@@ -47,6 +47,8 @@ attributes:
         range: I.3
       - work: Aristotle, Nicomachean Ethics
         range: I.8-10
+      - work: Aristotle, Nicomachean Ethics
+        range: I.7
 ---
 # Reading chunk 6: NE I.3 (precision of the subject) + I.8–10 (external goods) — verify the held-open apex warrant and the anti-Stoic bet, then revisit the apex question (capstone)
 
@@ -58,7 +60,8 @@ externals.
 ## Text
 
 Aristotle, *Nicomachean Ethics* I.3 — precision of the subject. Aristotle,
-*Nicomachean Ethics* I.8–10 — external goods.
+*Nicomachean Ethics* I.8–10 — external goods. Plus NE I.7 (the ergon
+argument), added 2026-07-13 to carry the chunk-2 function deferral.
 
 ## Questions to re-open against the text
 
@@ -74,6 +77,14 @@ text; this chunk checks the account.
   decides whether that warrant is real.
 - `intentions/tradition-aristotle.md` — does I.8–10 support the anti-Stoic
   bet on externals as recorded?
+- Deferral from chunk 2 (2026-07-13): the ergon — II.6's "performs its
+  function well" (1106a15–24) was read by the author as alignment with a
+  separate, independent ideal external to the possessor. Does I.7's function
+  argument (1097b24–1098a18) support that, or is the ergon immanent — the
+  thing's own characteristic activity, form-as-actuality rather than a
+  separate paradigm? Decide whether the external-ideal reading is a
+  divergence; the successor question (can the ideal be fully internalized)
+  is homed on chunk 5.
 
 **Capstone rule:** after chunks 1–6 are done (wherever they fall in the
 working order), revisit the apex question itself.

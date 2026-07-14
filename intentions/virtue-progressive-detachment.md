@@ -28,6 +28,15 @@ rationale: >-
   Atrophy is safe down to the layer where the recovery meta-skill lives, and
   dangerous below it: the capability to read, evaluate, and reason about what
   the delegatee produces is the floor under every recovery path.
+
+
+  The Aristotelian triple, made explicit at chunk 2 (NE II.6-7, 2026-07-13):
+  this virtue is itself a mean in its field, the irreversibility axis. Its
+  excess is forced detachment — dogma, detachment pursued as retention-zero,
+  which requires power to maintain; its deficiency is gated or unexercised
+  recovery paths — capture by irreversibility. The balance against its sibling
+  is the cross-guard recorded on kind-virtue's chunk-2 clarification, not this
+  internal mean.
 reading: null
 gap: null
 serves: []

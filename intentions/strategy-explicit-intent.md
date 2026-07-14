@@ -322,6 +322,30 @@ clarifications:
       this successor-cadence wording when it decides /align-audit inclusion of
       the retired rung-5 dialectic and the retired /align-strategy improvement
       pass. Recorded 2026-07-09 /align consolidation interview."
+  - question: What did the chunk-2 reading (NE II.1-6) amend in the 2026-07-09
+      cadence-as-habituation deferral?
+    answer: "Amended at chunk 2 (II.1-4). The habituation half is ratified and
+      sharpened: the cadence maintains the disposition only insofar as each
+      sitting exercises it — a rubber-stamp sitting is contrary practice,
+      actively forming the wrong hexis (1103b6-25: states are produced and
+      destroyed from and through the same activities; and II.2's deficiency
+      destruction is likewise a doing — fleeing everything, shunning every
+      pleasure, 1104a20-25 — not an absence). The drift sentence is amended as a
+      misstatement of the author's position: 'drift between sittings is the
+      hexis decaying' — the author's meaning was synchronization drift: between
+      sittings the internal hexis continues to evolve and the graph grows stale
+      as its model. Adjudication (reconciling the covenant clarification on this
+      node): recall-first-delta senses the delta without deciding which side
+      moved — neither side presumptively wins; only the sitting's dialectic can
+      tell an evolved position from a lapsed one. Three scenarios: the internal
+      hexis evolved toward the good (the graph is stale as its model), the hexis
+      atrophied (a lapse — the record compels, the covenant's tacit-drift
+      guard), or the record was in error to begin with (it never matched the
+      internal hexis). Periodic review with dialectic is the guard against all
+      three. Decay-by-inactivity of the internal hexis found no textual support
+      in II.1-4 — destruction is always by contrary or deficient doing;
+      Aristotle analyzes the internal hexis only, and the graph-desync mechanism
+      is outside his scope. Recorded 2026-07-13 /reading-review chunk 2."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

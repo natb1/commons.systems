@@ -42,13 +42,14 @@ attention:
     whose fix directly resolves the Workflow-tool-unavailable park; the
     companions address separate, unrelated concerns from the same interview
     round and were left at their original tier."
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-phase-launch-per-phase
   pr: 2870
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
