@@ -269,3 +269,15 @@ verify by dry-run in an interactive office-hours session, stopping before
 npx tsx packages/intentionsutil/scripts/review-coverage.ts >/dev/null
 npx tsx packages/intentionsutil/scripts/validate-graph.ts
 ```
+
+## needs-main residue
+
+Recorded 2026-07-14 by `/qa-fix` (PR #2871). One QA plan item is a planned
+deferral, not verifiable at merge time — it needs an actual future
+office-hours sitting to exercise the two new branches end-to-end:
+
+- **id:** 10
+- **title:** Dry-run both new branches in a real office-hours sitting (stop before graph-commit)
+- **url_path:** current
+- **expected_outcome:** Each branch selects the right target and produces the described agenda, stamps, and valid-JSON record plan, confirming the instructions execute correctly in practice.
+- **finding:** End-to-end behavior is only assertable by a future actual office-hours sitting exercising the mode-B confirmation branch and the mode-A delegation-exercise branch; not scriptable at merge time. All 8 script-verifiable QA items (structural completeness of both new sections, `review_trigger`/`review_window` usage, absence of a world-state/condition branch, unchanged existing chunk/candidate/capstone flows, absence of any `gh` invocation, frontier-linkage/dedup rule presence, and both `review-coverage.ts`/`validate-graph.ts` passing) PASSed in this qa-fix pass.
