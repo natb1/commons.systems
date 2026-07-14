@@ -129,18 +129,20 @@ denominator is zero (never emit a divide-by-zero or a fabricated `0`):
 `hit_rate` factors as `actionability × fix_rate` when both denominators are
 non-zero.
 
-### Which rate routes which phase
+### Which rate reflects which phase
 
-The routing policy generator (`generate-phase-model-policy.sh`) routes each
-phase on the metric that phase can actually move:
+`/dispatch-token-audit` reports each phase on the metric that phase can actually
+move. (These rates once fed an automated promote-to-Opus routing policy generator;
+that policy was retired in #2872 — the phase orchestrator is now always Sonnet and
+Opus tiering is chosen per-`agent()` inside each Workflow. The rates now inform the
+report a human reads, not an automated router.)
 
-- `review` routes on `hit_rate`. The review Workflow counts subagent-applied
+- `review` is read on `hit_rate`. The review Workflow counts subagent-applied
   fixes into `fixes_applied` directly, so the rate reflects review's own
   output.
-- `qa` routes on `actionability`. qa-fix's designed output is triage and
+- `qa` is read on `actionability`. qa-fix's designed output is triage and
   follow-ups — its fix lane delegates fixes to `/implement-unit` — so pooled
-  `hit_rate` is structurally near 0 regardless of how well the phase performs.
-  Routing qa on `hit_rate` would promote it to Opus on a rate it cannot move;
+  `hit_rate` is structurally near 0 regardless of how well the phase performs;
   `actionability` measures the triage quality qa does control.
 
 ## `subagents_launched` semantics

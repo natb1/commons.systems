@@ -407,9 +407,15 @@ log(
     `${securityFinders.length} security finder(s) pending for surface=${_a.surface}`
 );
 
+// Finders run on Opus (#2872). Finding real bugs and vulnerabilities in the diff
+// is the genuinely complex, generative subtask of this workflow — the orchestrator
+// stays on Sonnet and delegates this reasoning to Opus subagents. This covers the
+// always-on `/code-review` quality finder, the `/security-review` pass, and the
+// surface-gated security/cost domain lenses. Cheaper mechanical stages downstream
+// (dedup, classify) stay on Sonnet; fix-authoring is already Opus.
 const launchFinder = (name) => () =>
   agent(finderPrompt(name, _a), {
-    model: 'sonnet',
+    model: 'opus',
     agentType: 'general-purpose',
     schema: FINDINGS_SCHEMA,
     label: `find:${name}`,
