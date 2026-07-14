@@ -37312,10 +37312,9 @@ lw_setup() {
   # and lib-claude-agents.sh from the same dir.
   cp "$SCRIPT_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-launch-worker"
   cp "$SCRIPT_DIR/dispatch-phase-model" "$LW_DIR/dispatch-phase-model"
-  # dispatch-phase-model consults dispatch-config-load (a sibling, resolved via
-  # $SCRIPT_DIR) for the generated phase-model-policy (#2028), so it must travel
-  # with the copy. With no policy file at the resolved config dir it returns
-  # no-config and the default qa/review → sonnet map applies.
+  # dispatch-phase-model is a pure static map (#2872) — always qa/review → sonnet,
+  # reading no config. dispatch-launch-worker still resolves dispatch-config-load
+  # (a sibling, via $SCRIPT_DIR) for its other configs, so it must travel too.
   cp "$SCRIPT_DIR/dispatch-config-load" "$LW_DIR/dispatch-config-load"
   cp "$SCRIPT_DIR/dispatch-phase-effort" "$LW_DIR/dispatch-phase-effort"
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$LW_DIR/lib-reservation-ledger.sh"

@@ -1052,14 +1052,18 @@ phase-log write and outcome-envelope emit, and writes the phase-completed marker
 not met). Readiness is the router's projection, reconciled on later ticks — not
 something re-entry asserts.
 
-**Model split (#1172).** The dispatch chain runs this `review` phase orchestrator
-on **Sonnet** (via `dispatch-phase-model`, which maps `review →
-sonnet`). The model tiering is now owned by the Workflow's per-`agent()`
-`model:` settings: finder agents (code-review, security domains) run on
-**Sonnet**, dedup/classify/verify agents run on **Sonnet**, and **fix-authoring
-Opus fix agents** (`model: opus`) write all working-tree changes. Fix-authoring is
-pinned to Opus **exactly once** in the Workflow's fix phase — there is no
-double-tiering. The orchestrator (this skill) authors no product code.
+**Model split (#1172, #2872).** The dispatch chain runs this `review` phase
+orchestrator on **Sonnet** (via `dispatch-phase-model`, which maps `review →
+sonnet`) — always; there is no learned policy that can promote the orchestrator to
+Opus. The model tiering is owned by the Workflow's per-`agent()` `model:` settings,
+and Opus is reserved for the genuinely complex, generative subtasks: **finder
+agents run on Opus** (`model: opus`) — the always-on `/code-review` quality
+finder, the `/security-review` pass, and the surface-gated security/cost domain
+lenses, since finding real bugs and vulnerabilities in the diff is the core
+reasoning of the phase — and **fix-authoring agents run on Opus** (`model: opus`),
+writing all working-tree changes. The cheaper mechanical stages — dedup, classify,
+and the adversarial verify skeptics — run on **Sonnet**. The orchestrator (this
+skill) authors no product code.
 
 **Probe-wave throttle short-circuit (#1857).** On a `code` surface the Workflow
 splits the finder fan-out into two waves instead of one barrier. Wave 1 launches
