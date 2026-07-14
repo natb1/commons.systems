@@ -119,7 +119,7 @@ SPAWN=$(cat "$SPAWN_LOG")
 assert_eq "implement stdout" "launched tactic-foo /implement" "$OUT"
 assert_eq "implement exit 0" "0" "$RC"
 assert_contains "implement invokes /implement directly" "/implement tactic-foo" "$SPAWN"
-assert_contains "implement orchestrator model sonnet" "--model claude-sonnet-4-6" "$SPAWN"
+assert_contains "implement orchestrator model sonnet" "--model sonnet" "$SPAWN"
 assert_contains "implement --name is the node id" "--name tactic-foo" "$SPAWN"
 assert_contains "implement --cwd is the worktree" "--cwd $MAIN_WT/.claude/worktrees/tactic-foo" "$SPAWN"
 assert_contains "implement --effort medium" "--effort medium" "$SPAWN"
@@ -161,7 +161,7 @@ assert_eq "strategy stdout" "launched strategy-x /align-tactics" "$OUT"
 assert_eq "strategy exit 0" "0" "$RC"
 assert_contains "strategy invokes /align-tactics" "/align-tactics strategy-x" "$SPAWN"
 assert_contains "strategy cwd is the project root" "--cwd $MAIN_WT" "$SPAWN"
-assert_contains "strategy model sonnet" "--model claude-sonnet-4-6" "$SPAWN"
+assert_contains "strategy model sonnet" "--model sonnet" "$SPAWN"
 
 # ============================================================================
 # Case 4: provision exit 10 -> ci-waiting (no spawn)

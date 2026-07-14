@@ -46,22 +46,22 @@ echo "Case 1: no policy file -> hardcoded defaults"
 EMPTY_DIR=$(mktemp -d)
 
 run_phase "$EMPTY_DIR" qa
-assert_eq "no policy: qa -> sonnet" "claude-sonnet-4-6" "$OUT"
+assert_eq "no policy: qa -> sonnet" "sonnet" "$OUT"
 assert_eq "no policy: qa exit 0" "0" "$RC"
 
 run_phase "$EMPTY_DIR" review
-assert_eq "no policy: review -> sonnet" "claude-sonnet-4-6" "$OUT"
+assert_eq "no policy: review -> sonnet" "sonnet" "$OUT"
 
 run_phase "$EMPTY_DIR" fix-checks
-assert_eq "no policy: fix-checks -> sonnet" "claude-sonnet-4-6" "$OUT"
+assert_eq "no policy: fix-checks -> sonnet" "sonnet" "$OUT"
 assert_eq "no policy: fix-checks exit 0" "0" "$RC"
 
 run_phase "$EMPTY_DIR" fix-conflicts
-assert_eq "no policy: fix-conflicts -> sonnet" "claude-sonnet-4-6" "$OUT"
+assert_eq "no policy: fix-conflicts -> sonnet" "sonnet" "$OUT"
 assert_eq "no policy: fix-conflicts exit 0" "0" "$RC"
 
 run_phase "$EMPTY_DIR" main-qa
-assert_eq "no policy: main-qa -> sonnet" "claude-sonnet-4-6" "$OUT"
+assert_eq "no policy: main-qa -> sonnet" "sonnet" "$OUT"
 assert_eq "no policy: main-qa exit 0" "0" "$RC"
 
 run_phase "$EMPTY_DIR" plan
@@ -85,13 +85,13 @@ echo "Case 3: missing route key -> default fallback"
 DIR3=$(write_policy '{"routes":{"qa":"claude-opus-4-8"}}')
 
 run_phase "$DIR3" review
-assert_eq "policy missing review key: review -> default sonnet" "claude-sonnet-4-6" "$OUT"
+assert_eq "policy missing review key: review -> default sonnet" "sonnet" "$OUT"
 
 # ============================================================================
 # Case 4: allowlist guard — a policy demoting a code-authoring phase is ignored.
 # ============================================================================
 echo "Case 4: allowlist guard ignores non-allowlisted route"
-DIR4=$(write_policy '{"routes":{"implement":"claude-sonnet-4-6","qa":"claude-opus-4-8"}}')
+DIR4=$(write_policy '{"routes":{"implement":"sonnet","qa":"claude-opus-4-8"}}')
 
 run_phase "$DIR4" implement
 assert_eq "policy route for implement IGNORED -> empty" "" "$OUT"

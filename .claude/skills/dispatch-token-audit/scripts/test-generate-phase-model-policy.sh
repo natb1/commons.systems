@@ -90,8 +90,8 @@ FLIP=$(jq -n "{
 
 echo "=== healthy: per-phase metric routing (qa=actionability, review=hit_rate) ==="
 HEALTHY_OUT=$(printf '%s' "$HEALTHY" | "$SUT")
-assert_eq "healthy: routes.qa == claude-sonnet-4-6 (keep-cheap on actionability, despite hit_rate 0)" \
-  "claude-sonnet-4-6" "$(jq -r '.routes.qa' <<<"$HEALTHY_OUT")"
+assert_eq "healthy: routes.qa == sonnet (keep-cheap on actionability, despite hit_rate 0)" \
+  "sonnet" "$(jq -r '.routes.qa' <<<"$HEALTHY_OUT")"
 assert_eq "healthy: rationale.qa.decision == keep-cheap" \
   "keep-cheap" "$(jq -r '.rationale.qa.decision' <<<"$HEALTHY_OUT")"
 assert_eq "healthy: rationale.qa.metric == actionability" \
@@ -150,7 +150,7 @@ FLIP_MINSAMPLE=$(MIN_SAMPLE=5 "$SUT" <<<"$FLIP")
 assert_eq "MIN_SAMPLE=5: qa now routed (was omitted at default 20)" \
   "true" "$(jq -c '.routes | has("qa")' <<<"$FLIP_MINSAMPLE")"
 assert_eq "MIN_SAMPLE=5: qa actionability 0.6 >= default floor 0.5 -> keep-cheap" \
-  "claude-sonnet-4-6" "$(jq -r '.routes.qa' <<<"$FLIP_MINSAMPLE")"
+  "sonnet" "$(jq -r '.routes.qa' <<<"$FLIP_MINSAMPLE")"
 # QA_ACTIONABILITY_FLOOR=0.9 (with MIN_SAMPLE=5 to admit qa) flips qa from
 # keep-cheap to promote.
 FLIP_QA_FLOOR=$(MIN_SAMPLE=5 QA_ACTIONABILITY_FLOOR=0.9 "$SUT" <<<"$FLIP")
@@ -162,9 +162,9 @@ assert_eq "QA_ACTIONABILITY_FLOOR=0.9: rationale.qa.decision == promote" \
 # promote to keep-cheap, and qa (actionability metric) is unaffected.
 FLIP_HR_FLOOR=$(MIN_SAMPLE=5 HIT_RATE_FLOOR=0.1 "$SUT" <<<"$FLIP")
 assert_eq "HIT_RATE_FLOOR=0.1: review hit_rate 0.18 >= 0.1 -> keep-cheap" \
-  "claude-sonnet-4-6" "$(jq -r '.routes.review' <<<"$FLIP_HR_FLOOR")"
+  "sonnet" "$(jq -r '.routes.review' <<<"$FLIP_HR_FLOOR")"
 assert_eq "HIT_RATE_FLOOR=0.1: qa unaffected (still keep-cheap on actionability)" \
-  "claude-sonnet-4-6" "$(jq -r '.routes.qa' <<<"$FLIP_HR_FLOOR")"
+  "sonnet" "$(jq -r '.routes.qa' <<<"$FLIP_HR_FLOOR")"
 
 echo "=== determinism: generated_at / window subset ==="
 assert_eq "generated_at == window.until" \

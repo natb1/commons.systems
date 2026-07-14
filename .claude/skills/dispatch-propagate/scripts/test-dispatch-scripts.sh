@@ -20938,30 +20938,30 @@ tr_teardown
 # ============================================================================
 echo "=== dispatch-phase-model ==="
 
-echo "Test: dispatch-phase-model maps qa → claude-sonnet-4-6"
+echo "Test: dispatch-phase-model maps qa → sonnet"
 if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" qa 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: qa exits 0" "0" "$pm_rc"
-assert_eq "phase-model: qa → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+assert_eq "phase-model: qa → sonnet" "sonnet" "$pm_out"
 
-echo "Test: dispatch-phase-model maps review → claude-sonnet-4-6 (#1172)"
+echo "Test: dispatch-phase-model maps review → sonnet (#1172)"
 if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" review 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: review exits 0" "0" "$pm_rc"
-assert_eq "phase-model: review → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+assert_eq "phase-model: review → sonnet" "sonnet" "$pm_out"
 
-echo "Test: dispatch-phase-model maps fix-checks → claude-sonnet-4-6 (#2042)"
+echo "Test: dispatch-phase-model maps fix-checks → sonnet (#2042)"
 if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-checks 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: fix-checks exits 0" "0" "$pm_rc"
-assert_eq "phase-model: fix-checks → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+assert_eq "phase-model: fix-checks → sonnet" "sonnet" "$pm_out"
 
-echo "Test: dispatch-phase-model maps fix-conflicts → claude-sonnet-4-6 (#2042)"
+echo "Test: dispatch-phase-model maps fix-conflicts → sonnet (#2042)"
 if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-conflicts 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: fix-conflicts exits 0" "0" "$pm_rc"
-assert_eq "phase-model: fix-conflicts → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+assert_eq "phase-model: fix-conflicts → sonnet" "sonnet" "$pm_out"
 
-echo "Test: dispatch-phase-model maps main-qa → claude-sonnet-4-6 (#2274)"
+echo "Test: dispatch-phase-model maps main-qa → sonnet (#2274)"
 if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" main-qa 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: main-qa exits 0" "0" "$pm_rc"
-assert_eq "phase-model: main-qa → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+assert_eq "phase-model: main-qa → sonnet" "sonnet" "$pm_out"
 
 echo "Test: dispatch-phase-model maps unmapped phases → empty (default → Opus, no override)"
 for ph in implement done; do
@@ -21256,7 +21256,7 @@ export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
 export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
 SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
-    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model claude-sonnet-4-6 \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model sonnet \
     "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-job-model: dispatch-spawn-job exits 0" "0" "$rc"
 assert_eq "spawn-job-model: stdout is 'spawned'" "spawned" "$out"
@@ -21265,7 +21265,7 @@ assert_eq "spawn-job-model: argv[0] is --bg" "--bg" "${sj_bg_argv[0]:-}"
 assert_eq "spawn-job-model: argv[1] is --name" "--name" "${sj_bg_argv[1]:-}"
 assert_eq "spawn-job-model: argv[2] is the passed name" "diagnose-main" "${sj_bg_argv[2]:-}"
 assert_eq "spawn-job-model: argv[3] is --model" "--model" "${sj_bg_argv[3]:-}"
-assert_eq "spawn-job-model: argv[4] is claude-sonnet-4-6" "claude-sonnet-4-6" "${sj_bg_argv[4]:-}"
+assert_eq "spawn-job-model: argv[4] is sonnet" "sonnet" "${sj_bg_argv[4]:-}"
 assert_eq "spawn-job-model: argv[5] is --permission-mode" "--permission-mode" "${sj_bg_argv[5]:-}"
 assert_eq "spawn-job-model: argv[6] is auto" "auto" "${sj_bg_argv[6]:-}"
 assert_eq "spawn-job-model: argv[7] is the prompt" "/dispatch-diagnose-main abc123" "${sj_bg_argv[7]:-}"
@@ -21276,7 +21276,7 @@ spawn_worker_teardown
 # caller-supplied --model with --model opus in the bg argv AND set
 # CLAUDE_CODE_SUBAGENT_MODEL=opus so the spawned process inherits it.
 
-echo "Test: force-opus enabled overrides --model claude-sonnet-4-6 with --model opus in bg argv"
+echo "Test: force-opus enabled overrides --model sonnet with --model opus in bg argv"
 spawn_worker_setup
 write_fake_spawn_worker_claude
 export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
@@ -21285,18 +21285,18 @@ export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
 printf '{"enabled":true}\n' > "$DISPATCH_CONFIG_DIR/force-opus.json"
 SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
-    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model claude-sonnet-4-6 \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model sonnet \
     "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-job-force-opus-on: exits 0" "0" "$rc"
 assert_eq "spawn-job-force-opus-on: stdout is 'spawned'" "spawned" "$out"
-# Check the bg argv — caller passed --model claude-sonnet-4-6 but force-opus
+# Check the bg argv — caller passed --model sonnet but force-opus
 # must have overridden it to --model opus.
 mapfile -t sj_fo_argv < "$SPAWN_WORKER_BG_ARGV"
 assert_eq "spawn-job-force-opus-on: argv[0] is --bg" "--bg" "${sj_fo_argv[0]:-}"
 assert_eq "spawn-job-force-opus-on: argv[1] is --name" "--name" "${sj_fo_argv[1]:-}"
 assert_eq "spawn-job-force-opus-on: argv[2] is diagnose-main" "diagnose-main" "${sj_fo_argv[2]:-}"
 assert_eq "spawn-job-force-opus-on: argv[3] is --model" "--model" "${sj_fo_argv[3]:-}"
-assert_eq "spawn-job-force-opus-on: argv[4] is opus (not claude-sonnet-4-6)" "opus" "${sj_fo_argv[4]:-}"
+assert_eq "spawn-job-force-opus-on: argv[4] is opus (not sonnet)" "opus" "${sj_fo_argv[4]:-}"
 # Check that CLAUDE_CODE_SUBAGENT_MODEL was opus when the fake ran.
 sj_fo_subagent=$(cat "$SPAWN_WORKER_SUBAGENT_MODEL" 2>/dev/null || true)
 assert_eq "spawn-job-force-opus-on: CLAUDE_CODE_SUBAGENT_MODEL recorded as opus" "opus" "$sj_fo_subagent"
@@ -21306,7 +21306,7 @@ spawn_worker_teardown
 # With force-opus.json {"enabled":false}, dispatch-spawn-job must leave the
 # caller's --model untouched and must NOT set CLAUDE_CODE_SUBAGENT_MODEL.
 
-echo "Test: force-opus disabled leaves --model claude-sonnet-4-6 verbatim in bg argv"
+echo "Test: force-opus disabled leaves --model sonnet verbatim in bg argv"
 spawn_worker_setup
 write_fake_spawn_worker_claude
 export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
@@ -21314,13 +21314,13 @@ export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
 printf '{"enabled":false}\n' > "$DISPATCH_CONFIG_DIR/force-opus.json"
 SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
-    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model claude-sonnet-4-6 \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model sonnet \
     "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-job-force-opus-off: exits 0" "0" "$rc"
 assert_eq "spawn-job-force-opus-off: stdout is 'spawned'" "spawned" "$out"
 mapfile -t sj_foff_argv < "$SPAWN_WORKER_BG_ARGV"
 assert_eq "spawn-job-force-opus-off: argv[3] is --model" "--model" "${sj_foff_argv[3]:-}"
-assert_eq "spawn-job-force-opus-off: argv[4] is claude-sonnet-4-6 (unchanged)" "claude-sonnet-4-6" "${sj_foff_argv[4]:-}"
+assert_eq "spawn-job-force-opus-off: argv[4] is sonnet (unchanged)" "sonnet" "${sj_foff_argv[4]:-}"
 sj_foff_subagent=$(cat "$SPAWN_WORKER_SUBAGENT_MODEL" 2>/dev/null || true)
 assert_eq "spawn-job-force-opus-off: CLAUDE_CODE_SUBAGENT_MODEL is <unset>" "<unset>" "$sj_foff_subagent"
 spawn_worker_teardown
@@ -21329,7 +21329,7 @@ spawn_worker_teardown
 # With no force-opus.json at all, the gate must be off: caller's --model is
 # untouched and CLAUDE_CODE_SUBAGENT_MODEL is not set.
 
-echo "Test: force-opus absent (no file) leaves --model claude-sonnet-4-6 verbatim in bg argv"
+echo "Test: force-opus absent (no file) leaves --model sonnet verbatim in bg argv"
 spawn_worker_setup
 write_fake_spawn_worker_claude
 export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
@@ -21337,13 +21337,13 @@ export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
 # No force-opus.json written — config dir is empty (dispatch-config-load → no-config).
 SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
-    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model claude-sonnet-4-6 \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" --model sonnet \
     "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-job-force-opus-absent: exits 0" "0" "$rc"
 assert_eq "spawn-job-force-opus-absent: stdout is 'spawned'" "spawned" "$out"
 mapfile -t sj_fabsent_argv < "$SPAWN_WORKER_BG_ARGV"
 assert_eq "spawn-job-force-opus-absent: argv[3] is --model" "--model" "${sj_fabsent_argv[3]:-}"
-assert_eq "spawn-job-force-opus-absent: argv[4] is claude-sonnet-4-6 (unchanged)" "claude-sonnet-4-6" "${sj_fabsent_argv[4]:-}"
+assert_eq "spawn-job-force-opus-absent: argv[4] is sonnet (unchanged)" "sonnet" "${sj_fabsent_argv[4]:-}"
 sj_fabsent_subagent=$(cat "$SPAWN_WORKER_SUBAGENT_MODEL" 2>/dev/null || true)
 assert_eq "spawn-job-force-opus-absent: CLAUDE_CODE_SUBAGENT_MODEL is <unset>" "<unset>" "$sj_fabsent_subagent"
 spawn_worker_teardown
@@ -21625,7 +21625,7 @@ export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
 SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
     --name diagnose-main --cwd "$SPAWN_JOB_CWD" \
-    --model claude-sonnet-4-6 --effort high \
+    --model sonnet --effort high \
     "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-job-effort: dispatch-spawn-job exits 0" "0" "$rc"
 assert_eq "spawn-job-effort: stdout is 'spawned'" "spawned" "$out"
@@ -21634,7 +21634,7 @@ assert_eq "spawn-job-effort: argv[0] is --bg" "--bg" "${sj_effort_argv[0]:-}"
 assert_eq "spawn-job-effort: argv[1] is --name" "--name" "${sj_effort_argv[1]:-}"
 assert_eq "spawn-job-effort: argv[2] is the passed name" "diagnose-main" "${sj_effort_argv[2]:-}"
 assert_eq "spawn-job-effort: argv[3] is --model" "--model" "${sj_effort_argv[3]:-}"
-assert_eq "spawn-job-effort: argv[4] is claude-sonnet-4-6" "claude-sonnet-4-6" "${sj_effort_argv[4]:-}"
+assert_eq "spawn-job-effort: argv[4] is sonnet" "sonnet" "${sj_effort_argv[4]:-}"
 assert_eq "spawn-job-effort: argv[5] is --effort" "--effort" "${sj_effort_argv[5]:-}"
 assert_eq "spawn-job-effort: argv[6] is high" "high" "${sj_effort_argv[6]:-}"
 assert_eq "spawn-job-effort: argv[7] is --permission-mode" "--permission-mode" "${sj_effort_argv[7]:-}"
@@ -31966,7 +31966,7 @@ export TICK_DECISION="main-broken abc1234"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "main-broken: exit 0" "0" "$rc"
 assert_eq "main-broken: spawn-job argv (Sonnet — diagnosis authors no product code)" \
-  "--name diagnose-main --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /dispatch-diagnose-main abc1234" \
+  "--name diagnose-main --cwd $TMPDIR_TEST --model sonnet /dispatch-diagnose-main abc1234" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "main-broken: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
@@ -31979,7 +31979,7 @@ export TICK_DECISION="sync-failed"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "sync-failed: exit 0" "0" "$rc"
 assert_eq "sync-failed: spawn-job argv (Sonnet — conflict recovery escalates to Opus internally)" \
-  "--name sync-repair --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /commit-merge-push" \
+  "--name sync-repair --cwd $TMPDIR_TEST --model sonnet /commit-merge-push" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "sync-failed: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
@@ -31992,7 +31992,7 @@ export TICK_DECISION="jit-reminder owner/repo 42 PVT_x ITEM_y"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "jit-reminder: exit 0" "0" "$rc"
 assert_eq "jit-reminder: spawn-job argv (Sonnet — reminder skills author no product code)" \
-  "--name jit-reminder-42 --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
+  "--name jit-reminder-42 --cwd $TMPDIR_TEST --model sonnet /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 tick_teardown
 
@@ -37289,7 +37289,7 @@ echo "=== dispatch-launch-worker ==="
 #                             and exits 0.
 # dispatch-phase-model and dispatch-phase-effort are the REAL scripts (copied
 # in), so the compute-derivation assertions exercise the actual per-phase
-# policy: qa/review/fix-checks/fix-conflicts/main-qa → claude-sonnet-4-6 (no
+# policy: qa/review/fix-checks/fix-conflicts/main-qa → sonnet (no
 # effort); implement → effort medium; plan → effort high (#2042).
 #
 # The reservation ledger points at $LW_DIR/reservations via DISPATCH_RESERVATION_DIR
@@ -37450,9 +37450,9 @@ assert_eq "launch INVOKE /implement: no spawn-tick (exec path)" "no" \
 lw_teardown
 
 # 1b. INVOKE /fix-conflicts → exec dispatch-spawn-job with --model
-# claude-sonnet-4-6 and NO --effort (mechanical patch work routes to Sonnet,
+# sonnet and NO --effort (mechanical patch work routes to Sonnet,
 # #2042), reservation RETAINED, no tick.
-echo "Test: INVOKE /fix-conflicts → spawn-job exec with --model claude-sonnet-4-6, no --effort, reservation retained, no tick"
+echo "Test: INVOKE /fix-conflicts → spawn-job exec with --model sonnet, no --effort, reservation retained, no tick"
 lw_setup
 lw_write_marker
 lw_run "INVOKE /fix-conflicts"
@@ -37461,7 +37461,7 @@ sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /fix-conflicts: spawn-job logged once" "1" \
   "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
 assert_eq "launch INVOKE /fix-conflicts: spawn-job argv (with model)" \
-  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /fix-conflicts 839 $LW_WT" "$sj"
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model sonnet /fix-conflicts 839 $LW_WT" "$sj"
 assert_eq "launch INVOKE /fix-conflicts: no --effort in argv" "no" \
   "$([[ "$sj" == *"--effort"* ]] && echo yes || echo no)"
 assert_eq "launch INVOKE /fix-conflicts: reservation RETAINED" "yes" "$(lw_marker_exists)"
@@ -37471,10 +37471,10 @@ assert_eq "launch INVOKE /fix-conflicts: no spawn-tick (exec path)" "no" \
   "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
 lw_teardown
 
-# 1c. INVOKE /fix-checks → exec dispatch-spawn-job with --model claude-sonnet-4-6
+# 1c. INVOKE /fix-checks → exec dispatch-spawn-job with --model sonnet
 # and NO --effort (mechanical patch work routes to Sonnet, #2042), reservation
 # RETAINED, no tick.
-echo "Test: INVOKE /fix-checks → spawn-job exec with --model claude-sonnet-4-6, no --effort, reservation retained, no tick"
+echo "Test: INVOKE /fix-checks → spawn-job exec with --model sonnet, no --effort, reservation retained, no tick"
 lw_setup
 lw_write_marker
 lw_run "INVOKE /fix-checks"
@@ -37483,7 +37483,7 @@ sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /fix-checks: spawn-job logged once" "1" \
   "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
 assert_eq "launch INVOKE /fix-checks: spawn-job argv (with model)" \
-  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /fix-checks 839 $LW_WT" "$sj"
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model sonnet /fix-checks 839 $LW_WT" "$sj"
 assert_eq "launch INVOKE /fix-checks: no --effort in argv" "no" \
   "$([[ "$sj" == *"--effort"* ]] && echo yes || echo no)"
 assert_eq "launch INVOKE /fix-checks: reservation RETAINED" "yes" "$(lw_marker_exists)"
@@ -37493,45 +37493,45 @@ assert_eq "launch INVOKE /fix-checks: no spawn-tick (exec path)" "no" \
   "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
 lw_teardown
 
-# 2. INVOKE /qa-fix → spawn-job carries --model claude-sonnet-4-6 (real
+# 2. INVOKE /qa-fix → spawn-job carries --model sonnet (real
 # dispatch-phase-model qa policy) and the /qa-fix prompt.
-echo "Test: INVOKE /qa-fix → spawn-job with --model claude-sonnet-4-6"
+echo "Test: INVOKE /qa-fix → spawn-job with --model sonnet"
 lw_setup
 lw_write_marker
 lw_run "INVOKE /qa-fix"
 assert_eq "launch INVOKE /qa-fix: exit 0" "0" "$LW_RC"
 sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /qa-fix: spawn-job argv (with model)" \
-  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /qa-fix 839 $LW_WT" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model sonnet /qa-fix 839 $LW_WT" \
   "$sj"
 assert_eq "launch INVOKE /qa-fix: reservation RETAINED" "yes" "$(lw_marker_exists)"
 lw_teardown
 
-# 3. INVOKE /review-fix → spawn-job carries --model claude-sonnet-4-6 (review policy).
-echo "Test: INVOKE /review-fix → spawn-job with --model claude-sonnet-4-6"
+# 3. INVOKE /review-fix → spawn-job carries --model sonnet (review policy).
+echo "Test: INVOKE /review-fix → spawn-job with --model sonnet"
 lw_setup
 lw_write_marker
 lw_run "INVOKE /review-fix"
 assert_eq "launch INVOKE /review-fix: exit 0" "0" "$LW_RC"
 sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /review-fix: spawn-job argv (with model)" \
-  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /review-fix 839 $LW_WT" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model sonnet /review-fix 839 $LW_WT" \
   "$sj"
 lw_teardown
 
-# 3a. INVOKE /qa-main → spawn-job carries --model claude-sonnet-4-6 (real
+# 3a. INVOKE /qa-main → spawn-job carries --model sonnet (real
 # dispatch-phase-model main-qa policy: review-like, no product-code authoring,
 # #2274) and NO --effort. Regression guard for the routing gap where the
 # SKILL→PHASE map had no /qa-main arm, so PHASE stayed empty, dispatch-phase-model
 # was never consulted, and the spawn inherited the session default (Opus).
-echo "Test: INVOKE /qa-main → spawn-job with --model claude-sonnet-4-6, no --effort"
+echo "Test: INVOKE /qa-main → spawn-job with --model sonnet, no --effort"
 lw_setup
 lw_write_marker
 lw_run "INVOKE /qa-main"
 assert_eq "launch INVOKE /qa-main: exit 0" "0" "$LW_RC"
 sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /qa-main: spawn-job argv (with model)" \
-  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /qa-main 839 $LW_WT" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model sonnet /qa-main 839 $LW_WT" \
   "$sj"
 assert_eq "launch INVOKE /qa-main: no --effort in argv" "no" \
   "$([[ "$sj" == *"--effort"* ]] && echo yes || echo no)"

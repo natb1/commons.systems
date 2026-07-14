@@ -95,7 +95,7 @@ fi
 # launch-layer rule, hardcoded here rather than routed through the shared
 # per-phase model emitter (which the legacy lane still depends on — see the
 # header). Opus is reintroduced only inside each phase's own workflow.
-ORCH_MODEL="claude-sonnet-4-6"
+ORCH_MODEL="sonnet"
 
 # park-node / demote-node-to-implement live under the intentionsutil package,
 # not beside this script. Resolve them from the project root.

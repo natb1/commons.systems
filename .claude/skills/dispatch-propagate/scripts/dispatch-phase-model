@@ -2,17 +2,17 @@
 # dispatch-phase-model — emit the claude model override for a given dispatch phase.
 #
 # Default phase → model map (hardcoded fallback):
-#   qa           → claude-sonnet-4-6   (#1171: no product-code authoring; machine-verifiable
+#   qa           → sonnet   (#1171: no product-code authoring; machine-verifiable
 #                                       checks + browser automation + summary writing)
-#   review       → claude-sonnet-4-6   (#1172: the review-fix orchestrator authors no fixes —
+#   review       → sonnet   (#1172: the review-fix orchestrator authors no fixes —
 #                                       findings detection is on Sonnet review subagents and
 #                                       fix-authoring is delegated to an Opus subagent, so the
 #                                       orchestrator main chain runs on Sonnet)
-#   fix-checks   → claude-sonnet-4-6   (#2042: mechanical patch work; no product-code authoring
+#   fix-checks   → sonnet   (#2042: mechanical patch work; no product-code authoring
 #                                       that needs Opus)
-#   fix-conflicts → claude-sonnet-4-6  (#2042: mechanical patch work; no product-code authoring
+#   fix-conflicts → sonnet  (#2042: mechanical patch work; no product-code authoring
 #                                       that needs Opus)
-#   main-qa      → claude-sonnet-4-6   (#2274: review-like; no product-code authoring)
+#   main-qa      → sonnet   (#2274: review-like; no product-code authoring)
 #   *            → (empty)             unmapped phases inherit the session default (Opus)
 #
 # Generated policy override (#2028):
@@ -65,7 +65,7 @@ PHASE="$1"
 # Hardcoded default for this phase (empty → inherit the session default, Opus).
 case "$PHASE" in
   qa|review|fix-checks|fix-conflicts|main-qa)
-    DEFAULT_MODEL="claude-sonnet-4-6"
+    DEFAULT_MODEL="sonnet"
     ;;
   *)
     DEFAULT_MODEL=""

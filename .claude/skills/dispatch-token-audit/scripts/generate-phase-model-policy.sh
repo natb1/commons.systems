@@ -51,7 +51,7 @@
 #                                               "insufficient-sample"; the
 #                                               rationale records why so a
 #                                               human can see it).
-#   rate >= floor                             → routes[ph]="claude-sonnet-4-6"
+#   rate >= floor                             → routes[ph]="sonnet"
 #                                               (decision "keep-cheap").
 #   rate <  floor                             → routes[ph]="claude-opus-4-8"
 #                                               (decision "promote").
@@ -73,7 +73,7 @@
 #
 # DAY-ONE DEFAULT BEHAVIOR
 #   With healthy data, qa's actionability and review's hit_rate are both >= their
-#   floors, so both route to Sonnet ("claude-sonnet-4-6") — exactly the current
+#   floors, so both route to Sonnet ("sonnet") — exactly the current
 #   hardcoded default map in `dispatch-phase-model`. So writing this artifact by
 #   default changes NOTHING until evidence (a low pooled rate with enough
 #   samples) accumulates and flips a phase to "promote". Until then the policy is
@@ -120,7 +120,7 @@ jq -n \
       | if ($sessions < $min_sample) or ($rate == null) then
           .rationale[$ph] = ({decision:"insufficient-sample"} + $why)
         elif ($rate >= $floor) then
-          .routes[$ph] = "claude-sonnet-4-6"
+          .routes[$ph] = "sonnet"
           | .rationale[$ph] = ({decision:"keep-cheap"} + $why)
         else
           .routes[$ph] = "claude-opus-4-8"

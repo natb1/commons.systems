@@ -1054,7 +1054,7 @@ something re-entry asserts.
 
 **Model split (#1172).** The dispatch chain runs this `review` phase orchestrator
 on **Sonnet** (via `dispatch-phase-model`, which maps `review →
-claude-sonnet-4-6`). The model tiering is now owned by the Workflow's per-`agent()`
+sonnet`). The model tiering is now owned by the Workflow's per-`agent()`
 `model:` settings: finder agents (code-review, security domains) run on
 **Sonnet**, dedup/classify/verify agents run on **Sonnet**, and **fix-authoring
 Opus fix agents** (`model: opus`) write all working-tree changes. Fix-authoring is
