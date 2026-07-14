@@ -61,8 +61,9 @@
 #
 # Exit codes: 0 every node launched or cleanly disposed (launched/waiting/
 # skipped/scope-stale/parked are all RC-0 dispositions); 1 at least one node
-# could neither launch nor cleanly dispose (a spawn kick failed AND could not
-# park, or park-node/demote itself failed); 2 usage/configuration error.
+# could neither launch nor cleanly dispose (a spawn kick failed — no park is
+# attempted, the marker is left for the sweep — or a park-node/demote call
+# itself failed); 2 usage/configuration error.
 #
 # Requires `dangerouslyDisableSandbox: true` — provision-node-worktree runs git,
 # gh, and direnv, and dispatch-spawn-job spawns `claude --bg`.
