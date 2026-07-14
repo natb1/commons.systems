@@ -54,28 +54,7 @@ execution:
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "review phase reached review-fix Step 2 (the Workflow-tool fan-out of
-    .claude/workflows/review-fix.js), but this graph-lane worker session was not
-    granted the Workflow tool, so the workflow cannot be invoked and the review
-    pass cannot run. This is exactly the pre-Shape-B limitation PR #2870 (the
-    node under review) fixes: a phase skill that is itself a workflow cannot run
-    inside an agent()-fanned session that lacks the Workflow tool. review-fix
-    DOES support node targets (its node lane ran through the preamble and Step 1
-    inline scans: surface=code, deps=false, CodeQL 0 open alerts, erosion 0
-    findings, prescanned findings empty) — the block is the absent Workflow
-    tool, not node-target support, so this is NOT skill-node-target-unsupported.
-    Next steps: run /review-fix tactic-graph-phase-launch-per-phase in a full
-    interactive session that holds the Workflow tool, land the review via
-    transition-node --set-pr 2870, then manually clear office_hours;
-    alternatively human-review and merge PR #2870 itself, which makes the
-    Shape-B top-level-session-runs-skill-directly path live so future graph
-    review phases are granted the Workflow tool."
-  since: 2026-07-14
-  recommendation: "Run /review-fix tactic-graph-phase-launch-per-phase in a full
-    interactive session that holds the Workflow tool, then transition-node
-    --set-pr 2870 and manually clear office_hours; or human-review and merge PR
-    #2870 to make the Shape-B path live."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
