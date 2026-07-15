@@ -23,14 +23,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: implement
 execution:
   branch: tactic-dispatch-legacy-rewire
   pr: 2869
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: null
 validates: []
 blocked_by: []
