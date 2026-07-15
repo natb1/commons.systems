@@ -233,7 +233,7 @@ source "$SCRIPT_DIR/lib-claude-agents.sh"
 # The dispatch queue pins several phases/subagents to Sonnet (skill frontmatter
 # `model: sonnet`, prose "launch a model: sonnet subagent", per-unit "Recommended
 # model: sonnet" in persisted plans, and dispatch-phase-model emitting
-# `claude-sonnet-4-6` for qa/review — carried here as --model). The force-opus
+# `sonnet` for qa/review — carried here as --model). The force-opus
 # config overrides them all FROM ABOVE at the one precedence level that beats
 # every per-site request, set at this single launch chokepoint:
 #   - CLAUDE_CODE_SUBAGENT_MODEL=opus is Claude Code's rank-1 subagent override;
@@ -241,7 +241,7 @@ source "$SCRIPT_DIR/lib-claude-agents.sh"
 #     spawned worker and ALL its subagents (inherited through the Step 3 cd
 #     subshell, which runs in this script's exported environment).
 #   - MODEL=opus forces the worker's own session model, overriding any --model
-#     the caller passed (e.g. claude-sonnet-4-6 from dispatch-launch-worker for
+#     the caller passed (e.g. sonnet from dispatch-launch-worker for
 #     qa/review); the existing Step 3 bg_args logic then carries --model opus.
 # Per .claude/rules/code-style.md a malformed opt-in config is a misconfigured
 # environment: fail loudly. Silently skipping the force would leave the user

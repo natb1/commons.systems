@@ -53,7 +53,11 @@ clarifications:
       same-node race surfaces as a rebase conflict rather than a silent clobber.
       The strategy-substance audit that a PR checkpoint would have provided is
       supplied instead by the /align-strategy interview itself — substance is
-      human-decided live, before the write. Recorded 2026-07-03 interview."
+      human-decided live, before the write. Recorded 2026-07-03 interview.
+      (Amended 2026-07-13: a same-node race no longer fails closed to a
+      manual-merge park — contention resolves automatically through the
+      serialization ladder; see the automatic-serialization clarification of
+      that date.)"
   - question: A strategy's tactics all complete but its signal is still unvalidated
       — what stops /align-tactics from burning rounds forever?
     answer: A fresh-reading gate plus a round cap. After a tactic round completes,
@@ -317,7 +321,12 @@ clarifications:
       advisories), or fixes that would add defensive fallbacks contrary to
       code-style. Ignored findings are not graph-recorded; every disposition
       including refutation reasons is recorded once in the PR review comment as
-      the audit trail. Recorded 2026-07-04 interview."
+      the audit trail. Recorded 2026-07-04 interview. (Amended 2026-07-13: cost
+      now enters the resolve/defer boundary — a confirmed out-of-contract
+      finding cheaper to fix than to defer is resolved in scope rather than
+      deferred, and only expensive out-of-contract findings become draft
+      tactics; the contract trigger and the ignore category are unchanged. See
+      the fix-everything-cheap clarification of that date.)"
   - question: Is the qa phase a re-run of the automated checks — and what does a
       bootstrap-emulating session owe it?
     answer: "No — full parity with the legacy qa-fix skill
@@ -540,7 +549,11 @@ clarifications:
       files — the periodic /align-strategy improvement pass (now carrying the
       greenfield gate and placement doctrine) is the reconciler, and a
       doctrine-recording session pauses the pace curve for its audit window, as
-      this round did. Recorded 2026-07-06 interview."
+      this round did. Recorded 2026-07-06 interview. (Amended 2026-07-13: the
+      failing-closed clause and the uniform claiming ledger are narrowed —
+      claiming is scheduling-dedup only and never blocks an edit; same-node
+      conflict resolves automatically, parking only true conflicts. See the
+      automatic-serialization clarification of that date.)"
   - question: Does the legacy office-hours entry's attach-to-parking-session
       behavior carry over — how does a human engage a parked node?
     answer: "No — graph recoverability replaces session recovery. Session recovery
@@ -1168,7 +1181,11 @@ clarifications:
       the other review steps are untouched. This refines clarification 19's
       disposition mechanics for the code-review/security-review sources
       specifically; it does not change the three-way disposition doctrine
-      itself. Recorded 2026-07-11 interview."
+      itself. Recorded 2026-07-11 interview. (Amended 2026-07-13: the three-way
+      disposition doctrine this clarification leaves intact was itself refined
+      that day — the unfixed residue is now classified into cheap findings fixed
+      in scope versus expensive out-of-contract findings deferred, not filed
+      wholesale. See the fix-everything-cheap clarification.)"
   - question: Frozen (undecomposed or soft-frozen) tactics carry a ranking — are
       they selectable, and what runs when the dispatch script picks one?
     answer: "Yes — decomposition and re-evaluation are dispatchable, ranked,
@@ -1333,6 +1350,98 @@ clarifications:
       the persistent layer is modified (draft
       tactic-align-persistent-layer-doctrine). Recorded 2026-07-13 interview
       (author-dictated)."
+  - question: When two sessions contend on the same node, must the author serialize
+      the edits manually?
+    answer: "No — contention is serialized automatically by tooling; the author is
+      involved only at a true-conflict park. This amends two recorded positions:
+      the fail-closed clause of clarification 2 of 2026-07-03 (same-node
+      conflict maps to a manual-merge park) and the 2026-07-06 round's 'failing
+      closed on same-node conflict' plus its uniform claiming ledger, both of
+      which conflated textual overlap with contrary intent. The amended doctrine
+      is the PR lane's fix-conflicts doctrine applied to node writes: resolve
+      mechanical conflicts autonomously, escalate only genuine ambiguity. The
+      resolution ladder, in order: (1) git three-way rebase auto-merge —
+      non-overlapping edits land as today; (2) a structure-aware field-level
+      merge — frontmatter list appends union so both land, distinct-field edits
+      combine; (3) a stale --base stops being fatal: tooling re-reads fresh
+      origin/main state and re-applies this writer's field-level edit
+      automatically (the 2026-07-06 near-miss guard survives as automatic
+      re-application, not a manual 're-read and retry'); (4) surviving
+      same-scalar-field divergence goes to a model evaluation that attempts
+      reconciliation; (5) only a true conflict — two edits expressing contrary
+      author intentions that the model cannot reconcile — parks to office_hours,
+      the park record carrying both divergent values plus a recommendation per
+      condition 6. Model scope guard (holds the human-authorship condition): on
+      human-owned doctrine fields — virtue/strategy/tradition/delegation
+      statement, rationale, clarification text — the model resolves only
+      mechanical divergence (one side subsumes the other, reordering, same
+      intent differently worded), never synthesizing new substance; genuine
+      doctrine divergence parks directly. On ai-owned tactic content and state
+      fields (phase, office_hours, execution), full reconciliation applies.
+      Node-id claiming narrows to scheduling deduplication: the router still
+      avoids spawning a duplicate worker for a claimed node (a token-spend
+      concern), but no session is ever blocked from editing a node by a claim —
+      write safety lives entirely at land time. Motivating episode: this round's
+      own interview was halted at the align skill's stop-on-held-claim step by
+      an unrelated diagnose-main background session squatting the strategy's
+      worktree — a claim gate serializing the author where no overlapping work
+      existed. Steelman resolved as divergence: pessimistic mutual-exclusion
+      serialization (the prior doctrine) was put and rejected — it blocks
+      concurrent sessions that have no true conflict; optimistic git-based
+      resolution on the PR-merge precedent is adopted. Reliance note: the
+      model-reconciliation layer deepens delegation-anthropic-claude — Claude
+      adjudicating between two expressions of author intent is capture-relevant;
+      the risk is held by the scope guard and the human-authorship condition,
+      and no recovers edge is added (the work controls the delegation rather
+      than unwinding it, the same reasoning as strategy-graph-integrity's
+      declined edge). The success_signal is unchanged: serialization health is a
+      mechanism condition (amended condition 2), not the strategy's end-state.
+      Implementation is retained as draft tactics
+      tactic-graph-commit-auto-serialization and tactic-claim-dedup-only.
+      Recorded 2026-07-13 interview."
+  - question: Clarification 19 disposes review findings by verification × contract
+      alone — every confirmed out-of-contract finding defers to a draft tactic.
+      Does the cost of the fix versus the cost of deferring it also bear on the
+      disposition?
+    answer: "Yes — cost is a second resolve-in-scope trigger, refining clarification
+      19's resolve/defer boundary (the 'fix everything cheap' doctrine). A
+      confirmed finding is resolved in the review phase's content-fix loop when
+      it EITHER breaks the tactic's contract (clarification 19's original
+      trigger, unchanged) OR is cheaper to fix than to defer; only a confirmed
+      out-of-contract finding that is expensive to fix — a real refactor —
+      defers to a draft tactic. Cheaper-to-fix-than-to-defer is the line:
+      deferral carries real overhead (a draft-tactic body, a later
+      /align-tactics finalization round, a separate PR and its review), so a
+      localized low-risk edit whose diff and risk are smaller than that overhead
+      — reuse an existing helper, consolidate a read, add input validation,
+      tighten a regex — is fixed now; a fix that introduces new structure or is
+      cross-cutting (an algorithmic rewrite, a memoization architecture) defers,
+      its in-PR risk and scope exceeding the deferral overhead. Cost refines
+      ONLY the resolve↔defer boundary: it never moves a finding out of the
+      ignore category — refuted findings, unreachable scenarios, below-threshold
+      pre-existing advisories, and fixes that would add defensive fallbacks
+      contrary to code-style stay ignored however cheap, because fixing a
+      non-finding is waste and a defensive fallback violates code-style
+      regardless of cost. A finding fixed in scope is still recorded, satisfying
+      the graph-as-sole-tracker rule (clarification 30) and clarification 19's
+      own audit trail: the disposition and the fix land in the PR review
+      comment, so 'fixed cheaply in-PR' drops nothing. Steelman resolved as
+      divergence: strict contract-scoping — defer every out-of-contract finding,
+      keeping the PR to its exact deliverable (clarification 19 as first
+      recorded) — was put and diverged from: it pays the full deferral overhead
+      for a sub-overhead fix and accumulates debt on surfaces the diff already
+      touched, against the greenfield lens (fix it right, now) and the
+      fold-don't-drop smallness doctrine (clarification 30). This refines
+      clarification 19's disposition and the residue-handling of the
+      trust-builtin clarification (the review skills' unfixed residue is now
+      classified into fix-cheap / defer-expensive, not filed wholesale); the
+      three-way structure and its adversarial-confirm requirement are otherwise
+      unchanged. First application: PR #2865 (tactic-graph-digest-tooling) fixed
+      4 confirmed correctness/hardening findings plus cheap
+      reuse/efficiency/convention improvements in scope and deferred two large
+      refactors (a near-duplicate O(n²) inverted index, closure memoization) to
+      tactic-graph-digest-quality-followups. Implementation retained as draft
+      tactic-review-cheap-fix-disposition. Recorded 2026-07-13 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1385,8 +1494,12 @@ attributes:
       tactic-align-entrypoint-consolidation lands) is live — the graph is the
       sole issue tracker, bug tracker included, with no side-channel work
       records
-    - direct-push commits stay restricted to intentions/ paths and rebase-retry
-      conflict cost stays negligible at fleet concurrency
+    - direct-push commits stay restricted to intentions/ paths; same-node
+      contention resolves automatically through the serialization ladder (git
+      merge → structural field-level merge → re-read/re-apply → scoped model
+      reconciliation), with the author involved only at a true-conflict
+      office_hours park; total resolution cost — retries plus model spend —
+      stays negligible at fleet concurrency
     - strategy-graph-drives-dispatch holds — resolved rank from the graph orders
       execution
     - persistent-layer substance — virtues, strategies, traditions, delegations

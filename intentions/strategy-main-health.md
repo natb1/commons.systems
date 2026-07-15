@@ -15,7 +15,14 @@ rationale: "Red main halts the autonomous dispatch chain — no new work is safe
   validate this node and inherit its standing boost through the normal downward
   attention flow; the boost's dominance is maintained by a write-path guard
   (author override required to out-boost or reduce it), never by recompute."
-reading: null
+reading: "origin/main HEAD 9f364306 green 2026-07-13: all check runs concluded
+  success (acceptance, preview-and-smoke, lint, unit-tests, guard, Analyze
+  go/python/actions) — success_signal threshold met. Manual observation standing
+  in for the not-yet-implemented main-health sensor
+  (tactic-graph-main-self-heal): it validates the signal (gap null, reading set)
+  so the router strategy lane stops emitting this node as an align-tactics
+  decomposition candidate. Overwrite or null this reading when main next goes
+  red, or when the sensor lands and takes over the read."
 gap: null
 serves: []
 recovers: []

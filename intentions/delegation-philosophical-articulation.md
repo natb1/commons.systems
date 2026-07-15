@@ -83,7 +83,13 @@ attributes:
     tactic-reading-chunk-2-aristotle-hexis, range widened to NE II.1-6), and the
     AI-alignment correspondence on the delegatee-education doctrine (reviewed at
     tactic-reading-chunk-25-constitutional-ai, Constitutional AI sections 1 and
-    3-4)"
+    3-4); extended 2026-07-13 with the cross-guard articulation from the chunk-2
+    sitting — tension_with requalified as a graph-native inter-virtue
+    cross-guard (each sibling's excess falls in the other's field) with explicit
+    intra-virtue mean triples on the mobility children — Claude-drafted, adopted
+    by the author as a deferral ('execute greenfield recommendation as
+    deferred'), reviewed at tactic-reading-chunk-5-aristotle-phronesis (NE VI,
+    phronesis as Aristotle's own inter-virtue coordinator)"
   origin: chosen
   divergence:
     level: moderate
@@ -102,6 +108,12 @@ attributes:
         found and amended 2026-07-07 chunk 1 (the reading wins), recorded here
         retroactively 2026-07-08 when every reading-wins catch became a required
         contradictions entry
+      - the 2026-07-09 cadence-as-habituation deferral as drafted said 'drift
+        between sittings is the hexis decaying' — the author's position was
+        graph-model desynchronization (internal hexis evolves, record grows
+        stale as its model), and NE II.1 grounds destruction by contrary
+        practice, not decay-by-inactivity; found and amended 2026-07-13 chunk 2,
+        the reading wins
   irreversibility:
     recovery_path: relearn — read the cited texts against each tradition record,
       chunked in tactic-tradition-reading-program; each verified record flips
@@ -110,9 +122,12 @@ attributes:
       cited passage-by-passage on the records
     gated: false — nothing about the way back is held by either delegatee; the texts
       outlive both
-    last_exercised: "2026-07-07 — chunk 1 (Republic VII 514a-521b): tradition-plato
-      amended (misdirection, agency of turning, Form of the Good), cascades to
-      both roots and strategy-external-calibration"
+    last_exercised: "2026-07-13 — chunk 2 (NE II.1-7): tradition-aristotle ratified
+      on habituation and hexis (kind-virtue's definition personally verified)
+      and requalified on the mean (intra-virtue; tension_with divergence
+      recorded as graph-native cross-guard); strategy-explicit-intent's
+      cadence-as-habituation deferral amended (synchronization drift,
+      three-scenario adjudication) — a double reading-wins catch"
   classification: platform — demands buy-in while unverified; decays toward tool
     as records flip to codified
   non_delegable_floor: the capacity to notice a recorded articulation

@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
-# Tests for dispatch-phase-model — the tick-time phase → model lookup (#2028).
+# Tests for dispatch-phase-model — the tick-time phase → model lookup.
 #
-# Covers the generated-policy override path: a phase-model-policy.json route
-# (when present, for an allowlisted phase) overrides the hardcoded default
-# case-map; the demotable allowlist {qa, review} fail-closes against demoting a
-# code-authoring phase; a malformed policy fails loudly (non-zero exit) rather
-# than silently falling back; and the usage-error exit-code contract (exit 2)
-# still fires before any policy load.
-#
-# The SUT is pointed at fixture policies via the DISPATCH_CONFIG_DIR env seam
-# (the same seam dispatch-config-load uses) — each case writes a
-# phase-model-policy.json into a per-case mktemp dir.
+# Invariant under test (#2872): the phase orchestrator is ALWAYS Sonnet for the
+# workflow phases, and there is NO policy that can promote it to Opus. The lookup
+# is a pure static map — it reads no config file. These tests cover the static
+# map, the empty-default for unmapped phases, the regression guard that a stray
+# phase-model-policy.json is ignored (the retired #2028 promotion cannot come
+# back), and the usage-error exit-code contract (exit 2).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
@@ -29,93 +25,55 @@ run_phase() {  # $1 = config dir (or "" for none), $2 = phase
   set -e
 }
 
-# write_policy: drop a phase-model-policy.json with the given body into a fresh
-# mktemp dir and echo the dir path. The filename is fixed — dispatch-config-load
-# derives it from the config type.
-write_policy() {  # $1 = JSON body; echoes the config dir
-  local dir
-  dir=$(mktemp -d)
-  printf '%s\n' "$1" > "$dir/phase-model-policy.json"
-  printf '%s' "$dir"
-}
+# ============================================================================
+# Case 1: the static map — every workflow phase resolves to sonnet.
+# ============================================================================
+echo "Case 1: static map -> sonnet for the workflow phases"
+for ph in qa review fix-checks fix-conflicts main-qa; do
+  run_phase "" "$ph"
+  assert_eq "static: $ph -> sonnet" "sonnet" "$OUT"
+  assert_eq "static: $ph exit 0" "0" "$RC"
+done
 
 # ============================================================================
-# Case 1: no policy file present (empty config dir) → defaults apply.
+# Case 2: unmapped phases -> empty (inherit the session default, no --model).
 # ============================================================================
-echo "Case 1: no policy file -> hardcoded defaults"
-EMPTY_DIR=$(mktemp -d)
-
-run_phase "$EMPTY_DIR" qa
-assert_eq "no policy: qa -> sonnet" "claude-sonnet-4-6" "$OUT"
-assert_eq "no policy: qa exit 0" "0" "$RC"
-
-run_phase "$EMPTY_DIR" review
-assert_eq "no policy: review -> sonnet" "claude-sonnet-4-6" "$OUT"
-
-run_phase "$EMPTY_DIR" fix-checks
-assert_eq "no policy: fix-checks -> sonnet" "claude-sonnet-4-6" "$OUT"
-assert_eq "no policy: fix-checks exit 0" "0" "$RC"
-
-run_phase "$EMPTY_DIR" fix-conflicts
-assert_eq "no policy: fix-conflicts -> sonnet" "claude-sonnet-4-6" "$OUT"
-assert_eq "no policy: fix-conflicts exit 0" "0" "$RC"
-
-run_phase "$EMPTY_DIR" main-qa
-assert_eq "no policy: main-qa -> sonnet" "claude-sonnet-4-6" "$OUT"
-assert_eq "no policy: main-qa exit 0" "0" "$RC"
-
-run_phase "$EMPTY_DIR" plan
-assert_eq "no policy: unmapped plan -> empty" "" "$OUT"
-assert_eq "no policy: plan exit 0" "0" "$RC"
+echo "Case 2: unmapped phases -> empty"
+for ph in plan implement done; do
+  run_phase "" "$ph"
+  assert_eq "unmapped: $ph -> empty" "" "$OUT"
+  assert_eq "unmapped: $ph exit 0" "0" "$RC"
+done
 
 # ============================================================================
-# Case 2: policy routes qa -> opus → override beats the default.
+# Case 3: regression guard — a stray phase-model-policy.json cannot promote the
+# orchestrator. The retired #2028 policy routed qa/review to opus; the lookup no
+# longer reads any config, so such a file is inert.
 # ============================================================================
-echo "Case 2: policy route overrides default"
-DIR2=$(write_policy '{"routes":{"qa":"claude-opus-4-8"}}')
+echo "Case 3: stray policy file is ignored (no promotion to opus)"
+STRAY_DIR=$(mktemp -d)
+printf '%s\n' '{"routes":{"qa":"claude-opus-4-8","review":"claude-opus-4-8"}}' \
+  > "$STRAY_DIR/phase-model-policy.json"
 
-run_phase "$DIR2" qa
-assert_eq "policy qa -> opus (override)" "claude-opus-4-8" "$OUT"
-assert_eq "policy qa override exit 0" "0" "$RC"
+run_phase "$STRAY_DIR" qa
+assert_eq "stray policy: qa stays sonnet" "sonnet" "$OUT"
+assert_eq "stray policy: qa exit 0" "0" "$RC"
 
-# ============================================================================
-# Case 3: policy present but missing the requested route → default fallback.
-# ============================================================================
-echo "Case 3: missing route key -> default fallback"
-DIR3=$(write_policy '{"routes":{"qa":"claude-opus-4-8"}}')
+run_phase "$STRAY_DIR" review
+assert_eq "stray policy: review stays sonnet" "sonnet" "$OUT"
 
-run_phase "$DIR3" review
-assert_eq "policy missing review key: review -> default sonnet" "claude-sonnet-4-6" "$OUT"
-
-# ============================================================================
-# Case 4: allowlist guard — a policy demoting a code-authoring phase is ignored.
-# ============================================================================
-echo "Case 4: allowlist guard ignores non-allowlisted route"
-DIR4=$(write_policy '{"routes":{"implement":"claude-sonnet-4-6","qa":"claude-opus-4-8"}}')
-
-run_phase "$DIR4" implement
-assert_eq "policy route for implement IGNORED -> empty" "" "$OUT"
-assert_eq "implement guard exit 0" "0" "$RC"
-
-# The allowlisted route in the same policy is still honored.
-run_phase "$DIR4" qa
-assert_eq "allowlisted qa route still honored -> opus" "claude-opus-4-8" "$OUT"
+# A malformed policy file is likewise inert — no config load, so no failure.
+echo "Case 3b: malformed stray policy file is still inert"
+BAD_DIR=$(mktemp -d)
+printf '%s\n' '{ not json' > "$BAD_DIR/phase-model-policy.json"
+run_phase "$BAD_DIR" qa
+assert_eq "malformed stray policy: qa stays sonnet" "sonnet" "$OUT"
+assert_eq "malformed stray policy: qa exit 0" "0" "$RC"
 
 # ============================================================================
-# Case 5: malformed policy JSON → fail loudly (non-zero exit, no fallback).
+# Case 4: usage errors → exit 2.
 # ============================================================================
-echo "Case 5: malformed policy -> non-zero exit"
-DIR5=$(mktemp -d)
-printf '%s\n' '{ not json' > "$DIR5/phase-model-policy.json"
-
-run_phase "$DIR5" qa
-assert_eq "malformed policy -> nonzero exit" "nonzero" \
-  "$([ "$RC" -ne 0 ] && echo nonzero || echo zero)"
-
-# ============================================================================
-# Case 6: usage errors → exit 2, before any policy load.
-# ============================================================================
-echo "Case 6: usage errors exit 2"
+echo "Case 4: usage errors exit 2"
 
 set +e
 "$SUT" >/dev/null 2>&1
