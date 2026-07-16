@@ -209,7 +209,15 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
 
   // 4. fingerprint — a strategy substance edit after selection yields the
   //    worker. Only meaningful once stamping has started (null is never stale).
-  const stampedFp = readStrategyFingerprint(node);
+  //
+  //    Skipped entirely for an align-tactics selection. A strategy's stamp is
+  //    null anyway (nothing to compare). For a soft-frozen tactic — the exact
+  //    re-evaluation target an align-tactics session exists to handle — the
+  //    stale execution.strategy_fingerprint IS the selection reason, not a yield
+  //    reason: 3b (frozenTacticSelectable) already admitted it, so re-testing the
+  //    same staleness here would reject the node 3b just admitted and strand the
+  //    re-evaluation worker at exit 12.
+  const stampedFp = selectedPhase === "align-tactics" ? null : readStrategyFingerprint(node);
   if (stampedFp !== null) {
     const byId = new Map(listNodes(dir).map((n) => [n.id, n]));
     for (const sid of servingStrategyIds(node, byId)) {

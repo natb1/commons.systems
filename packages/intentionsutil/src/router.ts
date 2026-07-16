@@ -324,7 +324,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
         pr: null,
         reevaluation: false,
       });
-    } else if (frozenTacticIds.has(t.id)) {
+    } else if (frozenTacticIds.has(t.id) && isOpenTactic(t)) {
       candidates.push({
         id: t.id,
         kind: "tactic",

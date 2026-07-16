@@ -394,6 +394,28 @@ describe("soft-freeze gate", () => {
     expect(ids).toContain("tactic-sibling");
   });
 
+  it("a done child of a frozen subtree is NOT re-emitted as an align-tactics re-eval candidate", () => {
+    // A `done` tactic can sit in the store during a freeze because transition-node
+    // writes `done` without pruning (prune is a separate, lagging step). The
+    // soft-freeze scan must not surface it as a `/align-tactics` re-eval target:
+    // done (the highest progression ordinal) would otherwise sort to the TOP and
+    // dispatch a re-plan against a completed/merged tactic.
+    const nodes: IntentionNode[] = [
+      strategy({ id: "strategy-s" }),
+      tactic({
+        id: "tactic-stale",
+        serves: ["strategy-s"],
+        phase: "implement",
+        execution: exec({ strategy_fingerprint: "stale-fingerprint" }),
+      }),
+      tactic({ id: "tactic-done", serves: ["strategy-s"], phase: "done" }),
+    ];
+    const ids = selectGraphTargets(nodes).candidates.map((c) => c.id);
+    expect(ids).not.toContain("tactic-done");
+    // the open frozen child still re-surfaces
+    expect(ids).toContain("tactic-stale");
+  });
+
   // Multi-serves: the per-strategy map stamp must not false-freeze siblings.
   // An honest tactic serving two strategies carries one fingerprint per serving
   // strategy; a single legacy string cannot equal two substance hashes, which is

@@ -365,6 +365,32 @@ describe("evaluateSelection", () => {
       expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
     });
 
+    it("passes a soft-frozen tactic (stale fingerprint) the selector re-surfaces (exit 0)", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "strategy-x", kind: "strategy", statement: "Own the substrate." }));
+      // An open tactic carrying a STALE serving-strategy fingerprint is
+      // soft-frozen: the selector re-surfaces it as an align-tactics candidate.
+      // The stale fingerprint IS the re-evaluation reason, so step 4 must be
+      // skipped at align-tactics — a literal fingerprint check would exit-12 the
+      // very node 3b just admitted and strand the re-evaluation worker.
+      seed(
+        dir,
+        anode({
+          id: "tactic-frozen",
+          kind: "tactic",
+          phase: "qa",
+          serves: ["strategy-x"],
+          execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: "0".repeat(64) },
+        }),
+      );
+      // Sanity: the SAME node selected at its stored phase exit-12s on the stale
+      // fingerprint — proving align-tactics is what suppresses step 4, not the fixture.
+      expect(evaluateSelection({ nodeId: "tactic-frozen", selectedPhase: "qa", dir, stamp: null }).exitCode).toBe(12);
+      const r = evaluateSelection({ nodeId: "tactic-frozen", selectedPhase: "align-tactics", dir, stamp: null });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
+    });
+
     it("exit 12 when a draft tactic was parked after selection (not-parked owns the verdict)", () => {
       const dir = tempDir();
       // A parked draft tactic never reaches 3b — the earlier not-parked check
