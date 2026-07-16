@@ -55,6 +55,9 @@
 #   waiting <id>            provision exit 10 (ci-waiting) — retry next tick.
 #   skipped <id>            provision exit 12 (stale-selection) — no graph write.
 #   scope-stale <id>        provision exit 13 — node demoted to implement.
+#                           Rare post-sweep safety net now (the pre-selection
+#                           dispatch-graph-scope-sweep enumerator handles the
+#                           common case before launch), not the routine path.
 #   parked <id>             a mechanical failure parked the node (office_hours
 #                           graph write, never a label).
 #   failed <id> <reason>    the node could neither launch nor cleanly dispose.
@@ -206,8 +209,19 @@ for spec in "$@"; do
       echo "skipped $id"
       ;;
     13)
-      # scope-stale: the tactic's scope changed after the previous phase. Demote
-      # it to implement so its ladder re-runs against the merge-time scope.
+      # scope-stale: the tactic's scope changed after the previous phase. The
+      # common path for this disposition now runs BEFORE selection, in the
+      # dispatch-graph-scope-sweep enumerator wired into dispatch-select-tick's
+      # Step 1d (landed in a prior unit of this same plan) — so a metadata-only
+      # scope-stale demote no longer routinely consumes a launch slot here. This
+      # launch-time path only fires as a post-sweep safety re-check for scope
+      # drift introduced between the sweep and this provision call (e.g. a
+      # concurrent author/session edit landing in that window); it should be
+      # rare. Demote to implement so its ladder re-runs against the merge-time
+      # scope, and clear the reservation (mirrors case 12 above) so the demoted
+      # node is freed for next-tick re-selection rather than staying counted
+      # against the budget.
+      reservation_clear "$id" || true
       if "$DEMOTE_NODE" "$id"; then
         echo "scope-stale $id"
       else
