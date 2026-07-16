@@ -60,13 +60,20 @@ clarifications:
       that date.)"
   - question: A strategy's tactics all complete but its signal is still unvalidated
       — what stops /align-tactics from burning rounds forever?
-    answer: A fresh-reading gate plus a round cap. After a tactic round completes,
+    answer: "A fresh-reading gate plus a round cap. After a tactic round completes,
       the strategy is re-eligible only once its sensor produces a reading newer
       than the round's completion; after two rounds without validation it parks
       to office-hours with the round history as the why. A null reading counts
       as not-validated, but the first round must then include a tactic that
       makes the sensor runnable — a strategy that cannot be measured must first
-      buy its own instrument. Recorded 2026-07-03 interview.
+      buy its own instrument. Recorded 2026-07-03 interview. (Amended
+      2026-07-16: the \"reading newer than the round's completion\" anchor is a
+      distinct rounds.last_aligned — align-decompose time — not
+      rounds.last_completed, which clarification 22 reserves for
+      verified-in-prod; and the fresh-reading check applies regardless of count,
+      so it engages for strategies whose rounds produce born-parked or off-path
+      work and never prune a child. See the last_aligned clarification of that
+      date.)"
   - question: What replaces the dispatch:office-hours label?
     answer: A first-class parked field on goal-layer nodes (reason plus since),
       valid on strategies and tactics; the router skips parked nodes and their
@@ -1491,6 +1498,34 @@ clarifications:
       variance, out of scope for this self-reap — its orphaned job is reaped by
       the tick/sweep ledger pass that already GCs the stale worktree (retained
       in the draft tactic). Recorded 2026-07-16 interview."
+  - question: "A strategy whose signal is validated only by human work (sensor:
+      owner review at office-hours) is re-selected for /align-tactics every tick
+      — its rounds produce off-path tooling plus born-parked on-path reading
+      chunks, never a claude-executable on-path tactic, so the coverage gate
+      never trips and clarification 3's fresh-reading gate never fires. Why, and
+      what is the fix?"
+    answer: "Clarification 3's fresh-reading doctrine is correct but its
+      implementation anchor is wrong for this strategy class. The gate keys off
+      rounds.last_completed / rounds.count, which advance only when the last
+      child prunes — verified-in-prod (clarification 22). A round whose
+      deliverable is born-parked human reading plus off-path tooling never
+      prunes a child, so count stays 0 and last_completed stays null: the
+      fresh-reading check (guarded by count > 0) never runs and the node is
+      perpetually align-eligible. Fix: add a distinct rounds.last_aligned
+      timestamp, stamped when an /align-tactics round lands its tactics, and
+      re-select for a further round only when the strategy's reading is newer
+      than last_aligned (a null last_aligned — never aligned — still passes,
+      preserving first rounds), applied regardless of count. last_completed
+      keeps its verified-in-prod meaning (clarification 22) and count >= 2 stays
+      a hard cap; for a recurring human-signal strategy count legitimately stays
+      0 and last_aligned freshness is the sole re-selection throttle — align
+      runs once per new reading to born-park the reading's follow-up chunks and
+      sweep drift, then waits. Diverges from the rival fix of counting
+      born-parked on-path chunks as coverage: that would exclude the strategy
+      until the entire reading program finished and never re-open to sweep drift
+      on a new reading, losing the per-reading cadence clarification 3 intends.
+      Implementation: tactic-graph-eligibility-last-aligned. Recorded 2026-07-16
+      interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
