@@ -26,7 +26,21 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 6
+  override: null
+  rationale: "Author-directed 2026-07-16: this tactic fixes the perpetual
+    /align-tactics re-selection bug on strategy-philosophical-grounding (and any
+    other human-signal strategy) — a router-eligibility defect, not feature
+    work. Set to boost 6 (added on top of the strategy's own boost 5, plus the
+    capture term, composing to ~11.3) so it ranks strictly above the current
+    graph-wide ceiling among non-done, non-emergency nodes (9.33, held by
+    tactic-graph-frozen-tactic-dispatch/tactic-nontactic-body-durability/tactic\
+    -review-phase-trust-builtin-review) and above the prior top tier (authored
+    8: tactic-align-family-opus-default, tactic-align-skills-latest-graph-guard,
+    tactic-fingerprint-recipe-single-callsite). Deliberately left below
+    strategy-main-health's emergency ceiling (boost 100) — a red-main safety
+    signal this fix must not outrank."
 phase: null
 execution: null
 validates: []
