@@ -26,7 +26,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: fix
 execution:
   branch: tactic-graph-digest-tooling
   pr: 2865
