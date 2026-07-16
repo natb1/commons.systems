@@ -32,7 +32,12 @@ execution:
 validates:
   - strategy-exercise-recovery-paths
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-16
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /fix-conflicts once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}
