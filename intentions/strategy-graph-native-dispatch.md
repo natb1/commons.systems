@@ -60,13 +60,20 @@ clarifications:
       that date.)"
   - question: A strategy's tactics all complete but its signal is still unvalidated
       — what stops /align-tactics from burning rounds forever?
-    answer: A fresh-reading gate plus a round cap. After a tactic round completes,
+    answer: "A fresh-reading gate plus a round cap. After a tactic round completes,
       the strategy is re-eligible only once its sensor produces a reading newer
       than the round's completion; after two rounds without validation it parks
       to office-hours with the round history as the why. A null reading counts
       as not-validated, but the first round must then include a tactic that
       makes the sensor runnable — a strategy that cannot be measured must first
-      buy its own instrument. Recorded 2026-07-03 interview.
+      buy its own instrument. Recorded 2026-07-03 interview. (Amended
+      2026-07-16: the \"reading newer than the round's completion\" anchor is a
+      distinct rounds.last_aligned — align-decompose time — not
+      rounds.last_completed, which clarification 22 reserves for
+      verified-in-prod; and the fresh-reading check applies regardless of count,
+      so it engages for strategies whose rounds produce born-parked or off-path
+      work and never prune a child. See the last_aligned clarification of that
+      date.)"
   - question: What replaces the dispatch:office-hours label?
     answer: A first-class parked field on goal-layer nodes (reason plus since),
       valid on strategies and tactics; the router skips parked nodes and their
@@ -280,7 +287,15 @@ clarifications:
       2026-06-26→07-03 window — precisely as the queue migrates. The durable
       home for the requirements and their signal is strategy-token-economy; this
       clarification records only what the migration must carry. Recorded
-      2026-07-04 interview."
+      2026-07-04 interview. Amended 2026-07-16: the align-tactics decomposition
+      session no longer runs whole-session on Opus — under
+      strategy-token-economy clarification 10 the dispatch-launched
+      /align-tactics worker runs a Sonnet orchestrator that delegates the
+      decompose-to-signal judgment and per-tactic plan authoring to an Opus
+      subagent; the /align-strategy interview stays whole-session Opus. The
+      audit-written policy file is likewise now advisory (author-gated) rather
+      than auto-applied, per the same clarification. Durable home remains
+      strategy-token-economy."
   - question: Is the fix phase a linear step between implement and qa?
     answer: "No — fix is the CI-failure interrupt (it could be called ci-fix): a
       tactic enters fix from ANY of implement, qa, or review when its PR's CI
@@ -1442,6 +1457,75 @@ clarifications:
       refactors (a near-duplicate O(n²) inverted index, closure memoization) to
       tactic-graph-digest-quality-followups. Implementation retained as draft
       tactic-review-cheap-fix-disposition. Recorded 2026-07-13 interview."
+  - question: After a node worker terminates, is its session removed from the agents
+      list — and does an escalation-parked session stay for the author to
+      engage?
+    answer: "Reaped on every terminal exit — clean advance and escalation-park
+      alike. The legacy gh router's Stop hook removed a worker session that
+      terminated without variance and needed no author follow-up (via
+      dispatch-self-close — `claude rm <job-id>`, foreground-safe: a no-op for
+      an interactive session) so it did not clog the agents list; the node-lane
+      branch of that same Stop hook currently does nothing for a node worker
+      'parked or clean' (dispatch-stop.sh), so completed and parked node-worker
+      sessions accumulate in `claude agents --json`. The requirement carries
+      over, and graph-native doctrine widens it: because session persistence is
+      already demoted — sessions are disposable executors that live exactly as
+      long as their one phase (the disposable-session clarification), session
+      recovery is never router substrate (the worker-death clarification), and
+      every office_hours park writes its recoverable context into the NODE, not
+      the session (session attach/resume is not a supported recovery path) —
+      nothing durable lives in a terminated session, so the agents list should
+      hold only LIVE executors and an escalation-parked session is reaped too.
+      This diverges from the rival session-as-observability framing (keep
+      escalated sessions visible in the agents list as a live cue): escalations
+      surface through the office-hours dashboard's PARKED panel, which reads the
+      node's office_hours field, so a lingering agents-list entry adds no signal
+      and re-couples observability to session persistence — the coupling the
+      disposable-session clarification exists to reject. Mechanism (retained as
+      draft tactic-graph-node-session-reap, 'stop hook or otherwise' per the
+      requirement): the node-worker branch of the Stop hook calls the existing
+      foreground-safe self-close primitive on its terminal exit, after the
+      escalation-park backstop runs so the node's office_hours is durable before
+      the session is removed. Edge cases resolved: (a) foreground-safe gate —
+      only managed background worker jobs are reaped; interactive align and
+      office-hours human sessions (CLAUDE_JOB_DIR-gated) are never auto-removed;
+      (b) failure-containment consistency — reaping releases the node-id
+      worktree claim (worktree_has_live_session goes false), which correctly
+      makes the next phase selectable after a clean advance and lets the
+      no-progress fuse count re-selections after a silent no-transition exit, so
+      it does not weaken the router-failure-containment condition; (c) a worker
+      that dies mid-phase without firing a clean Stop (a hard crash) is
+      variance, out of scope for this self-reap — its orphaned job is reaped by
+      the tick/sweep ledger pass that already GCs the stale worktree (retained
+      in the draft tactic). Recorded 2026-07-16 interview."
+  - question: "A strategy whose signal is validated only by human work (sensor:
+      owner review at office-hours) is re-selected for /align-tactics every tick
+      — its rounds produce off-path tooling plus born-parked on-path reading
+      chunks, never a claude-executable on-path tactic, so the coverage gate
+      never trips and clarification 3's fresh-reading gate never fires. Why, and
+      what is the fix?"
+    answer: "Clarification 3's fresh-reading doctrine is correct but its
+      implementation anchor is wrong for this strategy class. The gate keys off
+      rounds.last_completed / rounds.count, which advance only when the last
+      child prunes — verified-in-prod (clarification 22). A round whose
+      deliverable is born-parked human reading plus off-path tooling never
+      prunes a child, so count stays 0 and last_completed stays null: the
+      fresh-reading check (guarded by count > 0) never runs and the node is
+      perpetually align-eligible. Fix: add a distinct rounds.last_aligned
+      timestamp, stamped when an /align-tactics round lands its tactics, and
+      re-select for a further round only when the strategy's reading is newer
+      than last_aligned (a null last_aligned — never aligned — still passes,
+      preserving first rounds), applied regardless of count. last_completed
+      keeps its verified-in-prod meaning (clarification 22) and count >= 2 stays
+      a hard cap; for a recurring human-signal strategy count legitimately stays
+      0 and last_aligned freshness is the sole re-selection throttle — align
+      runs once per new reading to born-park the reading's follow-up chunks and
+      sweep drift, then waits. Diverges from the rival fix of counting
+      born-parked on-path chunks as coverage: that would exclude the strategy
+      until the entire reading program finished and never re-open to sweep drift
+      on a new reading, losing the per-reading cadence clarification 3 intends.
+      Implementation: tactic-graph-eligibility-last-aligned. Recorded 2026-07-16
+      interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1567,5 +1651,13 @@ attributes:
       validate-graph/graph-commit refuses a commit that authors another boost or
       override at or above it, or that reduces it, unless the commit carries an
       explicit author override"
+    - a node-worker session is reaped from the agents list on every terminal
+      exit — clean advance and escalation-park alike — via the foreground-safe
+      self-close primitive (`claude rm`; interactive sessions exempt), because
+      nothing durable lives in a terminated session (an office_hours park's
+      context is written into the node, not the session); the agents list holds
+      only live executors, escalations surface via the office-hours PARKED panel
+      rather than a lingering session, and a completed or parked worker job left
+      in `claude agents --json` is a defect
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
