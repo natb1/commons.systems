@@ -20,7 +20,12 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-dependency-justification-audit
+  pr: 2875
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates:
   - strategy-owned-web-platform
 blocked_by: []
@@ -157,7 +162,7 @@ Confirm the driver resolves the new sensor for `strategy-owned-web-platform`
 `reading` for it.
 
 ```verify
-npx vitest run --project intentionsutil --root .
+npx vitest run --project packages/intentionsutil --root .
 ```
 
 Add unit tests covering: manifest parsing collects runtime deps and excludes

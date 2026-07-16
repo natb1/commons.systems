@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { parse, stringify } from "yaml";
 import { isPlainObject, validateNode, type IntentionNode, type IntentionNodeInput } from "./schema.js";
 import { IntentionSchemaError } from "./errors.js";
+import { extractFrontmatter, extractBody } from "./frontmatter.js";
 
 /**
  * Serialize a node to its on-disk form and write it to `<dir>/<id>.md`.
@@ -86,20 +87,8 @@ function readExistingTacticBody(filePath: string, node: IntentionNode): string |
   return extractBody(raw, node.id);
 }
 
-/**
- * Return everything after the closing frontmatter fence, verbatim (including
- * any trailing newline convention already on disk). Reuses `extractFrontmatter`
- * to locate the fence boundary rather than re-deriving it.
- */
-function extractBody(raw: string, id: string): string {
-  const frontmatter = extractFrontmatter(raw, id);
-  // `raw` is "---\n" + frontmatter + closing-fence-line + "\n" + body. The
-  // closing fence line itself is the first line of what remains after the
-  // frontmatter text, so the body starts right after that line's newline.
-  const afterFrontmatter = raw.slice("---\n".length + frontmatter.length);
-  const newlineIndex = afterFrontmatter.indexOf("\n");
-  return newlineIndex === -1 ? "" : afterFrontmatter.slice(newlineIndex + 1);
-}
+// `extractFrontmatter` / `extractBody` moved to the pure `frontmatter.ts`
+// module (imported above) so the fs-free digest can share one implementation.
 
 /**
  * Read and validate the node stored at `<dir>/<id>.md`.
@@ -142,19 +131,3 @@ export function listNodes(dir: string): IntentionNode[] {
     .map((id) => readNode(dir, id));
 }
 
-/**
- * Extract the text between the opening `---\n` fence and the next line that is
- * exactly `---`.
- */
-function extractFrontmatter(raw: string, id: string): string {
-  if (!raw.startsWith("---\n")) {
-    throw new IntentionSchemaError(`Node ${id} is missing an opening "---" frontmatter fence`);
-  }
-  const body = raw.slice("---\n".length);
-  // The closing fence is a line that is exactly "---".
-  const closeIndex = body.search(/^---$/m);
-  if (closeIndex === -1) {
-    throw new IntentionSchemaError(`Node ${id} is missing a closing "---" frontmatter fence`);
-  }
-  return body.slice(0, closeIndex);
-}
