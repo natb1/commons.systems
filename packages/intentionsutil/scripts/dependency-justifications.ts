@@ -51,4 +51,94 @@ export const dependencyJustifications: Record<string, DependencyJustification> =
       "print's EPUB renderer. Upstream is effectively unmaintained; we patch around its behavior in-app.",
     upstream: "stale",
   },
+  "react-dom": {
+    justification:
+      "React's DOM renderer, paired with react — createRoot in the app entrypoints (print, office-hours, audio, budget, landing main.tsx).",
+    upstream: "live",
+  },
+  "@google-cloud/secret-manager": {
+    justification:
+      "office-hours-snapshot/src/run.ts dynamically imports SecretManagerServiceClient to fetch secrets at runtime (functions declares it too but knip.jsonc baselines that copy as unused).",
+    upstream: "live",
+  },
+  "@observablehq/plot": {
+    justification:
+      "Declarative charting library for office-hours queue/history charts, budget's financial charts, and packages/ds chart components.",
+    upstream: "live",
+  },
+  "d3-hierarchy": {
+    justification:
+      "budget: hierarchy/tree layout (import { hierarchy, tree } from d3-hierarchy) for its hierarchical spend visualizations.",
+    upstream: "live",
+  },
+  "d3-interpolate": {
+    justification:
+      "budget: interpolateRgb color interpolation for chart color ramps.",
+    upstream: "live",
+  },
+  "d3-scale": {
+    justification:
+      "budget: declared but no code imports it — knip.jsonc baselines it as unused (budget's charts use d3-hierarchy/interpolate/shape, not d3-scale). A deletion candidate, kept per no-bulk-delete.",
+    upstream: "live",
+  },
+  "d3-scale-chromatic": {
+    justification:
+      "budget: declared but never imported — knip.jsonc baselines it as unused. A deletion candidate, kept per no-bulk-delete.",
+    upstream: "live",
+  },
+  "d3-shape": {
+    justification:
+      "budget: pie/arc shape generators (import { pie, arc } from d3-shape) for its donut/pie charts.",
+    upstream: "live",
+  },
+  dompurify: {
+    justification:
+      "fellspiral/landing: client-side HTML sanitization (DOMPurify.sanitize) of Markdown rendered through the shared @commons-systems/blog pipeline before innerHTML injection.",
+    upstream: "live",
+  },
+  marked: {
+    justification:
+      "fellspiral/landing: Markdown-to-HTML rendering of blog posts via the shared @commons-systems/blog marked-config.",
+    upstream: "live",
+  },
+  "firebase-admin": {
+    justification:
+      "Firebase Admin SDK — server-side Firestore access in office-hours-snapshot, firestoreutil seeding/merge helpers, and Cloud Functions.",
+    upstream: "live",
+  },
+  "firebase-functions": {
+    justification:
+      "Firebase Cloud Functions SDK — defines the HTTPS/scheduled functions (feed-proxy, webmention, project-signals, dispatch-queue-metrics).",
+    upstream: "live",
+  },
+  "missing.css": {
+    justification:
+      "Classless CSS baseline stylesheet imported once in each app entrypoint (office-hours, audio, budget, fellspiral, landing, print main.tsx).",
+    upstream: "live",
+  },
+  "music-metadata": {
+    justification:
+      "audio: parseBuffer extracts embedded tags/metadata from audio files (audio/src/local-metadata.ts).",
+    upstream: "live",
+  },
+  "pdfjs-dist": {
+    justification:
+      "print: PDF rendering and text-layer extraction (pdfjsLib + TextLayer) for the PDF viewer and metadata reader.",
+    upstream: "live",
+  },
+  typescript: {
+    justification:
+      "packages/firebase-audit: uses the TypeScript compiler API (import ts from \"typescript\") at runtime to statically resolve and walk module imports for the firebase-reachability audit — a genuine runtime dependency, not just the build toolchain.",
+    upstream: "live",
+  },
+  unzipit: {
+    justification:
+      "print: unzip() reads zip-based archives (image archives / comic books) in the viewer and metadata reader.",
+    upstream: "live",
+  },
+  yaml: {
+    justification:
+      "parse/stringify YAML — office-hours graph-source parsing and intentionsutil's intention-node store.",
+    upstream: "live",
+  },
 };
