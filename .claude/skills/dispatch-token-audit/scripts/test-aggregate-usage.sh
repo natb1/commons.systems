@@ -505,6 +505,46 @@ assert_eq "lenses.baseline_context.median_boot_tokens" "3" \
 assert_eq "lenses.baseline_context.total_proxy_usd" "$EXPECTED_BASELINE_PROXY" \
   "$(jq '.lenses.baseline_context.total_proxy_usd' <<<"$OUT")"
 
+# --- phase_standup lens (strategy-token-economy clarification 12) ----------
+# All five phase keys always present regardless of fixture coverage.
+assert_eq "lenses.phase_standup keys == 5 phase enum" \
+  '["fix","implement","main-qa","qa","review"]' \
+  "$(jq -c '.lenses.phase_standup | keys | sort' <<<"$OUT")"
+# skill_body_tokens comes from real SKILL.md files on disk (bytes/4 estimate) —
+# assert positive rather than an exact byte count, which would be fragile
+# against unrelated prose edits to those files.
+assert_eq "lenses.phase_standup.*.skill_body_tokens all positive" "true" \
+  "$(jq '[.lenses.phase_standup[] | .skill_body_tokens > 0] | all' <<<"$OUT")"
+assert_eq "lenses.phase_standup.*.skill_body_lines all positive" "true" \
+  "$(jq '[.lenses.phase_standup[] | .skill_body_lines > 0] | all' <<<"$OUT")"
+assert_eq "lenses.phase_standup.*.skill_body_bytes all positive" "true" \
+  "$(jq '[.lenses.phase_standup[] | .skill_body_bytes > 0] | all' <<<"$OUT")"
+# implement (mapped_skill plan-implement): the worker session (sess-worker) is
+# the only qualifying session. Its opening bigram is the two dispatch-context-pack
+# / gh-issue Bash calls (both scriptable), a 3rd Bash tool_use continues the
+# scriptable run before the 4th (VITE_GITHUB_BRANCH=... npm run build, env-var
+# prefixed so still classified scriptable by cmd_prefix normalization) — the
+# fixture's plan-implement tool_calls list is 4 scriptable calls deep, so the
+# leading run is 4 with 0 judgment calls inside the first $boot_window; the
+# median over a single qualifying session is that session's own values.
+assert_eq "phase_standup.implement.boot_preamble.sessions" "1" \
+  "$(jq '.lenses.phase_standup.implement.boot_preamble.sessions' <<<"$OUT")"
+assert_eq "phase_standup.implement.boot_preamble.scriptable_round_trips" "4" \
+  "$(jq '.lenses.phase_standup.implement.boot_preamble.scriptable_round_trips' <<<"$OUT")"
+assert_eq "phase_standup.implement.boot_preamble.judgment_calls" "1" \
+  "$(jq '.lenses.phase_standup.implement.boot_preamble.judgment_calls' <<<"$OUT")"
+assert_eq "phase_standup.implement.boot_preamble.ngrams[0].scriptable has 2 tokens" "2" \
+  "$(jq '.lenses.phase_standup.implement.boot_preamble.ngrams[0].scriptable | length' <<<"$OUT")"
+# main-qa (mapped_skill qa-main): the fixture has no qa-main-attributed session,
+# so this phase must degrade gracefully — zero qualifying sessions, zero-valued
+# medians, and an empty ngrams list, never a crash or a fabricated nonzero value.
+assert_eq "phase_standup.main-qa.boot_preamble.sessions (no qualifying sessions)" "0" \
+  "$(jq '.lenses.phase_standup["main-qa"].boot_preamble.sessions' <<<"$OUT")"
+assert_eq "phase_standup.main-qa.boot_preamble.scriptable_round_trips (empty median)" "0" \
+  "$(jq '.lenses.phase_standup["main-qa"].boot_preamble.scriptable_round_trips' <<<"$OUT")"
+assert_eq "phase_standup.main-qa.boot_preamble.ngrams empty" "[]" \
+  "$(jq -c '.lenses.phase_standup["main-qa"].boot_preamble.ngrams' <<<"$OUT")"
+
 # --- outcome-envelope assertions (#1860) ------------------------------------
 # by_phase_outcome.review pools non-subagent sessions carrying a review envelope
 # = the worker only. The agent-bbb SUBAGENT review envelope (counts 1000) is
