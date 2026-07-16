@@ -129,12 +129,37 @@ export function main(): number {
   lines.push("## Owner attestation");
   lines.push("");
   lines.push(
-    `Stamp \`reading\`/\`gap\` on \`intentions/${STRATEGY_ID}.md\` via dump-node.ts / ` +
-      "write-node.ts / graph-commit, per the recipe in this script's header comment.",
+    `Stamp \`reading\`/\`gap\` on **${STRATEGY_ID}** — this tactic's signal-target ` +
+      `node. Do NOT stamp ${EXTERNAL_ID}: its \`reading\`/\`gap\` is quoted verbatim in ` +
+      `\`## Challenges\` above only for context, and is not the node this report attests.`,
+  );
+  lines.push("");
+  lines.push(
+    `Stamp it on \`intentions/${STRATEGY_ID}.md\` via this dump-node.ts / write-node.ts / ` +
+      `graph-commit sequence (identical to this script's header recipe, but editing ` +
+      `\`reading\`/\`gap\` — and, on round completion, \`rounds\` — instead of ` +
+      `\`attributes.participation_log\`):`,
+  );
+  lines.push("");
+  lines.push(
+    `  1. Dump the strategy node:\n` +
+      `       npx tsx packages/intentionsutil/scripts/dump-node.ts ${STRATEGY_ID}`,
   );
   lines.push(
-    `Round completion also stamps \`rounds\` — see \`tactic-join-indieweb\`'s parked ` +
-      `recommendation for that node's role.`,
+    `  2. In the resulting JSON, set \`reading\`/\`gap\` (and, on round completion, ` +
+      `\`rounds\`) on ${STRATEGY_ID} — NOT on ${EXTERNAL_ID}.`,
+  );
+  lines.push(
+    `  3. Rewrite the node from the edited JSON:\n` +
+      `       npx tsx packages/intentionsutil/scripts/write-node.ts <path-to-edited-json>`,
+  );
+  lines.push(
+    `  4. Land it: \`packages/intentionsutil/scripts/graph-commit\`.`,
+  );
+  lines.push("");
+  lines.push(
+    `Round completion's \`rounds\` stamp on ${STRATEGY_ID} — see \`tactic-join-indieweb\`'s ` +
+      `parked recommendation for that node's role.`,
   );
   lines.push("");
 
