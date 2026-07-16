@@ -19,7 +19,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: fix
+phase: implement
 execution:
   branch: tactic-dependency-justification-audit
   pr: 2875
