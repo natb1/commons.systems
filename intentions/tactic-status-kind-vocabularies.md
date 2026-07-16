@@ -19,13 +19,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-status-kind-vocabularies
   pr: 2876
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: 15b5ef1dc7ce30e0a267440a124bd558c5506c86bd79f91fa2dc39b909df79b9
 validates: []
 blocked_by: []
