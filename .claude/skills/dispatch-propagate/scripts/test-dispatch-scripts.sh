@@ -21813,15 +21813,18 @@ assert_eq "busy: foreign holder untouched (not released)" "other-live-session" \
   "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
-# --- extra arguments → usage error, exit 2 -----------------------------------
-echo "Test: select-tick extra arguments → exit 2"
+# --- any positional arg → usage error, exit 2 (rejected before the second) ---
+# Explicit issue/PR targeting was removed with the legacy issue lane; the FIRST
+# positional is rejected at arg-parse time (before the lock or any side-effect
+# step), so a second trailing arg is never even inspected.
+echo "Test: select-tick positional arg → exit 2"
 sel_tick_setup
 err=$("$TMPDIR_TEST/dispatch-select-tick" 1 2 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 case "$err" in
-  *"unexpected extra arguments"*"EXIT=2") status="ok" ;;
+  *"explicit issue/PR targeting"*"EXIT=2") status="ok" ;;
   *) status="bad: $err" ;;
 esac
-assert_eq "extra args → usage error, exit 2" "ok" "$status"
+assert_eq "positional arg → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
 
 # --- TARGET_N validation: non-numeric → release + exit 2 (#1315) -------------
@@ -22144,12 +22147,12 @@ assert_eq "cap-exhausted: graph pace-exempt probe NOT consulted" "0" \
   "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
-# --- --manual cannot be combined with an explicit <number> → exit 2 ----------
+# --- --manual + an explicit <number> → exit 2 (positional rejected outright) -
 echo "Test: select-tick --manual + explicit number → exit 2"
 sel_tick_setup
 err=$("$TMPDIR_TEST/dispatch-select-tick" --manual 707 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 case "$err" in
-  *"cannot be combined"*"EXIT=2") status="ok" ;;
+  *"explicit issue/PR targeting"*"EXIT=2") status="ok" ;;
   *) status="bad: $err" ;;
 esac
 assert_eq "--manual + number → usage error, exit 2" "ok" "$status"
@@ -22736,17 +22739,21 @@ esac
 assert_eq "unknown flag → usage error, exit 2" "ok" "$status"
 tick_teardown
 
-# --- explicit arg is forwarded to select-tick --------------------------------
-echo "Test: dispatch-tick forwards explicit arg to select-tick"
+# --- positional arg → usage error, exit 2, select-tick never invoked --------
+# Explicit issue/PR targeting was the legacy issue lane's entry point; that lane
+# is gone, so dispatch-tick itself rejects any positional arg at Step 0, before
+# select-tick (or anything else) ever runs.
+echo "Test: dispatch-tick positional arg → exit 2, select-tick never invoked"
 tick_setup
-# dispatch-tick still forwards a positional arg (leading '#' stripped) to
-# select-tick; select-tick is where explicit targeting is now rejected. Here the
-# fake select-tick emits `empty`, so the tick routes cleanly and the test focuses
-# on the arg being forwarded.
 export TICK_DECISION="empty"
-out=$(run_tick '#88')
-assert_eq "arg forward: select-tick got the stripped arg" "88" \
-  "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
+err=$("$TMPDIR_TEST/dispatch-tick" '#88' 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"explicit issue/PR targeting"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "positional arg → usage error, exit 2" "ok" "$status"
+assert_eq "positional arg: select-tick never invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- headless tick (no CLAUDE_CODE_SESSION_ID) synthesizes a stable id --------
@@ -22966,12 +22973,12 @@ assert_eq "manual-fwd: graph-execute called with the node spec" "t1:tactic:imple
 assert_eq "manual-fwd: exit 0" "0" "$rc"
 tick_teardown
 
-# --- --manual + explicit number → usage error, exit 2 -----------------------
+# --- --manual + an explicit number → exit 2 (positional rejected outright) --
 echo "Test: dispatch-tick --manual + explicit number → exit 2"
 tick_setup
 err=$("$TMPDIR_TEST/dispatch-tick" --manual 707 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 case "$err" in
-  *"cannot be combined"*"EXIT=2") status="ok" ;;
+  *"explicit issue/PR targeting"*"EXIT=2") status="ok" ;;
   *) status="bad: $err" ;;
 esac
 assert_eq "--manual + number → usage error, exit 2" "ok" "$status"

@@ -63,12 +63,12 @@
 # newly-red main, is still surfaced even at/over the worker budget. The only hard
 # floor is genuine token exhaustion.
 #
-# Lock invariant: HOLD only on a graph target line that a fan-out consumes (the
-# per-node reservation markers written before the emit are the durable claim);
-# RELEASE on graph/empty/sync-failed/sync-repair-pending/sync-broken/
-# concurrency-cap/main-broken/jit-reminder; NEVER release on busy (nothing was
-# acquired). The graph release is safe because the per-node reservation markers
-# are the durable claim a concurrent tick's graph selector already skips on.
+# Lock invariant: RELEASE the lock on every decision except busy (where nothing
+# was acquired). Every terminal path — graph/empty/sync-failed/
+# sync-repair-pending/sync-broken/concurrency-cap/main-broken/jit-reminder —
+# releases before it emits; nothing holds the lock past select-tick. The graph
+# release is safe because the per-node reservation markers (written before the
+# emit) are the durable claim a concurrent tick's graph selector already skips on.
 #
 # Requires `dangerouslyDisableSandbox: true` — sub-scripts write tmp state, call
 # `gh`, and query the local Claude daemon over a Unix socket. The `--wait` lock
@@ -144,27 +144,22 @@ _dlog_select_emit() {
 # handler rather than clobbering this one (`trap ... EXIT` replaces, not stacks).
 trap '_dlog_select_emit' EXIT
 
-ARG=""
 MANUAL=""
 for a in "$@"; do
   case "$a" in
     --manual) MANUAL=1 ;;
     --*) DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="unknown-flag"; echo "dispatch-select-tick: unknown flag '$a'" >&2; exit 2 ;;
     *)
-      if [[ -n "$ARG" ]]; then
-        DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="extra-args"
-        echo "dispatch-select-tick: unexpected extra arguments after <number>" >&2
-        exit 2
-      fi
-      ARG="${a#\#}"
+      # Explicit issue/PR targeting (`dispatch <N>`) was the legacy issue lane's
+      # entry point; that lane is gone and the graph selector owns target
+      # selection. Reject a positional arg HERE — before the lock is acquired or
+      # any mutating side-effect step runs — rather than deep in Step 3.
+      DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="explicit-targeting-removed"
+      echo "dispatch-select-tick: explicit issue/PR targeting ('${a#\#}') was removed with the legacy issue lane; the graph selector owns target selection" >&2
+      exit 2
       ;;
   esac
 done
-if [[ -n "$MANUAL" && -n "$ARG" ]]; then
-  DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="manual-with-arg"
-  echo "dispatch-select-tick: --manual cannot be combined with an explicit <number>" >&2
-  exit 2
-fi
 
 release_lock() {
   "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
@@ -497,16 +492,13 @@ fi
 # Heartbeat: refresh after the auto-merge and reconcile-merged sub-steps complete (#2104, #2512).
 refresh_lock
 
-# --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -
-# Runs ONLY on the autonomous no-arg queue path. The explicit-target run (a
-# positional <number> was given) and the `--manual` run (the bare human-typed
-# `/dispatch` shim) DIVERGE here. The explicit-target run skips this gate
-# entirely — a deliberately-named target is not paced by the autonomous budget —
-# and keeps GAP=1. The `--manual` run runs its OWN context-dependent fan-out
-# computation (the `elif [[ -n "$MANUAL" ]]` branch below): it queries the
-# live-count, overrides the pace-curve throttle but honors the `--exhausted`
-# floor and the MAX_WORKERS ceiling, and emits <gap> = SPAWN_N (or
-# `concurrency-cap` when SPAWN_N=0).
+# --- Step 1b: run-scoped concurrency gate (autonomous queue path only) -------
+# Runs ONLY on the autonomous queue path. The `--manual` run (the bare
+# human-typed `/dispatch` shim) DIVERGES here: it runs its OWN
+# context-dependent fan-out computation (the `elif [[ -n "$MANUAL" ]]` branch
+# below) instead of this gate — it queries the live-count, overrides the
+# pace-curve throttle but honors the `--exhausted` floor and the MAX_WORKERS
+# ceiling, and emits <gap> = SPAWN_N (or `concurrency-cap` when SPAWN_N=0).
 # On the autonomous queue path the gate is evaluated ONCE per run. Before
 # counting, the gate sweeps stranded reservations (reservation_sweep) so it
 # reconciles the ledger first. LIVE_COUNT is then the effective-live count,
@@ -520,8 +512,8 @@ refresh_lock
 # per-worktree dedup in dispatch-spawn-job is the last-line defense.
 #
 # AT cap (LIVE_COUNT >= TARGET_N) the budget no longer hard-stops the run. The
-# budget paces only NON-priority autonomous fan-out; priority/main-broken work
-# bypasses it. There are three cases, evaluated in order:
+# budget paces only NON-pace-exempt autonomous fan-out; pace-exempt/main-broken
+# work bypasses it. There are three cases, evaluated in order:
 #   1. `dispatch-target-workers --exhausted` reports `exhausted` (the 5-hour or
 #      weekly window is genuinely ~100% used, reset still ahead) → HARD STOP for
 #      everything: release the lock, schedule the #725 re-seed, emit
@@ -529,30 +521,24 @@ refresh_lock
 #      is pure noise. This is distinct from "paced to 0 / at cap", which the
 #      pace/ramp math can produce while tokens remain; --exhausted is computed
 #      from telemetry independently of that math.
-#   2. Otherwise `dispatch-select-target --priority-only` probes the priority
-#      tier (its main-broken health gate runs first, so a main that broke WHILE
-#      at cap is now surfaced — the old early-exit fired before any selection):
-#        - `main-broken <sha>` → release the lock, echo it (the lock-free
-#          diagnose bg job spawns downstream).
-#        - `pr ...` / `issue ...` → HOLD the lock, append GAP=1 — ONE
-#          gate-exempt worker, exactly like explicit dispatch. It is
-#          still counted by claude_agents_count_busy_workers on later ticks, so
-#          it suppresses non-priority fan-out: it bypasses the GATE, not the
-#          COUNT.
-#        - `waiting <N>` → a priority PR exists but its CI is pending (#1444).
-#          At target=0 there is no busy worker re-probing priority on a
-#          baton-pass, so the pace reseed would strand the item until the pace
-#          window reopens. Arm the CI-cadence reseed instead:
-#          `dispatch-schedule-target-reseed <N>` re-runs dispatch-tick <N> on a
-#          short delay (CI concluded → spawns gate-exempt; still pending →
-#          re-arms, bounded by the ci-wait attempt counter → office-hours).
-#          At target>0 a busy worker already re-probes priority on each
-#          baton-pass, so the existing pace reseed (`dispatch-schedule-reseed`)
-#          is correct. Both paths release the lock and emit `concurrency-cap`.
-#   3. `empty` (no priority/main-broken item waiting) → the unchanged hard cap:
-#      release the lock, schedule the #725 re-seed, emit `concurrency-cap`.
+#   2. Otherwise probe `graph-select-target --pace-exempt-only` (the authored
+#      `pace_exempt` flag is the graph home of the legacy `priority` label): a
+#      hit HOLDS the lock and appends GAP=1 for ONE gate-exempt worker. It is
+#      still counted by claude_agents_count_busy_workers on later ticks, so it
+#      suppresses non-pace-exempt fan-out: it bypasses the GATE, not the COUNT.
+#   3. Otherwise check `repo-health --main-broken-sha` (its own live CI probe;
+#      a main that broke WHILE at cap is surfaced here even though no other
+#      item is pace-exempt) → release the lock, echo `main-broken <sha>` (the
+#      lock-free diagnose bg job spawns downstream).
+#   4. Neither bypass fires (no pace-exempt item, main healthy) → the unchanged
+#      hard cap: release the lock, schedule the #725 re-seed, emit
+#      `concurrency-cap`. (The legacy `dispatch-select-target --priority-only`
+#      probe this bypass used to run — including its `pr ...`/`issue ...`/
+#      `waiting <N>` dispositions and the `dispatch-schedule-target-reseed`
+#      CI-pending reseed — was deleted with the rest of the gh-issue lane in
+#      tactic-dispatch-legacy-rewire Unit 3.)
 GAP=1
-if [[ -z "$MANUAL" && -z "$ARG" ]]; then
+if [[ -z "$MANUAL" ]]; then
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   # shellcheck source=/dev/null
@@ -580,9 +566,9 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
     LIVE_COUNT=$(( BUSY + RESV ))
     if (( LIVE_COUNT >= TARGET_N )); then
       echo "router: $LIVE_COUNT effective live ($BUSY busy + $RESV reserved) >= target $TARGET_N"
-      # At the worker budget. The budget paces NON-priority autonomous fan-out;
-      # priority / main-broken work bypasses it (one gate-exempt worker, GAP=1),
-      # exactly like an explicit-target run. The only hard stop is
+      # At the worker budget. The budget paces NON-pace-exempt autonomous
+      # fan-out; pace-exempt/main-broken work bypasses it (one gate-exempt
+      # worker, GAP=1). The only hard stop is
       # genuine token exhaustion: when the 5-hour or weekly window is actually
       # out of tokens (~100% used, reset still ahead), spawn nothing — including
       # the main-broken diagnose job. Distinguish "paced to 0 / at cap" (a
@@ -772,16 +758,9 @@ refresh_lock
 # Explicit issue/PR targeting (`dispatch <N>`) was the legacy issue lane's entry
 # point (dispatch-resolve-arg → dispatch-select-target → dispatch-materialize-spawn).
 # That lane is gone; the graph selector owns target selection. A positional arg is
-# no longer meaningful — fail clear rather than silently selecting an unrelated
-# graph node (.claude/rules/code-style.md).
-if [[ -n "$ARG" ]]; then
-  release_lock
-  DLOG_DISPOSITION="usage-error"
-  DLOG_SKIP_REASON="explicit-targeting-removed"
-  echo "dispatch-select-tick: explicit issue/PR targeting ('$ARG') was removed with the legacy issue lane; the graph selector owns target selection" >&2
-  exit 2
-fi
-
+# rejected at arg-parse time above (before the lock or any side-effect step), so
+# there is nothing to guard here.
+#
 # --- Step 3a: consult the graph selector (tactic-graph-router-selector) -------
 # The graph selector is now the ONLY queue selector — the legacy gh selector
 # (dispatch-select-target) and its worktree-materialization chain
