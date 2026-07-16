@@ -49,6 +49,8 @@ attributes:
     passages:
       - work: Aristotle, Nicomachean Ethics
         range: VI
+      - work: Aristotle, Nicomachean Ethics
+        range: III.4
 ---
 # Reading chunk 5: Nicomachean Ethics VI (phronesis; vice corrupts the archē) — verify the phronesis third of virtue-philosophical-mobility's attribution
 
@@ -62,7 +64,9 @@ the respect floor.
 ## Text
 
 Aristotle, *Nicomachean Ethics* VI — phronesis (practical wisdom); vice
-corrupts the archē (the starting points of deliberation).
+corrupts the archē (the starting points of deliberation). Plus NE III.4
+1113a25–33 (the excellent person as kanōn kai metron), added 2026-07-13 to
+carry the chunk-2 internalization deferral.
 
 ## Questions to re-open against the text
 
@@ -71,6 +75,22 @@ corrupts the archē (the starting points of deliberation).
 - Does NE VI's "vice destroys the archē" actually support "capture corrupts
   the sensor" — the load-bearing analogy under the graph's entire
   capture/calibration doctrine?
+- Deferral from chunk 2 (2026-07-13): internalization vs approximation —
+  III.4 1113a29–33 makes the excellent person "a sort of standard and
+  measure" of the fine and pleasant, and II.6 hands the mean to the
+  phronimos's reason. Does internalization complete (the phronimos IS the
+  standard, no external remainder), or does the hexis only ever approximate
+  an externally anchored ideal — the author's held intuition, consistent
+  with chunk 1's Form-of-the-Good-as-external-anchor verdict?
+  Cross-reference: chunk 22 (Republic VI sun/line) tests the Platonic side.
+- Deferral from chunk 2 (2026-07-13): the cross-guard articulation on
+  kind-virtue's chunk-2 clarification (tension_with as graph-native
+  inter-virtue cross-guard, not the mean; mean triples on the mobility
+  children) is Claude-drafted and held on trust
+  (delegation-philosophical-articulation). NE VI — including the
+  unity-of-virtues discussion (VI.13, 1144b30–1145a2), Aristotle's own
+  inter-virtue coordinator — is the review: verify or amend the cross-guard
+  account against it.
 
 Two standing rules from `intentions/strategy-philosophical-grounding.md`
 clarifications apply: the borrowed-articulation capture question and "the

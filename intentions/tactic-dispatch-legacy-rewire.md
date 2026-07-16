@@ -24,7 +24,12 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-dispatch-legacy-rewire
+  pr: 2869
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -168,3 +173,21 @@ graph-lane tactic completes a full lifecycle with the legacy scripts gone.
 ## Implementation notes
 
 One subagent per unit, `model` per tag; constrain to working-tree edits.
+
+## needs-main residue
+
+QA (2026-07-15, PR #2869) found one acceptance criterion that cannot be
+asserted at merge time — verified downstream, once this tactic reaches
+`main-qa`, by observing real production dispatch ticks against the merged
+harness.
+
+- id: 12
+- title: Live dispatch harness behaves per the greenfield contract over the
+  next several real ticks
+- url_path: current
+- expected_outcome: Production dispatch ticks run clean end-to-end on the
+  reduced graph-native surface, with latch recovery, statusline phase, and
+  auto-merge/reconcile all behaving as before the rewire.
+- finding: end-to-end harness behavior on the live queue is observable only
+  across real production ticks after merge, not assertable in the working
+  tree at QA time (planned deferral, per the QA triage plan's classification).

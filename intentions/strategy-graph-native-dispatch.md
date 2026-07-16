@@ -53,7 +53,11 @@ clarifications:
       same-node race surfaces as a rebase conflict rather than a silent clobber.
       The strategy-substance audit that a PR checkpoint would have provided is
       supplied instead by the /align-strategy interview itself — substance is
-      human-decided live, before the write. Recorded 2026-07-03 interview."
+      human-decided live, before the write. Recorded 2026-07-03 interview.
+      (Amended 2026-07-13: a same-node race no longer fails closed to a
+      manual-merge park — contention resolves automatically through the
+      serialization ladder; see the automatic-serialization clarification of
+      that date.)"
   - question: A strategy's tactics all complete but its signal is still unvalidated
       — what stops /align-tactics from burning rounds forever?
     answer: A fresh-reading gate plus a round cap. After a tactic round completes,
@@ -317,7 +321,12 @@ clarifications:
       advisories), or fixes that would add defensive fallbacks contrary to
       code-style. Ignored findings are not graph-recorded; every disposition
       including refutation reasons is recorded once in the PR review comment as
-      the audit trail. Recorded 2026-07-04 interview."
+      the audit trail. Recorded 2026-07-04 interview. (Amended 2026-07-13: cost
+      now enters the resolve/defer boundary — a confirmed out-of-contract
+      finding cheaper to fix than to defer is resolved in scope rather than
+      deferred, and only expensive out-of-contract findings become draft
+      tactics; the contract trigger and the ignore category are unchanged. See
+      the fix-everything-cheap clarification of that date.)"
   - question: Is the qa phase a re-run of the automated checks — and what does a
       bootstrap-emulating session owe it?
     answer: "No — full parity with the legacy qa-fix skill
@@ -540,7 +549,11 @@ clarifications:
       files — the periodic /align-strategy improvement pass (now carrying the
       greenfield gate and placement doctrine) is the reconciler, and a
       doctrine-recording session pauses the pace curve for its audit window, as
-      this round did. Recorded 2026-07-06 interview."
+      this round did. Recorded 2026-07-06 interview. (Amended 2026-07-13: the
+      failing-closed clause and the uniform claiming ledger are narrowed —
+      claiming is scheduling-dedup only and never blocks an edit; same-node
+      conflict resolves automatically, parking only true conflicts. See the
+      automatic-serialization clarification of that date.)"
   - question: Does the legacy office-hours entry's attach-to-parking-session
       behavior carry over — how does a human engage a parked node?
     answer: "No — graph recoverability replaces session recovery. Session recovery
@@ -1168,7 +1181,11 @@ clarifications:
       the other review steps are untouched. This refines clarification 19's
       disposition mechanics for the code-review/security-review sources
       specifically; it does not change the three-way disposition doctrine
-      itself. Recorded 2026-07-11 interview."
+      itself. Recorded 2026-07-11 interview. (Amended 2026-07-13: the three-way
+      disposition doctrine this clarification leaves intact was itself refined
+      that day — the unfixed residue is now classified into cheap findings fixed
+      in scope versus expensive out-of-contract findings deferred, not filed
+      wholesale. See the fix-everything-cheap clarification.)"
   - question: Frozen (undecomposed or soft-frozen) tactics carry a ranking — are
       they selectable, and what runs when the dispatch script picks one?
     answer: "Yes — decomposition and re-evaluation are dispatchable, ranked,
@@ -1247,6 +1264,184 @@ clarifications:
       (clarification 47). Closing that split into a single tick-owned,
       label-free, marker-keyed merge is retained as draft tactic
       tactic-graph-tick-node-lane-auto-merge. Recorded 2026-07-11 interview."
+  - question: What replaces the dispatch:main-broken gh-issue latch when origin/main
+      goes red — and does the announcement surface stay gh-based?
+    answer: "Main health is a sensor, and the self-heal flows through the general
+      sensor machinery, not bespoke tick gating. Author-dictated encoding: (1)
+      main-health is a registered sensor (SensorRegistry, local-first —
+      own-pipeline CI status per read-sensors.ts doctrine) reading origin/main
+      HEAD check conclusions; (2) the graph tick — the greenfield workflow
+      automation — runs it each tick, and on a failing read find-or-creates the
+      fix tactic (tactic-main-red-<shortsha> shape, one open node per episode,
+      redacted diagnosis in the body); (3) the standing signal owner is
+      strategy-main-health (kind: strategy, parent:
+      strategy-autonomous-execution), created 2026-07-13 as the persistent home
+      of success_signal {sensor: main-health, threshold: green} — a strategy per
+      the same-date persistent-layer doctrine (standing structure never lives on
+      transient tactics); the fix tactic carries serves + validates edges to
+      strategy-main-health and its own success_signal {sensor: main-health,
+      threshold: green}, so the same sensor that detected the episode validates
+      the fix: threshold-met completes the tactic, re-arming detection (the
+      one-success_signal-per-node limit binds per node; two nodes may reference
+      one sensor); (4) rank by inheritance: strategy-main-health carries a
+      standing authored boost 100 the fix tactic inherits undecayed through the
+      normal downward attention flow — superseding the earlier-same-date
+      creation-time recompute-graph-max machine-authored boost (no
+      machine-authored boosts remain in the model); the automation still sets
+      pace_exempt: true on the fix tactic at creation (bypasses the pace gate,
+      never the --exhausted floor). The former accepted edge — blocked_by
+      compounding overtaking mid-episode — dissolves: blocking is orthogonal to
+      boosting per the same-date clarification on strategy-graph-drives-dispatch
+      (authored rank never flows backward; blockers serialize by max-based
+      precedence). Dominance of the 100 boost is maintained by the write-path
+      guard condition recorded alongside, never by recompute. Scope: a
+      main-specific instance of the general signal-ranking rule (same-date
+      signal-ranking clarification); strategy-signal failures keep routing to
+      /align-tactics. No gh issue, no label, no re-enabled features. Supersedes
+      tactic-dispatch-legacy-rewire Unit 1 recorded latitude on the announcement
+      surface (steelman — a gh-issue notification mirror — considered and
+      diverged from: re-enabling issues re-imports the dependency this strategy
+      recovers; visibility is owned surfaces job). Sequencing hazard:
+      dispatch-select-tick step 1c reads the open dispatch:main-broken issue as
+      the live latch, so legacy-latch cleanup (close the latch issue, re-disable
+      has_issues) is gated on the sensor flow replacing that reader. Mechanics
+      retained in draft tactic-graph-main-self-heal. Recorded 2026-07-12
+      interview; encoding refined and dictated by the author, recorded
+      2026-07-13 interview; signal ownership moved to strategy-main-health with
+      boost inheritance and the write-path guard (superseding the
+      fix-tactic-only signal home and the recompute-max machine boost), recorded
+      in a later 2026-07-13 interview."
+  - question: "The 2026-07-12 red-main episode: dispatch-diagnose-main found repo
+      issues disabled and re-enabled has_issues to satisfy its own gh-issue spec
+      — what does it teach?"
+    answer: The legacy drain state is a ratchet, and a legacy skill spec is never
+      license to unwind it. The drain proof included issues-disabled; the
+      diagnose job re-enabling the feature (then filing the latch issue)
+      regressed that proof and violated the existing condition that no new work
+      enters via gh. Recorded as a standing drain-state-monotonicity condition
+      alongside this clarification; the graph-native self-heal flow (same-date
+      clarification) removes the spec pressure that caused the deviation.
+      Recorded 2026-07-12 interview.
+  - question: How is resolution work for a failing signal ranked — does each signal
+      carry ranking configuration?
+    answer: "Yes, implicitly: a signal's resolution-ranking configuration IS the
+      owning node's authored boost. Resolution work created for a failing signal
+      attaches under the owner (serves/parent) and inherits the owner's boost
+      through the existing undecayed downward attention flow — no new rank
+      machinery and no per-signal rank field (steelman — an explicit
+      resolution_rank field on success_signal — considered and diverged from: it
+      would create a second ranking currency beside the attention model).
+      Default: no automatic elevation — a failing signal's resolution ranks
+      wherever the owning node's existing boost and position put it (often near
+      0), deliberately lower priority; strategy-signal failures keep routing to
+      /align-tactics, whose tactics inherit via serves, so the existing flow is
+      the default implementation. Main-health is the one signal whose owner
+      (strategy-main-health) carries a standing very-high boost (100), kept
+      dominant by the write-path guard condition recorded alongside. Recorded
+      2026-07-13 interview (author-dictated)."
+  - question: May standing graph structure — a signal owner, a standing boost
+      carrier — live on a tactic?
+    answer: "No. Tactics are transient by definition; persistent structure lives on
+      strategy (or virtue) nodes. This is why the main-health signal home is
+      strategy-main-health rather than the auto-created fix tactic or a standing
+      tactic: the fix tactic exists only per episode, and a standing tactic
+      would put permanent structure on a transient kind. The constraint is to be
+      encoded into the align-strategy skill itself so it stays visible whenever
+      the persistent layer is modified (draft
+      tactic-align-persistent-layer-doctrine). Recorded 2026-07-13 interview
+      (author-dictated)."
+  - question: When two sessions contend on the same node, must the author serialize
+      the edits manually?
+    answer: "No — contention is serialized automatically by tooling; the author is
+      involved only at a true-conflict park. This amends two recorded positions:
+      the fail-closed clause of clarification 2 of 2026-07-03 (same-node
+      conflict maps to a manual-merge park) and the 2026-07-06 round's 'failing
+      closed on same-node conflict' plus its uniform claiming ledger, both of
+      which conflated textual overlap with contrary intent. The amended doctrine
+      is the PR lane's fix-conflicts doctrine applied to node writes: resolve
+      mechanical conflicts autonomously, escalate only genuine ambiguity. The
+      resolution ladder, in order: (1) git three-way rebase auto-merge —
+      non-overlapping edits land as today; (2) a structure-aware field-level
+      merge — frontmatter list appends union so both land, distinct-field edits
+      combine; (3) a stale --base stops being fatal: tooling re-reads fresh
+      origin/main state and re-applies this writer's field-level edit
+      automatically (the 2026-07-06 near-miss guard survives as automatic
+      re-application, not a manual 're-read and retry'); (4) surviving
+      same-scalar-field divergence goes to a model evaluation that attempts
+      reconciliation; (5) only a true conflict — two edits expressing contrary
+      author intentions that the model cannot reconcile — parks to office_hours,
+      the park record carrying both divergent values plus a recommendation per
+      condition 6. Model scope guard (holds the human-authorship condition): on
+      human-owned doctrine fields — virtue/strategy/tradition/delegation
+      statement, rationale, clarification text — the model resolves only
+      mechanical divergence (one side subsumes the other, reordering, same
+      intent differently worded), never synthesizing new substance; genuine
+      doctrine divergence parks directly. On ai-owned tactic content and state
+      fields (phase, office_hours, execution), full reconciliation applies.
+      Node-id claiming narrows to scheduling deduplication: the router still
+      avoids spawning a duplicate worker for a claimed node (a token-spend
+      concern), but no session is ever blocked from editing a node by a claim —
+      write safety lives entirely at land time. Motivating episode: this round's
+      own interview was halted at the align skill's stop-on-held-claim step by
+      an unrelated diagnose-main background session squatting the strategy's
+      worktree — a claim gate serializing the author where no overlapping work
+      existed. Steelman resolved as divergence: pessimistic mutual-exclusion
+      serialization (the prior doctrine) was put and rejected — it blocks
+      concurrent sessions that have no true conflict; optimistic git-based
+      resolution on the PR-merge precedent is adopted. Reliance note: the
+      model-reconciliation layer deepens delegation-anthropic-claude — Claude
+      adjudicating between two expressions of author intent is capture-relevant;
+      the risk is held by the scope guard and the human-authorship condition,
+      and no recovers edge is added (the work controls the delegation rather
+      than unwinding it, the same reasoning as strategy-graph-integrity's
+      declined edge). The success_signal is unchanged: serialization health is a
+      mechanism condition (amended condition 2), not the strategy's end-state.
+      Implementation is retained as draft tactics
+      tactic-graph-commit-auto-serialization and tactic-claim-dedup-only.
+      Recorded 2026-07-13 interview."
+  - question: Clarification 19 disposes review findings by verification × contract
+      alone — every confirmed out-of-contract finding defers to a draft tactic.
+      Does the cost of the fix versus the cost of deferring it also bear on the
+      disposition?
+    answer: "Yes — cost is a second resolve-in-scope trigger, refining clarification
+      19's resolve/defer boundary (the 'fix everything cheap' doctrine). A
+      confirmed finding is resolved in the review phase's content-fix loop when
+      it EITHER breaks the tactic's contract (clarification 19's original
+      trigger, unchanged) OR is cheaper to fix than to defer; only a confirmed
+      out-of-contract finding that is expensive to fix — a real refactor —
+      defers to a draft tactic. Cheaper-to-fix-than-to-defer is the line:
+      deferral carries real overhead (a draft-tactic body, a later
+      /align-tactics finalization round, a separate PR and its review), so a
+      localized low-risk edit whose diff and risk are smaller than that overhead
+      — reuse an existing helper, consolidate a read, add input validation,
+      tighten a regex — is fixed now; a fix that introduces new structure or is
+      cross-cutting (an algorithmic rewrite, a memoization architecture) defers,
+      its in-PR risk and scope exceeding the deferral overhead. Cost refines
+      ONLY the resolve↔defer boundary: it never moves a finding out of the
+      ignore category — refuted findings, unreachable scenarios, below-threshold
+      pre-existing advisories, and fixes that would add defensive fallbacks
+      contrary to code-style stay ignored however cheap, because fixing a
+      non-finding is waste and a defensive fallback violates code-style
+      regardless of cost. A finding fixed in scope is still recorded, satisfying
+      the graph-as-sole-tracker rule (clarification 30) and clarification 19's
+      own audit trail: the disposition and the fix land in the PR review
+      comment, so 'fixed cheaply in-PR' drops nothing. Steelman resolved as
+      divergence: strict contract-scoping — defer every out-of-contract finding,
+      keeping the PR to its exact deliverable (clarification 19 as first
+      recorded) — was put and diverged from: it pays the full deferral overhead
+      for a sub-overhead fix and accumulates debt on surfaces the diff already
+      touched, against the greenfield lens (fix it right, now) and the
+      fold-don't-drop smallness doctrine (clarification 30). This refines
+      clarification 19's disposition and the residue-handling of the
+      trust-builtin clarification (the review skills' unfixed residue is now
+      classified into fix-cheap / defer-expensive, not filed wholesale); the
+      three-way structure and its adversarial-confirm requirement are otherwise
+      unchanged. First application: PR #2865 (tactic-graph-digest-tooling) fixed
+      4 confirmed correctness/hardening findings plus cheap
+      reuse/efficiency/convention improvements in scope and deferred two large
+      refactors (a near-duplicate O(n²) inverted index, closure memoization) to
+      tactic-graph-digest-quality-followups. Implementation retained as draft
+      tactic-review-cheap-fix-disposition. Recorded 2026-07-13 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1299,8 +1494,12 @@ attributes:
       tactic-align-entrypoint-consolidation lands) is live — the graph is the
       sole issue tracker, bug tracker included, with no side-channel work
       records
-    - direct-push commits stay restricted to intentions/ paths and rebase-retry
-      conflict cost stays negligible at fleet concurrency
+    - direct-push commits stay restricted to intentions/ paths; same-node
+      contention resolves automatically through the serialization ladder (git
+      merge → structural field-level merge → re-read/re-apply → scoped model
+      reconciliation), with the author involved only at a true-conflict
+      office_hours park; total resolution cost — retries plus model spend —
+      stays negligible at fleet concurrency
     - strategy-graph-drives-dispatch holds — resolved rank from the graph orders
       execution
     - persistent-layer substance — virtues, strategies, traditions, delegations
@@ -1359,5 +1558,14 @@ attributes:
       decision context; ancestry never substitutes for the node body's complete
       plan, and a plan-vs-ancestry conflict parks to office_hours with a
       recommendation rather than self-adjusting scope
+    - the legacy drain state is monotonic — no dispatch surface re-enables a
+      disabled GitHub feature (has_issues included); a skill whose spec requires
+      a disabled feature is a defect of the skill, never license to re-enable
+    - "strategy-main-health's standing boost (100) stays the graph's top
+      authored rank, enforced at the write path rather than by ranking logic
+      (parsimony — the node is simply boosted, no specialized rank treatment):
+      validate-graph/graph-commit refuses a commit that authors another boost or
+      override at or above it, or that reduces it, unless the commit carries an
+      explicit author override"
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

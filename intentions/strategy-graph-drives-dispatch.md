@@ -60,26 +60,35 @@ clarifications:
       2026-07-03.
   - question: Where does authored attention flow — what is the critical path to a
       hot node?
-    answer: "Applying attention to a node prioritizes the full critical path to it:
-      the node's outgoing authored source-set flows not only downward to its
-      subtree (parent/serves, as before) but also backward along blocked_by to
-      its blockers, recursively and interleaved — a blocker inherits the hot
-      node's sources, and the blocker's own subtree inherits them via the normal
-      downward flow. Propagation stays undecayed and undiluted, each authored
-      source counted once per node, and applies to overrides the same as boosts:
-      whatever outgoing set a node distributes to its children also reaches its
-      blockers. Existing authored boosts are unchanged in value and meaning
-      (strategy-attention-surface's boost 3 stands as authored); the change only
-      widens where rank flows, so no re-authoring is needed. Recorded 2026-07-07
-      interview."
+    answer: "Downward only: a node's outgoing authored source-set flows to its
+      subtree along parent/serves, undecayed and undiluted, each authored source
+      counted once per node, overrides distributing the same as boosts. The
+      2026-07-07 widening — backward flow along blocked_by so a hot node's
+      blockers inherit its sources — is superseded 2026-07-13: blocking is
+      orthogonal to boosting (next clarification), so authored rank never flows
+      backward. The critical path to a hot node is still drained first, but by
+      serialization precedence, not boost inheritance. Existing authored boosts
+      keep their value and meaning. Recorded 2026-07-07 interview; superseded in
+      part 2026-07-13 interview (author-dictated orthogonality)."
   - question: Does backward rank flow along blocked_by change the blocking mechanism?
-    answer: No. Blocking remains the sole ordering and gating mechanism — a blocked
-      node stays ineligible for selection regardless of rank, and ordering
-      constraints are still never expressed through attention. The backward flow
-      only ranks the blockers, so the router drains a hot node's critical path
-      first while the gate still releases itself as tactics close. Amends (does
-      not supersede) the 2026-07-02 ordering clarification. Recorded 2026-07-07
-      interview.
+    answer: "Superseded framing, 2026-07-13: there is no backward rank flow.
+      Blocking is orthogonal to boosting — blockers are serialized by a distinct
+      precedence mechanism: a blocker's selection precedence lifts to at least
+      the maximum effective precedence of the nodes it blocks (recursive and
+      max-based, never additive, so nothing compounds), while its boost-derived
+      rank value is untouched — blocking nodes are ranked higher, not boosted
+      higher. Blocking remains the sole gating mechanism (a blocked node stays
+      ineligible regardless of rank, and ordering constraints are still never
+      expressed through attention — this restores the 2026-07-02 separation in
+      full). Rationale for the supersession: the additive backward flow let
+      unrelated blocked_by compounding silently overtake intentionally
+      top-ranked nodes (recorded live lesson, 2026-07-07), a failure mode made
+      unacceptable by strategy-main-health's standing boost 100
+      (strategy-graph-native-dispatch, 2026-07-13). The structural signal term's
+      blocked_by reachability (flat +1 for on-path nodes) is unaffected —
+      boolean reachability, not additive compounding. Implementation retained in
+      draft tactic-attention-blocking-orthogonal. Recorded 2026-07-13 interview
+      (author-dictated)."
   - question: How does the intention-store instrument distinguish sensor-run
       readings from hand-written ones?
     answer: "Mechanically it cannot: reading provenance is not recorded in

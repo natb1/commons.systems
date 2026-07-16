@@ -34,8 +34,7 @@ execution:
   strategy_fingerprint: d998d5c0754b51cfc489ee784db11b77d9b40eb91777ee0215076b0ad1a6bb69
 validates:
   - strategy-graph-drives-dispatch
-blocked_by:
-  - tactic-intention-store-sensor
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
