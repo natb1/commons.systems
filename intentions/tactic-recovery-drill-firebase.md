@@ -19,13 +19,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-recovery-drill-firebase
   pr: 2877
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: 4ee635b8acf77f2cb701ca3625baa5edf2209e23bf04d30e72650eb7b94f36fa
 validates:
   - strategy-exercise-recovery-paths
@@ -148,3 +149,18 @@ un-sandboxed) and confirm the parity table passes with the webmention 503
 as the only recorded residue; confirm the drill report carries a real
 measured time; confirm `delegation-firebase`'s `last_exercised` is a real
 date on `origin/main` after the graph-commit.
+
+## needs-main residue
+
+- id: 9
+  title: Unit 3 record flip landed on origin/main (last_exercised = 2026-07-16)
+  url_path: current
+  expected_outcome: The delegation node `delegation-firebase` on `origin/main`
+    shows `attributes.irreversibility.last_exercised` flipped to `2026-07-16`
+    (was `null`), with `attributes.irreversibility.recovery_cost` refreshed to
+    the measured figure.
+  finding: The record flip landed via a separate direct-to-`origin/main`
+    graph-commit (Unit 3), not in this PR's diff — this PR only touches
+    `ops/recovery-drills/**`. Its presence on `origin/main` is a planned
+    deferral: verified out-of-band against merged main, not assertable at
+    this PR's merge.
