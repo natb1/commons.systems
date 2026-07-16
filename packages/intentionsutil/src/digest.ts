@@ -42,6 +42,25 @@ export interface DigestInput {
   deletedIds: string[];
 }
 
+// Ids come from YAML frontmatter and are only path-safety validated (store.ts
+// `assertPathSafeId` blocks separators and '.'/'..'; `requireString` only checks
+// non-empty), so an id may legally carry newlines, CR, tabs, brackets, or
+// arbitrary prose. The digest is the first-read surface fed to the /align-audit
+// LLM auditor; an un-sanitized id could inject forged check-table lines or direct
+// instructions into that context (a malicious node hiding a real integrity
+// violation or steering the audit's conclusion). Escape control characters —
+// C0/C1 plus DEL — at EVERY render boundary so an id cannot break out of its
+// field. The escaped form is still human-legible in the digest, and the escape
+// is deterministic (no wall-clock/environment data), preserving byte-identity.
+function renderId(id: string): string {
+  // Match C0 controls (U+0000-U+001F), DEL (U+007F), and C1 controls
+  // (U+0080-U+009F); escape each as \xHH so the id stays a single field.
+  // eslint-disable-next-line no-control-regex
+  return id.replace(/[\u0000-\u001F\u007F-\u009F]/g, (c) =>
+    `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`,
+  );
+}
+
 // --- Section 1: per-node digest lines --------------------------------------
 
 /** Latest `YYYY-MM-DD` appearing across a node's clarification answers, or "-". */
@@ -68,7 +87,7 @@ function perNodeLine(node: IntentionNode, body: string): string {
   const serves = node.serves.length > 0 ? node.serves.join(",") : "-";
   const bodyBytes = Buffer.byteLength(body, "utf8");
   return [
-    node.id,
+    renderId(node.id),
     `kind=${node.kind}`,
     `status=${node.status}`,
     `parent=${node.parent ?? "-"}`,
@@ -155,7 +174,7 @@ function tableClosure(nodes: IntentionNode[], byId: Map<string, IntentionNode>):
       .map((n) => n.id),
   );
   if (unclosed.length === 0) return "[CLOSURE] pass — every strategy/tactic reaches a virtue root";
-  return `[CLOSURE] ${unclosed.length} unclosed\n${unclosed.map((id) => `  ${id}`).join("\n")}`;
+  return `[CLOSURE] ${unclosed.length} unclosed\n${unclosed.map((id) => `  ${renderId(id)}`).join("\n")}`;
 }
 
 /** DONE-PRESENT: tactics at `phase: done` still present in the store. */
@@ -165,7 +184,7 @@ function tableDonePresent(nodes: IntentionNode[]): string {
   );
   if (done.length === 0) return "[DONE-PRESENT] none";
   return `[DONE-PRESENT] ${done.length} done tactics still in store\n${done
-    .map((id) => `  ${id}`)
+    .map((id) => `  ${renderId(id)}`)
     .join("\n")}`;
 }
 
@@ -183,7 +202,7 @@ function tableDupServes(nodes: IntentionNode[], byId: Map<string, IntentionNode>
     const parentServes = new Set(parent.serves);
     const redundant = node.serves.filter((s) => parentServes.has(s));
     if (redundant.length > 0) {
-      rows.push(`  ${node.id}: ${redundant.join(",")}`);
+      rows.push(`  ${renderId(node.id)}: ${redundant.map(renderId).join(",")}`);
     }
   }
   rows.sort();
@@ -240,7 +259,7 @@ function tableNearDup(nodes: IntentionNode[], threshold = 0.6): string {
   pairs.sort((x, y) => (y.sim - x.sim) || (x.a < y.a ? -1 : x.a > y.a ? 1 : x.b < y.b ? -1 : 1));
   if (pairs.length === 0) return `[NEAR-DUP-STATEMENTS] none above ${threshold}`;
   const shown = pairs.slice(0, NEAR_DUP_LIMIT);
-  const rows = shown.map((p) => `  ${p.sim.toFixed(2)}  ${p.a}  ${p.b}`);
+  const rows = shown.map((p) => `  ${p.sim.toFixed(2)}  ${renderId(p.a)}  ${renderId(p.b)}`);
   if (pairs.length > shown.length) {
     rows.push(`  ... and ${pairs.length - shown.length} more pairs >= ${threshold}`);
   }
@@ -314,7 +333,7 @@ function tableDanglingRefs(input: DigestInput): string {
         seen.add(t);
         const prefix = t.slice(0, -1); // drop trailing '*'
         const members = [...storeIds].filter((id) => id.startsWith(prefix)).length;
-        wildcardRows.push(`  ${node.id} -> ${t} (${members} member${members === 1 ? "" : "s"})`);
+        wildcardRows.push(`  ${renderId(node.id)} -> ${renderId(t)} (${members} member${members === 1 ? "" : "s"})`);
         continue;
       }
       // id-shaped? reuse the anchored test built once above.
@@ -342,12 +361,18 @@ function tableDanglingRefs(input: DigestInput): string {
   // body mention a missing ref? The planned-vs-violation judgment stays with the
   // audit; the digest only flags the heuristic.
   const openTactics = input.nodes.filter((n) => n.kind === "tactic" && n.phase !== "done");
-  const mentionsRef = (ref: string): boolean => {
+  const mentionsRef = (ref: string, referencedBy: string): boolean => {
     // Match the ref as a whole id token (same [\w-] boundaries as idShape), so a
     // missing `tactic-x` is not falsely "planned" by an unrelated `tactic-x-v2`.
+    // Exclude the referencing node itself: every missing ref is, by construction,
+    // present in its own referencing body (that is how it was extracted above), so
+    // a self-match would make EVERY missing ref falsely "planned". `[planned]` must
+    // mean some OTHER open tactic mentions the ref.
     const escaped = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`);
-    return openTactics.some((t) => re.test(t.statement) || re.test(input.bodies.get(t.id) ?? ""));
+    return openTactics.some(
+      (t) => t.id !== referencedBy && (re.test(t.statement) || re.test(input.bodies.get(t.id) ?? "")),
+    );
   };
 
   const missing = refs.filter((r) => r.klass === "missing");
@@ -356,11 +381,15 @@ function tableDanglingRefs(input: DigestInput): string {
 
   const missingRows = missing
     .map((r) => {
-      const annot = mentionsRef(r.ref) ? " [planned: open tactic mentions it]" : " [no open mention]";
-      return `  MISSING ${r.ref} <- ${r.referencedBy}${annot}`;
+      const annot = mentionsRef(r.ref, r.referencedBy)
+        ? " [planned: open tactic mentions it]"
+        : " [no open mention]";
+      return `  MISSING ${renderId(r.ref)} <- ${renderId(r.referencedBy)}${annot}`;
     })
     .sort();
-  const prunedRows = pruned.map((r) => `  PRUNED ${r.ref} <- ${r.referencedBy}`).sort();
+  const prunedRows = pruned
+    .map((r) => `  PRUNED ${renderId(r.ref)} <- ${renderId(r.referencedBy)}`)
+    .sort();
   wildcardRows.sort();
 
   const header = `[DANGLING-REFS] live=${liveCount} pruned=${pruned.length} missing=${missing.length} wildcard=${wildcardRows.length}`;
@@ -417,7 +446,7 @@ function tableStoredDefaults(input: DigestInput): string {
   }
   rows.sort((a, b) => b.count - a.count || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const shown = rows.slice(0, STORED_DEFAULTS_LIMIT);
-  const lines = shown.map((r) => `  ${String(r.count).padStart(2)} ${r.id}`);
+  const lines = shown.map((r) => `  ${String(r.count).padStart(2)} ${renderId(r.id)}`);
   if (rows.length > shown.length) {
     lines.push(`  ... and ${rows.length - shown.length} more nodes with default-valued keys`);
   }
