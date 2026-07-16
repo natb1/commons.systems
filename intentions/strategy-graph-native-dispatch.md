@@ -27,8 +27,13 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   until the gh queue drains, then it is removed; full /file-issue and
   /plan-issue coverage is mapped into the align family before removal (coverage
   matrix retained as draft content on tactic-graph-native-dispatch)."
-reading: null
-gap: null
+reading: "lifecycle: tactic-phase-skill-node-targets implement→qa→review→done
+  (2026-07-11); router selections: 701 records, 70 nodes"
+gap: 'reading "lifecycle: tactic-phase-skill-node-targets
+  implement→qa→review→done (2026-07-11); router selections: 701 records, 70
+  nodes" does not meet threshold "legacy gh dispatch router deleted from the
+  repo with the /file-issue and /plan-issue coverage matrix fully mapped to the
+  align family"'
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments

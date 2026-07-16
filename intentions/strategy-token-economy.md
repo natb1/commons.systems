@@ -29,8 +29,11 @@ rationale: "Claude access is prepaid (Max 20x plan): the marginal token is sunk
   vendor's growth via spend' divergence imported by delegation-anthropic-claude:
   on prepaid terms that import is bounded at plan price and reviewed at renewal,
   which is its alignment-of-attachments content."
-reading: null
-gap: null
+reading: "utilization: 1% weekly; tactics 28d: 223 created / 90 closed (net +133)"
+gap: 'reading "utilization: 1% weekly; tactics 28d: 223 created / 90 closed (net
+  +133)" does not meet threshold "utilization near 100% of the weekly allowance
+  while open claude-eligible tactics are non-increasing (closure at or above
+  arrival); full utilization with a growing backlog fails the signal"'
 serves:
   - virtue-alignment-of-attachments
 recovers: []

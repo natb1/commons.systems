@@ -37,6 +37,7 @@ import { listNodes, writeNode } from "../src/store.js";
 import { SensorRegistry, deriveGap, type Sensor } from "../src/sensors.js";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
+import { computeDependencyAudit } from "./dependency-audit.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/read-sensors.ts`, so the
@@ -539,6 +540,36 @@ const lifecycleSensor: Sensor = {
   },
 };
 
+// --- dependency-audit sensor -------------------------------------------------
+// Name is the exact `success_signal.sensor` string `strategy-owned-web-platform`
+// declares — the driver resolves a sensor by that verbatim name (same
+// match-the-declared-name contract as `token-economy`/lifecycle above). The
+// reading measures the third-party runtime dependency surface against its
+// recorded justifications (`dependency-justifications.ts`): total count,
+// unjustified count, dead-upstream count. Unlike the other sensors in this
+// file — which are already-total library/git calls — `computeDependencyAudit`
+// intentionally THROWS on a genuine manifest read error (a misconfigured
+// environment, per `.claude/rules/code-style.md`), by design so a caller can
+// choose how to handle it. This sensor is that caller: its `read()` wraps the
+// call in try/catch so a thrown error degrades to an honest status string
+// rather than propagating and aborting the whole batch (the total-sensor
+// contract documented at the top of this file).
+
+/** The verbatim `success_signal.sensor` name strategy-owned-web-platform declares. */
+const DEPENDENCY_AUDIT_SENSOR_NAME =
+  "dependency audit script over the workspace manifests (extending the knip ratchet), reviewed at office-hours";
+
+const dependencyAuditSensor: Sensor = {
+  name: DEPENDENCY_AUDIT_SENSOR_NAME,
+  read(): string {
+    try {
+      return computeDependencyAudit(repoRoot).summaryLine;
+    } catch (err) {
+      return `dependency audit: read error — ${String(err)}`;
+    }
+  },
+};
+
 // --- intention-store sensor --------------------------------------------------
 // The verbatim `success_signal.sensor` name strategy-graph-drives-dispatch
 // declares, and the store's self-measuring sensor: it counts how many open
@@ -662,6 +693,7 @@ export function buildDefaultRegistry(): SensorRegistry {
   registry.register(gitSensor);
   registry.register(tokenEconomySensor);
   registry.register(lifecycleSensor);
+  registry.register(dependencyAuditSensor);
   // Register the intention-store sensor last and have it derive the set of
   // registered sensor names from the registry itself at read() time — by then
   // the registry holds every sensor, including this one. Deriving the set (vs

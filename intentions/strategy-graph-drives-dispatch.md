@@ -26,8 +26,12 @@ rationale: >-
   write readings and gaps back after execution, and the next dialectic consumes
   that feedback when it triages. strategy-autonomous-execution owns the chain
   itself; this node owns the chain's coupling to intent.
-reading: null
-gap: null
+reading: "serves: 81/81 open tactics; readings: 12/51 sensor-naming strategies
+  (47 unregistered sensors)"
+gap: 'reading "serves: 81/81 open tactics; readings: 12/51 sensor-naming
+  strategies (47 unregistered sensors)" does not meet threshold "every open
+  tactic carries a non-empty serves edge and sensor-run readings exist for every
+  strategy that names a sensor"'
 serves:
   - virtue-philosophical-mobility
   - virtue-progressive-detachment
