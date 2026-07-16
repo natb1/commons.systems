@@ -22,16 +22,23 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 4
+  boost: 11
   override: null
-  rationale: "Author-directed 2026-07-11: top-ranks this draft above every
-    existing tactic (current max authored 8) so it decomposes first once
-    /align-tactics runs — own boost 4 added to strategy-graph-native-dispatch's
-    inherited boost 5 resolves to authored 9. Companion nodes
-    tactic-graph-phase-launch-per-phase,
-    tactic-review-phase-trust-builtin-review, and
-    tactic-graph-frozen-tactic-dispatch were boosted together in the same round
-    to the same tier."
+  rationale: "Author-directed 2026-07-16: re-boosted to the TOP of the ordinary
+    queue. Own boost 11 + strategy-graph-native-dispatch's inherited 5 resolves
+    to authored 16 (~16.33 with the delegation-github capture term) — one above
+    the prior ordinary ceiling of authored 15
+    (tactic-phase-boot-offload-launcher, tactic-phase-standup-audit-lens,
+    tactic-thin-oversized-skill-bodies), and below strategy-main-health's
+    emergency ceiling (100). Rationale: this tactic implements clarification 52
+    — the frozen/draft-node first-class selectable disposition (a boosted draft
+    becomes selectable for a per-node /align-tactics <id> session like any other
+    node). Until it lands, EVERY boosted draft — the prior 15-tier and
+    tactic-tick-scriptable-then-spawn (authored 12) alike — is inert for
+    autonomous selection, because a draft is not a selection candidate at all;
+    so the enabling capability must outrank the individual boosted drafts it
+    unblocks. Supersedes the stale 2026-07-11 note (own boost 4 -> authored 9,
+    'current max authored 8'), now inaccurate."
 phase: null
 execution: null
 validates: []
