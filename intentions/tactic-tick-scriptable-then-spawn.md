@@ -33,8 +33,14 @@ attention:
     2026-07-16 /align-tactics <tactic-id> per-node round
     (frozen-tactic-dispatch, clarification 52); the author-directed boost
     persists to rank this now-selectable work first."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-tick-scriptable-then-spawn
+  pr: 2881
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
