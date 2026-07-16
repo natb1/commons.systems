@@ -573,6 +573,7 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 | Review-phase deferred filings (`/review-fix` follow-up issues) | Draft tactics batched per component, finalized by a later `/align-tactics` round (strategy clarification 19); refuted/below-threshold findings live only in the PR review comment |
 | QA needs-main follow-up filing (`qa-fix` Step 3.6 → main-qa issues) | Retired as an artifact — needs-main residue rides the source tactic into its `main-qa` phase; the qa-main handler verifies against prod (strategy clarification 22, §1.1) |
 | Finalize (assign, `help wanted`) | Retired — presence on `origin/main` with `phase` set *is* schedulability |
+| `fix-checks`'s Flake sub-path (find-or-file a flake-tracking issue, `blocked_by` the PR's tracked issue) — an indirect `/file-issue` caller, missed by the direct-caller rows above; dead on the node lane since GitHub Issues are disabled repo-wide (strategy clarification, 2026-07-16) | Find-or-create a fingerprint-keyed **tactic node** (fingerprint/reproduce-command/diagnosis in the body) and set `blocked_by` on the **source tactic** directly — no office-hours escalation; the router's existing `blocked_by`-completeness gate (`blockersComplete` in `packages/intentionsutil/src/router.ts`) already re-surfaces the source tactic once the flake-fix tactic reaches `phase: done`. Tracked by `tactic-fix-checks-graph-native-flake-tracking` |
 
 ### `/plan-issue` → `/align-tactics`
 
