@@ -131,8 +131,8 @@ STRATEGY_STALE="$(jq -r '.strategyStale' <<<"$FRESH")"
 STAMP_MISSING="$(jq -r '.stampMissing' <<<"$FRESH")"
 
 # --- Scope-stale → delegate to the demotion primitive ------------------------
-# main-qa is post-merge by definition (check-node-selection.ts:213-215), so scope
-# chaining excludes it (SCOPE_CHAINED_PHASES = {fix,qa,review}, check-node-selection.ts:60;
+# main-qa is post-merge by definition (check-node-selection.ts:242), so scope
+# chaining excludes it (SCOPE_CHAINED_PHASES = {fix,qa,review}, check-node-selection.ts:61;
 # decideTransition's scope-stale branch is pre-merge only, transitions.ts:176-179). Don't
 # demote a scope-stale main-qa node — fall through to the normal transition below.
 if [[ "$SCOPE_STALE" == "true" && "$PHASE" != "main-qa" ]]; then
