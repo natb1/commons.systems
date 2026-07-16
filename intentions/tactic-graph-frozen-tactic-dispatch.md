@@ -39,13 +39,14 @@ attention:
     so the enabling capability must outrank the individual boosted drafts it
     unblocks. Supersedes the stale 2026-07-11 note (own boost 4 -> authored 9,
     'current max authored 8'), now inaccurate."
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-frozen-tactic-dispatch
   pr: 2883
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
