@@ -53,12 +53,17 @@ export interface DigestInput {
 // field. The escaped form is still human-legible in the digest, and the escape
 // is deterministic (no wall-clock/environment data), preserving byte-identity.
 function renderId(id: string): string {
-  // Match C0 controls (U+0000-U+001F), DEL (U+007F), and C1 controls
-  // (U+0080-U+009F); escape each as \xHH so the id stays a single field.
-  // eslint-disable-next-line no-control-regex
-  return id.replace(/[\u0000-\u001F\u007F-\u009F]/g, (c) =>
-    `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`,
-  );
+  // Walk code points rather than a control-char regex literal (which trips
+  // eslint's no-control-regex) and escape C0 controls (U+0000-U+001F), DEL
+  // (U+007F), and C1 controls (U+0080-U+009F) as \xHH so the id stays a
+  // single field.
+  return Array.from(id)
+    .map((ch) => {
+      const code = ch.codePointAt(0) ?? 0;
+      const isControl = code <= 0x1f || code === 0x7f || (code >= 0x80 && code <= 0x9f);
+      return isControl ? `\\x${code.toString(16).padStart(2, "0")}` : ch;
+    })
+    .join("");
 }
 
 // --- Section 1: per-node digest lines --------------------------------------
