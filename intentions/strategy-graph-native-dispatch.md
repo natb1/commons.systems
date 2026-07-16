@@ -280,7 +280,15 @@ clarifications:
       2026-06-26→07-03 window — precisely as the queue migrates. The durable
       home for the requirements and their signal is strategy-token-economy; this
       clarification records only what the migration must carry. Recorded
-      2026-07-04 interview."
+      2026-07-04 interview. Amended 2026-07-16: the align-tactics decomposition
+      session no longer runs whole-session on Opus — under
+      strategy-token-economy clarification 10 the dispatch-launched
+      /align-tactics worker runs a Sonnet orchestrator that delegates the
+      decompose-to-signal judgment and per-tactic plan authoring to an Opus
+      subagent; the /align-strategy interview stays whole-session Opus. The
+      audit-written policy file is likewise now advisory (author-gated) rather
+      than auto-applied, per the same clarification. Durable home remains
+      strategy-token-economy."
   - question: Is the fix phase a linear step between implement and qa?
     answer: "No — fix is the CI-failure interrupt (it could be called ci-fix): a
       tactic enters fix from ANY of implement, qa, or review when its PR's CI

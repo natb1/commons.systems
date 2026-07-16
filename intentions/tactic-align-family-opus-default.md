@@ -1,15 +1,18 @@
 ---
 id: tactic-align-family-opus-default
 kind: tactic
-statement: Pin the align-strategy/align-tactics session default to Opus across
-  both invocation paths
+statement: Split /align-tactics model routing (Sonnet orchestrator + Opus
+  decompose/plan subagent); keep /align-strategy whole-session Opus
 owner: ai
 status: raw
 parent: null
-rationale: Surfaced in the 2026-07-06 /align-strategy interview recording the
-  align-family Opus floor on strategy-token-economy. The requirement is recorded
-  there; this tactic carries the enforcement mechanism, which is not yet fully
-  in place.
+rationale: "Surfaced in the 2026-07-06 /align-strategy interview (align-family
+  Opus floor) and refined in the 2026-07-16 interview (strategy-token-economy
+  clarification 10): the whole-session Opus default is replaced for
+  /align-tactics by a Sonnet orchestrator that delegates the decompose-to-signal
+  judgment and per-tactic plan authoring to an Opus subagent; /align-strategy
+  stays whole-session Opus. This tactic carries the enforcement mechanism, not
+  yet fully in place."
 reading: null
 gap: null
 serves:
@@ -21,15 +24,18 @@ success_signal: null
 attention:
   boost: 8
   override: null
-  rationale: "Author-directed 2026-07-09: a direct skill-edit tactic — it pins
-    the session model default in both .claude/skills/align-strategy/SKILL.md
-    and .claude/skills/align-tactics/SKILL.md — so it belongs at the same top
-    tier as the other skill-edit tactics (tactic-align-skills-latest-graph-guard,
+  rationale: "Author-directed 2026-07-09 (boost tier unchanged 2026-07-16): a
+    direct skill-edit tactic — it sets .claude/skills/align-strategy/SKILL.md
+    frontmatter to model: opus and rewrites
+    .claude/skills/align-tactics/SKILL.md Step 3 so the decompose/plan subagent
+    launches on Opus while the orchestrator runs Sonnet — so it belongs at the
+    same top tier as the other skill-edit tactics
+    (tactic-align-skills-latest-graph-guard,
     tactic-fingerprint-recipe-single-callsite: authored 8). Those sit in
-    strategy-graph-native-dispatch's subtree and reach 8 as boost 3 + inherited
-    5; this tactic serves strategy-token-economy (unboosted), so it inherits
+    strategy-graph-native-dispatch subtree and reach 8 as boost 3 + inherited 5;
+    this tactic serves strategy-token-economy (unboosted), so it inherits
     nothing and takes the full boost 8 directly to reach the same authored-8
-    tier and be prioritized by the next dispatch tick."
+    tier."
 phase: null
 execution: null
 validates: []
@@ -39,45 +45,63 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Pin the align-strategy/align-tactics session default to Opus across both invocation paths
+# Split /align-tactics model routing (Sonnet orchestrator + Opus decompose/plan subagent); keep /align-strategy whole-session Opus
 
 Retained draft (`phase: null`) — context for a later `/align-tactics
 strategy-token-economy` round, not selectable work. Surfaced by the
-2026-07-06 `/align-strategy` interview that recorded the align-family Opus
-floor as clarifications on `strategy-token-economy`; the *requirement* lives
-there, this node holds the *mechanism* that is not yet fully in place.
+2026-07-06 `/align-strategy` interview (the align-family Opus floor) and
+refined by the 2026-07-16 interview (`strategy-token-economy` clarification
+10). The *requirement* lives on the strategy; this node holds the *mechanism*,
+not yet fully in place.
 
 ## Why this exists
 
-The Opus default is recorded but only partly enforced. Two invocation paths
-must land on Opus:
+Router-launched `/align-tactics` workers were observed authoring tactic plans
+on Sonnet: the worker launches on Sonnet (the Shape B orchestrator default)
+and its `Plan` subagent inherits that model, so the definition of the tactic
+nodes — the highest-stakes-to-signal act — runs cheap. Clarification 10
+resolves this by splitting the model boundary inside `/align-tactics` rather
+than pinning the whole session to Opus.
 
-- **Router-launched** `/align-tactics` worker — the graph-native launch chain
-  pins the model per `strategy-graph-native-dispatch` clarification 17 and
-  `tactic-graph-router-selector` (align-family interview/decomposition on Opus,
-  Explore/Plan fan-out on Sonnet or Haiku). Confirm this actually fires on the
-  first live graph tick that routes an align-family node.
-- **Human-invoked interactive** `/align-strategy` and `/align-tactics` — no
-  router sets the model; today it is whatever the human's session is set to.
+## The split (per strategy-token-economy clarification 10)
+
+- **`/align-tactics` — dispatch and interactive.** The orchestrator session
+  runs on **Sonnet** and does only the mechanical bookkeeping of a
+  decomposition round: node-id reservation, park-field writes, the
+  clause-coverage walk, and the `graph-commit`. It delegates **both**
+  high-stakes cognitive acts to an **Opus** subagent — the decompose-to-signal
+  judgment (the two-sided drift review and deciding which tactic nodes exist)
+  **and** each claude-eligible tactic's full plan-body authoring. The Explore
+  reuse-hunt fan-out stays demotable to Sonnet or Haiku.
+- **`/align-strategy` — interactive only.** No dispatch launch path; its
+  interview dialectic IS the audit and is non-delegable, so it stays
+  **whole-session Opus**.
 
 ## Open mechanism questions
 
-1. Set `model: opus` in the frontmatter of
-   `.claude/skills/align-strategy/SKILL.md` and
-   `.claude/skills/align-tactics/SKILL.md`.
-2. Confirm whether a `model:` field on a `user-invocable` main-loop skill
-   actually switches the *interactive session* model. It is confirmed to work
-   for `context: fork` skills (e.g. `commit-merge-push` uses `model: sonnet`),
-   but a main-loop skill runs in the human's existing session — the harness may
-   not honor a per-skill model there. If it does not, a launcher/config lever
-   is needed instead, or the interactive path stays an intended-not-guaranteed
-   default backed only by measurement.
-3. Verify via the token-audit by-node/by-phase attribution (the strategy's
-   `token-economy` sensor) that align-family sessions actually ran on Opus —
-   the after-the-fact check that the default held.
+1. **`/align-tactics` SKILL.md Step 3** — launch the decompose/plan `Plan`
+   subagent(s) with an explicit `model: opus` (Agent/Task `model` param),
+   independent of the orchestrator session's model. Author the tactic node body
+   from the subagent's output; the Sonnet orchestrator must not itself rewrite
+   plan substance. Do **not** pin the `/align-tactics` session to Opus in
+   frontmatter — the orchestrator is meant to run Sonnet.
+2. **Router launch model** — confirm the graph-native launch chain launches
+   `/align-tactics` workers on Sonnet (the Shape B orchestrator default),
+   `tactic-graph-router-selector` no longer forcing the whole align-family
+   session to Opus.
+3. **`/align-strategy` SKILL.md** — set `model: opus` in frontmatter. Confirm
+   whether a `model:` field on a `user-invocable` main-loop skill actually
+   switches the *interactive session* model (confirmed for `context: fork`
+   skills such as `commit-merge-push`; unconfirmed for user-invocable main-loop
+   skills). If not honored, the interactive path stays an
+   intended-not-guaranteed default backed by measurement.
+4. **Verify** via the token-audit by-node/by-phase attribution (the strategy's
+   `token-economy` sensor) that `/align-tactics` orchestration ran on Sonnet
+   while its plan-creation subagent ran on Opus.
 
 ## Boundary
 
-Floor-exempt from the routing actuator's fail-closed demotable allowlist: the
-audit policy loop must not demote align-family below Opus. Only the Explore/Plan
-fan-out spawned *under* these sessions stays demotable to Sonnet or Haiku.
+The align-family floor is deprecated (clarification 10) — there is no
+per-phase demotion exemption here. The audit-driven policy loop is advisory and
+author-gated for all routing; that actuator-side mechanism lives on
+`tactic-audit-routing-advisory-gate`, not this node.
