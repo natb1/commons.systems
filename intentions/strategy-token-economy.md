@@ -53,7 +53,7 @@ clarifications:
       figures in the token audit remain useful as allowance-consumption proxies
       for ranking, not as a bill to minimize. Recorded 2026-07-04 interview.
   - question: Which routing decisions may the control loop make automatically?
-    answer: Only those grounded in yield metrics whose denominator the routed phase
+    answer: "Only those grounded in yield metrics whose denominator the routed phase
       can actually move. The 2026-07-03 audit's qa→Opus promotion is a
       measurement artifact — qa's fixes route through /implement-unit subagents
       and never land in the outcome envelope's fixes_applied, so pooled qa
@@ -62,6 +62,11 @@ clarifications:
       Promotions from such metrics stay untrusted until the accounting is fixed
       or the phase routes on a metric it can move (detail retained on
       tactic-outcome-envelope-qa-accounting). Recorded 2026-07-04 interview.
+      Amended 2026-07-16: superseded — no routing decision is applied
+      automatically. The audit-written policy loop is now advisory: it surfaces
+      routing recommendations grounded in verified yield metrics, and every
+      routing change (demotion, promotion, or effort tuning) requires explicit
+      author approval before implementation. See clarification 10."
   - question: Do the skill-contract disciplines get recorded, or stay folklore?
     answer: "Recorded, two families. Context discipline: Explore-subagent fan-out
       returning compact findings, clean-context phase boundaries, and model
@@ -73,7 +78,12 @@ clarifications:
       background sessions that author no code (diagnostics, reminders, digest,
       main-qa verification) launch on Sonnet instead of inheriting Opus (detail
       retained on tactic-noncodegen-session-model-defaults). Recorded 2026-07-04
-      interview."
+      interview. Amended 2026-07-16: the 'sonnet/haiku on subagents of Opus
+      parents' rule is now a special case, not universal — under clarification
+      10 the /align-tactics orchestrator is itself Sonnet and deliberately
+      spawns an Opus plan-creation subagent (a cheap parent with one expensive
+      child); the cost-discipline still governs the Explore reuse-hunt fan-out.
+      See clarification 10."
   - question: What did /align-tactics round 1's drift review find?
     answer: "Immaterial refinements, no condition failures. (a) qa-fix's fix lane
       already maintains a landed-fix tally (SKILL.md Step 3.7), so the
@@ -108,7 +118,13 @@ clarifications:
       /align-tactics decomposition is high-stakes to the signal, so a cheaper
       model is a permanent gap in the record, not a recoverable cost saving.
       Explore/Plan fan-out spawned by these sessions stays demotable to Sonnet
-      or Haiku per clarification 4. Recorded 2026-07-06 interview."
+      or Haiku per clarification 4. Recorded 2026-07-06 interview. Amended
+      2026-07-16: still holds for /align-strategy (interactive-only,
+      whole-session Opus), but NOT for /align-tactics — under clarification 10
+      the dispatch-launched /align-tactics worker runs a Sonnet orchestrator and
+      delegates the decompose-to-signal judgment and per-tactic plan authoring
+      to an Opus subagent, rather than running the whole session on Opus. See
+      clarification 10."
   - question: Is the align-family Opus default demotable by the audit-written policy
       loop, like other phases?
     answer: "No — it is a floor, exempt from downward demotion. The routing
@@ -116,7 +132,11 @@ clarifications:
       verified yield metrics, but the align family is the audit step itself:
       demoting the audit to optimize its own cost is self-defeating. Only the
       Explore/Plan fan-out under these sessions remains demotable. Recorded
-      2026-07-06 interview."
+      2026-07-06 interview. Amended 2026-07-16: the floor is deprecated. Under
+      clarification 10 there is no per-phase downward-demotion exemption;
+      instead all audit-driven routing is advisory and author-gated, which
+      protects the high-stakes work without a special allowlist. See
+      clarification 10."
   - question: How is the Opus default enforced on the human-invoked interactive
       path, which has no router to set the model?
     answer: "As an intended default plus measurement, not a hard guarantee. The
@@ -128,7 +148,11 @@ clarifications:
       token-economy sensor), which can read after the fact whether an
       align-family session actually ran on Opus. The enforcement mechanism is
       retained as draft tactic-align-family-opus-default. Recorded 2026-07-06
-      interview."
+      interview. Amended 2026-07-16: this enforcement (SKILL.md model: opus
+      frontmatter plus after-the-fact audit) now describes /align-strategy,
+      which stays whole-session Opus. /align-tactics interactive invocation
+      follows the split in clarification 10 (Sonnet orchestrator plus Opus
+      plan-creation subagent). See clarification 10."
   - question: Under graph-native phase execution (Shape B), what is the standing
       model-routing default?
     answer: "The top-level phase orchestrator session runs on sonnet; workflow
@@ -145,6 +169,41 @@ clarifications:
       token, so pinning orchestrators to sonnet and reserving opus for the
       subagents whose yield justifies it converts the same allowance into more
       closed tactics. Recorded 2026-07-11 interview."
+  - question: How does /align-tactics route models (2026-07-16), and does the
+      audit-written policy loop still apply routing changes automatically?
+    answer: "Three changes, recorded 2026-07-16 interview. (1) The dispatch-launched
+      /align-tactics worker no longer runs whole-session on Opus. Its
+      orchestration — the mechanical bookkeeping of a decomposition round:
+      node-id reservation, park-field writes, the clause-coverage walk, and the
+      graph-commit — runs on the Sonnet orchestrator session. Both high-stakes
+      cognitive acts are delegated to an Opus subagent: the decompose-to-signal
+      judgment (the two-sided drift review and deciding which tactic nodes
+      exist) AND each claude-eligible tactic's full plan-body authoring. The
+      Explore reuse-hunt fan-out stays demotable to Sonnet or Haiku. This
+      relocates the 2026-07-06 Opus requirement (clarification 6) from the whole
+      session onto the subagent that does the work the floor protected —
+      'decomposition is high-stakes to the signal' is preserved, because the
+      decompose judgment and plan authoring are exactly what runs on Opus —
+      while cutting the cost of the orchestration around it. It makes
+      /align-tactics conform to the Shape B standing default (clarification 9:
+      Sonnet orchestrator, Opus subagents where the work calls for it).
+      Motivating observation: router-launched /align-tactics workers were
+      authoring tactic plans on Sonnet, because the worker launched on Sonnet
+      and its Plan subagent inherited that model. (2) /align-strategy is
+      unchanged: it is interactive-only (no dispatch launch path) and its
+      interview dialectic IS the audit and is non-delegable, so it stays
+      whole-session Opus via SKILL.md model: opus frontmatter. (3) The
+      align-family Opus floor (clarification 7) is deprecated and the
+      audit-written policy loop becomes advisory: it no longer applies ANY
+      routing change automatically — demotion, promotion, or effort tuning
+      alike. When the audit can demonstrate a task runs on a cheaper model
+      without compromising quality (or otherwise warrants a routing change), it
+      MUST surface the recommendation; implementation requires explicit author
+      approval. This supersedes clarification 3 (which licensed some automatic
+      routing) and removes the need for a per-phase floor exemption. Mechanism
+      retained as draft tactic-align-family-opus-default (the align-tactics
+      split) and tactic-audit-routing-advisory-gate (the advisory policy loop).
+      Recorded 2026-07-16 interview."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -155,9 +214,15 @@ tooling_goals:
       strategy subtree (shared with strategy-autonomous-execution via
       tactic-attention-surface-velocity-pace)
   - kind: actuator
-    statement: phase→model and phase→effort routing in the graph-native launch
-      chain, with the fail-closed demotable allowlist and the audit-written
-      policy loop
+    statement: "phase-to-model and phase-to-effort routing in the graph-native
+      launch chain. The audit-written policy loop is advisory (clarification
+      10): it surfaces routing recommendations — model/effort demotions and
+      promotions — grounded in verified yield metrics, and every routing change
+      requires explicit author approval before implementation; no routing change
+      is applied automatically. The /align-tactics worker routes a Sonnet
+      orchestrator with an Opus subagent for the decompose-to-signal judgment
+      and per-tactic plan authoring, the Explore reuse-hunt fan-out demotable to
+      Sonnet or Haiku."
 success_signal:
   observable: weekly allowance utilization together with claude-eligible tactic
     closure velocity (created vs closed)
@@ -182,8 +247,11 @@ attributes:
     - the token audit stays runnable and attributable across the router
       migration — a session that cannot be attributed to a node and phase is
       invisible to every control loop here
-    - routing automation acts only on yield metrics whose accounting is verified
-      (the qa fixes_applied gap is open as of 2026-07-04)
+    - routing recommendations are grounded only on yield metrics whose
+      accounting is verified (the qa fixes_applied gap is open as of
+      2026-07-04), and every routing change requires explicit author approval
+      before implementation — the audit-written policy loop surfaces
+      recommendations, it never auto-applies (clarification 10)
     - pace machinery stays operational config outside the graph
       (strategy-graph-native-dispatch clarification 14); this strategy records
       requirements, not machinery
