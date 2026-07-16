@@ -60,13 +60,20 @@ clarifications:
       that date.)"
   - question: A strategy's tactics all complete but its signal is still unvalidated
       — what stops /align-tactics from burning rounds forever?
-    answer: A fresh-reading gate plus a round cap. After a tactic round completes,
+    answer: "A fresh-reading gate plus a round cap. After a tactic round completes,
       the strategy is re-eligible only once its sensor produces a reading newer
       than the round's completion; after two rounds without validation it parks
       to office-hours with the round history as the why. A null reading counts
       as not-validated, but the first round must then include a tactic that
       makes the sensor runnable — a strategy that cannot be measured must first
-      buy its own instrument. Recorded 2026-07-03 interview.
+      buy its own instrument. Recorded 2026-07-03 interview. (Amended
+      2026-07-16: the \"reading newer than the round's completion\" anchor is a
+      distinct rounds.last_aligned — align-decompose time — not
+      rounds.last_completed, which clarification 22 reserves for
+      verified-in-prod; and the fresh-reading check applies regardless of count,
+      so it engages for strategies whose rounds produce born-parked or off-path
+      work and never prune a child. See the last_aligned clarification of that
+      date.)"
   - question: What replaces the dispatch:office-hours label?
     answer: A first-class parked field on goal-layer nodes (reason plus since),
       valid on strategies and tactics; the router skips parked nodes and their
@@ -667,7 +674,14 @@ clarifications:
       safe only because no overlapping tick fired. Bootstrap: an emulating
       session owes the router's claiming semantics like any other phase
       semantics (clarification 15) — write a ledger claim per selected node
-      before fan-out and clear each with its transition write."
+      before fan-out and clear each with its transition write. (Amended
+      2026-07-16: \"a tick's lifetime ends at spawn\" means the tick's FINAL
+      spawn — a tick front-loads all scriptable non-worker dispositions before
+      selection and then spawns the worker group against post-disposition state,
+      so a metadata-only disposition never consumes a launch-budget slot; see
+      the scriptable-then-spawn clarification of that date. Each spawn still
+      enters the ledger under the selection lock, so the global cap and overlap
+      safety are unchanged.)"
   - question: A selected node’s scope or state changes after selection — before its
       worker starts, or while it runs. What closes the window?
     answer: "Two gates bracket the worker; no mid-run polling. Start gate: the
@@ -853,7 +867,13 @@ clarifications:
       work), so the named range is a focus aid and the audit trail. Bootstrap
       parity: an emulating session owes the chain re-check before each
       transition it writes, and owes the demotion write when it finds a post-qa
-      scope edit (clarification 15). Recorded 2026-07-06 interview."
+      scope edit (clarification 15). Recorded 2026-07-06 interview. (Amended
+      2026-07-16: the primary scope-staleness comparison moves AHEAD of
+      selection into the tick's disposition sweep, so a demotion is scriptable
+      phase-1 work that no longer surprises the worker-launch step or consumes a
+      budget slot; the worker-start gate described here stays as the safety
+      re-check for staleness introduced after the sweep. See the
+      scriptable-then-spawn clarification of that date.)"
   - question: What guards the router against failure loops — a worker that
       repeatedly fails to make progress or park on a node, and a systemic
       executor failure (a daemon crash-loop) that would otherwise false-trip a
@@ -1491,6 +1511,68 @@ clarifications:
       variance, out of scope for this self-reap — its orphaned job is reaped by
       the tick/sweep ledger pass that already GCs the stale worktree (retained
       in the draft tactic). Recorded 2026-07-16 interview."
+  - question: "A strategy whose signal is validated only by human work (sensor:
+      owner review at office-hours) is re-selected for /align-tactics every tick
+      — its rounds produce off-path tooling plus born-parked on-path reading
+      chunks, never a claude-executable on-path tactic, so the coverage gate
+      never trips and clarification 3's fresh-reading gate never fires. Why, and
+      what is the fix?"
+    answer: "Clarification 3's fresh-reading doctrine is correct but its
+      implementation anchor is wrong for this strategy class. The gate keys off
+      rounds.last_completed / rounds.count, which advance only when the last
+      child prunes — verified-in-prod (clarification 22). A round whose
+      deliverable is born-parked human reading plus off-path tooling never
+      prunes a child, so count stays 0 and last_completed stays null: the
+      fresh-reading check (guarded by count > 0) never runs and the node is
+      perpetually align-eligible. Fix: add a distinct rounds.last_aligned
+      timestamp, stamped when an /align-tactics round lands its tactics, and
+      re-select for a further round only when the strategy's reading is newer
+      than last_aligned (a null last_aligned — never aligned — still passes,
+      preserving first rounds), applied regardless of count. last_completed
+      keeps its verified-in-prod meaning (clarification 22) and count >= 2 stays
+      a hard cap; for a recurring human-signal strategy count legitimately stays
+      0 and last_aligned freshness is the sole re-selection throttle — align
+      runs once per new reading to born-park the reading's follow-up chunks and
+      sweep drift, then waits. Diverges from the rival fix of counting
+      born-parked on-path chunks as coverage: that would exclude the strategy
+      until the entire reading program finished and never re-open to sweep drift
+      on a new reading, losing the per-reading cadence clarification 3 intends.
+      Implementation: tactic-graph-eligibility-last-aligned. Recorded 2026-07-16
+      interview."
+  - question: A tick performs scriptable non-worker work (e.g. a scope-stale demote)
+      and then ends having launched no worker — a SPAWN_N slot spent on a
+      metadata write. What is a tick's completion contract when scriptable work
+      and worker spawning would compete?
+    answer: "They never compete: a tick runs in two ordered phases — (1) ALL
+      scriptable, non-worker dispositions to completion, then (2) one
+      worker-group selection-and-spawn sized to the pace target against the
+      state phase 1 produced. Phase 1 is every graph-mutating disposition the
+      tick owes with no live worker: the reconcile sweep, scope-staleness
+      demotes, out-of-band absorptions, parks, node reaps, failure-fuse
+      accounting, and census births. Phase 2 selects and spawns the worker
+      group. Because scriptable work completes before selection, it never
+      consumes the worker budget — SPAWN_N counts workers actually LAUNCHED, not
+      selection slots a metadata write can silently spend. The live failure this
+      fixes: a manual tick selected one node, that node scope-stale-demoted at
+      launch (provision exit 13), and the tick ended with 0 workers though
+      SPAWN_N=1 and headroom=5 — the demote, a phase-1 disposition, had wrongly
+      run in phase 2 and eaten the only budget slot. Mechanism: the
+      scope-staleness comparison moves ahead of selection into the sweep, so a
+      demotion is a phase-1 disposition and phase-2 selection then spawns the
+      demoted node at its new implement phase (implement never re-demotes, so
+      this terminates) or the next-ranked task. The launch-time start gate (the
+      two gates bracketing the worker) stays as the safety re-check for state
+      that moved AFTER the sweep — a concurrent author/session edit between
+      phase 1 and spawn — whose rare skip falls to next-tick re-selection, the
+      death-recovery path, not a routine under-fill. Invariants unchanged:
+      claim-lifetime 'ends at spawn' (now the tick's FINAL spawn), the
+      reservation-ledger claim taken under the selection lock, and next-tick
+      re-selection as the worker-DEATH recovery path. Boundary: the contract
+      binds whenever SPAWN_N>0; auto-mode at the pace target selects and spawns
+      nothing, and phase-1 dispositions still run. Implementation retained as
+      draft tactic-tick-scriptable-then-spawn. Recorded 2026-07-16
+      /align-strategy interview (author-confirmed contract: each tick performs
+      all scriptable non-worker work, then spawns the next worker group)."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:

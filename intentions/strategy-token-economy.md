@@ -204,6 +204,71 @@ clarifications:
       retained as draft tactic-align-family-opus-default (the align-tactics
       split) and tactic-audit-routing-advisory-gate (the advisory policy loop).
       Recorded 2026-07-16 interview."
+  - question: May an autonomous worker self-schedule a fallback wakeup while waiting
+      on harness-tracked background work?
+    answer: "No — the harness re-invokes the session automatically when a tracked
+      background Workflow or Task completes, so a self-scheduled short-interval
+      ScheduleWakeup fallback only fires redundantly after that
+      auto-notification has already resumed and finished the work, producing a
+      no-progress round that burns the weekly allowance without closing any
+      tactic — this strategy's named failing state, and a case of the 'error
+      hygiene' throughput lever the rationale records. Discipline: schedule no
+      fallback for harness-tracked work; reserve fallbacks for external state
+      the harness cannot observe (a CI run, a deploy, a remote queue), sized to
+      that state's change cadence, and for an idle heartbeat with no specific
+      signal use a long delay (1200s+, per ScheduleWakeup's own guidance) rather
+      than a short poll that misses the prompt cache and fires before anything
+      can have changed. Live failure 2026-07-16: a /qa-fix worker (node
+      tactic-recovery-drill-firebase, PR #2877) set a 270s fallback while its
+      Step 3.5 disposition Workflow ran in the background; the task-notification
+      resumed the session and it completed every remaining step first, then the
+      270s timer fired on a now-stale prompt with nothing left to do — one
+      wasted no-progress round. Recorded 2026-07-16 interview."
+  - question: What is the fixed per-session standup cost of a phase-orchestrator
+      session, and how is it reduced?
+    answer: "A phase-orchestrator session (/implement, /qa-fix, /review-fix) pays a
+      large fixed cost to stand up before any tactic-closing work begins, even
+      though the work is mostly predetermined outside the metered session — the
+      reasoning already lives in a fixed workflow script
+      (.claude/workflows/qa-fix.js, review-fix.js) and the deterministic prelude
+      already runs in the launcher chain (dispatch-launch-worker ->
+      provision-node-worktree -> dispatch-merge-main) before the session exists.
+      This standup cost is a context-discipline throughput lever, extending
+      clarification 4, with two facets. (1) SKILL-body prose: the harness loads
+      the full SKILL.md on invocation and it persists for the whole session;
+      Claude Code's own guidance caps SKILL.md at 500 lines with detail moved to
+      on-demand reference files, and qa-fix (1,523 lines) and review-fix (1,088)
+      run 2-3x over — the fix is the standard, plausible-today Claude Code
+      pattern (thin body under 500 lines plus references/*.md loaded only when
+      read), not a harness change; confirmed against the Claude Code skills docs
+      this round, which corrected an earlier framing that assumed a harness
+      lazy-load capability was required. (2) Boot boilerplate: the opening
+      tool-call sequence re-derives in-session what is already known outside it
+      — N and the worktree path (already prompt args,
+      dispatch-launch-worker:164), the PR link (already resolved by the router),
+      and the origin/main merge (already done by the launcher); boot judgment
+      content is near-zero. review-fix already dropped its in-session merge
+      (review-fix/SKILL.md:199-201) and runs ~3-4 boot round-trips; qa-fix has
+      not adopted this and re-does the merge (Step 0.5, qa-fix/SKILL.md:227-233)
+      plus a redundant second context-pack at ~6-7 round-trips. Discipline: keep
+      only args-computation and near-zero-judgment bookends in the metered
+      session; push precomputable prelude into the launcher and thin the body to
+      references. Measurement precedes control (this strategy's rationale): no
+      current audit lens joins the two facets — lens 2 captures the
+      tool-round-trip preamble only as generic n-grams, lens 9 the prose
+      footprint — so this round retains three draft tactics:
+      tactic-phase-standup-audit-lens (a per-phase standup-cost lens, measure
+      first), tactic-thin-oversized-skill-bodies (the SKILL-body thinning to
+      under 500 lines plus references), and tactic-phase-boot-offload-launcher
+      (propagate review-fix's boot-offload to qa-fix plus launcher precompute).
+      Two guardrails bind those tactics as conditions: a parity gate — thinning
+      or offload must hold phase-success parity, since dropped instruction
+      regresses the phase invisibly, and reference files must be linked from
+      SKILL.md so the model loads them on demand — and a freshness bound —
+      launcher precompute is allowed only for values fixed at launch or produced
+      by the launcher's own merge step, never a value that can go stale against
+      the merged tree, so qa-fix's diff must stay post-merge. Recorded
+      2026-07-16 interview."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance

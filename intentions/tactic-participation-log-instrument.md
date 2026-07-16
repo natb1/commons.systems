@@ -25,14 +25,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: implement
 execution:
   branch: tactic-participation-log-instrument
   pr: 2873
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: ad4311f339fb4ca9e66a660b49ffa583735eb4d6c3af4bca3a1302f169a38a3b
 validates:
   - strategy-join-existing-practice
