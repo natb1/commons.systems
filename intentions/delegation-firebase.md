@@ -86,9 +86,15 @@ attributes:
   irreversibility:
     recovery_path: re-host — static apps deploy anywhere; the Firestore surfaces are
       small and behind an abstraction; functions are portable Node
-    recovery_cost: low; the local-first design keeps user data out of the migration entirely
+    recovery_cost: low for the mechanical steps (~35s build->serve->verify once
+      substitute-host tooling exists), but the tooling itself (nginx config
+      translating firebase.json, parity checklist, verify script) was a
+      low-single-digit-hour one-time build; the one real gap is /api/webmention,
+      compute-backed and not re-hostable statically -- measured 2026-07-16 via
+      tactic-recovery-drill-firebase
+      (ops/recovery-drills/firebase-drill-report.md)
     gated: false
-    last_exercised: null
+    last_exercised: 2026-07-16
   classification: platform
   non_delegable_floor: user data never lives only in the backend — local-first
     files are the source of truth
