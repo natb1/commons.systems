@@ -39,10 +39,14 @@ attributes:
   irreversibility:
     recovery_path: re-host — git is portable by design; issues/PR relationships
       export via API; Actions workflows would need porting to another runner
-    recovery_cost: days of migration work; the issue-graph conventions the dispatch
-      chain reads are the largest piece
+    recovery_cost: "measured 2026-07-16 drill: hours-to-about-a-day, dominated by CI
+      porting (8 workflow files to a new runner) and a rate-limited PR/comment
+      re-import (1312 PRs + 6343 comments span multiple GitHub REST 5000/hr
+      windows via Gitea's migrator); the issue graph (local intentions/, 0
+      GitHub issues remain) and git history (mirrored clones exist) carry
+      near-zero recovery cost. See ops/recovery-drills/github-drill-report.md."
     gated: false — all data exportable via API
-    last_exercised: null
+    last_exercised: 2026-07-16
   classification: platform
   non_delegable_floor: the repo itself — full clones exist on local machines at all times
   review_trigger: terms, pricing, or API changes hostile to individual-scale automation

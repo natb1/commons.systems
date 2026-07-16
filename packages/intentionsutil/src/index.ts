@@ -52,6 +52,8 @@ export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } fro
 export type { Goal, Realization } from "./goals.js";
 export { detectRung } from "./rungs.js";
 export type { Rung } from "./rungs.js";
+export { renderDigest, renderPerNode, renderTables } from "./digest.js";
+export type { DigestInput } from "./digest.js";
 export {
   SensorRegistry,
   readNodeSignal,
