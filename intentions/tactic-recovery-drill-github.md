@@ -19,13 +19,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-recovery-drill-github
   pr: 2878
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: 4ee635b8acf77f2cb701ca3625baa5edf2209e23bf04d30e72650eb7b94f36fa
 validates:
   - strategy-exercise-recovery-paths
@@ -152,3 +153,30 @@ comments render) and one PR; confirm the report's survived/lost table is
 filled from measured counts, not assumptions; confirm
 `delegation-github`'s `last_exercised` is a real date on `origin/main`
 after the graph-commit.
+
+## needs-main residue
+
+QA pass (`/qa-fix`, 2026-07-16) confirmed all 12 script-verifiable
+acceptance checks (deliverables present, export script executable/lint-clean/
+fail-loud/shell-json-compliant, `.gitignore` excludes the raw archive dir,
+manifest schema/counts consistent with the report, no secret values
+committed, report carries the required sections, `delegation-github`'s
+`last_exercised` landed on `origin/main`). Two items are planned
+deferrals — not code defects, and not fixable by further QA — carried here
+for downstream human verification:
+
+- **id 13** — Report's internal-consistency of the "over-count / +5-drift"
+  claims (PRs 1312→1317 as live drift during the export→import gap,
+  releases 0→2 as Gitea auto-registering git tags, comments
+  throughput-bound at the rate-limit wall). Expected outcome: a human
+  agrees the survived/lost narrative is a fair, non-misleading reading of
+  the measured deltas. Finding: whether the report's prose interpretation
+  is fair is a judgment call, not mechanically checkable.
+- **id 14** — The live GitHub→Gitea drill was actually run as described
+  (real Gitea 1.26.4 instance, `POST /api/v1/repos/migrate`, a rate-limit
+  wall at ~4650 REST calls, per-entity imported counts). Expected outcome:
+  a human accepts (or independently spot-checks) that the drill executed
+  faithfully and the imported-side numbers are measured, not assumed.
+  Finding: a one-time historical point-in-time measurement, verifiable
+  only by re-running the live multi-hour drill, not by any CI-checkable
+  invariant.
