@@ -25,8 +25,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-tailscale-shell-health-check
+  pr: 2874
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates:
   - strategy-tailscale-auth-visibility
 blocked_by: []
