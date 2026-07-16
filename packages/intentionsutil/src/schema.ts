@@ -351,10 +351,16 @@ export interface OfficeHours {
   recommendation: string | null;
 }
 
-/** `/align-tactics` re-evaluation round accounting; valid on strategies only. */
+/**
+ * `/align-tactics` re-evaluation round accounting; valid on strategies only.
+ * `last_completed` is verified-in-prod completion time (advances only when a
+ * non-draft child prunes); `last_aligned` is the date the last `/align-tactics`
+ * round *landed* (align-decompose time), stamped independently of completion.
+ */
 export interface Rounds {
   count: number;
   last_completed: string | null;
+  last_aligned: string | null;
 }
 
 function requireNumber(value: unknown, field: string): number {
@@ -450,6 +456,7 @@ function validateRounds(value: unknown, field: string): Rounds {
   return {
     count: requireNonNegativeInt(value.count, `${field}.count`),
     last_completed: optionalString(value.last_completed, `${field}.last_completed`),
+    last_aligned: optionalString(value.last_aligned, `${field}.last_aligned`),
   };
 }
 
