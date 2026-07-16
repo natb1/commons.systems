@@ -81,4 +81,6 @@ echo "  Stop with Ctrl-C (SIGINT) or SIGTERM."
 # `set -e` propagates a nonzero exit. `nix run` fetches nginx from nixpkgs — the
 # first run may download it (needs the npm/nix cache to be writable; see
 # .claude/rules/sandbox.md on running such commands with the sandbox disabled).
-exec nix run nixpkgs#nginx -- -c "$RENDERED_CONF" -p "$PREFIX/"
+nix run nixpkgs#nginx -- -c "$RENDERED_CONF" -p "$PREFIX/" &
+NGINX_PID=$!
+wait "$NGINX_PID"
