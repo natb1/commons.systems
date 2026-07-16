@@ -43,6 +43,7 @@ import { pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
 import { listNodes, readNode, readNodeBody } from "../src/store.js";
 import {
+  frozenTacticSelectable,
   servingStrategyIds,
   strategyAlignSelectable,
   strategyFingerprint,
@@ -159,11 +160,18 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
   // phases are first-class and persisted, so equality is correct there).
   const phase = readPhase(node);
   if (selectedPhase === "align-tactics") {
-    if (node.kind !== "strategy") {
-      return fail(EXIT_STALE_SELECTION, "phase", `selected align-tactics but ${nodeId} is a ${node.kind}, not a strategy`);
-    }
-    if (phase !== null) {
-      return fail(EXIT_STALE_SELECTION, "phase", `selected align-tactics but strategy ${nodeId} phase advanced to ${phase}`);
+    if (node.kind === "strategy") {
+      // A strategy is align-selected at its native null phase; any non-null
+      // stored phase (first-class or squatter) is a stale advance.
+      if (phase !== null) {
+        return fail(EXIT_STALE_SELECTION, "phase", `selected align-tactics but strategy ${nodeId} phase advanced to ${phase}`);
+      }
+    } else {
+      // A frozen tactic is align-selected either at draft (phase null) OR while
+      // carrying an in-flight phase if it is soft-frozen. That distinction is
+      // not cheaply recomputable here, so the phase-literal check is skipped for
+      // a tactic target: eligibility is decided wholesale by the 3b re-check
+      // below (frozenTacticSelectable, the single source of truth).
     }
   } else if (phase !== selectedPhase) {
     return fail(EXIT_STALE_SELECTION, "phase", `selected ${selectedPhase} but node is now ${phase ?? "draft/null"}`);
@@ -179,13 +187,24 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
   //     under the rounds cap, no non-draft on-path child, not soft-frozen out).
   //     Deferred to here so the not-parked check above owns the parked verdict;
   //     defers wholesale to the pure selector (single source of truth).
-  if (selectedPhase === "align-tactics" && !strategyAlignSelectable(node, listNodes(dir))) {
-    return fail(
-      EXIT_STALE_SELECTION,
-      "phase",
-      `selected align-tactics but strategy ${nodeId} is no longer align-eligible ` +
-        `(signal validated, rounds cap, on-path child, or soft-frozen out)`,
-    );
+  if (selectedPhase === "align-tactics") {
+    if (node.kind === "strategy") {
+      if (!strategyAlignSelectable(node, listNodes(dir))) {
+        return fail(
+          EXIT_STALE_SELECTION,
+          "phase",
+          `selected align-tactics but strategy ${nodeId} is no longer align-eligible ` +
+            `(signal validated, rounds cap, on-path child, or soft-frozen out)`,
+        );
+      }
+    } else if (!frozenTacticSelectable(node, listNodes(dir))) {
+      return fail(
+        EXIT_STALE_SELECTION,
+        "phase",
+        `selected align-tactics but tactic ${nodeId} is no longer frozen-eligible ` +
+          `(advanced past draft and not soft-frozen, parked, or resolved)`,
+      );
+    }
   }
 
   // 4. fingerprint — a strategy substance edit after selection yields the
