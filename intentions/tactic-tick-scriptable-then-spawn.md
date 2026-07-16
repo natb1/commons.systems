@@ -20,7 +20,18 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 6
+  override: null
+  rationale: "Author-directed 2026-07-16: the two-phase-tick fix (each tick
+    performs all scriptable non-worker work, then spawns the worker group) is
+    the current top-priority dispatch work — lift this node to the top of the
+    ordinary queue (authored 11 = own 6 + inherited 5 from
+    strategy-graph-native-dispatch), above every other tactic in the subtree and
+    all other authored ranks (<=9), sequenced below strategy-main-health's
+    guarded 100. Draft node: the boost carries to the selectable work
+    /align-tactics later produces and ranks it first for that decomposition.
+    /align-tactics deliberately NOT run this session (author-directed)."
 phase: null
 execution: null
 validates: []
