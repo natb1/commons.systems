@@ -674,7 +674,14 @@ clarifications:
       safe only because no overlapping tick fired. Bootstrap: an emulating
       session owes the router's claiming semantics like any other phase
       semantics (clarification 15) — write a ledger claim per selected node
-      before fan-out and clear each with its transition write."
+      before fan-out and clear each with its transition write. (Amended
+      2026-07-16: \"a tick's lifetime ends at spawn\" means the tick's FINAL
+      spawn — a tick front-loads all scriptable non-worker dispositions before
+      selection and then spawns the worker group against post-disposition state,
+      so a metadata-only disposition never consumes a launch-budget slot; see
+      the scriptable-then-spawn clarification of that date. Each spawn still
+      enters the ledger under the selection lock, so the global cap and overlap
+      safety are unchanged.)"
   - question: A selected node’s scope or state changes after selection — before its
       worker starts, or while it runs. What closes the window?
     answer: "Two gates bracket the worker; no mid-run polling. Start gate: the
@@ -860,7 +867,13 @@ clarifications:
       work), so the named range is a focus aid and the audit trail. Bootstrap
       parity: an emulating session owes the chain re-check before each
       transition it writes, and owes the demotion write when it finds a post-qa
-      scope edit (clarification 15). Recorded 2026-07-06 interview."
+      scope edit (clarification 15). Recorded 2026-07-06 interview. (Amended
+      2026-07-16: the primary scope-staleness comparison moves AHEAD of
+      selection into the tick's disposition sweep, so a demotion is scriptable
+      phase-1 work that no longer surprises the worker-launch step or consumes a
+      budget slot; the worker-start gate described here stays as the safety
+      re-check for staleness introduced after the sweep. See the
+      scriptable-then-spawn clarification of that date.)"
   - question: What guards the router against failure loops — a worker that
       repeatedly fails to make progress or park on a node, and a systemic
       executor failure (a daemon crash-loop) that would otherwise false-trip a
@@ -1526,6 +1539,40 @@ clarifications:
       on a new reading, losing the per-reading cadence clarification 3 intends.
       Implementation: tactic-graph-eligibility-last-aligned. Recorded 2026-07-16
       interview."
+  - question: A tick performs scriptable non-worker work (e.g. a scope-stale demote)
+      and then ends having launched no worker — a SPAWN_N slot spent on a
+      metadata write. What is a tick's completion contract when scriptable work
+      and worker spawning would compete?
+    answer: "They never compete: a tick runs in two ordered phases — (1) ALL
+      scriptable, non-worker dispositions to completion, then (2) one
+      worker-group selection-and-spawn sized to the pace target against the
+      state phase 1 produced. Phase 1 is every graph-mutating disposition the
+      tick owes with no live worker: the reconcile sweep, scope-staleness
+      demotes, out-of-band absorptions, parks, node reaps, failure-fuse
+      accounting, and census births. Phase 2 selects and spawns the worker
+      group. Because scriptable work completes before selection, it never
+      consumes the worker budget — SPAWN_N counts workers actually LAUNCHED, not
+      selection slots a metadata write can silently spend. The live failure this
+      fixes: a manual tick selected one node, that node scope-stale-demoted at
+      launch (provision exit 13), and the tick ended with 0 workers though
+      SPAWN_N=1 and headroom=5 — the demote, a phase-1 disposition, had wrongly
+      run in phase 2 and eaten the only budget slot. Mechanism: the
+      scope-staleness comparison moves ahead of selection into the sweep, so a
+      demotion is a phase-1 disposition and phase-2 selection then spawns the
+      demoted node at its new implement phase (implement never re-demotes, so
+      this terminates) or the next-ranked task. The launch-time start gate (the
+      two gates bracketing the worker) stays as the safety re-check for state
+      that moved AFTER the sweep — a concurrent author/session edit between
+      phase 1 and spawn — whose rare skip falls to next-tick re-selection, the
+      death-recovery path, not a routine under-fill. Invariants unchanged:
+      claim-lifetime 'ends at spawn' (now the tick's FINAL spawn), the
+      reservation-ledger claim taken under the selection lock, and next-tick
+      re-selection as the worker-DEATH recovery path. Boundary: the contract
+      binds whenever SPAWN_N>0; auto-mode at the pace target selects and spawns
+      nothing, and phase-1 dispositions still run. Implementation retained as
+      draft tactic-tick-scriptable-then-spawn. Recorded 2026-07-16
+      /align-strategy interview (author-confirmed contract: each tick performs
+      all scriptable non-worker work, then spawns the next worker group)."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
