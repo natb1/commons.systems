@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Execution, IntentionNode } from "../src/schema.js";
+import { PHASES } from "../src/schema.js";
 import {
-  PHASE_LADDER,
   readingDate,
   selectGraphTargets,
   strategyAlignSelectable,
@@ -417,7 +417,7 @@ describe("ordering", () => {
     expect(candidateIds(nodes)).toEqual(["tactic-high", "tactic-low"]);
   });
 
-  it("within one rank level, the phase ladder orders closest-to-done first", () => {
+  it("within one rank level, the progression ordinal orders closest-to-done first (qa sorts before fix)", () => {
     const nodes = [
       strategy({ id: "strategy-s", reading: "validated" }),
       tactic({ id: "tactic-implement", phase: "implement" }),
@@ -427,13 +427,15 @@ describe("ordering", () => {
     ];
     expect(candidateIds(nodes)).toEqual([
       "tactic-review",
-      "tactic-fix",
       "tactic-qa",
+      "tactic-fix",
       "tactic-implement",
     ]);
   });
 
   it("an eligible strategy sorts at the align-tactics rung, after tactics of equal rank", () => {
+    // Under the progression ordinal, implement (PHASES index 2) is more-progressed
+    // than a strategy's align-tactics rung (index 1), so the tactic sorts first.
     const nodes = [
       strategy({ id: "strategy-s" }),
       tactic({ id: "tactic-implement", phase: "implement" }),
@@ -449,8 +451,17 @@ describe("ordering", () => {
     expect(candidateIds(nodes)).toEqual(["tactic-a", "tactic-b"]);
   });
 
-  it("the ladder covers every selectable phase", () => {
-    expect(PHASE_LADDER).toEqual(["main-qa", "review", "fix", "qa", "implement", "align-tactics"]);
+  it("the progression ordinal runs over the full PHASES order", () => {
+    expect(PHASES).toEqual([
+      "draft",
+      "align-tactics",
+      "implement",
+      "fix",
+      "qa",
+      "review",
+      "main-qa",
+      "done",
+    ]);
   });
 });
 

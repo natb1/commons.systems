@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
 import { isStrategyStale } from "./transitions.js";
+import { PHASES } from "./schema.js";
 import type { IntentionNode, Phase } from "./schema.js";
 
 // Graph router v2, first half: selection (tactic-graph-router-selector).
@@ -18,12 +19,14 @@ import type { IntentionNode, Phase } from "./schema.js";
 // --- Types -------------------------------------------------------------------
 
 /**
- * The phase ladder, closest-to-done first (strategy clarification 22). Within
- * one resolved-attention rank level, candidates drain in this order; the
- * `align-tactics` rung is where eligible strategies (an `/align-tactics`
- * session) sort. `main-qa` (adopted into the schema `Phase` enum by
- * tactic-main-qa-phase) sorts closest-to-done: a merged tactic carrying
- * needs-main residue drains its main-qa verification before `done`.
+ * The phase ladder, closest-to-done first (strategy clarification 22).
+ *
+ * Historical: this drove the within-rank selection tiebreak until
+ * tactic-graph-frozen-tactic-dispatch replaced it with a progression ordinal
+ * over the full `PHASES` order (see `progressionIndex`). The selection sort no
+ * longer consults it; it is retained as a public export for downstream
+ * consumers. Note the progression ordinal reorders `fix` vs `qa` relative to
+ * this ladder (`qa` is now more-progressed than `fix`).
  */
 export const PHASE_LADDER: readonly string[] = [
   "main-qa",
@@ -61,7 +64,7 @@ export interface SelectionEvent {
 }
 
 export interface GraphSelection {
-  /** Eligible nodes in selection order: rank desc, phase ladder, id asc. */
+  /** Eligible nodes in selection order: rank desc, progression ordinal desc, id asc. */
   candidates: GraphCandidate[];
   /** Freeze / cap / gate events observed during the scan. */
   events: SelectionEvent[];
@@ -170,12 +173,26 @@ function blockersComplete(tactic: IntentionNode, byId: Map<string, IntentionNode
   return true;
 }
 
-function ladderIndex(phase: string): number {
-  const idx = PHASE_LADDER.indexOf(phase);
-  // An unknown phase (schema drift) sorts after every ladder rung rather than
-  // throwing: the wrapper's sensor gate is the loud failure point for a phase
-  // it cannot map.
-  return idx === -1 ? PHASE_LADDER.length : idx;
+/**
+ * A candidate's progression ordinal over the full `PHASES` order (schema.ts):
+ * the index of its effective phase, so a MORE-progressed candidate carries a
+ * HIGHER index. The sort comparator reverses this (descending) to drain
+ * closest-to-done first.
+ *
+ * A strategy carries no persisted phase — its directive rung is `align-tactics`
+ * (index 1). A tactic uses its node's persisted `phase`, falling back to
+ * `draft` (index 0) when the node lookup somehow fails, matching the draft
+ * convention (`phase: null` == draft).
+ *
+ * Note this reorders `fix` vs `qa` relative to the retired `PHASE_LADDER`: under
+ * `PHASES`, `qa` (index 4) is more-progressed than `fix` (index 3), so `qa` now
+ * sorts before `fix` — a deliberate behavior change.
+ */
+function progressionIndex(candidate: GraphCandidate, byId: Map<string, IntentionNode>): number {
+  const node = byId.get(candidate.id);
+  const p: Phase =
+    candidate.kind === "strategy" ? "align-tactics" : node?.phase ?? "draft";
+  return PHASES.indexOf(p);
 }
 
 // --- Selector ------------------------------------------------------------------
@@ -210,8 +227,8 @@ function ladderIndex(phase: string): number {
  *
  * Order: resolved attention rank outermost (node-keyed, directly from
  * `resolveAttention` — the retired node↔issue rank-map bridge is not revived);
- * within a rank level the phase ladder closest-to-done first; id ascending as
- * the deterministic tiebreak.
+ * within a rank level the progression ordinal (full `PHASES` order) sorts the
+ * more-progressed candidate first; id ascending as the deterministic tiebreak.
  */
 export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -343,9 +360,9 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
   // --- Order -------------------------------------------------------------------
   candidates.sort((a, b) => {
     if (a.rank !== b.rank) return b.rank - a.rank;
-    const al = ladderIndex(a.phase);
-    const bl = ladderIndex(b.phase);
-    if (al !== bl) return al - bl;
+    const ap = progressionIndex(a, byId);
+    const bp = progressionIndex(b, byId);
+    if (ap !== bp) return bp - ap;
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
