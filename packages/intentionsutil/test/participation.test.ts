@@ -81,7 +81,7 @@ describe("parseParticipationLog", () => {
     ]);
     const { entries, malformed } = parseParticipationLog(node);
     expect(entries).toHaveLength(1);
-    expect(entries[0]!.date).toBe("2026-02-20");
+    expect(entries[0].date).toBe("2026-02-20");
     expect(malformed).toHaveLength(1);
     expect(malformed[0]).toMatch(/entry 0.*venue/);
   });
@@ -93,7 +93,7 @@ describe("parseParticipationLog", () => {
     ]);
     const { entries, malformed } = parseParticipationLog(node);
     expect(entries).toHaveLength(1);
-    expect(entries[0]!.date).toBe("2026-02-20");
+    expect(entries[0].date).toBe("2026-02-20");
     expect(malformed).toHaveLength(1);
     expect(malformed[0]).toMatch(/entry 0.*date/);
   });
@@ -105,7 +105,7 @@ describe("parseParticipationLog", () => {
     const { entries, malformed } = parseParticipationLog(node);
     expect(malformed).toEqual([]);
     expect(entries).toHaveLength(1);
-    expect(entries[0]!.challenge).toBeNull();
+    expect(entries[0].challenge).toBeNull();
   });
 });
 
@@ -223,7 +223,7 @@ describe("challengeState", () => {
     const external = externalCalibrationNode("measured", null);
     const state = challengeState(entries, external);
     expect(state.logged).toHaveLength(1);
-    expect(state.logged[0]!.challenge).toBe("why not CRDTs");
+    expect(state.logged[0].challenge).toBe("why not CRDTs");
     expect(state.externalReading).toBe("measured");
     expect(state.externalGap).toBeNull();
   });

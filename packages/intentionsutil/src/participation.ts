@@ -111,7 +111,7 @@ export interface ParticipationSummary {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-/** Days between two YYYY-MM-DD dates (`to` minus `from`), treating each as UTC midnight. */
+/** Days between two YYYY-MM-DD dates (`to` minus `from`); each is read at UTC midnight. */
 function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / MS_PER_DAY);
 }
@@ -138,8 +138,8 @@ export function participationSummary(
 
   // entries is expected sorted ascending by parseParticipationLog, but derive
   // first/last defensively rather than assume caller-supplied order.
-  let firstDate = entries[0]!.date;
-  let lastDate = entries[0]!.date;
+  let firstDate = entries[0].date;
+  let lastDate = entries[0].date;
   const venues = new Set<string>();
   let last30Days = 0;
   let last90Days = 0;
