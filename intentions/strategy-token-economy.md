@@ -269,6 +269,36 @@ clarifications:
       by the launcher's own merge step, never a value that can go stale against
       the merged tree, so qa-fix's diff must stay post-merge. Recorded
       2026-07-16 interview."
+  - question: What did /align-tactics round 2's drift review find?
+    answer: "Immaterial refinements, no condition failures. (a) The success signal
+      is now measurable: round-1's instrument tactic-token-economy-sensor is
+      done and read-sensors produces a reading (utilization ~7% weekly; tactics
+      28d: 231 created / 91 closed, net +140), so no new instrument tactic is
+      needed this round. The reading shows both failing states active —
+      under-utilization (7% far below 100%, paid capacity idle) and backlog
+      growth (net +140, closure below arrival); under-utilization is a
+      pace/arrival concern owned by the pace curve
+      (strategy-graph-native-dispatch clarification 14), while the routing and
+      standup-cost levers this round decomposes address the closure-velocity
+      side. (b) Clarification 10's actuator-side 'make the audit-written routing
+      policy loop advisory' is already realized by PR #2872, which retired the
+      learned/adaptive phase-model-policy (#2028): dispatch-phase-model is now a
+      static map with a no-auto-promote invariant and /dispatch-token-audit is
+      report-only. tactic-audit-routing-advisory-gate is therefore re-scoped to
+      its surviving residual (a structured routing-recommendation output surface
+      plus the documented manual approval-and-apply convention), with the
+      superseded actuator-change unit dropped per the greenfield-relevance gate
+      (clarification 26). (c) Clarification 10's orchestrator-Sonnet half of the
+      align-family split is already in place (dispatch-graph-execute hardcodes
+      ORCH_MODEL=sonnet), so tactic-align-family-opus-default is scoped to its
+      residual: the explicit Opus decompose/plan subagent in align-tactics Step
+      3 and the align-strategy model:opus frontmatter. Round 2 decomposes the
+      seven retained drafts (the three standup-cost tactics of clarification 12,
+      the two clarification-10 routing tactics, the self-claim-collision bug
+      from PR #2870, and the OTel-substrate evaluation) into phase:implement
+      tactics; none carry a validates edge, as all are off the success-signal
+      path the done sensor already measures. Recorded 2026-07-16 /align-tactics
+      round 2."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -303,7 +333,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - the plan stays prepaid with a weekly allowance (Max 20x); metered
