@@ -204,6 +204,26 @@ clarifications:
       retained as draft tactic-align-family-opus-default (the align-tactics
       split) and tactic-audit-routing-advisory-gate (the advisory policy loop).
       Recorded 2026-07-16 interview."
+  - question: May an autonomous worker self-schedule a fallback wakeup while waiting
+      on harness-tracked background work?
+    answer: "No — the harness re-invokes the session automatically when a tracked
+      background Workflow or Task completes, so a self-scheduled short-interval
+      ScheduleWakeup fallback only fires redundantly after that
+      auto-notification has already resumed and finished the work, producing a
+      no-progress round that burns the weekly allowance without closing any
+      tactic — this strategy's named failing state, and a case of the 'error
+      hygiene' throughput lever the rationale records. Discipline: schedule no
+      fallback for harness-tracked work; reserve fallbacks for external state
+      the harness cannot observe (a CI run, a deploy, a remote queue), sized to
+      that state's change cadence, and for an idle heartbeat with no specific
+      signal use a long delay (1200s+, per ScheduleWakeup's own guidance) rather
+      than a short poll that misses the prompt cache and fires before anything
+      can have changed. Live failure 2026-07-16: a /qa-fix worker (node
+      tactic-recovery-drill-firebase, PR #2877) set a 270s fallback while its
+      Step 3.5 disposition Workflow ran in the background; the task-notification
+      resumed the session and it completed every remaining step first, then the
+      270s timer fired on a now-stale prompt with nothing left to do — one
+      wasted no-progress round. Recorded 2026-07-16 interview."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
