@@ -73,8 +73,16 @@ attention:
     #2869 (tactic-dispatch-legacy-rewire) that discovered gap (e): no node-lane
     re-entry check, requiring the session to hand-verify an already-completed
     review via execution.markers instead of following a documented skip."
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-graph-node-lane-write-hardening
+  pr: 2882
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

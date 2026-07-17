@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
 import { isStrategyStale } from "./transitions.js";
+import { PHASES } from "./schema.js";
 import type { IntentionNode, Phase } from "./schema.js";
 
 // Graph router v2, first half: selection (tactic-graph-router-selector).
@@ -18,12 +19,14 @@ import type { IntentionNode, Phase } from "./schema.js";
 // --- Types -------------------------------------------------------------------
 
 /**
- * The phase ladder, closest-to-done first (strategy clarification 22). Within
- * one resolved-attention rank level, candidates drain in this order; the
- * `align-tactics` rung is where eligible strategies (an `/align-tactics`
- * session) sort. `main-qa` (adopted into the schema `Phase` enum by
- * tactic-main-qa-phase) sorts closest-to-done: a merged tactic carrying
- * needs-main residue drains its main-qa verification before `done`.
+ * The phase ladder, closest-to-done first (strategy clarification 22).
+ *
+ * Historical: this drove the within-rank selection tiebreak until
+ * tactic-graph-frozen-tactic-dispatch replaced it with a progression ordinal
+ * over the full `PHASES` order (see `progressionIndex`). The selection sort no
+ * longer consults it; it is retained as a public export for downstream
+ * consumers. Note the progression ordinal reorders `fix` vs `qa` relative to
+ * this ladder (`qa` is now more-progressed than `fix`).
  */
 export const PHASE_LADDER: readonly string[] = [
   "main-qa",
@@ -47,8 +50,11 @@ export interface GraphCandidate {
   /** The tactic's execution.pr — the wrapper's sensor-gate input. Null for strategies. */
   pr: number | null;
   /**
-   * True when this strategy candidate is the soft-freeze re-evaluation session
-   * (strategy clarification 10) rather than an ordinary decomposition round.
+   * True when this candidate is a soft-freeze re-evaluation session (strategy
+   * clarification 10) rather than an ordinary decomposition round — a stale
+   * frozen tactic re-surfacing at `align-tactics`
+   * (tactic-graph-frozen-tactic-dispatch). False for a fresh draft-tactic or
+   * strategy align candidate.
    */
   reevaluation: boolean;
 }
@@ -61,7 +67,7 @@ export interface SelectionEvent {
 }
 
 export interface GraphSelection {
-  /** Eligible nodes in selection order: rank desc, phase ladder, id asc. */
+  /** Eligible nodes in selection order: rank desc, progression ordinal desc, id asc. */
   candidates: GraphCandidate[];
   /** Freeze / cap / gate events observed during the scan. */
   events: SelectionEvent[];
@@ -170,12 +176,26 @@ function blockersComplete(tactic: IntentionNode, byId: Map<string, IntentionNode
   return true;
 }
 
-function ladderIndex(phase: string): number {
-  const idx = PHASE_LADDER.indexOf(phase);
-  // An unknown phase (schema drift) sorts after every ladder rung rather than
-  // throwing: the wrapper's sensor gate is the loud failure point for a phase
-  // it cannot map.
-  return idx === -1 ? PHASE_LADDER.length : idx;
+/**
+ * A candidate's progression ordinal over the full `PHASES` order (schema.ts):
+ * the index of its effective phase, so a MORE-progressed candidate carries a
+ * HIGHER index. The sort comparator reverses this (descending) to drain
+ * closest-to-done first.
+ *
+ * A strategy carries no persisted phase — its directive rung is `align-tactics`
+ * (index 1). A tactic uses its node's persisted `phase`, falling back to
+ * `draft` (index 0) when the node lookup somehow fails, matching the draft
+ * convention (`phase: null` == draft).
+ *
+ * Note this reorders `fix` vs `qa` relative to the retired `PHASE_LADDER`: under
+ * `PHASES`, `qa` (index 4) is more-progressed than `fix` (index 3), so `qa` now
+ * sorts before `fix` — a deliberate behavior change.
+ */
+function progressionIndex(candidate: GraphCandidate, byId: Map<string, IntentionNode>): number {
+  const node = byId.get(candidate.id);
+  const p: Phase =
+    candidate.kind === "strategy" ? "align-tactics" : node?.phase ?? "draft";
+  return PHASES.indexOf(p);
 }
 
 // --- Selector ------------------------------------------------------------------
@@ -202,16 +222,28 @@ function ladderIndex(phase: string): number {
  * Soft-freeze gate (strategy clarification 10): an open tactic stamped with a
  * non-null `execution.strategy_fingerprint` differing from the serving
  * strategy's current substance fingerprint freezes the subtree — its tactics
- * are excluded from selection (in-flight phases finish on their own), one
- * re-evaluation `/align-tactics` candidate is emitted for the strategy
- * (bypassing the child/signal/rounds gates; `office_hours` still applies), and
- * a `freeze` event is logged. Null fingerprints are not stale — stamping
- * starts when the align machinery lands.
+ * are excluded from their normal phase skill (in-flight phases finish on their
+ * own), and a `freeze` event is logged. Per
+ * tactic-graph-frozen-tactic-dispatch (clarification 52) the re-evaluation now
+ * targets the frozen TACTICS directly: each subtree tactic re-surfaces as a
+ * `kind: "tactic", phase: "align-tactics", reevaluation: true` candidate
+ * (office_hours null and complete blockers still apply), rather than the
+ * strategy id. Null fingerprints are not stale — stamping starts when the
+ * align machinery lands.
+ *
+ * Frozen-tactic candidates (tactic-graph-frozen-tactic-dispatch): draft/raw
+ * tactics (`phase: draft` or null) are also first-class selectable candidates
+ * that route to `/align-tactics` (`reevaluation: false`, `pr: null`), gated on
+ * office_hours null and complete blockers. Their candidate `phase` is the
+ * directive rung `align-tactics`, but the progression ordinal reads the node's
+ * REAL phase (draft, index 0) for sorting, so a draft sorts last among ties.
+ * A strategy with only draft children still emits its own fresh-round
+ * align-tactics candidate; the two compete by rank.
  *
  * Order: resolved attention rank outermost (node-keyed, directly from
  * `resolveAttention` — the retired node↔issue rank-map bridge is not revived);
- * within a rank level the phase ladder closest-to-done first; id ascending as
- * the deterministic tiebreak.
+ * within a rank level the progression ordinal (full `PHASES` order) sorts the
+ * more-progressed candidate first; id ascending as the deterministic tiebreak.
  */
 export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -233,7 +265,6 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
 
   // --- Soft-freeze scan ------------------------------------------------------
   const frozenTacticIds = new Set<string>();
-  const frozenStrategyIds = new Set<string>();
   for (const s of strategies) {
     const fp = strategyFingerprint(s);
     const children = childrenOf.get(s.id) ?? [];
@@ -244,7 +275,6 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     // its serving strategies has since drifted.
     const stale = children.filter((t) => isOpenTactic(t) && isStrategyStale(t.execution, s.id, fp));
     if (stale.length === 0) continue;
-    frozenStrategyIds.add(s.id);
     for (const t of children) frozenTacticIds.add(t.id);
     events.push({
       event: "freeze",
@@ -272,6 +302,41 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     });
   }
 
+  // --- Frozen tactic candidates ------------------------------------------------
+  // Draft/raw tactics and soft-frozen tactics are first-class selectable nodes
+  // that route to /align-tactics (tactic-graph-frozen-tactic-dispatch). A draft
+  // is a decomposition input surfaced for its own align session; a soft-frozen
+  // tactic's normal phase skill is suppressed above, but a re-evaluation
+  // /align-tactics candidate is emitted here so the stale plan is re-aligned
+  // against the drifted strategy. Both gate on office_hours null and complete
+  // blockers. A tactic that is neither draft nor soft-frozen is already handled
+  // by the executable loop above (or is done / not eligible) and skipped here.
+  for (const t of tactics) {
+    if (t.office_hours !== null) continue;
+    if (!blockersComplete(t, byId)) continue;
+    if (isDraft(t)) {
+      candidates.push({
+        id: t.id,
+        kind: "tactic",
+        phase: "align-tactics", // directive rung, not the node's real (null) phase
+        rank: attention.get(t.id)?.value ?? 0,
+        pace_exempt: t.pace_exempt,
+        pr: null,
+        reevaluation: false,
+      });
+    } else if (frozenTacticIds.has(t.id) && isOpenTactic(t)) {
+      candidates.push({
+        id: t.id,
+        kind: "tactic",
+        phase: "align-tactics",
+        rank: attention.get(t.id)?.value ?? 0,
+        pace_exempt: t.pace_exempt,
+        pr: t.execution?.pr ?? null,
+        reevaluation: true,
+      });
+    }
+  }
+
   // --- Strategy candidates -------------------------------------------------------
   for (const s of strategies) {
     if (s.office_hours !== null) continue;
@@ -285,12 +350,6 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
       pr: null,
       reevaluation,
     });
-
-    if (frozenStrategyIds.has(s.id)) {
-      // The one queued re-evaluation session for a frozen subtree.
-      candidates.push(asCandidate(true));
-      continue;
-    }
 
     // No non-draft child tactics on the strategy's signal path.
     const children = childrenOf.get(s.id) ?? [];
@@ -343,9 +402,9 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
   // --- Order -------------------------------------------------------------------
   candidates.sort((a, b) => {
     if (a.rank !== b.rank) return b.rank - a.rank;
-    const al = ladderIndex(a.phase);
-    const bl = ladderIndex(b.phase);
-    if (al !== bl) return al - bl;
+    const ap = progressionIndex(a, byId);
+    const bp = progressionIndex(b, byId);
+    if (ap !== bp) return bp - ap;
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
@@ -374,5 +433,54 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
 export function strategyAlignSelectable(strategy: IntentionNode, nodes: IntentionNode[]): boolean {
   return selectGraphTargets(nodes).candidates.some(
     (c) => c.id === strategy.id && c.kind === "strategy" && c.phase === "align-tactics",
+  );
+}
+
+/**
+ * The strategy's highest-ranked eligible FROZEN descendant, or null
+ * (tactic-graph-frozen-tactic-dispatch). A frozen descendant is a tactic that
+ * (a) counts `strategy.id` among its `servingStrategyIds` (serves/parent-chain
+ * membership) and (b) the selector emits as a `kind: "tactic",
+ * phase: "align-tactics"` candidate — i.e. a draft/raw or soft-frozen tactic
+ * with office_hours null and complete blockers.
+ *
+ * The selector is the single source of truth: this walks its ALREADY-SORTED
+ * candidate list (rank desc, progression ordinal desc, id asc) and returns the
+ * node behind the first qualifying candidate, so ranking/tiebreaks match the
+ * real selection exactly. Returns null for a zero-tactic strategy or one whose
+ * descendants are all non-frozen.
+ */
+export function resolveFrozenDescendant(
+  strategy: IntentionNode,
+  nodes: IntentionNode[],
+): IntentionNode | null {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const c of selectGraphTargets(nodes).candidates) {
+    if (c.kind !== "tactic" || c.phase !== "align-tactics") continue;
+    const node = byId.get(c.id);
+    if (node === undefined) continue;
+    if (!servingStrategyIds(node, byId).has(strategy.id)) continue;
+    return node;
+  }
+  return null;
+}
+
+/**
+ * Would the graph selector emit `tactic` as an `align-tactics` candidate over
+ * this store snapshot right now? True iff `tactic` appears among
+ * `selectGraphTargets(nodes).candidates` as a `kind: "tactic"` candidate at the
+ * directive `align-tactics` rung — the frozen-tactic (draft/raw or soft-frozen)
+ * analog of `strategyAlignSelectable`.
+ *
+ * The selector is the single source of truth for frozen-tactic selectability
+ * (single-callsite doctrine): this is membership in its output, never a
+ * re-implementation of its per-tactic gates (draft/soft-freeze/office_hours/
+ * blockers). The worker-start re-validation gate calls it so a tactic selected
+ * at `align-tactics` re-validates against exactly the selector's current
+ * verdict.
+ */
+export function frozenTacticSelectable(tactic: IntentionNode, nodes: IntentionNode[]): boolean {
+  return selectGraphTargets(nodes).candidates.some(
+    (c) => c.id === tactic.id && c.kind === "tactic" && c.phase === "align-tactics",
   );
 }

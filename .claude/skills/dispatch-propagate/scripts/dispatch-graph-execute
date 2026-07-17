@@ -127,6 +127,7 @@ for spec in "$@"; do
   # Directive mapping from the persisted phase (never re-derived).
   case "$kind:$phase" in
     strategy:*)          SKILL="/align-tactics"; MODEL_PHASE="align-tactics" ;;
+    tactic:align-tactics) SKILL="/align-tactics"; MODEL_PHASE="align-tactics" ;;
     tactic:implement)    SKILL="/implement";     MODEL_PHASE="implement" ;;
     tactic:fix)          SKILL="/fix-checks";    MODEL_PHASE="fix-checks" ;;
     tactic:qa)           SKILL="/qa-fix";        MODEL_PHASE="qa" ;;
@@ -147,9 +148,11 @@ for spec in "$@"; do
   EFFORT_ARGS=()
   [[ -n "$EFFORT" ]] && EFFORT_ARGS=(--effort "$EFFORT")
 
-  if [[ "$kind" == "strategy" ]]; then
-    # Strategy lane: no pre-provision — /align-tactics owns its own worktree
-    # claim/entry. Spawn cwd=PROJECT_ROOT and let the skill enter its worktree.
+  if [[ "$kind" == "strategy" || "$phase" == "align-tactics" ]]; then
+    # Strategy lane (and a frozen-tactic align target): no pre-provision —
+    # /align-tactics owns its own worktree claim/entry, keyed on the node id
+    # (a strategy's id, or a frozen tactic's id). Spawn cwd=PROJECT_ROOT and let
+    # the skill enter its worktree.
     if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
         --cwd "$PROJECT_ROOT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
         "$SKILL $id" 1>&2; then
