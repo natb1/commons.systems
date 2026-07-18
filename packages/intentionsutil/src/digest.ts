@@ -16,7 +16,7 @@
 
 import { parse } from "yaml";
 import type { IntentionNode } from "./schema.js";
-import { validateGraph } from "./schema.js";
+import { validateGraph, mentionsRef } from "./schema.js";
 import { IntentionSchemaError } from "./errors.js";
 import { extractFrontmatter } from "./frontmatter.js";
 import { readingDate } from "./router.js";
@@ -326,29 +326,15 @@ function tableDanglingRefs(input: DigestInput): string {
 
   // Planned-reference annotation: does any OPEN (non-done) tactic's statement or
   // body mention a missing ref? The planned-vs-violation judgment stays with the
-  // audit; the digest only flags the heuristic.
-  const openTactics = input.nodes.filter((n) => n.kind === "tactic" && n.phase !== "done");
-  const mentionsRef = (ref: string, referencedBy: string): boolean => {
-    // Match the ref as a whole id token (same [\w-] boundaries as idShape), so a
-    // missing `tactic-x` is not falsely "planned" by an unrelated `tactic-x-v2`.
-    // Exclude the referencing node itself: every missing ref is, by construction,
-    // present in its own referencing body (that is how it was extracted above), so
-    // a self-match would make EVERY missing ref falsely "planned". `[planned]` must
-    // mean some OTHER open tactic mentions the ref.
-    const escaped = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`);
-    return openTactics.some(
-      (t) => t.id !== referencedBy && (re.test(t.statement) || re.test(input.bodies.get(t.id) ?? "")),
-    );
-  };
-
+  // audit; the digest only flags the heuristic. Shared with
+  // validateGraphProseRefs via the exported `mentionsRef` above.
   const missing = refs.filter((r) => r.klass === "missing");
   const pruned = refs.filter((r) => r.klass === "pruned");
   const liveCount = refs.filter((r) => r.klass === "live").length;
 
   const missingRows = missing
     .map((r) => {
-      const annot = mentionsRef(r.ref, r.referencedBy)
+      const annot = mentionsRef(input.nodes, input.bodies, r.ref, r.referencedBy)
         ? " [planned: open tactic mentions it]"
         : " [no open mention]";
       return `  MISSING ${renderId(r.ref)} <- ${renderId(r.referencedBy)}${annot}`;

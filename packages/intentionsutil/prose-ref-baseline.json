@@ -1,0 +1,18 @@
+[
+  {
+    "ref": "strategy-s",
+    "referencedBy": "tactic-freeze-resurface-stale-children-only"
+  },
+  {
+    "ref": "tactic-only",
+    "referencedBy": "tactic-graph-split-orphan-guard"
+  },
+  {
+    "ref": "tactic-sibling",
+    "referencedBy": "tactic-freeze-resurface-stale-children-only"
+  },
+  {
+    "ref": "tactic-stale",
+    "referencedBy": "tactic-freeze-resurface-stale-children-only"
+  }
+]

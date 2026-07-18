@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
-import { validateGraph, validateNode } from "../src/schema.js";
+import { validateGraph, validateGraphProseRefs, validateNode } from "../src/schema.js";
 
 describe("validateNode", () => {
   it("accepts a valid full node", () => {
@@ -1355,5 +1355,168 @@ describe("validateGraph", () => {
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-1: kind-tactic has no attributes\.status_vocabulary declared/,
     );
+  });
+});
+
+describe("validateGraphProseRefs", () => {
+  /** Build a full IntentionNode fixture for prose-ref tests. */
+  function pnode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
+    return {
+      id: partial.id,
+      kind: partial.kind,
+      statement: partial.statement ?? `Statement for ${partial.id}`,
+      owner: partial.owner ?? "human",
+      status: partial.status ?? "raw",
+      parent: partial.parent ?? null,
+      serves: partial.serves ?? [],
+      recovers: partial.recovers ?? [],
+      rationale: partial.rationale ?? null,
+      reading: partial.reading ?? null,
+      gap: partial.gap ?? null,
+      clarifications: partial.clarifications ?? [],
+      tooling_goals: partial.tooling_goals ?? [],
+      success_signal: partial.success_signal ?? null,
+      attention: partial.attention ?? null,
+      phase: partial.phase ?? null,
+      execution: partial.execution ?? null,
+      validates: partial.validates ?? [],
+      blocked_by: partial.blocked_by ?? [],
+      office_hours: partial.office_hours ?? null,
+      pace_exempt: partial.pace_exempt ?? false,
+      rounds: partial.rounds ?? null,
+      attributes: partial.attributes ?? {},
+    };
+  }
+
+  // A real node so the "tactic-" kind prefix exists in the derived vocabulary
+  // (prefixes are derived from the store ids, never hardcoded).
+  const realTactic = pnode({ id: "tactic-real", kind: "tactic" });
+
+  it("throws on a missing backtick ref in rationale", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "See `tactic-missing` for context." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-missing` does not resolve to a node/,
+    );
+  });
+
+  it("throws on a missing backtick ref in a clarification answer", () => {
+    const nodes = [
+      realTactic,
+      pnode({
+        id: "tactic-a",
+        kind: "tactic",
+        clarifications: [{ question: "q", answer: "Depends on `tactic-missing`." }],
+      }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-missing` does not resolve to a node/,
+    );
+  });
+
+  it("throws on a missing backtick ref in the body", () => {
+    const nodes = [realTactic, pnode({ id: "tactic-a", kind: "tactic" })];
+    const bodies = new Map([["tactic-a", "# heading\n\nBlocked on `tactic-missing`.\n"]]);
+    expect(() => validateGraphProseRefs(nodes, bodies, [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-missing` does not resolve to a node/,
+    );
+  });
+
+  it("passes when a backtick ref resolves to a live node in the store", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Depends on `tactic-real`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
+  });
+
+  it("passes when a backtick ref names a pruned (deleted) node", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Superseded `tactic-gone`." }),
+    ];
+    expect(() =>
+      validateGraphProseRefs(nodes, new Map(), ["tactic-gone"], new Set()),
+    ).not.toThrow();
+  });
+
+  it("passes a missing ref that an OTHER open tactic plans (mentions in its statement)", () => {
+    const nodes = [
+      realTactic,
+      // An open (non-done) tactic whose statement mentions the id — the ref is a
+      // forward reference to planned-but-uncommitted work, not a dangling ref.
+      pnode({
+        id: "tactic-planner",
+        kind: "tactic",
+        phase: "implement",
+        statement: "This will create tactic-planned.",
+      }),
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Coordinates with `tactic-planned`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
+  });
+
+  it("does NOT treat a missing ref as planned when the only mentioning tactic is done", () => {
+    const nodes = [
+      realTactic,
+      pnode({
+        id: "tactic-planner",
+        kind: "tactic",
+        phase: "done",
+        statement: "This created tactic-planned.",
+      }),
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Coordinates with `tactic-planned`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-planned` does not resolve to a node/,
+    );
+  });
+
+  it("passes a missing, non-planned ref that is present in the baseline", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Example id `tactic-example`." }),
+    ];
+    const baseline = new Set(["tactic-example|tactic-a"]);
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], baseline)).not.toThrow();
+  });
+
+  it("never flags a non-backticked prose compound that merely looks id-shaped", () => {
+    const nodes = [
+      realTactic,
+      // Plain-text "tactic-only" used as English prose (no backticks) — a
+      // non-backticked token counts only if it is in the known vocabulary, so it
+      // can never be classified missing.
+      pnode({
+        id: "tactic-a",
+        kind: "tactic",
+        rationale: "This is the tactic-only case discussed above.",
+      }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
+  });
+
+  it("lists ALL prose-ref violations in one throw", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Needs `tactic-x`." }),
+      pnode({
+        id: "tactic-b",
+        kind: "tactic",
+        clarifications: [{ question: "q", answer: "Also `tactic-y`." }],
+      }),
+    ];
+    let caught: unknown;
+    try {
+      validateGraphProseRefs(nodes, new Map(), [], new Set());
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    if (!(caught instanceof Error)) throw new Error("unreachable");
+    expect(caught.message).toContain("tactic-a: prose reference `tactic-x`");
+    expect(caught.message).toContain("tactic-b: prose reference `tactic-y`");
   });
 });
