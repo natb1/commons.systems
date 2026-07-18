@@ -25,11 +25,25 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 46
+  override: null
+  rationale: "Author-directed 2026-07-18: top-rank the brownfield /align-tactics
+    Workflow rearchitecture chain. strategy-token-economy carries no
+    strategy-level boost, so the tactic carries the full weight itself; boost 46
+    clears the current working-frontier max — tactic-phase-standup-audit-lens
+    resolves to 45 as the shared blocker of the token-economy standup-cost
+    cluster — while staying below the main-health sentinel at 100 the write-path
+    guard reserves. Via the blocked_by edge to tactic-align-family-opus-default
+    (increment 1, PR #2886), this boost flows backward to that blocker under the
+    attention model's backward blocked_by flow (resolving it to 8+46=54),
+    lifting the whole critical path so increment 1 completes first — the
+    intended brownfield sequencing."
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-align-family-opus-default
 office_hours: null
 pace_exempt: false
 rounds: null
