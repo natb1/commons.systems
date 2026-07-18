@@ -5,9 +5,6 @@
 # Visible output: identical to the user's global statusLine (model | cwd | tokens).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-# Short TTL: phase changes happen minutes apart, so 60s staleness is
-# imperceptible, and it caps `gh pr list` at one call per minute per worktree.
-DISPATCH_PHASE_TTL=60
 
 input=$(cat)
 
@@ -32,39 +29,45 @@ else
   printf "\033[36m%s\033[0m | \033[33m%s\033[0m" "$model" "$cwd"
 fi
 
-# Dispatch-phase segment — the worktree's dispatch PR phase, cached with a TTL
-# and refreshed in a detached background process so the status line never blocks
-# on dispatch-phase's `gh pr list` network call. The trailing `|| true` keeps a
-# transient git/dispatch-phase/cache failure from blanking the other segments.
+# Dispatch-phase segment — the worktree's persisted graph phase, read directly
+# from the intention node's record. A graph-lane worktree's branch name IS the
+# intention node id, so intentions/<branch>.md carries the authoritative `phase:`
+# in its YAML frontmatter. This read is local and instant — no `gh`, no network,
+# no cache/background process — so the status line never blocks.
+#
+# Rewired in Unit 2 of tactic-dispatch-legacy-rewire (rewire-then-delete): this
+# consumer no longer derives phase from GitHub `dispatch:*` labels via the
+# `dispatch-phase` sensor. It reads the persisted graph `phase:` instead, in line
+# with the greenfield target (no consumer derives state from dispatch labels).
+#
+# Fallback for non-node worktrees — a legacy `<N>-…` issue branch, `main`, or any
+# branch without a matching intention node: render nothing. The legacy issue
+# lane's phase used to come from `dispatch-phase` (a `gh` label query); this hook
+# must not call `gh` on the hot path, so those worktrees simply show no phase
+# segment. The trailing `|| true` at the call site keeps a transient git/read
+# failure from blanking the other segments.
 print_dispatch_segment() {
   local cwd_raw="$1"
-  local branch issue cache phase_script ci_ready_script now mtime phase
+  local root branch node_file phase
+  root=$(git -C "$cwd_raw" rev-parse --show-toplevel 2>/dev/null) || return 0
   branch=$(git -C "$cwd_raw" branch --show-current 2>/dev/null) || return 0
-  [[ "$branch" =~ ^([1-9][0-9]*)- ]] || return 0     # main / non-issue → nothing
-  issue="${BASH_REMATCH[1]}"
-  cache="$SCRIPT_DIR/../../tmp/dispatch-phase"
-  phase_script="$SCRIPT_DIR/../skills/dispatch-propagate/scripts/dispatch-phase"
-  ci_ready_script="$SCRIPT_DIR/../skills/dispatch-propagate/scripts/dispatch-ci-ready"
-  now=$(date +%s)
-  mtime=$(stat -c %Y "$cache" 2>/dev/null || echo 0)
-  if (( now - mtime >= DISPATCH_PHASE_TTL )); then
-    mkdir -p "$(dirname "$cache")" 2>/dev/null
-    touch "$cache" 2>/dev/null                       # bump mtime → no stampede
-    # Consult readiness first: a not-ready target (CI verdict still pending)
-    # displays `waiting`; otherwise display the actionable phase. Sourcing
-    # `waiting` from the readiness predicate rather than the phase enum keeps the
-    # display correct once dispatch-phase stops emitting `waiting`.
-    setsid bash -c '
-      if "$4" "$2" >/dev/null 2>&1; then
-        p=$("$1" "$2" 2>/dev/null) && [ -n "$p" ] && printf "%s" "$p" > "$3"
-      else
-        printf "%s" waiting > "$3"
-      fi
-    ' _ "$phase_script" "$issue" "$cache" "$ci_ready_script" >/dev/null 2>&1 </dev/null &
-  fi
-  phase=$(cat "$cache" 2>/dev/null) || return 0
-  [[ -n "$phase" ]] || return 0
-  printf " | \033[32m#%s %s\033[0m" "$issue" "$phase"
+  [[ -n "$branch" && "$branch" != "main" ]] || return 0
+  node_file="$root/intentions/$branch.md"
+  [[ -f "$node_file" ]] || return 0     # non-node worktree (legacy <N>-… / other) → nothing
+  # Read `phase:` from the LEADING YAML frontmatter block only (stop at its
+  # closing `---`), stripping optional surrounding quotes. A `null`/empty phase
+  # (a pre-phase or parked node) renders nothing.
+  phase=$(awk '
+    NR==1 && $0=="---" { infm=1; next }
+    infm && $0=="---" { exit }
+    infm && /^phase:[[:space:]]/ {
+      sub(/^phase:[[:space:]]*/, "")
+      gsub(/^["'\'']|["'\'']$/, "")
+      print; exit
+    }
+  ' "$node_file") || return 0
+  [[ -n "$phase" && "$phase" != "null" ]] || return 0
+  printf " | \033[32m[%s]\033[0m" "$phase"
 }
 
 print_dispatch_segment "$cwd_raw" || true

@@ -212,12 +212,14 @@ function progressionIndex(candidate: GraphCandidate, byId: Map<string, Intention
  * Strategy eligibility (§3.1): `office_hours` null; no non-draft child tactic
  * on the strategy's signal path (drafts are input; off-path tactics linger at
  * derived demoted rank by design); signal unvalidated (`gap` non-null or
- * `reading` null); fresh-reading gate (`rounds.count == 0`, or a reading dated
- * newer than `rounds.last_completed` — a reading with no parseable date fails
- * the gate and logs a `stale-reading` event); `rounds.count < 2` (at the cap a
- * `rounds-cap` event is logged and the strategy is skipped — the park write
- * belongs to the transition writer, never to selection, which makes no graph
- * writes).
+ * `reading` null); `rounds.count < 2` (at the cap a `rounds-cap` event is
+ * logged and the strategy is skipped — the park write belongs to the transition
+ * writer, never to selection, which makes no graph writes); then the
+ * fresh-reading gate, keyed off the last align-landing: eligible when
+ * `rounds.last_aligned` is null (never aligned) or when `reading` is present and
+ * dated strictly newer than `rounds.last_aligned` — a reading with no parseable
+ * date, or no reading at all once `last_aligned` is set, fails the gate and logs
+ * a `stale-reading` event.
  *
  * Soft-freeze gate (strategy clarification 10): an open tactic stamped with a
  * non-null `execution.strategy_fingerprint` differing from the serving
@@ -372,28 +374,29 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
       continue;
     }
 
-    // Fresh-reading gate: a first round is always fresh; a later round needs a
-    // reading newer than the last completed round.
-    if (count > 0) {
-      const last = s.rounds?.last_completed ?? null;
+    // Fresh-reading gate: keyed off the last align-landing (`rounds.last_aligned`),
+    // not the round counter — born-parked reading children never prune, so
+    // `rounds.count` can stay 0 while the strategy has been aligned repeatedly.
+    // Never aligned (`last_aligned` null): always fresh. Otherwise require a
+    // reading strictly newer than the last align.
+    const lastAligned = s.rounds?.last_aligned ?? null;
+    if (lastAligned !== null) {
       if (s.reading === null) {
         events.push({
           event: "stale-reading",
           strategy: s.id,
-          detail: `rounds.count=${count} but reading is null`,
+          detail: `rounds.last_aligned set (${lastAligned}) but reading is null`,
         });
         continue;
       }
-      if (last !== null) {
-        const date = readingDate(s.reading);
-        if (date === null || date <= last.slice(0, 10)) {
-          events.push({
-            event: "stale-reading",
-            strategy: s.id,
-            detail: `no reading newer than rounds.last_completed=${last}`,
-          });
-          continue;
-        }
+      const date = readingDate(s.reading);
+      if (date === null || date <= lastAligned.slice(0, 10)) {
+        events.push({
+          event: "stale-reading",
+          strategy: s.id,
+          detail: `no reading newer than rounds.last_aligned=${lastAligned}`,
+        });
+        continue;
       }
     }
 

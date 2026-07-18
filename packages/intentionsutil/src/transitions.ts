@@ -281,10 +281,12 @@ export function hasNeedsMainResidue(body: string): boolean {
  * Stamp a completed round on a strategy when its last non-draft child prunes
  * (spec §1.1 line 134): `count += 1`, `last_completed := date`. Pure — the
  * caller decides WHEN (its last non-draft child reached `done` and is being
- * pruned in this same commit) and supplies the ISO date.
+ * pruned in this same commit) and supplies the ISO date. `last_aligned` is
+ * preserved unchanged — it is stamped elsewhere, at align-landing time, not
+ * on completion.
  */
 export function stampRound(rounds: Rounds | null, date: string): Rounds {
-  return { count: (rounds?.count ?? 0) + 1, last_completed: date };
+  return { count: (rounds?.count ?? 0) + 1, last_completed: date, last_aligned: rounds?.last_aligned ?? null };
 }
 
 // --- Completion pruning graph edits (Unit 2) --------------------------------

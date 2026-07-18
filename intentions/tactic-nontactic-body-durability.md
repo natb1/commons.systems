@@ -42,7 +42,8 @@ execution:
   branch: tactic-nontactic-body-durability
   pr: 2890
   attempts: {}
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []
