@@ -174,7 +174,56 @@ const FIX_SCHEMA = {
   },
 };
 
+// Return shape for the trust-the-built-in review-and-fix sources (code-review,
+// security-review). These sources run the built-in skills with defaults and let
+// them apply their own edits; the finder reports the fixes they applied (`fixed`)
+// and the residue they did not auto-fix (`residue`) for a later three-way
+// resolve/defer/ignore disposition. security-review has no fix capability, so it
+// always returns `fixed: []`.
+const LANE_A_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['fixed', 'residue'],
+  properties: {
+    fixed: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['location', 'fix_summary', 'touched_files'],
+        properties: {
+          location: { type: 'string' },
+          fix_summary: { type: 'string' },
+          touched_files: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    residue: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['location', 'description', 'severity', 'category', 'exploit_scenario', 'recommended_fix'],
+        properties: {
+          location: { type: 'string' },
+          description: { type: 'string' },
+          severity: { enum: ['high', 'medium', 'low'] },
+          category: { type: 'string' },
+          exploit_scenario: { type: 'string' },
+          recommended_fix: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
 // --- inline kernel helpers (thin mirrors of the pure scripts) ----------------
+
+// The trust-the-built-in review-and-fix sources: these run the built-in review
+// skills with defaults, let them apply their own edits, and return a
+// fixed/residue envelope (LANE_A_SCHEMA) rather than findings for the shared
+// gather→classify→verify→fix pipeline.
+const LANE_A = new Set(['code-review', 'security-review']);
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-finders
 // Returns the AGENT finder-source set (the codeql/npm finders are NOT agents —
@@ -290,6 +339,24 @@ const SCHEMA_BLURB = [
   'Return { "findings": [ ...those objects... ] }. If you find nothing, return { "findings": [] }.',
 ].join('\n');
 
+// Schema spec for the trust-the-built-in review-and-fix lane (code-review,
+// security-review): a { fixed, residue } envelope rather than a findings list.
+const LANE_A_BLURB = [
+  'Return an object with exactly two arrays: "fixed" and "residue".',
+  'Each "fixed" entry is an object with exactly these fields:',
+  '- "location": "path:line" of the finding the built-in review fixed',
+  '- "fix_summary": one line describing what the built-in review changed',
+  '- "touched_files": array of file paths edited for that fix',
+  'Each "residue" entry (a finding NOT auto-fixed) is an object with exactly these fields:',
+  '- "location": "path:line"',
+  '- "description": what the issue is and why it is a risk',
+  '- "severity": "high" | "medium" | "low"',
+  '- "category": the finding\'s category (code-review category or vulnerability class)',
+  '- "exploit_scenario": the concrete attack scenario, or "" for a non-security finding',
+  '- "recommended_fix": the concrete corrective action',
+  'Return { "fixed": [ ... ], "residue": [ ... ] }. Use [] for an empty array.',
+].join('\n');
+
 function diffContext(args) {
   const base = args.merge_base || 'origin/main';
   const filesStr = (args.changed_files || []).join(', ') || '(see git diff HEAD)';
@@ -321,24 +388,41 @@ function finderPrompt(name, args) {
   const ctx = diffContext(args);
   if (name === 'code-review') {
     return [
-      'You are a findings-only code-review subagent.',
-      'Invoke the built-in `/code-review` skill via the Skill tool with the `max` effort argument,',
-      'FINDINGS-ONLY — do NOT pass the `--fix` flag; apply no fixes.',
+      'You are a code-review-and-fix subagent. You trust the built-in review to apply its own fixes.',
+      'Invoke the built-in `/code-review` skill via the Skill tool with the `max` effort argument',
+      'AND the `--fix` flag, so it applies its own working-tree edits after reviewing.',
       ctx,
-      'Once /code-review returns, continue: normalize every finding it produced to the schema below',
-      'with Source "code-review" and OWASP "" and STRIDE "" (code-review findings are not security-classified).',
-      SCHEMA_BLURB,
+      '/code-review reports each finding via ReportFindings with a per-finding `outcome` of',
+      '`fixed`, `no_change_needed`, or `skipped`. Once it returns, build a `{ fixed, residue }` object:',
+      '- For every finding with outcome "fixed", append to `fixed[]`: `location` (from the finding\'s',
+      '  file/line), `fix_summary` (a one-line summary of what changed, drawn from the finding\'s',
+      '  `summary`), `touched_files` (the file(s) it edited for that finding).',
+      '- For every finding with outcome "skipped", append to `residue[]`: `location`, `description`',
+      '  (from the finding\'s `failure_scenario`/`summary`), `severity` (map code-review\'s implicit',
+      '  confidence/severity as best judged; default "medium" if unclear), `category` (from the',
+      '  finding\'s `category` field), `exploit_scenario` ("" if not a security-flavored finding —',
+      '  code-review findings are not necessarily exploits), `recommended_fix` (a specific corrective',
+      '  action).',
+      '- IGNORE every finding with outcome "no_change_needed" entirely — add it to neither array.',
+      'Return `{ fixed: [...], residue: [...] }` matching the schema below.',
+      LANE_A_BLURB,
     ].join('\n');
   }
   if (name === 'security-review') {
     return [
-      'You are a findings-only security-review subagent.',
-      'Invoke the built-in `/security-review` skill via the Skill tool.',
+      'You are a security-review subagent for the trust-the-built-in review-and-fix lane.',
+      'Invoke the built-in `/security-review` skill via the Skill tool. Note: security-review has NO',
+      '`--fix` flag and edits nothing — it is inherently findings-only, and it already runs its own',
+      'internal false-positive filter (confidence >= 8, HIGH/MEDIUM severity only) before returning',
+      'its markdown report.',
       ctx,
-      'Once /security-review returns, continue: normalize every finding to the schema below with',
-      'Source "security-review". Map its severity to Confidence (high/medium/low → high/medium/low),',
-      'and infer the OWASP category and STRIDE element from each finding\'s category and description.',
-      SCHEMA_BLURB,
+      'Once /security-review returns its markdown report, normalize EVERY finding in that report into',
+      '`residue[]`: `location`, `description`, `severity` (map the report\'s HIGH/MEDIUM directly to',
+      '"high"/"medium"), `category` (the finding\'s vulnerability category, e.g. OWASP-style),',
+      '`exploit_scenario` (the concrete attack scenario from the report), `recommended_fix` (the',
+      'concrete remediation from the report).',
+      'Return `{ fixed: [], residue: [...] }` — `fixed` is always empty for this source.',
+      LANE_A_BLURB,
     ].join('\n');
   }
   if (name === 'cost') {
