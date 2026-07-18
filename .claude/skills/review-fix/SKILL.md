@@ -167,6 +167,39 @@ flush. Routing re-entry through Step 7 means its flush guard also carries any
 commits an interrupted prior run left stranded — the flush that lets the router
 resolve `mergeable == MERGEABLE` and promote the PR to ready.
 
+The node lane has no `dispatch:reviewed` label to test — `transition-node`
+records this skill's terminal action as a `reviewed` marker in
+`execution.markers`, not a gh label (see the Completion bullet above). So the
+parallel node-lane check keys on that marker: if `reviewed` is a member of the
+node's `execution.markers` list, this is an interrupted prior run — **skip Steps
+1–6** and go straight to Step 7's terminal flush, exactly as the label check
+routes the issue lane.
+
+Parse this from the already-fetched `NODE_MD` (the `intentions/$NODE_ID.md`
+frontmatter read from `origin/main` in the preamble) with a **scoped** match —
+not a naive `grep -q reviewed <<<"$NODE_MD"`. `execution.markers` is a nested
+YAML list (`  markers:` under the top-level `execution:` key, with `    -
+<marker>` items), so a bare `grep` for the token `reviewed` would false-match it
+appearing in the node body, the `validates`/`serves` edges, a rationale, or any
+other field, and wrongly trigger the skip-Steps-1–6 re-entry path — bypassing
+the actual review pass. Isolate the markers list to the execution block and test
+for an exact `reviewed` list item:
+
+```bash
+NODE_REVIEWED=$(printf '%s\n' "$NODE_MD" | awk '
+  $0 == "execution:"          { in_exec = 1; next }
+  in_exec && /^[^[:space:]]/  { exit }                  # new top-level key ends the execution block
+  in_exec && /^  markers:/    { in_markers = 1; next }
+  in_exec && in_markers && /^  [^[:space:]]/ { in_markers = 0 }  # next execution key ends the list
+  in_markers && /^    - reviewed[[:space:]]*$/ { print "1"; exit }
+')
+# Non-empty NODE_REVIEWED => the reviewed marker is already written: skip Steps 1–6.
+```
+
+The `reviewed` marker is the node lane's terminal action and is already written,
+so re-entry is a no-op beyond that flush, which likewise carries any commits an
+interrupted prior run left stranded.
+
 On this re-entry path the Workflow has not run — so Step 7 **skips the phase-log
 write entirely** (the prior accurate entry stays durable), treats the deviation
 criterion as not met (`result.deviation` is absent), skips the outcome-envelope
@@ -535,7 +568,27 @@ tactic nodes** — `status: raw`, no `phase`, `serves` the same strategy this
 tactic serves — batched per component, one `write-node.ts` build plus one
 `graph-commit`. Each draft's body records the finding provenance:
 `file:line`, failure scenario, adversarial verdict, and the source PR
-(`execution.pr`). Skip the `dispatch:review-followup` label, the
+(`execution.pr`). `body` is not a `write-node.ts` input field — the script
+discards unknown keys, and a new node's body is always regenerated from
+`statement` as a `# <statement>` placeholder
+(`packages/intentionsutil/src/store.ts:47`). So write each draft's provenance as
+a separate step, folded into the one-build-plus-one-commit sequence above:
+
+1. Run `write-node.ts` with only the frontmatter fields above (including
+   `status: raw`).
+2. Then edit each `intentions/<draft-id>.md` directly, replacing the generated
+   `# <statement>` placeholder that appears after the closing `---` fence with
+   the provenance content (`file:line`, failure scenario, adversarial verdict,
+   and `execution.pr`).
+3. Then run `graph-commit`.
+
+These hand-authored bodies are durable across any later frontmatter-only rewrite
+of these nodes: `writeNode` calls `readExistingTacticBody`
+(`packages/intentionsutil/src/store.ts:84-88`), which reads a `tactic` node's
+on-disk body verbatim and reuses it instead of regenerating the placeholder
+whenever the file already exists — so a subsequent write that only touches
+frontmatter preserves the provenance written in step 2. Skip the
+`dispatch:review-followup` label, the
 `<!-- dispatch:source-pr -->` marker, and the orphan-retriage machinery
 entirely — drafts are inert until a later `/align-tactics` round finalizes
 them, and that round re-validates the provenance against what actually merged.
@@ -854,7 +907,9 @@ No attempt counter — review is single-pass, so the default `--attempt 1` appli
 The upsert is idempotent on the `(review, 1)` key. Why re-entry must not re-write:
 the phase-log write PRECEDES the `dispatch:reviewed` apply (above), and re-entry
 is GATED on `dispatch:reviewed` already being present (see preamble: "If the
-labels line already includes `dispatch:reviewed`"). So whenever re-entry fires, the
+labels line already includes `dispatch:reviewed`") — or, on the node lane, on the
+parallel `reviewed`-in-`execution.markers` check (see preamble: "if `reviewed` is
+present in `execution.markers`"). So whenever re-entry fires, the
 accurate `(review, 1)` entry the original run wrote is guaranteed already durable
 on the comment. The script enforces the skip via `--reentry true`, preserving it.
 A re-write on re-entry has no prior-pass data to restate (`result` is absent), so

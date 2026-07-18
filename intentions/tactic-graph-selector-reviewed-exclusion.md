@@ -33,13 +33,14 @@ attention:
     resolved 16.333) so it is selected and finalized first — own boost 12 added
     to strategy-graph-native-dispatch's inherited 5.333 resolves to 17.333,
     clearing the max."
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-selector-reviewed-exclusion
   pr: 2888
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint:
     strategy-graph-native-dispatch: faf91a4e3701267190257233de6089716cb46abf5994a93abb21f62c626f0a76
 validates: []
