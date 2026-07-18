@@ -182,7 +182,7 @@ describe("store round-trip", () => {
   });
 });
 
-describe("writeNode tactic body preservation", () => {
+describe("writeNode body preservation", () => {
   it("preserves an existing tactic file's exact prior body content on rewrite", () => {
     const dir = tempDir();
     const original: IntentionNode = {
@@ -238,7 +238,10 @@ describe("writeNode tactic body preservation", () => {
     expect(read.phase).toBe("qa");
   });
 
-  it("still regenerates the cosmetic body for a non-tactic kind (e.g. strategy)", () => {
+  it("preserves an existing non-tactic (strategy) body verbatim on rewrite", () => {
+    // Durable-body contract (tactic-nontactic-body-durability): a strategy body
+    // is authoritative, durable content — a rewrite driven by a statement change
+    // (reconcile-graph, read-sensors, park, transition) must NOT clobber it.
     const dir = tempDir();
     const strategy: IntentionNodeInput = {
       id: "strategy-1",
@@ -249,22 +252,31 @@ describe("writeNode tactic body preservation", () => {
     };
     writeNode(dir, strategy);
 
-    // Hand-author a body, then rewrite — for a non-tactic, this must be
-    // clobbered by the regenerated `# ${statement}` heading.
+    // Hand-author durable design notes onto the strategy body, then rewrite the
+    // frontmatter — the body must survive untouched.
     const filePath = join(dir, "strategy-1.md");
     const raw = readFileSync(filePath, "utf8");
     const closeIndex = raw.indexOf("\n---\n");
     const frontmatterAndFence = raw.slice(0, closeIndex + "\n---\n".length);
-    writeFileSync(filePath, frontmatterAndFence + "# Hand-authored body that should be replaced\n");
+    const handAuthoredBody =
+      "# Router mechanism\n\n## Calibration events\n\nDurable settled design notes.\n";
+    writeFileSync(filePath, frontmatterAndFence + handAuthoredBody);
 
     writeNode(dir, { ...strategy, statement: "Second statement." });
 
     const rewritten = readFileSync(filePath, "utf8");
-    expect(rewritten.endsWith("# Second statement.\n")).toBe(true);
-    expect(rewritten).not.toContain("Hand-authored body that should be replaced");
+    const rewrittenCloseIndex = rewritten.indexOf("\n---\n");
+    const rewrittenBody = rewritten.slice(rewrittenCloseIndex + "\n---\n".length);
+    expect(rewrittenBody).toBe(handAuthoredBody);
+
+    // Frontmatter itself did update.
+    expect(readNode(dir, "strategy-1").statement).toBe("Second statement.");
   });
 
-  it("throws on a kind change that would discard an existing hand-authored tactic body", () => {
+  it("preserves a hand-authored body across a kind change (durable for all kinds)", () => {
+    // Under the durable-body contract, a body is authoritative content that
+    // survives reclassification — the former tactic→non-tactic loss guard is
+    // obsolete because non-tactic bodies are now durable too.
     const dir = tempDir();
     const tactic: IntentionNodeInput = {
       id: "tactic-reclass",
@@ -275,7 +287,6 @@ describe("writeNode tactic body preservation", () => {
     };
     writeNode(dir, tactic);
 
-    // Hand-author a plan body, as the live store does for tactics.
     const filePath = join(dir, "tactic-reclass.md");
     const raw = readFileSync(filePath, "utf8");
     const closeIndex = raw.indexOf("\n---\n");
@@ -283,14 +294,13 @@ describe("writeNode tactic body preservation", () => {
     const handAuthoredBody = "# A real plan\n\n## Unit 1\n\nDo the thing.\n";
     writeFileSync(filePath, frontmatterAndFence + handAuthoredBody);
 
-    // Rewriting with kind changed away from tactic would regenerate the
-    // placeholder body and silently drop the plan — it must throw instead.
-    expect(() => writeNode(dir, { ...tactic, kind: "strategy" })).toThrow(
-      /Refusing to change kind of "tactic-reclass" from "tactic" to "strategy"/,
-    );
+    // Reclassify tactic → strategy: the body is preserved verbatim, not dropped.
+    writeNode(dir, { ...tactic, kind: "strategy" });
 
-    // The file is untouched: still a tactic, plan body intact.
-    expect(readFileSync(filePath, "utf8")).toBe(frontmatterAndFence + handAuthoredBody);
+    const rewritten = readFileSync(filePath, "utf8");
+    const rewrittenBody = rewritten.slice(rewritten.indexOf("\n---\n") + "\n---\n".length);
+    expect(rewrittenBody).toBe(handAuthoredBody);
+    expect(readNode(dir, "tactic-reclass").kind).toBe("strategy");
   });
 
   it("allows a kind change when the existing tactic body is still the generated placeholder", () => {

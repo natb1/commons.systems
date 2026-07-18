@@ -43,8 +43,8 @@ export function writeNode(dir: string, node: IntentionNodeInput): void {
   assertPathSafeId(validated.id);
   mkdirSync(dir, { recursive: true });
   const filePath = join(dir, `${validated.id}.md`);
-  assertNoTacticBodyLoss(filePath, validated);
-  const body = readExistingTacticBody(filePath, validated) ?? `# ${validated.statement}\n`;
+  const body = readExistingBody(filePath, validated) ?? `# ${validated.statement}\n`;
+  assertNoBodyLoss(filePath, validated, body);
   // `stringify` already ends its output with a newline, so the closing fence
   // lands on its own line.
   const content = `---\n${stringify(validated)}---\n${body}`;
@@ -52,37 +52,41 @@ export function writeNode(dir: string, node: IntentionNodeInput): void {
 }
 
 /**
- * Guard against silent plan loss on a kind change: rewriting an existing
- * `tactic` file with `kind` changed away from `tactic` would fall through to
- * the regenerated `# ${statement}` placeholder body and discard the
- * hand-authored plan content that tactic bodies authoritatively carry. Throw a
- * clear error instead — a deliberate reclassification requires deleting or
- * rewriting the file explicitly. A tactic whose body is still the generated
- * placeholder carries no plan content, so its kind may change freely.
+ * Durable-body invariant (tactic-nontactic-body-durability): every node body is
+ * authoritative content `writeNode` preserves verbatim across rewrites via
+ * `readExistingBody`, for every kind. This guard asserts that invariant held —
+ * it throws if a rewrite is about to replace an existing file's non-placeholder
+ * body with the regenerated `# ${statement}` placeholder, catching any
+ * body-preservation regression before it silently discards authored content. An
+ * existing body that is still the generated placeholder carries no authored
+ * content, so it may be regenerated freely.
  */
-function assertNoTacticBodyLoss(filePath: string, node: IntentionNode): void {
-  if (node.kind === "tactic" || !existsSync(filePath)) return;
+function assertNoBodyLoss(filePath: string, node: IntentionNode, body: string): void {
+  if (!existsSync(filePath)) return;
   const raw = readFileSync(filePath, "utf8");
   const existing: unknown = parse(extractFrontmatter(raw, node.id));
-  if (!isPlainObject(existing) || existing.kind !== "tactic") return;
-  const body = extractBody(raw, node.id);
-  if (body === `# ${String(existing.statement)}\n`) return;
-  throw new IntentionSchemaError(
-    `Refusing to change kind of "${node.id}" from "tactic" to "${node.kind}": ` +
-      `the rewrite would discard the existing hand-authored tactic body. ` +
-      `Delete or rewrite ${filePath} explicitly to reclassify.`
-  );
+  if (!isPlainObject(existing)) return;
+  const existingBody = extractBody(raw, node.id);
+  if (existingBody === `# ${String(existing.statement)}\n`) return;
+  if (body === `# ${node.statement}\n`) {
+    throw new IntentionSchemaError(
+      `Refusing to write "${node.id}": the rewrite would replace the existing ` +
+        `hand-authored body with a regenerated placeholder, discarding durable ` +
+        `content. This is a body-preservation regression in writeNode.`
+    );
+  }
 }
 
 /**
- * For a `tactic` node whose file already exists on disk, read that file's
- * existing body (everything after the closing frontmatter fence) verbatim so
- * a rewrite doesn't clobber hand-maintained plan content. Returns `null` for
- * any other kind, or for a tactic with no existing file yet — callers fall
- * back to the generated `# ${statement}` body in both cases.
+ * For a node whose file already exists on disk, read that file's existing body
+ * (everything after the closing frontmatter fence) verbatim so a rewrite doesn't
+ * clobber durable content. Every node body is authoritative under the
+ * durable-body contract (tactic-nontactic-body-durability), so this applies to
+ * every kind. Returns `null` when no file exists yet — callers fall back to the
+ * generated `# ${statement}` body.
  */
-function readExistingTacticBody(filePath: string, node: IntentionNode): string | null {
-  if (node.kind !== "tactic" || !existsSync(filePath)) return null;
+function readExistingBody(filePath: string, node: IntentionNode): string | null {
+  if (!existsSync(filePath)) return null;
   const raw = readFileSync(filePath, "utf8");
   return extractBody(raw, node.id);
 }
