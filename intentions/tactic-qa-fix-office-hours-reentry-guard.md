@@ -48,8 +48,14 @@ attention:
     tactic-freeze-resurface-stale-children-only (childless, empty blocked_by:
     rank = boost + 5.33; then-max 66.33), so boost 61 ties the top of the
     discretionary frontier."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-qa-fix-office-hours-reentry-guard
+  pr: 2893
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
