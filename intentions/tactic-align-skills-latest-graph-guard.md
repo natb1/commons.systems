@@ -26,24 +26,26 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 3
+  boost: 61
   override: null
-  rationale: "Author-directed 2026-07-08 (further refined): elevated to the same
-    tier as the tactics that directly edit
-    .claude/skills/align-strategy/SKILL.md and
-    .claude/skills/align-tactics/SKILL.md (boost 3, added on top of the
-    strategy's own boost 5, authored 8) — even though this tactic's own fix is a
-    freshness-guard mechanism rather than a SKILL.md prose edit, the author has
-    directed it ranks alongside the direct skill-edit tactics, above
-    curriculum-execution tooling (boost 7) and the rest of
-    strategy-graph-native-dispatch's subtree (inherited 5, unboosted)."
-phase: qa
+  rationale: "Raised 3 -> 61 by author direction (2026-07-18 /align-strategy round
+    on the selector mis-dispatch): this guard is the fix-of-record for the
+    stale-worktree read that made the mis-dispatched align session falsely
+    conclude no work existed. Sized against the composed selector rank per the
+    materiality precedent (childless, empty blocked_by: rank = boost + 5.33;
+    then-max 66.00 on tactic-align-family-opus-default), so boost 61 gives 66.33
+    — top of the discretionary frontier, below only the permanent
+    strategy-main-health trunk signal. Prior rationale (boost 3, 2026-07-08):
+    elevated to the tier of the tactics that directly edit the align SKILL.md
+    files, above curriculum-execution tooling and the rest of the subtree."
+phase: review
 execution:
   branch: tactic-align-skills-latest-graph-guard
   pr: 2889
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []

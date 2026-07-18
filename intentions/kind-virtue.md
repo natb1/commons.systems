@@ -131,5 +131,7 @@ attributes:
       exceptionless, never balanced or summed; set where a virtue carries a
       floor the tension machinery must not touch (see
       virtue-respect-for-persons)"
+  status_vocabulary:
+    codified: the author has personally settled this virtue's articulation
 ---
 # Virtue — a disposition held and exercised, never completed

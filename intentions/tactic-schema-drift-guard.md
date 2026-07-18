@@ -31,7 +31,6 @@ validates:
   - strategy-graph-self-description
 blocked_by:
   - tactic-schema-md-deprecation
-  - tactic-status-kind-vocabularies
 office_hours: null
 pace_exempt: false
 rounds: null

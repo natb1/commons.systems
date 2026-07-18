@@ -7,10 +7,17 @@ export type Owner = "human" | "ai" | "procedure";
 
 export const OWNERS: readonly Owner[] = ["human", "ai", "procedure"];
 
-/** Lifecycle stage of a node as it moves from raw intention to codified work. */
-export type Status = "raw" | "refining" | "delegated" | "codified";
+/**
+ * Lifecycle stage of a node as it moves from raw intention to codified work.
+ * Widened to `string`: the set of valid statuses is per-kind data (each kind
+ * node's `attributes.status_vocabulary`), not a central enum in code —
+ * enforced by `validateGraph`, not `validateNode` (which has no graph
+ * context). `STATUSES` is kept as the legacy default vocabulary values for
+ * callers that still reference it.
+ */
+export type Status = string;
 
-export const STATUSES: readonly Status[] = ["raw", "refining", "delegated", "codified"];
+export const STATUSES: readonly string[] = ["raw", "refining", "delegated", "codified"];
 
 /** What kind of tooling a goal codifies. */
 export type ToolingKind = "actuator" | "sensor";
@@ -321,19 +328,34 @@ function validateAttention(value: unknown, field: string): Attention {
 // --- Dispatch-state structured fields --------------------------------------
 
 /**
+ * A single strategy soft-freeze stamp value. Either:
+ *  - a bare substance-hash string (legacy/deprecated form, see below), or
+ *  - `{hash, sha}`: `hash` is the same substance-fields hash, and `sha` is the
+ *    `origin/main` commit the hash was computed against — i.e. the exact
+ *    revision of `intentions/<strategy-id>.md` the stamp reflects. A stale
+ *    child can recover the precise delta via
+ *    `git diff <sha>..origin/main -- intentions/<strategy-id>.md` instead of
+ *    only knowing *that* it drifted.
+ */
+export type StrategyStampValue = string | { hash: string; sha: string };
+
+/**
  * Live execution record a router stamps on a tactic in flight. Valid on
  * tactics only (enforced by `validateGraph`).
  *
- *  - `strategy_fingerprint` is a per-strategy map `{<strategy-id>: <hash>}` of
- *    each serving strategy's substance-fields hash, stamped at plan/re-evaluation
+ *  - `strategy_fingerprint` is a per-strategy map `{<strategy-id>: <StrategyStampValue>}`
+ *    of each serving strategy's substance-fields hash, stamped at plan/re-evaluation
  *    time and later compared by a router's mid-flight soft-freeze trigger. A
  *    serving strategy absent from the map is never stale (per-strategy null
- *    semantics). The bare-string form is DEPRECATED-LEGACY: it predates
- *    multi-serves stamping and is compared against every serving strategy (a
- *    single string cannot equal two substance hashes, so a multi-serves tactic
- *    was born permanently stale). Legacy strings are accepted transiently and
- *    convert to map form by natural churn — every writer emits map form now, and
- *    each re-stamp rewrites the field. No hashing logic lives here — only the
+ *    semantics). Each map value is either a bare hash string or a `{hash, sha}`
+ *    object recording the `origin/main` commit the hash was taken against
+ *    (see `StrategyStampValue`). The top-level bare-string form (the whole
+ *    field, not a map value) is DEPRECATED-LEGACY: it predates multi-serves
+ *    stamping and is compared against every serving strategy (a single string
+ *    cannot equal two substance hashes, so a multi-serves tactic was born
+ *    permanently stale). Legacy strings are accepted transiently and convert
+ *    to map form by natural churn — every writer emits map form now, and each
+ *    re-stamp rewrites the field. No hashing logic lives here — only the
  *    typed field.
  */
 export interface Execution {
@@ -341,7 +363,7 @@ export interface Execution {
   pr: number | null;
   attempts: Record<string, number>; // per-phase attempt counts
   markers: string[];
-  strategy_fingerprint: string | Record<string, string> | null;
+  strategy_fingerprint: string | Record<string, StrategyStampValue> | null;
 }
 
 /** A first-class parking record: why a node is in office hours and since when. */
@@ -351,10 +373,16 @@ export interface OfficeHours {
   recommendation: string | null;
 }
 
-/** `/align-tactics` re-evaluation round accounting; valid on strategies only. */
+/**
+ * `/align-tactics` re-evaluation round accounting; valid on strategies only.
+ * `last_completed` is verified-in-prod completion time (advances only when a
+ * non-draft child prunes); `last_aligned` is the date the last `/align-tactics`
+ * round *landed* (align-decompose time), stamped independently of completion.
+ */
 export interface Rounds {
   count: number;
   last_completed: string | null;
+  last_aligned: string | null;
 }
 
 function requireNumber(value: unknown, field: string): number {
@@ -385,6 +413,11 @@ function requireDateString(value: unknown, field: string): string {
   return s;
 }
 
+function optionalDateString(value: unknown, field: string): string | null {
+  if (value == null) return null;
+  return requireDateString(value, field);
+}
+
 function validateAttempts(value: unknown, field: string): Record<string, number> {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
@@ -397,14 +430,19 @@ function validateAttempts(value: unknown, field: string): Record<string, number>
 }
 
 /**
- * The soft-freeze stamp: a per-strategy fingerprint map `{<strategy-id>: <hash>}`,
- * a bare string (deprecated-legacy, accepted transiently), or null. The map's
- * values are substance-hash strings; a malformed non-string value is rejected.
+ * The soft-freeze stamp: a per-strategy fingerprint map
+ * `{<strategy-id>: <StrategyStampValue>}`, a bare string (deprecated-legacy
+ * top-level form, accepted transiently), or null. Each map value is either a
+ * bare substance-hash string (legacy) or a `{hash, sha}` object — `sha` is the
+ * `origin/main` commit the hash was taken against, letting a stale child
+ * recover the exact delta via `git diff <sha>..origin/main --
+ * intentions/<strategy-id>.md`. A malformed value (non-string, non-object, or
+ * an object missing/mistyping `hash`/`sha`) is rejected.
  */
 function validateStrategyFingerprint(
   value: unknown,
   field: string,
-): string | Record<string, string> | null {
+): string | Record<string, StrategyStampValue> | null {
   if (value == null) return null;
   if (typeof value === "string") return value; // deprecated-legacy bare-string form
   if (!isPlainObject(value)) {
@@ -412,9 +450,21 @@ function validateStrategyFingerprint(
       `Expected string, object, or null for ${field}, got ${typeof value}`,
     );
   }
-  const out: Record<string, string> = {};
+  const out: Record<string, StrategyStampValue> = {};
   for (const [key, fp] of Object.entries(value)) {
-    out[key] = requireString(fp, `${field}.${key}`);
+    const stampField = `${field}.${key}`;
+    if (typeof fp === "string") {
+      out[key] = fp;
+    } else if (isPlainObject(fp)) {
+      out[key] = {
+        hash: requireString(fp.hash, `${stampField}.hash`),
+        sha: requireString(fp.sha, `${stampField}.sha`),
+      };
+    } else {
+      throw new IntentionSchemaError(
+        `Expected string or {hash, sha} object for ${stampField}, got ${typeof fp}`,
+      );
+    }
   }
   return out;
 }
@@ -450,6 +500,7 @@ function validateRounds(value: unknown, field: string): Rounds {
   return {
     count: requireNonNegativeInt(value.count, `${field}.count`),
     last_completed: optionalString(value.last_completed, `${field}.last_completed`),
+    last_aligned: optionalDateString(value.last_aligned, `${field}.last_aligned`),
   };
 }
 
@@ -478,6 +529,10 @@ export function validateNode(value: unknown): IntentionNode {
   if (kind === "") {
     throw new IntentionSchemaError("kind must be a non-empty string");
   }
+  const status = requireString(value.status, "status");
+  if (status === "") {
+    throw new IntentionSchemaError("status must be a non-empty string");
+  }
 
   return {
     // Required core.
@@ -485,7 +540,7 @@ export function validateNode(value: unknown): IntentionNode {
     kind,
     statement: requireString(value.statement, "statement"),
     owner: requireOneOf(value.owner, OWNERS, "owner"),
-    status: requireOneOf(value.status, STATUSES, "status"),
+    status,
 
     // Optional scalars — absent/null tolerated, default null.
     parent: optionalString(value.parent, "parent"),
@@ -566,6 +621,9 @@ export function validateNode(value: unknown): IntentionNode {
  *  14. Every `validates` entry resolves to an existing `kind: "strategy"` node.
  *  15. `blocked_by` edges contain no cycle (a tactic transitively blocked by
  *      itself is invalid).
+ *  16. Every node's `status` must be a key in its kind node's declared
+ *      `attributes.status_vocabulary` (a missing declaration on the kind node
+ *      is itself an error).
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -723,6 +781,22 @@ export function validateGraph(nodes: IntentionNode[]): void {
         problems.push(
           `${node.id}: validates "${target}" must resolve to a kind "strategy" node, got kind "${targetNode.kind}"`,
         );
+      }
+    }
+    // Rule 16: status must be a key in the kind node's status_vocabulary.
+    {
+      const kindNode = byId.get(`kind-${node.kind}`);
+      if (kindNode !== undefined) {
+        const vocab = kindNode.attributes.status_vocabulary;
+        if (!isPlainObject(vocab) || Object.keys(vocab).length === 0) {
+          problems.push(
+            `${node.id}: kind-${node.kind} has no attributes.status_vocabulary declared`,
+          );
+        } else if (!Object.prototype.hasOwnProperty.call(vocab, node.status)) {
+          problems.push(
+            `${node.id}: status "${node.status}" is not declared in kind-${node.kind}'s status_vocabulary`,
+          );
+        }
       }
     }
   }

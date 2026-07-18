@@ -1,4 +1,4 @@
-import type { Execution, IntentionNode, Rounds } from "./schema.js";
+import type { Execution, IntentionNode, Rounds, StrategyStampValue } from "./schema.js";
 import { servingStrategyIds } from "./router.js";
 
 // Graph router v2, second half: phase transitions, execution-state writes,
@@ -140,6 +140,13 @@ export interface TransitionDecision {
   hold: boolean;
   /** True when the hold is a scope-fingerprint demotion to `implement`. */
   demote: boolean;
+  /**
+   * Completion markers to strip from `execution.markers` as part of this
+   * transition. Non-empty only for the CI-failure fix interrupt, which clears
+   * `qa-done` and `reviewed` so a resume out of `fix` re-runs qa and review (the
+   * regressed code was never seen by the completed review). Empty otherwise.
+   */
+  clearMarkers: readonly string[];
 }
 
 /**
@@ -176,39 +183,43 @@ export function decideTransition(args: {
   // 1. Scope-fingerprint demotion (pre-merge only; the caller must not invoke
   //    this on a merged tactic — post-merge staleness routes via main-qa).
   if (scopeStale) {
-    return { phase: "implement", armMerge: false, hold: true, demote: true };
+    return { phase: "implement", armMerge: false, hold: true, demote: true, clearMarkers: [] };
   }
 
   // 2. Strategy soft-freeze hold at the completed phase.
   if (strategyStale) {
-    return { phase, armMerge: false, hold: true, demote: false };
+    return { phase, armMerge: false, hold: true, demote: false, clearMarkers: [] };
   }
 
-  // 3. CI-failure interrupt.
+  // 3. CI-failure interrupt. Clear the qa-done and reviewed markers: the code
+  //    that regressed was never seen by the completed qa/review, so leaving
+  //    `fix` must resume at `qa` and re-run both — `resumeAfterFix`'s cascade
+  //    falls through to `qa` once these markers are gone.
   if (fixInterrupt(phase, ci)) {
-    return { phase: "fix", armMerge: false, hold: false, demote: false };
+    return { phase: "fix", armMerge: false, hold: false, demote: false, clearMarkers: [QA_DONE_MARKER, REVIEWED_MARKER] };
   }
 
   // 4. Resume out of fix on green CI.
   if (phase === "fix") {
     if (ci === "passing") {
-      return { phase: resumeAfterFix(markers, hasResidue), armMerge: false, hold: false, demote: false };
+      return { phase: resumeAfterFix(markers, hasResidue), armMerge: false, hold: false, demote: false, clearMarkers: [] };
     }
-    // Still red — stay in fix.
-    return { phase: "fix", armMerge: false, hold: true, demote: false };
+    // Still red — stay in fix. Markers were already cleared on the earlier call
+    // that first entered `fix`; this later branch must not clear again.
+    return { phase: "fix", armMerge: false, hold: true, demote: false, clearMarkers: [] };
   }
 
   // 5. Clean review completion arms auto-merge; no graph-side phase write.
   if (phase === "review") {
-    return { phase: "review", armMerge: true, hold: false, demote: false };
+    return { phase: "review", armMerge: true, hold: false, demote: false, clearMarkers: [] };
   }
 
   // 6. Forward ladder edge.
   const next = forwardPhase(phase, hasResidue);
   if (next === null) {
-    return { phase, armMerge: false, hold: true, demote: false };
+    return { phase, armMerge: false, hold: true, demote: false, clearMarkers: [] };
   }
-  return { phase: next, armMerge: false, hold: false, demote: false };
+  return { phase: next, armMerge: false, hold: false, demote: false, clearMarkers: [] };
 }
 
 // --- Execution-state mutation helpers ---------------------------------------
@@ -270,10 +281,12 @@ export function hasNeedsMainResidue(body: string): boolean {
  * Stamp a completed round on a strategy when its last non-draft child prunes
  * (spec §1.1 line 134): `count += 1`, `last_completed := date`. Pure — the
  * caller decides WHEN (its last non-draft child reached `done` and is being
- * pruned in this same commit) and supplies the ISO date.
+ * pruned in this same commit) and supplies the ISO date. `last_aligned` is
+ * preserved unchanged — it is stamped elsewhere, at align-landing time, not
+ * on completion.
  */
 export function stampRound(rounds: Rounds | null, date: string): Rounds {
-  return { count: (rounds?.count ?? 0) + 1, last_completed: date };
+  return { count: (rounds?.count ?? 0) + 1, last_completed: date, last_aligned: rounds?.last_aligned ?? null };
 }
 
 // --- Completion pruning graph edits (Unit 2) --------------------------------
@@ -351,12 +364,28 @@ export function isScopeStale(stamp: ScopeStamp | null, currentFingerprint: strin
 }
 
 /**
+ * Extract the comparable fingerprint hash from a stamp map entry. Each entry
+ * is either the legacy bare-string form (the hash itself) or the widened
+ * `{hash, sha}` object form (Unit 1, `StrategyStampValue`) that additionally
+ * carries the `origin/main` sha the stamp was taken at. This is the single
+ * home of that shape discrimination — callers compare hashes via this helper
+ * instead of duplicating the `string | {hash,sha}` branch inline.
+ */
+export function stampHash(value: StrategyStampValue): string {
+  return typeof value === "string" ? value : value.hash;
+}
+
+/**
  * Per-strategy staleness against a raw stamp value (soft-freeze, strategy
  * clarification 10). The stamp is one of:
  *   - `null` — never stale (stamping starts when the align machinery lands).
- *   - a `Record<strategy-id, fingerprint>` map — stale iff the map carries a key
- *     for `strategyId` AND its value differs from `currentFingerprint`; a
- *     serving strategy ABSENT from the map is never stale (per-strategy null).
+ *   - a `Record<strategy-id, StrategyStampValue>` map — stale iff the map
+ *     carries a key for `strategyId` AND its stamped hash differs from
+ *     `currentFingerprint`; a serving strategy ABSENT from the map is never
+ *     stale (per-strategy null). Each map value is either a bare-string hash
+ *     or the widened `{hash, sha}` object recording the `origin/main` sha the
+ *     stamp was taken at — `stampHash` extracts the comparable hash from
+ *     either shape.
  *   - a bare string (deprecated-legacy) — stale iff it differs from
  *     `currentFingerprint`, ignoring `strategyId`. This preserves the legacy
  *     compare-against-every-serving-strategy semantics: one string cannot equal
@@ -364,14 +393,14 @@ export function isScopeStale(stamp: ScopeStamp | null, currentFingerprint: strin
  *     re-stamp converts it to map form.
  */
 export function isFingerprintStale(
-  stamp: string | Record<string, string> | null,
+  stamp: string | Record<string, StrategyStampValue> | null,
   strategyId: string,
   currentFingerprint: string,
 ): boolean {
   if (stamp === null) return false;
   if (typeof stamp === "string") return stamp !== currentFingerprint;
   if (!Object.hasOwn(stamp, strategyId)) return false;
-  return stamp[strategyId] !== currentFingerprint;
+  return stampHash(stamp[strategyId]) !== currentFingerprint;
 }
 
 /**
