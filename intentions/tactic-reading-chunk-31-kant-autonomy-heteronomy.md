@@ -74,6 +74,19 @@ or interest outside itself. One work-section — the third Groundwork chunk
   III is Kant's most a priori move (the deduction from freedom) — does reading
   it sharpen the graph's divergence from the a priori method?
 
+- Deferral from chunk 5 (2026-07-18): R14's heteronomy clause — "mounting
+  claude as a delagatee does involve mounting transitive desires" (author
+  articulation, wording wins): heteronomy arrives through the vendor
+  desire-chain. Does section III's heteronomy (the law given by an external
+  object or interest) read a mounted delegatee chain as heteronomy's
+  instrument, and mobility's management of that chain as autonomy's work?
+- Deferral from chunk 5 (2026-07-18): R2's open interplay — the Platonic
+  return-obligation (Republic 519c–520d: the ascended are compelled back
+  down) vs the categorical imperative: the author asked to understand how
+  these two grounds of obligation relate before the return-obligation adopted
+  entry finalizes on tradition-plato (draft quarantined on
+  tactic-dialog-review-plato-cave).
+
 Two standing rules from `intentions/strategy-philosophical-grounding.md` clarifications apply: the borrowed-articulation capture question and "the reading wins" on any contradiction.
 
 ## Completion

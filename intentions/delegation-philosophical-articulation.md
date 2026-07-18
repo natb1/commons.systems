@@ -89,7 +89,16 @@ attributes:
     intra-virtue mean triples on the mobility children — Claude-drafted, adopted
     by the author as a deferral ('execute greenfield recommendation as
     deferred'), reviewed at tactic-reading-chunk-5-aristotle-phronesis (NE VI,
-    phronesis as Aristotle's own inter-virtue coordinator)"
+    phronesis as Aristotle's own inter-virtue coordinator); extended 2026-07-18
+    with the chunk-5 deferred slate — the entire outcome ledger of the NE VI +
+    III.4 sitting (the Q1-Q4 draft verdicts, integration recommendations R1-R24
+    with the probe-2 corollary, the vocabulary/quote retention drafts, and
+    Claude's boost-vs-numbering frontier recommendation), deferred en bloc by
+    the author's glare ruling pending author recall, origination, and
+    ratification; quarantined on and reviewed at
+    tactic-dialog-review-aristotle-phronesis, with the retroactive cave and
+    hexis items reviewed at tactic-dialog-review-plato-cave and
+    tactic-dialog-review-aristotle-hexis"
   origin: chosen
   divergence:
     level: moderate
@@ -114,6 +123,12 @@ attributes:
         stale as its model), and NE II.1 grounds destruction by contrary
         practice, not decay-by-inactivity; found and amended 2026-07-13 chunk 2,
         the reading wins
+      - the chunk-5 R15b homing-gate rider as Claude drafted it generalized the
+        author's case-specific born-parked condition (desire-tracking strategies
+        without an aligned mechanism) into a standing born-parked rule for
+        derived strategies — caught by the author in-sitting (2026-07-16
+        exchange); classified in-sitting through the R16 lens as doxa promoted
+        to doctrine without ratification; recorded 2026-07-18, the reading wins
   irreversibility:
     recovery_path: relearn — read the cited texts against each tradition record,
       chunked in tactic-tradition-reading-program; each verified record flips
@@ -122,12 +137,14 @@ attributes:
       cited passage-by-passage on the records
     gated: false — nothing about the way back is held by either delegatee; the texts
       outlive both
-    last_exercised: "2026-07-13 — chunk 2 (NE II.1-7): tradition-aristotle ratified
-      on habituation and hexis (kind-virtue's definition personally verified)
-      and requalified on the mean (intra-virtue; tension_with divergence
-      recorded as graph-native cross-guard); strategy-explicit-intent's
-      cadence-as-habituation deferral amended (synchronization drift,
-      three-scenario adjudication) — a double reading-wins catch"
+    last_exercised: "2026-07-17 — chunk 5 (NE VI + III.4): reading and per-chapter
+      comprehension dialectic completed with the three-movement structure; the
+      sitting's amend/ratify outcomes were deferred en bloc (2026-07-18 glare
+      ruling) to tactic-dialog-review-aristotle-phronesis, so no tradition
+      record moved this round; the recovery loop's exercise is the comprehension
+      record itself (eleven textual corrections including the end-setter gate)
+      plus one reading-wins catch (the R15b misstatement, recorded in
+      contradictions)"
   classification: platform — demands buy-in while unverified; decays toward tool
     as records flip to codified
   non_delegable_floor: the capacity to notice a recorded articulation

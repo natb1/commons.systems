@@ -37,8 +37,14 @@ attention:
     directed it ranks alongside the direct skill-edit tactics, above
     curriculum-execution tooling (boost 7) and the rest of
     strategy-graph-native-dispatch's subtree (inherited 5, unboosted)."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-align-skills-latest-graph-guard
+  pr: 2889
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

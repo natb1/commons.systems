@@ -203,7 +203,11 @@ clarifications:
       routing) and removes the need for a per-phase floor exemption. Mechanism
       retained as draft tactic-align-family-opus-default (the align-tactics
       split) and tactic-audit-routing-advisory-gate (the advisory policy loop).
-      Recorded 2026-07-16 interview."
+      Recorded 2026-07-16 interview. Amended 2026-07-18: the align-tactics split
+      executes as a deterministic Workflow (`.claude/workflows/align-tactics.js`
+      via the Workflow tool, /review-fix-shaped), not an ad-hoc per-callsite
+      `model: opus` addition — see clarification 14 for the three-tier
+      delegation and the office-hours-park autonomy coupling."
   - question: May an autonomous worker self-schedule a fallback wakeup while waiting
       on harness-tracked background work?
     answer: "No — the harness re-invokes the session automatically when a tracked
@@ -298,7 +302,64 @@ clarifications:
       from PR #2870, and the OTel-substrate evaluation) into phase:implement
       tactics; none carry a validates edge, as all are off the success-signal
       path the done sensor already measures. Recorded 2026-07-16 /align-tactics
-      round 2."
+      round 2. Amended 2026-07-18: the align-tactics-split residual is further
+      split — PR #2886 lands the model:opus params (increment 1), and the full
+      /review-fix-shaped Workflow rearchitecture is retained as draft
+      tactic-align-tactics-workflow for a later round; see clarification 14."
+  - question: How does the /align-tactics align-family model-routing split
+      (clarification 10) execute — an ad-hoc per-callsite model addition, or a
+      deterministic Workflow?
+    answer: "As a deterministic Workflow, not an ad-hoc per-callsite `model: opus`
+      addition. Clarification 10 fixed WHO runs on which model (Sonnet
+      orchestrator, Opus for the two high-stakes acts); this clarification fixes
+      HOW /align-tactics executes that split: a
+      `.claude/workflows/align-tactics.js` invoked through the Workflow tool,
+      the same architecture as /review-fix and /qa-fix — NOT `model: opus`
+      bolted onto the caller-thread Explore/Plan subagent calls the skill fans
+      out today (align-tactics SKILL.md:377, 'runs in the caller's thread ... no
+      orchestrator'), which is the fragile shape PR #2886 /
+      tactic-align-family-opus-default currently ships. Three-tier delegation:
+      (i) SONNET top-level orchestrator — node-id reservation, park-field
+      writes, the clause-coverage walk, graph-commit, and assembling node bodies
+      from subagent output; it carries no plan substance. (ii) OPUS subagents
+      for the key decisions — the two-sided drift-review verdict (which
+      conditions failed), the decompose-to-signal judgment (which tactic nodes
+      exist), and each claude-eligible tactic's plan-body authoring. (iii)
+      SONNET subagents for delegable gathering — the Explore reuse-hunt /
+      prior-art scan, the mechanical drift scan (grep the corpus, gather
+      candidates), and clause-coverage evidence gathering. Adopt/diverge: ADOPT
+      the Workflow, DIVERGE from 'the ad-hoc model-param split is enough' — (a)
+      ad-hoc tiering is fragile: any future edit adding a Plan/Agent call
+      without `model: opus` silently regresses the highest-stakes act to Sonnet
+      (the exact motivating bug in tactic-align-family-opus-default), whereas a
+      deterministic script makes the tiering structural; (b) it is consistent
+      with clarification 12, which endorses 'the reasoning already lives in a
+      fixed workflow script' — the Workflow moves align-tactics' reasoning into
+      exactly such a script; (c) /align-tactics is autonomous and never
+      AskUserQuestion mid-run, so a Workflow (which cannot run an interactive
+      dialectic) is a natural fit. Autonomy-contract coupling: 'never
+      AskUserQuestion' holds INSIDE the Workflow — when the plan cannot be fully
+      derived from the graph or otherwise needs author intervention, the
+      orchestrator parks the tactic node to office_hours via the existing
+      three-condition park mechanism (align-tactics SKILL.md:139-186), and the
+      resulting office-hours session is where AskUserQuestion legitimately runs
+      with the author; the park escape hatch was confirmed present this round.
+      Scope: the Workflow is the single autonomous execution model for ALL
+      /align-tactics invocations — router-launched and hand-triggered alike;
+      there is no separate interactive path, a human invocation just triggers
+      the same autonomous flow. /align-strategy stays OUT and remains
+      whole-session Opus: its interview IS interactive AskUserQuestion dialectic
+      a Workflow cannot run. The clean rule: /align-tactics is autonomous →
+      Workflow-able; /align-strategy is interactive → not. Migration is
+      brownfield: PR #2886 (tactic-align-family-opus-default) lands the
+      model:opus params as increment 1 (a correct subset), then draft
+      tactic-align-tactics-workflow carries the full /review-fix-shaped
+      rearchitecture, decomposed by a later /align-tactics round; the
+      rearchitecture must hold plan-quality/phase-success parity and keep the
+      script plus thinned SKILL body within clarification 12's standup-cost
+      discipline. Off the success-signal path (no validates edge), measured
+      after the fact by the token-economy sensor's by-node/by-phase attribution.
+      Recorded 2026-07-18 interview."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -314,10 +375,13 @@ tooling_goals:
       10): it surfaces routing recommendations — model/effort demotions and
       promotions — grounded in verified yield metrics, and every routing change
       requires explicit author approval before implementation; no routing change
-      is applied automatically. The /align-tactics worker routes a Sonnet
-      orchestrator with an Opus subagent for the decompose-to-signal judgment
-      and per-tactic plan authoring, the Explore reuse-hunt fan-out demotable to
-      Sonnet or Haiku."
+      is applied automatically. The /align-tactics worker executes as a
+      deterministic Workflow (`.claude/workflows/align-tactics.js`,
+      /review-fix-shaped, clarification 14): a Sonnet top-level orchestrator,
+      Opus subagents for the decompose-to-signal judgment / two-sided
+      drift-review verdict / per-tactic plan authoring, and Sonnet subagents for
+      the Explore reuse-hunt and mechanical gathering; the reuse-hunt fan-out
+      stays demotable to Sonnet or Haiku."
 success_signal:
   observable: weekly allowance utilization together with claude-eligible tactic
     closure velocity (created vs closed)
