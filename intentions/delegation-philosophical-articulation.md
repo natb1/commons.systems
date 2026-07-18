@@ -98,7 +98,10 @@ attributes:
     ratification; quarantined on and reviewed at
     tactic-dialog-review-aristotle-phronesis, with the retroactive cave and
     hexis items reviewed at tactic-dialog-review-plato-cave and
-    tactic-dialog-review-aristotle-hexis"
+    tactic-dialog-review-aristotle-hexis; the boost-vs-numbering item exited the
+    slate 2026-07-18 — author-ratified at the /align-strategy round, recorded on
+    strategy-graph-review-curriculum — leaving the rest of the ledger on the
+    dialog gate"
   origin: chosen
   divergence:
     level: moderate
