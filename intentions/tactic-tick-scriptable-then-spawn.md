@@ -17,7 +17,27 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: "The node's ## Verification manual live-tick end-to-end checks (Check
+      1 scriptable->spawn regression; Check 2 convergence / liveness guard /
+      exit-13 reservation-clear) were parked to office-hours for a human to run
+      — should they gate the node's progression out of qa?"
+    answer: "No — dispositioned by author waiver. The author elected 2026-07-18 to
+      SKIP the two manual live-tick end-to-end checks (Check 1:
+      scriptable->spawn regression; Check 2: single-pass convergence / liveness
+      guard / exit-13 reservation-clear) rather than run them, because they
+      require driving a live dispatch tick against the ACTIVE production queue —
+      a claude agents --json daemon-socket read plus demotion of real in-flight
+      tactics — which would disturb the active queue unacceptably. The
+      script-verifiable QA already passed (vitest 502/502, clean shell syntax,
+      phase-1-before-selection ordering, exit-13 reservation_clear present,
+      listScopeStaleTactics export present) and PR #2881 CI is green (23/23). On
+      that basis the qa phase is completed by waiver (qa-done marker) and the
+      node progresses qa -> review; the office_hours park is cleared. The manual
+      checks are NOT re-queued: if the scope-stale-demote-at-launch regression
+      they confirm ever recurs, it surfaces as a fresh code-fix tactic against
+      dispatch-select-tick / dispatch-graph-scope-sweep / dispatch-graph-execute
+      case 13, per the park recommendation. Recorded 2026-07-18."
 tooling_goals: []
 success_signal: null
 attention:
@@ -33,151 +53,18 @@ attention:
     2026-07-16 /align-tactics <tactic-id> per-node round
     (frozen-tactic-dispatch, clarification 52); the author-directed boost
     persists to rank this now-selectable work first."
-phase: qa
+phase: review
 execution:
   branch: tactic-tick-scriptable-then-spawn
   pr: 2881
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: all script-verifiable QA items passed (vitest 502/502, shell
-    syntax clean, phase-1-before-selection ordering confirmed, exit-13
-    reservation_clear confirmed, listScopeStaleTactics export confirmed). Two
-    acceptance-criteria items remain: the node's own ## Verification section's
-    manual end-to-end live-tick checks (phase-1-demote + phase-2-launch same
-    tick; single-pass convergence; liveness guard; exit-13 safety net). These
-    need claude agents --json (dangerouslyDisableSandbox, live daemon socket)
-    and can mutate live production graph state (demote real in-flight tactics)
-    if run carelessly — unsafe to auto-run in an isolated QA session. qa-main's
-    autonomous verifier is browser-only (Claude-in-Chrome against deployed prod)
-    and has no mechanism to run a dispatch tick or query the daemon, so it
-    cannot perform this check either. Escalating directly to office-hours for a
-    human to run the manual checks, rather than deferring to a main-qa pass that
-    would only fail the same way."
-  since: 2026-07-17
-  recommendation: >-
-    ## Recommendation: `tactic-tick-scriptable-then-spawn` (PR #2881)
-
-
-    ### Status going in
-
-
-    The autonomous `/qa-fix` pass already cleared everything script-verifiable:
-    vitest 502/502, clean shell syntax, the phase-1 sweep call confirmed ahead
-    of the real selection call sites (the earlier ordering false-fail was a
-    doc-comment grep artifact, discounted), the exit-13 `reservation_clear`
-    addition present, and the `listScopeStaleTactics` export present. No code
-    change is owed for any of that. What's left is the node's own `##
-    Verification` section's two **manual** end-to-end checks — they were parked
-    (not attempted) because they need `claude agents --json` (daemon socket,
-    `dangerouslyDisableSandbox: true`) and can mutate live graph state, which
-    neither the autonomous QA lane nor `/qa-main`'s browser-only verifier can do
-    safely unattended. This is confirmation-only work for a human at a terminal.
-
-
-    ### Before you touch anything: work on a throwaway, not a live tactic
-
-
-    Both checks demote a scope-stale tactic. Do not pick a real in-flight tactic
-    as the subject — a demote to `implement` is a production graph mutation.
-    Either:
-
-
-    - Create a disposable test tactic in `qa`/`fix`/`review` phase with no live
-    worker, or
-
-    - Snapshot the graph state first (`git status` on `intentions/`, note the
-    target node's current `phase`/`execution.pr`) so any accidental demote is
-    trivially reverted with `git checkout intentions/<id>.md` before you
-    `graph-commit` anything.
-
-
-    Confirm the chosen subject has no live session: run `claude agents --json`
-    (with `dangerouslyDisableSandbox: true`) and verify nothing is running under
-    its worktree.
-
-
-    ### Check 1 — live-tick end-to-end (scriptable→spawn regression)
-
-
-    This is the exact bug the tactic fixes: a scope-stale demote at launch time
-    used to consume a `SPAWN_N` slot silently, so a tick with headroom could
-    launch zero workers.
-
-
-    1. Force a fingerprint mismatch on the test tactic. Two ways, pick one:
-       - Edit its stamp file `.claude/worktrees/<id>.scope-fingerprint` to a bogus value, or
-       - Hand-edit the tactic's statement/body in `intentions/<id>.md` so its recomputed scope fingerprint diverges from the stamped value.
-    2. Run the tick manually with headroom > 1 and sandbox off:
-
-       `.claude/skills/dispatch-propagate/scripts/dispatch-select-tick` — run with `dangerouslyDisableSandbox: true`, tee stdout to a file so you can grep ordering.
-    3. Confirm both halves in the captured stdout:
-       - (a) A `scope-sweep: scope-stale <id>` line appears before the selection decision line — grep for `scope-sweep: scope-stale` and confirm its line number precedes the selection decision. This is the phase-1 demote landing before selection, per the Step-1d wiring in `dispatch-select-tick` and the sweep script `dispatch-graph-scope-sweep`.
-       - (b) The tick still launches a worker in phase 2 despite the demote — headroom was not silently consumed. Confirm a worker actually spawns.
-
-    If both hold, the regression fix is verified.
-
-
-    ### Check 2 — convergence / liveness guard / safety net
-
-
-    Three sub-checks, all against the sweep + `dispatch-graph-execute` case
-    `13)` path:
-
-
-    - (a) Single-pass convergence: a node just demoted to `implement` in phase 1
-    is not immediately re-swept in the same tick. Confirm the demoted node shows
-    one `scope-stale` line, not a re-sweep.
-
-    - (b) Liveness protects a live worker: take a scope-stale tactic that does
-    have a live worker (start/point a session at its worktree so `claude agents
-    --json` reports it live), run the tick, and confirm it is not swept — no
-    `scope-stale` demote line for it.
-
-    - (c) Safety-net + reservation clear: simulate residual staleness introduced
-    between the sweep and worker-launch (re-dirty the fingerprint after the
-    sweep step but before launch). Confirm the tick hits the exit-13 path in
-    `dispatch-graph-execute` (case `13)`), and that the new `reservation_clear`
-    fires so the node is freed for next-tick re-selection (verify the
-    reservation is cleared, not left held).
-
-
-    The demote primitive underneath all of this is
-    `packages/intentionsutil/scripts/demote-node-to-implement` — read it if you
-    need to understand what state a demote writes.
-
-
-    ### If both checks pass
-
-
-    There is no residue item and no needs-main follow-up expected — this is
-    confirmation-only. Clean up any test-tactic / stamp edits (`git checkout`
-    the touched `intentions/*.md` and stamp files so no experimental mutation
-    leaks), then manually clear the node's `office_hours` park and let it
-    continue its normal ladder:
-
-
-    - Read the node, set `office_hours` to null, write it back, and
-    `graph-commit` from a state where `HEAD == origin/main` (the standard
-    clear-park inverse of `park-node`). No phase override, no needs-main
-    routing.
-
-
-    ### If either check reveals an actual bug
-
-
-    That is new information, not this park's scope — it means the fix is
-    incomplete. Don't patch it inline from the office-hours session. Escalate it
-    as a fresh code-fix against PR #2881's branch: either a new tactic/issue
-    scoped to the specific failing behavior (name which of
-    `dispatch-select-tick`, `dispatch-graph-scope-sweep`, or
-    `dispatch-graph-execute` case `13)` misbehaved and how), or route the PR
-    through a `fix-checks` pass. Keep the node parked (`office_hours` intact)
-    until that fix lands, rather than clearing it.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

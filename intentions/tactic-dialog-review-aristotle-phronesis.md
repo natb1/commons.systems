@@ -420,18 +420,6 @@ suggestions (Hume, Laws II, NE VII, APo II.19, Wood, Fogg, James) →
 `tactic-tradition-reading-program` body. Rule on D6 (see R15c). Note the
 Protagoras apparatus flag (Q3).
 
-### 8. Ratify the boost-vs-numbering recommendation
-
-The author's 2026-07-18 question — can the attention/boost mechanism manage
-curriculum-frontier priorities, replacing the integer numbering? — was
-answered by a Claude evaluation recorded as a clarification on
-`strategy-graph-review-curriculum`: yes for frontier items (blocked_by for
-sequence, attention for urgency, no integers), not yet for the legacy
-reading queue (/sync-reader's stable file sort; the 2026-07-09
-entries-stay-unboosted scope), with the greenfield direction named
-(chain-derived reader order retiring the numbering). Ratify, amend, or
-re-defer that recommendation here.
-
 ## Completion
 
 - The end-setter gate passed (or Q2/Q4 re-deferred with the gate re-queued).
