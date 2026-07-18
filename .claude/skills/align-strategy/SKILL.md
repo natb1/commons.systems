@@ -2,9 +2,23 @@
 name: align-strategy
 description: Interview-driven recording of a `strategy-*` intention node — the graph-native successor to `/file-issue`'s requirements-definition role. Frames the input as a new strategy or an edit to an existing one, runs a Socratic dialectic to fix intent/placement/benefit/signal/conditions, advises on delegation capture, retains tactical byproducts as draft tactic nodes, and lands the record via `graph-commit`. On-demand only; never files a GitHub issue.
 user-invocable: true
+model: opus
 ---
 
 # Align Strategy
+
+**On the `model` field's enforcement (tactic-align-family clarification 10,
+2026-07-16):** `/align-strategy` is `user-invocable: true` — it runs on the
+interactive main loop, not via a `context: fork` subagent launch. A `model:`
+field in frontmatter is confirmed honored for `context: fork` skills; for
+`user-invocable` main-loop skills like this one, honoring is unconfirmed. This
+skill stays whole-session Opus because its interview dialectic is
+non-delegable and it has no dispatch launch path to carry an explicit
+`model: opus` argument the way `/align-tactics`' Step 3 subagent launch does.
+If the harness does not honor this field on the interactive path, the default
+here is intended-not-guaranteed — backed by the token audit's by-node/by-phase
+attribution (`strategy-token-economy`'s sensor) reading after the fact whether
+the session actually ran on Opus.
 
 `/align-strategy [optional requirement text]` records or revises a
 `strategy-*` intention node under interview. It supersedes `/file-issue`'s
