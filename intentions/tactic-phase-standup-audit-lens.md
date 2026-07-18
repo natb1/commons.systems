@@ -33,16 +33,140 @@ attention:
     strategy-token-economy carries no strategy-level boost, so the tactic
     carries the full weight itself; boost 15 clears the current working max
     (~14.5)."
-phase: fix
+phase: qa
 execution:
   branch: tactic-phase-standup-audit-lens
   pr: 2880
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA plan items 7-8 (scriptable/judgment classifier substring
+    list; boot-preamble heuristic soundness) are subjective heuristic-design
+    sign-offs on the phase_standup lens, not code defects. The disposition
+    skeptics refuted the needs-human framing, but the gated fix-planner declined
+    to author a fix (scope-deviation): 'Both findings are subjective-judgment
+    sign-offs (heuristic reasonableness), not code defects; resolving them
+    requires human agreement or an unauthorized heuristic redesign, so no
+    autonomous fix unit applies.' Escalating to office-hours; all 6
+    machine-verifiable QA items passed cleanly."
+  since: 2026-07-18
+  recommendation: >-
+    # Office-hours: sign off on two heuristic choices in the phase-standup lens
+    (`tactic-phase-standup-audit-lens`, PR #2880)
+
+
+    ## What you're deciding
+
+
+    This is **not** a code review. Every mechanically checkable QA item already
+
+    passed — both test suites (182/182, 36/36), syntax, lens shape/keys, file
+
+    location, and SKILL.md doc consistency. CI is green and no bugs were found.
+
+
+    What's left is two design-taste sign-offs that the autonomous fix-planner
+
+    refused to make on its own, because a wrong call here silently corrupts the
+
+    baseline that two blocked sibling tactics
+
+    (`tactic-thin-oversized-skill-bodies`, `tactic-phase-boot-offload-launcher`)
+
+    will measure their before/after against:
+
+
+    1. **Is the scriptable/judgment substring list reasonable?**
+
+    2. **Is the boot-preamble heuristic a good-enough measurement instrument?**
+
+
+    The lens is an internal engineering-measurement tool, not user-facing
+    behavior.
+
+    "Good enough to trust a before/after comparison" is the bar — not
+    perfection.
+
+
+    ## Where to look
+
+
+    - **The classifier substring list** — `is_scriptable` def at
+      `.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh:563-566`,
+      and the list itself defined as `$scriptable_subs` at
+      `aggregate-usage.sh:877-878`:
+      `dispatch-context-pack`, `dispatch-check-blockers`, `dispatch-`,
+      `git merge`, `git fetch`, `git status`, `gh pr`, `gh issue`.
+      Note the substrings match the `cmd_prefix` 2-token form (e.g.
+      `Bash:gh pr`), per the comment at lines 561-562.
+    - **The lens computation** — the `$phase_standup_lens` jq block at
+      `aggregate-usage.sh:851-928`. The three proxies to judge:
+      `scriptable_round_trips` (median leading run of consecutive scriptable
+      calls, lines 891-896), `judgment_calls` (median non-scriptable count in the
+      first 8 opening calls, lines 898-900), and `skill_body_tokens` (a `bytes/4`
+      estimate, line 917).
+    - **The lens-10 doc paragraph** —
+    `.claude/skills/dispatch-token-audit/SKILL.md:115`.
+
+
+    ## How to sanity-check item 7 quickly (don't reason about the list in the
+    abstract)
+
+
+    Run `/dispatch-token-audit` over a real window and inspect the
+
+    `boot_preamble.ngrams` output for the `qa` and `review` phases. Each n-gram
+
+    token is tagged `scriptable` or `judgment` by this same classifier. Read the
+
+    split against what the transcripts actually did:
+
+
+    - Are the mechanical `gh`/`git`/`dispatch-*` boot calls landing in
+      `scriptable`? (No gross false negatives — a common mechanical call missed.)
+    - Is anything that's really a judgment call getting tagged `scriptable`?
+      (No gross false positives.)
+
+    Real transcript data will show this in seconds; the substring list is easy
+    to
+
+    adjust if the split looks off.
+
+
+    ## How to sanity-check item 8
+
+
+    With real data in hand, confirm the `qa` phase shows a materially higher
+
+    `scriptable_round_trips` than `review` — roughly 6-7 vs 3-4, per the node
+
+    body's grounding (and the expectation baked into the code comment at
+
+    `aggregate-usage.sh:869-872`). If that gap shows up, the instrument is
+
+    discriminating the phases correctly and is doing its job — the `bytes/4`
+    token
+
+    count being a coarse estimate is fine, because the two sibling tactics
+    compare
+
+    the *same* estimate before and after, so the systematic coarseness cancels.
+
+
+    ## Outcome
+
+
+    - **If both look reasonable** — approve/merge `#2880` as-is. There is
+    nothing
+      to fix; the machine-checkable work is already done.
+    - **If the substring list or a proxy needs adjusting** — it's a small
+      follow-up edit to `aggregate-usage.sh` (add/remove a substring, or tweak the
+      `$boot_window`/run definition), not a redesign. The lens shape and doc stay
+      as they are.
 pace_exempt: false
 rounds: null
 attributes: {}

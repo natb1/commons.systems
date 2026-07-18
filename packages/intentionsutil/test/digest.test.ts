@@ -73,8 +73,15 @@ function section(out: string, tag: string): string {
 
 /** A minimal closed graph: the kind nodes, a virtue, a strategy, a tactic. */
 function closedGraph(): IntentionNode[] {
+  // Every fixture node here defaults to status "raw" (anode()'s default), so
+  // each kind node's status_vocabulary just needs to cover "raw"; "codified"
+  // is included too to mirror the default schema.test.ts's gnode() applies.
+  const statusVocabulary = { raw: "Not yet started.", codified: "Complete." };
   return [
-    ...kinds(),
+    ...kinds().map((n) => ({
+      ...n,
+      attributes: { ...n.attributes, status_vocabulary: statusVocabulary },
+    })),
     anode({ id: "virtue-root", kind: "virtue" }),
     anode({ id: "strategy-a", kind: "strategy", serves: ["virtue-root"] }),
     anode({ id: "tactic-a", kind: "tactic", serves: ["strategy-a"], validates: ["strategy-a"] }),

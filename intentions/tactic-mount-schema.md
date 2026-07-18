@@ -32,8 +32,7 @@ execution:
   strategy_fingerprint: 04aa02adec88a3145460aa90242ca47578f633087667aba014c921593e28d1b3
 validates:
   - strategy-graph-mounts
-blocked_by:
-  - tactic-nontactic-body-durability
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
