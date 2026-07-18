@@ -64,10 +64,16 @@ The gap, confirmed by reading the selector at `origin/main`:
   `execution.markers` either.
 
 Result: a fully-reviewed node is re-dispatched `/review-fix` every tick — observed
-this session on `tactic-graph-node-lane-write-hardening` / PR #2882. It is a no-op
-only because that node's own gap-(e) hardening added the node-lane review-fix
-re-entry check (skip Steps 1–6 when `reviewed ∈ execution.markers`), but it still
-consumes a worker slot each tick.
+this session on `tactic-graph-node-lane-write-hardening` / PR #2882. **Correction
+during finalization:** `/review-fix`'s existing re-entry short-circuit
+(`.claude/skills/review-fix/SKILL.md`) is gated on the **`dispatch:reviewed`
+GitHub label**, and the node-target lane explicitly does **not** apply that label
+(`SKILL.md`'s "Node-target lane" section: "Do **not** apply `dispatch:reviewed`
+via `dispatch-complete-phase`" — it records the `reviewed` marker in
+`execution.markers` instead). So on `origin/main` today there is **no**
+marker-gated re-entry check on the node lane: a re-dispatched reviewed node
+re-runs the **full** review pass every tick, not a no-op — a real, live cost,
+not a latent one.
 
 ## Desired behavior (from the interview)
 
@@ -127,7 +133,7 @@ already-existing fixture helpers.
 
 Scope:
 - `packages/intentionsutil/src/router.ts` — in the tactic-candidate loop inside
-  `selectGraphTargets` (currently `router.ts:288-303`; body:
+  `selectGraphTargets` (currently `router.ts:289-303`; body:
   ```ts
   for (const t of tactics) {
     if (t.office_hours !== null) continue;
@@ -139,9 +145,10 @@ Scope:
   ```
   ), add one more guard before the `candidates.push(...)`: skip a tactic when
   `t.phase === "review"` and `t.execution?.markers.includes(REVIEWED_MARKER)`.
-  Import `REVIEWED_MARKER` from `./transitions.js` (already exported at
-  `transitions.ts:30`; router.ts does not currently import anything from
-  `transitions.ts`, so this is a new import line at the top of the file).
+  `router.ts:3` already has `import { isStrategyStale } from "./transitions.js";`
+  — extend that **existing** import to `import { isStrategyStale, REVIEWED_MARKER
+  } from "./transitions.js";` (do not add a second `transitions.js` import line;
+  `REVIEWED_MARKER` is exported at `transitions.ts:30`).
 - Out of scope: any other candidate loop (strategy candidates, frozen-tactic
   re-evaluation candidates) — the `reviewed` marker is only ever written at
   `phase: "review"` completion (`PHASE_COMPLETION_MARKER.review`,
@@ -261,15 +268,35 @@ them):**
   currently asserts only `.phase`) — add a new assertion there (or a new `it`)
   that `clearMarkers` equals `[QA_DONE_MARKER, REVIEWED_MARKER]` when the
   incoming `markers` fixture includes `REVIEWED_MARKER`.
-- `packages/intentionsutil/test/apply-node-transition.test.ts` — the existing
-  `"interrupts review→fix on failing CI without writing a marker"` case (line
-  74) should gain an assertion that, when the node starts with
-  `execution.markers: [PLANNED_MARKER, QA_DONE_MARKER, REVIEWED_MARKER]`, the
-  written node's `execution.markers` after the transition equals
-  `[PLANNED_MARKER]` (both `QA_DONE_MARKER` and `REVIEWED_MARKER` dropped).
-  Add a second case: leaving `fix` with `ci: "passing"` from that same
-  markers-minus-two state resumes at `phase: "qa"` (not `"review"`), confirming
-  the resume-cascade fallthrough end to end.
+- `packages/intentionsutil/test/apply-node-transition.test.ts` — `seedTactic`
+  (this file's own helper, ~line 14) only sets a fixed `phase`/`body` with
+  `execution: null`; it has no parameter for pre-seeding `execution.markers`, so
+  a node starting with `[PLANNED_MARKER, QA_DONE_MARKER, REVIEWED_MARKER]` must
+  be built by **chained `applyNodeTransition` calls** against a real temp store,
+  the same pattern the existing "demotes to implement on scope-stale" case (line
+  ~91) already uses for a two-hop `[planned, qa-done]` state. Add a new test:
+  ```ts
+  it("interrupts a fully-reviewed tactic to fix and clears qa-done + reviewed", () => {
+    const dir = tempDir();
+    seedTactic(dir, "implement", "# body\n");
+    applyNodeTransition({ ...baseArgs, dir }); // implement→qa (planned)
+    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // qa→review (qa-done)
+    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // review armMerge (reviewed), phase stays review
+    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["planned", "qa-done", "reviewed"]);
+
+    const r = applyNodeTransition({ ...baseArgs, dir, ci: "failing" }); // fix interrupt
+    expect(r.phase).toBe("fix");
+    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["planned"]);
+
+    const r2 = applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // leaves fix
+    expect(r2.phase).toBe("qa"); // NOT "review" — resumeAfterFix falls through to planned-only
+  });
+  ```
+  This is a single new `it`, not a modification of the existing
+  "interrupts review→fix on failing CI without writing a marker" case (which
+  seeds `phase: "review"` directly with no prior markers and stays correct
+  unchanged — its assertion `markers: []` still holds since there was nothing to
+  clear).
 
 ## Verification
 
