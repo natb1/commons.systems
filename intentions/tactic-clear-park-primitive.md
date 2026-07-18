@@ -1,10 +1,11 @@
 ---
 id: tactic-clear-park-primitive
 kind: tactic
-statement: Add a scripted atomic clear-park primitive (inverse of park-node) and
-  make it the drain lane's mandatory terminal park disposition
+statement: Add a scripted atomic clear-park primitive (inverse of park-node)
+  that the self-modification drain lane invokes as its mandatory terminal park
+  disposition
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: Surfaced 2026-07-18 align-strategy interview recording the drain-lane
   terminal-disposition requirement (strategy-graph-native-dispatch clarification
@@ -25,7 +26,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: implement
 execution: null
 validates: []
 blocked_by: []
@@ -35,64 +36,130 @@ rounds: null
 attributes: {}
 ---
 
-# Scripted atomic clear-park primitive + mandatory drain-lane terminal disposition
+# Scripted atomic clear-park primitive
 
-Draft context for `/align-tactics` — retained from the 2026-07-18
-`/align-strategy` interview that recorded `strategy-graph-native-dispatch`
-clarification 65. Not yet planned into units.
+## Context
 
-## Why
+`park-node` (`packages/intentionsutil/scripts/park-node`) sets a node's
+first-class `office_hours` field and lands it on `main` through `graph-commit`.
+It has **no scripted inverse**. A parked node's `office_hours` is cleared today
+only by (1) clarification 4's incidental side-effect — *any* interactive commit
+that touches the node's own frontmatter — or (2) a hand-rolled inline
+`readNode → office_hours = null → writeNode → graph-commit` sequence.
 
-`park-node` (`packages/intentionsutil/scripts/park-node`) has no scripted
-inverse. A parked node's `office_hours` field is cleared today only by:
+The self-modification **drain** lane triggers neither reliably: its fix commit
+lands on the **PR branch** and never touches the node's `office_hours` field, so
+the incidental clear (1) never fires, and the separate inline clear (2) is not
+forced by session termination and so is forgettable. The observed live failure:
+`tactic-phase-standup-audit-lens` went park → drain (fix pushed, CI green) →
+**re-park** → clear across separate sessions because the terminal clear was
+never atomic with the drain.
 
-1. clarification 4's incidental side-effect — *any* interactive commit that
-   touches the node's frontmatter — which the self-modification **drain** lane
-   never triggers, because the drain's fix commit lands on the **PR branch** and
-   never touches the node's `office_hours` field; or
-2. a hand-rolled inline `readNode → office_hours=null → writeNode → graph-commit`
-   sequence, which is separate from the fix push, not forced by session
-   termination, and therefore forgettable.
+`strategy-graph-native-dispatch` clarification 65 makes the fix mandatory: the
+drain lane must **terminate** with an explicit park disposition executed through
+a scripted atomic primitive — `clear-park` on green CI, `park-node` (re-park) on
+red/blocked CI — never leaving a drained node ambiguous. This tactic delivers
+that `clear-park` primitive. (Wiring it into the drain skill is the separate
+`tactic-office-hours-self-modification-skill`; the emulated drain prompt
+`~/prompt-emulated-office-hours.md`, outside this repo, already invokes
+`clear-park` with an emulation fallback until the script lands — both are out of
+scope here.)
 
-The live failure: `tactic-phase-standup-audit-lens` went park → drain (fix
-pushed, CI green) → **re-park** → clear across multiple sessions, because the
-terminal clear was never atomic with the drain.
+## Units of work
 
-## What
+### Unit 1 — Add `packages/intentionsutil/scripts/clear-park`
 
-Add `packages/intentionsutil/scripts/clear-park`, the exact inverse of
-`park-node`:
+**Recommended model:** sonnet
 
-- Usage: `clear-park <node-id> [note]`
-- Writes via `store.ts` `readNode → node.office_hours = null → writeNode`
-  (authors no markdown itself, same as `park-node`).
-- Lands on `main` through the `graph-commit` primitive:
-  `graph-commit -m "graph: clear office_hours park on <node-id> (<note>)" <node-id>`.
-- Exit codes mirror `park-node`: 0 cleared and landed / 1 write-or-commit
-  failed / 2 usage.
+**Scope.** Create one new executable bash script,
+`packages/intentionsutil/scripts/clear-park`, as the exact inverse of
+`park-node` (`packages/intentionsutil/scripts/park-node:1`). Mirror park-node's
+structure line-for-line, changing only the write payload and the commit message:
 
-This generalizes the one-off manual clear-park sequence noted in
-`tactic-tick-scriptable-then-spawn`'s body into a first-class primitive.
+- **Usage:** `clear-park <node-id> [note]` — exactly one required arg (the node
+  id) and an optional free-text `note` folded into the commit message. Reject
+  `$# < 1`, `$# > 2`, or an empty node id with a `usage:` line on stderr and
+  `exit 2` (park-node's usage-guard shape, `park-node:44-48`, adjusted for the
+  1–2 arg count).
+- **Path/module resolution:** copy park-node's `SCRIPT_DIR` / `REPO_ROOT` /
+  `INTENTIONS_DIR` / `STORE_MODULE` block verbatim (`park-node:31-35`).
+- **Write payload:** in the throwaway `.mts` heredoc, do
+  `const node = readNode(intentionsDir, id); node.office_hours = null;
+  writeNode(intentionsDir, node);` — the inverse of park-node's
+  `node.office_hours = { reason, since, recommendation }` assignment
+  (`park-node:63-71`). Author no markdown; go through `store.ts`'s
+  `readNode`/`writeNode` exactly as park-node does. `clear-park` needs **no**
+  `reason`/`since`/`recommendation` — drop those argv slots from the heredoc.
+- **Already-cleared guard (intentional, not a fallback):** after `readNode`, if
+  `node.office_hours` is already `null`, print an informative stderr note
+  (`clear-park: <id> is not parked (office_hours already null); nothing to do`)
+  and `exit 0` **without** calling `graph-commit`. This is deliberate idempotent
+  behavior — clearing an unparked node is a no-op, and skipping the commit avoids
+  a `graph-commit` empty-diff failure. It is a clear boundary decision, not a
+  buried error-hiding fallback (`.claude/rules/code-style.md`). Have the heredoc
+  signal the guard to the outer shell (e.g. `process.exit(3)` from the `.mts` on
+  already-null, and let the bash wrapper translate exit-3 → the note + `exit 0`;
+  any other non-zero heredoc exit → the write-failed path + `exit 1`).
+- **Land on main:** on a real clear, land via the `graph-commit` primitive with
+  `-m "graph: clear office_hours park on <node-id> (<note>)"` — omit the
+  `(<note>)` suffix when `note` is empty (`park-node:88-91` is the model call).
+  `graph-commit` is the only main-landing path; never push/commit to main
+  directly.
+- **Exit codes** mirror park-node (`park-node:26-28`): `0` cleared and landed on
+  main (or already-clear no-op); `1` the write or graph-commit failed; `2` usage
+  error.
+- **Header comment:** open with a park-node-style block comment naming this as
+  the scripted inverse, citing clarification 65 and the drain-lane terminal
+  disposition, and noting the already-cleared no-op behavior.
+- `chmod +x` the new file (park-node is executable; match its mode).
 
-## Requirement it satisfies (clarification 65)
+Out of scope: any change to `park-node`, `graph-commit`, `store.ts`,
+`schema.ts`, the drain skill (`tactic-office-hours-self-modification-skill`), or
+the emulated prompt.
 
-The self-modification drain lane must **terminate** with an explicit, mandatory
-park disposition executed through the scripted primitive — never leaving a
-drained node in an ambiguous still-parked state:
+**Dependencies.** None.
 
-- **green CI** → `clear-park <node-id> <note>` (office_hours → null on main);
-- **red / blocked CI** → re-park via `park-node <node-id> <updated-reason>`.
+## Reuse
 
-The read-only human office-hours lane is unchanged: it drains nothing and
-legitimately never un-parks (clarification 4's side-effect clear still governs
-it, per `.claude/skills/office-hours/SKILL.md`).
+- `packages/intentionsutil/scripts/park-node` — the script to mirror
+  line-for-line; invert only the `office_hours` assignment and the commit
+  message, and drop the `reason`/`recommendation` args.
+- `packages/intentionsutil/src/store.ts` `readNode` / `writeNode` — the sole
+  validated read/write path (already unit-tested by
+  `packages/intentionsutil/test/store.test.ts`); `clear-park` authors no YAML
+  itself.
+- `packages/intentionsutil/scripts/graph-commit` — the only path that lands a
+  node edit on `main` (stamps the four required checks via the `graph/**` fast
+  path, then fast-forwards). Called exactly as park-node calls it.
 
-## Scope pointers
+## Verification
 
-- `packages/intentionsutil/scripts/park-node` — the script to mirror.
-- `packages/intentionsutil/scripts/graph-commit` — the only main-landing write path.
-- `tactic-office-hours-self-modification-skill` — the drain skill that must call
-  `clear-park` as its terminal step once implemented.
-- `~/prompt-emulated-office-hours.md` — the emulated drain prompt, updated in the
-  same 2026-07-18 round to invoke `clear-park` (emulating it via the inverse
-  sequence until the script lands).
+`clear-park` is a thin bash wrapper whose only real work — `readNode →
+office_hours=null → writeNode` — delegates to the already-tested `store.ts`, and
+whose landing delegates to `graph-commit` (which lands on `main` and so is not
+exercised in an isolated unit test, exactly as its sibling `park-node` carries
+no unit test). Verification is therefore mostly inspection plus a store-level
+round-trip, matching the sibling's posture:
+
+- Structural inspection: `clear-park` mirrors `park-node`'s arg-guard,
+  path-resolution, heredoc, and `graph-commit` invocation, differing only in the
+  `office_hours = null` payload, the dropped `reason`/`recommendation` args, the
+  already-cleared no-op guard, and the commit message.
+
+- The `store.ts` round-trip the script relies on (write `office_hours` non-null,
+  read it back null after clearing) is covered by the existing suite:
+
+```verify
+npx vitest run --project intentionsutil --root .
+```
+
+- Manual/observe-in-production (not auto-runnable, `graph-commit` lands on
+  `main`): against a genuinely parked scratch node, run
+  `./packages/intentionsutil/scripts/clear-park <node-id> "test note"`
+  (sandbox off — it needs network/daemon/TLS) and confirm
+  `git show origin/main:intentions/<node-id>.md` shows `office_hours: null` and
+  the commit message reads `graph: clear office_hours park on <node-id> (test
+  note)`. Re-running it on the now-unparked node prints the not-parked note and
+  exits 0 without a new commit (idempotency). The full drain-lane terminal
+  disposition is exercised in production once
+  `tactic-office-hours-self-modification-skill` wires the call.
