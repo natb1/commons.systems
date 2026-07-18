@@ -463,6 +463,29 @@ describe("validateNode", () => {
     ).toThrow();
   });
 
+  it("accepts any non-empty status string (status is not a central enum)", () => {
+    const result = validateNode({
+      id: "n3d",
+      kind: "tactic",
+      statement: "Custom kind-specific status.",
+      owner: "human",
+      status: "anything-nonempty",
+    });
+    expect(result.status).toBe("anything-nonempty");
+  });
+
+  it("rejects an empty-string status", () => {
+    expect(() =>
+      validateNode({
+        id: "n3e",
+        kind: "tactic",
+        statement: "Empty status.",
+        owner: "human",
+        status: "",
+      }),
+    ).toThrow(/status must be a non-empty string/);
+  });
+
   it("rejects a bad enum value", () => {
     expect(() =>
       validateNode({
@@ -656,7 +679,14 @@ describe("validateGraph", () => {
       office_hours: partial.office_hours ?? null,
       pace_exempt: partial.pace_exempt ?? false,
       rounds: partial.rounds ?? null,
-      attributes: partial.attributes ?? {},
+      // Default status_vocabulary covers the "raw"/"codified" statuses these
+      // fixtures use, so kind-node fixtures satisfy rule 16 (every node's
+      // status must be a key in its kind node's status_vocabulary) without
+      // every test needing to declare one explicitly. Tests that need to
+      // exercise rule 16 itself pass their own `attributes` to override this.
+      attributes: partial.attributes ?? {
+        status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+      },
     };
   }
 
@@ -670,7 +700,10 @@ describe("validateGraph", () => {
         id: "kind-strategy",
         kind: "kind",
         status: "codified",
-        attributes: { goal_layer: true },
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
       }),
       gnode({ id: "kind-delegation", kind: "kind", status: "codified" }),
       gnode({ id: "virtue-root", kind: "virtue", status: "codified", parent: null }),
@@ -934,13 +967,19 @@ describe("validateGraph", () => {
         id: "kind-strategy",
         kind: "kind",
         status: "codified",
-        attributes: { goal_layer: true },
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
       }),
       gnode({
         id: "kind-tactic",
         kind: "kind",
         status: "codified",
-        attributes: { goal_layer: true },
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
       }),
     ];
   }
@@ -1147,5 +1186,48 @@ describe("validateGraph", () => {
       gnode({ id: "tactic-c", kind: "tactic" }),
     ];
     expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  // --- Rule 16: status must be a key in the kind node's status_vocabulary --
+
+  it("passes when a node's status is a key in its kind node's status_vocabulary", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-tactic",
+        kind: "kind",
+        status: "codified",
+        attributes: { status_vocabulary: { codified: "Complete." } },
+      }),
+      gnode({ id: "tactic-1", kind: "tactic", status: "codified" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when a node's status is not declared in its kind node's status_vocabulary", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-tactic",
+        kind: "kind",
+        status: "codified",
+        attributes: { status_vocabulary: { codified: "Complete." } },
+      }),
+      gnode({ id: "tactic-1", kind: "tactic", status: "raw" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: status "raw" is not declared in kind-tactic's status_vocabulary/,
+    );
+  });
+
+  it("throws when a kind node has no attributes.status_vocabulary declared", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified", attributes: {} }),
+      gnode({ id: "tactic-1", kind: "tactic", status: "raw" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: kind-tactic has no attributes\.status_vocabulary declared/,
+    );
   });
 });

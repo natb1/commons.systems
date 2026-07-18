@@ -7,10 +7,17 @@ export type Owner = "human" | "ai" | "procedure";
 
 export const OWNERS: readonly Owner[] = ["human", "ai", "procedure"];
 
-/** Lifecycle stage of a node as it moves from raw intention to codified work. */
-export type Status = "raw" | "refining" | "delegated" | "codified";
+/**
+ * Lifecycle stage of a node as it moves from raw intention to codified work.
+ * Widened to `string`: the set of valid statuses is per-kind data (each kind
+ * node's `attributes.status_vocabulary`), not a central enum in code —
+ * enforced by `validateGraph`, not `validateNode` (which has no graph
+ * context). `STATUSES` is kept as the legacy default vocabulary values for
+ * callers that still reference it.
+ */
+export type Status = string;
 
-export const STATUSES: readonly Status[] = ["raw", "refining", "delegated", "codified"];
+export const STATUSES: readonly string[] = ["raw", "refining", "delegated", "codified"];
 
 /** What kind of tooling a goal codifies. */
 export type ToolingKind = "actuator" | "sensor";
@@ -478,6 +485,10 @@ export function validateNode(value: unknown): IntentionNode {
   if (kind === "") {
     throw new IntentionSchemaError("kind must be a non-empty string");
   }
+  const status = requireString(value.status, "status");
+  if (status === "") {
+    throw new IntentionSchemaError("status must be a non-empty string");
+  }
 
   return {
     // Required core.
@@ -485,7 +496,7 @@ export function validateNode(value: unknown): IntentionNode {
     kind,
     statement: requireString(value.statement, "statement"),
     owner: requireOneOf(value.owner, OWNERS, "owner"),
-    status: requireOneOf(value.status, STATUSES, "status"),
+    status,
 
     // Optional scalars — absent/null tolerated, default null.
     parent: optionalString(value.parent, "parent"),
@@ -566,6 +577,9 @@ export function validateNode(value: unknown): IntentionNode {
  *  14. Every `validates` entry resolves to an existing `kind: "strategy"` node.
  *  15. `blocked_by` edges contain no cycle (a tactic transitively blocked by
  *      itself is invalid).
+ *  16. Every node's `status` must be a key in its kind node's declared
+ *      `attributes.status_vocabulary` (a missing declaration on the kind node
+ *      is itself an error).
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -723,6 +737,22 @@ export function validateGraph(nodes: IntentionNode[]): void {
         problems.push(
           `${node.id}: validates "${target}" must resolve to a kind "strategy" node, got kind "${targetNode.kind}"`,
         );
+      }
+    }
+    // Rule 16: status must be a key in the kind node's status_vocabulary.
+    {
+      const kindNode = byId.get(`kind-${node.kind}`);
+      if (kindNode !== undefined) {
+        const vocab = kindNode.attributes.status_vocabulary;
+        if (!isPlainObject(vocab) || Object.keys(vocab).length === 0) {
+          problems.push(
+            `${node.id}: kind-${node.kind} has no attributes.status_vocabulary declared`,
+          );
+        } else if (!Object.prototype.hasOwnProperty.call(vocab, node.status)) {
+          problems.push(
+            `${node.id}: status "${node.status}" is not declared in kind-${node.kind}'s status_vocabulary`,
+          );
+        }
       }
     }
   }
