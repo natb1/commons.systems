@@ -1745,6 +1745,75 @@ clarifications:
       tactics for per-node re-evaluation (the strategy-substance fingerprint
       includes clarifications); that re-evaluation is expected and
       author-directed here. Recorded 2026-07-18 /align-strategy interview."
+  - question: The dispatch phase-worker skills carry ad-hoc names (/align-tactics,
+      /implement, /fix-checks, /qa-fix, /review-fix, /qa-main, /fix-conflicts) —
+      what naming convention should they take, and how does renaming
+      /align-tactics reconcile with its align-family membership (clarification
+      45)?
+    answer: "A uniform dispatch-<phase> namespace for every skill the dispatch
+      script invokes: dispatch-plan (from /align-tactics), dispatch-implement
+      (from /implement), dispatch-fix (from /fix-checks, the CI-red interrupt of
+      clarification 18), dispatch-qa (from /qa-fix), dispatch-review (from
+      /review-fix), dispatch-main-qa (from /qa-main), plus dispatch-conflict
+      (from /fix-conflicts) — a graph-native conflict skill that auto-resolves
+      MECHANICAL conflicts (any conflict decidable from existing graph
+      requirements) and parks to office_hours only on conflicts requiring author
+      input on INTENTION, upgrading today's graph-commit-parks-on-any-conflict
+      behavior (retained as draft tactic-dispatch-conflict-greenfield). The
+      apparent collision with clarification 45 — which grouped /align-tactics in
+      the align family — is resolved by redrawing the family boundary at
+      records-vs-executes: the align family is the persistent-layer RECORDING
+      interface (/align alone — virtues, strategies, traditions, delegations),
+      and the dispatch-* family is the EXECUTION chain (plan then implement then
+      fix then qa then review then main-qa, plus conflict).
+      Planning/decomposition is execution, so /align-tactics becomes
+      dispatch-plan and its interactive strategy-decomposition role continues as
+      manual dispatch-plan invocation. /plan-issue is deprecated — superseded by
+      dispatch-plan — and is deleted, not renamed
+      (tactic-legacy-router-removal). Steelman (the branch=node-id claim
+      invariant already makes target resolution uniform, so the rename is
+      cosmetic): DIVERGED — a self-describing surface where skill name = phase
+      is a first-class requirement for its own sake, not cosmetic, and it rides
+      cheaply on the same atomic PR the input-contract change (clarification 68)
+      already touches. Both the naming and the contract change are legitimate
+      but LOW RANK (clarification 69). Implementation retained as draft
+      tactic-dispatch-skill-rename. Recorded 2026-07-18 interview."
+  - question: How do the dispatch phase skills receive their input — today they
+      infer the target from the worktree branch name, and only /align-tactics
+      takes an explicit node-id argument?
+    answer: "Each dispatch-* skill splits derivation (node to params) from execution
+      (params to work): the skill core executes from explicit structured params
+      — testable in isolation — and a thin front door accepts a node id and runs
+      a derivation script that emits those params, replacing today's
+      worktree-branch-name inference. Division of labor by invoker: the router
+      always passes the computed structured params directly (it holds the node
+      at selection, so it saves the derivation round-trip); the node-id +
+      derivation-script front door is primarily the manual/author invocation
+      path. The model to generalize is /align-tactics, which already takes an
+      explicit node-id argument. Value: removes the hidden branch-name coupling,
+      makes derivation and execution independently testable, and makes each
+      skill user-invocable with either explicit params or a bare node id.
+      Implementation retained as draft tactic-dispatch-skill-input-contract.
+      Recorded 2026-07-18 interview."
+  - question: These naming and interface requirements are legitimate but low
+      priority — how does the graph record such a greenfield requirement at low
+      rank so it never interferes with higher-ranked work, and is a structural
+      improvement needed?
+    answer: "As a backlog tactic (clarification 9): a fully-planned, selectable
+      tactic marked with the backlog flag /align-tactics stamps at
+      decomposition, off-path because it carries no validates edge to an
+      unvalidated signal, so calculated attention resolves it one rank tier
+      below every round tactic (clarification 11) and self-corrects upward only
+      if a future signal's path later includes the component. Off-path demotion
+      guarantees such a tactic never PREEMPTS higher-ranked work — the router
+      selects it only as slack, when nothing higher-ranked remains — which is
+      exactly the recorded, low-rank, non-interfering tracking the author asked
+      for; it is the graph-native analog of the enhancement label. Structural
+      assessment (the author asked to recommend improvements if required): NONE
+      required — the existing backlog-tactic plus off-path-demotion mechanism is
+      the structural support. This round's dispatch-rename, input-contract, and
+      conflict tactics are recorded as draft byproducts here and finalize as
+      backlog tactics. Recorded 2026-07-18 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
