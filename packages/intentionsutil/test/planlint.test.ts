@@ -132,13 +132,15 @@ describe("lintTacticBodies", () => {
     const dir = tempDir();
     writeRawNode(dir, { id: "tactic-a", body: "no markers\n" });
     writeRawNode(dir, { id: "tactic-b", body: "no markers\n" });
-    let message = "";
+    let caught: unknown;
     try {
       lintTacticBodies(dir, listNodes(dir));
     } catch (e) {
-      message = (e as Error).message;
+      caught = e;
     }
-    expect(message).toMatch(/tactic-a/);
-    expect(message).toMatch(/tactic-b/);
+    expect(caught).toBeInstanceOf(Error);
+    if (!(caught instanceof Error)) throw new Error("unreachable");
+    expect(caught.message).toMatch(/tactic-a/);
+    expect(caught.message).toMatch(/tactic-b/);
   });
 });
