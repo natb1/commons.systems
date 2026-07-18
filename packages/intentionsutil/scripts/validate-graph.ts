@@ -38,15 +38,26 @@ import { deletedNodeIds } from "./lib-deleted-node-ids.js";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const baselinePath = join(scriptDir, "..", "prose-ref-baseline.json");
 
-interface ProseRefBaselineEntry {
-  ref: string;
-  referencedBy: string;
+function isProseRefBaselineEntry(
+  value: unknown,
+): value is { ref: string; referencedBy: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "ref" in value &&
+    "referencedBy" in value &&
+    typeof value.ref === "string" &&
+    typeof value.referencedBy === "string"
+  );
 }
 
 /** Load the grandfather baseline as a Set of `"<ref>|<referencedBy>"` keys. */
 function loadBaseline(): Set<string> {
-  const entries = JSON.parse(readFileSync(baselinePath, "utf8")) as ProseRefBaselineEntry[];
-  return new Set(entries.map((e) => `${e.ref}|${e.referencedBy}`));
+  const parsed: unknown = JSON.parse(readFileSync(baselinePath, "utf8"));
+  if (!Array.isArray(parsed) || !parsed.every(isProseRefBaselineEntry)) {
+    throw new Error(`${baselinePath}: expected a JSON array of {ref, referencedBy} objects`);
+  }
+  return new Set(parsed.map((e) => `${e.ref}|${e.referencedBy}`));
 }
 
 function main(): void {
