@@ -9418,6 +9418,39 @@ if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "paused occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
 ca_teardown
 
+# --- Test 8e: exclude_sid self-exclusion (tactic-align-tactics-self-claim-collision) ---
+#
+# A graph-launched /align-tactics orchestrator is spawned with
+# `--name "$id"` — the same name as its own worktree basename — so its own
+# just-spawned session can otherwise self-match Step 0.2's live-claim check.
+# The optional exclude_sid argument lets a caller pass its own session id so
+# that self-match is excluded, while a genuinely different live session under
+# the same name still counts as a held claim.
+
+echo "Test: worktree_has_live_session with exclude_sid treats a self-named-match session as free"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"self-sess\",\"pid\":1,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR" "self-sess"; then live=occupied; else live=free; fi
+assert_eq "self-exclude: only-self session with exclude_sid reports free" "free" "$live"
+ca_teardown
+
+echo "Test: worktree_has_live_session with no exclude_sid still reports occupied for the same session"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"self-sess\",\"pid\":1,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "self-exclude: same session without exclude_sid reports occupied (backward compatible)" "occupied" "$live"
+ca_teardown
+
+echo "Test: worktree_has_live_session with exclude_sid still reports occupied for a different live session"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"other-sess\",\"pid\":2,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR" "self-sess"; then live=occupied; else live=free; fi
+assert_eq "self-exclude: a different live session with the same name still reports occupied" "occupied" "$live"
+ca_teardown
+
 # --- Test 9: claude_sessions_under invokes `claude` with --cwd <path> -------
 
 echo "Test: claude_sessions_under invokes claude with --cwd <path>"
