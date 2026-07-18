@@ -33,14 +33,16 @@ attention:
     resolved 16.333) so it is selected and finalized first — own boost 12 added
     to strategy-graph-native-dispatch's inherited 5.333 resolves to 17.333,
     clearing the max."
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-selector-reviewed-exclusion
   pr: 2888
   attempts: {}
   markers:
     - planned
-  strategy_fingerprint: null
+    - qa-done
+  strategy_fingerprint:
+    strategy-graph-native-dispatch: 5b3943b83e9651f7ae405a91510bcffb11f07817ecb99e976f13e0678b11c963
 validates: []
 blocked_by: []
 office_hours: null
@@ -325,3 +327,22 @@ npx vitest run --project intentionsutil --root .
   node-lane PR, confirm no `/review-fix` worker is dispatched to it post-review
   and the tick merges it, with Claude intervening only on a red-CI fix that then
   visibly re-runs qa and review.
+
+## needs-main residue
+
+- **id:** 8
+- **title:** End-to-end reviewed-exclusion observed in a live dispatch tick
+- **url_path:** current
+- **expected_outcome:** In production the reviewed lifecycle is entirely
+  tick-owned — no re-dispatched review worker on a reviewed node, and CI
+  regressions resume at qa.
+- **finding:** planned deferral — the node's own Verification section
+  documents this as observable only in production once the sibling
+  `tactic-graph-tick-node-lane-auto-merge` tactic also lands; explicitly
+  non-blocking for this tactic and not assertable at merge time. Measured
+  downstream once that sibling lands and a reviewed node-lane PR goes through
+  a live dispatch tick.
+
+## Interim-mechanism note (2026-07-18 re-evaluation)
+
+The red-CI marker-clear re-review this tactic ships (`decideTransition`/`fixInterrupt` in `transitions.ts`) is the interim mechanism: the fix-orthogonal greenfield (`strategy-graph-native-dispatch`, fix-orthogonal-execution-state clarification; carrier `tactic-fix-interrupt-orthogonal-state`, phase implement) replaces it with a direct `phase -> review` reset plus auto-merge disarm when a fix pushes code after review completed. This tactic's scope and plan are unchanged — it lands the interim mechanism; the replacement rides the carrier's migration step 4. Reconciled against the full strategy substance and stamped (map form) 2026-07-18 /align-strategy round.

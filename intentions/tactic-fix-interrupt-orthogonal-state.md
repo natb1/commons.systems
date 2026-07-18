@@ -6,7 +6,7 @@ statement: "Model the CI-fix interrupt as orthogonal execution state, not a
   resets phase to review directly instead of reconstructing position from
   markers"
 owner: ai
-status: raw
+status: codified
 parent: tactic-graph-native-dispatch
 rationale: "Surfaced in the 2026-07-18 /align-strategy interview questioning the
   two-step fix->implement->qa transition (observed on
@@ -14,13 +14,20 @@ rationale: "Surfaced in the 2026-07-18 /align-strategy interview questioning the
   overloads the single `phase` scalar with two orthogonal jobs -- ladder
   position and CI-fix-active -- so entering `fix` destroys ladder position,
   forcing the lossy resumeAfterFix marker-reconstruction (transitions.ts:116)
-  and the two-commit resume-then-advance. Author confirmed the greenfield
-  direction: split the scalar. Draft (retain-not-refine); a later /align-tactics
-  round decomposes it into PR-sized units. Doctrine unchanged -- fix is an
-  interrupt (clarification 18) and unreviewed code must never merge after a fix
-  (clarification 63); only the implementation mechanism changes, so no
-  strategy-clarification amendment (which would soft-freeze the ~20 open child
-  tactics of strategy-graph-native-dispatch)."
+  and the two-commit resume-then-advance. Greenfield direction
+  (author-confirmed): split the scalar -- `fix` leaves the phase enum and the
+  interrupt becomes an orthogonal execution.fix field. Finalized 2026-07-18 as a
+  single atomic PR (author office-hours decision, this session): schema-additive
+  execution.fix, transition/selector redesign, shell-layer repoint, then
+  live-node migration + fix-enum removal in one cutover. Doctrine unchanged --
+  fix is an interrupt (clarification 18) and unreviewed code must never merge
+  after a fix (clarification 63); only the mechanism changes. No
+  strategy-clarification amendment this round: finalizing/implementing changes
+  no strategy fingerprint (strategyFingerprint at router.ts:89 hashes
+  clarifications, not the schema PHASES enum), so it soft-freezes none of the
+  strategy open children. The now-stale fix-as-phase framing in clarifications
+  18/63, the 2026-07-04 main-qa ladder, and the phase ordinal is deferred
+  record-hygiene for a later /align-strategy pass."
 reading: null
 gap: null
 serves:
@@ -30,171 +37,235 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Major scope deviation for a per-node /align-tactics finalize. This
-    frozen draft is a backwards-incompatible, multi-PR migration that removes
-    `fix` from the phase enum (schema.ts:28) and splits it into an orthogonal
-    execution.fix interrupt-state. Scheduling it coherently requires strategy
-    edits the per-node finalize path structurally cannot make: amending
-    strategy-graph-native-dispatch clarifications 18 (fix-as-interrupt), 63
-    (reviewed-marker re-review), the 2026-07-04 main-qa ladder ordering
-    (main-qa->review->fix->qa->implement->align-tactics), and the phase ordinal
-    used in attention ranking
-    (draft<align-tactics<implement<fix<qa<review<main-qa) -- all of which
-    reference `fix` as a live phase and become factually wrong once the enum
-    value is removed. Those clarification amendments soft-freeze the 16 open
-    child tactics of strategy-graph-native-dispatch; the draft body explicitly
-    directs that this soft-freeze coincide with real subtree re-evaluation (a
-    strategy-target round), not a not-yet-scheduled isolated change. The
-    per-node finalize path also cannot decompose the required 4-step migration
-    subtree (additive schema -> dual-read -> one-time live-node migration ->
-    enum removal; 2 live phase:fix nodes exist today:
-    tactic-phase-standup-audit-lens, tactic-tailscale-shell-health-check) into
-    PR-sized units with blocked_by sequencing. Recommend: schedule this via a
-    strategy-target `/align-tactics strategy-graph-native-dispatch` round that
-    (a) decomposes the 4-step migration into a PR-sized subtree with blocked_by
-    edges, (b) folds in the pointer-amendments to clarifications 18/63 + the
-    main-qa ladder + the phase ordinal in the same round so the soft-freeze
-    coincides with subtree re-evaluation, and (c) sequences this work after
-    tactic-graph-selector-reviewed-exclusion (phase qa, boost 12), which ships
-    the interim marker-clear re-review that this redesign supersedes via
-    greenfield step 4 (direct phase->review reset). Alternatively, if the author
-    prefers to finalize this as a single atomic PR in isolation, clear this park
-    with that direction and the clarification/ordinal reconciliation handled
-    separately."
-  since: 2026-07-18
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # Fix as orthogonal interrupt state, not a phase value
 
-Draft retained by the 2026-07-18 `/align-strategy` interview
-(retain-not-refine, strategy clarification 6). A later `/align-tactics` round
-decomposes this into PR-sized units and writes the clean-session plans. This
-body carries the design decision and its consequences, not a finalized plan.
+## Context
 
-## Problem
+The router models the CI-fix interrupt as a value of the `phase` enum
+(`packages/intentionsutil/src/schema.ts:28`, `:38`). This overloads one scalar
+with two orthogonal concerns: **ladder position** (`implement → qa → review →
+main-qa → done`) and **fix-active** (is a CI-failure interrupt in flight). Because
+`phase` is a single field, entering `fix` *destroys* the ladder position, so
+`resumeAfterFix` (`transitions.ts:116-122`) reconstructs it from
+`execution.markers` — lossy for an in-progress phase (a fix mid-`implement`, no
+`planned` marker, resumes to `implement` then needs a *second* transition to
+`qa`; observed on `tactic-fingerprint-recipe-single-callsite` / PR #2885 as
+`fix → implement → qa`, two state-only commits). Worse, `resumeAfterFix` returns
+`done`/`main-qa` directly when the `reviewed` marker is present
+(`transitions.ts:118`), so a CI fix landing *after* review can auto-merge newly
+pushed code without re-review.
 
-The current router models the CI-fix interrupt as a value of the `phase` enum
-(`packages/intentionsutil/src/schema.ts:28`). This overloads one scalar with
-two orthogonal concerns:
+**Greenfield direction (author-confirmed):** `fix` leaves the phase enum. `phase`
+becomes purely ladder-positional and is never overwritten by a CI failure. A new
+orthogonal, nullable `execution.fix` interrupt-state carries the two jobs the
+phase overwrite was secretly doing: (a) **selector gating** — non-null tells the
+selector "dispatch `/fix-checks`, not the phase worker"; and (b) a
+**pending-CI concurrency guard** — a `pushed_sha` that survives the window
+between the fix worker pushing and CI re-reporting, so a not-yet-green re-run is
+not misread as "resume the phase worker." The one deliberate backward edge is
+**re-review**: when `/fix-checks` pushes code and review has already completed,
+the fix worker resets `phase → review` and disarms auto-merge (a correctness
+move — new code must be reviewed). With `phase` preserved, the common
+`fix → implement → qa` collapses to nothing: the node was at `implement`, stays
+at `implement`, and takes one forward edge when implement completes.
 
-1. **ladder position** — where on the success ladder the work sits
-   (`implement → qa → review → main-qa → done`), and
-2. **fix-active** — whether a CI-failure interrupt is currently in flight.
+**Shape:** one atomic PR (author decision). The change is backwards-incompatible
+(dropping the `fix` enum value breaks any node at `phase: fix`), so the code and
+the 2 live `phase: fix` nodes cut over together in a single merge rather than
+across sequenced deploys — no window where the enum is half-removed. The units
+below are additive-first so intermediate commits stay green; the enum removal and
+live-node migration are the final cutover unit.
 
-Because `phase` is a single field, entering `fix` **destroys** the ladder
-position. The code then has to *reconstruct* it from `execution.markers`:
-`resumeAfterFix` (`packages/intentionsutil/src/transitions.ts:116`) reads the
-completion markers (`planned`/`qa-done`/`reviewed`) to guess where to resume.
-That reconstruction is lossy for an *in-progress* phase — a fix that interrupts
-mid-`implement` (no `planned` marker yet) resumes to `implement`, then needs a
-*second* transition to advance to `qa`. Observed live on
-`tactic-fingerprint-recipe-single-callsite` / PR #2885: `fix → implement → qa`,
-two state-only commits on `main` to express "CI went green, carry on."
+**Supersedes the interim marker-clear re-review.** `tactic-graph-selector-
+reviewed-exclusion` (in flight, `phase: qa` at planning time) ships an interim
+re-review-after-fix via *clearing the `reviewed` marker*; that mechanism will be
+on `origin/main` by the time this implements. This tactic **replaces** it with
+the direct `phase → review` reset of the greenfield design (Unit 2) — remove the
+marker-clear path, keep the orthogonal selector-side reviewed-exclusion that
+tactic also owns. Not a hard `blocked_by` (author note: "does NOT block or
+duplicate"); merge order is naturally after the sibling.
 
-**Correctness defect the current model carries** (grounded in
-`transitions.ts:118`): `resumeAfterFix` returns `done`/`main-qa` directly when
-the `reviewed` marker is present, so a CI fix that lands *after* review has
-completed can auto-merge its newly-pushed code **without re-review**. Strategy
-clarification 63 (2026-07-18) records the requirement that closes this
-("unreviewed code must never reach merge") and its interim mechanism (fix
-dispatch clears the `reviewed` marker), but neither is implemented in
-`transitions.ts` yet. See the reconciliation note below.
+**Out of scope (deliberately deferred — author decision this session):** the
+stale *fix-as-phase framing* in `strategy-graph-native-dispatch` clarifications
+18 / 63, the 2026-07-04 main-qa ladder clarification, and the phase-ordinal prose
+in this spec node's body (`intentions/tactic-graph-native-dispatch.md` §3.1).
+The greenfield preserves their doctrine; only incidental wording goes stale, and
+nothing in code (`transitions.ts` / `router.ts` / `validate-graph`) reads that
+prose. Editing the strategy's `clarifications` would change its fingerprint and
+soft-freeze its ~16 open children, so it is left to a later `/align-strategy`
+pass. **Do not edit strategy frontmatter or the spec node in this PR.**
 
-## Greenfield design (fix leaves the phase enum)
+## Units of work
 
-Split the overloaded scalar into two orthogonal fields.
+### Unit 1 — Schema: add orthogonal `execution.fix` (additive, no removals)
 
-1. **`fix` leaves the phase enum.** `phase` becomes purely ladder-positional:
-   `implement → qa → review → main-qa → done`. It is never overwritten by a CI
-   failure.
-2. **A new orthogonal `execution.fix` interrupt-state** (nullable; shape TBD at
-   plan time, e.g. `{ since, attempt, pushed_sha }`). This is the state a node
-   must retain for an in-progress fix. It does two jobs the phase overwrite was
-   secretly doing:
-   - **selector gating** — it tells the selector "dispatch `/fix-checks`, not
-     the phase worker," and
-   - **pending-CI concurrency guard** — it survives the window between the
-     fix worker pushing and CI re-reporting, so a not-yet-green re-run is not
-     misread as "resume the phase worker" and a duplicate fix worker is not
-     spawned. (The worktree live-session lock already prevents two concurrent
-     workers on one node; this field carries the intent *across* the ticks when
-     no session is live.)
-3. **Selector precedence made explicit in data.** `execution.fix` active (or a
-   live red CI verdict) → fix worker; else → the phase worker for the preserved
-   `phase`. This is the same "CI verdict is checked BEFORE phase logic"
-   precedence the current `fixInterrupt` comment already admits
-   (`transitions.ts:98-107`) — the redesign moves it out of a phase overwrite
-   and into an orthogonal field the selector reads.
-4. **One deliberate backward edge (re-review).** When `/fix-checks` pushes code
-   and review has already completed (reviewed / merge-armed / `main-qa`), the
-   fix worker resets `phase → review` **and disarms auto-merge**. This is a
-   correctness move (new code must be reviewed), not a resume mechanism. When
-   the interrupt fires *before* review completes, `phase` is already at
-   `implement`/`qa`/`review` and is simply preserved — no special handling.
-5. **No `resumeAfterFix`, no marker-reconstruction, no two-step.** CI green +
-   no fix pending → clear `execution.fix`; the node is *already* at its correct
-   `phase` and the next tick takes its single normal forward edge. In the
-   common case `fix → implement → qa` collapses to *nothing*: the node was at
-   `implement`, stays at `implement`, and takes one forward edge when implement
-   completes.
-6. **`execution.markers` loses its load-bearing fix role.** Markers existed to
-   let `resumeAfterFix` reconstruct position; with `phase` preserved they are
-   no longer needed for the fix path. Whether to retire them entirely or keep
-   them for audit/idempotency (the reconciler and the reviewed-exclusion
-   selector still read `reviewed`) is a plan-time call for `/align-tactics` —
-   note the coupling with `tactic-graph-selector-reviewed-exclusion` below.
+**Scope.** In `packages/intentionsutil/src/schema.ts`:
+- Add a nullable `FixState` to the `Execution` type (`schema.ts:339-345`):
+  `fix: { since: string; attempt: number; pushed_sha: string | null } | null`.
+  `since` = interrupt date (`date -u +%Y-%m-%d`), `attempt` = fix-attempt
+  counter (replaces the `attempts["fix"]` convention), `pushed_sha` = the last
+  SHA `/fix-checks` pushed (the pending-CI guard; null before the first push).
+- Extend `validateExecution` (`schema.ts:422-433`) to validate `fix` (nullable
+  object; string `since`, number `attempt`, nullable-string `pushed_sha`).
+- Do **not** touch the `Phase` union (`:24-32`) or `PHASES` (`:34-43`) yet —
+  `fix` stays in the enum through Units 1-3 so live nodes keep validating.
+- Out of scope: transition/selector behavior, any removals.
 
-## Brownfield migration (backwards-incompatible, multi-PR)
+**Recommended model:** sonnet — bounded, additive type + validator work with a
+given shape.
 
-Dropping the `fix` enum value breaks any node currently at `phase: fix`, so the
-change is sequenced:
+**Dependencies:** none.
 
-1. **Additive schema.** Add `execution.fix` to the schema and validator; ships
-   first, changes no behavior.
-2. **Dual-read transition/selector.** Teach `decideTransition` and the selector
-   to read `execution.fix`, keeping `phase: "fix"` working in parallel.
-3. **One-time migration.** Migrate any live `phase: fix` node to `(preserved
-   phase + execution.fix set)`, reconstructing the preserved phase from markers
-   *once* at migration time — the last use of the lossy reconstruction.
-4. **Remove `fix` from the enum**; delete `fixInterrupt` and `resumeAfterFix`.
+### Unit 2 — Transitions + router: drive the interrupt off `execution.fix`
 
-## Reconciliation with in-flight and recorded work
+**Scope.** Rewrite the fix machinery to read/write `execution.fix` and preserve
+`phase`:
+- `packages/intentionsutil/src/transitions.ts`:
+  - `decideTransition` (`:166-212`): on `fixInterrupt` conditions
+    (`ci === "failing"` at an interruptible ladder phase — reuse the
+    `FIX_INTERRUPTIBLE` set semantics, `:95`), **set `execution.fix`** and
+    **leave `phase` unchanged**, instead of returning `{ phase: "fix" }`
+    (`:189`). On green CI with `execution.fix` set: **clear `execution.fix`**;
+    if the node is past review (has the `reviewed` marker / merge-armed), reset
+    `phase → review` and signal **disarm auto-merge** (the re-review edge);
+    otherwise leave `phase` as-is. Still-red CI holds with `execution.fix`
+    retained (replaces the `:198` stay-in-fix branch).
+  - Delete `resumeAfterFix` (`:116-122`) and its marker-reconstruction — with
+    `phase` preserved there is nothing to reconstruct. Retire the fix-specific
+    `LADDER`/`forwardPhase` comments (`:59`, `:71`) referencing `fix`.
+  - Extend `TransitionDecision` (`:127-143`) to express the fix write
+    (set/clear `execution.fix`, `disarmAutoMerge`) and phase-preservation.
+  - Keep `fixInterrupt` (`:105-107`) as the interrupt predicate (now gating an
+    `execution.fix` write, not a phase overwrite) — or inline it; implementer's
+    call.
+- `apply-node-transition.ts` (invoked by `transition-node`): apply the new
+  `execution.fix` set/clear + `disarmAutoMerge` writes.
+- `packages/intentionsutil/src/router.ts`: candidate emission (`:289-303`)
+  currently emits `phase` verbatim; ensure a node with `execution.fix` set is
+  emitted as a **fix candidate** regardless of its preserved `phase`, and a node
+  without it emits its `phase` worker. `progressionIndex` (`:194-199`) derives
+  from `PHASES`; no change needed here (Unit 4 removes `fix` from `PHASES` and
+  the ordinal self-adjusts). Retire the `fix` entry from the vestigial
+  `PHASE_LADDER` (`:34`) if it is dead; otherwise leave for Unit 4.
+- **Remove the interim marker-clear re-review** (from `tactic-graph-selector-
+  reviewed-exclusion`, on main by now); the direct `phase → review` reset above
+  replaces it. Preserve that tactic's orthogonal selector-side
+  reviewed-exclusion (reviewed nodes are not re-emitted as review candidates).
+- Update TS tests to the new semantics: `transitions.test.ts` (`fixInterrupt`
+  `:87-98`, `resumeAfterFix` `:103-112` — remove, `decideTransition` fix cases
+  `:141`/`:146`/`:152-153`, `incrementAttempt(e,"fix")` `:197-199`),
+  `router.test.ts` (`:147`, `:663`, `:696`), `apply-node-transition.test.ts:78`.
+  Add coverage for: fix preserves phase; post-review fix resets to review +
+  disarms; pending-CI guard (`pushed_sha` set, CI not yet green → no duplicate
+  dispatch, no premature resume).
 
-- **`tactic-graph-selector-reviewed-exclusion`** (phase `implement`, top-ranked
-  `boost: 12`) owns two things: (a) the selector excluding a `reviewed`-marked
-  node from review-worker candidacy — orthogonal to the fix model, retained
-  under any design; and (b) re-review-after-fix via the **marker-clear**
-  mechanism (fix dispatch clears `reviewed`, `resumeAfterFix` re-enters review).
-  Author decision 2026-07-18: **ship the interim marker-clear fix now** (it
-  closes the live unreviewed-merge bug observed on PR #2882) and let this
-  redesign **supersede that mechanism later** — when this tactic is scheduled,
-  re-review migrates from marker-clear to the direct `phase → review` reset of
-  greenfield step 4, and the marker-clear path is retired here. This tactic does
-  NOT block or duplicate `tactic-graph-selector-reviewed-exclusion`.
-- **Strategy clarifications 18 (fix-as-phase, 2026-07-04) and 63 (re-review,
-  2026-07-18)** encode the *doctrine* this redesign preserves (fix is an
-  interrupt; unreviewed code must never merge after a fix). Only the
-  *implementation mechanism* changes, so this round records no
-  strategy-clarification amendment — amending them would change the strategy's
-  substance fingerprint (`router.ts:88` includes `clarifications`) and
-  soft-freeze the ~20 open child tactics of `strategy-graph-native-dispatch`
-  (clarification 10; machinery live via the `done`
-  `tactic-graph-router-transitions`). The pointer-amendments to 18/63 (marking
-  their fix-as-phase / marker-clear framing superseded by this tactic) should be
-  folded into the `/align-tactics` round that *schedules* this work, so the
-  soft-freeze coincides with real re-evaluation of the subtree rather than
-  stalling the active fleet for a not-yet-scheduled change.
-- **Strategy clarification (2026-07-04 main-qa)** states "The phase ladder
-  becomes `main-qa → review → fix → qa → implement → align-tactics`" as the
-  attention-ranking order. Removing `fix` from the enum requires reconciling
-  that ranking order too — a plan-time item for the scheduling `/align-tactics`
-  round.
+**Recommended model:** opus — core orthogonal-state redesign; the re-review
+correctness edge, the concurrency-guard semantics, and the selector precedence
+are design-bearing and easy to get subtly wrong.
 
+**Dependencies:** Unit 1 (needs the `execution.fix` field).
+
+### Unit 3 — Shell dispatch layer: route the fix worker off `execution.fix`
+
+**Scope.** Repoint every consumer that currently branches on `phase == "fix"`:
+- `.claude/skills/dispatch-propagate/scripts/graph-select-target:195` — the
+  `sensor_gate` `fix|qa|review)` CI gate: gate the fix worker on `execution.fix`
+  being set (or a live red-CI verdict), not on `phase == fix`.
+- `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:126-135` —
+  the `case "$kind:$phase"` phase→skill map (`tactic:fix → /fix-checks`, `:129`):
+  dispatch `/fix-checks` when `execution.fix` is set, independent of the
+  preserved `phase`.
+- `packages/intentionsutil/scripts/check-node-selection.ts` — `SCOPE_CHAINED_PHASES`
+  (`:61`) and the worker-start literal phase-equality gate (`:161-177`): admit a
+  fix-selected node by its `execution.fix` state rather than `phase === "fix"`.
+- `.claude/skills/fix-checks/SKILL.md:50-51` — the preamble hard-gate
+  `if [ "$NODE_PHASE" != "fix" ]`: repoint to assert `execution.fix` is set at
+  origin/main (and update the references at `:35,187,206,345,368`).
+- Legacy gh-lane `fix-checks` label/PR-queue references (`dispatch-phase`,
+  `dispatch-select-target`, `dispatch-mark-complete`, `dispatch-phase-model`,
+  `dispatch-preflight.sh`) are the *label* phase, distinct from the graph enum —
+  leave unless they read the graph node's `phase`.
+
+**Recommended model:** opus — cross-cutting judgment across bash + a TS helper +
+a SKILL gate; each consumer must be repointed to the correct new signal without
+regressing the legacy label lane that shares the `fix-checks` name.
+
+**Dependencies:** Units 1, 2 (the field exists and the transition writes it).
+
+### Unit 4 — Cutover: migrate live nodes, then drop `fix` from the enum
+
+**Scope.**
+- One-time migration of every node currently at `phase: fix` to
+  `(preserved phase + execution.fix)`, reconstructing the preserved phase from
+  `markers` this once (the last use of the lossy mapping). Today:
+  - `intentions/tactic-phase-standup-audit-lens.md` — `markers: []`, `pr: 2880`
+    → preserved `phase: implement`, `execution.fix: { since, attempt: 1,
+    pushed_sha: null }`.
+  - `intentions/tactic-tailscale-shell-health-check.md` — `markers: [planned]`,
+    `pr: 2874` → preserved `phase: qa`, `execution.fix` set as above.
+  Re-scan for `^phase: fix$` at implement time (`grep -rl` in `intentions/`) in
+  case new ones appeared; migrate all. Land these node edits through
+  `write-node.ts` + `graph-commit` (never hand-edit YAML), preserving each
+  node's body.
+- Remove `"fix"` from the `Phase` union (`schema.ts:28`) and `PHASES`
+  (`schema.ts:38`); the `requireOneOf(value.phase, PHASES, "phase")` check
+  (`schema.ts:516`) then rejects any stray `phase: fix`.
+- Delete now-dead fix-phase code: the vestigial `PHASE_LADDER` fix entry
+  (`router.ts:34`) and any remaining `fix`-phase literals in `transitions.ts`
+  not already removed in Unit 2.
+- Final `validate-graph` clean and full suite green.
+
+**Recommended model:** sonnet — mechanical given the explicit marker→phase
+mapping and the single-line enum removals; the design decisions were made in
+Units 1-2.
+
+**Dependencies:** Units 1, 2, 3 (selector must read `execution.fix` before the
+live nodes leave `phase: fix`; enum removal must follow the migration).
+
+## Reuse
+
+- `FIX_INTERRUPTIBLE` set + `fixInterrupt` predicate (`transitions.ts:95,105-107`)
+  — the interrupt condition; reuse rather than re-deriving which phases interrupt.
+- `PHASE_COMPLETION_MARKER` / `reviewed` marker (`transitions.ts:30,33-37`) — the
+  "past review?" test for the re-review reset, and the one-time marker→phase
+  reconstruction in Unit 4.
+- `strategyFingerprint` (`router.ts:89`) — confirms this change touches no
+  fingerprint input (hashes `clarifications`, not `PHASES`), so no soft-freeze.
+- `write-node.ts` / `dump-node.ts` / `graph-commit` — the only sanctioned path
+  for the Unit 4 live-node migration (frontmatter via `write-node`, land via
+  `graph-commit --base`).
+- `validateExecution` (`schema.ts:422-433`) — extend the existing validator; do
+  not add a parallel one.
+
+## Verification
+
+```verify
+npx vitest run --project packages/intentionsutil --root .
+```
+
+```verify
+npx tsx packages/intentionsutil/scripts/validate-graph.ts
+```
+
+Manual / observe-in-production:
+- After Unit 4, `grep -rl '^phase: fix$' intentions/` returns nothing and no node
+  fails validation.
+- Drive a red-CI interrupt end-to-end on a scratch node: CI fails mid-`implement`
+  → `execution.fix` set, `phase` stays `implement`, `/fix-checks` dispatched
+  (not the implement worker); CI green → `execution.fix` cleared, node resumes at
+  `implement` and takes a single forward edge (no `fix → implement → qa`
+  double-commit).
+- Post-review re-review edge: with a `reviewed`-marked node, a `/fix-checks`
+  push resets `phase → review` and auto-merge is disarmed — newly pushed code
+  cannot merge unreviewed (the `transitions.ts:118` defect is closed).
+- Confirm the legacy gh-lane `fix-checks` label path still functions (shared
+  name, distinct mechanism) — it must not regress.
