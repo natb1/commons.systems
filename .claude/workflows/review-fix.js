@@ -1237,6 +1237,16 @@ if (laneAResidue.length === 0) {
 // --- 6. FILE-PREP (pure JS, no gh) -------------------------------------------
 phase('file');
 
+// Merge code-review's own applied fixes (laneAFixed, from the finders phase) and
+// the residue phase's applied resolves (laneAResidueFixed) into the terminal
+// fixed[] envelope array — appended here (in file-prep, AFTER fixedIds was already
+// computed in the earlier FIX phase) rather than earlier, because fixedIds is a
+// Lane-B-only membership set used by Lane-B's own upheldErosionIds/deferred_filings
+// logic and must NOT include Lane-A ids (Lane-A ids never appear in
+// deduped/keptFindings at all, so there is no collision risk either way — this
+// ordering is simply the natural integration point, not a correctness requirement).
+fixed.push(...laneAFixed, ...laneAResidueFixed);
+
 // 6a. Deferred code-review findings → deferred_filings.
 function shortTitle(desc) {
   const text = (desc || '').trim();
@@ -1292,6 +1302,11 @@ const deferred_filings = deduped
     };
   });
 
+// Append Lane-A's out-of-contract-and-expensive residue follow-ups (built by the
+// residue-phase subagent) to the same array the SKILL body files as blocked_by
+// follow-ups (or draft tactic nodes on a graph-node target).
+deferred_filings.push(...laneADeferred);
+
 // 6b. Out-of-scope codeql/npm findings → security_followup_input (pass fields through).
 const security_followup_input = deduped
   .filter(
@@ -1325,14 +1340,25 @@ const security_followup_input = deduped
 
 // --- 7. deviation + dispositions + return ------------------------------------
 
-// deviation: any Required + Upheld + high-confidence finding still unresolved after fixes.
-const deviation = keptFindings.some(
-  (f) =>
-    f.bucket === 'Required' &&
-    f.verify === 'Upheld' &&
-    f.Confidence === 'high' &&
-    !fixedIds.has(f.id)
-);
+// deviation: any Required + Upheld + high-confidence finding still unresolved after fixes,
+// OR (Lane-A) a confirmed high-severity in-contract security-review finding the residue
+// phase did not resolve. code-review is quality-only and never escalates; erosion is
+// Lane-B and untouched (non-escalation invariant intact for erosion).
+const deviation =
+  keptFindings.some(
+    (f) =>
+      f.bucket === 'Required' &&
+      f.verify === 'Upheld' &&
+      f.Confidence === 'high' &&
+      !fixedIds.has(f.id)
+  ) ||
+  residueDispositions.some(
+    (r) =>
+      r.source === 'security-review' &&
+      r.severity === 'high' &&
+      r.in_contract &&
+      !(r.disposition === 'resolve' && r.applied === true)
+  );
 
 function truncate(text, n) {
   const t = (text || '').trim().replace(/\s+/g, ' ');
@@ -1365,6 +1391,13 @@ const dispositions = deduped.map((f) => {
   }
   return entry;
 });
+
+// Append Lane-A's dispositions (code-review/security-review findings, resolved by
+// the built-ins themselves or dispositioned by the residue-phase subagent) so the
+// Step-6 PR comment renders them in the same Fixed/Required/Deferred/Informational
+// buckets as Lane-B. laneADispositions already carry recommended_fix for Fixed/
+// Required entries (built that way in the residue phase), so no transformation needed.
+dispositions.push(...laneADispositions);
 
 // --- outcome-envelope counts (Unit 3, issue #1860) ---------------------------
 // Computed per .claude/docs/outcome-envelope.md. Unit 4 passes these straight
