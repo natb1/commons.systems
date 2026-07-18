@@ -50,6 +50,7 @@ export const meta = {
     { title: 'classify' },
     { title: 'verify' },
     { title: 'fix' },
+    { title: 'residue' },
     { title: 'file' },
   ],
 };
@@ -211,6 +212,52 @@ const LANE_A_SCHEMA = {
           category: { type: 'string' },
           exploit_scenario: { type: 'string' },
           recommended_fix: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+// Disposition schema for the "residue" phase — the ONE opus subagent that
+// three-way dispositions every Lane-A residue item (resolve / defer / ignore),
+// applies "resolve" fixes to the working tree in-session, and reports the
+// disposition of each. `applied` is true ONLY for a resolve whose fix actually
+// landed. `followup_title`/`followup_body` are populated ONLY for defers.
+const RESIDUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['items'],
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'ref',
+          'source',
+          'severity',
+          'in_contract',
+          'disposition',
+          'applied',
+          'touched_files',
+          'fix_summary',
+          'rationale',
+          'followup_title',
+          'followup_body',
+        ],
+        properties: {
+          ref: { type: 'string' },
+          source: { enum: ['code-review', 'security-review'] },
+          severity: { enum: ['high', 'medium', 'low'] },
+          in_contract: { type: 'boolean' },
+          disposition: { enum: ['resolve', 'defer', 'ignore'] },
+          applied: { type: 'boolean' },
+          touched_files: { type: 'array', items: { type: 'string' } },
+          fix_summary: { type: 'string' },
+          rationale: { type: 'string' },
+          followup_title: { type: 'string' },
+          followup_body: { type: 'string' },
         },
       },
     },
@@ -1011,6 +1058,181 @@ const fixedIds = new Set(fixed.map((e) => e.id));
 const upheldErosionIds = new Set(
   keptFindings.filter((f) => f.Source === 'erosion' && f.verify === 'Upheld').map((f) => f.id)
 );
+
+// --- 5b. RESIDUE (ONE opus subagent, sequenced AFTER the fix fan-out) ---------
+// Lane-A findings (code-review, security-review) never entered the shared
+// dedup→classify→verify→fix pipeline: they are ALREADY CONFIRMED by the built-ins'
+// own internal verification. Their un-auto-fixed residue (laneAResidue, already
+// source-tagged in the finders phase) is dispositioned here by a single opus
+// subagent via a three-way resolve/defer/ignore rule; "resolve" fixes are applied
+// to the working tree IN-SESSION. This phase runs after the FIX phase's parallel
+// fan-out fully resolves so no two agents edit the working tree concurrently.
+phase('residue');
+
+// Local truncation — inlined to avoid an ordering dependency on the `truncate`
+// function declaration defined later in file-prep.
+const residueTruncate = (text) => (text || '').trim().replace(/\s+/g, ' ').slice(0, 140);
+// Blocker-issue attribution for defer filings — mirrors the Lane-B `blockerNums`
+// computation (defined later in file-prep); duplicated here since that const is
+// out of scope at this insertion point.
+const residueBlockerNums =
+  _a.implementing_issues && _a.implementing_issues.length
+    ? _a.implementing_issues
+    : 'independent';
+
+let residueDispositions = [];
+let laneAResidueFixed = [];
+let laneADispositions = [];
+let laneADeferred = [];
+
+if (laneAResidue.length === 0) {
+  log('residue: no Lane-A residue to disposition — skipping the subagent.');
+} else {
+  // Synthesize a stable ref id per item in array order so the agent can echo it
+  // back and we can zip its disposition to the original residue item by index.
+  const residueForAgent = laneAResidue.map((r, i) => ({
+    ref: `residue-${i}`,
+    location: r.location,
+    description: r.description,
+    severity: r.severity,
+    category: r.category,
+    exploit_scenario: r.exploit_scenario,
+    recommended_fix: r.recommended_fix,
+    source: r.source,
+  }));
+  const base = _a.merge_base || 'origin/main';
+  const filesStr = (_a.changed_files || []).join(', ') || '(see git diff HEAD)';
+  const residuePrompt = [
+    'You are the residue-disposition subagent for the trust-the-built-in review lane.',
+    'You are given a list of findings that the built-in /code-review and /security-review',
+    'skills surfaced but did NOT auto-fix. These findings are ALREADY CONFIRMED by the',
+    "built-ins' own internal verification (code-review's own review pass; security-review's",
+    'own confidence>=8 HIGH/MEDIUM false-positive filter). Do NOT re-run adversarial',
+    'skepticism or try to refute them — the only job is to DECIDE DISPOSITION and, for',
+    'resolves, apply the fix.',
+    '',
+    `Contract context: the pending diff is against merge base \`${base}\`. Changed files: ${filesStr}.`,
+    'Inspect the introduced diff read-only to judge whether each item is IN-CONTRACT: use',
+    `Bash/git (e.g. \`git diff ${base}...HEAD\`) or read the changed files, and reason about`,
+    "whether the finding concerns something the diff's own tactic/plan claims to deliver, or",
+    'the security/integrity of code the diff itself introduced, versus pre-existing surface',
+    'the diff merely touched.',
+    '',
+    'Apply this three-way rule EXACTLY:',
+    '- Resolve (apply the fix to the working tree): confirmed AND breaks the tactic\'s own',
+    "  contract — the deliverable its plan claims, or the security/integrity of what the diff",
+    '  itself introduced — ALWAYS, regardless of cost; OR confirmed out-of-contract AND cheaper',
+    '  to fix than to defer.',
+    '- Defer (file a follow-up, do not edit): confirmed, real, out-of-contract, and EXPENSIVE',
+    '  to fix (pre-existing surface the diff merely touched, defense-in-depth where the design',
+    '  already fails closed, robustness under conditions no signal path exercises).',
+    '- Ignore (audit-line only, no edit, no follow-up): refuted, unreachable failure scenario,',
+    '  below the meaningfulness threshold, or a fix that would add a defensive fallback contrary',
+    "  to this project's code-style rule (prefer clear errors over defensive fallbacks — no",
+    "  speculative validation for scenarios that can't happen).",
+    '',
+    'For every item disposed as "resolve": actually apply the fix in the working tree NOW.',
+    'Edit the working tree ONLY — make NO commits and NO pushes (a later step commits).',
+    'Read any file with the Read tool before your first Edit or Write to it in this session — the edit is rejected otherwise and the retry burns the tokens twice.',
+    '',
+    'Return { "items": [ ... ] } with EXACTLY one object per input item, each carrying:',
+    '- ref: the item\'s ref (echo it back unchanged)',
+    '- source: the item\'s source ("code-review" | "security-review")',
+    '- severity: the item\'s severity ("high" | "medium" | "low")',
+    '- in_contract: boolean — is this in the diff\'s own contract?',
+    '- disposition: "resolve" | "defer" | "ignore"',
+    '- applied: boolean — true ONLY if disposition is "resolve" AND you actually applied the fix',
+    '- touched_files: array of file paths you edited (empty if not applicable)',
+    '- fix_summary: one line describing what you changed (empty if not applicable)',
+    '- rationale: why this disposition',
+    '- followup_title: a short follow-up title (empty unless disposition is "defer")',
+    '- followup_body: the follow-up body (empty unless disposition is "defer")',
+    '',
+    `Findings to disposition:\n${JSON.stringify(residueForAgent, null, 2)}`,
+  ].join('\n');
+
+  subagentsLaunched += 1;
+  const residueRes = await agent(residuePrompt, {
+    model: 'opus',
+    agentType: 'general-purpose',
+    schema: RESIDUE_SCHEMA,
+    label: 'residue',
+    phase: 'residue',
+  });
+  const items = (residueRes && residueRes.items) || [];
+  residueDispositions = items;
+
+  // Zip each disposition back to its original residue item by ref index to recover
+  // location/description/category/exploit_scenario/recommended_fix (the schema does
+  // not carry these on the disposition object).
+  for (const item of items) {
+    const idx = Number(String(item.ref).replace(/^residue-/, ''));
+    const orig = laneAResidue[idx];
+    if (!orig) {
+      log(`residue: disposition ref ${item.ref} maps to no original residue item — skipping.`);
+      continue;
+    }
+    // Fixed entry for an applied resolve.
+    if (item.disposition === 'resolve' && item.applied === true) {
+      laneAResidueFixed.push({
+        id: item.ref,
+        location: orig.location,
+        fix_summary: item.fix_summary || '',
+        touched_files: item.touched_files || [],
+      });
+    }
+    // Deferred filing for a defer.
+    if (item.disposition === 'defer') {
+      const title =
+        (item.followup_title && item.followup_title.trim()) ||
+        residueTruncate(orig.description).slice(0, 80);
+      const body =
+        (item.followup_body && item.followup_body.trim()) ||
+        [
+          orig.description,
+          '',
+          `Recommended fix: ${orig.recommended_fix}`,
+          '',
+          `Rationale: ${item.rationale || ''}`,
+          '',
+          `Backlink: #${_a.pr_num}`,
+        ].join('\n');
+      laneADeferred.push({
+        title,
+        body,
+        blocker_issue_nums: residueBlockerNums,
+      });
+    }
+    // Disposition-audit entry. bucket mapping:
+    //   resolve + applied            → Fixed
+    //   resolve + NOT applied        → Required (in-contract, unresolved; not dropped)
+    //   ignore                       → Informational
+    //   defer                        → Deferred
+    let bucket;
+    if (item.disposition === 'resolve') {
+      bucket = item.applied === true ? 'Fixed' : 'Required';
+    } else if (item.disposition === 'ignore') {
+      bucket = 'Informational';
+    } else {
+      bucket = 'Deferred';
+    }
+    const entry = {
+      id: item.ref,
+      short_desc: residueTruncate(orig.description),
+      location: orig.location,
+      bucket,
+      sources: [item.source],
+    };
+    if (bucket === 'Fixed' || bucket === 'Required') {
+      entry.recommended_fix = orig.recommended_fix;
+    }
+    laneADispositions.push(entry);
+  }
+  log(
+    `residue: ${items.length} dispositioned — fixed=${laneAResidueFixed.length}, ` +
+      `deferred=${laneADeferred.length}, audit=${laneADispositions.length}`
+  );
+}
 
 // --- 6. FILE-PREP (pure JS, no gh) -------------------------------------------
 phase('file');
