@@ -177,6 +177,13 @@ export function applyNodeTransition(args: Args): ApplyResult {
     (!decision.hold && !decision.demote && decision.phase !== "fix" && decision.phase !== prevPhase);
   if (marker !== undefined && advanced) execution = addMarker(execution, marker);
 
+  // Strip any markers the decision cleared (the fix interrupt clears qa-done and
+  // reviewed so a resume out of fix re-runs qa and review). Runs for every
+  // decision carrying clearMarkers; a demotion below wholesale-clears anyway.
+  if (decision.clearMarkers.length > 0) {
+    execution = { ...execution, markers: execution.markers.filter((m) => !decision.clearMarkers.includes(m)) };
+  }
+
   // Apply the phase write. A demotion clears the completion markers so the
   // re-selected implement worker re-runs the ladder against the new scope.
   if (decision.demote) {

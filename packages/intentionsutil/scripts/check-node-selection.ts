@@ -49,7 +49,7 @@ import {
   strategyFingerprint,
   tacticScopeFingerprint,
 } from "../src/router.js";
-import { isFingerprintStale } from "../src/transitions.js";
+import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
 import { isPlainObject } from "../src/schema.js";
 import type { IntentionNode } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
@@ -121,6 +121,24 @@ function readStrategyFingerprint(node: IntentionNode): string | Record<string, s
 }
 
 /**
+ * The node's execution completion markers, first-class or squatter, else `[]`.
+ * Mirrors `readStrategyFingerprint`'s fall-back so the reviewed-marker guard
+ * honors the same squatter convention as the surrounding phase/park/fingerprint
+ * reads — a squatter node (attention-surface / token-economy subtree) carries
+ * `execution` under `attributes.execution`, where `node.execution` is null.
+ */
+function readMarkers(node: IntentionNode): string[] {
+  const firstClass = node.execution?.markers ?? null;
+  if (firstClass !== null) return firstClass;
+  const squatExec = node.attributes.execution;
+  if (squatExec !== null && typeof squatExec === "object" && "markers" in squatExec) {
+    const markers = (squatExec as { markers?: unknown }).markers;
+    if (Array.isArray(markers)) return markers.filter((m): m is string => typeof m === "string");
+  }
+  return [];
+}
+
+/**
  * Run the five re-validation checks against a store the caller guarantees is at
  * fresh origin/main. Pure: reads files, returns a result — no process exit, no
  * direct stdio. Throws only on a genuinely malformed store (a node file that
@@ -175,6 +193,19 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     }
   } else if (phase !== selectedPhase) {
     return fail(EXIT_STALE_SELECTION, "phase", `selected ${selectedPhase} but node is now ${phase ?? "draft/null"}`);
+  } else if (selectedPhase === "review" && readMarkers(node).includes(REVIEWED_MARKER)) {
+    // The pure selector (selectGraphTargets) already skips emitting a
+    // phase:review tactic once it carries the reviewed marker — the marker
+    // means the review pass already ran and the node is awaiting tick
+    // merge/fix, not a fresh review candidate. This is the execute-side
+    // mirror of that guard, catching a directive selected just before the
+    // marker landed (or a hand-run/explicit-dispatch invocation that bypassed
+    // the selector entirely).
+    return fail(
+      EXIT_STALE_SELECTION,
+      "phase",
+      `${nodeId} already carries the reviewed marker — awaiting tick merge/fix, not a review candidate`,
+    );
   }
 
   // 3. not parked — an author park landing after selection yields the worker.

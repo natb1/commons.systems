@@ -124,7 +124,7 @@ describe("decideTransition", () => {
 
   it("advances implement → qa on a clean pass", () => {
     const d = decideTransition({ ...base, phase: "implement" });
-    expect(d).toEqual({ phase: "qa", armMerge: false, hold: false, demote: false });
+    expect(d).toEqual({ phase: "qa", armMerge: false, hold: false, demote: false, clearMarkers: [] });
   });
 
   it("advances qa → review on a clean pass", () => {
@@ -133,13 +133,24 @@ describe("decideTransition", () => {
 
   it("arms auto-merge and writes no phase at clean review completion", () => {
     const d = decideTransition({ ...base, phase: "review" });
-    expect(d).toEqual({ phase: "review", armMerge: true, hold: false, demote: false });
+    expect(d).toEqual({ phase: "review", armMerge: true, hold: false, demote: false, clearMarkers: [] });
   });
 
   it("interrupts to fix on failing CI from any ladder phase", () => {
     for (const phase of ["implement", "qa", "review"]) {
       expect(decideTransition({ ...base, phase, ci: "failing" }).phase).toBe("fix");
     }
+  });
+
+  it("clears qa-done and reviewed on the fix interrupt so resume re-runs qa and review", () => {
+    const d = decideTransition({
+      ...base,
+      phase: "review",
+      ci: "failing",
+      markers: [PLANNED_MARKER, QA_DONE_MARKER, REVIEWED_MARKER],
+    });
+    expect(d.phase).toBe("fix");
+    expect(d.clearMarkers).toEqual([QA_DONE_MARKER, REVIEWED_MARKER]);
   });
 
   it("resumes out of fix at the marker-implied phase on green CI", () => {
@@ -150,18 +161,18 @@ describe("decideTransition", () => {
 
   it("stays in fix while CI is still red", () => {
     const d = decideTransition({ ...base, phase: "fix", ci: "failing" });
-    expect(d).toEqual({ phase: "fix", armMerge: false, hold: true, demote: false });
+    expect(d).toEqual({ phase: "fix", armMerge: false, hold: true, demote: false, clearMarkers: [] });
   });
 
   it("demotes to implement on a scope-fingerprint mismatch, before any other rule", () => {
     // Even with a clean forward path and a failing CI, scope-stale wins.
     const d = decideTransition({ ...base, phase: "review", ci: "failing", scopeStale: true });
-    expect(d).toEqual({ phase: "implement", armMerge: false, hold: true, demote: true });
+    expect(d).toEqual({ phase: "implement", armMerge: false, hold: true, demote: true, clearMarkers: [] });
   });
 
   it("holds at the completed phase on a strategy-fingerprint mismatch", () => {
     const d = decideTransition({ ...base, phase: "review", strategyStale: true });
-    expect(d).toEqual({ phase: "review", armMerge: false, hold: true, demote: false });
+    expect(d).toEqual({ phase: "review", armMerge: false, hold: true, demote: false, clearMarkers: [] });
   });
 
   it("scope-stale takes precedence over strategy-stale", () => {

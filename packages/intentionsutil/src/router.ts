@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
-import { isStrategyStale } from "./transitions.js";
+import { isStrategyStale, REVIEWED_MARKER } from "./transitions.js";
 import { PHASES } from "./schema.js";
 import type { IntentionNode, Phase } from "./schema.js";
 
@@ -293,6 +293,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     if (!isOpenTactic(t)) continue;
     if (frozenTacticIds.has(t.id)) continue;
     if (!blockersComplete(t, byId)) continue;
+    if (t.phase === "review" && t.execution?.markers.includes(REVIEWED_MARKER)) continue;
     candidates.push({
       id: t.id,
       kind: "tactic",
