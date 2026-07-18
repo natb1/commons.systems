@@ -38,7 +38,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: fix
+phase: implement
 execution:
   branch: tactic-graph-split-orphan-guard
   pr: 2899
