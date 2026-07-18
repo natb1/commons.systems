@@ -33,181 +33,34 @@ attention:
     strategy-token-economy carries no strategy-level boost, so the tactic
     carries the full weight itself; boost 15 clears the current working max
     (~14.5)."
-phase: qa
+phase: review
 execution:
   branch: tactic-phase-standup-audit-lens
   pr: 2880
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: scope-deviation on opus-fixable residue — both findings (10,
-    11) are subjective heuristic-design sign-offs, not code defects; resolving
-    them requires human agreement or an unauthorized heuristic redesign, not a
-    scoped code fix"
-  since: 2026-07-18
-  recommendation: >-
-    # Recommendation: tactic-phase-standup-audit-lens (PR #2880)
-
-
-    ## The one decision blocking merge
-
-
-    Everything mechanical passed — 182/182 + 36/36 tests green, CI green, lens
-    wired and documented, edge cases handled. The **only** thing standing
-    between this PR and merge is a sign-off on two heuristic-design judgment
-    calls (findings 10 and 11). No code needs to change to unblock; you are
-    being asked to render an engineering verdict, not to fix a defect.
-
-
-    This is the **second** identical park on this exact deviation. Attempt 0 hit
-    it, went through office-hours, review-fix landed two *unrelated* code fixes
-    (which did not touch the heuristic), and qa-fix re-ran and re-parked on the
-    same two items because the heuristic code is unchanged. **It will park here
-    every pass until you resolve it** — the loop does not self-terminate.
-
-
-    An automated disposition classifier plus two independent adversarial
-    skeptics all concluded Opus *could* soundly judge both items without you.
-    The fix-planner nonetheless refused to self-authorize "signing off on a
-    heuristic design." So the real question is authorization, and you have two
-    levels of it to answer.
-
-
-    ---
-
-
-    ## Decision A — the two heuristics (unblocks THIS PR)
-
-
-    You must personally accept or reject each. Both are low-stakes: this lens is
-    a **measurement instrument**, and its only consumers are two sibling tactics
-    (SKILL-body thinning; boot-preamble launcher offload) that read the
-    before/after delta. If a metric is slightly miscalibrated, the failure mode
-    is "the two downstream tactics measure their own improvement imprecisely" —
-    not a production defect, not user-facing, not hard to revise later.
-
-
-    ### Finding 10 — the scriptable/judgment substring list
-
-    `is_scriptable()` in `aggregate-usage.sh` tags a boot call "scriptable"
-    (offloadable to a launcher) when it's a `Bash:` call whose normalized
-    2-token form contains one of: `dispatch-context-pack`,
-    `dispatch-check-blockers`, bare `dispatch-`, `git merge`, `git fetch`, `git
-    status`, `gh pr`, `gh issue`. Everything else (Read/Edit/Grep/Task, any
-    other Bash) is "judgment."
-
-
-    - **A "yes" (approve) looks like:** You agree this list captures the
-    mechanical setup calls the phase orchestrators actually open with, and you
-    accept that the bare `dispatch-` catch-all may over-tag any future
-    `dispatch-*` call as scriptable and that non-listed setup verbs (e.g. `git
-    checkout`, `git rebase`, `gh api`) fall to "judgment." Since the window is
-    only the first 8 calls, the blast radius of a mis-tag is small. → Approve
-    as-is; merge.
-
-    - **A "no" (reject) looks like:** You can name a specific boot call that
-    today's phases actually make that this list mis-classifies in a way that
-    would *invert* the qa-fix-vs-review-fix comparison the downstream tactics
-    need. If so, say which call and which bucket it belongs in — that becomes a
-    scoped one-line edit to `$scriptable_subs`, then re-QA.
-
-
-    **Suggested default:** approve. The list is derived from the actual dispatch
-    boot commands, over-tagging is bounded by the 8-call window, and the
-    instrument is revisable when the two consumer tactics run.
-
-
-    ### Finding 11 — the two proxy metrics
-
-    `scriptable_round_trips` = median length of the *leading consecutive run* of
-    scriptable calls at session start. `judgment_calls` = median count of
-    non-scriptable calls within the first 8 (`$boot_window`). The tactic's
-    rationale predicts ~6-7 scriptable round-trips for qa-fix vs ~3-4 for
-    review-fix, judgment near-zero in both.
-
-
-    - **The specific risk to rule on:** (a) *circularity* — were these two
-    metric definitions chosen after seeing the 6-7-vs-3-4 spread, i.e. tuned to
-    produce the expected answer rather than derived independently? (b)
-    *leading-run blindness* — a judgment-heavy boot step that occurs *after* the
-    first scriptable run breaks is invisible to `scriptable_round_trips` (it
-    only counts the leading run) and may fall outside the 8-call window for
-    `judgment_calls`.
-
-    - **A "yes" (approve) looks like:** You accept "leading consecutive
-    scriptable run" as a fair proxy for mechanical boot round-trips, accept that
-    the expected spread is a *sanity check* on a metric defined independently
-    (leading-run length and first-8 judgment count are both mechanical
-    definitions, not fitted parameters), and accept that later-in-session
-    judgment work is out of scope because the instrument targets *boot* cost
-    specifically. → Approve; merge.
-
-    - **A "no" (reject) looks like:** You want the leading-run definition
-    replaced (e.g. "count all scriptable calls in the first 8, not just the
-    leading run") or the boot window widened past 8. Either is a scoped code
-    edit to `aggregate-usage.sh` — name the replacement definition and re-QA.
-
-
-    **Suggested default:** approve. The metrics are mechanically defined; the
-    predicted spread reads as a documented expectation to check against, not a
-    tuning target. Circularity would only matter if a fitted threshold were
-    involved — there is none.
-
-
-    ---
-
-
-    ## Decision B — the standing policy (stops the re-park loop for this class)
-
-
-    Independent of A, decide whether an autonomous agent may render this *kind*
-    of verdict — "sign off on a subjective heuristic-design item that skeptics
-    agree is within LLM competence" — without a human in the loop next time.
-
-
-    - **Option B1 — keep human-in-loop:** Every heuristic-design sign-off routes
-    to office-hours. Safe, but every future measurement-instrument tactic
-    (including the two siblings blocked on this one) will park here and wait for
-    you. Given the classifier + two skeptics already agreed these are
-    LLM-decidable, this spends your review time on low-stakes calibration calls.
-
-    - **Option B2 — authorize autonomous sign-off for this class:** Grant
-    qa-fix's fix-planner authority to render an engineering verdict on
-    heuristic-design items *when* the disposition classifier and its adversarial
-    skeptics unanimously judge them LLM-decidable AND the artifact is a
-    non-user-facing measurement instrument. This is the change that prevents the
-    identical re-park; without it, resolving A unblocks this one PR but the next
-    instrument tactic repeats the loop. Scope the grant narrowly
-    (measurement/audit instruments, unanimous skeptic agreement) so it does not
-    leak into user-facing or irreversible design decisions.
-
-
-    **Suggested default:** B2, scoped as above. The evidence this pass
-    (unanimous automated + adversarial agreement that these are decidable) is
-    exactly the signal such a policy should trigger on, and B1 guarantees you
-    personally clear every future instrument tactic.
-
-
-    ---
-
-
-    ## Fastest path to green
-
-    1. Approve findings 10 and 11 as-is (Decision A → yes/yes), OR name the
-    specific mis-tagged call / replacement metric definition for a scoped
-    `aggregate-usage.sh` edit + re-QA.
-
-    2. Pick B1 or B2 so this deviation class stops re-parking.
-
-    3. On A-approve: clear the office_hours park and let the qa lane complete —
-    no code change, no re-implementation.
+office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  qa_judgment_waiver:
+    pr: 2880
+    findings:
+      - 10
+      - 11
+    reason: "Author-approved 2026-07-18: both remaining qa-fix findings (10:
+      scriptable/judgment classifier substring list; 11: boot-preamble
+      leading-run + first-8-calls median heuristic) are heuristic-design
+      sign-offs on the phase_standup measurement instrument, not code defects.
+      Author reviewed the recommendation (Decision A) and approved both as
+      skipped; office_hours park cleared and the qa lane's remaining residue
+      marked skipped so the node proceeds to review."
+    since: 2026-07-18
 ---
 
 # Per-phase standup-cost audit lens — join SKILL-body tokens and boot tool-round-trips into one /dispatch-token-audit measurement, split scriptable vs judgment
