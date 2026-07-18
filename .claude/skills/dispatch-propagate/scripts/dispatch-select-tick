@@ -489,6 +489,23 @@ if [[ -n "$CENSUS_OUT" ]]; then
   done <<< "$CENSUS_OUT"
 fi
 
+# Pre-selection scope-staleness sweep (tactic-tick-scriptable-then-spawn). Runs
+# before the concurrency gate and selection below, so a scope-stale tactic is
+# demoted to `implement` as a scriptable non-worker disposition here in phase 1
+# rather than at worker-launch time (dispatch-graph-execute's exit-13 case, still
+# present as a post-sweep safety net). Moving the metadata-only demote out of the
+# launch group means it never silently consumes a SPAWN_N launch slot. Runs after
+# the reconcilers above absorb what they can, so only persistent scope drift
+# remains. Best-effort (a failure must not abort the tick); this whole script
+# runs with the sandbox disabled (see the header note), covering the sweep's
+# claude_agents_list_all daemon socket + demote-node-to-implement graph-commit.
+SCOPE_SWEEP_OUT=$("$SCRIPT_DIR/dispatch-graph-scope-sweep") || true
+if [[ -n "$SCOPE_SWEEP_OUT" ]]; then
+  while IFS= read -r sweep_line; do
+    [[ -n "$sweep_line" ]] && echo "scope-sweep: $sweep_line"
+  done <<< "$SCOPE_SWEEP_OUT"
+fi
+
 # Heartbeat: refresh after the auto-merge and reconcile-merged sub-steps complete (#2104, #2512).
 refresh_lock
 

@@ -1998,6 +1998,33 @@ clarifications:
       refreshes the stamp by hand — write '<tacticScopeFingerprint(statement,
       body)> <origin/main sha>' as the stamp file's one line, the 2026-07-18
       remediation's proven recipe. Recorded 2026-07-18 interview."
+  - question: What provenance convention binds clarifications[].answer — the
+      trailing Recorded-sentence the align SKILL.md docs prescribe, or the
+      dated-clause convention the corpus and readingDate() implement?
+    answer: "(Recorded 2026-07-18 /align-strategy interview.) Ratified greenfield:
+      every clarifications[].answer carries a dated provenance clause — an event
+      verb plus ISO date — placed where it reads best; front-loaded
+      parenthetical preferred, verb open (Recorded / Amended / Reviewed /
+      adopted...). The newest ISO date anywhere in the answer is its effective
+      date — the readingDate() contract (packages/intentionsutil/src/router.ts)
+      that coverage.ts's lastReviewedOf depends on — and amendments add a new
+      dated clause rather than rewriting the old one. Grounds, author-endorsed
+      (not held on trust): position-dependence is wrong under amendment (an
+      amended answer necessarily carries two or more dates, so 'the trailing
+      sentence' stops being well-defined); the verb is semantic, dating
+      different event kinds; an answer's last sentence should be its substantive
+      conclusion, not boilerplate; and 'a dated clause anywhere' is exactly the
+      contract the machine consumers read. Steelman (trailing-sentence
+      uniformity for mechanical hand-auditing): DIVERGED — amendment breaks
+      terminal placement anyway, and a front-loaded parenthetical is at least as
+      scannable. Migration: edit the two align-skill doctrine passages
+      (.claude/skills/align-strategy/SKILL.md and
+      .claude/skills/align-tactics/SKILL.md) as part of
+      tactic-align-provenance-lint-doctrine's implementation; zero corpus
+      rewrites (the 27 goal-layer answers and all tactic-lane answers already
+      comply with the loosened rule); no grandfather clause; the enforcing lint
+      checks the loosened rule corpus-wide. This ratification discharges that
+      tactic's office_hours gate, unparked in the same commit."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -2043,6 +2070,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via

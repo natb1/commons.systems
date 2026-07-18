@@ -30,7 +30,23 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 58
+  override: null
+  rationale: "Boosted to top of the discretionary frontier by author direction
+    (2026-07-18). Rearchitecting /align-tactics into a structural Workflow makes
+    the Opus-decision / Sonnet-orchestrator model tiering unbreakable, closing
+    the #2886 regression surface — high-leverage graph-native-dispatch
+    infrastructure the author elevated above its ordinary implement-phase
+    backlog rank. The boost is sized against the composed selector rank, not the
+    raw-boost column: with no inbound compounding the node's rank equals its
+    boost exactly, so 58 tops the current discretionary max (~51.3 on
+    tactic-materiality-scoped-freeze) with margin while staying well below the
+    permanent strategy-main-health trunk (rank 101, the sole node above it). The
+    boost flows undecayed to the one node this tactic is blocked_by
+    (tactic-align-family-opus-default, PR #2886), lifting that blocker to ~66 —
+    the intended critical-path prioritization (the blocker must merge first), no
+    unrelated node is distorted."
 phase: implement
 execution: null
 validates: []

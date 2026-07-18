@@ -51,100 +51,18 @@ attention:
     discretionary frontier, below only the permanent strategy-main-health trunk
     signal (rank 101). The boost flows nowhere else (empty blocked_by, no
     children), so it distorts no other node's rank."
-phase: qa
+phase: review
 execution:
   branch: tactic-materiality-scoped-freeze
   pr: 2892
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: opus fix-planner declined item #10 (doctrine
-    clarity/design-soundness judgment) as a scope-deviation — not a code defect,
-    needs human confirmation; escalating to office-hours"
-  since: 2026-07-18
-  recommendation: >-
-    ## Recommendation: `tactic-materiality-scoped-freeze` (PR #2892, qa phase)
-
-
-    **The decision you actually own here.** Nothing is broken. This is a
-    two-part design/clarity confirmation, and only you can make it:
-
-
-    1. **Doctrine clarity + intent match** — Does the materiality-scoped
-    classification (orthogonal → re-stamp same-commit / materially-affected →
-    leave stale to freeze at its own rank / must-land-first → leave stale +
-    `blocked_by` the carrier), with its explicit "no rank gate — rank is not a
-    proxy for materiality" stance, read clearly and capture what you meant when
-    you set this direction?
-
-    2. **Design soundness** — Is widening `execution.strategy_fingerprint` from
-    a bare hash to `{hash, sha}`, converting the ~80 legacy bare-hash stamps
-    opportunistically-only (at each re-stamp), and deferring bare-string
-    rejection in `validate-graph` to a future migration step 4, the right call —
-    versus alternatives you may have weighed (e.g. a one-shot bulk backfill, or
-    gating the validator now)?
-
-
-    **What to read (short, targeted):**
-
-    - `.claude/skills/align-strategy/SKILL.md` ~lines 467–510 — the three
-    buckets, the "no rank gate" statement, the `{hash, sha}` emitted form, and
-    `git rev-parse origin/main` as the interim sha source. This section replaces
-    the old indiscriminate "Soft-freeze warning."
-
-    - `.claude/skills/align-tactics/SKILL.md` — the "Fingerprint honesty"
-    section and Re-evaluation-mode item 3: the `{hash, sha}` re-stamp form,
-    untouched-sibling preservation, and the migration-step-4-is-future-work
-    pointer.
-
-
-    Read these two as a pair and judge them on their own terms — is a session
-    following this doctrine going to classify children correctly and
-    unambiguously?
-
-
-    **Every machine-checkable criterion already passed.** 517/517 intentionsutil
-    vitest; the transition/selection/router/apply-node suites (12/12 + 130/130)
-    covering the required-`--strategy-sha` invariant, object-form staleness, and
-    freeze/no-freeze behavior; validate-graph clean at 402 nodes; the validator
-    confirmed unedited (no bare-string rejection slipped in); backward-compat
-    confirmed across 120 files of legacy stamps. This is not a bug hunt — do not
-    go looking for one.
-
-
-    **Why this reached your desk (useful for future policy, not just this
-    park).** There's a genuine disagreement upstream. The qa-fix adversarial
-    step ran two skeptics who both *refuted* the "needs a human" premise — their
-    view: judging whether committed doctrine prose is clear and a classification
-    scheme is internally coherent is a text-comprehension/design-review task
-    Opus can do by reading, with no private/tacit context required — so the item
-    flipped to `opus-fixable`. But the gated Opus fix-planner then *declined*,
-    returning `deviation: true` with an empty unit list: there's no code defect
-    to fix, every script check already passed, so it wouldn't manufacture a
-    change and deferred to human confirmation. Both are defensible: an LLM *can*
-    assess coherence, yet "confirm this design is what I want before it lands"
-    is legitimately an author call. That tension — LLM-judgeable clarity vs.
-    author-owned design ratification — is the thing worth forming a standing
-    policy on for this class of item.
-
-
-    **Action:**
-
-    - Read the two doctrine sections above as a pair (~15 min).
-
-    - If the doctrine reads clearly **and** the design (`{hash, sha}`,
-    opportunistic-only conversion, deferred step 4) is sound: **confirm and
-    unpark** — let PR #2892's qa phase complete and transition to `review`. No
-    code change needed.
-
-    - If not: name the specific defect and location — which bucket is ambiguous,
-    or which design choice you'd change (e.g. "backfill all 80 now" or "gate the
-    validator this PR") — and route that back as the scoped fix rather than
-    unparking.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

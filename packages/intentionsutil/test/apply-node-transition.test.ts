@@ -104,6 +104,26 @@ describe("applyNodeTransition store round-trip", () => {
     expect(node.execution?.markers).toEqual([]);
   });
 
+  it("clears qa-done and reviewed on a fix interrupt so resume out of fix returns to qa", () => {
+    const dir = tempDir();
+    // Walk implement→qa→review→(arm-merge) so the node carries all three markers.
+    seedTactic(dir, "implement", "# body\n");
+    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // implement→qa (planned)
+    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // qa→review (qa-done)
+    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // review arms merge (reviewed)
+    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["planned", "qa-done", "reviewed"]);
+
+    // CI regresses: fix interrupt clears qa-done and reviewed, keeping planned.
+    const fix = applyNodeTransition({ ...baseArgs, dir, ci: "failing" });
+    expect(fix.phase).toBe("fix");
+    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["planned"]);
+
+    // Leaving fix on green CI resumes at qa (not review) — the cleared markers
+    // mean the marker cascade falls through past review back to qa.
+    const resume = applyNodeTransition({ ...baseArgs, dir, ci: "passing" });
+    expect(resume.phase).toBe("qa");
+  });
+
   it("routes a residue-bearing clean review to arm-merge and reports hasResidue", () => {
     const dir = tempDir();
     seedTactic(dir, "review", "# body\n\n## needs-main\n\nverify in prod\n");
