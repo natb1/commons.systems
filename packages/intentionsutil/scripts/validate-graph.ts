@@ -13,11 +13,16 @@
 
 import { listNodes } from "../src/store.js";
 import { validateGraph } from "../src/schema.js";
+import { lintTacticBodies } from "../src/planlint.js";
 
 function main(): void {
   const intentionsDir = process.argv[2] ?? "intentions";
   const nodes = listNodes(intentionsDir);
   validateGraph(nodes);
+  // Frontmatter integrity (validateGraph) is not enough for tactics: for a
+  // planned/execution-phase tactic the markdown body IS the authoritative plan,
+  // so also lint each such body for the required plan-schema markers.
+  lintTacticBodies(intentionsDir, nodes);
   process.stdout.write(`ok — ${nodes.length} nodes\n`);
 }
 

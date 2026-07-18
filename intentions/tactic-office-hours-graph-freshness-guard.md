@@ -75,6 +75,10 @@ scope: adding network to the selector; the clear-park primitive
 ([[tactic-clear-park-primitive]]) and the self-modification drain skill
 ([[tactic-office-hours-self-modification-skill]]).
 
+**Recommended model:** sonnet — a mechanical bash guard with a clear diff shape
+(one script, `git fetch` + a `park_live_on_main` check + queue-head walk), no
+cross-cutting design judgment.
+
 ## Verification
 
 `bash -n` clean. `park_live_on_main` exercised against real origin/main state:
