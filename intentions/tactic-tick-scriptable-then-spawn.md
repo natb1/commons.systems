@@ -17,7 +17,27 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: "The node's ## Verification manual live-tick end-to-end checks (Check
+      1 scriptable->spawn regression; Check 2 convergence / liveness guard /
+      exit-13 reservation-clear) were parked to office-hours for a human to run
+      — should they gate the node's progression out of qa?"
+    answer: "No — dispositioned by author waiver. The author elected 2026-07-18 to
+      SKIP the two manual live-tick end-to-end checks (Check 1:
+      scriptable->spawn regression; Check 2: single-pass convergence / liveness
+      guard / exit-13 reservation-clear) rather than run them, because they
+      require driving a live dispatch tick against the ACTIVE production queue —
+      a claude agents --json daemon-socket read plus demotion of real in-flight
+      tactics — which would disturb the active queue unacceptably. The
+      script-verifiable QA already passed (vitest 502/502, clean shell syntax,
+      phase-1-before-selection ordering, exit-13 reservation_clear present,
+      listScopeStaleTactics export present) and PR #2881 CI is green (23/23). On
+      that basis the qa phase is completed by waiver (qa-done marker) and the
+      node progresses qa -> review; the office_hours park is cleared. The manual
+      checks are NOT re-queued: if the scope-stale-demote-at-launch regression
+      they confirm ever recurs, it surfaces as a fresh code-fix tactic against
+      dispatch-select-tick / dispatch-graph-scope-sweep / dispatch-graph-execute
+      case 13, per the park recommendation. Recorded 2026-07-18."
 tooling_goals: []
 success_signal: null
 attention:
@@ -33,13 +53,14 @@ attention:
     2026-07-16 /align-tactics <tactic-id> per-node round
     (frozen-tactic-dispatch, clarification 52); the author-directed boost
     persists to rank this now-selectable work first."
-phase: qa
+phase: review
 execution:
   branch: tactic-tick-scriptable-then-spawn
   pr: 2881
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []

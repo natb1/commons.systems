@@ -41,13 +41,15 @@ attention:
     tactic-fingerprint-recipe-single-callsite). Deliberately left below
     strategy-main-health's emergency ceiling (boost 100) — a red-main safety
     signal this fix must not outrank."
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-eligibility-last-aligned
   pr: 2884
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []
