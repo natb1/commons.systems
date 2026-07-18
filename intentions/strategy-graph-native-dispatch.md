@@ -171,7 +171,14 @@ clarifications:
       Fingerprint-mismatch detection and the 'stop new selections in the
       subtree, let in-flight phases finish their current phase' behavior are
       unchanged; only the re-evaluation's dispatch granularity changes
-      (highest-ranked soft-frozen node first, per the progression tiebreak)."
+      (highest-ranked soft-frozen node first, per the progression tiebreak).
+      (Scoped 2026-07-18: the freeze becomes materiality-scoped at the source —
+      the editing /align-strategy round, holding the delta and the author in
+      hand, classifies each stamped open child and re-stamps orthogonal children
+      in the same graph-commit, so a freeze fires only on materially affected
+      children; each of those still re-evaluates at its own rank exactly as
+      recorded here. See the materiality-scoped-freeze clarification and
+      tactic-materiality-scoped-freeze.)"
   - question: Does the backlog band scale — and does it self-correct when the graph
       changes?
     answer: "No on both counts — superseded on same-day author review: the backlog
@@ -308,7 +315,11 @@ clarifications:
       loops: qa-fix and review-fix repair QA/review-content findings locally
       (with their own attempt counters) before anything reaches CI, and those
       loops never pass through the fix phase — fix means exactly 'CI is red on
-      this tactic's PR'. Recorded 2026-07-04 from author direction."
+      this tactic's PR'. Recorded 2026-07-04 from author direction. (Encoding
+      superseded 2026-07-18: fix is modeled as orthogonal execution.fix state,
+      not a phase value — see the fix-orthogonal-execution-state clarification
+      and tactic-fix-interrupt-orthogonal-state. Fix remains a CI interrupt
+      exactly as recorded here; only its encoding changes.)"
   - question: Review findings beyond the tactic's plan — which are fixed in scope,
       which defer, which are ignored, and how do deferrals schedule?
     answer: "Three-way disposition by verification x contract, decided in the review
@@ -406,7 +417,12 @@ clarifications:
       undecomposed context, this is fully-specified machine verification),
       sensor modeling (wrong altitude — signals measure the strategy's
       observable, not each shipped feature), and an implicit reconciler hold
-      (hidden state, violates clarification 1). Recorded 2026-07-04 interview."
+      (hidden state, violates clarification 1). Recorded 2026-07-04 interview.
+      (Ordinal amended 2026-07-18: once fix leaves the phase enum, this
+      attention-ranking order drops it — main-qa -> review -> qa -> implement ->
+      align-tactics — because a fixing node ranks at its preserved phase with
+      execution.fix orthogonal; see the fix-orthogonal-execution-state
+      clarification.)"
   - question: The repo was re-anchored — main checked out at the project root with
       Claude Code managing worktrees natively; do the worktree commitments still
       target the legacy .bare + sibling worktrees/ layout?
@@ -873,7 +889,13 @@ clarifications:
       phase-1 work that no longer surprises the worker-launch step or consumes a
       budget slot; the worker-start gate described here stays as the safety
       re-check for staleness introduced after the sweep. See the
-      scriptable-then-spawn clarification of that date.)"
+      scriptable-then-spawn clarification of that date.) (Scoped 2026-07-18: the
+      'leaving only author and re-evaluation edits able to demote' clause is
+      narrowed — an author-present align round that classifies its own
+      tactic-body edit as scope-inert re-stamps the custody stamp in the same
+      round, so such edits no longer demote; material and unsure edits still do.
+      See the scope-inert-restamp clarification and draft
+      tactic-scope-inert-restamp-primitive.)"
   - question: What guards the router against failure loops — a worker that
       repeatedly fails to make progress or park on a node, and a systemic
       executor failure (a daemon crash-loop) that would otherwise false-trip a
@@ -1251,7 +1273,10 @@ clarifications:
       and extends clarification 10's soft-freeze re-evaluation from a
       strategy-level round to per-tactic dispatch. Implementation retained as a
       draft tactic (tactic-graph-frozen-tactic-dispatch). Recorded 2026-07-11
-      interview."
+      interview. (Ordinal amended 2026-07-18: the tie-break ordinal drops fix —
+      draft < align-tactics < implement < qa < review < main-qa < done — once
+      fix becomes orthogonal execution.fix state rather than a phase value; see
+      the fix-orthogonal-execution-state clarification.)"
   - question: After a phase completes cleanly (no variance/escalation), who
       validates CI and who advances the node — and does the post-review merge
       need author intervention?
@@ -1610,6 +1635,396 @@ clarifications:
       tracks the concrete fix, and tactic-phase-standup-audit-lens's
       office_hours was cleared with blocked_by set to it. Recorded 2026-07-16
       interview."
+  - question: "A node's `reviewed` marker is written but its PR is not yet merged
+      (it sits at `phase: review` awaiting the tick's merge) — does the selector
+      keep dispatching a review worker to it, and what is its remaining
+      lifecycle?"
+    answer: "No — the `reviewed` marker terminates review-worker candidacy. Once
+      `execution.markers` includes `reviewed`, neither the scheduled selector
+      (`selectGraphTargets`, router.ts) nor an explicit `dispatch <node>`
+      resolution emits the node as a review-phase worker candidate; its
+      remaining transitions are entirely tick-owned, per clarification 53's
+      worker/tick split. On green CI + `mergeable==MERGEABLE` the tick's
+      `graph-auto-merge` (tactic-graph-tick-node-lane-auto-merge) merges it
+      label-free and `reconcile-graph-merged` absorbs the merge to
+      `done`/`main-qa` with worktree cleanup; on red CI the fix interrupt
+      (clarification 18) dispatches a fix worker, and that fix dispatch CLEARS
+      the `reviewed` marker so the node re-enters review after fix→qa — a CI
+      failure means code changed that the completed review never saw, so
+      unreviewed code must never reach merge (the same no-unreviewed-code-merges
+      guarantee test-integrity protects). This red-CI marker-clear is distinct
+      from the scope-stale demote-to-implement (clarification 36), which fires
+      on a post-review scope EDIT rather than a CI failure. Concrete gap this
+      closes: `selectGraphTargets` emits ANY open `phase:review` tactic as a
+      review candidate and neither it nor `check-node-selection.ts` reads
+      `execution.markers`, so a fully-reviewed node kept being re-dispatched
+      `/review-fix` every tick (observed on
+      tactic-graph-node-lane-write-hardening / PR #2882) — a no-op only because
+      that node's own gap-(e) hardening added the node-lane review-fix re-entry
+      check, but a wasted worker slot each tick nonetheless. This refines
+      clarification 53 from the tick side (the tick prefers merge) to the
+      selector side (the selector must not emit the candidate at all);
+      clarification 53's tick-merge disposition and
+      tactic-graph-tick-node-lane-auto-merge's merge reconciler are unchanged.
+      Implementation retained as draft tactic
+      tactic-graph-selector-reviewed-exclusion. Recorded 2026-07-18 interview.
+      (Mechanism superseded 2026-07-18: the red-CI marker-clear re-review is the
+      interim mechanism; the greenfield replaces it with a direct phase ->
+      review reset plus auto-merge disarm when a fix pushes code after review
+      completed — see the fix-orthogonal-execution-state clarification and
+      tactic-fix-interrupt-orthogonal-state. The no-unreviewed-code-merges
+      guarantee this clarification protects is unchanged.)"
+  - question: An office-hours drain session fixed a parked node and pushed the fix,
+      but the office_hours park was left set — the node was even re-parked
+      before a later session finally cleared it
+      (tactic-phase-standup-audit-lens, 2026-07). Clarification 4 says a park
+      clears as a side effect of "any interactive-session commit touching the
+      node." Why didn't that fire for the drain lane, and what must a drain
+      session do at termination?
+    answer: "Clarification 4's side-effect clear only fires when a commit touches
+      the parked node's own frontmatter, but a self-modification drain session's
+      fix commit lands on the PR branch and never touches the node's
+      office_hours field — so nothing clears the park incidentally, and the
+      separate clear-park graph-commit to main is not forced by session
+      termination and was forgotten (the observed park -> drain -> re-park ->
+      clear sequence on tactic-phase-standup-audit-lens). Requirement: the
+      self-modification drain lane must terminate with a MANDATORY explicit park
+      disposition executed through a scripted atomic primitive — clear-park
+      <node-id> [note] on green CI (office_hours -> null landed on main via
+      graph-commit), or re-park via park-node with an updated reason on red or
+      blocked CI — and never leave a drained node in an ambiguous still-parked
+      state. This refines clarification 4, it does not replace it: clarification
+      4's incidental side-effect clear remains the mechanism for the read-only
+      human office-hours lane (which drains nothing and legitimately never
+      un-parks, per .claude/skills/office-hours/SKILL.md:374-378); the drain
+      lane adds an explicit terminal disposition on top of it. The disposition
+      must be a single scripted graph operation — the inverse of park-node — not
+      a hand-rolled inline readNode -> office_hours=null -> writeNode ->
+      graph-commit sequence, precisely so it cannot be partially completed,
+      skipped, or forgotten between the fix push and session end. This
+      generalizes the one-off manual clear-park sequence noted at
+      tactic-tick-scriptable-then-spawn body (the clear-park inverse of
+      park-node) into a first-class primitive. Implementation retained as draft
+      tactic tactic-clear-park-primitive. Recorded 2026-07-18 interview."
+  - question: How is the CI-fix interrupt modeled — as a `phase` enum value or as
+      orthogonal execution state — and what is the migration off the phase-value
+      encoding?
+    answer: "Greenfield target: fix is NOT a phase; it is orthogonal nullable
+      execution state, execution.fix = {since, attempt, pushed_sha}. `phase`
+      stays purely ladder-positional (implement -> qa -> review -> main-qa ->
+      done) and is never overwritten by a CI failure, so entering a fix no
+      longer destroys ladder position. The selector reads execution.fix
+      directly: execution.fix set (or a live red-CI verdict) -> dispatch
+      fix-checks; else -> the phase worker for the preserved phase. This is the
+      same CI-verdict-before-phase-logic precedence the fix-as-interrupt
+      clarification (2026-07-04) already records, moved out of a phase overwrite
+      and into a field the selector reads. execution.fix also carries the
+      pending-CI concurrency guard across the ticks when no session is live —
+      the window between the fix worker pushing and CI re-reporting — so a
+      not-yet-green re-run is not misread as \"resume the phase worker\". The
+      one deliberate backward edge is a correctness move, not a resume
+      mechanism: when a fix pushes code after review has completed (reviewed /
+      merge-armed / main-qa), the fix worker resets phase -> review and disarms
+      auto-merge, because new code must be re-reviewed. This REPLACES the
+      interim red-CI marker-clear re-review (the reviewed-marker re-review
+      clarification, 2026-07-18) and the lossy resumeAfterFix
+      marker-reconstruction (transitions.ts): with phase preserved there is
+      nothing to reconstruct. When the interrupt fires BEFORE review completes,
+      phase is already at implement/qa/review and is simply preserved — no
+      special handling, and the two-commit fix->implement->qa resume collapses
+      to nothing. Doctrine preserved unchanged: fix remains a CI interrupt
+      (fix-as-interrupt clarification) and unreviewed code must never reach
+      merge after a fix (reviewed-marker re-review clarification); only the
+      ENCODING changes. This supersedes the fix-as-phase framing wherever it
+      appears: the attention ordinal drops fix (draft < align-tactics <
+      implement < qa < review < main-qa < done) in both the frozen-tactic
+      tie-break clarification and the main-qa parity ladder; and the incidental
+      phase enumerations that list fix as a station (the scope-fingerprint
+      chain-of-custody clarification, and the pre-transitions bootstrap advance
+      clarification) now read against the node's PRESERVED phase, since a fixing
+      node sits at implement/qa/review with execution.fix set. Brownfield
+      migration (backwards-incompatible — dropping the fix enum value breaks any
+      node at phase:fix — so sequenced; the executable clean-session units live
+      in tactic-fix-interrupt-orthogonal-state, phase implement): (1) additive
+      schema — add execution.fix to schema + validator, changes no behavior; (2)
+      dual-read transitions/selector — teach decideTransition and the selector
+      to read execution.fix while phase:\"fix\" keeps working in parallel; (3)
+      one-time migration of the live phase:fix nodes to (preserved phase +
+      execution.fix set), reconstructing the preserved phase from markers once
+      at migration time — the last use of the lossy reconstruction; (4) remove
+      fix from the Phase enum and delete fixInterrupt and resumeAfterFix. The
+      spec node tactic-graph-native-dispatch (S3.1) phase-ordinal prose updates
+      with step 4. Landing this record soft-freezes the strategy's open child
+      tactics for per-node re-evaluation (the strategy-substance fingerprint
+      includes clarifications); that re-evaluation is expected and
+      author-directed here. Recorded 2026-07-18 /align-strategy interview."
+  - question: The dispatch phase-worker skills carry ad-hoc names (/align-tactics,
+      /implement, /fix-checks, /qa-fix, /review-fix, /qa-main, /fix-conflicts) —
+      what naming convention should they take, and how does renaming
+      /align-tactics reconcile with its align-family membership (clarification
+      45)?
+    answer: "A uniform dispatch-<phase> namespace for every skill the dispatch
+      script invokes: dispatch-plan (from /align-tactics), dispatch-implement
+      (from /implement), dispatch-fix (from /fix-checks, the CI-red interrupt of
+      clarification 18), dispatch-qa (from /qa-fix), dispatch-review (from
+      /review-fix), dispatch-main-qa (from /qa-main), plus dispatch-conflict
+      (from /fix-conflicts) — a graph-native conflict skill that auto-resolves
+      MECHANICAL conflicts (any conflict decidable from existing graph
+      requirements) and parks to office_hours only on conflicts requiring author
+      input on INTENTION, upgrading today's graph-commit-parks-on-any-conflict
+      behavior (retained as draft tactic-dispatch-conflict-greenfield). The
+      apparent collision with clarification 45 — which grouped /align-tactics in
+      the align family — is resolved by redrawing the family boundary at
+      records-vs-executes: the align family is the persistent-layer RECORDING
+      interface (/align alone — virtues, strategies, traditions, delegations),
+      and the dispatch-* family is the EXECUTION chain (plan then implement then
+      fix then qa then review then main-qa, plus conflict).
+      Planning/decomposition is execution, so /align-tactics becomes
+      dispatch-plan and its interactive strategy-decomposition role continues as
+      manual dispatch-plan invocation. /plan-issue is deprecated — superseded by
+      dispatch-plan — and is deleted, not renamed
+      (tactic-legacy-router-removal). Steelman (the branch=node-id claim
+      invariant already makes target resolution uniform, so the rename is
+      cosmetic): DIVERGED — a self-describing surface where skill name = phase
+      is a first-class requirement for its own sake, not cosmetic, and it rides
+      cheaply on the same atomic PR the input-contract change (clarification 68)
+      already touches. Both the naming and the contract change are legitimate
+      but LOW RANK (clarification 69). Implementation retained as draft
+      tactic-dispatch-skill-rename. Recorded 2026-07-18 interview. (Amended
+      2026-07-18 same day: the rides-on-the-same-atomic-PR sentence is corrected
+      — the leaf-tactic rule holds one PR per leaf, so the two changes land as
+      coordinated adjacent PRs: tactic-dispatch-skill-input-contract first,
+      tactic-dispatch-skill-rename blocked_by it and sweeping the restructured
+      skills after. See the migration-sequencing clarification.)"
+  - question: How do the dispatch phase skills receive their input — today they
+      infer the target from the worktree branch name, and only /align-tactics
+      takes an explicit node-id argument?
+    answer: "Each dispatch-* skill splits derivation (node to params) from execution
+      (params to work): the skill core executes from explicit structured params
+      — testable in isolation — and a thin front door accepts a node id and runs
+      a derivation script that emits those params, replacing today's
+      worktree-branch-name inference. Division of labor by invoker: the router
+      always passes the computed structured params directly (it holds the node
+      at selection, so it saves the derivation round-trip); the node-id +
+      derivation-script front door is primarily the manual/author invocation
+      path. The model to generalize is /align-tactics, which already takes an
+      explicit node-id argument. Value: removes the hidden branch-name coupling,
+      makes derivation and execution independently testable, and makes each
+      skill user-invocable with either explicit params or a bare node id.
+      Implementation retained as draft tactic-dispatch-skill-input-contract.
+      Recorded 2026-07-18 interview."
+  - question: These naming and interface requirements are legitimate but low
+      priority — how does the graph record such a greenfield requirement at low
+      rank so it never interferes with higher-ranked work, and is a structural
+      improvement needed?
+    answer: "As a backlog tactic (clarification 9): a fully-planned, selectable
+      tactic marked with the backlog flag /align-tactics stamps at
+      decomposition, off-path because it carries no validates edge to an
+      unvalidated signal, so calculated attention resolves it one rank tier
+      below every round tactic (clarification 11) and self-corrects upward only
+      if a future signal's path later includes the component. Off-path demotion
+      guarantees such a tactic never PREEMPTS higher-ranked work — the router
+      selects it only as slack, when nothing higher-ranked remains — which is
+      exactly the recorded, low-rank, non-interfering tracking the author asked
+      for; it is the graph-native analog of the enhancement label. Structural
+      assessment (the author asked to recommend improvements if required): NONE
+      required — the existing backlog-tactic plus off-path-demotion mechanism is
+      the structural support. This round's dispatch-rename, input-contract, and
+      conflict tactics are recorded as draft byproducts here and finalize as
+      backlog tactics. Recorded 2026-07-18 interview. (Companion 2026-07-18:
+      off-path demotion covers the recorded requirement’s own rank; the freeze
+      tax of the recording edit itself — every stamped child paying a
+      re-evaluation session even for an orthogonal edit — is addressed
+      separately by the materiality-scoped-freeze clarification.)"
+  - question: A strategy edit soft-freezes every stamped open child regardless of
+      relevance or rank (a low-rank edit such as the 2026-07-18 skill-rename
+      round stales every stamped in-flight child) — should the freeze decision
+      incorporate a rank comparison, and how does a stale child recover WHAT
+      changed when the stamp is a bare hash?
+    answer: 'Greenfield: the freeze becomes materiality-scoped at the source, not
+      rank-gated at the selector. Today’s freeze conflates two separable
+      judgments: materiality (does this edit affect this child’s plan at all?)
+      and urgency (when must an affected child stop and reconcile?). The editing
+      round — the one session holding both the delta and the author — classifies
+      each stamped open child: an orthogonal child is re-stamped in the SAME
+      graph-commit as the edit, so no freeze ever fires for it; a materially
+      affected child is left stale and freezes exactly as recorded in the
+      soft-freeze clarification, re-evaluating at its own rank. The selector
+      already runs re-evaluation at the child’s own rank (the frozen-candidate
+      emission in router.ts), so a low-rank change never preempts higher-ranked
+      work even today — the defect was only the orthogonal-child tax: one
+      re-evaluation session per stamped child whose likely verdict is
+      "unaffected, re-stamp". Delta provenance: the per-strategy stamp widens
+      from a bare hash to {hash, sha}, where sha is the origin/main commit whose
+      strategy content the stamp was taken against — mirroring the tactic
+      scope-custody stamp (the scope-fingerprint chain-of-custody clarification)
+      — so a stale child recovers the exact delta mechanically via git diff
+      <sha>..origin/main -- intentions/<strategy-id>.md instead of relying on
+      dated-clarification archaeology. Steelman (the author’s rank-gate
+      proposal: freeze a stale child only when the staling change’s carrier
+      out-ranks it, firing later if the carrier is boosted above it): DIVERGED —
+      rank is not a proxy for materiality (a low-rank change can still
+      invalidate a high-rank child’s plan: the skill rename renames the very
+      skills tactic-align-skills-latest-graph-guard’s plan edits); an
+      unconditional rank gate lets workers knowingly execute superseded scope;
+      and attributing a bare hash mismatch to a ranked carrier needs the same
+      provenance substrate anyway. Rank incorporation instead rides existing
+      machinery: re-evaluation competes at the child’s own rank, and a
+      must-land-first migration carrier acquires blocked_by edges from affected
+      children (see the migration-sequencing clarification), whose backward
+      attention-compounding boosts the carrier in proportion to what it blocks.
+      Brownfield (backwards-incompatible for stamp readers, so sequenced;
+      executable units live in draft tactic-materiality-scoped-freeze): (1)
+      additive — schema accepts string | {hash, sha} as the map value, staleness
+      reads the hash in either form; (2) new stamps write {hash, sha}; (3)
+      bare-hash stamps migrate opportunistically at each re-stamp; (4) drop the
+      bare-string form; skill-side, /align-strategy’s step-5 soft-freeze warning
+      becomes the classification-and-re-stamp step. The three edits now
+      accumulated on the 9 currently-stale children (fix-orthogonal,
+      skill-rename, this round) reconcile via the author’s already-planned
+      re-evaluation sweep — this doctrine applies from the next edit round on.
+      Recorded 2026-07-18 /align-strategy interview. Corrected same-day
+      2026-07-18: the motivating premise overstated the live blast radius — none
+      of this strategy’s open children carry a map-form stamp yet (stamping
+      starts as align rounds land it), and the selector’s live freeze events all
+      trace to legacy bare-string stamps on OTHER strategies’ children, so the
+      three 2026-07-18 edits froze zero children mechanically; until stamp
+      coverage exists, the re-evaluation obligation on this strategy’s open
+      subtree is doctrinal (the soft-freeze clarification), not stamp-enforced.
+      The norm this correction demonstrates: prose-level record corrections are
+      never deferred for freeze cost — the graph tracks greenfield state, prose
+      included, and an editing round pays exactly the materiality of its change
+      (this correction: zero freezes, one commit). A legacy bare-string stamp
+      converts to map form only in a re-evaluation round of a strategy it
+      actually serves, carrying the old string into the entries of the
+      strategies that round did NOT reconcile so their freeze is preserved
+      (absent-from-map would silently unfreeze them). Recorded 2026-07-18
+      /align-strategy interview, same-day correction.'
+  - question: Does the graph need first-class structure for sequencing brownfield
+      migrations of backwards-incompatible changes, and how do in-flight tactics
+      link to a migration that must land before their work?
+    answer: "No new structure — existing edges suffice. A backwards-incompatible
+      change records its greenfield target and ordered migration in the strategy
+      (the fix-orthogonal-execution-state clarification is the pattern) and
+      carries execution in a carrier tactic: one atomic PR with ordered units in
+      the tactic body when the migration fits a single PR
+      (tactic-fix-interrupt-orthogonal-state), or a parent tactic with children
+      sequenced by blocked_by edges (validateGraph rules 6/13/15) when it spans
+      PRs. The one real gap was the LINK from materially affected in-flight
+      tactics to the migration: the editing round adds a blocked_by edge from
+      each affected child to the carrier when the migration must land before
+      that child’s work — which both gates selection and back-compounds
+      attention onto the carrier, pricing the migration by what it blocks (the
+      emergent rank incorporation of the materiality-scoped-freeze
+      clarification). A first-class attributes.migration record is DECLINED by
+      parsimony until a sensor needs machine-readable migration state. Recorded
+      2026-07-18 /align-strategy interview."
+  - question: Does dispatch's concurrency dedup key on live sessions or worktree
+      existence, and does the office-hours lane share the mechanism
+      (office-hours sessions safe for concurrent selection)?
+    answer: "Live sessions, uniformly, for every launch mode including office-hours
+      — confirmed 2026-07-18 as the target-state mechanism. The dedup /
+      claimed-set keys on liveness: a node is skipped only when a
+      reservation-ledger marker named by its id exists OR
+      worktree_has_live_session reports a live node-id-named session (claude
+      agents --json) — never on worktree existence. A bare or un-reaped
+      .claude/worktrees/<node-id> whose session has ended does NOT block
+      selection (the shipped graph-select-target behavior; the #1474 change
+      moved existence-keying to liveness-keying precisely so an unreaped
+      worktree cannot block the next worker). Worktree reaping is decoupled
+      post-merge disk hygiene — dispatch-sweep removes a worktree after its PR
+      merges and the tree is in-sync, guarding on worktree_has_live_session
+      first — never a selection gate; what makes a node's next phase selectable
+      is the transition write flipping phase on origin/main plus the prior
+      session ending (its claim clears). The office-hours lane shares this exact
+      mechanism: (a) the graph-native office-hours lane runs IN the node-id
+      worktree for its session's life so its live session is detectable, and
+      that worktree is disposable — reaped like any worker's, since office-hours
+      lands no commit; (b) office-hours-select gains the same liveness dedup —
+      an untargeted (queue-head) launch SKIPS a parked node that already has a
+      live office-hours session and returns the next-ranking parked node (the
+      concurrent-selection safety this round records); (c) an explicit
+      /office-hours <node-id> targeting a node that already has a live
+      office-hours session RETURNS AN ERROR — a deliberate human target on an
+      occupied node is a collision to surface, not a silent fall-through.
+      Consistency correction: tactic-align-session-claiming Unit 3's recorded
+      prescription — 'graph-select-target treats ANY existing
+      .claude/worktrees/<node-id> as a held claim' (existence-keyed) — is
+      superseded by this liveness mechanism (#1474), contradicts its own Unit 1
+      (which states the liveness rule), and describes the pre-#1474
+      worktree-walk that was deliberately replaced; the shipped code is already
+      liveness-keyed, only the recorded tactic text is stale (tracked by draft
+      tactic-align-session-claiming-liveness-correction). Implementation
+      retained as draft tactic-office-hours-concurrency-dedup. Recorded
+      2026-07-18 interview."
+  - question: A scope-inert align annotation on an in-flight tactic's body — the
+      reconciliation notes amendment-completeness mandates — trips the tactic
+      scope-custody gate and demotes the whole ladder. Does materiality-scoping
+      extend to the scope-custody stamp, and by what mechanism?
+    answer: "Yes — greenfield: the materiality principle ('an editing round pays
+      exactly the materiality of its change', clarification 70) extends to the
+      tactic scope-custody stamp, closing the seam in the chain-of-custody
+      amendment (clarification 39) between its intent ('if the re-evaluation
+      confirms without amending, nothing re-runs') and its mechanism: recording
+      the confirmation is itself a body edit, so tacticScopeFingerprint trips
+      and demotes. Observed 2026-07-18: an align round's scope-inert
+      Interim-mechanism note on tactic-graph-selector-reviewed-exclusion demoted
+      a fully-reviewed node (PR #2888, green CI) review -> implement; the tax is
+      three phase sessions per annotation, since demote-to-implement discards qa
+      and review custody. Mechanism — sanctioned re-stamp, worktree-locality
+      preserved: the stamp stays a worktree-local file, never a per-launch graph
+      write (clarification 39's design stands); an author-present align round
+      (/align-strategy or /align-tactics — the interview holds both the delta
+      and the author, the same classifier trust clarification 70 records) that
+      classifies its own tactic-body edit as scope-inert re-stamps
+      .claude/worktrees/<id>.scope-fingerprint to the post-edit
+      tacticScopeFingerprint plus the current origin/main sha in the same round,
+      recording the classification in the round's record — mirroring the
+      transition writer's machinery refresh (which stands unchanged) rather than
+      moving the stamp into the node. Fail-closed classification: only a
+      confident scope-inert verdict re-stamps; any doubt leaves the stamp
+      untouched and custody demotes as recorded, and a material edit is left
+      stale exactly as today. Phase workers, qa/review sessions, and the tick
+      never re-stamp. Steelman (keep the gate purely mechanical; accept the
+      demotion tax as misclassification insurance): DIVERGED — the annotations
+      are doctrine-mandated (clarification 38 records reconciliation in the
+      node), so the tax recurs structurally, and the strategy-stamp side already
+      rejected the same orthogonal tax with the same classifier. Net guarantee
+      unchanged: merge still requires an unbroken implement -> qa -> review
+      chain against the merge-time scope fingerprint — a re-stamp asserts, under
+      author presence, that the post-edit fingerprint IS that same scope.
+      Executable carrier: draft tactic-scope-inert-restamp-primitive (re-stamp
+      script plus align-skill step); bootstrap until it lands: the round
+      refreshes the stamp by hand — write '<tacticScopeFingerprint(statement,
+      body)> <origin/main sha>' as the stamp file's one line, the 2026-07-18
+      remediation's proven recipe. Recorded 2026-07-18 interview."
+  - question: What provenance convention binds clarifications[].answer — the
+      trailing Recorded-sentence the align SKILL.md docs prescribe, or the
+      dated-clause convention the corpus and readingDate() implement?
+    answer: "(Recorded 2026-07-18 /align-strategy interview.) Ratified greenfield:
+      every clarifications[].answer carries a dated provenance clause — an event
+      verb plus ISO date — placed where it reads best; front-loaded
+      parenthetical preferred, verb open (Recorded / Amended / Reviewed /
+      adopted...). The newest ISO date anywhere in the answer is its effective
+      date — the readingDate() contract (packages/intentionsutil/src/router.ts)
+      that coverage.ts's lastReviewedOf depends on — and amendments add a new
+      dated clause rather than rewriting the old one. Grounds, author-endorsed
+      (not held on trust): position-dependence is wrong under amendment (an
+      amended answer necessarily carries two or more dates, so 'the trailing
+      sentence' stops being well-defined); the verb is semantic, dating
+      different event kinds; an answer's last sentence should be its substantive
+      conclusion, not boilerplate; and 'a dated clause anywhere' is exactly the
+      contract the machine consumers read. Steelman (trailing-sentence
+      uniformity for mechanical hand-auditing): DIVERGED — amendment breaks
+      terminal placement anyway, and a front-loaded parenthetical is at least as
+      scannable. Migration: edit the two align-skill doctrine passages
+      (.claude/skills/align-strategy/SKILL.md and
+      .claude/skills/align-tactics/SKILL.md) as part of
+      tactic-align-provenance-lint-doctrine's implementation; zero corpus
+      rewrites (the 27 goal-layer answers and all tactic-lane answers already
+      comply with the loosened rule); no grandfather clause; the enforcing lint
+      checks the loosened rule corpus-wide. This ratification discharges that
+      tactic's office_hours gate, unparked in the same commit."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1655,6 +2070,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via

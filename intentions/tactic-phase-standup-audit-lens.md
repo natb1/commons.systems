@@ -33,99 +33,140 @@ attention:
     strategy-token-economy carries no strategy-level boost, so the tactic
     carries the full weight itself; boost 15 clears the current working max
     (~14.5)."
-phase: fix
+phase: qa
 execution:
   branch: tactic-phase-standup-audit-lens
   pr: 2880
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: >-
-    /fix-checks: PR #2880's only failing check (unit-tests /
-    test-aggregate-usage.sh
+  reason: "/qa-fix: QA plan items 7-8 (scriptable/judgment classifier substring
+    list; boot-preamble heuristic soundness) are subjective heuristic-design
+    sign-offs on the phase_standup lens, not code defects. The disposition
+    skeptics refuted the needs-human framing, but the gated fix-planner declined
+    to author a fix (scope-deviation): 'Both findings are subjective-judgment
+    sign-offs (heuristic reasonableness), not code defects; resolving them
+    requires human agreement or an unauthorized heuristic redesign, so no
+    autonomous fix unit applies.' Escalating to office-hours; all 6
+    machine-verifiable QA items passed cleanly."
+  since: 2026-07-18
+  recommendation: >-
+    # Office-hours: sign off on two heuristic choices in the phase-standup lens
+    (`tactic-phase-standup-audit-lens`, PR #2880)
 
-    lenses.baseline_context.total_proxy_usd) is a pre-existing
-    jq-version-dependent
 
-    floating-point flake unrelated to this PR's own changes, but the skill's
-    Flake
+    ## What you're deciding
 
-    tracking-and-block procedure cannot execute: GitHub Issues are disabled
-    repo-wide
 
-    (has_issues: false) and the node lane forbids gh issue reads/writes
-    entirely, so
+    This is **not** a code review. Every mechanically checkable QA item already
 
-    there is no tracking issue to file and no "PR's tracked issue" to block.
-    Needs a
+    passed — both test suites (182/182, 36/36), syntax, lens shape/keys, file
 
-    human decision on the graph-native flake-tracking successor, or
-    authorization to
+    location, and SKILL.md doc consistency. CI is green and no bugs were found.
 
-    directly loosen the pre-existing exact-float-string assertion at
 
-    .claude/skills/dispatch-token-audit/scripts/test-aggregate-usage.sh:505-506.
-  since: 2026-07-16
-  recommendation: |-
-    **What happened:** PR #2880 (tactic-phase-standup-audit-lens) had exactly one
-    failing CI check, `unit-tests`. Local reproduction (jq-1.8.1) passed 182/182 —
-    `test-aggregate-usage.sh` did not reproduce the CI failure. Digging into the
-    run log (https://github.com/natb1/commons.systems/actions/runs/29521484660/job/87699381148)
-    showed the sole failing assertion is `lenses.baseline_context.total_proxy_usd`
-    (`expected: '0.05307749999999999'`, `actual: '0.0530775'`) — a floating-point
-    string-formatting mismatch, not a value mismatch. `git diff origin/main...HEAD`
-    confirms that assertion (test-aggregate-usage.sh:505-506) is unchanged context in
-    this PR's diff, sitting immediately above the PR's own new `phase_standup`
-    assertions — so this is a **pre-existing** test, unrelated to what this PR
-    touches.
+    What's left is two design-taste sign-offs that the autonomous fix-planner
 
-    **Root cause:** `EXPECTED_BASELINE_PROXY` (test-aggregate-usage.sh:297) sums four
-    already-divided terms left-to-right via `jq -n`. `aggregate-usage.sh`'s own
-    `total_proxy_usd` (aggregate-usage.sh:836-840) maps each row to
-    `(init_input*RATE_INPUT + init_cache_creation*RATE_CACHE_CREATION)/1e6` and sums
-    via jq's `add`. Floating-point addition isn't associative, so the two orders
-    produce bit-distinct doubles; jq's number-to-string formatting (which differs
-    across jq major versions) renders one as a clean decimal and the other with
-    trailing float noise. CI's `ubuntu-latest` runner's preinstalled jq apparently
-    differs from local jq-1.8.1 in this respect.
+    refused to make on its own, because a wrong call here silently corrupts the
 
-    **Why fix-checks stopped here instead of fixing it:** the skill's design
-    (deliberately) never lets a `/fix-checks` pass push a speculative fix to a
-    pre-existing failure unrelated to the PR under repair — the correct move is to
-    file the flake as its own tracking issue and block the PR's tracked issue on it,
-    so `/dispatch-propagate` stops re-routing this PR to `fix-checks` for a failure
-    it cannot fix. That mechanism is `/file-issue` (GitHub-issue-based), gated by the
-    node lane's own rule that "no gh issue is ever read or written" on this lane.
-    Both paths are now dead: `gh api repos/natb1/commons.systems --jq .has_issues`
-    returns `false` — Issues are disabled repo-wide — and even if they weren't, the
-    node lane forbids touching them, and this PR closes a graph tactic node (not a
-    GitHub issue), so there's no "PR's tracked issue" to `blocked_by` in the first
-    place.
+    baseline that two blocked sibling tactics
 
-    **Recommended next steps for the human, in order of preference:**
+    (`tactic-thin-oversized-skill-bodies`, `tactic-phase-boot-offload-launcher`)
 
-    1. **Fastest unblock:** since the flake is narrowly a floating-point
-       exact-string-equality assertion (not a real behavior bug), directly loosen
-       `test-aggregate-usage.sh:505-506` to compare `total_proxy_usd` with a small
-       epsilon tolerance instead of exact string equality — e.g. compute
-       `abs(expected - actual) < 1e-9` via `jq`. This is a one-line-scope fix
-       unrelated to PR #2880's own content, which is exactly why `fix-checks`
-       declined to push it unilaterally; a human authorizing/making this edit
-       directly (on `main`, or as its own tiny PR) unblocks #2880 on the next CI
-       run without needing any tracking-issue machinery at all.
-    2. **Systemic fix:** if this class of situation (a `/fix-checks` node-lane pass
-       hitting a real flake with no GitHub-Issues-based tracking path available)
-       will recur, define a graph-native successor for the `fix-checks` skill's
-       Flake sub-path — e.g. file a born-parked tactic node tracking the flake and
-       `blocked_by` the source tactic node on it, mirroring what `/file-issue` did
-       for the legacy lane. That's a `fix-checks`-skill-level change, out of scope
-       for resolving this one PR.
-    3. Once the flake is resolved (by option 1, ideally) and CI is re-run green on
-       #2880, clear this park (`office_hours` on the
-       `tactic-phase-standup-audit-lens` node) so the node resumes normal dispatch.
+    will measure their before/after against:
+
+
+    1. **Is the scriptable/judgment substring list reasonable?**
+
+    2. **Is the boot-preamble heuristic a good-enough measurement instrument?**
+
+
+    The lens is an internal engineering-measurement tool, not user-facing
+    behavior.
+
+    "Good enough to trust a before/after comparison" is the bar — not
+    perfection.
+
+
+    ## Where to look
+
+
+    - **The classifier substring list** — `is_scriptable` def at
+      `.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh:563-566`,
+      and the list itself defined as `$scriptable_subs` at
+      `aggregate-usage.sh:877-878`:
+      `dispatch-context-pack`, `dispatch-check-blockers`, `dispatch-`,
+      `git merge`, `git fetch`, `git status`, `gh pr`, `gh issue`.
+      Note the substrings match the `cmd_prefix` 2-token form (e.g.
+      `Bash:gh pr`), per the comment at lines 561-562.
+    - **The lens computation** — the `$phase_standup_lens` jq block at
+      `aggregate-usage.sh:851-928`. The three proxies to judge:
+      `scriptable_round_trips` (median leading run of consecutive scriptable
+      calls, lines 891-896), `judgment_calls` (median non-scriptable count in the
+      first 8 opening calls, lines 898-900), and `skill_body_tokens` (a `bytes/4`
+      estimate, line 917).
+    - **The lens-10 doc paragraph** —
+    `.claude/skills/dispatch-token-audit/SKILL.md:115`.
+
+
+    ## How to sanity-check item 7 quickly (don't reason about the list in the
+    abstract)
+
+
+    Run `/dispatch-token-audit` over a real window and inspect the
+
+    `boot_preamble.ngrams` output for the `qa` and `review` phases. Each n-gram
+
+    token is tagged `scriptable` or `judgment` by this same classifier. Read the
+
+    split against what the transcripts actually did:
+
+
+    - Are the mechanical `gh`/`git`/`dispatch-*` boot calls landing in
+      `scriptable`? (No gross false negatives — a common mechanical call missed.)
+    - Is anything that's really a judgment call getting tagged `scriptable`?
+      (No gross false positives.)
+
+    Real transcript data will show this in seconds; the substring list is easy
+    to
+
+    adjust if the split looks off.
+
+
+    ## How to sanity-check item 8
+
+
+    With real data in hand, confirm the `qa` phase shows a materially higher
+
+    `scriptable_round_trips` than `review` — roughly 6-7 vs 3-4, per the node
+
+    body's grounding (and the expectation baked into the code comment at
+
+    `aggregate-usage.sh:869-872`). If that gap shows up, the instrument is
+
+    discriminating the phases correctly and is doing its job — the `bytes/4`
+    token
+
+    count being a coarse estimate is fine, because the two sibling tactics
+    compare
+
+    the *same* estimate before and after, so the systematic coarseness cancels.
+
+
+    ## Outcome
+
+
+    - **If both look reasonable** — approve/merge `#2880` as-is. There is
+    nothing
+      to fix; the machine-checkable work is already done.
+    - **If the substring list or a proxy needs adjusting** — it's a small
+      follow-up edit to `aggregate-usage.sh` (add/remove a substring, or tweak the
+      `$boot_window`/run definition), not a redesign. The lens shape and doc stay
+      as they are.
 pace_exempt: false
 rounds: null
 attributes: {}

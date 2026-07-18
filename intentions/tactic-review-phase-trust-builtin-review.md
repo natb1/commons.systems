@@ -35,7 +35,12 @@ attention:
     retained boost keeps the implement-phase work top-ranked for router
     selection."
 phase: implement
-execution: null
+execution:
+  branch: tactic-review-phase-trust-builtin-review
+  pr: 2887
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -368,3 +373,20 @@ with the persisted plan text in hand; threading a `plan`/`contract` arg from
 `SKILL.md` Step 2 into the workflow `args` would strengthen the contract judgment.
 This is a small `SKILL.md` + `review-fix.js` arg touch — recommended but out of
 scope for the minimum refactor.
+
+## needs-main residue
+
+Recorded by `/qa-fix` (PR #2887) — verifiable only against a live production
+`/review-fix` run, not at merge time.
+
+- id: 7
+- title: Live Workflow-runtime behavior of the two-lane fan-out and residue disposition
+- url_path: current
+- expected_outcome: Real end-to-end run shows Lane-A trust-the-built-in fix
+  application, correct residue disposition, unchanged Lane-B behavior, and
+  correct deviation escalation.
+- finding: no live Workflow-runtime test harness exists yet (the `agent()` /
+  `parallel()` / `phase()` globals only exist inside a live Workflow run);
+  end-to-end behavior can only be observed by running `/review-fix` on a
+  future PR in production. This mirrors the node's own "Manual /
+  observe-in-production" verification section above.
