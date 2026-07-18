@@ -171,7 +171,14 @@ clarifications:
       Fingerprint-mismatch detection and the 'stop new selections in the
       subtree, let in-flight phases finish their current phase' behavior are
       unchanged; only the re-evaluation's dispatch granularity changes
-      (highest-ranked soft-frozen node first, per the progression tiebreak)."
+      (highest-ranked soft-frozen node first, per the progression tiebreak).
+      (Scoped 2026-07-18: the freeze becomes materiality-scoped at the source —
+      the editing /align-strategy round, holding the delta and the author in
+      hand, classifies each stamped open child and re-stamps orthogonal children
+      in the same graph-commit, so a freeze fires only on materially affected
+      children; each of those still re-evaluates at its own rank exactly as
+      recorded here. See the materiality-scoped-freeze clarification and
+      tactic-materiality-scoped-freeze.)"
   - question: Does the backlog band scale — and does it self-correct when the graph
       changes?
     answer: "No on both counts — superseded on same-day author review: the backlog
@@ -1813,7 +1820,79 @@ clarifications:
       required — the existing backlog-tactic plus off-path-demotion mechanism is
       the structural support. This round's dispatch-rename, input-contract, and
       conflict tactics are recorded as draft byproducts here and finalize as
-      backlog tactics. Recorded 2026-07-18 interview."
+      backlog tactics. Recorded 2026-07-18 interview. (Companion 2026-07-18:
+      off-path demotion covers the recorded requirement’s own rank; the freeze
+      tax of the recording edit itself — every stamped child paying a
+      re-evaluation session even for an orthogonal edit, as this round’s edit
+      did to 9 in-flight children — is addressed separately by the
+      materiality-scoped-freeze clarification.)"
+  - question: A strategy edit soft-freezes every stamped open child regardless of
+      relevance or rank (the 2026-07-18 skill-rename round staled 9 in-flight
+      children for a low-rank naming requirement) — should the freeze decision
+      incorporate a rank comparison, and how does a stale child recover WHAT
+      changed when the stamp is a bare hash?
+    answer: 'Greenfield: the freeze becomes materiality-scoped at the source, not
+      rank-gated at the selector. Today’s freeze conflates two separable
+      judgments: materiality (does this edit affect this child’s plan at all?)
+      and urgency (when must an affected child stop and reconcile?). The editing
+      round — the one session holding both the delta and the author — classifies
+      each stamped open child: an orthogonal child is re-stamped in the SAME
+      graph-commit as the edit, so no freeze ever fires for it; a materially
+      affected child is left stale and freezes exactly as recorded in the
+      soft-freeze clarification, re-evaluating at its own rank. The selector
+      already runs re-evaluation at the child’s own rank (the frozen-candidate
+      emission in router.ts), so a low-rank change never preempts higher-ranked
+      work even today — the defect was only the orthogonal-child tax: one
+      re-evaluation session per stamped child whose likely verdict is
+      "unaffected, re-stamp". Delta provenance: the per-strategy stamp widens
+      from a bare hash to {hash, sha}, where sha is the origin/main commit whose
+      strategy content the stamp was taken against — mirroring the tactic
+      scope-custody stamp (the scope-fingerprint chain-of-custody clarification)
+      — so a stale child recovers the exact delta mechanically via git diff
+      <sha>..origin/main -- intentions/<strategy-id>.md instead of relying on
+      dated-clarification archaeology. Steelman (the author’s rank-gate
+      proposal: freeze a stale child only when the staling change’s carrier
+      out-ranks it, firing later if the carrier is boosted above it): DIVERGED —
+      rank is not a proxy for materiality (a low-rank change can still
+      invalidate a high-rank child’s plan: the skill rename renames the very
+      skills tactic-align-skills-latest-graph-guard’s plan edits); an
+      unconditional rank gate lets workers knowingly execute superseded scope;
+      and attributing a bare hash mismatch to a ranked carrier needs the same
+      provenance substrate anyway. Rank incorporation instead rides existing
+      machinery: re-evaluation competes at the child’s own rank, and a
+      must-land-first migration carrier acquires blocked_by edges from affected
+      children (see the migration-sequencing clarification), whose backward
+      attention-compounding boosts the carrier in proportion to what it blocks.
+      Brownfield (backwards-incompatible for stamp readers, so sequenced;
+      executable units live in draft tactic-materiality-scoped-freeze): (1)
+      additive — schema accepts string | {hash, sha} as the map value, staleness
+      reads the hash in either form; (2) new stamps write {hash, sha}; (3)
+      bare-hash stamps migrate opportunistically at each re-stamp; (4) drop the
+      bare-string form; skill-side, /align-strategy’s step-5 soft-freeze warning
+      becomes the classification-and-re-stamp step. The three edits now
+      accumulated on the 9 currently-stale children (fix-orthogonal,
+      skill-rename, this round) reconcile via the author’s already-planned
+      re-evaluation sweep — this doctrine applies from the next edit round on.
+      Recorded 2026-07-18 /align-strategy interview.'
+  - question: Does the graph need first-class structure for sequencing brownfield
+      migrations of backwards-incompatible changes, and how do in-flight tactics
+      link to a migration that must land before their work?
+    answer: "No new structure — existing edges suffice. A backwards-incompatible
+      change records its greenfield target and ordered migration in the strategy
+      (the fix-orthogonal-execution-state clarification is the pattern) and
+      carries execution in a carrier tactic: one atomic PR with ordered units in
+      the tactic body when the migration fits a single PR
+      (tactic-fix-interrupt-orthogonal-state), or a parent tactic with children
+      sequenced by blocked_by edges (validateGraph rules 6/13/15) when it spans
+      PRs. The one real gap was the LINK from materially affected in-flight
+      tactics to the migration: the editing round adds a blocked_by edge from
+      each affected child to the carrier when the migration must land before
+      that child’s work — which both gates selection and back-compounds
+      attention onto the carrier, pricing the migration by what it blocks (the
+      emergent rank incorporation of the materiality-scoped-freeze
+      clarification). A first-class attributes.migration record is DECLINED by
+      parsimony until a sensor needs machine-readable migration state. Recorded
+      2026-07-18 /align-strategy interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
