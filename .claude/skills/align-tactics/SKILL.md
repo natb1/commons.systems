@@ -118,8 +118,9 @@ frontmatter to tell which:
   sweep. Reconcile the whole node against the current serving-strategy substance
   (the whole-node reconciliation bar, clarification 32, per Re-evaluation mode
   item 2), re-stamp **only** the re-evaluated strategy's entry in
-  `execution.strategy_fingerprint` and leave every other serving strategy's
-  entry untouched (Re-evaluation mode item 3 — a tactic still at
+  `execution.strategy_fingerprint` to the `{hash: strategyFingerprint(strategy),
+  sha: <origin/main sha>}` object form (Re-evaluation mode item 3) and leave
+  every other serving strategy's entry untouched (a tactic still at
   `execution: null` has no map to re-stamp), and land via `graph-commit`.
 
 **Both cases land the single pre-existing node** via `graph-commit --base` —
@@ -567,21 +568,32 @@ frontmatter this session does change (a drift clarification, a park, the
 <strategy-id>`, bundled with the round's tactics when small.
 
 **Fingerprint honesty.** `execution.strategy_fingerprint` is a **per-strategy
-map** `{<strategy-id>: <fingerprint>}` — one entry per serving strategy — that
+map** `{<strategy-id>: {hash, sha}}` — one entry per serving strategy — that
 the router's soft-freeze trigger compares against each serving strategy's
 current substance (strategy clarification 10). At mint time this session stamps
-only the **decomposed** strategy's entry: `{<decomposed-strategy-id>:
-<fingerprint>}`, where `<fingerprint>` is `strategyFingerprint(strategy)` from
-`packages/intentionsutil/src/router.ts` — always that helper, never a
-hand-computed hash. A serving strategy absent from the map is never stale
-(per-strategy null), so an honest multi-serves tactic is not born frozen against
-its other serving strategies; those entries are filled by whichever session
-decomposes or re-evaluates each of them. A tactic not yet advanced still carries
+only the **decomposed** strategy's entry: `{<decomposed-strategy-id>: {hash:
+strategyFingerprint(strategy), sha: <origin/main sha>}}`, where the `hash` is
+`strategyFingerprint(strategy)` from `packages/intentionsutil/src/router.ts` —
+always that helper, never a hand-computed hash — and `sha` is the origin/main
+commit the hash was taken against, obtained with `git rev-parse origin/main` in
+the bootstrap-interim hand-stamp path (a live router passes it through
+`apply-node-transition.ts --strategy-sha`). A serving strategy absent from the
+map is never stale (per-strategy null), so an honest multi-serves tactic is not
+born frozen against its other serving strategies; those entries are filled by
+whichever session decomposes or re-evaluates each of them. Untouched
+sibling-strategy entries in the same map are left as-is — this session converts
+only the key it is re-stamping, never a key it is not touching (opportunistic
+conversion, not bulk migration). A tactic not yet advanced still carries
 `execution: null` (no map to stamp); the map is seeded the first time an
 `execution` object exists. The bare-string form is deprecated-legacy — never
 emit it. In the bootstrap interim with no live router, the mint-time stamp is
 made by hand at completion; the freeze-on-mismatch rule is otherwise discharged
 by running re-evaluation in the **same session** as the strategy edit (below).
+
+Dropping the bare-string form entirely, and making `validate-graph` **reject**
+it, is sequenced future work (migration step 4), not this change — bare strings
+remain valid deprecated-legacy, and only classification-touched keys convert to
+the `{hash, sha}` object form.
 
 ## Re-evaluation mode
 
@@ -612,11 +624,14 @@ decompose fresh. It:
    fingerprint-triggered re-evaluation.
 3. Re-stamps **only the re-evaluated strategy's entry** in each surviving
    tactic's `execution.strategy_fingerprint` map — set
-   `map[<re-evaluated-strategy-id>] = strategyFingerprint(strategy)`
-   (`packages/intentionsutil/src/router.ts`), leaving every other serving
-   strategy's entry untouched — which unfreezes the subtree against this
-   strategy without disturbing the others. (A tactic still at `execution: null`
-   has no map to re-stamp until the machinery seeds one.)
+   `map[<re-evaluated-strategy-id>] = {hash: strategyFingerprint(strategy),
+   sha: <origin/main sha>}` (`hash` via `strategyFingerprint` from
+   `packages/intentionsutil/src/router.ts`; `sha` via `git rev-parse
+   origin/main` in the bootstrap-interim hand-stamp path, or
+   `apply-node-transition.ts --strategy-sha` under a live router), leaving every
+   other serving strategy's entry untouched — which unfreezes the subtree
+   against this strategy without disturbing the others. (A tactic still at
+   `execution: null` has no map to re-stamp until the machinery seeds one.)
 4. Lands the amendments via `graph-commit`.
 
 Until a live router exists, re-evaluation runs **inline** in the same session

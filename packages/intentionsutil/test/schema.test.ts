@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import { validateGraph, validateNode } from "../src/schema.js";
 
@@ -160,7 +161,124 @@ describe("validateNode", () => {
           strategy_fingerprint: { "strategy-a": 123 },
         },
       }),
-    ).toThrow(/string for execution.strategy_fingerprint.strategy-a/);
+    ).toThrow(/Expected string or \{hash, sha\} object for execution.strategy_fingerprint.strategy-a/);
+  });
+
+  it("accepts a strategy_fingerprint map value that is a {hash, sha} object", () => {
+    const result = validateNode({
+      id: "n1-fp-obj",
+      kind: "tactic",
+      statement: "Execution with an object-form fingerprint entry.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: { "strategy-a": { hash: "hash-a", sha: "sha-a" } },
+      },
+    });
+    expect(result.execution?.strategy_fingerprint).toEqual({
+      "strategy-a": { hash: "hash-a", sha: "sha-a" },
+    });
+  });
+
+  it("accepts a mixed map with one bare-string legacy entry and one {hash, sha} object entry", () => {
+    const result = validateNode({
+      id: "n1-fp-mixed",
+      kind: "tactic",
+      statement: "Execution with a mixed-form fingerprint map.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: {
+          "strategy-a": "hash-a",
+          "strategy-b": { hash: "hash-b", sha: "sha-b" },
+        },
+      },
+    });
+    expect(result.execution?.strategy_fingerprint).toEqual({
+      "strategy-a": "hash-a",
+      "strategy-b": { hash: "hash-b", sha: "sha-b" },
+    });
+  });
+
+  it("rejects a {hash, sha} map object value missing hash", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-nohash",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry missing hash.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { sha: "sha-a" } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects a {hash, sha} map object value missing sha", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-nosha",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry missing sha.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: "hash-a" } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects a {hash, sha} map object value with a non-string hash or sha", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-badhash",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry with a numeric hash.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: 123, sha: "sha-a" } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+    expect(() =>
+      validateNode({
+        id: "n1-fp-badsha",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry with a numeric sha.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: "hash-a", sha: 456 } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
   });
 
   it("rejects a strategy_fingerprint that is neither string, object, nor null", () => {
