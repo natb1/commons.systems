@@ -86,7 +86,11 @@ describe("validateNode", () => {
       recommendation: "escalate to the author",
     });
     expect(result.pace_exempt).toBe(true);
-    expect(result.rounds).toEqual({ count: 3, last_completed: "2026-07-02" });
+    expect(result.rounds).toEqual({
+      count: 3,
+      last_completed: "2026-07-02",
+      last_aligned: null,
+    });
   });
 
   it("defaults execution nested nullables and tolerates a bare execution", () => {
@@ -1084,7 +1088,7 @@ describe("validateGraph", () => {
   it("throws when rounds is set on a non-strategy", () => {
     const nodes = [
       ...kindNodes(),
-      gnode({ id: "tactic-1", kind: "tactic", rounds: { count: 1, last_completed: null } }),
+      gnode({ id: "tactic-1", kind: "tactic", rounds: { count: 1, last_completed: null, last_aligned: null } }),
     ];
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-1: rounds is only valid on kind "strategy" nodes, got kind "tactic"/,
@@ -1094,7 +1098,11 @@ describe("validateGraph", () => {
   it("passes when rounds sits on a strategy", () => {
     const nodes = [
       ...kindNodes(),
-      gnode({ id: "strategy-1", kind: "strategy", rounds: { count: 2, last_completed: "2026-07-01" } }),
+      gnode({
+        id: "strategy-1",
+        kind: "strategy",
+        rounds: { count: 2, last_completed: "2026-07-01", last_aligned: null },
+      }),
     ];
     expect(() => validateGraph(nodes)).not.toThrow();
   });
