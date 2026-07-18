@@ -74,8 +74,8 @@ order; the graph is its single home, maintained by
 | Priority | Chunk node | Texts | Record(s) |
 |---|---|---|---|
 | 1 | `tactic-reading-chunk-1-plato-cave` (done 2026-07-07) | Republic VII 514a–521b | tradition-plato |
-| 2 | `tactic-reading-chunk-2-aristotle-hexis` | NE II.5–6 | tradition-aristotle |
-| 3 | `tactic-reading-chunk-5-aristotle-phronesis` | NE VI | tradition-aristotle |
+| 2 | `tactic-reading-chunk-2-aristotle-hexis` (done 2026-07-13) | NE II.5–6 | tradition-aristotle |
+| 3 | `tactic-reading-chunk-5-aristotle-phronesis` (done 2026-07-17) | NE VI | tradition-aristotle |
 | 4 | `tactic-reading-chunk-19-augustine-interior-teacher` | De Magistro 11.36–14.46 | tradition-augustine |
 | 5 | `tactic-reading-chunk-20-augustine-conversio` | Confessions VII.9–17 | tradition-augustine |
 | 6 | `tactic-reading-chunk-21-augustine-divided-will` | Confessions VIII.5–12 | tradition-augustine |
@@ -138,6 +138,28 @@ clarification on `tradition-stoicism`; the text stays in that record's
 `attributes.texts`. `tradition-augustine` was already fully covered (chunks
 19–21); no action.
 
+## Dialog sessions (2026-07-18)
+
+The 2026-07-18 exercise taxonomy (`strategy-graph-review-curriculum`): every
+reading session produces a dialog session — Socratic reinforcement of the
+completed reading, author recall and origination — prioritized before new
+reading. Dialog nodes are frontier items: no
+`attributes.curriculum.priority` integer (sequence is `blocked_by`; relative
+urgency rides the attention system, which compounds backward through
+`blocked_by`) and no reader excerpt (`/sync-reader` ignores them —
+recall-based, no re-reading). Each carries
+`attributes.curriculum.exercise: dialog`.
+
+| Dialog node | Reinforces | Carries |
+|---|---|---|
+| `tactic-dialog-review-plato-cave` | chunk 1 (node pruned; outcomes durable on `tradition-plato`) | chunk-1 recall lists; retroactive items R1–R5 |
+| `tactic-dialog-review-aristotle-hexis` | `tactic-reading-chunk-2-aristotle-hexis` | chunk-2 recall lists; retroactive items R9–R11 |
+| `tactic-dialog-review-aristotle-phronesis` | `tactic-reading-chunk-5-aristotle-phronesis` | the complete chunk-5 deferred ledger (ratification gate) |
+
+The production rule is encoded as `blocked_by` on
+`tactic-reading-chunk-19-augustine-interior-teacher` (head of the remaining
+reading order): the three dialog sittings precede the Augustine block.
+
 ## Candidate batch (strategy-complete-grounding)
 
 Chunks 10–17 are *candidate* chunks (2026-07-07 /align-strategy round,
@@ -158,6 +180,28 @@ above and serve `strategy-complete-grounding`, not this node's own strategy.
 | 21 | `tactic-reading-chunk-15-ostrom-commons-gift` | Governing the Commons ch. 3; Mauss, The Gift intro, ch. 1 | tradition-ostrom (+ Mauss divergence) |
 | 22 | `tactic-reading-chunk-16-buddhism-nonattachment` | MN 22 (raft simile); SN 56.11 | tradition-buddhism (expected declined) |
 | 23 | `tactic-reading-chunk-17-confucian-household` | Great Learning; Analects 1–2 | tradition-confucianism |
+
+### Chunk-5 candidate suggestions (2026-07-18)
+
+Follow-up references identified by the chunk-5 sitting (recursive-frontier
+feeder). Tracked here for the next /align round or the dialog session to
+mint as candidate chunk nodes; grain (per-author vs school-level) is left to
+the candidate sitting. Politics I.2 needed no entry — chunk 7 already covers
+it.
+
+- Hume, *Treatise* 3.1.1 — the is/ought refusal (the probe-2 corollary reads
+  NE VI.1's split as modal, a refusal of the Humean firewall; author: "must
+  be tracked for later review")
+- Plato, *Laws* II 653a–c — Aristotle cites it at 1104b11–13 (habituation in
+  pleasure and pain)
+- NE VII — akrasia/enkrateia (the continence trap, R15a)
+- Aristotle, *Posterior Analytics* II.19 — epagōgē/nous companion text (R18)
+- Wendy Wood (habit research); BJ Fogg (behavior design); William James,
+  *Principles of Psychology* ch. IV (habit) — empirical habit-mechanism
+  references in the SAME machinery as the classical texts (author's
+  parsimony ruling, R15c; empirical records differ only in review_trigger
+  content — supersession); review gate: imported techniques are checked
+  against II.4's three conditions.
 
 ## Shared chunk office-hours reason (the single home)
 

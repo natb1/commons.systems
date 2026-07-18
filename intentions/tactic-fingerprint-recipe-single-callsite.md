@@ -34,16 +34,22 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: fix
+phase: qa
 execution:
   branch: tactic-fingerprint-recipe-single-callsite
   pr: 2885
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-18
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /fix-conflicts once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}

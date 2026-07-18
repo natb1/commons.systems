@@ -108,5 +108,7 @@ attributes:
     - "attributes: kind-specific fields, defined by the kind node — the kind
       nodes own the which-kinds-carry-which-fields statement"
   entry_point: this node is the entry point of the graph
+  status_vocabulary:
+    codified: the author has personally settled this kind's semantics
 ---
 # A kind defines the semantics of a class of nodes

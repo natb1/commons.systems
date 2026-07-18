@@ -51,6 +51,19 @@ clarifications:
       pleasure supervening on the act (1104b3-8) — distinguishing virtuous
       action from virtuous character. Recorded 2026-07-13 /reading-review chunk
       2."
+  - question: What did reading chunk 5 (NE VI + III.4) resolve on this record?
+    answer: "Nothing yet, by design. The sitting completed 2026-07-17 with draft
+      verdicts touching this record — retire-and-adopt on the provisional
+      vice-corrupts divergence (with tradition-plato's provisional chosen_over
+      in lockstep), a III.4 both/and adopted entry (capture corrupts appearance,
+      not wishing), the spoudaios self-certification amendment to the
+      fallibilism divergence, and the chunk-5 vocabulary/quote retention lists —
+      but the author deferred the entire slate en bloc (2026-07-18: 'all of
+      these outcomes sound correct but there is still too much platonic glare to
+      ratify outright'). The full ledger is quarantined on
+      tactic-dialog-review-aristotle-phronesis, the ratification gate; this
+      record changes only when that dialog session ratifies, amends, or
+      re-defers each item. Recorded 2026-07-18 /reading-review chunk 5."
 tooling_goals: []
 success_signal: null
 attention: null

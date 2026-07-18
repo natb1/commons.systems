@@ -36,13 +36,14 @@ attention:
     this tactic serves strategy-token-economy (unboosted), so it inherits
     nothing and takes the full boost 8 directly to reach the same authored-8
     tier."
-phase: qa
+phase: review
 execution:
   branch: tactic-align-family-opus-default
   pr: 2886
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
@@ -53,6 +54,17 @@ attributes: {}
 ---
 
 # Split /align-tactics model routing (Sonnet orchestrator + Opus decompose/plan subagent); keep /align-strategy whole-session Opus
+
+> **Migration note (2026-07-18, `strategy-token-economy` clarification 14):** this
+> is **increment 1** of a two-step brownfield migration, not the greenfield end
+> state. It adds `model: opus` to `/align-tactics`' existing caller-thread
+> Explore/Plan subagents — a correct but interim subset. The greenfield target is
+> `/align-tactics` executing as a deterministic Workflow
+> (`.claude/workflows/align-tactics.js`, /review-fix-shaped: Sonnet orchestrator,
+> Opus decision subagents, Sonnet gathering subagents), carried by **increment 2**,
+> `tactic-align-tactics-workflow` (which is `blocked_by` this node so it sequences
+> after #2886 merges). Keep this PR's scope as-is — the Workflow rearchitecture is
+> increment 2's job, not this one's.
 
 ## Context
 
@@ -148,3 +160,18 @@ its plan-creation subagent ran on **Opus**, and that `/align-strategy` sessions
 ran on Opus. Confirm `dispatch-graph-execute` still launches `/align-tactics` on
 Sonnet (`ORCH_MODEL`), i.e. the router is not forcing the whole align-family
 session to Opus.
+
+## needs-main residue
+
+- **8. Deferred behavioral verification via `/dispatch-token-audit` attribution**
+  - URL path: current
+  - Expected outcome: post-run token attribution shows the intended
+    Sonnet-orchestrator / Opus-subagent split; `dispatch-graph-execute` does not
+    force the whole align-family session onto Opus.
+  - Finding: this node's own "Manual / observe-in-production" section explicitly
+    defers this check to after-the-fact `/dispatch-token-audit` by-node/by-phase
+    attribution, measured after a real router-launched `/align-tactics` round
+    runs post-merge — not assertable at QA time on a skill-markdown-only diff.
+    (`qa-fix` disposition: `needs-main`, `planned_deferral: true`; route: human —
+    the token-audit read is not a public-prod Chrome-observable check, so it
+    does not qualify for the autonomous `/qa-main` lane.)

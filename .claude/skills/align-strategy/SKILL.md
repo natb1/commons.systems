@@ -69,13 +69,23 @@ blocks your `graph-commit` rebase, and a stale read races live phase state
    run with `dangerouslyDisableSandbox: true`) — the claim is held by
    another session: stop and report the held claim to the author. Do
    **not** park the node — a held claim is not a defect.
-3. **Enter the worktree.** Otherwise create or re-enter it — native
-   `EnterWorktree` with the node id as the worktree name, or the
-   `provision-node-worktree`
-   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`)
-   primitive — and do all authoring and the step-5 `graph-commit` from
+3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+   or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
-   liveness rule the router uses, so no separate lock is needed.
+   liveness rule the router uses, so no separate lock is needed. **Prefer
+   `provision-node-worktree`**
+   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`): it
+   fetches `origin/main` and cuts the worktree fresh from it, so no separate
+   freshness check is needed after it. If instead you use native
+   `EnterWorktree`, **or** re-enter an **already-existing** worktree by any
+   means **other than `provision-node-worktree`**, running
+   `.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh` is
+   **mandatory** as the very first action in that worktree — **before any
+   graph read** (before Step 1's overlap grep / `readNode`, etc.). A non-zero
+   exit means the checkout is stale **or** the `git fetch` itself failed;
+   either way, **STOP** and freshen (`git fetch origin main && git merge
+   origin/main`) before proceeding. Never treat a failed fetch as license to
+   proceed on unverified state.
 
 **Doctrine-recording rounds pin the pace curve.** A round that records
 governing dispatch doctrine (a concurrency-safety or
@@ -464,14 +474,50 @@ landed with `office_hours` set instead of the intended content (a
 concurrent-edit conflict) — tell the author and stop; do not retry
 automatically.
 
-**Soft-freeze warning.** If this is an edit to a strategy that has open
-(non-draft, non-`done`) child tactics, warn the author **before** running
-`graph-commit`: landing this edit queues a soft freeze and re-evaluation
-of the open subtree once the router (`tactic-graph-router-selector` /
-`tactic-graph-router-transitions`) is live (clarification 10). Until then,
-say so explicitly and prompt the author to run the re-evaluation as an
-inline `/align-tactics` pass in the same session — every round recorded on
-`strategy-graph-native-dispatch` so far has done exactly this by hand.
+**Materiality-scoped freeze — classify each open child.** If this is an edit
+to a strategy that has open (non-draft, non-`done`) child tactics with an
+existing stamped `execution.strategy_fingerprint` entry for this strategy, the
+session must classify **each** such stamped open child against the actual edit
+delta — **before** running `graph-commit` — into exactly one of three buckets.
+The classification is materiality-scoped, not indiscriminate: an edit no longer
+queues a blanket freeze of the whole open subtree; only the children the edit
+actually affects freeze.
+
+There is **no rank gate** — rank is not a proxy for materiality. A low-rank
+child can still be materially affected, and a high-rank child can still be
+orthogonal; classify every stamped open child on the substance of the delta,
+never on its rank.
+
+- **Orthogonal** — the edit does not affect this child's plan at all.
+  Re-stamp its `execution.strategy_fingerprint` entry for this strategy to
+  `{hash: strategyFingerprint(strategy), sha: <origin/main sha at edit time>}`
+  in the **same** `graph-commit` as this strategy edit, so no freeze fires for
+  this child.
+- **Materially affected** — the edit changes something this child's plan
+  depends on. Leave its stamp untouched/stale: the freeze fires and it
+  re-evaluates later at its own rank via the existing re-evaluation mechanism
+  (unchanged — `tactic-graph-router-selector` /
+  `tactic-graph-router-transitions` when live; the inline `/align-tactics` pass
+  in this same session in the bootstrap interim, as every round recorded on
+  `strategy-graph-native-dispatch` so far has done by hand).
+- **Must-land-first migration** — this child must not proceed until some
+  carrier work lands. In addition to leaving its stamp stale (as materially
+  affected), add `blocked_by += [<carrier-id>]` so the router cannot select it
+  until the carrier lands.
+
+`hash` is always `strategyFingerprint(strategy)` from
+`packages/intentionsutil/src/router.ts` — always that helper, never a
+hand-computed hash. In the bootstrap-interim hand-stamp path (no live router
+yet), get `sha` with `git rev-parse origin/main`. The live-router path instead
+passes it through `apply-node-transition.ts --strategy-sha <sha>` rather than
+shelling git itself.
+
+Dropping the legacy bare-string form entirely, and making `validate-graph`
+**reject** bare strings, is sequenced future work (migration step 4), **not**
+this change: bare strings remain valid deprecated-legacy, and only the
+classification-touched (re-stamped) keys convert to the `{hash, sha}` object
+form — opportunistic conversion, not a bulk migration of the extant legacy
+bare-hash stamps.
 
 **Curriculum enrollment (record time).** Maintaining the ever-expanding
 review curriculum is one of /align's roles

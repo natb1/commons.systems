@@ -57,7 +57,11 @@ describe("reconcileGraph", () => {
     const dir = tempDir();
     node(dir, { id: "kind-strategy", kind: "kind" });
     node(dir, { id: "kind-tactic", kind: "kind" });
-    node(dir, { id: "strategy-s", kind: "strategy", rounds: { count: 0, last_completed: null } });
+    node(dir, {
+      id: "strategy-s",
+      kind: "strategy",
+      rounds: { count: 0, last_completed: null, last_aligned: null },
+    });
     node(dir, { id: "tactic-done", kind: "tactic", phase: "review", serves: ["strategy-s"] });
     node(dir, { id: "tactic-next", kind: "tactic", phase: "draft", serves: ["strategy-s"], blocked_by: ["tactic-done"] });
 
@@ -70,7 +74,7 @@ describe("reconcileGraph", () => {
     expect(readNode(dir, "tactic-next").blocked_by).toEqual([]);
     // Round stamped (only a draft child remains).
     const s = readNode(dir, "strategy-s");
-    expect(s.rounds).toEqual({ count: 1, last_completed: "2026-07-10" });
+    expect(s.rounds).toEqual({ count: 1, last_completed: "2026-07-10", last_aligned: null });
     expect(plan.edit).toContain("strategy-s");
     expect(plan.edit).toContain("tactic-next");
   });
@@ -101,7 +105,11 @@ describe("reconcileGraph", () => {
     const dir = tempDir();
     node(dir, { id: "kind-strategy", kind: "kind" });
     node(dir, { id: "kind-tactic", kind: "kind" });
-    node(dir, { id: "strategy-s", kind: "strategy", rounds: { count: 0, last_completed: null } });
+    node(dir, {
+      id: "strategy-s",
+      kind: "strategy",
+      rounds: { count: 0, last_completed: null, last_aligned: null },
+    });
     node(dir, { id: "tactic-a", kind: "tactic", phase: "review", serves: ["strategy-s"] });
     node(dir, { id: "tactic-b", kind: "tactic", phase: "review", serves: ["strategy-s"] });
 
@@ -112,20 +120,32 @@ describe("reconcileGraph", () => {
     });
 
     expect(plan.prune.sort()).toEqual(["tactic-a", "tactic-b"]);
-    expect(readNode(dir, "strategy-s").rounds).toEqual({ count: 1, last_completed: "2026-07-10" });
+    expect(readNode(dir, "strategy-s").rounds).toEqual({
+      count: 1,
+      last_completed: "2026-07-10",
+      last_aligned: null,
+    });
   });
 
   it("does not stamp while a non-draft sibling survives the sweep", () => {
     const dir = tempDir();
     node(dir, { id: "kind-strategy", kind: "kind" });
     node(dir, { id: "kind-tactic", kind: "kind" });
-    node(dir, { id: "strategy-s", kind: "strategy", rounds: { count: 0, last_completed: null } });
+    node(dir, {
+      id: "strategy-s",
+      kind: "strategy",
+      rounds: { count: 0, last_completed: null, last_aligned: null },
+    });
     node(dir, { id: "tactic-a", kind: "tactic", phase: "review", serves: ["strategy-s"] });
     node(dir, { id: "tactic-b", kind: "tactic", phase: "qa", serves: ["strategy-s"] });
 
     const plan = reconcileGraph({ dir, prStatesFile: prStates(dir, { "tactic-a": "merged" }), date: "2026-07-10" });
     expect(plan.prune).toEqual(["tactic-a"]);
-    expect(readNode(dir, "strategy-s").rounds).toEqual({ count: 0, last_completed: null });
+    expect(readNode(dir, "strategy-s").rounds).toEqual({
+      count: 0,
+      last_completed: null,
+      last_aligned: null,
+    });
   });
 
   it("ignores tactics whose PR is not terminal or that are draft/done", () => {

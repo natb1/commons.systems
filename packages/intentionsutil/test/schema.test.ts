@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import { validateGraph, validateNode } from "../src/schema.js";
 
@@ -86,7 +87,11 @@ describe("validateNode", () => {
       recommendation: "escalate to the author",
     });
     expect(result.pace_exempt).toBe(true);
-    expect(result.rounds).toEqual({ count: 3, last_completed: "2026-07-02" });
+    expect(result.rounds).toEqual({
+      count: 3,
+      last_completed: "2026-07-02",
+      last_aligned: null,
+    });
   });
 
   it("defaults execution nested nullables and tolerates a bare execution", () => {
@@ -156,7 +161,124 @@ describe("validateNode", () => {
           strategy_fingerprint: { "strategy-a": 123 },
         },
       }),
-    ).toThrow(/string for execution.strategy_fingerprint.strategy-a/);
+    ).toThrow(/Expected string or \{hash, sha\} object for execution.strategy_fingerprint.strategy-a/);
+  });
+
+  it("accepts a strategy_fingerprint map value that is a {hash, sha} object", () => {
+    const result = validateNode({
+      id: "n1-fp-obj",
+      kind: "tactic",
+      statement: "Execution with an object-form fingerprint entry.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: { "strategy-a": { hash: "hash-a", sha: "sha-a" } },
+      },
+    });
+    expect(result.execution?.strategy_fingerprint).toEqual({
+      "strategy-a": { hash: "hash-a", sha: "sha-a" },
+    });
+  });
+
+  it("accepts a mixed map with one bare-string legacy entry and one {hash, sha} object entry", () => {
+    const result = validateNode({
+      id: "n1-fp-mixed",
+      kind: "tactic",
+      statement: "Execution with a mixed-form fingerprint map.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: {
+          "strategy-a": "hash-a",
+          "strategy-b": { hash: "hash-b", sha: "sha-b" },
+        },
+      },
+    });
+    expect(result.execution?.strategy_fingerprint).toEqual({
+      "strategy-a": "hash-a",
+      "strategy-b": { hash: "hash-b", sha: "sha-b" },
+    });
+  });
+
+  it("rejects a {hash, sha} map object value missing hash", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-nohash",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry missing hash.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { sha: "sha-a" } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects a {hash, sha} map object value missing sha", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-nosha",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry missing sha.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: "hash-a" } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects a {hash, sha} map object value with a non-string hash or sha", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-badhash",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry with a numeric hash.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: 123, sha: "sha-a" } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+    expect(() =>
+      validateNode({
+        id: "n1-fp-badsha",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry with a numeric sha.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: "hash-a", sha: 456 } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
   });
 
   it("rejects a strategy_fingerprint that is neither string, object, nor null", () => {
@@ -463,6 +585,29 @@ describe("validateNode", () => {
     ).toThrow();
   });
 
+  it("accepts any non-empty status string (status is not a central enum)", () => {
+    const result = validateNode({
+      id: "n3d",
+      kind: "tactic",
+      statement: "Custom kind-specific status.",
+      owner: "human",
+      status: "anything-nonempty",
+    });
+    expect(result.status).toBe("anything-nonempty");
+  });
+
+  it("rejects an empty-string status", () => {
+    expect(() =>
+      validateNode({
+        id: "n3e",
+        kind: "tactic",
+        statement: "Empty status.",
+        owner: "human",
+        status: "",
+      }),
+    ).toThrow(/status must be a non-empty string/);
+  });
+
   it("rejects a bad enum value", () => {
     expect(() =>
       validateNode({
@@ -656,7 +801,14 @@ describe("validateGraph", () => {
       office_hours: partial.office_hours ?? null,
       pace_exempt: partial.pace_exempt ?? false,
       rounds: partial.rounds ?? null,
-      attributes: partial.attributes ?? {},
+      // Default status_vocabulary covers the "raw"/"codified" statuses these
+      // fixtures use, so kind-node fixtures satisfy rule 16 (every node's
+      // status must be a key in its kind node's status_vocabulary) without
+      // every test needing to declare one explicitly. Tests that need to
+      // exercise rule 16 itself pass their own `attributes` to override this.
+      attributes: partial.attributes ?? {
+        status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+      },
     };
   }
 
@@ -670,7 +822,10 @@ describe("validateGraph", () => {
         id: "kind-strategy",
         kind: "kind",
         status: "codified",
-        attributes: { goal_layer: true },
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
       }),
       gnode({ id: "kind-delegation", kind: "kind", status: "codified" }),
       gnode({ id: "virtue-root", kind: "virtue", status: "codified", parent: null }),
@@ -934,13 +1089,19 @@ describe("validateGraph", () => {
         id: "kind-strategy",
         kind: "kind",
         status: "codified",
-        attributes: { goal_layer: true },
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
       }),
       gnode({
         id: "kind-tactic",
         kind: "kind",
         status: "codified",
-        attributes: { goal_layer: true },
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
       }),
     ];
   }
@@ -1045,7 +1206,7 @@ describe("validateGraph", () => {
   it("throws when rounds is set on a non-strategy", () => {
     const nodes = [
       ...kindNodes(),
-      gnode({ id: "tactic-1", kind: "tactic", rounds: { count: 1, last_completed: null } }),
+      gnode({ id: "tactic-1", kind: "tactic", rounds: { count: 1, last_completed: null, last_aligned: null } }),
     ];
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-1: rounds is only valid on kind "strategy" nodes, got kind "tactic"/,
@@ -1055,7 +1216,11 @@ describe("validateGraph", () => {
   it("passes when rounds sits on a strategy", () => {
     const nodes = [
       ...kindNodes(),
-      gnode({ id: "strategy-1", kind: "strategy", rounds: { count: 2, last_completed: "2026-07-01" } }),
+      gnode({
+        id: "strategy-1",
+        kind: "strategy",
+        rounds: { count: 2, last_completed: "2026-07-01", last_aligned: null },
+      }),
     ];
     expect(() => validateGraph(nodes)).not.toThrow();
   });
@@ -1147,5 +1312,48 @@ describe("validateGraph", () => {
       gnode({ id: "tactic-c", kind: "tactic" }),
     ];
     expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  // --- Rule 16: status must be a key in the kind node's status_vocabulary --
+
+  it("passes when a node's status is a key in its kind node's status_vocabulary", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-tactic",
+        kind: "kind",
+        status: "codified",
+        attributes: { status_vocabulary: { codified: "Complete." } },
+      }),
+      gnode({ id: "tactic-1", kind: "tactic", status: "codified" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when a node's status is not declared in its kind node's status_vocabulary", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-tactic",
+        kind: "kind",
+        status: "codified",
+        attributes: { status_vocabulary: { codified: "Complete." } },
+      }),
+      gnode({ id: "tactic-1", kind: "tactic", status: "raw" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: status "raw" is not declared in kind-tactic's status_vocabulary/,
+    );
+  });
+
+  it("throws when a kind node has no attributes.status_vocabulary declared", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified", attributes: {} }),
+      gnode({ id: "tactic-1", kind: "tactic", status: "raw" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: kind-tactic has no attributes\.status_vocabulary declared/,
+    );
   });
 });
