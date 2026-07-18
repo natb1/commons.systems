@@ -34,100 +34,18 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: qa
+phase: review
 execution:
   branch: tactic-fingerprint-recipe-single-callsite
   pr: 2885
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA disposition triage on item #7 (state-only vs substance edit
-    distinction) refuted the needs-human framing and downgraded it to
-    opus-fixable, but the gated Opus fix-planner returned zero fix-plan units
-    (not a deviation) -- planning-failed. Escalating to office-hours for human
-    disposition rather than silently treating an empty plan as either a landed
-    fix or a confirmed pass."
-  since: 2026-07-18
-  recommendation: >-
-    ## Recommendation: tactic-fingerprint-recipe-single-callsite (PR #2885, qa
-    phase)
-
-
-    **Likely disposition: PASS, no code change.** The empty Opus fix-plan is not
-    a
-
-    failure to fix a real gap — it reflects that there was nothing to fix. QA
-    item #7
-
-    ("state-only vs substance edit distinction produces the intended
-    user-visible
-
-    behavior") is already mechanically encoded and test-covered. Both Sonnet
-    skeptics
-
-    reached this same read. Confirm the two checks below, then complete the qa
-    phase
-
-    manually.
-
-
-    ### What to check (2 minutes)
-
-
-    1. **The field list is correct.** Open
-    `packages/intentionsutil/src/router.ts`,
-       function `strategyFingerprint` (lines 89-99). Confirm the hashed `substance`
-       object includes only substance fields — `statement`, `clarifications`,
-       `conditions`, `serves`, `success_signal`, `tooling_goals` — and that the state
-       fields `reading` and `office_hours` are absent. (They are: the object hashes
-       nothing from node state.) This is exactly the state-only/substance boundary
-       item #7 asks about.
-
-    2. **A passing test locks that boundary.** Open
-       `packages/intentionsutil/test/strategy-fingerprint.test.ts`. Confirm the two
-       assertions:
-       - "is unchanged by a state-only edit (reading, office_hours)": mutates
-         `reading` and `office_hours`, asserts the fingerprint is identical.
-       - "changes on a substance edit (statement)": mutates `statement`, asserts the
-         fingerprint differs.
-
-       Both are in the suite this qa-fix pass already ran green (29 files, 539
-       tests). Re-run if you want fresh confirmation:
-       `npx vitest run --project packages/intentionsutil --root .`
-
-    ### Action
-
-
-    If both checks hold (they should), item #7 is satisfied by existing code
-    plus a
-
-    passing test — there is no user-input ambiguity and no missing work. Mark
-    the qa
-
-    phase PASS and advance the node: complete the qa phase manually / transition
-
-    `tactic-fingerprint-recipe-single-callsite` out of `qa` (e.g. the
-    graph-native
-
-    `transition-node` path), just as a clean autonomous pass would have. No fix
-
-    commit is needed; do not re-enter the qa-fix lane.
-
-
-    Only escalate further if check 1 or 2 fails — e.g. if
-    `reading`/`office_hours`
-
-    turn out to be in the hashed substance object, or the two tests are absent
-    or
-
-    skipped. That would be a genuine defect, not a judgment call, and should go
-    back
-
-    through the implement/qa chain rather than being resolved here.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
