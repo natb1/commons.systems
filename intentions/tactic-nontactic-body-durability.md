@@ -21,38 +21,32 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Which non-tactic body-durability contract is adopted, and is it
+      implemented?
+    answer: "Greenfield ratified by the author at office hours (2026-07-18): ALL
+      node bodies are durable, authoritative content; statement is the one-line
+      frontmatter summary. store.ts drops the kind gate (readExistingTacticBody
+      -> readExistingBody, assertNoTacticBodyLoss -> a kind-agnostic
+      assertNoBodyLoss) so writeNode preserves every kind body verbatim and
+      regenerates the placeholder only for a brand-new file. Shipped on PR #2890
+      (phase review). The tactic-graph-native-dispatch cosmetic-render body
+      doctrine is amended to durable-for-all-kinds in the same landing. Blocked
+      consumers tactic-calibration-event-registry, tactic-mount-schema, and
+      tactic-graph-native-dispatch-fold unblock when #2890 merges."
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: review
+execution:
+  branch: tactic-nontactic-body-durability
+  pr: 2890
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Author decision reconciling two recorded doctrines the store silently
-    arbitrates: the kind-strategy body-function rule (2026-07-09, strategy
-    bodies carry durable settled mechanism) vs the tactic-graph-native-dispatch
-    doctrine that the body is a cosmetic render for non-tactics, which store.ts
-    writeNode enforces by regenerating every non-tactic body from `statement` on
-    every write (reconcile-graph, read-sensors, park, and transition writes all
-    clobber it). Three consumers (tactic-calibration-event-registry,
-    tactic-mount-schema, tactic-graph-native-dispatch-fold) are blocked on the
-    outcome."
-  since: 2026-07-11
-  recommendation: "Greenfield (recommended): make ALL node bodies durable —
-    generalize readExistingTacticBody (drop the kind gate) and the
-    assertNoTacticBodyLoss guard in store.ts, and amend the cosmetic-render
-    doctrine to durable-for-all-kinds. Honors the 2026-07-09 body-function rule
-    and all three consumers with no relocation, and removes the kind-conditional
-    special case (single callsite per
-    tactic-fingerprint-recipe-single-callsite). Alternative (option B): keep
-    non-tactic bodies as statement-derived cosmetic renders (single source of
-    truth), add a store guard that errors on a non-placeholder non-tactic body,
-    relocate the three consumers to body-safe homes (frontmatter fields / a
-    dedicated tactic body / a package doc), and retire the body-function rule.
-    Decide at office hours; then implement, and the three blocked consumers
-    unblock and re-run implementation/qa/review."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
