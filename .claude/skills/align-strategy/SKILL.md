@@ -474,6 +474,55 @@ landed with `office_hours` set instead of the intended content (a
 concurrent-edit conflict) — tell the author and stop; do not retry
 automatically.
 
+**Scope-inert re-stamp — protect a tactic's own scope custody.** If this
+round's edit touched the **body** (not just frontmatter) of an in-flight
+tactic — a node with a phase set, i.e. an open child (not `draft`, not
+`done`), the same population the Materiality-scoped-freeze section below
+discusses — then that body edit trips the tactic's own chain-of-custody
+scope gate: the worktree-local `.claude/worktrees/<id>.scope-fingerprint`
+stamp no longer matches the tactic's current body fingerprint, and the gate
+demotes the tactic back to `implement`, discarding its qa/review custody.
+That is correct for a real plan-substance change, but this interview
+sometimes must edit an open tactic's body for a **scope-inert** reason — a
+reconciliation note, a drift-review correction, a provenance annotation, or
+any other body edit clarification 38's amendment-completeness bar produces —
+where the plan substance is unchanged. For those, the demotion is spurious.
+
+Classify this round's own edit, per tactic, as **scope-inert** (plan
+substance unchanged — e.g. a provenance/reconciliation annotation) versus
+**material or unsure**. The rule is fail-closed: **only** a confident
+scope-inert verdict re-stamps; on **any** doubt — including a merely
+plausible substance change — do nothing further here. Leave the stamp
+untouched and let custody demote the tactic exactly as it does today. That
+demotion-on-doubt is the existing correct behavior, not a failure mode to
+work around.
+
+For each tactic whose edit is confidently scope-inert, **after** the body
+edit has landed via `graph-commit` in this **same** round (so it is on
+origin/main), run:
+
+```bash
+npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>
+```
+
+It must run post-`graph-commit`: the script reads the tactic's current
+on-disk body and the current `origin/main` sha to compute the stamp, so a
+pre-landing run would stamp stale content. It re-writes **only** the
+worktree-local `.scope-fingerprint` file — it is never a node write and
+never a `graph-commit` of its own.
+
+Record the classification in this round's own record/summary — the
+scope-inert verdict and the tactic ids re-stamped — as the audit trail the
+doctrine requires.
+
+This is a **separate** stamp from the Materiality-scoped-freeze section that
+follows, not an extension of it. That section's `execution.strategy_fingerprint`
+freeze protects open children broadly against **strategy**-substance drift;
+this step's worktree-local `.scope-fingerprint` re-stamp protects a single
+**tactic**'s own scope-custody gate from being tripped by a scope-inert edit
+to that tactic's own body. Two unrelated stamps, two unrelated mechanisms —
+do not conflate them.
+
 **Materiality-scoped freeze — classify each open child.** If this is an edit
 to a strategy that has open (non-draft, non-`done`) child tactics with an
 existing stamped `execution.strategy_fingerprint` entry for this strategy, the
