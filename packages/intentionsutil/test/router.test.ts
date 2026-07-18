@@ -148,6 +148,28 @@ describe("tactic eligibility", () => {
     ]);
     expect(sel.candidates[0]).toMatchObject({ pace_exempt: true, pr: 42 });
   });
+
+  it("skips a phase:review tactic once execution.markers includes 'reviewed' (tick-owned)", () => {
+    const nodes = [
+      tactic({
+        id: "tactic-reviewed",
+        phase: "review",
+        execution: exec({ markers: ["reviewed"] }),
+      }),
+    ];
+    expect(candidateIds(nodes)).toEqual([]);
+  });
+
+  it("still selects a phase:review tactic without the 'reviewed' marker", () => {
+    const nodes = [
+      tactic({
+        id: "tactic-review",
+        phase: "review",
+        execution: exec({ markers: [] }),
+      }),
+    ];
+    expect(candidateIds(nodes)).toEqual(["tactic-review"]);
+  });
 });
 
 describe("strategy eligibility", () => {
