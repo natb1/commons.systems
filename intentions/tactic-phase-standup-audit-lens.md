@@ -42,7 +42,90 @@ execution:
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    /fix-checks: PR #2880's only failing check (unit-tests /
+    test-aggregate-usage.sh
+
+    lenses.baseline_context.total_proxy_usd) is a pre-existing
+    jq-version-dependent
+
+    floating-point flake unrelated to this PR's own changes, but the skill's
+    Flake
+
+    tracking-and-block procedure cannot execute: GitHub Issues are disabled
+    repo-wide
+
+    (has_issues: false) and the node lane forbids gh issue reads/writes
+    entirely, so
+
+    there is no tracking issue to file and no "PR's tracked issue" to block.
+    Needs a
+
+    human decision on the graph-native flake-tracking successor, or
+    authorization to
+
+    directly loosen the pre-existing exact-float-string assertion at
+
+    .claude/skills/dispatch-token-audit/scripts/test-aggregate-usage.sh:505-506.
+  since: 2026-07-16
+  recommendation: |-
+    **What happened:** PR #2880 (tactic-phase-standup-audit-lens) had exactly one
+    failing CI check, `unit-tests`. Local reproduction (jq-1.8.1) passed 182/182 —
+    `test-aggregate-usage.sh` did not reproduce the CI failure. Digging into the
+    run log (https://github.com/natb1/commons.systems/actions/runs/29521484660/job/87699381148)
+    showed the sole failing assertion is `lenses.baseline_context.total_proxy_usd`
+    (`expected: '0.05307749999999999'`, `actual: '0.0530775'`) — a floating-point
+    string-formatting mismatch, not a value mismatch. `git diff origin/main...HEAD`
+    confirms that assertion (test-aggregate-usage.sh:505-506) is unchanged context in
+    this PR's diff, sitting immediately above the PR's own new `phase_standup`
+    assertions — so this is a **pre-existing** test, unrelated to what this PR
+    touches.
+
+    **Root cause:** `EXPECTED_BASELINE_PROXY` (test-aggregate-usage.sh:297) sums four
+    already-divided terms left-to-right via `jq -n`. `aggregate-usage.sh`'s own
+    `total_proxy_usd` (aggregate-usage.sh:836-840) maps each row to
+    `(init_input*RATE_INPUT + init_cache_creation*RATE_CACHE_CREATION)/1e6` and sums
+    via jq's `add`. Floating-point addition isn't associative, so the two orders
+    produce bit-distinct doubles; jq's number-to-string formatting (which differs
+    across jq major versions) renders one as a clean decimal and the other with
+    trailing float noise. CI's `ubuntu-latest` runner's preinstalled jq apparently
+    differs from local jq-1.8.1 in this respect.
+
+    **Why fix-checks stopped here instead of fixing it:** the skill's design
+    (deliberately) never lets a `/fix-checks` pass push a speculative fix to a
+    pre-existing failure unrelated to the PR under repair — the correct move is to
+    file the flake as its own tracking issue and block the PR's tracked issue on it,
+    so `/dispatch-propagate` stops re-routing this PR to `fix-checks` for a failure
+    it cannot fix. That mechanism is `/file-issue` (GitHub-issue-based), gated by the
+    node lane's own rule that "no gh issue is ever read or written" on this lane.
+    Both paths are now dead: `gh api repos/natb1/commons.systems --jq .has_issues`
+    returns `false` — Issues are disabled repo-wide — and even if they weren't, the
+    node lane forbids touching them, and this PR closes a graph tactic node (not a
+    GitHub issue), so there's no "PR's tracked issue" to `blocked_by` in the first
+    place.
+
+    **Recommended next steps for the human, in order of preference:**
+
+    1. **Fastest unblock:** since the flake is narrowly a floating-point
+       exact-string-equality assertion (not a real behavior bug), directly loosen
+       `test-aggregate-usage.sh:505-506` to compare `total_proxy_usd` with a small
+       epsilon tolerance instead of exact string equality — e.g. compute
+       `abs(expected - actual) < 1e-9` via `jq`. This is a one-line-scope fix
+       unrelated to PR #2880's own content, which is exactly why `fix-checks`
+       declined to push it unilaterally; a human authorizing/making this edit
+       directly (on `main`, or as its own tiny PR) unblocks #2880 on the next CI
+       run without needing any tracking-issue machinery at all.
+    2. **Systemic fix:** if this class of situation (a `/fix-checks` node-lane pass
+       hitting a real flake with no GitHub-Issues-based tracking path available)
+       will recur, define a graph-native successor for the `fix-checks` skill's
+       Flake sub-path — e.g. file a born-parked tactic node tracking the flake and
+       `blocked_by` the source tactic node on it, mirroring what `/file-issue` did
+       for the legacy lane. That's a `fix-checks`-skill-level change, out of scope
+       for resolving this one PR.
+    3. Once the flake is resolved (by option 1, ideally) and CI is re-run green on
+       #2880, clear this park (`office_hours` on the
+       `tactic-phase-standup-audit-lens` node) so the node resumes normal dispatch.
 pace_exempt: false
 rounds: null
 attributes: {}

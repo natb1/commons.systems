@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Execution, IntentionNode } from "../src/schema.js";
+import { PHASES } from "../src/schema.js";
 import {
-  PHASE_LADDER,
+  frozenTacticSelectable,
   readingDate,
+  resolveFrozenDescendant,
   selectGraphTargets,
   strategyAlignSelectable,
   strategyFingerprint,
@@ -101,13 +103,20 @@ describe("tactic eligibility", () => {
     expect(candidateIds(nodes)).toEqual([]);
   });
 
-  it("skips draft (explicit and null-phase) and done tactics", () => {
+  it("skips a done tactic; draft tactics now surface at align-tactics", () => {
+    // tactic-graph-frozen-tactic-dispatch: a draft/raw tactic (explicit or
+    // null-phase) is now a first-class candidate at the align-tactics rung; only
+    // a DONE tactic is fully excluded.
     const nodes = [
       tactic({ id: "tactic-draft", phase: "draft" }),
       tactic({ id: "tactic-nophase", phase: null }),
       tactic({ id: "tactic-done", phase: "done" }),
     ];
-    expect(candidateIds(nodes)).toEqual([]);
+    // Both drafts sort at the draft progression index (0), id ascending.
+    expect(candidateIds(nodes)).toEqual(["tactic-draft", "tactic-nophase"]);
+    for (const c of selectGraphTargets(nodes).candidates) {
+      expect(c).toMatchObject({ kind: "tactic", phase: "align-tactics", reevaluation: false });
+    }
   });
 
   it("skips a tactic with a present, not-done blocker", () => {
@@ -170,13 +179,17 @@ describe("strategy eligibility", () => {
     expect(candidateIds(nodes)).toEqual(["tactic-child"]);
   });
 
-  it("draft children do not block a strategy (drafts are input)", () => {
+  it("draft children do not block a strategy's fresh round (drafts are input)", () => {
     const nodes = [
       strategy({ id: "strategy-s" }),
       tactic({ id: "tactic-child", serves: ["strategy-s"], validates: ["strategy-s"], phase: "draft" }),
       tactic({ id: "tactic-child2", serves: ["strategy-s"], validates: ["strategy-s"], phase: null }),
     ];
-    expect(candidateIds(nodes)).toEqual(["strategy-s"]);
+    // The strategy still emits its fresh align-tactics round; additively, each
+    // draft child ALSO surfaces as its own align-tactics candidate
+    // (tactic-graph-frozen-tactic-dispatch). The strategy sorts first (align
+    // rung, index 1) ahead of the drafts (draft index 0), then id ascending.
+    expect(candidateIds(nodes)).toEqual(["strategy-s", "tactic-child", "tactic-child2"]);
   });
 
   it("an OFF-path non-draft child does not block the strategy", () => {
@@ -304,15 +317,42 @@ describe("soft-freeze gate", () => {
     ];
   };
 
-  it("a stale fingerprint freezes the subtree and emits one re-evaluation candidate", () => {
+  it("a stale fingerprint re-surfaces the frozen tactics at align-tactics", () => {
     const sel = selectGraphTargets(frozenGraph("stale-fingerprint"));
-    // Both subtree tactics are excluded; the strategy surfaces as the one
-    // queued re-evaluation /align-tactics session.
-    expect(sel.candidates.map((c) => c.id)).toEqual(["strategy-s"]);
-    expect(sel.candidates[0]?.reevaluation).toBe(true);
+    // tactic-graph-frozen-tactic-dispatch: the re-evaluation now targets the
+    // frozen TACTICS directly (not the strategy id). Both subtree tactics are
+    // excluded from their normal phase skill and re-emitted as align-tactics
+    // re-evaluation candidates. strategy-s ALSO emits its own fresh round here
+    // because its frozen children carry no `validates` edge — they are off the
+    // signal path, so the fresh-round child gate does not block the strategy.
+    // Order: rank 0 across the board, then progression ordinal desc over each
+    // node's REAL phase (tactic-sibling qa=4 > tactic-stale implement=2 >
+    // strategy-s align=1).
+    expect(sel.candidates.map((c) => c.id)).toEqual([
+      "tactic-sibling",
+      "tactic-stale",
+      "strategy-s",
+    ]);
+    const stale = sel.candidates.find((c) => c.id === "tactic-stale");
+    const sibling = sel.candidates.find((c) => c.id === "tactic-sibling");
+    expect(stale).toMatchObject({ kind: "tactic", phase: "align-tactics", reevaluation: true });
+    expect(sibling).toMatchObject({ kind: "tactic", phase: "align-tactics", reevaluation: true });
     expect(sel.events).toEqual([
       expect.objectContaining({ event: "freeze", strategy: "strategy-s" }),
     ]);
+  });
+
+  it("a frozen tactic's normal phase-skill candidate is suppressed (only align-tactics remains)", () => {
+    const sel = selectGraphTargets(frozenGraph("stale-fingerprint"));
+    // tactic-stale is at phase `implement`, tactic-sibling at `qa`, but neither
+    // emits an executable phase-skill candidate — only the single align-tactics
+    // re-eval candidate.
+    const staleCands = sel.candidates.filter((c) => c.id === "tactic-stale");
+    expect(staleCands).toHaveLength(1);
+    expect(staleCands[0]).toMatchObject({ phase: "align-tactics" });
+    const siblingCands = sel.candidates.filter((c) => c.id === "tactic-sibling");
+    expect(siblingCands).toHaveLength(1);
+    expect(siblingCands[0]).toMatchObject({ phase: "align-tactics" });
   });
 
   it("a matching fingerprint does not freeze", () => {
@@ -337,17 +377,55 @@ describe("soft-freeze gate", () => {
     expect(sel.candidates.map((c) => c.id)).toContain("tactic-stale");
   });
 
-  it("a parked strategy emits no re-evaluation candidate even when frozen", () => {
+  it("parking the strategy drops its own candidate but not the frozen tactics' re-eval", () => {
+    // The re-eval now targets the tactics directly, so parking the STRATEGY no
+    // longer suppresses them — only the strategy's own (fresh-round) candidate
+    // is gated out. The tactics carry office_hours null and still emit.
     const nodes = frozenGraph("stale-fingerprint").map((n) =>
       n.id === "strategy-s"
         ? { ...n, office_hours: { reason: "parked", since: "2026-07-01", recommendation: null } }
         : n,
     );
     const sel = selectGraphTargets(nodes);
-    expect(sel.candidates).toEqual([]);
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-sibling", "tactic-stale"]);
+    expect(sel.candidates.every((c) => c.kind === "tactic" && c.phase === "align-tactics")).toBe(true);
     expect(sel.events).toEqual([
       expect.objectContaining({ event: "freeze", strategy: "strategy-s" }),
     ]);
+  });
+
+  it("parking a frozen tactic drops its own re-eval candidate", () => {
+    // office_hours gating applies to the frozen-tactic emission too.
+    const nodes = frozenGraph("stale-fingerprint").map((n) =>
+      n.id === "tactic-stale"
+        ? { ...n, office_hours: { reason: "parked", since: "2026-07-01", recommendation: null } }
+        : n,
+    );
+    const ids = selectGraphTargets(nodes).candidates.map((c) => c.id);
+    expect(ids).not.toContain("tactic-stale");
+    expect(ids).toContain("tactic-sibling");
+  });
+
+  it("a done child of a frozen subtree is NOT re-emitted as an align-tactics re-eval candidate", () => {
+    // A `done` tactic can sit in the store during a freeze because transition-node
+    // writes `done` without pruning (prune is a separate, lagging step). The
+    // soft-freeze scan must not surface it as a `/align-tactics` re-eval target:
+    // done (the highest progression ordinal) would otherwise sort to the TOP and
+    // dispatch a re-plan against a completed/merged tactic.
+    const nodes: IntentionNode[] = [
+      strategy({ id: "strategy-s" }),
+      tactic({
+        id: "tactic-stale",
+        serves: ["strategy-s"],
+        phase: "implement",
+        execution: exec({ strategy_fingerprint: "stale-fingerprint" }),
+      }),
+      tactic({ id: "tactic-done", serves: ["strategy-s"], phase: "done" }),
+    ];
+    const ids = selectGraphTargets(nodes).candidates.map((c) => c.id);
+    expect(ids).not.toContain("tactic-done");
+    // the open frozen child still re-surfaces
+    expect(ids).toContain("tactic-stale");
   });
 
   // Multi-serves: the per-strategy map stamp must not false-freeze siblings.
@@ -410,6 +488,165 @@ describe("soft-freeze gate", () => {
   });
 });
 
+describe("frozen-node candidates", () => {
+  it("a draft tactic (unparked, unblocked) emits an align-tactics candidate", () => {
+    const sel = selectGraphTargets([tactic({ id: "tactic-draft", phase: "draft" })]);
+    expect(sel.candidates).toHaveLength(1);
+    expect(sel.candidates[0]).toMatchObject({
+      id: "tactic-draft",
+      kind: "tactic",
+      phase: "align-tactics",
+      pr: null,
+      reevaluation: false,
+    });
+  });
+
+  it("a null-phase (raw) tactic emits an align-tactics candidate", () => {
+    const sel = selectGraphTargets([tactic({ id: "tactic-raw", phase: null })]);
+    expect(sel.candidates[0]).toMatchObject({
+      id: "tactic-raw",
+      kind: "tactic",
+      phase: "align-tactics",
+      reevaluation: false,
+    });
+  });
+
+  it("a parked draft tactic emits no candidate", () => {
+    const nodes = [
+      tactic({
+        id: "tactic-draft",
+        phase: "draft",
+        office_hours: { reason: "needs a human", since: "2026-07-01", recommendation: null },
+      }),
+    ];
+    expect(candidateIds(nodes)).toEqual([]);
+  });
+
+  it("a draft tactic with a present, not-done blocker emits no candidate", () => {
+    const nodes = [
+      tactic({ id: "tactic-draft", phase: "draft", blocked_by: ["tactic-b"] }),
+      tactic({ id: "tactic-b", phase: "implement" }),
+    ];
+    // Only the executable blocker candidate; the draft is gated out by its
+    // incomplete blocker.
+    expect(candidateIds(nodes)).toEqual(["tactic-b"]);
+  });
+
+  it("a soft-frozen tactic emits a single align-tactics re-eval candidate carrying its PR", () => {
+    const s = strategy({ id: "strategy-s", reading: "validated" });
+    const nodes = [
+      s,
+      tactic({
+        id: "tactic-stale",
+        serves: ["strategy-s"],
+        phase: "implement",
+        execution: exec({ pr: 77, strategy_fingerprint: "stale-fingerprint" }),
+      }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    const cands = sel.candidates.filter((c) => c.id === "tactic-stale");
+    expect(cands).toHaveLength(1);
+    expect(cands[0]).toMatchObject({
+      kind: "tactic",
+      phase: "align-tactics",
+      pr: 77,
+      reevaluation: true,
+    });
+    // No executable `implement` candidate for the same id.
+    expect(cands.some((c) => c.phase === "implement")).toBe(false);
+  });
+});
+
+describe("resolveFrozenDescendant", () => {
+  it("returns the higher-ranked frozen descendant (draft vs soft-frozen)", () => {
+    const s = strategy({ id: "strategy-s", reading: "validated" });
+    const nodes = [
+      ...kinds(),
+      s,
+      // A draft child, boosted so it out-ranks the soft-frozen sibling.
+      tactic({
+        id: "tactic-draft",
+        serves: ["strategy-s"],
+        phase: "draft",
+        attention: { boost: 5, override: null, rationale: "hot" },
+      }),
+      // A soft-frozen (open, stale-fingerprint) child at lower rank.
+      tactic({
+        id: "tactic-stale",
+        serves: ["strategy-s"],
+        phase: "implement",
+        execution: exec({ strategy_fingerprint: "stale-fingerprint" }),
+      }),
+    ];
+    const resolved = resolveFrozenDescendant(s, nodes);
+    expect(resolved?.id).toBe("tactic-draft");
+  });
+
+  it("resolves a descendant reached through the parent chain", () => {
+    const s = strategy({ id: "strategy-s", reading: "validated" });
+    const nodes = [
+      ...kinds(),
+      s,
+      tactic({ id: "tactic-root", serves: ["strategy-s"], phase: "draft" }),
+      // Inherits strategy membership via parent; itself a draft frozen node.
+      tactic({ id: "tactic-leaf", parent: "tactic-root", phase: "draft" }),
+    ];
+    const resolved = resolveFrozenDescendant(s, nodes);
+    // Both are drafts at rank 0; id ascending picks tactic-leaf first.
+    expect(resolved?.id).toBe("tactic-leaf");
+  });
+
+  it("returns null for a strategy with no tactic children", () => {
+    const s = strategy({ id: "strategy-s", reading: "validated" });
+    expect(resolveFrozenDescendant(s, [...kinds(), s])).toBeNull();
+  });
+
+  it("returns null when all descendants are non-frozen (open, in-flight)", () => {
+    const s = strategy({ id: "strategy-s", reading: "validated" });
+    const nodes = [
+      ...kinds(),
+      s,
+      tactic({ id: "tactic-open", serves: ["strategy-s"], phase: "implement" }),
+    ];
+    expect(resolveFrozenDescendant(s, nodes)).toBeNull();
+  });
+});
+
+describe("frozenTacticSelectable", () => {
+  it("is true for an eligible draft tactic (agrees with candidate membership)", () => {
+    const nodes = [tactic({ id: "tactic-draft", phase: "draft" })];
+    expect(frozenTacticSelectable(nodes[0], nodes)).toBe(true);
+  });
+
+  it("is false for a non-frozen open tactic (routes to its phase skill, not align-tactics)", () => {
+    const nodes = [tactic({ id: "tactic-open", phase: "implement" })];
+    expect(frozenTacticSelectable(nodes[0], nodes)).toBe(false);
+  });
+
+  it("is false for a parked draft tactic", () => {
+    const nodes = [
+      tactic({
+        id: "tactic-draft",
+        phase: "draft",
+        office_hours: { reason: "parked", since: "2026-07-01", recommendation: null },
+      }),
+    ];
+    expect(frozenTacticSelectable(nodes[0], nodes)).toBe(false);
+  });
+
+  it("is true for a soft-frozen tactic", () => {
+    const s = strategy({ id: "strategy-s", reading: "validated" });
+    const stale = tactic({
+      id: "tactic-stale",
+      serves: ["strategy-s"],
+      phase: "implement",
+      execution: exec({ strategy_fingerprint: "stale-fingerprint" }),
+    });
+    const nodes = [s, stale];
+    expect(frozenTacticSelectable(stale, nodes)).toBe(true);
+  });
+});
+
 describe("ordering", () => {
   it("resolved attention rank is the outermost axis", () => {
     const nodes = [
@@ -429,7 +666,7 @@ describe("ordering", () => {
     expect(candidateIds(nodes)).toEqual(["tactic-high", "tactic-low"]);
   });
 
-  it("within one rank level, the phase ladder orders closest-to-done first", () => {
+  it("within one rank level, the progression ordinal orders closest-to-done first (qa sorts before fix)", () => {
     const nodes = [
       strategy({ id: "strategy-s", reading: "validated" }),
       tactic({ id: "tactic-implement", phase: "implement" }),
@@ -439,13 +676,15 @@ describe("ordering", () => {
     ];
     expect(candidateIds(nodes)).toEqual([
       "tactic-review",
-      "tactic-fix",
       "tactic-qa",
+      "tactic-fix",
       "tactic-implement",
     ]);
   });
 
   it("an eligible strategy sorts at the align-tactics rung, after tactics of equal rank", () => {
+    // Under the progression ordinal, implement (PHASES index 2) is more-progressed
+    // than a strategy's align-tactics rung (index 1), so the tactic sorts first.
     const nodes = [
       strategy({ id: "strategy-s" }),
       tactic({ id: "tactic-implement", phase: "implement" }),
@@ -461,8 +700,17 @@ describe("ordering", () => {
     expect(candidateIds(nodes)).toEqual(["tactic-a", "tactic-b"]);
   });
 
-  it("the ladder covers every selectable phase", () => {
-    expect(PHASE_LADDER).toEqual(["main-qa", "review", "fix", "qa", "implement", "align-tactics"]);
+  it("the progression ordinal runs over the full PHASES order", () => {
+    expect(PHASES).toEqual([
+      "draft",
+      "align-tactics",
+      "implement",
+      "fix",
+      "qa",
+      "review",
+      "main-qa",
+      "done",
+    ]);
   });
 });
 
