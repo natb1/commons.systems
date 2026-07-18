@@ -508,6 +508,36 @@ describe("soft-freeze gate", () => {
     // the legacy behavior this migration preserves until a re-stamp converts it.
     expect(frozen).toEqual(["strategy-a", "strategy-b"]);
   });
+
+  it("an object-form {hash, sha} map entry fresh against its .hash produces no freeze", () => {
+    const { nodes, sA, sB } = multiServes(null);
+    const stamped = {
+      "strategy-a": { hash: strategyFingerprint(sA), sha: "some-sha-a" },
+      "strategy-b": { hash: strategyFingerprint(sB), sha: "some-sha-b" },
+    };
+    const withStamp = nodes.map((n) =>
+      n.id === "tactic-multi" ? { ...n, execution: exec({ strategy_fingerprint: stamped }) } : n,
+    );
+    const sel = selectGraphTargets(withStamp);
+    expect(sel.events.filter((e) => e.event === "freeze")).toEqual([]);
+    expect(sel.candidates.map((c) => c.id)).toContain("tactic-multi");
+  });
+
+  it("an object-form {hash, sha} map entry stale against its .hash freezes that strategy", () => {
+    const { nodes, sA } = multiServes(null);
+    // Fresh against strategy-a, deliberately stale (wrong .hash) against strategy-b.
+    const stamped = {
+      "strategy-a": { hash: strategyFingerprint(sA), sha: "some-sha-a" },
+      "strategy-b": { hash: "stale-b", sha: "some-sha-b" },
+    };
+    const withStamp = nodes.map((n) =>
+      n.id === "tactic-multi" ? { ...n, execution: exec({ strategy_fingerprint: stamped }) } : n,
+    );
+    const sel = selectGraphTargets(withStamp);
+    const frozen = sel.events.filter((e) => e.event === "freeze").map((e) => e.strategy);
+    expect(frozen).toEqual(["strategy-b"]);
+    expect(frozen).not.toContain("strategy-a");
+  });
 });
 
 describe("frozen-node candidates", () => {
