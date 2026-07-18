@@ -29,13 +29,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-review-sitting-skill-generalization
   pr: 2871
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
 validates:
   - strategy-graph-review-curriculum
