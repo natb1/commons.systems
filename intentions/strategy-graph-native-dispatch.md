@@ -1913,6 +1913,44 @@ clarifications:
       clarification). A first-class attributes.migration record is DECLINED by
       parsimony until a sensor needs machine-readable migration state. Recorded
       2026-07-18 /align-strategy interview."
+  - question: Does dispatch's concurrency dedup key on live sessions or worktree
+      existence, and does the office-hours lane share the mechanism
+      (office-hours sessions safe for concurrent selection)?
+    answer: "Live sessions, uniformly, for every launch mode including office-hours
+      — confirmed 2026-07-18 as the target-state mechanism. The dedup /
+      claimed-set keys on liveness: a node is skipped only when a
+      reservation-ledger marker named by its id exists OR
+      worktree_has_live_session reports a live node-id-named session (claude
+      agents --json) — never on worktree existence. A bare or un-reaped
+      .claude/worktrees/<node-id> whose session has ended does NOT block
+      selection (the shipped graph-select-target behavior; the #1474 change
+      moved existence-keying to liveness-keying precisely so an unreaped
+      worktree cannot block the next worker). Worktree reaping is decoupled
+      post-merge disk hygiene — dispatch-sweep removes a worktree after its PR
+      merges and the tree is in-sync, guarding on worktree_has_live_session
+      first — never a selection gate; what makes a node's next phase selectable
+      is the transition write flipping phase on origin/main plus the prior
+      session ending (its claim clears). The office-hours lane shares this exact
+      mechanism: (a) the graph-native office-hours lane runs IN the node-id
+      worktree for its session's life so its live session is detectable, and
+      that worktree is disposable — reaped like any worker's, since office-hours
+      lands no commit; (b) office-hours-select gains the same liveness dedup —
+      an untargeted (queue-head) launch SKIPS a parked node that already has a
+      live office-hours session and returns the next-ranking parked node (the
+      concurrent-selection safety this round records); (c) an explicit
+      /office-hours <node-id> targeting a node that already has a live
+      office-hours session RETURNS AN ERROR — a deliberate human target on an
+      occupied node is a collision to surface, not a silent fall-through.
+      Consistency correction: tactic-align-session-claiming Unit 3's recorded
+      prescription — 'graph-select-target treats ANY existing
+      .claude/worktrees/<node-id> as a held claim' (existence-keyed) — is
+      superseded by this liveness mechanism (#1474), contradicts its own Unit 1
+      (which states the liveness rule), and describes the pre-#1474
+      worktree-walk that was deliberately replaced; the shipped code is already
+      liveness-keyed, only the recorded tactic text is stale (tracked by draft
+      tactic-align-session-claiming-liveness-correction). Implementation
+      retained as draft tactic-office-hours-concurrency-dedup. Recorded
+      2026-07-18 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
