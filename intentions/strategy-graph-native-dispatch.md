@@ -697,7 +697,14 @@ clarifications:
       so a metadata-only disposition never consumes a launch-budget slot; see
       the scriptable-then-spawn clarification of that date. Each spawn still
       enters the ledger under the selection lock, so the global cap and overlap
-      safety are unchanged.)"
+      safety are unchanged.) (Amended 2026-07-18: the cap bounds
+      *autonomously-selected* workers — the tick/pace machinery must never
+      select past it. A deliberate human dispatch may launch one node over it
+      (clarification 76): a bounded, conscious, self-correcting act, not the
+      autonomous runaway this invariant guards against. The overlap-safety
+      property is unchanged — it concerns concurrent autonomous ticks, and the
+      human-launched worker still enters the ledger, so no autonomous tick
+      compounds on top of it.)"
   - question: A selected node’s scope or state changes after selection — before its
       worker starts, or while it runs. What closes the window?
     answer: "Two gates bracket the worker; no mid-run polling. Start gate: the
@@ -2059,6 +2066,45 @@ clarifications:
       freezes: at c2a909c7 the strategy has no map-stamped open children (the
       stale stamp cleared when its carrier closed), so no classify-and-re-stamp
       was owed. Recorded 2026-07-18 /align-strategy interview."
+  - question: Does a deliberate human dispatch — the bare /dispatch fan-out picking
+      the highest-ranking available node, or an explicit dispatch <node-id> —
+      bypass the absolute max_concurrent_workers ceiling, or only the pace
+      curve?
+    answer: "Yes, for exactly one node — a bounded single-node override. Human
+      dispatch already overrides the pace curve (clarification 49); it
+      additionally bypasses the absolute max_concurrent_workers ceiling
+      (clarification 33) for the single highest-ranking *available* node (bare
+      /dispatch) or the single named node (dispatch <node-id>), launching it
+      even when live == max_concurrent_workers. Fan-out WIDTH beyond that one
+      node still honors the ceiling: below the cap a bare /dispatch fills
+      headroom as before; at or above the cap it degrades to launching exactly
+      the one top-ranked available node (+1 over the ceiling), never a wider
+      over-spawn. The two hard floors clarification 49 already names stay hard
+      for the single-node guarantee too: it never preempts a node already
+      claimed (it takes the next-highest available), and it never fires under
+      genuine token exhaustion (the --exhausted floor). This aligns the graph
+      lane with the issue lane, whose explicit dispatch <issue-number> path
+      already resolves-and-exits before selection and so launches its one node
+      without consulting the ceiling at all. Why bounded rather than a hard
+      ceiling or an unbounded bypass: the ceiling's purpose (clarification 33)
+      is to keep autonomous overlapping ticks from compounding to a runaway
+      worker count — a property about autonomous selection, not about a
+      conscious, low-frequency human act; and the excess is transient and
+      self-correcting because the human-launched worker enters the reservation
+      ledger like any other, so the next autonomous tick counts it and spawns
+      nothing more until it drains. The steelman for an inviolable ceiling — a
+      human should raise max_concurrent_workers or wait, never exceed it — was
+      considered and diverged from: it would leave a saturated fleet unable to
+      honor an explicit human priority, the exact moment the override exists
+      for, and it is inconsistent with the issue lane, which already exceeds the
+      ceiling for its one node. Repeated human invocations each floor to one
+      node, so a deliberately-repeated dispatch can transiently reach max+N;
+      this is accepted as deliberate human action, parity with repeated explicit
+      issue-dispatch. Live gap: the #1458 bare-fan-out code
+      (dispatch-select-tick) currently treats max_concurrent_workers as a hard
+      ceiling and emits concurrency-cap at HEADROOM=0, contradicting this —
+      tracked by tactic-manual-dispatch-single-node-headroom. Recorded
+      2026-07-18 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
