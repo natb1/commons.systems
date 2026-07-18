@@ -194,7 +194,12 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
        # node already handed to a human for review. A parked node's
        # `office_hours:` key has nothing on its own line (a nested block
        # follows); an unparked node has the literal `office_hours: null`.
-       if ! printf '%s\n' "$NODE_MD" | grep -q '^office_hours: null$'; then
+       # Match only the YAML frontmatter (the lines between the first and
+       # second `---` delimiters), never the markdown body — a prose body line
+       # reading exactly `office_hours: null` (e.g. docs quoting this guard)
+       # must not be mistaken for the node's actual state.
+       NODE_FRONTMATTER=$(printf '%s\n' "$NODE_MD" | awk '/^---$/{d++; next} d==1{print} d>=2{exit}')
+       if ! printf '%s\n' "$NODE_FRONTMATTER" | grep -q '^office_hours: null$'; then
          echo "/qa-fix: node '$NODE_ID' is already office_hours-parked at origin/main — nothing to do" >&2
          exit 0
        fi
