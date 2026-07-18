@@ -159,3 +159,18 @@ its plan-creation subagent ran on **Opus**, and that `/align-strategy` sessions
 ran on Opus. Confirm `dispatch-graph-execute` still launches `/align-tactics` on
 Sonnet (`ORCH_MODEL`), i.e. the router is not forcing the whole align-family
 session to Opus.
+
+## needs-main residue
+
+- **8. Deferred behavioral verification via `/dispatch-token-audit` attribution**
+  - URL path: current
+  - Expected outcome: post-run token attribution shows the intended
+    Sonnet-orchestrator / Opus-subagent split; `dispatch-graph-execute` does not
+    force the whole align-family session onto Opus.
+  - Finding: this node's own "Manual / observe-in-production" section explicitly
+    defers this check to after-the-fact `/dispatch-token-audit` by-node/by-phase
+    attribution, measured after a real router-launched `/align-tactics` round
+    runs post-merge — not assertable at QA time on a skill-markdown-only diff.
+    (`qa-fix` disposition: `needs-main`, `planned_deferral: true`; route: human —
+    the token-audit read is not a public-prod Chrome-observable check, so it
+    does not qualify for the autonomous `/qa-main` lane.)
