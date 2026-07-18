@@ -95,13 +95,15 @@ clarification records.
    steps 2–6 once per concern, each producing its own node and its own
    `graph-commit` call in step 5. Do not force unrelated concerns into one
    node to avoid re-running the interview.
-2. **Duplicate / overlap detection.** Grep `intentions/strategy-*.md` for
-   keyword overlap with the requirement (statement, rationale, and
-   clarification text). A strong match means this is an **edit**, not a
-   new strategy — read the matched node in full via
-   `readNode(intentionsDir, id)` (or just read the file: only the
-   frontmatter is authoritative) before the interview, and use it as the
-   dialectic's starting point.
+2. **Duplicate / overlap detection.** Run
+   `npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions`
+   and grep its per-strategy statement dump for keyword overlap with the
+   requirement (statement, rationale, and clarification text) — one flat
+   dump to scan instead of grepping N separate `intentions/strategy-*.md`
+   files. A strong match means this is an **edit**, not a new strategy —
+   read the matched node in full via `readNode(intentionsDir, id)` (or just
+   read the file: only the frontmatter is authoritative) before the
+   interview, and use it as the dialectic's starting point.
 3. **New vs. edit.** No strong overlap → new strategy: identify which
    `virtue-*.md` node(s) it serves (a strategy's `serves` must resolve to
    `kind: virtue` — `validateGraph` rule 8). Overlap found → edit: confirm
@@ -110,7 +112,10 @@ clarification records.
 
 **With no requirement text — improvement pass:**
 
-1. Read every `intentions/strategy-*.md` node. For each, check:
+1. Run
+   `npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions`
+   and check its per-strategy census dump (conditions, reading, gap,
+   clarification provenance) for each strategy:
    - Any `attributes.conditions` entry that no longer plausibly holds
      against current repo/author state.
    - `reading`/`gap` staleness — a `reading` that predates a clarification
@@ -128,9 +133,9 @@ clarification records.
      (e.g. "until the gh-queue drains"). This is the same gate
      `/align-tactics` runs at finalization — running it here too catches
      staleness on strategies with no pending decomposition round.
-2. Separately, list `virtue-*.md` ids that appear in **no** strategy's
-   `serves` — a virtue with no strategy expressing it is a candidate for a
-   brand-new strategy.
+2. Separately, read the census's "Unserved virtues" section — virtue ids
+   that appear in **no** strategy's `serves` — a virtue with no strategy
+   expressing it is a candidate for a brand-new strategy.
 3. Present the candidates (failing-condition strategies, stale-signal
    strategies, contradicted-clarification strategies, doomed-tactic
    strategies, unserved virtues) via `AskUserQuestion` and let the author
@@ -143,10 +148,12 @@ fan out to `Explore` subagents returning compact `path:line`-anchored
 findings — the interview dialectic itself (step 2 onward) is never
 delegated. Keyword grep (this step's corpus sweep, and step 3's delegation
 sweep) only **shortlists** candidates; it never disposes of one — disposition
-requires reading each shortlisted node in full. A strategy-corpus census
-script is planned as an enumeration hook for this sweep
-(`tactic-align-tactics-mechanical-floor` Unit 4); until it lands, sweep the
-corpus by hand as above.
+requires reading each shortlisted node in full. The
+`align-strategy-census.ts` script (`tactic-align-tactics-mechanical-floor`
+Unit 4) is the enumeration hook for this sweep — run it as shown in item 1
+above instead of hand-reading the corpus; the greenfield-relevance gate's
+per-strategy tactic sweep still requires reading each flagged strategy's
+node in full, since the census does not carry tactic state.
 
 ## Step 2 — Interview dialectic
 
@@ -334,8 +341,13 @@ recommendation on trust, never a quiet drop. When the author accepts one:
 
 ## Step 3 — Delegation advice
 
-Grep `intentions/delegation-*.md` for nodes whose `statement` or
-`attributes.delegated` overlaps the strategy's domain. For each match:
+Run
+`npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions`
+and read its "Delegations" section — it already dumps id, statement,
+`attributes.delegated`, `attributes.divergence.level`, and
+`attributes.irreversibility.{gated,recovery_cost}` for every delegation
+node — for entries whose `statement` or `attributes.delegated` overlaps the
+strategy's domain. For each match:
 
 1. Propose (`AskUserQuestion`) whether the strategy should carry a
    `recovers: [<delegation-id>]` edge (`recovers` is valid only on
