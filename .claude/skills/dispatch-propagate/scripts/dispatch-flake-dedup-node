@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+# Deterministic, state-spanning flake-dedup guard — NODE LANE. Given a flake
+# fingerprint, find whether an intention-graph tactic node already tracks the
+# same fingerprint and tell the caller what disposition to take.
+# Usage:
+#   dispatch-flake-dedup-node <fingerprint> --body-file <f> [--head-ref <ref-or-sha>]
+#
+# WHY THIS EXISTS
+#   This is the graph-native sibling of `dispatch-flake-dedup` (the GitHub-Issues
+#   lane), tracked by intention node `tactic-fix-checks-graph-native-flake-tracking`.
+#   `fix-checks/SKILL.md` Step 4's Flake sub-path is GitHub-Issues-based end to
+#   end — it calls `dispatch-flake-dedup` (which reads/writes issues via `gh`)
+#   and `/file-issue`. That path is DEAD on the node lane: GitHub Issues are
+#   disabled repo-wide (has_issues: false) and the node lane forbids any
+#   `gh issue` read/write. This script is the node-lane replacement for the
+#   find-or-decide guard. Instead of searching issue titles, it greps the
+#   intention-graph node bodies for the fingerprint; instead of GitHub-hosted
+#   closing-commit / run-head-SHA metadata, it uses LOCAL git ancestry.
+#
+#   This script is PURELY a search+decide+print tool. In EVERY disposition it
+#   NEVER writes to any intentions/*.md file and NEVER calls graph-commit. The
+#   actual node writes (create a fresh flake tactic, or record a recurrence /
+#   reopen on an existing one) belong to the caller wiring (a later unit of the
+#   same tactic node), not here.
+#
+# STATE SCOPE
+#   The match spans OPEN and DONE tactic nodes. A flake that was tracked, fixed,
+#   and its tactic node completed (phase: done) can recur — an open-only dedup
+#   would mis-report it as brand new. Spanning done state lets a recurrence be
+#   distinguished (REOPENED vs STALE) from a genuinely new flake (NONE). A node
+#   that was created then PRUNED has had its file deleted, so a reopen-after-prune
+#   simply finds no file and collapses into NONE (the caller files fresh).
+#
+# FINGERPRINT MATCH
+#   The fingerprint format (produced in fix-checks/SKILL.md) is
+#   `<failing-check-name> — <stable-id>`. It is carried VERBATIM as a line of
+#   body text in the flake tracking tactic node (plain text, e.g. under a
+#   'Fingerprint:' label) — NOT a structured frontmatter field. The match is a
+#   fixed-string grep for that exact string appearing anywhere in a
+#   intentions/tactic-*.md file. The fingerprint is meant to be unique per flake,
+#   so at most one file should match; more than one is a data error and aborts
+#   rather than silently picking one.
+#
+# STALE-vs-REOPEN GATE (phase: done branch only)
+#   A done tactic node is completed when its root-cause fix merged to main. But a
+#   long-lived PR branch that pre-dates that fix keeps emitting the pre-fix
+#   failure signature; treating every such match as a live recurrence would
+#   thrash the node. So the done branch gates on POSITIVE evidence that the
+#   caller's head is behind the closing fix:
+#     - closing commit = the completion commit of the matched node, resolved from
+#       LOCAL git history: the most recent commit on origin/main that touched the
+#       node's file (origin/main is the only place these files live, so its tip
+#       commit for that path is authoritative).
+#     - Compared against a caller-supplied --head-ref (the PR branch's head
+#       SHA/ref) via LOCAL git ancestry: `git merge-base --is-ancestor <closing>
+#       <head-ref>`. Exit 0 → closing IS an ancestor of head → head CONTAINS the
+#       fix → NOT stale → REOPENED. Non-zero → closing is NOT an ancestor → head
+#       does NOT contain the fix → STALE.
+#   This is a deliberate simplification of the issue lane's gh-REST
+#   `gh_commit_is_ancestor_rest` call: local git ancestry, no GitHub API, fully
+#   offline. STALE fires only on positive evidence the head is behind the fix.
+#   --head-ref is REQUIRED only when this branch is actually reached (a phase:
+#   done match found) — mirroring the issue lane's --run-id being required only on
+#   the CLOSED path. OPEN/NONE never consult it.
+#
+# NO NETWORK
+#   This script calls NO `gh` command anywhere. It works fully offline against
+#   local git history (origin/main must be fetched; the caller ensures that).
+set -euo pipefail
+
+if [[ "$#" -lt 1 || -z "${1:-}" ]]; then
+  echo "error: usage: dispatch-flake-dedup-node <fingerprint> --body-file <f> [--head-ref <ref-or-sha>]" >&2
+  exit 2
+fi
+
+fingerprint="$1"
+shift
+
+body_file=""
+head_ref=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --body-file) body_file="$2"; shift 2 ;;
+    --head-ref)  head_ref="$2";  shift 2 ;;
+    *)
+      echo "error: dispatch-flake-dedup-node: unexpected argument '$1'" >&2
+      exit 2
+      ;;
+  esac
+done
+
+# --body-file is validated for CLI-shape parity with the issue-lane sibling
+# (which records the recurrence body). This search+decide tool does not read its
+# contents — the caller wiring uses it when it performs the node write — but we
+# still require and existence-check it so a misconfigured caller fails loud.
+if [[ -z "$body_file" ]]; then
+  echo "error: dispatch-flake-dedup-node: --body-file <f> is required" >&2
+  exit 2
+fi
+if [[ ! -f "$body_file" ]]; then
+  echo "error: dispatch-flake-dedup-node: --body-file '$body_file' does not exist" >&2
+  exit 2
+fi
+
+# Operate against the repo root so the intentions/ glob resolves regardless of
+# the caller's cwd. A failure here is a misconfigured environment — fail loud
+# (.claude/rules/code-style.md), do not fall back.
+repo_root=$(git rev-parse --show-toplevel) || {
+  echo "error: dispatch-flake-dedup-node: not inside a git repository" >&2
+  exit 1
+}
+cd "$repo_root"
+
+# 1. Match via a fixed-string grep over the tactic node bodies. -F: the
+#    fingerprint carries an em-dash and check-name punctuation; treat it as a
+#    literal, not a regex. -l: list matching files only. No node → NONE.
+#    A no-match grep exits 1 under `set -e`; guard it so an empty result is not
+#    an error but the NONE disposition.
+matches=$(grep -rlF -- "$fingerprint" intentions/tactic-*.md 2>/dev/null || true)
+
+# 2. No matching node → caller files a fresh flake tactic. (Also covers the
+#    reopen-after-prune case: a pruned node's file is gone, so no match.)
+if [[ -z "$matches" ]]; then
+  echo "NONE"
+  exit 0
+fi
+
+# The fingerprint is meant to be unique per flake, so exactly one file should
+# match. More than one is a data error — list the candidates and abort rather
+# than silently pick one (.claude/rules/code-style.md).
+match_count=$(printf '%s\n' "$matches" | grep -c .)
+if [[ "$match_count" -gt 1 ]]; then
+  echo "error: dispatch-flake-dedup-node: fingerprint matched multiple tactic nodes (expected at most one):" >&2
+  printf '  %s\n' $matches >&2
+  exit 1
+fi
+
+match_file="$matches"
+
+# Derive the tactic id from the file path: intentions/<id>.md → <id> (the id
+# already carries the `tactic-` prefix). This is the token printed in the
+# disposition line.
+tactic_id=$(basename "$match_file" .md)
+
+# Read the node's phase from its YAML frontmatter (a `phase: <value>` line).
+# Frontmatter is delimited by the first two `---` lines; a `phase:` line only
+# appears there. sed extracts the value of the first `phase:` line; grep/sed only,
+# no TypeScript dependency. An empty result means no phase line (a node not yet
+# phase-set) — treated as open, since it is not `done`.
+phase=$(sed -n 's/^phase:[[:space:]]*//p' "$match_file" | head -n1)
+
+# 3. Open node (phase set and not `done`, or phase absent) → EXISTING. The caller
+#    records the recurrence on the existing node.
+if [[ "$phase" != "done" ]]; then
+  echo "EXISTING $tactic_id"
+  exit 0
+fi
+
+# 4. phase: done → the ancestry-gated STALE-vs-REOPEN branch. --head-ref is
+#    required only here.
+if [[ -z "$head_ref" ]]; then
+  echo "error: dispatch-flake-dedup-node: --head-ref is required to decide REOPENED vs STALE for done node $tactic_id (stale-head gate)" >&2
+  exit 1
+fi
+
+# Resolve the closing commit: the most recent commit on origin/main touching the
+# node's file. origin/main is the only place these files live, so its tip commit
+# for that path is the completion commit.
+closing=$(git log -1 --format=%H origin/main -- "$match_file") || {
+  echo "error: dispatch-flake-dedup-node: could not resolve closing commit for $tactic_id via git log on origin/main" >&2
+  exit 1
+}
+if [[ -z "$closing" ]]; then
+  echo "error: dispatch-flake-dedup-node: no commit on origin/main touches $match_file — cannot resolve closing commit for stale-head gate" >&2
+  exit 1
+fi
+
+# LOCAL git ancestry: is the closing fix already contained in the caller's head?
+#   ancestor (exit 0)     → head CONTAINS the fix → NOT stale → REOPENED
+#   not ancestor (exit !0) → head does NOT contain the fix → STALE
+# --is-ancestor exits 0/1 cleanly; any OTHER exit is a bad ref etc. — fail loud.
+if git merge-base --is-ancestor "$closing" "$head_ref"; then
+  echo "REOPENED $tactic_id"
+  exit 0
+else
+  rc=$?
+  if [[ "$rc" -ne 1 ]]; then
+    echo "error: dispatch-flake-dedup-node: git merge-base --is-ancestor failed (exit $rc) comparing closing $closing against --head-ref '$head_ref'" >&2
+    exit 1
+  fi
+  echo "dispatch-flake-dedup-node: suppressing reopen of $tactic_id — head '$head_ref' does not contain closing fix $closing (stale-head)" >&2
+  echo "STALE $tactic_id"
+  exit 0
+fi
