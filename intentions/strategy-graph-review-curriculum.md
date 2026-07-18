@@ -177,9 +177,9 @@ clarifications:
       /reading-review chunk 5."
   - question: Can the attention/boost mechanism manage curriculum-frontier
       priorities, replacing the integer numbering (author question, 2026-07-18)?
-    answer: "Claude evaluation; recommendation held for ratification at
-      tactic-dialog-review-aristotle-phronesis. Yes for the frontier, not yet
-      for the legacy reading queue. New frontier items (the dialog nodes and
+    answer: "Author-ratified 2026-07-18 /align-strategy round, pulled forward from
+      the phronesis dialog agenda by author direction. Yes for the frontier, not
+      yet for the legacy reading queue. New frontier items (the dialog nodes and
       future minted items) carry no attributes.curriculum.priority integer:
       sequence is encoded as blocked_by edges — the production rule lands as
       blocked_by on tactic-reading-chunk-19-augustine-interior-teacher (head of
@@ -193,10 +193,18 @@ clarifications:
       2026-07-09 attention rationale on this node deliberately scoped boosts to
       the frontier-maintenance machinery with per-chunk curriculum entries
       unboosted — per-chunk authored boosts would recreate the hand-maintained
-      roster the frontier rule declines. Greenfield direction: retire the
-      numbering by deriving reader sort order from the blocked_by chain (a
-      /sync-reader change plus edge backfill on the chunk nodes), as a separate
-      later round. Recorded 2026-07-18 /reading-review chunk 5."
+      roster the frontier rule declines. Steelman disposition (rival framing:
+      hand-authored integers as pedagogical order that computed scores would
+      trample) — declined: the blocked_by chain is itself the hand-authored
+      sequence (it encodes dependency, not rank), and attention only arbitrates
+      among items the author has not sequenced; order authorship stays with the
+      author via edges. Greenfield direction: retire the numbering by deriving
+      reader sort order from the blocked_by chain (a /sync-reader change plus
+      edge backfill on the chunk nodes), retained as draft
+      tactic-sync-reader-chain-order (serves strategy-philosophical-grounding,
+      the /sync-reader artifact owner) for a later /align-tactics round.
+      Recorded 2026-07-18 /reading-review chunk 5; author-ratified and descoped
+      from the dialog agenda 2026-07-18 /align-strategy round."
 tooling_goals:
   - kind: sensor
     statement: "review-coverage table in the graph digest / align-audit report — per
