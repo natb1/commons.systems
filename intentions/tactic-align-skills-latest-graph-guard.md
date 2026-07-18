@@ -38,13 +38,14 @@ attention:
     strategy-main-health trunk signal. Prior rationale (boost 3, 2026-07-08):
     elevated to the tier of the tactics that directly edit the align SKILL.md
     files, above curriculum-execution tooling and the rest of the subtree."
-phase: qa
+phase: review
 execution:
   branch: tactic-align-skills-latest-graph-guard
   pr: 2889
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
