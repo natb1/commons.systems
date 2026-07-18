@@ -46,7 +46,95 @@ execution:
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    /qa-fix: scope-deviation on an opus-fixable QA finding, requiring human
+    ratification.
+
+
+    QA item 7 ("Accuracy of the model:opus-honoring-unconfirmed claim" added to
+
+    align-strategy/SKILL.md by this PR) was disposed opus-fixable by the
+    disposition
+
+    classifier (2/2 skeptics refuted the needs-human framing, arguing it reduces
+    to
+
+    a mechanical fidelity check against the already-recorded
+    strategy-token-economy
+
+    clarification 10). The gated fix-planner then examined it and found NO
+    in-scope
+
+    code change resolves it — the prose already matches acceptance-criteria Unit
+    2
+
+    verbatim (align-strategy/SKILL.md:10-21) — and raised deviation:true with
+    zero
+
+    fix units rather than fabricate a change. This is the qa-fix scope-deviation
+
+    escape path (permanent escalation, not a retry): a human needs to ratify
+
+    whether this PR's added enforcement-note prose is an accurate
+    characterization
+
+    of the harness's model:-field honoring behavior.
+
+
+    Separately, needs-main item 8 (deferred /dispatch-token-audit attribution
+
+    check) was already filed as a needs-main residue section directly in the
+
+    tactic's own body (intentions/tactic-align-family-opus-default.md, commit
+
+    b334d6d2) per the node-lane Step 3.6 override — not part of this escalation,
+
+    it rides toward main-qa on a future completion pass.
+
+
+    Full QA summary: PR #2886 comment (marker <!-- dispatch:qa-summary -->,
+
+    comment id 5013068750).
+  since: 2026-07-18
+  recommendation: >-
+    Read the PR #2886 diff (align-strategy/SKILL.md:10-21 and
+    align-tactics/SKILL.md
+
+    Step 3) alongside strategy-token-economy clarification 10 (2026-07-16).
+    Decide
+
+    whether the added align-strategy enforcement note — "model: field honoring
+    is
+
+    confirmed for context:fork skills but unconfirmed for user-invocable
+    main-loop
+
+    skills, so treated as intended-not-guaranteed, checked after the fact via
+
+    /dispatch-token-audit" — is an accurate characterization to ratify as-is.
+
+
+    If it holds: mark item 7 resolved (no code change needed) and clear the
+
+    office-hours park so the PR can proceed to a clean qa pass and merge.
+
+
+    If it needs correction: the fix is a prose edit to
+
+    .claude/skills/align-strategy/SKILL.md's enforcement note (around lines
+    10-21)
+
+    — either strengthen/soften the "unconfirmed" hedge or correct the described
+
+    enforcement mechanism, then re-run /qa-fix.
+
+
+    Item 8 (dispatch-token-audit attribution) needs no action now — it's already
+
+    recorded as needs-main residue on the node body and will surface again at
+
+    main-qa after this PR merges.
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -159,3 +247,18 @@ its plan-creation subagent ran on **Opus**, and that `/align-strategy` sessions
 ran on Opus. Confirm `dispatch-graph-execute` still launches `/align-tactics` on
 Sonnet (`ORCH_MODEL`), i.e. the router is not forcing the whole align-family
 session to Opus.
+
+## needs-main residue
+
+- **8. Deferred behavioral verification via `/dispatch-token-audit` attribution**
+  - URL path: current
+  - Expected outcome: post-run token attribution shows the intended
+    Sonnet-orchestrator / Opus-subagent split; `dispatch-graph-execute` does not
+    force the whole align-family session onto Opus.
+  - Finding: this node's own "Manual / observe-in-production" section explicitly
+    defers this check to after-the-fact `/dispatch-token-audit` by-node/by-phase
+    attribution, measured after a real router-launched `/align-tactics` round
+    runs post-merge — not assertable at QA time on a skill-markdown-only diff.
+    (`qa-fix` disposition: `needs-main`, `planned_deferral: true`; route: human —
+    the token-audit read is not a public-prod Chrome-observable check, so it
+    does not qualify for the autonomous `/qa-main` lane.)
