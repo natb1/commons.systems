@@ -140,6 +140,13 @@ export interface TransitionDecision {
   hold: boolean;
   /** True when the hold is a scope-fingerprint demotion to `implement`. */
   demote: boolean;
+  /**
+   * Completion markers to strip from `execution.markers` as part of this
+   * transition. Non-empty only for the CI-failure fix interrupt, which clears
+   * `qa-done` and `reviewed` so a resume out of `fix` re-runs qa and review (the
+   * regressed code was never seen by the completed review). Empty otherwise.
+   */
+  clearMarkers: readonly string[];
 }
 
 /**
@@ -176,39 +183,43 @@ export function decideTransition(args: {
   // 1. Scope-fingerprint demotion (pre-merge only; the caller must not invoke
   //    this on a merged tactic — post-merge staleness routes via main-qa).
   if (scopeStale) {
-    return { phase: "implement", armMerge: false, hold: true, demote: true };
+    return { phase: "implement", armMerge: false, hold: true, demote: true, clearMarkers: [] };
   }
 
   // 2. Strategy soft-freeze hold at the completed phase.
   if (strategyStale) {
-    return { phase, armMerge: false, hold: true, demote: false };
+    return { phase, armMerge: false, hold: true, demote: false, clearMarkers: [] };
   }
 
-  // 3. CI-failure interrupt.
+  // 3. CI-failure interrupt. Clear the qa-done and reviewed markers: the code
+  //    that regressed was never seen by the completed qa/review, so leaving
+  //    `fix` must resume at `qa` and re-run both — `resumeAfterFix`'s cascade
+  //    falls through to `qa` once these markers are gone.
   if (fixInterrupt(phase, ci)) {
-    return { phase: "fix", armMerge: false, hold: false, demote: false };
+    return { phase: "fix", armMerge: false, hold: false, demote: false, clearMarkers: [QA_DONE_MARKER, REVIEWED_MARKER] };
   }
 
   // 4. Resume out of fix on green CI.
   if (phase === "fix") {
     if (ci === "passing") {
-      return { phase: resumeAfterFix(markers, hasResidue), armMerge: false, hold: false, demote: false };
+      return { phase: resumeAfterFix(markers, hasResidue), armMerge: false, hold: false, demote: false, clearMarkers: [] };
     }
-    // Still red — stay in fix.
-    return { phase: "fix", armMerge: false, hold: true, demote: false };
+    // Still red — stay in fix. Markers were already cleared on the earlier call
+    // that first entered `fix`; this later branch must not clear again.
+    return { phase: "fix", armMerge: false, hold: true, demote: false, clearMarkers: [] };
   }
 
   // 5. Clean review completion arms auto-merge; no graph-side phase write.
   if (phase === "review") {
-    return { phase: "review", armMerge: true, hold: false, demote: false };
+    return { phase: "review", armMerge: true, hold: false, demote: false, clearMarkers: [] };
   }
 
   // 6. Forward ladder edge.
   const next = forwardPhase(phase, hasResidue);
   if (next === null) {
-    return { phase, armMerge: false, hold: true, demote: false };
+    return { phase, armMerge: false, hold: true, demote: false, clearMarkers: [] };
   }
-  return { phase: next, armMerge: false, hold: false, demote: false };
+  return { phase: next, armMerge: false, hold: false, demote: false, clearMarkers: [] };
 }
 
 // --- Execution-state mutation helpers ---------------------------------------
