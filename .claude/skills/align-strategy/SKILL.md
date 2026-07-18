@@ -78,7 +78,7 @@ blocks your `graph-commit` rebase, and a stale read races live phase state
    fetches `origin/main` and cuts the worktree fresh from it, so no separate
    freshness check is needed after it. If instead you use native
    `EnterWorktree`, **or** re-enter an **already-existing** worktree by any
-   means, running
+   means **other than `provision-node-worktree`**, running
    `.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh` is
    **mandatory** as the very first action in that worktree — **before any
    graph read** (before Step 1's overlap grep / `readNode`, etc.). A non-zero

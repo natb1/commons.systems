@@ -36,7 +36,8 @@ worktree, on a verified-fresh checkout. **Prefer the `provision-node-worktree`
 primitive** (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`):
 it fetches `origin/main` and cuts the worktree fresh from it, so no separate
 freshness check is needed after it. If instead you use native `EnterWorktree`,
-**or** re-enter an **already-existing** worktree by any means, running
+**or** re-enter an **already-existing** worktree by any means **other than
+`provision-node-worktree`**, running
 `.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh` is
 **mandatory** as the very first action in that worktree — **before any graph
 read**, i.e. before Step 1's gap-report regeneration. A non-zero exit means the

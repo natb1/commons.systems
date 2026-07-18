@@ -78,7 +78,7 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    fetches `origin/main` and cuts the worktree fresh from it, so no separate
    freshness check is needed after it. If instead this run uses native
    `EnterWorktree`, **or** re-enters an **already-existing** worktree by any
-   means, running
+   means **other than `provision-node-worktree`**, running
    `.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh` is
    **mandatory** as the very first action in that worktree — **before any
    graph read** (before any `readNode` or drift grep below). A non-zero exit

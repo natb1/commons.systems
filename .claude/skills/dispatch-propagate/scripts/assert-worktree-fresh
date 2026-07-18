@@ -58,7 +58,10 @@ fi
 
 # Count commits reachable from origin/main but not from HEAD — i.e. how far the
 # local checkout is behind. Zero means up-to-date (or ahead); positive means stale.
-BEHIND="$(git rev-list --count HEAD..origin/main)"
+if ! BEHIND="$(git rev-list --count HEAD..origin/main 2>/dev/null)"; then
+  echo "assert-worktree-fresh: origin/main did not resolve after fetch in '$WORKTREE' — cannot verify freshness, refusing to proceed" >&2
+  exit 1
+fi
 if [[ "$BEHIND" -gt 0 ]]; then
   echo "assert-worktree-fresh: HEAD is $BEHIND commit(s) behind origin/main — freshen (merge origin/main) before analysis" >&2
   exit 1
