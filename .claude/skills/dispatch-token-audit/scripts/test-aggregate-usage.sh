@@ -116,11 +116,13 @@ setup() {
 
   # line 2: assistant — implement, opus, usage input=1000, cc=2000, cr=4000, out=500
   # Tool calls A,B (context-pack, gh issue). Usage/model unchanged; content added.
+  # lint-allow: gh-rest-porcelain fixture JSON simulates a transcript tool_use command string, not a real gh invocation
   printf '%s\n' '{"type":"assistant","attributionSkill":"implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_001","name":"Bash","input":{"command":".claude/skills/dispatch-propagate/scripts/dispatch-context-pack 999 --pr"}},{"type":"tool_use","id":"toolu_002","name":"Bash","input":{"command":"gh issue view 999 --json labels"}}],"usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
     >> "$worker_jsonl"
 
   # line 3: assistant — same model/skill/branch, usage input=100, cc=200, cr=400, out=50
   # Tool calls A,B again → session document order A,B,A,B. Usage/model unchanged.
+  # lint-allow: gh-rest-porcelain fixture JSON simulates a transcript tool_use command string, not a real gh invocation
   printf '%s\n' '{"type":"assistant","attributionSkill":"implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_003","name":"Bash","input":{"command":".claude/skills/dispatch-propagate/scripts/dispatch-context-pack 999 --pr"}},{"type":"tool_use","id":"toolu_004","name":"Bash","input":{"command":"gh issue view 999 --json labels"}}],"usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":400,"output_tokens":50}}}' \
     >> "$worker_jsonl"
 
