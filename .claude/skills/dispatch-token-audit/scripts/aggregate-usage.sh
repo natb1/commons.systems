@@ -876,7 +876,7 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
 # — never interpreted as instructions here (rendering is a downstream unit).
 | ( ["dispatch-context-pack","dispatch-check-blockers","dispatch-",
      "git merge","git fetch","git status","gh pr","gh issue"] ) as $scriptable_subs
-| ( { implement:"plan-implement", fix:"fix-checks", qa:"qa-fix",
+| ( { implement:"implement", fix:"fix-checks", qa:"qa-fix",
       review:"review-fix", "main-qa":"qa-main" } ) as $phase_skill
 | 8 as $boot_window
 | ( reduce $tool_sequences.top[] as $t ({};
