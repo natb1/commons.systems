@@ -34,7 +34,40 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Major scope deviation for a per-node /align-tactics finalize. This
+    frozen draft is a backwards-incompatible, multi-PR migration that removes
+    `fix` from the phase enum (schema.ts:28) and splits it into an orthogonal
+    execution.fix interrupt-state. Scheduling it coherently requires strategy
+    edits the per-node finalize path structurally cannot make: amending
+    strategy-graph-native-dispatch clarifications 18 (fix-as-interrupt), 63
+    (reviewed-marker re-review), the 2026-07-04 main-qa ladder ordering
+    (main-qa->review->fix->qa->implement->align-tactics), and the phase ordinal
+    used in attention ranking
+    (draft<align-tactics<implement<fix<qa<review<main-qa) -- all of which
+    reference `fix` as a live phase and become factually wrong once the enum
+    value is removed. Those clarification amendments soft-freeze the 16 open
+    child tactics of strategy-graph-native-dispatch; the draft body explicitly
+    directs that this soft-freeze coincide with real subtree re-evaluation (a
+    strategy-target round), not a not-yet-scheduled isolated change. The
+    per-node finalize path also cannot decompose the required 4-step migration
+    subtree (additive schema -> dual-read -> one-time live-node migration ->
+    enum removal; 2 live phase:fix nodes exist today:
+    tactic-phase-standup-audit-lens, tactic-tailscale-shell-health-check) into
+    PR-sized units with blocked_by sequencing. Recommend: schedule this via a
+    strategy-target `/align-tactics strategy-graph-native-dispatch` round that
+    (a) decomposes the 4-step migration into a PR-sized subtree with blocked_by
+    edges, (b) folds in the pointer-amendments to clarifications 18/63 + the
+    main-qa ladder + the phase ordinal in the same round so the soft-freeze
+    coincides with subtree re-evaluation, and (c) sequences this work after
+    tactic-graph-selector-reviewed-exclusion (phase qa, boost 12), which ships
+    the interim marker-clear re-review that this redesign supersedes via
+    greenfield step 4 (direct phase->review reset). Alternatively, if the author
+    prefers to finalize this as a single atomic PR in isolation, clear this park
+    with that direction and the clarification/ordinal reconciliation handled
+    separately."
+  since: 2026-07-18
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
