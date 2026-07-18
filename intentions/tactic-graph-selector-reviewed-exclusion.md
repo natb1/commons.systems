@@ -33,13 +33,14 @@ attention:
     resolved 16.333) so it is selected and finalized first — own boost 12 added
     to strategy-graph-native-dispatch's inherited 5.333 resolves to 17.333,
     clearing the max."
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-selector-reviewed-exclusion
   pr: 2888
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
@@ -325,3 +326,18 @@ npx vitest run --project intentionsutil --root .
   node-lane PR, confirm no `/review-fix` worker is dispatched to it post-review
   and the tick merges it, with Claude intervening only on a red-CI fix that then
   visibly re-runs qa and review.
+
+## needs-main residue
+
+- **id:** 8
+- **title:** End-to-end reviewed-exclusion observed in a live dispatch tick
+- **url_path:** current
+- **expected_outcome:** In production the reviewed lifecycle is entirely
+  tick-owned — no re-dispatched review worker on a reviewed node, and CI
+  regressions resume at qa.
+- **finding:** planned deferral — the node's own Verification section
+  documents this as observable only in production once the sibling
+  `tactic-graph-tick-node-lane-auto-merge` tactic also lands; explicitly
+  non-blocking for this tactic and not assertable at merge time. Measured
+  downstream once that sibling lands and a reviewed node-lane PR goes through
+  a live dispatch tick.
