@@ -540,9 +540,16 @@ map** `{<strategy-id>: <fingerprint>}` — one entry per serving strategy — th
 the router's soft-freeze trigger compares against each serving strategy's
 current substance (strategy clarification 10). At mint time this session stamps
 only the **decomposed** strategy's entry: `{<decomposed-strategy-id>:
-<fingerprint>}`, where `<fingerprint>` is `strategyFingerprint(strategy)` from
-`packages/intentionsutil/src/router.ts` — always that helper, never a
-hand-computed hash. A serving strategy absent from the map is never stale
+<fingerprint>}`, where `<fingerprint>` is the value printed by
+
+```bash
+npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <decomposed-strategy-id>
+```
+
+run against a fresh `origin/main` at stamp time — the single runnable callsite
+for `strategyFingerprint(strategy)` (`packages/intentionsutil/src/router.ts`).
+Never hand-compute the hash, and never re-derive the recipe inline — always run
+this command. A serving strategy absent from the map is never stale
 (per-strategy null), so an honest multi-serves tactic is not born frozen against
 its other serving strategies; those entries are filled by whichever session
 decomposes or re-evaluates each of them. A tactic not yet advanced still carries
@@ -581,8 +588,14 @@ decompose fresh. It:
    fingerprint-triggered re-evaluation.
 3. Re-stamps **only the re-evaluated strategy's entry** in each surviving
    tactic's `execution.strategy_fingerprint` map — set
-   `map[<re-evaluated-strategy-id>] = strategyFingerprint(strategy)`
-   (`packages/intentionsutil/src/router.ts`), leaving every other serving
+   `map[<re-evaluated-strategy-id>]` to the value printed by
+
+   ```bash
+   npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <re-evaluated-strategy-id>
+   ```
+
+   (the single runnable callsite for `strategyFingerprint(strategy)`,
+   `packages/intentionsutil/src/router.ts`), leaving every other serving
    strategy's entry untouched — which unfreezes the subtree against this
    strategy without disturbing the others. (A tactic still at `execution: null`
    has no map to re-stamp until the machinery seeds one.)
