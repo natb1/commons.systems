@@ -96,9 +96,9 @@ describe("strategyFingerprintFor", () => {
   it("exits non-zero for a non-strategy id", () => {
     const dir = tempDir();
     seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
       throw new Error(`process.exit(${code})`);
-    }) as never);
+    });
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
     expect(() => strategyFingerprintFor(dir, "tactic-a")).toThrow(/process\.exit\(1\)/);
@@ -108,9 +108,9 @@ describe("strategyFingerprintFor", () => {
 
   it("exits non-zero for a missing/nonexistent id", () => {
     const dir = tempDir();
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
       throw new Error(`process.exit(${code})`);
-    }) as never);
+    });
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
     expect(() => strategyFingerprintFor(dir, "strategy-gone")).toThrow(/process\.exit\(1\)/);
