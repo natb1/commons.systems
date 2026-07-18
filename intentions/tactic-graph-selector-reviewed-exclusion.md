@@ -43,7 +43,7 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint:
-    strategy-graph-native-dispatch: faf91a4e3701267190257233de6089716cb46abf5994a93abb21f62c626f0a76
+    strategy-graph-native-dispatch: 4d429cd61c99f4ab3cceb276f80604e38e4aa17c9b6e8bb732786705ae8eaafe
 validates: []
 blocked_by: []
 office_hours: null
