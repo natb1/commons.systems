@@ -25,7 +25,8 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-dispatch-skill-input-contract
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -63,3 +64,5 @@ Out of scope: `/align` (persistent-layer recording — stays align-family); `/pl
 ## Pattern
 
 Single-PR atomic rename with full reference sweep, old names working until the PR merges — parity with [[tactic-align-entrypoint-consolidation]]. Fixtures/tests updated in the same PR. Coordinate with [[tactic-dispatch-skill-input-contract]] (same skills).
+
+Sequencing (2026-07-18 topology correction, strategy migration-sequencing clarification): lands as the second of two coordinated adjacent PRs — `blocked_by: [tactic-dispatch-skill-input-contract]`; the rename sweeps the restructured skills after the input-contract PR merges. The reference-site census above is re-run at finalize (it will have drifted as in-flight work edits those files).

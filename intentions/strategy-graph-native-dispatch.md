@@ -1784,7 +1784,12 @@ clarifications:
       cheaply on the same atomic PR the input-contract change (clarification 68)
       already touches. Both the naming and the contract change are legitimate
       but LOW RANK (clarification 69). Implementation retained as draft
-      tactic-dispatch-skill-rename. Recorded 2026-07-18 interview."
+      tactic-dispatch-skill-rename. Recorded 2026-07-18 interview. (Amended
+      2026-07-18 same day: the rides-on-the-same-atomic-PR sentence is corrected
+      — the leaf-tactic rule holds one PR per leaf, so the two changes land as
+      coordinated adjacent PRs: tactic-dispatch-skill-input-contract first,
+      tactic-dispatch-skill-rename blocked_by it and sweeping the restructured
+      skills after. See the migration-sequencing clarification.)"
   - question: How do the dispatch phase skills receive their input — today they
       infer the target from the worktree branch name, and only /align-tactics
       takes an explicit node-id argument?
@@ -1823,12 +1828,11 @@ clarifications:
       backlog tactics. Recorded 2026-07-18 interview. (Companion 2026-07-18:
       off-path demotion covers the recorded requirement’s own rank; the freeze
       tax of the recording edit itself — every stamped child paying a
-      re-evaluation session even for an orthogonal edit, as this round’s edit
-      did to 9 in-flight children — is addressed separately by the
-      materiality-scoped-freeze clarification.)"
+      re-evaluation session even for an orthogonal edit — is addressed
+      separately by the materiality-scoped-freeze clarification.)"
   - question: A strategy edit soft-freezes every stamped open child regardless of
-      relevance or rank (the 2026-07-18 skill-rename round staled 9 in-flight
-      children for a low-rank naming requirement) — should the freeze decision
+      relevance or rank (a low-rank edit such as the 2026-07-18 skill-rename
+      round stales every stamped in-flight child) — should the freeze decision
       incorporate a rank comparison, and how does a stale child recover WHAT
       changed when the stamp is a bare hash?
     answer: 'Greenfield: the freeze becomes materiality-scoped at the source, not
@@ -1873,7 +1877,23 @@ clarifications:
       accumulated on the 9 currently-stale children (fix-orthogonal,
       skill-rename, this round) reconcile via the author’s already-planned
       re-evaluation sweep — this doctrine applies from the next edit round on.
-      Recorded 2026-07-18 /align-strategy interview.'
+      Recorded 2026-07-18 /align-strategy interview. Corrected same-day
+      2026-07-18: the motivating premise overstated the live blast radius — none
+      of this strategy’s open children carry a map-form stamp yet (stamping
+      starts as align rounds land it), and the selector’s live freeze events all
+      trace to legacy bare-string stamps on OTHER strategies’ children, so the
+      three 2026-07-18 edits froze zero children mechanically; until stamp
+      coverage exists, the re-evaluation obligation on this strategy’s open
+      subtree is doctrinal (the soft-freeze clarification), not stamp-enforced.
+      The norm this correction demonstrates: prose-level record corrections are
+      never deferred for freeze cost — the graph tracks greenfield state, prose
+      included, and an editing round pays exactly the materiality of its change
+      (this correction: zero freezes, one commit). A legacy bare-string stamp
+      converts to map form only in a re-evaluation round of a strategy it
+      actually serves, carrying the old string into the entries of the
+      strategies that round did NOT reconcile so their freeze is preserved
+      (absent-from-map would silently unfreeze them). Recorded 2026-07-18
+      /align-strategy interview, same-day correction.'
   - question: Does the graph need first-class structure for sequencing brownfield
       migrations of backwards-incompatible changes, and how do in-flight tactics
       link to a migration that must land before their work?

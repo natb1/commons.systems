@@ -41,7 +41,8 @@ execution:
   markers:
     - planned
     - qa-done
-  strategy_fingerprint: null
+  strategy_fingerprint:
+    strategy-graph-native-dispatch: 5b3943b83e9651f7ae405a91510bcffb11f07817ecb99e976f13e0678b11c963
 validates: []
 blocked_by: []
 office_hours: null
@@ -341,3 +342,7 @@ npx vitest run --project intentionsutil --root .
   non-blocking for this tactic and not assertable at merge time. Measured
   downstream once that sibling lands and a reviewed node-lane PR goes through
   a live dispatch tick.
+
+## Interim-mechanism note (2026-07-18 re-evaluation)
+
+The red-CI marker-clear re-review this tactic ships (`decideTransition`/`fixInterrupt` in `transitions.ts`) is the interim mechanism: the fix-orthogonal greenfield (`strategy-graph-native-dispatch`, fix-orthogonal-execution-state clarification; carrier `tactic-fix-interrupt-orthogonal-state`, phase implement) replaces it with a direct `phase -> review` reset plus auto-merge disarm when a fix pushes code after review completed. This tactic's scope and plan are unchanged — it lands the interim mechanism; the replacement rides the carrier's migration step 4. Reconciled against the full strategy substance and stamped (map form) 2026-07-18 /align-strategy round.
