@@ -170,6 +170,28 @@ describe("tactic eligibility", () => {
     ];
     expect(candidateIds(nodes)).toEqual(["tactic-review"]);
   });
+
+  it("emits a fix candidate when execution.fix is set, regardless of the real ladder phase", () => {
+    // A CI-fix interrupt is carried orthogonally on execution.fix; the node's
+    // real phase (e.g. qa) stays put, but the candidate surfaces as phase:"fix".
+    const nodes = [
+      tactic({
+        id: "tactic-under-fix",
+        phase: "qa",
+        execution: { ...exec({ pr: 7 }), fix: { since: "2026-07-18", attempt: 1, pushed_sha: null } },
+      }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    expect(sel.candidates[0]).toMatchObject({ id: "tactic-under-fix", phase: "fix" });
+  });
+
+  it("emits the real ladder phase when execution.fix is unset", () => {
+    const nodes = [
+      tactic({ id: "tactic-clean", phase: "qa", execution: { ...exec({ pr: 7 }), fix: null } }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    expect(sel.candidates[0]).toMatchObject({ id: "tactic-clean", phase: "qa" });
+  });
 });
 
 describe("strategy eligibility", () => {

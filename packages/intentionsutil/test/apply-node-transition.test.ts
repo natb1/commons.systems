@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readNode, writeNode } from "../src/store.js";
-import type { CiVerdict } from "../src/transitions.js";
 import { applyNodeTransition, parseArgs } from "../scripts/apply-node-transition.js";
 
 function tempDir(): string {
@@ -45,14 +44,12 @@ function seedTactic(dir: string, phase: string, body: string): void {
 
 const baseArgs: {
   id: string;
-  ci: CiVerdict;
   scopeStale: boolean;
   strategyStale: boolean;
   setPr: number | null;
   strategyFingerprint: Record<string, { hash: string; sha: string }> | null;
 } = {
   id: "tactic-syn",
-  ci: "unknown",
   scopeStale: false,
   strategyStale: false,
   setPr: null,
@@ -71,18 +68,21 @@ describe("applyNodeTransition store round-trip", () => {
     expect(node.execution?.markers).toEqual(["planned"]);
   });
 
-  it("interrupts review→fix on failing CI without writing a marker", () => {
+  it("advances review CI-blind — never routes into fix", () => {
+    // The forward decision no longer reads CI; a review-phase transition arms
+    // merge and never writes phase:"fix" (a CI-fix interrupt is the selector's
+    // orthogonal execution.fix, not a phase overwrite here).
     const dir = tempDir();
     seedTactic(dir, "review", "# body\n");
-    const r = applyNodeTransition({ ...baseArgs, dir, ci: "failing" });
-    expect(r.phase).toBe("fix");
-    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual([]);
+    const r = applyNodeTransition({ ...baseArgs, dir });
+    expect(r.phase).not.toBe("fix");
+    expect(r.armMerge).toBe(true);
   });
 
   it("arms merge at clean review completion and stamps the reviewed marker", () => {
     const dir = tempDir();
     seedTactic(dir, "review", "# body\n");
-    const r = applyNodeTransition({ ...baseArgs, dir, ci: "passing" });
+    const r = applyNodeTransition({ ...baseArgs, dir });
     expect(r.armMerge).toBe(true);
     expect(r.phase).toBe("review");
     expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["reviewed"]);
@@ -93,7 +93,7 @@ describe("applyNodeTransition store round-trip", () => {
     // Seed a review-phase tactic that already carries markers, via two hops.
     seedTactic(dir, "implement", "# body\n");
     applyNodeTransition({ ...baseArgs, dir }); // implement→qa (planned)
-    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // qa→review (qa-done)
+    applyNodeTransition({ ...baseArgs, dir }); // qa→review (qa-done)
     expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["planned", "qa-done"]);
 
     const r = applyNodeTransition({ ...baseArgs, dir, scopeStale: true });
@@ -104,30 +104,10 @@ describe("applyNodeTransition store round-trip", () => {
     expect(node.execution?.markers).toEqual([]);
   });
 
-  it("clears qa-done and reviewed on a fix interrupt so resume out of fix returns to qa", () => {
-    const dir = tempDir();
-    // Walk implement→qa→review→(arm-merge) so the node carries all three markers.
-    seedTactic(dir, "implement", "# body\n");
-    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // implement→qa (planned)
-    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // qa→review (qa-done)
-    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // review arms merge (reviewed)
-    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["planned", "qa-done", "reviewed"]);
-
-    // CI regresses: fix interrupt clears qa-done and reviewed, keeping planned.
-    const fix = applyNodeTransition({ ...baseArgs, dir, ci: "failing" });
-    expect(fix.phase).toBe("fix");
-    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["planned"]);
-
-    // Leaving fix on green CI resumes at qa (not review) — the cleared markers
-    // mean the marker cascade falls through past review back to qa.
-    const resume = applyNodeTransition({ ...baseArgs, dir, ci: "passing" });
-    expect(resume.phase).toBe("qa");
-  });
-
   it("routes a residue-bearing clean review to arm-merge and reports hasResidue", () => {
     const dir = tempDir();
     seedTactic(dir, "review", "# body\n\n## needs-main\n\nverify in prod\n");
-    const r = applyNodeTransition({ ...baseArgs, dir, ci: "passing" });
+    const r = applyNodeTransition({ ...baseArgs, dir });
     expect(r.hasResidue).toBe(true);
     expect(r.armMerge).toBe(true);
   });

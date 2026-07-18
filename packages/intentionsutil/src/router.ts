@@ -297,7 +297,10 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     candidates.push({
       id: t.id,
       kind: "tactic",
-      phase: t.phase,
+      // A tactic under an active CI-fix interrupt (`execution.fix` set) is
+      // emitted as a `fix` candidate regardless of its preserved ladder `phase`;
+      // its real `phase` stays put and the interrupt is carried orthogonally.
+      phase: t.execution?.fix != null ? "fix" : t.phase,
       rank: attention.get(t.id)?.value ?? 0,
       pace_exempt: t.pace_exempt,
       pr: t.execution?.pr ?? null,

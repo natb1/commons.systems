@@ -30,7 +30,6 @@ export {
   LADDER,
   forwardPhase,
   fixInterrupt,
-  resumeAfterFix,
   decideTransition,
   addMarker,
   incrementAttempt,
