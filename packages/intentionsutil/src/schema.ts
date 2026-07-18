@@ -391,6 +391,11 @@ function requireDateString(value: unknown, field: string): string {
   return s;
 }
 
+function optionalDateString(value: unknown, field: string): string | null {
+  if (value == null) return null;
+  return requireDateString(value, field);
+}
+
 function validateAttempts(value: unknown, field: string): Record<string, number> {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
@@ -456,7 +461,7 @@ function validateRounds(value: unknown, field: string): Rounds {
   return {
     count: requireNonNegativeInt(value.count, `${field}.count`),
     last_completed: optionalString(value.last_completed, `${field}.last_completed`),
-    last_aligned: optionalString(value.last_aligned, `${field}.last_aligned`),
+    last_aligned: optionalDateString(value.last_aligned, `${field}.last_aligned`),
   };
 }
 
