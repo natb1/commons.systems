@@ -69,13 +69,23 @@ blocks your `graph-commit` rebase, and a stale read races live phase state
    run with `dangerouslyDisableSandbox: true`) — the claim is held by
    another session: stop and report the held claim to the author. Do
    **not** park the node — a held claim is not a defect.
-3. **Enter the worktree.** Otherwise create or re-enter it — native
-   `EnterWorktree` with the node id as the worktree name, or the
-   `provision-node-worktree`
-   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`)
-   primitive — and do all authoring and the step-5 `graph-commit` from
+3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+   or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
-   liveness rule the router uses, so no separate lock is needed.
+   liveness rule the router uses, so no separate lock is needed. **Prefer
+   `provision-node-worktree`**
+   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`): it
+   fetches `origin/main` and cuts the worktree fresh from it, so no separate
+   freshness check is needed after it. If instead you use native
+   `EnterWorktree`, **or** re-enter an **already-existing** worktree by any
+   means, running
+   `.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh` is
+   **mandatory** as the very first action in that worktree — **before any
+   graph read** (before Step 1's overlap grep / `readNode`, etc.). A non-zero
+   exit means the checkout is stale **or** the `git fetch` itself failed;
+   either way, **STOP** and freshen (`git fetch origin main && git merge
+   origin/main`) before proceeding. Never treat a failed fetch as license to
+   proceed on unverified state.
 
 **Doctrine-recording rounds pin the pace curve.** A round that records
 governing dispatch doctrine (a concurrency-safety or

@@ -31,12 +31,21 @@ ordinary conversational turns.
 
 Author in the node's own worktree, never the shared `main` checkout — a second
 session's dirty tracked file blocks your `graph-commit` rebase and a stale read
-races live phase state. Create or re-enter the worktree with native
-`EnterWorktree` (or the `provision-node-worktree` primitive,
-`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`) and do all
-authoring and the step-4 `graph-commit` from there.
+races live phase state. Do all authoring and the step-4 `graph-commit` from the
+worktree, on a verified-fresh checkout. **Prefer the `provision-node-worktree`
+primitive** (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`):
+it fetches `origin/main` and cuts the worktree fresh from it, so no separate
+freshness check is needed after it. If instead you use native `EnterWorktree`,
+**or** re-enter an **already-existing** worktree by any means, running
+`.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh` is
+**mandatory** as the very first action in that worktree — **before any graph
+read**, i.e. before Step 1's gap-report regeneration. A non-zero exit means the
+checkout is stale **or** the `git fetch` itself failed; either way, **stop** and
+freshen (`git fetch origin main && git merge origin/main`) before proceeding.
+Never treat a failed fetch as license to proceed on unverified state.
 
-Never run `gh` anywhere in this flow.
+Never run `gh` anywhere in this flow (`assert-worktree-fresh`'s own `git fetch`
+is not a `gh` call, so it does not conflict with this).
 
 ## Step 1 — Refresh the gap report
 
