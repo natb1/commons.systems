@@ -22,7 +22,19 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 62
+  override: null
+  rationale: "Boosted to top ranking by author direction (2026-07-18
+    /align-strategy round on the redundant qa-fix re-run of
+    tactic-review-phase-trust-builtin-review): this draft is the tracker of
+    record for the false scope-drift demotion class that cycled that node review
+    -> implement -> qa on a byte-identical diff. Sized against the composed
+    selector rank (childless, empty blocked_by: rank = boost + 5.33; current max
+    66.33 on tactic-align-skills-latest-graph-guard and
+    tactic-freeze-resurface-stale-children-only), so boost 62 gives 67.33 -
+    strictly top of the selector frontier, verified via select-targets. The
+    boost flows nowhere else (no blocked_by, no children)."
 phase: null
 execution: null
 validates: []
@@ -82,3 +94,31 @@ SHA=$(git rev-parse origin/main)
 FP=$(node --import tsx/esm -e '...tacticScopeFingerprint(readNode(...).statement, readNodeBody(...))...' <id>)
 echo "$FP $SHA" > .claude/worktrees/<id>.scope-fingerprint
 ```
+
+## Second observed incident (2026-07-18, machinery-append variant)
+
+Recorded by the 2026-07-18 /align-strategy round answering "why did dispatch
+launch qa-fix when qa was already complete?" on
+`tactic-review-phase-trust-builtin-review` (PR #2887):
+
+- 13:30 EDT `d99f84fe` — phase start; scope-custody stamp taken at this sha.
+- 13:51 EDT `5be80194` — `transition-node` advanced qa -> review and appended
+  the `## needs-main residue` section (a machinery body append). Its
+  `refresh_stamp()` ran under the pre-#2882 wrong-root stamp bug, so the
+  main-root stamp stayed at `d99f84fe`.
+- 16:12 EDT — PR #2882 (`tactic-graph-node-lane-write-hardening`) merged the
+  `MAIN_ROOT` stamp-path fix.
+- 16:51 EDT `3a72e369` — a transition read the (still-stale) main-root stamp,
+  saw `5be80194` as absorbed scope drift, and falsely demoted the node
+  review -> implement, discarding qa and review custody.
+- 18:35 EDT `72408785` — re-transitioned to qa; a full qa-fix pass then re-ran
+  on a byte-identical diff.
+
+Distinct trigger, same defect class as the rationale's PR #2888 incident: a
+scope-inert body append (there an align note, here the machinery's own residue
+append) trips `tacticScopeFingerprint` and demotes a completed ladder. The
+machinery variant's root cause is fixed on main by PR #2882; its regression
+protection is tracked by `tactic-transition-node-scope-stale-test-coverage`.
+This primitive remains the fix for the align-round variant and the sanctioned
+recovery path (re-stamp instead of re-implementing) for any future false
+demotion. Cost of this incident: three redundant phase sessions.

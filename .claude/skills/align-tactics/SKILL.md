@@ -69,13 +69,23 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    another session: stop and report the held claim, then end the run. A
    held claim is **not** an `office_hours` park (it is not one of the three
    autonomy-contract conditions below) and **not** a defect.
-3. **Enter the worktree.** Otherwise create or re-enter it — native
-   `EnterWorktree` with the node id as the worktree name, or the
-   `provision-node-worktree`
-   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`)
-   primitive — and do all authoring and the step-5 `graph-commit` from
+3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+   or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
-   liveness rule the router uses, so no separate lock is needed.
+   liveness rule the router uses, so no separate lock is needed. **Prefer
+   `provision-node-worktree`**
+   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`): it
+   fetches `origin/main` and cuts the worktree fresh from it, so no separate
+   freshness check is needed after it. If instead this run uses native
+   `EnterWorktree`, **or** re-enters an **already-existing** worktree by any
+   means **other than `provision-node-worktree`**, running
+   `.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh` is
+   **mandatory** as the very first action in that worktree — **before any
+   graph read** (before any `readNode` or drift grep below). A non-zero exit
+   means the checkout is stale **or** the `git fetch` itself failed; either
+   way, **STOP** and freshen (`git fetch origin main && git merge
+   origin/main`) before proceeding. Never treat a failed fetch as license to
+   proceed on unverified state.
 
 ## Tactic target — per-node finalize or re-plan
 
