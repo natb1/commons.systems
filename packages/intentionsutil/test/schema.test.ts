@@ -1425,8 +1425,8 @@ describe("validateGraph", () => {
       caught = e;
     }
     expect(caught).toBeInstanceOf(Error);
-    const message = (caught as Error).message;
-    expect(message).toMatch(/tactic-1: clarifications\[0\]\.answer carries no dated provenance clause/);
-    expect(message).toMatch(/virtue-1: clarifications\[0\]\.answer carries no dated provenance clause/);
+    if (!(caught instanceof Error)) throw new Error("unreachable");
+    expect(caught.message).toMatch(/tactic-1: clarifications\[0\]\.answer carries no dated provenance clause/);
+    expect(caught.message).toMatch(/virtue-1: clarifications\[0\]\.answer carries no dated provenance clause/);
   });
 });
