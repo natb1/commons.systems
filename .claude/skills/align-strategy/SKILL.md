@@ -7,7 +7,7 @@ model: opus
 
 # Align Strategy
 
-**On the `model` field's enforcement (tactic-align-family clarification 10,
+**On the `model` field's enforcement (strategy-token-economy clarification 10,
 2026-07-16):** `/align-strategy` is `user-invocable: true` — it runs on the
 interactive main loop, not via a `context: fork` subagent launch. A `model:`
 field in frontmatter is confirmed honored for `context: fork` skills; for
