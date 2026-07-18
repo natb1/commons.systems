@@ -1,8 +1,8 @@
 ---
 id: tactic-align-tactics-mechanical-floor
 kind: tactic
-statement: "mechanical floor for the align skills: plan-schema body lint in
-  the validate gate, plus child-tactic and strategy-corpus census scripts"
+statement: "mechanical floor for the align skills: plan-schema body lint in the
+  validate gate, plus child-tactic and strategy-corpus census scripts"
 owner: ai
 status: codified
 parent: null
@@ -28,11 +28,11 @@ serves:
   - strategy-graph-native-dispatch
 recovers: []
 clarifications:
-  - question: "Unit 1 was parked 2026-07-09 because its combined body+provenance
-      lint was unimplementable as specified. How should it be re-spec'd?"
-    answer: "(Recorded 2026-07-18 /align-tactics per-node re-plan round.) Split
-      in two. This node keeps only the plan-schema body lint, rescoped for
-      corpus reality found on re-investigation: (1) the marker checks are
+  - question: Unit 1 was parked 2026-07-09 because its combined body+provenance lint
+      was unimplementable as specified. How should it be re-spec'd?
+    answer: "(Recorded 2026-07-18 /align-tactics per-node re-plan round.) Split in
+      two. This node keeps only the plan-schema body lint, rescoped for corpus
+      reality found on re-investigation: (1) the marker checks are
       format-tolerant — Context/Verification match by heading prefix so
       'Verification checklist' still counts, and the Recommended-model check
       matches 'recommended model' case-insensitively anywhere in the body, not
@@ -64,12 +64,11 @@ clarifications:
       (packages/intentionsutil/src/router.ts:159-163) already extracts 'the
       newest ISO date mentioned anywhere' in a clarification answer,
       verb-agnostic, and coverage.ts's lastReviewedOf relies on exactly that
-      semantics (test fixtures 'Recorded 2026-05-01.' and 'Amended
-      2026-06-15.', packages/intentionsutil/test/coverage.test.ts:223-239).
-      Loosening the two SKILL.md doctrine passages to match is an align-layer
-      doctrine edit, not a lint tweak an off-path autonomous session should
-      make unilaterally — hence the park on the sibling tactic rather than a
-      decision here."
+      semantics (test fixtures 'Recorded 2026-05-01.' and 'Amended 2026-06-15.',
+      packages/intentionsutil/test/coverage.test.ts:223-239). Loosening the two
+      SKILL.md doctrine passages to match is an align-layer doctrine edit, not a
+      lint tweak an off-path autonomous session should make unilaterally — hence
+      the park on the sibling tactic rather than a decision here."
 tooling_goals: []
 success_signal: null
 attention:
@@ -82,8 +81,13 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: implement
-execution: null
+phase: fix
+execution:
+  branch: tactic-align-tactics-mechanical-floor
+  pr: 2896
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

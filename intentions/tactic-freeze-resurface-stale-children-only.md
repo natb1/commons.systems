@@ -44,8 +44,14 @@ attention:
     tactic-align-family-opus-default), so boost 61 gives 66.33 - top of the
     discretionary frontier. The boost flows nowhere else (no blocked_by, no
     children)."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-freeze-resurface-stale-children-only
+  pr: 2895
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
