@@ -262,9 +262,18 @@ Drift review is **two-sided** (strategy clarification 8):
     Land it as a dated `clarifications` entry on the strategy without
     interrupting, and continue the round.
 
-Every clarification `answer` ends with a provenance sentence in the existing
-convention, e.g. `"...Recorded 2026-07-05 /align-tactics round."` (date via
-`date -u +%Y-%m-%d`).
+Every clarification `answer` carries a dated provenance clause: an event verb
+(Recorded / Amended / Reviewed / clarified / adopted, etc.) plus an ISO date,
+placed wherever it reads best in the sentence — a front-loaded parenthetical
+is preferred, e.g. `"(Recorded 2026-07-05 /align-tactics round.) ..."`, but any
+placement is accepted. The newest ISO date anywhere in the answer is its
+effective date — the `readingDate()` contract
+(`packages/intentionsutil/src/router.ts`) extracts it verb-agnostically, and
+`coverage.ts`'s `lastReviewedOf` depends on it. An amendment adds a new dated
+clause rather than rewriting the old one. Get the date via
+`date -u +%Y-%m-%d`, never hand-guessed. `validateGraph` rule 17 mechanically
+enforces the date-presence half of this convention; the event verb is
+documented style, not linted.
 
 This absorbs the `/plan-issue` relevance/drift, convention-drift, and
 merged-work-overlap review (§4 coverage matrix) — unchanged in substance, with

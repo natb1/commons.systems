@@ -154,9 +154,14 @@ chunks resolve per **## Candidate chunks** instead.
 - **The reading wins.** Amend the tradition record where the reading
   contradicts it, cascading to any virtue/strategy clarification that leaned
   on the misarticulation; ratify where it holds. Every resolution lands as a
-  dated `clarifications` entry ending with a provenance sentence (date via
-  `date -u +%Y-%m-%d`), e.g.
-  `"...Recorded 2026-07-20 /reading-review chunk 3."`
+  dated `clarifications` entry carrying a dated provenance clause — an event
+  verb (Recorded / Amended / Reviewed / clarified / adopted, etc.) plus an ISO
+  date, placed wherever it reads best — a front-loaded parenthetical is
+  preferred, e.g. `"(Recorded 2026-07-20 /reading-review chunk 3.) ..."`, but
+  any placement is accepted. The newest ISO date anywhere in the answer is its
+  effective date (the `readingDate()` contract in
+  `packages/intentionsutil/src/router.ts` extracts it verb-agnostically). Get
+  the date via `date -u +%Y-%m-%d`, never hand-guessed.
 - **Delegation audit trail.** Stamp
   `attributes.irreversibility.last_exercised` on
   `intentions/delegation-philosophical-articulation.md`. Every reading-wins
