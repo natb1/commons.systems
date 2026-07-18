@@ -34,7 +34,7 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: fix
+phase: implement
 execution:
   branch: tactic-fingerprint-recipe-single-callsite
   pr: 2885
