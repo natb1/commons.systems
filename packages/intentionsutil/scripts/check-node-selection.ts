@@ -49,7 +49,7 @@ import {
   strategyFingerprint,
   tacticScopeFingerprint,
 } from "../src/router.js";
-import { isFingerprintStale } from "../src/transitions.js";
+import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
 import { isPlainObject } from "../src/schema.js";
 import type { IntentionNode } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
@@ -175,6 +175,19 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     }
   } else if (phase !== selectedPhase) {
     return fail(EXIT_STALE_SELECTION, "phase", `selected ${selectedPhase} but node is now ${phase ?? "draft/null"}`);
+  } else if (selectedPhase === "review" && node.execution?.markers.includes(REVIEWED_MARKER) === true) {
+    // The pure selector (selectGraphTargets) already skips emitting a
+    // phase:review tactic once it carries the reviewed marker — the marker
+    // means the review pass already ran and the node is awaiting tick
+    // merge/fix, not a fresh review candidate. This is the execute-side
+    // mirror of that guard, catching a directive selected just before the
+    // marker landed (or a hand-run/explicit-dispatch invocation that bypassed
+    // the selector entirely).
+    return fail(
+      EXIT_STALE_SELECTION,
+      "phase",
+      `${nodeId} already carries the reviewed marker — awaiting tick merge/fix, not a review candidate`,
+    );
   }
 
   // 3. not parked — an author park landing after selection yields the worker.

@@ -87,6 +87,37 @@ describe("evaluateSelection", () => {
     expect(r.exitCode).toBe(0);
   });
 
+  it("exit 12 when a review-phase node already carries the reviewed marker", () => {
+    const dir = tempDir();
+    seed(
+      dir,
+      anode({
+        id: "tactic-r",
+        kind: "tactic",
+        phase: "review",
+        execution: { branch: "b", pr: 1, attempts: {}, markers: ["reviewed"], strategy_fingerprint: null },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-r", selectedPhase: "review", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/tactic-r already carries the reviewed marker/);
+  });
+
+  it("passes a review-phase node without the reviewed marker", () => {
+    const dir = tempDir();
+    seed(
+      dir,
+      anode({
+        id: "tactic-r2",
+        kind: "tactic",
+        phase: "review",
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-r2", selectedPhase: "review", dir, stamp: null });
+    expect(r.exitCode).toBe(0);
+  });
+
   it("exit 12 when parked first-class (office_hours set after selection)", () => {
     const dir = tempDir();
     seed(
