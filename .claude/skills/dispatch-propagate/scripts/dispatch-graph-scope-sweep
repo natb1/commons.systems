@@ -14,15 +14,30 @@
 # the existing demote-node-to-implement primitive per stale id), mirroring the
 # decision/land split of dispatch-graph-census and reconcile-graph-merged.
 #
-# Liveness: an in-flight worker owns its own scope, so its node must NOT be
-# swept. The live node-id set is derived from claude_agents_list_all (the
-# machine-wide daemon query), keeping only session names shaped like graph node
-# ids (`^tactic-` / `^strategy-`) — for node-lane workers the session name IS
-# the node id (see graph-select-target's "Claimed set", which keys
-# worktree_has_live_session on "$NATIVE_ROOT/.claude/worktrees/$id"). An UNKNOWN
-# from claude_agents_list_all is NOT an empty live set: an empty set could
-# under-count and wrongly sweep a live node, so on UNKNOWN this script skips the
-# sweep entirely this tick and logs a diagnostic rather than guessing.
+# Claimed set (must match graph-select-target's exactly — reservation OR live):
+# a node the selector will NOT touch must also be one this sweep will NOT demote,
+# else the sweep races the selector by mutating a node selection considers
+# claimed. graph-select-target:248-252 skips a node when `reservation_exists`
+# OR `worktree_has_live_session`, so the sweep excludes BOTH halves:
+#
+#   - Reserved: dispatch-graph-execute deliberately KEEPS a node's reservation
+#     across ticks on ci-waiting (case 10) and spawn-failure (case 0) so the
+#     budget keeps counting the slot and the node is re-selected on a later tick.
+#     Such a node is reserved-but-not-live when the next tick's sweep runs (the
+#     sweep precedes the concurrency gate's reservation_sweep). Demoting it would
+#     clear its execution markers out from under an outstanding reservation while
+#     selection still considers it claimed — an unsynchronized graph mutation.
+#     So any candidate with `reservation_exists "$id"` is skipped before DEMOTE.
+#   - Live: an in-flight worker owns its own scope, so its node must NOT be
+#     swept. The live node-id set is derived from claude_agents_list_all (the
+#     machine-wide daemon query), keeping only session names shaped like graph
+#     node ids (`^tactic-` / `^strategy-`) — for node-lane workers the session
+#     name IS the node id (see graph-select-target's "Claimed set", which keys
+#     worktree_has_live_session on "$NATIVE_ROOT/.claude/worktrees/$id"). An
+#     UNKNOWN from claude_agents_list_all is NOT an empty live set: an empty set
+#     could under-count and wrongly sweep a live node, so on UNKNOWN this script
+#     skips the sweep entirely this tick and logs a diagnostic rather than
+#     guessing.
 #
 # The scope stamp for each node is <repo>/.claude/worktrees/<id>.scope-fingerprint
 # (the convention demote-node-to-implement:46 and provision-node-worktree:86
@@ -47,6 +62,10 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+# lib-reservation-ledger.sh provides reservation_exists (the reservation half of
+# graph-select-target's claimed set); it transitively re-sources
+# lib-claude-agents.sh (idempotent, load-guarded).
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)" || {
   echo "dispatch-graph-scope-sweep: could not resolve REPO_ROOT" >&2; exit 1; }
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
@@ -83,8 +102,20 @@ if ! STALE_OUT=$( (cd "$REPO_ROOT" && node --import tsx/esm "$ENUM_TS" \
 fi
 
 # --- Demote each stale tactic (best-effort per node) --------------------------
+# Reserved-half exclusion (matches graph-select-target's claimed set): a node
+# whose reservation is still outstanding — dispatch-graph-execute keeps it across
+# ci-waiting / spawn-failure ticks — is re-selected on a later tick, so demoting
+# it here would race the selector. The ledger is the SHARED project-root
+# tmp/dispatch-reservations (reservation_exists resolves it via git-common-dir),
+# so the check runs from within the repo. The reserved marker basename is the
+# node id (node-lane worker session name == node id), matching how
+# graph-select-target keys reservation_exists.
 while IFS= read -r id; do
   [[ -n "$id" ]] || continue
+  if ( cd "$REPO_ROOT" && reservation_exists "$id" ); then
+    echo "dispatch-graph-scope-sweep: $id is reserved (outstanding reservation) — skipping demote (claimed by the selector)" >&2
+    continue
+  fi
   if "$DEMOTE" "$id" >&2; then
     echo "scope-stale $id"
   else
