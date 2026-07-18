@@ -52,12 +52,69 @@ job_id_for_name() {
         else empty end' 2>/dev/null || true
 }
 
-# One call to the single source of truth; dispatch on the returned verb. Capture
-# only stdout so the selector's `NOTE —` stderr advisory reaches the terminal.
-directive=$(npx tsx "$SCRIPT_DIR/office-hours-select.ts" ${TARGET:+"$TARGET"})
+# park_live_on_main <node-id> — success iff origin/main authoritatively shows a
+# LIVE park for the node (an `office_hours:` field that is not `null`). The
+# offline selector reads only the LOCAL `intentions/` store, which can lag
+# origin/main: a node already drained-and-cleared by a prior session still ranks
+# if this checkout's copy of its file predates the clear (a stale PR-branch
+# worktree is the common case — its committed node file still shows the old
+# park). origin/main is the authoritative park state, so we confirm each
+# candidate there before launching and skip stale-worktree false positives.
+# Reads the already-fetched `origin/main` ref via `git show` (no working-tree
+# mutation); a missing file or `office_hours: null` on main —> not a live park.
+park_live_on_main() {
+  local nid="$1" body
+  body=$(git show "origin/main:intentions/${nid}.md" 2>/dev/null) || return 1
+  grep -q '^office_hours:' <<<"$body" || return 1
+  if grep -qE '^office_hours:[[:space:]]*null[[:space:]]*$' <<<"$body"; then
+    return 1
+  fi
+  return 0
+}
+
+# resolve_directive — emit exactly one directive line for the first LIVE head (or
+# the explicit target), authoritatively confirmed on origin/main. Extends the
+# selector's disposition vocabulary with `cleared <node-id>` for a selected node
+# whose park is already cleared on main (a stale-worktree false positive). In
+# queue-head mode it walks the ranked `--list` top-down and launches the first
+# node still parked on main, logging each skipped false positive to stderr. The
+# selector's own `NOTE —` stderr advisory still passes straight to the terminal.
+resolve_directive() {
+  if [[ -n "$TARGET" ]]; then
+    if park_live_on_main "$TARGET"; then
+      npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$TARGET"
+    else
+      echo "cleared $TARGET"
+    fi
+    return 0
+  fi
+  local score nid date
+  while IFS=$'\t' read -r score nid date; do
+    [[ -z "$nid" ]] && continue
+    if park_live_on_main "$nid"; then
+      npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$nid"
+      return 0
+    fi
+    echo "office-hours: skipping $nid — park already cleared on origin/main (stale-worktree false positive)." >&2
+  done < <(npx tsx "$SCRIPT_DIR/office-hours-select.ts" --list)
+  echo "empty"
+}
+
+# Sync the authoritative park state before selecting. A fetch failure is
+# non-fatal: fall back to whatever `origin/main` ref this checkout already has
+# (usually current) rather than blocking office hours on a network blip.
+git fetch origin main --quiet 2>/dev/null || true
+
+# Dispatch on the freshness-guarded directive. Capture only stdout so the
+# selector's `NOTE —` stderr advisory reaches the terminal.
+directive=$(resolve_directive)
 read -r verb a b _ <<<"$directive"
 
 case "$verb" in
+  cleared)
+    echo "office-hours: node $a park already cleared on origin/main (stale-worktree false positive) — nothing to launch."
+    exit 0
+    ;;
   empty)
     if [[ "$a" == "not-parked" ]]; then
       echo "office-hours: node $b is not parked — nothing to launch for it."
