@@ -411,7 +411,7 @@ describe("evaluateSelection", () => {
           kind: "strategy",
           gap: "still gapped",
           reading: "fresh 2026-07-10",
-          rounds: { count: 2, last_completed: "2026-07-01T00:00:00Z" },
+          rounds: { count: 2, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
         }),
       );
       const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });

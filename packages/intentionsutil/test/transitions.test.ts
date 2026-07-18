@@ -230,13 +230,23 @@ describe("hasNeedsMainResidue", () => {
 
 describe("stampRound", () => {
   it("increments count and stamps last_completed from a null rounds", () => {
-    expect(stampRound(null, "2026-07-10")).toEqual({ count: 1, last_completed: "2026-07-10" });
+    expect(stampRound(null, "2026-07-10")).toEqual({
+      count: 1,
+      last_completed: "2026-07-10",
+      last_aligned: null,
+    });
   });
 
-  it("increments an existing count", () => {
-    expect(stampRound({ count: 1, last_completed: "2026-01-01" }, "2026-07-10")).toEqual({
+  it("increments an existing count and preserves last_aligned unchanged", () => {
+    expect(
+      stampRound(
+        { count: 1, last_completed: "2026-01-01", last_aligned: "2026-06-15" },
+        "2026-07-10",
+      ),
+    ).toEqual({
       count: 2,
       last_completed: "2026-07-10",
+      last_aligned: "2026-06-15",
     });
   });
 });

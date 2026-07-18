@@ -231,7 +231,7 @@ describe("strategy eligibility", () => {
         id: "strategy-s",
         gap: "still gapped",
         reading: "fresh 2026-07-06",
-        rounds: { count: 2, last_completed: "2026-07-01T00:00:00Z" },
+        rounds: { count: 2, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
       }),
     ]);
     expect(sel.candidates).toEqual([]);
@@ -240,12 +240,12 @@ describe("strategy eligibility", () => {
     ]);
   });
 
-  it("fresh-reading gate: rounds.count > 0 with a null reading is stale", () => {
+  it("fresh-reading gate: last_aligned set with a null reading is stale", () => {
     const sel = selectGraphTargets([
       strategy({
         id: "strategy-s",
         gap: "gapped",
-        rounds: { count: 1, last_completed: "2026-07-01T00:00:00Z" },
+        rounds: { count: 1, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
       }),
     ]);
     expect(sel.candidates).toEqual([]);
@@ -254,13 +254,13 @@ describe("strategy eligibility", () => {
     ]);
   });
 
-  it("fresh-reading gate: a reading older than last_completed is stale", () => {
+  it("fresh-reading gate: a reading not newer than last_aligned is stale", () => {
     const sel = selectGraphTargets([
       strategy({
         id: "strategy-s",
         gap: "gapped",
         reading: "sampled 2026-06-20, still red",
-        rounds: { count: 1, last_completed: "2026-07-01T00:00:00Z" },
+        rounds: { count: 1, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
       }),
     ]);
     expect(sel.candidates).toEqual([]);
@@ -269,24 +269,36 @@ describe("strategy eligibility", () => {
     ]);
   });
 
-  it("fresh-reading gate: a reading newer than last_completed passes", () => {
+  it("fresh-reading gate: a reading newer than last_aligned passes", () => {
     const sel = selectGraphTargets([
       strategy({
         id: "strategy-s",
         gap: "gapped",
         reading: "sampled 2026-07-05, still red",
-        rounds: { count: 1, last_completed: "2026-07-01T00:00:00Z" },
+        rounds: { count: 1, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
       }),
     ]);
     expect(sel.candidates.map((c) => c.id)).toEqual(["strategy-s"]);
   });
 
-  it("first round (rounds.count == 0 or rounds null) is always fresh", () => {
+  it("never aligned (last_aligned null, whether rounds is null or count is 0) is always fresh", () => {
     const nodes = [
-      strategy({ id: "strategy-a", rounds: { count: 0, last_completed: null } }),
+      strategy({ id: "strategy-a", rounds: { count: 0, last_completed: null, last_aligned: null } }),
       strategy({ id: "strategy-b" }),
     ];
     expect(candidateIds(nodes)).toEqual(["strategy-a", "strategy-b"]);
+  });
+
+  it("regression: a strategy with count still 0 but last_aligned set (born-parked-only children never prune) is gated by last_aligned, not count", () => {
+    const nodes = [
+      strategy({
+        id: "strategy-s",
+        gap: "gapped",
+        reading: "sampled 2026-06-20, still red",
+        rounds: { count: 0, last_completed: null, last_aligned: "2026-07-01" },
+      }),
+    ];
+    expect(candidateIds(nodes)).toEqual([]);
   });
 });
 
@@ -739,7 +751,10 @@ describe("strategyFingerprint", () => {
     expect(strategyFingerprint({ ...base, reading: "new reading" })).toBe(fp);
     expect(strategyFingerprint({ ...base, gap: "new gap" })).toBe(fp);
     expect(
-      strategyFingerprint({ ...base, rounds: { count: 1, last_completed: "2026-07-01" } }),
+      strategyFingerprint({
+        ...base,
+        rounds: { count: 1, last_completed: "2026-07-01", last_aligned: null },
+      }),
     ).toBe(fp);
     expect(
       strategyFingerprint({ ...base, office_hours: { reason: "r", since: "2026-07-01", recommendation: null } }),
