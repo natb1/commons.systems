@@ -308,7 +308,11 @@ clarifications:
       loops: qa-fix and review-fix repair QA/review-content findings locally
       (with their own attempt counters) before anything reaches CI, and those
       loops never pass through the fix phase — fix means exactly 'CI is red on
-      this tactic's PR'. Recorded 2026-07-04 from author direction."
+      this tactic's PR'. Recorded 2026-07-04 from author direction. (Encoding
+      superseded 2026-07-18: fix is modeled as orthogonal execution.fix state,
+      not a phase value — see the fix-orthogonal-execution-state clarification
+      and tactic-fix-interrupt-orthogonal-state. Fix remains a CI interrupt
+      exactly as recorded here; only its encoding changes.)"
   - question: Review findings beyond the tactic's plan — which are fixed in scope,
       which defer, which are ignored, and how do deferrals schedule?
     answer: "Three-way disposition by verification x contract, decided in the review
@@ -406,7 +410,12 @@ clarifications:
       undecomposed context, this is fully-specified machine verification),
       sensor modeling (wrong altitude — signals measure the strategy's
       observable, not each shipped feature), and an implicit reconciler hold
-      (hidden state, violates clarification 1). Recorded 2026-07-04 interview."
+      (hidden state, violates clarification 1). Recorded 2026-07-04 interview.
+      (Ordinal amended 2026-07-18: once fix leaves the phase enum, this
+      attention-ranking order drops it — main-qa -> review -> qa -> implement ->
+      align-tactics — because a fixing node ranks at its preserved phase with
+      execution.fix orthogonal; see the fix-orthogonal-execution-state
+      clarification.)"
   - question: The repo was re-anchored — main checked out at the project root with
       Claude Code managing worktrees natively; do the worktree commitments still
       target the legacy .bare + sibling worktrees/ layout?
@@ -1251,7 +1260,10 @@ clarifications:
       and extends clarification 10's soft-freeze re-evaluation from a
       strategy-level round to per-tactic dispatch. Implementation retained as a
       draft tactic (tactic-graph-frozen-tactic-dispatch). Recorded 2026-07-11
-      interview."
+      interview. (Ordinal amended 2026-07-18: the tie-break ordinal drops fix —
+      draft < align-tactics < implement < qa < review < main-qa < done — once
+      fix becomes orthogonal execution.fix state rather than a phase value; see
+      the fix-orthogonal-execution-state clarification.)"
   - question: After a phase completes cleanly (no variance/escalation), who
       validates CI and who advances the node — and does the post-review merge
       need author intervention?
@@ -1642,7 +1654,13 @@ clarifications:
       clarification 53's tick-merge disposition and
       tactic-graph-tick-node-lane-auto-merge's merge reconciler are unchanged.
       Implementation retained as draft tactic
-      tactic-graph-selector-reviewed-exclusion. Recorded 2026-07-18 interview."
+      tactic-graph-selector-reviewed-exclusion. Recorded 2026-07-18 interview.
+      (Mechanism superseded 2026-07-18: the red-CI marker-clear re-review is the
+      interim mechanism; the greenfield replaces it with a direct phase ->
+      review reset plus auto-merge disarm when a fix pushes code after review
+      completed — see the fix-orthogonal-execution-state clarification and
+      tactic-fix-interrupt-orthogonal-state. The no-unreviewed-code-merges
+      guarantee this clarification protects is unchanged.)"
   - question: An office-hours drain session fixed a parked node and pushed the fix,
       but the office_hours park was left set — the node was even re-parked
       before a later session finally cleared it
@@ -1675,6 +1693,58 @@ clarifications:
       tactic-tick-scriptable-then-spawn body (the clear-park inverse of
       park-node) into a first-class primitive. Implementation retained as draft
       tactic tactic-clear-park-primitive. Recorded 2026-07-18 interview."
+  - question: How is the CI-fix interrupt modeled — as a `phase` enum value or as
+      orthogonal execution state — and what is the migration off the phase-value
+      encoding?
+    answer: "Greenfield target: fix is NOT a phase; it is orthogonal nullable
+      execution state, execution.fix = {since, attempt, pushed_sha}. `phase`
+      stays purely ladder-positional (implement -> qa -> review -> main-qa ->
+      done) and is never overwritten by a CI failure, so entering a fix no
+      longer destroys ladder position. The selector reads execution.fix
+      directly: execution.fix set (or a live red-CI verdict) -> dispatch
+      fix-checks; else -> the phase worker for the preserved phase. This is the
+      same CI-verdict-before-phase-logic precedence the fix-as-interrupt
+      clarification (2026-07-04) already records, moved out of a phase overwrite
+      and into a field the selector reads. execution.fix also carries the
+      pending-CI concurrency guard across the ticks when no session is live —
+      the window between the fix worker pushing and CI re-reporting — so a
+      not-yet-green re-run is not misread as \"resume the phase worker\". The
+      one deliberate backward edge is a correctness move, not a resume
+      mechanism: when a fix pushes code after review has completed (reviewed /
+      merge-armed / main-qa), the fix worker resets phase -> review and disarms
+      auto-merge, because new code must be re-reviewed. This REPLACES the
+      interim red-CI marker-clear re-review (the reviewed-marker re-review
+      clarification, 2026-07-18) and the lossy resumeAfterFix
+      marker-reconstruction (transitions.ts): with phase preserved there is
+      nothing to reconstruct. When the interrupt fires BEFORE review completes,
+      phase is already at implement/qa/review and is simply preserved — no
+      special handling, and the two-commit fix->implement->qa resume collapses
+      to nothing. Doctrine preserved unchanged: fix remains a CI interrupt
+      (fix-as-interrupt clarification) and unreviewed code must never reach
+      merge after a fix (reviewed-marker re-review clarification); only the
+      ENCODING changes. This supersedes the fix-as-phase framing wherever it
+      appears: the attention ordinal drops fix (draft < align-tactics <
+      implement < qa < review < main-qa < done) in both the frozen-tactic
+      tie-break clarification and the main-qa parity ladder; and the incidental
+      phase enumerations that list fix as a station (the scope-fingerprint
+      chain-of-custody clarification, and the pre-transitions bootstrap advance
+      clarification) now read against the node's PRESERVED phase, since a fixing
+      node sits at implement/qa/review with execution.fix set. Brownfield
+      migration (backwards-incompatible — dropping the fix enum value breaks any
+      node at phase:fix — so sequenced; the executable clean-session units live
+      in tactic-fix-interrupt-orthogonal-state, phase implement): (1) additive
+      schema — add execution.fix to schema + validator, changes no behavior; (2)
+      dual-read transitions/selector — teach decideTransition and the selector
+      to read execution.fix while phase:\"fix\" keeps working in parallel; (3)
+      one-time migration of the live phase:fix nodes to (preserved phase +
+      execution.fix set), reconstructing the preserved phase from markers once
+      at migration time — the last use of the lossy reconstruction; (4) remove
+      fix from the Phase enum and delete fixInterrupt and resumeAfterFix. The
+      spec node tactic-graph-native-dispatch (S3.1) phase-ordinal prose updates
+      with step 4. Landing this record soft-freezes the strategy's open child
+      tactics for per-node re-evaluation (the strategy-substance fingerprint
+      includes clarifications); that re-evaluation is expected and
+      author-directed here. Recorded 2026-07-18 /align-strategy interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
