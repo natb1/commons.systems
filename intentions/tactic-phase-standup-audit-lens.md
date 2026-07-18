@@ -33,7 +33,7 @@ attention:
     strategy-token-economy carries no strategy-level boost, so the tactic
     carries the full weight itself; boost 15 clears the current working max
     (~14.5)."
-phase: fix
+phase: qa
 execution:
   branch: tactic-phase-standup-audit-lens
   pr: 2880

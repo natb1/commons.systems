@@ -35,22 +35,27 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 61
+  boost: 62
   override: null
   rationale: "Boosted to top ranking by author direction (2026-07-18
-    /align-strategy round): one of the two fix carriers for the selector
-    mis-dispatch. Sized against the composed selector rank (childless, empty
-    blocked_by: rank = boost + 5.33; then-max 66.00 on
-    tactic-align-family-opus-default), so boost 61 gives 66.33 - top of the
-    discretionary frontier. The boost flows nowhere else (no blocked_by, no
-    children)."
-phase: qa
+    /align-strategy round, re-confirmed same day): one of the two fix carriers
+    for the selector mis-dispatch — the read-time consumer half; its edit-time
+    sibling is tactic-scope-inert-restamp-primitive. Sized against the composed
+    selector rank (childless, empty blocked_by: rank = boost + 5.33). At boost
+    61 (rank 66.33) it merely TIED an unrelated non-carrier
+    (tactic-qa-fix-office-hours-reentry-guard, also 66.33), holding top only on
+    the id tiebreak — fragile against any compounding that node might accrue.
+    Bumped to 62 (rank 67.33) so both requirement carriers sit at joint top of
+    the frontier, strictly above every non-carrier. The boost flows nowhere
+    else (no blocked_by, no children)."
+phase: review
 execution:
   branch: tactic-freeze-resurface-stale-children-only
   pr: 2895
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
