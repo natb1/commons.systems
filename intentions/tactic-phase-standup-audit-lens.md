@@ -33,20 +33,34 @@ attention:
     strategy-token-economy carries no strategy-level boost, so the tactic
     carries the full weight itself; boost 15 clears the current working max
     (~14.5)."
-phase: qa
+phase: review
 execution:
   branch: tactic-phase-standup-audit-lens
   pr: 2880
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  qa_judgment_waiver:
+    pr: 2880
+    findings:
+      - 10
+      - 11
+    reason: "Author-approved 2026-07-18: both remaining qa-fix findings (10:
+      scriptable/judgment classifier substring list; 11: boot-preamble
+      leading-run + first-8-calls median heuristic) are heuristic-design
+      sign-offs on the phase_standup measurement instrument, not code defects.
+      Author reviewed the recommendation (Decision A) and approved both as
+      skipped; office_hours park cleared and the qa lane's remaining residue
+      marked skipped so the node proceeds to review."
+    since: 2026-07-18
 ---
 
 # Per-phase standup-cost audit lens — join SKILL-body tokens and boot tool-round-trips into one /dispatch-token-audit measurement, split scriptable vs judgment

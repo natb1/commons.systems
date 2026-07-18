@@ -51,7 +51,9 @@ the scope-inert-restamp clarification on `strategy-graph-native-dispatch`
 (`intentions/strategy-graph-native-dispatch.md:1967-2007`), which closes a
 seam in the chain-of-custody clarification's "only author and re-evaluation
 edits able to demote" clause
-(`intentions/strategy-graph-native-dispatch.md:838-897`).
+(`intentions/strategy-graph-native-dispatch.md:838-905` — the range covers
+clarification 39 in full, including its 2026-07-18 scoping amendment at
+lines 900-905, which is the actual narrowing this tactic implements).
 
 ## Context
 
@@ -61,8 +63,12 @@ its current `tacticScopeFingerprint(statement, body)` — by design, so a
 material scope edit forces a fresh implement→qa→review chain. But an
 **author-present align round** editing a tactic's body to record a
 reconciliation note or classification (doctrine-mandated by clarification
-38's amendment-completeness bar) is itself a body edit, and today has no
-way to distinguish itself from a material edit: it trips the same gate.
+38's amendment-completeness bar — the /align-strategy-side widening,
+`strategy-graph-native-dispatch.md:823-837`, of the tactic-specific bar
+clarification 32 names, `strategy-graph-native-dispatch.md:648+`; the two
+are distinct, related clarifications, not the same one cited twice) is
+itself a body edit, and today has no way to distinguish itself from a
+material edit: it trips the same gate.
 
 This already happened concretely: on 2026-07-18 an align round's
 scope-inert Interim-mechanism note on `tactic-graph-selector-reviewed-exclusion`
@@ -158,7 +164,10 @@ export function restampScope(intentionsDir: string, repoRoot: string, mainRoot: 
   `mkdir -p`).
 - Throws (does not swallow) on any failure — no `|| return 0` fail-open
   behavior. The CLI wrapper's main-guard catch prints to stderr and
-  `process.exit(1)`, matching `list-scope-stale-tactics.ts:84-91`'s pattern.
+  `process.exit(1)` — the try/catch-around-`main()`, stderr-then-exit shape
+  follows `list-scope-stale-tactics.ts:84-91`, but this script exits `1`
+  rather than that file's `2`, matching `dump-node.ts:82-89`'s exit code
+  instead (the closer sibling template for this script's overall shape).
 
 CLI: `npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>`
 — repoRoot/intentionsDir resolved from `import.meta.url` (never cwd,
@@ -167,6 +176,24 @@ recipe above, both overridable via `--repo-root <dir>` / `--main-root <dir>`
 flags so tests can inject temp dirs without touching the real
 `.claude/worktrees/`. Print the written `<fingerprint> <sha>` line to
 stdout on success (useful for the align round's record).
+
+**Unit test required** (not just the shell end-to-end verify blocks
+below): add `packages/intentionsutil/test/restamp-scope-fingerprint.test.ts`
+exercising the exported `restampScope(intentionsDir, repoRoot, mainRoot, id)`
+directly, following `write-node.test.ts`'s pattern
+(`packages/intentionsutil/test/write-node.test.ts:1-10` — `mkdtempSync`
+for a scratch `intentionsDir`/`mainRoot`, import the core function from
+`../scripts/restamp-scope-fingerprint.js`). Since `restampScope` shells out
+to `git rev-parse origin/main`, pass this repo's own root as `repoRoot` in
+the test (a real git checkout with an `origin/main` — no fixture repo
+needed) while keeping `intentionsDir` and `mainRoot` scratch temp dirs;
+write a fixture node into the scratch `intentionsDir` via `writeNode`
+first. Assert: the stamp file is created at
+`<mainRoot>/.claude/worktrees/<id>.scope-fingerprint`; its content is
+exactly `<fingerprint> <sha>\n`; `fingerprint` equals
+`tacticScopeFingerprint(statement, body)` computed independently in the
+test from the same fixture; and calling `restampScope` with a nonexistent
+node id throws.
 
 **Explicitly out of scope:** no `graph-commit` call, no node
 frontmatter/body write, no classification logic (the align round decides
@@ -317,8 +344,9 @@ re-stamp mechanism that must not be conflated with the new one.
   `process.stderr.write` + `process.exit(1)` on error, main-guard at `:96`.
 - `list-scope-stale-tactics.ts` —
   `packages/intentionsutil/scripts/list-scope-stale-tactics.ts:84-91`.
-  Template for the fail-loud CLI error-handling wrapper (catch, stderr,
-  `process.exit`).
+  Template for the fail-loud CLI error-handling wrapper shape (catch,
+  stderr, `process.exit`) — note it exits `2`; this script follows
+  `dump-node.ts`'s exit `1` instead (see Unit 1).
 - `compute-freshness.ts` — `packages/intentionsutil/scripts/compute-freshness.ts`.
   Sibling example of a pure-computation script taking explicit
   `--snapshot`/`--stamp` flags rather than hardcoding paths — same spirit
@@ -331,7 +359,7 @@ cd packages/intentionsutil && npx tsc --noEmit
 ```
 
 ```verify
-cd packages/intentionsutil && npx vitest run test/transitions.test.ts test/router.test.ts test/scope-sweep.test.ts
+cd packages/intentionsutil && npx vitest run test/transitions.test.ts test/router.test.ts test/scope-sweep.test.ts test/restamp-scope-fingerprint.test.ts
 ```
 
 ```verify
