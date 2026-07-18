@@ -1,16 +1,16 @@
 ---
 id: tactic-align-provenance-lint-doctrine
 kind: tactic
-statement: Resolve the align-skill provenance-sentence doctrine vs. actual
-  corpus/tooling convention before any clarifications[].answer provenance lint
-  is built
-owner: human
-status: delegated
+statement: Plan and land the clarifications[].answer provenance lint under the
+  ratified 2026-07-18 dated-clause-anywhere doctrine, including the two
+  align-skill SKILL.md doctrine-passage edits
+owner: ai
+status: raw
 parent: null
-rationale: Split 2026-07-18 out of tactic-align-tactics-mechanical-floor's Unit
+rationale: "Split 2026-07-18 out of tactic-align-tactics-mechanical-floor's Unit
   1 (see that node's clarifications entry for the full re-plan). The
   align-strategy and align-tactics SKILL.md docs both assert every
-  clarifications[].answer must END with a trailing "Recorded YYYY-MM-DD"
+  clarifications[].answer must END with a trailing \"Recorded YYYY-MM-DD\"
   provenance sentence, but a live sweep of intentions/ found the corpus never
   followed that convention (front-loaded parenthetical, varied verbs,
   substantive close) and packages/intentionsutil/src/router.ts's readingDate()
@@ -20,7 +20,12 @@ rationale: Split 2026-07-18 out of tactic-align-tactics-mechanical-floor's Unit
   goal-layer clarification answers (virtue/strategy nodes) to add a redundant
   trailing sentence; loosening the doctrine to match reality is an align-layer
   decision on two SKILL.md files, not a lint implementation detail. Off-path (no
-  validates chain).
+  validates chain). Amended 2026-07-18: the doctrine gate is discharged — the
+  author ratified the loosened dated-clause-anywhere convention
+  (strategy-graph-native-dispatch's 2026-07-18 provenance-doctrine
+  clarification); this tactic now carries the remaining ai work (the two
+  SKILL.md doctrine-passage edits plus the enforcing lint) as a draft awaiting
+  /align-tactics finalize."
 reading: null
 gap: null
 serves:
@@ -42,48 +47,44 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Decide the align-skill clarification-provenance doctrine: the SKILL.md
-    docs (align-strategy/SKILL.md:306-309, align-tactics/SKILL.md:263-265) both
-    prescribe a clarifications[].answer trailing 'Recorded YYYY-MM-DD' sentence;
-    the live corpus of 27 dated clarification answers on goal-layer nodes
-    (virtue/strategy) never followed it, instead front-loading a parenthetical
-    with varied verbs (Recorded/Amended/clarified/Reviewed/adopted) and closing
-    each answer with its substantive conclusion. router.ts's readingDate()
-    (packages/intentionsutil/src/router.ts:159-163) and coverage.ts's
-    lastReviewedOf already implement and depend on the corpus's actual
-    convention (newest ISO date anywhere in the string, verb-agnostic), not the
-    SKILL.md doctrine. Recommend: loosen both SKILL.md passages to describe the
-    actual convention ('a dated provenance clause somewhere in the answer,
-    front-loaded parenthetical preferred, verb open') so the doctrine matches
-    reality and matches readingDate()'s semantics -- this requires no corpus
-    rewrite (0 tactic violations, and the 27 goal-layer answers already comply
-    with the loosened rule). Once the doctrine is settled, a follow-up
-    /align-tactics round can write the enforcing lint rule into
-    tactic-align-tactics-mechanical-floor's planlint.ts module (or a fresh
-    sibling tactic) matching whichever convention is ratified. Alternative if
-    the trailing-sentence doctrine is deliberately intended as an aspirational
-    forward rule (not a retroactive one): scope the lint to newly-authored
-    clarifications only (e.g. dated after ratification) so it never demands
-    rewriting the 27 existing author-owned philosophical records, and clarify in
-    both SKILL.md docs that historical entries are grandfathered."
-  since: 2026-07-18
-  recommendation: Ratify or revise the recommended direction (loosen the SKILL.md
-    doctrine to match the corpus/readingDate() convention, no corpus rewrite
-    needed) in an /align-strategy pass touching align-strategy/SKILL.md and
-    align-tactics/SKILL.md; record the outcome as a dated clarification on
-    strategy-graph-native-dispatch, then run /align-tactics on this tactic to
-    finalize the enforcing lint plan under the ratified doctrine.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Resolve the align-skill provenance-sentence doctrine vs. actual corpus/tooling convention before any clarifications[].answer provenance lint is built
+# Plan and land the clarifications[].answer provenance lint under the ratified 2026-07-18 dated-clause-anywhere doctrine
 
-Born-parked human gate, split 2026-07-18 out of
+Formerly a born-parked human gate, split 2026-07-18 out of
 `tactic-align-tactics-mechanical-floor`'s Unit 1 (see that node's
-`clarifications` entry and this tactic's own `office_hours.reason` for the
-full analysis). Off-path: no `validates` chain reaches this node.
+`clarifications` entry). The gate was discharged the same day — see
+"Outcome" below; the "What to review" / "What approval means" sections
+following it are the historical decision brief, kept for context. Off-path:
+no `validates` chain reaches this node.
+
+## Outcome — ratified 2026-07-18
+
+The author ratified option 1 (greenfield: loosen the doctrine) in the
+2026-07-18 `/align-strategy` interview, recorded as a dated clarification on
+`strategy-graph-native-dispatch` ("What provenance convention binds
+clarifications[].answer..."). The ratified doctrine: every
+`clarifications[].answer` carries a dated provenance clause — an event verb
+plus ISO date — placed where it reads best; front-loaded parenthetical
+preferred, verb open; the newest ISO date anywhere in the answer is its
+effective date (the `readingDate()` contract); amendments add a new dated
+clause rather than rewriting the old one. Zero corpus rewrites, no
+grandfather clause.
+
+Remaining work for this tactic (now a draft awaiting `/align-tactics`
+finalize):
+
+1. Edit the two SKILL.md doctrine passages
+   (`.claude/skills/align-strategy/SKILL.md:306-309`,
+   `.claude/skills/align-tactics/SKILL.md:263-265`) to state the ratified
+   convention in place of the trailing-sentence rule.
+2. Plan and land the enforcing lint (in
+   `tactic-align-tactics-mechanical-floor`'s planlint.ts module or a
+   sibling): every `clarifications[].answer` on a node must contain at
+   least one event-verb + ISO-date clause; corpus-wide, no grandfathering.
 
 ## What to review
 
