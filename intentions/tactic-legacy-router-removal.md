@@ -26,7 +26,6 @@ blocked_by:
   - tactic-graph-router-transitions
   - tactic-dispatch-lifecycle-sensor
   - tactic-phase-skill-node-targets
-  - tactic-dispatch-legacy-rewire
 office_hours:
   reason: "implement: tactic-legacy-router-removal Unit 1 could only be partially
     completed - several 'legacy' scripts are still live-wired into the

@@ -51,8 +51,14 @@ attention:
     discretionary frontier, below only the permanent strategy-main-health trunk
     signal (rank 101). The boost flows nowhere else (empty blocked_by, no
     children), so it distorts no other node's rank."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-materiality-scoped-freeze
+  pr: 2892
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

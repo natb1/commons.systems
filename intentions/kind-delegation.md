@@ -113,5 +113,10 @@ attributes:
       recorded at office-hours — never seeded or inferred by a session
       (tactic-household-consent-instrument seeds shared/basis proposals only;
       ratification is tactic-household-consent-offering)."
+  status_vocabulary:
+    raw: a future-candidate capture named before any recovery strategy exists,
+      awaiting selection
+    refining: under active dialectic
+    codified: the author has personally settled this attachment record
 ---
 # Delegation — an attachment record; where capture is detected and recovery kept real
