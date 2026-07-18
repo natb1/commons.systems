@@ -120,7 +120,7 @@ codified}.
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root .
+npx vitest run --project packages/intentionsutil --root .
 npx tsx packages/intentionsutil/scripts/validate-graph.ts
 ```
 

@@ -233,13 +233,13 @@ carry retained tactical context from `/align-strategy`).
 **Eligibility sanity check.** Confirm the strategy is actually decomposable
 this round (`intentions/tactic-graph-native-dispatch.md` §3.1): `office_hours`
 null, signal unvalidated (`gap` non-null or `reading` null), the fresh-reading
-gate holds (`rounds.count == 0`, or a reading exists newer than
-`rounds.last_completed` — a null `reading` never satisfies "newer than"), it
-has no non-draft child tactics already on its signal path (the
-fifth §3.1 criterion — see Idempotency, above, which reads those children), and
-`rounds.count < 2`. If `rounds.count` is already at the cap
-with no fresh reading, park the strategy (round history as the reason) instead
-of burning a third round.
+gate holds (`rounds.last_aligned` is null — never aligned — or a reading
+exists dated strictly newer than `rounds.last_aligned` — a null `reading`
+never satisfies "newer than"), it has no non-draft child tactics already on
+its signal path (the fifth §3.1 criterion — see Idempotency, above, which
+reads those children), and `rounds.count < 2`. If `rounds.count` is already at
+the cap with no fresh reading, park the strategy (round history as the reason)
+instead of burning a third round.
 
 Drift review is **two-sided** (strategy clarification 8):
 
@@ -526,14 +526,25 @@ Per tactic:
 
 **Strategy round accounting.** Ensure the serving strategy carries a `rounds`
 object (`validateGraph` rule 12 — strategies only). On the first round,
-initialize `rounds: {count: 0, last_completed: null}` if null. `count`
-increments and `last_completed` timestamps when the round's **final** tactic
-completes — a completion-time write behind prod verification
+initialize `rounds: {count: 0, last_completed: null, last_aligned: null}` if
+null. `count` increments and `last_completed` timestamps when the round's
+**final** tactic completes — a completion-time write behind prod verification
 (`intentions/tactic-graph-native-dispatch.md` §1.1; in the bootstrap interim
-with no live router, that stamp is made by hand at completion). Any strategy
+with no live router, that stamp is made by hand at completion). `last_aligned`
+is a **separate, landing-time** stamp: when a strategy round (this skill,
+invoked over the whole strategy — not the per-node finalize form below) lands
+its tactics for a strategy, this session also sets that strategy's
+`rounds.last_aligned` to the round's commit date (`date -u +%Y-%m-%d`) via
+`write-node.ts`, bundled into the **same** `graph-commit` as the round's
+tactics. `last_aligned` tracks when the strategy was last decomposed, distinct
+from `count`/`last_completed`, which stay keyed to tactic-completion time (per
+clarification 22) — its semantics are unchanged by this stamp. A **per-node
+finalize** invocation (`/align-tactics <tactic-id>`, i.e. passing a specific
+tactic id argument) does **not** stamp `last_aligned` — it is not a strategy
+round and never bumps `rounds` at all (per clarification 52). Any strategy
 frontmatter this session does change (a drift clarification, a park, the
-`rounds` init) lands via `graph-commit <strategy-id>`, bundled with the round's
-tactics when small.
+`rounds` init, the `last_aligned` stamp) lands via `graph-commit
+<strategy-id>`, bundled with the round's tactics when small.
 
 **Fingerprint honesty.** `execution.strategy_fingerprint` is a **per-strategy
 map** `{<strategy-id>: <fingerprint>}` — one entry per serving strategy — that
