@@ -889,7 +889,13 @@ clarifications:
       phase-1 work that no longer surprises the worker-launch step or consumes a
       budget slot; the worker-start gate described here stays as the safety
       re-check for staleness introduced after the sweep. See the
-      scriptable-then-spawn clarification of that date.)"
+      scriptable-then-spawn clarification of that date.) (Scoped 2026-07-18: the
+      'leaving only author and re-evaluation edits able to demote' clause is
+      narrowed — an author-present align round that classifies its own
+      tactic-body edit as scope-inert re-stamps the custody stamp in the same
+      round, so such edits no longer demote; material and unsure edits still do.
+      See the scope-inert-restamp clarification and draft
+      tactic-scope-inert-restamp-primitive.)"
   - question: What guards the router against failure loops — a worker that
       repeatedly fails to make progress or park on a node, and a systemic
       executor failure (a daemon crash-loop) that would otherwise false-trip a
@@ -1913,6 +1919,85 @@ clarifications:
       clarification). A first-class attributes.migration record is DECLINED by
       parsimony until a sensor needs machine-readable migration state. Recorded
       2026-07-18 /align-strategy interview."
+  - question: Does dispatch's concurrency dedup key on live sessions or worktree
+      existence, and does the office-hours lane share the mechanism
+      (office-hours sessions safe for concurrent selection)?
+    answer: "Live sessions, uniformly, for every launch mode including office-hours
+      — confirmed 2026-07-18 as the target-state mechanism. The dedup /
+      claimed-set keys on liveness: a node is skipped only when a
+      reservation-ledger marker named by its id exists OR
+      worktree_has_live_session reports a live node-id-named session (claude
+      agents --json) — never on worktree existence. A bare or un-reaped
+      .claude/worktrees/<node-id> whose session has ended does NOT block
+      selection (the shipped graph-select-target behavior; the #1474 change
+      moved existence-keying to liveness-keying precisely so an unreaped
+      worktree cannot block the next worker). Worktree reaping is decoupled
+      post-merge disk hygiene — dispatch-sweep removes a worktree after its PR
+      merges and the tree is in-sync, guarding on worktree_has_live_session
+      first — never a selection gate; what makes a node's next phase selectable
+      is the transition write flipping phase on origin/main plus the prior
+      session ending (its claim clears). The office-hours lane shares this exact
+      mechanism: (a) the graph-native office-hours lane runs IN the node-id
+      worktree for its session's life so its live session is detectable, and
+      that worktree is disposable — reaped like any worker's, since office-hours
+      lands no commit; (b) office-hours-select gains the same liveness dedup —
+      an untargeted (queue-head) launch SKIPS a parked node that already has a
+      live office-hours session and returns the next-ranking parked node (the
+      concurrent-selection safety this round records); (c) an explicit
+      /office-hours <node-id> targeting a node that already has a live
+      office-hours session RETURNS AN ERROR — a deliberate human target on an
+      occupied node is a collision to surface, not a silent fall-through.
+      Consistency correction: tactic-align-session-claiming Unit 3's recorded
+      prescription — 'graph-select-target treats ANY existing
+      .claude/worktrees/<node-id> as a held claim' (existence-keyed) — is
+      superseded by this liveness mechanism (#1474), contradicts its own Unit 1
+      (which states the liveness rule), and describes the pre-#1474
+      worktree-walk that was deliberately replaced; the shipped code is already
+      liveness-keyed, only the recorded tactic text is stale (tracked by draft
+      tactic-align-session-claiming-liveness-correction). Implementation
+      retained as draft tactic-office-hours-concurrency-dedup. Recorded
+      2026-07-18 interview."
+  - question: A scope-inert align annotation on an in-flight tactic's body — the
+      reconciliation notes amendment-completeness mandates — trips the tactic
+      scope-custody gate and demotes the whole ladder. Does materiality-scoping
+      extend to the scope-custody stamp, and by what mechanism?
+    answer: "Yes — greenfield: the materiality principle ('an editing round pays
+      exactly the materiality of its change', clarification 70) extends to the
+      tactic scope-custody stamp, closing the seam in the chain-of-custody
+      amendment (clarification 39) between its intent ('if the re-evaluation
+      confirms without amending, nothing re-runs') and its mechanism: recording
+      the confirmation is itself a body edit, so tacticScopeFingerprint trips
+      and demotes. Observed 2026-07-18: an align round's scope-inert
+      Interim-mechanism note on tactic-graph-selector-reviewed-exclusion demoted
+      a fully-reviewed node (PR #2888, green CI) review -> implement; the tax is
+      three phase sessions per annotation, since demote-to-implement discards qa
+      and review custody. Mechanism — sanctioned re-stamp, worktree-locality
+      preserved: the stamp stays a worktree-local file, never a per-launch graph
+      write (clarification 39's design stands); an author-present align round
+      (/align-strategy or /align-tactics — the interview holds both the delta
+      and the author, the same classifier trust clarification 70 records) that
+      classifies its own tactic-body edit as scope-inert re-stamps
+      .claude/worktrees/<id>.scope-fingerprint to the post-edit
+      tacticScopeFingerprint plus the current origin/main sha in the same round,
+      recording the classification in the round's record — mirroring the
+      transition writer's machinery refresh (which stands unchanged) rather than
+      moving the stamp into the node. Fail-closed classification: only a
+      confident scope-inert verdict re-stamps; any doubt leaves the stamp
+      untouched and custody demotes as recorded, and a material edit is left
+      stale exactly as today. Phase workers, qa/review sessions, and the tick
+      never re-stamp. Steelman (keep the gate purely mechanical; accept the
+      demotion tax as misclassification insurance): DIVERGED — the annotations
+      are doctrine-mandated (clarification 38 records reconciliation in the
+      node), so the tax recurs structurally, and the strategy-stamp side already
+      rejected the same orthogonal tax with the same classifier. Net guarantee
+      unchanged: merge still requires an unbroken implement -> qa -> review
+      chain against the merge-time scope fingerprint — a re-stamp asserts, under
+      author presence, that the post-edit fingerprint IS that same scope.
+      Executable carrier: draft tactic-scope-inert-restamp-primitive (re-stamp
+      script plus align-skill step); bootstrap until it lands: the round
+      refreshes the stamp by hand — write '<tacticScopeFingerprint(statement,
+      body)> <origin/main sha>' as the stamp file's one line, the 2026-07-18
+      remediation's proven recipe. Recorded 2026-07-18 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
