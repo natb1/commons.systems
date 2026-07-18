@@ -32,7 +32,8 @@ blocked_by: []
 office_hours:
   reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
     (verify-record). This chunk: NE III.10–12 and Republic IV against
-    tradition-aristotle and tradition-plato."
+    tradition-aristotle and tradition-plato. 2026-07-18 chunk-5 forward flags
+    add NE III.2-3 and III.5 — see the body's deferral bullets."
   since: 2026-07-06
   recommendation: null
 pace_exempt: false
@@ -45,6 +46,10 @@ attributes:
         range: III.10-12
       - work: Plato, Republic
         range: IV
+      - work: Aristotle, Nicomachean Ethics
+        range: III.2-3
+      - work: Aristotle, Nicomachean Ethics
+        range: III.5
 ---
 # Reading chunk 4: NE III.10–12 (sōphrosynē) + Republic IV (the ordered soul) — verify virtue-temperance's broad scope against the texts
 
@@ -57,6 +62,8 @@ underwrite virtue-temperance's broad scope.
 Aristotle, *Nicomachean Ethics* III.10–12 — sōphrosynē. Plato, *Republic* IV
 — the ordered soul.
 
+Plus NE III.2–3 and III.5, added 2026-07-18 to carry the chunk-5 forward
+flags (voluntary-without-decision; deliberation's scope; the thrown stone).
 ## Questions to re-open against the text
 
 The 2026-07-04/05 interview resolutions were made on Claude's account of the
@@ -84,6 +91,21 @@ text; this chunk checks the account.
   stay voluntary, and does "compulsion" (bia) belong anywhere in the circle's
   entry? No current chunk covers III.1; read it alongside if the sitting has
   room, or record where the question moves.
+
+- Deferral from chunk 5 (2026-07-18): III.2 1111b8–10 —
+  voluntary-without-decision grounds R8-amended (automation may act without
+  fresh ratification exactly where an already-ratified prohairesis fully
+  determines the response; the moment remediation would select among ends or
+  create new practical truth, it parks). Verify the ground.
+- Deferral from chunk 5 (2026-07-18): III.3 1112a21–31 — deliberation's scope
+  (about things toward ends, among things in our power); the kind-pipeline
+  reading (R6: boulēsis → deliberation → prohairesis as virtue → strategy →
+  tactic) leans on it.
+- Deferral from chunk 5 (2026-07-18): III.5 1114a13–21 (the thrown stone) —
+  recoverability of the formed vicious hexis; Q2's residue (vice destroys the
+  archē read as end-substitution corrupting the archē's appearing): once
+  thrown, what way back does the text leave? Routing ruling confirmed
+  2026-07-16 at the chunk-5 sitting.
 
 Two standing rules from `intentions/strategy-philosophical-grounding.md`
 clarifications apply: the borrowed-articulation capture question (this loop is
