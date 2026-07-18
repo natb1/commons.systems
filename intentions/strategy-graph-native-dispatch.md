@@ -1573,6 +1573,76 @@ clarifications:
       draft tactic-tick-scriptable-then-spawn. Recorded 2026-07-16
       /align-strategy interview (author-confirmed contract: each tick performs
       all scriptable non-worker work, then spawns the next worker group)."
+  - question: "Now that GitHub Issues are disabled repo-wide (has_issues: false),
+      how does fix-checks track a CI flake and gate the source tactic on the
+      fix, on the node lane?"
+    answer: "A tactic node, not a GitHub issue, replaces /file-issue's
+      flake-tracking role: on is_flake==true, fix-checks finds-or-creates a
+      fingerprint-keyed tactic node (fingerprint, reproduce command, and
+      diagnosis in the body — the same content the GH issue body used to carry)
+      and sets blocked_by:[<that tactic>] on the source tactic. No office-hours
+      escalation — this mirrors legacy's own flake path (file + block +
+      queue-skip, no park), and the router's existing blocked_by-completeness
+      gate (packages/intentionsutil/src/router.ts's blockersComplete: absence or
+      phase:done completes a blocker) already re-surfaces the source tactic once
+      the flake-fix tactic reaches phase:done — no new auto-resume mechanism is
+      needed, only correct edge modeling. Steelman considered and declined: a
+      centralized flake registry (tracking fingerprints as a set rather than N
+      one-off tactics) would make recurrence more visible, but parsimony favors
+      reusing the existing tactic+blocked_by primitive for a problem that hasn't
+      yet shown volume — dispatch-flake-dedup's fingerprint-matching logic ports
+      to search tactic nodes instead of gh issues without a new node kind;
+      recurring volume is a future re-evaluation trigger, not something to
+      pre-build for. This closes a coverage-matrix gap
+      (tactic-graph-native-dispatch.md §4): the matrix mapped /file-issue's and
+      /plan-issue's DIRECT callers, but fix-checks invokes /file-issue
+      internally as a flake-tracking primitive — an uncovered indirect case,
+      consistent with this strategy's own 'no dispatch surface re-enables a
+      disabled GitHub feature' clarification (the legacy flake path's
+      GitHub-Issues dependency is itself the defect, not license to re-enable
+      Issues). Retained as tactic-fix-checks-graph-native-flake-tracking (draft,
+      parent tactic-graph-native-dispatch) for a later /align-tactics planning
+      pass — porting dispatch-flake-dedup's dedup logic, updating
+      fix-checks/SKILL.md's Flake sub-path, and the flake-tactic id/slug
+      convention are implementation decisions for that round. Applied
+      immediately to PR #2880's own park as a worked example:
+      tactic-baseline-proxy-float-tolerance (serves strategy-token-economy)
+      tracks the concrete fix, and tactic-phase-standup-audit-lens's
+      office_hours was cleared with blocked_by set to it. Recorded 2026-07-16
+      interview."
+  - question: "A node's `reviewed` marker is written but its PR is not yet merged
+      (it sits at `phase: review` awaiting the tick's merge) — does the selector
+      keep dispatching a review worker to it, and what is its remaining
+      lifecycle?"
+    answer: "No — the `reviewed` marker terminates review-worker candidacy. Once
+      `execution.markers` includes `reviewed`, neither the scheduled selector
+      (`selectGraphTargets`, router.ts) nor an explicit `dispatch <node>`
+      resolution emits the node as a review-phase worker candidate; its
+      remaining transitions are entirely tick-owned, per clarification 53's
+      worker/tick split. On green CI + `mergeable==MERGEABLE` the tick's
+      `graph-auto-merge` (tactic-graph-tick-node-lane-auto-merge) merges it
+      label-free and `reconcile-graph-merged` absorbs the merge to
+      `done`/`main-qa` with worktree cleanup; on red CI the fix interrupt
+      (clarification 18) dispatches a fix worker, and that fix dispatch CLEARS
+      the `reviewed` marker so the node re-enters review after fix→qa — a CI
+      failure means code changed that the completed review never saw, so
+      unreviewed code must never reach merge (the same no-unreviewed-code-merges
+      guarantee test-integrity protects). This red-CI marker-clear is distinct
+      from the scope-stale demote-to-implement (clarification 36), which fires
+      on a post-review scope EDIT rather than a CI failure. Concrete gap this
+      closes: `selectGraphTargets` emits ANY open `phase:review` tactic as a
+      review candidate and neither it nor `check-node-selection.ts` reads
+      `execution.markers`, so a fully-reviewed node kept being re-dispatched
+      `/review-fix` every tick (observed on
+      tactic-graph-node-lane-write-hardening / PR #2882) — a no-op only because
+      that node's own gap-(e) hardening added the node-lane review-fix re-entry
+      check, but a wasted worker slot each tick nonetheless. This refines
+      clarification 53 from the tick side (the tick prefers merge) to the
+      selector side (the selector must not emit the candidate at all);
+      clarification 53's tick-merge disposition and
+      tactic-graph-tick-node-lane-auto-merge's merge reconciler are unchanged.
+      Implementation retained as draft tactic
+      tactic-graph-selector-reviewed-exclusion. Recorded 2026-07-18 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:

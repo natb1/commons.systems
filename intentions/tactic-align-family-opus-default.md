@@ -37,7 +37,12 @@ attention:
     nothing and takes the full boost 8 directly to reach the same authored-8
     tier."
 phase: implement
-execution: null
+execution:
+  branch: tactic-align-family-opus-default
+  pr: 2886
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -47,6 +52,17 @@ attributes: {}
 ---
 
 # Split /align-tactics model routing (Sonnet orchestrator + Opus decompose/plan subagent); keep /align-strategy whole-session Opus
+
+> **Migration note (2026-07-18, `strategy-token-economy` clarification 14):** this
+> is **increment 1** of a two-step brownfield migration, not the greenfield end
+> state. It adds `model: opus` to `/align-tactics`' existing caller-thread
+> Explore/Plan subagents — a correct but interim subset. The greenfield target is
+> `/align-tactics` executing as a deterministic Workflow
+> (`.claude/workflows/align-tactics.js`, /review-fix-shaped: Sonnet orchestrator,
+> Opus decision subagents, Sonnet gathering subagents), carried by **increment 2**,
+> `tactic-align-tactics-workflow` (which is `blocked_by` this node so it sequences
+> after #2886 merges). Keep this PR's scope as-is — the Workflow rearchitecture is
+> increment 2's job, not this one's.
 
 ## Context
 

@@ -34,8 +34,14 @@ attention:
     is now finalized to phase: implement with a full clean-session plan, and the
     retained boost keeps the implement-phase work top-ranked for router
     selection."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-review-phase-trust-builtin-review
+  pr: 2887
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
