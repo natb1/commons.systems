@@ -58,8 +58,13 @@ attention:
     provenance-convention passages in align-strategy/SKILL.md and
     align-tactics/SKILL.md, so it qualifies on the same basis as its sibling
     tactic-align-tactics-mechanical-floor."
-phase: implement
-execution: null
+phase: fix
+execution:
+  branch: tactic-align-provenance-lint-doctrine
+  pr: 2894
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
