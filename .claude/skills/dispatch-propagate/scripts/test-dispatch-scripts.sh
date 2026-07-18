@@ -34893,7 +34893,7 @@ echo "=== dispatch-refresh-rate-limits ==="
 
 rr_setup() {
   TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/state" "$TMPDIR_TEST/fix"
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/state" "$TMPDIR_TEST/fix" "$TMPDIR_TEST/config"
   cp "$SCRIPT_DIR/dispatch-refresh-rate-limits" "$TMPDIR_TEST/scripts/"
   cp "$SCRIPT_DIR/update-rate-limits.sh" "$TMPDIR_TEST/scripts/"
   cp "$SCRIPT_DIR/dispatch-target-workers" "$TMPDIR_TEST/scripts/"
@@ -34904,11 +34904,13 @@ rr_setup() {
            "$TMPDIR_TEST/scripts/dispatch-target-workers" \
            "$TMPDIR_TEST/scripts/dispatch-config-load"
   export DISPATCH_RATE_LIMITS_STATE_FILE="$TMPDIR_TEST/state/rate_limits.json"
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
 }
 rr_teardown() {
   rm -rf "$TMPDIR_TEST"; TMPDIR_TEST=""
   unset DISPATCH_RATE_LIMITS_STATE_FILE DISPATCH_REFRESH_RATE_LIMITS_CREDS \
     DISPATCH_REFRESH_RATE_LIMITS_HEADERS_FILE
+  unset DISPATCH_CONFIG_DIR
 }
 write_creds() {  # $1=file $2=expiresAt-ms
   printf '{"claudeAiOauth":{"accessToken":"test-token","expiresAt":%s}}\n' "$2" > "$1"
