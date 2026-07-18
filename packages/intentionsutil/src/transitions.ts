@@ -1,4 +1,4 @@
-import type { Execution, IntentionNode, Rounds } from "./schema.js";
+import type { Execution, IntentionNode, Rounds, StrategyStampValue } from "./schema.js";
 import { servingStrategyIds } from "./router.js";
 
 // Graph router v2, second half: phase transitions, execution-state writes,
@@ -351,12 +351,28 @@ export function isScopeStale(stamp: ScopeStamp | null, currentFingerprint: strin
 }
 
 /**
+ * Extract the comparable fingerprint hash from a stamp map entry. Each entry
+ * is either the legacy bare-string form (the hash itself) or the widened
+ * `{hash, sha}` object form (Unit 1, `StrategyStampValue`) that additionally
+ * carries the `origin/main` sha the stamp was taken at. This is the single
+ * home of that shape discrimination — callers compare hashes via this helper
+ * instead of duplicating the `string | {hash,sha}` branch inline.
+ */
+export function stampHash(value: StrategyStampValue): string {
+  return typeof value === "string" ? value : value.hash;
+}
+
+/**
  * Per-strategy staleness against a raw stamp value (soft-freeze, strategy
  * clarification 10). The stamp is one of:
  *   - `null` — never stale (stamping starts when the align machinery lands).
- *   - a `Record<strategy-id, fingerprint>` map — stale iff the map carries a key
- *     for `strategyId` AND its value differs from `currentFingerprint`; a
- *     serving strategy ABSENT from the map is never stale (per-strategy null).
+ *   - a `Record<strategy-id, StrategyStampValue>` map — stale iff the map
+ *     carries a key for `strategyId` AND its stamped hash differs from
+ *     `currentFingerprint`; a serving strategy ABSENT from the map is never
+ *     stale (per-strategy null). Each map value is either a bare-string hash
+ *     or the widened `{hash, sha}` object recording the `origin/main` sha the
+ *     stamp was taken at — `stampHash` extracts the comparable hash from
+ *     either shape.
  *   - a bare string (deprecated-legacy) — stale iff it differs from
  *     `currentFingerprint`, ignoring `strategyId`. This preserves the legacy
  *     compare-against-every-serving-strategy semantics: one string cannot equal
@@ -364,14 +380,14 @@ export function isScopeStale(stamp: ScopeStamp | null, currentFingerprint: strin
  *     re-stamp converts it to map form.
  */
 export function isFingerprintStale(
-  stamp: string | Record<string, string> | null,
+  stamp: string | Record<string, StrategyStampValue> | null,
   strategyId: string,
   currentFingerprint: string,
 ): boolean {
   if (stamp === null) return false;
   if (typeof stamp === "string") return stamp !== currentFingerprint;
   if (!Object.hasOwn(stamp, strategyId)) return false;
-  return stamp[strategyId] !== currentFingerprint;
+  return stampHash(stamp[strategyId]) !== currentFingerprint;
 }
 
 /**
