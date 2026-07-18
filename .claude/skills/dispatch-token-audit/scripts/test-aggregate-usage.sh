@@ -31,6 +31,30 @@ assert_eq() {
   fi
 }
 
+# Numeric-tolerance variant of assert_eq for float sums whose jq string
+# rendering is not stable across jq versions. Floating-point addition is not
+# associative, so summing already-divided terms left-to-right (a test's
+# EXPECTED_*) versus map-then-`add` (the aggregator) yields bit-distinct doubles
+# that jq renders with different trailing digits on different jq builds. Compare
+# the magnitudes within a tolerance instead of their string forms; correctness
+# to 1e-9 is preserved, formatting fragility is removed.
+assert_close() {
+  local label="$1" expected="$2" actual="$3" tol="${4:-1e-9}"
+  TOTAL=$((TOTAL + 1))
+  local within
+  within=$(jq -n --argjson e "$expected" --argjson a "$actual" --argjson t "$tol" \
+    '((($e - $a) | if . < 0 then -. else . end) < $t)')
+  if [[ "$within" == "true" ]]; then
+    PASS=$((PASS + 1))
+    echo "  PASS: $label"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: $label (not within $tol)"
+    echo "    expected: '$expected'"
+    echo "    actual:   '$actual'"
+  fi
+}
+
 report_results() {
   echo ""
   echo "================================"
@@ -502,7 +526,7 @@ assert_eq "lenses.baseline_context.peak_boot_tokens" "3000" \
   "$(jq '.lenses.baseline_context.peak_boot_tokens' <<<"$OUT")"
 assert_eq "lenses.baseline_context.median_boot_tokens" "3" \
   "$(jq '.lenses.baseline_context.median_boot_tokens' <<<"$OUT")"
-assert_eq "lenses.baseline_context.total_proxy_usd" "$EXPECTED_BASELINE_PROXY" \
+assert_close "lenses.baseline_context.total_proxy_usd" "$EXPECTED_BASELINE_PROXY" \
   "$(jq '.lenses.baseline_context.total_proxy_usd' <<<"$OUT")"
 
 # --- phase_standup lens (strategy-token-economy clarification 12) ----------
