@@ -121,6 +121,24 @@ function readStrategyFingerprint(node: IntentionNode): string | Record<string, s
 }
 
 /**
+ * The node's execution completion markers, first-class or squatter, else `[]`.
+ * Mirrors `readStrategyFingerprint`'s fall-back so the reviewed-marker guard
+ * honors the same squatter convention as the surrounding phase/park/fingerprint
+ * reads — a squatter node (attention-surface / token-economy subtree) carries
+ * `execution` under `attributes.execution`, where `node.execution` is null.
+ */
+function readMarkers(node: IntentionNode): string[] {
+  const firstClass = node.execution?.markers ?? null;
+  if (firstClass !== null) return firstClass;
+  const squatExec = node.attributes.execution;
+  if (squatExec !== null && typeof squatExec === "object" && "markers" in squatExec) {
+    const markers = (squatExec as { markers?: unknown }).markers;
+    if (Array.isArray(markers)) return markers.filter((m): m is string => typeof m === "string");
+  }
+  return [];
+}
+
+/**
  * Run the five re-validation checks against a store the caller guarantees is at
  * fresh origin/main. Pure: reads files, returns a result — no process exit, no
  * direct stdio. Throws only on a genuinely malformed store (a node file that
@@ -175,7 +193,7 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     }
   } else if (phase !== selectedPhase) {
     return fail(EXIT_STALE_SELECTION, "phase", `selected ${selectedPhase} but node is now ${phase ?? "draft/null"}`);
-  } else if (selectedPhase === "review" && node.execution?.markers.includes(REVIEWED_MARKER) === true) {
+  } else if (selectedPhase === "review" && readMarkers(node).includes(REVIEWED_MARKER)) {
     // The pure selector (selectGraphTargets) already skips emitting a
     // phase:review tactic once it carries the reviewed marker — the marker
     // means the review pass already ran and the node is awaiting tick
