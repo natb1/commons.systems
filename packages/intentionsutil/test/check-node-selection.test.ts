@@ -251,6 +251,89 @@ describe("evaluateSelection", () => {
     expect(r.exitCode).toBe(0);
   });
 
+  it("an object-form {hash, sha} map fresh against its .hash passes; stale against it fails", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-a", kind: "strategy", statement: "Strategy A." }));
+    const fpA = strategyFingerprint(readNode(dir, "strategy-a"));
+    seed(
+      dir,
+      anode({
+        id: "tactic-fresh",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-a"],
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: fpA, sha: "some-sha" } },
+        },
+      }),
+    );
+    const fresh = evaluateSelection({ nodeId: "tactic-fresh", selectedPhase: "qa", dir, stamp: null });
+    expect(fresh.exitCode).toBe(0);
+
+    seed(
+      dir,
+      anode({
+        id: "tactic-stale",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-a"],
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: "0".repeat(64), sha: "some-sha" } },
+        },
+      }),
+    );
+    const stale = evaluateSelection({ nodeId: "tactic-stale", selectedPhase: "qa", dir, stamp: null });
+    expect(stale.exitCode).toBe(12);
+    expect(stale.stderr[0]).toMatch(/fingerprint:.*strategy-a substance changed/);
+  });
+
+  it("a squatter object-form {hash, sha} stamp (attributes.execution) survives the reader and participates in staleness", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-a", kind: "strategy", statement: "Strategy A." }));
+    const fpA = strategyFingerprint(readNode(dir, "strategy-a"));
+    seed(
+      dir,
+      anode({
+        id: "tactic-squat-fresh",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-a"],
+        // First-class execution absent; the stamp is squatted under attributes.
+        attributes: {
+          execution: { strategy_fingerprint: { "strategy-a": { hash: fpA, sha: "some-sha" } } },
+        },
+      }),
+    );
+    const fresh = evaluateSelection({ nodeId: "tactic-squat-fresh", selectedPhase: "qa", dir, stamp: null });
+    expect(fresh.exitCode).toBe(0);
+
+    seed(
+      dir,
+      anode({
+        id: "tactic-squat-stale",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-a"],
+        attributes: {
+          execution: {
+            strategy_fingerprint: { "strategy-a": { hash: "0".repeat(64), sha: "some-sha" } },
+          },
+        },
+      }),
+    );
+    const stale = evaluateSelection({ nodeId: "tactic-squat-stale", selectedPhase: "qa", dir, stamp: null });
+    expect(stale.exitCode).toBe(12);
+    expect(stale.stderr[0]).toMatch(/fingerprint:.*strategy-a substance changed/);
+  });
+
   it("scope fingerprint is stable across state-field edits and changes on a body edit", () => {
     const dir = tempDir();
     seed(dir, anode({ id: "tactic-s", kind: "tactic", phase: "implement" }));

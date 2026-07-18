@@ -21,6 +21,7 @@ import {
   isScopeStale,
   isStrategyStale,
   isFingerprintStale,
+  stampHash,
 } from "../src/transitions.js";
 
 function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
@@ -326,5 +327,35 @@ describe("scope stamp parsing + gates", () => {
     expect(isFingerprintStale({ "strategy-a": "fp" }, "strategy-a", "fp")).toBe(false);
     expect(isFingerprintStale({ "strategy-a": "old" }, "strategy-a", "fp")).toBe(true);
     expect(isFingerprintStale({ "strategy-b": "old" }, "strategy-a", "fp")).toBe(false);
+  });
+
+  it("isFingerprintStale: object-form {hash, sha} map value compares against .hash; sha plays no role", () => {
+    expect(
+      isFingerprintStale({ "strategy-a": { hash: "X", sha: "sha-1" } }, "strategy-a", "X"),
+    ).toBe(false);
+    expect(
+      isFingerprintStale({ "strategy-a": { hash: "X", sha: "sha-1" } }, "strategy-a", "Y"),
+    ).toBe(true);
+    // A different sha with the same hash is still fresh — sha is provenance, not
+    // part of the freshness comparison.
+    expect(
+      isFingerprintStale({ "strategy-a": { hash: "X", sha: "sha-2" } }, "strategy-a", "X"),
+    ).toBe(false);
+  });
+
+  it("isFingerprintStale: mixed map evaluates object-form and bare-string entries independently per key", () => {
+    const stamp = {
+      "strategy-a": { hash: "fp-a", sha: "sha-a" },
+      "strategy-b": "fp-b",
+    };
+    expect(isFingerprintStale(stamp, "strategy-a", "fp-a")).toBe(false);
+    expect(isFingerprintStale(stamp, "strategy-b", "fp-b")).toBe(false);
+    expect(isFingerprintStale(stamp, "strategy-a", "stale")).toBe(true);
+    expect(isFingerprintStale(stamp, "strategy-b", "stale")).toBe(true);
+  });
+
+  it("stampHash: string passthrough and {hash, sha} extraction", () => {
+    expect(stampHash("abc")).toBe("abc");
+    expect(stampHash({ hash: "abc", sha: "def" })).toBe("abc");
   });
 });
