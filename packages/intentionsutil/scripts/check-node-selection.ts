@@ -49,9 +49,9 @@ import {
   strategyFingerprint,
   tacticScopeFingerprint,
 } from "../src/router.js";
-import { isFingerprintStale } from "../src/transitions.js";
+import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
 import { isPlainObject } from "../src/schema.js";
-import type { IntentionNode } from "../src/schema.js";
+import type { IntentionNode, StrategyStampValue } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
 // --- Exit codes ------------------------------------------------------------
@@ -95,10 +95,13 @@ function readParked(node: IntentionNode): boolean {
 
 /**
  * The stamped serving-strategy fingerprint, first-class or squatter, or null.
- * Returns the per-strategy map, a legacy bare string, or null — the caller
- * compares per-strategy via `isFingerprintStale`.
+ * Returns the per-strategy map (each entry a bare hash string or a
+ * `{hash, sha}` object), a legacy bare string, or null — the caller compares
+ * per-strategy via `isFingerprintStale`.
  */
-function readStrategyFingerprint(node: IntentionNode): string | Record<string, string> | null {
+function readStrategyFingerprint(
+  node: IntentionNode,
+): string | Record<string, StrategyStampValue> | null {
   const firstClass = node.execution?.strategy_fingerprint ?? null;
   if (firstClass !== null) return firstClass;
   const squatExec = node.attributes.execution;
@@ -106,18 +109,46 @@ function readStrategyFingerprint(node: IntentionNode): string | Record<string, s
     const fp = (squatExec as { strategy_fingerprint?: unknown }).strategy_fingerprint;
     if (typeof fp === "string") return fp;
     if (isPlainObject(fp)) {
-      // Coerce the squatter map to Record<string,string> by keeping string
-      // values — no cast, and non-string entries (malformed) are dropped rather
-      // than mis-typed.
-      const out: Record<string, string> = {};
+      // Coerce the squatter map to Record<string,StrategyStampValue> by
+      // keeping well-formed entries — no cast, and malformed entries are
+      // dropped rather than mis-typed. A well-formed entry is either a bare
+      // hash string (legacy per-strategy form) or a `{hash, sha}` object
+      // (materiality-scoped form) with both fields present as strings.
+      const out: Record<string, StrategyStampValue> = {};
       for (const [key, value] of Object.entries(fp)) {
-        if (typeof value === "string") out[key] = value;
+        if (typeof value === "string") {
+          out[key] = value;
+        } else if (
+          isPlainObject(value) &&
+          typeof value.hash === "string" &&
+          typeof value.sha === "string"
+        ) {
+          out[key] = { hash: value.hash, sha: value.sha };
+        }
       }
       return out;
     }
     return null;
   }
   return null;
+}
+
+/**
+ * The node's execution completion markers, first-class or squatter, else `[]`.
+ * Mirrors `readStrategyFingerprint`'s fall-back so the reviewed-marker guard
+ * honors the same squatter convention as the surrounding phase/park/fingerprint
+ * reads — a squatter node (attention-surface / token-economy subtree) carries
+ * `execution` under `attributes.execution`, where `node.execution` is null.
+ */
+function readMarkers(node: IntentionNode): string[] {
+  const firstClass = node.execution?.markers ?? null;
+  if (firstClass !== null) return firstClass;
+  const squatExec = node.attributes.execution;
+  if (squatExec !== null && typeof squatExec === "object" && "markers" in squatExec) {
+    const markers = (squatExec as { markers?: unknown }).markers;
+    if (Array.isArray(markers)) return markers.filter((m): m is string => typeof m === "string");
+  }
+  return [];
 }
 
 /**
@@ -175,6 +206,19 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     }
   } else if (phase !== selectedPhase) {
     return fail(EXIT_STALE_SELECTION, "phase", `selected ${selectedPhase} but node is now ${phase ?? "draft/null"}`);
+  } else if (selectedPhase === "review" && readMarkers(node).includes(REVIEWED_MARKER)) {
+    // The pure selector (selectGraphTargets) already skips emitting a
+    // phase:review tactic once it carries the reviewed marker — the marker
+    // means the review pass already ran and the node is awaiting tick
+    // merge/fix, not a fresh review candidate. This is the execute-side
+    // mirror of that guard, catching a directive selected just before the
+    // marker landed (or a hand-run/explicit-dispatch invocation that bypassed
+    // the selector entirely).
+    return fail(
+      EXIT_STALE_SELECTION,
+      "phase",
+      `${nodeId} already carries the reviewed marker — awaiting tick merge/fix, not a review candidate`,
+    );
   }
 
   // 3. not parked — an author park landing after selection yields the worker.

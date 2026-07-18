@@ -889,7 +889,13 @@ clarifications:
       phase-1 work that no longer surprises the worker-launch step or consumes a
       budget slot; the worker-start gate described here stays as the safety
       re-check for staleness introduced after the sweep. See the
-      scriptable-then-spawn clarification of that date.)"
+      scriptable-then-spawn clarification of that date.) (Scoped 2026-07-18: the
+      'leaving only author and re-evaluation edits able to demote' clause is
+      narrowed — an author-present align round that classifies its own
+      tactic-body edit as scope-inert re-stamps the custody stamp in the same
+      round, so such edits no longer demote; material and unsure edits still do.
+      See the scope-inert-restamp clarification and draft
+      tactic-scope-inert-restamp-primitive.)"
   - question: What guards the router against failure loops — a worker that
       repeatedly fails to make progress or park on a node, and a systemic
       executor failure (a daemon crash-loop) that would otherwise false-trip a
@@ -1951,6 +1957,108 @@ clarifications:
       tactic-align-session-claiming-liveness-correction). Implementation
       retained as draft tactic-office-hours-concurrency-dedup. Recorded
       2026-07-18 interview."
+  - question: A scope-inert align annotation on an in-flight tactic's body — the
+      reconciliation notes amendment-completeness mandates — trips the tactic
+      scope-custody gate and demotes the whole ladder. Does materiality-scoping
+      extend to the scope-custody stamp, and by what mechanism?
+    answer: "Yes — greenfield: the materiality principle ('an editing round pays
+      exactly the materiality of its change', clarification 70) extends to the
+      tactic scope-custody stamp, closing the seam in the chain-of-custody
+      amendment (clarification 39) between its intent ('if the re-evaluation
+      confirms without amending, nothing re-runs') and its mechanism: recording
+      the confirmation is itself a body edit, so tacticScopeFingerprint trips
+      and demotes. Observed 2026-07-18: an align round's scope-inert
+      Interim-mechanism note on tactic-graph-selector-reviewed-exclusion demoted
+      a fully-reviewed node (PR #2888, green CI) review -> implement; the tax is
+      three phase sessions per annotation, since demote-to-implement discards qa
+      and review custody. Mechanism — sanctioned re-stamp, worktree-locality
+      preserved: the stamp stays a worktree-local file, never a per-launch graph
+      write (clarification 39's design stands); an author-present align round
+      (/align-strategy or /align-tactics — the interview holds both the delta
+      and the author, the same classifier trust clarification 70 records) that
+      classifies its own tactic-body edit as scope-inert re-stamps
+      .claude/worktrees/<id>.scope-fingerprint to the post-edit
+      tacticScopeFingerprint plus the current origin/main sha in the same round,
+      recording the classification in the round's record — mirroring the
+      transition writer's machinery refresh (which stands unchanged) rather than
+      moving the stamp into the node. Fail-closed classification: only a
+      confident scope-inert verdict re-stamps; any doubt leaves the stamp
+      untouched and custody demotes as recorded, and a material edit is left
+      stale exactly as today. Phase workers, qa/review sessions, and the tick
+      never re-stamp. Steelman (keep the gate purely mechanical; accept the
+      demotion tax as misclassification insurance): DIVERGED — the annotations
+      are doctrine-mandated (clarification 38 records reconciliation in the
+      node), so the tax recurs structurally, and the strategy-stamp side already
+      rejected the same orthogonal tax with the same classifier. Net guarantee
+      unchanged: merge still requires an unbroken implement -> qa -> review
+      chain against the merge-time scope fingerprint — a re-stamp asserts, under
+      author presence, that the post-edit fingerprint IS that same scope.
+      Executable carrier: draft tactic-scope-inert-restamp-primitive (re-stamp
+      script plus align-skill step); bootstrap until it lands: the round
+      refreshes the stamp by hand — write '<tacticScopeFingerprint(statement,
+      body)> <origin/main sha>' as the stamp file's one line, the 2026-07-18
+      remediation's proven recipe. Recorded 2026-07-18 interview."
+  - question: What provenance convention binds clarifications[].answer — the
+      trailing Recorded-sentence the align SKILL.md docs prescribe, or the
+      dated-clause convention the corpus and readingDate() implement?
+    answer: "(Recorded 2026-07-18 /align-strategy interview.) Ratified greenfield:
+      every clarifications[].answer carries a dated provenance clause — an event
+      verb plus ISO date — placed where it reads best; front-loaded
+      parenthetical preferred, verb open (Recorded / Amended / Reviewed /
+      adopted...). The newest ISO date anywhere in the answer is its effective
+      date — the readingDate() contract (packages/intentionsutil/src/router.ts)
+      that coverage.ts's lastReviewedOf depends on — and amendments add a new
+      dated clause rather than rewriting the old one. Grounds, author-endorsed
+      (not held on trust): position-dependence is wrong under amendment (an
+      amended answer necessarily carries two or more dates, so 'the trailing
+      sentence' stops being well-defined); the verb is semantic, dating
+      different event kinds; an answer's last sentence should be its substantive
+      conclusion, not boilerplate; and 'a dated clause anywhere' is exactly the
+      contract the machine consumers read. Steelman (trailing-sentence
+      uniformity for mechanical hand-auditing): DIVERGED — amendment breaks
+      terminal placement anyway, and a front-loaded parenthetical is at least as
+      scannable. Migration: edit the two align-skill doctrine passages
+      (.claude/skills/align-strategy/SKILL.md and
+      .claude/skills/align-tactics/SKILL.md) as part of
+      tactic-align-provenance-lint-doctrine's implementation; zero corpus
+      rewrites (the 27 goal-layer answers and all tactic-lane answers already
+      comply with the loosened rule); no grandfather clause; the enforcing lint
+      checks the loosened rule corpus-wide. This ratification discharges that
+      tactic's office_hours gate, unparked in the same commit."
+  - question: Why did the 2026-07-18 selector ticks dispatch /align-tactics
+      re-evaluation onto subtree children with no planning work to do, and do
+      the recorded freeze-improvement requirements fix it?
+    answer: "Root cause, from the selection/routing logs and git history: the 20:57Z
+      strategy edit (e7d20df0, the provenance-lint round) landed without the
+      materiality classify-and-re-stamp step, staling the one map-stamped open
+      child (tactic-graph-selector-reviewed-exclusion); the next tick's
+      soft-freeze scan then swept ALL open children into frozenTacticIds — the
+      re-surface set of the frozen-tactic-dispatch clarification is the whole
+      subtree, not the stale children — and the top-ranked unclaimed child
+      (tactic-review-phase-trust-builtin-review, own stamp null, plan untouched
+      by the edit) was dispatched to /align-tactics; its session then read a
+      stale worktree checkout and concluded no work existed. Coverage verdict,
+      three-way split: (1) the freeze firing at all on an orthogonal edit is
+      fixed by tactic-materiality-scoped-freeze (PR #2892) once editing rounds
+      classify-and-re-stamp; (2) the stale-worktree worker read is fixed by
+      tactic-align-skills-latest-graph-guard (PR #2889), whose Hole-2 closure
+      routes align sessions through provision-node-worktree's fetch-and-merge
+      re-entry; (3) not covered anywhere: when a freeze legitimately fires,
+      suppression and re-surface still take the WHOLE subtree, contradicting the
+      same-commit orthogonal classification and sweeping null-stamped children a
+      sibling's staleness says nothing about — retained as draft
+      tactic-freeze-resurface-stale-children-only (narrow both frozenTacticIds
+      uses to stale-stamped children only). The subtree-conservatism rival
+      framing (a materially drifted strategy makes every child's plan suspect,
+      so the full sweep is deliberate) was put to the author and DIVERGED from:
+      under the materiality doctrine the editing round's per-child
+      classification is the authority on who is affected; a blanket sweep
+      re-litigates it. Both fix carriers were boosted to the top of the
+      discretionary frontier (boost 61, composed rank 66.33, above the then-max
+      66.00) by author direction this round. This edit itself fired zero
+      freezes: at c2a909c7 the strategy has no map-stamped open children (the
+      stale stamp cleared when its carrier closed), so no classify-and-re-stamp
+      was owed. Recorded 2026-07-18 /align-strategy interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1996,6 +2104,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via

@@ -2,9 +2,11 @@
 id: tactic-fix-interrupt-orthogonal-state
 kind: tactic
 statement: "Model the CI-fix interrupt as orthogonal execution state, not a
-  phase value: phase stays ladder-positional across a fix, and a post-review fix
+  phase value: phase stays ladder-positional across a fix, a post-review fix
   resets phase to review directly instead of reconstructing position from
-  markers"
+  markers, and phase workers advance the ladder unconditionally while the
+  selector scripts all CI-gated fix routing (no metered transition-time CI
+  read)"
 owner: ai
 status: codified
 parent: tactic-graph-native-dispatch
@@ -33,7 +35,31 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Should a phase-worker session read CI to decide its own forward
+      transition, or advance the ladder unconditionally and let dispatch script
+      the CI-gated fix routing at selection?
+    answer: "Advance unconditionally. A phase worker completes its phase and takes
+      its forward ladder edge (implement->qa, qa->review, review->arm-merge)
+      without reading CI; the completion writer (decideTransition /
+      transition-node) drops its CI-verdict sensor (the gh pr view head-SHA +
+      CI-verdict REST round-trip at transition-node:107-114). All CI-gated fix
+      routing moves to the selector (graph-select-target's sensor_gate,
+      :190-215), which already reads CI at selection: concluded-red sets
+      execution.fix and routes /fix-checks; concluded-green clears it (with the
+      past-review re-review reset) and routes the phase worker; pending waits.
+      Rationale: the transition-time read is redundant with the selector's own
+      dispatch-ci-ready read and burns metered-session round-trips on a routing
+      decision dispatch can script for free in owned code -- the
+      strategy-token-economy standup-cost lever and
+      strategy-graph-native-dispatch's thin-script doctrine. Traced consistent
+      across every phase progression this session (implement->qa, qa->review,
+      review->arm-merge -- safe CI-blind because GitHub gates the merge and a
+      red verdict routes to fix/disarm before it can land -- and the fix
+      interrupt from any phase). Refines Units 2 (decideTransition CI-blind,
+      forward edges unconditional) and 3 (selector is the sole CI-routing
+      authority, owning execution.fix set/clear). Recorded 2026-07-18
+      /align-strategy interview (author direction)."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -73,10 +99,34 @@ selector "dispatch `/fix-checks`, not the phase worker"; and (b) a
 between the fix worker pushing and CI re-reporting, so a not-yet-green re-run is
 not misread as "resume the phase worker." The one deliberate backward edge is
 **re-review**: when `/fix-checks` pushes code and review has already completed,
-the fix worker resets `phase → review` and disarms auto-merge (a correctness
-move — new code must be reviewed). With `phase` preserved, the common
+new code must be reviewed — so the fix worker disarms auto-merge immediately at
+push, and the selector resets `phase → review` on the next green (see the
+"Metered vs. scripted" paragraph below for the metered-vs-scripted split). With
+`phase` preserved, the common
 `fix → implement → qa` collapses to nothing: the node was at `implement`, stays
 at `implement`, and takes one forward edge when implement completes.
+
+**Metered vs. scripted — advance unconditionally (author direction,
+2026-07-18).** The phase worker's completion transition is **CI-blind**:
+`decideTransition` / `transition-node` drop the CI-verdict sensor and take the
+forward ladder edge (`implement → qa`, `qa → review`, `review → arm-merge`)
+**unconditionally**, never reading CI and never setting `execution.fix`. All
+CI-gated fix routing moves to the **selector** (`graph-select-target`'s
+`sensor_gate`), which already reads CI at selection: a concluded-**red** verdict
+sets `execution.fix` and routes `/fix-checks`; concluded-**green** clears it
+(with the past-review re-review reset) and routes the phase worker; **pending**
+waits. The transition-time read the worker used to pay (`gh pr view` for the
+head SHA + a CI-verdict REST call, `transition-node:107-114`) is redundant with
+the selector's own read (`dispatch-ci-ready`, `graph-select-target:190-215`) and
+burns metered-session round-trips on a routing decision dispatch can script for
+free in owned code — `strategy-token-economy`'s standup-cost lever and
+`strategy-graph-native-dispatch`'s thin-script doctrine (selection/transition
+mechanics live in owned, testable code). Traced consistent across **every** phase
+progression this session (`implement→qa`, `qa→review`, `review→arm-merge`, and
+the fix interrupt from any phase); the one wrinkle is that `review` arms
+auto-merge CI-blind, which is safe because GitHub gates the actual merge and a
+red verdict routes the node to fix (disarm + `phase → review`) before it can
+land.
 
 **Shape:** one atomic PR (author decision). The change is backwards-incompatible
 (dropping the `fix` enum value breaks any node at `phase: fix`), so the code and
@@ -102,7 +152,13 @@ The greenfield preserves their doctrine; only incidental wording goes stale, and
 nothing in code (`transitions.ts` / `router.ts` / `validate-graph`) reads that
 prose. Editing the strategy's `clarifications` would change its fingerprint and
 soft-freeze its ~16 open children, so it is left to a later `/align-strategy`
-pass. **Do not edit strategy frontmatter or the spec node in this PR.**
+pass. Also deferred to that same pass (same soft-freeze reason): articulating the
+**advance-unconditionally / selector-scripts-CI doctrine** as a first-class
+`strategy-graph-native-dispatch` clarification. It is a sharpening of that
+strategy's existing thin-script doctrine ("selection, transition, and
+provisioning mechanics live in owned code"); the concrete design is fully carried
+by this tactic's clarification + Units 2–3, so no strategy edit is owed now.
+**Do not edit strategy frontmatter or the spec node in this PR.**
 
 ## Units of work
 
@@ -130,25 +186,30 @@ given shape.
 **Scope.** Rewrite the fix machinery to read/write `execution.fix` and preserve
 `phase`:
 - `packages/intentionsutil/src/transitions.ts`:
-  - `decideTransition` (`:166-212`): on `fixInterrupt` conditions
-    (`ci === "failing"` at an interruptible ladder phase — reuse the
-    `FIX_INTERRUPTIBLE` set semantics, `:95`), **set `execution.fix`** and
-    **leave `phase` unchanged**, instead of returning `{ phase: "fix" }`
-    (`:189`). On green CI with `execution.fix` set: **clear `execution.fix`**;
-    if the node is past review (has the `reviewed` marker / merge-armed), reset
-    `phase → review` and signal **disarm auto-merge** (the re-review edge);
-    otherwise leave `phase` as-is. Still-red CI holds with `execution.fix`
-    retained (replaces the `:198` stay-in-fix branch).
+  - `decideTransition` (`:166-212`): make it **CI-blind** (author direction,
+    2026-07-18 — see Context "Metered vs. scripted"). **Drop the `ci` parameter**
+    from its forward-routing role: the forward ladder edge fires
+    **unconditionally** (`implement → qa`, `qa → review`, `review → arm-merge`),
+    never routed into `fix` by a verdict this function reads. Remove the
+    `fixInterrupt`-drives-`{ phase: "fix" }` branch (`:188-189`) entirely — the
+    transition no longer sets `execution.fix`. The freshness gates (scope-stale
+    demotion, strategy-stale hold) stay. **`execution.fix` set/clear + the
+    re-review reset move to the selector (Unit 3)** — they are no longer the
+    completion transition's job.
   - Delete `resumeAfterFix` (`:116-122`) and its marker-reconstruction — with
     `phase` preserved there is nothing to reconstruct. Retire the fix-specific
     `LADDER`/`forwardPhase` comments (`:59`, `:71`) referencing `fix`.
-  - Extend `TransitionDecision` (`:127-143`) to express the fix write
-    (set/clear `execution.fix`, `disarmAutoMerge`) and phase-preservation.
-  - Keep `fixInterrupt` (`:105-107`) as the interrupt predicate (now gating an
-    `execution.fix` write, not a phase overwrite) — or inline it; implementer's
-    call.
-- `apply-node-transition.ts` (invoked by `transition-node`): apply the new
-  `execution.fix` set/clear + `disarmAutoMerge` writes.
+  - `TransitionDecision` (`:127-143`) no longer carries any fix/CI field — it
+    expresses only the unconditional forward edge, the demote, and the hold.
+  - Keep `fixInterrupt` (`:105-107`) / `FIX_INTERRUPTIBLE` (`:95`) as the
+    **interrupt predicate the selector calls** (which phases a red verdict may
+    interrupt), not a transition-time branch — export them for Unit 3's selector
+    use.
+- `transition-node` (`:107-114`): **remove the CI-verdict sensor** (`gh_pr_view_rest`
+  head SHA + `dispatch_ci_verdict_rest`) — the completion writer no longer reads
+  CI. This is the metered round-trip the change eliminates.
+- `apply-node-transition.ts`: drop the `--ci` input and the fix-write handling;
+  it applies only the unconditional forward / demote / hold decision.
 - `packages/intentionsutil/src/router.ts`: candidate emission (`:289-303`)
   currently emits `phase` verbatim; ensure a node with `execution.fix` set is
   emitted as a **fix candidate** regardless of its preserved `phase`, and a node
@@ -176,10 +237,26 @@ are design-bearing and easy to get subtly wrong.
 
 ### Unit 3 — Shell dispatch layer: route the fix worker off `execution.fix`
 
-**Scope.** Repoint every consumer that currently branches on `phase == "fix"`:
-- `.claude/skills/dispatch-propagate/scripts/graph-select-target:195` — the
-  `sensor_gate` `fix|qa|review)` CI gate: gate the fix worker on `execution.fix`
-  being set (or a live red-CI verdict), not on `phase == fix`.
+**Scope.** Repoint every consumer that currently branches on `phase == "fix"`,
+and make the selector the **sole CI-routing authority** (the work moved out of
+`decideTransition` in Unit 2):
+- `.claude/skills/dispatch-propagate/scripts/graph-select-target:190-215` — the
+  `sensor_gate` `fix|qa|review)` CI gate is where the concluded-CI verdict is now
+  read and **acted on** (not just concluded-vs-pending). It must distinguish
+  concluded-**red** from concluded-**green**, not just pending: on a concluded-red
+  verdict at an interruptible phase (`fixInterrupt`/`FIX_INTERRUPTIBLE`, exported
+  from Unit 2), **set `execution.fix`** and emit the node as a **fix candidate**;
+  on concluded-green with `execution.fix` set, **clear `execution.fix`** — and if
+  the node is past review (`reviewed` marker / merge-armed) reset `phase → review`
+  and disarm auto-merge (the re-review edge) — then emit its phase worker; on
+  concluded-green with no `execution.fix`, emit the phase worker; on pending,
+  skip (unchanged). The `execution.fix` write lands through the graph-commit
+  write path the selector already uses for its state writes (never a metered
+  session). The `pushed_sha` pending-CI guard (Unit 1) is what lets the selector
+  tell "fix worker pushed, CI not yet green" from "resume the phase worker."
+  (The `/fix-checks` worker still **disarms auto-merge immediately** when it
+  pushes post-review code — a safety action at push time — and records
+  `pushed_sha`; the selector owns the `phase → review` reset on the next green.)
 - `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:126-135` —
   the `case "$kind:$phase"` phase→skill map (`tactic:fix → /fix-checks`, `:129`):
   dispatch `/fix-checks` when `execution.fix` is set, independent of the
@@ -259,11 +336,13 @@ npx tsx packages/intentionsutil/scripts/validate-graph.ts
 Manual / observe-in-production:
 - After Unit 4, `grep -rl '^phase: fix$' intentions/` returns nothing and no node
   fails validation.
-- Drive a red-CI interrupt end-to-end on a scratch node: CI fails mid-`implement`
-  → `execution.fix` set, `phase` stays `implement`, `/fix-checks` dispatched
-  (not the implement worker); CI green → `execution.fix` cleared, node resumes at
-  `implement` and takes a single forward edge (no `fix → implement → qa`
-  double-commit).
+- Drive a red-CI interrupt end-to-end on a scratch node: the implement worker
+  opens the PR and advances to `qa` **unconditionally** (no CI read in its
+  completion transition); the PR's CI then fails → at the **next selection** the
+  selector sets `execution.fix` and dispatches `/fix-checks` (not the qa worker),
+  `phase` staying `qa`; CI green → the selector clears `execution.fix` and emits
+  the `qa` worker (no `fix → implement → qa` double-commit, and no transition-time
+  `gh pr view` / CI-verdict round-trip in any phase worker session).
 - Post-review re-review edge: with a `reviewed`-marked node, a `/fix-checks`
   push resets `phase → review` and auto-merge is disarmed — newly pushed code
   cannot merge unreviewed (the `transitions.ts:118` defect is closed).
