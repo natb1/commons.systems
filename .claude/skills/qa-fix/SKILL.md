@@ -191,15 +191,40 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
        # Re-entry guard: parking sets office_hours without changing phase, so a
        # stale self-scheduled wakeup re-firing mid-session (bypassing the
        # selector's office_hours-null gate) must not re-run qa-fix against a
-       # node already handed to a human for review. A parked node's
-       # `office_hours:` key has nothing on its own line (a nested block
-       # follows); an unparked node has the literal `office_hours: null`.
+       # node already handed to a human for review. This must agree with the
+       # canonical selection gate `readParked`
+       # (packages/intentionsutil/scripts/check-node-selection.ts:90-93):
+       # a node is parked iff the first-class `office_hours` is non-null OR a
+       # non-null `attributes.office_hours` squatter block is present. The
+       # squatter convention is live until tactic-schema-migration-backfill
+       # lands, and a squatter-parked node keeps the literal top-level
+       # `office_hours: null` alongside a populated `attributes.office_hours`
+       # block — so a top-level-only check would miss it and re-run QA against a
+       # parked node.
+       #
        # Match only the YAML frontmatter (the lines between the first and
        # second `---` delimiters), never the markdown body — a prose body line
        # reading exactly `office_hours: null` (e.g. docs quoting this guard)
        # must not be mistaken for the node's actual state.
+       # Capture matches as text (never rely on `grep -q`'s exit code, which is
+       # unreliable on empty input under some grep wrappers) and test for
+       # emptiness.
        NODE_FRONTMATTER=$(printf '%s\n' "$NODE_MD" | awk '/^---$/{d++; next} d==1{print} d>=2{exit}')
-       if ! printf '%s\n' "$NODE_FRONTMATTER" | grep -q '^office_hours: null$'; then
+       PARKED=""
+       # First-class park: an unparked node carries the literal
+       # `office_hours: null`; its absence means a nested block replaced it.
+       FIRST_CLASS_NULL=$(printf '%s\n' "$NODE_FRONTMATTER" | grep -xF 'office_hours: null')
+       [ -z "$FIRST_CLASS_NULL" ] && PARKED=1
+       # Squatter park: a non-null indented `office_hours:` line nested under
+       # `attributes:` (block form has an empty value with children below;
+       # inline form has a non-null scalar). Select indented `office_hours:`
+       # lines, then drop the `null` ones — anything left means a populated
+       # squatter block.
+       SQUATTER=$(printf '%s\n' "$NODE_FRONTMATTER" \
+            | grep -E '^[[:space:]]+office_hours:' \
+            | grep -vE '^[[:space:]]+office_hours:[[:space:]]+null[[:space:]]*$')
+       [ -n "$SQUATTER" ] && PARKED=1
+       if [ -n "$PARKED" ]; then
          echo "/qa-fix: node '$NODE_ID' is already office_hours-parked at origin/main — nothing to do" >&2
          exit 0
        fi
