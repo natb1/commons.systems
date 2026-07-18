@@ -37,18 +37,26 @@ rationale: >-
   kind-tradition and five records; the apex question held open on both roots;
   the respect floor made explicitly Kantian with Aristotelian practice; the
   consent edge split by irreversibility; virtue-temperance rooted.
-reading: "chunk 2 completed 2026-07-13 (/reading-review live sitting, NE
-  II.1-7): tradition-aristotle ratified on habituation (the teacher turns the
-  practice, virtue of character as social act, the II.4 circle entered by chance
-  or guidance) and requalified on the mean (intra-virtue; tension_with recorded
-  as graph-native cross-guard divergence); kind-virtue's hexis definition
-  ratified; the cadence-as-habituation deferral amended (synchronization drift,
-  three-scenario adjudication) — a double reading-wins catch; the
-  comprehension-then-ratify conduct rule recorded; three new deferrals homed on
-  chunks 4, 5, 6"
-gap: three rounds recorded (2026-07-04 dialectic, 2026-07-07 chunk 1, 2026-07-13
-  chunk 2) — recurrence holding; sustained recurrence across review cycles
-  remains the unproven clause
+reading: "chunk 5 completed 2026-07-17 (/reading-review live sitting, NE VI +
+  III.4): comprehension dialectic run per-chapter with the three-movement
+  structure; the end-setter correction issued at the finale (virtue makes the
+  skopos correct, phronesis the things toward it — 1144a7-9; formally
+  unconfirmed, re-run as an origination exercise at the dialog session); ALL
+  outcomes — the Q1-Q4 draft verdicts (mobility's Aristotle-third verified
+  clause-by-clause; retire-and-adopt on the vice-corrupts divergence;
+  approximation-not-internalization; cross-guards as the artifact's compensation
+  for distributed eye-less judgment), the R1-R24 integration ledger, and the
+  vocabulary/quote retention drafts — deferred en bloc by the author's
+  2026-07-18 glare ruling to tactic-dialog-review-aristotle-phronesis (dialog
+  exercise, born-parked), whose body quarantines the ledger and gates
+  ratification; retroactive cave and hexis items route to
+  tactic-dialog-review-plato-cave and tactic-dialog-review-aristotle-hexis"
+gap: four rounds recorded (2026-07-04 dialectic, 2026-07-07 chunk 1, 2026-07-13
+  chunk 2, 2026-07-17 chunk 5 — the last deferred en bloc, ratification pending
+  at the dialog session) — recurrence holding; sustained recurrence across
+  review cycles remains the unproven clause; the capture-doctrine path is read
+  end to end (Cave, hexis, phronesis) but its phronesis third is unratified
+  until the dialog session passes
 serves:
   - virtue-philosophical-mobility
   - virtue-respect-for-persons
@@ -272,6 +280,36 @@ clarifications:
       bias the comprehension test; the periagoge conduct rules above assume this
       separation and it is now explicit. Recorded 2026-07-13 /reading-review
       chunk 2."
+  - question: What conduct-rule amendments did the chunk-5 sitting add to review
+      sittings (2026-07-14 through 2026-07-18)?
+    answer: "Four author directives, verbatim-anchored. (1) Third movement
+      (2026-07-14): after comprehension and ratification, every reading sitting
+      runs an integration pass — 'for claude to reconsider from a fresh
+      perspective how the reading might suggest improvements
+      (correctness/parsimony/etc.) to the graph (including tooling that operates
+      on the graph). Those recommendations from claude must also be ratified, or
+      futher deferrals, divergences must be recorded.' Run retroactively over
+      prior readings when directed — the chunk-5 sitting ran retroactive passes
+      over chunks 1 and 2. (2) Adopted-entry reframe rule (2026-07-14): 'When
+      adding an adopted entry also re-evaluate the content of the adopting node
+      to assess whether the content can be better framed in terms of the adopted
+      references.' (3) Retention requirement (2026-07-15): 'additional content
+      that must be recorded in the graph for each review, current and prievious
+      two: key vocabulary words (greek in this case) and quotes. These
+      vocabulary words and quotes must be resurfaced in the periodic review to
+      ensure they persist in author's internal knowledge.' Homes: the lists live
+      on the durable tradition records, never the prunable chunk nodes
+      (2026-07-08 persistence doctrine); the resurfacing mechanism is the dialog
+      exercise type (2026-07-18, strategy-graph-review-curriculum). (4) Exercise
+      taxonomy, production rule, and deferral option (2026-07-18): recorded in
+      full on strategy-graph-review-curriculum, the curriculum-mechanism home —
+      this strategy keeps the reading-side apparatus by pointer, never
+      duplication. A reading sitting may ratify directly or defer its outcome
+      slate to the produced dialog session; the chunk-5 sitting exercised the
+      deferral option en bloc under the author's glare ruling ('all of these
+      outcomes sound correct but there is still too much platonic glare to
+      ratify outright'), with tactic-dialog-review-aristotle-phronesis as the
+      ratification gate. Recorded 2026-07-18 /reading-review chunk 5."
 tooling_goals:
   - kind: actuator
     statement: "/sync-reader skill — sync the reading curriculum to the author's

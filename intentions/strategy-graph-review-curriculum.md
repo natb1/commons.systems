@@ -140,6 +140,63 @@ clarifications:
       that branch once the sitting resolves the home. rounds.count stays 0 — the
       round final tactic is at phase: implement, not yet done. Recorded
       2026-07-13 /align-tactics round."
+  - question: What exercise types does the curriculum run, and how is the frontier
+      constructed (2026-07-18 requirements)?
+    answer: "Author-directed at the chunk-5 sitting close. Two exercise types, both
+      ratifying graph content and both recursively identifying follow-up
+      references, vocabulary, and key concepts/quotes for further review:
+      reading exercises (reading, then comprehension dialectic, integration
+      recommendations, follow-up curriculum, ratification) and dialog exercises
+      (new — Socratic reinforcement of reading already done; review of key
+      concepts, vocabulary, and quotes with a focus on author recall and
+      origination). The recursive tracking of follow-up resources and the recall
+      of vocabulary and key concepts/quotes must be the primary mechanism for
+      establishing the curriculum frontier. Frontier construction has two
+      feeders (author clarification, same date): the frontier is built
+      recursively from curriculum sessions, and also from analysis of
+      persistent-layer nodes with content that has not been validated by reading
+      and dialog review — the second feeder is the existing coverage-sensor /
+      mode-A enrollment machinery (clarifications 3 and 5) restated as a
+      frontier source, not new machinery. Production rule: reading sessions
+      always produce a dialog session on the curriculum frontier, prioritized
+      before new reading. Deferral option: a reading session may ratify drafts
+      and integration recommendations directly, or record them and defer to the
+      produced dialog session or a follow-up reading session. Dialog exercises
+      are also the resurfacing mechanism for the 2026-07-15 retention
+      requirement (vocabulary/quotes for the current and previous two readings,
+      recorded on strategy-philosophical-grounding), superseding the interim
+      narrower draft (review opens by exercising terms). First instances:
+      tactic-dialog-review-plato-cave, tactic-dialog-review-aristotle-hexis,
+      tactic-dialog-review-aristotle-phronesis — the chunk-5 sitting exercised
+      the deferral option for its entire outcome slate, and the phronesis dialog
+      node is the ratification gate. Forward flag:
+      tactic-review-sitting-skill-generalization (in flight, phase: qa at
+      recording time) must encode the dialog-exercise sitting type and the
+      three-movement reading-sitting structure on the generalized skill surface
+      — flagged here rather than edited onto the live node. Recorded 2026-07-18
+      /reading-review chunk 5."
+  - question: Can the attention/boost mechanism manage curriculum-frontier
+      priorities, replacing the integer numbering (author question, 2026-07-18)?
+    answer: "Claude evaluation; recommendation held for ratification at
+      tactic-dialog-review-aristotle-phronesis. Yes for the frontier, not yet
+      for the legacy reading queue. New frontier items (the dialog nodes and
+      future minted items) carry no attributes.curriculum.priority integer:
+      sequence is encoded as blocked_by edges — the production rule lands as
+      blocked_by on tactic-reading-chunk-19-augustine-interior-teacher (head of
+      the remaining reading order) naming the three dialog nodes — and relative
+      urgency rides the attention system, which already compounds backward
+      through blocked_by, so the dialog nodes outrank the queue they block with
+      no authored per-node boost. The existing integer numbering on reading
+      chunks stays for now, for two reasons: /sync-reader names reader files by
+      the integer so the device sort order is stable (a computed attention score
+      would rename files between syncs, shuffling in-progress reading), and the
+      2026-07-09 attention rationale on this node deliberately scoped boosts to
+      the frontier-maintenance machinery with per-chunk curriculum entries
+      unboosted — per-chunk authored boosts would recreate the hand-maintained
+      roster the frontier rule declines. Greenfield direction: retire the
+      numbering by deriving reader sort order from the blocked_by chain (a
+      /sync-reader change plus edge backfill on the chunk nodes), as a separate
+      later round. Recorded 2026-07-18 /reading-review chunk 5."
 tooling_goals:
   - kind: sensor
     statement: "review-coverage table in the graph digest / align-audit report — per

@@ -1643,6 +1643,38 @@ clarifications:
       tactic-graph-tick-node-lane-auto-merge's merge reconciler are unchanged.
       Implementation retained as draft tactic
       tactic-graph-selector-reviewed-exclusion. Recorded 2026-07-18 interview."
+  - question: An office-hours drain session fixed a parked node and pushed the fix,
+      but the office_hours park was left set — the node was even re-parked
+      before a later session finally cleared it
+      (tactic-phase-standup-audit-lens, 2026-07). Clarification 4 says a park
+      clears as a side effect of "any interactive-session commit touching the
+      node." Why didn't that fire for the drain lane, and what must a drain
+      session do at termination?
+    answer: "Clarification 4's side-effect clear only fires when a commit touches
+      the parked node's own frontmatter, but a self-modification drain session's
+      fix commit lands on the PR branch and never touches the node's
+      office_hours field — so nothing clears the park incidentally, and the
+      separate clear-park graph-commit to main is not forced by session
+      termination and was forgotten (the observed park -> drain -> re-park ->
+      clear sequence on tactic-phase-standup-audit-lens). Requirement: the
+      self-modification drain lane must terminate with a MANDATORY explicit park
+      disposition executed through a scripted atomic primitive — clear-park
+      <node-id> [note] on green CI (office_hours -> null landed on main via
+      graph-commit), or re-park via park-node with an updated reason on red or
+      blocked CI — and never leave a drained node in an ambiguous still-parked
+      state. This refines clarification 4, it does not replace it: clarification
+      4's incidental side-effect clear remains the mechanism for the read-only
+      human office-hours lane (which drains nothing and legitimately never
+      un-parks, per .claude/skills/office-hours/SKILL.md:374-378); the drain
+      lane adds an explicit terminal disposition on top of it. The disposition
+      must be a single scripted graph operation — the inverse of park-node — not
+      a hand-rolled inline readNode -> office_hours=null -> writeNode ->
+      graph-commit sequence, precisely so it cannot be partially completed,
+      skipped, or forgotten between the fix push and session end. This
+      generalizes the one-off manual clear-park sequence noted at
+      tactic-tick-scriptable-then-spawn body (the clear-park inverse of
+      park-node) into a first-class primitive. Implementation retained as draft
+      tactic tactic-clear-park-primitive. Recorded 2026-07-18 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
