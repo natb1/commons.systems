@@ -204,24 +204,30 @@ should say so explicitly.
 
 `/align-tactics` decomposes one strategy into N tactics, so idempotency is
 **per-tactic**, not a single strategy-level marker. Before planning, read the
-strategy's existing non-draft child tactics. The store serializes arrays as
-YAML **block sequences**, so `serves` renders as `serves:` on its own line
-followed by `  - <strategy-id>` — an inline-flow grep for
-`serves: [<strategy-id>]` matches nothing. Find the children with
-`grep -rl '^  - <strategy-id>$' intentions/tactic-*.md` (or, to see the
-surrounding `serves:` block, `grep -B1 -A2 '^  - <strategy-id>$'
-intentions/tactic-*.md` — both anchor on the target id, so neither returns
-tactics serving a *different* strategy), then read each candidate's
-`phase` and keep the `phase`-set, non-`draft`/non-`done` ones. A
-tactic already at `phase: implement` with a plan in its body is done work — do
-not re-plan it. A partial prior run (some tactics landed, some not) resumes by
-planning only the missing ones. Draft tactics (`phase` absent) are **input**,
-not landed work: they are consumed in step 2 — **but first check
-`office_hours`**: a `phase`-absent child with `office_hours` set is not an
-`/align-strategy`-retained draft, it is a **born-parked** tactic from a prior
-round (Step 4), already-decided human-owned work. Skip it (at most reconfirm it
-is still needed); never run it through the step-2 finalize/split/merge/prune
-draft path.
+strategy's existing child tactics with the census script:
+
+```
+npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> intentions
+```
+
+It finds every tactic whose `serves` block references `<strategy-id>` (the
+store serializes arrays as YAML block sequences, so this is not a simple
+inline-flow grep) and, per matching tactic, reports its classification
+(`draft` / `born-parked` / `open` / `done`), `phase`, first line of
+`office_hours.reason` when parked, `statement`, and body `## ` headings. The
+census's `classification` field already applies the taxonomy below — read it
+off the output rather than re-deriving it from a raw `phase`/`office_hours`
+read.
+
+A `done` tactic — already at `phase: implement` with a plan in its body — is
+done work; do not re-plan it. A partial prior run (some tactics landed, some
+not) resumes by planning only the tactics the census reports as still `open`
+or `draft`. `draft` tactics (`phase` absent, no `office_hours`) are **input**,
+not landed work: they are consumed in step 2. `born-parked` tactics (`phase`
+absent, `office_hours` set) are not `/align-strategy`-retained drafts — they
+are already-decided human-owned work from a prior round's Step 4. Skip them
+(at most reconfirm still needed); never run them through the step-2
+finalize/split/merge/prune draft path.
 
 ## Step 1 — Scope and two-sided drift review
 
