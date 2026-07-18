@@ -375,21 +375,41 @@ write it into the tactic's node body. Reuse `/plan-issue`'s Explore/Plan
 subagent fan-out and its plan-quality bar verbatim — only the landing changes.
 
 **Explore/Plan fan-out.** This skill runs in the caller's thread, so it fans
-out the built-in `Explore` and `Plan` subagents directly (no orchestrator, no
-nesting), exactly as `/plan-issue` Steps 3–5:
+out the built-in `Explore` and `Plan` subagents directly (no intermediate
+orchestrator, no nesting), exactly as `/plan-issue` Steps 3–5:
 
-- Launch up to **3** `Explore` agents in parallel (usually 1), reuse-first:
-  have them hunt existing functions, utilities, and patterns to reuse rather
-  than propose new code. The built-in agents skip `CLAUDE.md` and git history,
-  so pass the tactic's scope and the strategy's intent inline; require a
-  compact `path:line`-anchored findings block, not whole-file dumps.
+**Model routing (strategy-token-economy clarification 10).** This
+`/align-tactics` session is the **Sonnet orchestrator** — the router launches
+it on Sonnet (`dispatch-graph-execute`'s `ORCH_MODEL="sonnet"`), and it stays
+Sonnet: it fans out subagents, threads their findings, and authors node bodies
+and frontmatter, but it does **not** itself decide plan substance. The
+decompose-to-signal judgment — the plan's units, their scope, sequencing, and
+recommended models — is the **`Plan` subagent's** work, and that subagent is
+launched with an explicit **`model: opus`** so its reasoning runs on Opus
+independent of this session's Sonnet model. The `Explore` reuse-hunt is a
+mechanical search and stays cost-demotable — launch it with `model: sonnet` (or
+`model: haiku` for a small, well-scoped hunt); never force it onto Opus.
+
+- Launch up to **3** `Explore` agents in parallel (usually 1), reuse-first,
+  each with an explicit `model: sonnet` (or `model: haiku` for a small hunt) —
+  demotable, never Opus. Have them hunt existing functions, utilities, and
+  patterns to reuse rather than propose new code. The built-in agents skip
+  `CLAUDE.md` and git history, so pass the tactic's scope and the strategy's
+  intent inline; require a compact `path:line`-anchored findings block, not
+  whole-file dumps.
 - Launch **1–3** `Plan` agents (usually 1; multiple only for large or
   architectural work, each a distinct framing per
   `.claude/rules/design-proposals.md` — lead with the ideal greenfield design,
-  add a brownfield migration path when warranted). Feed each the Explore
-  findings, the tactic scope, the plan schema below, and the `/implement-unit`
-  model-selection heuristic inline (the `Plan` agent will not read the skill
-  file). Synthesize multiple proposals into a single recommended approach.
+  add a brownfield migration path when warranted), each launched with an
+  explicit **`model: opus`** (the Agent/Task tool's `model` parameter) so the
+  decompose-to-signal reasoning runs on Opus regardless of this session's
+  Sonnet model — do **not** let the `Plan` subagent inherit the orchestrator's
+  Sonnet by omitting `model`. Feed each the Explore findings, the tactic scope,
+  the plan schema below, and the `/implement-unit` model-selection heuristic
+  inline (the `Plan` agent will not read the skill file). Synthesize multiple
+  proposals into a single recommended approach, then author the node body from
+  that Opus output — the Sonnet orchestrator transcribes and reconciles the
+  plan into the schema; it does not rewrite the plan's substance.
 - Trivial tactics (a typo, a one-line change, a simple rename) skip the
   fan-out — write the one-unit plan directly.
 
