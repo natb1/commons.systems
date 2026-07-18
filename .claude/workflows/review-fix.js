@@ -497,11 +497,16 @@ log(
 // always-on `/code-review` quality finder, the `/security-review` pass, and the
 // surface-gated security/cost domain lenses. Cheaper mechanical stages downstream
 // (dedup, classify) stay on Sonnet; fix-authoring is already Opus.
+// Lane-A finders (code-review, security-review) run the trust-the-built-in
+// review-and-fix skills and return a { fixed, residue } envelope (LANE_A_SCHEMA),
+// so they must launch with that schema — NOT the shared FINDINGS_SCHEMA. Their
+// prompts are already Lane-A-aware (finderPrompt branches on the name). Lane-B
+// finders (everything else) keep the FINDINGS_SCHEMA findings-list shape.
 const launchFinder = (name) => () =>
   agent(finderPrompt(name, _a), {
     model: 'opus',
     agentType: 'general-purpose',
-    schema: FINDINGS_SCHEMA,
+    schema: LANE_A.has(name) ? LANE_A_SCHEMA : FINDINGS_SCHEMA,
     label: `find:${name}`,
     phase: 'finders',
   });
@@ -515,6 +520,9 @@ const qualityResults = await parallel(qualityFinders.map(launchFinder));
 let securityResults = [];
 let coverage_incomplete = false;
 let coverage_note = '';
+// A throttled wave 1 (qualityDead) now ALSO correctly means "no code-review
+// self-fixes were applied" — code-review is a Lane-A finder that applies its own
+// edits, so a null result contributes no fixed/residue to the Lane-A capture below.
 const qualityDead = qualityResults.filter(Boolean).length === 0;
 if (securityFinders.length && qualityDead) {
   coverage_incomplete = true;
@@ -528,11 +536,68 @@ if (securityFinders.length && qualityDead) {
   securityResults = await parallel(securityFinders.map(launchFinder));
 }
 
-const finderResults = qualityResults.concat(securityResults);
+// Tag each result with the finder NAME that produced it. The two results arrays
+// are parallel to their source finder-name arrays (qualityFinders/securityFinders),
+// so zip each before concatenating. The name association is load-bearing: it lets
+// the Lane-B gather below filter out the Lane-A results by name (their shape is
+// { fixed, residue }, not { findings }) once other Lane-B finders are mixed into
+// securityResults — positional array-concat alone would lose it.
+const finderResults = qualityFinders
+  .map((name, i) => ({ name, res: qualityResults[i] }))
+  .concat(securityFinders.map((name, i) => ({ name, res: securityResults[i] })));
 
-// Gather: surviving finder findings + the prescanned codeql/npm findings.
+// --- Lane-A capture (code-review, security-review) ---------------------------
+// These two finders bypass the shared dedup→classify→verify→fix pipeline. Capture
+// their raw { fixed, residue } results here, separately from the Lane-B gather, so
+// a LATER unit's "residue" phase can dispose of the residue and merge the fixes.
+// code-review is wave 1 (qualityFinders has exactly one entry when present).
+const codeReviewResult = qualityResults[qualityFinders.indexOf('code-review')] || null;
+// security-review is a wave-2 finder (only launched when surface === 'code');
+// securityFinders and securityResults are parallel/same-index.
+const securityReviewIdx = securityFinders.indexOf('security-review');
+const securityReviewResult = securityReviewIdx >= 0 ? securityResults[securityReviewIdx] : null;
+
+// Seed fixed[] early with code-review's own applied fixes. Synthesize sequential
+// ids in array order. Unit 4 merges laneAFixed into the final fixed[] envelope;
+// this unit only builds and exposes it. security-review applies no fixes (its
+// fixed[] is always empty), so only code-review contributes here.
+const laneAFixed = ((codeReviewResult && codeReviewResult.fixed) || []).map((e, n) => ({
+  id: `code-review-fix-${n}`,
+  location: e.location,
+  fix_summary: e.fix_summary,
+  touched_files: e.touched_files,
+}));
+
+// Raw Lane-A results, exposed for later units to consume.
+const laneAResults = {
+  'code-review': codeReviewResult,
+  'security-review': securityReviewResult,
+};
+// Combined Lane-A residue, each item tagged with its source so Unit 3 knows which
+// finder produced it.
+const laneAResidue = []
+  .concat(
+    ((codeReviewResult && codeReviewResult.residue) || []).map((r) =>
+      Object.assign({}, r, { source: 'code-review' })
+    )
+  )
+  .concat(
+    ((securityReviewResult && securityReviewResult.residue) || []).map((r) =>
+      Object.assign({}, r, { source: 'security-review' })
+    )
+  );
+log(
+  `finders: Lane-A captured — code-review fixes=${laneAFixed.length}, ` +
+    `residue=${laneAResidue.length}`
+);
+
+// Gather: surviving Lane-B finder findings + the prescanned codeql/npm findings.
+// Lane-A results (code-review, security-review) are EXCLUDED — their { fixed,
+// residue } shape carries no `findings`, and they are disposed of separately.
 let allFindings = [];
-for (const res of finderResults.filter(Boolean)) {
+for (const { name, res } of finderResults) {
+  if (LANE_A.has(name)) continue;
+  if (!res) continue;
   for (const f of res.findings || []) allFindings.push(f);
 }
 for (const f of _a.prescanned_findings || []) allFindings.push(f);
