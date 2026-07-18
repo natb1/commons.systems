@@ -5,7 +5,7 @@ statement: evaluate Claude Code OTel export (token/cost metrics +
   workflow.run_id grouping + OTEL_RESOURCE_ATTRIBUTES node/phase stamping) as a
   local sensor/attribution substrate, replacing transcript-scraping
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Surfaced 2026-07-08 when the author asked whether a recent Claude
   Code change (workflow.run_id / workflow.name OTel attributes on
@@ -27,7 +27,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: implement
 execution: null
 validates: []
 blocked_by: []
@@ -36,87 +36,111 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# evaluate Claude Code OTel export (token/cost metrics + workflow.run_id grouping + OTEL_RESOURCE_ATTRIBUTES node/phase stamping) as a local sensor/attribution substrate, replacing transcript-scraping
 
-> Draft (no `phase`): retained tactical context, not selectable work. `/align-tactics`
-> owns whether this is decomposed, superseded, or dropped. It is a *mechanism*
-> proposal for an already-recorded requirement — do not read it as a re-plan of the
-> shipping attribution tactics named below.
+# Evaluate Claude Code OTel export as a local sensor/attribution substrate, replacing transcript-scraping
 
-## What surfaced this
+## Context
 
-A Claude Code change note: *"Added `workflow.run_id` and `workflow.name`
-OpenTelemetry attributes to telemetry emitted by workflow-spawned agents, so a
-workflow run's activity can be reconstructed from OTel data."* The question was
-whether this — or pre-existing Claude Code OTel data — could serve any graph
-strategy. It can, as a **sensor/attribution substrate**, not as a new intent.
+Surfaced 2026-07-08: a Claude Code change added `workflow.run_id` /
+`workflow.name` OpenTelemetry attributes to telemetry from workflow-spawned
+agents. It maps onto an already-recorded requirement, not a new intent —
+`strategy-token-economy`'s condition that a session unattributable to a node and
+phase is invisible to every control loop, and `strategy-graph-native-dispatch`'s
+need to reconstruct a tick's activity (hence the honest multi-entry `serves`).
 
-## The requirement it maps onto (already recorded)
+The requirement is **currently satisfied by transcript-scraping**:
+`tactic-token-audit-node-attribution` (PR #2777) stamps `node_id` into the
+`<session-id>.dispatch-stamp.json` sidecar and joins it in `aggregate-usage.sh`;
+`tactic-token-economy-sensor` (PR #2779, done) registers the `token-economy`
+sensor with utilization from the statusline `rate_limits.json`. Measured weakness
+of the scrape path (2026-06-26→07-03 audit): the unattributed `<none>` bucket was
+the single largest line, and workflow-spawned agents are exactly that blind spot.
 
-`strategy-token-economy` conditions (frontmatter): *"the token audit stays
-runnable and attributable across the router migration — a session that cannot be
-attributed to a node and phase is invisible to every control loop here."* That
-requirement is currently satisfied by **transcript-scraping**:
+OTel is the **greenfield alternative substrate**: `code.claude.com/docs/en/monitoring-usage`
+documents `claude_code.token.usage` / `claude_code.cost.usage` metrics keyed by
+`session.id`/`model`/`skill.name`, a `workflow.run_id` log attribute that groups a
+whole workflow run *including nested agents*, arbitrary `OTEL_RESOURCE_ATTRIBUTES`
+stamped on every metric, and export to a **local** OTLP collector (no cloud
+backend). The greenfield shape: the launcher sets
+`OTEL_RESOURCE_ATTRIBUTES="node.id=<id>,phase=<phase>"` at session start, so every
+cost/token metric is attributable *by construction*, removing the fragile
+session-id→node_id sidecar join and skill-frame phase detection.
 
-- `tactic-token-audit-node-attribution` (PR #2777, review) — stamps `node_id`
-  into the `<session-id>.dispatch-stamp.json` sidecar and joins it in
-  `aggregate-usage.sh`; phase is inferred by skill-frame command-name detection.
-- `tactic-token-economy-sensor` (PR #2779, qa) — registers the `token-economy`
-  registry sensor; utilization comes from the statusline `rate_limits.json`.
+**This tactic is an evaluation, not an adoption.** It is off the success-signal
+path (no `validates`; unboosted → derived-demoted rank). Its deliverable is a
+written recommendation; the decision to *adopt* the OTel substrate — which deepens
+reliance on the Anthropic-provided export surface (owned by
+`delegation-anthropic-claude`, and this strategy explicitly manages the
+"promote the vendor via spend" divergence) — is an **author capture-risk /
+attachment decision left to office-hours**, not something this evaluation commits.
 
-Measured weakness of the transcript-scrape path (2026-06-26→07-03 audit): the
-unattributed `<none>` bucket was the single largest line ($5,680 proxy /
-$1,842 real, 19,733 turns), and Unit 4 of #2777 fixes a subagent **double-count**.
-Workflow-spawned agents are exactly that blind spot.
+## Unit 1 — stand up a local OTel export and measure attribution quality vs the scrape path
 
-## Why OTel fits (verified against Claude Code docs, 2026-07-08)
+**Recommended model:** opus
 
-`code.claude.com/docs/en/monitoring-usage`:
+Judgment-heavy: it weighs a greenfield substrate against a shipped one and must
+bound the claim honestly (per the draft's caveats) before recommending.
 
-- **Metrics** `claude_code.token.usage` and `claude_code.cost.usage`, keyed by
-  `session.id`, `model`, and `skill.name` — structured, no transcript parse.
-- **`workflow.run_id`** (log-event attribute, `wf_`-prefixed) groups all API
-  requests and tool results of one workflow run *including nested agents*.
-  `dispatch-graph-tick` **is** a `Workflow` (one agent per selected node), so a
-  whole tick and its subagents reconstruct into one run — this is the direct
-  answer to the subagent double-count and the `<none>` bucket.
-- **`workflow.name`** (log-event attribute) can carry node/phase, but is
-  redacted to `"custom"` unless `OTEL_LOG_TOOL_DETAILS=1`.
-- Exportable to a **local** OTLP collector (`OTEL_EXPORTER_OTLP_ENDPOINT`,
-  default `localhost:4317`) — no cloud backend required, consistent with
-  local-first sensors.
-- Arbitrary `OTEL_RESOURCE_ATTRIBUTES` are stamped on every metric/event.
+Scope:
+- Enable Claude Code telemetry locally only: `CLAUDE_CODE_ENABLE_TELEMETRY=1`
+  with `OTEL_EXPORTER_OTLP_ENDPOINT` pointing at a **local** OTLP collector
+  (default `localhost:4317`) — no cloud backend, consistent with the local-first
+  sensor doctrine (`read-sensors.ts`). Set
+  `OTEL_RESOURCE_ATTRIBUTES="node.id=<id>,phase=<phase>"` at a dispatch worker's
+  session start (the launcher, `dispatch-launch-worker`) for a small trial set of
+  nodes.
+- Run a representative slice of dispatch work (including a `dispatch-graph-tick`
+  Workflow, which spawns one agent per selected node) with export on, and measure:
+  does OTel `token.usage`/`cost.usage` — grouped by the resource attributes and
+  `workflow.run_id` — attribute cost to node+phase for **workflow-spawned
+  subagents** that the transcript-scrape `<none>` bucket currently misses? Compare
+  the OTel node/phase attribution against the sidecar-join attribution for the
+  same window.
+- Honor the draft's caveats explicitly in the writeup: cost/token are *metrics*
+  while `workflow.name` is a *log event* redacted to `"custom"` unless
+  `OTEL_LOG_TOOL_DETAILS=1`, so reaching node+phase on the cost numbers needs the
+  resource-attribute stamping (above) or a logs↔metrics join on
+  `session.id`/`workflow.run_id` — **not** a naive "`workflow.name` on the cost
+  metric," which does not exist.
 
-**Greenfield shape:** the dispatch worker launcher sets
-`OTEL_RESOURCE_ATTRIBUTES="node.id=<id>,phase=<phase>"` at session start, so
-every `token.usage` / `cost.usage` metric is **attributable by construction** —
-removing the fragile session-id→node_id sidecar join and skill-frame phase
-detection entirely.
+Reuse:
+- `.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh` and the
+  `<session-id>.dispatch-stamp.json` sidecar (`dispatch-stamp-session`) — the
+  incumbent attribution path this evaluation benchmarks against.
+- `dispatch-graph-tick` (a `Workflow`) — the concrete subagent-double-count /
+  `<none>`-bucket case the OTel `workflow.run_id` grouping is claimed to fix.
+- `packages/intentionsutil/scripts/read-sensors.ts` — the local-first sensor
+  doctrine and the `token-economy` sensor the substrate would eventually feed.
 
-## Two downstream consumers (why the multi-entry `serves`)
+## Unit 2 — write the recommendation: adopt / defer / supersede, with the capture-risk decision framed for the author
 
-The telemetry pipeline (enable `CLAUDE_CODE_ENABLE_TELEMETRY=1` + a local
-collector) is one shared instrument feeding two readings, which is why this is
-one tactic serving two strategies rather than nearest-fit placement:
+**Recommended model:** opus
 
-1. **`strategy-token-economy`** — OTel token/cost metrics + resource-attribute
-   node/phase stamping as the attribution substrate for the token audit.
-2. **`strategy-graph-native-dispatch`** — `workflow.run_id` reconstruction of a
-   tick's activity (nodes selected, agents spawned, failures) as a second,
-   independent reading source for `tactic-dispatch-lifecycle-sensor` (which today
-   derives its reading from the `intentions/` git log + the router selection log).
+Scope:
+- Produce a written evaluation (as this tactic's PR artifact — a doc under the
+  audit or dispatch skill, or a decision note) recommending one of: **adopt** the
+  OTel substrate (and in what sequence relative to the shipped scrape path —
+  e.g. supersede the sidecar once proven), **defer**, or **drop**. Ground the
+  recommendation in Unit 1's measured attribution-quality comparison.
+- Frame the **capture-risk decision explicitly for the author**: adopting the
+  OTel substrate deepens reliance on the Anthropic export surface
+  (`delegation-anthropic-claude`) and stands up new local infra (a collector).
+  State the tradeoff and mark the adoption decision as author-owned
+  (office-hours), not something the evaluation itself commits. Do not enable
+  telemetry export as a standing default as part of this tactic.
 
-## Honest caveats (bound the claim before decomposing)
+Dependencies: Unit 2 depends on Unit 1.
 
-- Cost/token are **metrics**; `workflow.name` is a **log event** redacted by
-  default. Reaching node+phase on the *cost numbers* needs either a
-  logs↔metrics join (on `session.id` / `workflow.run_id`) or the
-  resource-attribute stamping above — **not** a naive "`workflow.name` on the
-  cost metric," which does not exist.
-- Requires standing up telemetry export + a local collector: new infra and a
-  deeper lean on the Anthropic-provided export surface (owned by
-  `delegation-anthropic-claude`). Weigh capture risk there.
-- Overlaps in-flight tactics #2777 / #2779. The disposition here is
-  *evaluate as greenfield substrate*, not *replace shipping work mid-flight*;
-  `/align-tactics` decides sequencing (e.g. adopt after those land, or supersede
-  the sidecar path once proven).
+## Verification
+
+Prose — the deliverable is an evaluation, not a runtime behavior change:
+- Unit 1's measurement must show, for the trial window, whether OTel node/phase
+  attribution covers workflow-spawned subagents that the transcript-scrape
+  `<none>` bucket misses — a concrete before/after on the audit's largest blind
+  spot, not an assertion.
+- Unit 2's recommendation must land a clear adopt/defer/drop verdict grounded in
+  that measurement, with the capture-risk / new-infra tradeoff framed as an
+  author office-hours decision. No standing telemetry-export default is enabled by
+  this tactic.
+- No production routing or sensor behavior changes as a result of the evaluation
+  alone; any adoption is a separate, author-approved follow-up.

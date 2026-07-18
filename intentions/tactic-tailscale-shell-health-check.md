@@ -26,7 +26,12 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-tailscale-shell-health-check
+  pr: 2874
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates:
   - strategy-tailscale-auth-visibility
 blocked_by: []
@@ -126,3 +131,20 @@ Manual (per machine, on the NixOS router host and the Darwin client): run
 status` reports Running → no banner. Run `sudo tailscale logout`, open a fresh
 interactive shell → the named banner and login URL print. Confirm a
 non-interactive shell (`zsh -c 'true'`) prints nothing.
+
+## needs-main residue
+
+- **id**: 7
+- **title**: Per-machine live switch and real logout/login cycle
+- **url_path**: current
+- **expected_outcome**: On every real machine, a logged-out state surfaces the
+  banner at shell open and a healthy state stays silent, verified after an
+  actual `home-manager switch` activation.
+- **finding**: Requires an actual `sudo tailscale logout` on each live machine
+  (real side effects on that machine's auth state) plus a per-machine
+  `home-manager switch` and re-login cycle; explicitly left as an unchecked box
+  in this tactic's own Verification section and not assertable by an automated
+  agent at QA time. The underlying shell logic (interactive guard, BackendState
+  parsing, AuthURL/remediation output, non-interactive silence, real
+  tailscale/jq invocation) was independently verified script-verifiable by 6
+  other QA items, all PASS, on the NixOS router host during this qa-fix pass.

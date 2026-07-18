@@ -28,7 +28,7 @@ attention: null
 phase: implement
 execution:
   branch: tactic-participation-log-instrument
-  pr: null
+  pr: 2873
   attempts: {}
   markers: []
   strategy_fingerprint: ad4311f339fb4ca9e66a660b49ffa583735eb4d6c3af4bca3a1302f169a38a3b
@@ -178,3 +178,26 @@ live store today the script reports an empty log, quotes
 `strategy-external-calibration`'s zero reading, and exits 0. Typecheck:
 `.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app
 packages/intentionsutil`.
+
+## needs-main residue
+
+QA (PR #2873) disposition-classified this item `needs-main` — a documented
+planned deferral, not a defect. Verified downstream, not at this PR's merge.
+
+- id: 8
+  title: Actual non-null strategy reading is out of scope for this instrument PR
+  url_path: current
+  expected_outcome: This PR is not expected to produce a non-null reading on
+    strategy-join-existing-practice — it delivers the parser/summary module
+    and report script only. Producing a real reading is deferred by design
+    and must not be treated as a failing acceptance criterion here.
+  finding: Producing an actual non-null reading/gap on
+    strategy-join-existing-practice requires real off-repo participation,
+    which the sibling tactic tactic-join-indieweb (blocked_by this tactic)
+    logs. This instrument-only PR intentionally stops at the report script;
+    strategy-join-existing-practice.reading remains null after this PR by
+    design, per this tactic's own rationale and Context section. Verifiable
+    post-merge only by confirming strategy-join-existing-practice.reading is
+    still null and no code in this PR attempts to write it (the report
+    script's `readNode`-only, no-write posture, confirmed structurally by QA:
+    `git diff --name-only origin/main...HEAD` touches no `intentions/` path).

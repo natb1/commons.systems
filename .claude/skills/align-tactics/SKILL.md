@@ -1,6 +1,6 @@
 ---
 name: align-tactics
-description: Autonomously break a recorded `strategy-*` intention node into PR-sized tactic subtrees carrying full clean-session plans — the graph-native successor to `/plan-issue` and `/file-issue`'s epic-structuring role. Two-sided drift review, decompose to the signal, plan each claude-eligible tactic into its node body, park the rest; lands via `graph-commit`. Never files a GitHub issue; never `AskUserQuestion` mid-run.
+description: Autonomously break a recorded `strategy-*` intention node into PR-sized tactic subtrees carrying full clean-session plans, or finalize/re-plan a single frozen `tactic-*` node directly — the graph-native successor to `/plan-issue` and `/file-issue`'s epic-structuring role. Two-sided drift review, decompose to the signal, plan each claude-eligible tactic into its node body, park the rest; lands via `graph-commit`. Never files a GitHub issue; never `AskUserQuestion` mid-run.
 user-invocable: true
 ---
 
@@ -38,21 +38,30 @@ It inherits along two axes, each with a part it deliberately does **not** take:
 
 ## Trigger and input
 
-On-demand or router-invoked. The sole argument is the id of the strategy to
-decompose: `/align-tactics strategy-<slug>`. With no argument, stop and report
-that a strategy id is required — this skill never selects its own target.
+On-demand or router-invoked. The sole argument is a node id, either:
+
+- `/align-tactics strategy-<slug>` — decompose a recorded strategy into its
+  executable tactic subtree (Steps 1–5 below), or
+- `/align-tactics tactic-<slug>` — finalize or re-plan a single **frozen**
+  tactic (draft/raw, or soft-frozen — the router selects exactly the tactics
+  its `frozenTacticSelectable` gate approves,
+  `packages/intentionsutil/src/router.ts:482`). This is the per-node target
+  path (see "Tactic target — per-node finalize or re-plan", below).
+
+With no argument, stop and report that a node id (`strategy-<slug>` or
+`tactic-<slug>`) is required — this skill never selects its own target.
 
 ## Step 0 — Claim and isolate
 
-Before the first write, claim the target strategy's node id and author in
-its worktree — the same uniform node-id reservation discipline the router's
-fan-out workers follow (`strategy-graph-native-dispatch`'s 2026-07-06
+Before the first write, claim the target node id (strategy or tactic) and
+author in its worktree — the same uniform node-id reservation discipline the
+router's fan-out workers follow (`strategy-graph-native-dispatch`'s 2026-07-06
 concurrency-safety clarification). Never author in the shared `main`
 checkout: a concurrent session's dirty tracked file blocks this run's
 `graph-commit` rebase, and a stale read races live phase state.
 
-1. **Resolve the target node id** — the `strategy-<slug>` argument (this
-   skill never selects its own target).
+1. **Resolve the target node id** — the `strategy-<slug>` or `tactic-<slug>`
+   argument (this skill never selects its own target).
 2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
    already exists with a live session — `worktree_has_live_session <path>`
    (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
@@ -60,13 +69,92 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    another session: stop and report the held claim, then end the run. A
    held claim is **not** an `office_hours` park (it is not one of the three
    autonomy-contract conditions below) and **not** a defect.
-3. **Enter the worktree.** Otherwise create or re-enter it — native
-   `EnterWorktree` with the node id as the worktree name, or the
-   `provision-node-worktree`
-   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`)
-   primitive — and do all authoring and the step-5 `graph-commit` from
+3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+   or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
-   liveness rule the router uses, so no separate lock is needed.
+   liveness rule the router uses, so no separate lock is needed. **Prefer
+   `provision-node-worktree`**
+   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`): it
+   fetches `origin/main` and cuts the worktree fresh from it, so no separate
+   freshness check is needed after it. If instead this run uses native
+   `EnterWorktree`, **or** re-enters an **already-existing** worktree by any
+   means **other than `provision-node-worktree`**, running
+   `.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh` is
+   **mandatory** as the very first action in that worktree — **before any
+   graph read** (before any `readNode` or drift grep below). A non-zero exit
+   means the checkout is stale **or** the `git fetch` itself failed; either
+   way, **STOP** and freshen (`git fetch origin main && git merge
+   origin/main`) before proceeding. Never treat a failed fetch as license to
+   proceed on unverified state.
+
+## Tactic target — per-node finalize or re-plan
+
+When the argument is a `tactic-<slug>` (not a `strategy-<slug>`), this session
+operates on **exactly one pre-existing tactic node** — the router queued it
+because its `frozenTacticSelectable` gate approved it as an `align-tactics`
+candidate (`packages/intentionsutil/src/router.ts:482`;
+`resolveFrozenDescendant` at line 453 is the strategy-side inverse the selector
+uses). There is **no** strategy decomposition, no draft sweep, and no `rounds`
+bump here — Steps 1–5 below are the strategy-target flow; this subsection is the
+parallel tactic-target flow, reusing pieces of them **by reference**. It runs
+the same Step 0 claim/worktree mechanics (keyed on the tactic id) and the same
+Autonomy contract (below).
+
+A frozen tactic target is **either** draft/raw or soft-frozen; read its
+frontmatter to tell which:
+
+- **Draft/raw** (`phase` absent — `phase: null`, never decomposed) →
+  **finalize** it. This is Step 3 ("Plan each claude-eligible tactic") applied
+  to exactly this **one** tactic: run the Explore/Plan fan-out (or, for a
+  trivial tactic, write the plan directly), landing it at `phase: implement`
+  with a full clean-session plan in its body per the Step-3 plan schema. Do
+  **NOT** sweep the serving strategy's other draft tactics — that draft
+  consume/split/merge/prune path is the strategy-target flow's job (Step 2 item
+  2). Do **NOT** bump the strategy's `rounds` counter — round accounting is
+  completion-time and prod-verified (see "Strategy round accounting" in Step 5).
+  **Whole-node reconcile** (clarification 32, per "Re-evaluation mode" item 2):
+  rewrite any stale draft narrative in `statement`, `rationale`,
+  `attention.rationale`, and the body so none of it contradicts the finalized
+  state — **while preserving the authored `attention.boost` value** (do not
+  reset or renumber it). Frontmatter on landing: `status: codified`,
+  `phase: implement`, `execution: null`, and `validates: []` unless this tactic
+  itself produces the strategy's signal reading (in which case
+  `validates: [<strategy-id>]`, the Step 2 item 5 convention).
+
+- **Soft-frozen** (`phase` already set to an in-flight value — `implement`,
+  `fix`, `qa` — but its `execution.strategy_fingerprint` entry for one serving
+  strategy is stale) → **re-plan** it. This is exactly "## Re-evaluation mode"
+  (below) applied to this **one** tactic instead of a strategy-wide open-child
+  sweep. Reconcile the whole node against the current serving-strategy substance
+  (the whole-node reconciliation bar, clarification 32, per Re-evaluation mode
+  item 2), re-stamp **only** the re-evaluated strategy's entry in
+  `execution.strategy_fingerprint` to the `{hash: strategyFingerprint(strategy),
+  sha: <origin/main sha>}` object form (Re-evaluation mode item 3) and leave
+  every other serving strategy's entry untouched (a tactic still at
+  `execution: null` has no map to re-stamp), and land via `graph-commit`.
+
+**Both cases land the single pre-existing node** via `graph-commit --base` —
+dump it first with `dump-node.ts`, the exact Step-5 "Capture a base manifest"
+mechanic, so a stale read of a live node is refused mechanically:
+
+```bash
+BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+  --out-dir "$TMPDIR/dump" <tactic-id>)
+packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
+```
+
+There is **no strategy edit** in either case — a per-node tactic-target session
+never touches the serving strategy's frontmatter (`rounds`, clarifications, or
+otherwise), in contrast to the strategy-target flow, which may. If a
+tactic-target session discovers the strategy's own record needs an edit, that is
+a record-completeness defect to name in a park (see the Autonomy contract's
+unrecorded-context framing), not something this session writes onto the
+strategy.
+
+**Autonomy contract binds unchanged.** A tactic target that hits requirement
+ambiguity, major scope deviation, or an unverifiable blocker parks the
+**tactic** node (never the strategy) via the same `office_hours` write mechanism
+in "Autonomy contract", below.
 
 ## Autonomy contract
 
@@ -156,13 +244,13 @@ carry retained tactical context from `/align-strategy`).
 **Eligibility sanity check.** Confirm the strategy is actually decomposable
 this round (`intentions/tactic-graph-native-dispatch.md` §3.1): `office_hours`
 null, signal unvalidated (`gap` non-null or `reading` null), the fresh-reading
-gate holds (`rounds.count == 0`, or a reading exists newer than
-`rounds.last_completed` — a null `reading` never satisfies "newer than"), it
-has no non-draft child tactics already on its signal path (the
-fifth §3.1 criterion — see Idempotency, above, which reads those children), and
-`rounds.count < 2`. If `rounds.count` is already at the cap
-with no fresh reading, park the strategy (round history as the reason) instead
-of burning a third round.
+gate holds (`rounds.last_aligned` is null — never aligned — or a reading
+exists dated strictly newer than `rounds.last_aligned` — a null `reading`
+never satisfies "newer than"), it has no non-draft child tactics already on
+its signal path (the fifth §3.1 criterion — see Idempotency, above, which
+reads those children), and `rounds.count < 2`. If `rounds.count` is already at
+the cap with no fresh reading, park the strategy (round history as the reason)
+instead of burning a third round.
 
 Drift review is **two-sided** (strategy clarification 8):
 
@@ -449,31 +537,53 @@ Per tactic:
 
 **Strategy round accounting.** Ensure the serving strategy carries a `rounds`
 object (`validateGraph` rule 12 — strategies only). On the first round,
-initialize `rounds: {count: 0, last_completed: null}` if null. `count`
-increments and `last_completed` timestamps when the round's **final** tactic
-completes — a completion-time write behind prod verification
+initialize `rounds: {count: 0, last_completed: null, last_aligned: null}` if
+null. `count` increments and `last_completed` timestamps when the round's
+**final** tactic completes — a completion-time write behind prod verification
 (`intentions/tactic-graph-native-dispatch.md` §1.1; in the bootstrap interim
-with no live router, that stamp is made by hand at completion). Any strategy
+with no live router, that stamp is made by hand at completion). `last_aligned`
+is a **separate, landing-time** stamp: when a strategy round (this skill,
+invoked over the whole strategy — not the per-node finalize form below) lands
+its tactics for a strategy, this session also sets that strategy's
+`rounds.last_aligned` to the round's commit date (`date -u +%Y-%m-%d`) via
+`write-node.ts`, bundled into the **same** `graph-commit` as the round's
+tactics. `last_aligned` tracks when the strategy was last decomposed, distinct
+from `count`/`last_completed`, which stay keyed to tactic-completion time (per
+clarification 22) — its semantics are unchanged by this stamp. A **per-node
+finalize** invocation (`/align-tactics <tactic-id>`, i.e. passing a specific
+tactic id argument) does **not** stamp `last_aligned` — it is not a strategy
+round and never bumps `rounds` at all (per clarification 52). Any strategy
 frontmatter this session does change (a drift clarification, a park, the
-`rounds` init) lands via `graph-commit <strategy-id>`, bundled with the round's
-tactics when small.
+`rounds` init, the `last_aligned` stamp) lands via `graph-commit
+<strategy-id>`, bundled with the round's tactics when small.
 
 **Fingerprint honesty.** `execution.strategy_fingerprint` is a **per-strategy
-map** `{<strategy-id>: <fingerprint>}` — one entry per serving strategy — that
+map** `{<strategy-id>: {hash, sha}}` — one entry per serving strategy — that
 the router's soft-freeze trigger compares against each serving strategy's
 current substance (strategy clarification 10). At mint time this session stamps
-only the **decomposed** strategy's entry: `{<decomposed-strategy-id>:
-<fingerprint>}`, where `<fingerprint>` is `strategyFingerprint(strategy)` from
-`packages/intentionsutil/src/router.ts` — always that helper, never a
-hand-computed hash. A serving strategy absent from the map is never stale
-(per-strategy null), so an honest multi-serves tactic is not born frozen against
-its other serving strategies; those entries are filled by whichever session
-decomposes or re-evaluates each of them. A tactic not yet advanced still carries
+only the **decomposed** strategy's entry: `{<decomposed-strategy-id>: {hash:
+strategyFingerprint(strategy), sha: <origin/main sha>}}`, where the `hash` is
+`strategyFingerprint(strategy)` from `packages/intentionsutil/src/router.ts` —
+always that helper, never a hand-computed hash — and `sha` is the origin/main
+commit the hash was taken against, obtained with `git rev-parse origin/main` in
+the bootstrap-interim hand-stamp path (a live router passes it through
+`apply-node-transition.ts --strategy-sha`). A serving strategy absent from the
+map is never stale (per-strategy null), so an honest multi-serves tactic is not
+born frozen against its other serving strategies; those entries are filled by
+whichever session decomposes or re-evaluates each of them. Untouched
+sibling-strategy entries in the same map are left as-is — this session converts
+only the key it is re-stamping, never a key it is not touching (opportunistic
+conversion, not bulk migration). A tactic not yet advanced still carries
 `execution: null` (no map to stamp); the map is seeded the first time an
 `execution` object exists. The bare-string form is deprecated-legacy — never
 emit it. In the bootstrap interim with no live router, the mint-time stamp is
 made by hand at completion; the freeze-on-mismatch rule is otherwise discharged
 by running re-evaluation in the **same session** as the strategy edit (below).
+
+Dropping the bare-string form entirely, and making `validate-graph` **reject**
+it, is sequenced future work (migration step 4), not this change — bare strings
+remain valid deprecated-legacy, and only classification-touched keys convert to
+the `{hash, sha}` object form.
 
 ## Re-evaluation mode
 
@@ -504,16 +614,27 @@ decompose fresh. It:
    fingerprint-triggered re-evaluation.
 3. Re-stamps **only the re-evaluated strategy's entry** in each surviving
    tactic's `execution.strategy_fingerprint` map — set
-   `map[<re-evaluated-strategy-id>] = strategyFingerprint(strategy)`
-   (`packages/intentionsutil/src/router.ts`), leaving every other serving
-   strategy's entry untouched — which unfreezes the subtree against this
-   strategy without disturbing the others. (A tactic still at `execution: null`
-   has no map to re-stamp until the machinery seeds one.)
+   `map[<re-evaluated-strategy-id>] = {hash: strategyFingerprint(strategy),
+   sha: <origin/main sha>}` (`hash` via `strategyFingerprint` from
+   `packages/intentionsutil/src/router.ts`; `sha` via `git rev-parse
+   origin/main` in the bootstrap-interim hand-stamp path, or
+   `apply-node-transition.ts --strategy-sha` under a live router), leaving every
+   other serving strategy's entry untouched — which unfreezes the subtree
+   against this strategy without disturbing the others. (A tactic still at
+   `execution: null` has no map to re-stamp until the machinery seeds one.)
 4. Lands the amendments via `graph-commit`.
 
 Until a live router exists, re-evaluation runs **inline** in the same session
 that recorded the strategy edit — the way every round on
 `strategy-graph-native-dispatch` has executed it by hand.
+
+**Per-node re-evaluation.** Under `tactic-graph-frozen-tactic-dispatch`, the
+router may now queue re-evaluation as a **per-node** `/align-tactics
+<tactic-id>` session targeting exactly one soft-frozen tactic, rather than only
+the strategy-wide open-child sweep this section historically described. The
+disposition bar is identical — the same whole-node reconciliation (item 2) and
+single-strategy re-stamp (item 3) — applied to the one target. See "Tactic
+target — per-node finalize or re-plan", above, for that flow.
 
 A strategy-corpus census script is planned as an enumeration hook for the
 open-child sweep above (`tactic-align-tactics-mechanical-floor` Unit 2);

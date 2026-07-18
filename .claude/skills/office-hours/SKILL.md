@@ -369,7 +369,13 @@ report where to engage, and stop. No graph write, no label, no phase action.
      `/align-strategy` or `/align-tactics` on `<node-id>`.
    - **Tactic node** — name the item's worktree `.claude/worktrees/<node-id>`
      ("engage here" when the current session's cwd is already it) and
-     `execution.pr` when non-null.
+     `execution.pr` when non-null. Advise the human that a parked worktree may
+     have gone stale while parked, so before resuming analysis there they
+     should run `assert-worktree-fresh`
+     (`.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh`) or
+     freshen via `git fetch origin main && git merge origin/main` — a non-zero
+     exit (stale checkout **or** failed fetch) means freshen first. This is
+     advice for the human to act on; this skill runs no such command itself.
 
    Un-parking is an explicit human graph edit — clear `office_hours` via
    `write-node` + `graph-commit`. There is no strip hook in this lane, and this

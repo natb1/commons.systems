@@ -21,6 +21,7 @@ import {
   isScopeStale,
   isStrategyStale,
   isFingerprintStale,
+  stampHash,
 } from "../src/transitions.js";
 
 function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
@@ -124,7 +125,7 @@ describe("decideTransition", () => {
 
   it("advances implement → qa on a clean pass", () => {
     const d = decideTransition({ ...base, phase: "implement" });
-    expect(d).toEqual({ phase: "qa", armMerge: false, hold: false, demote: false });
+    expect(d).toEqual({ phase: "qa", armMerge: false, hold: false, demote: false, clearMarkers: [] });
   });
 
   it("advances qa → review on a clean pass", () => {
@@ -133,13 +134,24 @@ describe("decideTransition", () => {
 
   it("arms auto-merge and writes no phase at clean review completion", () => {
     const d = decideTransition({ ...base, phase: "review" });
-    expect(d).toEqual({ phase: "review", armMerge: true, hold: false, demote: false });
+    expect(d).toEqual({ phase: "review", armMerge: true, hold: false, demote: false, clearMarkers: [] });
   });
 
   it("interrupts to fix on failing CI from any ladder phase", () => {
     for (const phase of ["implement", "qa", "review"]) {
       expect(decideTransition({ ...base, phase, ci: "failing" }).phase).toBe("fix");
     }
+  });
+
+  it("clears qa-done and reviewed on the fix interrupt so resume re-runs qa and review", () => {
+    const d = decideTransition({
+      ...base,
+      phase: "review",
+      ci: "failing",
+      markers: [PLANNED_MARKER, QA_DONE_MARKER, REVIEWED_MARKER],
+    });
+    expect(d.phase).toBe("fix");
+    expect(d.clearMarkers).toEqual([QA_DONE_MARKER, REVIEWED_MARKER]);
   });
 
   it("resumes out of fix at the marker-implied phase on green CI", () => {
@@ -150,18 +162,18 @@ describe("decideTransition", () => {
 
   it("stays in fix while CI is still red", () => {
     const d = decideTransition({ ...base, phase: "fix", ci: "failing" });
-    expect(d).toEqual({ phase: "fix", armMerge: false, hold: true, demote: false });
+    expect(d).toEqual({ phase: "fix", armMerge: false, hold: true, demote: false, clearMarkers: [] });
   });
 
   it("demotes to implement on a scope-fingerprint mismatch, before any other rule", () => {
     // Even with a clean forward path and a failing CI, scope-stale wins.
     const d = decideTransition({ ...base, phase: "review", ci: "failing", scopeStale: true });
-    expect(d).toEqual({ phase: "implement", armMerge: false, hold: true, demote: true });
+    expect(d).toEqual({ phase: "implement", armMerge: false, hold: true, demote: true, clearMarkers: [] });
   });
 
   it("holds at the completed phase on a strategy-fingerprint mismatch", () => {
     const d = decideTransition({ ...base, phase: "review", strategyStale: true });
-    expect(d).toEqual({ phase: "review", armMerge: false, hold: true, demote: false });
+    expect(d).toEqual({ phase: "review", armMerge: false, hold: true, demote: false, clearMarkers: [] });
   });
 
   it("scope-stale takes precedence over strategy-stale", () => {
@@ -229,13 +241,23 @@ describe("hasNeedsMainResidue", () => {
 
 describe("stampRound", () => {
   it("increments count and stamps last_completed from a null rounds", () => {
-    expect(stampRound(null, "2026-07-10")).toEqual({ count: 1, last_completed: "2026-07-10" });
+    expect(stampRound(null, "2026-07-10")).toEqual({
+      count: 1,
+      last_completed: "2026-07-10",
+      last_aligned: null,
+    });
   });
 
-  it("increments an existing count", () => {
-    expect(stampRound({ count: 1, last_completed: "2026-01-01" }, "2026-07-10")).toEqual({
+  it("increments an existing count and preserves last_aligned unchanged", () => {
+    expect(
+      stampRound(
+        { count: 1, last_completed: "2026-01-01", last_aligned: "2026-06-15" },
+        "2026-07-10",
+      ),
+    ).toEqual({
       count: 2,
       last_completed: "2026-07-10",
+      last_aligned: "2026-06-15",
     });
   });
 });
@@ -326,5 +348,35 @@ describe("scope stamp parsing + gates", () => {
     expect(isFingerprintStale({ "strategy-a": "fp" }, "strategy-a", "fp")).toBe(false);
     expect(isFingerprintStale({ "strategy-a": "old" }, "strategy-a", "fp")).toBe(true);
     expect(isFingerprintStale({ "strategy-b": "old" }, "strategy-a", "fp")).toBe(false);
+  });
+
+  it("isFingerprintStale: object-form {hash, sha} map value compares against .hash; sha plays no role", () => {
+    expect(
+      isFingerprintStale({ "strategy-a": { hash: "X", sha: "sha-1" } }, "strategy-a", "X"),
+    ).toBe(false);
+    expect(
+      isFingerprintStale({ "strategy-a": { hash: "X", sha: "sha-1" } }, "strategy-a", "Y"),
+    ).toBe(true);
+    // A different sha with the same hash is still fresh — sha is provenance, not
+    // part of the freshness comparison.
+    expect(
+      isFingerprintStale({ "strategy-a": { hash: "X", sha: "sha-2" } }, "strategy-a", "X"),
+    ).toBe(false);
+  });
+
+  it("isFingerprintStale: mixed map evaluates object-form and bare-string entries independently per key", () => {
+    const stamp = {
+      "strategy-a": { hash: "fp-a", sha: "sha-a" },
+      "strategy-b": "fp-b",
+    };
+    expect(isFingerprintStale(stamp, "strategy-a", "fp-a")).toBe(false);
+    expect(isFingerprintStale(stamp, "strategy-b", "fp-b")).toBe(false);
+    expect(isFingerprintStale(stamp, "strategy-a", "stale")).toBe(true);
+    expect(isFingerprintStale(stamp, "strategy-b", "stale")).toBe(true);
+  });
+
+  it("stampHash: string passthrough and {hash, sha} extraction", () => {
+    expect(stampHash("abc")).toBe("abc");
+    expect(stampHash({ hash: "abc", sha: "def" })).toBe("abc");
   });
 });
