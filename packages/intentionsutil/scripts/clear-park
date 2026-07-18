@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# clear-park — clear one intention node's office_hours park via the graph
+# write (strategy-graph-native-dispatch, clarification 65). The scripted
+# inverse of park-node: a future drain-lane skill
+# (tactic-office-hours-self-modification-skill) invokes this as its mandatory
+# terminal park disposition on green CI, since park-node currently has no
+# scripted inverse — a park is cleared today only by an incidental commit
+# side-effect or a hand-rolled inline sequence, which is unreliable for the
+# drain lane whose fix commit lands on the PR branch and never touches the
+# node frontmatter.
+#
+# Content is written through store.ts's readNode → writeNode (the validated
+# writer — frontmatter serialized correctly, tactic bodies preserved); this
+# script authors no markdown. The commit/stamp/fast-forward mechanics are
+# graph-commit's.
+#
+# If the node's office_hours is already null, this is a deliberate idempotent
+# no-op: print an informative note and exit 0 without calling graph-commit.
+#
+# Usage: clear-park <node-id> [note]
+#
+# Exit codes: 0 cleared and landed on main (or already-clear no-op); 1 the
+# write or graph-commit failed; 2 usage error.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
+
+NODE_ID="${1:-}"
+# Optional 2nd arg: free-text note folded into the commit message.
+NOTE="${2:-}"
+if [[ $# -lt 1 || $# -gt 2 || -z "$NODE_ID" ]]; then
+  echo "usage: clear-park <node-id> [note]" >&2
+  exit 2
+fi
+
+TMPTS="$(mktemp --suffix=.mts)" \
+  || { echo "clear-park: could not create temp file for the clearing write" >&2; exit 1; }
+trap 'rm -f "$TMPTS"' EXIT
+cat >"$TMPTS" <<'TS'
+// argv: <storeModule> <intentionsDir> <id>
+const [storePath, intentionsDir, id] = process.argv.slice(2);
+const { readNode, writeNode } = await import(storePath);
+const node = readNode(intentionsDir, id);
+if (node.office_hours == null) {
+  process.stderr.write(`clear-park: ${id} is not parked (office_hours already null)\n`);
+  process.exit(3);
+}
+node.office_hours = null;
+writeNode(intentionsDir, node);
+process.stderr.write(`clear-park: cleared office_hours on ${id}\n`);
+TS
+
+npx_status=0
+(cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$NODE_ID" >&2) || npx_status=$?
+
+if [[ $npx_status -eq 3 ]]; then
+  echo "clear-park: $NODE_ID is not parked (office_hours already null); nothing to do" >&2
+  exit 0
+elif [[ $npx_status -ne 0 ]]; then
+  echo "clear-park: failed to clear the office_hours record for $NODE_ID" >&2
+  exit 1
+fi
+
+if [[ -n "$NOTE" ]]; then
+  MESSAGE="graph: clear office_hours park on $NODE_ID ($NOTE)"
+else
+  MESSAGE="graph: clear office_hours park on $NODE_ID"
+fi
+
+if ! "$SCRIPT_DIR/graph-commit" -m "$MESSAGE" "$NODE_ID"; then
+  echo "clear-park: graph-commit failed for $NODE_ID; the office_hours write is on disk but not landed" >&2
+  exit 1
+fi
+
+exit 0
