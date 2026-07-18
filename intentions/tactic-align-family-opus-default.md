@@ -36,8 +36,14 @@ attention:
     this tactic serves strategy-token-economy (unboosted), so it inherits
     nothing and takes the full boost 8 directly to reach the same authored-8
     tier."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-align-family-opus-default
+  pr: 2886
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
