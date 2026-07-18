@@ -81,12 +81,13 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: fix
+phase: qa
 execution:
   branch: tactic-align-tactics-mechanical-floor
   pr: 2896
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
 validates: []
 blocked_by: []
