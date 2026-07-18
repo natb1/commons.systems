@@ -30,7 +30,8 @@ execution:
   branch: office-hours-graph-freshness-guard
   pr: 2891
   attempts: {}
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []
