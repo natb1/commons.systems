@@ -2025,6 +2025,40 @@ clarifications:
       comply with the loosened rule); no grandfather clause; the enforcing lint
       checks the loosened rule corpus-wide. This ratification discharges that
       tactic's office_hours gate, unparked in the same commit."
+  - question: Why did the 2026-07-18 selector ticks dispatch /align-tactics
+      re-evaluation onto subtree children with no planning work to do, and do
+      the recorded freeze-improvement requirements fix it?
+    answer: "Root cause, from the selection/routing logs and git history: the 20:57Z
+      strategy edit (e7d20df0, the provenance-lint round) landed without the
+      materiality classify-and-re-stamp step, staling the one map-stamped open
+      child (tactic-graph-selector-reviewed-exclusion); the next tick's
+      soft-freeze scan then swept ALL open children into frozenTacticIds — the
+      re-surface set of the frozen-tactic-dispatch clarification is the whole
+      subtree, not the stale children — and the top-ranked unclaimed child
+      (tactic-review-phase-trust-builtin-review, own stamp null, plan untouched
+      by the edit) was dispatched to /align-tactics; its session then read a
+      stale worktree checkout and concluded no work existed. Coverage verdict,
+      three-way split: (1) the freeze firing at all on an orthogonal edit is
+      fixed by tactic-materiality-scoped-freeze (PR #2892) once editing rounds
+      classify-and-re-stamp; (2) the stale-worktree worker read is fixed by
+      tactic-align-skills-latest-graph-guard (PR #2889), whose Hole-2 closure
+      routes align sessions through provision-node-worktree's fetch-and-merge
+      re-entry; (3) not covered anywhere: when a freeze legitimately fires,
+      suppression and re-surface still take the WHOLE subtree, contradicting the
+      same-commit orthogonal classification and sweeping null-stamped children a
+      sibling's staleness says nothing about — retained as draft
+      tactic-freeze-resurface-stale-children-only (narrow both frozenTacticIds
+      uses to stale-stamped children only). The subtree-conservatism rival
+      framing (a materially drifted strategy makes every child's plan suspect,
+      so the full sweep is deliberate) was put to the author and DIVERGED from:
+      under the materiality doctrine the editing round's per-child
+      classification is the authority on who is affected; a blanket sweep
+      re-litigates it. Both fix carriers were boosted to the top of the
+      discretionary frontier (boost 61, composed rank 66.33, above the then-max
+      66.00) by author direction this round. This edit itself fired zero
+      freezes: at c2a909c7 the strategy has no map-stamped open children (the
+      stale stamp cleared when its carrier closed), so no classify-and-re-stamp
+      was owed. Recorded 2026-07-18 /align-strategy interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
