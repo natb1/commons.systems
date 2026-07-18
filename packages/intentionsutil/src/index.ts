@@ -48,6 +48,7 @@ export {
 export type { CiVerdict, TransitionDecision, ScopeStamp } from "./transitions.js";
 export { IntentionSchemaError } from "./errors.js";
 export { writeNode, readNode, readNodeBody, listNodes } from "./store.js";
+export { listScopeStaleTactics } from "./scope-sweep.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";
 export type { Goal, Realization } from "./goals.js";
 export { detectRung } from "./rungs.js";

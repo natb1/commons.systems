@@ -49,7 +49,7 @@ const baseArgs: {
   scopeStale: boolean;
   strategyStale: boolean;
   setPr: number | null;
-  strategyFingerprint: Record<string, string> | null;
+  strategyFingerprint: Record<string, { hash: string; sha: string }> | null;
 } = {
   id: "tactic-syn",
   ci: "unknown",
@@ -104,6 +104,26 @@ describe("applyNodeTransition store round-trip", () => {
     expect(node.execution?.markers).toEqual([]);
   });
 
+  it("clears qa-done and reviewed on a fix interrupt so resume out of fix returns to qa", () => {
+    const dir = tempDir();
+    // Walk implement→qa→review→(arm-merge) so the node carries all three markers.
+    seedTactic(dir, "implement", "# body\n");
+    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // implement→qa (planned)
+    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // qa→review (qa-done)
+    applyNodeTransition({ ...baseArgs, dir, ci: "passing" }); // review arms merge (reviewed)
+    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["planned", "qa-done", "reviewed"]);
+
+    // CI regresses: fix interrupt clears qa-done and reviewed, keeping planned.
+    const fix = applyNodeTransition({ ...baseArgs, dir, ci: "failing" });
+    expect(fix.phase).toBe("fix");
+    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["planned"]);
+
+    // Leaving fix on green CI resumes at qa (not review) — the cleared markers
+    // mean the marker cascade falls through past review back to qa.
+    const resume = applyNodeTransition({ ...baseArgs, dir, ci: "passing" });
+    expect(resume.phase).toBe("qa");
+  });
+
   it("routes a residue-bearing clean review to arm-merge and reports hasResidue", () => {
     const dir = tempDir();
     seedTactic(dir, "review", "# body\n\n## needs-main\n\nverify in prod\n");
@@ -116,12 +136,22 @@ describe("applyNodeTransition store round-trip", () => {
     const dir = tempDir();
     seedTactic(dir, "implement", "# body\n");
     // First stamp: strategy-a. Then stamp strategy-b — a must survive.
-    applyNodeTransition({ ...baseArgs, dir, strategyFingerprint: { "strategy-a": "hash-a" } });
-    expect(readNode(dir, "tactic-syn").execution?.strategy_fingerprint).toEqual({ "strategy-a": "hash-a" });
-    applyNodeTransition({ ...baseArgs, dir, strategyFingerprint: { "strategy-b": "hash-b" } });
+    applyNodeTransition({
+      ...baseArgs,
+      dir,
+      strategyFingerprint: { "strategy-a": { hash: "hash-a", sha: "sha-1" } },
+    });
     expect(readNode(dir, "tactic-syn").execution?.strategy_fingerprint).toEqual({
-      "strategy-a": "hash-a",
-      "strategy-b": "hash-b",
+      "strategy-a": { hash: "hash-a", sha: "sha-1" },
+    });
+    applyNodeTransition({
+      ...baseArgs,
+      dir,
+      strategyFingerprint: { "strategy-b": { hash: "hash-b", sha: "sha-2" } },
+    });
+    expect(readNode(dir, "tactic-syn").execution?.strategy_fingerprint).toEqual({
+      "strategy-a": { hash: "hash-a", sha: "sha-1" },
+      "strategy-b": { hash: "hash-b", sha: "sha-2" },
     });
   });
 
@@ -133,26 +163,84 @@ describe("applyNodeTransition store round-trip", () => {
     const seeded = readNode(dir, "tactic-syn");
     seeded.execution = { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: "legacy" };
     writeNode(dir, seeded);
-    applyNodeTransition({ ...baseArgs, dir, strategyFingerprint: { "strategy-a": "hash-a" } });
-    expect(readNode(dir, "tactic-syn").execution?.strategy_fingerprint).toEqual({ "strategy-a": "hash-a" });
+    applyNodeTransition({
+      ...baseArgs,
+      dir,
+      strategyFingerprint: { "strategy-a": { hash: "hash-a", sha: "sha-1" } },
+    });
+    expect(readNode(dir, "tactic-syn").execution?.strategy_fingerprint).toEqual({
+      "strategy-a": { hash: "hash-a", sha: "sha-1" },
+    });
+  });
+
+  it("a re-stamp via applyNodeTransition preserves an untouched pre-existing bare-string sibling key unchanged", () => {
+    const dir = tempDir();
+    seedTactic(dir, "implement", "# body\n");
+    const seeded = readNode(dir, "tactic-syn");
+    seeded.execution = {
+      branch: "b",
+      pr: null,
+      attempts: {},
+      markers: [],
+      strategy_fingerprint: { "other-sid": "oldhash" },
+    };
+    writeNode(dir, seeded);
+    applyNodeTransition({
+      ...baseArgs,
+      dir,
+      strategyFingerprint: { "new-sid": { hash: "newhash", sha: "sha-new" } },
+    });
+    expect(readNode(dir, "tactic-syn").execution?.strategy_fingerprint).toEqual({
+      "other-sid": "oldhash",
+      "new-sid": { hash: "newhash", sha: "sha-new" },
+    });
   });
 });
 
 describe("apply-node-transition parseArgs --strategy-fingerprint", () => {
-  it("parses a keyed entry into the map and merges repeats", () => {
+  it("parses a keyed entry into the map and merges repeats, folded with --strategy-sha into {hash, sha}", () => {
     const args = parseArgs([
       "tactic-syn",
       "--strategy-fingerprint",
       "strategy-a=hash-a",
       "--strategy-fingerprint",
       "strategy-b=hash-b",
+      "--strategy-sha",
+      "sha-123",
     ]);
-    expect(args.strategyFingerprint).toEqual({ "strategy-a": "hash-a", "strategy-b": "hash-b" });
+    expect(args.strategyFingerprint).toEqual({
+      "strategy-a": { hash: "hash-a", sha: "sha-123" },
+      "strategy-b": { hash: "hash-b", sha: "sha-123" },
+    });
   });
 
   it("rejects the bare-hash form (no strategy id)", () => {
-    expect(() => parseArgs(["tactic-syn", "--strategy-fingerprint", "barehash"])).toThrow(
-      /requires a '<strategy-id>=<hash>' value/,
+    expect(() =>
+      parseArgs(["tactic-syn", "--strategy-fingerprint", "barehash", "--strategy-sha", "sha-123"]),
+    ).toThrow(/requires a '<strategy-id>=<hash>' value/);
+  });
+
+  it("rejects --strategy-fingerprint without --strategy-sha", () => {
+    expect(() => parseArgs(["tactic-syn", "--strategy-fingerprint", "strategy-a=hash-a"])).toThrow(
+      /--strategy-fingerprint requires --strategy-sha/,
     );
+  });
+
+  it("applyNodeTransition applied from a single --strategy-sha shared across entries writes {hash, sha} for each key", () => {
+    const dir = tempDir();
+    seedTactic(dir, "implement", "# body\n");
+    const args = parseArgs([
+      "tactic-syn",
+      "--strategy-fingerprint",
+      "strategy-a=hash-a",
+      "--strategy-sha",
+      "sha-shared",
+      "--dir",
+      dir,
+    ]);
+    applyNodeTransition(args);
+    expect(readNode(dir, "tactic-syn").execution?.strategy_fingerprint).toEqual({
+      "strategy-a": { hash: "hash-a", sha: "sha-shared" },
+    });
   });
 });

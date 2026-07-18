@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# dispatch-jit-scan — the just-in-time (jit) reminder DUE-scan.
+#
+# Usage: dispatch-jit-scan
+#
+# Scans the configured JITs and, if any open JIT issue is DUE, prints the most
+# pressing one as:
+#   jit-reminder <repo> <num> <project> <item-id>
+# Prints nothing when no jit.json config is present or no JIT is eligible.
+#
+# This is the reminder half of the JIT machinery. The engine half
+# (dispatch-jit-engine, run earlier in dispatch-select-tick) CREATES the recurring
+# issues on cadence; this scan finds an already-open issue that is now due and
+# emits the reminder line dispatch-tick routes to a `/dispatch-jit-reminder` bg
+# job (which claims the issue and runs its configured skill, e.g. digest).
+#
+# Extracted verbatim from dispatch-select-target's `jit_scan` (the legacy
+# selector, deleted in tactic-dispatch-legacy-rewire Unit 3) so the KEEP-aux
+# jit-reminder trigger survives the legacy selector's removal — the same
+# rewire-then-delete move Unit 1 used to lift the main-broken probe into
+# repo-health. dispatch-select-tick's graph-native selection calls this after the
+# graph selector and the main-broken latch come up empty.
+#
+# Emitted AFTER the graph selector (graph work outranks a reminder) but its
+# priority ordering versus main-broken is preserved from the legacy selector:
+# dispatch-select-tick emits a due reminder before the main-broken latch, matching
+# the old dispatch-select-target default-mode order (jit_scan, then
+# main_broken_latch).
+#
+# Requires `dangerouslyDisableSandbox: true` — invokes `gh` (via
+# gh_issue_list_rest / dispatch-project-status-read); gh's TLS validation is
+# blocked by the sandbox (see .claude/rules/sandbox.md).
+#
+# Exit codes:
+#   0  scan completed (stdout carries a jit-reminder line, or nothing).
+#   1  a hard error (invalid config/duration, a JIT misconfiguration).
+#
+# NOT set -e: matches the sibling dispatch scripts; hard errors exit 1 explicitly.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# lib.sh provides gh_issue_list_rest, parse_duration, and gh_retry.
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib.sh"
+
+# Scan configured JITs and, if any open JIT issue is due, print the most
+# pressing one as: jit-reminder <repo> <num> <project> <item-id>. Prints
+# nothing when no config is present or no JIT is eligible.
+jit_scan() {
+  local jit_config projects_config jits_jsonl
+  jit_config=$("$SCRIPT_DIR/dispatch-config-load" jit)
+  [[ "$jit_config" == "no-config" ]] && return 0
+
+  projects_config=$("$SCRIPT_DIR/dispatch-config-load" projects)
+  if [[ "$projects_config" == "no-config" ]]; then
+    echo "error: jit.json is present but projects.json is absent; a JIT references a project key" >&2
+    exit 1
+  fi
+
+  # One compact JSON object per jit, one per line. A per-jit JSON object —
+  # rather than a @tsv projection — keeps empty timing fields distinct: bash
+  # `read` with a tab IFS collapses consecutive empty tab-separated fields.
+  jits_jsonl=$(printf '%s' "$jit_config" | jq -c '.jits[]')
+
+  local -a candidates=()
+  local jit_obj key repo label project due_after_close remind_after_close due_after_create
+  while IFS= read -r jit_obj; do
+    [[ -z "$jit_obj" ]] && continue
+    key=$(printf '%s' "$jit_obj" | jq -r '.key')
+    repo=$(printf '%s' "$jit_obj" | jq -r '.repo')
+    label=$(printf '%s' "$jit_obj" | jq -r '.label')
+    project=$(printf '%s' "$jit_obj" | jq -r '.project')
+    due_after_close=$(printf '%s' "$jit_obj" | jq -r '.dueAfterClose // ""')
+    remind_after_close=$(printf '%s' "$jit_obj" | jq -r '.remindAfterClose // ""')
+    due_after_create=$(printf '%s' "$jit_obj" | jq -r '.dueAfterCreate // ""')
+
+    local open_json open_num open_created
+    open_json=$(gh_issue_list_rest --repo "$repo" --state open --label "$label")
+    open_num=$(printf '%s' "$open_json" | jq -r '.[0].number // empty')
+    [[ -z "$open_num" ]] && continue
+    open_created=$(printf '%s' "$open_json" | jq -r '.[0].createdAt')
+
+    local due
+    if [[ -n "$due_after_close" ]]; then
+      local closed_json max_closed offset anchor
+      # --limit 100 is safe: recurring JITs are single-instance, so the 100
+      # most-recently-created closed issues contain the most-recently-closed one.
+      closed_json=$(gh_issue_list_rest --repo "$repo" --state closed --label "$label" --limit 100)
+      max_closed=$(printf '%s' "$closed_json" | jq -r 'map(.closedAt) | max // empty')
+      if ! offset=$(parse_duration "$due_after_close"); then
+        echo "error: invalid duration '$due_after_close' (expected <integer><s|m|h|d|w>)" >&2
+        exit 1
+      fi
+      if [[ -n "$max_closed" ]]; then
+        anchor=$(date -d "$max_closed" +%s)
+        due=$(( anchor + offset ))
+      else
+        if [[ -z "$remind_after_close" ]]; then
+          echo "error: jit '$key' is a cadence jit with no closed issue and no remindAfterClose; cold-start due cannot be computed" >&2
+          exit 1
+        fi
+        local remind_offset
+        if ! remind_offset=$(parse_duration "$remind_after_close"); then
+          echo "error: invalid duration '$remind_after_close' (expected <integer><s|m|h|d|w>)" >&2
+          exit 1
+        fi
+        anchor=$(date -d "$open_created" +%s)
+        due=$(( anchor + offset - remind_offset ))
+      fi
+    elif [[ -n "$due_after_create" ]]; then
+      local offset anchor
+      if ! offset=$(parse_duration "$due_after_create"); then
+        echo "error: invalid duration '$due_after_create' (expected <integer><s|m|h|d|w>)" >&2
+        exit 1
+      fi
+      anchor=$(date -d "$open_created" +%s)
+      due=$(( anchor + offset ))
+    else
+      echo "error: jit '$key' has no due offset (neither dueAfterClose nor dueAfterCreate)" >&2
+      exit 1
+    fi
+
+    local project_obj status_in_progress status_done
+    project_obj=$(printf '%s' "$projects_config" | jq -c --arg k "$project" '.projects[] | select(.key == $k)')
+    if [[ -z "$project_obj" ]]; then
+      echo "error: jit '$key' references project '$project', which is not in projects.json" >&2
+      exit 1
+    fi
+    status_in_progress=$(printf '%s' "$project_obj" | jq -r '.statusInProgress')
+    status_done=$(printf '%s' "$project_obj" | jq -r '.statusDone')
+
+    local issue_url status_json item_id status
+    issue_url="https://github.com/$repo/issues/$open_num"
+    status_json=$("$SCRIPT_DIR/dispatch-project-status-read" "$project" "$issue_url")
+    item_id=$(printf '%s' "$status_json" | jq -r '.itemId')
+    if [[ -z "$item_id" || "$item_id" == "null" ]]; then
+      echo "error: jit '$key' issue #$open_num is not in project '$project'" >&2
+      exit 1
+    fi
+    status=$(printf '%s' "$status_json" | jq -r '.status // ""')
+    if [[ "$status" == "$status_in_progress" || "$status" == "$status_done" ]]; then
+      continue
+    fi
+
+    candidates+=("$due"$'\t'"$repo $open_num $project $item_id")
+  done <<< "$jits_jsonl"
+
+  [[ ${#candidates[@]} -eq 0 ]] && return 0
+  local winner
+  # Earliest-due survivor wins regardless of whether due is in the past — JIT
+  # is a priority signal, not a gate. Cadence is set so issues are filed
+  # close to their due time; the scan orders, the operator decides.
+  winner=$(printf '%s\n' "${candidates[@]}" | sort -n -k1,1 | head -1 | cut -f2-)
+  echo "jit-reminder $winner"
+}
+
+jit_scan

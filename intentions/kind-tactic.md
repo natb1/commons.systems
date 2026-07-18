@@ -62,5 +62,11 @@ attributes:
   fields:
     - "attention: valid on this kind (goal_layer: true) — a TOP-LEVEL field, not
       an attributes entry; canonical definition on kind-kind's field list"
+  status_vocabulary:
+    raw: not yet dialectically examined
+    refining: under active dialectic
+    delegated: Claude-authored on trust; the decisions remain the author's
+    codified: the plan is written and the tactic is ready to dispatch — the author
+      has settled its execution plan
 ---
 # Tactic — a completable unit of execution

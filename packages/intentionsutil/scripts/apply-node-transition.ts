@@ -17,13 +17,19 @@
 //   node --import tsx/esm apply-node-transition.ts <node-id> \
 //     [--ci passing|failing|unknown] [--scope-stale] [--strategy-stale] \
 //     [--set-pr <n>] [--strategy-fingerprint <strategy-id>=<hash> ...] \
-//     [--dir <intentions-dir>]
+//     [--strategy-sha <sha>] [--dir <intentions-dir>]
 //
 // `--strategy-fingerprint` is repeatable and takes a KEYED `<strategy-id>=<hash>`
 // value; each entry merges into the per-strategy stamp map, preserving other
 // keys. The bare hash form (no `=`) is rejected — it cannot say which serving
 // strategy the hash belongs to, and a single string freezes every other serving
 // strategy of a multi-serves tactic.
+//
+// `--strategy-sha <sha>` is required whenever `--strategy-fingerprint` is given
+// (an error is thrown otherwise): it is the origin/main commit the hash(es) were
+// computed against, and is shared across every `--strategy-fingerprint` entry in
+// the invocation. This script is pure of git/gh — the wrapper owns those reads
+// and passes the sha in explicitly rather than this script shelling it out.
 //
 // Stdout: one JSON object
 //   { "phase": "<new-phase>", "prevPhase": "<old>", "armMerge": bool,
@@ -32,7 +38,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readNode, readNodeBody, writeNode } from "../src/store.js";
-import type { Execution } from "../src/schema.js";
+import type { Execution, StrategyStampValue } from "../src/schema.js";
 import {
   PHASE_COMPLETION_MARKER,
   addMarker,
@@ -50,7 +56,7 @@ interface Args {
   scopeStale: boolean;
   strategyStale: boolean;
   setPr: number | null;
-  strategyFingerprint: Record<string, string> | null;
+  strategyFingerprint: Record<string, { hash: string; sha: string }> | null;
   dir: string;
 }
 
@@ -64,6 +70,8 @@ export function parseArgs(argv: string[]): Args {
     strategyFingerprint: null,
     dir: join(repoRoot, "intentions"),
   };
+  let fingerprintHashes: Record<string, string> | null = null;
+  let strategySha: string | null = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     switch (a) {
@@ -100,9 +108,12 @@ export function parseArgs(argv: string[]): Args {
         }
         const sid = entry.slice(0, eq);
         const hash = entry.slice(eq + 1);
-        out.strategyFingerprint = { ...(out.strategyFingerprint ?? {}), [sid]: hash };
+        fingerprintHashes = { ...(fingerprintHashes ?? {}), [sid]: hash };
         break;
       }
+      case "--strategy-sha":
+        strategySha = argv[++i];
+        break;
       case "--dir":
         out.dir = argv[++i];
         break;
@@ -113,6 +124,17 @@ export function parseArgs(argv: string[]): Args {
     }
   }
   if (out.id === "") throw new Error("apply-node-transition: <node-id> is required");
+  if (fingerprintHashes !== null) {
+    if (!strategySha) {
+      throw new Error(
+        "apply-node-transition: --strategy-fingerprint requires --strategy-sha (the origin/main commit the hash was computed against)",
+      );
+    }
+    const sha = strategySha;
+    out.strategyFingerprint = Object.fromEntries(
+      Object.entries(fingerprintHashes).map(([sid, hash]) => [sid, { hash, sha }]),
+    );
+  }
   return out;
 }
 
@@ -154,7 +176,7 @@ export function applyNodeTransition(args: Args): ApplyResult {
     // An existing legacy bare-string stamp carries no strategy id, so it is
     // dropped here — the re-stamp converts the field to map form (natural churn).
     const existing = execution.strategy_fingerprint;
-    const base: Record<string, string> =
+    const base: Record<string, StrategyStampValue> =
       existing !== null && typeof existing === "object" ? { ...existing } : {};
     execution = { ...execution, strategy_fingerprint: { ...base, ...args.strategyFingerprint } };
   }
@@ -176,6 +198,13 @@ export function applyNodeTransition(args: Args): ApplyResult {
     decision.armMerge ||
     (!decision.hold && !decision.demote && decision.phase !== "fix" && decision.phase !== prevPhase);
   if (marker !== undefined && advanced) execution = addMarker(execution, marker);
+
+  // Strip any markers the decision cleared (the fix interrupt clears qa-done and
+  // reviewed so a resume out of fix re-runs qa and review). Runs for every
+  // decision carrying clearMarkers; a demotion below wholesale-clears anyway.
+  if (decision.clearMarkers.length > 0) {
+    execution = { ...execution, markers: execution.markers.filter((m) => !decision.clearMarkers.includes(m)) };
+  }
 
   // Apply the phase write. A demotion clears the completion markers so the
   // re-selected implement worker re-runs the ladder against the new scope.
