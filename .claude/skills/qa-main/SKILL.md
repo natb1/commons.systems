@@ -130,15 +130,35 @@ asymmetric — when the signal is unclear, route to **cannot-verify**.
   `packages/intentionsutil/scripts/graph-commit` (`dangerouslyDisableSandbox:
   true` — `node --import tsx/esm write-node.ts`, then `graph-commit`; the
   graph-tick worker applies the reset-dance a PR-branch worktree needs):
-  - `kind: tactic`, `phase: implement`, `owner: ai`, and `serves` the same
-    strategy the source tactic serves (read `serves` from `NODE_MD`).
+  - `kind: tactic`, `phase: implement`, `status: raw`, `owner: ai`, and
+    `serves` the same strategy the source tactic serves (read `serves` from
+    `NODE_MD`). `status` is required with no default (`validateNode`,
+    `packages/intentionsutil/src/schema.ts:468-534`) — omitting it makes
+    `write-node.ts` throw `IntentionSchemaError`.
   - A stable id embedding the source, e.g.
     `tactic-<source-id>-main-qa-regression`. If `intentions/<bug-id>.md` already
     exists at origin/main, an interrupted prior run filed it — reuse it and
     **skip** the write (idempotent re-run).
   - The body records the regression provenance: the `expected_outcome`, the
     observed-on-prod behavior, the `url_path`, and the source PR (`execution.pr`)
-    and source node id — enough for an implement worker to act on.
+    and source node id — enough for an implement worker to act on. `body` is
+    not a `write-node.ts` input field — the script discards unknown keys, and
+    a new node's body is always regenerated from `statement` as a
+    `# <statement>` placeholder (`packages/intentionsutil/src/store.ts:47`).
+    So write the provenance as a separate step, in this order:
+    1. Run `write-node.ts` with only the frontmatter fields above (including
+       `status: raw`).
+    2. Then edit `intentions/<bug-id>.md` directly, replacing the generated
+       `# <statement>` placeholder that appears after the closing `---` fence
+       with the provenance content (the fields listed above).
+    3. Then run `graph-commit`.
+
+    This append is durable across any later frontmatter-only rewrite of this
+    node: `writeNode` calls `readExistingTacticBody`
+    (`packages/intentionsutil/src/store.ts:84-88`), which reads a `tactic`
+    node's on-disk body verbatim and reuses it instead of regenerating the
+    placeholder whenever the file already exists — so a subsequent write that
+    only touches frontmatter preserves the hand-authored body written in step 2.
 
   Then advance the source `main-qa → done`:
 
