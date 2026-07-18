@@ -188,6 +188,16 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
          echo "/qa-fix: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'qa'" >&2
          exit 1
        fi
+       # Re-entry guard: parking sets office_hours without changing phase, so a
+       # stale self-scheduled wakeup re-firing mid-session (bypassing the
+       # selector's office_hours-null gate) must not re-run qa-fix against a
+       # node already handed to a human for review. A parked node's
+       # `office_hours:` key has nothing on its own line (a nested block
+       # follows); an unparked node has the literal `office_hours: null`.
+       if ! printf '%s\n' "$NODE_MD" | grep -q '^office_hours: null$'; then
+         echo "/qa-fix: node '$NODE_ID' is already office_hours-parked at origin/main — nothing to do" >&2
+         exit 0
+       fi
        N="$NODE_ID"; TARGET_KIND=node ;;
    esac
    ```
