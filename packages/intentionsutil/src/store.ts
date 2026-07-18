@@ -9,14 +9,12 @@ import { extractFrontmatter, extractBody } from "./frontmatter.js";
  * Serialize a node to its on-disk form and write it to `<dir>/<id>.md`.
  *
  * The node is validated FIRST (defaults applied) so the written frontmatter is
- * complete and deterministic. For every kind except `tactic`, the markdown
- * body is a cosmetic render of `statement` and is not parsed back on read.
- *
- * `tactic` bodies are authoritative, hand-maintained plan content (see
- * strategy-graph-native-dispatch's doctrine amendment): if `<dir>/<id>.md`
- * already exists, its existing body is preserved verbatim across the
- * rewrite rather than regenerated. A brand-new tactic file (no prior file on
- * disk) still gets the generated `# ${statement}` placeholder body.
+ * complete and deterministic. For every kind, an existing file's markdown body
+ * is preserved verbatim across rewrites (via `readExistingBody`) — bodies are
+ * authoritative, durable content, not a cosmetic render of `statement` (see the
+ * durable-body contract, tactic-nontactic-body-durability). Only a brand-new
+ * file with no prior file on disk gets the generated `# ${statement}`
+ * placeholder body.
  */
 // Mirrors graph-commit's id validation exactly (packages/intentionsutil/scripts/graph-commit,
 // the `case "$id" in` block): reject path separators, and `.`/`..` as EXACT ids
@@ -61,17 +59,17 @@ export function writeNode(dir: string, node: IntentionNodeInput): void {
  * existing body that is still the generated placeholder carries no authored
  * content, so it may be regenerated freely.
  */
-function assertNoBodyLoss(filePath: string, node: IntentionNode, body: string): void {
+export function assertNoBodyLoss(filePath: string, node: IntentionNode, body: string): void {
   if (!existsSync(filePath)) return;
   const raw = readFileSync(filePath, "utf8");
   const existing: unknown = parse(extractFrontmatter(raw, node.id));
   if (!isPlainObject(existing)) return;
   const existingBody = extractBody(raw, node.id);
   if (existingBody === `# ${String(existing.statement)}\n`) return;
-  if (body === `# ${node.statement}\n`) {
+  if (body !== existingBody) {
     throw new IntentionSchemaError(
       `Refusing to write "${node.id}": the rewrite would replace the existing ` +
-        `hand-authored body with a regenerated placeholder, discarding durable ` +
+        `hand-authored body with regenerated content, discarding durable ` +
         `content. This is a body-preservation regression in writeNode.`
     );
   }

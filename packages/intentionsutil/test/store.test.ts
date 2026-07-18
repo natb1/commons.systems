@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
-import { listNodes, readNode, writeNode } from "../src/store.js";
+import { assertNoBodyLoss, listNodes, readNode, writeNode } from "../src/store.js";
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "intentions-"));
@@ -336,6 +336,89 @@ describe("writeNode body preservation", () => {
 
     const raw = readFileSync(join(dir, "tactic-new.md"), "utf8");
     expect(raw.endsWith("# A fresh tactic.\n")).toBe(true);
+  });
+
+  it("does not false-positive when the preserved body equals the new statement's placeholder", () => {
+    // Regression for the guard's false positive: a human sets a strategy body to
+    // `# New statement.\n`, then the statement is changed to "New statement." The
+    // preserved on-disk body coincidentally equals the NEW statement's generated
+    // placeholder. writeNode preserves it byte-for-byte (lossless), so the rewrite
+    // must succeed — the old guard threw here, blocking a legitimate update.
+    const dir = tempDir();
+    const strategy: IntentionNodeInput = {
+      id: "strategy-coincidence",
+      kind: "strategy",
+      statement: "Old statement.",
+      owner: "human",
+      status: "refining",
+    };
+    writeNode(dir, strategy);
+
+    const filePath = join(dir, "strategy-coincidence.md");
+    const raw = readFileSync(filePath, "utf8");
+    const frontmatterAndFence = raw.slice(0, raw.indexOf("\n---\n") + "\n---\n".length);
+    const handAuthoredBody = "# New statement.\n";
+    writeFileSync(filePath, frontmatterAndFence + handAuthoredBody);
+
+    // Changing the statement to "New statement." makes the preserved body equal
+    // the NEW placeholder — the rewrite must not throw, and the body survives.
+    expect(() => writeNode(dir, { ...strategy, statement: "New statement." })).not.toThrow();
+    const rewritten = readFileSync(filePath, "utf8");
+    const rewrittenBody = rewritten.slice(rewritten.indexOf("\n---\n") + "\n---\n".length);
+    expect(rewrittenBody).toBe(handAuthoredBody);
+    expect(readNode(dir, "strategy-coincidence").statement).toBe("New statement.");
+  });
+});
+
+describe("assertNoBodyLoss guard", () => {
+  // The guard is a defensive backstop: writeNode always feeds it the preserved
+  // on-disk body, so its throw branch is unreachable through the public path.
+  // These tests exercise it directly to pin its contract — it trips only when a
+  // (future, buggy) caller supplies a body that differs from the durable on-disk
+  // body, and never on a byte-identical body.
+  function existingNode(dir: string, statement: string): IntentionNode {
+    writeNode(dir, {
+      id: "guarded",
+      kind: "strategy",
+      statement,
+      owner: "human",
+      status: "refining",
+    });
+    return readNode(dir, "guarded");
+  }
+
+  it("throws when the supplied body differs from the durable on-disk body", () => {
+    const dir = tempDir();
+    const node = existingNode(dir, "Statement.");
+    const filePath = join(dir, "guarded.md");
+    const raw = readFileSync(filePath, "utf8");
+    const frontmatterAndFence = raw.slice(0, raw.indexOf("\n---\n") + "\n---\n".length);
+    writeFileSync(filePath, frontmatterAndFence + "# Durable authored content.\n\nA plan.\n");
+
+    // A regenerated placeholder written over authored content — the regression
+    // the guard exists to catch.
+    expect(() => assertNoBodyLoss(filePath, node, `# ${node.statement}\n`)).toThrow(
+      /body-preservation regression/
+    );
+  });
+
+  it("does not throw when the supplied body is byte-identical to the on-disk body", () => {
+    const dir = tempDir();
+    const node = existingNode(dir, "Statement.");
+    const filePath = join(dir, "guarded.md");
+    const raw = readFileSync(filePath, "utf8");
+    const frontmatterAndFence = raw.slice(0, raw.indexOf("\n---\n") + "\n---\n".length);
+    const durableBody = "# Durable authored content.\n\nA plan.\n";
+    writeFileSync(filePath, frontmatterAndFence + durableBody);
+
+    expect(() => assertNoBodyLoss(filePath, node, durableBody)).not.toThrow();
+  });
+
+  it("returns early (no throw) when no file exists yet", () => {
+    const dir = tempDir();
+    const node = existingNode(dir, "Statement.");
+    const missing = join(dir, "does-not-exist.md");
+    expect(() => assertNoBodyLoss(missing, node, "# anything\n")).not.toThrow();
   });
 });
 
