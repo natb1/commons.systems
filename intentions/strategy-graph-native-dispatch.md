@@ -889,7 +889,13 @@ clarifications:
       phase-1 work that no longer surprises the worker-launch step or consumes a
       budget slot; the worker-start gate described here stays as the safety
       re-check for staleness introduced after the sweep. See the
-      scriptable-then-spawn clarification of that date.)"
+      scriptable-then-spawn clarification of that date.) (Scoped 2026-07-18: the
+      'leaving only author and re-evaluation edits able to demote' clause is
+      narrowed — an author-present align round that classifies its own
+      tactic-body edit as scope-inert re-stamps the custody stamp in the same
+      round, so such edits no longer demote; material and unsure edits still do.
+      See the scope-inert-restamp clarification and draft
+      tactic-scope-inert-restamp-primitive.)"
   - question: What guards the router against failure loops — a worker that
       repeatedly fails to make progress or park on a node, and a systemic
       executor failure (a daemon crash-loop) that would otherwise false-trip a
@@ -1951,6 +1957,47 @@ clarifications:
       tactic-align-session-claiming-liveness-correction). Implementation
       retained as draft tactic-office-hours-concurrency-dedup. Recorded
       2026-07-18 interview."
+  - question: A scope-inert align annotation on an in-flight tactic's body — the
+      reconciliation notes amendment-completeness mandates — trips the tactic
+      scope-custody gate and demotes the whole ladder. Does materiality-scoping
+      extend to the scope-custody stamp, and by what mechanism?
+    answer: "Yes — greenfield: the materiality principle ('an editing round pays
+      exactly the materiality of its change', clarification 70) extends to the
+      tactic scope-custody stamp, closing the seam in the chain-of-custody
+      amendment (clarification 39) between its intent ('if the re-evaluation
+      confirms without amending, nothing re-runs') and its mechanism: recording
+      the confirmation is itself a body edit, so tacticScopeFingerprint trips
+      and demotes. Observed 2026-07-18: an align round's scope-inert
+      Interim-mechanism note on tactic-graph-selector-reviewed-exclusion demoted
+      a fully-reviewed node (PR #2888, green CI) review -> implement; the tax is
+      three phase sessions per annotation, since demote-to-implement discards qa
+      and review custody. Mechanism — sanctioned re-stamp, worktree-locality
+      preserved: the stamp stays a worktree-local file, never a per-launch graph
+      write (clarification 39's design stands); an author-present align round
+      (/align-strategy or /align-tactics — the interview holds both the delta
+      and the author, the same classifier trust clarification 70 records) that
+      classifies its own tactic-body edit as scope-inert re-stamps
+      .claude/worktrees/<id>.scope-fingerprint to the post-edit
+      tacticScopeFingerprint plus the current origin/main sha in the same round,
+      recording the classification in the round's record — mirroring the
+      transition writer's machinery refresh (which stands unchanged) rather than
+      moving the stamp into the node. Fail-closed classification: only a
+      confident scope-inert verdict re-stamps; any doubt leaves the stamp
+      untouched and custody demotes as recorded, and a material edit is left
+      stale exactly as today. Phase workers, qa/review sessions, and the tick
+      never re-stamp. Steelman (keep the gate purely mechanical; accept the
+      demotion tax as misclassification insurance): DIVERGED — the annotations
+      are doctrine-mandated (clarification 38 records reconciliation in the
+      node), so the tax recurs structurally, and the strategy-stamp side already
+      rejected the same orthogonal tax with the same classifier. Net guarantee
+      unchanged: merge still requires an unbroken implement -> qa -> review
+      chain against the merge-time scope fingerprint — a re-stamp asserts, under
+      author presence, that the post-edit fingerprint IS that same scope.
+      Executable carrier: draft tactic-scope-inert-restamp-primitive (re-stamp
+      script plus align-skill step); bootstrap until it lands: the round
+      refreshes the stamp by hand — write '<tacticScopeFingerprint(statement,
+      body)> <origin/main sha>' as the stamp file's one line, the 2026-07-18
+      remediation's proven recipe. Recorded 2026-07-18 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
