@@ -1542,7 +1542,14 @@ clarifications:
       that dies mid-phase without firing a clean Stop (a hard crash) is
       variance, out of scope for this self-reap — its orphaned job is reaped by
       the tick/sweep ledger pass that already GCs the stale worktree (retained
-      in the draft tactic). Recorded 2026-07-16 interview."
+      in the draft tactic). Recorded 2026-07-16 interview. (Amended 2026-07-19:
+      reaping remains the DEFAULT and the doctrinal behavior, but is now
+      configurable via a default-off operator escape hatch that keeps a
+      completed/parked session for local inspection — see the 2026-07-19
+      configurable-auto-close clarification. \"Reaped on every terminal exit\"
+      describes the default; when the keep-sessions toggle is ON, a kept session
+      is intentional, not a clog, and its node-id claim is held until manual
+      reap.)"
   - question: "A strategy whose signal is validated only by human work (sensor:
       owner review at office-hours) is re-selected for /align-tactics every tick
       — its rounds produce off-path tooling plus born-parked on-path reading
@@ -2167,6 +2174,111 @@ clarifications:
       2026-07-19. tactic-claim-dedup-only (scheduling dedup) is orthogonal to
       conflict resolution and unaffected. Recorded 2026-07-19 /align-strategy
       round."
+  - question: Should auto-close of a completed worker session be configurable, given
+      the 2026-07-16 reaping clarification reaps on every terminal exit and
+      diverged from the session-as-observability rival?
+    answer: "Yes — auto-close is made configurable via a default-off operator escape
+      hatch, and this does NOT weaken the reaping doctrine. Auto-close (reap on
+      every terminal exit) remains the DEFAULT and the doctrinal expression of
+      disposable sessions; the toggle, off by default, lets an operator KEEP a
+      completed or escalation-parked worker session for local
+      inspection/debugging. The doctrine holds because its actual concern —
+      established by the disposable-session clarification and the 2026-07-16
+      reaping clarification's divergence from the session-as-observability rival
+      — is that session persistence must never become router SUBSTRATE or the
+      observability CHANNEL, not the bare existence of a lingering session; the
+      author affirmed this reading of the divergence's intent this round. A
+      human-flipped, default-off debug knob never makes session persistence the
+      router's recovery substrate and never changes where escalations surface
+      (still the office-hours PARKED panel, which reads the node's office_hours
+      field), so it is orthogonal to the coupling the doctrine rejects. Edge
+      cases resolved this round: (a) the switch is symmetric — when ON it
+      suppresses the reap on BOTH clean-advance and escalation-park; when OFF
+      (default) both reap as before; (b) the check lives in the shared
+      self-close primitive (dispatch-self-close), so both the legacy gh
+      issue-worker lane and the graph-native node-worker lane honor one config
+      point; (c) the foreground-safe gate is unchanged — only managed background
+      worker jobs are affected, interactive align/office-hours sessions
+      (CLAUDE_JOB_DIR-gated) are never touched; (d) documented consequence,
+      endorsed: a kept-alive session keeps worktree_has_live_session TRUE, so
+      its node-id worktree claim stays held and the router will NOT select that
+      node's next phase until the operator manually reaps it — this is inherent
+      to a debug hold, and leaving the knob ON stalls the affected nodes
+      (caution recorded). Implementation retained as draft
+      tactic-worker-self-close-configurable. Recorded 2026-07-19 interview."
+  - question: "graph-commit rebase-retry exhaustion: does the 2026-07-13 rejection
+      of pessimistic serialization forbid serializing the landing step, and what
+      is the resolution — a better serialization method or a higher retry
+      limit?"
+    answer: "Neither doctrine-violation nor retry-limit. The 2026-07-13
+      clarification (58) rejected pessimistic mutual exclusion for same-node
+      EDIT contention, resolved by the merge ladder (partitioned by
+      clarification 78 between tactic-graph-commit-auto-serialization layers 1-3
+      and tactic-dispatch-conflict-greenfield layers 4-5); it does not govern
+      LANDING contention — unrelated nodes racing for the single linear main
+      ref. There, git's server-side ref update is already an atomic
+      compare-and-swap (integrity is never at risk; the losing push is refused
+      whole), but CAS is optimistic concurrency and its redo cost here is
+      dominated by the stamp: branch protection requires the four checks green
+      on the exact SHA, so every retry re-buys pull --rebase → new SHA →
+      scratch-branch force-push → await_checks (30-180s of CI), and the
+      vulnerability window is the entire stamp duration — under fleet load
+      MAX_PUSH_ATTEMPTS=5 exhausts with zero progress (observed three times,
+      2026-07-19). Author-ratified resolution, per the design-proposals rule
+      (greenfield first, migration separate): (a) GREENFIELD — the graph lands
+      on its own ref with a validate-only gate (tactic-graph-ref-split): retries
+      then cost milliseconds and native CAS optimistic retry suffices with no
+      lock anywhere, harmonizing the anti-serialization doctrine system-wide;
+      (b) INTERIM — graph-commit serializes only the rebase→stamp→push critical
+      section behind a lock ref claimed by atomic CAS ref-update, with a
+      TTL/steal-after-expiry stale-lock story
+      (tactic-graph-commit-landing-lock), explicitly deleted when the ref split
+      lands — the lock protects the stamp investment, not ref atomicity, and
+      cooperating writers queue instead of burning stamps. Raising
+      GRAPH_COMMIT_MAX_ATTEMPTS was considered and rejected as the primary fix:
+      it converts exhaustion into more wasted CI stamps without shrinking the
+      collision window (kept only as an env-var stopgap). Boldness recorded: the
+      cost-structure analysis is verified in-session against graph-commit and
+      three live exhaustions; the git-CAS semantics, merge-queue comparison
+      (rejected: a PR per landing is too heavy for the fleet's write rate and
+      rate-limit budget), and ref-split CAS-sufficiency claim are
+      Claude-internal design reasoning the author has not independently
+      verified. Recorded 2026-07-19 interview."
+  - question: The redundancy/stale-selection start-gate (check-node-selection.ts) is
+      wired only inside provision-node-worktree. Do phase skills entered by the
+      other Step-0 paths (native EnterWorktree, re-entry of an existing
+      worktree) still get the mechanical gate?
+    answer: "No — they fall back to prose reasoning, a real gap. The mechanical
+      selection-validity gate (check-node-selection.ts, exit 12 stale-selection
+      / exit 13 scope-stale) runs only from provision-node-worktree:87. The
+      phase-skill Step-0 alternate entry paths — native EnterWorktree, or
+      re-entry of an already-existing worktree — run only assert-worktree-fresh
+      (a freshness check), never check-node-selection. So a phase skill entered
+      those ways detects a redundant or terminal-state selection only through
+      the skill body's prose Idempotency reasoning, an LLM judgment gate rather
+      than a mechanical one. This burned a full session on 2026-07-18:
+      /align-tactics tactic-graph-main-self-heal was re-invoked manually against
+      an already-finalized node (phase:implement, execution:null); because the
+      session was already inside the worktree (re-entry, no
+      provision-node-worktree re-run), the mechanical gate never fired and the
+      no-op was caught only by prose reasoning. Requirement: the mechanical
+      selection-validity gate must bind EVERY phase-skill entry, not just the
+      fresh-cut provision path — run check-node-selection at entry regardless of
+      how the worktree was provisioned, exiting cheaply (skipped) on a
+      redundant/stale/terminal-state selection before any Explore/Plan fan-out
+      or session-boot work. Steelman considered and DIVERGED from: fix redundant
+      dispatch only at the selection SOURCE (the selector never emits a
+      terminal-state candidate — tactic-freeze-resurface-stale-children-only PR
+      #2895, tactic-materiality-scoped-freeze PR #2892). Rejected as sufficient
+      because a MANUAL human invocation (/align-tactics tactic-X typed directly)
+      has no selector to gate it; the entry gate is the only possible guard for
+      that path, so selection-source fixes and the entry gate are complementary
+      layers, not alternatives. Carrier: retained draft
+      tactic-phase-entry-selection-gate; may be partly closed by
+      tactic-align-skills-latest-graph-guard (PR #2889, not yet on origin/main)
+      if its re-entry routing re-runs check-node-selection — the draft tactic's
+      first unit verifies that overlap before implementing. Recorded 2026-07-19
+      /align-strategy interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -2300,6 +2412,11 @@ attributes:
       context is written into the node, not the session); the agents list holds
       only live executors, escalations surface via the office-hours PARKED panel
       rather than a lingering session, and a completed or parked worker job left
-      in `claude agents --json` is a defect
+      in `claude agents --json` is a defect UNLESS the default-off keep-sessions
+      operator escape hatch (2026-07-19 configurable-auto-close clarification)
+      is enabled, in which case a kept session is intentional and its node-id
+      claim is held until manual reap; auto-close (reap on every terminal exit)
+      is the default and doctrinal behavior, and the toggle is never router
+      substrate
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
