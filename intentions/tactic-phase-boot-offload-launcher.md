@@ -41,8 +41,7 @@ attention:
 phase: implement
 execution: null
 validates: []
-blocked_by:
-  - tactic-phase-standup-audit-lens
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
