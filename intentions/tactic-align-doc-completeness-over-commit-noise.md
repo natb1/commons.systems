@@ -74,11 +74,14 @@ measurement.
 
 **Scope.** `.claude/skills/align-strategy/SKILL.md`, Step 5. Insert one new
 subsection immediately before the existing `**Materiality-scoped freeze —
-classify each open child.**` paragraph at
-`.claude/skills/align-strategy/SKILL.md:477` (i.e. directly after the
-"Bundle any draft tactic nodes..." paragraph ending at line 470, before line
-477). Insert the following (matching the file's existing bold-lead-in bullet
-style used by the surrounding Step 5 prose):
+classify each open child.**` paragraph, currently at
+`.claude/skills/align-strategy/SKILL.md:477`. That bold lead-in string is the
+authoritative anchor — locate it by text match, not by line number, since an
+intervening "If `graph-commit` exits 1 having printed a parking message..."
+paragraph sits between it and the earlier "Bundle any draft tactic nodes..."
+paragraph, and line numbers will drift as the file changes. Insert the new
+subsection directly above the matched paragraph (matching the file's existing
+bold-lead-in bullet style used by the surrounding Step 5 prose):
 
 ```markdown
 **Documentation completeness over commit size.** When an interview outcome is
