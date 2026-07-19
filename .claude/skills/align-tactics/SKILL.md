@@ -400,7 +400,9 @@ nesting), exactly as `/plan-issue` Steps 3–5:
   add a brownfield migration path when warranted). Feed each the Explore
   findings, the tactic scope, the plan schema below, and the `/implement-unit`
   model-selection heuristic inline (the `Plan` agent will not read the skill
-  file). Synthesize multiple proposals into a single recommended approach.
+  file) — when the unit delivers a chart, dashboard, or other data-viz
+  surface, also feed the `/dataviz` procedure inline, same reason.
+  Synthesize multiple proposals into a single recommended approach.
 - Trivial tactics (a typo, a one-line change, a simple rename) skip the
   fan-out — write the one-unit plan directly.
 
@@ -414,6 +416,11 @@ schema"):
   - **Scope** — files/behavior that change, what is out of scope, with
     `path:line` anchors so the build delegates each unit to `/implement-unit`
     without re-reading source.
+  - **Data-viz guidance (chart/dashboard units only)** — when the unit
+    delivers a chart, graph, plot, dashboard, or other data-viz surface: the
+    chosen form, the validated categorical palette, and mark/interaction
+    specs, per `/dataviz`. Run the palette through `/dataviz`'s validator
+    script in a fenced ` ```verify ` block so it runs headless.
   - **Recommended model** — `sonnet` or `opus`, per the model-selection
     heuristic at `.claude/skills/implement-unit/SKILL.md` (lines 31–39; the
     canonical home — do not restate the bullets here, same convention

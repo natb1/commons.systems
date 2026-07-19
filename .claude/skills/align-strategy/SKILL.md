@@ -322,6 +322,17 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    `AskUserQuestion` with visual aids: build mockup/variant artifacts on
    `@commons-systems/ds` and sync them to the claude.ai/design canvas via
    `DesignSync`, so the author disambiguates by pointing at a variant.
+   For a chart, dashboard, or data-viz requirement, first load the
+   `/dataviz` built-in skill — its procedure governs the recorded design:
+   form chosen by the data's job (including its "is it even a chart" test),
+   color assigned by role (categorical/sequential/diverging/status) never by
+   rank, the categorical palette run through `/dataviz`'s validator script
+   (never eyeballed), mark specs and spacers, a default hover layer, and an
+   accessibility pass (legend for ≥2 series, table view, a selected — not
+   auto-flipped — dark mode). `/dataviz` and the design canvas compose, not
+   compete: `/dataviz` supplies the design method and its computable checks;
+   the canvas still supplies the mockup/variant artifacts for author
+   disambiguation, now built to follow `/dataviz`.
    Canvas artifacts are interview aids, not deliverables — the resolution
    they produce is recorded as an ordinary dated clarification like any
    other. Caveat: a freshly synced component is absent from the canvas
