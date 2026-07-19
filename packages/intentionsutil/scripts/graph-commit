@@ -85,6 +85,17 @@ MAX_PUSH_ATTEMPTS="${GRAPH_COMMIT_MAX_ATTEMPTS:-5}"
 CHECK_POLL_SECONDS="${GRAPH_COMMIT_CHECK_POLL_SECONDS:-7}"
 CHECK_TIMEOUT_SECONDS="${GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS:-180}"
 
+# Landing-lock tunables (see "# --- Landing lock" below). LOCK_REF is a fixed
+# constant, not overridable. LOCK_TTL_SECONDS is how long a claim stays live
+# before a waiter may steal it — one full check-stamp window plus a margin
+# (default 240s). LOCK_POLL_SECONDS is the poll interval while waiting on a live
+# foreign holder. LOCK_WAIT_SECONDS bounds the total time a writer waits to
+# acquire before giving up (default 1050s = MAX_PUSH_ATTEMPTS full attempts).
+LOCK_REF="refs/graph/landing-lock"
+LOCK_TTL_SECONDS="${GRAPH_COMMIT_LOCK_TTL_SECONDS:-$((CHECK_TIMEOUT_SECONDS + 60))}"
+LOCK_POLL_SECONDS="${GRAPH_COMMIT_LOCK_POLL_SECONDS:-5}"
+LOCK_WAIT_SECONDS="${GRAPH_COMMIT_LOCK_WAIT_SECONDS:-$((MAX_PUSH_ATTEMPTS * (CHECK_TIMEOUT_SECONDS + 30)))}"
+
 # --- Globals set by main() -------------------------------------------------
 # IDS         — the node ids to commit (positional args) — ordinary edits whose
 #               new content already exists on disk.
@@ -115,6 +126,19 @@ CURRENT_MSG=""
 #                  delete it on the remote on exit.
 SCRATCH_BRANCH=""
 SCRATCH_PUSHED=0
+# Landing-lock globals (see "# --- Landing lock" below).
+# LOCK_HOLDER_ID    — this process's unique claim identity, computed once at
+#                     script load: short hostname + PID + two $RANDOM draws.
+# LOCK_SHA          — the SHA of the lock commit this process currently believes
+#                     it owns (set when a claim/renew/steal push succeeds).
+# LOCK_HELD         — 1 iff this process currently holds the lock.
+# LOCK_WAIT_DEADLINE — absolute unix-epoch deadline for lock_claim_or_renew() to
+#                     give up; set once per try_land() invocation by its caller
+#                     (a later unit), not here.
+LOCK_HOLDER_ID="${GRAPH_COMMIT_LOCK_HOLDER_ID:-$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo host)-$$-$RANDOM$RANDOM}"
+LOCK_SHA=""
+LOCK_HELD=0
+LOCK_WAIT_DEADLINE=0
 # ORIG_HEAD / RESTORE_HEAD — set by ensure_intentions_only_base() when the
 # worktree HEAD is a far-ahead branch (a PR-branch checkout carrying commits
 # that touch non-intentions/ files). To land an intentions/-only SHA the write
@@ -442,6 +466,169 @@ await_checks() {
     fi
     sleep "$CHECK_POLL_SECONDS"
   done
+}
+
+# --- Landing lock (distributed CAS lock with TTL steal) --------------------
+# Serializes the rebase → stamp → push critical section across concurrent
+# graph-commit invocations, so a losing writer waits/backs off cheaply instead
+# of burning a full CI-stamp cycle (30–180s) it is very likely to lose.
+#
+# There is no shared filesystem or coordination server across the machines that
+# run graph-commit — the only shared, atomically-updatable medium is the git
+# remote itself. So the lock IS a git ref: refs/graph/landing-lock, whose value
+# is an orphan (parentless) commit object encoding the current holder's identity
+# and an expiry timestamp. Mutual exclusion rides on git's own server-side
+# compare-and-swap on ref updates:
+#   - Claiming a free lock is a non-force push to a ref that does not yet exist.
+#     git rejects it if a concurrent writer created the ref first — that is an
+#     atomic CAS on "still absent".
+#   - Renewing our own claim, or stealing an expired foreign one, is a
+#     --force-with-lease push that only lands if the remote ref still equals the
+#     exact SHA we observed — an atomic CAS on "unchanged since we looked".
+# A losing CAS never corrupts anything; the loser simply re-observes and loops.
+#
+# TTL steal keeps a crashed holder (one that dies without releasing) from
+# freezing the lock forever: each claim carries expiry = now + LOCK_TTL_SECONDS,
+# and once that passes any waiter may steal the ref (again via the leased CAS,
+# so two simultaneous stealers can't both win). LOCK_WAIT_DEADLINE (set by the
+# caller) bounds how long a writer waits before giving up entirely.
+#
+# Payload encoding — a lock claim is a single orphan commit whose tree is git's
+# universal empty-tree object (4b825dc642cb6eb9a060e54bf8d69288fbee4904) and
+# whose message is exactly two lines:
+#     graph-commit-lock v1
+#     holder=<LOCK_HOLDER_ID> expiry=<unix_epoch_seconds>
+# Author/committer identity is whatever git commit-tree picks up from ambient
+# user.name/user.email — no special identity handling.
+
+# build_lock_commit <expiry_unix_ts> -> prints a new orphan commit SHA.
+build_lock_commit() {
+  local expiry="$1"
+  git commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 \
+    -m "graph-commit-lock v1" \
+    -m "holder=$LOCK_HOLDER_ID expiry=$expiry"
+}
+
+# read_lock_payload <ref-or-sha> — read an already-fetched ref/sha's message and
+# set LOCK_OBS_HOLDER / LOCK_OBS_EXPIRY from its second line (parsed with bash's
+# own [[ =~ ]], no external grep/sed). Two distinct failure shapes, handled
+# differently:
+#   - The object is not (yet) in this clone's local object database: `git show`
+#     fails and we `return 1` on that line itself, quietly — this is the normal,
+#     expected case the first time a given lock SHA is observed, and the caller
+#     recovers by fetching. It must NOT fall through to the parse-failure die.
+#   - The object IS readable but its message does not parse as a lock payload:
+#     that is a broken-environment condition, so die() rather than silently skip
+#     (per code-style.md's clear-errors-over-fallbacks convention).
+read_lock_payload() {
+  local ref="$1" body line2
+  body="$(git show -s --format=%B "$ref" 2>/dev/null)" || return 1
+  line2="$(printf '%s\n' "$body" | tail -n1)"
+  if [[ "$line2" =~ ^holder=([^[:space:]]+)\ expiry=([0-9]+)$ ]]; then
+    LOCK_OBS_HOLDER="${BASH_REMATCH[1]}"
+    LOCK_OBS_EXPIRY="${BASH_REMATCH[2]}"
+  else
+    die "malformed landing-lock payload on $ref: '$line2'"
+  fi
+}
+
+# lock_claim_or_renew — no arguments. Loops until this process holds a live
+# claim (sets LOCK_SHA + LOCK_HELD=1 and returns 0), or until LOCK_WAIT_DEADLINE
+# (set by the caller before the first call, a later unit) passes without
+# acquiring, in which case it returns 1.
+#
+# Note: `git ls-remote` returning a SHA does NOT guarantee the corresponding
+# commit object is already in the LOCAL object database — `git clone`/`git
+# fetch` never pull refs/graph/** by default — hence the fetch fallback around
+# read_lock_payload. And even if the ref moves again between the ls-remote and
+# that fetch (so FETCH_HEAD names something newer than $remote_sha), every
+# subsequent write below leases against $remote_sha specifically — the original
+# ls-remote observation — never against whatever FETCH_HEAD resolved to. So a
+# stale read only ever wastes a loop iteration; it can never cause an incorrect
+# write.
+lock_claim_or_renew() {
+  local remote_sha now expiry new_sha
+  while :; do
+    remote_sha="$(git ls-remote origin "$LOCK_REF" | cut -f1)"
+    now="$(date +%s)"
+    # Deadline check up front, before any branch below — covers every
+    # `continue` path (lost create race, lost renew/steal race, live
+    # foreign holder), not just the live-holder wait. Without this, a
+    # pathological run of repeated lost create/steal races would spin
+    # with no sleep and no exit condition.
+    if [[ "$now" -ge "$LOCK_WAIT_DEADLINE" ]]; then
+      return 1
+    fi
+
+    if [[ -z "$remote_sha" ]]; then
+      # No one holds it: try to CREATE it. A non-force push to a ref that
+      # does not yet exist is git's own atomic CAS on "still absent" — it
+      # is rejected if a concurrent writer created the ref first, in which
+      # case we fall through and re-observe as "exists".
+      new_sha="$(build_lock_commit "$((now + LOCK_TTL_SECONDS))")"
+      if git push origin "$new_sha:$LOCK_REF" >&2; then
+        LOCK_SHA="$new_sha"; LOCK_HELD=1
+        return 0
+      fi
+      # Rejected: almost always a lost create race — re-observe as "exists"
+      # on the next loop pass. Left un-redirected (not `2>/dev/null`) so a
+      # genuine non-race failure (auth/network) is visible in the log rather
+      # than silently swallowed — per code-style.md's clear-errors-over-fallbacks.
+      continue
+    fi
+
+    # read_lock_payload returns 1 (quietly) when the object named by
+    # $remote_sha is not yet in this clone's local object database — the
+    # normal case the FIRST time this process observes a given lock SHA,
+    # since `git clone`/`git fetch` never pull refs/graph/** by default.
+    # It only `die`s if the object IS readable but fails to parse.
+    read_lock_payload "$remote_sha" || {
+      git fetch -q origin "$LOCK_REF" >&2
+      read_lock_payload FETCH_HEAD
+    }
+
+    if [[ "$LOCK_OBS_HOLDER" == "$LOCK_HOLDER_ID" ]]; then
+      # Renewing our own still-recorded claim.
+      new_sha="$(build_lock_commit "$((now + LOCK_TTL_SECONDS))")"
+      if git push --force-with-lease="$LOCK_REF:$remote_sha" origin "$new_sha:$LOCK_REF" >&2; then
+        LOCK_SHA="$new_sha"; LOCK_HELD=1
+        return 0
+      fi
+      # Lease rejected: we were slow enough that someone else already
+      # reclaimed it out from under us. Re-observe from scratch.
+      continue
+    fi
+
+    if [[ "$LOCK_OBS_EXPIRY" -gt "$now" ]]; then
+      # Live, foreign holder: wait, don't steal.
+      sleep "$LOCK_POLL_SECONDS"
+      continue
+    fi
+
+    # Expired: steal, atomically, only if the ref still equals what we
+    # just observed (guards a simultaneous-steal race against another
+    # waiter that observed the same expiry).
+    new_sha="$(build_lock_commit "$((now + LOCK_TTL_SECONDS))")"
+    if git push --force-with-lease="$LOCK_REF:$remote_sha" origin "$new_sha:$LOCK_REF" >&2; then
+      LOCK_SHA="$new_sha"; LOCK_HELD=1
+      return 0
+    fi
+    continue
+  done
+}
+
+# lock_release — no-op unless we currently hold the lock; best-effort. The
+# --force-with-lease on the delete refspec is atomic ("delete only if the remote
+# ref still equals $LOCK_SHA"), so this process never deletes a lock it no
+# longer owns — e.g. after losing a steal race, or after its own
+# LOCK_WAIT_SECONDS timeout let another writer reclaim the ref. Always
+# non-fatal (|| true) so a release failure never masks the caller's real exit
+# status, mirroring the scratch-branch delete's discipline in cleanup().
+lock_release() {
+  [[ "$LOCK_HELD" -eq 1 ]] || return 0
+  git push --force-with-lease="$LOCK_REF:$LOCK_SHA" origin ":$LOCK_REF" >&2 || true
+  LOCK_HELD=0
+  LOCK_SHA=""
 }
 
 # --- Bounded rebase + stamp + push loop ------------------------------------
