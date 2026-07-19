@@ -58,7 +58,8 @@ office_hours:
   recommendation: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  bug_fix: true
 ---
 # office-hours snapshot: shared wire-contract + the three pipeline breaks
 

@@ -38,7 +38,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  bug_fix: true
 ---
 
 # Fix align-tactics Step 0.2 worktree_has_live_session self-claim false-positive when graph-launched under Shape B

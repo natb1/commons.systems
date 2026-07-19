@@ -69,7 +69,8 @@ office_hours:
     **Files to glance at if you want to verify the change yourself:** `.github/scripts/check-graph-fast-path.sh` (new guard), `.github/workflows/graph-fast-path.yml` (wiring — confirm the old three-dot diff is gone and the script is invoked), `.github/scripts/test-check-graph-fast-path.sh` + `unit-tests.yml` (hermetic suite wiring). The pre-existing `validate-graph.ts` guard step is untouched and out of scope.
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  bug_fix: true
 ---
 # fix Graph Fast Path guard false-fail: empty origin/main...HEAD diff in push context
 

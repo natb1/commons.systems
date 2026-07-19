@@ -30,7 +30,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  bug_fix: true
 ---
 # Fix stale .claude/skills/align/ path references left in intention node bodies after the /align -> /align-init skill rename (e.g. tactic-sync-reader-skill body pointer to align/SKILL.md, tactic-dispatch-script-hardening body pointer to align/scripts/gather-context.sh)
 
