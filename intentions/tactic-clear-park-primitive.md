@@ -38,7 +38,7 @@ office_hours:
     `intentionsutil`). Corrected invocation passes 533/533 tests cleanly. This
     is a plan-text typo, not a code defect, so the fix lane (correcting code)
     does not apply."
-  since: 2026-07-18
+  since: 2026-07-19
   recommendation: >-
     ## Recommendation
 
