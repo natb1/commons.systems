@@ -18,25 +18,6 @@ import type { FixState, IntentionNode, Phase } from "./schema.js";
 
 // --- Types -------------------------------------------------------------------
 
-/**
- * The phase ladder, closest-to-done first (strategy clarification 22).
- *
- * Historical: this drove the within-rank selection tiebreak until
- * tactic-graph-frozen-tactic-dispatch replaced it with a progression ordinal
- * over the full `PHASES` order (see `progressionIndex`). The selection sort no
- * longer consults it; it is retained as a public export for downstream
- * consumers. Note the progression ordinal reorders `fix` vs `qa` relative to
- * this ladder (`qa` is now more-progressed than `fix`).
- */
-export const PHASE_LADDER: readonly string[] = [
-  "main-qa",
-  "review",
-  "fix",
-  "qa",
-  "implement",
-  "align-tactics",
-];
-
 /** One selectable node, in selection order. */
 export interface GraphCandidate {
   id: string;

@@ -145,7 +145,7 @@ describe("tactic eligibility", () => {
 
   it("passes pace_exempt and execution.pr through to the candidate", () => {
     const sel = selectGraphTargets([
-      tactic({ id: "tactic-a", phase: "fix", pace_exempt: true, execution: exec({ pr: 42 }) }),
+      tactic({ id: "tactic-a", phase: "qa", pace_exempt: true, execution: exec({ pr: 42 }) }),
     ]);
     expect(sel.candidates[0]).toMatchObject({ pace_exempt: true, pr: 42 });
   });
@@ -763,18 +763,16 @@ describe("ordering", () => {
     expect(candidateIds(nodes)).toEqual(["tactic-high", "tactic-low"]);
   });
 
-  it("within one rank level, the progression ordinal orders closest-to-done first (qa sorts before fix)", () => {
+  it("within one rank level, the progression ordinal orders closest-to-done first", () => {
     const nodes = [
       strategy({ id: "strategy-s", reading: "validated" }),
       tactic({ id: "tactic-implement", phase: "implement" }),
       tactic({ id: "tactic-review", phase: "review" }),
       tactic({ id: "tactic-qa", phase: "qa" }),
-      tactic({ id: "tactic-fix", phase: "fix" }),
     ];
     expect(candidateIds(nodes)).toEqual([
       "tactic-review",
       "tactic-qa",
-      "tactic-fix",
       "tactic-implement",
     ]);
   });
@@ -802,7 +800,6 @@ describe("ordering", () => {
       "draft",
       "align-tactics",
       "implement",
-      "fix",
       "qa",
       "review",
       "main-qa",

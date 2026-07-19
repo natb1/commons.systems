@@ -27,12 +27,15 @@ export const TOOLING_KINDS: readonly ToolingKind[] = ["actuator", "sensor"];
 /**
  * Persisted dispatch phase a tactic sits in. A future graph-native router
  * transitions this; the schema only validates the value is one of the enum.
+ *
+ * `"fix"` is deliberately NOT a member: the CI-fix interrupt lives entirely in
+ * the orthogonal `execution.fix` field (see `FixState`), set/cleared by the
+ * graph selector off the live CI verdict, independent of `phase`.
  */
 export type Phase =
   | "draft"
   | "align-tactics"
   | "implement"
-  | "fix"
   | "qa"
   | "review"
   | "main-qa"
@@ -42,7 +45,6 @@ export const PHASES: readonly Phase[] = [
   "draft",
   "align-tactics",
   "implement",
-  "fix",
   "qa",
   "review",
   "main-qa",

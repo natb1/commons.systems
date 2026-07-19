@@ -19,7 +19,6 @@ export {
   tacticScopeFingerprint,
   servingStrategyIds,
   readingDate,
-  PHASE_LADDER,
 } from "./router.js";
 export type { GraphCandidate, GraphSelection, SelectionEvent } from "./router.js";
 export {
