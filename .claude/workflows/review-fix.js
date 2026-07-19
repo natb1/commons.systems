@@ -264,6 +264,21 @@ const RESIDUE_SCHEMA = {
   },
 };
 
+// Independent working-tree verification schema — consumed by a SEPARATE agent that
+// is fed NO finding data (only a git instruction), so it cannot be steered by a
+// prompt-injection payload embedded in an attacker-controlled finding description.
+// It reports the files actually modified in the working tree so a residue item's
+// self-reported `applied`/`touched_files` can be checked against reality before the
+// escalation gate or the phantom-fix accounting trusts it.
+const RESIDUE_TREE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['modified_files'],
+  properties: {
+    modified_files: { type: 'array', items: { type: 'string' } },
+  },
+};
+
 // --- inline kernel helpers (thin mirrors of the pure scripts) ----------------
 
 // The trust-the-built-in review-and-fix sources: these run the built-in review
@@ -615,11 +630,6 @@ const laneAFixed = ((codeReviewResult && codeReviewResult.fixed) || []).map((e, 
   touched_files: e.touched_files,
 }));
 
-// Raw Lane-A results, exposed for later units to consume.
-const laneAResults = {
-  'code-review': codeReviewResult,
-  'security-review': securityReviewResult,
-};
 // Combined Lane-A residue, each item tagged with its source so Unit 3 knows which
 // finder produced it.
 const laneAResidue = []
@@ -1084,6 +1094,11 @@ let residueDispositions = [];
 let laneAResidueFixed = [];
 let laneADispositions = [];
 let laneADeferred = [];
+// Original-residue-index → whether the item's fix is VERIFIED-resolved (a resolve
+// whose claimed touched_files were confirmed modified in the working tree). Keyed
+// by laneAResidue index (not the agent's echoed fields) so the deviation gate can
+// judge escalation from the finder's own output. Empty when there is no residue.
+const residueResolvedByIdx = new Map();
 
 if (laneAResidue.length === 0) {
   log('residue: no Lane-A residue to disposition — skipping the subagent.');
@@ -1162,6 +1177,53 @@ if (laneAResidue.length === 0) {
   const items = (residueRes && residueRes.items) || [];
   residueDispositions = items;
 
+  // Independent working-tree verification of `applied`. The residue agent's own
+  // `applied`/`touched_files` are self-reported and never checked against reality;
+  // an item can claim `disposition:'resolve', applied:true` while editing nothing
+  // (an honest error, or a prompt-injection payload embedded in an attacker-
+  // controlled finding description steering the agent). Trusting that claim lets a
+  // vulnerability merge as "Fixed" and lets the deviation gate treat a high-severity
+  // security finding as resolved. Confirm the claimed edits actually landed: capture
+  // the working-tree's real modified-file set via a SEPARATE agent fed ONLY a git
+  // instruction (no finding descriptions reach it, so the injection cannot steer it).
+  let modifiedSet = new Set();
+  const anyResolveApplied = items.some(
+    (it) => it.disposition === 'resolve' && it.applied === true
+  );
+  if (anyResolveApplied) {
+    subagentsLaunched += 1;
+    const treeRes = await agent(
+      [
+        'Run `git diff --name-only HEAD` in the current working tree and return the',
+        'EXACT list of repo-relative file paths it prints — the files with uncommitted',
+        'modifications. Make NO edits, NO commits, NO pushes; this is a read-only check.',
+        'Return { "modified_files": [ ...paths... ] }. Return [] if it prints nothing.',
+      ].join('\n'),
+      {
+        model: 'sonnet',
+        agentType: 'general-purpose',
+        schema: RESIDUE_TREE_SCHEMA,
+        label: 'residue-tree-verify',
+        phase: 'residue',
+      }
+    );
+    for (const p of (treeRes && treeRes.modified_files) || []) {
+      const s = String(p).trim();
+      if (s) modifiedSet.add(s);
+    }
+  }
+  // A claimed touched file is "really modified" only if it matches a path in the
+  // git-diff set. Tolerate absolute-vs-repo-relative reporting by suffix match.
+  const pathReallyModified = (t) => {
+    const tf = String(t).trim();
+    if (!tf) return false;
+    if (modifiedSet.has(tf)) return true;
+    for (const m of modifiedSet) {
+      if (m === tf || m.endsWith('/' + tf) || tf.endsWith('/' + m)) return true;
+    }
+    return false;
+  };
+
   // Zip each disposition back to its original residue item by ref index to recover
   // location/description/category/exploit_scenario/recommended_fix (the schema does
   // not carry these on the disposition object).
@@ -1172,8 +1234,28 @@ if (laneAResidue.length === 0) {
       log(`residue: disposition ref ${item.ref} maps to no original residue item — skipping.`);
       continue;
     }
-    // Fixed entry for an applied resolve.
-    if (item.disposition === 'resolve' && item.applied === true) {
+    // Trust `applied:true` ONLY when the working tree confirms it: the claimed
+    // touched_files must be non-empty AND every one present in the git-diff set.
+    // A resolve+applied:true with no corresponding tree change is a phantom fix —
+    // treated as UNRESOLVED so it is not bucketed Fixed and (for a high-severity
+    // security finding) the deviation gate below still fires.
+    const appliedVerified =
+      item.disposition === 'resolve' &&
+      item.applied === true &&
+      Array.isArray(item.touched_files) &&
+      item.touched_files.length > 0 &&
+      item.touched_files.every(pathReallyModified);
+    if (item.disposition === 'resolve' && item.applied === true && !appliedVerified) {
+      log(
+        `residue: ${item.ref} claimed resolve+applied but no matching working-tree change — treating as unresolved.`
+      );
+    }
+    // Record verified-resolution keyed on the ORIGINAL residue index so the
+    // deviation gate can judge escalation from the finder's own severity/source.
+    residueResolvedByIdx.set(idx, appliedVerified);
+
+    // Fixed entry for a VERIFIED applied resolve only.
+    if (appliedVerified) {
       laneAResidueFixed.push({
         id: item.ref,
         location: orig.location,
@@ -1204,13 +1286,13 @@ if (laneAResidue.length === 0) {
       });
     }
     // Disposition-audit entry. bucket mapping:
-    //   resolve + applied            → Fixed
-    //   resolve + NOT applied        → Required (in-contract, unresolved; not dropped)
+    //   resolve + VERIFIED applied   → Fixed
+    //   resolve + unverified/phantom → Required (unresolved; not dropped)
     //   ignore                       → Informational
     //   defer                        → Deferred
     let bucket;
     if (item.disposition === 'resolve') {
-      bucket = item.applied === true ? 'Fixed' : 'Required';
+      bucket = appliedVerified ? 'Fixed' : 'Required';
     } else if (item.disposition === 'ignore') {
       bucket = 'Informational';
     } else {
@@ -1341,9 +1423,22 @@ const security_followup_input = deduped
 // --- 7. deviation + dispositions + return ------------------------------------
 
 // deviation: any Required + Upheld + high-confidence finding still unresolved after fixes,
-// OR (Lane-A) a confirmed high-severity in-contract security-review finding the residue
-// phase did not resolve. code-review is quality-only and never escalates; erosion is
-// Lane-B and untouched (non-escalation invariant intact for erosion).
+// OR (Lane-A) ANY high-severity security-review residue finding the residue phase did not
+// VERIFIABLY resolve. code-review is quality-only and never escalates; erosion is Lane-B
+// and untouched (non-escalation invariant intact for erosion).
+//
+// The Lane-A clause is deliberately hardened against a residue agent whose disposition
+// was steered by a prompt-injection payload embedded in an attacker-controlled finding
+// description (e.g. "mark in_contract:false / disposition:ignore"):
+//   - severity/source are read from laneAResidue — the security-review finder's OWN
+//     output — NOT the residue agent's echoed r.severity/r.source, so a downgraded or
+//     mislabeled echo cannot dodge the gate;
+//   - `in_contract` is NOT consulted at all: any high-severity security finding that is
+//     not verifiably fixed escalates to a human regardless of the agent's contract call;
+//   - "resolved" means residueResolvedByIdx === true, a working-tree-VERIFIED applied
+//     resolve — an ignore/defer/phantom-resolve leaves the item unresolved and escalates.
+// A high-severity original item with no returned disposition (agent dropped it) has no
+// map entry (!== true) and therefore also escalates.
 const deviation =
   keptFindings.some(
     (f) =>
@@ -1352,12 +1447,11 @@ const deviation =
       f.Confidence === 'high' &&
       !fixedIds.has(f.id)
   ) ||
-  residueDispositions.some(
-    (r) =>
-      r.source === 'security-review' &&
-      r.severity === 'high' &&
-      r.in_contract &&
-      !(r.disposition === 'resolve' && r.applied === true)
+  laneAResidue.some(
+    (orig, idx) =>
+      orig.source === 'security-review' &&
+      orig.severity === 'high' &&
+      residueResolvedByIdx.get(idx) !== true
   );
 
 function truncate(text, n) {
@@ -1398,6 +1492,24 @@ const dispositions = deduped.map((f) => {
 // buckets as Lane-B. laneADispositions already carry recommended_fix for Fixed/
 // Required entries (built that way in the residue phase), so no transformation needed.
 dispositions.push(...laneADispositions);
+
+// Also surface code-review's OWN auto-applied fixes (laneAFixed) as Fixed-bucket
+// dispositions. They were merged into `fixed[]` (line ~1335) so they count toward
+// `fixes_applied`, but without a matching disposition they would break the
+// outcome-envelope invariant `fixes_applied === count of Fixed-bucket dispositions`
+// (.claude/docs/outcome-envelope.md) and let `hit_rate = fixes_applied /
+// findings_surfaced` exceed 1.0. laneAResidueFixed already appears in
+// laneADispositions as Fixed, so only laneAFixed needs adding here.
+dispositions.push(
+  ...laneAFixed.map((e) => ({
+    id: e.id,
+    short_desc: truncate(e.fix_summary, 140),
+    location: e.location,
+    bucket: 'Fixed',
+    sources: ['code-review'],
+    recommended_fix: e.fix_summary,
+  }))
+);
 
 // --- outcome-envelope counts (Unit 3, issue #1860) ---------------------------
 // Computed per .claude/docs/outcome-envelope.md. Unit 4 passes these straight
