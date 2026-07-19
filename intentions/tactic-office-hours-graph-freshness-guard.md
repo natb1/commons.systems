@@ -38,7 +38,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  bug_fix: true
 ---
 
 # tactic-office-hours-graph-freshness-guard

@@ -30,7 +30,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  bug_fix: true
 ---
 # analyticsutil: deliver web-vitals and the first page_view for sessions torn down before firebase analytics init resolves (pre-init race)
 
