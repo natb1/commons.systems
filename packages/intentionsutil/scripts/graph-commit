@@ -74,6 +74,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 INTENTIONS_DIR="$REPO_ROOT/intentions"
 # store.ts is imported by the parking fallback via tsx (.js → .ts resolution).
 STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
+# merge-node.ts is the layer-2 field-level auto-merge CLI (run_merge_node()).
+MERGE_NODE_SCRIPT="$REPO_ROOT/packages/intentionsutil/scripts/merge-node.ts"
 
 # Total commit → rebase → stamp → push attempts before a pure (conflict-free)
 # rejection is declared a busy-main failure. Overridable for tests.
@@ -124,6 +126,21 @@ SCRATCH_PUSHED=0
 # intentions-only worktree), where the in-place path is used unchanged.
 ORIG_HEAD=""
 RESTORE_HEAD=0
+# RESOLVED_VIA_MERGE — set to 1 the moment any layer-2 (structural field-level
+# merge, run_merge_node()) or later layer-3 auto-merge actually resolves a
+# concurrent-edit divergence. Read once at the final "landed" log line to append
+# a distinct suffix; this is the SAME rc-0 landed exit as a plain landed
+# outcome, distinguished only by the log message — no new exit code.
+RESOLVED_VIA_MERGE=0
+# CONFLICT_FIELDS_JSON — path to a tempfile (created inside SNAP_DIR the first
+# time it is needed) holding a JSON ARRAY of unresolved-field objects
+# accumulated across every id this invocation could not fully resolve
+# (shape: {"id","field","ours","theirs"} for a real field conflict, or a
+# {"id","note"} sentinel for a crash / prune-vs-edit). Empty string means the
+# file has not been created yet (no captured conflicts). Appends read-modify-
+# rewrite via jq so the file stays valid JSON throughout (a pushable array, not
+# JSONL). Unit 3/4 also read/write it.
+CONFLICT_FIELDS_JSON=""
 
 die() {
   echo "error: graph-commit: $*" >&2
@@ -277,6 +294,69 @@ snapshot() {
   # PRUNE_IDS are deliberately skipped: a prune id has no on-disk file to
   # copy, and there is no writer-authored content to preserve for it — the
   # deletion is fully recorded by the commit that lands (or fails to land).
+}
+
+# --- Layer-2 conflict accumulation ------------------------------------------
+# CONFLICT_FIELDS_JSON holds a JSON ARRAY of unresolved-field objects (see the
+# globals block). We keep it a valid JSON array throughout — appending is a
+# read-modify-rewrite via jq, not a JSONL append — so any later reader (Unit
+# 3/4) can `jq` it directly. The file lives inside SNAP_DIR, which exists for
+# the lifetime of any run that reaches try_land().
+
+# Lazily create the accumulator file as an empty array the first time it's used.
+init_conflict_fields() {
+  if [[ -z "$CONFLICT_FIELDS_JSON" ]]; then
+    CONFLICT_FIELDS_JSON="$SNAP_DIR/conflict-fields.json"
+    printf '[]' >"$CONFLICT_FIELDS_JSON"
+  fi
+}
+
+# Append a JSON array of objects (compact JSON passed on $1) onto
+# CONFLICT_FIELDS_JSON, rewriting the whole file so it stays a valid array.
+append_conflicts() {
+  local arr="$1" tmp
+  init_conflict_fields
+  tmp="$(mktemp "$SNAP_DIR/.cf.XXXXXX")" || die "could not create temp file for conflict-fields append"
+  jq --argjson add "$arr" '. + $add' "$CONFLICT_FIELDS_JSON" >"$tmp"
+  mv -- "$tmp" "$CONFLICT_FIELDS_JSON"
+}
+
+# --- Layer 2: structural field-level auto-merge -----------------------------
+# run_merge_node <id> <base-file-or-empty> <ours-file> <theirs-file-or-empty> <out-file>
+# Invokes MERGE_NODE_SCRIPT (merge-node.ts) to three-way merge one node's
+# frontmatter fields. On full resolution: <out-file> holds the valid merged
+# content when this returns 0, and RESOLVED_VIA_MERGE is set to 1. On partial /
+# no resolution, OR a tool crash (non-zero exit / unparsable stdout): appends
+# one entry per unresolved field (or one generic "could not attempt structural
+# merge" sentinel on a crash) to CONFLICT_FIELDS_JSON and returns 1. NEVER dies
+# — a per-node content divergence is expected, recoverable state, not a broken
+# environment. Per shell-json.md, stdout is captured into a variable FIRST, then
+# parsed via a here-string (`jq <<<"$var"`), never `echo "$var" | jq`.
+run_merge_node() {
+  local id="$1" base="$2" ours="$3" theirs="$4" out="$5"
+  local captured rc=0
+  # merge-node.ts prints one line of JSON on stdout for BOTH the resolved and
+  # the unresolved outcomes, and NO JSON (non-zero exit, stderr only) on a
+  # genuine crash. Capture stdout; let stderr flow through for visibility.
+  captured="$(npx tsx "$MERGE_NODE_SCRIPT" --base "$base" --ours "$ours" --theirs "$theirs" --out "$out")" || rc=$?
+
+  # A crash (non-zero exit) or stdout that is not valid JSON is NOT a content
+  # divergence we can enumerate — record a generic sentinel and report
+  # unresolved, but never die.
+  if [[ "$rc" -ne 0 ]] || ! jq -e . >/dev/null 2>&1 <<<"$captured"; then
+    append_conflicts "$(jq -cn --arg id "$id" '[{id: $id, note: "could not attempt structural merge"}]')"
+    return 1
+  fi
+
+  if [[ "$(jq -r '.resolved' <<<"$captured")" == "true" ]]; then
+    # merge-node.ts wrote <out>; the merged content is ready for the caller.
+    RESOLVED_VIA_MERGE=1
+    return 0
+  fi
+
+  # resolved==false: one {id, field, ours, theirs} entry per unresolved field.
+  append_conflicts "$(jq -c --arg id "$id" '[.conflicts[] | {id: $id, field, ours, theirs}]' <<<"$captured")"
+  return 1
 }
 
 # --- Far-ahead worktree: rebuild the edit on an intentions/-only base --------
@@ -438,6 +518,96 @@ await_checks() {
   done
 }
 
+# --- Prune-id membership ----------------------------------------------------
+# Return 0 iff <id> is one of the --prune ids (a deletion, not an edit).
+is_prune_id() {
+  local id="$1" p
+  for p in "${PRUNE_IDS[@]}"; do
+    [[ "$p" == "$id" ]] && return 0
+  done
+  return 1
+}
+
+# --- Layer 2: field-level auto-merge of a textual rebase conflict ------------
+# Called with a rebase in progress (conflicted paths staged as unmerged) after
+# `git pull --rebase origin main` hit a textual CONFLICT, BEFORE aborting and
+# parking. For each conflicted intentions/<id>.md, attempt an automatic
+# field-level merge via run_merge_node(). Returns 0 iff EVERY conflicted id
+# fully resolved AND `git rebase --continue` then succeeded — the caller falls
+# through to the normal post-pull stamping/push path exactly as if the pull had
+# succeeded outright. Returns 1 on any unresolved id (the caller aborts the
+# rebase and returns 10 → parks); unresolved fields accumulate in
+# CONFLICT_FIELDS_JSON. Dies only on the broken-invariant case (a conflicted
+# path outside this invocation's node set).
+try_layer2_resolve() {
+  local conflicted path id all_resolved=1
+  conflicted="$(git diff --name-only --diff-filter=U)"
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    id="${path#intentions/}"
+    id="${id%.md}"
+    # Defensive: only requested paths are ever staged by this writer, so a
+    # conflicted path outside ALL_IDS (EXPECTED holds exactly ALL_IDS's paths)
+    # is a broken invariant, not a content divergence — die, do not continue.
+    if [[ -z "${EXPECTED[$path]:-}" ]]; then
+      die "unexpected conflicted path '$path' not in this invocation's node set — broken staging invariant"
+    fi
+    # A prune (deletion) has no content to structurally merge against — record a
+    # sentinel and mark unresolved for this id without calling run_merge_node.
+    if is_prune_id "$id"; then
+      append_conflicts "$(jq -cn --arg id "$id" '[{id: $id, note: "prune vs. concurrent edit"}]')"
+      all_resolved=0
+      continue
+    fi
+    # GIT-REBASE STAGE NUMBERING (do NOT get this backwards — documented here so
+    # future readers don't invert it): during `git rebase`, HEAD is replayed
+    # ONTO the upstream tip, so
+    #   stage :1: = merge-base                                (this plan's "base")
+    #   stage :2: = UPSTREAM / already-landed content         (this plan's "theirs")
+    #   stage :3: = the patch being replayed / this writer's
+    #               intended content                         (this plan's "ours")
+    # This is the OPPOSITE of `git merge`'s numbering, where stage 2 is ours and
+    # stage 3 is theirs. run_merge_node() takes (<id> <base> <ours> <theirs>
+    # <out>) by the merge primitive's SEMANTIC naming, so we pass stage 3 as
+    # "ours" and stage 2 as "theirs" even though the raw git stage numbers are
+    # swapped from that.
+    local base_arg ours_arg theirs_arg out_f
+    out_f="$SNAP_DIR/.merge-$id.out"
+    base_arg="$(stage_file_or_empty 1 "$path" "$SNAP_DIR/.merge-$id.base")"
+    theirs_arg="$(stage_file_or_empty 2 "$path" "$SNAP_DIR/.merge-$id.theirs")"
+    ours_arg="$(stage_file_or_empty 3 "$path" "$SNAP_DIR/.merge-$id.ours")"
+    if run_merge_node "$id" "$base_arg" "$ours_arg" "$theirs_arg" "$out_f"; then
+      # Resolved: install the merged content at the real repo path and stage it.
+      cp -- "$out_f" "$path"
+      git add -- "$path"
+    else
+      all_resolved=0
+    fi
+  done <<<"$conflicted"
+
+  [[ "$all_resolved" -eq 1 ]] || return 1
+
+  # Every conflicted id resolved and staged — continue the rebase. If it
+  # unexpectedly fails (a stage we did not enumerate, a hook, etc.), treat it as
+  # unresolved so the caller aborts and parks — do not assume infallibility.
+  git rebase --continue >&2 || return 1
+  return 0
+}
+
+# Write stage <n> of <path> into <dest>; echo <dest> when the stage exists, or
+# the empty string when it does not (an add/add or delete/modify conflict leaves
+# a stage absent). merge-node.ts reads an empty-string arg as "this side did not
+# exist" rather than parsing an empty file, so a missing stage must map to "".
+stage_file_or_empty() {
+  local stage="$1" path="$2" dest="$3"
+  if git show ":$stage:$path" >"$dest" 2>/dev/null; then
+    printf '%s' "$dest"
+  else
+    rm -f -- "$dest"
+    printf '%s'
+  fi
+}
+
 # --- Bounded rebase + stamp + push loop ------------------------------------
 # Runs up to MAX_PUSH_ATTEMPTS of:
 #   pull --rebase origin main → push HEAD:graph/<scratch> → await checks →
@@ -447,8 +617,11 @@ await_checks() {
 # path before fast-forwarding it onto main.
 # Returns:
 #   0  pushed.
-#   10 a rebase CONFLICT occurred (aborted) — the caller fails closed and
-#      parks; there is no automatic resolution.
+#   10 a rebase CONFLICT occurred that layer 2 (try_layer2_resolve) could NOT
+#      fully resolve — the rebase is aborted and the caller fails closed and
+#      parks. A conflict that layer 2 DOES resolve is continued in place and
+#      falls through to the normal push path (returning 0), never surfacing as
+#      10.
 #   11 every attempt failed with no conflict (busy main, or the checks never
 #      stamped green within the poll window).
 # Dies on a non-conflict rebase/fetch failure (broken environment), and on a
@@ -460,12 +633,20 @@ try_land() {
   local attempt sha ck
   for (( attempt=1; attempt<=MAX_PUSH_ATTEMPTS; attempt++ )); do
     if ! git pull --rebase origin main >&2; then
-      if rebase_in_progress; then
-        echo "graph-commit: rebase conflict on attempt $attempt/$MAX_PUSH_ATTEMPTS (concurrent edit to the same node); aborting" >&2
+      if ! rebase_in_progress; then
+        die "'git pull --rebase origin main' failed and left no rebase in progress (dirty tree or fetch failure)"
+      fi
+      echo "graph-commit: rebase conflict on attempt $attempt/$MAX_PUSH_ATTEMPTS (concurrent edit to the same node); attempting layer-2 field-level auto-merge before parking" >&2
+      if ! try_layer2_resolve; then
+        # Layer 2 could not fully resolve every conflicted field — abort the
+        # rebase and park (return 10, which land() maps to 12).
         git rebase --abort >&2 || true
         return 10
       fi
-      die "'git pull --rebase origin main' failed and left no rebase in progress (dirty tree or fetch failure)"
+      # Layer 2 resolved every conflicted id and `git rebase --continue`
+      # succeeded — fall through to the normal stamping/push path below exactly
+      # as if `git pull --rebase` had succeeded outright the first time.
+      echo "graph-commit: layer-2 auto-merge resolved all conflicted node(s) on attempt $attempt/$MAX_PUSH_ATTEMPTS; continuing" >&2
     fi
 
     # The exact SHA we intend to land; the required checks stamp onto it.
@@ -507,18 +688,21 @@ try_land() {
   return 11
 }
 
-# --- Land: fail closed on conflict ------------------------------------------
+# --- Land: fail closed on an unresolvable conflict --------------------------
 # A rebase conflict means a concurrent writer landed an OVERLAPPING edit to the
-# same node while this one was in flight. There is no safe automatic
-# resolution: replaying this writer's whole-file snapshot over the other
-# writer's landed content would silently discard that edit (the entire file,
-# not just the conflicting hunk) while still exiting 0 — so a conflict maps
-# directly to the parking outcome, never to a retry.
+# same node while this one was in flight. try_land() first attempts an automatic
+# field-level merge (layer 2, try_layer2_resolve): when every conflicted field
+# merges cleanly the rebase is continued in place and the write lands normally
+# (rc 0). Only when layer 2 CANNOT resolve every conflicted field does the
+# conflict map to the parking outcome — replaying this writer's whole-file
+# snapshot over the other writer's landed content would silently discard that
+# edit (the entire file, not just the conflicting hunk) while still exiting 0,
+# so an unresolvable conflict parks rather than retries or overwrites.
 # Returns:
-#   0  landed.
+#   0  landed (possibly after a layer-2 auto-merge resolved the conflict).
 #   11 pure rejection exhausted with NO conflict (busy main — fail loudly, do
 #      not park; this is not a semantic conflict).
-#   12 a rebase CONFLICT (genuine semantic conflict — the caller parks).
+#   12 a rebase CONFLICT layer 2 could not fully resolve (the caller parks).
 land() {
   local rc=0
   try_land || rc=$?
@@ -562,6 +746,47 @@ TS
     die "failed to write the office_hours parking record"
   fi
   rm -f "$tmpts"
+}
+
+# --- Shared fail-closed park path (never returns) ---------------------------
+# The concurrent-edit conflict fail-closed sequence, extracted from main()'s
+# rc-12 tail so a second call site (Unit 3, before any commit exists) can invoke
+# the identical park without duplicating fetch/reset/park_write/re-commit/land
+# logic. Self-contained: relies only on globals (ALL_IDS, SNAP_DIR, KEEP_SNAP)
+# and the committed helpers, never on state that exists only after
+# try_land()/land() ran — it does its own fetch/reset. Always calls exit 1.
+park_and_exit() {
+  local park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
+  # Fail closed: discard this writer's local conflicting commit, park the node as
+  # it exists on fresh origin/main (the other writer's already-landed content
+  # wins), and preserve this writer's unlanded content in SNAP_DIR for the
+  # manual merge.
+  KEEP_SNAP=1
+  echo "graph-commit: concurrent-edit conflict on ${ALL_IDS[*]}; parking node(s) — this writer's content is NOT landed" >&2
+  echo "graph-commit: this writer's unlanded content is preserved at $SNAP_DIR for the manual merge" >&2
+  # Sync to fresh origin/main. The tree is clean of tracked modifications here
+  # (the conflicting rebase could only start on a clean tree and was aborted),
+  # so the reset discards exactly the local conflicting commit — nothing else.
+  # NOTE (deployment): `git reset --hard` is a tree-updating op; when this
+  # script is driven through the sandboxed Bash tool it needs
+  # dangerouslyDisableSandbox if origin/main advanced read-only paths
+  # (.claude/skills/**, config/) — see .claude/rules/sandbox.md. That is a
+  # caller concern, not resolved here.
+  git fetch origin main >&2
+  git reset --hard FETCH_HEAD >&2
+  park_write
+  CURRENT_MSG="$park_msg"
+  if id_files_dirty; then
+    commit_files
+  fi
+  local prc=0
+  land || prc=$?
+  if [[ "$prc" -eq 0 ]]; then
+    echo "graph-commit: parked ${ALL_IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
+  else
+    echo "error: graph-commit: could not land the parking write for ${ALL_IDS[*]} — office_hours set locally but not pushed to main" >&2
+  fi
+  exit 1
 }
 
 # --- Main ------------------------------------------------------------------
@@ -622,11 +847,11 @@ main() {
   ALL_IDS=("${IDS[@]}" "${PRUNE_IDS[@]}")
   check_base_freshness
 
-  # Default commit / parking messages.
+  # Default commit message (the parking commit message is derived inside
+  # park_and_exit()).
   if [[ -z "$msg" ]]; then
     msg="graph: ${ALL_IDS[*]}"
   fi
-  local park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
 
   # The throwaway stamping branch: named for the primary id and scoped to this
   # PID so concurrent graph-commit invocations never collide. cleanup() (the
@@ -673,7 +898,13 @@ main() {
   local rc=0
   land || rc=$?
   if [[ "$rc" -eq 0 ]]; then
-    echo "graph-commit: landed ${ALL_IDS[*]} on main" >&2
+    # Same rc-0 landed outcome whether or not a layer-2/3 auto-merge was needed;
+    # RESOLVED_VIA_MERGE only distinguishes the log line (no new exit code).
+    local landed_msg="graph-commit: landed ${ALL_IDS[*]} on main"
+    if [[ "$RESOLVED_VIA_MERGE" -eq 1 ]]; then
+      landed_msg+=" (layer 2/3 auto-resolved a concurrent-edit divergence)"
+    fi
+    echo "$landed_msg" >&2
     exit 0
   fi
   if [[ "$rc" -eq 11 ]]; then
@@ -681,36 +912,9 @@ main() {
     exit 1
   fi
 
-  # rc == 12: concurrent-edit conflict — fail closed. Discard this writer's
-  # local conflicting commit, park the node as it exists on fresh origin/main
-  # (the other writer's already-landed content wins), and preserve this
-  # writer's unlanded content in SNAP_DIR for the manual merge.
-  KEEP_SNAP=1
-  echo "graph-commit: concurrent-edit conflict on ${ALL_IDS[*]}; parking node(s) — this writer's content is NOT landed" >&2
-  echo "graph-commit: this writer's unlanded content is preserved at $SNAP_DIR for the manual merge" >&2
-  # Sync to fresh origin/main. The tree is clean of tracked modifications here
-  # (the conflicting rebase could only start on a clean tree and was aborted),
-  # so the reset discards exactly the local conflicting commit — nothing else.
-  # NOTE (deployment): `git reset --hard` is a tree-updating op; when this
-  # script is driven through the sandboxed Bash tool it needs
-  # dangerouslyDisableSandbox if origin/main advanced read-only paths
-  # (.claude/skills/**, config/) — see .claude/rules/sandbox.md. That is a
-  # caller concern, not resolved here.
-  git fetch origin main >&2
-  git reset --hard FETCH_HEAD >&2
-  park_write
-  CURRENT_MSG="$park_msg"
-  if id_files_dirty; then
-    commit_files
-  fi
-  local prc=0
-  land || prc=$?
-  if [[ "$prc" -eq 0 ]]; then
-    echo "graph-commit: parked ${ALL_IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
-  else
-    echo "error: graph-commit: could not land the parking write for ${ALL_IDS[*]} — office_hours set locally but not pushed to main" >&2
-  fi
-  exit 1
+  # rc == 12: concurrent-edit conflict layer 2 could not fully resolve — fail
+  # closed via the shared park path.
+  park_and_exit
 }
 
 # Run main only when executed directly; when sourced (e.g. for unit-testing the
