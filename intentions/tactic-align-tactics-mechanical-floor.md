@@ -81,16 +81,81 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: fix
+phase: qa
 execution:
   branch: tactic-align-tactics-mechanical-floor
   pr: 2896
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA planner scope-deviation on opus-fixable residue (items 10,
+    11: align-tactics/align-strategy SKILL.md prose-coherence sign-offs) —
+    skeptics refuted the needs-human label but the gated fix-planner declined to
+    author a fix (deviation_reason: \"Findings 10/11 are subjective
+    prose-coherence sign-offs on the align-tactics/align-strategy SKILL.md
+    doctrine edits (no automated check); I verified the edits are already
+    coherent and every referenced census field exists in the scripts with no
+    dangling references, so there is no scoped code defect to fix — resolving
+    them needs a human coherence sign-off, not code.\"); escalating to
+    office-hours per Step 3.7's scope-deviation escape"
+  since: 2026-07-19
+  recommendation: >-
+    # Recommendation: `tactic-align-tactics-mechanical-floor` (PR #2896)
+
+
+    **Bottom line:** This is a fast confirm-and-patch, not a deep judgment call.
+    The two open QA items are subjective prose sign-offs on SKILL.md doctrine
+    edits, but the skeptic disposition already did the investigative work for
+    you — one item points at a specific stale line to fix, the other is already
+    clean. Everything machine-verifiable (unit tests 545/545, live
+    validate-graph gate, both census scripts on the real corpus, end-to-end
+    marker-catch, the `tactic-mainqa-*` exemption, unknown-id handling, the live
+    lint fix) passed.
+
+
+    **Note the tension worth resolving first.** The gated fix-planner declined
+    to author any fix unit, reasoning "no scoped code defect... needs a human
+    coherence sign-off." That reads oddly for item 10, because both skeptics
+    independently located a concrete, textually-locatable stale reference — an
+    ordinary editorial defect, not a values judgment. That mismatch (planner
+    says "nothing to fix," skeptics say "here's the exact stale line") is the
+    whole reason this parked, and it resolves the moment you read the line.
+
+
+    **Item 10 — confirm and fix directly.** Open
+    `.claude/skills/align-tactics/SKILL.md` at lines ~645-648, the
+    "Re-evaluation mode" section. It still says a census script "is planned...
+    until it lands, enumerate open children by hand per the Idempotency
+    section's `grep -rl` recipe." That's stale on two counts:
+    `align-tactics-census.ts` already exists and is already wired into the
+    Idempotency section above, and that Idempotency section no longer contains
+    any `grep -rl` recipe (a file-wide grep for "grep -rl" returns only this one
+    dangling mention). If your read confirms it, just patch this passage to
+    point at the current Idempotency-section census-script mechanism and drop
+    the "is planned / until it lands / by hand" framing. This is a doc-only
+    follow-up — no QA re-run required.
+
+
+    **Item 11 — confirm and mark resolved, no change.** Both skeptics read
+    `.claude/skills/align-strategy/SKILL.md` directly and found it already
+    coherent: the census script (`align-strategy-census.ts`) is correctly wired
+    into all three sections (Step 1 improvement-pass branch, Step 1.2 overlap
+    detection, Step 3 delegation advice), with self-aware framing and no
+    dangling reference to the removed hand-reading approach. The only loose
+    thread is line ~159 informally calling Step 3 "step 3's delegation sweep"
+    while the heading reads "Delegation advice" — a cosmetic label, harmless. A
+    quick confirming read should let you sign this off as-is (optionally tidy
+    the label while you're in the file).
+
+
+    **After the item-10 patch,** commit it onto PR #2896 as a doc-only fix, then
+    advance the node through qa to done — no full QA cycle is warranted, since
+    the only change is the one doc edit and nothing script-verifiable was
+    touched.
 pace_exempt: false
 rounds: null
 attributes: {}

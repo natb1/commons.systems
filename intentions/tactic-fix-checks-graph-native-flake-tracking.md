@@ -27,8 +27,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-fix-checks-graph-native-flake-tracking
+  pr: 2901
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -290,3 +298,26 @@ surface:
 - Confirm the ported `STALE` suppression still holds (a stale PR branch
   re-emitting the pre-fix signature does not spuriously reopen or duplicate) —
   the ancestry-based branch copied from `dispatch-flake-dedup:134-182`.
+
+## Needs-main residue
+
+Recorded by `/qa-fix` (PR #2901) — this item cannot be verified by a script at
+QA time; it requires live observation of the merged intention graph and is
+deferred to `tactic-main-qa-phase`'s handler per the node body's own
+Verification section, which frames it as a manual dry-run confirmation rather
+than an automated merge-time check.
+
+- **id**: 5
+- **title**: End-to-end router re-selection via `blocked_by`
+- **url_path**: n/a
+- **expected_outcome**: The source tactic self-unblocks and is re-selected by
+  the router once a linked flake tactic reaches `phase: done`, with no
+  spurious `STALE` reopen, confirming the design's central architectural
+  assumption.
+- **finding**: planned-deferral — the node body's own Verification section
+  explicitly frames this as a manual "dry-run against a synthetic flake on a
+  throwaway node-lane worktree" and a "confirmation of the wiring, not a
+  discovery" (since `router.ts`'s `blockersComplete` semantics — absence or
+  `phase: done` completes a blocker — are prior-art verified, not new
+  plumbing), to be checked via live intention-graph observation rather than an
+  automated merge-time check. Not assertable by a script at this PR.

@@ -88,7 +88,9 @@ clarifications:
       blocked_by reachability (flat +1 for on-path nodes) is unaffected —
       boolean reachability, not additive compounding. Implementation retained in
       draft tactic-attention-blocking-orthogonal. Recorded 2026-07-13 interview
-      (author-dictated)."
+      (author-dictated). Amended 2026-07-18: under the tier model the precedence
+      lift generalizes to the lexicographic (tier, rank) pair — see the
+      2026-07-18 tier clarifications."
   - question: How does the intention-store instrument distinguish sensor-run
       readings from hand-written ones?
     answer: "Mechanically it cannot: reading provenance is not recorded in
@@ -99,10 +101,74 @@ clarifications:
       office-hours is itself the sensor run, so existence is the honest proxy
       there. A first-class provenance field is deliberately out of scope this
       round. Recorded 2026-07-11 /align-tactics round."
+  - question: How do defects and production incidents outrank feature work — what is
+      the tier model?
+    answer: "Ranking gains an outer tier axis — an author-dictated amendment of the
+      terms-with-weights-never-bands doctrine: tiers ARE bands, deliberately,
+      layered above the term-composed rank; the terms-and-weights doctrine
+      continues to govern ordering within a tier. Three tiers: tier 1 (default)
+      is all ordinary work; tier 2 is bug fixes and security issues, plus
+      anything explicitly lifted to tier 2; tier 3 is production/main issues
+      (e.g. CI failing on main), plus anything explicitly lifted to tier 3. The
+      selector sorts by tier first, always — every tier-3 node outranks every
+      tier-2 node outranks every tier-1 node — and boost-derived rank orders
+      within a tier. Diverges from the additive-term rival (a +K bug-fix term
+      keeping the never-bands doctrine intact) deliberately: a term-based floor
+      is relative to other terms magnitudes and erodes as weights evolve, while
+      a tier is an absolute guarantee. This replaces the special-case
+      standing-boost-100 mechanism on strategy-main-health: red-main work
+      becomes tier 3 membership rather than a dominant boost. Migration is
+      must-land-first: strategy-main-health boost 100 and the write-path guard
+      protecting it (strategy-graph-native-dispatch, 2026-07-13) stay
+      authoritative until the tier implementation lands; draft
+      tactic-attention-tier-ranking flips main-health to tier 3 and amends the
+      guard in the same change. Recorded 2026-07-18 interview
+      (author-dictated)."
+  - question: How is a node marked as a bug fix or security issue, and how is tier
+      expressed?
+    answer: "Semantic marks are kind-agnostic attributes fields: attributes.bug_fix:
+      true and attributes.security: true each imply tier >= 2 — the mark names
+      WHY the node ranks. An explicit attributes.tier: 2 or 3 expresses
+      non-semantic lifts, including tier 3 for production/main issues. A node
+      own tier = max(semantic-implied, explicit, 1); absent all marks a node is
+      tier 1. Marks live in free-form attributes, so authoring them needs no
+      schema change; the implementation adds validate-graph shape checks
+      (booleans; tier in {2,3}). Recorded 2026-07-18 interview."
+  - question: Does tier flow to other nodes, and how does it interact with blocking
+      precedence?
+    answer: "Tier inherits downward along parent/serves — the same edges authored
+      boosts flow on — max-based: a node effective tier = max(own tier, each
+      distributor effective tier), so marking a strategy tier 3 lifts its
+      subtree and nothing compounds. Blocking precedence generalizes from rank
+      to the pair: a blocker effective selection precedence lifts to at least
+      the lexicographic max (tier, rank) of the nodes it blocks — recursive and
+      max-based, never additive — so a tier-1 blocker of a tier-3 node drains
+      with tier-3 urgency while its own marks and authored rank are untouched.
+      This extends the 2026-07-13 blocking-orthogonal-to-boosting doctrine
+      unchanged in spirit: blocking still gates and serializes, never boosts.
+      Recorded 2026-07-18 interview."
+  - question: Which nodes carry the first bug_fix/security marks?
+    answer: "The 2026-07-18 round applied attributes.bug_fix: true to the ten clear
+      defect-fix tactics open at the time
+      (tactic-align-tactics-self-claim-collision,
+      tactic-graph-fastpath-guard-diff-base,
+      tactic-office-hours-snapshot-wire-contract,
+      tactic-qa-fix-office-hours-reentry-guard, tactic-analytics-preinit-vitals,
+      tactic-align-init-rename-stale-node-refs,
+      tactic-align-strategy-stepref-drift-dataviz,
+      tactic-review-fix-residue-death-coverage,
+      tactic-office-hours-graph-freshness-guard,
+      tactic-graph-review-exclusion-stall-recovery) and attributes.security:
+      true to tactic-prerender-single-injection-path. Borderline candidates
+      (mixed-scope or design-remedy nodes) are listed in draft
+      tactic-attention-tier-ranking for a later author call, not marked. Marks
+      are inert until the tier implementation lands. Recorded 2026-07-18
+      interview."
 tooling_goals:
   - kind: actuator
-    statement: resolveAttention (additive source-set ranks) consumed directly by the
-      graph-native router's selector
+    statement: resolveAttention (outer tier from bug_fix/security/tier marks with
+      downward max inheritance, additive source-set ranks within tier) consumed
+      directly by the graph-native router selector
   - kind: sensor
     statement: frontier-view renders the resolved ranking
 success_signal:
@@ -122,6 +188,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - the dispatch chain remains the execution path for tactical work

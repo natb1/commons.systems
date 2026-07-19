@@ -46,8 +46,8 @@ attention:
     (tactic-qa-fix-office-hours-reentry-guard, also 66.33), holding top only on
     the id tiebreak — fragile against any compounding that node might accrue.
     Bumped to 62 (rank 67.33) so both requirement carriers sit at joint top of
-    the frontier, strictly above every non-carrier. The boost flows nowhere
-    else (no blocked_by, no children)."
+    the frontier, strictly above every non-carrier. The boost flows nowhere else
+    (no blocked_by, no children)."
 phase: review
 execution:
   branch: tactic-freeze-resurface-stale-children-only
@@ -56,6 +56,7 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []
