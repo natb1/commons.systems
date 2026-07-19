@@ -471,7 +471,7 @@ try_land() {
         git rebase --abort >&2 || true
         return 10
       fi
-      die "'git pull --rebase origin main' failed and left no rebase in progress (dirty tree or fetch failure)"
+      die "'git pull --rebase origin main' failed and left no rebase in progress (fetch failure or another unexpected git error — an unrelated dirty tracked file would have been caught by the pre-flight check)"
     fi
 
     # The exact SHA we intend to land; the required checks stamp onto it.
@@ -597,6 +597,46 @@ TS
   rm -f "$tmpts"
 }
 
+# --- Pre-flight: refuse on unrelated dirty tracked files --------------------
+# try_land()'s `git pull --rebase origin main` refuses outright when ANY
+# tracked file is dirty, including files entirely unrelated to this call's
+# node set (observed: a modified flake.lock in a freshly-provisioned
+# worktree). Left unchecked, that refusal surfaces as try_land()'s generic
+# "dirty tree or fetch failure" die() — indistinguishable from a genuine
+# environment problem, and it never names the offending paths. Catch it here,
+# before ANY tree mutation — in particular before ensure_intentions_only_base()
+# could run a `git reset --hard` that would silently discard the very dirt
+# this is trying to surface — scoped to exclude exactly the paths this call is
+# about to write (those are expected to be dirty; that is the point). Ignores
+# untracked (`??`) entries: only a dirty TRACKED file blocks `git pull
+# --rebase`, per the observed failure mode (code-style.md: clear error over a
+# silent fallback such as --autostash, which would hide rather than surface
+# the anomaly).
+assert_clean_outside_ids() {
+  local dirty
+  dirty="$(git status --porcelain)"
+  [[ -z "$dirty" ]] && return 0
+  local -A ours=()
+  local id
+  for id in "${ALL_IDS[@]}"; do
+    ours["intentions/$id.md"]=1
+  done
+  local offending="" line path
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ "$line" == '??'* ]] && continue
+    path="${line:3}"
+    [[ -n "${ours[$path]:-}" ]] && continue
+    offending+="$line"$'\n'
+  done <<<"$dirty"
+  if [[ -n "$offending" ]]; then
+    echo "error: graph-commit: refusing to start — unrelated dirty tracked file(s) outside this call's node set:" >&2
+    printf '%s' "$offending" >&2
+    echo "       stash or commit these first (e.g. 'git stash -u'), then re-run graph-commit — it resumes safely (a prior partial local commit is detected and just pushed forward)." >&2
+    exit 1
+  fi
+}
+
 # --- Main ------------------------------------------------------------------
 main() {
   cd "$REPO_ROOT"
@@ -654,6 +694,7 @@ main() {
 
   ALL_IDS=("${IDS[@]}" "${PRUNE_IDS[@]}")
   check_base_freshness
+  assert_clean_outside_ids
 
   # Default commit / parking messages.
   if [[ -z "$msg" ]]; then

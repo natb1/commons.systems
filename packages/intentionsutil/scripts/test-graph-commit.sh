@@ -53,6 +53,8 @@
 #  18. far-ahead worktree + --prune: a deletion issued from a far-ahead PR
 #      branch lands on main (the node is removed) without landing the code
 #      commit, HEAD restored
+#  19. an unrelated dirty tracked file outside the node set: clear pre-flight
+#      error naming the file, no rebase/CI attempted, main untouched
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -101,7 +103,7 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
 }
 for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2-migration \
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
-          t-farahead t-farahead-prune t-prune-conflict; do
+          t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight; do
   seed_node "$id"
 done
 git -C "$SEED" add -A
@@ -606,6 +608,26 @@ if [[ $rc -eq 0 ]] \
   ok "far-ahead worktree + --prune: node removed from main, code commit excluded, HEAD restored"
 else
   no "far-ahead prune (rc=$rc restored2=$restored2 far_tip2=$far_tip2)"; printf '%s\n' "$out"
+fi
+
+# --- Case 19: unrelated dirty tracked file — clear pre-flight error, no rebase attempted ---
+set_mode green
+W10="$WORK/w10"
+make_clone "$W10" writer-10
+sync_clone "$W10"
+edit_line "$W10" t-dirty-preflight 1 dirty-edit
+echo "unrelated local change" >>"$W10/packages/intentionsutil/src/store.js"
+before_sha="$(origin_sha)"
+out="$(run_gc "$W10" t-dirty-preflight 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'unrelated dirty tracked file' <<<"$out" \
+   && grep -q 'store.js' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]] \
+   && [[ "$(gh_calls)" -eq 0 ]]; then
+  ok "unrelated dirty tracked file: clear pre-flight error names the file, no rebase/CI attempted, main untouched"
+else
+  no "unrelated dirty tracked file pre-flight (rc=$rc)"; printf '%s\n' "$out"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
