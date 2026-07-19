@@ -24,25 +24,30 @@
 #      3 consecutive polls
 #   7. pending timeout (shim reports "0 0"): still transient — burns all
 #      attempts and exits with the busy-main error
-#   8. id validation: `v1..v2-migration` lands end-to-end; `/`, `\`, and the
+#   8. desynced check-run status (one required check's status is stuck
+#      in_progress even though its conclusion already reports success — a
+#      known GitHub check-runs desync, #2457): the fixed --jq filter keys off
+#      .conclusion alone, so this still counts as the fourth success and
+#      lands immediately instead of spinning to the busy-main timeout
+#   9. id validation: `v1..v2-migration` lands end-to-end; `/`, `\`, and the
 #      exact ids `.` / `..` are rejected with exit 2
-#   9. --prune: an ordinary edit id and a prune id land in ONE commit
-#  10. --prune guard: a prune id whose file is still present on disk is
+#  10. --prune: an ordinary edit id and a prune id land in ONE commit
+#  11. --prune guard: a prune id whose file is still present on disk is
 #      rejected (no commit lands)
-#  11. --base fresh: a --base entry matching origin/main's current blob lands
-#  12. --base stale: a --base entry pointing at a blob origin/main no longer
+#  12. --base fresh: a --base entry matching origin/main's current blob lands
+#  13. --base stale: a --base entry pointing at a blob origin/main no longer
 #      has is refused (no commit lands, no rebase-retry burned)
-#  13. --prune alone (no positional id, IDS empty): a pure deletion lands on
+#  14. --prune alone (no positional id, IDS empty): a pure deletion lands on
 #      main and the scratch branch is cleaned up — this is the owed-prune
 #      backlog's actual shape (a done node with no accompanying edit), not
-#      exercised by case 9's mixed edit+prune
-#  14. --base manifest-file form: a file of <id>=<blobsha> lines (as opposed
-#      to the inline form used by cases 11-12) lands
-#  15. far-ahead worktree (PR branch with a non-intentions code commit): the
+#      exercised by case 10's mixed edit+prune
+#  15. --base manifest-file form: a file of <id>=<blobsha> lines (as opposed
+#      to the inline form used by cases 12-13) lands
+#  16. far-ahead worktree (PR branch with a non-intentions code commit): the
 #      edit is rebuilt on origin/main, ONLY the intentions/ change lands (the
 #      code commit is excluded), exit 0, and the worktree HEAD is restored to
 #      the PR tip
-#  16. far-ahead worktree + --prune: a deletion issued from a far-ahead PR
+#  17. far-ahead worktree + --prune: a deletion issued from a far-ahead PR
 #      branch lands on main (the node is removed) without landing the code
 #      commit, HEAD restored
 #
@@ -90,7 +95,7 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
     for i in $(seq 1 12); do echo "line$i: base"; done
   } >"$SEED/intentions/$1.md"
 }
-for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending v1..v2-migration \
+for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2-migration \
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
           t-farahead t-farahead-prune; do
   seed_node "$id"
@@ -110,23 +115,75 @@ make_clone "$A" writer-a
 make_clone "$B" writer-b
 
 # --- gh / npx PATH shims ------------------------------------------------------
-mkdir -p "$WORK/bin"
+mkdir -p "$WORK/bin" "$WORK/fixtures"
 MODE_FILE="$WORK/gh-mode"
 CALL_LOG="$WORK/gh-calls"
+FIXTURE_DIR="$WORK/fixtures"
+
+# Fixture JSON per mode: {status,conclusion}-shaped check_runs entries for the
+# four required names, run through graph-commit's REAL --jq filter below (not
+# a hardcoded count) so the filter itself is exercised end-to-end.
+cat >"$FIXTURE_DIR/green.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
+  {"name": "lint", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "status": "completed", "conclusion": "success"}
+]}
+JSON
+
+cat >"$FIXTURE_DIR/pending.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "status": "in_progress", "conclusion": null},
+  {"name": "preview-and-smoke", "status": "in_progress", "conclusion": null},
+  {"name": "lint", "status": "in_progress", "conclusion": null},
+  {"name": "unit-tests", "status": "in_progress", "conclusion": null}
+]}
+JSON
+
+cat >"$FIXTURE_DIR/concluded-fail.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
+  {"name": "lint", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "status": "completed", "conclusion": "failure"}
+]}
+JSON
+
+# Desynced-success: one required check's status is still in_progress even
+# though its conclusion already reports success (the GitHub check-runs desync
+# the fixed --jq filter tolerates by keying off .conclusion alone) — #2457.
+cat >"$FIXTURE_DIR/desynced-success.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
+  {"name": "lint", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "status": "in_progress", "conclusion": "success"}
+]}
+JSON
 
 cat >"$WORK/bin/gh" <<'SH'
 #!/usr/bin/env bash
 # gh shim: behavior selected by $GC_GH_MODE_FILE; every invocation appends one
 # fixed marker line to $GC_GH_CALL_LOG so tests can assert poll counts (the
 # real args contain a multi-line --jq program, so they must not be logged raw).
+# For modes that reach the check-runs endpoint, this runs graph-commit's REAL
+# --jq program (extracted from "$@") against a mode-specific fixture file, so
+# the filter itself is exercised rather than a hardcoded count string.
 echo "gh-invocation" >>"$GC_GH_CALL_LOG"
-case "$(cat "$GC_GH_MODE_FILE")" in
-  green)          echo "4 0" ;;
-  pending)        echo "0 0" ;;
-  concluded-fail) echo "3 1" ;;
-  hard-fail)      echo "gh: HTTP 403: API rate limit exceeded (harness shim)" >&2; exit 1 ;;
-  *)              echo "gh shim: unknown mode" >&2; exit 99 ;;
-esac
+mode="$(cat "$GC_GH_MODE_FILE")"
+if [[ "$mode" == "hard-fail" ]]; then
+  echo "gh: HTTP 403: API rate limit exceeded (harness shim)" >&2
+  exit 1
+fi
+jq_program=""
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--jq" ]]; then jq_program="$2"; break; fi
+  shift
+done
+fixture="$GC_FIXTURE_DIR/$mode.json"
+[[ -f "$fixture" ]] || { echo "gh shim: no fixture for mode $mode" >&2; exit 99; }
+jq -r "$jq_program" "$fixture"
 SH
 
 cat >"$WORK/bin/npx" <<'SH'
@@ -163,7 +220,7 @@ run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMP
   (
     cd "$clone" || exit 99
     export PATH="$WORK/bin:$PATH"
-    export GC_GH_MODE_FILE="$MODE_FILE" GC_GH_CALL_LOG="$CALL_LOG"
+    export GC_GH_MODE_FILE="$MODE_FILE" GC_GH_CALL_LOG="$CALL_LOG" GC_FIXTURE_DIR="$FIXTURE_DIR"
     export GRAPH_COMMIT_CHECK_POLL_SECONDS="${GC_POLL:-0}"
     export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS="${GC_TIMEOUT:-5}"
     export GRAPH_COMMIT_MAX_ATTEMPTS="${GC_ATTEMPTS:-5}"
@@ -282,7 +339,25 @@ else
 fi
 sync_clone "$A"
 
-# --- Case 8: id validation -------------------------------------------------------
+# --- Case 8: desynced check-run status — fixed filter counts it as concluded ----
+# GitHub sometimes leaves a check-run's status stuck at in_progress even after
+# its conclusion is already populated (a known check-runs desync, #2457). The
+# fixed --jq filter keys off .conclusion alone, so this fixture's fourth entry
+# (status=in_progress, conclusion=success) still counts toward nsucc==4 and
+# lands immediately instead of spinning to the busy-main timeout the
+# pre-fix status=="completed"-gated filter would hit.
+set_mode desynced-success
+sync_clone "$A"
+edit_line "$A" t-desync 1 desync-lands
+out="$(run_gc "$A" t-desync 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-desync | grep -q 'line1: desync-lands'; then
+  ok "desynced check-run (status stuck in_progress, conclusion success) still lands"
+else
+  no "desynced check-run handling (rc=$rc)"; printf '%s\n' "$out"
+fi
+sync_clone "$A"
+
+# --- Case 9: id validation -------------------------------------------------------
 set_mode green
 sync_clone "$A"
 edit_line "$A" v1..v2-migration 1 dotdot-ok
@@ -302,11 +377,11 @@ for bad in 'a/b' 'a\b' '.' '..'; do
 done
 
 # ---------------------------------------------------------------------------
-# Cases 9-10: --prune
+# Cases 10-11: --prune
 # ---------------------------------------------------------------------------
 set_mode green
 
-# Case 9: an ordinary edit id and a prune id land in ONE commit.
+# Case 10: an ordinary edit id and a prune id land in ONE commit.
 W1="$WORK/w1"
 make_clone "$W1" writer-1
 echo "line13: edited" >>"$W1/intentions/t-prune-edit.md"
@@ -331,7 +406,7 @@ else
   no "prune: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
 fi
 
-# Case 10: a prune id whose file is still present on disk is rejected.
+# Case 11: a prune id whose file is still present on disk is rejected.
 W2="$WORK/w2"
 make_clone "$W2" writer-2
 before_sha="$(origin_sha)"
@@ -346,9 +421,9 @@ else
   fi
 fi
 
-# Case 13: --prune alone (no positional id) — a pure deletion-only commit.
+# Case 14: --prune alone (no positional id) — a pure deletion-only commit.
 # This is the owed-prune backlog's actual shape (a `phase: done` node with no
-# accompanying edit), distinct from case 9's mixed edit+prune: IDS is empty
+# accompanying edit), distinct from case 10's mixed edit+prune: IDS is empty
 # here, so ALL_IDS[0] resolves entirely from PRUNE_IDS, exercising the
 # scratch-branch ref-name path and id_files_dirty()/commit_files() with no
 # ordinary ids at all.
@@ -373,10 +448,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Cases 11-12: --base compare-and-swap
+# Cases 12-13: --base compare-and-swap
 # ---------------------------------------------------------------------------
 
-# Case 11: --base fresh — a blob matching origin/main's current content lands.
+# Case 12: --base fresh — a blob matching origin/main's current content lands.
 W3="$WORK/w3"
 make_clone "$W3" writer-3
 fresh_sha="$(git -C "$W3" hash-object intentions/t-base.md)"
@@ -392,7 +467,7 @@ else
   no "base fresh: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
 fi
 
-# Case 12: --base stale — a blob origin/main no longer has is refused.
+# Case 13: --base stale — a blob origin/main no longer has is refused.
 W4="$WORK/w4"
 make_clone "$W4" writer-4
 stale_sha="$(git -C "$W4" hash-object intentions/t-base.md)"
@@ -421,8 +496,8 @@ else
   fi
 fi
 
-# Case 14: --base manifest-file form — a file of <id>=<blobsha> lines (as
-# opposed to cases 11-12's inline <id>=<blobsha> argument).
+# Case 15: --base manifest-file form — a file of <id>=<blobsha> lines (as
+# opposed to cases 12-13's inline <id>=<blobsha> argument).
 W6="$WORK/w6"
 make_clone "$W6" writer-6
 manifest_sha="$(git -C "$W6" hash-object intentions/t-base-manifest.md)"
@@ -440,7 +515,7 @@ else
   no "base manifest-file form: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
 fi
 
-# --- Case 15: far-ahead worktree (PR branch) — rebuild on origin/main -----------
+# --- Case 16: far-ahead worktree (PR branch) — rebuild on origin/main -----------
 # A PR-branch checkout whose HEAD carries a non-intentions code commit. A commit
 # made on top of it is NOT intentions/-only, so the pre-fix graph-commit's
 # scratch push would fail the fast-path guard and never land. The fix rebuilds
@@ -468,7 +543,7 @@ else
   no "far-ahead worktree (rc=$rc restored=$restored far_tip=$far_tip code-on-main=$(grep -c 'src/feature.js' <<<"$main_tree"))"; printf '%s\n' "$out"
 fi
 
-# --- Case 16: far-ahead worktree + --prune --------------------------------------
+# --- Case 17: far-ahead worktree + --prune --------------------------------------
 # A prune issued from the same far-ahead PR branch: the node is removed from
 # main, the code commit is still excluded, and HEAD is restored.
 set_mode green
