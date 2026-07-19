@@ -668,6 +668,14 @@ export function validateNode(value: unknown): IntentionNode {
  *      uniform across every kind). This is the convention `readingDate()`
  *      (router.ts) and `coverage.ts`'s `lastReviewedOf` parse to date a
  *      clarification; a dateless answer silently breaks those consumers.
+ *  18. `strategy-main-health` holds a dominant attention: no OTHER node's
+ *      `attention.boost` or `attention.override` may match or exceed
+ *      `strategy-main-health`'s own live `attention.boost`. This keeps red-main
+ *      fix work outranking everything else. The threshold is read live from the
+ *      graph (never hardcoded); if `strategy-main-health` is absent or its
+ *      `attention`/`attention.boost` is null there is no dominance to protect
+ *      and the guard is inert. A node may opt out by placing the literal
+ *      substring `ACK: main-health-dominance` in its `attention.rationale`.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -683,6 +691,14 @@ export function validateGraph(nodes: IntentionNode[]): void {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const ids = new Set(byId.keys());
   const problems: string[] = [];
+  // Rule 18 threshold: strategy-main-health's own live attention.boost. Read
+  // from the same nodes array; null when the node, its attention, or its boost
+  // is absent — in which case there is no dominance to protect (guard inert).
+  const mainHealthNode = byId.get("strategy-main-health");
+  const dominantBoost =
+    mainHealthNode !== undefined && mainHealthNode.attention !== null
+      ? mainHealthNode.attention.boost
+      : null;
   for (const node of nodes) {
     if (!ids.has(`kind-${node.kind}`)) {
       problems.push(`${node.id}: kind "${node.kind}" has no kind-${node.kind} node`);
@@ -853,6 +869,29 @@ export function validateGraph(nodes: IntentionNode[]): void {
       if (!/\d{4}-\d{2}-\d{2}/.test(node.clarifications[i].answer)) {
         problems.push(
           `${node.id}: clarifications[${i}].answer carries no dated provenance clause (YYYY-MM-DD) — see readingDate()`,
+        );
+      }
+    }
+    // Rule 18: no node other than strategy-main-health may match or exceed its
+    // dominant attention.boost via either attention.boost or attention.override.
+    // Threshold (dominantBoost) is read live above; when null the guard is
+    // inert. An author may opt out with "ACK: main-health-dominance" in the
+    // node's attention.rationale.
+    if (
+      dominantBoost !== null &&
+      node.id !== "strategy-main-health" &&
+      node.attention !== null &&
+      !node.attention.rationale.includes("ACK: main-health-dominance")
+    ) {
+      const { boost, override } = node.attention;
+      if (boost !== null && boost >= dominantBoost) {
+        problems.push(
+          `${node.id}: attention.boost (${boost}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
+        );
+      }
+      if (override !== null && override >= dominantBoost) {
+        problems.push(
+          `${node.id}: attention.override (${override}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
         );
       }
     }
