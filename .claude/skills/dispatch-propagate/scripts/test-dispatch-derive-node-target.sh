@@ -22,9 +22,11 @@ TMP_ROOT=$(mktemp -d)
 BODY_MARKER="FIXTURE BODY MARKER TEXT"
 
 # Write a valid intentions/<id>.md node file into $1 (a repo working dir).
-# $2 = node id, $3 = phase.
+# $2 = node id, $3 = phase, $4 = execution YAML block (optional; defaults to
+# `execution: null`). $4 lets a case seed an active CI-fix interrupt
+# (execution.fix non-null) to exercise the --expect-fix-active gate.
 write_node_fixture() {
-  local repo="$1" id="$2" phase="$3"
+  local repo="$1" id="$2" phase="$3" execution="${4:-execution: null}"
   mkdir -p "$repo/intentions"
   cat > "$repo/intentions/$id.md" <<EOF
 ---
@@ -35,7 +37,7 @@ owner: ai
 status: codified
 parent: null
 phase: $phase
-execution: null
+$execution
 serves: []
 recovers: []
 clarifications: []
@@ -63,7 +65,9 @@ EOF
 # $1 = node id to check out as the feature branch (empty = don't check out a
 #      node-named branch; caller checks out something else).
 # $2 = "with_node:<phase>" to seed intentions/<node-id>.md on origin/main
-#      before push, or empty to omit it entirely.
+#      before push (execution: null); "with_fix:<phase>" to seed it with a
+#      non-null execution.fix (an active CI-fix interrupt) at the given phase;
+#      or empty to omit the node entirely.
 REPO=""
 BARE=""
 make_repo() {
@@ -81,6 +85,24 @@ make_repo() {
   if [[ "$seed" == with_node:* ]]; then
     local phase="${seed#with_node:}"
     write_node_fixture "$REPO" "$branch_id" "$phase"
+  elif [[ "$seed" == with_fix:* ]]; then
+    local phase="${seed#with_fix:}"
+    # Non-null execution with an active CI-fix interrupt (execution.fix set).
+    local exec_block
+    exec_block=$(cat <<'FIXEOF'
+execution:
+  branch: fixture-branch
+  pr: null
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-19
+    attempt: 1
+    pushed_sha: null
+FIXEOF
+)
+    write_node_fixture "$REPO" "$branch_id" "$phase" "$exec_block"
   else
     printf '%s\n' "# placeholder" > "$REPO/README.md"
   fi
@@ -209,5 +231,48 @@ echo "Test 8: malformed node id -> exit 2"
 make_repo ""
 run_sut "Tactic_Bad" --expect-phase implement
 assert_eq "malformed-node-id: exit 2" "2" "$RC"
+
+# ---------------------------------------------------------------------------
+# Test 9: --expect-fix-active, node present but execution.fix is null -> exit 3.
+# ---------------------------------------------------------------------------
+echo "Test 9: expect-fix-active with null execution.fix -> exit 3"
+make_repo "tactic-fix-inactive" "with_node:implement"
+run_sut "tactic-fix-inactive" --expect-fix-active
+assert_eq "fix-active-null: exit 3" "3" "$RC"
+
+# ---------------------------------------------------------------------------
+# Test 10: --expect-fix-active, execution.fix non-null, --pr-mode none ->
+# exit 0, PR: none.
+# ---------------------------------------------------------------------------
+echo "Test 10: expect-fix-active with active interrupt, pr-mode none -> exit 0"
+make_repo "tactic-fix-active" "with_fix:implement"
+run_sut "tactic-fix-active" --expect-fix-active --pr-mode none
+assert_eq "fix-active-none: exit 0" "0" "$RC"
+assert_contains "fix-active-none: stdout has PR: none" "PR: none" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 11: --expect-fix-active, execution.fix non-null, --pr-mode required,
+# gh returns empty -> exit 4.
+# ---------------------------------------------------------------------------
+echo "Test 11: expect-fix-active, pr-mode required with no open PR -> exit 4"
+make_repo "tactic-fix-active-nopr" "with_fix:implement"
+GH_PR_NUM="" run_sut "tactic-fix-active-nopr" --expect-fix-active --pr-mode required
+assert_eq "fix-active-required-missing: exit 4" "4" "$RC"
+
+# ---------------------------------------------------------------------------
+# Test 12: both --expect-phase and --expect-fix-active given -> exit 2.
+# ---------------------------------------------------------------------------
+echo "Test 12: both gate flags given -> exit 2 (usage error)"
+make_repo "tactic-both-flags" "with_fix:implement"
+run_sut "tactic-both-flags" --expect-phase implement --expect-fix-active
+assert_eq "both-gate-flags: exit 2" "2" "$RC"
+
+# ---------------------------------------------------------------------------
+# Test 13: neither --expect-phase nor --expect-fix-active given -> exit 2.
+# ---------------------------------------------------------------------------
+echo "Test 13: no gate flag given -> exit 2 (usage error)"
+make_repo "tactic-no-gate" "with_node:implement"
+run_sut "tactic-no-gate" --pr-mode none
+assert_eq "no-gate-flag: exit 2" "2" "$RC"
 
 report_results

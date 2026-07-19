@@ -7,15 +7,23 @@
 # read it via the intentionsutil store primitives, gate on the expected phase,
 # and (optionally) resolve the open PR.
 #
-# Usage: dispatch-derive-node-target <node-id> --expect-phase <phase> [--pr-mode none|optional|required]
+# Usage: dispatch-derive-node-target <node-id> (--expect-phase <phase> | --expect-fix-active) [--pr-mode none|optional|required]
 #
 #   <node-id>        The node id this session is operating on. Must match the
 #                     node-id slug regex AND the current checked-out branch
 #                     name (tactic phase worktrees are branch==node-id, mirrors
 #                     dispatch-graph-execute's provisioning contract).
-#   --expect-phase    Required. The phase the caller expects the node to be
-#                     persisted at. Mismatch is a stale-selection signal (exit
-#                     3), not a usage error — the caller decides how to react.
+#   --expect-phase    The phase the caller expects the node to be persisted at.
+#                     Mismatch is a stale-selection signal (exit 3), not a usage
+#                     error — the caller decides how to react. Exactly one of
+#                     --expect-phase / --expect-fix-active must be given.
+#   --expect-fix-active
+#                     Gate on an active CI-fix interrupt instead of a ladder
+#                     phase: require the node's `execution.fix` to be non-null
+#                     (the /fix-checks lane's real gate — `phase` stays at its
+#                     ladder position and is never the literal "fix"). Null
+#                     `execution.fix` is exit 3 (no active interrupt). Exactly
+#                     one of --expect-phase / --expect-fix-active must be given.
 #   --pr-mode         none (default): skip PR resolution, never calls gh.
 #                     optional: resolve the open PR if one exists; empty is
 #                     NOT an error.
@@ -35,8 +43,9 @@
 #   0  success
 #   1  node-not-found / read-failure (absent from origin/main, or the store
 #      primitives failed to read it)
-#   2  usage error (bad node-id, missing --expect-phase) or branch mismatch
-#   3  phase mismatch (--expect-phase does not match the node's persisted phase)
+#   2  usage error (bad node-id, missing/duplicated gate flag) or branch mismatch
+#   3  gate mismatch: --expect-phase does not match the node's persisted phase,
+#      or --expect-fix-active and the node's execution.fix is null
 #   4  --pr-mode required and no open PR was found
 set -uo pipefail
 
@@ -44,7 +53,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 usage() {
-  echo "usage: dispatch-derive-node-target <node-id> --expect-phase <phase> [--pr-mode none|optional|required]" >&2
+  echo "usage: dispatch-derive-node-target <node-id> (--expect-phase <phase> | --expect-fix-active) [--pr-mode none|optional|required]" >&2
 }
 
 NODE_ID="${1:-}"
@@ -60,12 +69,16 @@ if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
 fi
 
 EXPECT_PHASE=""
+EXPECT_FIX_ACTIVE=0
 PR_MODE="none"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --expect-phase)
       EXPECT_PHASE="${2:-}"
       shift 2 ;;
+    --expect-fix-active)
+      EXPECT_FIX_ACTIVE=1
+      shift ;;
     --pr-mode)
       PR_MODE="${2:-}"
       shift 2 ;;
@@ -76,8 +89,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$EXPECT_PHASE" ]]; then
-  echo "dispatch-derive-node-target: --expect-phase is required and must be non-empty" >&2
+# Exactly one gate mode must be selected.
+if [[ -n "$EXPECT_PHASE" && "$EXPECT_FIX_ACTIVE" -eq 1 ]]; then
+  echo "dispatch-derive-node-target: --expect-phase and --expect-fix-active are mutually exclusive" >&2
+  usage
+  exit 2
+fi
+if [[ -z "$EXPECT_PHASE" && "$EXPECT_FIX_ACTIVE" -eq 0 ]]; then
+  echo "dispatch-derive-node-target: exactly one of --expect-phase <phase> or --expect-fix-active is required" >&2
   usage
   exit 2
 fi
@@ -119,11 +138,21 @@ if [[ $? -ne 0 || -z "$COMBINED_JSON" ]]; then
   exit 1
 fi
 
-# --- Step 5: phase gate --------------------------------------------------
+# --- Step 5: gate --------------------------------------------------------
+# ACTUAL_PHASE is read regardless of gate mode — it is emitted informationally
+# on the PHASE: line (step 7). It is the gate criterion only under --expect-phase.
 ACTUAL_PHASE="$(jq -r '.node.phase' <<<"$COMBINED_JSON")"
-if [[ "$ACTUAL_PHASE" != "$EXPECT_PHASE" ]]; then
-  echo "dispatch-derive-node-target: node '$NODE_ID' is at phase '$ACTUAL_PHASE', expected '$EXPECT_PHASE'" >&2
-  exit 3
+if [[ "$EXPECT_FIX_ACTIVE" -eq 1 ]]; then
+  ACTUAL_FIX="$(jq -r '.node.execution.fix // "null"' <<<"$COMBINED_JSON")"
+  if [[ "$ACTUAL_FIX" == "null" ]]; then
+    echo "dispatch-derive-node-target: node '$NODE_ID' has no active CI-fix interrupt (execution.fix is null)" >&2
+    exit 3
+  fi
+else
+  if [[ "$ACTUAL_PHASE" != "$EXPECT_PHASE" ]]; then
+    echo "dispatch-derive-node-target: node '$NODE_ID' is at phase '$ACTUAL_PHASE', expected '$EXPECT_PHASE'" >&2
+    exit 3
+  fi
 fi
 
 # --- Step 6: PR resolution ------------------------------------------------
