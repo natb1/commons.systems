@@ -50,6 +50,16 @@
 #  17. far-ahead worktree + --prune: a deletion issued from a far-ahead PR
 #      branch lands on main (the node is removed) without landing the code
 #      commit, HEAD restored
+#  18. lock contention is cheap: a waiting writer makes zero gh polls while
+#      blocked on the landing lock, then exactly one poll cycle once it
+#      acquires the lock and lands (not a re-poll-from-scratch retry burn)
+#  19. dead-holder steal: an expired foreign lock claim is stolen promptly,
+#      not held to the full lock-wait timeout
+#  20. live-holder wait: a live foreign lock is not stolen prematurely; the
+#      writer waits for the planted expiry before proceeding
+#  21. lock-ref hygiene: refs/graph/landing-lock is absent after a normal
+#      landing and never appears under refs/heads/graph/** (disjoint from
+#      the scratch-branch namespace graph-fast-path.yml triggers on)
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -98,7 +108,8 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
 }
 for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2-migration \
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
-          t-farahead t-farahead-prune; do
+          t-farahead t-farahead-prune \
+          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene; do
   seed_node "$id"
 done
 git -C "$SEED" add -A
@@ -177,6 +188,10 @@ if [[ "$mode" == "hard-fail" ]]; then
   echo "gh: HTTP 403: API rate limit exceeded (harness shim)" >&2
   exit 1
 fi
+if [[ "$mode" == "blocked-green" ]]; then
+  while [[ ! -e "$GC_GH_SENTINEL_FILE" ]]; do sleep 0.2; done
+  mode=green
+fi
 jq_program=""
 while [[ $# -gt 0 ]]; do
   if [[ "$1" == "--jq" ]]; then jq_program="$2"; break; fi
@@ -215,8 +230,10 @@ edit_line() { # <clone> <id> <n> <text>
   sed -i "s/^line$3: .*/line$3: $4/" "$1/intentions/$2.md"
 }
 scratch_refs() { git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**'; }
+lock_ref_exists() { git -C "$ORIGIN" show-ref --verify --quiet refs/graph/landing-lock; }
 
 run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMPTS
+           # GC_LOCK_TTL GC_LOCK_POLL GC_LOCK_WAIT GC_SENTINEL
   local clone="$1"; shift
   (
     cd "$clone" || exit 99
@@ -225,6 +242,10 @@ run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMP
     export GRAPH_COMMIT_CHECK_POLL_SECONDS="${GC_POLL:-0}"
     export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS="${GC_TIMEOUT:-5}"
     export GRAPH_COMMIT_MAX_ATTEMPTS="${GC_ATTEMPTS:-5}"
+    export GRAPH_COMMIT_LOCK_TTL_SECONDS="${GC_LOCK_TTL:-}"
+    export GRAPH_COMMIT_LOCK_POLL_SECONDS="${GC_LOCK_POLL:-}"
+    export GRAPH_COMMIT_LOCK_WAIT_SECONDS="${GC_LOCK_WAIT:-}"
+    export GC_GH_SENTINEL_FILE="${GC_SENTINEL:-}"
     bash packages/intentionsutil/scripts/graph-commit "$@"
   )
 }
@@ -561,6 +582,118 @@ if [[ $rc -eq 0 ]] \
   ok "far-ahead worktree + --prune: node removed from main, code commit excluded, HEAD restored"
 else
   no "far-ahead prune (rc=$rc restored2=$restored2 far_tip2=$far_tip2)"; printf '%s\n' "$out"
+fi
+
+# --- Case 18: contention is now cheap, not exhausting -----------------------
+set_mode blocked-green
+W8="$WORK/w8"; W9="$WORK/w9"
+make_clone "$W8" writer-8
+make_clone "$W9" writer-9
+edit_line "$W8" t-lock-contend 1 A-top
+edit_line "$W9" t-lock-contend 12 B-bottom
+SENTINEL="$WORK/lock-sentinel-18"; rm -f "$SENTINEL"
+outA="$WORK/out-18-a.log"; outB="$WORK/out-18-b.log"
+( GC_SENTINEL="$SENTINEL" run_gc "$W8" -m 'test: lock contend A' t-lock-contend >"$outA" 2>&1; echo $? >"$WORK/rc-18-a" ) &
+pidA=$!
+# Wait (bounded poll) for A to have made its gh call (now blocked inside the
+# shim on the sentinel) — this guarantees A already holds the lock and is
+# parked in await_checks(), so the reset+start-B sequence below cannot race
+# against A's own call landing in the log after the reset.
+claimed=0
+for _ in $(seq 1 100); do
+  [[ "$(gh_calls)" -ge 1 ]] && { claimed=1; break; }
+  sleep 0.1
+done
+if [[ "$claimed" -ne 1 ]]; then
+  no "lock contend: writer A never reached await_checks (no gh call observed)"
+  rm -f "$SENTINEL"; wait "$pidA" 2>/dev/null
+else
+  : >"$CALL_LOG"   # from here, CALL_LOG counts only B's calls
+  ( GC_LOCK_POLL=1 GC_SENTINEL="$SENTINEL" run_gc "$W9" -m 'test: lock contend B' t-lock-contend >"$outB" 2>&1; echo $? >"$WORK/rc-18-b" ) &
+  pidB=$!
+  sleep 1   # give B a moment to attempt (and fail) to claim the held lock
+  callsB_while_blocked="$(gh_calls)"
+  : >"$SENTINEL"   # release A
+  wait "$pidA"; rcA="$(cat "$WORK/rc-18-a")"
+  wait "$pidB"; rcB="$(cat "$WORK/rc-18-b")"
+  callsB_final="$(gh_calls)"
+  content="$(origin_show t-lock-contend)"
+  if [[ "$callsB_while_blocked" -eq 0 && "$rcA" -eq 0 && "$rcB" -eq 0 && "$callsB_final" -eq 1 ]] \
+     && grep -q 'line1: A-top' <<<"$content" && grep -q 'line12: B-bottom' <<<"$content"; then
+    ok "lock contend: B makes 0 polls while A holds the lock, then lands in exactly 1 poll cycle"
+  else
+    no "lock contend: callsB_while_blocked=$callsB_while_blocked rcA=$rcA rcB=$rcB callsB_final=$callsB_final"
+    printf '%s\n' "$(cat "$outA" 2>/dev/null)" "$(cat "$outB" 2>/dev/null)"
+  fi
+fi
+rm -f "$SENTINEL"
+
+plant_lock() { # <expiry_unix_ts> <holder>
+  local expiry="$1" holder="$2" sha
+  sha="$(git -C "$ORIGIN" commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 \
+    -m "graph-commit-lock v1" -m "holder=$holder expiry=$expiry")"
+  git -C "$ORIGIN" update-ref refs/graph/landing-lock "$sha"
+}
+
+# --- Case 19: dead-holder steal ----------------------------------------------
+set_mode green
+past_expiry=$(( $(date +%s) - 60 ))
+plant_lock "$past_expiry" dead-holder-test
+W10="$WORK/w10"
+make_clone "$W10" writer-10
+edit_line "$W10" t-lock-steal 1 steal-lands
+start_ts=$(date +%s)
+out="$(GC_LOCK_POLL=1 run_gc "$W10" -m 'test: dead-holder steal' t-lock-steal 2>&1)"; rc=$?
+elapsed=$(( $(date +%s) - start_ts ))
+if [[ $rc -eq 0 ]] && origin_show t-lock-steal | grep -q 'line1: steal-lands' && [[ "$elapsed" -le 10 ]]; then
+  ok "dead-holder steal: expired foreign lock is stolen and lands promptly (${elapsed}s)"
+else
+  no "dead-holder steal (rc=$rc elapsed=${elapsed}s)"; printf '%s\n' "$out"
+fi
+
+# --- Case 20: live-holder wait (no premature steal) --------------------------
+set_mode green
+future_expiry=$(( $(date +%s) + 3 ))
+plant_lock "$future_expiry" live-holder-test
+planted_sha="$(git -C "$ORIGIN" for-each-ref --format='%(objectname)' refs/graph/landing-lock)"
+W11="$WORK/w11"
+make_clone "$W11" writer-11
+edit_line "$W11" t-lock-wait 1 wait-then-lands
+outfile="$WORK/out-20.log"
+start_ts=$(date +%s)
+( GC_LOCK_POLL=1 run_gc "$W11" -m 'test: live-holder wait' t-lock-wait >"$outfile" 2>&1; echo $? >"$WORK/rc-20" ) &
+pid20=$!
+sleep 1
+current_sha="$(git -C "$ORIGIN" for-each-ref --format='%(objectname)' refs/graph/landing-lock)"
+no_premature_steal=0
+[[ "$current_sha" == "$planted_sha" ]] && no_premature_steal=1
+wait "$pid20"
+end_ts=$(date +%s)
+elapsed=$(( end_ts - start_ts ))
+rc="$(cat "$WORK/rc-20")"
+out="$(cat "$outfile")"
+if [[ "$no_premature_steal" -eq 1 && $rc -eq 0 && "$elapsed" -ge 2 ]] \
+   && origin_show t-lock-wait | grep -q 'line1: wait-then-lands'; then
+  ok "live-holder wait: does not steal before the planted expiry (${elapsed}s elapsed), lands once it passes"
+else
+  no "live-holder wait (no_premature_steal=$no_premature_steal rc=$rc elapsed=${elapsed}s)"; printf '%s\n' "$out"
+fi
+
+# --- Case 21: lock-ref hygiene ------------------------------------------------
+set_mode green
+W12="$WORK/w12"
+make_clone "$W12" writer-12
+edit_line "$W12" t-lock-hygiene 1 hygiene-lands
+out="$(run_gc "$W12" -m 'test: lock hygiene' t-lock-hygiene 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && ! lock_ref_exists; then
+  ok "lock hygiene: refs/graph/landing-lock absent on origin after a normal successful landing"
+else
+  no "lock hygiene: rc=$rc"; printf '%s\n' "$out"
+fi
+if ! git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**' | grep -q landing-lock; then
+  ok "lock hygiene: refs/heads/graph/** never lists the landing-lock ref (disjoint namespaces)"
+else
+  no "lock hygiene: landing-lock ref leaked into refs/heads/graph/**"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
