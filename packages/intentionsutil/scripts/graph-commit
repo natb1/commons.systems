@@ -200,19 +200,30 @@ parse_base_arg() {
   fi
 }
 
-# Refuse the write if any --base entry's blob no longer matches origin/main.
-# Runs once, before any local commit is made (and before SNAP_DIR/the EXIT
-# trap exist, so a refusal here leaves nothing to clean up) — a stale read is
-# caught before it touches the tree at all, rather than relying on the
-# rebase-retry loop's textual-conflict detection to notice (the 2026-07-06
-# near-miss: a stale dump of a live node avoided a textual conflict and nearly
-# clobbered concurrent state). Sessions that pass no --base see no change in
-# behavior (opt-in, per code-style.md: clear error over a silent fallback).
+# Reconcile each --base entry against origin/main after a fetch. If an entry's
+# blob no longer matches origin/main, a concurrent writer landed an edit to the
+# same node since this writer read it. Rather than refusing outright (the old
+# behavior — a hard die), attempt a structural three-way merge of the writer's
+# intended edit against the freshly-landed content (layer 3), using the same
+# run_merge_node() primitive as the rebase-conflict path. There is no git
+# rebase-stage inversion here — these are plain file reads, so base/ours/theirs
+# map directly: base = the blob the writer read (BASE[$id]), ours = the writer's
+# current on-disk edit, theirs = origin/main's landed content (FETCH_HEAD:path).
+# A fully-merged node is rewritten on disk so the normal commit+land flow
+# proceeds against the fresh origin/main content. A divergence run_merge_node
+# cannot resolve is recorded (CONFLICT_FIELDS_JSON); after every entry is
+# checked, an unresolved divergence parks the node(s) via park_and_exit() — the
+# same structured park an unresolvable rebase conflict takes. This requires
+# SNAP_DIR and the EXIT trap to already exist, so main() now sets them BEFORE
+# calling this. The 2026-07-06 near-miss motivated the check: a stale dump of a
+# live node avoided a textual conflict and nearly clobbered concurrent state.
+# Sessions that pass no --base see no change in behavior (opt-in, per
+# code-style.md: clear error over a silent fallback).
 check_base_freshness() {
   [[ "${#BASE[@]}" -eq 0 ]] && return 0
   echo "graph-commit: checking --base freshness for ${#BASE[@]} node(s) against origin/main" >&2
   git fetch origin main >&2
-  local id sha origin_sha path
+  local id sha origin_sha path STALE_BASE_UNRESOLVED=0
   for id in "${!BASE[@]}"; do
     sha="${BASE[$id]}"
     path="intentions/$id.md"
@@ -221,10 +232,43 @@ check_base_freshness() {
     else
       origin_sha="<absent>"
     fi
-    if [[ "$origin_sha" != "$sha" ]]; then
-      die "stale base for '$id' — origin/main's $path is now $origin_sha, not the $sha you read; re-read the node and retry"
+    [[ "$origin_sha" == "$sha" ]] && continue
+
+    # origin/main's copy of this node diverged from the blob the writer read.
+    # Attempt a structural three-way merge instead of refusing. base/ours/theirs
+    # map directly to plain file reads (no rebase-stage inversion):
+    #   base   = the blob the writer originally read (BASE[$id])
+    #   ours   = the writer's current intended content (on disk, pre-snapshot)
+    #   theirs = origin/main's freshly-landed content (FETCH_HEAD:$path), or the
+    #            empty string when the node is now absent on origin/main.
+    local base_f theirs_f out_f
+    base_f="$SNAP_DIR/.base-merge-$id.base"
+    out_f="$SNAP_DIR/.base-merge-$id.out"
+    if ! git cat-file -p "$sha" >"$base_f" 2>/dev/null; then
+      die "base blob $sha for '$id' is unreadable in the local object database — cannot attempt automatic reconciliation of the stale base"
     fi
+    if [[ "$origin_sha" == "<absent>" ]]; then
+      theirs_f=""
+    else
+      theirs_f="$SNAP_DIR/.base-merge-$id.theirs"
+      git show "FETCH_HEAD:$path" >"$theirs_f"
+    fi
+    if run_merge_node "$id" "$base_f" "$INTENTIONS_DIR/$id.md" "$theirs_f" "$out_f"; then
+      # Fully resolved: overwrite the on-disk node with the merged content so the
+      # write proceeds against exactly origin_sha. RESOLVED_VIA_MERGE is already
+      # set to 1 by run_merge_node().
+      cp -- "$out_f" "$INTENTIONS_DIR/$id.md"
+      continue
+    fi
+    # run_merge_node() already appended the unresolved fields to
+    # CONFLICT_FIELDS_JSON. Record the divergence but keep checking every
+    # remaining --base id so the eventual park names them all.
+    STALE_BASE_UNRESOLVED=1
   done
+
+  if [[ "${STALE_BASE_UNRESOLVED:-0}" -eq 1 ]]; then
+    park_and_exit   # Unit 2's extracted fail-closed park — never returns
+  fi
 }
 
 # --- Cleanup (EXIT trap) ---------------------------------------------------
@@ -845,13 +889,6 @@ main() {
   done
 
   ALL_IDS=("${IDS[@]}" "${PRUNE_IDS[@]}")
-  check_base_freshness
-
-  # Default commit message (the parking commit message is derived inside
-  # park_and_exit()).
-  if [[ -z "$msg" ]]; then
-    msg="graph: ${ALL_IDS[*]}"
-  fi
 
   # The throwaway stamping branch: named for the primary id and scoped to this
   # PID so concurrent graph-commit invocations never collide. cleanup() (the
@@ -862,15 +899,32 @@ main() {
   # sequences git refuses in a ref (`..`), so every non-[A-Za-z0-9-] char maps
   # to `-`. Use ALL_IDS (not just IDS) so a pure-prune commit (no ordinary
   # ids) still gets a valid scratch-branch name.
+  # Computed here (before check_base_freshness) because it depends only on
+  # ALL_IDS/ref_id, and layer 3's park path (park_and_exit) relies on cleanup()
+  # already knowing the scratch-branch name.
   local ref_id="${ALL_IDS[0]//[!A-Za-z0-9-]/-}"
   SCRATCH_BRANCH="graph/$ref_id-$$"
 
+  # SNAP_DIR and the EXIT trap must exist BEFORE check_base_freshness runs:
+  # layer 3's stale-base auto-merge (inside check_base_freshness) uses
+  # run_merge_node()'s tempfiles and CONFLICT_FIELDS_JSON — both rooted in
+  # SNAP_DIR — and an unresolved divergence reaches park_and_exit(), which
+  # relies on the EXIT trap's cleanup(). None of these existed here before this
+  # block was moved ahead of the freshness check.
   SNAP_DIR="$(mktemp -d)" || die "could not create snapshot tempdir"
   trap cleanup EXIT
   # An EXIT trap does not reliably fire on INT/TERM in all shells; convert
   # those signals into a normal exit so cleanup() (snapshot removal, remote
   # scratch-branch delete) always runs on signal death.
   trap 'exit 130' INT TERM
+
+  check_base_freshness
+
+  # Default commit message (the parking commit message is derived inside
+  # park_and_exit()).
+  if [[ -z "$msg" ]]; then
+    msg="graph: ${ALL_IDS[*]}"
+  fi
 
   # Capture the writer's on-disk content, then commit-and-land it.
   # Three states, discriminated by id_files_dirty():
