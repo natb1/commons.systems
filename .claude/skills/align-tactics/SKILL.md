@@ -666,6 +666,51 @@ decompose fresh. It:
    this strategy without disturbing the others. (A tactic still at `execution:
    null` has no map to re-stamp until the machinery seeds one.)
 4. Lands the amendments via `graph-commit`.
+5. **Scope-inert re-stamp — protect each amended tactic's own scope custody.**
+   Step 2's amendment edits the **body** of open (non-`draft`, non-`done`)
+   tactics — precisely clarification 32's amendment-completeness scenario. A
+   body edit to an in-flight tactic trips that tactic's own chain-of-custody
+   scope gate: the worktree-local `.claude/worktrees/<id>.scope-fingerprint`
+   stamp no longer matches the tactic's current body fingerprint, and the gate
+   demotes the tactic back to `implement`, discarding its qa/review custody.
+   That is correct for a real plan-substance change, but an amendment mandated
+   solely by the completeness bar — a reconciliation note, a provenance
+   annotation, a drift-review correction — often leaves the plan substance
+   unchanged, and there the demotion is spurious (PR #2888 was falsely demoted
+   from review to implement this way).
+
+   Classify this round's own edit, **per tactic**, as **scope-inert** (plan
+   substance unchanged) versus **material or unsure**. The rule is fail-closed:
+   **only** a confident scope-inert verdict re-stamps; on **any** doubt — a
+   merely plausible substance change included — do nothing further here. Leave
+   the worktree-local stamp untouched and let custody demote the tactic exactly
+   as it does today; that demotion-on-doubt is the existing correct behavior,
+   not a failure mode to work around.
+
+   For each confidently scope-inert tactic, **after** its amendment has landed
+   via `graph-commit` in this **same** round (step 4, so it is on origin/main),
+   run:
+
+   ```bash
+   npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>
+   ```
+
+   It must run post-`graph-commit`: the script reads the tactic's current
+   on-disk body and the current `origin/main` sha to compute the stamp, so a
+   pre-landing run would stamp stale content. Record the scope-inert
+   classification and the re-stamped tactic ids in this round's record.
+
+   This is a **completely different** mechanism from item 3's re-stamp — do not
+   conflate the two. Item 3 re-stamps `execution.strategy_fingerprint`, a
+   **node-frontmatter** map keyed per serving strategy, computed via
+   `strategyFingerprint`, and landed as a node write in the round's
+   `graph-commit`; it tracks per-strategy substance drift across the subtree.
+   This item re-stamps the worktree-local
+   `.claude/worktrees/<id>.scope-fingerprint` **file**, computed via
+   `tacticScopeFingerprint` through the Unit-1 script; it is **never** a node
+   write and **never** a `graph-commit` of its own, and it tracks a single
+   tactic's own body-scope drift. Two unrelated stamps, two unrelated
+   mechanisms.
 
 Until a live router exists, re-evaluation runs **inline** in the same session
 that recorded the strategy edit — the way every round on
