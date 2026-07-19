@@ -29,7 +29,10 @@ execution:
   pr: null
   attempts: {}
   markers: []
-  strategy_fingerprint: d998d5c0754b51cfc489ee784db11b77d9b40eb91777ee0215076b0ad1a6bb69
+  strategy_fingerprint:
+    strategy-graph-drives-dispatch:
+      hash: 600086b571b997058c8d2f7f952239af11a9bea58d3d3a238c3a9a44db1b744e
+      sha: df4d47f23697ae65634357b7766302e6f1677ae9
 validates:
   - strategy-graph-drives-dispatch
 blocked_by: []
