@@ -1356,4 +1356,77 @@ describe("validateGraph", () => {
       /tactic-1: kind-tactic has no attributes\.status_vocabulary declared/,
     );
   });
+
+  // Rule 17: clarifications[].answer must carry a dated provenance clause.
+  it("accepts a dated clarification regardless of date placement (front, trailing, mid)", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        clarifications: [
+          { question: "front-loaded?", answer: "(Recorded 2026-07-05 by author) settled." },
+          { question: "trailing?", answer: "Settled the scope. Recorded 2026-07-05." },
+          { question: "mid-sentence?", answer: "On 2026-07-05 the author ratified this." },
+        ],
+      }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rejects a dateless clarification, naming the node id and clarification index", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        clarifications: [
+          { question: "dated?", answer: "Recorded 2026-07-05." },
+          { question: "dateless?", answer: "No date anywhere in this answer." },
+        ],
+      }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: clarifications\[1\]\.answer carries no dated provenance clause/,
+    );
+  });
+
+  it("passes a node with an empty clarifications array (the gnode default)", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "tactic-1", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("accumulates all dateless clarifications across nodes into one thrown error", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        clarifications: [{ question: "q", answer: "No date here." }],
+      }),
+      gnode({
+        id: "virtue-1",
+        kind: "virtue",
+        clarifications: [{ question: "q", answer: "Also no date." }],
+      }),
+    ];
+    let caught: unknown;
+    try {
+      validateGraph(nodes);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    if (!(caught instanceof Error)) throw new Error("unreachable");
+    expect(caught.message).toMatch(/tactic-1: clarifications\[0\]\.answer carries no dated provenance clause/);
+    expect(caught.message).toMatch(/virtue-1: clarifications\[0\]\.answer carries no dated provenance clause/);
+  });
 });

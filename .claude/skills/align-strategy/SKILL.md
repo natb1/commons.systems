@@ -316,8 +316,8 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    boldness + accept-as-deferral, context delivered inside the tool). Record
    the resolution as a dated `clarifications` entry in the adopt/diverge
    shape — either the strategy adopts the rival framing, or it diverges
-   from it with the reason stated — ending with a provenance sentence in the
-   step-2.8 convention.
+   from it with the reason stated — carrying a dated provenance clause per
+   the step-2.8 convention.
 6. **Signal.** Draft a `success_signal` — `{observable, sensor, threshold,
    is_proxy}` — and confirm it names something a sensor can actually read.
    A strategy with no plausible sensor is a sign the intent is still too
@@ -328,9 +328,19 @@ recommendation on trust, never a quiet drop. When the author accepts one:
 8. **Edge cases and consequences.** For each of the above, surface at
    least one edge case or downstream consequence and resolve it with the
    author. Every resolution becomes a dated `clarifications` entry —
-   `{question, answer}` where `answer` ends with a provenance sentence in
-   the existing convention, e.g. `"...Recorded 2026-07-05 interview."`
-   (get the date via `date -u +%Y-%m-%d`, never hand-guessed).
+   `{question, answer}` where `answer` carries a dated provenance clause:
+   an event verb (Recorded / Amended / Reviewed / clarified / adopted,
+   etc.) plus an ISO date, placed wherever it reads best in the sentence —
+   a front-loaded parenthetical is preferred, e.g.
+   `"(Recorded 2026-07-05 interview.) ..."`, but any placement is accepted.
+   The newest ISO date anywhere in the answer is its effective date — the
+   `readingDate()` contract (`packages/intentionsutil/src/router.ts`)
+   extracts it verb-agnostically, and `coverage.ts`'s `lastReviewedOf`
+   depends on it. An amendment adds a new dated clause rather than rewriting
+   the old one, so the history of resolutions stays legible. Get the date
+   via `date -u +%Y-%m-%d`, never hand-guessed. `validateGraph` rule 17
+   mechanically enforces the date-presence half of this convention; the
+   event verb is documented style, not linted.
 9. **Design-canvas support (UI-design requirements only).** When a
    decision is about UI shape and text underspecifies it, supplement
    `AskUserQuestion` with visual aids: build mockup/variant artifacts on

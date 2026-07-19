@@ -624,6 +624,11 @@ export function validateNode(value: unknown): IntentionNode {
  *  16. Every node's `status` must be a key in its kind node's declared
  *      `attributes.status_vocabulary` (a missing declaration on the kind node
  *      is itself an error).
+ *  17. Every `clarifications[].answer` carries a dated provenance clause — a
+ *      `YYYY-MM-DD` substring placed anywhere in the string (placement-agnostic,
+ *      uniform across every kind). This is the convention `readingDate()`
+ *      (router.ts) and `coverage.ts`'s `lastReviewedOf` parse to date a
+ *      clarification; a dateless answer silently breaks those consumers.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -797,6 +802,19 @@ export function validateGraph(nodes: IntentionNode[]): void {
             `${node.id}: status "${node.status}" is not declared in kind-${node.kind}'s status_vocabulary`,
           );
         }
+      }
+    }
+    // Rule 17: every clarifications[].answer carries a dated provenance clause
+    // (a YYYY-MM-DD substring, placed anywhere). This is the same date pattern
+    // readingDate() (router.ts) uses; it is inlined rather than imported because
+    // router.ts already imports from this file (a back-import would cycle). The
+    // machine consumers this protects are readingDate() and coverage.ts's
+    // lastReviewedOf, which parse this date to timestamp a clarification.
+    for (let i = 0; i < node.clarifications.length; i++) {
+      if (!/\d{4}-\d{2}-\d{2}/.test(node.clarifications[i].answer)) {
+        problems.push(
+          `${node.id}: clarifications[${i}].answer carries no dated provenance clause (YYYY-MM-DD) — see readingDate()`,
+        );
       }
     }
   }
