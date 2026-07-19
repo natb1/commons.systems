@@ -31,7 +31,7 @@
 # disarms auto-merge (`gh pr ready --undo`) — then emits the resolved ladder
 # phase. These two graph-commit writes are the only writes selection makes.
 #
-# Usage: graph-select-target [--top <n>] [--pace-exempt-only]
+# Usage: graph-select-target [--top <n>] [--pace-exempt-only] [--node <id>]
 #
 #   --top <n>            Print at most <n> selected nodes (default 1).
 #   --pace-exempt-only   The probe lane for a paced-to-zero worker target
@@ -42,6 +42,13 @@
 #                        nodes authored `pace_exempt: true`. The caller admits
 #                        at most one gate-exempt worker — the flag bypasses the
 #                        pace GATE, not the worker count or the rank order.
+#   --node <id>          Explicit single-node dispatch: bypass rank order and
+#                        --top truncation and consider ONLY the named node id.
+#                        Every existing environmental gate (claim-safety,
+#                        per-phase sensor_gate) still applies verbatim — this
+#                        is a selection-order override, not a gate bypass.
+#                        Mutually exclusive with --top and --pace-exempt-only
+#                        (usage error, exit 2, when combined).
 #
 # Stdout protocol:
 #   node <id> <kind> <phase>   zero to <top> lines, in selection order.
@@ -89,26 +96,38 @@ export DISPATCH_DECISION_LOG_FILE
 source "$SCRIPT_DIR/lib-decision-log.sh" 2>/dev/null || true
 
 TOP=1
+TOP_SET=""
 PACE_EXEMPT_ONLY=""
+NODE_TARGET=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --top)
       [[ $# -ge 2 && "${2:-}" =~ ^[1-9][0-9]*$ ]] \
         || { echo "graph-select-target: --top requires a positive integer" >&2; exit 2; }
-      TOP="$2"; shift 2 ;;
+      TOP="$2"; TOP_SET=1; shift 2 ;;
     --pace-exempt-only) PACE_EXEMPT_ONLY=1; shift ;;
+    --node)
+      [[ $# -ge 2 && -n "${2:-}" ]] \
+        || { echo "graph-select-target: --node requires a non-empty id" >&2; exit 2; }
+      NODE_TARGET="$2"; shift 2 ;;
     *)
       echo "graph-select-target: unknown argument '$1'" >&2
-      echo "usage: graph-select-target [--top <n>] [--pace-exempt-only]" >&2
+      echo "usage: graph-select-target [--top <n>] [--pace-exempt-only] [--node <id>]" >&2
       exit 2 ;;
   esac
 done
+
+if [[ -n "$NODE_TARGET" && ( -n "$TOP_SET" || -n "$PACE_EXEMPT_ONLY" ) ]]; then
+  echo "graph-select-target: --node is mutually exclusive with --top and --pace-exempt-only" >&2
+  echo "usage: graph-select-target [--top <n>] [--pace-exempt-only] [--node <id>]" >&2
+  exit 2
+fi
 
 # --- Selection-log emitter (best-effort, one record per invocation) ----------
 # Accumulators consumed by the EXIT trap. SKIPPED is a JSON array of
 # {id, reason} objects; SELECTED a JSON array of ids; EVENTS the pure
 # selector's freeze/cap/gate events (JSON array).
-MODE=$([[ -n "$PACE_EXEMPT_ONLY" ]] && echo "pace-exempt" || echo "normal")
+MODE=$([[ -n "$NODE_TARGET" ]] && echo "node" || { [[ -n "$PACE_EXEMPT_ONLY" ]] && echo "pace-exempt" || echo "normal"; })
 DISPOSITION=""
 SELECTED_JSON="[]"
 SKIPPED_JSON="[]"
@@ -353,10 +372,12 @@ sensor_gate() {
 
 SELECTED_COUNT=0
 SELECTED_LINES=""
+NODE_PRESENT=0
 while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha; do
   [[ -n "$id" ]] || continue
+  [[ -n "$NODE_TARGET" ]] && NODE_PRESENT=1
   ELIGIBLE_COUNT=$(( ELIGIBLE_COUNT + 1 ))
-  (( SELECTED_COUNT >= TOP )) && continue
+  [[ -z "$NODE_TARGET" ]] && { (( SELECTED_COUNT >= TOP )) && continue; }
 
   if [[ -n "$PACE_EXEMPT_ONLY" && "$pace_exempt" != "true" ]]; then
     continue
@@ -367,10 +388,12 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha; do
   # daemon-UNKNOWN into occupied (fail-safe: never double-book a node).
   if reservation_exists "$id"; then
     skip_note "$id" "reserved"
+    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: reserved" >&2
     continue
   fi
   if worktree_has_live_session "$NATIVE_ROOT/.claude/worktrees/$id"; then
     skip_note "$id" "live-session"
+    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: live-session" >&2
     continue
   fi
 
@@ -384,17 +407,24 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha; do
     exit 2
   elif (( rc == 1 )); then
     skip_note "$id" "$emit_phase"
+    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: $emit_phase" >&2
     continue
   fi
 
   SELECTED_LINES+="node $id $kind $emit_phase"$'\n'
   SELECTED_JSON=$(jq -c --arg id "$id" '. + [$id]' <<<"$SELECTED_JSON") || true
   SELECTED_COUNT=$(( SELECTED_COUNT + 1 ))
-done < <(jq -r '.candidates[] | [.id, .kind, .phase, (.pr // "null"), (.pace_exempt | tostring), (.fix.pushed_sha // "null")] | @tsv' \
+done < <(jq -r --arg target "$NODE_TARGET" \
+  '.candidates[] | (if $target != "" then select(.id == $target) else . end) | [.id, .kind, .phase, (.pr // "null"), (.pace_exempt | tostring), (.fix.pushed_sha // "null")] | @tsv' \
   <<<"$SELECTION")
 
 if (( SELECTED_COUNT == 0 )); then
-  DISPOSITION="empty"
+  if [[ -n "$NODE_TARGET" && "$NODE_PRESENT" == "0" ]]; then
+    echo "graph-select-target: node $NODE_TARGET is not selectable (not found, done, parked, blocked, or already reviewed — inspect intentions/$NODE_TARGET.md directly for the reason)" >&2
+    DISPOSITION="not-found"
+  else
+    DISPOSITION="empty"
+  fi
   echo "empty"
   exit 0
 fi
