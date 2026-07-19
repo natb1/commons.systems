@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -29,6 +29,7 @@ office_hours:
   reason: needs the owner's real Darwin and downstream example machines — not
     automatable
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -37,11 +38,12 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issues (closed, content preserved here): 2594,
-2582, 2771 — needs-main residue from the pure-eval/identity personalization
-work (issues 2448 and 61; PRs 2591, 2581) and the overlay split (issue 2769,
-PR 2770). The practitioner instance-flake entry point is how
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issues (closed, content
+preserved here): 2594, 2582, 2771 — needs-main residue from the
+pure-eval/identity personalization work (issues 2448 and 61; PRs 2591, 2581)
+and the overlay split (issue 2769, PR 2770). The practitioner instance-flake
+entry point is how
 `strategy-distribute-workflow` is exercised; verification needs the owner's
 real machines.
 
