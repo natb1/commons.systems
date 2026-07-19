@@ -330,15 +330,14 @@ recommendation on trust, never a quiet drop. When the author accepts one:
 10. **Persistent-layer ownership gate.** Whenever this interview is about to
     record standing structure — a node that owns a `success_signal` read on
     an ongoing basis, a node carrying a standing `attention` boost/override,
-    or any node other machinery permanently references — the recorded owner
-    must be `kind: strategy` (or `virtue`), never a tactic. Tactics are
+    or any node that other machinery permanently references — the recorded
+    owner must be `kind: strategy` (or `virtue`), never a tactic. Tactics are
     transient by definition: they complete and leave the selectable graph.
     If a tactic is proposed as a standing owner, surface it as an interview
-    question (recommend the owning strategy; propose creating one if none
-    exists — `strategy-main-health` is the worked precedent, created
-    2026-07-13 for exactly this reason), never record-and-fix-later.
-    Resolution lands as a dated `clarifications` entry per the step-2.8
-    provenance convention.
+    question, never record-and-fix-later: recommend the owning strategy, and
+    propose creating one if none exists (`strategy-main-health` is the worked
+    precedent, created 2026-07-13 for exactly this reason). Resolution lands
+    as a dated `clarifications` entry per the step-2.8 provenance convention.
 
 **The `/file-issue` 8-category evaluation, folded into the steps above**
 (so nothing from the coverage matrix silently drops):
@@ -419,11 +418,11 @@ review-phase finding, not something this skill should ever produce.
 
 ## Step 5 — Record
 
-Before constructing the JSON to land, re-confirm no node this round is about
-to record as a `success_signal` owner or a standing `attention` boost/override
-carrier is `kind: tactic` — the same gate as dialectic step 10, restated here
-as the final pre-write check so a resolution made earlier in a long interview
-is not silently dropped by the time the JSON is constructed.
+Before constructing the JSON to land, re-confirm that no node about to be
+recorded this round — as a `success_signal` owner or a standing `attention`
+boost/override carrier — is `kind: tactic`. This is the same gate as dialectic
+step 10, restated here as the final pre-write check so a resolution made earlier
+in a long interview is not silently dropped by the time the JSON is constructed.
 
 Write the full node through `write-node.ts` — never hand-edit the YAML
 frontmatter:
