@@ -47,12 +47,7 @@ clarifications:
     answer: >-
       A strategy's tactics all complete but its signal is still unvalidated — what stops /align-tactics from burning rounds forever? — See body §Phase Transitions & Fix State. Recorded 2026-07-03 interview.
   - question: What replaces the dispatch:office-hours label?
-    answer: A first-class parked field on goal-layer nodes (reason plus since),
-      valid on strategies and tactics; the router skips parked nodes and their
-      subtrees. An interactive-session commit touching the node — the graph
-      analog of the UserPromptSubmit strip hook — clears it. status keeps
-      meaning refinement maturity; parking is orthogonal queue state. Recorded
-      2026-07-03 interview.
+    answer: What replaces the dispatch:office-hours label? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-03 interview.
   - question: Where does a tactic's execution plan live, given node bodies are cosmetic?
     answer: "In the tactic node body, amending the doctrine: the body stays a
       cosmetic render for virtues, strategies, and delegations, but is
@@ -159,77 +154,13 @@ clarifications:
       Is the fix phase a linear step between implement and qa? — See body §Phase Transitions & Fix State. Recorded 2026-07-04 from author direction.
   - question: Review findings beyond the tactic's plan — which are fixed in scope,
       which defer, which are ignored, and how do deferrals schedule?
-    answer: "Three-way disposition by verification x contract, decided in the review
-      phase. Resolve in scope: a finding that is adversarially confirmed
-      (survives the skeptic pass with a concrete failure scenario) AND breaks
-      the tactic's own stated contract — the deliverable its plan claims, or the
-      security/integrity of what the diff itself introduced. 'No live callers
-      yet' never defers a contract violation of the delivered thing itself
-      (precedent: graph-commit's fail-closed conflict fix). The review phase
-      holds — no review -> done transition — while a confirmed in-scope finding
-      is open; its internal content-fix loop resolves them locally before CI.
-      Defer: real but out-of-contract — confirmed findings on pre-existing
-      surfaces the diff merely touched, defense-in-depth where the design
-      already fails closed, robustness under conditions no unvalidated signal
-      path exercises. Deferrals are recorded in the graph as draft tactics
-      (retain-not-refine, clarification 6), batched per component with finding
-      provenance (file:line, failure scenario, verdict, source PR) in the body;
-      they become selectable only when a later /align-tactics round finalizes
-      them, and once finalized they carry no validates edge to an unvalidated
-      signal, so calculated attention's off-path demotion (clarification 11)
-      ranks them below round tactics with no new machinery — and self-corrects
-      upward if a new signal's path later includes the component. Ignore:
-      refuted by the skeptic pass, unreachable failure scenarios, below the
-      meaningfulness threshold (legacy parity: pre-existing moderate/low
-      advisories), or fixes that would add defensive fallbacks contrary to
-      code-style. Ignored findings are not graph-recorded; every disposition
-      including refutation reasons is recorded once in the PR review comment as
-      the audit trail. Recorded 2026-07-04 interview. (Amended 2026-07-13: cost
-      now enters the resolve/defer boundary — a confirmed out-of-contract
-      finding cheaper to fix than to defer is resolved in scope rather than
-      deferred, and only expensive out-of-contract findings become draft
-      tactics; the contract trigger and the ignore category are unchanged. See
-      the fix-everything-cheap clarification of that date.)"
+    answer: Review findings beyond the tactic's plan — which are fixed in scope, which defer, which are ignored, and how do deferrals schedule? — See body §Review & QA Disposition for the full mechanism. Recorded 2026-07-04 interview.
   - question: Is the qa phase a re-run of the automated checks — and what does a
       bootstrap-emulating session owe it?
-    answer: "No — full parity with the legacy qa-fix skill
-      (.claude/skills/qa-fix/SKILL.md), recorded 2026-07-04 from author
-      direction after the first emulated qa run. QA is the autonomous half of
-      user-acceptance QA, not an automated-test re-run: merge origin/main first;
-      author a genuine QA plan from the live context (a triage that classifies
-      ordered items script-verifiable / needs-browser / needs-human-judgment);
-      validate the delivered behavior INDEPENDENTLY against the tactic's stated
-      intent and real data — the live store, deployed surfaces, public seed data
-      — never merely reproducing the implementer's claimed checks (the plan's
-      verify blocks are the floor, not the phase); classify residue on the
-      four-class disposition axis (opus-fixable -> the phase's bounded internal
-      fix loop, needs-main -> follow-up, needs-human -> office_hours park,
-      already-satisfied -> pass); record the summary on the PR. Precedent, same
-      day: PR #2752's first qa pass re-ran the author's checklist and passed;
-      the independent pass against the real delegation records immediately found
-      the capture-term scoring bug (exact-match enum parsing vs the store's
-      actual free-text vocabulary). A bootstrap-transition session
-      (clarification 15) emulating qa owes these full semantics before writing
-      the qa -> review transition; the transition write asserts the validation
-      happened, not that the checklist re-ran."
+    answer: Is the qa phase a re-run of the automated checks — and what does a bootstrap-emulating session owe it? — See body §Review & QA Disposition for the full mechanism. Recorded 2026-07-04 from author direction.
   - question: Does review-phase parity bind like qa parity — what does an emulating
       session owe the review phase?
-    answer: "Yes — the clarification-20 rule generalizes: review is the full
-      /review-fix fan-out (surface-conditional finders in parallel -> code dedup
-      -> classify -> adversarial verify with severity-scaled skeptics -> the
-      Opus fix lane -> disposition per clarification 19, recorded in the PR
-      review comment), not a single-agent read-through — and never skippable.
-      Precedent: PRs #2750, #2748, and #2742 merged with no review phase at all
-      under the bootstrap doctrine; the independent review ran retroactively a
-      day later and its findings became the clarification-19 deferral drafts. A
-      bootstrap-emulating session owes the full fan-out semantics before writing
-      review -> done; the transition write asserts the review ran, not that CI
-      is green. One seam is graph-native (clarification 19): deferred findings
-      land as draft tactic nodes batched per component — never gh follow-up
-      issues, no dispatch:review-followup label, and no orphan-retriage analog
-      is needed: drafts are inert until a later /align-tactics round finalizes
-      them, and that round validates the finding provenance against what
-      actually merged. Recorded 2026-07-04 interview."
+    answer: Does review-phase parity bind like qa parity — what does an emulating session owe the review phase? — See body §Review & QA Disposition for the full mechanism. Recorded 2026-07-04 interview.
   - question: Where does a graph-native tactic's qa needs-main residue — post-merge
       verify-against-prod work — live?
     answer: >-
@@ -368,64 +299,10 @@ clarifications:
       Claiming & Liveness for the full mechanism. Recorded 2026-07-06."
   - question: Does the legacy office-hours entry's attach-to-parking-session
       behavior carry over — how does a human engage a parked node?
-    answer: "No — graph recoverability replaces session recovery. Session recovery
-      is not supported usage of the greenfield router: under workflow-native
-      tick execution (clarification 24) phase workers are agent() subagents
-      inside a tick workflow, not independently attachable daemon jobs, so a
-      design premised on re-entering the parking session cannot be supported —
-      and with the park write carrying full context, session persistence (daemon
-      registry, transcripts, resume) stops being load-bearing: the owned graph,
-      not the harness's session machinery, is the recovery substrate for parked
-      work (no recovers edge recorded — the same strategy leans on the Workflow
-      executor per clarification 25, so a strategy-level unwind claim would
-      overstate). The park write is the recovery artifact: every office_hours
-      park records recoverable context in the node at park time — the reason, a
-      best-next-steps recommendation as a first-class
-      office_hours.recommendation field beside reason/since (atomic with the
-      park, cleared with the un-park; a schema follow-up, since
-      tactic-graph-dispatch-schema is done), and any state a fresh session
-      needs; a park whose context lives only in the parking session is a defect
-      (condition 6). The graph-native entry always launches, and attaches the
-      human to, a NEW session recovered from the graph: selection walks parked
-      nodes in resolved-rank order (the router's own calculated-attention
-      ordering; an explicit node-id argument targets one item); the session
-      roots in the node-id worktree when one exists — in-flight working-tree
-      state lands in front of the human, and the session claims the node id per
-      the liveness rule (clarification 13) — else the main checkout; it surfaces
-      office_hours.reason and the recorded recommendation as untrusted data,
-      generates a recommendation via a read-only review subagent only when none
-      was recorded, and stops. Read-only review-and-recommend parity holds: no
-      phase transition, no un-park, no fixes — the park clears per clarification
-      4 (an interactive-session commit touching the node). The legacy entry's
-      attach/resume/provision verbs, its gh selector, and the strip hook retire
-      with the drain (tactic-legacy-router-removal). Recorded 2026-07-06
-      interview."
+    answer: Does the legacy office-hours entry's attach-to-parking-session behavior carry over — how does a human engage a parked node? — See body §Recovery & Session Lifecycle. Recorded 2026-07-06 interview.
   - question: Bootstrap rounds run /align-tactics in the same session as the
       /align-strategy edit — is that same-session context load-bearing?
-    answer: "No — it is a bootstrap safety, never a carrier, recorded from author
-      direction. In the target design the soft-freeze re-evaluation is a fresh
-      /align-tactics session the router queues on a fingerprint mismatch
-      (clarification 10) and the tick launches (clarification 24), with the
-      transition-time fingerprint gate holding every forward transition and
-      merge arm until that session confirms or amends
-      (tactic-graph-router-transitions Unit 1) and the autonomy contract parking
-      to office_hours — reason plus recommendation — when author input is
-      required. That fresh session has only the graph, so /align-strategy owes
-      it a complete record: every fact a decomposition or re-evaluation needs —
-      the interview's decisions, rationale, edge-case resolutions, and tactical
-      byproducts — lands in the graph at record time (strategy substance:
-      statement, clarifications, conditions, success_signal; tactical context:
-      draft tactic bodies per clarification 6), never only in the recording
-      session's context. A decomposition that cannot proceed without unrecorded
-      interview context is a defect of the /align-strategy round that produced
-      it, exactly as a park whose context lives only in the parking session is a
-      defect (condition 6) — the same graph-recoverability principle applied to
-      the strategy-record write instead of the park write. The /align-strategy
-      requirements-coverage check (its step 6: every clause of the author's
-      input maps to a recorded element) is the skill-side discharge of this
-      condition. Same-session /align-tactics execution remains good practice
-      during bootstrap while no router exists to queue the re-evaluation, but
-      nothing may depend on it. Recorded 2026-07-06 from author direction."
+    answer: Bootstrap rounds run /align-tactics in the same session as the /align-strategy edit — is that same-session context load-bearing? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-06 from author direction.
   - question: Repeated /align-tactics rounds kept re-refining the same
       doctrine-encoding tactic (tactic-align-skills-greenfield-gate, four
       touches on 2026-07-06) — one-off or process defect, and what is the
@@ -480,44 +357,7 @@ clarifications:
       failure) while graph state and worktree survive — is the session state
       worth recovering, by workflow-session resume or by transcript
       reconstruction (the legacy recover-api-error pattern)?
-    answer: "No on both mechanisms — re-selection stays the only recovery path,
-      reaffirming the workflow-tick clarification (2026-07-06, dead ticks
-      recover by re-selection) and the bootstrap-record clarification
-      (2026-07-06, re-evaluation is a fresh session with only the graph), and
-      the residual loss is closed by a durability rule, not a session mechanism.
-      What a dead worker actually loses is reasoning-in-progress — findings not
-      yet flushed to durable state; the node body's clean-session plan
-      (condition 7), the node-id worktree with its commits and uncommitted edits
-      (the re-selected worker roots in the same worktree, so in-flight file
-      state lands in front of it per the office-hours-entry clarification's rule
-      (2026-07-06)), and the PR with its phase comments all survive, and the
-      ledger sweep already keeps a dead worker from blocking new selections.
-      Workflow-session resume is technically unfit twice over: resume is
-      same-session-only, unavailable exactly when the tick session is dead; and
-      resume replays only completed agent() calls from cache — a worker that
-      died mid-flight re-runs from scratch — so its best case equals
-      re-selection at tighter coupling to the rented executor. Transcript
-      reconstruction is negative expected value as router machinery: the node
-      body already carries everything a fresh session needs, so the transcript's
-      marginal information over plan + worktree diff + PR comments is small;
-      reading a long transcript costs a significant fraction of redoing the
-      reasoning and inherits whatever confused state killed the session; and it
-      would make the harness's proprietary transcript format load-bearing for
-      the router — reversing the office-hours-entry clarification's (2026-07-06)
-      demotion of session persistence and running against the thin-script
-      capture bound (clarification 25). recover-api-error stays a human-invoked
-      legacy-lane tool and never becomes router substrate. The remaining gap —
-      an expensive phase dying with its findings only in conversation — is
-      closed by the checkpoint discipline (new condition 9): phase progress
-      whose only home is the session is a defect; workers flush findings to
-      durable state at natural boundaries (worktree commits for file work; PR
-      comments for QA triage and review findings as produced, not only at phase
-      end; node body sections for residue), and a re-selected worker treats
-      pre-existing worktree/PR state as resume input — diff against the branch
-      base and read prior phase comments before redoing anything. This bounds a
-      dead worker's redo cost to one checkpoint interval with zero new harness
-      coupling. Skill-side encoding retained as draft
-      tactic-phase-checkpoint-discipline. Recorded 2026-07-06 interview."
+    answer: A worker session dies mid-phase (API error, session limit, system failure) while graph state and worktree survive — is the session state worth recovering, by workflow-session resume or by transcript reconstruction (the legacy recover-api-error pattern)? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-06 interview.
   - question: Clarification 32's amendment-completeness bar names re-evaluation
       amendments of tactics. Does the same bar bind /align-strategy edits to
       strategy nodes?
@@ -544,48 +384,7 @@ clarifications:
       repeatedly fails to make progress or park on a node, and a systemic
       executor failure (a daemon crash-loop) that would otherwise false-trip a
       per-node fuse across every selectable node?
-    answer: "Two fuses, both written by the reconciler sweep, each gating exactly
-      its blast radius. Per-node fuse: the sweep increments a durable
-      no-progress counter (an execution.attempts entry — frontmatter state,
-      never in the scope hash) whenever a claimed node's worker ends with
-      neither a transition write (forward or backward) nor a park — the claim
-      died silently; at 2 consecutive no-progress cycles (legacy CAP=2 parity)
-      the sweep parks that node to office_hours carrying the failure history per
-      condition 6. Any successful transition resets the counter; a start-gate
-      skipped disposition is a correct yield, never a strike; the gate is
-      node-local — a tripped node fuse blocks only that node. Systemic breaker:
-      classification runs in the NEXT tick's sweep, before selection (sweep →
-      classify → gate → fan out), because the failing tick cannot classify
-      itself — the motivating scenario is a misconfigured fan-out exceeding
-      memory and crashing the daemon or system, killing the tick and its workers
-      together, where tick-end classification and a canary probe are both blind
-      (a canary passes whenever the daemon has recovered enough to run it). When
-      the sweep finds correlated death — at least 3 simultaneously dead
-      no-progress claims constituting the prior tick's selection (all or quorum;
-      below the floor, failures strike per-node and the cap-2 fuse still catches
-      real loops) — it writes NO per-node strikes and instead trips the breaker:
-      one incident tactic written via graph-commit, born office_hours-parked,
-      serving this strategy, carrying the correlated-failure evidence and a
-      next-steps recommendation. While an unresolved breaker tactic exists,
-      selection selects nothing — the only global gate. Correlated death is also
-      the signature of the daemon-down liveness trap (a dead daemon makes every
-      claim look dead at once via the empty claude agents read), so the
-      discriminator converts exactly the false-mass-park input into a single
-      graph artifact. Reset is human-only via the normal interactive un-park
-      (clarification 4): auto-reset would resume a crash loop, and a trip is by
-      definition human-reviewed through the standard office-hours queue — no
-      side channel (clarification 28), and no breaker state in dispatch.config,
-      which keeps tunables only (quorum floor, caps); clarification 14's
-      machine-state carve-out covers telemetry and tunables, not
-      review-demanding events. Net: the crash-loop scenario is bounded to one
-      crash, and this amends the unbounded reading of re-selection recovery
-      (clarifications 24/30/34) — re-selection remains the only recovery path,
-      now fuse-bounded in both scopes. No recovers edge is added (clarification
-      26 precedent: the fuse bounds executor-failure blast radius; it does not
-      reduce executor reliance). Bootstrap parity: an emulating session owes
-      strike accounting and the pre-selection breaker check like any other phase
-      semantics (clarification 15). Implementation retained as draft
-      tactic-router-failure-fuses. Recorded 2026-07-07 interview."
+    answer: What guards the router against failure loops — a worker that repeatedly fails to make progress or park on a node, and a systemic executor failure (a daemon crash-loop) that would otherwise false-trip a per-node fuse across every selectable node? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-07 interview.
   - question: Self-modifying tactics — scope touching agent-behavior config
       (.claude/skills/**, .claude/hooks/**, settings) — cannot be committed by
       auto-mode workers. Is self-modification a supported greenfield use case,
@@ -833,23 +632,7 @@ clarifications:
       tool — the two could not both hold. Recorded 2026-07-11 interview."
   - question: Does the review phase re-wrap /code-review as a findings-only finder,
       or trust the review skills' own built-in review-and-fix?
-    answer: "Trust the built-in review+fix. The review phase runs /code-review max
-      and /security-review with their defaults, both on opus, and works with
-      whatever they output and edit — the 'You are a findings-only code-review
-      subagent' framing (`.claude/workflows/review-fix.js:324,335`) is dropped,
-      along with the findings-only wrapper and the separate adversarial-verify →
-      opus-fix pipeline FOR those two sources (they carry their own
-      verification). Only the residue those skills do not auto-fix is handled:
-      an opus subagent classifies it and files follow-ups through the
-      pre-existing classify → defer → file logic. Dedup, deferred-filing, and
-      the other review steps are untouched. This refines clarification 19's
-      disposition mechanics for the code-review/security-review sources
-      specifically; it does not change the three-way disposition doctrine
-      itself. Recorded 2026-07-11 interview. (Amended 2026-07-13: the three-way
-      disposition doctrine this clarification leaves intact was itself refined
-      that day — the unfixed residue is now classified into cheap findings fixed
-      in scope versus expensive out-of-contract findings deferred, not filed
-      wholesale. See the fix-everything-cheap clarification.)"
+    answer: Does the review phase re-wrap /code-review as a findings-only finder, or trust the review skills' own built-in review-and-fix? — See body §Review & QA Disposition for the full mechanism. Recorded 2026-07-11 interview.
   - question: Frozen (undecomposed or soft-frozen) tactics carry a ranking — are
       they selectable, and what runs when the dispatch script picks one?
     answer: >-
@@ -938,106 +721,11 @@ clarifications:
       alone — every confirmed out-of-contract finding defers to a draft tactic.
       Does the cost of the fix versus the cost of deferring it also bear on the
       disposition?
-    answer: "Yes — cost is a second resolve-in-scope trigger, refining clarification
-      19's resolve/defer boundary (the 'fix everything cheap' doctrine). A
-      confirmed finding is resolved in the review phase's content-fix loop when
-      it EITHER breaks the tactic's contract (clarification 19's original
-      trigger, unchanged) OR is cheaper to fix than to defer; only a confirmed
-      out-of-contract finding that is expensive to fix — a real refactor —
-      defers to a draft tactic. Cheaper-to-fix-than-to-defer is the line:
-      deferral carries real overhead (a draft-tactic body, a later
-      /align-tactics finalization round, a separate PR and its review), so a
-      localized low-risk edit whose diff and risk are smaller than that overhead
-      — reuse an existing helper, consolidate a read, add input validation,
-      tighten a regex — is fixed now; a fix that introduces new structure or is
-      cross-cutting (an algorithmic rewrite, a memoization architecture) defers,
-      its in-PR risk and scope exceeding the deferral overhead. Cost refines
-      ONLY the resolve↔defer boundary: it never moves a finding out of the
-      ignore category — refuted findings, unreachable scenarios, below-threshold
-      pre-existing advisories, and fixes that would add defensive fallbacks
-      contrary to code-style stay ignored however cheap, because fixing a
-      non-finding is waste and a defensive fallback violates code-style
-      regardless of cost. A finding fixed in scope is still recorded, satisfying
-      the graph-as-sole-tracker rule (clarification 30) and clarification 19's
-      own audit trail: the disposition and the fix land in the PR review
-      comment, so 'fixed cheaply in-PR' drops nothing. Steelman resolved as
-      divergence: strict contract-scoping — defer every out-of-contract finding,
-      keeping the PR to its exact deliverable (clarification 19 as first
-      recorded) — was put and diverged from: it pays the full deferral overhead
-      for a sub-overhead fix and accumulates debt on surfaces the diff already
-      touched, against the greenfield lens (fix it right, now) and the
-      fold-don't-drop smallness doctrine (clarification 30). This refines
-      clarification 19's disposition and the residue-handling of the
-      trust-builtin clarification (the review skills' unfixed residue is now
-      classified into fix-cheap / defer-expensive, not filed wholesale); the
-      three-way structure and its adversarial-confirm requirement are otherwise
-      unchanged. First application: PR #2865 (tactic-graph-digest-tooling) fixed
-      4 confirmed correctness/hardening findings plus cheap
-      reuse/efficiency/convention improvements in scope and deferred two large
-      refactors (a near-duplicate O(n²) inverted index, closure memoization) to
-      tactic-graph-digest-quality-followups. Implementation retained as draft
-      tactic-review-cheap-fix-disposition. Recorded 2026-07-13 interview."
+    answer: Clarification 19 disposes review findings by verification × contract alone — every confirmed out-of-contract finding defers to a draft tactic. Does the cost of the fix versus the cost of deferring it also bear on the disposition? — See body §Review & QA Disposition for the full mechanism. Recorded 2026-07-13 interview.
   - question: After a node worker terminates, is its session removed from the agents
       list — and does an escalation-parked session stay for the author to
       engage?
-    answer: "Reaped on every terminal exit — clean advance and escalation-park
-      alike. The legacy gh router's Stop hook removed a worker session that
-      terminated without variance and needed no author follow-up (via
-      dispatch-self-close — `claude rm <job-id>`, foreground-safe: a no-op for
-      an interactive session) so it did not clog the agents list; the node-lane
-      branch of that same Stop hook currently does nothing for a node worker
-      'parked or clean' (dispatch-stop.sh), so completed and parked node-worker
-      sessions accumulate in `claude agents --json`. The requirement carries
-      over, and graph-native doctrine widens it: because session persistence is
-      already demoted — sessions are disposable executors that live exactly as
-      long as their one phase (the disposable-session clarification), session
-      recovery is never router substrate (the worker-death clarification), and
-      every office_hours park writes its recoverable context into the NODE, not
-      the session (session attach/resume is not a supported recovery path) —
-      nothing durable lives in a terminated session, so the agents list should
-      hold only LIVE executors and an escalation-parked session is reaped too.
-      This diverges from the rival session-as-observability framing (keep
-      escalated sessions visible in the agents list as a live cue): escalations
-      surface through the office-hours dashboard's PARKED panel, which reads the
-      node's office_hours field, so a lingering agents-list entry adds no signal
-      and re-couples observability to session persistence — the coupling the
-      disposable-session clarification exists to reject. Mechanism (retained as
-      draft tactic-graph-node-session-reap, 'stop hook or otherwise' per the
-      requirement): the node-worker branch of the Stop hook calls the existing
-      foreground-safe self-close primitive on its terminal exit, after the
-      escalation-park backstop runs so the node's office_hours is durable before
-      the session is removed. Edge cases resolved: (a) foreground-safe gate —
-      only managed background worker jobs are reaped; interactive align and
-      office-hours human sessions (CLAUDE_JOB_DIR-gated) are never auto-removed;
-      (b) failure-containment consistency — reaping releases the node-id
-      worktree claim (worktree_has_live_session goes false), which correctly
-      makes the next phase selectable after a clean advance and lets the
-      no-progress fuse count re-selections after a silent no-transition exit, so
-      it does not weaken the router-failure-containment condition; (c) a worker
-      that dies mid-phase without firing a clean Stop (a hard crash) is
-      variance, out of scope for this self-reap — its orphaned job is reaped by
-      the tick/sweep ledger pass that already GCs the stale worktree (retained
-      in the draft tactic). Recorded 2026-07-16 interview. (Amended 2026-07-19:
-      reaping remains the DEFAULT and the doctrinal behavior, but is now
-      configurable via a default-off operator escape hatch that keeps a
-      completed/parked session for local inspection — see the 2026-07-19
-      configurable-auto-close clarification. \"Reaped on every terminal exit\"
-      describes the default; when the keep-sessions toggle is ON, a kept session
-      is intentional, not a clog, and its node-id claim is held until manual
-      reap.) (Amended 2026-07-19 (reap-scope narrowing): the DEFAULT is further
-      narrowed — auto-close now fires ONLY on a clean phase-transition or an
-      escalation-park, not on every terminal exit. Edge case (c)'s sweep-reap of
-      a mid-phase-dead (crashed) orphaned job is REVERSED: such a job is now
-      KEPT (its job entry and node-id worktree both held) for local debugging
-      until manual reap, because a non-transitioned, non-parked exit has no
-      durable record (it never parked to office-hours) and the live session is
-      its only debugging artifact; and edge case (b)'s
-      reap-then-fuse-re-selects-after-a-silent-no-transition-exit is likewise
-      narrowed — a no-transition exit is now kept and the node freezes-for-debug
-      rather than auto-retrying. The keep-all toggle of the 2026-07-19
-      configurable-auto-close clarification layers on top of this narrowed
-      default. See the 2026-07-19 reap-scope-narrowing clarification for the
-      full resolution and the accepted freeze-for-debug tradeoff.)"
+    answer: After a node worker terminates, is its session removed from the agents list — and does an escalation-parked session stay for the author to engage? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-16 interview.
   - question: "A strategy whose signal is validated only by human work (sensor:
       owner review at office-hours) is re-selected for /align-tactics every tick
       — its rounds produce off-path tooling plus born-parked on-path reading
@@ -1130,31 +818,7 @@ clarifications:
       clears as a side effect of "any interactive-session commit touching the
       node." Why didn't that fire for the drain lane, and what must a drain
       session do at termination?
-    answer: "Clarification 4's side-effect clear only fires when a commit touches
-      the parked node's own frontmatter, but a self-modification drain session's
-      fix commit lands on the PR branch and never touches the node's
-      office_hours field — so nothing clears the park incidentally, and the
-      separate clear-park graph-commit to main is not forced by session
-      termination and was forgotten (the observed park -> drain -> re-park ->
-      clear sequence on tactic-phase-standup-audit-lens). Requirement: the
-      self-modification drain lane must terminate with a MANDATORY explicit park
-      disposition executed through a scripted atomic primitive — clear-park
-      <node-id> [note] on green CI (office_hours -> null landed on main via
-      graph-commit), or re-park via park-node with an updated reason on red or
-      blocked CI — and never leave a drained node in an ambiguous still-parked
-      state. This refines clarification 4, it does not replace it: clarification
-      4's incidental side-effect clear remains the mechanism for the read-only
-      human office-hours lane (which drains nothing and legitimately never
-      un-parks, per .claude/skills/office-hours/SKILL.md:374-378); the drain
-      lane adds an explicit terminal disposition on top of it. The disposition
-      must be a single scripted graph operation — the inverse of park-node — not
-      a hand-rolled inline readNode -> office_hours=null -> writeNode ->
-      graph-commit sequence, precisely so it cannot be partially completed,
-      skipped, or forgotten between the fix push and session end. This
-      generalizes the one-off manual clear-park sequence noted at
-      tactic-tick-scriptable-then-spawn body (the clear-park inverse of
-      park-node) into a first-class primitive. Implementation retained as draft
-      tactic tactic-clear-park-primitive. Recorded 2026-07-18 interview."
+    answer: An office-hours drain session fixed a parked node and pushed the fix, but the office_hours park was left set — the node was even re-parked before a later session finally cleared it (tactic-phase-standup-audit-lens, 2026-07). Clarification 4 says a park clears as a side effect of "any interactive-session commit touching the node." Why didn't that fire for the drain lane, and what must a drain session do at termination? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-18 interview.
   - question: How is the CI-fix interrupt modeled — as a `phase` enum value or as
       orthogonal execution state — and what is the migration off the phase-value
       encoding?
@@ -2126,3 +1790,191 @@ hard-fails unless the diff vs main is entirely under intentions/, runs graph
 validation, and stamps the four required contexts green in about a minute; the
 writer then fast-forwards the same SHA to main, rebasing and re-running on
 reject. Heavy CI still guards any diff touching paths outside intentions/.
+
+### Recovery & Session Lifecycle
+
+**Re-selection from origin/main is the only recovery path, now fuse-bounded.**
+Current rule (from 2026-07-07, entry 40). A dead tick, a parked node, a worker
+that died mid-phase, or a scope change after selection is never recovered by
+resuming a session — the router always re-selects from origin/main, because the
+owned graph, not the harness's session machinery, is the recovery substrate.
+Entries 24, 30, and 34 established this unconditional re-selection: dead ticks
+recover by next-tick re-selection from origin/main; a human engages a parked node
+through a NEW session recovered from the node's `office_hours` context (reason plus
+a recorded best-next-steps recommendation), never by attaching to the parking
+session; and a scope-or-state change after selection is caught by the fingerprint
+gate (see §Fingerprint & Freeze). Entry 40 amends the unbounded reading of that
+recovery — re-selection stays the only path, but two fuses written by the
+reconciler sweep now bound it, each gating exactly its blast radius. The per-node
+fuse increments a durable no-progress counter (an `execution.attempts` entry —
+frontmatter state, never in the scope hash) whenever a claimed node's worker ends
+with neither a transition write (forward or backward) nor a park; at 2 consecutive
+no-progress cycles (legacy CAP=2 parity) the sweep parks that node to
+`office_hours` carrying its failure history. Any successful transition resets the
+counter, a start-gate skip is a correct yield rather than a strike, and the fuse is
+node-local. The systemic breaker guards against a daemon crash-loop that would
+false-trip every node's fuse at once: because a failing tick cannot classify
+itself, classification runs in the NEXT tick's sweep before selection (sweep →
+classify → gate → fan out), and when it finds correlated death — at least 3
+simultaneously dead no-progress claims constituting the prior tick's selection — it
+writes NO per-node strikes and instead trips the breaker, one incident tactic
+written via graph-commit, born `office_hours`-parked, serving this strategy,
+carrying the correlated-failure evidence and a next-steps recommendation. While an
+unresolved breaker tactic exists, selection selects nothing — the only global gate.
+Correlated death is also the signature of the daemon-down liveness trap, where a
+dead daemon makes every claim look dead at once via the empty `claude agents` read
+(see §Worktree Claiming & Liveness), so the discriminator converts exactly that
+false-mass-park input into a single reviewable graph artifact. Reset is human-only
+via the normal interactive un-park (auto-reset would resume the crash loop); no
+`recovers` edge is added, since the fuse bounds executor-failure blast radius
+without reducing executor reliance. Implementation retained as draft
+tactic-router-failure-fuses.
+
+The first-tick Workflow-script substrate decision that entry 24 also carries is a
+substrate question, not a recovery one — see §Execution Substrate for its full
+content; only its re-selection-recovery role is restated here.
+
+**A self-modification drain session must explicitly dispose the park at
+termination.** Current rule (from 2026-07-18, entry 65), refining — not replacing —
+entry 4. Entry 4 (2026-07-03) established that parking is orthogonal queue state
+cleared incidentally by any interactive-session commit that touches the parked
+node's own frontmatter (the graph analog of the legacy UserPromptSubmit strip
+hook), and that general rule still holds for the read-only human office-hours lane,
+which drains nothing and legitimately never un-parks. But a self-modification drain
+session's fix commit lands on the PR branch and never touches the node's
+`office_hours` field, so nothing clears the park incidentally — the observed
+park → drain → re-park → clear sequence on tactic-phase-standup-audit-lens. Entry
+65 adds a drain-lane-specific terminal disposition on top of entry 4: the drain
+lane must terminate with a MANDATORY explicit disposition through a single scripted
+atomic primitive — `clear-park <node-id> [note]` on green CI (`office_hours → null`
+landed on main via graph-commit) or a re-park via `park-node` with an updated
+reason on red or blocked CI — and never leave a drained node ambiguously
+still-parked. The disposition must be one scripted graph operation, the inverse of
+`park-node`, not a hand-rolled read → `office_hours=null` → write → commit
+sequence, precisely so it cannot be partially completed, skipped, or forgotten
+between the fix push and session end. Implementation retained as draft
+tactic-clear-park-primitive.
+
+The following recovery and session-lifecycle rules are settled and stand on their
+own:
+
+Same-session `/align-tactics` during bootstrap is a safety net, never a carrier
+(Recorded 2026-07-06 from author direction, entry 31). Bootstrap rounds run
+`/align-tactics` in the same session as the `/align-strategy` edit, but nothing may
+depend on that shared context. In the target design the soft-freeze re-evaluation
+is a fresh `/align-tactics` session the router queues on a fingerprint mismatch and
+the tick launches, and that session has only the graph — so `/align-strategy` owes
+it a complete record: every interview decision, rationale, edge-case resolution,
+and tactical byproduct lands in the graph at record time (strategy substance in the
+node; tactical context as draft tactic bodies). A decomposition that cannot proceed
+without unrecorded interview context is a defect of the round that produced it, the
+same graph-recoverability principle that governs park writes; the
+requirements-coverage check in `/align-strategy` is the skill-side discharge.
+Same-session execution stays good bootstrap practice while no router exists to queue
+the re-evaluation, but nothing may depend on it.
+
+A dead worker is recovered only by re-selection, under a checkpoint-discipline
+condition (Recorded 2026-07-06 interview, entry 37). When a worker dies mid-phase
+(API error, session limit, system failure) while graph state and worktree survive,
+neither workflow-session resume nor transcript reconstruction is used — re-selection
+stays the only path. Resume is same-session-only (unavailable exactly when the tick
+session is dead) and replays only completed `agent()` calls, so a mid-flight death
+re-runs from scratch anyway; transcript reconstruction is negative expected value
+and would make the harness's proprietary transcript format load-bearing for the
+router. `recover-api-error` stays a human-invoked legacy-lane tool, never router
+substrate. What a dead worker actually loses is reasoning-in-progress, bounded by
+the checkpoint discipline (condition 9): phase progress whose only home is the
+session is a defect, so workers flush findings to durable state at natural
+boundaries — worktree commits for file work, PR comments for QA triage and review
+findings as produced, node body sections for residue — and a re-selected worker,
+rooting in the same node-id worktree, treats pre-existing worktree/PR state as
+resume input (diff against the branch base, read prior phase comments before
+redoing anything). This bounds a dead worker's redo cost to one checkpoint interval
+with zero new harness coupling. Skill-side encoding retained as draft
+tactic-phase-checkpoint-discipline.
+
+Node-worker sessions are reaped from the agents list on terminal exit via a
+foreground-safe self-close (Recorded 2026-07-16 interview, entry 60). Because
+session persistence is already demoted — sessions are disposable executors that
+live exactly as long as their one phase, session recovery is never router
+substrate, and every park writes its recoverable context into the node rather than
+the session — nothing durable lives in a terminated session, so `claude agents
+--json` should hold only LIVE executors. The node-worker branch of the Stop hook
+therefore calls the existing foreground-safe self-close primitive on terminal exit,
+after the escalation-park backstop runs so the node's `office_hours` is durable
+before the session is removed. Only managed background worker jobs are reaped;
+interactive align and office-hours human sessions (CLAUDE_JOB_DIR-gated) are never
+auto-removed. Escalations surface through the office-hours dashboard's PARKED panel
+(which reads the node's `office_hours` field), so a lingering agents-list entry
+would add no signal and merely re-couple observability to session persistence — the
+coupling the disposable-session doctrine exists to reject. Implementation retained
+as draft tactic-graph-node-session-reap. (The 2026-07-19 clarifications later made
+reaping a configurable default-off escape hatch and narrowed the default to fire
+only on a clean phase-transition or escalation-park — keeping a non-transitioned,
+non-parked exit for debugging — see those entries for the full narrowing.)
+
+### Review & QA Disposition
+
+**Review findings disposition three ways — resolve-in-scope / defer / ignore —
+with cost now a second resolve-in-scope trigger.** Current rule (entry 19
+2026-07-04, as refined by entry 59 2026-07-13; entry 59 adds a trigger, it does not
+replace the frame). Entry 19 fixed the three-way disposition, decided in the review
+phase, keyed on verification × contract. Resolve in scope a finding that is
+adversarially confirmed (survives the skeptic pass with a concrete failure
+scenario) AND breaks the tactic's own stated contract — the deliverable its plan
+claims, or the security/integrity of what the diff itself introduced ("no live
+callers yet" never defers a contract violation of the delivered thing itself); the
+review phase holds — no review → done — while a confirmed in-scope finding is open,
+its internal content-fix loop resolving it locally before CI. Defer a real but
+out-of-contract confirmed finding (a pre-existing surface the diff merely touched,
+defense-in-depth where the design already fails closed) to a graph draft tactic
+batched per component with finding provenance, selectable only once a later
+`/align-tactics` round finalizes it. Ignore findings refuted by the skeptic pass,
+unreachable scenarios, below-threshold pre-existing advisories, or fixes that would
+add defensive fallbacks contrary to code-style; every disposition, refutations
+included, is recorded once in the PR review comment as the audit trail. Entry 51
+(2026-07-11) applied the same frame to `/code-review` and `/security-review`
+themselves — the review phase trusts their built-in review-and-fix and dispositions
+only the residue they do not auto-fix, through the same classify → defer → file
+logic. Entry 59 refines both: cost becomes a second resolve-in-scope trigger — a
+confirmed finding is resolved in scope when it EITHER breaks the contract (entry
+19's original trigger, unchanged) OR is cheaper to fix than to defer, since
+deferral carries real overhead (a draft-tactic body, a later finalization round, a
+separate PR and its review). Only a confirmed out-of-contract finding that is
+expensive to fix — a real refactor introducing new structure or a cross-cutting
+change — still defers. Cost refines ONLY the resolve↔defer boundary: it never moves
+a finding out of the ignore category, because fixing a non-finding is waste and a
+defensive fallback violates code-style however cheap. A finding fixed in scope is
+still recorded in the PR review comment, so "fixed cheaply in-PR" drops nothing.
+Implementation retained as draft tactic-review-cheap-fix-disposition.
+
+The following review and QA rules are settled and stand on their own:
+
+QA is full independent user-acceptance validation, not a checklist re-run (Recorded
+2026-07-04 from author direction, entry 20). Full parity with the legacy qa-fix
+skill: merge origin/main first; author a genuine QA plan from the live context (a
+triage classifying ordered items script-verifiable / needs-browser /
+needs-human-judgment); validate the delivered behavior INDEPENDENTLY against the
+tactic's stated intent and real data — the live store, deployed surfaces, public
+seed data — never merely reproducing the implementer's claimed checks (the plan's
+verify blocks are the floor, not the phase); classify residue on the four-class
+axis (opus-fixable → the phase's bounded internal fix loop, needs-main → follow-up,
+needs-human → office_hours park, already-satisfied → pass) and record the summary on
+the PR. Precedent: PR #2752's first qa pass merely re-ran the author's checklist and
+passed, while the independent pass against the real delegation records immediately
+found a capture-term scoring bug (exact-match enum parsing vs the store's actual
+free-text vocabulary). A bootstrap-emulating session owes these full semantics
+before writing the qa → review transition; the write asserts the validation
+happened, not that the checklist re-ran.
+
+Review is the full /review-fix fan-out, and deferred findings land as graph draft
+tactics (Recorded 2026-07-04 interview, entry 21). Review-phase parity binds like qa
+parity: review is the full fan-out — surface-conditional finders in parallel → code
+dedup → classify → adversarial verify with severity-scaled skeptics → the Opus fix
+lane → disposition per the rule above, recorded in the PR review comment — not a
+single-agent read-through, and never skippable. One seam is graph-native: deferred
+findings land as draft tactic nodes batched per component, never gh follow-up issues
+and no dispatch:review-followup label, inert until a later `/align-tactics` round
+finalizes them (and that round validates the finding provenance against what
+actually merged). A bootstrap-emulating session owes the full fan-out before writing
+review → done; the write asserts the review ran, not that CI is green.
