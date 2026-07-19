@@ -20,7 +20,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -28,6 +28,7 @@ office_hours:
   reason: human visual judgment in a local Storybook browser session (~15 min) —
     no CI runs Storybook
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -36,10 +37,11 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-06 from the legacy gh main-qa queue during the target-state
-review (second sweep). Source issue (closed, content preserved here): 2524 —
-needs-main residue from the ds component work (issue 2510, PR 2517). No CI
-runs Storybook, and visual fidelity cannot be judged by automated tooling.
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issue (closed, content
+preserved here): 2524 — needs-main residue from the ds component work (issue
+2510, PR 2517). No CI runs Storybook, and visual fidelity cannot be judged by
+automated tooling.
 Operational note: the dev server needs `optimizeDeps.esbuildOptions.target:
 es2022` alongside `build.target` (known crash otherwise); never
 `pkill -f storybook`.
