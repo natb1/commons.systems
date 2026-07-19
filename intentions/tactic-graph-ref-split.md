@@ -18,9 +18,10 @@ rationale: "Finalized 2026-07-18 by an /align-tactics per-node pass
   cause (unchanged from the retained draft): intention nodes shared main with
   application code, so graph-only commits inherited code-grade branch protection
   (four checks green on the exact SHA) and contended with every code merge;
-  MAX_PUSH_ATTEMPTS=5 exhausted with zero progress three times on 2026-07-19
-  under fleet load. Two facts verified live during finalization, not assumed:
-  (1) `gh api repos/natb1/commons.systems/rulesets/12884700 --jq
+  MAX_PUSH_ATTEMPTS=5 exhausted with zero progress three times under fleet load
+  (recorded 2026-07-19 in strategy clarification 80). Two facts verified live
+  during finalization, not assumed: (1) `gh api
+  repos/natb1/commons.systems/rulesets/12884700 --jq
   '.conditions.ref_name.include'` returns `[\"~DEFAULT_BRANCH\"]` — the ruleset
   targets only `main`, so any other branch in this same repo is automatically
   exempt from all four required checks with zero admin action, which is what
@@ -30,16 +31,23 @@ rationale: "Finalized 2026-07-18 by an /align-tactics per-node pass
   original draft's open questions worried about) was deleted in
   tactic-dispatch-legacy-rewire (commits 638f78a5, a8c4898d) before this
   finalization ran — the stale brownfield-duplicate comment referencing it is
-  dead and is deleted as part of this plan, not worked around. Supersedes its
-  own prior stated sequencing: the retained draft said this tactic 'lands after
-  tactic-graph-commit-landing-lock; its completion deletes the lock code' — but
-  tactic-graph-commit-landing-lock is still status:raw/phase:null (a design
-  sketch, no code ever written), so there is no lock-acquisition code for this
-  tactic's graph-commit rewrite to delete, and gating the real greenfield fix
-  behind first building a throwaway interim mitigation would be pure waste. This
-  tactic proceeds without blocked_by on it; a future pass should prune or park
-  tactic-graph-commit-landing-lock now that its premise is superseded (not done
-  here — a per-node finalize session doesn't touch sibling tactic nodes)."
+  dead and is deleted as part of this plan, not worked around. Correction from
+  an opus validation pass run immediately after initial landing: this node
+  originally asserted tactic-graph-commit-landing-lock was status:raw/phase:null
+  and set blocked_by to [] on that basis. That was true when first checked but
+  went stale — a concurrent session finalized tactic-graph-commit-landing-lock
+  to status:codified/phase:implement (also dated 2026-07-18) with a full plan
+  that adds a CAS-claimed lock ref (refs/graph/landing-lock) into graph-commit's
+  existing try_land(), before this node's graph-commit was landed. Since
+  landing-lock is now dispatch-eligible and its plan targets the CURRENT
+  graph-commit (still on main with the CI-stamp mechanic), this tactic now
+  carries blocked_by: [tactic-graph-commit-landing-lock] so landing-lock's plan
+  executes against a stable target first; Unit 2's rewrite (which replaces
+  try_land() wholesale) additionally deletes landing-lock's
+  refs/graph/landing-lock CAS-lock acquisition/release code as part of that
+  replacement — see Unit 2's updated scope. This reverses the prior 'proceeds
+  independently' framing, which was reasoned soundly from stale information, not
+  a research gap."
 reading: null
 gap: null
 serves:
@@ -52,7 +60,8 @@ attention: null
 phase: implement
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-graph-commit-landing-lock
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -71,12 +80,17 @@ four required status checks (`acceptance`, `preview-and-smoke`, `lint`,
 that triggers `.github/workflows/graph-fast-path.yml` (a CI fast path
 stamping those four checks in ~30-60s), then fast-forwards onto `main`. Under
 fleet load, `MAX_PUSH_ATTEMPTS=5` (the commit→rebase→stamp→push retry loop)
-exhausted with zero progress three times on 2026-07-19. The interim
-mitigation `tactic-graph-commit-landing-lock` would add a CAS-claimed
-serialization lock around the critical section — but per this node's
-rationale, it is still `status: raw` / `phase: null` (an unimplemented design
-sketch), so this tactic proceeds independently rather than waiting on it (see
-rationale for the full argument).
+exhausted with zero progress three times (recorded 2026-07-19 in strategy
+clarification 80). `tactic-graph-commit-landing-lock` is a **separate,
+already-finalized** tactic (`phase: implement`) that adds an interim
+CAS-claimed serialization lock (`refs/graph/landing-lock`) into the
+*current* `graph-commit`'s `try_land()`, targeting the CI-stamp mechanic this
+tactic replaces. This tactic is `blocked_by: [tactic-graph-commit-landing-lock]`
+so that plan lands against a stable target first; Unit 2 below additionally
+deletes the lock-acquisition/release code it introduces as part of replacing
+`try_land()` wholesale (see rationale for the correction history — this
+tactic originally shipped without that dependency, based on a stale read of
+landing-lock's status).
 
 **Design: `intentions/*.md` moves onto its own persistent branch,
 `graph-main`, in the same repo.** Verified live via `gh api
@@ -129,12 +143,17 @@ must end up pushed to `origin`, so do it where the push is a simple
    handful of ids spanning old and recent history.
 3. `git push origin graph-main`.
 4. `git worktree add .claude/worktrees/.graph-store graph-main` — the one
-   shared, long-lived graph worktree. The leading dot keeps it outside the
-   node-id branch regex (`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`,
-   `.claude/hooks/worktree-create.sh`) so no reap/sweep/session-liveness
+   shared, long-lived graph worktree. The leading dot keeps the *directory
+   name* outside the node-id branch regex (`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`,
+   `.claude/hooks/worktree-create.sh`), so no reap/sweep/session-liveness
    tooling that scans `.claude/worktrees/*` for node-id or issue-number
-   identities mistakes it for one — confirm this by reading whatever sweep
-   logic exists before relying on it silently.
+   directory names mistakes it for one. This does **not** protect the
+   *branch* name — `graph-main` itself matches that same node-id-shaped
+   regex, so any sweep keyed on branch names rather than directory names
+   could still misclassify it. Confirm by reading whatever sweep/reap logic
+   actually exists (what it iterates over — tracked identities vs. a blind
+   walk, and whether it keys on directory or branch name) before relying on
+   either protection silently.
 
 Out of scope: branch-protection configuration on `graph-main` (optional,
 non-blocking — see Verification); the cutover PR removing `intentions/` from
@@ -159,6 +178,12 @@ rewrite of the landing mechanism, not a find-and-replace of `main` →
   far-ahead-worktree rebuild hazard this exists for is structurally
   impossible once landing never touches a worktree's checkout); the
   `ORIG_HEAD`/`RESTORE_HEAD` globals and their `cleanup()` restore logic.
+  **Also delete** the `refs/graph/landing-lock` CAS-lock acquisition/release
+  code that `tactic-graph-commit-landing-lock` adds to `try_land()` — this
+  tactic is now `blocked_by` that one (see rationale), so by the time this
+  unit runs, that lock code exists in `graph-commit` and must be removed as
+  part of replacing `try_land()` wholesale, not left dangling as dead code
+  that still tries to claim a lock ref nothing else respects.
 - **Keep unchanged**: id validation, `--base`/`--prune` argument parsing,
   `snapshot()` (still the sole surviving copy of a writer's content on the
   fail-closed park path), `park_write`'s existing `readNode`/`writeNode`-via-
@@ -210,11 +235,15 @@ rewrite of the landing mechanism, not a find-and-replace of `main` →
   `intentions/` prefix).
 - **Park path rewrite**: on a same-id conflict, materialize
   `origin/graph-main`'s current blobs for the affected ids into a temp
-  directory (`git show origin/graph-main:<id>.md > ...`), invoke the
-  existing `park_write` pointed at that temp directory (it already takes an
-  `intentionsDir` argument, so this needs no change to `park_write` itself),
-  then land the office_hours-mutated result via the same plumbing steps
-  above.
+  directory (`git show origin/graph-main:<id>.md > ...`), then invoke the
+  existing `park_write` against that temp directory. `park_write` today
+  hardcodes the global `$INTENTIONS_DIR` when it calls its embedded tsx
+  script — it does **not** already take a directory argument, so this
+  requires a small, deliberate change: either add a directory parameter to
+  `park_write` and thread the temp directory through, or reassign
+  `INTENTIONS_DIR` to the temp directory before the call (and restore it
+  after). Either is fine; the point is this is a real, small edit to
+  `park_write`, not a zero-change reuse.
 - Update the file's header comment to describe the new mechanic.
 
 **Recommended model:** opus — the highest-judgment unit in this plan:
@@ -244,21 +273,24 @@ GRAPH_WT=$(git worktree list --porcelain | awk '/^worktree /{wt=substr($0,10)} /
   `origin/graph-main` — mirroring the existing `origin/main` behind-count
   check exactly.
 - **`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`** —
-  after creating/merging the worktree against `origin/main` (existing logic,
-  unchanged), resolve `GRAPH_WT`, refresh it
-  (`git -C "$GRAPH_WT" fetch origin graph-main && git -C "$GRAPH_WT" reset
-  --hard origin/graph-main` — safe because nothing ever writes into
-  `GRAPH_WT`'s working tree directly, only `graph-commit`'s plumbing writes
-  objects/refs, so a hard reset to the fetched tip is always correct and
-  idempotent under concurrent callers), then
-  `[ -e "$WT/intentions" ] || ln -s "$GRAPH_WT" "$WT/intentions"`. This also
-  resolves the pre-provision revalidation gate (`check-node-selection.ts
-  --dir "$PROJECT_ROOT/intentions"`): once the **project-root worktree
-  itself** has the same symlink installed (Unit 8's one-time backfill covers
-  it, since the symlink never touches the project-root's own branch/history
-  and so never conflicts with its `--ff-only` sync), that gate needs no
-  special-casing at all — it just reads through the ordinary symlink like
-  every other consumer.
+  two separate insertion points, in this order:
+  1. **Before** the existing pre-provision revalidation gate
+     (`check-node-selection.ts --dir "$PROJECT_ROOT/intentions"`), resolve
+     `GRAPH_WT` and refresh it (`git -C "$GRAPH_WT" fetch origin graph-main
+     && git -C "$GRAPH_WT" reset --hard origin/graph-main` — safe because
+     nothing ever writes into `GRAPH_WT`'s working tree directly, only
+     `graph-commit`'s plumbing writes objects/refs, so a hard reset to the
+     fetched tip is always correct and idempotent under concurrent callers).
+     This ordering matters: the gate reads `$PROJECT_ROOT/intentions`
+     (a symlink to `GRAPH_WT` once the project-root worktree itself has the
+     symlink installed, per Unit 8's backfill), and today's `main` fast-
+     forward sync (`dispatch-select-tick`) does not freshen the graph store
+     at all post-cutover — only this refresh does, so it must run before the
+     gate reads through the symlink, not after.
+  2. **After** creating/merging the worktree against `origin/main` (existing
+     logic, unchanged), `[ -e "$WT/intentions" ] || ln -s "$GRAPH_WT"
+     "$WT/intentions"` for the new worktree itself (`GRAPH_WT` is already
+     resolved and fresh from step 1).
 - **`.claude/skills/dispatch-propagate/scripts/dispatch-merge-main`** — after
   its existing `origin/main` fetch+merge block, add the same
   resolve-`GRAPH_WT`-and-refresh-plus-symlink step. Because
@@ -303,17 +335,50 @@ step slots in.
   header doc describing "the store is read at origin/main ONLY"; update the
   downstream `select-targets.ts --dir "$SNAPSHOT_DIR/intentions"` call to
   `--dir "$SNAPSHOT_DIR"`.
+- `.claude/skills/dispatch-propagate/scripts/transition-node` — two
+  couplings, both missed if only `graph-select-target` is fixed:
+  1. `git archive origin/main intentions | tar -x` (feeding the scope/
+     strategy freshness gates via `compute-freshness.ts`) — retarget to
+     `origin/graph-main`, drop the `intentions` subpath, same as
+     `graph-select-target` above. Left unfixed, this silently yields an
+     empty snapshot post-cutover and quietly disables scope-drift gating
+     rather than erroring.
+  2. `refresh_stamp`'s scope-fingerprint stamp write, which records the sha
+     as `git rev-parse origin/main` — retarget to `git rev-parse
+     origin/graph-main` (see the stamp-sha point below; this is one of the
+     two write sites that must change together with `demote-node-to-
+     implement`'s read side).
 - `packages/intentionsutil/scripts/demote-node-to-implement` — the
   `git log <stamped-sha>..origin/main -- intentions/<id>.md` range: retarget
   the range end to `origin/graph-main` and drop the `intentions/` path
   prefix. Not cosmetic — once `intentions/` is gone from `main`'s tree
   (Unit 8), this call would otherwise silently return nothing rather than
-  erroring, quietly dropping provenance notes.
+  erroring, quietly dropping provenance notes. **This retarget is only
+  coherent if the stamp's base sha is also migrated**: both
+  `provision-node-worktree`'s `ORIGIN_SHA=$(git rev-parse origin/main)` stamp
+  write and `transition-node`'s `refresh_stamp` (above) currently record an
+  `origin/main` commit as the range *start*. Because `graph-main` has a
+  disjoint history from `main` (per Unit 1's `subtree split`), a range like
+  `<main-sha>..origin/graph-main` excludes nothing and silently returns the
+  node's *entire* graph-main history instead of the since-phase-start delta.
+  Retarget both stamp-write sites to `git rev-parse origin/graph-main`
+  *before or alongside* this read-side change — implement them together, not
+  independently, or the range degrades invisibly (best-effort, never
+  errors).
 - `packages/intentionsutil/src/schema.ts` — the `StrategyStampValue` and
   soft-freeze stamp-map doc comments describing `sha` as "the `origin/main`
-  commit the hash was computed against": reword to `origin/graph-main`. Doc
+  commit the hash was computed against": reword to `origin/graph-main`,
+  including the worked example in the same comment block
+  (`git diff <sha>..origin/main -- intentions/<strategy-id>.md` →
+  `git diff <sha>..origin/graph-main -- <strategy-id>.md`, dropping the
+  `intentions/` prefix too so the example stays internally consistent). Doc
   comment only — no validator in this file parses or interprets the `sha`
-  string's ref origin, so no runtime behavior changes.
+  string's ref origin, so no runtime behavior changes. Leave
+  `strategy_fingerprint.sha`'s *other* write site
+  (`apply-node-transition.ts --strategy-sha`) and its stamped values alone —
+  staleness there compares `.hash`, not `.sha` (`transitions.ts`), so an
+  `origin/main`-sourced `sha` stays valid provenance even after the cutover;
+  this is a documentation-only reword, not a value migration.
 - `.claude/skills/align-strategy/SKILL.md` — the doctrinal-consistency-gate
   instruction to read intention docs "at `origin/main`... `git show
   origin/main:intentions/<id>.md`": reword to `origin/graph-main:<id>.md`.
@@ -327,11 +392,21 @@ step slots in.
   rewire` (commits `638f78a5`, `a8c4898d`) before this finalization ran, so
   there is no remaining duplicate to fix or flag; remove the paragraph
   outright, no replacement TODO.
+- Lightweight doc-comment sweep (harmless if skipped, but stale if left):
+  `packages/intentionsutil/scripts/dump-node.ts`'s header ("against
+  origin/main"), `select-targets.ts`'s header ("origin/main into a temp
+  dir"), and `validate-graph.ts`'s header (references the `graph/**` CI fast
+  path deleted in Unit 6) — reword to match the new mechanic. None of these
+  are functionally load-bearing (`dump-node` hashes the on-disk file
+  content-addressed, so `--base` CAS still matches correctly across the
+  branch/path move regardless of the comment), so this is prose cleanup, not
+  a behavior fix.
 
 **Recommended model:** sonnet — every change is a well-specified
-find-and-retarget; the one semantically load-bearing change
-(`demote-node-to-implement`) is a single-line ref swap already fully
-justified above, not a design decision left open.
+find-and-retarget; the two semantically load-bearing changes
+(`demote-node-to-implement`'s range and the two stamp-write sites feeding
+it) are single-line ref swaps already fully justified above, not a design
+decision left open.
 
 **Dependencies:** Unit 1.
 
@@ -341,12 +416,16 @@ justified above, not a design decision left open.
 
 **Scope.** Each of these currently shells `git log`/`git show` against
 implicit `HEAD` with an `intentions/`-prefixed pathspec, assuming the graph's
-history lives in the calling worktree's own ancestry. Because the shared
-graph worktree (`GRAPH_WT`, Unit 1/3) has its own single, clean,
-un-merged-into-anything history — not a merge-introduced duplicate ancestry —
-repointing each script's execution `cwd`/pathspec at `GRAPH_WT` (resolved via
-`fs.realpathSync` of the `intentions` symlink) instead of `repoRoot` is a
-direct substitution, not a de-duplication fix:
+history lives in the calling worktree's own ancestry. The shared graph
+worktree (`GRAPH_WT`, Unit 1/3) is never merged into any consuming worktree's
+branch — its history is `graph-main`'s own, walked directly rather than via
+a second parent — so repointing each script's execution `cwd`/pathspec at
+`GRAPH_WT` (resolved via `fs.realpathSync` of the `intentions` symlink)
+instead of `repoRoot` is a direct substitution, not a de-duplication fix.
+(`git subtree split` can itself preserve merge commits from `main`'s own
+history where `intentions/` was touched by a merge, so "single linear
+history" is not guaranteed — only "not merged into a *consuming* worktree's
+branch" is the load-bearing property here.)
 
 - `packages/intentionsutil/scripts/read-sensors.ts` — `readTacticVelocity`
   and `readLifecyclePhaseHistory` (and their `git show <commit>:<path>`
@@ -363,14 +442,33 @@ direct substitution, not a de-duplication fix:
 - `packages/intentionsutil/scripts/trace-decisions.ts` — `scanDecisionTrace`:
   pass `graphWorktreeRoot` as `repoDir`; drop the `intentions/` directory
   pathspec entirely (equivalent to `.`, since the whole worktree is now the
-  store).
+  store). **Also strip the hardcoded `^intentions\/` prefix from all four**
+  of this file's path-matching regexes — `STRATEGY_PATH`,
+  `STRATEGY_OR_VIRTUE_PATH`, `NODE_PATH`, and `nodeIdFromPath` — not just the
+  `git log` pathspec. Once `git log` runs against `GRAPH_WT` (node files at
+  bare `<id>.md`, no `intentions/` prefix, per Unit 1), any path-matching
+  regex still anchored on `^intentions\/` matches nothing, and
+  `scanDecisionTrace` silently returns zero events instead of erroring — the
+  same class of bug the `graph-digest.ts` regex below is explicitly fixed
+  for; this file has four such call sites, not one, and all four need the
+  fix. Note this script is **not** a total/never-throws sensor by design
+  (its own docstring: an operator-run digest, not a total batch sensor) —
+  unlike `read-sensors.ts`, preserving a "never throws" contract is not a
+  requirement here.
 - `packages/intentionsutil/scripts/graph-digest.ts` — `deletedNodeIds()`:
   retarget the `git -C repoRoot log` call to `graphWorktreeRoot`; drop the
   `intentions/` pathspec; simplify the deleted-path-matching regex from
   `/^intentions\/(.+)\.md$/` to `/^(.+)\.md$/`.
-- Preserve every function's "total sensor, never throws" contract exactly —
-  only the `cwd`/pathspec arguments feeding the existing `try/catch`-wrapped
-  `execFileSync` calls change.
+- Preserve each function's existing error-handling contract exactly as-is —
+  only the `cwd`/pathspec arguments feeding each `execFileSync` call change.
+  Note the contracts differ per file, so "never throws" is not a blanket
+  property to preserve everywhere: `read-sensors.ts`'s two functions are
+  fully `try/catch`-wrapped total sensors; `ledger-census.ts`'s
+  `gitEntryDate` throws by design on a shallow checkout (an intentional
+  guard, not a bug); `trace-decisions.ts`'s `scanDecisionTrace` throws by
+  design (operator-run digest, not a total sensor, per its own docstring).
+  Match whatever each function already does — don't add or remove
+  try/catch as part of this repoint.
 - Confirm during implementation that the shared graph worktree's root
   contains only `<id>.md` node files (per `write-node.ts`'s
   `join(dir, \`${id}.md\`)`), so the simplified regex in `graph-digest.ts`
@@ -396,10 +494,13 @@ resolvable via `fs.realpathSync`).
   status checks by design (confirmed via the live ruleset query in Context)
   — a CI job here would add ongoing Actions minutes for zero required-check
   value.
-- `.github/workflows/unit-tests.yml` — remove the `'graph/**'` branch
-  exclusion (dead pattern once `graph-commit` no longer creates scratch
-  branches under that glob) and add `graph-main` (a real, ongoing need —
-  running the full app suite on every intentions/-only push is pure waste).
+- `.github/workflows/unit-tests.yml` — its trigger is `branches-ignore`, so
+  this is an ignore-list edit, not a run-list edit: remove `'graph/**'` from
+  the ignore list (dead pattern once `graph-commit` no longer creates
+  scratch branches under that glob) and add `graph-main` to the *same*
+  ignore list (a real, ongoing need — running the full app suite on every
+  intentions/-only push is pure waste). `graph-main` is excluded from this
+  workflow's triggers, not included.
 - `packages/intentionsutil/SEPARABILITY.md` (Gap 3) — append a one-line note
   that this change helps the documented portability gap: dropping the
   `gh`/CI/branch-protection coupling from `graph-commit`'s landing path
@@ -498,7 +599,9 @@ earlier in this plan and doesn't need re-litigating here.
 
 ```verify
 # Unit 1 precondition — the ruleset scope this whole design depends on.
-gh api repos/natb1/commons.systems/rulesets/12884700 --jq '.conditions.ref_name.include' | grep -qx '\["~DEFAULT_BRANCH"\]' \
+# Use -c (compact, one line) so this doesn't false-fail on gh --jq's
+# multi-line pretty-printed array output.
+gh api repos/natb1/commons.systems/rulesets/12884700 --jq '.conditions.ref_name.include' | jq -c . | grep -qx '\["~DEFAULT_BRANCH"\]' \
   || { echo "FAIL: ruleset targets more than ~DEFAULT_BRANCH — re-derive the plan before proceeding"; exit 1; }
 ```
 

@@ -20,7 +20,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -28,6 +28,7 @@ office_hours:
   reason: observable only on the next real prod/preview Firebase deploys — passive
     observation, no setup
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -36,12 +37,12 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issue (closed, content preserved here): 2726 —
-needs-main residue from the smoke-runner retry gate (issue 2713, PR 2719).
-The aggregate deploy smoke runners are the chain's post-deploy sensor and
-persist across the router migration. Passive observation on the next real
-deploys; no setup.
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issue (closed, content
+preserved here): 2726 — needs-main residue from the smoke-runner retry gate
+(issue 2713, PR 2719). The aggregate deploy smoke runners are the chain's
+post-deploy sensor and persist across the router migration. Passive
+observation on the next real deploys; no setup.
 
 ## Verification checklist
 

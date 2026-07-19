@@ -20,7 +20,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -28,6 +28,7 @@ office_hours:
   reason: subjective visual before/after judgment against deployed production —
     human-only (~10 min)
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -36,11 +37,12 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issue (closed, content preserved here): 2669 —
-needs-main residue from the landing PageShell refactor (issue 2553, PR 2665).
-Subjective visual before/after judgment against deployed production, with
-named deliberate deviations. Human-only, ~10 minutes in a browser.
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issue (closed, content
+preserved here): 2669 — needs-main residue from the landing PageShell
+refactor (issue 2553, PR 2665). Subjective visual before/after judgment
+against deployed production, with named deliberate deviations. Human-only,
+~10 minutes in a browser.
 
 ## Verification checklist
 
