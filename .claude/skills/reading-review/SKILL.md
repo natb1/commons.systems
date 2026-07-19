@@ -88,16 +88,23 @@ re-validates content held on trust against its source (delegations,
 traditions — the reading program above), mode B re-affirms author-owned content
 against broadened context. A mode-B target is detected either way:
 
-- **With an argument** naming a node that is **not** a `tactic-reading-chunk-*`
-  and **not** a `tactic-context-capstone-*`, take it as a mode-B target
-  directly. The author may name the author-owned durable node itself or its
-  born-parked review-entry node.
+- **With an argument** naming a node that is **not** a `tactic-reading-chunk-*`,
+  **not** a `tactic-context-capstone-*`, **not** a `delegation-*` (delegations
+  are mode A per the delegation-exercise rule below), and that exists as an
+  author-owned durable node, take it as a mode-B target directly. The author may
+  name the author-owned durable node itself or its born-parked review-entry node.
+  The mode-A delegation rule below is checked first, so a `delegation-*` argument
+  never reaches this catch-all.
 - **With no argument**, a parked **mode-B review entry** is selectable alongside
   the chunks and capstones — a born-parked node (`office_hours` set, `phase` ≠
-  `done`) whose raw text (frontmatter + body) contains the id of a mode-B
-  durable subject as a substring. Like a capstone it carries no
-  `attributes.curriculum.priority`, so it sorts after the chunk and capstone
-  entries.
+  `done`) whose `office_hours.reason` names a mode-B durable subject (the minting
+  rules require `reason` to name the reviewed subject; do **not** match on any
+  substring of the raw text, since every entry's `serves:
+  [strategy-graph-review-curriculum]` frontmatter would trivially contain a
+  mode-B subject id). The delegation review-entry rule below is checked first, so
+  a delegation entry is classified mode A rather than falling into this branch.
+  Like a capstone it carries no `attributes.curriculum.priority`, so it sorts
+  after the chunk and capstone entries.
 
 The mode-B branch runs per the **Mode-B confirmation sittings** section below.
 The precondition check (independent reading sitting) does **not** apply to a mode-B
@@ -107,10 +114,11 @@ sitting — it is specific to tradition-text readings.
 office-hours exercise of one `delegation-*` node's recovery loop against its
 recovery-path fields. These are the mode-A half of
 `strategy-graph-review-curriculum` aimed at a delegation directly (the coverage
-sensor `packages/intentionsutil/src/coverage.ts` classifies a delegation node —
-or any delegated-status node — as mode A, with review path `event-based-review`
-when it carries a non-empty `attributes.review_trigger`). A mode-A delegation
-target is detected either way:
+sensor `packages/intentionsutil/src/coverage.ts` classifies a delegation node as
+mode A, with review path `event-based-review` when it carries a non-empty
+`attributes.review_trigger`; a delegated-*status* node that is not of kind
+`delegation` is also mode A, but `pathOf` returns its path as `MISSING`, not
+`event-based-review`). A mode-A delegation target is detected either way:
 
 - **With an argument** naming a `delegation-*` node id, take that delegation as
   the mode-A target directly, provided it has a non-empty
@@ -637,8 +645,9 @@ Prose only — a SKILL.md is model instructions with no automated test surface.
   account of Claude's, and that the verify- and candidate-chunk flows are
   unchanged by the edit.
 - **Mode-B dry-run.** Target an author-owned durable node the coverage table
-  marks mode B / `frontier-reachable` (confirm the projection first with the
-  fenced check below). Confirm the skill selects it, surfaces the
+  marks mode B / `frontier-reachable` (confirm the projection first by running
+  `npx tsx packages/intentionsutil/scripts/review-coverage.ts` and reading the
+  target's `mode` / `path` columns). Confirm the skill selects it, surfaces the
   broadened-context agenda with the author articulating before any account of
   Claude's, plans a re-affirm/amend recording on the durable node (not on a
   transient entry), and plans a born-parked frontier-expansion entry whose raw
