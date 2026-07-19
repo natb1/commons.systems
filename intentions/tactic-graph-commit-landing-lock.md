@@ -98,7 +98,7 @@ comments).
 
 1. **New env-var tunables**, added near the existing tunable block
    (graph-commit:78-86, right after `CHECK_TIMEOUT_SECONDS`):
-   ```
+   ```bash
    LOCK_REF="refs/graph/landing-lock"
    LOCK_TTL_SECONDS="${GRAPH_COMMIT_LOCK_TTL_SECONDS:-$((CHECK_TIMEOUT_SECONDS + 60))}"
    LOCK_POLL_SECONDS="${GRAPH_COMMIT_LOCK_POLL_SECONDS:-5}"
@@ -120,7 +120,7 @@ comments).
 
 2. **New globals**, added near the existing `SCRATCH_BRANCH`/`SCRATCH_PUSHED`
    declarations (graph-commit:113-117):
-   ```
+   ```bash
    LOCK_HOLDER_ID="${GRAPH_COMMIT_LOCK_HOLDER_ID:-$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo host)-$$-$RANDOM$RANDOM}"
    LOCK_SHA=""
    LOCK_HELD=0
@@ -173,11 +173,23 @@ comments).
 5. **Helper: `read_lock_payload`** — `read_lock_payload <ref-or-sha>` reads a
    already-fetched ref/sha's message and sets two globals `LOCK_OBS_HOLDER`
    and `LOCK_OBS_EXPIRY` (parsed from the second message line via bash's
-   `[[ ... =~ ... ]]` regex, no external `grep`/`sed` needed):
+   `[[ ... =~ ... ]]` regex, no external `grep`/`sed` needed). It MUST
+   distinguish two distinct failure shapes with different return behavior:
+   "the object named by `<ref-or-sha>` is not yet in the local object
+   database" (a normal, expected condition the caller retries after a fetch —
+   return 1, do NOT die) versus "the object IS readable but its message
+   doesn't parse as a lock payload" (a broken-environment condition — die).
+   Conflating these two (e.g. by piping the whole function through
+   `2>/dev/null || <fallback>` without the function itself distinguishing
+   them) is a real bug: `git show`'s failure on an absent object must be
+   caught with `|| return 1` on the `git show` line itself, not left to fall
+   through to the parse-failure `die` branch, or the caller's fetch-and-retry
+   fallback becomes unreachable dead code (`die` calls `exit`, which no
+   caller-side `||` can intercept):
    ```bash
    read_lock_payload() {
      local ref="$1" body line2
-     body="$(git show -s --format=%B "$ref")"
+     body="$(git show -s --format=%B "$ref" 2>/dev/null)" || return 1
      line2="$(printf '%s\n' "$body" | tail -n1)"
      if [[ "$line2" =~ ^holder=([^[:space:]]+)\ expiry=([0-9]+)$ ]]; then
        LOCK_OBS_HOLDER="${BASH_REMATCH[1]}"
@@ -187,10 +199,13 @@ comments).
      fi
    }
    ```
-   A malformed payload is a broken-environment condition (someone/something
-   wrote to `refs/graph/landing-lock` outside this mechanism) — `die()`, per
-   `.claude/rules/code-style.md`'s clear-errors-over-fallbacks convention, not
-   a silent skip.
+   A malformed-but-readable payload is a broken-environment condition
+   (someone/something wrote to `refs/graph/landing-lock` outside this
+   mechanism) — `die()`, per `.claude/rules/code-style.md`'s
+   clear-errors-over-fallbacks convention, not a silent skip. An
+   object-not-yet-local condition is NOT broken-environment — it is the
+   ordinary first-observation case (see the note below) and must return
+   quietly so the caller's fetch fallback actually runs.
 
 6. **Core function: `lock_claim_or_renew`** — no arguments; returns 0 once
    this process holds a live claim (setting `LOCK_SHA`/`LOCK_HELD=1`), or
@@ -202,6 +217,15 @@ comments).
      while :; do
        remote_sha="$(git ls-remote origin "$LOCK_REF" | cut -f1)"
        now="$(date +%s)"
+       # Deadline check up front, before any branch below — covers every
+       # `continue` path (lost create race, lost renew/steal race, live
+       # foreign holder), not just the live-holder wait. Without this, a
+       # pathological run of repeated lost create/steal races (this writer
+       # keeps observing "absent or expired" but keeps losing the race to
+       # claim it) would spin with no sleep and no exit condition.
+       if [[ "$now" -ge "$LOCK_WAIT_DEADLINE" ]]; then
+         return 1
+       fi
 
        if [[ -z "$remote_sha" ]]; then
          # No one holds it: try to CREATE it. A non-force push to a ref that
@@ -209,15 +233,27 @@ comments).
          # is rejected if a concurrent writer created the ref first, in which
          # case we fall through and re-observe as "exists".
          new_sha="$(build_lock_commit "$((now + LOCK_TTL_SECONDS))")"
-         if git push origin "$new_sha:$LOCK_REF" >&2 2>/dev/null; then
+         if git push origin "$new_sha:$LOCK_REF" >&2; then
            LOCK_SHA="$new_sha"; LOCK_HELD=1
            return 0
          fi
+         # Rejected: almost always a lost create race (someone else created
+         # the ref first) — re-observe as "exists" on the next loop pass.
+         # Left un-redirected (not `2>/dev/null`) so a genuine non-race
+         # failure (auth/network) is visible in the log rather than silently
+         # swallowed and only surfacing one loop later — per
+         # .claude/rules/code-style.md's clear-errors-over-fallbacks
+         # convention.
          continue
        fi
 
-       read_lock_payload "$remote_sha" 2>/dev/null || {
-         # Object not yet in our local odb — fetch it once, then re-read.
+       # read_lock_payload returns 1 (quietly) when the object named by
+       # $remote_sha is not yet in this clone's local object database — the
+       # normal case the FIRST time this process observes a given lock SHA,
+       # since `git clone`/`git fetch` never pull refs/graph/** by default.
+       # It only `die`s if the object IS readable but fails to parse (a
+       # genuinely broken payload), so this fallback is reachable and correct.
+       read_lock_payload "$remote_sha" || {
          git fetch -q origin "$LOCK_REF" >&2
          read_lock_payload FETCH_HEAD
        }
@@ -235,10 +271,9 @@ comments).
        fi
 
        if [[ "$LOCK_OBS_EXPIRY" -gt "$now" ]]; then
-         # Live, foreign holder: wait, don't steal.
-         if [[ "$now" -ge "$LOCK_WAIT_DEADLINE" ]]; then
-           return 1
-         fi
+         # Live, foreign holder: wait, don't steal. (The deadline is already
+         # checked at the top of the loop on every pass, including this one
+         # on the next iteration — no separate check needed here.)
          sleep "$LOCK_POLL_SECONDS"
          continue
        fi
@@ -257,15 +292,21 @@ comments).
    ```
    Note: `git ls-remote` returning a SHA does not guarantee the corresponding
    commit object is already in the LOCAL odb (it's a remote-side query) —
-   `read_lock_payload "$remote_sha"` will fail locally the first time a given
-   SHA is observed, hence the `git fetch -q origin "$LOCK_REF"` fallback
-   before re-reading via `FETCH_HEAD`. Implementers should verify this
-   fetch-then-read sequencing works against a real bare-remote-backed clone
-   (the test harness in Unit 3 is exactly this shape) and adjust the exact
-   incantation if `git show -s --format=%B <sha>` needs the object fetched by
-   SHA rather than by ref name in this repo's git version — the
-   SHA-vs-FETCH_HEAD distinction is a mechanical detail, not a design
-   decision.
+   `read_lock_payload "$remote_sha"` returns 1 (see Unit 1 item 5) the first
+   time a given SHA is observed, hence the `git fetch -q origin "$LOCK_REF"`
+   fallback before re-reading via `FETCH_HEAD`. This is safe even if the ref
+   moved again between the `ls-remote` and the `fetch` (i.e. `FETCH_HEAD` names
+   a newer commit than `$remote_sha`): every subsequent write in this function
+   leases against `$remote_sha` specifically (the original `ls-remote`
+   observation), never against whatever `FETCH_HEAD` resolved to, so a stale
+   read here only ever causes a wasted loop iteration (the lease mismatches
+   and the push is rejected → re-observe), never an incorrect write. The one
+   remaining mechanical detail implementers should verify against a real
+   bare-remote-backed clone (the test harness in Unit 3 is exactly this shape)
+   is the exact fetch-then-read incantation itself — e.g. whether
+   `git show -s --format=%B <sha>` needs the object fetched by SHA rather than
+   by ref name in this repo's git version — which is a shell/plumbing detail,
+   not a design decision.
 
 7. **Core function: `lock_release`** — no-op unless we hold the lock;
    best-effort:
@@ -280,8 +321,12 @@ comments).
    The `--force-with-lease` on a delete refspec is an atomic "delete only if
    the remote still equals `$LOCK_SHA`" — this process never deletes a lock
    it no longer actually owns (e.g. after losing a steal race, or after its
-   own `LOCK_WAIT_SECONDS` timeout). Always non-fatal (`|| true`) so a
-   release failure never masks the caller's real exit status, mirroring the
+   own `LOCK_WAIT_SECONDS` timeout). This relies on the locally-installed
+   git honoring an explicit lease on a delete refspec (confirmed present in
+   git 2.54, the version in this repo's dev environment at plan time —
+   reverify if the implementing environment's `git --version` differs
+   meaningfully). Always non-fatal (`|| true`) so a release failure never
+   masks the caller's real exit status, mirroring the
    existing scratch-branch delete's discipline at graph-commit:233-235.
 
 **Out of scope for Unit 1:** does not call any of these new functions from
@@ -322,13 +367,15 @@ exact placement is specified below.
      `if ! git pull --rebase origin main >&2; then` (graph-commit:462), add:
      ```bash
      if ! lock_claim_or_renew; then
-       echo "graph-commit: could not claim the landing lock within ${LOCK_WAIT_SECONDS}s (main busy — another writer is landing); giving up" >&2
        break
      fi
      ```
-     The `break` exits the `for` loop early (before `MAX_PUSH_ATTEMPTS` is
-     necessarily exhausted) and falls through to the existing trailing block
-     (graph-commit:506-507) — see the message tweak below.
+     No separate log line here — the trailing block below (reworded to cover
+     both exhaustion causes) is what the caller sees, so this path prints
+     exactly one error line, not two. The `break` exits the `for` loop early
+     (before `MAX_PUSH_ATTEMPTS` is necessarily exhausted) and falls through
+     to the existing trailing block (graph-commit:506-507) — see the message
+     tweak below.
    - Immediately before the existing final push, `if git push origin
      "$sha:main" >&2; then` (graph-commit:501), add a cheap re-check that
      this process still owns the lock (guards the case where a slow
@@ -347,21 +394,49 @@ exact placement is specified below.
      (graph-commit:466), add `lock_release`.
    - Reword the trailing "exhausted" block (graph-commit:506-507) to account
      for both the pre-existing exhaustion cause and the new lock-wait-timeout
-     cause, and release the lock there too:
+     cause, and release the lock there too. The original message's leading
+     substring (`could not land on main after N attempts`) is an existing
+     test assertion (test-graph-commit.sh's case 7 — see the REQUIRED
+     companion edit below); do not silently reword it away. Compute a capped
+     attempt count first (the `for` loop's own increment leaves `$attempt`
+     at `MAX_PUSH_ATTEMPTS + 1` after natural exhaustion, since the
+     increment runs before the failing loop condition is tested — using raw
+     `$attempt` directly would misreport "after 6/5 attempts" on a plain
+     5-attempt exhaustion):
      ```bash
      lock_release
-     echo "error: graph-commit: could not land on main — main busy (landing-lock contention or required checks never stamped green) after $attempt/$MAX_PUSH_ATTEMPTS attempt(s); retry later" >&2
+     local ran=$attempt
+     (( ran > MAX_PUSH_ATTEMPTS )) && ran=$MAX_PUSH_ATTEMPTS
+     echo "error: graph-commit: could not land on main after $ran/$MAX_PUSH_ATTEMPTS attempts — main busy (landing-lock contention or required checks never stamped green); retry later" >&2
      return 11
      ```
-     (`$attempt` here reflects however many loop iterations actually ran,
-     whether they were consumed by real rebase/stamp/push cycles or ended
-     early via the lock-wait `break` — this is intentionally the SAME return
-     code (11) and the SAME caller-visible exit-1 "busy main, retry later"
-     contract as before; only the internal cause and the logged detail
-     differ. Do not introduce a new exit code or a different top-level
-     message for the lock-wait-timeout case — the task's failure-mode
-     requirement is that this composes with, not replaces, the existing
-     semantics.)
+     On natural exhaustion (all `MAX_PUSH_ATTEMPTS` iterations ran a full
+     rebase/stamp/push cycle and lost), `$ran` equals `$MAX_PUSH_ATTEMPTS`.
+     On the early-`break` lock-wait-timeout path, `$ran` is the 1-based
+     iteration number the `break` fired on (typically less than
+     `MAX_PUSH_ATTEMPTS` unless the timeout happened to land on the last
+     iteration) — an honest count of how far the loop actually got, not an
+     overcount. This is intentionally the SAME return code (11) and the SAME
+     caller-visible exit-1 "busy main, retry later" contract as before; only
+     the internal cause and the logged detail differ. Do not introduce a new
+     exit code or a different top-level message shape for the
+     lock-wait-timeout case — the failure-mode requirement is that this
+     composes with, not replaces, the existing semantics.
+
+     **REQUIRED companion edit (do in the same commit as this reword, not
+     separately):** `test-graph-commit.sh`'s existing case 7 ("pending
+     timeout retry path", around test-graph-commit.sh:278) asserts
+     `grep -q 'could not land on main after 2 attempts' <<<"$out"` against
+     the OLD message shape, using `GC_ATTEMPTS=2`. With `$ran` capped at
+     `MAX_PUSH_ATTEMPTS` on natural exhaustion, that case's new message reads
+     `could not land on main after 2/2 attempts — main busy (...); retry
+     later` — update case 7's assertion to
+     `grep -q 'could not land on main after 2/2 attempts' <<<"$out"` (or a
+     looser `after 2/2` substring match) in the SAME change that reworks this
+     message. Skipping this update makes the Verification step's
+     `test-graph-commit.sh` run fail case 7 even though the implementation is
+     otherwise correct — this is not optional cleanup, it is required for the
+     plan's own Verification block to pass.
    - The `die()` call for a non-conflict rebase/fetch failure
      (graph-commit:468) and the `die()` for a concluded check failure
      (graph-commit:493) are UNCHANGED — they still bypass `try_land()`'s
@@ -427,17 +502,45 @@ is needed.
 New cases to add:
 
 - **Case 17 — contention is now cheap, not exhausting:** two writers (`A`,
-  `B`) both edit the SAME node concurrently in `green` mode with realistic
-  (not artificially tiny) `GC_TIMEOUT`/`GC_POLL`; run `A`'s `graph-commit` in
-  the background, and while it's mid-flight, run `B`'s. Assert both
-  eventually exit 0 (or one exits 0 and the other's edit auto-merges/lands on
-  a subsequent rebase, matching the existing non-overlap-merge semantics of
-  case 3) AND — the actual regression check for the bug this tactic fixes —
-  assert via `gh_calls`/`CALL_LOG` that the total number of `gh` check-run
-  polls across both writers is close to what ONE clean landing cycle would
-  cost, not `2×` or more (i.e. the loser did NOT independently re-poll checks
-  from scratch while the winner held the lock; it waited on the lock
-  instead).
+  `B`) edit DIFFERENT lines of the SAME node concurrently (mirror case 3's
+  non-overlap setup: A edits line 1, B edits line 12 — editing the SAME line
+  would be an overlapping conflict, case 4's scenario, and would falsify this
+  case's exit-0-for-both assertion). The correct-behavior invariant is NOT
+  "total polls close to one cycle" — a lock cannot make two independent
+  landings cost one stamp; each writer's own SHA must still be stamped once
+  (checks attach to the SHA, not the branch, per graph-commit's own comment
+  at graph-commit:16-18/471). The actual regression this case must catch is
+  narrower: **the loser must not re-poll from scratch on every losing
+  rebase-retry** the way it does pre-lock. So the setup needs a way to force
+  a deterministic overlap window (real wall-clock "run A in the background,
+  hope B starts while A is mid-flight" is unreliable — with the existing
+  `green` shim, `await_checks` returns on its first poll in milliseconds, so
+  B would almost always start after A has already released and the case
+  would pass trivially without exercising contention at all):
+  1. Add a new shim mode (alongside the existing `green`/`pending`/
+     `concluded-fail`/`hard-fail` modes set via `set_mode`, test-graph-commit.sh:151)
+     that blocks on a sentinel file the test controls — e.g. `blocked-green`:
+     the `gh api .../check-runs` shim polls/waits until a test-created
+     sentinel path exists, then returns the same green fixture `green` would.
+     This lets the test hold writer A inside its `await_checks()` call (i.e.
+     lock still held) for as long as the test wants, deterministically.
+  2. With `A` started in the background under `blocked-green` (holding the
+     lock, parked inside `await_checks()`), start `B` and assert (polling
+     `$ORIGIN`'s `refs/graph/landing-lock` SHA directly, not via `gh_calls`)
+     that `B` is NOT independently polling `gh` (its own `CALL_LOG` entry
+     count stays at 0) while `A` still holds the lock — i.e. `B` is blocked
+     in `lock_claim_or_renew`'s wait loop, not burning a stamp cycle of its
+     own.
+  3. Remove the sentinel (or let a short test-configured timeout elapse) so
+     `A` completes and releases; assert `A` exits 0.
+  4. Assert `B` then acquires the lock, completes its own single stamp cycle
+     (its `CALL_LOG` entry count becomes exactly 1, not 2+), and exits 0 with
+     its edit landed (both writers' distinct-line edits present in the final
+     node content, matching case 3's auto-merge semantics).
+  The pass/fail signal is therefore: **B's poll count is 0 while A holds the
+  lock, and exactly 1 once B lands** — never "B re-polled 2+ times because it
+  kept losing a race and retrying from scratch," which is the pre-lock
+  behavior this tactic eliminates.
 - **Case 18 — dead-holder steal:** using a throwaway helper clone, directly
   `git push` a lock commit to `refs/graph/landing-lock` (mirroring
   `build_lock_commit`'s exact commit-tree/message shape from Unit 1, with an
@@ -469,10 +572,16 @@ New cases to add:
 
 **Out of scope for Unit 3:** does not build a new scratch-repo/bare-origin
 harness from scratch. Does not test `tactic-graph-ref-split` (no
-ref-layout-migration scenarios). Does not modify the existing `gh`/`npx`
-PATH shims' behavior (test-graph-commit.sh:112-148) beyond, if needed,
-sourcing the same `MODE_FILE`/`CALL_LOG` mechanism already in place — the
-lock mechanism itself never calls `gh` or `npx` at all, only `git`.
+ref-layout-migration scenarios). The one IN-SCOPE shim change is the new
+`blocked-green` mode Case 17 requires (a sentinel-gated variant of the
+existing `green` fixture, added to the same `MODE_FILE`-dispatch mechanism
+`set_mode`/the `gh` shim already use at test-graph-commit.sh:112-148) — this
+is the mechanism that makes Case 17's contention window deterministic instead
+of a real-wall-clock race. Beyond that one addition, do not otherwise modify
+the existing shims' behavior or the pre-existing `green`/`pending`/
+`concluded-fail`/`hard-fail` modes — the lock mechanism itself never calls
+`gh` or `npx` at all, only `git`, so no shim changes are needed for lock
+claim/renew/steal/release themselves (cases 18-20).
 
 **Recommended model:** sonnet. This mirrors an established, already-built
 harness pattern in the same file with a well-understood shape (bare origin +
