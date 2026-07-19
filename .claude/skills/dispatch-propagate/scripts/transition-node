@@ -11,7 +11,9 @@
 # residue→main-qa, freshness holds) lives in the pure `transitions` module,
 # applied via apply-node-transition.ts; this wrapper owns only the environmental
 # parts: the origin/main snapshot, the CI verdict sensor, the fingerprint gates,
-# arming gh auto-merge, and refreshing the phase-start stamp.
+# and refreshing the phase-start stamp. Arming/merge of a reviewed node-lane PR
+# is owned by the tick reconciler (graph-auto-merge); this script only records
+# the `reviewed` execution marker via apply-node-transition — it never merges.
 #
 # Doctrine: the transition is a STATE-ONLY commit on main, never on the work PR
 # branch (strategy clarification 15). Run this from a main-based checkout; from
@@ -28,14 +30,15 @@
 #     transition owns its own provenance commit + PR comment).
 #   - strategy-stale → hold at the completed phase (the selector queues the
 #     re-evaluation; a confirm re-stamps and the next tick advances).
-#   - missing stamp at the review→merge ARMING point → fail closed: hold, do
-#     NOT arm merge. Elsewhere a missing stamp fails open.
+#   - missing/stale stamp at the review→merge point is re-checked and fails
+#     closed by the tick reconciler (graph-auto-merge) immediately before
+#     merging, not here.
 #
 # Usage: transition-node <node-id> [--set-pr <n>]
 #
 # Stdout: exactly one outcome line —
 #   transitioned <id> <prev> -> <new>
-#   armed-merge <id> (review complete)
+#   review-complete <id> (merge deferred to tick)
 #   demoted <id> -> implement (scope drift)
 #   held <id> at <phase> (<reason>)
 #
@@ -128,7 +131,6 @@ FRESH="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/compute-fresh
   echo "transition-node: freshness gate computation failed for $NODE_ID" >&2; exit 2; }
 SCOPE_STALE="$(jq -r '.scopeStale' <<<"$FRESH")"
 STRATEGY_STALE="$(jq -r '.strategyStale' <<<"$FRESH")"
-STAMP_MISSING="$(jq -r '.stampMissing' <<<"$FRESH")"
 
 # --- Scope-stale → delegate to the demotion primitive ------------------------
 # main-qa is post-merge by definition (check-node-selection.ts:242), so scope
@@ -156,13 +158,6 @@ NEW_PHASE="$(jq -r '.phase' <<<"$RESULT")"
 ARM_MERGE="$(jq -r '.armMerge' <<<"$RESULT")"
 HOLD="$(jq -r '.hold' <<<"$RESULT")"
 
-# Missing-stamp fail-closed at the arming point (worker-start has landed).
-if [[ "$ARM_MERGE" == "true" && "$STAMP_MISSING" == "true" ]]; then
-  echo "transition-node: $NODE_ID review complete but the phase-start stamp is missing — holding (arming requires the stamp)" >&2
-  echo "held $NODE_ID at review (missing-stamp)"
-  exit 0
-fi
-
 # --- Land the state-only write on main ---------------------------------------
 if ! "$GRAPH_COMMIT" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
   echo "transition-node: graph-commit failed for $NODE_ID" >&2
@@ -171,13 +166,9 @@ fi
 
 refresh_stamp
 
-# --- Arm auto-merge at clean review completion -------------------------------
+# --- Clean review completion: defer merge to the tick reconciler -------------
 if [[ "$ARM_MERGE" == "true" ]]; then
-  if [[ -n "$PR" ]]; then
-    gh pr ready "$PR" >/dev/null 2>&1 || true
-    "$SCRIPT_DIR/dispatch-auto-merge" >/dev/null 2>&1 || true
-  fi
-  echo "armed-merge $NODE_ID (review complete)"
+  echo "review-complete $NODE_ID (merge deferred to tick)"
   exit 0
 fi
 
