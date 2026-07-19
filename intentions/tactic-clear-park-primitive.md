@@ -26,8 +26,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-clear-park-primitive
+  pr: 2903
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
