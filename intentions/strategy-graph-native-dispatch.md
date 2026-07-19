@@ -1549,7 +1549,20 @@ clarifications:
       configurable-auto-close clarification. \"Reaped on every terminal exit\"
       describes the default; when the keep-sessions toggle is ON, a kept session
       is intentional, not a clog, and its node-id claim is held until manual
-      reap.)"
+      reap.) (Amended 2026-07-19 (reap-scope narrowing): the DEFAULT is further
+      narrowed — auto-close now fires ONLY on a clean phase-transition or an
+      escalation-park, not on every terminal exit. Edge case (c)'s sweep-reap of
+      a mid-phase-dead (crashed) orphaned job is REVERSED: such a job is now
+      KEPT (its job entry and node-id worktree both held) for local debugging
+      until manual reap, because a non-transitioned, non-parked exit has no
+      durable record (it never parked to office-hours) and the live session is
+      its only debugging artifact; and edge case (b)'s
+      reap-then-fuse-re-selects-after-a-silent-no-transition-exit is likewise
+      narrowed — a no-transition exit is now kept and the node freezes-for-debug
+      rather than auto-retrying. The keep-all toggle of the 2026-07-19
+      configurable-auto-close clarification layers on top of this narrowed
+      default. See the 2026-07-19 reap-scope-narrowing clarification for the
+      full resolution and the accepted freeze-for-debug tradeoff.)"
   - question: "A strategy whose signal is validated only by human work (sensor:
       owner review at office-hours) is re-selected for /align-tactics every tick
       — its rounds produce off-path tooling plus born-parked on-path reading
@@ -2205,7 +2218,16 @@ clarifications:
       node's next phase until the operator manually reaps it — this is inherent
       to a debug hold, and leaving the knob ON stalls the affected nodes
       (caution recorded). Implementation retained as draft
-      tactic-worker-self-close-configurable. Recorded 2026-07-19 interview."
+      tactic-worker-self-close-configurable. Recorded 2026-07-19 interview.
+      (Amended 2026-07-19 (reap-scope narrowing): the premise 'reap on every
+      terminal exit remains the DEFAULT' is superseded — the default is now
+      'reap iff the exit transitioned or parked the node'. This toggle is
+      unchanged in mechanism but re-scoped: when OFF (default),
+      transitioned/parked sessions reap and every other terminal exit is
+      kept-for-debug; when ON, the transitioned/parked sessions are ALSO kept.
+      Both the narrowed-default transition-or-park check and this keep-all
+      toggle live in the shared self-close primitive. See the 2026-07-19
+      reap-scope-narrowing clarification.)"
   - question: "graph-commit rebase-retry exhaustion: does the 2026-07-13 rejection
       of pessimistic serialization forbid serializing the landing step, and what
       is the resolution — a better serialization method or a higher retry
@@ -2279,6 +2301,196 @@ clarifications:
       if its re-entry routing re-runs check-node-selection — the draft tactic's
       first unit verifies that overlap before implementing. Recorded 2026-07-19
       /align-strategy interview."
+  - question: The 2026-07-16 reaping clarification reaps a node-worker session on
+      EVERY terminal exit, and its edge case (c) reaps a mid-phase-dead
+      (crashed) worker's orphaned job via the tick/sweep pass. But a session
+      that terminated WITHOUT a clean phase-transition and WITHOUT an
+      escalation-park has no durable record anywhere — it was not parked to the
+      office-hours queue, so nothing carries its failure context except the live
+      session itself. Should auto-close really fire on those exits?
+    answer: "No — auto-close (reap) is narrowed to fire ONLY on a clean
+      phase-transition or an escalation-park; every OTHER terminal exit — a hard
+      crash, an error exit, or a clean-but-no-transition/no-progress exit —
+      leaves the worker session KEPT (its job entry AND its node-id worktree
+      both held) for local debugging until an operator manually reaps it.
+      Rationale: the two clean terminal states each write a durable outcome the
+      disposable-session doctrine relies on — a transition advances the node's
+      persisted phase, a park writes office_hours into the node — so nothing is
+      lost by reaping them. A non-clean terminal exit writes NEITHER: it was not
+      parked to office-hours (so it never reaches the PARKED panel, the
+      office-hours-debuggable channel) and it did not advance the phase, so the
+      live session is the only artifact of the failure. Reaping it would
+      silently erase the one thing a debugger has. This DIVERGES from the
+      2026-07-16 clarification's edge case (c) (which reaped the crashed job via
+      the sweep) and narrows 'reaped on every terminal exit' (its main body, and
+      edge case (b)'s
+      reap-then-fuse-re-selects-after-a-silent-no-transition-exit) to 'reaped
+      iff the exit transitioned or parked the node'. It does NOT re-open the
+      session-as-observability coupling the 2026-07-16 clarification rejected: a
+      kept failed session is a DEBUGGING ARTIFACT a human inspects, not a
+      recovery substrate (session attach/resume is still not a supported
+      recovery path — the router never resumes from a kept session; the human
+      reaps it and the node re-selects fresh or is fixed forward) and not the
+      escalation channel (real escalations still park to office-hours).
+      Resolutions this round: (a) SCOPE — reap iff transitioned-or-parked; keep
+      every other terminal exit for local debug [author, this round]. (b)
+      FREEZE-FOR-DEBUG accepted — a kept session holds worktree_has_live_session
+      TRUE, so the router will not re-select the node and the no-progress fuse
+      will not count re-selections; the node freezes until manual reap instead
+      of auto-retrying. The author accepted this self-heal/throughput loss on
+      the failure path explicitly: a failure worth debugging must not be
+      silently retried underneath the operator [author chose 'yes — freeze for
+      debug', this round]. (c) SURFACING — a minimal operator-visible COUNT of
+      held-for-debug sessions (non-transitioned, non-parked terminal exits kept
+      alive) surfaces so silent accumulation of frozen nodes is visible; it
+      reports only the count of kept-failed jobs, never their content, so it is
+      a GC/hygiene metric, not a recovery or escalation channel, and does not
+      re-couple observability to session persistence [author chose 'yes —
+      minimal count' over 'no new surface', this round]. Retained as draft
+      tactic-frozen-session-debug-count. (d) COMPOSITION with the 2026-07-19
+      keep-all toggle — the DEFAULT itself narrows to 'reap iff
+      transitioned-or-parked' (this amends all three recorded sites: the
+      2026-07-16 reaping clarification, the 2026-07-19 configurable-auto-close
+      clarification, and the reap condition); the keep-all toggle
+      (tactic-worker-self-close-configurable) layers ON TOP — when ON it
+      additionally keeps the transitioned/parked sessions the narrowed default
+      would otherwise reap; both the transition-or-park check and the toggle
+      live in the shared self-close primitive [author chose 'narrow default;
+      toggle layers on top', this round]. Materially affected tactics, to be
+      re-planned by /align-tactics (not rewritten in this /align-strategy
+      round): tactic-graph-node-session-reap — its Unit 2 (sweep-reap of
+      mid-phase-dead orphaned jobs) reverses under (a) and must be re-planned
+      (Unit 1's Stop-hook reap survives, now gated on transition-or-park); and
+      tactic-worker-self-close-configurable's draft framing (which assumes 'reap
+      on every terminal exit' is the default) must be re-scoped to the narrowed
+      default per (d). Recorded 2026-07-19 interview."
+  - question: A merged PR's green CI had run on a stale base and main went red after
+      the merge — does merge eligibility require the PR to be current with main,
+      and is the recorded reviewed-marker key the author's 'done marker' intent?
+    answer: "(Recorded 2026-07-19 interview, prompted by a stale-base green-CI merge
+      producing a red main.) Two resolutions. (1) Signal confirmed: the author's
+      'node is done / carries the done marker' merge key IS the recorded one —
+      `reviewed` in execution.markers at phase review (clarification 53),
+      evolving to a literal pending-merge phase per draft
+      tactic-pending-merge-phase; `done` itself stays post-merge, so the gate
+      never keys on it. (2) Merge eligibility gains a fourth conjunct beyond
+      green CI + MERGEABLE + the reviewed marker: the PR branch must be up to
+      date with origin/main, and the passing checks must have run on that
+      current base — a green verdict computed on a stale base is not
+      merge-eligible. When the PR is behind, the tick reconciler scripts the
+      remediation itself: gh api update-branch, skip this tick, merge on a later
+      tick once checks pass on the fresh base — every scriptable step of the
+      done-phase merge path lives in the dispatch router, never in a phase
+      worker or the author. Diverged (2026-07-19) from the GitHub-native
+      alternative (branch-protection require-up-to-date plus merge queue): it
+      solves stale-base CI but moves merge behavior into GitHub config the graph
+      cannot read, deepening delegation-github (which this strategy recovers);
+      the owned tick gate keeps merge keyed on graph state. Implementation
+      retained as draft tactic-graph-auto-merge-up-to-date-gate, a follow-up to
+      tactic-graph-tick-node-lane-auto-merge — PR #2904 lands as-is, and the
+      author accepts the interim window in which graph-auto-merge can merge a
+      stale-base green PR until the follow-up ships."
+  - question: While a reviewed node is pending merge, an update-branch sync can turn
+      CI red or the PR CONFLICTING — is the failed check routed to a fix worker
+      and the conflict to a conflict worker?
+    answer: "(Confirmed 2026-07-19 interview.) Yes, both, via one reconciler —
+      tracked and still WIP at confirmation time
+      (tactic-graph-review-exclusion-stall-recovery, phase implement). The
+      selector's reviewed-marker exclusion means normal selection never re-reads
+      a pending-merge node, so that tactic's review-stall reconciler polls the
+      stranded PRs directly and fires needsReviewStallRecovery on ci failing OR
+      mergeable CONFLICTING, routing the node through the existing fix interrupt
+      (phase fix, qa-done and reviewed markers cleared). A red check from the
+      up-to-date sync therefore reaches a fix worker on a later tick. A
+      CONFLICTING PR takes the same demotion, and the conflict itself is then
+      handled at re-provisioning: provision-node-worktree's merge of origin/main
+      hits the conflict and exits 11, routing the /fix-conflicts conflict
+      worker. The up-to-date gate (draft
+      tactic-graph-auto-merge-up-to-date-gate) composes with this: the gate only
+      updates the branch and defers the merge; regression routing stays owned by
+      the stall-recovery reconciler."
+  - question: "Clarification 64 (the reviewed/pending-merge lifecycle) enumerates
+      the tick's post-review branches — green CI + mergeable==MERGEABLE ->
+      merge, red CI -> fix interrupt — but specifies NO branch for a
+      reviewed/pending-merge PR whose GitHub mergeable==CONFLICTING. The legacy
+      dispatch lane buckets a CONFLICTING PR to /fix-conflicts (lib.sh
+      dispatch-phase), but the graph-native router has no equivalent:
+      read-sensors.ts has no mergeable sensor, PHASES has no conflict phase, and
+      the selector's only interrupt is the CI-fix of clarification 66. So a
+      conflicting reviewed node-lane PR sits silently unmerged with no worker
+      dispatched (observed live on tactic-align-skills-dataviz-guidance,
+      2026-07-19). How does the graph-native router recognize a pending-merge PR
+      in conflict and route it to a conflict worker?"
+    answer: >-
+      (Recorded 2026-07-19 /align-strategy interview.) The merge-conflict
+      interrupt is the structural twin of the CI-fix interrupt (clarification 66
+      / tactic-fix-interrupt-orthogonal-state, codified) and is modeled the same
+      way — as orthogonal execution state, not a phase value.
+
+
+      (1) Encoding — a new orthogonal, nullable execution.conflict = {since,
+      attempt}, mirroring execution.fix's shape (clarification 66). phase stays
+      purely ladder-positional (at pending-merge in the greenfield of
+      tactic-pending-merge-phase, or post-review arm-merge in the interim) and
+      is never overwritten by a conflict. No conflict value is added to the
+      PHASES enum: the clarification-66 precedent that pulled fix out of the
+      enum applies verbatim — a phase value overloads ladder-position with
+      interrupt-active.
+
+
+      (2) Routing authority — the SELECTOR is the sole sensor-reading routing
+      authority for this interrupt too, parity with clarification 66's "the
+      selector reads execution.fix directly". The selector reads the PR's GitHub
+      mergeable sensor at selection and branches three ways: CONFLICTING -> set
+      execution.conflict and dispatch the conflict worker (dispatch-conflict);
+      MERGEABLE -> clear execution.conflict and let the tick's no-worker
+      graph-auto-merge action land it (clarification 64); UNKNOWN -> wait and
+      retry next tick (parity with clarification 66's pending-CI concurrency
+      guard), never dispatching a worker on UNKNOWN, which would thrash on
+      GitHub's async mergeability computation. The tick reconciler keeps ONLY
+      the no-worker merge action (clarification 64); it does not route.
+
+
+      (3) Reaction, not prevention — the router detects a conflict when it
+      manifests and routes reactively, consistent with the sensor-driven
+      selector model. Continuously rebasing pending-merge PRs onto origin/main
+      to pre-empt conflicts is explicitly OUT of scope: a silent rebase would
+      change the merged result and so invalidate the review a pending-merge node
+      just passed (the no-unreviewed-code-merges guarantee of clarifications
+      64/66).
+
+
+      (4) Spin guard — execution.conflict.attempt caps the conflict interrupt
+      (parity with the fix-checks attempt cap and legacy /fix-conflicts' cap of
+      3); at the cap the node parks to office_hours rather than spinning.
+
+
+      (5) Re-review after resolution — does the
+      no-unreviewed-code-merges-after-a-fix doctrine (clarifications 64/66)
+      extend to conflict resolutions? Yes, materiality-scoped, tied to the
+      conflict worker's own mechanical-vs-intention verdict (clarification 78 /
+      tactic-dispatch-conflict-greenfield's layer partition): a purely
+      MECHANICAL resolution (dispatch-conflict layers 1-3 — decidable from
+      existing graph requirements, content-preserving) clears execution.conflict
+      and returns directly to pending-merge to merge, having changed no reviewed
+      intent; a resolution requiring model reconciliation or author input
+      (layers 4-5 — new substance) resets phase -> review and disarms
+      auto-merge, exactly as clarification 66's post-review fix backward-edge
+      does, because the resolution introduced code the completed review never
+      saw.
+
+
+      Scope: this supplies the router-side detect-and-route half that
+      clarification 64 (tick branches) and the dispatch-* skill-inventory
+      clarification (which already names dispatch-conflict as the graph-native
+      conflict skill from /fix-conflicts) left open; it contradicts and amends
+      neither. The router-side routing seam is retained as draft
+      tactic-graph-router-conflict-routing (this round); the resolution WORKER
+      is tactic-dispatch-conflict-greenfield; the pending-merge wait phase it
+      composes with is tactic-pending-merge-phase; the mergeable sensor is a new
+      read in read-sensors.ts. Delegation: this rides on delegation-github (the
+      PR/merge substrate) but adds no unwinding of that reliance, so
+      strategy-graph-native-dispatch takes no new recovers edge.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -2405,18 +2617,28 @@ attributes:
       validate-graph/graph-commit refuses a commit that authors another boost or
       override at or above it, or that reduces it, unless the commit carries an
       explicit author override"
-    - a node-worker session is reaped from the agents list on every terminal
-      exit — clean advance and escalation-park alike — via the foreground-safe
-      self-close primitive (`claude rm`; interactive sessions exempt), because
-      nothing durable lives in a terminated session (an office_hours park's
-      context is written into the node, not the session); the agents list holds
-      only live executors, escalations surface via the office-hours PARKED panel
-      rather than a lingering session, and a completed or parked worker job left
-      in `claude agents --json` is a defect UNLESS the default-off keep-sessions
+    - a node-worker session is auto-closed (reaped from the agents list via the
+      foreground-safe self-close primitive — `claude rm`; interactive sessions
+      exempt) ONLY on a clean phase-transition or an escalation-park; every
+      other terminal exit — a hard crash, an error, or a
+      clean-but-no-transition/no-progress exit — is KEPT (its job entry and
+      node-id worktree both held) for local debugging until an operator manually
+      reaps it, because such an exit was not parked to office-hours and the live
+      session is its only debugging artifact (2026-07-19 reap-scope-narrowing
+      clarification). Reaping a transitioned/parked session loses nothing
+      durable (the transition advanced the node's phase; the park wrote
+      office_hours into the node), and a transitioned/parked worker job left in
+      `claude agents --json` is a defect UNLESS the default-off keep-all
       operator escape hatch (2026-07-19 configurable-auto-close clarification)
-      is enabled, in which case a kept session is intentional and its node-id
-      claim is held until manual reap; auto-close (reap on every terminal exit)
-      is the default and doctrinal behavior, and the toggle is never router
-      substrate
+      is enabled. A kept failed session holds worktree_has_live_session TRUE, so
+      its node freezes (router will not re-select; no-progress fuse will not
+      count re-selections) until manual reap — accepted freeze-for-debug over
+      silent auto-retry on the failure path. A minimal operator-visible count of
+      held-for-debug sessions surfaces accumulation without re-coupling
+      observability to session persistence (it reports only the count, never
+      session content; it is not a recovery substrate or escalation channel —
+      escalations still surface via the office-hours PARKED panel). Auto-close
+      remains the doctrinal default for the two clean terminal states, and the
+      session is never router substrate
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
