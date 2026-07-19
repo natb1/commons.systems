@@ -73,4 +73,32 @@ describe("restampScope", () => {
 
     expect(() => restampScope(intentionsDir, realRepoRoot, mainRoot, "tactic-does-not-exist")).toThrow();
   });
+
+  it("propagates a git failure (fails LOUD) when origin/main cannot be resolved", () => {
+    // The node exists, so readNode/readNodeBody succeed and the failure comes
+    // from the `git rev-parse origin/main` call — exercising the script's
+    // central distinguishing contract versus transition-node's
+    // `refresh_stamp()`, which fails OPEN. `repoRoot` here is a bare scratch
+    // dir that is not a git repo, so `git rev-parse origin/main` fails and the
+    // error must propagate rather than be swallowed.
+    const intentionsDir = tempDir();
+    const mainRoot = tempDir();
+    const nonGitRepoRoot = tempDir();
+
+    writeNodeFromJson(
+      intentionsDir,
+      JSON.stringify({
+        id: "tactic-git-failure-fixture",
+        kind: "tactic",
+        statement: "Fail loud when origin/main cannot be resolved.",
+        owner: "human",
+        status: "codified",
+        parent: null,
+      }),
+    );
+
+    expect(() =>
+      restampScope(intentionsDir, nonGitRepoRoot, mainRoot, "tactic-git-failure-fixture"),
+    ).toThrow();
+  });
 });

@@ -91,11 +91,11 @@ export function restampScope(
 
 // --- Main ----------------------------------------------------------------
 
-function resolveMainRoot(): string {
+function resolveMainRoot(repoRoot: string): string {
   const gitCommonDir = execFileSync(
     "git",
     ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    { encoding: "utf8" },
+    { cwd: repoRoot, encoding: "utf8" },
   ).trim();
   return dirname(gitCommonDir);
 }
@@ -119,29 +119,45 @@ function run(): void {
     repoRoot = v;
   }
 
-  let mainRoot = resolveMainRoot();
+  // Capture the --main-root override but do NOT resolve the main root yet: when
+  // it is supplied we must not shell out to git at all, and when it is absent
+  // the resolution must run inside the try/catch below so a git failure surfaces
+  // through the clean error path rather than as an uncaught throw.
   const mainRootIdx = args.indexOf("--main-root");
+  let mainRootValue: string | null = null;
   if (mainRootIdx !== -1) {
     const v = args[mainRootIdx + 1];
     if (!v) {
       process.stderr.write("restamp-scope-fingerprint: --main-root requires a directory argument\n" + USAGE);
       process.exit(1);
     }
-    mainRoot = v;
+    mainRootValue = v;
   }
 
   const intentionsDir = join(repoRoot, "intentions");
 
-  const skipIdx = new Set<number>();
+  // Indices consumed by recognized flags and their values. Anything left that
+  // begins with `-` is an unrecognized flag: reject it (mirroring
+  // compute-freshness.ts) rather than silently dropping it as a fallback.
+  const consumed = new Set<number>();
   if (repoRootIdx !== -1) {
-    skipIdx.add(repoRootIdx);
-    skipIdx.add(repoRootIdx + 1);
+    consumed.add(repoRootIdx);
+    consumed.add(repoRootIdx + 1);
   }
   if (mainRootIdx !== -1) {
-    skipIdx.add(mainRootIdx);
-    skipIdx.add(mainRootIdx + 1);
+    consumed.add(mainRootIdx);
+    consumed.add(mainRootIdx + 1);
   }
-  const positional = args.filter((a, i) => !skipIdx.has(i) && !a.startsWith("-"));
+  const positional: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (consumed.has(i)) continue;
+    const a = args[i];
+    if (a.startsWith("-")) {
+      process.stderr.write(`restamp-scope-fingerprint: unknown flag '${a}'\n` + USAGE);
+      process.exit(1);
+    }
+    positional.push(a);
+  }
   if (positional.length !== 1) {
     process.stderr.write("restamp-scope-fingerprint: exactly one node id is required\n" + USAGE);
     process.exit(1);
@@ -149,6 +165,7 @@ function run(): void {
   const id = positional[0];
 
   try {
+    const mainRoot = mainRootValue ?? resolveMainRoot(repoRoot);
     const { fingerprint, sha } = restampScope(intentionsDir, repoRoot, mainRoot, id);
     process.stdout.write(`${fingerprint} ${sha}\n`);
   } catch (err) {
