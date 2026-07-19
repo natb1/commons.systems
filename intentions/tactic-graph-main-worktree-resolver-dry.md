@@ -112,10 +112,10 @@ must be verified by hand (see Verification).
 **Amendment (2026-07-19, same session, post-landing self-review via an
 independent opus verification pass — whole-node reconciliation per the
 skill's amendment-completeness bar, not a formal re-evaluation trigger):**
-this plan originally landed with a `set -e` defect and an unflagged minor
-behavior nuance. Both are corrected below.
+this plan originally landed with a `set -e` defect and a stderr-suppression
+inconsistency. Both are corrected below.
 
-- **`set -e` defect (real, now fixed in the Scope below).**
+- **`set -e` defect (real; fixed in the Scope below).**
   `worktree-create.sh` runs `set -euo pipefail` — it has `-e` — while the
   other three sites run `set -uo pipefail` (no `-e`). A bare
   `PROJECT_ROOT=$(resolve_main_worktree)` returns exit 1 on failure (from
@@ -126,20 +126,21 @@ behavior nuance. Both are corrected below.
   ERR-trap message instead of being "preserved exactly" as the original plan
   claimed. Only `worktree-create.sh`'s call site needs the fix (see Scope);
   the other three sites have no `-e` and are unaffected.
-- **Minor stderr-suppression nuance (cosmetic, not fixed — flagged for
-  honesty).** `resolve_main_worktree` always redirects the `git worktree
-  list` call with `2>/dev/null`. `dispatch-graph-execute` and
-  `provision-node-worktree` already did this. `worktree-create.sh` and
-  `graph-select-target` did **not** — their git stderr (e.g. a corrupt
-  worktree registry warning) was previously visible and will now be
-  silently suppressed at those two sites. This is judged low-risk and
-  in-scope for a "pure refactor" (it only affects diagnostic-message
-  visibility on an already-rare failure path, not control flow), so it is
-  not treated as a blocking behavior change — but a fresh implementer should
-  know this is a real, if minor, diff from strict byte-for-byte
-  preservation, not an oversight to "fix" by removing `2>/dev/null` from the
-  shared helper (that would just move the inconsistency to the two sites
-  that rely on it today).
+- **stderr-suppression inconsistency (real; fixed in the Scope below).** The
+  original helper hardcoded `2>/dev/null` on the `git worktree list` call
+  inside `resolve_main_worktree` itself. Two of the four original sites
+  (`dispatch-graph-execute`, `provision-node-worktree`) already redirected
+  that way; the other two (`worktree-create.sh`, `graph-select-target`) did
+  not, so hardcoding it inside the helper would have silently suppressed
+  git's stderr (e.g. a corrupt-worktree-registry warning) at those two sites
+  that previously surfaced it. Fixed by removing the redirect from
+  **inside** the function entirely and instead redirecting at the two call
+  sites that want it — `resolve_main_worktree 2>/dev/null` — via bash's
+  ordinary per-invocation stderr redirection (redirecting a function call's
+  fd 2 redirects everything the function's body writes to stderr, including
+  the `git`/`awk` pipeline inside it). This preserves each site's exact
+  original stderr behavior with no added parameter or branching in the
+  helper. See the corrected helper body and the four call sites below.
 
 ## Unit 1 — Extract `resolve_main_worktree` and replace the four call sites
 
@@ -176,6 +177,13 @@ convention of sibling files `lib-reservation-ledger.sh` / `lib-claude-agents.sh`
 # existence check and its own error message, since those differ per site
 # (hard error vs. soft fallback) and that difference is preserved, not fixed,
 # by this refactor.
+#
+# Does NOT redirect its own stderr — the `git worktree list` call's stderr is
+# left to inherit the caller's fd 2 normally. Two of the four call sites want
+# it suppressed (they did before this refactor too); they redirect at the
+# call site with `resolve_main_worktree 2>/dev/null` instead of this function
+# hardcoding it, so the other two sites keep seeing git's stderr exactly as
+# they did before this refactor.
 resolve_main_worktree() {
   local git_dir="${1:-}"
   if [[ -n "${DISPATCH_GRAPH_MAIN_WORKTREE:-}" ]]; then
@@ -184,9 +192,9 @@ resolve_main_worktree() {
   fi
   local list wt
   if [[ -n "$git_dir" ]]; then
-    list=$(git -C "$git_dir" worktree list --porcelain 2>/dev/null)
+    list=$(git -C "$git_dir" worktree list --porcelain)
   else
-    list=$(git worktree list --porcelain 2>/dev/null)
+    list=$(git worktree list --porcelain)
   fi
   wt=$(awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}' <<<"$list")
   [[ -n "$wt" ]] || return 1
@@ -236,12 +244,12 @@ failure, and a bare assignment's failure aborts the script under `-e` before
 the line-105 hard-error check ever runs, silently replacing the specific
 `$BRANCH`-naming error message with a generic ERR-trap message. The
 `|| PROJECT_ROOT=""` clause absorbs the failure so control reaches the
-existing check below unchanged. (The other three sites below use a bare
-`PROJECT_ROOT=$(resolve_main_worktree)` deliberately — they run `set -uo
-pipefail` with no `-e`, so a failing assignment there just leaves
-`PROJECT_ROOT` empty and falls through to their own checks; do not add
-`|| PROJECT_ROOT=""` at those sites, it would be a no-op but is unnecessary
-noise inconsistent with their existing style.)
+existing check below unchanged. (The other three sites below assign without
+this guard deliberately — they run `set -uo pipefail` with no `-e`, so a
+failing assignment there just leaves `PROJECT_ROOT`/`NATIVE_ROOT` empty and
+falls through to their own checks; do not add `|| PROJECT_ROOT=""` at those
+sites, it would be a no-op but is unnecessary noise inconsistent with their
+existing style.)
 
 Leave `worktree-create.sh:105-106` (the `[ -n "$PROJECT_ROOT" ] || { ... exit 1; }`
 hard-error block, with its `worktree-create`-specific message naming
@@ -277,8 +285,11 @@ with:
 # Project root = the worktree with `main` checked out (substrate clarification
 # 23). resolve_main_worktree honors DISPATCH_GRAPH_MAIN_WORKTREE, the test
 # override.
-PROJECT_ROOT=$(resolve_main_worktree)
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 ```
+
+The `2>/dev/null` on the call (not inside the helper) matches this site's
+original `git worktree list --porcelain 2>/dev/null` redirect exactly.
 
 Leave `dispatch-graph-execute:92-95` (the `-z`/`! -d` hard-error check and its
 message) unchanged.
@@ -314,8 +325,11 @@ with:
 # Project root = the worktree with `main` checked out (substrate clarification
 # 23: `main` is checked out at the project root). resolve_main_worktree
 # honors DISPATCH_GRAPH_MAIN_WORKTREE, the test override, when set.
-PROJECT_ROOT=$(resolve_main_worktree)
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 ```
+
+The `2>/dev/null` on the call (not inside the helper) matches this site's
+original `git worktree list --porcelain 2>/dev/null` redirect exactly.
 
 Leave `provision-node-worktree:66-69` (the `-z`/`! -d` hard-error check and
 its message) unchanged.
