@@ -191,7 +191,7 @@ PR or either order).
 
 ## Reuse
 
-- Existing `isDraft`/`isOpenTactic` helpers (router.ts:124-131) — unchanged,
+- Existing `isDraft`/`isOpenTactic` helpers (router.ts:124-133) — unchanged,
   reused as-is.
 - Existing `tactic()`/`anode()`/`candidateIds()` test fixtures
   (`packages/intentionsutil/test/router.test.ts:14-81`).
