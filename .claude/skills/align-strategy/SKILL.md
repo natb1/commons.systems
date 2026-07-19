@@ -328,8 +328,9 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    until the project is opened/refreshed — warn the author if this is
    their first look at a same-session sync.
 10. **Persistent-layer ownership gate.** Whenever this interview is about to
-    record standing structure — a node that owns a `success_signal` read on
-    an ongoing basis, a node carrying a standing `attention` boost/override,
+    record standing structure — a node that owns a `success_signal` that is
+    read on an ongoing basis, a node carrying a standing `attention`
+    boost/override,
     or any node that other machinery permanently references — the recorded
     owner must be `kind: strategy` (or `virtue`), never a tactic. Tactics are
     transient by definition: they complete and leave the selectable graph.
