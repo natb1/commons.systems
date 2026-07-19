@@ -2105,6 +2105,68 @@ clarifications:
       ceiling and emits concurrency-cap at HEADROOM=0, contradicting this —
       tracked by tactic-manual-dispatch-single-node-headroom. Recorded
       2026-07-18 interview."
+  - question: When a phase skill delegates a unit to a subagent (the main thread
+      never edits files), what guarantees the subagent's writes land in the
+      launching worktree rather than the primary checkout?
+    answer: "Nothing currently — and the gap is load-bearing. The Agent tool pins a
+      spawned subagent's cwd at launch to the primary checkout
+      (~/natb1/commons.systems), not the launching worktree, so a subagent that
+      writes via a relative path silently lands its edits in the primary
+      checkout while the worktree keeps a clean git status — the entire unit is
+      lost with no error (observed live 2026-07-19 in Unit 1 of
+      tactic-otel-sensor-substrate: the implementation subagent wrote
+      otel-trial-notes.md into the primary checkout's .claude/skills/, requiring
+      manual detection and relocation). The subagent-worker execution contract
+      therefore carries an implicit invariant it does not enforce: subagents
+      operate on the launching worktree, not the primary checkout. The fix is
+      prevention plus a backstop — the implementation-subagent prompt contract
+      passes the absolute worktree root and mandates absolute paths under it,
+      and /implement-unit adds a post-subagent contamination guard that fails
+      loudly when a subagent's writes land outside the worktree — tracked as
+      tactic-subagent-cwd-worktree-guard. This is distinct from the
+      primary-checkout-on-main invariant (tactic-primary-checkout-main-guard):
+      that keeps the primary checkout ON main; this keeps subagent WRITES OUT of
+      it. Recorded 2026-07-19 interview."
+  - question: Clarification 58 (2026-07-13) retained its 5-layer resolution ladder
+      in tactic-graph-commit-auto-serialization as an in-script graph-commit
+      upgrade, and clarification 67 (2026-07-18) retained
+      tactic-dispatch-conflict-greenfield as a model-driven skill for the same
+      conflict upgrade without referencing the earlier draft — which vehicle
+      owns which ladder layer?
+    answer: "The ladder partitions across both vehicles by what each can host —
+      ratified by the author at the 2026-07-19 office-hours review that cleared
+      both tactics' 2026-07-19 parks. graph-commit the SCRIPT owns the
+      deterministic mechanical layers: (1) git three-way rebase auto-merge
+      (exists today), (2) structural field-level / list-union frontmatter merge
+      (net-new code — no merge or field-union helper exists in
+      packages/intentionsutil/src — with test-graph-commit.sh coverage), (3)
+      stale --base auto re-read/re-apply. The dispatch-conflict SKILL owns the
+      model layers: (4) scoped model reconciliation as a skill-thread opus
+      subagent in the fix-conflicts resolved/ambiguous verdict shape, under
+      clarification 58's model scope guard verbatim, and (5) the true-conflict
+      office_hours park carrying both divergent values plus a recommendation.
+      The seam: when layers 1-3 cannot resolve, graph-commit exits with a
+      structured mechanical-unresolved state (alongside landed and parked) that
+      dispatch-conflict consumes; tactic-dispatch-conflict-greenfield is
+      blocked_by tactic-graph-commit-auto-serialization to encode the ordering.
+      Grounds for the vehicle split: no bash script in the repo performs a
+      scoped model eval — model-resolution steps run only as SKILL.md-driven
+      subagents (the fix-conflicts pattern) — so the script cannot host layers
+      4-5 as the 2026-07-13 draft assumed; conversely, pushing layers 1-3 into
+      the skill would move deterministic, unit-testable merge logic behind a
+      model. Accordingly tactic-graph-commit-auto-serialization narrows to
+      layers 1-3 (narrowed, not pruned: that scope is real net-new deterministic
+      code distinct from the model layers) and
+      tactic-dispatch-conflict-greenfield owns layers 4-5 on top of its rename
+      scope; both parks clear in this round's commit. Clarification 58's ladder
+      doctrine, scope guard, and claim-narrowing stand unamended — only the
+      implementation-vehicle assignment is amended. This entry also cures the
+      record-completeness defect (condition 7 / clarification 31) of the
+      2026-07-18 round: clarification 67 re-derived the conflict upgrade without
+      reconciling the 2026-07-13 draft, the gap that parked both tactics on
+      2026-07-19. tactic-claim-dedup-only (scheduling dedup) is orthogonal to
+      conflict resolution and unaffected. Recorded 2026-07-19 /align-strategy
+      round."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
