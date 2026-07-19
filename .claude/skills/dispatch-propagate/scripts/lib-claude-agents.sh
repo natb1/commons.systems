@@ -16,6 +16,7 @@
 #   claude_agents_count_busy_workers
 #   verify_agent_registered_under      <agent-name> <cwd>
 #   claude_agents_snapshot_capture     <path>
+#   claude_job_id_for_name_all         <name>
 #
 # claude_sessions_under <path>
 #   The cwd-based low-level primitive. Runs `claude agents --json --cwd <path>`,
@@ -342,6 +343,42 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     if [[ -n "$lines" ]]; then
       printf '%s\n' "$lines"
     fi
+    return 0
+  }
+
+  # claude_job_id_for_name_all <name> — echo the daemon JOB ID (the short `.id`
+  # field of `claude agents --json --all` — the 8-hex-char basename
+  # dispatch-self-close derives from $CLAUDE_JOB_DIR, NOT `.sessionId`) of the
+  # live/done background job whose `.name` exactly equals <name>, or empty if
+  # none. --all so a job in a terminal state (done/stopped/etc — hidden from the
+  # default active-only listing) is still resolvable: the mid-phase-dead-worker
+  # reap this backs needs exactly that visibility. Consolidates office-hours'
+  # inline job_id_for_name() jq pattern into one shared implementation.
+  #     return 0 — daemon queried successfully. Stdout is the job id, or empty if
+  #               no name match. Empty stdout + return 0 is a definite "no such job".
+  #     return 1 — UNKNOWN. `claude` missing, non-zero exit, or non-array output.
+  #               Stdout is empty. Callers MUST NOT treat this as "no job" — see
+  #               each call site's own fail-safe handling.
+  claude_job_id_for_name_all() {
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+      printf 'lib-claude-agents: claude_job_id_for_name_all requires a <name> argument\n' >&2
+      return 1
+    fi
+
+    local out
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json --all 2>/dev/null); then
+      return 1
+    fi
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    jq -r --arg n "$name" '
+      if type == "array"
+      then (first(.[] | select(.name == $n) | .id) // empty)
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null || return 1
     return 0
   }
 

@@ -6965,6 +6965,8 @@ sweep_teardown() {
   unset DISPATCH_CONFIG_DIR
   # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
   unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
+  # Mid-phase-dead job reap seams — never leak across tests.
+  unset DISPATCH_SWEEP_CLAUDE_CMD DISPATCH_AGENTS_SNAPSHOT
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -7011,6 +7013,50 @@ exit 0
 FAKE
   chmod +x "$fake"
   export CLAUDE_AGENTS_CMD="$fake"
+}
+
+# Helper: install a fake `claude` for the mid-phase-dead job reap
+# (reap_job_for_branch -> claude_job_id_for_name_all). Each argument must be in
+# `name=sid:jid` form; `sid` and `jid` are DELIBERATELY DISTINCT (mirroring
+# production where `.id` is the short job id, NOT `.sessionId` — see
+# sweep_fake_claude_sessions_by_name's sibling comment). Handles two shapes:
+#   - `rm <id>`                 logs <id> to $STUB_DIR/claude-rm-calls.log, exit 0.
+#   - `agents --json --all`     serves the registered entries.
+#   - anything else (plain `agents --json`, no --all) serves `[]`.
+# The --all discrimination is LOAD-BEARING: worktree_has_live_session's liveness
+# gate (via claude_agents_list_all -> _claude_agents_raw) issues PLAIN
+# `agents --json` with NO --all. If the fake served the same registered payload
+# for both, the liveness gate would see the "done" job and report the worktree
+# OCCUPIED, the sweep would skip removal entirely, and reap_job_for_branch would
+# never run — this discrimination is what lets both queries share one fake.
+sweep_fake_claude_sessions_by_name_with_id() {
+  local fake="$TMPDIR_TEST/fake/claude"
+  local all_payload="[" entry name rest sid jid first=1
+  for entry in "$@"; do
+    name="${entry%%=*}"; rest="${entry#*=}"; sid="${rest%%:*}"; jid="${rest#*:}"
+    if (( first )); then first=0; else all_payload+=","; fi
+    all_payload+="{\"sessionId\":\"$sid\",\"id\":\"$jid\",\"pid\":1,\"status\":\"done\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  all_payload+="]"
+  printf '%s' "$all_payload" > "$TMPDIR_TEST/fake/all-payload.json"
+  cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+FAKE_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [[ "${1:-}" == "rm" ]]; then
+  echo "$2" >> "$STUB_DIR/claude-rm-calls.log"
+  exit 0
+fi
+if [[ "${1:-}" == "agents" && "${2:-}" == "--json" && "${3:-}" == "--all" ]]; then
+  cat "$FAKE_DIR/all-payload.json"
+  exit 0
+fi
+echo '[]'
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
+  export DISPATCH_SWEEP_CLAUDE_CMD="$fake"
 }
 
 # --- Test 1: merged classification triggers cleanup --------------------------
@@ -8275,6 +8321,204 @@ if grep -q "SWEEP_CONFIG_ERROR" "$DISPATCH_SWEEP_LOG_FILE"; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# ============================================================================
+# Mid-phase-dead job reap tests (tactic-graph-node-session-reap)
+# ============================================================================
+#
+# A graph-native node-worker background session that dies mid-phase without
+# firing a clean Stop never reaches the Stop-hook self-close (Unit 1), so its
+# `claude agents --json` job entry is orphaned. reap_job_for_branch (dispatch-sweep)
+# closes that leak: at each of the 3 points where a worktree is confirmed dead
+# and about to be removed, it looks up a job registered under a name exactly
+# matching the worktree's branch (== node id for a graph-native worker) and
+# deletes it via `claude rm`.
+
+# --- Test J1: MERGED-removal site reaps the orphaned job ---------------------
+echo "Test: J1 mid-phase-dead job reap at the MERGED-removal site"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/3000-merged-job"
+WT_BASE="3000-merged-job"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":3000,"created_at":"2024-01-01T00:00:00Z","title":"PR 3000"}]' \
+  > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+sweep_fake_claude_sessions_by_name_with_id "$WT_BASE=sess-1:job-1"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "J1 sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: J1 worktree still removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J1 worktree still removed"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+rm_calls=$(cat "$STUB_DIR/claude-rm-calls.log" 2>/dev/null || true)
+if [[ "$rm_calls" == "job-1" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: J1 claude rm job-1 called exactly once"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J1 claude rm job-1 called exactly once"; echo "    rm_calls: $rm_calls"
+fi
+sweep_teardown
+
+# --- Test J2: CLOSED-issue-removal site reaps the orphaned job ---------------
+echo "Test: J2 mid-phase-dead job reap at the CLOSED-issue-removal site"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/57-closed-job"
+WT_BASE="57-closed-job"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "CLOSED" > "$STUB_DIR/issue-state-57.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+sweep_fake_claude_sessions_by_name_with_id "$WT_BASE=sess-2:job-2"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "J2 sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: J2 worktree still removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J2 worktree still removed"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+rm_calls=$(cat "$STUB_DIR/claude-rm-calls.log" 2>/dev/null || true)
+if [[ "$rm_calls" == "job-2" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: J2 claude rm job-2 called exactly once"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J2 claude rm job-2 called exactly once"; echo "    rm_calls: $rm_calls"
+fi
+sweep_teardown
+
+# --- Test J3: not-in-sync force-reap site reaps the orphaned job -------------
+# Reuses the N1-style two-sweep marker-then-reap pattern: first sweep records
+# the not-in-sync marker, a later sweep past grace force-reaps.
+echo "Test: J3 mid-phase-dead job reap at the not-in-sync force-reap site"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/3010-merged-dirty-job"
+WT_BASE="3010-merged-dirty-job"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":3010,"created_at":"2024-01-01T00:00:00Z","title":"PR 3010"}]' \
+  > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+sweep_fake_claude_sessions_by_name_with_id "$WT_BASE=sess-3:job-3"
+
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "J3 sweep#1 (marker recorded) exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+rm_calls=$(cat "$STUB_DIR/claude-rm-calls.log" 2>/dev/null || true)
+if [[ -z "$rm_calls" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: J3 sweep#1 no premature reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J3 sweep#1 no premature reap"; echo "    rm_calls: $rm_calls"
+fi
+
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "J3 sweep#2 (force-reap) exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: J3 sweep#2 force-removed the worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J3 sweep#2 force-removed the worktree"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+rm_calls=$(cat "$STUB_DIR/claude-rm-calls.log" 2>/dev/null || true)
+if [[ "$rm_calls" == "job-3" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: J3 sweep#2 claude rm job-3 called exactly once"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J3 sweep#2 claude rm job-3 called exactly once"; echo "    rm_calls: $rm_calls"
+fi
+sweep_teardown
+
+# --- Test J4: legacy issue-numbered branch — no job registered, harmless no-op ---
+echo "Test: J4 legacy issue-numbered branch has no matching job — reap is a harmless no-op"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/42-feature"
+sweep_register_wt "$WT_PATH" "42-feature"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":4200,"created_at":"2024-01-01T00:00:00Z","title":"PR 4200"}]' \
+  > "$STUB_DIR/pr-state-42-feature.json"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+# Default fake `claude` from sweep_setup: no jobs registered, returns `[]`.
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "J4 sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH" && echo "$calls" | grep -qx "branch-D:42-feature"; then
+  PASS=$((PASS + 1)); echo "  PASS: J4 worktree/branch removed normally"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J4 worktree/branch removed normally"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$STUB_DIR/claude-rm-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: J4 claude-rm-calls.log empty or absent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J4 claude-rm-calls.log empty or absent"
+  echo "    rm_calls: $(cat "$STUB_DIR/claude-rm-calls.log")"
+fi
+sweep_teardown
+
+# --- Test J5: UNKNOWN daemon for the reap lookup specifically ----------------
+# Isolate the reap lookup's UNKNOWN from the liveness gate's own UNKNOWN
+# handling: satisfy worktree_has_live_session's liveness gate via a valid
+# DISPATCH_AGENTS_SNAPSHOT ([]), so the worktree is free and removal proceeds,
+# while separately pointing CLAUDE_AGENTS_CMD at a nonexistent binary so ONLY
+# claude_job_id_for_name_all (queried directly, bypassing the snapshot) fails.
+echo "Test: J5 UNKNOWN daemon for the reap lookup — sweep still completes, no fatal abort"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/3020-merged-unknown"
+WT_BASE="3020-merged-unknown"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":3020,"created_at":"2024-01-01T00:00:00Z","title":"PR 3020"}]' \
+  > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+echo '[]' > "$STUB_DIR/agents-snapshot.json"
+export DISPATCH_AGENTS_SNAPSHOT="$STUB_DIR/agents-snapshot.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "J5 sweep exits 0 (no fatal abort on UNKNOWN reap lookup)" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH" && echo "$calls" | grep -qx "branch-D:$WT_BASE"; then
+  PASS=$((PASS + 1)); echo "  PASS: J5 worktree/branch still removed (liveness gate satisfied via snapshot)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J5 worktree/branch still removed (liveness gate satisfied via snapshot)"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "REAP_JOB_LOOKUP_UNKNOWN: branch=$WT_BASE" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: J5 REAP_JOB_LOOKUP_UNKNOWN logged"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J5 REAP_JOB_LOOKUP_UNKNOWN logged"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$STUB_DIR/claude-rm-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: J5 claude-rm-calls.log empty or absent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: J5 claude-rm-calls.log empty or absent"
+  echo "    rm_calls: $(cat "$STUB_DIR/claude-rm-calls.log")"
 fi
 sweep_teardown
 

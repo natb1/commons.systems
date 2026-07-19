@@ -22,6 +22,8 @@
 # Environment overrides for testability:
 #   DISPATCH_SWEEP_LOG_FILE   Override log path. Default: <root>/tmp/dispatch-sweep.log.
 #   DISPATCH_SWEEP_NOW        Override UTC timestamp source (deterministic tests).
+#   DISPATCH_SWEEP_CLAUDE_CMD The `claude` command used for the mid-phase-dead job
+#                             reap's `claude rm` call. Default: `claude`.
 #
 # Exit codes:
 #   0  normal sweep completed (merged worktrees removed where possible).
@@ -169,9 +171,38 @@ reap_or_skip_not_in_sync() {
       log "BRANCH_DELETE_FAILED: branch=$wt_branch (worktree removed; branch retained)"
     fi
     reap_marker_clear "$PROJECT_ROOT" "$wt_basename" || true
+    reap_job_for_branch "$wt_branch"
     log "REAP_${suffix}_NOT_IN_SYNC: '$wt_path' branch=$wt_branch $log_suffix age_seconds=$age grace_seconds=$NOT_IN_SYNC_GRACE_S quarantine='$dest'"
   else
     log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
+  fi
+  return 0
+}
+
+# reap_job_for_branch <wt_branch> — best-effort: if a live/done background job is
+# registered under a name exactly matching <wt_branch>, delete it via `claude rm`.
+# For a graph-native node worker, the worktree's branch name IS the node id AND
+# the worktree basename IS the node id (both equal wt_branch), so a name match here
+# means the worktree's owning job entry is orphaned (its worktree is being reaped,
+# confirmed dead by worktree_has_live_session having already returned false at
+# every call site that reaches here — see call-site comments).
+# A legacy issue-numbered branch (e.g. `42-feature`) never matches a job by this
+# name, so this is a harmless no-op there. Never aborts the sweep: every failure
+# is logged and this always returns 0.
+reap_job_for_branch() {
+  local wt_branch="$1"
+  local job_id
+  if ! job_id=$(claude_job_id_for_name_all "$wt_branch"); then
+    log "REAP_JOB_LOOKUP_UNKNOWN: branch=$wt_branch (daemon unqueryable; any orphaned job entry left in place)"
+    return 0
+  fi
+  if [[ -z "$job_id" ]]; then
+    return 0
+  fi
+  if "${DISPATCH_SWEEP_CLAUDE_CMD:-claude}" rm "$job_id" >/dev/null 2>&1; then
+    log "REAP_JOB: branch=$wt_branch job_id=$job_id"
+  else
+    log "REAP_JOB_FAILED: branch=$wt_branch job_id=$job_id"
   fi
   return 0
 }
@@ -265,6 +296,7 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
               # Clear any not-in-sync marker so a future same-named worktree never
               # inherits a stale grace timestamp.
               reap_marker_clear "$PROJECT_ROOT" "$(basename "$wt_path")" || true
+              reap_job_for_branch "$wt_branch"
               log "REMOVE_CLOSED_ISSUE: '$wt_path' branch=$wt_branch issue=#$issue_num"
             else
               log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
@@ -302,6 +334,7 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
       # Clear any not-in-sync marker so a future same-named worktree never
       # inherits a stale grace timestamp.
       reap_marker_clear "$PROJECT_ROOT" "$(basename "$wt_path")" || true
+      reap_job_for_branch "$wt_branch"
       log "REMOVE_MERGED: '$wt_path' branch=$wt_branch pr=#$pr_num"
     else
       log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
