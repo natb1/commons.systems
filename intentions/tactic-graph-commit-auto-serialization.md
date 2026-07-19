@@ -37,7 +37,23 @@ attention:
     boost + 5.33; current max 68.33 on tactic-fix-interrupt-orthogonal-state at
     boost 63), so boost 64 gives 69.33 — strictly top of the selector frontier,
     verified via select-targets. The boost flows nowhere else (no blocked_by, no
-    children)."
+    children). Reconfirmed 2026-07-19: still boost 64 / rank 69.33, verified top
+    of the actually-selectable candidates against origin/main 9e376105 (412+
+    nodes; tactic-align-tactics-workflow was separately boosted to a nominal 75
+    the same day, but it is phase:implement and blocked_by
+    tactic-align-family-opus-default (still in merge-ready-hold), so it is
+    excluded from the candidates list and does not displace this node from #1).
+    No boost change made -- already sufficient. Second live incident of the
+    tracked gap the same day: an /align-tactics session's trivial office_hours
+    wording edit on tactic-dispatch-conflict-greenfield raced a
+    concurrently-landing /align-strategy ratification (clarification 78) and
+    lost -- graph-commit's rebase hit a textual CONFLICT on the same node and
+    fell through to the fail-closed park path, clobbering the just-ratified
+    clean office_hours state with the generic 'concurrent-edit conflict' message
+    until a manual follow-up commit (d6d371ba) cleared it. Exactly this node's
+    layer-3 gap (stale-base auto re-read/re-apply): a fresh re-read would have
+    shown the losing writer's delta moot and landed cleanly with no park at all.
+    Author will /align-tactics this node in a separate session."
 phase: null
 execution: null
 validates: []
