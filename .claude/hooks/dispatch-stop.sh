@@ -70,7 +70,20 @@ if [[ -n "$JOB_NAME" && -n "$_HOOK_ROOT" && -f "$_HOOK_ROOT/intentions/$JOB_NAME
       fi
     fi
   fi
+
+  _SELF_CLOSE="$_HOOK_ROOT/.claude/skills/dispatch-propagate/scripts/dispatch-self-close"
+  if [ -x "$_SELF_CLOSE" ]; then
+    # Reap this node worker's job entry from `claude agents --json` on every
+    # terminal exit -- clean and parked alike. Runs AFTER the park backstop above
+    # so a durable office_hours write lands before the session disappears.
+    # dispatch-self-close is CLAUDE_JOB_DIR-gated and a no-op for interactive
+    # sessions; node-worker names never match `dispatch-*`, so it self-closes
+    # unconditionally here (its router continuation-invariant branch never
+    # triggers for this caller).
+    "$_SELF_CLOSE" >/dev/null 2>&1 \
+      || echo "[dispatch-stop] WARNING: dispatch-self-close for '$JOB_NAME' failed (non-fatal)" >&2
+  fi
 fi
 
-# Node worker (parked or clean) and routers alike: nothing more for this hook.
+# Routers and non-node jobs: nothing more for this hook.
 exit 0
