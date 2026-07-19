@@ -160,29 +160,14 @@ clarifications:
       2026-07-03 interview."
   - question: Does per-issue worktree isolation carry over — where does a
       graph-native tactic's worker execute?
-    answer: "Yes — one worktree per tactic. When the router launches a worker for a
-      tactic, it provisions a dedicated worktree keyed by the tactic's node id,
-      the same isolation the legacy router gives each issue. This is the
-      launch-side commitment behind worktree anchoring
-      (tactic-graph-native-dispatch §3.4: <tactic-id> is the
-      branch/worktree/reservation/session key) and the worktree-create.sh
-      node-id naming unit (tactic-graph-router-selector unit 3). Until that unit
-      lands, the hook still rejects node-id names — graph-native sessions must
-      borrow a numeric anchor, which this requirement removes. Recorded
-      2026-07-03 from author direction."
+    answer: "Does per-issue worktree isolation carry over — where does a
+      graph-native tactic's worker execute? — See body §Worktree Claiming &
+      Liveness. Recorded 2026-07-03."
   - question: Can workers execute nodes concurrently — and what stops two workers
       claiming the same node?
-    answer: "Concurrency is a first-class requirement, not an inherited detail: the
-      router runs up to the paced worker target in parallel across eligible
-      non-parked nodes of both kinds — tactic phase sessions and strategy
-      /align-tactics sessions. Claiming and isolation are uniform by node id:
-      every launched worker enters the one claimed set / reservation ledger
-      under its node id — strategy ids included, so an in-flight /align-tactics
-      session claims its strategy and closes the duplicate-spawn window while
-      its tactics have not yet landed on origin/main — and runs in a worktree
-      keyed by that id, giving liveness detection (live session ⇔ worktree) one
-      rule for both kinds. Write safety stays the single-node rebase-retry
-      commit path (clarification 2). Recorded 2026-07-03 interview."
+    answer: "Can workers execute nodes concurrently — and what stops two workers
+      claiming the same node? — See body §Worktree Claiming & Liveness for the
+      full mechanism. Recorded 2026-07-03."
   - question: Does the graph-native router keep the legacy pace function — and where
       does its priority override live?
     answer: "Full parity, machinery unchanged and outside the graph:
@@ -327,23 +312,11 @@ clarifications:
   - question: The repo was re-anchored — main checked out at the project root with
       Claude Code managing worktrees natively; do the worktree commitments still
       target the legacy .bare + sibling worktrees/ layout?
-    answer: "No — Claude Code native worktrees are the substrate, recorded
-      2026-07-05 from author direction. main is checked out at the project root
-      (~/natb1/commons.systems) and every worker worktree is a Claude
-      Code-managed worktree at the harness default location,
-      <project-root>/.claude/worktrees/<node-id> — entered via the native
-      worktree tooling (EnterWorktree) in sessions, and provisioned by launch
-      scripts as a plain git worktree add into that same path. No graph-native
-      machinery may assume the legacy layout: the .bare shared common dir and
-      the sibling worktrees/ container persist only as backward compatibility
-      for the draining gh lane, and the WorktreeCreate hook's git-common-dir
-      anchoring, <issue-num>-<slug>-only name validation, and gh identity stub
-      are legacy-lane conventions that retire with it
-      (tactic-legacy-router-removal). This supersedes the mechanism half of
-      clarification 12 (the worktree-create.sh node-id naming unit): the
-      isolation commitment stands — one worktree per node id, liveness via live
-      session ⇔ worktree — but a node-id worktree is a plain native worktree at
-      the default location, never a hook-redirected path."
+    answer: "The repo was re-anchored — main checked out at the project root
+      with Claude Code managing worktrees natively; do the worktree commitments
+      still target the legacy .bare + sibling worktrees/ layout? — See body
+      §Worktree Claiming & Liveness for the full mechanism. Recorded
+      2026-07-05."
   - question: The first emulated router tick ran as a Workflow-tool script — is the
       Workflow primitive a better tick-execution substrate than the legacy shell
       spawn chain?
@@ -464,28 +437,10 @@ clarifications:
   - question: Two human-invoked align sessions ran concurrently in the shared
       checkout during the 2026-07-06 doctrine round — is the target router safe
       for this concurrency, and what closes the gaps?
-    answer: "Router-launched work is safe by construction — node-id claiming with
-      worktree isolation, frozen-selection ticks, single-node rebase-retry
-      writes failing closed on same-node conflict, and the substance-fingerprint
-      soft freeze. Three commitments close the human-session gaps. Claiming:
-      interactive and human-invoked bg align sessions enter the same node-id
-      reservation ledger as router workers and author in worktrees, never the
-      shared main checkout — the ledger is uniform across launch modes.
-      Freshness: the write path gains a base-version check — the editing flow
-      records the origin/main blob each node was read at, and graph-commit
-      refuses a write whose base is stale, making read-fresh mechanical rather
-      than session discipline (implementation: tactic-graph-commit-prune-support
-      Unit 2; motivating near-miss: a stale dump of
-      tactic-graph-commit-hardening nearly clobbered its live phase: qa state).
-      Semantic drift: no lock covers doctrine-vs-content races across different
-      files — the periodic /align-strategy improvement pass (now carrying the
-      greenfield gate and placement doctrine) is the reconciler, and a
-      doctrine-recording session pauses the pace curve for its audit window, as
-      this round did. Recorded 2026-07-06 interview. (Amended 2026-07-13: the
-      failing-closed clause and the uniform claiming ledger are narrowed —
-      claiming is scheduling-dedup only and never blocks an edit; same-node
-      conflict resolves automatically, parking only true conflicts. See the
-      automatic-serialization clarification of that date.)"
+    answer: "Two human-invoked align sessions ran concurrently in the shared
+      checkout during the 2026-07-06 doctrine round — is the target router safe
+      for this concurrency, and what closes the gaps? — See body §Worktree
+      Claiming & Liveness for the full mechanism. Recorded 2026-07-06."
   - question: Does the legacy office-hours entry's attach-to-parking-session
       behavior carry over — how does a human engage a parked node?
     answer: "No — graph recoverability replaces session recovery. Session recovery
@@ -1502,41 +1457,11 @@ clarifications:
   - question: Does dispatch's concurrency dedup key on live sessions or worktree
       existence, and does the office-hours lane share the mechanism
       (office-hours sessions safe for concurrent selection)?
-    answer: "Live sessions, uniformly, for every launch mode including office-hours
-      — confirmed 2026-07-18 as the target-state mechanism. The dedup /
-      claimed-set keys on liveness: a node is skipped only when a
-      reservation-ledger marker named by its id exists OR
-      worktree_has_live_session reports a live node-id-named session (claude
-      agents --json) — never on worktree existence. A bare or un-reaped
-      .claude/worktrees/<node-id> whose session has ended does NOT block
-      selection (the shipped graph-select-target behavior; the #1474 change
-      moved existence-keying to liveness-keying precisely so an unreaped
-      worktree cannot block the next worker). Worktree reaping is decoupled
-      post-merge disk hygiene — dispatch-sweep removes a worktree after its PR
-      merges and the tree is in-sync, guarding on worktree_has_live_session
-      first — never a selection gate; what makes a node's next phase selectable
-      is the transition write flipping phase on origin/main plus the prior
-      session ending (its claim clears). The office-hours lane shares this exact
-      mechanism: (a) the graph-native office-hours lane runs IN the node-id
-      worktree for its session's life so its live session is detectable, and
-      that worktree is disposable — reaped like any worker's, since office-hours
-      lands no commit; (b) office-hours-select gains the same liveness dedup —
-      an untargeted (queue-head) launch SKIPS a parked node that already has a
-      live office-hours session and returns the next-ranking parked node (the
-      concurrent-selection safety this round records); (c) an explicit
-      /office-hours <node-id> targeting a node that already has a live
-      office-hours session RETURNS AN ERROR — a deliberate human target on an
-      occupied node is a collision to surface, not a silent fall-through.
-      Consistency correction: tactic-align-session-claiming Unit 3's recorded
-      prescription — 'graph-select-target treats ANY existing
-      .claude/worktrees/<node-id> as a held claim' (existence-keyed) — is
-      superseded by this liveness mechanism (#1474), contradicts its own Unit 1
-      (which states the liveness rule), and describes the pre-#1474
-      worktree-walk that was deliberately replaced; the shipped code is already
-      liveness-keyed, only the recorded tactic text is stale (tracked by draft
-      tactic-align-session-claiming-liveness-correction). Implementation
-      retained as draft tactic-office-hours-concurrency-dedup. Recorded
-      2026-07-18 interview."
+    answer: "Does dispatch's concurrency dedup key on live sessions or worktree
+      existence, and does the office-hours lane share the mechanism
+      (office-hours sessions safe for concurrent selection)? — See body
+      §Worktree Claiming & Liveness for the full mechanism. Recorded
+      2026-07-18."
   - question: A scope-inert align annotation on an in-flight tactic's body — the
       reconciliation notes amendment-completeness mandates — trips the tactic
       scope-custody gate and demotes the whole ladder. Does materiality-scoping
@@ -1617,25 +1542,11 @@ clarifications:
   - question: When a phase skill delegates a unit to a subagent (the main thread
       never edits files), what guarantees the subagent's writes land in the
       launching worktree rather than the primary checkout?
-    answer: "Nothing currently — and the gap is load-bearing. The Agent tool pins a
-      spawned subagent's cwd at launch to the primary checkout
-      (~/natb1/commons.systems), not the launching worktree, so a subagent that
-      writes via a relative path silently lands its edits in the primary
-      checkout while the worktree keeps a clean git status — the entire unit is
-      lost with no error (observed live 2026-07-19 in Unit 1 of
-      tactic-otel-sensor-substrate: the implementation subagent wrote
-      otel-trial-notes.md into the primary checkout's .claude/skills/, requiring
-      manual detection and relocation). The subagent-worker execution contract
-      therefore carries an implicit invariant it does not enforce: subagents
-      operate on the launching worktree, not the primary checkout. The fix is
-      prevention plus a backstop — the implementation-subagent prompt contract
-      passes the absolute worktree root and mandates absolute paths under it,
-      and /implement-unit adds a post-subagent contamination guard that fails
-      loudly when a subagent's writes land outside the worktree — tracked as
-      tactic-subagent-cwd-worktree-guard. This is distinct from the
-      primary-checkout-on-main invariant (tactic-primary-checkout-main-guard):
-      that keeps the primary checkout ON main; this keeps subagent WRITES OUT of
-      it. Recorded 2026-07-19 interview."
+    answer: "When a phase skill delegates a unit to a subagent (the main thread
+      never edits files), what guarantees the subagent's writes land in the
+      launching worktree rather than the primary checkout? — See body
+      §Worktree Claiming & Liveness for the full mechanism. Recorded
+      2026-07-19."
   - question: Clarification 58 (2026-07-13) retained its 5-layer resolution ladder
       in tactic-graph-commit-auto-serialization as an in-script graph-commit
       upgrade, and clarification 67 (2026-07-18) retained
@@ -2244,3 +2155,100 @@ work existed). This is a defect, not deliberate subtree-conservatism — the edi
 round's per-child classification is the authority on who is affected, and a blanket
 sweep re-litigates it. The fix (narrow both `frozenTacticIds` uses to stale-stamped
 children only) is tracked in draft tactic-freeze-resurface-stale-children-only.
+
+### Worktree Claiming & Liveness
+
+**Claude Code native worktrees are the execution substrate for every worker.**
+Current rule (from 2026-07-05, entry 23, superseding the mechanism half of entry
+12): main is checked out at the project root, and every worker worktree is a
+Claude Code-managed worktree at the harness default location,
+`<project-root>/.claude/worktrees/<node-id>` — entered via `EnterWorktree` in
+sessions, and provisioned by launch scripts as a plain `git worktree add` into
+that same path. No graph-native machinery may assume the legacy layout: the
+`.bare` shared common dir and the sibling `worktrees/` container persist only as
+backward compatibility for the draining gh lane, and the WorktreeCreate hook's
+git-common-dir anchoring, `<issue-num>-<slug>`-only name validation, and gh
+identity stub are legacy-lane conventions that retire with it
+(tactic-legacy-router-removal). The isolation commitment itself is unchanged
+from when it was first recorded: one worktree per node id, liveness detected as
+live session ⇔ worktree — only the substrate under that commitment changed.
+History: entry 12 (2026-07-03) originally committed this one-worktree-per-tactic
+isolation to the legacy `worktree-create.sh` hook and node-id naming under the
+`.bare` + sibling `worktrees/` layout; entry 23 (2026-07-05) retired that
+mechanism in favor of native worktrees while keeping the isolation rule itself.
+
+**Uniform node-id claiming ledger covers both tactic and strategy sessions.**
+(Entry 13, 2026-07-03 interview.) Concurrency is a first-class requirement, not
+an inherited detail: the router runs up to the paced worker target in parallel
+across eligible non-parked nodes of both kinds — tactic phase sessions and
+strategy /align-tactics sessions. Claiming and isolation are uniform by node id:
+every launched worker enters the one claimed set / reservation ledger under its
+node id — strategy ids included, so an in-flight /align-tactics session claims
+its strategy and closes the duplicate-spawn window while its tactics have not
+yet landed on origin/main — and runs in a worktree keyed by that id, giving
+liveness detection (live session ⇔ worktree) one rule for both kinds. Write
+safety stays the single-node rebase-retry commit path.
+
+**Human/interactive sessions join the same ledger; a base-version write check
+makes read-freshness mechanical.** (Entry 29, 2026-07-06 interview.) Interactive
+and human-invoked bg align sessions enter the same node-id reservation ledger as
+router workers and author in worktrees, never the shared main checkout — the
+ledger is uniform across launch modes. The editing flow records the origin/main
+blob each node was read at, and graph-commit refuses a write whose base is
+stale, making read-freshness mechanical rather than session discipline
+(motivating near-miss: a stale dump of tactic-graph-commit-hardening nearly
+clobbered its live `phase: qa` state). Semantic drift across different files has
+no lock; the periodic /align-strategy improvement pass is the reconciler, and a
+doctrine-recording session pauses the pace curve for its audit window. (Amended
+2026-07-13: the failing-closed clause and the uniform claiming ledger are
+narrowed — claiming is scheduling-dedup only and never blocks an edit; same-node
+conflict resolves automatically, parking only true conflicts — see the
+automatic-serialization clarification of that date.)
+
+**Dedup keys on live-session liveness only, never worktree existence; reaping
+is decoupled post-merge hygiene.** (Entry 72, 2026-07-18 interview.) The dedup /
+claimed-set keys on liveness: a node is skipped only when a reservation-ledger
+marker named by its id exists OR `worktree_has_live_session` reports a live
+node-id-named session (`claude agents --json`) — never on worktree existence. A
+bare or un-reaped `.claude/worktrees/<node-id>` whose session has ended does NOT
+block selection (the #1474 change moved existence-keying to liveness-keying
+precisely so an unreaped worktree cannot block the next worker). Worktree
+reaping is decoupled post-merge disk hygiene — dispatch-sweep removes a worktree
+after its PR merges and the tree is in-sync, guarding on
+`worktree_has_live_session` first — never a selection gate; what makes a node's
+next phase selectable is the transition write flipping phase on origin/main plus
+the prior session ending (its claim clears). The office-hours lane shares this
+exact mechanism: it runs in the node-id worktree for its session's life so its
+live session is detectable, and that worktree is reaped like any worker's since
+office-hours lands no commit; office-hours-select gains the same liveness dedup
+so an untargeted (queue-head) launch skips a parked node that already has a live
+office-hours session and returns the next-ranking parked node; an explicit
+`/office-hours <node-id>` targeting a node with a live office-hours session
+returns an error — a deliberate human target on an occupied node is a collision
+to surface, not a silent fall-through. Consistency correction:
+tactic-align-session-claiming's Unit 3 recorded prescription — "graph-select-target
+treats ANY existing `.claude/worktrees/<node-id>` as a held claim"
+(existence-keyed) — is superseded by this liveness mechanism (#1474),
+contradicts its own Unit 1 (which states the liveness rule), and describes the
+pre-#1474 worktree-walk that was deliberately replaced; the shipped code is
+already liveness-keyed, only the recorded tactic text is stale (tracked by
+draft tactic-align-session-claiming-liveness-correction).
+
+**Subagent cwd is pinned to the primary checkout by the Agent tool — fixed by
+passing the absolute worktree root plus a contamination guard.** (Entry 77,
+2026-07-19 interview.) The Agent tool pins a spawned subagent's cwd at launch to
+the primary checkout, not the launching worktree, so a subagent that writes via
+a relative path silently lands its edits in the primary checkout while the
+worktree keeps a clean git status — the entire unit is lost with no error
+(observed live 2026-07-19 in Unit 1 of tactic-otel-sensor-substrate: the
+implementation subagent wrote `otel-trial-notes.md` into the primary checkout's
+`.claude/skills/`, requiring manual detection and relocation). The
+subagent-worker execution contract therefore carries an implicit invariant it
+does not enforce: subagents operate on the launching worktree, not the primary
+checkout. The fix is prevention plus a backstop — the implementation-subagent
+prompt contract passes the absolute worktree root and mandates absolute paths
+under it, and /implement-unit adds a post-subagent contamination guard that
+fails loudly when a subagent's writes land outside the worktree (tracked as
+tactic-subagent-cwd-worktree-guard). This is distinct from the
+primary-checkout-on-main invariant (tactic-primary-checkout-main-guard): that
+keeps the primary checkout ON main; this keeps subagent WRITES OUT of it.
