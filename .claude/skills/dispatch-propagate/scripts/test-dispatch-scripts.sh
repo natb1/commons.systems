@@ -30821,6 +30821,183 @@ assert_eq "graph-select-target: orphan node-id worktree (no session) is selected
 rm -rf "$GSC_ROOT" "$GSC_BARE"
 
 # ============================================================================
+# Test: graph-select-target --standalone — lock + headroom + claim wrapping
+# (tactic-graph-router-live-worker-visibility Unit 2)
+# ============================================================================
+# --standalone folds the lock-acquire -> headroom-check -> (clamp) -> select ->
+# claim -> release cycle dispatch-select-tick otherwise wraps around this
+# selector into one self-contained invocation, for manual/emulated callers.
+# The fixture extends the Unit-3 graph-select-target harness above: same
+# real-git-repo + fake-npx + fake-`claude` shape, plus (a) a real (uncopied-
+# stub) `dispatch-acquire-lock` physically copied alongside graph-select-target
+# (it sources lib.sh via its own SCRIPT_DIR, same reason the Unit-3 fixture
+# copies rather than symlinks), and (b) a `dispatch-target-workers` fake using
+# the SEL_MAX_WORKERS/SEL_EXHAUSTED/SEL_TARGET_N idiom from sel_tick_setup
+# (test-dispatch-scripts.sh's dispatch-select-tick harness), placed inside the
+# fixture's scripts dir since graph-select-target resolves it as a sibling via
+# $SCRIPT_DIR.
+#
+# Each case below gets a fresh fixture (gsc_standalone_setup/_teardown) so a
+# failure in one case cannot cascade into the next. Env vars needed only for
+# the single invocation under test are passed as a command prefix (not
+# `export`ed into the shell), mirroring the Unit-3 fixture's own convention.
+gsc_standalone_setup() {
+  GSCS_ROOT=$(mktemp -d)
+  GSCS_BARE=$(mktemp -d)
+  GSCS_SCRIPTS="$GSCS_ROOT/.claude/skills/dispatch-propagate/scripts"
+  mkdir -p "$GSCS_SCRIPTS" "$GSCS_ROOT/bin"
+  # Physical copies (not symlinks): both graph-select-target and
+  # dispatch-acquire-lock derive their own on-disk location via SCRIPT_DIR.
+  cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/dispatch-acquire-lock \
+     "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh "$GSCS_SCRIPTS/"
+  chmod +x "$GSCS_SCRIPTS/graph-select-target" "$GSCS_SCRIPTS/dispatch-acquire-lock"
+  # Fake npx: one selectable implement-phase candidate (same shape as the
+  # Unit-3 fixture above) so only the standalone lock/headroom/claim wrapping
+  # this unit covers is exercised.
+  cat > "$GSCS_ROOT/bin/npx" <<'GSCSNPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSCSNPX
+  chmod +x "$GSCS_ROOT/bin/npx"
+  # Fake dispatch-target-workers: the SEL_MAX_WORKERS/SEL_EXHAUSTED/SEL_TARGET_N
+  # idiom from sel_tick_setup's own fake, reused verbatim.
+  cat > "$GSCS_SCRIPTS/dispatch-target-workers" <<'GSCSDTW'
+#!/usr/bin/env bash
+if [[ "$1" == "--exhausted" ]]; then
+  echo "${SEL_EXHAUSTED:-ok}"
+  exit 0
+fi
+if [[ "$1" == "--max" ]]; then
+  echo "${SEL_MAX_WORKERS:-8}"
+  exit 0
+fi
+echo "${SEL_TARGET_N:-1}"
+GSCSDTW
+  chmod +x "$GSCS_SCRIPTS/dispatch-target-workers"
+  # A git repo whose origin/main carries an intentions/ tree, main checked out
+  # at the fixture root so NATIVE_ROOT resolves there.
+  git init -q -b main "$GSCS_ROOT"
+  git -C "$GSCS_ROOT" config user.email t@t
+  git -C "$GSCS_ROOT" config user.name t
+  mkdir -p "$GSCS_ROOT/intentions"
+  echo '# placeholder' > "$GSCS_ROOT/intentions/placeholder.md"
+  git -C "$GSCS_ROOT" add -A
+  git -C "$GSCS_ROOT" commit -q -m seed
+  git init -q --bare -b main "$GSCS_BARE"
+  git -C "$GSCS_ROOT" remote add origin "$GSCS_BARE"
+  git -C "$GSCS_ROOT" push -q origin main
+  git -C "$GSCS_ROOT" fetch -q origin
+  # Fake `claude agents --json`: payload driven by a rewritable file, default
+  # empty registry (no busy workers, no live sessions).
+  cat > "$GSCS_ROOT/bin/claude" <<'GSCSCLAUDE'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+cat "$_root/claude-payload.json"
+exit 0
+GSCSCLAUDE
+  chmod +x "$GSCS_ROOT/bin/claude"
+  printf '%s' '[]' > "$GSCS_ROOT/claude-payload.json"
+  GSCS_GST="$GSCS_SCRIPTS/graph-select-target"
+}
+
+gsc_standalone_teardown() {
+  rm -rf "$GSCS_ROOT" "$GSCS_BARE"
+  GSCS_ROOT="" ; GSCS_BARE="" ; GSCS_SCRIPTS="" ; GSCS_GST=""
+}
+
+# --- Case 1: headroom available -> selects, claims, releases the lock --------
+echo "Test: graph-select-target --standalone with headroom available selects, claims a reservation, and releases the lock"
+gsc_standalone_setup
+gsc1_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-1" SEL_MAX_WORKERS=8 \
+  "$GSCS_GST" --standalone --top 1 2>/dev/null)
+assert_eq "graph-select-target --standalone: headroom available selects the candidate" \
+  "node tactic-standalone-fixture tactic implement" "$gsc1_out"
+assert_eq "graph-select-target --standalone: selected id gets a reservation-ledger marker" \
+  "1" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+# Release convention (mirrors the dispatch-acquire-lock suite's own --release
+# test): a strict self-release EMPTIES the lock file's contents (the file
+# itself is left in place). A non-empty file here would mean the trap's
+# self-release never fired or fired against the wrong session.
+gsc1_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc1_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone releases the lock (file emptied)"
+  echo "    lock file: '$gsc1_lock'"
+fi
+gsc_standalone_teardown
+
+# --- Case 2: HEADROOM == 0 -> degrades to empty, no claim, lock released -----
+echo "Test: graph-select-target --standalone with HEADROOM == 0 degrades to empty without claiming or leaking the lock"
+gsc_standalone_setup
+# One busy worker (name matches claude_agents_count_busy_workers' ^[0-9]+-
+# shape) against SEL_MAX_WORKERS=1 -> LIVE_COUNT=1, HEADROOM=1-1=0.
+printf '%s' '[{"sessionId":"s1","pid":1,"status":"busy","name":"1-worker","cwd":""}]' \
+  > "$GSCS_ROOT/claude-payload.json"
+gsc2_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-2" SEL_MAX_WORKERS=1 \
+  "$GSCS_GST" --standalone --top 1 2>/dev/null)
+assert_eq "graph-select-target --standalone: HEADROOM == 0 prints empty" "empty" "$gsc2_out"
+assert_eq "graph-select-target --standalone: HEADROOM == 0 writes no reservation marker" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+gsc2_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc2_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (HEADROOM 0) releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (HEADROOM 0) releases the lock (file emptied)"
+  echo "    lock file: '$gsc2_lock'"
+fi
+gsc_standalone_teardown
+
+# --- Case 3: lock already held by a live foreign session -> degrades to empty
+echo "Test: graph-select-target --standalone with the lock held by a live foreign session degrades to empty (never double-claims)"
+gsc_standalone_setup
+# Pre-seed the lock file with a foreign holder (mirrors the dispatch-acquire-
+# lock suite's own foreign-live-holder fixtures, e.g. its Test 9 at
+# "--wait against a live foreign holder times out"). The fake `claude`
+# registry reports that foreign session as live/busy so the liveness check
+# does not reclaim it.
+printf '%s\n' "gsc-standalone-3-foreign" > "$GSCS_ROOT/dispatch.lock"
+printf '%s' '[{"sessionId":"gsc-standalone-3-foreign","pid":1,"status":"busy","name":"x","cwd":""}]' \
+  > "$GSCS_ROOT/claude-payload.json"
+gsc3_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-3-self" DISPATCH_LOCK_WAIT_TIMEOUT=0 SEL_MAX_WORKERS=8 \
+  "$GSCS_GST" --standalone --top 1 2>/dev/null)
+assert_eq "graph-select-target --standalone: contended lock degrades to empty" "empty" "$gsc3_out"
+assert_eq "graph-select-target --standalone: contended lock writes no reservation marker" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+# The foreign holder's lock must be untouched — this invocation never
+# acquired it, so it must never release (empty) or overwrite it either.
+assert_eq "graph-select-target --standalone: contended lock leaves the foreign holder untouched" \
+  "gsc-standalone-3-foreign" "$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)"
+gsc_standalone_teardown
+
+# --- Case 4: non-standalone invocation is byte-for-byte unchanged (regression)
+echo "Test: graph-select-target without --standalone never touches the lock or the reservation ledger (Unit 1 regression guard)"
+gsc_standalone_setup
+gsc4_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  "$GSCS_GST" --top 1 2>/dev/null)
+assert_eq "graph-select-target (no --standalone): selection proceeds normally" \
+  "node tactic-standalone-fixture tactic implement" "$gsc4_out"
+assert_eq "graph-select-target (no --standalone): the lock file is never created" \
+  "0" "$([ -e "$GSCS_ROOT/dispatch.lock" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target (no --standalone): no reservation marker is written" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+gsc_standalone_teardown
+
+# ============================================================================
 # Test: assert-worktree-fresh — non-skippable pre-analysis freshness guard
 # (tactic-align-skills-latest-graph-guard Unit 2)
 # ============================================================================
