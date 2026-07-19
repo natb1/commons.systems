@@ -27,14 +27,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-align-persistent-layer-doctrine
   pr: 2908
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null

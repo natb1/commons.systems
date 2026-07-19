@@ -1259,7 +1259,20 @@ clarifications:
       configurable-auto-close clarification. \"Reaped on every terminal exit\"
       describes the default; when the keep-sessions toggle is ON, a kept session
       is intentional, not a clog, and its node-id claim is held until manual
-      reap.)"
+      reap.) (Amended 2026-07-19 (reap-scope narrowing): the DEFAULT is further
+      narrowed — auto-close now fires ONLY on a clean phase-transition or an
+      escalation-park, not on every terminal exit. Edge case (c)'s sweep-reap of
+      a mid-phase-dead (crashed) orphaned job is REVERSED: such a job is now
+      KEPT (its job entry and node-id worktree both held) for local debugging
+      until manual reap, because a non-transitioned, non-parked exit has no
+      durable record (it never parked to office-hours) and the live session is
+      its only debugging artifact; and edge case (b)'s
+      reap-then-fuse-re-selects-after-a-silent-no-transition-exit is likewise
+      narrowed — a no-transition exit is now kept and the node freezes-for-debug
+      rather than auto-retrying. The keep-all toggle of the 2026-07-19
+      configurable-auto-close clarification layers on top of this narrowed
+      default. See the 2026-07-19 reap-scope-narrowing clarification for the
+      full resolution and the accepted freeze-for-debug tradeoff.)"
   - question: "A strategy whose signal is validated only by human work (sensor:
       owner review at office-hours) is re-selected for /align-tactics every tick
       — its rounds produce off-path tooling plus born-parked on-path reading
@@ -1694,7 +1707,16 @@ clarifications:
       node's next phase until the operator manually reaps it — this is inherent
       to a debug hold, and leaving the knob ON stalls the affected nodes
       (caution recorded). Implementation retained as draft
-      tactic-worker-self-close-configurable. Recorded 2026-07-19 interview."
+      tactic-worker-self-close-configurable. Recorded 2026-07-19 interview.
+      (Amended 2026-07-19 (reap-scope narrowing): the premise 'reap on every
+      terminal exit remains the DEFAULT' is superseded — the default is now
+      'reap iff the exit transitioned or parked the node'. This toggle is
+      unchanged in mechanism but re-scoped: when OFF (default),
+      transitioned/parked sessions reap and every other terminal exit is
+      kept-for-debug; when ON, the transitioned/parked sessions are ALSO kept.
+      Both the narrowed-default transition-or-park check and this keep-all
+      toggle live in the shared self-close primitive. See the 2026-07-19
+      reap-scope-narrowing clarification.)"
   - question: "graph-commit rebase-retry exhaustion: does the 2026-07-13 rejection
       of pessimistic serialization forbid serializing the landing step, and what
       is the resolution — a better serialization method or a higher retry
@@ -1768,6 +1790,69 @@ clarifications:
       if its re-entry routing re-runs check-node-selection — the draft tactic's
       first unit verifies that overlap before implementing. Recorded 2026-07-19
       /align-strategy interview."
+  - question: The 2026-07-16 reaping clarification reaps a node-worker session on
+      EVERY terminal exit, and its edge case (c) reaps a mid-phase-dead
+      (crashed) worker's orphaned job via the tick/sweep pass. But a session
+      that terminated WITHOUT a clean phase-transition and WITHOUT an
+      escalation-park has no durable record anywhere — it was not parked to the
+      office-hours queue, so nothing carries its failure context except the live
+      session itself. Should auto-close really fire on those exits?
+    answer: "No — auto-close (reap) is narrowed to fire ONLY on a clean
+      phase-transition or an escalation-park; every OTHER terminal exit — a hard
+      crash, an error exit, or a clean-but-no-transition/no-progress exit —
+      leaves the worker session KEPT (its job entry AND its node-id worktree
+      both held) for local debugging until an operator manually reaps it.
+      Rationale: the two clean terminal states each write a durable outcome the
+      disposable-session doctrine relies on — a transition advances the node's
+      persisted phase, a park writes office_hours into the node — so nothing is
+      lost by reaping them. A non-clean terminal exit writes NEITHER: it was not
+      parked to office-hours (so it never reaches the PARKED panel, the
+      office-hours-debuggable channel) and it did not advance the phase, so the
+      live session is the only artifact of the failure. Reaping it would
+      silently erase the one thing a debugger has. This DIVERGES from the
+      2026-07-16 clarification's edge case (c) (which reaped the crashed job via
+      the sweep) and narrows 'reaped on every terminal exit' (its main body, and
+      edge case (b)'s
+      reap-then-fuse-re-selects-after-a-silent-no-transition-exit) to 'reaped
+      iff the exit transitioned or parked the node'. It does NOT re-open the
+      session-as-observability coupling the 2026-07-16 clarification rejected: a
+      kept failed session is a DEBUGGING ARTIFACT a human inspects, not a
+      recovery substrate (session attach/resume is still not a supported
+      recovery path — the router never resumes from a kept session; the human
+      reaps it and the node re-selects fresh or is fixed forward) and not the
+      escalation channel (real escalations still park to office-hours).
+      Resolutions this round: (a) SCOPE — reap iff transitioned-or-parked; keep
+      every other terminal exit for local debug [author, this round]. (b)
+      FREEZE-FOR-DEBUG accepted — a kept session holds worktree_has_live_session
+      TRUE, so the router will not re-select the node and the no-progress fuse
+      will not count re-selections; the node freezes until manual reap instead
+      of auto-retrying. The author accepted this self-heal/throughput loss on
+      the failure path explicitly: a failure worth debugging must not be
+      silently retried underneath the operator [author chose 'yes — freeze for
+      debug', this round]. (c) SURFACING — a minimal operator-visible COUNT of
+      held-for-debug sessions (non-transitioned, non-parked terminal exits kept
+      alive) surfaces so silent accumulation of frozen nodes is visible; it
+      reports only the count of kept-failed jobs, never their content, so it is
+      a GC/hygiene metric, not a recovery or escalation channel, and does not
+      re-couple observability to session persistence [author chose 'yes —
+      minimal count' over 'no new surface', this round]. Retained as draft
+      tactic-frozen-session-debug-count. (d) COMPOSITION with the 2026-07-19
+      keep-all toggle — the DEFAULT itself narrows to 'reap iff
+      transitioned-or-parked' (this amends all three recorded sites: the
+      2026-07-16 reaping clarification, the 2026-07-19 configurable-auto-close
+      clarification, and the reap condition); the keep-all toggle
+      (tactic-worker-self-close-configurable) layers ON TOP — when ON it
+      additionally keeps the transitioned/parked sessions the narrowed default
+      would otherwise reap; both the transition-or-park check and the toggle
+      live in the shared self-close primitive [author chose 'narrow default;
+      toggle layers on top', this round]. Materially affected tactics, to be
+      re-planned by /align-tactics (not rewritten in this /align-strategy
+      round): tactic-graph-node-session-reap — its Unit 2 (sweep-reap of
+      mid-phase-dead orphaned jobs) reverses under (a) and must be re-planned
+      (Unit 1's Stop-hook reap survives, now gated on transition-or-park); and
+      tactic-worker-self-close-configurable's draft framing (which assumes 'reap
+      on every terminal exit' is the default) must be re-scoped to the narrowed
+      default per (d). Recorded 2026-07-19 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1894,19 +1979,29 @@ attributes:
       validate-graph/graph-commit refuses a commit that authors another boost or
       override at or above it, or that reduces it, unless the commit carries an
       explicit author override"
-    - a node-worker session is reaped from the agents list on every terminal
-      exit — clean advance and escalation-park alike — via the foreground-safe
-      self-close primitive (`claude rm`; interactive sessions exempt), because
-      nothing durable lives in a terminated session (an office_hours park's
-      context is written into the node, not the session); the agents list holds
-      only live executors, escalations surface via the office-hours PARKED panel
-      rather than a lingering session, and a completed or parked worker job left
-      in `claude agents --json` is a defect UNLESS the default-off keep-sessions
+    - a node-worker session is auto-closed (reaped from the agents list via the
+      foreground-safe self-close primitive — `claude rm`; interactive sessions
+      exempt) ONLY on a clean phase-transition or an escalation-park; every
+      other terminal exit — a hard crash, an error, or a
+      clean-but-no-transition/no-progress exit — is KEPT (its job entry and
+      node-id worktree both held) for local debugging until an operator manually
+      reaps it, because such an exit was not parked to office-hours and the live
+      session is its only debugging artifact (2026-07-19 reap-scope-narrowing
+      clarification). Reaping a transitioned/parked session loses nothing
+      durable (the transition advanced the node's phase; the park wrote
+      office_hours into the node), and a transitioned/parked worker job left in
+      `claude agents --json` is a defect UNLESS the default-off keep-all
       operator escape hatch (2026-07-19 configurable-auto-close clarification)
-      is enabled, in which case a kept session is intentional and its node-id
-      claim is held until manual reap; auto-close (reap on every terminal exit)
-      is the default and doctrinal behavior, and the toggle is never router
-      substrate
+      is enabled. A kept failed session holds worktree_has_live_session TRUE, so
+      its node freezes (router will not re-select; no-progress fuse will not
+      count re-selections) until manual reap — accepted freeze-for-debug over
+      silent auto-retry on the failure path. A minimal operator-visible count of
+      held-for-debug sessions surfaces accumulation without re-coupling
+      observability to session persistence (it reports only the count, never
+      session content; it is not a recovery substrate or escalation channel —
+      escalations still surface via the office-hours PARKED panel). Auto-close
+      remains the doctrinal default for the two clean terminal states, and the
+      session is never router substrate
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
 
