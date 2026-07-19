@@ -48,7 +48,92 @@ execution:
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA on PR #2899 (tactic-graph-split-orphan-guard) surfaced 7/7
+    PASS on all script-verifiable acceptance items (full vitest suite,
+    typecheck, validate-graph.ts against the real corpus, graph-digest table
+    rendering, baseline/module wiring, id-refs.ts purity, and new-rule test
+    coverage). Two needs-human-judgment items remained: (1) a manual re-read of
+    the four align-tactics/SKILL.md prose insertion sites, which the disposition
+    Workflow classified opus-fixable, but the gated fix-planning phase returned
+    zero fix units (fix_plan.units=[], deviation=false) — a \"planning produced
+    nothing usable\" outcome that /qa-fix Step 3.7 defines as an escalation, not
+    a completion. The QA session's own independent read of the diff hunks for
+    those four sites found them consistent and non-contradictory, suggesting the
+    fix-planner likely correctly found no defect rather than failing outright —
+    but this needs a human to confirm and clear it, since the skill has no path
+    to auto-resolve an opus-fixable item with an empty, non-deviation fix plan.
+    (2) A needs-main/planned-deferral item (confirm the next real graph-commit
+    push still passes the graph/** fast-path CI gate) — not yet filed to the
+    node's needs-main residue section, since that append only lands via a
+    completing pass's transition-node commit, and this pass escalated instead.
+    No qa-fix attempt label was applied (the planning-failed path is exempt), so
+    the next automated pass still has its full attempt budget."
+  since: 2026-07-19
+  recommendation: >-
+    # Recommended next steps — tactic-graph-split-orphan-guard (PR #2899)
+
+
+    ## Item 8 — align-tactics SKILL.md prose consistency (likely a non-issue)
+
+
+    Read the four insertion sites in `.claude/skills/align-tactics/SKILL.md`
+    directly in the PR diff:
+
+
+    1. Around the "Both cases land the single pre-existing node via
+    `graph-commit --base`..." sentence — a new "Exception: a re-plan... that
+    discovers a genuine split" paragraph.
+
+    2. Step 2 item 2 ("finalized, split, merged, or pruned") — a parenthetical
+    added after "split" pointing at Step 5 item 3.
+
+    3. Step 5 item 3 ("One `graph-commit` per tactic...") — the batch example
+    list extended, plus a new sentence after the code block.
+
+    4. Re-evaluation mode item 2 ("Amends, prunes, or confirms") — "splits"
+    added to the verb list with a pointer to the split exception.
+
+
+    The QA session's own read of these four hunks (already visible in the PR
+    diff) found them internally consistent and non-contradictory with
+    neighboring prose. **If you agree on a quick read**, there's likely nothing
+    to fix here — the disposition Workflow's `opus-fixable` classification plus
+    the fix-planner's empty plan is consistent with "no defect found," just
+    mislabeled by the classify step as `opus-fixable` instead of
+    `already-satisfied`. Options:
+
+    - Confirm the prose is fine and manually clear this item (e.g. resolve
+    office-hours and let the next `/qa-fix` pass re-run — the shell-command
+    items already all pass, so a clean pass should follow once this item is
+    disposed of).
+
+    - If you spot an actual inconsistency, note it and let the next `/qa-fix`
+    pass fix it (it will get another attempt, since no attempt label was
+    consumed this pass).
+
+
+    ## Item 9 — needs-main planned deferral (routine, low-risk)
+
+
+    "Confirm the next real `graph-commit` push from an unrelated future session
+    still passes the `graph/**` fast-path CI check" — this is inherently only
+    verifiable after this PR merges and a later, unrelated `graph-commit` runs.
+    No action needed now; once a future `/qa-fix` pass on this same node reaches
+    a completing pass (after item 8 clears), Step 3.6 will append this to the
+    node's own `## needs-main residue` body section and the `main-qa` phase will
+    pick it up automatically. No manual filing needed.
+
+
+    ## Bottom line
+
+
+    This PR's actual code (the `id-refs.ts` extraction, the new
+    `validateGraphProseRefs` rule, the baseline, the shared
+    `lib-deleted-node-ids.ts` module) is fully verified and green. The park is
+    purely about disposing of item 8's judgment call cleanly. A quick manual
+    confirmation should be enough to unblock — no code changes are known to be
+    needed.
 pace_exempt: false
 rounds: null
 attributes: {}
