@@ -43,18 +43,31 @@
 #   blob no longer matches origin/main after a fetch, the write is refused
 #   before any local commit is made. Omit entirely to keep pre-CAS behavior.
 #
-# Exit status:
-#   0  the edit landed on main.
-#   1  push could not land: busy main after all attempts, the required checks
-#      never stamped green within the poll window, a required check CONCLUDED
-#      non-success (deterministic content failure — no retry), check-run
-#      polling itself failed 3 consecutive times (gh auth/rate-limit/network,
-#      surfaced verbatim), or a concurrent-edit
-#      CONFLICT. The conflict case fails closed — this writer's content is NOT
-#      landed (no automatic overwrite of the other writer's already-landed
-#      edit): the node is parked via office_hours on top of fresh origin/main
-#      and this writer's unlanded content is preserved on disk for a manual
-#      merge.
+# Exit status — four observable outcomes across rc 0 and rc 1:
+#   0  the edit landed on main. Two sub-cases, distinguished only by a log line
+#      (same exit code):
+#        landed                 — no concurrent-edit divergence; no special log.
+#        landed-after-resolution — a concurrent-edit divergence was auto-merged
+#          by layer 2 (rebase-conflict field merge) or layer 3 (stale --base
+#          re-read), then landed. The final log line carries the
+#          "(layer 2/3 auto-resolved a concurrent-edit divergence)" suffix.
+#   1  push could not land. Two distinct rc-1 sub-cases:
+#        busy-main — busy main after all attempts, the required checks never
+#          stamped green within the poll window, a required check CONCLUDED
+#          non-success (deterministic content failure — no retry), or check-run
+#          polling itself failed 3 consecutive times (gh auth/rate-limit/network,
+#          surfaced verbatim). NO park is written in this case.
+#        mechanical-unresolved-parked — a concurrent-edit CONFLICT that layers
+#          1-3 could not auto-merge. Fails closed: this writer's content is NOT
+#          landed (no automatic overwrite of the other writer's already-landed
+#          edit); the node is parked via office_hours on top of fresh
+#          origin/main and this writer's unlanded content is preserved on disk
+#          for a manual merge. When the park carries field-level divergence
+#          detail, office_hours.reason contains the stable marker
+#          "mechanical-unresolved" and office_hours.recommendation holds a
+#          per-diverged-field breakdown; a park with no captured field detail
+#          keeps the plain "concurrent-edit conflict — manual merge needed"
+#          reason and no recommendation.
 #   2  usage error.
 #
 # Conventions: mirrors the bounded-retry shape/logging of `gh_retry` in
@@ -760,32 +773,89 @@ land() {
   esac
 }
 
+# --- Recommendation text for a mechanical-unresolved park -------------------
+# Render CONFLICT_FIELDS_JSON (the layer-2/3 unresolved-field accumulator) into a
+# human-readable, per-conflict breakdown for office_hours.recommendation. Handles
+# BOTH entry shapes present in the array:
+#   {id, field, ours, theirs}  — a real diverged field. `ours` is this session's
+#                                value, `theirs` is origin/main's; each renders
+#                                raw when it is already a string, else as compact
+#                                JSON (an array/object field).
+#   {id, note}                 — a generic sentinel (merge-node crash, or a
+#                                prune-vs-concurrent-edit) with no field detail.
+# One block per entry, blank-line separated. Emitted on stdout.
+build_recommendation() {
+  local jqprog="$SNAP_DIR/.park-recommendation.jq"
+  cat >"$jqprog" <<'JQ'
+def render_value: if type == "string" then . else tojson end;
+map(
+  if has("field") then
+    "Diverged field '\(.field)' on \(.id):\n  this session's value: \(.ours|render_value)\n  origin/main's value: \(.theirs|render_value)"
+  else
+    "Unresolved conflict on \(.id): \(.note // "no field-level detail captured")"
+  end
+) | join("\n\n")
+JQ
+  jq -rf "$jqprog" "$CONFLICT_FIELDS_JSON"
+}
+
 # --- Parking fallback ------------------------------------------------------
 # A genuine semantic conflict: set office_hours on each target node via store.ts
 # (readNode → set office_hours → writeNode) so the frontmatter is serialized
 # correctly and — for a tactic — its authoritative body is preserved. Uses a
 # throwaway tsx module rather than hand-editing YAML.
+#
+# Two shapes of park, keyed on whether the layer-2/3 accumulator
+# (CONFLICT_FIELDS_JSON) captured any field-level divergence detail:
+#   - has entries → office_hours.reason carries the stable "mechanical-unresolved"
+#     marker (a contract a future dispatch-conflict skill greps for) plus the
+#     count of diverged fields, and office_hours.recommendation holds the
+#     per-conflict breakdown built by build_recommendation().
+#   - empty/absent (unset global, missing file, or a `[]` array — a park for a
+#     reason unrelated to a mechanical-merge attempt) → the original plain reason
+#     and NO recommendation (recommendation=null). This preserves pre-Unit-4
+#     behavior exactly for that case.
 park_write() {
-  local since reason tmpts
+  local since reason tmpts rec_file=""
   since="$(date -u +%Y-%m-%d)"
   reason="graph-commit: concurrent-edit conflict — manual merge needed"
+
+  if [[ -n "$CONFLICT_FIELDS_JSON" && -s "$CONFLICT_FIELDS_JSON" ]]; then
+    local n
+    n="$(jq 'length' "$CONFLICT_FIELDS_JSON")"
+    if [[ "${n:-0}" -gt 0 ]]; then
+      reason="graph-commit: mechanical-unresolved — ${n} field(s) diverged across concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
+      rec_file="$SNAP_DIR/park-recommendation.txt"
+      build_recommendation >"$rec_file"
+    fi
+  fi
+
   tmpts="$(mktemp --suffix=.mts)" || die "could not create temp file for the parking write"
   cat >"$tmpts" <<'TS'
 // argv: <storeModule> <intentionsDir> <since> <reason> <id...>
+// The recommendation text is passed OUT OF BAND via the env var
+// GRAPH_COMMIT_RECOMMENDATION_FILE (a path to a tempfile), not argv: it can be a
+// long, multi-line string, and keeping it off argv both dodges argv
+// length/shell-quoting limits AND preserves this module's positional-argument
+// contract (id list starts at position 4) unchanged. Unset/empty → null.
+import { readFileSync } from "node:fs";
 const [storePath, intentionsDir, since, reason, ...ids] = process.argv.slice(2);
 const { readNode, writeNode } = await import(storePath);
+const recFile = process.env.GRAPH_COMMIT_RECOMMENDATION_FILE || "";
+const recommendation = recFile ? readFileSync(recFile, "utf8") : null;
 // Two-pass for atomicity: read every node up front so an unreadable id fails
 // BEFORE any write — a single read-modify-write loop that threw mid-way would
 // leave the earlier ids mutated on disk, uncommitted.
 const nodes = ids.map((id) => readNode(intentionsDir, id));
 for (let i = 0; i < nodes.length; i++) {
   const node = nodes[i];
-  node.office_hours = { reason, since };
+  node.office_hours = { reason, since, recommendation };
   writeNode(intentionsDir, node);
   process.stderr.write(`graph-commit: set office_hours on ${ids[i]} (since=${since})\n`);
 }
 TS
-  if ! npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "${ALL_IDS[@]}" >&2; then
+  if ! GRAPH_COMMIT_RECOMMENDATION_FILE="$rec_file" \
+       npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "${ALL_IDS[@]}" >&2; then
     rm -f "$tmpts"
     die "failed to write the office_hours parking record"
   fi
