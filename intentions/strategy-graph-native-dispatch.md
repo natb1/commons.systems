@@ -41,18 +41,7 @@ clarifications:
       Where does a tactic's execution state live — derived from PR/CI ground truth as today, or persisted in the node? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-03 interview.
   - question: How do concurrent sessions record graph edits safely, given a record
       must land on origin/main before it is schedulable?
-    answer: "One write path: every graph edit — strategy records, tactic breakdowns,
-      phase transitions, readings, parking — is a single-node commit pushed
-      directly to main with a rebase-retry loop, restricted to intentions/
-      paths. One file per node keeps concurrent-session conflicts rare, and a
-      same-node race surfaces as a rebase conflict rather than a silent clobber.
-      The strategy-substance audit that a PR checkpoint would have provided is
-      supplied instead by the /align-strategy interview itself — substance is
-      human-decided live, before the write. Recorded 2026-07-03 interview.
-      (Amended 2026-07-13: a same-node race no longer fails closed to a
-      manual-merge park — contention resolves automatically through the
-      serialization ladder; see the automatic-serialization clarification of
-      that date.)"
+    answer: "How do concurrent sessions record graph edits safely, given a record must land on origin/main before it is schedulable? — See body §Serialization & Commit. Recorded 2026-07-03 interview."
   - question: A strategy's tactics all complete but its signal is still unvalidated
       — what stops /align-tactics from burning rounds forever?
     answer: >-
@@ -111,53 +100,14 @@ clarifications:
       4). Recorded 2026-07-03 interview."
   - question: Round 1 deferred the /align-init entrypoint by omission — how do
       deferrals stay visible without competing with signal work?
-    answer: "Deferrals are recorded, not omitted: work off the minimum path to
-      validating a signal lands as a backlog tactic — fully planned, selectable,
-      demoted. The demotion is part of calculated attention: resolveAttention
-      composes the authored boost/override with a derived signal-path factor,
-      resolving a node one rank tier lower when it is not on any
-      unvalidated-signal path. The on/off-path input is the membership
-      /align-tactics stamps at decomposition (round tactics on-path, backlog
-      tactics off-path via a backlog flag; a strategy is on-path while its own
-      signal is unvalidated); the demotion itself derives at read time, so it
-      self-corrects when signals validate. Backlog tactics, like drafts, do not
-      block their strategy's /align-tactics eligibility — the rule is no
-      non-draft, non-backlog child tactics. The graph-native analog of the
-      enhancement label. Recorded 2026-07-03 interview. Amended 2026-07-11:
-      drafts are no longer inert `/align-tactics` input only — a frozen/draft
-      tactic is itself selectable for a per-node `/align-tactics <id>` session
-      (see the 2026-07-11 frozen-tactic-dispatch clarification, clarification
-      52). The eligibility-blocking rule stated here — a strategy is
-      `/align-tactics`-eligible only with no non-draft, non-backlog on-path
-      children — is unchanged; what changes is that a draft now carries a
-      first-class selectable disposition rather than only being consumed by its
-      strategy's round."
+    answer: "Round 1 deferred the /align-init entrypoint by omission — how do deferrals stay visible without competing with signal work? — See body §Pace, Backlog & Attention. Recorded 2026-07-03 interview."
   - question: What happens when a strategy's substance is edited while it has open
       tactics?
     answer: >-
       What happens when a strategy's substance is edited while it has open tactics? — See body §Fingerprint & Freeze. Recorded 2026-07-03 interview.
   - question: Does the backlog band scale — and does it self-correct when the graph
       changes?
-    answer: "No on both counts — superseded on same-day author review: the backlog
-      flag was a judgment stored at plan time (stale the moment a new signal
-      justifies the deferred node, or competing work resolves) and a discrete
-      band cannot absorb new attention conditions without band arithmetic.
-      Clarification 9's principle stands — deferrals are recorded, fully
-      planned, and selectable, never omitted — but the mechanism is replaced:
-      calculated attention is an extensible weighted sum of terms, each derived
-      at read time. Terms: explicit author attention (an authored override pins
-      absolutely; a boost is a weighted term that derived terms cannot silently
-      overwhelm), signal satisfaction (structural: the tactics that validate a
-      signal — produce its reading, meet its threshold — carry a factual
-      validates edge; a node is on-path iff it reaches a validates-terminal of
-      an unvalidated signal via blocked_by/parent chains, so attention rises
-      automatically when any new signal's path includes the node), and capture
-      resolution (from the recovers edges' delegation capture axes, divergence
-      and irreversibility). New attention conditions add as terms with weights;
-      terms and weights live in code (intentionsutil's attention module), so
-      weight changes are reviewed PRs. The backlog flag is deleted; strategy
-      eligibility counts only on-path children, also derived. Recorded
-      2026-07-03 interview."
+    answer: "Does the backlog band scale — and does it self-correct when the graph changes? — See body §Pace, Backlog & Attention for the full mechanism. Recorded 2026-07-03 interview."
   - question: Does per-issue worktree isolation carry over — where does a
       graph-native tactic's worker execute?
     answer: "Does per-issue worktree isolation carry over — where does a
@@ -170,20 +120,7 @@ clarifications:
       full mechanism. Recorded 2026-07-03."
   - question: Does the graph-native router keep the legacy pace function — and where
       does its priority override live?
-    answer: "Full parity, machinery unchanged and outside the graph:
-      dispatch-target-workers' weekly cumulative pace curve stays the binary
-      spend gate (whether to spend) and the 5-hour linear ramp decides how many
-      concurrent workers (0..max_concurrent_workers); telemetry
-      (rate_limits.json) and tunables stay operational config — the graph
-      records the requirement, not the machinery, since rate-limit telemetry is
-      machine state, not intent. One pace budget spans both routers during
-      coexistence and counts strategy sessions as workers. The legacy priority
-      label maps to a first-class authored pace-exempt flag on goal-layer nodes
-      (schema home: tactic-graph-dispatch-schema), deliberately orthogonal to
-      attention ordering: it admits one gate-exempt worker past a paced-to-zero
-      budget — it bypasses the gate, not the count or the order — and never
-      overrides genuine token exhaustion (the --exhausted hard floor,
-      main-broken parity). Recorded 2026-07-03 interview."
+    answer: "Does the graph-native router keep the legacy pace function — and where does its priority override live? — See body §Pace, Backlog & Attention for the full mechanism. Recorded 2026-07-03 interview."
   - question: Before the transitions tactic lands, who advances a graph-native
       tactic's phase on main — how do QA, review, CI-gated fix, and merge
       workers get scheduled?
@@ -191,19 +128,7 @@ clarifications:
       Before the transitions tactic lands, who advances a graph-native tactic's phase on main — how do QA, review, CI-gated fix, and merge workers get scheduled? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-03 from author review.
   - question: What did the author's branch-protection review find, and what
       mechanism lets intentions/-only commits land on main without a PR?
-    answer: "Reviewed 2026-07-03 (tactic-intentions-branch-protection): main has a
-      single repository ruleset — no-deletion, no-force-push, and four required
-      status checks (acceptance, preview-and-smoke, lint, unit-tests;
-      non-strict) — and no pull-request requirement. GitHub attaches check runs
-      to the commit SHA, so a direct push is accepted whenever the pushed SHA
-      already carries the four passing contexts. Decision: no settings change.
-      The write path rides a graph/** scratch-branch CI fast path: push the
-      intentions/-only commit to graph/<node-id>; a fast workflow hard-fails
-      unless the diff vs main is entirely under intentions/, runs graph
-      validation, and stamps the four required contexts green in about a minute;
-      the writer then fast-forwards the same SHA to main, rebasing and
-      re-running on reject. Heavy CI still guards any diff touching paths
-      outside intentions/. Implementation is tactic-graph-commit Unit 2."
+    answer: "What did the author's branch-protection review find, and what mechanism lets intentions/-only commits land on main without a PR? — See body §Serialization & Commit for the full mechanism. Recorded 2026-07-03."
   - question: Beyond the pace curve (clarification 14), does the legacy router's
       token-optimization machinery carry over to the graph-native router?
     answer: "Yes — parity recorded 2026-07-04 (strategy-token-economy interview).
@@ -524,43 +449,7 @@ clarifications:
       direction."
   - question: Is 'select all eligible, cap concurrent per workflow' safe under
       overlapping ticks — and where does the concurrency cap bind?
-    answer: "No as run, and the cap is global — recorded 2026-07-06 interview after
-      the second emulated tick. The concurrency cap is a property of the one
-      claimed set, never of a workflow: max_concurrent_workers
-      (dispatch.config/target-workers.json, default 8) bounds the TOTAL of
-      dispatch-managed workers live at any moment across all ticks, workflows,
-      and lanes. The enforcement point is selection — the tick counts busy plus
-      reserved from the ledger and liveness against the pace target and selects
-      only the gap; per-workflow caps (dispatch-graph-tick's worker_cap, an
-      emulated tick's semaphore) are local backstops, never the enforcement
-      point (two overlapping workflows each locally capped at 8 would otherwise
-      run 16). What makes overlapping ticks safe is claims spanning the overlap:
-      a tick's lifetime ends at spawn — every selected node enters the
-      reservation ledger at selection under the lock, the claim is carried by
-      the node-id-named runner session for the phase's life, and a dead worker's
-      claim is reconciled by the sweep; a concurrent tick re-selects only
-      unclaimed nodes, so the global cap holds without serializing ticks. A
-      single long-lived multi-node workflow is never the router mode: its
-      subagents are invisible to node-id liveness, so it cannot carry claims —
-      the second emulated tick's 12 workers in one workflow were exactly this,
-      safe only because no overlapping tick fired. Bootstrap: an emulating
-      session owes the router's claiming semantics like any other phase
-      semantics (clarification 15) — write a ledger claim per selected node
-      before fan-out and clear each with its transition write. (Amended
-      2026-07-16: \"a tick's lifetime ends at spawn\" means the tick's FINAL
-      spawn — a tick front-loads all scriptable non-worker dispositions before
-      selection and then spawns the worker group against post-disposition state,
-      so a metadata-only disposition never consumes a launch-budget slot; see
-      the scriptable-then-spawn clarification of that date. Each spawn still
-      enters the ledger under the selection lock, so the global cap and overlap
-      safety are unchanged.) (Amended 2026-07-18: the cap bounds
-      *autonomously-selected* workers — the tick/pace machinery must never
-      select past it. A deliberate human dispatch may launch one node over it
-      (clarification 76): a bounded, conscious, self-correcting act, not the
-      autonomous runaway this invariant guards against. The overlap-safety
-      property is unchanged — it concerns concurrent autonomous ticks, and the
-      human-launched worker still enters the ledger, so no autonomous tick
-      compounds on top of it.)"
+    answer: "Is 'select all eligible, cap concurrent per workflow' safe under overlapping ticks — and where does the concurrency cap bind? — See body §Pace, Backlog & Attention. Recorded 2026-07-06."
   - question: A selected node’s scope or state changes after selection — before its
       worker starts, or while it runs. What closes the window?
     answer: >-
@@ -916,26 +805,7 @@ clarifications:
       Emulated implement→qa transitions repeatedly land phase:qa with execution.pr null while an open draft PR exists — is the PR stamp at the implement→qa write load-bearing? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-10 interview.
   - question: Does explicit human dispatch of a single node override the pace curve,
       and does the graph lane have an entrypoint for it?
-    answer: "Yes — explicit human dispatch overrides the autonomous pace curve in
-      both lanes, a gate-bypass path distinct from the pace_exempt flag
-      (clarification 14). pace_exempt is a standing per-node flag the autonomous
-      selector reads to admit one exempt worker past a paced-to-zero budget;
-      explicit dispatch is an on-demand human action that skips the
-      pace/concurrency gate for one invocation of any node, regardless of that
-      flag. The issue lane already implements it: dispatch <issue-number>'s
-      explicit-arg branch (dispatch-select-tick:778-818) resolves and exits
-      before both the graph selector and the pace gate, so it skips the
-      concurrency gate (dispatch-tick:30). The graph lane has no equivalent —
-      dispatch-resolve-arg accepts positive integers only, so dispatch <node-id>
-      errors and the only explicit path is invoking dispatch-graph-execute by
-      hand. Closing that gap is tactic-graph-explicit-node-dispatch. Explicit
-      dispatch overrides the pace gate ONLY: it still respects the uniform
-      node-id live-session/worktree claim (it refuses a node already held rather
-      than force-preempting into a graph-commit conflict), and never overrides
-      genuine token exhaustion (the --exhausted hard floor), parity with
-      clarification 14. It never edits dispatch.config/target-workers.json — it
-      bypasses the gate at selection, it does not change the curve. Recorded
-      2026-07-11 interview."
+    answer: "Does explicit human dispatch of a single node override the pace curve, and does the graph lane have an entrypoint for it? — See body §Pace, Backlog & Attention. Recorded 2026-07-11 interview."
   - question: A phase whose own logic is a workflow (/review-fix, /qa-fix) cannot
       run as the tick's nested agent() — how does the router launch such a
       phase?
@@ -1049,21 +919,7 @@ clarifications:
       Recorded 2026-07-12 interview.
   - question: How is resolution work for a failing signal ranked — does each signal
       carry ranking configuration?
-    answer: "Yes, implicitly: a signal's resolution-ranking configuration IS the
-      owning node's authored boost. Resolution work created for a failing signal
-      attaches under the owner (serves/parent) and inherits the owner's boost
-      through the existing undecayed downward attention flow — no new rank
-      machinery and no per-signal rank field (steelman — an explicit
-      resolution_rank field on success_signal — considered and diverged from: it
-      would create a second ranking currency beside the attention model).
-      Default: no automatic elevation — a failing signal's resolution ranks
-      wherever the owning node's existing boost and position put it (often near
-      0), deliberately lower priority; strategy-signal failures keep routing to
-      /align-tactics, whose tactics inherit via serves, so the existing flow is
-      the default implementation. Main-health is the one signal whose owner
-      (strategy-main-health) carries a standing very-high boost (100), kept
-      dominant by the write-path guard condition recorded alongside. Recorded
-      2026-07-13 interview (author-dictated)."
+    answer: "How is resolution work for a failing signal ranked — does each signal carry ranking configuration? — See body §Pace, Backlog & Attention for the full mechanism. Recorded 2026-07-13 interview (author-dictated)."
   - question: May standing graph structure — a signal owner, a standing boost
       carrier — live on a tactic?
     answer: "No. Tactics are transient by definition; persistent structure lives on
@@ -1077,53 +933,7 @@ clarifications:
       (author-dictated)."
   - question: When two sessions contend on the same node, must the author serialize
       the edits manually?
-    answer: "No — contention is serialized automatically by tooling; the author is
-      involved only at a true-conflict park. This amends two recorded positions:
-      the fail-closed clause of clarification 2 of 2026-07-03 (same-node
-      conflict maps to a manual-merge park) and the 2026-07-06 round's 'failing
-      closed on same-node conflict' plus its uniform claiming ledger, both of
-      which conflated textual overlap with contrary intent. The amended doctrine
-      is the PR lane's fix-conflicts doctrine applied to node writes: resolve
-      mechanical conflicts autonomously, escalate only genuine ambiguity. The
-      resolution ladder, in order: (1) git three-way rebase auto-merge —
-      non-overlapping edits land as today; (2) a structure-aware field-level
-      merge — frontmatter list appends union so both land, distinct-field edits
-      combine; (3) a stale --base stops being fatal: tooling re-reads fresh
-      origin/main state and re-applies this writer's field-level edit
-      automatically (the 2026-07-06 near-miss guard survives as automatic
-      re-application, not a manual 're-read and retry'); (4) surviving
-      same-scalar-field divergence goes to a model evaluation that attempts
-      reconciliation; (5) only a true conflict — two edits expressing contrary
-      author intentions that the model cannot reconcile — parks to office_hours,
-      the park record carrying both divergent values plus a recommendation per
-      condition 6. Model scope guard (holds the human-authorship condition): on
-      human-owned doctrine fields — virtue/strategy/tradition/delegation
-      statement, rationale, clarification text — the model resolves only
-      mechanical divergence (one side subsumes the other, reordering, same
-      intent differently worded), never synthesizing new substance; genuine
-      doctrine divergence parks directly. On ai-owned tactic content and state
-      fields (phase, office_hours, execution), full reconciliation applies.
-      Node-id claiming narrows to scheduling deduplication: the router still
-      avoids spawning a duplicate worker for a claimed node (a token-spend
-      concern), but no session is ever blocked from editing a node by a claim —
-      write safety lives entirely at land time. Motivating episode: this round's
-      own interview was halted at the align skill's stop-on-held-claim step by
-      an unrelated diagnose-main background session squatting the strategy's
-      worktree — a claim gate serializing the author where no overlapping work
-      existed. Steelman resolved as divergence: pessimistic mutual-exclusion
-      serialization (the prior doctrine) was put and rejected — it blocks
-      concurrent sessions that have no true conflict; optimistic git-based
-      resolution on the PR-merge precedent is adopted. Reliance note: the
-      model-reconciliation layer deepens delegation-anthropic-claude — Claude
-      adjudicating between two expressions of author intent is capture-relevant;
-      the risk is held by the scope guard and the human-authorship condition,
-      and no recovers edge is added (the work controls the delegation rather
-      than unwinding it, the same reasoning as strategy-graph-integrity's
-      declined edge). The success_signal is unchanged: serialization health is a
-      mechanism condition (amended condition 2), not the strategy's end-state.
-      Implementation is retained as draft tactics
-      tactic-graph-commit-auto-serialization and tactic-claim-dedup-only.
-      Recorded 2026-07-13 interview."
+    answer: "When two sessions contend on the same node, must the author serialize the edits manually? — See body §Serialization & Commit for the full mechanism. Recorded 2026-07-13 interview."
   - question: Clarification 19 disposes review findings by verification × contract
       alone — every confirmed out-of-contract finding defers to a draft tactic.
       Does the cost of the fix versus the cost of deferring it also bear on the
@@ -1504,41 +1314,7 @@ clarifications:
       the highest-ranking available node, or an explicit dispatch <node-id> —
       bypass the absolute max_concurrent_workers ceiling, or only the pace
       curve?
-    answer: "Yes, for exactly one node — a bounded single-node override. Human
-      dispatch already overrides the pace curve (clarification 49); it
-      additionally bypasses the absolute max_concurrent_workers ceiling
-      (clarification 33) for the single highest-ranking *available* node (bare
-      /dispatch) or the single named node (dispatch <node-id>), launching it
-      even when live == max_concurrent_workers. Fan-out WIDTH beyond that one
-      node still honors the ceiling: below the cap a bare /dispatch fills
-      headroom as before; at or above the cap it degrades to launching exactly
-      the one top-ranked available node (+1 over the ceiling), never a wider
-      over-spawn. The two hard floors clarification 49 already names stay hard
-      for the single-node guarantee too: it never preempts a node already
-      claimed (it takes the next-highest available), and it never fires under
-      genuine token exhaustion (the --exhausted floor). This aligns the graph
-      lane with the issue lane, whose explicit dispatch <issue-number> path
-      already resolves-and-exits before selection and so launches its one node
-      without consulting the ceiling at all. Why bounded rather than a hard
-      ceiling or an unbounded bypass: the ceiling's purpose (clarification 33)
-      is to keep autonomous overlapping ticks from compounding to a runaway
-      worker count — a property about autonomous selection, not about a
-      conscious, low-frequency human act; and the excess is transient and
-      self-correcting because the human-launched worker enters the reservation
-      ledger like any other, so the next autonomous tick counts it and spawns
-      nothing more until it drains. The steelman for an inviolable ceiling — a
-      human should raise max_concurrent_workers or wait, never exceed it — was
-      considered and diverged from: it would leave a saturated fleet unable to
-      honor an explicit human priority, the exact moment the override exists
-      for, and it is inconsistent with the issue lane, which already exceeds the
-      ceiling for its one node. Repeated human invocations each floor to one
-      node, so a deliberately-repeated dispatch can transiently reach max+N;
-      this is accepted as deliberate human action, parity with repeated explicit
-      issue-dispatch. Live gap: the #1458 bare-fan-out code
-      (dispatch-select-tick) currently treats max_concurrent_workers as a hard
-      ceiling and emits concurrency-cap at HEADROOM=0, contradicting this —
-      tracked by tactic-manual-dispatch-single-node-headroom. Recorded
-      2026-07-18 interview."
+    answer: "Does a deliberate human dispatch — the bare /dispatch fan-out picking the highest-ranking available node, or an explicit dispatch <node-id> — bypass the absolute max_concurrent_workers ceiling, or only the pace curve? — See body §Pace, Backlog & Attention for the full mechanism. Recorded 2026-07-18 interview."
   - question: When a phase skill delegates a unit to a subagent (the main thread
       never edits files), what guarantees the subagent's writes land in the
       launching worktree rather than the primary checkout?
@@ -1553,40 +1329,7 @@ clarifications:
       tactic-dispatch-conflict-greenfield as a model-driven skill for the same
       conflict upgrade without referencing the earlier draft — which vehicle
       owns which ladder layer?
-    answer: "The ladder partitions across both vehicles by what each can host —
-      ratified by the author at the 2026-07-19 office-hours review that cleared
-      both tactics' 2026-07-19 parks. graph-commit the SCRIPT owns the
-      deterministic mechanical layers: (1) git three-way rebase auto-merge
-      (exists today), (2) structural field-level / list-union frontmatter merge
-      (net-new code — no merge or field-union helper exists in
-      packages/intentionsutil/src — with test-graph-commit.sh coverage), (3)
-      stale --base auto re-read/re-apply. The dispatch-conflict SKILL owns the
-      model layers: (4) scoped model reconciliation as a skill-thread opus
-      subagent in the fix-conflicts resolved/ambiguous verdict shape, under
-      clarification 58's model scope guard verbatim, and (5) the true-conflict
-      office_hours park carrying both divergent values plus a recommendation.
-      The seam: when layers 1-3 cannot resolve, graph-commit exits with a
-      structured mechanical-unresolved state (alongside landed and parked) that
-      dispatch-conflict consumes; tactic-dispatch-conflict-greenfield is
-      blocked_by tactic-graph-commit-auto-serialization to encode the ordering.
-      Grounds for the vehicle split: no bash script in the repo performs a
-      scoped model eval — model-resolution steps run only as SKILL.md-driven
-      subagents (the fix-conflicts pattern) — so the script cannot host layers
-      4-5 as the 2026-07-13 draft assumed; conversely, pushing layers 1-3 into
-      the skill would move deterministic, unit-testable merge logic behind a
-      model. Accordingly tactic-graph-commit-auto-serialization narrows to
-      layers 1-3 (narrowed, not pruned: that scope is real net-new deterministic
-      code distinct from the model layers) and
-      tactic-dispatch-conflict-greenfield owns layers 4-5 on top of its rename
-      scope; both parks clear in this round's commit. Clarification 58's ladder
-      doctrine, scope guard, and claim-narrowing stand unamended — only the
-      implementation-vehicle assignment is amended. This entry also cures the
-      record-completeness defect (condition 7 / clarification 31) of the
-      2026-07-18 round: clarification 67 re-derived the conflict upgrade without
-      reconciling the 2026-07-13 draft, the gap that parked both tactics on
-      2026-07-19. tactic-claim-dedup-only (scheduling dedup) is orthogonal to
-      conflict resolution and unaffected. Recorded 2026-07-19 /align-strategy
-      round."
+    answer: "Clarification 58 (2026-07-13) retained its 5-layer resolution ladder in tactic-graph-commit-auto-serialization as an in-script graph-commit upgrade, and clarification 67 (2026-07-18) retained tactic-dispatch-conflict-greenfield as a model-driven skill for the same conflict upgrade without referencing the earlier draft — which vehicle owns which ladder layer? — See body §Serialization & Commit for the full mechanism. Recorded 2026-07-19 /align-strategy round."
   - question: Should auto-close of a completed worker session be configurable, given
       the 2026-07-16 reaping clarification reaps on every terminal exit and
       diverged from the session-as-observability rival?
@@ -2252,3 +1995,134 @@ fails loudly when a subagent's writes land outside the worktree (tracked as
 tactic-subagent-cwd-worktree-guard). This is distinct from the
 primary-checkout-on-main invariant (tactic-primary-checkout-main-guard): that
 keeps the primary checkout ON main; this keeps subagent WRITES OUT of it.
+
+### Pace, Backlog & Attention
+
+**Deferred work stays recorded and selectable; its demotion is calculated at
+read time, not stamped as a flag.** Current rule (from 2026-07-03, entry 11,
+superseding the mechanism of entry 9 while keeping its principle): work off the
+minimum path to validating a signal is never omitted — it lands as a
+fully-planned, selectable tactic, demoted below on-path work. Entry 9 first
+recorded this deferral and implemented the demotion as a manually-stamped
+"backlog" flag `/align-tactics` wrote at decomposition, dropping such a node one
+rank tier. Entry 11 superseded that mechanism on same-day author review: a flag
+stored at plan time goes stale the moment a new signal justifies the deferred
+node or competing work resolves, and a discrete band cannot absorb new attention
+conditions without band arithmetic. In its place, attention is an extensible
+weighted sum of terms each derived at read time by `resolveAttention`
+(intentionsutil's attention module): explicit author attention (an authored
+override pins absolutely; a boost is a weighted term derived terms cannot
+silently overwhelm), signal satisfaction (a node is on-path iff it reaches a
+`validates`-terminal of an unvalidated signal via `blocked_by`/`parent` chains,
+so attention rises automatically when any new signal's path includes the node),
+and capture resolution (from the `recovers` edges' divergence and
+irreversibility axes). New conditions add as reviewed-PR terms with weights, and
+strategy `/align-tactics` eligibility counts only on-path children — also
+derived. The backlog flag is deleted: the current codebase has no such stored
+field. On-path membership is computed from `validates` edges and structural
+chains in `packages/intentionsutil/src/attention.ts`, and `schema.ts` states the
+seed rank is derived on read and NEVER stored. Terminology note: entry 69
+(2026-07-18) describes a backlog tactic as one "marked with the backlog flag
+/align-tactics stamps at decomposition," which reads as if the flag still exists;
+it does not. Entry 69 is using the retired entry-9 terminology as shorthand for
+what is now the derived off-path (no-`validates`-edge) demotion of entry 11 — its
+positional citations to clarifications 9 and 11 remain exactly correct, only the
+implementing mechanism it names is historical.
+
+**The legacy pace curve carries over unchanged; a deliberate human dispatch
+bypasses both the pace gate and — for exactly one node — the absolute worker
+ceiling.** Current rule (pace machinery from 2026-07-03, entry 14; ceiling
+scoping and single-node bypass from 2026-07-18, entry 76, amending entries 33 and
+49). Pace parity is full and lives outside the graph: dispatch-target-workers'
+weekly cumulative pace curve stays the binary spend gate and the 5-hour linear
+ramp decides how many concurrent workers (0..max_concurrent_workers); telemetry
+and tunables stay operational config, since rate-limit state is machine state,
+not intent. The legacy priority label maps to a first-class authored
+`pace_exempt` flag on goal-layer nodes — orthogonal to attention ordering — that
+admits one gate-exempt worker past a paced-to-zero budget without overriding the
+count, the order, or genuine token exhaustion (the `--exhausted` hard floor).
+Entry 33 fixed `max_concurrent_workers` (dispatch.config/target-workers.json,
+default 8) as the one true global ceiling on dispatch-managed workers live at any
+moment across all ticks, workflows, and lanes, enforced at selection so
+overlapping autonomous ticks cannot compound past it. Entry 49 established that an
+explicit human dispatch of a single node overrides the autonomous pace curve in
+both lanes — a gate-bypass distinct from the standing `pace_exempt` flag — while
+still honoring the node-id claim (it refuses a node already held rather than
+force-preempting) and the `--exhausted` floor. Entry 76 amends both: a deliberate
+human dispatch (bare `/dispatch` picking the highest-ranking available node, or
+`dispatch <node-id>`) additionally bypasses the absolute ceiling for exactly one
+node, launching it even when live == max, while fan-out WIDTH beyond that one
+node still honors the ceiling. Entry 33's own text is amended in place to scope
+the ceiling to *autonomously-selected* workers only — the human-launched worker
+still enters the reservation ledger, so the next autonomous tick counts it and
+the transient excess self-corrects. Entry 76 amends entry 33's ceiling scope
+rather than fully superseding it: the ceiling remains the invariant against
+autonomous runaway; only conscious, bounded human action may exceed it by one.
+
+**A failing signal's resolution ranking is the owning node's authored boost — no
+per-signal rank field.** (Entry 56, 2026-07-13 interview, author-dictated.)
+Resolution work created for a failing signal attaches under the owner
+(serves/parent) and inherits the owner's boost through the existing undecayed
+downward attention flow; no new rank machinery is added, and an explicit
+`resolution_rank` field on `success_signal` was considered and diverged from — it
+would create a second ranking currency beside the attention model. The default is
+no automatic elevation: a failing signal ranks wherever the owner's boost and
+position put it (often near 0), deliberately low. Main-health is the one signal
+whose owner carries a standing very-high boost (100), kept dominant by its
+write-path guard condition.
+
+### Serialization & Commit
+
+**Same-node contention is serialized automatically by a five-rung resolution
+ladder; the author is involved only at a true-conflict park.** Current rule (from
+2026-07-13, entry 58, amending the fail-closed clause of entry 2). Every graph
+edit is a single-node commit pushed directly to origin/main with a rebase-retry
+loop, restricted to intentions/ paths (entry 2, 2026-07-03). Entry 2 originally
+mapped a same-node race to a manual-merge park, failing closed; entry 58
+supersedes that clause with the PR lane's fix-conflicts doctrine applied to node
+writes — resolve mechanical conflicts autonomously, escalate only genuine
+ambiguity. The ladder, in order: (1) git three-way rebase auto-merge for
+non-overlapping edits; (2) a structure-aware field-level merge (frontmatter list
+appends union, distinct-field edits combine); (3) a stale `--base` stops being
+fatal — tooling re-reads fresh origin/main state and re-applies this writer's
+field-level edit automatically; (4) surviving same-scalar-field divergence goes
+to a model evaluation that attempts reconciliation, under a scope guard that lets
+the model resolve only mechanical divergence on human-owned doctrine fields
+(virtue/strategy/tradition/delegation statement, rationale, clarification text)
+and full reconciliation on ai-owned tactic/state fields; (5) only a true conflict
+— contrary author intentions the model cannot reconcile — parks to `office_hours`
+with both divergent values and a recommendation. Node-id claiming narrows to
+scheduling deduplication: the router still avoids spawning a duplicate worker for
+a claimed node, but no session is ever blocked from *editing* a node by a claim —
+write safety lives entirely at land time.
+
+Entry 78 (2026-07-19) amends entry 58's implementation-vehicle assignment only,
+not its ladder doctrine, which stands unamended. The ladder partitions across two
+vehicles by what each can host: the `graph-commit` SCRIPT owns the deterministic
+mechanical layers 1-3 (three-way rebase auto-merge exists today; the field-level
+list-union merge and stale-base auto re-read/re-apply are net-new code, no such
+helper exists in packages/intentionsutil/src, with test-graph-commit.sh
+coverage), and the `dispatch-conflict` SKILL owns the model layers 4-5 (scoped
+model reconciliation as a skill-thread opus subagent in the fix-conflicts
+resolved/ambiguous verdict shape, plus the true-conflict park). The grounds: no
+bash script in the repo performs a scoped model eval — model-resolution runs only
+as SKILL.md-driven subagents — so the script cannot host layers 4-5, while
+pushing layers 1-3 into the skill would hide deterministic, unit-testable merge
+logic behind a model. The seam is a structured mechanical-unresolved exit state
+from graph-commit (alongside landed and parked) that dispatch-conflict consumes,
+and `tactic-dispatch-conflict-greenfield` is `blocked_by
+tactic-graph-commit-auto-serialization` to encode the ordering.
+tactic-claim-dedup-only (scheduling dedup) is orthogonal and unaffected.
+
+**A SHA carrying the four required contexts may push directly to main via a
+`graph/**` scratch-branch CI fast path.** (Entry 16, reviewed 2026-07-03,
+tactic-intentions-branch-protection.) main has a single repository ruleset —
+no-deletion, no-force-push, and four required status checks (acceptance,
+preview-and-smoke, lint, unit-tests; non-strict) — and no pull-request
+requirement, so GitHub accepts a direct push whenever the pushed SHA already
+carries the four passing contexts. No settings change was made. The write path
+pushes an intentions/-only commit to `graph/<node-id>`; a fast workflow
+hard-fails unless the diff vs main is entirely under intentions/, runs graph
+validation, and stamps the four required contexts green in about a minute; the
+writer then fast-forwards the same SHA to main, rebasing and re-running on
+reject. Heavy CI still guards any diff touching paths outside intentions/.
