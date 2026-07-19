@@ -21,12 +21,14 @@ import type { IntentionNode } from "./schema.js";
 
 /**
  * The phases whose scope is inherited from a prior phase and therefore chained
- * to the phase-start stamp — fix/qa/review. Mirrors `SCOPE_CHAINED_PHASES` in
+ * to the phase-start stamp — qa/review. Mirrors `SCOPE_CHAINED_PHASES` in
  * `packages/intentionsutil/scripts/check-node-selection.ts` (the worker-start
- * gate's check 5): `implement` re-establishes custody against the latest scope,
- * and `main-qa` is post-merge, so neither is scope-chained.
+ * gate's check 5), which additionally includes the selector's `"fix"`
+ * CANDIDATE directive (never a persisted `node.phase` value — see
+ * `Phase`/`PHASES` in schema.ts): `implement` re-establishes custody against
+ * the latest scope, and `main-qa` is post-merge, so neither is scope-chained.
  */
-const SCOPE_CHAINED_PHASES = new Set(["fix", "qa", "review"]);
+const SCOPE_CHAINED_PHASES = new Set(["qa", "review"]);
 
 /** The phase-start stamp file for a node id: `<stamp-dir>/<id>.scope-fingerprint`. */
 function stampPath(stampDir: string, id: string): string {
@@ -61,7 +63,7 @@ function readStampedFingerprint(stampDir: string, id: string): string | null {
  * A node is stale — and returned — when ALL hold:
  *   - `kind === "tactic"`,
  *   - `office_hours` is null (an author park is handled by its own lane),
- *   - `phase` is one of the scope-chained phases (fix/qa/review),
+ *   - `phase` is one of the scope-chained phases (qa/review),
  *   - the node id is NOT in `liveIds` (an in-flight worker owns its own scope;
  *     the demote is only for idle nodes),
  *   - a scope-fingerprint stamp file exists at

@@ -6,7 +6,7 @@ statement: "correct tactic-align-session-claiming Unit 3's recorded
   held claim') to the shipped liveness rule (reservation marker OR
   worktree_has_live_session), reconciling it with its own Unit 1 and #1474"
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Byproduct of the 2026-07-18 office-hours-concurrency interview:
   verifying the target-state mechanism surfaced that
@@ -24,7 +24,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: implement
 execution: null
 validates: []
 blocked_by: []
@@ -35,42 +35,130 @@ attributes: {}
 ---
 # correct tactic-align-session-claiming Unit 3's recorded existence-based claim ('graph-select-target treats ANY existing worktree as a held claim') to the shipped liveness rule (reservation marker OR worktree_has_live_session), reconciling it with its own Unit 1 and #1474
 
-**Draft** — byproduct of the 2026-07-18 office-hours-concurrency interview.
-Recorded-text hygiene; no behavior change. Input to a later
-`/align-tactics strategy-graph-native-dispatch` round.
+Finalized by `/align-tactics tactic-align-session-claiming-liveness-correction`
+(2026-07-18) from the draft byproduct of the same day's
+office-hours-concurrency interview. Recorded-text hygiene only — no code
+changes; the shipped code is already correct. Tracked as the correction
+vehicle by `strategy-graph-native-dispatch`'s 2026-07-18 clarification
+("tracked by draft tactic-align-session-claiming-liveness-correction").
 
 ## Context
 
-Verifying the target-state concurrency mechanism this round surfaced an
-inconsistency in the recorded graph. `tactic-align-session-claiming`
+Verifying the target-state concurrency mechanism during that interview
+surfaced an inconsistency in the recorded graph. `tactic-align-session-claiming`
 (`phase: done`, PR 2804) Unit 3 prescribes an **existence-based** claimed set:
 
 > "Assert (and if missing, add) that `graph-select-target`'s claimed-set
 > derivation treats ANY existing `.claude/worktrees/<node-id>` as a held
 > claim … Add a test: create a bare node-id worktree, run selection, assert
-> the node is skipped." (`intentions/tactic-align-session-claiming.md:134-138`)
+> the node is skipped." (`intentions/tactic-align-session-claiming.md`, Unit 3
+> — grep `## Unit 3 — selector claimed-set covers human-created worktrees`;
+> at finalize time this was lines 126–138.)
 
-This is stale on three counts:
-- **Diverges from shipped code.** `graph-select-target:245-255` skips a node
-  only on a reservation-ledger marker OR `worktree_has_live_session` (liveness);
-  a bare worktree with no live session is **not** skipped.
-- **Contradicts its own Unit 1**, which states the liveness rule
-  ("`…exists with a live session (worktree_has_live_session)…`",
-  `tactic-align-session-claiming.md:89-96`).
-- **Describes the pre-#1474 behavior** that was deliberately replaced.
-  `test-dispatch-scripts.sh:296-297, 9363-9364` records #1474 moving
-  existence-keying → liveness so "a bare worktree alone no longer blocks."
+This is stale on three counts, each verified directly against the shipped
+sources (not re-derived from the draft's citations — those had already
+drifted from the growing test file by finalize time):
 
-## What changes
+- **Diverges from shipped code.** `.claude/skills/dispatch-propagate/scripts/graph-select-target`
+  (verified at lines 245–255 at finalize time; re-grep the comment
+  `# Claimed set: reservation-ledger marker or live node-id session` if the
+  file has moved) skips a node only on `reservation_exists` OR
+  `worktree_has_live_session` — a bare worktree with no live session is
+  **not** skipped.
+- **Contradicts its own Unit 1**, which already states the liveness rule:
+  "If `<project-root>/.claude/worktrees/<node-id>` exists with a live session
+  (`worktree_has_live_session` …), the claim is held" (same file, Unit 1).
+- **Describes the pre-#1474 behavior** that was deliberately replaced. The
+  actual shipped test —
+  `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`
+  (verified at finalize time: the `# Test: graph-select-target — a
+  human-created node-id worktree is a held claim (tactic-align-session-claiming
+  Unit 3)` block, ~line 30408, and its `live_session_claimed_nums (#1474)`
+  neighbor, ~line 9752 — re-grep by heading text, not line number, since the
+  file grows) — asserts the **opposite** of Unit 3's prescription: Case 1, a
+  live-session-owned node-id worktree is skipped; Case 2 (the negative
+  control), the *same* worktree with **no** live session (daemon reports `[]`)
+  is still **selected** — pinning that bare directory existence alone is
+  explicitly NOT a claim.
 
-Correct Unit 3's recorded text (and its prescribed test) to the shipped
-liveness rule, reconciled with Unit 1. Because the author's target state is
-liveness-keying — an un-reaped worktree must never block dispatch work; reaping
-is post-merge `dispatch-sweep` hygiene — the existence-based prescription is
-simply wrong for the target state. Code is already correct; this is a
-whole-node text reconciliation of the `done` tactic, no implementation.
+## Unit 1 — correct `tactic-align-session-claiming.md` Unit 3's recorded text
 
-## Surfaces to change
+**Recommended model:** sonnet
 
-- `intentions/tactic-align-session-claiming.md` Unit 3 (and any body sentence
-  implying existence-keying) → liveness. Preserve Unit 1/Unit 2 as-is.
+Scope:
+- `intentions/tactic-align-session-claiming.md`, Unit 3 section only (grep
+  `## Unit 3 — selector claimed-set covers human-created worktrees` — do not
+  rely on the hardcoded line numbers below without re-grepping first, since
+  intervening edits can shift them; at finalize time this was lines 126–138,
+  immediately before `## Reuse` at line 140).
+- Rewrite the Unit 3 `Scope:` bullet (currently: "Assert (and if missing, add)
+  that `graph-select-target`'s claimed-set derivation treats ANY existing
+  `.claude/worktrees/<node-id>` as a held claim … Add a test: create a bare
+  node-id worktree, run selection, assert the node is skipped.") to instead
+  describe the **shipped** liveness-keyed behavior and its actual test
+  coverage: the claimed-set gate is `reservation_exists(id)` OR
+  `worktree_has_live_session(...)` (not bare directory existence), matching
+  Unit 1's own phrasing; the shipped test asserts (a) a live-session-owned
+  node-id worktree is skipped, and (b) the same worktree with no live session
+  (a "bare"/orphan worktree) is still selected — the negative control proving
+  existence alone is not a claim.
+- Explicitly out of scope: Unit 1 and Unit 2 of the same node — both already
+  state the liveness rule correctly and need no edit. No code changes anywhere
+  — `graph-select-target` and its test already implement and cover the correct
+  (liveness) behavior; this unit is a recorded-text-only correction of a
+  `phase: done` node's stale prose.
+- This is a **pre-existing node** on `origin/main` (Unit 3 landed via PR
+  2804): dump it through `dump-node.ts` before editing and land the edit
+  through `graph-commit --base` per the Reuse section below — the same
+  stale-read protection this session used for its own frontmatter write.
+- Dependencies: none.
+
+## Reuse
+
+- `packages/intentionsutil/scripts/dump-node.ts` — capture a base manifest for
+  `tactic-align-session-claiming` before editing its body (it is
+  `phase: done`, i.e. pre-existing on `origin/main`), the same mechanic this
+  finalize session used for its own node:
+  ```
+  BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+    --out-dir "$TMPDIR/dump" tactic-align-session-claiming)
+  ```
+  (both `dump-node.ts` and any other `tsx` invocation here need
+  `dangerouslyDisableSandbox: true` — the tsx CLI's IPC pipe under
+  `$TMPDIR` is blocked by the sandbox's filesystem allowlist.)
+- `packages/intentionsutil/scripts/graph-commit --base "$BASE"
+  tactic-align-session-claiming` — the sole landing path (per
+  `.claude/skills/align-tactics/SKILL.md` Step 5); this is a body-only `Edit`,
+  no `write-node.ts` frontmatter change (the node's frontmatter — `status`,
+  `phase: done`, `execution`, etc. — is untouched by a text correction to its
+  body).
+- `.claude/skills/dispatch-propagate/scripts/graph-select-target` and
+  `test-dispatch-scripts.sh` — the ground truth the corrected Unit 3 text must
+  match; re-read both directly rather than trusting this plan's line numbers,
+  which will have drifted further by execution time.
+
+## Verification
+
+Prose (no code changed, so no test suite to run — verify the corrected text
+directly):
+
+- Read the corrected `## Unit 3` section of
+  `intentions/tactic-align-session-claiming.md` and confirm it no longer
+  claims bare/existence-based worktree keying, and instead describes the
+  reservation-ledger-marker-OR-live-session gate, consistent with the same
+  node's Unit 1.
+- Confirm Unit 1 and Unit 2 of the same node are unchanged (whole-node diff
+  should touch only the Unit 3 section).
+
+```verify
+SECTION=$(awk '/^## Unit 3 — selector claimed-set covers human-created worktrees/{flag=1;next} /^## /{flag=0} flag' intentions/tactic-align-session-claiming.md)
+grep -qi 'treats ANY existing' <<<"$SECTION" && echo "STALE: existence-keyed phrase still present" && exit 1
+grep -qi 'live.session' <<<"$SECTION" && echo OK
+```
+
+(The `awk` scoping is deliberate — bounding the check to the Unit 3 section only,
+between its own heading and the next `## ` heading. A fixed-line `grep -A20`
+window bleeds past Unit 3's ~13-line body into `## Reuse`, whose own
+`worktree_has_live_session` mention would satisfy the second grep even if the
+corrected Unit 3 text hadn't actually changed — a false pass this scoping
+rules out.)
