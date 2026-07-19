@@ -29,12 +29,27 @@ rationale: "Surfaced 2026-07-11 while explicitly executing
   reads the main checkout's working tree, which only dispatch-select-tick's
   BRANCH==main sync keeps fresh, so calling dispatch-graph-execute directly by
   hand skips that sync and can hit a false exit-12 stale-selection) is resolved
-  for free by this design: routing the explicit node id through dispatch-tick ->
-  dispatch-select-tick -> dispatch-graph-execute (instead of invoking
-  dispatch-graph-execute directly) means the existing unconditional BRANCH==main
-  sync in dispatch-select-tick already runs before target selection, exactly as
-  it does for the autonomous and --manual paths today. No new sync code is
-  needed; only routing through the existing pipeline instead of bypassing it."
+  by this design routing through dispatch-tick -> dispatch-select-tick ->
+  dispatch-graph-execute instead of calling dispatch-graph-execute directly --
+  the existing BRANCH==main sync in dispatch-select-tick then runs before target
+  selection whenever the tick runs from the main checkout, with no new sync code
+  needed; the non-main-worktree invocation case remains a known pre-existing
+  limitation, unchanged by this tactic (see Unit 2's Out-of-scope note in the
+  body). Validated 2026-07-18 by an independent opus subagent review of the
+  landed plan against live file content: the review confirmed all path:line
+  citations except one off-by-8 line number (provision-node-worktree's node-id
+  regex is at line 52, not 44 -- corrected), confirmed the test-anchor citations
+  and non-fallthrough decision-line design were accurate and implementable, but
+  found a critical gap -- Unit 2 as originally landed never bypassed
+  dispatch-select-tick's autonomous concurrency/pace gate (lines 558-645, which
+  runs whenever MANUAL is empty, which includes the NODE_ARG case since the two
+  are mutually exclusive) -- so the explicit node-id path would have been
+  paced/capped exactly like the ranked path, defeating the tactic's entire
+  purpose. This pass adds the missing Step-1b bypass to Unit 2's scope (skip the
+  TARGET_N pace-curve and MAX_WORKERS ceiling for NODE_ARG, but still honor
+  genuine dispatch-target-workers --exhausted, mirroring the --manual branch's
+  own EXHAUSTED handling) and corrects the citation and the overstated 'sync is
+  unconditional' claim."
 reading: null
 gap: null
 serves:
@@ -85,9 +100,10 @@ once the main checkout was manually synced).
 This tactic closes the gap by giving `dispatch <node-id>` a real path through
 the *existing* pipeline (`dispatch-tick` → `dispatch-select-tick` →
 `dispatch-graph-execute`) instead of the direct-call workaround — which also
-resolves the stale-tree false-exit-12 for free, since the existing
-`BRANCH == "main"` sync already runs unconditionally before target selection on
-that path, with no new sync code needed.
+resolves the stale-tree false-exit-12, since the existing `BRANCH == "main"`
+sync already runs before target selection on that path whenever the tick runs
+from the main checkout (the normal invocation — see the caveat in Unit 2's
+Scope), with no new sync code needed.
 
 ## Unit 1 — `graph-select-target --node <id>`: explicit single-target mode
 
@@ -107,13 +123,21 @@ lines ~245-254) and `sensor_gate` (lines ~193-234), truncating at `--top`
   `.candidates[]` unfiltered), and run it through the exact same
   `reservation_exists` / `worktree_has_live_session` / `sensor_gate` sequence
   used today — no new gating logic.
+- Track whether the target id appeared in `.candidates[]` at all with its own
+  counter/flag (distinct from `SELECTED_COUNT`) — both the "present but
+  gated" and "absent entirely" cases below leave `SELECTED_COUNT` at 0, so
+  `SELECTED_COUNT` alone cannot distinguish them; only "did the `select(.id ==
+  $id)` filter yield a row" can.
 - If the id is present in `.candidates[]` and passes every gate: print
   `node <id> <kind> <phase>` (the existing protocol; `dispatch-select-tick`'s
   `emit_graph_selection` already consumes this unchanged) and exit 0.
 - If the id is present but fails a gate (reserved, live-session, or a sensor
-  gate like `no-pr`/`ci-pending`/`pr-not-merged`): print the existing
-  `skip_note` reason to stderr and print `empty` on stdout, exit 0 (same
-  contract the ranked path already uses for a fully-gated-out candidate).
+  gate like `no-pr`/`ci-pending`/`pr-not-merged`): `sensor_gate`/the claim
+  checks already produce a `reason` string (today only fed into `skip_note`,
+  which logs to the selection-log JSON, not stderr) — echo that same `reason`
+  string directly to stderr yourself, then print `empty` on stdout, exit 0
+  (same stdout contract the ranked path already uses for a fully-gated-out
+  candidate).
 - If the id is absent from `.candidates[]` entirely (does not exist in the
   store, is `done`, has `office_hours` set, has incomplete `blocked_by`, or is
   a `review`-phase tactic already excluded by the `REVIEWED_MARKER` check in
@@ -155,6 +179,35 @@ verbatim.
   accurate — a bare number or garbage string is neither a flag nor a graph
   node id). Reject combining `NODE_ARG` with `--manual` as a usage error
   (`--manual` is the "no specific target" fan-out mode).
+- **Bypass the autonomous concurrency/pace gate for `NODE_ARG` (this is the
+  actual pace-skip the tactic exists for — without this edit the feature does
+  nothing beyond what the ranked path already does).**
+  `dispatch-select-tick:558` opens `if [[ -z "$MANUAL" ]]; then` — the
+  autonomous gate block that computes `TARGET_N`/`LIVE_COUNT` and, at cap,
+  either finds a pace-exempt bypass or emits `concurrency-cap` and exits 0
+  (lines 558-645) *before* Step 3 ever runs. Because `NODE_ARG` is mutually
+  exclusive with `--manual`, `MANUAL` is empty on the explicit-node path too,
+  so unless this block is also guarded, a `NODE_ARG` dispatch hits the exact
+  same pace cap as the ranked autonomous path and never reaches Step 3 — the
+  opposite of "skips the pace gate." Change the guard at line 558 to
+  `if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then`, so `NODE_ARG` skips this
+  entire block (both the `TARGET_N` pace-curve throttle and the `MAX_WORKERS`
+  ceiling check that lives inside it) and `GAP` stays at its default of `1`
+  (set at line 557, above this block), falling straight through to Step 3.
+  This mirrors the doctrine `tactic-manual-dispatch-single-node-headroom`'s
+  own body describes for this tactic: an explicit single-node dispatch
+  "launches its one named node without a ceiling check" — stronger than
+  `--manual`'s bare fan-out, which still honors the ceiling (that sibling
+  tactic brings `--manual` up to the same guarantee separately; not this
+  tactic's scope). **Still honor genuine token exhaustion**, the one hard
+  floor every other path in this file respects (the `--manual` branch's own
+  `EXHAUSTED` check at lines 681-686 is the pattern): before falling through
+  to Step 3, `NODE_ARG` must still query
+  `dispatch-target-workers --exhausted` and, if `exhausted`, `release_lock`
+  and emit `concurrency-cap` with a `node-explicit-rate-limit-exhausted`
+  `DLOG_SKIP_REASON` exactly as the `--manual` branch does — a deliberate
+  single-node dispatch does not override real token exhaustion, only the
+  self-imposed pace curve and worker ceiling.
 - Around Step 3 (`dispatch-select-tick:773-791`, the `graph-select-target
   --top "$GAP"` call and `emit_graph_selection` invocation): when `NODE_ARG`
   is set, call `graph-select-target --node "$NODE_ARG"` (Unit 1) instead of
@@ -209,8 +262,11 @@ to implementation-time judgment.
 
 **Reuse.**
 - `provision-node-worktree`'s node-id slug regex
-  (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree:44`) —
+  (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree:52`) —
   reuse verbatim for arg discrimination; do not invent a second regex.
+- The `--manual` branch's `EXHAUSTED` check
+  (`dispatch-select-tick:681-686`) — the pattern to mirror for `NODE_ARG`'s
+  own hard-floor check above; do not invent new exhaustion-detection logic.
 - `emit_graph_selection` (`dispatch-select-tick:192-215`) — reused unchanged;
   no new decision-line format for the success path.
 - `dispatch-tick`'s existing `graph)` decision-routing arm
@@ -234,17 +290,39 @@ author wants one); differentiating the specific reason an unselectable node id
 was excluded (Unit 1's scope note); `tactic-manual-dispatch-single-node-headroom`'s
 bare-`--manual`-at-ceiling headroom guarantee (a sibling, ranking-driven
 concern per that node's own body — keep the two consistent if both land, but
-this tactic does not implement it).
+this tactic does not implement it); making the `origin/main` sync
+worktree-independent. **Known limitation, not fixed by this tactic:** the
+`BRANCH == "main"` sync (`dispatch-select-tick:259-334`) that closes the
+stale-tree gap only runs when the invoking checkout's current branch is
+literally `main` — `dispatch-tick` does not `cd` to the main worktree before
+calling `dispatch-select-tick` on the terminal path. Running `dispatch
+<node-id>` from a **non-main feature worktree** does not inherit the sync, so
+the stale-tree false exit-12 this tactic otherwise closes can still occur in
+that case. This is a pre-existing constraint of the whole tick pipeline (the
+autonomous and `--manual` paths have the same limitation today), not something
+this tactic introduces or is scoped to fix; fixing it would mean hardening
+`check-node-selection.ts` to read `origin/main` directly instead of the
+working tree (the design-point-5(b) shape the original draft flagged as the
+greenfield-preferred fix) — a separate, larger-scoped tactic if the author
+wants it. The normal invocation (`dispatch <node-id>` from the main checkout)
+is unaffected.
 
 ## Verification
 
 ```verify
 cd /home/n8/natb1/commons.systems && .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
 ```
-Manually: pick a real open node id (e.g. a tactic currently at `phase:
-implement` with no live claim). Run `dispatch <that-node-id>` with the pace
-curve pinned to zero (`dispatch.config/target-workers.json`) and confirm it
-still spawns — proving the pace gate is skipped. Run it again immediately
+Manually, all from the **main checkout** (branch `main` — see Unit 2's "Known
+limitation" note above): pick a real open node id (e.g. a tactic currently at
+`phase: implement` with no live claim). Run `dispatch <that-node-id>` with the
+pace curve pinned to zero (`dispatch.config/target-workers.json`) **and** live
+worker count at or above `max_concurrent_workers` and confirm it still spawns
+— proving both the `TARGET_N` pace-curve gate and the `MAX_WORKERS` ceiling
+are skipped (this is the core check: without Unit 2's Step-1b bypass, this
+case would incorrectly emit `concurrency-cap`). Separately, confirm the
+genuine-exhaustion floor still holds: with `dispatch-target-workers
+--exhausted` reporting `exhausted`, `dispatch <that-node-id>` must still emit
+`concurrency-cap`, not spawn. Run `dispatch <that-node-id>` again immediately
 while the first worker is still live and confirm it refuses cleanly
 (`node-not-selectable`, reservation or live-session reason) rather than
 double-spawning. Run `dispatch <unknown-node-id>` and confirm a clear
