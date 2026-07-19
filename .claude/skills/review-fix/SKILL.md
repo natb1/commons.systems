@@ -130,10 +130,9 @@ Every step runs unchanged except these re-keyed seams:
 - **Completion.** Do **not** apply `dispatch:reviewed` via
   `dispatch-complete-phase`, and do **not** call `dispatch-mark-complete` /
   `dispatch-finalize-phase`. Invoke the graph-native transition writer, which
-  records the `reviewed` marker in `execution.markers` and — on a clean review —
-  arms gh auto-merge (same config gate as today), all as one state-only
-  graph-commit on `origin/main`; the reconciler sweep absorbs the out-of-band
-  merge to `done`:
+  records the `reviewed` marker in `execution.markers` as one state-only
+  graph-commit on `origin/main` and then stops — it does not arm or perform any
+  merge itself, and does not call `gh pr ready` or `dispatch-auto-merge`:
 
   ```bash
   .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
@@ -141,6 +140,17 @@ Every step runs unchanged except these re-keyed seams:
 
   The graph-tick worker runs it with the reset-dance a PR-branch worktree needs;
   the skill hands it the node id and never writes the graph directly.
+
+  Merging is deferred entirely to the tick's `graph-auto-merge` reconciler,
+  which runs every tick keyed off the `reviewed` marker: for each node whose
+  `execution.markers` includes `reviewed`, it senses the PR and — only when it
+  is `mergeable == MERGEABLE`, green on CI, and the node's tactic-scope
+  fingerprint is fresh against `origin/main` — squash-merges it, label-free (no
+  `dispatch:reviewed` gh label involved on this lane). It fails closed: a
+  missing/stale scope-fingerprint stamp or a `scopeStale` result holds (declines
+  to merge) rather than merging speculatively. `reconcile-graph-merged` then
+  absorbs that out-of-band merge to `done`/`main-qa` on a later tick, honoring
+  its grace window, same as before.
 - **Deferred findings (Step 5).** On the node lane, deferred/security follow-up
   findings become **draft tactic nodes**, not gh follow-up issues — see the
   node-lane branch in Step 5.
