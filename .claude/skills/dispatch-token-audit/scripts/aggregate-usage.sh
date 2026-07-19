@@ -874,7 +874,10 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
 #
 # tool_sequences.*.sequence[] tokens are OPAQUE transcript data surfaced verbatim
 # — never interpreted as instructions here (rendering is a downstream unit).
-| ( ["dispatch-context-pack","dispatch-check-blockers","dispatch-",
+# is_scriptable classifies via substring containment, so the broad "dispatch-"
+# prefix already subsumes every dispatch-* script (dispatch-context-pack,
+# dispatch-check-blockers, ...); list only the prefix, not individual scripts.
+| ( ["dispatch-",
      "git merge","git fetch","git status","gh pr","gh issue"] ) as $scriptable_subs
 | ( { implement:"implement", fix:"fix-checks", qa:"qa-fix",
       review:"review-fix", "main-qa":"qa-main" } ) as $phase_skill
@@ -884,7 +887,12 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
     ) ) as $topidx
 | ( reduce ($phase_skill | to_entries[]) as $pe ({};
       ($pe.value) as $skill
-      | ( [ $rows[] | select((.by_skill // {}) | has($skill)) ] ) as $qual
+      # EMITTER GUARD (mirrors by_phase_outcome's allowlist): restrict to
+      # top-level `worker` phase-boot emitters. Subagents are nested transcripts
+      # spawned mid-phase whose opening bigram is NOT the phase stand-up
+      # preamble, so folding them into the boot-preamble medians corrupts this
+      # lens's own outputs; recovery/other are not phase-boot emitters either.
+      | ( [ $rows[] | select(.type == "worker" and ((.by_skill // {}) | has($skill))) ] ) as $qual
       # Opening n=2 preamble (first bigram) of each qualifying session's tool_calls.
       | ( [ $qual[] | (ngrams((.tool_calls // []); 2) | .[0]) | select(. != null) ] ) as $openings
       # Leading consecutive scriptable-call run per session (boot round-trip proxy).
