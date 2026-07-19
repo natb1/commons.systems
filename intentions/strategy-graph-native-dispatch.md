@@ -37,13 +37,8 @@ recovers:
 clarifications:
   - question: Where does a tactic's execution state live — derived from PR/CI ground
       truth as today, or persisted in the node?
-    answer: Persisted. The tactic node stores an explicit phase field the router
-      transitions; PR draft state and CI are demoted from ground truth to
-      sensors the router reads before committing a transition. This deliberately
-      reverses the 'no persisted state machine' principle of the gh-era router —
-      the graph is the state machine now. Out-of-band gh events (a hand-merged
-      PR) are absorbed by a reconciler sweep, not by re-derivation. Recorded
-      2026-07-03 interview.
+    answer: >-
+      Where does a tactic's execution state live — derived from PR/CI ground truth as today, or persisted in the node? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-03 interview.
   - question: How do concurrent sessions record graph edits safely, given a record
       must land on origin/main before it is schedulable?
     answer: "One write path: every graph edit — strategy records, tactic breakdowns,
@@ -60,20 +55,8 @@ clarifications:
       that date.)"
   - question: A strategy's tactics all complete but its signal is still unvalidated
       — what stops /align-tactics from burning rounds forever?
-    answer: "A fresh-reading gate plus a round cap. After a tactic round completes,
-      the strategy is re-eligible only once its sensor produces a reading newer
-      than the round's completion; after two rounds without validation it parks
-      to office-hours with the round history as the why. A null reading counts
-      as not-validated, but the first round must then include a tactic that
-      makes the sensor runnable — a strategy that cannot be measured must first
-      buy its own instrument. Recorded 2026-07-03 interview. (Amended
-      2026-07-16: the \"reading newer than the round's completion\" anchor is a
-      distinct rounds.last_aligned — align-decompose time — not
-      rounds.last_completed, which clarification 22 reserves for
-      verified-in-prod; and the fresh-reading check applies regardless of count,
-      so it engages for strategies whose rounds produce born-parked or off-path
-      work and never prune a child. See the last_aligned clarification of that
-      date.)"
+    answer: >-
+      A strategy's tactics all complete but its signal is still unvalidated — what stops /align-tactics from burning rounds forever? — See body §Phase Transitions & Fix State. Recorded 2026-07-03 interview.
   - question: What replaces the dispatch:office-hours label?
     answer: A first-class parked field on goal-layer nodes (reason plus since),
       valid on strategies and tactics; the router skips parked nodes and their
@@ -245,24 +228,8 @@ clarifications:
   - question: Before the transitions tactic lands, who advances a graph-native
       tactic's phase on main — how do QA, review, CI-gated fix, and merge
       workers get scheduled?
-    answer: "Bootstrap-transition doctrine. Parity with the legacy router means the
-      completing worker's state write to origin/main is what schedules the next
-      phase worker (dispatch-complete-phase parity): selection reads main, so a
-      phase that ends without the write schedules nothing. Until
-      tactic-graph-router-transitions and tactic-graph-commit are live, every
-      session completing a phase on a graph-native tactic must itself end the
-      phase with the transition write to main — phase (implement -> fix/qa ->
-      review -> done, per the CI-verdict and mergeability sensors), execution.pr
-      when the work PR opens, attempt counters, and markers. The write is a
-      state-only intentions/ commit, never part of the work PR (the work PR
-      merges at the end of the lifecycle; state must land on main while it is
-      still open): direct-pushed once tactic-intentions-branch-protection lands,
-      delivered as a state-only PR the author merges until then. Fields ride
-      squatted attributes.* until tactic-graph-dispatch-schema is on main, since
-      main's validator gates the first-class shapes. Gap observed live
-      2026-07-03: PR #2742 opened with the schema tactic still phase: implement
-      on main, leaving qa/review/merge unscheduled. The doctrine retires when
-      the transitions tactic lands. Recorded 2026-07-03 from author review."
+    answer: >-
+      Before the transitions tactic lands, who advances a graph-native tactic's phase on main — how do QA, review, CI-gated fix, and merge workers get scheduled? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-03 from author review.
   - question: What did the author's branch-protection review find, and what
       mechanism lets intentions/-only commits land on main without a PR?
     answer: "Reviewed 2026-07-03 (tactic-intentions-branch-protection): main has a
@@ -304,22 +271,8 @@ clarifications:
       than auto-applied, per the same clarification. Durable home remains
       strategy-token-economy."
   - question: Is the fix phase a linear step between implement and qa?
-    answer: "No — fix is the CI-failure interrupt (it could be called ci-fix): a
-      tactic enters fix from ANY of implement, qa, or review when its PR's CI
-      verdict is failing, and once CI is green again the router resumes the
-      ladder from where the tactic left off — it is not a station every tactic
-      passes through between implement and qa. This is legacy parity:
-      dispatch-phase checks mergeability and CI verdict BEFORE any phase-label
-      logic, so a PR already past qa or review routes back to fix-checks on a CI
-      regression. Distinct from the qa and review phases' own internal fix
-      loops: qa-fix and review-fix repair QA/review-content findings locally
-      (with their own attempt counters) before anything reaches CI, and those
-      loops never pass through the fix phase — fix means exactly 'CI is red on
-      this tactic's PR'. Recorded 2026-07-04 from author direction. (Encoding
-      superseded 2026-07-18: fix is modeled as orthogonal execution.fix state,
-      not a phase value — see the fix-orthogonal-execution-state clarification
-      and tactic-fix-interrupt-orthogonal-state. Fix remains a CI interrupt
-      exactly as recorded here; only its encoding changes.)"
+    answer: >-
+      Is the fix phase a linear step between implement and qa? — See body §Phase Transitions & Fix State. Recorded 2026-07-04 from author direction.
   - question: Review findings beyond the tactic's plan — which are fixed in scope,
       which defer, which are ignored, and how do deferrals schedule?
     answer: "Three-way disposition by verification x contract, decided in the review
@@ -395,34 +348,8 @@ clarifications:
       actually merged. Recorded 2026-07-04 interview."
   - question: Where does a graph-native tactic's qa needs-main residue — post-merge
       verify-against-prod work — live?
-    answer: "In the tactic's own lifecycle: main-qa is a phase of the source node,
-      not a separate artifact (no gh carve-out — condition 1 holds absolutely).
-      The legacy follow-up issue was a workaround for gh mechanics (issues close
-      on merge, forcing a second artifact plus provenance markers plus orphan
-      retriage); a persistent node with persisted phase needs none of it.
-      Design: the Phase enum gains main-qa, between merge and done; qa records
-      needs-main residue in a body section of the node instead of filing
-      anything; the reconciler routes a merged tactic to main-qa when residue
-      exists, else done; the router maps main-qa to the qa-main handler session
-      under the uniform node-id machinery, gated on the prod deploy landing;
-      outcomes keep qa-main parity — pass -> done (prune), broken -> an
-      implement-chain bug tactic written via graph-commit then done,
-      cannot-verify -> office_hours. Completion-prunes and round accounting move
-      behind prod verification, so rounds.last_completed means verified-in-prod
-      and the fresh-reading gate reflects verified reality. The phase ladder
-      becomes main-qa -> review -> fix -> qa -> implement -> align-tactics.
-      Rejected: a separate main-qa child tactic (recreates the two-artifact
-      provenance/orphan problem and stamps rounds before verification),
-      draft-and-finalize-later (unbounded verification latency; drafts are
-      undecomposed context, this is fully-specified machine verification),
-      sensor modeling (wrong altitude — signals measure the strategy's
-      observable, not each shipped feature), and an implicit reconciler hold
-      (hidden state, violates clarification 1). Recorded 2026-07-04 interview.
-      (Ordinal amended 2026-07-18: once fix leaves the phase enum, this
-      attention-ranking order drops it — main-qa -> review -> qa -> implement ->
-      align-tactics — because a fixing node ranks at its preserved phase with
-      execution.fix orthogonal; see the fix-orthogonal-execution-state
-      clarification.)"
+    answer: >-
+      Where does a graph-native tactic's qa needs-main residue — post-merge verify-against-prod work — live? — See body §Phase Transitions & Fix State. Recorded 2026-07-04 interview.
   - question: The repo was re-anchored — main checked out at the project root with
       Claude Code managing worktrees natively; do the worktree commitments still
       target the legacy .bare + sibling worktrees/ layout?
@@ -1164,19 +1091,8 @@ clarifications:
   - question: Emulated implement→qa transitions repeatedly land phase:qa with
       execution.pr null while an open draft PR exists — is the PR stamp at the
       implement→qa write load-bearing?
-    answer: "Yes — confirmed at scale on tick +3 (2026-07-10): six nodes (PRs #2819,
-      #2825, #2828, #2830, #2838, #2839) reached qa with execution.pr null, and
-      each qa worker had to backfill the stamp before it could key its
-      CI-verdict and mergeability sensors off the PR. The duty is already
-      specified in the in-flight tactic-graph-router-transitions ('execution.pr
-      when the PR opens'), so no new node is recorded — this entry confirms the
-      spec is load-bearing at fleet scale and directs that tactic's own qa and
-      review phases to verify the delivered transition writer stamps
-      execution.pr at the implement→qa write itself, not at some later write.
-      Until the writer lands, emulating sessions owe the stamp with the
-      transition (bootstrap parity, clarification 15), and the tick instruction
-      encodes the qa-side backfill as the interim correction. Recorded
-      2026-07-10 interview."
+    answer: >-
+      Emulated implement→qa transitions repeatedly land phase:qa with execution.pr null while an open draft PR exists — is the PR stamp at the implement→qa write load-bearing? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-10 interview.
   - question: Does explicit human dispatch of a single node override the pace curve,
       and does the graph lane have an entrypoint for it?
     answer: "Yes — explicit human dispatch overrides the autonomous pace curve in
@@ -1245,85 +1161,13 @@ clarifications:
       wholesale. See the fix-everything-cheap clarification.)"
   - question: Frozen (undecomposed or soft-frozen) tactics carry a ranking — are
       they selectable, and what runs when the dispatch script picks one?
-    answer: "Yes — decomposition and re-evaluation are dispatchable, ranked,
-      per-node work, not a manual-only step. A frozen node is a draft/raw tactic
-      (never decomposed — the retain-not-refine byproducts of clarification 6)
-      or a soft-frozen tactic (a planned tactic whose strategy substance
-      fingerprint changed, clarification 10). Every node carries calculated
-      attention derived at read time regardless of phase (clarification 11), so
-      a frozen node is ranked exactly like an executable one — \"ranked even
-      when frozen\" is already true; what this adds is that the selector no
-      longer excludes frozen nodes from the eligible pool. When the dispatch
-      script selects a frozen node, the session runs `/align-tactics <node-id>`
-      on it — extending `/align-tactics` to accept a tactic target (today it is
-      strategy-only: \"never selects its own target\"), the decomposition-skill
-      analog of tactic-phase-skill-node-targets re-keying the execution phase
-      skills. Selection resolves over a pool of frozen nodes: a strategy is
-      selectable when it has frozen descendants (or is itself undecomposed — the
-      zero-tactic initial-decomposition case), and selecting a strategy descends
-      to its highest-ranking frozen subtree node; a frozen tactic may rank
-      higher than its parent strategy and be selected directly. The router runs
-      `/align-tactics` on the resolved highest-ranked frozen node. Ties in
-      calculated attention break toward the more-progressed node by the phase
-      ordinal (draft < align-tactics < implement < fix < qa < review < main-qa <
-      done, so review outranks implement; equivalently a concrete child tactic
-      outranks its abstract parent strategy) — finish in-flight
-      decomposition/work before opening new. Claiming and worktree isolation key
-      on the RESOLVED node the session runs on, not the selection entry: a
-      strategy-entry and a direct-tactic selection that land on the same node
-      collide on one claim and dedupe via the uniform node-id
-      live-session/worktree rule (clarification 13); a zero-tactic strategy
-      resolves to itself → `/align-tactics <strategy-id>`, the classic initial
-      decomposition, unchanged. This supersedes the \"drafts are inert
-      `/align-tactics` input only\" implication of clarification 9 (drafts stay
-      non-blocking for strategy eligibility but gain a selectable disposition)
-      and extends clarification 10's soft-freeze re-evaluation from a
-      strategy-level round to per-tactic dispatch. Implementation retained as a
-      draft tactic (tactic-graph-frozen-tactic-dispatch). Recorded 2026-07-11
-      interview. (Ordinal amended 2026-07-18: the tie-break ordinal drops fix —
-      draft < align-tactics < implement < qa < review < main-qa < done — once
-      fix becomes orthogonal execution.fix state rather than a phase value; see
-      the fix-orthogonal-execution-state clarification.)"
+    answer: >-
+      Frozen (undecomposed or soft-frozen) tactics carry a ranking — are they selectable, and what runs when the dispatch script picks one? — See body §Phase Transitions & Fix State. Recorded 2026-07-11 interview.
   - question: After a phase completes cleanly (no variance/escalation), who
       validates CI and who advances the node — and does the post-review merge
       need author intervention?
-    answer: "Steady-state division of labor, split worker/tick. The phase worker —
-      implement, qa, and review alike — marks its phase complete and does NOT
-      itself validate CI or gate the next step on it; the tick reconciler
-      validates CI. Each tick reads the node's PR CI verdict: a tick where CI is
-      still in progress is skipped for that node (no forward transition, no
-      failure — it is retried next tick); a green-CI tick with the node ready
-      performs the next transition and dispatches the next phase worker; a
-      red-CI tick routes to the fix interrupt (clarification 18, parity with
-      dispatch-phase's CI-verdict-before-labels ordering). For review, the 'next
-      task' on the green-CI tick is the merge itself: the tick auto-merges the
-      reviewed PR without author intervention when green CI +
-      mergeable==MERGEABLE + the node's `reviewed` marker are all present. This
-      moves the merge/arm responsibility from the transition writer and the
-      review worker — where clarification 47 (review-worker arming) and
-      tactic-graph-router-transitions (the transition writer 'arms gh auto-merge
-      at clean review completion') placed it — onto the tick reconciler, which
-      arms once per tick under a fresh in-turn grant (dissolving clarification
-      47's per-worker-arming classifier hazard while keeping its phrasing
-      doctrine intact: arming instructions state the human authorization as fact
-      and name the commands, never arguing with or predicting the permission
-      layer). The tactic-scope-fingerprint re-check that clarification 36 sites
-      'before arming auto-merge' rides with the arming to the tick; its net
-      guarantee — no merge until the in-flight phase's fresh read postdates the
-      last scope edit — is unchanged. This is the steady state that
-      clarification 15's bootstrap-transition doctrine emulates by hand (there
-      the completing worker reads the CI/mergeability sensors at transition
-      time); it retires when tactic-graph-router-transitions and the router are
-      live. Concrete gap this records against: transition-node's node-lane arm
-      step readies the PR then calls the LABEL-gated dispatch-auto-merge, whose
-      eligibility requires the gh dispatch:reviewed label the node lane never
-      writes, so a reviewed node-lane PR is readied+mergeable but silently
-      skipped and held for human merge (observed on PR #2859, merged by hand
-      2026-07-11) — while the tick-workflow's own gh-native `gh pr merge --auto
-      --squash` path merged 8 of 9 review PRs autonomously on tick +3
-      (clarification 47). Closing that split into a single tick-owned,
-      label-free, marker-keyed merge is retained as draft tactic
-      tactic-graph-tick-node-lane-auto-merge. Recorded 2026-07-11 interview."
+    answer: >-
+      After a phase completes cleanly (no variance/escalation), who validates CI and who advances the node — and does the post-review merge need author intervention? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-11 interview.
   - question: What replaces the dispatch:main-broken gh-issue latch when origin/main
       goes red — and does the announcement surface stay gh-based?
     answer: "Main health is a sensor, and the self-heal flows through the general
@@ -1569,28 +1413,8 @@ clarifications:
       chunks, never a claude-executable on-path tactic, so the coverage gate
       never trips and clarification 3's fresh-reading gate never fires. Why, and
       what is the fix?"
-    answer: "Clarification 3's fresh-reading doctrine is correct but its
-      implementation anchor is wrong for this strategy class. The gate keys off
-      rounds.last_completed / rounds.count, which advance only when the last
-      child prunes — verified-in-prod (clarification 22). A round whose
-      deliverable is born-parked human reading plus off-path tooling never
-      prunes a child, so count stays 0 and last_completed stays null: the
-      fresh-reading check (guarded by count > 0) never runs and the node is
-      perpetually align-eligible. Fix: add a distinct rounds.last_aligned
-      timestamp, stamped when an /align-tactics round lands its tactics, and
-      re-select for a further round only when the strategy's reading is newer
-      than last_aligned (a null last_aligned — never aligned — still passes,
-      preserving first rounds), applied regardless of count. last_completed
-      keeps its verified-in-prod meaning (clarification 22) and count >= 2 stays
-      a hard cap; for a recurring human-signal strategy count legitimately stays
-      0 and last_aligned freshness is the sole re-selection throttle — align
-      runs once per new reading to born-park the reading's follow-up chunks and
-      sweep drift, then waits. Diverges from the rival fix of counting
-      born-parked on-path chunks as coverage: that would exclude the strategy
-      until the entire reading program finished and never re-open to sweep drift
-      on a new reading, losing the per-reading cadence clarification 3 intends.
-      Implementation: tactic-graph-eligibility-last-aligned. Recorded 2026-07-16
-      interview."
+    answer: >-
+      A strategy whose signal is validated only by human work (sensor: owner review at office-hours) is re-selected for /align-tactics every tick — its rounds produce off-path tooling plus born-parked on-path reading chunks, never a claude-executable on-path tactic, so the coverage gate never trips and clarification 3's fresh-reading gate never fires. Why, and what is the fix? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-16 interview.
   - question: A tick performs scriptable non-worker work (e.g. a scope-stale demote)
       and then ends having launched no worker — a SPAWN_N slot spent on a
       metadata write. What is a tick's completion contract when scriptable work
@@ -1666,41 +1490,8 @@ clarifications:
       (it sits at `phase: review` awaiting the tick's merge) — does the selector
       keep dispatching a review worker to it, and what is its remaining
       lifecycle?"
-    answer: "No — the `reviewed` marker terminates review-worker candidacy. Once
-      `execution.markers` includes `reviewed`, neither the scheduled selector
-      (`selectGraphTargets`, router.ts) nor an explicit `dispatch <node>`
-      resolution emits the node as a review-phase worker candidate; its
-      remaining transitions are entirely tick-owned, per clarification 53's
-      worker/tick split. On green CI + `mergeable==MERGEABLE` the tick's
-      `graph-auto-merge` (tactic-graph-tick-node-lane-auto-merge) merges it
-      label-free and `reconcile-graph-merged` absorbs the merge to
-      `done`/`main-qa` with worktree cleanup; on red CI the fix interrupt
-      (clarification 18) dispatches a fix worker, and that fix dispatch CLEARS
-      the `reviewed` marker so the node re-enters review after fix→qa — a CI
-      failure means code changed that the completed review never saw, so
-      unreviewed code must never reach merge (the same no-unreviewed-code-merges
-      guarantee test-integrity protects). This red-CI marker-clear is distinct
-      from the scope-stale demote-to-implement (clarification 36), which fires
-      on a post-review scope EDIT rather than a CI failure. Concrete gap this
-      closes: `selectGraphTargets` emits ANY open `phase:review` tactic as a
-      review candidate and neither it nor `check-node-selection.ts` reads
-      `execution.markers`, so a fully-reviewed node kept being re-dispatched
-      `/review-fix` every tick (observed on
-      tactic-graph-node-lane-write-hardening / PR #2882) — a no-op only because
-      that node's own gap-(e) hardening added the node-lane review-fix re-entry
-      check, but a wasted worker slot each tick nonetheless. This refines
-      clarification 53 from the tick side (the tick prefers merge) to the
-      selector side (the selector must not emit the candidate at all);
-      clarification 53's tick-merge disposition and
-      tactic-graph-tick-node-lane-auto-merge's merge reconciler are unchanged.
-      Implementation retained as draft tactic
-      tactic-graph-selector-reviewed-exclusion. Recorded 2026-07-18 interview.
-      (Mechanism superseded 2026-07-18: the red-CI marker-clear re-review is the
-      interim mechanism; the greenfield replaces it with a direct phase ->
-      review reset plus auto-merge disarm when a fix pushes code after review
-      completed — see the fix-orthogonal-execution-state clarification and
-      tactic-fix-interrupt-orthogonal-state. The no-unreviewed-code-merges
-      guarantee this clarification protects is unchanged.)"
+    answer: >-
+      A node's `reviewed` marker is written but its PR is not yet merged (it sits at `phase: review` awaiting the tick's merge) — does the selector keep dispatching a review worker to it, and what is its remaining lifecycle? — See body §Phase Transitions & Fix State. Recorded 2026-07-18 interview.
   - question: An office-hours drain session fixed a parked node and pushed the fix,
       but the office_hours park was left set — the node was even re-parked
       before a later session finally cleared it
@@ -1736,55 +1527,8 @@ clarifications:
   - question: How is the CI-fix interrupt modeled — as a `phase` enum value or as
       orthogonal execution state — and what is the migration off the phase-value
       encoding?
-    answer: "Greenfield target: fix is NOT a phase; it is orthogonal nullable
-      execution state, execution.fix = {since, attempt, pushed_sha}. `phase`
-      stays purely ladder-positional (implement -> qa -> review -> main-qa ->
-      done) and is never overwritten by a CI failure, so entering a fix no
-      longer destroys ladder position. The selector reads execution.fix
-      directly: execution.fix set (or a live red-CI verdict) -> dispatch
-      fix-checks; else -> the phase worker for the preserved phase. This is the
-      same CI-verdict-before-phase-logic precedence the fix-as-interrupt
-      clarification (2026-07-04) already records, moved out of a phase overwrite
-      and into a field the selector reads. execution.fix also carries the
-      pending-CI concurrency guard across the ticks when no session is live —
-      the window between the fix worker pushing and CI re-reporting — so a
-      not-yet-green re-run is not misread as \"resume the phase worker\". The
-      one deliberate backward edge is a correctness move, not a resume
-      mechanism: when a fix pushes code after review has completed (reviewed /
-      merge-armed / main-qa), the fix worker resets phase -> review and disarms
-      auto-merge, because new code must be re-reviewed. This REPLACES the
-      interim red-CI marker-clear re-review (the reviewed-marker re-review
-      clarification, 2026-07-18) and the lossy resumeAfterFix
-      marker-reconstruction (transitions.ts): with phase preserved there is
-      nothing to reconstruct. When the interrupt fires BEFORE review completes,
-      phase is already at implement/qa/review and is simply preserved — no
-      special handling, and the two-commit fix->implement->qa resume collapses
-      to nothing. Doctrine preserved unchanged: fix remains a CI interrupt
-      (fix-as-interrupt clarification) and unreviewed code must never reach
-      merge after a fix (reviewed-marker re-review clarification); only the
-      ENCODING changes. This supersedes the fix-as-phase framing wherever it
-      appears: the attention ordinal drops fix (draft < align-tactics <
-      implement < qa < review < main-qa < done) in both the frozen-tactic
-      tie-break clarification and the main-qa parity ladder; and the incidental
-      phase enumerations that list fix as a station (the scope-fingerprint
-      chain-of-custody clarification, and the pre-transitions bootstrap advance
-      clarification) now read against the node's PRESERVED phase, since a fixing
-      node sits at implement/qa/review with execution.fix set. Brownfield
-      migration (backwards-incompatible — dropping the fix enum value breaks any
-      node at phase:fix — so sequenced; the executable clean-session units live
-      in tactic-fix-interrupt-orthogonal-state, phase implement): (1) additive
-      schema — add execution.fix to schema + validator, changes no behavior; (2)
-      dual-read transitions/selector — teach decideTransition and the selector
-      to read execution.fix while phase:\"fix\" keeps working in parallel; (3)
-      one-time migration of the live phase:fix nodes to (preserved phase +
-      execution.fix set), reconstructing the preserved phase from markers once
-      at migration time — the last use of the lossy reconstruction; (4) remove
-      fix from the Phase enum and delete fixInterrupt and resumeAfterFix. The
-      spec node tactic-graph-native-dispatch (S3.1) phase-ordinal prose updates
-      with step 4. Landing this record soft-freezes the strategy's open child
-      tactics for per-node re-evaluation (the strategy-substance fingerprint
-      includes clarifications); that re-evaluation is expected and
-      author-directed here. Recorded 2026-07-18 /align-strategy interview."
+    answer: >-
+      How is the CI-fix interrupt modeled — as a `phase` enum value or as orthogonal execution state — and what is the migration off the phase-value encoding? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-18 /align-strategy interview.
   - question: The dispatch phase-worker skills carry ad-hoc names (/align-tactics,
       /implement, /fix-checks, /qa-fix, /review-fix, /qa-main, /fix-conflicts) —
       what naming convention should they take, and how does renaming
@@ -2642,3 +2386,118 @@ attributes:
       session is never router substrate
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
+
+## Router Mechanism
+
+This section holds the settled router and graph-mechanism rules moved down out of
+the clarification history, per the body-function rule for strategy nodes
+(intentions/kind-strategy.md, 2026-07-09): a strategy's body carries the design
+document, and clarifications that have hardened into current mechanism belong in
+prose organized by topic rather than as a running interview log. Each subsection
+below states the current rule and folds the clarification entries that produced
+it; the compressed `clarifications:` entries point here.
+
+### Phase Transitions & Fix State
+
+**Fix is orthogonal execution state, not a phase.** Current rule (from the
+2026-07-18 encoding decision, entry 66): fix is a nullable orthogonal
+`execution.fix = {since, attempt, pushed_sha}`, not a value of `phase`. `phase`
+stays purely ladder-positional — implement → qa → review → main-qa → done — and
+is never overwritten by a CI failure, so entering a fix no longer destroys ladder
+position. The selector reads `execution.fix` directly: set (or a live red-CI
+verdict) → dispatch fix-checks; otherwise → the phase worker for the preserved
+phase. `execution.fix` also carries the pending-CI concurrency guard across ticks
+when no session is live — the window between a fix worker pushing and CI
+re-reporting — so a not-yet-green re-run is not misread as "resume the phase
+worker." The one deliberate backward edge is a correctness move: when a fix
+pushes code after review has completed (reviewed / merge-armed / main-qa), the
+fix worker resets `phase → review` and disarms auto-merge, because new code must
+be re-reviewed. Doctrine is preserved unchanged — fix remains a CI interrupt, and
+unreviewed code must never reach merge after a fix; only the encoding changes. The
+attention ordinal therefore drops fix: draft < align-tactics < implement < qa <
+review < main-qa < done. Migration is backwards-incompatible (dropping the fix
+enum value breaks any node at `phase:fix`) and sequenced — additive schema →
+dual-read transitions/selector → one-time migration of live `phase:fix` nodes to
+(preserved phase + `execution.fix` set) → remove fix from the Phase enum and
+delete `fixInterrupt`/`resumeAfterFix`; the executable clean-session units live in
+tactic-fix-interrupt-orthogonal-state.
+
+History of this rule: entry 18 (2026-07-04) established fix as the CI-failure
+interrupt — a tactic enters fix from any of implement, qa, or review when its
+PR's CI verdict is failing and resumes the ladder once CI is green, distinct from
+qa-fix and review-fix's own internal content-repair loops — but originally modeled
+it as a phase value. Entry 22 (2026-07-04) added `main-qa` as a phase between merge
+and done (post-merge needs-main residue lives in a body section of the node, not a
+follow-up issue) and set the attention-ranking ladder, which then still listed fix.
+Entry 52 (2026-07-11) made frozen tactics selectable and defined the tie-break
+ordinal (ties break toward the more-progressed node), an ordinal that then still
+listed fix. Entry 64 (2026-07-18) established that the `reviewed` marker terminates
+review-worker candidacy and specified the interim red-CI marker-clear that made a
+node re-enter review after fix → qa. Entry 66 supersedes the encoding for all of
+them: `phase` is never overwritten by fix, every ordinal list drops fix, and the
+marker-clear re-review is replaced by the direct `phase → review` reset plus
+auto-merge disarm above.
+
+**Re-alignment eligibility anchors on `rounds.last_aligned`.** Current rule (from
+2026-07-16, entry 61): for a strategy whose signal is validated only by human work
+(e.g. owner review at office-hours), /align-tactics re-eligibility keys off a
+distinct `rounds.last_aligned` timestamp — stamped when an /align-tactics round
+lands its tactics — rather than `rounds.last_completed`. Re-select for a further
+round only when the strategy's reading is newer than `last_aligned` (a null
+`last_aligned`, meaning never aligned, still passes, preserving first rounds),
+applied regardless of count. This is needed because a round whose deliverable is
+born-parked reading plus off-path tooling never prunes a child, so
+`rounds.last_completed`/`rounds.count` never advance and the older gate never
+fires — the strategy would be perpetually align-eligible. It supersedes only the
+ANCHOR field of the earlier fresh-reading gate: `last_completed` keeps its
+verified-in-prod meaning (entry 22), and the `count >= 2` hard cap still belongs
+to entry 3. Implementation: tactic-graph-eligibility-last-aligned. History: entry 3
+(2026-07-03) established the fresh-reading gate plus the two-round cap that stops
+/align-tactics from burning rounds forever on an unvalidated signal, originally
+anchored on `rounds.last_completed`; a null reading counts as not-validated, and a
+strategy that cannot be measured must first buy its own instrument.
+
+The following rules are settled and stand on their own:
+
+Persisted `phase` is the state machine (Recorded 2026-07-03 interview, entry 1).
+A tactic node stores an explicit `phase` field the router transitions; PR draft
+state and CI are demoted from ground truth to sensors the router reads before
+committing a transition. This deliberately reverses the gh-era router's "no
+persisted state machine" principle — the graph is the state machine now.
+Out-of-band gh events (a hand-merged PR) are absorbed by a reconciler sweep, not
+by re-derivation.
+
+Bootstrap-transition doctrine (Recorded 2026-07-03 from author review, entry 15).
+Until tactic-graph-router-transitions and tactic-graph-commit are live, every
+session completing a phase on a graph-native tactic must itself end the phase with
+the transition write to origin/main — `phase` (advancing the ladder against the
+CI-verdict and mergeability sensors, with the CI-fix interrupt handled orthogonally
+per the fix-state rule above), `execution.pr` when the work PR opens, attempt
+counters, and markers. Selection reads main, so a phase that ends without the write
+schedules nothing. The write is a state-only `intentions/` commit, never part of
+the work PR (the work PR merges at the end of the lifecycle; state must land on
+main while it is still open); fields ride squatted `attributes.*` until
+tactic-graph-dispatch-schema is on main. The doctrine retires when the transitions
+tactic lands.
+
+`execution.pr` stamps at the implement→qa write itself (Recorded 2026-07-10
+interview, entry 48). Confirmed load-bearing at fleet scale: on tick +3 six nodes
+reached qa with `execution.pr` null while an open draft PR existed, and each qa
+worker had to backfill the stamp before it could key its CI-verdict and
+mergeability sensors off the PR. The delivered transition writer must stamp
+`execution.pr` at the implement→qa write, not at some later write; until it lands,
+emulating sessions owe the stamp with the transition (bootstrap parity above).
+
+Steady-state worker/tick split (Recorded 2026-07-11 interview, entry 53). The
+phase worker — implement, qa, and review alike — marks its phase complete and does
+NOT itself validate CI; the tick reconciler validates CI. Each tick reads the
+node's PR CI verdict: a tick where CI is still in progress skips the node (no
+forward transition, no failure — retried next tick); a green-CI tick with the node
+ready performs the next transition and dispatches the next phase worker; a red-CI
+tick routes to the fix interrupt. For review, the green-CI "next task" is the merge
+itself: the tick auto-merges the reviewed PR without author intervention when green
+CI + `mergeable==MERGEABLE` + the node's `reviewed` marker are all present, arming
+once per tick under a fresh in-turn grant. This moves the merge/arm responsibility
+off the transition writer and the review worker and onto the tick reconciler. It is
+the steady state that the bootstrap-transition doctrine above emulates by hand, and
+it retires when the router is live.
