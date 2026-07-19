@@ -22902,7 +22902,7 @@ tick_teardown
 echo "Test: dispatch-tick node-id arg forwarded to select-tick; node-not-selectable → exit 1, no graph-execute"
 tick_setup
 export TICK_DECISION="node-not-selectable foo-bar"
-err=$("$TMPDIR_TEST/dispatch-tick" foo-bar 2>&1 1>/dev/null) ; rc=$?
+err=$("$TMPDIR_TEST/dispatch-tick" foo-bar 2>&1 1>/dev/null) && rc=0 || rc=$?
 assert_eq "node-arg-fwd: select-tick received the raw node-id (no flag)" "foo-bar" \
   "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
 assert_eq "node-not-selectable: exit 1" "1" "$rc"
