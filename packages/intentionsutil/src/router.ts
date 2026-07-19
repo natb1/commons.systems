@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
 import { isStrategyStale, REVIEWED_MARKER } from "./transitions.js";
 import { PHASES } from "./schema.js";
-import type { IntentionNode, Phase } from "./schema.js";
+import type { FixState, IntentionNode, Phase } from "./schema.js";
 
 // Graph router v2, first half: selection (tactic-graph-router-selector).
 //
@@ -18,25 +18,6 @@ import type { IntentionNode, Phase } from "./schema.js";
 
 // --- Types -------------------------------------------------------------------
 
-/**
- * The phase ladder, closest-to-done first (strategy clarification 22).
- *
- * Historical: this drove the within-rank selection tiebreak until
- * tactic-graph-frozen-tactic-dispatch replaced it with a progression ordinal
- * over the full `PHASES` order (see `progressionIndex`). The selection sort no
- * longer consults it; it is retained as a public export for downstream
- * consumers. Note the progression ordinal reorders `fix` vs `qa` relative to
- * this ladder (`qa` is now more-progressed than `fix`).
- */
-export const PHASE_LADDER: readonly string[] = [
-  "main-qa",
-  "review",
-  "fix",
-  "qa",
-  "implement",
-  "align-tactics",
-];
-
 /** One selectable node, in selection order. */
 export interface GraphCandidate {
   id: string;
@@ -49,6 +30,16 @@ export interface GraphCandidate {
   pace_exempt: boolean;
   /** The tactic's execution.pr — the wrapper's sensor-gate input. Null for strategies. */
   pr: number | null;
+  /**
+   * The tactic's raw `execution.fix` interrupt state, or null. Surfaced so the
+   * shell sensor-gate (`graph-select-target`) reads the interrupt AND its
+   * `pushed_sha` (the pending-CI guard) straight off the candidate object
+   * without a second store read — the CI-routing decision (enter/resolve fix)
+   * is bash's, but the state it keys on stays in this pure TS layer. Null for
+   * strategies and for a tactic with no active interrupt. Note `phase` above is
+   * already overwritten to `"fix"` whenever this is non-null.
+   */
+  fix: FixState | null;
   /**
    * True when this candidate is a soft-freeze re-evaluation session (strategy
    * clarification 10) rather than an ordinary decomposition round — a stale
@@ -299,10 +290,14 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     candidates.push({
       id: t.id,
       kind: "tactic",
-      phase: t.phase,
+      // A tactic under an active CI-fix interrupt (`execution.fix` set) is
+      // emitted as a `fix` candidate regardless of its preserved ladder `phase`;
+      // its real `phase` stays put and the interrupt is carried orthogonally.
+      phase: t.execution?.fix != null ? "fix" : t.phase,
       rank: attention.get(t.id)?.value ?? 0,
       pace_exempt: t.pace_exempt,
       pr: t.execution?.pr ?? null,
+      fix: t.execution?.fix ?? null,
       reevaluation: false,
     });
   }
@@ -327,6 +322,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
         rank: attention.get(t.id)?.value ?? 0,
         pace_exempt: t.pace_exempt,
         pr: null,
+        fix: null,
         reevaluation: false,
       });
     } else if (frozenTacticIds.has(t.id) && isOpenTactic(t)) {
@@ -337,6 +333,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
         rank: attention.get(t.id)?.value ?? 0,
         pace_exempt: t.pace_exempt,
         pr: t.execution?.pr ?? null,
+        fix: t.execution?.fix ?? null,
         reevaluation: true,
       });
     }
@@ -353,6 +350,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
       rank: attention.get(s.id)?.value ?? 0,
       pace_exempt: s.pace_exempt,
       pr: null,
+      fix: null,
       reevaluation,
     });
 

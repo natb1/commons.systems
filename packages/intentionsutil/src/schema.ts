@@ -27,12 +27,15 @@ export const TOOLING_KINDS: readonly ToolingKind[] = ["actuator", "sensor"];
 /**
  * Persisted dispatch phase a tactic sits in. A future graph-native router
  * transitions this; the schema only validates the value is one of the enum.
+ *
+ * `"fix"` is deliberately NOT a member: the CI-fix interrupt lives entirely in
+ * the orthogonal `execution.fix` field (see `FixState`), set/cleared by the
+ * graph selector off the live CI verdict, independent of `phase`.
  */
 export type Phase =
   | "draft"
   | "align-tactics"
   | "implement"
-  | "fix"
   | "qa"
   | "review"
   | "main-qa"
@@ -42,7 +45,6 @@ export const PHASES: readonly Phase[] = [
   "draft",
   "align-tactics",
   "implement",
-  "fix",
   "qa",
   "review",
   "main-qa",
@@ -358,12 +360,32 @@ export type StrategyStampValue = string | { hash: string; sha: string };
  *    re-stamp rewrites the field. No hashing logic lives here — only the
  *    typed field.
  */
+/**
+ * A CI-fix interrupt in flight on a tactic, orthogonal to `phase`. `since` is
+ * the interrupt date (`date -u +%Y-%m-%d`); `attempt` is the fix-attempt
+ * counter (replaces the `attempts["fix"]` convention); `pushed_sha` is the
+ * last SHA `/fix-checks` pushed — the pending-CI guard, null before the first
+ * push.
+ */
+export interface FixState {
+  since: string;
+  attempt: number;
+  pushed_sha: string | null;
+}
+
 export interface Execution {
   branch: string;
   pr: number | null;
   attempts: Record<string, number>; // per-phase attempt counts
   markers: string[];
   strategy_fingerprint: string | Record<string, StrategyStampValue> | null;
+  /**
+   * Optional (not just nullable) at the type level: existing `Execution`
+   * object literals across the codebase predate this field and are out of
+   * scope for this additive-only unit. `validateExecution` always populates
+   * it (to a validated object or `null`) on any value it returns.
+   */
+  fix?: FixState | null;
 }
 
 /** A first-class parking record: why a node is in office hours and since when. */
@@ -469,6 +491,22 @@ function validateStrategyFingerprint(
   return out;
 }
 
+/**
+ * Nullable `FixState` object: string `since`, number `attempt`, nullable
+ * string `pushed_sha`.
+ */
+function validateFixState(value: unknown, field: string): FixState | null {
+  if (value == null) return null;
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object or null for ${field}, got ${typeof value}`);
+  }
+  return {
+    since: requireDateString(value.since, `${field}.since`),
+    attempt: requireNonNegativeInt(value.attempt, `${field}.attempt`),
+    pushed_sha: optionalString(value.pushed_sha, `${field}.pushed_sha`),
+  };
+}
+
 function validateExecution(value: unknown, field: string): Execution {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
@@ -479,6 +517,7 @@ function validateExecution(value: unknown, field: string): Execution {
     attempts: validateAttempts(value.attempts, `${field}.attempts`),
     markers: validateIdArray(value.markers, `${field}.markers`),
     strategy_fingerprint: validateStrategyFingerprint(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
+    fix: validateFixState(value.fix, `${field}.fix`),
   };
 }
 

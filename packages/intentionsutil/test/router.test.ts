@@ -61,6 +61,7 @@ function exec(partial: Partial<Execution> = {}): Execution {
     attempts: partial.attempts ?? {},
     markers: partial.markers ?? [],
     strategy_fingerprint: partial.strategy_fingerprint ?? null,
+    fix: partial.fix ?? null,
   };
 }
 
@@ -144,9 +145,31 @@ describe("tactic eligibility", () => {
 
   it("passes pace_exempt and execution.pr through to the candidate", () => {
     const sel = selectGraphTargets([
-      tactic({ id: "tactic-a", phase: "fix", pace_exempt: true, execution: exec({ pr: 42 }) }),
+      tactic({ id: "tactic-a", phase: "qa", pace_exempt: true, execution: exec({ pr: 42 }) }),
     ]);
     expect(sel.candidates[0]).toMatchObject({ pace_exempt: true, pr: 42 });
+  });
+
+  it("overrides phase to 'fix' and surfaces execution.fix when a CI-fix interrupt is active", () => {
+    // The ladder phase (qa) is preserved on the node; the candidate is emitted as
+    // a fix candidate and carries the raw interrupt state for the shell gate's
+    // pending-CI guard.
+    const fix = { since: "2026-07-18", attempt: 2, pushed_sha: "abc123" };
+    const sel = selectGraphTargets([
+      tactic({ id: "tactic-a", phase: "qa", execution: exec({ pr: 42, fix }) }),
+    ]);
+    const c = sel.candidates.find((x) => x.id === "tactic-a");
+    expect(c?.phase).toBe("fix");
+    expect(c?.fix).toEqual(fix);
+  });
+
+  it("surfaces fix:null and the real ladder phase when no interrupt is active", () => {
+    const sel = selectGraphTargets([
+      tactic({ id: "tactic-a", phase: "qa", execution: exec({ pr: 42 }) }),
+    ]);
+    const c = sel.candidates.find((x) => x.id === "tactic-a");
+    expect(c?.phase).toBe("qa");
+    expect(c?.fix).toBeNull();
   });
 
   it("skips a phase:review tactic once execution.markers includes 'reviewed' (tick-owned)", () => {
@@ -169,6 +192,28 @@ describe("tactic eligibility", () => {
       }),
     ];
     expect(candidateIds(nodes)).toEqual(["tactic-review"]);
+  });
+
+  it("emits a fix candidate when execution.fix is set, regardless of the real ladder phase", () => {
+    // A CI-fix interrupt is carried orthogonally on execution.fix; the node's
+    // real phase (e.g. qa) stays put, but the candidate surfaces as phase:"fix".
+    const nodes = [
+      tactic({
+        id: "tactic-under-fix",
+        phase: "qa",
+        execution: { ...exec({ pr: 7 }), fix: { since: "2026-07-18", attempt: 1, pushed_sha: null } },
+      }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    expect(sel.candidates[0]).toMatchObject({ id: "tactic-under-fix", phase: "fix" });
+  });
+
+  it("emits the real ladder phase when execution.fix is unset", () => {
+    const nodes = [
+      tactic({ id: "tactic-clean", phase: "qa", execution: { ...exec({ pr: 7 }), fix: null } }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    expect(sel.candidates[0]).toMatchObject({ id: "tactic-clean", phase: "qa" });
   });
 });
 
@@ -768,18 +813,16 @@ describe("ordering", () => {
     expect(candidateIds(nodes)).toEqual(["tactic-high", "tactic-low"]);
   });
 
-  it("within one rank level, the progression ordinal orders closest-to-done first (qa sorts before fix)", () => {
+  it("within one rank level, the progression ordinal orders closest-to-done first", () => {
     const nodes = [
       strategy({ id: "strategy-s", reading: "validated" }),
       tactic({ id: "tactic-implement", phase: "implement" }),
       tactic({ id: "tactic-review", phase: "review" }),
       tactic({ id: "tactic-qa", phase: "qa" }),
-      tactic({ id: "tactic-fix", phase: "fix" }),
     ];
     expect(candidateIds(nodes)).toEqual([
       "tactic-review",
       "tactic-qa",
-      "tactic-fix",
       "tactic-implement",
     ]);
   });
@@ -807,7 +850,6 @@ describe("ordering", () => {
       "draft",
       "align-tactics",
       "implement",
-      "fix",
       "qa",
       "review",
       "main-qa",

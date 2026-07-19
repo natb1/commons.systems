@@ -78,6 +78,7 @@ describe("validateNode", () => {
       attempts: { implement: 1, qa: 2 },
       markers: ["dispatch:qa"],
       strategy_fingerprint: "abc123",
+      fix: null,
     });
     expect(result.validates).toEqual(["strategy-1"]);
     expect(result.blocked_by).toEqual(["tactic-2"]);
@@ -109,6 +110,7 @@ describe("validateNode", () => {
       attempts: {},
       markers: [],
       strategy_fingerprint: null,
+      fix: null,
     });
   });
 

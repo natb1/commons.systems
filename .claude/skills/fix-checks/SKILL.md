@@ -32,7 +32,12 @@ than restarting the pass.
 **Target resolution — keyspace split.** The current worktree dictates the
 target. Split on its name before Step 1: `[0-9]*-*` is a legacy issue worktree
 (unchanged); anything else is a graph-native node id, and
-`intentions/<id>.md` must exist at `origin/main` with `phase == fix` (else exit 1).
+`intentions/<id>.md` must exist at `origin/main` under an active CI-fix interrupt
+— `execution.fix != null` (else exit 1). Note `phase` is NOT `fix`: a CI-fix
+interrupt is carried orthogonally on `execution.fix`, leaving `phase` at its real
+ladder position (implement/qa/review), so the gate reads `execution.fix`, never
+`phase`. Nested YAML is fragile to `sed`-scrape, so read the node through
+`readNode` and test `.execution.fix` with `jq`.
 
 ```bash
 BRANCH=$(basename "$(git rev-parse --show-toplevel)")
@@ -42,13 +47,21 @@ case "$BRANCH" in
   *)
     NODE_ID="$BRANCH"
     git fetch origin main --quiet
-    NODE_MD=$(git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -xO 2>/dev/null) || {
+    # Extract the node from origin/main into a temp store and read it via
+    # readNode (the single validation gate), rather than sed-scraping frontmatter.
+    NODE_TMP=$(mktemp -d)
+    if ! git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -x -C "$NODE_TMP" 2>/dev/null; then
       echo "/fix-checks: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
       exit 1
-    }
-    NODE_PHASE=$(printf '%s\n' "$NODE_MD" | sed -n 's/^phase: *//p' | head -1)
-    if [ "$NODE_PHASE" != "fix" ]; then
-      echo "/fix-checks: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'fix'" >&2
+    fi
+    NODE_JSON=$(node --import tsx/esm -e '
+      const { readNode } = await import("./packages/intentionsutil/src/store.js");
+      process.stdout.write(JSON.stringify(readNode(process.argv[1], process.argv[2])));
+    ' "$NODE_TMP/intentions" "$NODE_ID") || {
+      echo "/fix-checks: could not read node '$NODE_ID' from origin/main" >&2; exit 1; }
+    rm -rf "$NODE_TMP"
+    if [ "$(jq -r '.execution.fix // "null"' <<<"$NODE_JSON")" = "null" ]; then
+      echo "/fix-checks: node '$NODE_ID' is not under a CI-fix interrupt (execution.fix is null) at origin/main" >&2
       exit 1
     fi
     N="$NODE_ID"; TARGET_KIND=node ;;
@@ -63,18 +76,54 @@ performs does not apply — use `dispatch-context-pack`'s `--pr-is-number` flag
 instead, see Step 1 below. fix-checks never runs without an open PR, so an
 empty result here is a real error — write `$CLAUDE_JOB_DIR/office-hours-reason`
 per the Escalation note below and stop, never `dispatch-mark-deviation`, which
-is issue-only) — never pass `--issue`; on a clean
-fix (CI green after the push) the completion seam invokes the graph-native
-transition writer instead of any `dispatch-complete-phase` /
-`dispatch-mark-complete` — it consults the CI verdict and returns the node from
-`fix` to the interrupted ladder position as one state-only graph-commit on
-`origin/main`:
+is issue-only) — never pass `--issue`.
+
+**Node-lane completion — the fix worker does NOT resolve the interrupt.** The
+selector, not this worker, owns clearing `execution.fix` (it decides when CI has
+gone green on the pushed sha, on a LATER tick). This worker's completion duty is
+only to RECORD what this iteration did and stop:
+
+- **If this iteration pushed a commit** (a real fix, or the Step 4
+  "main-already-fixed-it" merge-commit push): record the pushed sha onto the
+  active interrupt via `apply-fix-state --record-push`, then land that state-only
+  write on `origin/main` with `graph-commit`. Recording the sha arms the
+  selector's pending-CI guard, so a pending verdict on this exact sha is never
+  misread as a green resolution. Run this from the PR-branch worktree with the
+  reset-dance `graph-commit` needs there (same as `/implement`'s node-lane
+  completion did with `transition-node`):
+
+  ```bash
+  HEAD_SHA=$(git rev-parse HEAD)
+  node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
+    "$N" --record-push "$HEAD_SHA"
+  .claude/skills/dispatch-propagate/scripts/graph-commit \
+    -m "graph: record fix push $HEAD_SHA on $N" "$N"
+  ```
+
+- **If this iteration pushed NOTHING** (the generic-no-repro / flake outcomes
+  Step 4 documents as pushing nothing): make NO graph write. There is no new sha
+  to record and the interrupt stays exactly as it was; the selector re-launches
+  `/fix-checks` next tick (or the flake path files its own issue and the node is
+  no longer re-routed to fix — see Step 4).
+
+Do NOT call `transition-node` here: after the CI-blind redesign it no longer
+knows about `fix` and would force the ladder forward regardless of whether the
+fix actually worked. Do NOT clear `execution.fix`, reset `phase`, or write any
+completion marker — those are the selector's on a later green tick. The Stop hook
+(`.claude/hooks/dispatch-stop.sh`) needs nothing from this seam for a clean pass
+(it only backstops the escalation park); chain continuation is carried by the
+systemd heartbeat and the tick's convergence reseed.
+
+**Disarm auto-merge on every push.** Whenever this worker pushes ANY commit (a
+fix or the main-already-fixed-it merge), disarm auto-merge immediately as a
+safety action — a past-review node may still carry a stale merge-arm from before
+the regression, and the newly pushed code must not merge before it is re-reviewed
+(the selector applies the re-review reset when it later resolves the interrupt):
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
+gh pr ready --undo "$PR_NUM"   # idempotent no-op when the PR was not merge-armed
 ```
 
-The graph-tick worker runs it with the reset-dance a PR-branch worktree needs.
 Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
 `office-hours-recommendation`) for the Stop hook's `park-node`, never a gh label.
 **On the node lane no gh issue is ever read or written.**
@@ -211,6 +260,10 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
      ```bash
      git push origin HEAD
      ```
+
+     **Node lane:** this counts as a push — after it, disarm auto-merge
+     (`gh pr ready --undo "$PR_NUM"`) and record the pushed sha per the node-lane
+     completion seam above (`apply-fix-state --record-push` + `graph-commit`).
 
    - **Flake** — `is_flake == true`: the failure is an upstream flaky test or a
      CI-infrastructure hiccup, unrelated to this PR's own changes. Re-running
@@ -531,6 +584,10 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
    classification — generic and flake push nothing, main-fixed pushed the merge
    commit — so there is nothing more to do here.
 
+   **Node lane:** immediately after `/implement-unit` pushes the fix, disarm
+   auto-merge (`gh pr ready --undo "$PR_NUM"`) and record the pushed HEAD sha per
+   the node-lane completion seam (`apply-fix-state --record-push` + `graph-commit`).
+
    `/implement-unit` returning here is mid-pass, not the end of the turn. Continue
    through Steps 7–9; the pass ends only at the Step 9 `dispatch-mark-complete`
    marker (or the Step 4 needs-human stop). Do not emit a closing summary; the next
@@ -546,19 +603,28 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
    ```
 
 9. **Write the phase-completed marker, then stop.** Reached by every outcome
-   **except** needs-human (which stopped in Step 4 without a marker). The Stop hook
-   (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
+   **except** needs-human (which stopped in Step 4 without a marker).
    `CLAUDE_JOB_DIR` unset = interactive run; the script no-ops with a clear
    diagnostic.
+
+   **Legacy lane only** (`TARGET_KIND=issue`):
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
      --phase fix-checks --pr "$PR_NUM"
    ```
 
+   **Node lane** (`TARGET_KIND=node`): write NO `dispatch-mark-complete` marker
+   (it is a gh-label vehicle, issue-only). The node lane's completion is the
+   `apply-fix-state --record-push` + `graph-commit` write from the completion
+   seam above (when this iteration pushed), or nothing (when it pushed nothing).
+   The Stop hook (`.claude/hooks/dispatch-stop.sh`) needs no marker from a clean
+   node pass — it only backstops the escalation park.
+
    Then **stop**. The `/dispatch-propagate` background-job chain drives the
-   next iteration — the next `/dispatch-propagate` job re-derives the phase
-   from CI ground truth and re-invokes `/fix-checks` if checks still fail.
+   next iteration — the selector observes the pushed sha's CI verdict on a later
+   tick and either resolves the interrupt (green) or re-invokes `/fix-checks`
+   (still red).
 
 ## Accumulator
 
