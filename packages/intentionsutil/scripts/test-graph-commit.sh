@@ -333,7 +333,7 @@ edit_line "$A" t-pending 1 stuck
 out="$(export GC_POLL=1 GC_TIMEOUT=1 GC_ATTEMPTS=2; run_gc "$A" t-pending 2>&1)"; rc=$?
 if [[ $rc -eq 1 ]] \
    && grep -q 'attempt 2/2' <<<"$out" \
-   && grep -q 'could not land on main after 2 attempts' <<<"$out"; then
+   && grep -q 'could not land on main after 2/2 attempts' <<<"$out"; then
   ok "pending timeout stays transient: burns attempts, exits busy-main"
 else
   no "pending timeout retry path (rc=$rc)"; printf '%s\n' "$out"

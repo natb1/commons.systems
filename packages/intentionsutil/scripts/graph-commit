@@ -257,6 +257,13 @@ cleanup() {
   if [[ "$SCRATCH_PUSHED" -eq 1 && -n "$SCRATCH_BRANCH" ]]; then
     git push origin --delete "$SCRATCH_BRANCH" >&2 || true
   fi
+  # Best-effort backstop: in the common paths try_land() already released the
+  # lock and reset LOCK_HELD=0, so this is a no-op there. It only does real
+  # work when the script dies before reaching try_land()'s own release calls
+  # (the two die() paths, or any other unexpected die()).
+  if [[ "$LOCK_HELD" -eq 1 ]]; then
+    lock_release
+  fi
   return "$rc"
 }
 
@@ -651,11 +658,20 @@ lock_release() {
 # code-style.md).
 try_land() {
   local attempt sha ck
+  LOCK_WAIT_DEADLINE=$(( $(date +%s) + LOCK_WAIT_SECONDS ))
   for (( attempt=1; attempt<=MAX_PUSH_ATTEMPTS; attempt++ )); do
+    # Serialize concurrent invocations on the landing lock so a losing writer
+    # waits/backs off instead of burning a full CI-stamp cycle only to lose
+    # the final push to main anyway.
+    if ! lock_claim_or_renew; then
+      break
+    fi
+
     if ! git pull --rebase origin main >&2; then
       if rebase_in_progress; then
         echo "graph-commit: rebase conflict on attempt $attempt/$MAX_PUSH_ATTEMPTS (concurrent edit to the same node); aborting" >&2
         git rebase --abort >&2 || true
+        lock_release
         return 10
       fi
       die "'git pull --rebase origin main' failed and left no rebase in progress (dirty tree or fetch failure)"
@@ -691,12 +707,21 @@ try_land() {
     fi
 
     # The SHA now carries the four passing contexts — fast-forward it onto main.
+    if [[ "$(git ls-remote origin "$LOCK_REF" | cut -f1)" != "$LOCK_SHA" ]]; then
+      echo "graph-commit: landing lock no longer held (stolen after expiry) before the main push on attempt $attempt/$MAX_PUSH_ATTEMPTS; re-claiming and retrying" >&2
+      LOCK_HELD=0
+      continue
+    fi
     if git push origin "$sha:main" >&2; then
+      lock_release
       return 0
     fi
     echo "graph-commit: push of $sha to main rejected (main advanced), attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
   done
-  echo "error: graph-commit: could not land on main after $MAX_PUSH_ATTEMPTS attempts — main busy or the required checks never stamped green; retry later" >&2
+  lock_release
+  local ran=$attempt
+  (( ran > MAX_PUSH_ATTEMPTS )) && ran=$MAX_PUSH_ATTEMPTS
+  echo "error: graph-commit: could not land on main after $ran/$MAX_PUSH_ATTEMPTS attempts — main busy (landing-lock contention or required checks never stamped green); retry later" >&2
   return 11
 }
 
