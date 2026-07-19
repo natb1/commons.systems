@@ -25,13 +25,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-tick-node-lane-auto-merge
   pr: 2904
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
@@ -325,3 +326,35 @@ restructures the tick's scriptable dispositions before the worker spawn — the 
 `graph-auto-merge` sweep is one such scriptable, non-worker disposition and is
 complementary, not blocking; plan against current `origin/main`
 `dispatch-select-tick` and resolve any textual overlap at merge time.
+
+## needs-main residue
+
+All script-verifiable acceptance criteria passed at QA time (the new
+`graph-auto-merge` script's gates, `transition-node`'s arm removal, the
+`dispatch-select-tick` wiring, the `review-fix/SKILL.md` doctrine update, the
+full `test-dispatch-scripts.sh` suite at 2976/2976, and `run-lint.sh`). The
+following three acceptance criteria are genuinely only verifiable by observing a
+live tick cycle acting on a real downstream node-lane PR after this merges — the
+QA disposition triage classified all three `needs-main` (planned deferral, not a
+defect):
+
+- **id 7** — First node-lane tactic reaching clean review actually auto-merges
+  via the tick in production.
+  - Expected outcome: A real tick cycle merges the reviewed node-lane PR
+    label-free without author intervention.
+  - Finding: Requires a live tick cycle acting on a different downstream node in
+    production after this PR merges; not verifiable at merge time.
+
+- **id 8** — `transition-node` emits the exact `review-complete` line and does
+  not merge in a live run.
+  - Expected outcome: A live `transition-node` run defers the merge and prints
+    `review-complete <id> (merge deferred to tick)`, with no merge performed by
+    `transition-node`.
+  - Finding: Requires a live review-completion run on a downstream node in
+    production; not verifiable at merge time.
+
+- **id 9** — A scope-edited node is held and demoted in a live run.
+  - Expected outcome: The stale-scope node is fail-closed held (`held <id>
+    (scope-stale)`) and subsequently demoted to `implement` by selection.
+  - Finding: Requires a live tick observing a scope-edited downstream node in
+    production; not verifiable at merge time.

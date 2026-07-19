@@ -2105,6 +2105,28 @@ clarifications:
       ceiling and emits concurrency-cap at HEADROOM=0, contradicting this —
       tracked by tactic-manual-dispatch-single-node-headroom. Recorded
       2026-07-18 interview."
+  - question: When a phase skill delegates a unit to a subagent (the main thread
+      never edits files), what guarantees the subagent's writes land in the
+      launching worktree rather than the primary checkout?
+    answer: "Nothing currently — and the gap is load-bearing. The Agent tool pins a
+      spawned subagent's cwd at launch to the primary checkout
+      (~/natb1/commons.systems), not the launching worktree, so a subagent that
+      writes via a relative path silently lands its edits in the primary
+      checkout while the worktree keeps a clean git status — the entire unit is
+      lost with no error (observed live 2026-07-19 in Unit 1 of
+      tactic-otel-sensor-substrate: the implementation subagent wrote
+      otel-trial-notes.md into the primary checkout's .claude/skills/, requiring
+      manual detection and relocation). The subagent-worker execution contract
+      therefore carries an implicit invariant it does not enforce: subagents
+      operate on the launching worktree, not the primary checkout. The fix is
+      prevention plus a backstop — the implementation-subagent prompt contract
+      passes the absolute worktree root and mandates absolute paths under it,
+      and /implement-unit adds a post-subagent contamination guard that fails
+      loudly when a subagent's writes land outside the worktree — tracked as
+      tactic-subagent-cwd-worktree-guard. This is distinct from the
+      primary-checkout-on-main invariant (tactic-primary-checkout-main-guard):
+      that keeps the primary checkout ON main; this keeps subagent WRITES OUT of
+      it. Recorded 2026-07-19 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:

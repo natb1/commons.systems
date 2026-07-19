@@ -27,7 +27,47 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Cannot finalize: this tactic and the sibling
+    tactic-graph-commit-auto-serialization (the 2026-07-13
+    automatic-serialization draft) target the SAME behavior -- upgrading
+    graph-commit's park-on-any-conflict so mechanical conflicts auto-resolve and
+    only genuine INTENTION conflicts park -- and the split of responsibility
+    between the two is undecided. tactic-graph-commit-auto-serialization was
+    itself parked on 2026-07-19 for exactly this reason: the two drafts target
+    the same upgrade under two incompatible architectures -- (a) a 5-layer
+    resolution ladder built INTO graph-commit the bash script (that tactic),
+    versus (b) a graph-native model-driven skill, dispatch-conflict, renamed
+    from /fix-conflicts (this tactic). That park already worked out a
+    recommended greenfield partition: graph-commit the script owns the
+    deterministic mechanical layers 1-3 (git three-way auto-merge, a net-new
+    structural field-level/list-union frontmatter merge, and stale --base auto
+    re-read/re-apply); this tactic (dispatch-conflict) owns layer-4 model
+    reconciliation (opus subagent, resolved/ambiguous verdict, a scope guard
+    limiting the model to mechanical divergence on human-owned doctrine fields)
+    and layer-5 true-conflict office_hours parking. Two concrete options were
+    floated: (1) narrow tactic-graph-commit-auto-serialization to layers 1-3 and
+    fold layers 4-5 into this tactic, or (2) supersede that tactic entirely into
+    this one (prune it). But that recommendation was explicitly left unratified:
+    'which architecture wins, or how the ladder partitions across script and
+    skill, is an author design decision -- not something an autonomous finalize
+    should pick.' Finalizing THIS tactic now, under any one reading of that
+    partition, would repeat the exact premature pick the sibling park avoided,
+    and would lock in a scope for this node before the sibling's park is
+    resolved -- the same record-completeness defect (clarification 31) already
+    named there, now blocking the other half of the same duplicate pair."
+  since: 2026-07-19
+  recommendation: "Same fix as tactic-graph-commit-auto-serialization's park: run
+    one /align-strategy reconciliation pass on strategy-graph-native-dispatch,
+    ratify the layer partition as a clarification, then /align-tactics both
+    tactics together in one pass so neither node's plan pre-empts the other's
+    scope. Recommended partition (already drafted on the sibling's park,
+    repeated here for symmetry): this tactic (dispatch-conflict) owns model
+    reconciliation and true-conflict parking (layers 4-5);
+    tactic-graph-commit-auto-serialization is narrowed to the deterministic
+    mechanical layers (1-3) rather than pruned, since that scope (three-way
+    auto-merge, structural field-level/list-union merge, stale-base re-apply) is
+    real net-new code distinct from this tactic's model-driven layers."
 pace_exempt: false
 rounds: null
 attributes: {}
