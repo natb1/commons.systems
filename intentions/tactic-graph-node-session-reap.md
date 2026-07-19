@@ -410,10 +410,25 @@ currently starting at line 6704):
   (currently around lines 6994-7014) but (a) including a `.id` field distinct
   from `.sessionId`/`.name` per entry (mirroring the `office_hours_fake_claude`
   convention already used elsewhere in this file, e.g. around lines 3696-3720,
-  where `id` is `"j-$name"` vs `sessionId` `"s-$name"`), and (b) handling a
+  where `id` is `"j-$name"` vs `sessionId` `"s-$name"`), (b) handling a
   `rm <id>` invocation by logging it to `$STUB_DIR/claude-rm-calls.log` and
   exiting 0 (existing sweep fakes only ever serve `agents --json` and ignore
-  all other args):
+  all other args), and (c) — **load-bearing, verified against the real
+  `worktree_has_live_session`/`claude_agents_list_all`/`_claude_agents_raw`
+  chain in `lib-claude-agents.sh`** — the fake MUST discriminate `agents
+  --json --all` from plain `agents --json`, serving the registered entries
+  ONLY for `--all` and an empty `[]` for the plain form. `_claude_agents_raw`
+  (called by `claude_agents_list_all`, which `worktree_has_live_session`
+  uses for its liveness gate) issues plain `agents --json` with **no**
+  `--all` flag; `claude_job_id_for_name_all` (the new reap-lookup function)
+  issues `agents --json --all` directly. If the fake served the same payload
+  for both, `worktree_has_live_session` would see the registered "done" job
+  and report the worktree OCCUPIED — the sweep would skip removal entirely,
+  the reap call would never run, and `claude-rm-calls.log` would stay empty,
+  failing every test case below. The discrimination is what makes the fixture
+  correctly simulate "a job in a terminal state, invisible to the plain
+  active-only listing, but visible to `--all`" — exactly the mid-phase-dead
+  scenario Unit 2 exists to reap:
   ```bash
   sweep_fake_claude_sessions_by_name_with_id() {
     local fake="$TMPDIR_TEST/fake/claude"
@@ -425,15 +440,23 @@ currently starting at line 6704):
       all_payload+="{\"sessionId\":\"$sid\",\"id\":\"$jid\",\"pid\":1,\"status\":\"done\",\"name\":\"$name\",\"cwd\":\"\"}"
     done
     all_payload+="]"
-    printf '%s' "$all_payload" > "$TMPDIR_TEST/fake/payload.json"
+    printf '%s' "$all_payload" > "$TMPDIR_TEST/fake/all-payload.json"
     cat > "$fake" <<'FAKE'
   #!/usr/bin/env bash
   STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+  FAKE_DIR="$(cd "$(dirname "$0")" && pwd)"
   if [[ "${1:-}" == "rm" ]]; then
     echo "$2" >> "$STUB_DIR/claude-rm-calls.log"
     exit 0
   fi
-  cat "$(cd "$(dirname "$0")" && pwd)/payload.json"
+  if [[ "${1:-}" == "agents" && "${2:-}" == "--json" && "${3:-}" == "--all" ]]; then
+    cat "$FAKE_DIR/all-payload.json"
+    exit 0
+  fi
+  # Plain `agents --json` (no --all) — the worktree_has_live_session query
+  # path. The registered entries are DONE jobs, not live sessions, so this
+  # must stay empty or the liveness gate would report the worktree occupied.
+  echo '[]'
   exit 0
   FAKE
     chmod +x "$fake"
@@ -460,13 +483,30 @@ currently starting at line 6704):
      worktree/branch normally and `claude-rm-calls.log` is empty or absent
      (harmless no-op, confirming the unconditional call at all 3 sites
      doesn't regress the legacy-issue path).
-  5. UNKNOWN-daemon case: point `CLAUDE_AGENTS_CMD` at a nonexistent binary
-     (the pattern already used elsewhere in this file, e.g. around line 187)
-     for one removal test, and assert the sweep still completes successfully
-     (worktree/branch still removed, a `REAP_JOB_LOOKUP_UNKNOWN` log line
-     present, but no fatal abort) — proving the job-reap lookup failure is
-     isolated per the "best-effort, log-and-continue, never abort the sweep"
-     contract.
+  5. UNKNOWN-daemon case for the reap lookup specifically — **must isolate
+     the reap lookup's UNKNOWN from the liveness gate's own UNKNOWN
+     handling**, which is a distinct, already-covered failure mode (an
+     UNKNOWN liveness read fails safe toward "occupied" and skips removal
+     entirely — see `worktree_has_live_session`'s doc comment — so if this
+     test naively points `CLAUDE_AGENTS_CMD` at a nonexistent binary with no
+     other override, the worktree is never removed in the first place and
+     the reap-lookup path under test never runs). `worktree_has_live_session`
+     → `claude_agents_list_all` → `_claude_agents_raw` prefers
+     `$DISPATCH_AGENTS_SNAPSHOT` when set and readable, falling back to
+     `${CLAUDE_AGENTS_CMD:-claude} agents --json` only when the snapshot is
+     absent/unreadable; `claude_job_id_for_name_all` (the new function) never
+     reads the snapshot — it always calls
+     `${CLAUDE_AGENTS_CMD:-claude} agents --json --all` directly. So: write a
+     valid snapshot file containing `[]` and export
+     `DISPATCH_AGENTS_SNAPSHOT` to it (satisfying the liveness gate — the
+     worktree is free, removal proceeds), while separately pointing
+     `CLAUDE_AGENTS_CMD` at a nonexistent binary (the pattern already used
+     elsewhere in this file, e.g. around line 187) so only the reap lookup
+     fails. Assert the sweep still completes successfully (worktree/branch
+     still removed, a `REAP_JOB_LOOKUP_UNKNOWN` log line present, but no
+     fatal abort, and `claude-rm-calls.log` empty or absent) — proving the
+     job-reap lookup failure is isolated per the "best-effort,
+     log-and-continue, never abort the sweep" contract.
 - The `office-hours` `job_id_for_name()` refactor (2d) needs no new
   office-hours-specific test (the delegation is behavior-preserving given
   both env vars default identically in production and every existing test
