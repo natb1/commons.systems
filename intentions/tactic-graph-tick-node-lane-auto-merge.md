@@ -25,14 +25,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: implement
 execution:
   branch: tactic-graph-tick-node-lane-auto-merge
   pr: 2904
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: null
 validates: []
 blocked_by: []
