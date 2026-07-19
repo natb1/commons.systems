@@ -1542,7 +1542,14 @@ clarifications:
       that dies mid-phase without firing a clean Stop (a hard crash) is
       variance, out of scope for this self-reap — its orphaned job is reaped by
       the tick/sweep ledger pass that already GCs the stale worktree (retained
-      in the draft tactic). Recorded 2026-07-16 interview."
+      in the draft tactic). Recorded 2026-07-16 interview. (Amended 2026-07-19:
+      reaping remains the DEFAULT and the doctrinal behavior, but is now
+      configurable via a default-off operator escape hatch that keeps a
+      completed/parked session for local inspection — see the 2026-07-19
+      configurable-auto-close clarification. \"Reaped on every terminal exit\"
+      describes the default; when the keep-sessions toggle is ON, a kept session
+      is intentional, not a clog, and its node-id claim is held until manual
+      reap.)"
   - question: "A strategy whose signal is validated only by human work (sensor:
       owner review at office-hours) is re-selected for /align-tactics every tick
       — its rounds produce off-path tooling plus born-parked on-path reading
@@ -2167,6 +2174,38 @@ clarifications:
       2026-07-19. tactic-claim-dedup-only (scheduling dedup) is orthogonal to
       conflict resolution and unaffected. Recorded 2026-07-19 /align-strategy
       round."
+  - question: Should auto-close of a completed worker session be configurable, given
+      the 2026-07-16 reaping clarification reaps on every terminal exit and
+      diverged from the session-as-observability rival?
+    answer: "Yes — auto-close is made configurable via a default-off operator escape
+      hatch, and this does NOT weaken the reaping doctrine. Auto-close (reap on
+      every terminal exit) remains the DEFAULT and the doctrinal expression of
+      disposable sessions; the toggle, off by default, lets an operator KEEP a
+      completed or escalation-parked worker session for local
+      inspection/debugging. The doctrine holds because its actual concern —
+      established by the disposable-session clarification and the 2026-07-16
+      reaping clarification's divergence from the session-as-observability rival
+      — is that session persistence must never become router SUBSTRATE or the
+      observability CHANNEL, not the bare existence of a lingering session; the
+      author affirmed this reading of the divergence's intent this round. A
+      human-flipped, default-off debug knob never makes session persistence the
+      router's recovery substrate and never changes where escalations surface
+      (still the office-hours PARKED panel, which reads the node's office_hours
+      field), so it is orthogonal to the coupling the doctrine rejects. Edge
+      cases resolved this round: (a) the switch is symmetric — when ON it
+      suppresses the reap on BOTH clean-advance and escalation-park; when OFF
+      (default) both reap as before; (b) the check lives in the shared
+      self-close primitive (dispatch-self-close), so both the legacy gh
+      issue-worker lane and the graph-native node-worker lane honor one config
+      point; (c) the foreground-safe gate is unchanged — only managed background
+      worker jobs are affected, interactive align/office-hours sessions
+      (CLAUDE_JOB_DIR-gated) are never touched; (d) documented consequence,
+      endorsed: a kept-alive session keeps worktree_has_live_session TRUE, so
+      its node-id worktree claim stays held and the router will NOT select that
+      node's next phase until the operator manually reaps it — this is inherent
+      to a debug hold, and leaving the knob ON stalls the affected nodes
+      (caution recorded). Implementation retained as draft
+      tactic-worker-self-close-configurable. Recorded 2026-07-19 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -2300,6 +2339,11 @@ attributes:
       context is written into the node, not the session); the agents list holds
       only live executors, escalations surface via the office-hours PARKED panel
       rather than a lingering session, and a completed or parked worker job left
-      in `claude agents --json` is a defect
+      in `claude agents --json` is a defect UNLESS the default-off keep-sessions
+      operator escape hatch (2026-07-19 configurable-auto-close clarification)
+      is enabled, in which case a kept session is intentional and its node-id
+      claim is held until manual reap; auto-close (reap on every terminal exit)
+      is the default and doctrinal behavior, and the toggle is never router
+      substrate
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
