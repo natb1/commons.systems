@@ -51,13 +51,14 @@
 #      branch lands on main (the node is removed) without landing the code
 #      commit, HEAD restored
 #
-# No network and no real gh/node needed; requires only bash + git.
+# No network and no real gh/node needed; requires only bash + git + jq.
 
 set -uo pipefail
 
 HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GC_SCRIPT="$HARNESS_DIR/graph-commit"
 [[ -f "$GC_SCRIPT" ]] || { echo "error: graph-commit not found at $GC_SCRIPT" >&2; exit 1; }
+command -v jq >/dev/null || { echo "error: jq not found (required by the gh shim)" >&2; exit 1; }
 
 WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
 declare -a SNAP_DIRS_TO_CLEAN=()
