@@ -576,8 +576,10 @@ it is not a reason to avoid recording the clarification itself.
 
 **Measure freeze/re-stamp cost via the authoritative predicate, never a
 grep.** If a recording or materiality decision turns on how many open children
-a clarification would freeze, compute the actual set with `readNode` +
-`isFingerprintStale` (`packages/intentionsutil/src/transitions.ts`) — or
+a clarification would freeze, compute the actual set with `readNode`
+(`packages/intentionsutil/src/store.ts`, re-exported via the package index
+barrel) + `isFingerprintStale`
+(`packages/intentionsutil/src/transitions.ts`) — or
 `strategyFingerprint` (`packages/intentionsutil/src/router.ts`) plus the same
 per-child stamp read the router's selector uses — never a text `grep` over
 `strategy_fingerprint`. A `grep -c` (or similar) over that field counts the
