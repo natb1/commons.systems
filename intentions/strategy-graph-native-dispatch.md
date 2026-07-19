@@ -2409,6 +2409,88 @@ clarifications:
       tactic-graph-auto-merge-up-to-date-gate) composes with this: the gate only
       updates the branch and defers the merge; regression routing stays owned by
       the stall-recovery reconciler."
+  - question: "Clarification 64 (the reviewed/pending-merge lifecycle) enumerates
+      the tick's post-review branches — green CI + mergeable==MERGEABLE ->
+      merge, red CI -> fix interrupt — but specifies NO branch for a
+      reviewed/pending-merge PR whose GitHub mergeable==CONFLICTING. The legacy
+      dispatch lane buckets a CONFLICTING PR to /fix-conflicts (lib.sh
+      dispatch-phase), but the graph-native router has no equivalent:
+      read-sensors.ts has no mergeable sensor, PHASES has no conflict phase, and
+      the selector's only interrupt is the CI-fix of clarification 66. So a
+      conflicting reviewed node-lane PR sits silently unmerged with no worker
+      dispatched (observed live on tactic-align-skills-dataviz-guidance,
+      2026-07-19). How does the graph-native router recognize a pending-merge PR
+      in conflict and route it to a conflict worker?"
+    answer: >-
+      (Recorded 2026-07-19 /align-strategy interview.) The merge-conflict
+      interrupt is the structural twin of the CI-fix interrupt (clarification 66
+      / tactic-fix-interrupt-orthogonal-state, codified) and is modeled the same
+      way — as orthogonal execution state, not a phase value.
+
+
+      (1) Encoding — a new orthogonal, nullable execution.conflict = {since,
+      attempt}, mirroring execution.fix's shape (clarification 66). phase stays
+      purely ladder-positional (at pending-merge in the greenfield of
+      tactic-pending-merge-phase, or post-review arm-merge in the interim) and
+      is never overwritten by a conflict. No conflict value is added to the
+      PHASES enum: the clarification-66 precedent that pulled fix out of the
+      enum applies verbatim — a phase value overloads ladder-position with
+      interrupt-active.
+
+
+      (2) Routing authority — the SELECTOR is the sole sensor-reading routing
+      authority for this interrupt too, parity with clarification 66's "the
+      selector reads execution.fix directly". The selector reads the PR's GitHub
+      mergeable sensor at selection and branches three ways: CONFLICTING -> set
+      execution.conflict and dispatch the conflict worker (dispatch-conflict);
+      MERGEABLE -> clear execution.conflict and let the tick's no-worker
+      graph-auto-merge action land it (clarification 64); UNKNOWN -> wait and
+      retry next tick (parity with clarification 66's pending-CI concurrency
+      guard), never dispatching a worker on UNKNOWN, which would thrash on
+      GitHub's async mergeability computation. The tick reconciler keeps ONLY
+      the no-worker merge action (clarification 64); it does not route.
+
+
+      (3) Reaction, not prevention — the router detects a conflict when it
+      manifests and routes reactively, consistent with the sensor-driven
+      selector model. Continuously rebasing pending-merge PRs onto origin/main
+      to pre-empt conflicts is explicitly OUT of scope: a silent rebase would
+      change the merged result and so invalidate the review a pending-merge node
+      just passed (the no-unreviewed-code-merges guarantee of clarifications
+      64/66).
+
+
+      (4) Spin guard — execution.conflict.attempt caps the conflict interrupt
+      (parity with the fix-checks attempt cap and legacy /fix-conflicts' cap of
+      3); at the cap the node parks to office_hours rather than spinning.
+
+
+      (5) Re-review after resolution — does the
+      no-unreviewed-code-merges-after-a-fix doctrine (clarifications 64/66)
+      extend to conflict resolutions? Yes, materiality-scoped, tied to the
+      conflict worker's own mechanical-vs-intention verdict (clarification 78 /
+      tactic-dispatch-conflict-greenfield's layer partition): a purely
+      MECHANICAL resolution (dispatch-conflict layers 1-3 — decidable from
+      existing graph requirements, content-preserving) clears execution.conflict
+      and returns directly to pending-merge to merge, having changed no reviewed
+      intent; a resolution requiring model reconciliation or author input
+      (layers 4-5 — new substance) resets phase -> review and disarms
+      auto-merge, exactly as clarification 66's post-review fix backward-edge
+      does, because the resolution introduced code the completed review never
+      saw.
+
+
+      Scope: this supplies the router-side detect-and-route half that
+      clarification 64 (tick branches) and the dispatch-* skill-inventory
+      clarification (which already names dispatch-conflict as the graph-native
+      conflict skill from /fix-conflicts) left open; it contradicts and amends
+      neither. The router-side routing seam is retained as draft
+      tactic-graph-router-conflict-routing (this round); the resolution WORKER
+      is tactic-dispatch-conflict-greenfield; the pending-merge wait phase it
+      composes with is tactic-pending-merge-phase; the mergeable sensor is a new
+      read in read-sensors.ts. Delegation: this rides on delegation-github (the
+      PR/merge substrate) but adds no unwinding of that reliance, so
+      strategy-graph-native-dispatch takes no new recovers edge.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
