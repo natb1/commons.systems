@@ -379,8 +379,8 @@ rebase_in_progress() {
 
 # --- Fast-path check stamping ----------------------------------------------
 # Poll the branch-protection ruleset's four required contexts on <sha> until all
-# report completed/success, keyed on the check-run NAME (mirrors the four jobs
-# in .github/workflows/graph-fast-path.yml). Only the fast path fires on a
+# report a successful conclusion, keyed on the check-run NAME (mirrors the four
+# jobs in .github/workflows/graph-fast-path.yml). Only the fast path fires on a
 # `graph/**` push (unit-tests.yml ignores graph/**, pr-checks.yml is PR-only),
 # so there is no same-named run to race. Uses `gh api ... --jq` so gh runs jq on
 # its in-memory JSON — never an `echo "$VAR" | jq` round-trip (shell-json.md).
@@ -403,14 +403,20 @@ await_checks() {
   deadline=$(( $(date +%s) + CHECK_TIMEOUT_SECONDS ))
   nsucc=0
   while :; do
-    # For the four required names on this SHA, count how many are
-    # completed/success and how many are completed/non-success. Extra check runs
-    # (e.g. CodeQL `Analyze (*)`, `guard`) are ignored by the name filter.
+    # For the four required names on this SHA, count how many concluded
+    # success and how many concluded non-success, keyed off .conclusion alone
+    # (null = pending, non-null = concluded) rather than requiring
+    # status=="completed" too — GitHub sometimes leaves a check-run's status
+    # stuck at in_progress even after its conclusion is already populated (a
+    # known check-runs desync). Mirrors dispatch_classify_rollup's
+    # `(.conclusion // "")` idiom (lib.sh) fixed for the same desync. Extra
+    # check runs (e.g. CodeQL `Analyze (*)`, `guard`) are ignored by the name
+    # filter.
     if counts="$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
       --jq '[.check_runs[]
              | select(.name=="acceptance" or .name=="preview-and-smoke"
                       or .name=="lint" or .name=="unit-tests")]
-            | "\([.[]|select(.status=="completed" and .conclusion=="success")]|length) \([.[]|select(.status=="completed" and .conclusion!="success")]|length)"' \
+            | "\([.[]|select((.conclusion // "") == "success")]|length) \([.[]|select(((.conclusion // "") != "") and (.conclusion != "success"))]|length)"' \
       2>"$errfile")"; then
       gh_fails=0
       [[ -n "$counts" ]] || counts="0 0"
