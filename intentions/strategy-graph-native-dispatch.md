@@ -2364,6 +2364,51 @@ clarifications:
       tactic-worker-self-close-configurable's draft framing (which assumes 'reap
       on every terminal exit' is the default) must be re-scoped to the narrowed
       default per (d). Recorded 2026-07-19 interview."
+  - question: A merged PR's green CI had run on a stale base and main went red after
+      the merge — does merge eligibility require the PR to be current with main,
+      and is the recorded reviewed-marker key the author's 'done marker' intent?
+    answer: "(Recorded 2026-07-19 interview, prompted by a stale-base green-CI merge
+      producing a red main.) Two resolutions. (1) Signal confirmed: the author's
+      'node is done / carries the done marker' merge key IS the recorded one —
+      `reviewed` in execution.markers at phase review (clarification 53),
+      evolving to a literal pending-merge phase per draft
+      tactic-pending-merge-phase; `done` itself stays post-merge, so the gate
+      never keys on it. (2) Merge eligibility gains a fourth conjunct beyond
+      green CI + MERGEABLE + the reviewed marker: the PR branch must be up to
+      date with origin/main, and the passing checks must have run on that
+      current base — a green verdict computed on a stale base is not
+      merge-eligible. When the PR is behind, the tick reconciler scripts the
+      remediation itself: gh api update-branch, skip this tick, merge on a later
+      tick once checks pass on the fresh base — every scriptable step of the
+      done-phase merge path lives in the dispatch router, never in a phase
+      worker or the author. Diverged (2026-07-19) from the GitHub-native
+      alternative (branch-protection require-up-to-date plus merge queue): it
+      solves stale-base CI but moves merge behavior into GitHub config the graph
+      cannot read, deepening delegation-github (which this strategy recovers);
+      the owned tick gate keeps merge keyed on graph state. Implementation
+      retained as draft tactic-graph-auto-merge-up-to-date-gate, a follow-up to
+      tactic-graph-tick-node-lane-auto-merge — PR #2904 lands as-is, and the
+      author accepts the interim window in which graph-auto-merge can merge a
+      stale-base green PR until the follow-up ships."
+  - question: While a reviewed node is pending merge, an update-branch sync can turn
+      CI red or the PR CONFLICTING — is the failed check routed to a fix worker
+      and the conflict to a conflict worker?
+    answer: "(Confirmed 2026-07-19 interview.) Yes, both, via one reconciler —
+      tracked and still WIP at confirmation time
+      (tactic-graph-review-exclusion-stall-recovery, phase implement). The
+      selector's reviewed-marker exclusion means normal selection never re-reads
+      a pending-merge node, so that tactic's review-stall reconciler polls the
+      stranded PRs directly and fires needsReviewStallRecovery on ci failing OR
+      mergeable CONFLICTING, routing the node through the existing fix interrupt
+      (phase fix, qa-done and reviewed markers cleared). A red check from the
+      up-to-date sync therefore reaches a fix worker on a later tick. A
+      CONFLICTING PR takes the same demotion, and the conflict itself is then
+      handled at re-provisioning: provision-node-worktree's merge of origin/main
+      hits the conflict and exits 11, routing the /fix-conflicts conflict
+      worker. The up-to-date gate (draft
+      tactic-graph-auto-merge-up-to-date-gate) composes with this: the gate only
+      updates the branch and defers the merge; regression routing stays owned by
+      the stall-recovery reconciler."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
