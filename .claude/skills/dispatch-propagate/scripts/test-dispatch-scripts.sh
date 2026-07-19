@@ -9451,6 +9451,28 @@ if worktree_has_live_session "$CA_DIR" "self-sess"; then live=occupied; else liv
 assert_eq "self-exclude: a different live session with the same name still reports occupied" "occupied" "$live"
 ca_teardown
 
+# The exact disambiguation exclude_sid exists to provide: exclude MY session yet
+# STILL detect a concurrent OTHER session that shares the worktree name. A future
+# refactor to a whole-list filter (e.g. "free if any excluded-sid row is present")
+# would pass every case above yet regress here to a dangerous false-negative — two
+# live sessions in one worktree reported free, allowing concurrent authoring that
+# corrupts the graph-commit rebase. Assert both row orderings lock the behavior in.
+echo "Test: worktree_has_live_session with exclude_sid reports occupied when self AND another live session share the name (self-first)"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"self-sess\",\"pid\":1,\"status\":\"busy\",\"name\":\"$ca_basename\"},{\"sessionId\":\"other-sess\",\"pid\":2,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR" "self-sess"; then live=occupied; else live=free; fi
+assert_eq "self-exclude: self+other under same name (self-first) reports occupied" "occupied" "$live"
+ca_teardown
+
+echo "Test: worktree_has_live_session with exclude_sid reports occupied when self AND another live session share the name (other-first)"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"other-sess\",\"pid\":2,\"status\":\"busy\",\"name\":\"$ca_basename\"},{\"sessionId\":\"self-sess\",\"pid\":1,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR" "self-sess"; then live=occupied; else live=free; fi
+assert_eq "self-exclude: self+other under same name (other-first) reports occupied" "occupied" "$live"
+ca_teardown
+
 # --- Test 9: claude_sessions_under invokes `claude` with --cwd <path> -------
 
 echo "Test: claude_sessions_under invokes claude with --cwd <path>"

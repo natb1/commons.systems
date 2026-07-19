@@ -12,7 +12,7 @@
 #   claude_sessions_with_name          <name>
 #   claude_agents_list_all
 #   live_session_claimed_nums
-#   worktree_has_live_session          <worktree-path>
+#   worktree_has_live_session          <worktree-path> [exclude_sid]
 #   claude_agents_count_busy_workers
 #   verify_agent_registered_under      <agent-name> <cwd>
 #   claude_agents_snapshot_capture     <path>
