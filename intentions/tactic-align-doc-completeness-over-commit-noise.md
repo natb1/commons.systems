@@ -39,61 +39,7 @@ execution:
   fix: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: '/qa-fix: disposition triage classified the sole residue item (a
-    prose-clarity/faithfulness judgment call on the inserted lessons) as
-    opus-fixable, but the gated fix-planner returned zero fix units for it — not
-    a scope-deviation, but "planning produced nothing usable." Per the qa-fix
-    contract this escalates with a planning-failed reason rather than
-    auto-passing, even though direct inspection (5/5 script-verifiable checks
-    passed, and 2/2 adversarial skeptics refuted the "needs human" call)
-    strongly suggests the prose already satisfies the criterion and no fix is
-    needed.'
-  since: 2026-07-19
-  recommendation: >-
-    ## Recommendation: very likely a false escalation — no defect in the PR
-
-
-    This park is almost certainly a disposition-pipeline artifact, not a real
-    problem with PR #2913. The QA pass verified all 5 script-checkable claims,
-    and the fix-planner returned zero fix units — meaning it found nothing to
-    change. The skill's contract treats "empty plan" as a planning failure, but
-    here it just reflects that the prose already meets the bar.
-
-
-    ### What to check (fast path, ~2 minutes)
-
-
-    Open `.claude/skills/align-strategy/SKILL.md`, lines ~550–570 (the new
-    subsection just before "**Materiality-scoped freeze**"). Confirm the prose
-    states both lessons accurately:
-
-
-    - (a) Never downgrade a warranted strategy clarification to a
-    draft-tactic-only, or omit it, just to keep a commit small or dodge a
-    re-stamp.
-
-    - (b) Measure freeze/re-stamp cost via the authoritative predicate
-    `isFingerprintStale`/`strategyFingerprint`, never a grep over
-    `strategy_fingerprint`.
-
-
-    If it reads correctly (it was verified word-for-word against the diff during
-    QA, so it almost certainly does), approve and unpark the tactic so it
-    proceeds to the next phase. No code change needed.
-
-
-    ### Tooling note (not for this reviewer to fix now)
-
-
-    For whoever owns the qa-fix disposition workflow: an item both skeptics
-    agree needs no human judgment, and whose fix-planner finds nothing to fix,
-    should resolve to "already-satisfied" (drop as PASS) rather than
-    "opus-fixable with empty units," which forces this planning-failed
-    escalation.
-
-
-    PR #2913
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
