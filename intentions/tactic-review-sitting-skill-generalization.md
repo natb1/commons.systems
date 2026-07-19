@@ -37,6 +37,7 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates:
   - strategy-graph-review-curriculum
