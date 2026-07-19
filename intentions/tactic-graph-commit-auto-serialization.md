@@ -39,7 +39,53 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: 'Cannot finalize: this tactic (from the 2026-07-13
+    automatic-serialization clarification of strategy-graph-native-dispatch) and
+    the newer raw draft tactic-dispatch-conflict-greenfield (2026-07-18
+    clarification 67) both target the SAME behavior -- upgrade graph-commit
+    park-on-any-conflict so mechanical conflicts auto-resolve and only genuine
+    INTENTION conflicts park -- under two incompatible architectures: (a) a
+    5-layer resolution ladder built INTO graph-commit the bash script (this
+    tactic), versus (b) a graph-native model-driven skill dispatch-conflict
+    renamed from /fix-conflicts (the 07-18 draft, whose clarification-67 text
+    verbatim describes it as "upgrading today graph-commit-parks-on-any-conflict
+    behavior"). Clarification 67 re-derived the conflict-upgrade requirement and
+    retained a fresh draft without referencing or reconciling this 07-13 draft
+    -- a record-completeness defect of the 07-18 /align-strategy round
+    (clarification 31 framing). Finalizing either draft into an implement plan
+    would risk building the same resolution logic twice in two vehicles.
+    Compounding it: this tactic layer-4 "scoped model reconciliation inside
+    graph-commit" is architecturally infeasible as written -- no bash script in
+    the repo performs a scoped model eval (verified across packages/**/scripts
+    and .claude/skills/**/scripts); model-resolution steps run only as
+    SKILL.md-driven subagents in a skill thread (the fix-conflicts opus-subagent
+    resolved/ambiguous pattern), so graph-commit the script cannot host layers
+    4-5. Which architecture wins, or how the ladder partitions across script and
+    skill, is an author design decision -- not something an autonomous finalize
+    should pick.'
+  since: 2026-07-19
+  recommendation: "Reconcile the two conflict-resolution drafts in an
+    /align-strategy pass on strategy-graph-native-dispatch and record the
+    partition as a clarification, then re-decompose. Recommended greenfield
+    partition (per design-proposals rule, uses each vehicle for what it can do):
+    graph-commit the SCRIPT owns the deterministic mechanical layers -- git
+    three-way auto-merge (already exists), a structural field-level / list-union
+    frontmatter merge (net-new: no merge/field-union helper exists anywhere in
+    packages/intentionsutil/src, so this is real code + tests in
+    test-graph-commit.sh), and stale --base auto re-read/re-apply. The
+    dispatch-conflict SKILL (tactic-dispatch-conflict-greenfield) owns layer-4
+    model reconciliation (opus subagent, resolved/ambiguous verdict, scope guard
+    limiting the model to mechanical divergence on human-owned doctrine fields)
+    and layer-5 true-conflict office_hours park, invoked only when the script
+    mechanical layers cannot resolve. Concretely: either (1) narrow
+    tactic-graph-commit-auto-serialization to layers 1-3 and fold layers 4-5
+    into tactic-dispatch-conflict-greenfield, or (2) supersede this tactic
+    entirely into tactic-dispatch-conflict-greenfield (prune this one). Also
+    note office_hours.recommendation is now a first-class schema field, so the
+    07-13 draft references to condition-6 recommendation-in-reason are stale.
+    tactic-claim-dedup-only (node-id claiming narrows to scheduling dedup) is
+    orthogonal to conflict resolution and is unaffected by this reconciliation."
 pace_exempt: false
 rounds: null
 attributes: {}
