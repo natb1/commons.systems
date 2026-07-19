@@ -150,7 +150,7 @@ round-trip, matching the sibling's posture:
   read it back null after clearing) is covered by the existing suite:
 
 ```verify
-npx vitest run --project intentionsutil --root .
+npx vitest run --project packages/intentionsutil --root .
 ```
 
 - Manual/observe-in-production (not auto-runnable, `graph-commit` lands on
