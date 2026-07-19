@@ -341,15 +341,20 @@ describe("soft-freeze gate", () => {
 
   it("a stale fingerprint re-surfaces the frozen tactics at align-tactics", () => {
     const sel = selectGraphTargets(frozenGraph("stale-fingerprint"));
-    // tactic-graph-frozen-tactic-dispatch: the re-evaluation now targets the
-    // frozen TACTICS directly (not the strategy id). Both subtree tactics are
-    // excluded from their normal phase skill and re-emitted as align-tactics
-    // re-evaluation candidates. strategy-s ALSO emits its own fresh round here
-    // because its frozen children carry no `validates` edge — they are off the
-    // signal path, so the fresh-round child gate does not block the strategy.
+    // tactic-freeze-resurface-stale-children-only: the freeze scan only sweeps
+    // children whose OWN stamp is stale against the serving strategy's current
+    // fingerprint. tactic-stale is stale and gets excluded from its normal
+    // phase skill and re-emitted as an align-tactics re-evaluation candidate.
+    // tactic-sibling was never stamped (execution: null) and is not in the
+    // `stale` list, so it is not frozen — it keeps emitting its normal `qa`
+    // candidate. strategy-s ALSO emits its own fresh round here because its
+    // frozen children carry no `validates` edge — they are off the signal
+    // path, so the fresh-round child gate does not block the strategy.
     // Order: rank 0 across the board, then progression ordinal desc over each
     // node's REAL phase (tactic-sibling qa=4 > tactic-stale implement=2 >
-    // strategy-s align=1).
+    // strategy-s align=1) — progressionIndex ranks by each node's real phase
+    // regardless of freeze status, so the candidate order is unchanged by
+    // the fix.
     expect(sel.candidates.map((c) => c.id)).toEqual([
       "tactic-sibling",
       "tactic-stale",
@@ -358,23 +363,61 @@ describe("soft-freeze gate", () => {
     const stale = sel.candidates.find((c) => c.id === "tactic-stale");
     const sibling = sel.candidates.find((c) => c.id === "tactic-sibling");
     expect(stale).toMatchObject({ kind: "tactic", phase: "align-tactics", reevaluation: true });
-    expect(sibling).toMatchObject({ kind: "tactic", phase: "align-tactics", reevaluation: true });
+    expect(sibling).toMatchObject({ kind: "tactic", phase: "qa", reevaluation: false });
     expect(sel.events).toEqual([
       expect.objectContaining({ event: "freeze", strategy: "strategy-s" }),
     ]);
   });
 
+  it("a fresh- or null-stamped sibling is not frozen or re-surfaced by a stale sibling's freeze", () => {
+    const s = strategy({ id: "strategy-s" });
+    const nodes: IntentionNode[] = [
+      s,
+      tactic({
+        id: "tactic-stale",
+        serves: ["strategy-s"],
+        phase: "implement",
+        execution: exec({ strategy_fingerprint: "stale-fingerprint" }),
+      }),
+      tactic({
+        id: "tactic-fresh",
+        serves: ["strategy-s"],
+        phase: "qa",
+        execution: exec({ strategy_fingerprint: strategyFingerprint(s) }),
+      }),
+      tactic({ id: "tactic-null-stamp", serves: ["strategy-s"], phase: "review" }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    expect(sel.candidates.find((c) => c.id === "tactic-fresh")).toMatchObject({
+      phase: "qa",
+      reevaluation: false,
+    });
+    expect(sel.candidates.find((c) => c.id === "tactic-null-stamp")).toMatchObject({
+      phase: "review",
+      reevaluation: false,
+    });
+    const frozenCandidates = sel.candidates.filter(
+      (c) => c.kind === "tactic" && c.phase === "align-tactics",
+    );
+    expect(frozenCandidates.map((c) => c.id)).toEqual(["tactic-stale"]);
+    const freezeEvent = sel.events.find((e) => e.event === "freeze");
+    expect(freezeEvent?.detail).toContain("tactic-stale");
+    expect(freezeEvent?.detail).not.toContain("tactic-fresh");
+    expect(freezeEvent?.detail).not.toContain("tactic-null-stamp");
+  });
+
   it("a frozen tactic's normal phase-skill candidate is suppressed (only align-tactics remains)", () => {
     const sel = selectGraphTargets(frozenGraph("stale-fingerprint"));
-    // tactic-stale is at phase `implement`, tactic-sibling at `qa`, but neither
-    // emits an executable phase-skill candidate — only the single align-tactics
-    // re-eval candidate.
+    // tactic-stale is at phase `implement` and is stale, so it is excluded
+    // from its normal phase skill and only its align-tactics re-eval
+    // candidate remains. tactic-sibling was never stamped, is not frozen, and
+    // still emits its normal `qa` phase-skill candidate.
     const staleCands = sel.candidates.filter((c) => c.id === "tactic-stale");
     expect(staleCands).toHaveLength(1);
     expect(staleCands[0]).toMatchObject({ phase: "align-tactics" });
     const siblingCands = sel.candidates.filter((c) => c.id === "tactic-sibling");
     expect(siblingCands).toHaveLength(1);
-    expect(siblingCands[0]).toMatchObject({ phase: "align-tactics" });
+    expect(siblingCands[0]).toMatchObject({ phase: "qa" });
   });
 
   it("a matching fingerprint does not freeze", () => {
@@ -402,7 +445,11 @@ describe("soft-freeze gate", () => {
   it("parking the strategy drops its own candidate but not the frozen tactics' re-eval", () => {
     // The re-eval now targets the tactics directly, so parking the STRATEGY no
     // longer suppresses them — only the strategy's own (fresh-round) candidate
-    // is gated out. The tactics carry office_hours null and still emit.
+    // is gated out. tactic-stale is stale and still emits its align-tactics
+    // re-eval candidate. tactic-sibling was never frozen (never stamped), and
+    // tactic candidacy never reads the serving strategy's office_hours, so it
+    // keeps emitting its normal `qa` candidate regardless of the strategy's
+    // park.
     const nodes = frozenGraph("stale-fingerprint").map((n) =>
       n.id === "strategy-s"
         ? { ...n, office_hours: { reason: "parked", since: "2026-07-01", recommendation: null } }
@@ -410,7 +457,10 @@ describe("soft-freeze gate", () => {
     );
     const sel = selectGraphTargets(nodes);
     expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-sibling", "tactic-stale"]);
-    expect(sel.candidates.every((c) => c.kind === "tactic" && c.phase === "align-tactics")).toBe(true);
+    const sibling = sel.candidates.find((c) => c.id === "tactic-sibling");
+    const stale = sel.candidates.find((c) => c.id === "tactic-stale");
+    expect(sibling).toMatchObject({ phase: "qa", reevaluation: false });
+    expect(stale).toMatchObject({ phase: "align-tactics", reevaluation: true });
     expect(sel.events).toEqual([
       expect.objectContaining({ event: "freeze", strategy: "strategy-s" }),
     ]);

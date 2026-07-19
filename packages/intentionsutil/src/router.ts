@@ -223,15 +223,17 @@ function progressionIndex(candidate: GraphCandidate, byId: Map<string, Intention
  *
  * Soft-freeze gate (strategy clarification 10): an open tactic stamped with a
  * non-null `execution.strategy_fingerprint` differing from the serving
- * strategy's current substance fingerprint freezes the subtree — its tactics
- * are excluded from their normal phase skill (in-flight phases finish on their
- * own), and a `freeze` event is logged. Per
- * tactic-graph-frozen-tactic-dispatch (clarification 52) the re-evaluation now
- * targets the frozen TACTICS directly: each subtree tactic re-surfaces as a
- * `kind: "tactic", phase: "align-tactics", reevaluation: true` candidate
- * (office_hours null and complete blockers still apply), rather than the
- * strategy id. Null fingerprints are not stale — stamping starts when the
- * align machinery lands.
+ * strategy's current substance fingerprint freezes only that stale-stamped
+ * child — not its whole sibling subtree — excluding it from its normal phase
+ * skill (in-flight phases finish on their own), and a `freeze` event is
+ * logged. Per tactic-graph-frozen-tactic-dispatch (clarification 52) the
+ * re-evaluation now targets the frozen TACTICS directly: each stale child
+ * re-surfaces as a `kind: "tactic", phase: "align-tactics", reevaluation:
+ * true` candidate (office_hours null and complete blockers still apply),
+ * rather than the strategy id. A fresh-stamped or null-stamped sibling under
+ * the same strategy is untouched by another child's staleness and keeps its
+ * ordinary phase-skill candidate. Null fingerprints are not stale — stamping
+ * starts when the align machinery lands.
  *
  * Frozen-tactic candidates (tactic-graph-frozen-tactic-dispatch): draft/raw
  * tactics (`phase: draft` or null) are also first-class selectable candidates
@@ -277,7 +279,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     // its serving strategies has since drifted.
     const stale = children.filter((t) => isOpenTactic(t) && isStrategyStale(t.execution, s.id, fp));
     if (stale.length === 0) continue;
-    for (const t of children) frozenTacticIds.add(t.id);
+    for (const t of stale) frozenTacticIds.add(t.id);
     events.push({
       event: "freeze",
       strategy: s.id,
