@@ -642,10 +642,10 @@ disposition bar is identical — the same whole-node reconciliation (item 2) and
 single-strategy re-stamp (item 3) — applied to the one target. See "Tactic
 target — per-node finalize or re-plan", above, for that flow.
 
-A strategy-corpus census script is planned as an enumeration hook for the
-open-child sweep above (`tactic-align-tactics-mechanical-floor` Unit 2);
-until it lands, enumerate open children by hand per the Idempotency section's
-`grep -rl` recipe.
+The open-child sweep above enumerates a strategy's open child tactics through
+the census script wired into the Idempotency section
+(`align-tactics-census.ts` — `tactic-align-tactics-mechanical-floor` Unit 2),
+which reports each child tactic's classification, `phase`, and parked reason.
 
 ## Out of scope
 
