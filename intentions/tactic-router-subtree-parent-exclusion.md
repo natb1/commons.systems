@@ -27,7 +27,20 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 65
+  override: null
+  rationale: "Boosted to top ranking by author direction (2026-07-19, 'execute
+    recommendation' follow-up to the /align-strategy round that minted this
+    draft): the router misselects subtree-parents every tick, and the
+    office_hours parks those doomed sessions force are self-regenerating queue
+    noise — so this fix dispatches next. Sized against the composed selector
+    max: childless, empty blocked_by, so rank = boost + 5.33; frontier max at
+    authoring was 69.33 (tactic-graph-commit-auto-serialization, boost 64), so
+    boost 65 gives 70.33 — verified #1 via select-targets against origin/main
+    10befb49. This deliberately overtakes the auto-serialization pin per the
+    same author direction; that node stays #2 with its own boost untouched. The
+    boost flows nowhere else (no blocked_by, no children)."
 phase: null
 execution: null
 validates: []
@@ -76,3 +89,19 @@ valid `phase: implement` landing). Live instances: `tactic-graph-native-dispatch
 - Unit test: a phase-null tactic that is another tactic's `parent` is not
   draft-selectable; a childless phase-null tactic still is.
 - Completion clears the office_hours park on `tactic-graph-native-dispatch`.
+
+## Scope extension (2026-07-19 follow-up)
+
+The exclusion has a second read site beyond the router: the strategy-target
+`/align-tactics` flow's draft-consumption sweep (Step 2 item 2 of
+`.claude/skills/align-tactics/SKILL.md`) treats every phase-absent,
+office_hours-unset child of the strategy as a consumable draft —
+finalize/split/merge/prune. A subtree-parent must be excluded there by the same
+derived parent-set rule, or a strategy round would run a container through the
+draft path. Cover both sites at finalization: the router code path AND the
+skill's sweep instruction (a SKILL.md edit adding the subtree-parent exclusion
+to the draft-consumption step). Design rationale, ratified by the author
+2026-07-19: classification is derived from `parent` edges, never declared —
+any per-node annotation (park, blocker, container flag) caches structure the
+graph already encodes and can drift when children are pruned. Acceptance grows
+one item: a strategy-target round's draft sweep skips subtree-parents.
