@@ -2244,6 +2244,41 @@ clarifications:
       rate-limit budget), and ref-split CAS-sufficiency claim are
       Claude-internal design reasoning the author has not independently
       verified. Recorded 2026-07-19 interview."
+  - question: The redundancy/stale-selection start-gate (check-node-selection.ts) is
+      wired only inside provision-node-worktree. Do phase skills entered by the
+      other Step-0 paths (native EnterWorktree, re-entry of an existing
+      worktree) still get the mechanical gate?
+    answer: "No — they fall back to prose reasoning, a real gap. The mechanical
+      selection-validity gate (check-node-selection.ts, exit 12 stale-selection
+      / exit 13 scope-stale) runs only from provision-node-worktree:87. The
+      phase-skill Step-0 alternate entry paths — native EnterWorktree, or
+      re-entry of an already-existing worktree — run only assert-worktree-fresh
+      (a freshness check), never check-node-selection. So a phase skill entered
+      those ways detects a redundant or terminal-state selection only through
+      the skill body's prose Idempotency reasoning, an LLM judgment gate rather
+      than a mechanical one. This burned a full session on 2026-07-18:
+      /align-tactics tactic-graph-main-self-heal was re-invoked manually against
+      an already-finalized node (phase:implement, execution:null); because the
+      session was already inside the worktree (re-entry, no
+      provision-node-worktree re-run), the mechanical gate never fired and the
+      no-op was caught only by prose reasoning. Requirement: the mechanical
+      selection-validity gate must bind EVERY phase-skill entry, not just the
+      fresh-cut provision path — run check-node-selection at entry regardless of
+      how the worktree was provisioned, exiting cheaply (skipped) on a
+      redundant/stale/terminal-state selection before any Explore/Plan fan-out
+      or session-boot work. Steelman considered and DIVERGED from: fix redundant
+      dispatch only at the selection SOURCE (the selector never emits a
+      terminal-state candidate — tactic-freeze-resurface-stale-children-only PR
+      #2895, tactic-materiality-scoped-freeze PR #2892). Rejected as sufficient
+      because a MANUAL human invocation (/align-tactics tactic-X typed directly)
+      has no selector to gate it; the entry gate is the only possible guard for
+      that path, so selection-source fixes and the entry gate are complementary
+      layers, not alternatives. Carrier: retained draft
+      tactic-phase-entry-selection-gate; may be partly closed by
+      tactic-align-skills-latest-graph-guard (PR #2889, not yet on origin/main)
+      if its re-entry routing re-runs check-node-selection — the draft tactic's
+      first unit verifies that overlap before implementing. Recorded 2026-07-19
+      /align-strategy interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:

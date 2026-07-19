@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -29,6 +29,7 @@ office_hours:
   reason: needs on-box nixos-rebuild switch on the actual WSL hardware plus
     Windows interop — not automatable
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -37,13 +38,13 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issues (closed, content preserved here): 2647,
-2648, 2649, 2650, 2651, 2579, 2578 — needs-main residue from the WSL
-home-manager integration (issue 2636, PR 2638) and the wezterm Windows-profile
-work (issue 62, PR 2458). CI proves the config evaluates and builds; these
-checks need the actual WSL hardware and Windows interop. One on-box sweep
-around a single `sudo nixos-rebuild switch`.
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issues (closed, content
+preserved here): 2647, 2648, 2649, 2650, 2651, 2579, 2578 — needs-main
+residue from the WSL home-manager integration (issue 2636, PR 2638) and the
+wezterm Windows-profile work (issue 62, PR 2458). CI proves the config
+evaluates and builds; these checks need the actual WSL hardware and Windows
+interop. One on-box sweep around a single `sudo nixos-rebuild switch`.
 
 ## Verification checklist
 
