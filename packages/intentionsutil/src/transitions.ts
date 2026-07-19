@@ -221,10 +221,12 @@ export type Mergeable = "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
  * regressed and must be routed back to `fix` by the review-stall reconciler
  * (`tactic-graph-review-exclusion-stall-recovery`). Once a node reaches
  * `review` and picks up the `reviewed` marker, the selector's reviewed-marker
- * exclusion (`router.ts:296`, `tactic-graph-selector-reviewed-exclusion`)
- * removes it from selection entirely — so `transition-node`'s normal
- * `fixInterrupt` path never runs for this node again via selection, and a
- * later CI regression or merge conflict would otherwise strand it forever.
+ * exclusion (`selectGraphTargets` in `router.ts`,
+ * `tactic-graph-selector-reviewed-exclusion`) removes it from selection
+ * entirely — so the normal CI-red fix-interrupt entry (`graph-select-target`'s
+ * `_gate_maybe_interrupt`, which only runs on candidates the selector already
+ * emits) never gets a chance to run on this node again, and a later CI
+ * regression or merge conflict would otherwise strand it forever.
  *
  * A `failing` CI verdict or a `CONFLICTING` mergeability is a genuine
  * regression that must be recovered. `UNKNOWN` mergeability and any non-
