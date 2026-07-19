@@ -578,7 +578,7 @@ live classification judgment at that point, not just a query).
 npx tsx packages/intentionsutil/scripts/validate-graph.ts
 ```
 ```verify
-npx vitest run --project intentionsutil --root .
+npx vitest run --project packages/intentionsutil --root .
 ```
 
 Prose:
