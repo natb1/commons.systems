@@ -134,34 +134,8 @@ clarifications:
       strategy's round."
   - question: What happens when a strategy's substance is edited while it has open
       tactics?
-    answer: "Soft freeze plus queued re-evaluation, detected by fingerprint:
-      /align-tactics stamps the strategy's substance fingerprint (statement,
-      clarifications, conditions, serves, success_signal, tooling_goals — never
-      the state fields reading/gap/rounds/office_hours, which sensors touch
-      constantly) on each tactic it plans. When the router sees a mismatch it
-      stops new selections in that subtree, lets in-flight phases finish their
-      current phase, and queues a re-evaluation /align-tactics session that
-      amends, prunes, or confirms the open tactics and re-stamps.
-      /align-strategy warns the author at record time that editing a strategy
-      with open non-draft tactics queues this freeze. This session is the first
-      instance: these clarifications made round 1's plans stale, and the
-      re-evaluation was executed in the same change. Recorded 2026-07-03
-      interview. Amended 2026-07-11: the queued re-evaluation is now
-      dispatchable at tactic granularity, not only a strategy-level round — a
-      soft-frozen tactic carries a ranking and is selected directly, running
-      `/align-tactics <tactic-id>` to re-plan it (see the 2026-07-11
-      frozen-tactic-dispatch clarification, clarification 52).
-      Fingerprint-mismatch detection and the 'stop new selections in the
-      subtree, let in-flight phases finish their current phase' behavior are
-      unchanged; only the re-evaluation's dispatch granularity changes
-      (highest-ranked soft-frozen node first, per the progression tiebreak).
-      (Scoped 2026-07-18: the freeze becomes materiality-scoped at the source —
-      the editing /align-strategy round, holding the delta and the author in
-      hand, classifies each stamped open child and re-stamps orthogonal children
-      in the same graph-commit, so a freeze fires only on materially affected
-      children; each of those still re-evaluates at its own rank exactly as
-      recorded here. See the materiality-scoped-freeze clarification and
-      tactic-materiality-scoped-freeze.)"
+    answer: >-
+      What happens when a strategy's substance is edited while it has open tactics? — See body §Fingerprint & Freeze. Recorded 2026-07-03 interview.
   - question: Does the backlog band scale — and does it self-correct when the graph
       changes?
     answer: "No on both counts — superseded on same-day author review: the backlog
@@ -634,29 +608,8 @@ clarifications:
       compounds on top of it.)"
   - question: A selected node’s scope or state changes after selection — before its
       worker starts, or while it runs. What closes the window?
-    answer: "Two gates bracket the worker; no mid-run polling. Start gate: the
-      provisioning prelude (provision-node-worktree) re-validates against fresh
-      origin/main — the node still exists, its persisted phase equals the
-      selected phase (passed as an argument; the directive is never re-derived),
-      office_hours is null, and the serving strategy's substance fingerprint is
-      unchanged where stamped — and any mismatch is a distinct exit code: the
-      worker reports skipped, its claim clears, and the next tick re-selects
-      from current state. This makes the soft freeze precise: a
-      selected-but-unstarted worker counts as not started and yields to the
-      freeze. Write gate: the transition-time fingerprint gate
-      (tactic-graph-router-transitions Unit 1) holds the transition when
-      substance moved mid-run. Changes landing mid-run are absorbed at the write
-      gate plus the re-evaluation sweep — phase skills never poll the graph
-      mid-phase. Author interactive edits to a claimed tactic's scope land
-      freely and bind from the next selection: the in-flight phase finishes
-      against the scope it started with and its transition write stands; an
-      author who needs in-flight work stopped parks the node — the start gate
-      blocks any queued or re-selected worker, and the interactive-commit rule
-      un-parks. The base-version write check (tactic-graph-commit-prune-support
-      Unit 2) keeps author and worker node-writes from clobbering each other.
-      Start-gate implementation is retained as draft
-      tactic-worker-start-revalidation (new scope — never an amendment to the
-      in-flight selector PR). Recorded 2026-07-06 interview."
+    answer: >-
+      A selected node’s scope or state changes after selection — before its worker starts, or while it runs. What closes the window? — See body §Fingerprint & Freeze. Recorded 2026-07-06 interview.
   - question: Does long-horizon graph work keep a workflow or session alive?
     answer: "No — the graph is the long-horizon substrate; sessions are disposable
       executors. This generalizes the office-hours-entry clarification
@@ -677,34 +630,8 @@ clarifications:
   - question: A tactic-only scope edit lands mid-review, or between review-pass and
       merge — the mid-flight-edit rule lets the transition write stand, so the
       PR merges against pre-edit scope. Is that window acceptable?
-    answer: "No — closed by a tactic-scope fingerprint, superseding the 'its
-      transition write stands' clause of the mid-flight-edit clarification
-      recorded earlier the same day. The rest of that rule stands: edits to a
-      claimed tactic land freely, bind from the next selection, and
-      park-to-interrupt remains the author's stop lever; what changes is that a
-      phase's forward transition no longer survives a scope edit that landed
-      after the phase's fresh read. Mechanism, symmetric with the
-      strategy-substance fingerprint (clarification 10) but tactic-local and
-      worktree-scoped rather than stored in the node: the worker-start
-      re-validation gate records the tactic's scope fingerprint — a hash over
-      statement plus node body, never frontmatter state fields, so
-      attempts/markers/residue/park writes cannot trip it
-      (tacticScopeFingerprint beside strategyFingerprint in intentionsutil) — as
-      part of taking its fresh read, saved beside the node's worktree, never a
-      per-launch graph write. The transition writer re-checks it at every
-      forward transition write, and specifically before arming auto-merge at
-      clean review completion, exactly where the strategy-fingerprint gate
-      already sits (tactic-graph-router-transitions Unit 1): on mismatch, no
-      forward transition is written and no merge is armed — the tactic stays at
-      its completed phase and the next tick re-runs that phase against the
-      updated scope, whose worker takes a fresh read and a fresh stamp. Net
-      guarantee: a tactic cannot reach done or merge until the phase that was in
-      flight has completed a run whose fresh read postdates the last scope edit.
-      Bootstrap parity: an emulating session owes the same scope re-check before
-      writing its transition (clarification 15). The asymmetry that motivated
-      this — the soft-freeze hash deliberately covers strategy substance only —
-      remains by design; tactic scope gets its own local gate instead of joining
-      the strategy hash. Recorded 2026-07-06 interview."
+    answer: >-
+      A tactic-only scope edit lands mid-review, or between review-pass and merge — the mid-flight-edit rule lets the transition write stand, so the PR merges against pre-edit scope. Is that window acceptable? — See body §Fingerprint & Freeze. Recorded 2026-07-06 interview.
   - question: A worker session dies mid-phase (API error, session limit, system
       failure) while graph state and worktree survive — is the session state
       worth recovering, by workflow-session resume or by transcript
@@ -767,69 +694,8 @@ clarifications:
       scope edit (direct, or via a cascading strategy re-evaluation) force all
       three of implement/qa/review to execute with the latest scope — and when a
       phase routes back, is it clear from graph state what changed?
-    answer: "Yes to both, by amendment: scope staleness now demotes the tactic to
-      phase implement instead of holding it in place — superseding the same-day
-      scope-fingerprint clarification's 'stays at its completed phase and the
-      next tick re-runs that phase' clause (its stamp/verify mechanism and
-      everything else in that entry stand). As first recorded, the gate re-ran
-      only the held phase, so an edit landing after qa's fresh read reached
-      merge with only review re-run: review's contract check does route
-      delivered-vs-current-scope gaps to its fix lane, so the code converged,
-      but the new scope never received the qa phase's independent
-      user-acceptance validation (clarification 20), and 'implement ran with
-      latest scope' held only vicariously through fix loops. Amended rule —
-      chain of custody: a pre-merge phase beyond implement may run only against
-      the exact scope the previous phase ran against. The worker-start gate
-      compares the current tacticScopeFingerprint against the existing stamp
-      left by the previous phase before overwriting it (fix/qa/review; implement
-      skips the comparison — it always takes the latest scope and re-establishes
-      custody; main-qa is post-merge and validates against current intent by
-      design); the transition-time gate keeps comparing against the running
-      phase's own start stamp. Staleness at either point writes the backward
-      transition phase := implement — the transition writer's one owned backward
-      transition — never a hold: the re-selected implement worker roots in the
-      same worktree, reads the current node body as the whole target state, and
-      implements only the delta, after which qa and review re-run in order on
-      fresh reads. Net guarantee, strengthened from the superseded clause: merge
-      requires an unbroken implement -> qa -> review chain all executed against
-      the merge-time scope fingerprint. Machinery body writes cannot break the
-      chain: the transition writer refreshes the stamp to the post-write
-      fingerprint of the node it just committed — residue sections DO change the
-      body hash, so the superseded entry's claim that residue writes cannot trip
-      the gate was wrong as written; the writer-side refresh is what makes
-      machinery appends harmless — leaving only author and re-evaluation edits
-      able to demote. A cascading strategy edit reaches this gate through the
-      existing two stages: the strategy-substance fingerprint holds transitions
-      and queues re-evaluation (clarification 10); if the re-evaluation amends
-      the tactic's scope, that amendment trips the scope chain and demotes — if
-      it confirms without amending, nothing re-runs, which is correct. Boundary:
-      demotion is pre-merge only (implement/qa/review/fix); post-merge staleness
-      routes per main-qa parity (clarification 22) — broken-in-prod becomes an
-      implement-chain bug tactic, never an un-merge. A missing stamp fails open
-      with a logged warning during bootstrap and fails closed (demote) once the
-      stamp mechanism lands. Routing-back provenance is explicit, not
-      archaeological: the stamp records the origin/main SHA beside the
-      fingerprint, so the demoting writer names exactly what is being absorbed —
-      git log <stamped-sha>..origin/main -- intentions/<id>.md — in the demotion
-      commit message and as a comment on the node's PR when one exists; the
-      re-run phases need no delta to be correct (the node body is the full
-      target state, condition 7 — plan minus delivered worktree state is the
-      work), so the named range is a focus aid and the audit trail. Bootstrap
-      parity: an emulating session owes the chain re-check before each
-      transition it writes, and owes the demotion write when it finds a post-qa
-      scope edit (clarification 15). Recorded 2026-07-06 interview. (Amended
-      2026-07-16: the primary scope-staleness comparison moves AHEAD of
-      selection into the tick's disposition sweep, so a demotion is scriptable
-      phase-1 work that no longer surprises the worker-launch step or consumes a
-      budget slot; the worker-start gate described here stays as the safety
-      re-check for staleness introduced after the sweep. See the
-      scriptable-then-spawn clarification of that date.) (Scoped 2026-07-18: the
-      'leaving only author and re-evaluation edits able to demote' clause is
-      narrowed — an author-present align round that classifies its own
-      tactic-body edit as scope-inert re-stamps the custody stamp in the same
-      round, so such edits no longer demote; material and unsure edits still do.
-      See the scope-inert-restamp clarification and draft
-      tactic-scope-inert-restamp-primitive.)"
+    answer: >-
+      The scope-fingerprint gate re-runs only the phase that was in flight — implement and qa completed against pre-edit scope never re-run. Does a scope edit (direct, or via a cascading strategy re-evaluation) force all three of implement/qa/review to execute with the latest scope — and when a phase routes back, is it clear from graph state what changed? — See body §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-06 interview.
   - question: What guards the router against failure loops — a worker that
       repeatedly fails to make progress or park on a node, and a systemic
       executor failure (a daemon crash-loop) that would otherwise false-trip a
@@ -1599,65 +1465,8 @@ clarifications:
       round stales every stamped in-flight child) — should the freeze decision
       incorporate a rank comparison, and how does a stale child recover WHAT
       changed when the stamp is a bare hash?
-    answer: 'Greenfield: the freeze becomes materiality-scoped at the source, not
-      rank-gated at the selector. Today’s freeze conflates two separable
-      judgments: materiality (does this edit affect this child’s plan at all?)
-      and urgency (when must an affected child stop and reconcile?). The editing
-      round — the one session holding both the delta and the author — classifies
-      each stamped open child: an orthogonal child is re-stamped in the SAME
-      graph-commit as the edit, so no freeze ever fires for it; a materially
-      affected child is left stale and freezes exactly as recorded in the
-      soft-freeze clarification, re-evaluating at its own rank. The selector
-      already runs re-evaluation at the child’s own rank (the frozen-candidate
-      emission in router.ts), so a low-rank change never preempts higher-ranked
-      work even today — the defect was only the orthogonal-child tax: one
-      re-evaluation session per stamped child whose likely verdict is
-      "unaffected, re-stamp". Delta provenance: the per-strategy stamp widens
-      from a bare hash to {hash, sha}, where sha is the origin/main commit whose
-      strategy content the stamp was taken against — mirroring the tactic
-      scope-custody stamp (the scope-fingerprint chain-of-custody clarification)
-      — so a stale child recovers the exact delta mechanically via git diff
-      <sha>..origin/main -- intentions/<strategy-id>.md instead of relying on
-      dated-clarification archaeology. Steelman (the author’s rank-gate
-      proposal: freeze a stale child only when the staling change’s carrier
-      out-ranks it, firing later if the carrier is boosted above it): DIVERGED —
-      rank is not a proxy for materiality (a low-rank change can still
-      invalidate a high-rank child’s plan: the skill rename renames the very
-      skills tactic-align-skills-latest-graph-guard’s plan edits); an
-      unconditional rank gate lets workers knowingly execute superseded scope;
-      and attributing a bare hash mismatch to a ranked carrier needs the same
-      provenance substrate anyway. Rank incorporation instead rides existing
-      machinery: re-evaluation competes at the child’s own rank, and a
-      must-land-first migration carrier acquires blocked_by edges from affected
-      children (see the migration-sequencing clarification), whose backward
-      attention-compounding boosts the carrier in proportion to what it blocks.
-      Brownfield (backwards-incompatible for stamp readers, so sequenced;
-      executable units live in draft tactic-materiality-scoped-freeze): (1)
-      additive — schema accepts string | {hash, sha} as the map value, staleness
-      reads the hash in either form; (2) new stamps write {hash, sha}; (3)
-      bare-hash stamps migrate opportunistically at each re-stamp; (4) drop the
-      bare-string form; skill-side, /align-strategy’s step-5 soft-freeze warning
-      becomes the classification-and-re-stamp step. The three edits now
-      accumulated on the 9 currently-stale children (fix-orthogonal,
-      skill-rename, this round) reconcile via the author’s already-planned
-      re-evaluation sweep — this doctrine applies from the next edit round on.
-      Recorded 2026-07-18 /align-strategy interview. Corrected same-day
-      2026-07-18: the motivating premise overstated the live blast radius — none
-      of this strategy’s open children carry a map-form stamp yet (stamping
-      starts as align rounds land it), and the selector’s live freeze events all
-      trace to legacy bare-string stamps on OTHER strategies’ children, so the
-      three 2026-07-18 edits froze zero children mechanically; until stamp
-      coverage exists, the re-evaluation obligation on this strategy’s open
-      subtree is doctrinal (the soft-freeze clarification), not stamp-enforced.
-      The norm this correction demonstrates: prose-level record corrections are
-      never deferred for freeze cost — the graph tracks greenfield state, prose
-      included, and an editing round pays exactly the materiality of its change
-      (this correction: zero freezes, one commit). A legacy bare-string stamp
-      converts to map form only in a re-evaluation round of a strategy it
-      actually serves, carrying the old string into the entries of the
-      strategies that round did NOT reconcile so their freeze is preserved
-      (absent-from-map would silently unfreeze them). Recorded 2026-07-18
-      /align-strategy interview, same-day correction.'
+    answer: >-
+      A strategy edit soft-freezes every stamped open child regardless of relevance or rank (a low-rank edit such as the 2026-07-18 skill-rename round stales every stamped in-flight child) — should the freeze decision incorporate a rank comparison, and how does a stale child recover WHAT changed when the stamp is a bare hash? — See body §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-18 /align-strategy interview.
   - question: Does the graph need first-class structure for sequencing brownfield
       migrations of backwards-incompatible changes, and how do in-flight tactics
       link to a migration that must land before their work?
@@ -1719,43 +1528,8 @@ clarifications:
       reconciliation notes amendment-completeness mandates — trips the tactic
       scope-custody gate and demotes the whole ladder. Does materiality-scoping
       extend to the scope-custody stamp, and by what mechanism?
-    answer: "Yes — greenfield: the materiality principle ('an editing round pays
-      exactly the materiality of its change', clarification 70) extends to the
-      tactic scope-custody stamp, closing the seam in the chain-of-custody
-      amendment (clarification 39) between its intent ('if the re-evaluation
-      confirms without amending, nothing re-runs') and its mechanism: recording
-      the confirmation is itself a body edit, so tacticScopeFingerprint trips
-      and demotes. Observed 2026-07-18: an align round's scope-inert
-      Interim-mechanism note on tactic-graph-selector-reviewed-exclusion demoted
-      a fully-reviewed node (PR #2888, green CI) review -> implement; the tax is
-      three phase sessions per annotation, since demote-to-implement discards qa
-      and review custody. Mechanism — sanctioned re-stamp, worktree-locality
-      preserved: the stamp stays a worktree-local file, never a per-launch graph
-      write (clarification 39's design stands); an author-present align round
-      (/align-strategy or /align-tactics — the interview holds both the delta
-      and the author, the same classifier trust clarification 70 records) that
-      classifies its own tactic-body edit as scope-inert re-stamps
-      .claude/worktrees/<id>.scope-fingerprint to the post-edit
-      tacticScopeFingerprint plus the current origin/main sha in the same round,
-      recording the classification in the round's record — mirroring the
-      transition writer's machinery refresh (which stands unchanged) rather than
-      moving the stamp into the node. Fail-closed classification: only a
-      confident scope-inert verdict re-stamps; any doubt leaves the stamp
-      untouched and custody demotes as recorded, and a material edit is left
-      stale exactly as today. Phase workers, qa/review sessions, and the tick
-      never re-stamp. Steelman (keep the gate purely mechanical; accept the
-      demotion tax as misclassification insurance): DIVERGED — the annotations
-      are doctrine-mandated (clarification 38 records reconciliation in the
-      node), so the tax recurs structurally, and the strategy-stamp side already
-      rejected the same orthogonal tax with the same classifier. Net guarantee
-      unchanged: merge still requires an unbroken implement -> qa -> review
-      chain against the merge-time scope fingerprint — a re-stamp asserts, under
-      author presence, that the post-edit fingerprint IS that same scope.
-      Executable carrier: draft tactic-scope-inert-restamp-primitive (re-stamp
-      script plus align-skill step); bootstrap until it lands: the round
-      refreshes the stamp by hand — write '<tacticScopeFingerprint(statement,
-      body)> <origin/main sha>' as the stamp file's one line, the 2026-07-18
-      remediation's proven recipe. Recorded 2026-07-18 interview."
+    answer: >-
+      A scope-inert align annotation on an in-flight tactic's body — the reconciliation notes amendment-completeness mandates — trips the tactic scope-custody gate and demotes the whole ladder. Does materiality-scoping extend to the scope-custody stamp, and by what mechanism? — See body §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-18 interview.
   - question: What provenance convention binds clarifications[].answer — the
       trailing Recorded-sentence the align SKILL.md docs prescribe, or the
       dated-clause convention the corpus and readingDate() implement?
@@ -1786,37 +1560,8 @@ clarifications:
   - question: Why did the 2026-07-18 selector ticks dispatch /align-tactics
       re-evaluation onto subtree children with no planning work to do, and do
       the recorded freeze-improvement requirements fix it?
-    answer: "Root cause, from the selection/routing logs and git history: the 20:57Z
-      strategy edit (e7d20df0, the provenance-lint round) landed without the
-      materiality classify-and-re-stamp step, staling the one map-stamped open
-      child (tactic-graph-selector-reviewed-exclusion); the next tick's
-      soft-freeze scan then swept ALL open children into frozenTacticIds — the
-      re-surface set of the frozen-tactic-dispatch clarification is the whole
-      subtree, not the stale children — and the top-ranked unclaimed child
-      (tactic-review-phase-trust-builtin-review, own stamp null, plan untouched
-      by the edit) was dispatched to /align-tactics; its session then read a
-      stale worktree checkout and concluded no work existed. Coverage verdict,
-      three-way split: (1) the freeze firing at all on an orthogonal edit is
-      fixed by tactic-materiality-scoped-freeze (PR #2892) once editing rounds
-      classify-and-re-stamp; (2) the stale-worktree worker read is fixed by
-      tactic-align-skills-latest-graph-guard (PR #2889), whose Hole-2 closure
-      routes align sessions through provision-node-worktree's fetch-and-merge
-      re-entry; (3) not covered anywhere: when a freeze legitimately fires,
-      suppression and re-surface still take the WHOLE subtree, contradicting the
-      same-commit orthogonal classification and sweeping null-stamped children a
-      sibling's staleness says nothing about — retained as draft
-      tactic-freeze-resurface-stale-children-only (narrow both frozenTacticIds
-      uses to stale-stamped children only). The subtree-conservatism rival
-      framing (a materially drifted strategy makes every child's plan suspect,
-      so the full sweep is deliberate) was put to the author and DIVERGED from:
-      under the materiality doctrine the editing round's per-child
-      classification is the authority on who is affected; a blanket sweep
-      re-litigates it. Both fix carriers were boosted to the top of the
-      discretionary frontier (boost 61, composed rank 66.33, above the then-max
-      66.00) by author direction this round. This edit itself fired zero
-      freezes: at c2a909c7 the strategy has no map-stamped open children (the
-      stale stamp cleared when its carrier closed), so no classify-and-re-stamp
-      was owed. Recorded 2026-07-18 /align-strategy interview."
+    answer: >-
+      Why did the 2026-07-18 selector ticks dispatch /align-tactics re-evaluation onto subtree children with no planning work to do, and do the recorded freeze-improvement requirements fix it? — See body §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-18 /align-strategy interview.
   - question: Does a deliberate human dispatch — the bare /dispatch fan-out picking
       the highest-ranking available node, or an explicit dispatch <node-id> —
       bypass the absolute max_concurrent_workers ceiling, or only the pace
@@ -2279,3 +2024,128 @@ once per tick under a fresh in-turn grant. This moves the merge/arm responsibili
 off the transition writer and the review worker and onto the tick reconciler. It is
 the steady state that the bootstrap-transition doctrine above emulates by hand, and
 it retires when the router is live.
+
+### Fingerprint & Freeze
+
+Two fingerprint stamps keep a worker from executing scope the author has already
+superseded: a strategy-substance fingerprint that soft-freezes a strategy's open
+subtree when its substance is edited, and a tactic-local scope-custody stamp that
+demotes a tactic whose own scope moved under it. Both began as blanket gates and
+both are now materiality-scoped — an editing round pays exactly the materiality of
+its change. (The CI-fix interrupt is orthogonal execution state, not part of this
+machinery — see §Phase Transitions & Fix State, entry 66.)
+
+**Strategy-substance soft freeze, materiality-scoped at the source.** Current rule
+(from 2026-07-18, entries 70 and 73, scoping the 2026-07-03 soft-freeze mechanism of
+entry 10): /align-tactics stamps a strategy's substance fingerprint — a hash over
+statement, clarifications, conditions, serves, success_signal, and tooling_goals,
+never the state fields (reading/gap/rounds/office_hours) sensors touch constantly —
+on each tactic it plans, paired with the origin/main SHA the stamp was taken against
+(`{hash, sha}`, so a stale child recovers the exact delta mechanically via `git diff
+<sha>..origin/main -- intentions/<strategy-id>.md` rather than dated-clarification
+archaeology). Materiality is decided at the source: the editing round — the one
+session holding both the delta and the author — classifies each stamped open child
+and re-stamps orthogonal children in the SAME graph-commit as the edit, so a freeze
+never fires for a child the edit does not affect. A materially affected child is left
+stale and freezes: the router stops new selections in that subtree, lets in-flight
+phases finish their current phase, and re-evaluates the child at its own rank (a
+dispatchable `/align-tactics <tactic-id>` session per entry 52's frozen-tactic
+dispatch, highest-ranked stale child first) to amend, prune, or confirm and re-stamp.
+/align-strategy's record-time step-5 soft-freeze warning becomes this
+classify-and-re-stamp step. The rank-gate rival (freeze a stale child only when the
+staling change out-ranks it) is rejected: rank is not a proxy for materiality — a
+low-rank edit can still invalidate a high-rank child's plan — and rank incorporation
+instead rides existing machinery (re-evaluation competes at the child's own rank, and
+a must-land-first migration carrier acquires blocked_by edges whose backward
+attention-compounding boosts it in proportion to what it blocks).
+
+The same materiality principle extends to the tactic scope-custody stamp of the chain
+below (entry 73): an author-present align round (/align-strategy or /align-tactics)
+that classifies its own tactic-body edit as scope-inert re-stamps the worktree-local
+`.claude/worktrees/<id>.scope-fingerprint` file to the post-edit fingerprint plus the
+current origin/main SHA in the same round, recording the classification in the round's
+record — mirroring the transition writer's machinery refresh rather than moving the
+stamp into the node. This closes the seam in the chain-of-custody rule (entry 39)
+between its intent ("if the re-evaluation confirms without amending, nothing re-runs")
+and its mechanism (recording that confirmation is itself a body edit that would trip
+the scope fingerprint and demote): a doctrine-mandated reconciliation note (entry 38)
+no longer demotes a green, fully-reviewed node. Classification is fail-closed — only a
+confident scope-inert verdict re-stamps; any doubt leaves the stamp untouched and
+custody demotes as recorded, and phase workers, qa/review sessions, and the tick never
+re-stamp. The net guarantee is unchanged: merge still requires an unbroken
+implement → qa → review chain against the merge-time scope fingerprint — a re-stamp
+asserts, under author presence, that the post-edit fingerprint IS that same scope.
+
+Migration is backwards-incompatible for stamp readers and sequenced (schema accepts
+`string | {hash, sha}` → new stamps write the map form → bare-hash stamps migrate
+opportunistically at each re-stamp → drop the bare-string form); the executable units
+live in draft tactic-materiality-scoped-freeze, and the tactic-stamp re-stamp carrier
+(script plus align-skill step) in draft tactic-scope-inert-restamp-primitive.
+
+History: entry 10 (2026-07-03) established the soft freeze detected by a substance
+fingerprint stamped per tactic, with any mismatch freezing the whole subtree; a
+2026-07-11 amendment made the queued re-evaluation dispatchable at tactic granularity
+(entry 52) rather than only as a strategy-level round. Entry 70 (2026-07-18) replaced
+the blanket freeze with materiality scoping and widened the stamp from a bare hash to
+`{hash, sha}`. Entry 73 (2026-07-18) extended the same materiality principle to the
+tactic-local scope-custody stamp.
+
+**Tactic scope-custody chain — a pre-merge phase runs only against the scope the
+previous phase ran against.** Current rule (from 2026-07-06, entry 39, superseding
+entries 34 and 36): two gates bracket every worker with no mid-run polling — a start
+gate (the provisioning prelude re-validates the node against fresh origin/main: still
+exists, persisted phase equals the selected phase, office_hours null, serving
+strategy's substance fingerprint unchanged where stamped; a mismatch is a distinct
+exit code that reports skipped and yields to the freeze) and a write gate (the
+transition-time fingerprint check). Each phase records a tactic scope fingerprint — a
+hash over statement plus node body, never frontmatter state fields (so
+attempts/markers/residue/park writes cannot trip it), saved in a worktree-local file
+beside the origin/main SHA it was read against, never a per-launch graph write. The
+chain-of-custody rule: a pre-merge phase beyond implement (fix/qa/review) may run only
+against the exact scope the previous phase ran against — the worker-start gate
+compares the current fingerprint against the stamp the previous phase left before
+overwriting it (implement skips the comparison; it always takes the latest scope and
+re-establishes custody; main-qa is post-merge and validates against current intent by
+design). Staleness at either gate writes the one owned backward transition, `phase :=
+implement` — never a hold — so the re-selected implement worker roots in the same
+worktree, reads the current node body as the whole target state, implements only the
+delta, and qa and review re-run in order on fresh reads. Net guarantee: merge requires
+an unbroken implement → qa → review chain all executed against the merge-time scope
+fingerprint. Machinery body writes cannot break the chain — the transition writer
+refreshes the stamp to the post-write fingerprint of the node it just committed, so
+residue-section appends are harmless, leaving only author and re-evaluation edits able
+to demote (and, per the scope-inert re-stamp above, not even a classified-inert author
+annotation). The demoting writer names the absorbed range — `git log
+<stamped-sha>..origin/main -- intentions/<id>.md` — in its commit message and on the
+node's PR. A cascading strategy edit reaches this gate through the soft freeze above:
+the strategy fingerprint holds transitions and queues re-evaluation; if that
+re-evaluation amends the tactic's scope, the amendment trips the scope chain and
+demotes; if it confirms without amending, nothing re-runs. Implementation:
+tactic-graph-router-transitions Unit 1 (transition-time gate) and draft
+tactic-worker-start-revalidation (start gate). A later timing change (entry 62) moves
+the primary scope-staleness comparison ahead of selection into the tick's disposition
+sweep, leaving the worker-start gate as the safety re-check; that folding lives in
+§Execution Substrate.
+
+History: entry 34 (2026-07-06) recorded the mid-flight-edit rule — an author edit to a
+claimed tactic's scope lands freely mid-phase, the in-flight phase finishes against
+the scope it started with, and "its transition write stands" (park-to-interrupt the
+author's only stop lever). Entry 36 (same day) superseded that "transition write
+stands" clause with the tactic-scope fingerprint gate: on mismatch, no forward
+transition is written and no merge armed — the tactic held at its completed phase and
+the next tick re-ran that one phase. Entry 39 (same day) superseded entry 36's "hold
+and re-run the held phase" clause with the chain of custody above: staleness demotes
+to `phase: implement` and forces the full implement → qa → review re-run, because
+otherwise an edit landing after qa's fresh read could reach merge with only review
+re-run — the new scope never receiving qa's independent user-acceptance validation.
+
+**Known defect: freeze re-surface over-sweeps the subtree.** When a freeze
+legitimately fires, suppression and re-surface still take the WHOLE open subtree into
+`frozenTacticIds`, not just the stale-stamped children — so a null-stamped child a
+sibling's staleness says nothing about can be swept into a re-evaluation and find no
+work to do (observed 2026-07-18, entry 75: the top-ranked unclaimed child was
+dispatched to /align-tactics and its session read a stale worktree and concluded no
+work existed). This is a defect, not deliberate subtree-conservatism — the editing
+round's per-child classification is the authority on who is affected, and a blanket
+sweep re-litigates it. The fix (narrow both `frozenTacticIds` uses to stale-stamped
+children only) is tracked in draft tactic-freeze-resurface-stale-children-only.
