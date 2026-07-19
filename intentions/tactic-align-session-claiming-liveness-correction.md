@@ -151,6 +151,14 @@ directly):
   should touch only the Unit 3 section).
 
 ```verify
-grep -A20 '## Unit 3 — selector claimed-set covers human-created worktrees' intentions/tactic-align-session-claiming.md | grep -qi 'treats ANY existing' && echo "STALE: existence-keyed phrase still present" && exit 1
-grep -A20 '## Unit 3 — selector claimed-set covers human-created worktrees' intentions/tactic-align-session-claiming.md | grep -qi 'live.session' && echo OK
+SECTION=$(awk '/^## Unit 3 — selector claimed-set covers human-created worktrees/{flag=1;next} /^## /{flag=0} flag' intentions/tactic-align-session-claiming.md)
+grep -qi 'treats ANY existing' <<<"$SECTION" && echo "STALE: existence-keyed phrase still present" && exit 1
+grep -qi 'live.session' <<<"$SECTION" && echo OK
 ```
+
+(The `awk` scoping is deliberate — bounding the check to the Unit 3 section only,
+between its own heading and the next `## ` heading. A fixed-line `grep -A20`
+window bleeds past Unit 3's ~13-line body into `## Reuse`, whose own
+`worktree_has_live_session` mention would satisfy the second grep even if the
+corrected Unit 3 text hadn't actually changed — a false pass this scoping
+rules out.)
