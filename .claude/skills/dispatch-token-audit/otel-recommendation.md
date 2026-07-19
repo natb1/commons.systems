@@ -50,7 +50,7 @@ Everything below traces to Unit 1; the `path:line` anchors are its own.
 - **Path B closes it by construction — if inheritance holds.** The launcher
   already has `id` and `phase` in scope per node
   (`dispatch-graph-execute:110-135`), and `dispatch-spawn-job` execs
-  `claude --bg` in an env-inheriting subshell (`:288-292`). Exporting the three
+  `claude --bg` in an env-inheriting subshell (`:285-298`). Exporting the three
   env vars immediately before the spawn stamps `node.id`+`phase` onto every metric
   the orchestrator and its nested subagents emit (Unit 1 lines 118–143).
 - **The reach to node+phase-on-spend is narrow.** Cost/token are *metrics*;

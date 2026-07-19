@@ -120,7 +120,7 @@ The launcher — the per-node spawn loop in `dispatch-graph-execute` — already
 `id` (node id) and `phase` in scope for every node it launches
 (`dispatch-graph-execute:110-135`). It spawns via `dispatch-spawn-job`, which
 execs `cd "$CWD" && claude --bg …` **in a subshell that inherits the exported
-environment** (`dispatch-spawn-job:288-292`). So exporting, immediately before
+environment** (`dispatch-spawn-job:285-298`). So exporting, immediately before
 that spawn:
 
 ```
