@@ -411,7 +411,9 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
              suppression exactly: do **nothing** — no create, no body append, no
              reopen, no frontmatter change. Flake tactic = `<tactic-id>`,
              disposition `STALE`. Skip the node-lane sub-step 4 below entirely
-             (the same exception the legacy lane's `STALE` branch carves out) and
+             (the same exception the legacy lane's `STALE` branch carves out).
+             Record the accumulator note (sub-step 5) marking this recurrence as
+             suppressed-stale — the `<tactic-id> (STALE-SUPPRESSED)` entry — then
              fall through directly to sub-step 6 (post accumulator, push
              nothing).
      4. **Block the PR's tracked issue on the flake issue.**

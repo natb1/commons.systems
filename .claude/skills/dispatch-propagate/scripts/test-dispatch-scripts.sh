@@ -25149,6 +25149,62 @@ EOF
   assert_eq "flake-dedup-node: missing --body-file → exit 2" "2" "$ec"
   fdn_teardown
 
+  # CASE 9 — an UNRELATED node quotes the fingerprint in prose but carries no
+  # canonical `Fingerprint: <fp>` label line → must NOT match (the match is
+  # scoped to the label, not a bare substring anywhere in a body) → NONE.
+  fdn_setup
+  cat > "$FDN_ORIGIN/intentions/tactic-plan-fix-nav.md" <<EOF
+---
+id: tactic-plan-fix-nav
+phase: implement
+---
+# Planning node
+
+We should fix: $FDN_FP
+EOF
+  git -C "$FDN_ORIGIN" add intentions/tactic-plan-fix-nav.md
+  git -C "$FDN_ORIGIN" commit -q -m "unrelated planning node quoting the fingerprint"
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  out=$(fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md")
+  assert_eq "flake-dedup-node: unrelated prose mention (no label) → NONE" "NONE" "$out"
+  fdn_teardown
+
+  # CASE 10 — phase-ABSENT frontmatter, but the BODY carries a verbatim CI
+  # excerpt line beginning `phase: done`. Phase extraction is bounded to the
+  # frontmatter block, so the body line must NOT be read as the node's phase:
+  # the node is treated as open → EXISTING (no --head-ref demanded).
+  fdn_setup
+  cat > "$FDN_ORIGIN/intentions/tactic-flake-nav-smoke.md" <<EOF
+---
+id: tactic-flake-nav-smoke
+---
+# Flaky CI tracker
+
+Fingerprint: $FDN_FP
+
+Recurrence excerpt:
+phase: done
+EOF
+  git -C "$FDN_ORIGIN" add intentions/tactic-flake-nav-smoke.md
+  git -C "$FDN_ORIGIN" commit -q -m "phase-absent node with 'phase: done' in body excerpt"
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  out=$(fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md")
+  assert_eq "flake-dedup-node: body 'phase: done' not read as phase → EXISTING <id>" "EXISTING tactic-flake-nav-smoke" "$out"
+  fdn_teardown
+
+  # CASE 11 — (guardrail) --head-ref passed as the final token with no value →
+  # clean usage error (exit 2), not a set -u 'unbound variable' abort.
+  fdn_setup
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  if fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md" --head-ref 2>"$FDN_TMPDIR/err"; then ec=0; else ec=$?; fi
+  assert_eq "flake-dedup-node: --head-ref with no value → exit 2" "2" "$ec"
+  if grep -q 'head-ref requires a value' "$FDN_TMPDIR/err"; then g=yes; else g=no; fi
+  assert_eq "flake-dedup-node: --head-ref with no value → stderr usage error" "yes" "$g"
+  fdn_teardown
+
 echo ""
 echo "=== dispatch-mark-complete / dispatch-mark-deviation ==="
 
