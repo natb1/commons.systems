@@ -64,16 +64,22 @@ attention:
     here by re-reading origin/main and combining both writers' text, exactly the
     layer-2/3 structural field-level merge this tactic's own plan below makes
     automatic); boost preserved unchanged across the finalize."
-phase: fix
+phase: implement
 execution:
   branch: tactic-graph-commit-auto-serialization
   pr: 2911
   attempts: {}
   markers: []
   strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-19
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /fix-conflicts once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}
