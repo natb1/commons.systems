@@ -401,7 +401,8 @@ nesting), exactly as `/plan-issue` Steps 3–5:
   findings, the tactic scope, the plan schema below, and the `/implement-unit`
   model-selection heuristic inline (the `Plan` agent will not read the skill
   file) — when the unit delivers a chart, dashboard, or other data-viz
-  surface, also feed the `/dataviz` procedure inline, same reason.
+  surface, first load the `/dataviz` built-in skill (via the Skill tool), then
+  feed its procedure inline to the `Plan` agent, same reason.
   Synthesize multiple proposals into a single recommended approach.
 - Trivial tactics (a typo, a one-line change, a simple rename) skip the
   fan-out — write the one-unit plan directly.
@@ -418,9 +419,13 @@ schema"):
     without re-reading source.
   - **Data-viz guidance (chart/dashboard units only)** — when the unit
     delivers a chart, graph, plot, dashboard, or other data-viz surface: the
-    chosen form, the validated categorical palette, and mark/interaction
-    specs, per `/dataviz`. Run the palette through `/dataviz`'s validator
-    script in a fenced ` ```verify ` block so it runs headless.
+    chosen form, the categorical palette (validated with `/dataviz`'s
+    validator script during planning, never eyeballed), and mark/interaction
+    specs, per `/dataviz`. Prose only — this per-unit field is not executed;
+    any auto-runnable palette check belongs in the plan's `## Verification`
+    section (the sole place ` ```verify ` blocks run), as a self-contained,
+    repo-runnable script that asserts the palette's thresholds directly with
+    no dependency on the bundled skill's install path.
   - **Recommended model** — `sonnet` or `opus`, per the model-selection
     heuristic at `.claude/skills/implement-unit/SKILL.md` (lines 31–39; the
     canonical home — do not restate the bullets here, same convention
