@@ -62,7 +62,24 @@ clarifications:
       /align-strategy interview (author direction)."
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 63
+  override: null
+  rationale: "Boosted to top ranking by author direction (2026-07-18): this node
+    is the tracker of record for the fix-interrupt marker-write gap that cycles a
+    tactic implement -> fix -> implement. Diagnosed live on
+    tactic-align-provenance-lint-doctrine (PR #2894): a CI-failing implement
+    completion fires the fix interrupt (transitions.ts:98) before the `planned`
+    completion marker is written (apply-node-transition.ts advances-only marker
+    rule), so resumeAfterFix([]) (transitions.ts:116) finds no marker and falls
+    back to implement instead of qa. This node's greenfield fix — split `fix` out
+    of the phase enum into an orthogonal execution.fix field so phase stays
+    ladder-positional across a fix — removes the lossy marker reconstruction
+    entirely. Sized against the composed selector rank (childless, empty
+    blocked_by: rank = boost + 5.33; current max 67.33 on
+    tactic-scope-inert-restamp-primitive at boost 62), so boost 63 gives 68.33 —
+    strictly top of the selector frontier, verified via select-targets. The boost
+    flows nowhere else (no blocked_by, no children)."
 phase: qa
 execution:
   branch: tactic-fix-interrupt-orthogonal-state
