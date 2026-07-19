@@ -14,9 +14,11 @@ rationale: "Surfaced 2026-07-07: a manual emulated router tick and the live
   leaving tactic-office-hours-graph-entry carrying phase:fix (from the manual
   tick's review->fix transition) AND a non-null office_hours park (from the
   daemon session's mechanical-conflict park) at once. Root cause confirmed by
-  code read (2026-07-18): dispatch-select-tick already computes live-worker
-  headroom (busy-worker count plus reservation-ledger count, versus MAX_WORKERS)
-  and holds dispatch-acquire-lock across its call to graph-select-target and the
+  code read (2026-07-18): dispatch-select-tick's --manual branch already
+  computes live-worker headroom (busy-worker count plus reservation-ledger
+  count, versus MAX_WORKERS -- the daemon's own autonomous gate instead
+  compares against TARGET_N, a separate pace-derived target) and holds
+  dispatch-acquire-lock across its call to graph-select-target and the
   resulting reservation_write claim (dispatch-select-tick Step 0 lock acquire
   through emit_graph_selection's reservation_write+release_lock) -- but
   graph-select-target itself performs NEITHER the lock acquisition NOR the
@@ -60,17 +62,19 @@ up carrying `phase: fix` (written by the manual tick's review→fix transition)
 *and* a non-null `office_hours` park (written by the daemon session's
 mechanical-conflict park) at the same time.
 
-Code investigation (2026-07-18) found the root cause precisely.
-`dispatch-select-tick` — the daemon's selection entrypoint
-(`.claude/skills/dispatch-propagate/scripts/dispatch-select-tick`) — is already
-concurrency-safe on its own: it acquires the shared session-keyed
-`dispatch-acquire-lock` in its Step 0 (line ~219), computes a live-worker
-headroom (`BUSY=claude_agents_count_busy_workers`, `RESV=reservation_count`,
+Code investigation (2026-07-18, re-verified by an opus review pass) found the
+root cause precisely. `dispatch-select-tick` — the daemon's selection
+entrypoint (`.claude/skills/dispatch-propagate/scripts/dispatch-select-tick`)
+— is already concurrency-safe on its own: it acquires the shared session-keyed
+`dispatch-acquire-lock` in its Step 0 (header at line 219, the `--wait` acquire
+at line 221), its `--manual` branch computes a live-worker headroom
+(`BUSY=claude_agents_count_busy_workers`, `RESV=reservation_count`,
 `LIVE_COUNT=BUSY+RESV`, `HEADROOM=MAX_WORKERS-LIVE_COUNT` clamped to ≥0, lines
-~668-711), calls `graph-select-target --top "$GAP"` (line 787) still holding
-that lock, and — inside `emit_graph_selection` (lines 179-211) — writes a
-`reservation_write` claim for every selected id *before* calling
-`release_lock`. This is a correct, atomic check-then-claim cycle.
+669-683), calls `graph-select-target --top "$GAP"` (line 787) still holding
+that lock, and — inside `emit_graph_selection` (defined at lines 192-217) —
+writes a `reservation_write` claim for every selected id (line 208) *before*
+calling `release_lock` (line 211). This is a correct, atomic check-then-claim
+cycle.
 
 The gap: `graph-select-target` itself
 (`.claude/skills/dispatch-propagate/scripts/graph-select-target`) performs
@@ -110,17 +114,19 @@ opus).
 **Scope:**
 
 - File: `.claude/skills/dispatch-propagate/scripts/graph-select-target`.
-- Add a new `--standalone` flag to the existing arg-parse loop (`graph-select-target:82-93`).
+- Add a new `--standalone` flag to the existing arg-parse loop
+  (`graph-select-target:82-94`, case arms at 83-93).
 - When `--standalone` is set, before running the existing selection logic:
   1. Acquire the shared lock: `"$SCRIPT_DIR/dispatch-acquire-lock" --wait`
      (fail the invocation — print `empty` and exit 0, matching the existing
      "selector failure degrades to empty" convention `dispatch-select-tick`
      uses at its own call site — if this returns anything other than
-     `acquired`).
+     `acquired`). Set a `STANDALONE_LOCKED=1` flag once acquired (needed by
+     step 4 below).
   2. Compute live-worker headroom using **exactly** the same formula
-     `dispatch-select-tick` already uses at lines ~668-681 (do not re-derive
-     it): `BUSY=$(claude_agents_count_busy_workers)` (from
-     `lib-claude-agents.sh`, already sourced by `graph-select-target`),
+     `dispatch-select-tick`'s `--manual` branch already uses at lines
+     669-683 (do not re-derive it): `BUSY=$(claude_agents_count_busy_workers)`
+     (from `lib-claude-agents.sh`, already sourced by `graph-select-target`),
      `RESV=$(reservation_count)` (from `lib-reservation-ledger.sh`, already
      sourced), `LIVE_COUNT=$((BUSY+RESV))`,
      `MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max)`,
@@ -128,17 +134,41 @@ opus).
      `HEADROOM=$((MAX_WORKERS-LIVE_COUNT))` clamped to ≥0. On
      `EXHAUSTED == exhausted` or `HEADROOM == 0`: release the lock, print
      `empty`, exit 0 (mirrors `dispatch-select-tick`'s `concurrency-cap`
-     disposition at lines ~682-696 — no need to reproduce its logging, just the
-     disposition).
+     disposition, gate at line 684 through `echo "concurrency-cap"` at line
+     698 — no need to reproduce its logging, just the disposition).
   3. Clamp the effective `--top` value to `min(TOP, HEADROOM)` before running
      the existing selection.
 - After the existing selection logic produces its selected node id(s) (the
   same code path `--standalone` shares with the non-standalone mode —
   no duplication of the eligibility/claimed-set logic itself), for each
-  selected id call `reservation_write "$id" "$id" "${CLAUDE_CODE_SESSION_ID:-}"`
-  (same call shape `dispatch-select-tick:208` uses) to claim it.
+  selected id call
+  `reservation_write "$id" "$id" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2`
+  (same call shape, including the `1>&2` redirect, that
+  `dispatch-select-tick:208` uses) to claim it.
 - Release the lock (`"$SCRIPT_DIR/dispatch-acquire-lock" --release`) after
   the claim writes complete, whether or not any nodes were selected.
+- **Lock-leak completeness (do not skip):** `graph-select-target` has several
+  exit paths between the acquire (step 1) and the final claim/release that a
+  naive per-branch release would miss — `no-store` (exit 0), a `mktemp`
+  failure (exit 2), a `git archive` failure (exit 2), and a `select-targets.ts`
+  failure (exit 2). Do not hand-release at each of these sites. Instead, add
+  the release into the script's existing `_cleanup` EXIT trap (currently emits
+  the selection log and removes the snapshot; it does not release the lock
+  today), guarded by the `STANDALONE_LOCKED` flag from step 1:
+  `[[ -n "${STANDALONE_LOCKED:-}" ]] && "$SCRIPT_DIR/dispatch-acquire-lock" --release`.
+  This guarantees the lock is released on every exit path once `--standalone`
+  has acquired it, including ones added later.
+- **Nesting restriction:** `--standalone` acquires AND unconditionally
+  releases the lock in the same invocation. Its terminal `--release` is a
+  strict self-release keyed on `CLAUDE_CODE_SESSION_ID` — if a future caller
+  invoked `graph-select-target --standalone` while its own session already
+  held the lock, the nested release would drop the OUTER caller's hold
+  (acquire is safely re-entrant; release is not). `--standalone` is for
+  standalone/manual invocation only — never call it from code that already
+  holds `dispatch-acquire-lock` (today, no call site does: neither
+  `dispatch-select-tick:787` nor its `--pace-exempt-only` probe at line 612
+  passes `--standalone`, so this restriction does not affect any existing
+  caller).
 - Keep the stdout protocol byte-for-byte identical (`node <id> <kind> <phase>`
   lines / `empty`) so existing callers and any future manual-tick launcher
   parse it the same way regardless of `--standalone`.
@@ -161,12 +191,19 @@ cases, mirroring an existing fixture pattern almost verbatim).
 - Reuse the existing `graph-select-target` fixture-harness pattern at
   `test-dispatch-scripts.sh:30436-30485` (copies `graph-select-target`,
   `lib.sh`, `lib-*.sh` into a fixture scripts dir; fakes `CLAUDE_AGENTS_CMD`
-  and a fixture graph store read via `git archive`) — extend it with fixture
-  stand-ins for `dispatch-acquire-lock` and `dispatch-target-workers` (both
-  already faked elsewhere in this file for the `claude_agents_count_busy_workers`
-  and `LIVE_COUNT`/`TARGET_N` tests at lines ~9441-9558 and ~21192,
-  21243-21250 — reuse those existing fixture idioms rather than inventing new
-  ones).
+  and a fixture graph store read via `git archive`) — extend it with a fixture
+  stand-in for `dispatch-target-workers` (already faked elsewhere in this file
+  for the `LIVE_COUNT`/`TARGET_N` tests, stub at line 21185 driven by
+  `SEL_MAX_WORKERS`/`SEL_EXHAUSTED`/`SEL_TARGET_N`; reuse that idiom rather
+  than inventing a new one). `dispatch-acquire-lock` is **not** faked
+  anywhere in this suite — both its own test suite (`sel_tick_setup` copies
+  the real script at line 8300) and the select-tick harness (line 21068, `cp
+  "$SCRIPT_DIR/dispatch-acquire-lock"`) run the REAL script, driven by
+  `DISPATCH_LOCK_FILE` plus a fake `CLAUDE_AGENTS_CMD` for liveness. Copy the
+  real `dispatch-acquire-lock` into the fixture scripts dir the same way
+  (per the select-tick harness at ~21054-21075 and the acquire-lock suite's
+  foreign-live-holder test at ~8457-8527) — a stub cannot exercise real
+  busy/liveness semantics, and case 3 below genuinely needs the real lock.
 - Add cases:
   1. `--standalone` with headroom available: selection proceeds, the selected
      id gets a reservation-ledger marker, and the lock is released afterward
@@ -175,8 +212,10 @@ cases, mirroring an existing fixture pattern almost verbatim).
      `MAX_WORKERS`): prints `empty`, writes no claim, releases the lock.
   3. `--standalone` with the lock already held by a live foreign session
      (fixture a foreign `CLAUDE_CODE_SESSION_ID` recorded in the lock file
-     with a live fixture session): the call blocks/degrades to `empty` rather
-     than selecting — never double-claims.
+     with a live fixture session): the call degrades to `empty` rather than
+     selecting — never double-claims. Set `DISPATCH_LOCK_WAIT_TIMEOUT=0` for
+     this case so `--wait`'s single contended check returns immediately
+     instead of polling its 300s default wait window.
   4. Non-`--standalone` invocation (today's default) is unchanged: no lock
      file touched, no reservation-ledger write from `graph-select-target`
      itself — a regression guard proving Unit 1 is additive.
@@ -187,22 +226,29 @@ cases, mirroring an existing fixture pattern almost verbatim).
 
 - `dispatch-acquire-lock --wait` / `--release`
   (`.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock`) — the
-  shared, session-keyed, safely re-entrant process lock. Verified re-entrant:
-  `try_acquire`'s recorded-session-equals-self branch (`dispatch-acquire-lock:369`
-  region) treats a same-session re-acquire as a no-op success, so calling it
-  from `graph-select-target --standalone` is safe even in the hypothetical case
-  of a future caller that already holds the lock.
-- `claude_agents_count_busy_workers`, `lib-claude-agents.sh` (already sourced
-  by `graph-select-target`, line ~70).
-- `reservation_count`, `reservation_write`, `lib-reservation-ledger.sh`
-  (already sourced by `graph-select-target`, line ~70).
-- `dispatch-target-workers` / `dispatch-target-workers --max` /
-  `dispatch-target-workers --exhausted`
+  shared, session-keyed process lock. Its **acquire** side is safely
+  re-entrant: the recorded-session-equals-self branch (condition at line 372,
+  `else` no-op-success at lines 407-410) treats a same-session re-acquire as
+  a no-op success. Its **release** side is NOT safely nestable — see the
+  "Nesting restriction" callout in Unit 1's scope above; `--standalone`'s own
+  acquire+release pair is self-contained and this asymmetry is exactly why it
+  must not be invoked from inside an existing same-session lock hold.
+- `claude_agents_count_busy_workers`, `lib-claude-agents.sh:101` (already
+  sourced by `graph-select-target`, line 71).
+- `reservation_count` (`lib-reservation-ledger.sh:273`), `reservation_write`
+  (`lib-reservation-ledger.sh:178`) (already sourced by `graph-select-target`,
+  line 69).
+- `dispatch-target-workers` / `dispatch-target-workers --max` (line 210) /
+  `dispatch-target-workers --exhausted` (line 209)
   (`.claude/skills/dispatch-propagate/scripts/dispatch-target-workers`).
 - The exact headroom arithmetic already implemented in
-  `dispatch-select-tick:668-681` — copy it, do not re-derive independently.
+  `dispatch-select-tick`'s `--manual` branch, lines 669-683 — copy it, do not
+  re-derive independently. The daemon's own autonomous gate is a different,
+  TARGET_N-based comparison (line 584) — not the formula to copy here.
 - The existing `graph-select-target` fixture-harness pattern,
-  `test-dispatch-scripts.sh:30436-30485`.
+  `test-dispatch-scripts.sh:30436-30485`, and the real (non-stubbed)
+  `dispatch-acquire-lock` fixture idiom used by the select-tick harness
+  (~21054-21075) and its own suite (~8457-8527).
 
 ## Verification
 
