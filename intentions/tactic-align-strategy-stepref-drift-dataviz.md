@@ -36,7 +36,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  bug_fix: true
 ---
 # Update the stale /align-strategy step-number reference (step 2.7 to step 2.9, design-canvas support) at all three sites in the tactic-align-skills-dataviz-guidance draft after PR #2867's Step 2 renumbering
 
