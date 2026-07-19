@@ -194,11 +194,29 @@ needed for the stub itself):
    unchanged afterward) so all three fixed sites get a direct regression
    assertion, not just `worktree_has_live_session`.
 
-Before the Unit 1 fix lands, this test must fail (case 2's assertion trips,
-and case 1 likely reports "occupied" instead of "free" per the reproduction
-above) — confirm this by running the new test script against the pre-fix file
-first, then again after Unit 1, to see red-then-green (test-integrity: don't
-write a test you haven't watched fail).
+**Nuance confirmed by independent `/align-tactics` review (opus, 2026-07-18):
+case 2 is the only assertion guaranteed to regress, not case 1.** The live
+2026-07-12/2026-07-18 reproductions had `CLAUDE_AGENTS_CMD` *unset*, so under
+the clobbered `$PATH` the bare `claude` command also failed to resolve —
+`claude_agents_list_all` returned unknown, and `worktree_has_live_session`'s
+fail-safe folded that into "occupied". But this test's `write_fake_claude`
+stub sets `CLAUDE_AGENTS_CMD` to an **absolute path**, which bypasses `$PATH`
+lookup entirely — so pre-fix, only the bare `basename "$path"` call breaks
+(`base` ends up empty), while the stubbed `claude` query still succeeds. An
+empty `base` still fails to match any live-session name in the (empty)
+registry, so case 1 can plausibly still report "free" even on the unpatched
+code — it is not a reliable pre/post-fix discriminator in this harness.
+**Case 2 (`$PATH` byte-identical before/after) is the load-bearing regression
+assertion** — it fails pre-fix and passes post-fix regardless of the
+`CLAUDE_AGENTS_CMD` stub, because the clobber itself happens unconditionally
+inside `local path=`. Do not treat case 1's pass as evidence the fix works;
+confirm red-then-green on case 2 specifically.
+
+Before the Unit 1 fix lands, this test must fail (case 2's assertion trips) —
+confirm this by running the new test script against the pre-fix file first,
+then again after Unit 1, to see red-then-green (test-integrity: don't write a
+test you haven't watched fail). Case 1 may or may not also flip under this
+harness per the nuance above; do not treat it as required-red.
 
 **Recommended model:** sonnet — unit-test writing with explicit, enumerated
 cases against an already-understood function.
