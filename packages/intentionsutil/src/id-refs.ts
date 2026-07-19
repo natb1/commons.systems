@@ -15,7 +15,10 @@ function sortedIds(ids: Iterable<string>): string[] {
 // tracks whatever kinds the graph actually holds. Shared by every
 // prefix-derived matcher so escaping and ordering never drift between them (ids
 // are only path-safety validated, so a prefix can contain a regex metacharacter).
-export function escapedPrefixAlt(prefixes: Set<string>): string {
+// Internal to this module — `buildIdRefMatchers` is the only caller; not exported
+// (no external consumer), so the module's public surface stays the matcher/
+// classify/extract primitives the digest and schema actually import.
+function escapedPrefixAlt(prefixes: Set<string>): string {
   return sortedIds(prefixes)
     .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("|");
