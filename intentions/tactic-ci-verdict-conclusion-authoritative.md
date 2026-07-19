@@ -39,8 +39,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-ci-verdict-conclusion-authoritative
+  pr: 2909
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -170,13 +176,13 @@ judgment required).
   counts the old hardcoded strings gave, so no other case's assertions move.
 - Add one new case to `packages/intentionsutil/scripts/test-graph-commit.sh`,
   placed after Case 7 (pending timeout, ends around line 283) and renumbered
-  into the file's own header list (currently cases 1-16 at lines 8-40):
+  into the file's own header list (currently cases 1-16 at lines 13-46):
   a `desynced-success.json` fixture — three checks `{"status": "completed",
   "conclusion": "success"}`, one `{"status": "in_progress", "conclusion":
   "success"}` (the exact desync this tactic's rationale describes) — and a new
   seed node id (e.g. `t-desync`, added to the `seed_node` loop at
-  `test-graph-commit.sh:94`) landed with `set_mode desynced-success; run_gc "$A"
-  t-desync`. Assert `rc -eq 0` and that the edit lands on `main`
+  `test-graph-commit.sh:93-97`) landed with `set_mode desynced-success; run_gc
+  "$A" t-desync`. Assert `rc -eq 0` and that the edit lands on `main`
   (`origin_show t-desync`), proving the fixed filter counts the desynced entry
   as the fourth success and lands immediately rather than spinning to the
   busy-main timeout the pre-fix filter would hit.
@@ -189,8 +195,8 @@ judgment required).
   (`.claude/skills/dispatch-propagate/scripts/lib.sh:707-742`) is the pattern
   to mirror for the `--jq` predicate rewrite — do not invent a different null
   check.
-- `test-dispatch-scripts.sh`'s `verdict_rest_case` helper (around line 1331)
-  is the precedent for shimming only the raw `gh` fetch and letting the real
+- `test-dispatch-scripts.sh`'s `verdict_rest_case` helper (defined at line
+  1335) is the precedent for shimming only the raw `gh` fetch and letting the real
   classification code run unmodified — the same fidelity bar the
   `test-graph-commit.sh` shim rewrite above targets.
 - Do **not** reuse `dispatch_classify_rollup` itself inside `await_checks()`:
