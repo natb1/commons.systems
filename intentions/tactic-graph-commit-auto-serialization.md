@@ -19,7 +19,22 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 64
+  override: null
+  rationale: "Boosted to top ranking by author direction (2026-07-18), following
+    the office-hours drain of tactic-review-sitting-skill-generalization (PR
+    #2871): that node's needs-main residue was silently dropped by park-node
+    reading a stale local checkout (the writer never re-reads origin/main), and
+    graph-commit rebased the residue-less body onto main with no textual
+    conflict — a genuine instance of exactly the auto-serialization gap this
+    node tracks (stale-base re-apply, not a true conflict, should not silently
+    clobber). Author will /align-tactics this node in a separate session. Sized
+    against the composed selector rank (childless, empty blocked_by: rank =
+    boost + 5.33; current max 68.33 on tactic-fix-interrupt-orthogonal-state at
+    boost 63), so boost 64 gives 69.33 — strictly top of the selector frontier,
+    verified via select-targets. The boost flows nowhere else (no blocked_by, no
+    children)."
 phase: null
 execution: null
 validates: []
