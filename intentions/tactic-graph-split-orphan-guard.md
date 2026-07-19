@@ -38,12 +38,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: fix
+phase: qa
 execution:
   branch: tactic-graph-split-orphan-guard
   pr: 2899
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
 validates: []
 blocked_by: []
