@@ -30,8 +30,12 @@
 #  10. --prune guard: a prune id whose file is still present on disk is
 #      rejected (no commit lands)
 #  11. --base fresh: a --base entry matching origin/main's current blob lands
-#  12. --base stale: a --base entry pointing at a blob origin/main no longer
-#      has is refused (no commit lands, no rebase-retry burned)
+#  12. --base stale, disjoint appended lines (bare line-based fixture): now
+#      that layer 3 attempts an automatic merge before refusing, two disjoint
+#      appended lines (this writer's line13, the concurrent writer's line14)
+#      auto-resolve — exit 0, both lines land, no park. (Pre-Unit-3 this was a
+#      hard `die`; cases 19-20 below cover the field-level resolve/unresolved
+#      split this case can no longer distinguish on its own.)
 #  13. --prune alone (no positional id, IDS empty): a pure deletion lands on
 #      main and the scratch branch is cleaned up — this is the owed-prune
 #      backlog's actual shape (a done node with no accompanying edit), not
@@ -45,6 +49,21 @@
 #  16. far-ahead worktree + --prune: a deletion issued from a far-ahead PR
 #      branch lands on main (the node is removed) without landing the code
 #      commit, HEAD restored
+#  17. layer 2 (rebase-conflict field merge) resolves a textual conflict whose
+#      two sides touch DIFFERENT fields: exit 0, the "auto-resolved" log
+#      suffix appears, both writers' field edits land
+#  18. layer 2 leaves a textual conflict whose two sides touch the SAME field
+#      mechanical-unresolved: exit 1, office_hours.reason carries
+#      "mechanical-unresolved", and the recommendation names both values
+#  19. layer 3 (--base stale re-read) auto-resolves a field-level fixture
+#      whose disjoint fields diverged: exit 0, no die, no park, both fields land
+#  20. layer 3 leaves a stale-`--base` SAME-field divergence
+#      mechanical-unresolved: exit 1, office_hours.reason carries
+#      "mechanical-unresolved", both values are named in the recommendation
+#  21. a --prune id racing a concurrent edit to the same node is excluded from
+#      the layer-2 merge attempt entirely (a deletion has nothing to
+#      structurally merge against) — no false "auto-resolved" claim, parks
+#      with the prune-specific sentinel note
 #
 # No network and no real gh/node needed; requires only bash + git.
 
@@ -92,9 +111,38 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
 }
 for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending v1..v2-migration \
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
-          t-farahead t-farahead-prune; do
+          t-farahead t-farahead-prune t-prune-conflict; do
   seed_node "$id"
 done
+
+# seed_field_node writes a real ---fenced IntentionNode (id, kind: tactic,
+# statement, owner: ai, status: raw — the minimum validateNode requires; see
+# packages/intentionsutil/src/schema.ts) plus caller-supplied extra frontmatter
+# lines, for the layer-2/3 field-merge cases (17-21) below. Unlike seed_node's
+# bare line-based format (kept untouched for cases 1-16, which only exercise
+# textual rebase mechanics), this is real enough for a human reader to
+# recognize as node content, though the npx merge-node.ts shim below never
+# actually parses it as YAML — it only greps `key: value` lines.
+seed_field_node() { # <id> <extra-yaml-lines...>
+  local id="$1"; shift
+  {
+    echo "---"
+    echo "id: $id"
+    echo "kind: tactic"
+    echo "statement: base statement for $id"
+    echo "owner: ai"
+    echo "status: raw"
+    local line
+    for line in "$@"; do echo "$line"; done
+    echo "---"
+    echo "Placeholder body for $id."
+  } >"$SEED/intentions/$id.md"
+}
+seed_field_node t-field-merge "fieldA: base" "fieldB: base"
+seed_field_node t-field-conflict "sentinel: base"
+seed_field_node t-field-base-ok "fieldA: base" "fieldB: base"
+seed_field_node t-field-base-bad "sentinel: base"
+
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
 git -C "$SEED" push -q origin main
@@ -131,19 +179,135 @@ SH
 
 cat >"$WORK/bin/npx" <<'SH'
 #!/usr/bin/env bash
-# npx shim: emulates `npx tsx <helper> <storeModule> <intentionsDir> <since>
-# <reason> <id...>` (graph-commit's park_write) without node. Mirrors the real
-# helper's two-pass shape: verify every id is readable first, then write all.
+# npx shim: dispatches on the script path passed right after `tsx` (argv[2] to
+# this shim) so it can emulate TWO distinct real tsx invocations without node:
+#
+#   merge-node.ts  — graph-commit's run_merge_node() layer-2/3 CLI. This branch
+#     does NOT reimplement the real three-way YAML field merge (that primitive,
+#     mergeIntentionNodes, is Unit 1's job and its correctness is covered by
+#     packages/intentionsutil/test/node-merge.test.ts — the source of truth).
+#     This shim only proves graph-commit invokes merge-node.ts at the right
+#     point and branches correctly on its resolved/unresolved verdict. It does
+#     so with a SIMPLIFIED three-way merge over bare `key: value` lines (works
+#     against both seed_node's line1..line12 format and seed_field_node's real
+#     frontmatter, since both are just newline-delimited `key: value` pairs):
+#     for each key appearing in ours and/or theirs, if both sides agree (or
+#     only one side touched it), that value wins; if both sides changed it
+#     away from base to DIFFERENT values (or there is no base to compare
+#     against and the two sides disagree), it is an unresolved conflict.
+#   anything else (park_write's throwaway tsx module) — emulates `npx tsx
+#     <helper> <storeModule> <intentionsDir> <since> <reason> <id...>` without
+#     node. Mirrors the real helper's two-pass shape: verify every id is
+#     readable first, then write all. Also reads
+#     $GRAPH_COMMIT_RECOMMENDATION_FILE (the out-of-band recommendation-text
+#     env var — see graph-commit's park_write) so tests can assert the
+#     recommendation content actually reaches the landed node.
 [[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
-shift 3   # tsx, helper script path, store module path
-dir="$1"; since="$2"; reason="$3"; shift 3
-for id in "$@"; do
-  [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
-done
-for id in "$@"; do
-  printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
-  echo "graph-commit: set office_hours on $id (since=$since)" >&2
-done
+
+case "$(basename "$2")" in
+  merge-node.ts)
+    shift 2
+    base=""; ours=""; theirs=""; out=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --base) base="$2"; shift 2 ;;
+        --ours) ours="$2"; shift 2 ;;
+        --theirs) theirs="$2"; shift 2 ;;
+        --out) out="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+
+    # theirs genuinely absent (the id no longer exists on the landed side):
+    # ours is the only content, so ours wins outright (mirrors merge-node.ts's
+    # real documented behavior for an empty --theirs).
+    if [[ -z "$theirs" ]]; then
+      [[ -n "$out" && -n "$ours" ]] && cp -- "$ours" "$out"
+      printf '{"resolved":true,"conflicts":[]}\n'
+      exit 0
+    fi
+
+    declare -A BASE_V=() OURS_V=() THEIRS_V=()
+    declare -a ALL_KEYS=()
+    if [[ -n "$base" && -f "$base" ]]; then
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" == *:* ]] || continue
+        k="${line%%:*}"; v="${line#*: }"
+        [[ -n "${BASE_V[$k]+x}" ]] || BASE_V["$k"]="$v"
+      done <"$base"
+    fi
+    if [[ -n "$ours" && -f "$ours" ]]; then
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" == *:* ]] || continue
+        k="${line%%:*}"; v="${line#*: }"
+        if [[ -z "${OURS_V[$k]+x}" ]]; then OURS_V["$k"]="$v"; ALL_KEYS+=("$k"); fi
+      done <"$ours"
+    fi
+    if [[ -n "$theirs" && -f "$theirs" ]]; then
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" == *:* ]] || continue
+        k="${line%%:*}"; v="${line#*: }"
+        [[ -n "${THEIRS_V[$k]+x}" ]] || THEIRS_V["$k"]="$v"
+        seen=0
+        for existing in "${ALL_KEYS[@]:-}"; do [[ "$existing" == "$k" ]] && { seen=1; break; }; done
+        [[ $seen -eq 1 ]] || ALL_KEYS+=("$k")
+      done <"$theirs"
+    fi
+
+    conflicts_json="[]"
+    resolved=true
+    merged_lines=()
+    for k in "${ALL_KEYS[@]}"; do
+      have_b=0; [[ -n "${BASE_V[$k]+x}" ]] && have_b=1
+      have_o=0; [[ -n "${OURS_V[$k]+x}" ]] && have_o=1
+      have_t=0; [[ -n "${THEIRS_V[$k]+x}" ]] && have_t=1
+      bv="${BASE_V[$k]-}"; ov="${OURS_V[$k]-}"; tv="${THEIRS_V[$k]-}"
+      final=""
+      if [[ $have_o -eq 1 && $have_t -eq 1 && "$ov" == "$tv" ]]; then
+        final="$ov"
+      elif [[ $have_b -eq 1 && $have_o -eq 1 && "$ov" == "$bv" && $have_t -eq 1 ]]; then
+        final="$tv"
+      elif [[ $have_b -eq 1 && $have_t -eq 1 && "$tv" == "$bv" && $have_o -eq 1 ]]; then
+        final="$ov"
+      elif [[ $have_o -eq 1 && $have_t -eq 0 ]]; then
+        final="$ov"
+      elif [[ $have_t -eq 1 && $have_o -eq 0 ]]; then
+        final="$tv"
+      else
+        resolved=false
+        conflicts_json="$(jq -c --arg field "$k" --arg ours "$ov" --arg theirs "$tv" \
+          '. + [{field:$field, ours:$ours, theirs:$theirs}]' <<<"$conflicts_json")"
+        continue
+      fi
+      merged_lines+=("$k: $final")
+    done
+
+    if [[ "$resolved" == true ]]; then
+      if [[ -n "$out" ]]; then
+        printf '%s\n' "${merged_lines[@]}" >"$out"
+      fi
+      printf '{"resolved":true,"conflicts":[]}\n'
+    else
+      printf '{"resolved":false,"conflicts":%s}\n' "$conflicts_json"
+    fi
+    exit 0
+    ;;
+  *)
+    shift 3   # tsx, helper script path, store module path
+    dir="$1"; since="$2"; reason="$3"; shift 3
+    for id in "$@"; do
+      [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
+    done
+    rec=""
+    if [[ -n "${GRAPH_COMMIT_RECOMMENDATION_FILE:-}" && -f "$GRAPH_COMMIT_RECOMMENDATION_FILE" ]]; then
+      rec="$(cat "$GRAPH_COMMIT_RECOMMENDATION_FILE")"
+    fi
+    for id in "$@"; do
+      printf 'office_hours: {reason: "%s", since: %s, recommendation: "%s"}\n' "$reason" "$since" "$rec" >>"$dir/$id.md"
+      echo "graph-commit: set office_hours on $id (since=$since)" >&2
+    done
+    ;;
+esac
 SH
 chmod +x "$WORK/bin/gh" "$WORK/bin/npx"
 
@@ -155,6 +319,9 @@ origin_sha() { git -C "$ORIGIN" rev-parse main; }
 sync_clone() { git -C "$1" fetch -q origin main && git -C "$1" reset -q --hard FETCH_HEAD; }
 edit_line() { # <clone> <id> <n> <text>
   sed -i "s/^line$3: .*/line$3: $4/" "$1/intentions/$2.md"
+}
+edit_field() { # <clone> <id> <field> <value> — for seed_field_node fixtures
+  sed -i "s/^$3: .*/$3: $4/" "$1/intentions/$2.md"
 }
 scratch_refs() { git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**'; }
 
@@ -224,7 +391,7 @@ snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
 if [[ $rc -eq 1 ]] \
    && grep -q 'concurrent-edit conflict' <<<"$out" \
    && grep -q 'line1: A-wins' <<<"$content" \
-   && ! grep -q 'B-loses' <<<"$content" \
+   && ! grep -q '^line1: B-loses' <<<"$content" \
    && grep -q 'office_hours' <<<"$content"; then
   ok "overlap: exit 1, other writer survives on main, office_hours park landed"
 else
@@ -392,33 +559,46 @@ else
   no "base fresh: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
 fi
 
-# Case 12: --base stale — a blob origin/main no longer has is refused.
+# Case 12: --base stale, disjoint appended lines (bare line-based fixture) —
+# now auto-resolves via layer 3 instead of dying. Pre-Unit-3 this was a hard
+# `die "stale base for ..."`. Since Unit 3, check_base_freshness() attempts an
+# automatic structural merge (run_merge_node()) before refusing; against this
+# harness's npx merge-node.ts shim (a simplified key:value three-way merge —
+# see the shim's own comment), two writers appending DIFFERENT new lines
+# (line13 vs line14, neither present in the other's base or landed content) is
+# exactly the disjoint case the shim resolves cleanly, so this now lands
+# (exit 0) rather than refusing. Cases 19-20 below cover the resolve/unresolved
+# split on real seed_field_node fixtures that this bare-line fixture can no
+# longer distinguish (a genuine same-line divergence is exercised by case 4,
+# and a same-FIELD divergence specifically by cases 18/20).
 W4="$WORK/w4"
 make_clone "$W4" writer-4
 stale_sha="$(git -C "$W4" hash-object intentions/t-base.md)"
-before_sha="$(origin_sha)"
 
 # Simulate a concurrent writer landing an unrelated change to the SAME node
 # on origin/main, bypassing graph-commit (representing "another session
 # already committed" for fast test setup — the mechanism under test is the
 # blob comparison, not how the concurrent write itself lands).
+# NOTE: case 11 (above) already landed a "line13" key onto this same t-base
+# node — the appended keys here must be fresh (line15/line16) or the harness's
+# simplified key:value merge shim (first-occurrence-wins per file) would treat
+# "line13" as an already-known key colliding with a stale duplicate rather
+# than the genuinely disjoint new key this case means to exercise.
 OTHER="$WORK/other"
 make_clone "$OTHER" other
-echo "line14: concurrent edit" >>"$OTHER/intentions/t-base.md"
+echo "line16: concurrent edit" >>"$OTHER/intentions/t-base.md"
 git -C "$OTHER" commit -qam 'concurrent edit'
 git -C "$OTHER" push -q origin main
 
-echo "line13: writer4 edit (based on a stale read)" >>"$W4/intentions/t-base.md"
-if out="$(run_gc "$W4" -m 'test: base stale' --base "t-base=$stale_sha" t-base 2>&1)"; then
-  no "base stale: expected refusal, got exit 0"
+echo "line15: writer4 edit (based on a stale read)" >>"$W4/intentions/t-base.md"
+out="$(run_gc "$W4" -m 'test: base stale, disjoint fields' --base "t-base=$stale_sha" t-base 2>&1)"; rc=$?
+content="$(origin_show t-base 2>/dev/null)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'line15: writer4 edit (based on a stale read)' <<<"$content" \
+   && grep -q 'line16: concurrent edit' <<<"$content"; then
+  ok "base stale, disjoint lines: layer 3 auto-resolves rather than dying, both edits land"
 else
-  after_sha="$(origin_sha)"
-  concurrent_sha="$(git -C "$OTHER" rev-parse HEAD)"
-  if grep -q "stale base" <<<"$out" && [[ "$after_sha" == "$concurrent_sha" ]]; then
-    ok "base stale: refuses a --base whose blob no longer matches origin/main, writer4 content NOT landed"
-  else
-    no "base stale: refused but wrong error or main moved unexpectedly"; printf '%s\n' "$out"
-  fi
+  no "base stale disjoint-lines resolve (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # Case 14: --base manifest-file form — a file of <id>=<blobsha> lines (as
@@ -485,6 +665,130 @@ if [[ $rc -eq 0 ]] \
   ok "far-ahead worktree + --prune: node removed from main, code commit excluded, HEAD restored"
 else
   no "far-ahead prune (rc=$rc restored2=$restored2 far_tip2=$far_tip2)"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Cases 17-21: layer 2 (rebase-conflict field merge) and layer 3 (stale --base
+# re-read) auto-merge, using seed_field_node's real-frontmatter fixtures.
+# ---------------------------------------------------------------------------
+
+# Case 17: layer 2 resolves a textual rebase conflict whose two sides touch
+# DIFFERENT fields. fieldA and fieldB are adjacent lines in the seeded
+# frontmatter, so editing each independently still produces a textual git
+# CONFLICT (the diff hunks' contexts overlap) even though the fields
+# themselves never collide — exactly the case run_merge_node() should resolve.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_field "$A" t-field-merge fieldA A-edit
+run_gc "$A" t-field-merge >/dev/null 2>&1
+edit_field "$B" t-field-merge fieldB B-edit
+out="$(run_gc "$B" t-field-merge 2>&1)"; rc=$?
+content="$(origin_show t-field-merge)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'layer 2/3 auto-resolved a concurrent-edit divergence' <<<"$out" \
+   && grep -q 'fieldA: A-edit' <<<"$content" \
+   && grep -q 'fieldB: B-edit' <<<"$content"; then
+  ok "layer 2: non-overlapping field-level conflict auto-merges, both writers' edits land"
+else
+  no "layer 2 field-merge (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# Case 18: layer 2 leaves a textual conflict whose two sides touch the SAME
+# field mechanical-unresolved: exit 1, office_hours.reason carries the stable
+# "mechanical-unresolved" marker, and the recommendation names both values.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_field "$A" t-field-conflict sentinel A-value
+run_gc "$A" t-field-conflict >/dev/null 2>&1
+edit_field "$B" t-field-conflict sentinel B-value
+out="$(run_gc "$B" t-field-conflict 2>&1)"; rc=$?
+content="$(origin_show t-field-conflict)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'A-value' <<<"$content" \
+   && grep -q 'B-value' <<<"$content"; then
+  ok "layer 2: same-field divergence stays mechanical-unresolved, both values named in the recommendation"
+else
+  no "layer 2 field-conflict (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# Case 19: layer 3 (--base stale re-read) auto-resolves a stale --base whose
+# delta touches a DIFFERENT field than the concurrently-landed write.
+set_mode green
+W8="$WORK/w8"
+make_clone "$W8" writer-8
+base_ok_sha="$(git -C "$W8" hash-object intentions/t-field-base-ok.md)"
+edit_field "$W8" t-field-base-ok fieldA writer8-edit
+
+OTHER2="$WORK/other2"
+make_clone "$OTHER2" other2
+edit_field "$OTHER2" t-field-base-ok fieldB concurrent-edit
+git -C "$OTHER2" commit -qam 'concurrent field edit'
+git -C "$OTHER2" push -q origin main
+
+out="$(run_gc "$W8" -m 'test: base field resolve' --base "t-field-base-ok=$base_ok_sha" t-field-base-ok 2>&1)"; rc=$?
+content="$(origin_show t-field-base-ok 2>/dev/null)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'fieldA: writer8-edit' <<<"$content" \
+   && grep -q 'fieldB: concurrent-edit' <<<"$content"; then
+  ok "layer 3: stale --base auto-resolves a disjoint-field divergence, both edits land"
+else
+  no "layer 3 base resolve (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# Case 20: layer 3 leaves a stale --base SAME-field divergence
+# mechanical-unresolved: exit 1, office_hours.reason carries
+# "mechanical-unresolved", both values are named in the recommendation.
+set_mode green
+W9="$WORK/w9"
+make_clone "$W9" writer-9
+base_bad_sha="$(git -C "$W9" hash-object intentions/t-field-base-bad.md)"
+edit_field "$W9" t-field-base-bad sentinel writer9-value
+
+OTHER3="$WORK/other3"
+make_clone "$OTHER3" other3
+edit_field "$OTHER3" t-field-base-bad sentinel concurrent-value
+git -C "$OTHER3" commit -qam 'concurrent same-field edit'
+git -C "$OTHER3" push -q origin main
+
+out="$(run_gc "$W9" -m 'test: base field conflict' --base "t-field-base-bad=$base_bad_sha" t-field-base-bad 2>&1)"; rc=$?
+content="$(origin_show t-field-base-bad 2>/dev/null)"
+calls="$(gh_calls)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'writer9-value' <<<"$content" \
+   && grep -q 'concurrent-value' <<<"$content" \
+   && [[ "$calls" -eq 1 ]]; then
+  ok "layer 3: stale --base same-field divergence stays mechanical-unresolved (parks via a single stamp poll, no prior retry loop)"
+else
+  no "layer 3 base conflict (rc=$rc calls=$calls)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# Case 21: a --prune id racing a concurrent edit to the same node is excluded
+# from the layer-2 merge attempt entirely (a deletion has nothing to
+# structurally merge against) — no false "auto-resolved" claim, parks with the
+# prune-specific sentinel note.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_line "$A" t-prune-conflict 1 landed-edit
+run_gc "$A" t-prune-conflict >/dev/null 2>&1
+rm -f "$B/intentions/t-prune-conflict.md"
+out="$(run_gc "$B" --prune t-prune-conflict 2>&1)"; rc=$?
+content="$(origin_show t-prune-conflict 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && ! grep -q 'layer 2/3 auto-resolved' <<<"$out" \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'prune vs. concurrent edit' <<<"$content" \
+   && grep -q 'landed-edit' <<<"$content"; then
+  ok "prune-vs-edit: excluded from the layer-2 merge attempt, parks with the prune-specific reason"
+else
+  no "prune-vs-edit exclusion (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
