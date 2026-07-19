@@ -109,6 +109,38 @@ former is stubbed wholesale in `test-dispatch-graph-execute.sh`; the latter is
 only mentioned in a comment) — their edits have no automated safety net and
 must be verified by hand (see Verification).
 
+**Amendment (2026-07-19, same session, post-landing self-review via an
+independent opus verification pass — whole-node reconciliation per the
+skill's amendment-completeness bar, not a formal re-evaluation trigger):**
+this plan originally landed with a `set -e` defect and an unflagged minor
+behavior nuance. Both are corrected below.
+
+- **`set -e` defect (real, now fixed in the Scope below).**
+  `worktree-create.sh` runs `set -euo pipefail` — it has `-e` — while the
+  other three sites run `set -uo pipefail` (no `-e`). A bare
+  `PROJECT_ROOT=$(resolve_main_worktree)` returns exit 1 on failure (from
+  `resolve_main_worktree`'s own `[[ -n "$wt" ]] || return 1`), and under
+  `set -e` that failing assignment aborts the script immediately — **before**
+  reaching the existing `worktree-create.sh:105-106` hard-error block, so the
+  specific `$BRANCH`-naming error message is silently replaced by a generic
+  ERR-trap message instead of being "preserved exactly" as the original plan
+  claimed. Only `worktree-create.sh`'s call site needs the fix (see Scope);
+  the other three sites have no `-e` and are unaffected.
+- **Minor stderr-suppression nuance (cosmetic, not fixed — flagged for
+  honesty).** `resolve_main_worktree` always redirects the `git worktree
+  list` call with `2>/dev/null`. `dispatch-graph-execute` and
+  `provision-node-worktree` already did this. `worktree-create.sh` and
+  `graph-select-target` did **not** — their git stderr (e.g. a corrupt
+  worktree registry warning) was previously visible and will now be
+  silently suppressed at those two sites. This is judged low-risk and
+  in-scope for a "pure refactor" (it only affects diagnostic-message
+  visibility on an already-rare failure path, not control flow), so it is
+  not treated as a blocking behavior change — but a fresh implementer should
+  know this is a real, if minor, diff from strict byte-for-byte
+  preservation, not an oversight to "fix" by removing `2>/dev/null` from the
+  shared helper (that would just move the inconsistency to the two sites
+  that rely on it today).
+
 ## Unit 1 — Extract `resolve_main_worktree` and replace the four call sites
 
 **Recommended model:** sonnet — well-specified mechanical refactor with a
@@ -170,9 +202,11 @@ finding; verify against the live files before treating the `statement` field
 as authoritative).
 
 **Edit** `.claude/hooks/worktree-create.sh` — this file currently sources
-nothing. Add, near the top after the `set -euo pipefail` line (around
-`worktree-create.sh:33`, immediately after the existing shell-options line and
-before the `WORKTREE_REGISTERED=0` variable block):
+nothing, and unlike the other three sites it runs `set -euo pipefail` (has
+`-e`) — this matters for the replacement below. Add, near the top after the
+`set -euo pipefail` line (`worktree-create.sh:38`, immediately after the
+existing shell-options line and before the `WORKTREE_REGISTERED=0` variable
+block):
 
 ```bash
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -193,13 +227,26 @@ Then replace `worktree-create.sh:103-104`:
 with:
 
 ```bash
-  PROJECT_ROOT=$(resolve_main_worktree)
+  PROJECT_ROOT=$(resolve_main_worktree) || PROJECT_ROOT=""
 ```
+
+**Do not write this as a bare `PROJECT_ROOT=$(resolve_main_worktree)`.** This
+file runs `set -euo pipefail`; `resolve_main_worktree` returns exit 1 on
+failure, and a bare assignment's failure aborts the script under `-e` before
+the line-105 hard-error check ever runs, silently replacing the specific
+`$BRANCH`-naming error message with a generic ERR-trap message. The
+`|| PROJECT_ROOT=""` clause absorbs the failure so control reaches the
+existing check below unchanged. (The other three sites below use a bare
+`PROJECT_ROOT=$(resolve_main_worktree)` deliberately — they run `set -uo
+pipefail` with no `-e`, so a failing assignment there just leaves
+`PROJECT_ROOT` empty and falls through to their own checks; do not add
+`|| PROJECT_ROOT=""` at those sites, it would be a no-op but is unnecessary
+noise inconsistent with their existing style.)
 
 Leave `worktree-create.sh:105-106` (the `[ -n "$PROJECT_ROOT" ] || { ... exit 1; }`
 hard-error block, with its `worktree-create`-specific message naming
-`$BRANCH`) unchanged — that per-site error message is preserved exactly, not
-folded into the helper.
+`$BRANCH`) unchanged — that per-site error message is now genuinely preserved
+exactly, including on the failure path.
 
 **Edit**
 `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute` — add a
@@ -382,3 +429,14 @@ Manual (no automated harness exercises the real
   node-id branch) and confirm the resulting worktree lands at the expected
   `<project-root>/.claude/worktrees/<node-id>` path, unchanged from before
   this refactor.
+- **Failure-path check specific to `worktree-create.sh`** (this is the site
+  with the `set -e` hazard called out in Scope — the success-path checks
+  above do not exercise it): run the edited `worktree-create.sh` standalone
+  in a directory with no worktree registry (or with
+  `DISPATCH_GRAPH_MAIN_WORKTREE`-style env forced empty and no real `main`
+  worktree reachable) and confirm it still prints the specific
+  `"[worktree-create] ERROR: no worktree with 'main' checked out; cannot
+  resolve the project root for node-id worktree '$BRANCH'"` message and exits
+  1 — not a generic `set -e` ERR-trap message. If you see a generic/blank
+  failure instead of that exact message, the `|| PROJECT_ROOT=""` guard in
+  this unit's edit was dropped or misplaced; fix before landing.
