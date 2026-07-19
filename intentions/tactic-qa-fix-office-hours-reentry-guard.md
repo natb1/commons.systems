@@ -63,7 +63,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  bug_fix: true
 ---
 # qa-fix node-lane Step 0 bails cleanly when the node is already office_hours-parked at origin/main, closing the in-session ScheduleWakeup re-entry gap the selector's office_hours gate does not cover
 

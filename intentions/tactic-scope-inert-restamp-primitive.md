@@ -35,8 +35,15 @@ attention:
     tactic-freeze-resurface-stale-children-only), so boost 62 gives 67.33 -
     strictly top of the selector frontier, verified via select-targets. The
     boost flows nowhere else (no blocked_by, no children)."
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-scope-inert-restamp-primitive
+  pr: 2902
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

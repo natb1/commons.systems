@@ -62,9 +62,33 @@ clarifications:
       /align-strategy interview (author direction)."
 tooling_goals: []
 success_signal: null
-attention: null
-phase: implement
-execution: null
+attention:
+  boost: 63
+  override: null
+  rationale: "Boosted to top ranking by author direction (2026-07-18): this node
+    is the tracker of record for the fix-interrupt marker-write gap that cycles
+    a tactic implement -> fix -> implement. Diagnosed live on
+    tactic-align-provenance-lint-doctrine (PR #2894): a CI-failing implement
+    completion fires the fix interrupt (transitions.ts:98) before the `planned`
+    completion marker is written (apply-node-transition.ts advances-only marker
+    rule), so resumeAfterFix([]) (transitions.ts:116) finds no marker and falls
+    back to implement instead of qa. This node's greenfield fix — split `fix`
+    out of the phase enum into an orthogonal execution.fix field so phase stays
+    ladder-positional across a fix — removes the lossy marker reconstruction
+    entirely. Sized against the composed selector rank (childless, empty
+    blocked_by: rank = boost + 5.33; current max 67.33 on
+    tactic-scope-inert-restamp-primitive at boost 62), so boost 63 gives 68.33 —
+    strictly top of the selector frontier, verified via select-targets. The
+    boost flows nowhere else (no blocked_by, no children)."
+phase: review
+execution:
+  branch: tactic-fix-interrupt-orthogonal-state
+  pr: 2905
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -348,3 +372,28 @@ Manual / observe-in-production:
   cannot merge unreviewed (the `transitions.ts:118` defect is closed).
 - Confirm the legacy gh-lane `fix-checks` label path still functions (shared
   name, distinct mechanism) — it must not regress.
+
+## needs-main residue
+
+Recorded by `/qa-fix` (PR #2905) — items only verifiable against merged
+main/deployed production, not reproducible synthetically at QA time.
+
+- **id:** 7
+- **title:** Red-CI interrupt drives cleanly end-to-end on a scratch node across selector ticks
+- **url_path:** current
+- **expected_outcome:** The full interrupt->fix->reset cycle behaves as this
+  node's own Verification section claims: the implement worker advances to
+  `qa` unconditionally with no CI read in its completion transition; the PR's
+  CI then fails and at the next selection the selector sets `execution.fix`
+  and dispatches `/fix-checks` (not the qa worker), `phase` staying `qa`; CI
+  green causes the selector to clear `execution.fix` and emit the `qa` worker
+  (no `fix -> implement -> qa` double-commit, no transition-time CI-verdict
+  round-trip in any phase worker session); and for a reviewed node, a
+  `/fix-checks` push resets `phase -> review` and disarms auto-merge so newly
+  pushed code cannot merge unreviewed.
+- **finding:** planned deferral — this is an end-to-end live-selector
+  behavior spanning a real CI failure/success cycle over multiple selector
+  ticks; it cannot be reproduced synthetically at QA time (no scratch node /
+  live selector tick loop available in a QA session) and is best observed in
+  production/main-qa, exactly as this node's own Verification section marks
+  it manual/observe-in-production.
