@@ -147,9 +147,15 @@ pipefail`, same `source "$SCRIPT_DIR/lib.sh"`, same `REPO_ROOT`/`UTIL_SCRIPTS`/`
 resolution). Behavior:
 
 1. **Enumerate candidates** (network-free): a `node --import tsx/esm -e`
-   one-liner (same inline style as `reconcile-graph-merged`'s `OPEN_TACTICS`
-   block) using `listNodes` from `../src/store.js` and `REVIEWED_MARKER` from
-   `../src/transitions.js`. Print `<id>\t<pr>` for every tactic where
+   one-liner run from `$REPO_ROOT` (same inline style as
+   `reconcile-graph-merged`'s `OPEN_TACTICS` block, `reconcile-graph-merged:44-54`
+   — copy that block's `(cd "$REPO_ROOT" && node --import tsx/esm -e '...')`
+   shape verbatim; a dynamic `import()` inside `node -e` resolves against CWD,
+   so the import specifiers must be the working `./packages/intentionsutil/src/store.js`
+   / `./packages/intentionsutil/src/transitions.js` form that script already
+   uses — NOT a `../src/...` relative path, which would resolve wrong from
+   `$REPO_ROOT`) using `listNodes` and `REVIEWED_MARKER`. Print `<id>\t<pr>`
+   for every tactic where
    `n.kind === "tactic"`, `n.phase === "review"`,
    `n.execution?.markers.includes(REVIEWED_MARKER)`, and `n.execution.pr` is
    non-null. Exit 0 immediately (no output) if the enumeration is empty.
@@ -165,13 +171,31 @@ resolution). Behavior:
      `unknown` — mirror `transition-node`'s `CI="unknown"` fallback pattern,
      `transition-node:107-117`).
    - Call the Unit-1 predicate via a `node --import tsx/esm -e` one-liner
-     importing `needsReviewStallRecovery` from `../src/transitions.js`,
+     (same CWD-resolution caveat as step 1 — run from `$REPO_ROOT`, import
+     `needsReviewStallRecovery` from `./packages/intentionsutil/src/transitions.js`),
      passing `VERDICT` and `MERGEABLE`. If it prints `"false"`, `continue`
      (no-op, nothing printed to stdout — mirrors `reconcile-graph-merged`'s
      "NOTHING for a skip" stdout protocol).
    - Otherwise: run
      `node --import tsx/esm "$UTIL_SCRIPTS/apply-node-transition.ts" "$id" --ci failing`
-     (reusing the existing fix-interrupt decision — see Context). On failure,
+     (reusing the existing fix-interrupt decision — see Context). Deliberately
+     pass **no** `--scope-stale`/`--strategy-stale` flag: `apply-node-transition.ts`'s
+     CLI defaults both to `false` when the flag is omitted
+     (`apply-node-transition.ts:67-68`), and `decideTransition` only enters its
+     scope-stale (`transitions.ts:185-187`) or strategy-stale
+     (`:190-192`) branches when the caller passes `true` — so with these flags
+     always omitted, this call site can NEVER take those branches, regardless
+     of the node's actual scope/strategy staleness; it always falls through to
+     the `ci: "failing"` fix-interrupt branch (`:198-200`) once the trigger
+     fires. This is intentional, not an oversight: staleness detection is
+     `transition-node`'s and the worker-start gate's job, not this
+     reconciler's. Once this reconciler routes the node to `fix`, it re-enters
+     the normal selection ladder, and the worker-start gate re-applies the
+     scope/strategy freshness checks the next time it is picked up — so a
+     node that is both PR-regressed and scope/strategy-stale is still caught
+     correctly, just one tick later than the PR-regression recovery. Do not
+     add scope/strategy-staleness detection to this reconciler — that would
+     duplicate machinery that already runs downstream of `fix`. On failure,
      log to stderr and `continue` to the next candidate (best-effort, mirrors
      `dispatch-reconcile-ready`'s per-PR error handling — NOT `set -e`, no
      `|| true`-swallowed silent skip).
