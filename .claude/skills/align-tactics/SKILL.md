@@ -562,18 +562,26 @@ map** `{<strategy-id>: {hash, sha}}` — one entry per serving strategy — that
 the router's soft-freeze trigger compares against each serving strategy's
 current substance (strategy clarification 10). At mint time this session stamps
 only the **decomposed** strategy's entry: `{<decomposed-strategy-id>: {hash:
-strategyFingerprint(strategy), sha: <origin/main sha>}}`, where the `hash` is
-`strategyFingerprint(strategy)` from `packages/intentionsutil/src/router.ts` —
-always that helper, never a hand-computed hash — and `sha` is the origin/main
-commit the hash was taken against, obtained with `git rev-parse origin/main` in
-the bootstrap-interim hand-stamp path (a live router passes it through
-`apply-node-transition.ts --strategy-sha`). A serving strategy absent from the
-map is never stale (per-strategy null), so an honest multi-serves tactic is not
-born frozen against its other serving strategies; those entries are filled by
-whichever session decomposes or re-evaluates each of them. Untouched
-sibling-strategy entries in the same map are left as-is — this session converts
-only the key it is re-stamping, never a key it is not touching (opportunistic
-conversion, not bulk migration). A tactic not yet advanced still carries
+<fingerprint>, sha: <origin/main sha>}}`, where the `hash` is the value printed
+by
+
+```bash
+npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <decomposed-strategy-id>
+```
+
+run against a fresh `origin/main` at stamp time — the single runnable callsite
+for `strategyFingerprint(strategy)` (`packages/intentionsutil/src/router.ts`);
+never hand-compute the hash, and never re-derive the recipe inline — always run
+this command. `sha` is the origin/main commit the hash was taken against,
+obtained with `git rev-parse origin/main` in the bootstrap-interim hand-stamp
+path (a live router passes it through `apply-node-transition.ts --strategy-sha`).
+A serving strategy absent from the map is never stale (per-strategy null), so an
+honest multi-serves tactic is not born frozen against its other serving
+strategies; those entries are filled by whichever session decomposes or
+re-evaluates each of them. Untouched sibling-strategy entries in the same map
+are left as-is — this session converts only the key it is re-stamping, never a
+key it is not touching (opportunistic conversion, not bulk migration). A tactic
+not yet advanced still carries
 `execution: null` (no map to stamp); the map is seeded the first time an
 `execution` object exists. The bare-string form is deprecated-legacy — never
 emit it. In the bootstrap interim with no live router, the mint-time stamp is
@@ -614,14 +622,20 @@ decompose fresh. It:
    fingerprint-triggered re-evaluation.
 3. Re-stamps **only the re-evaluated strategy's entry** in each surviving
    tactic's `execution.strategy_fingerprint` map — set
-   `map[<re-evaluated-strategy-id>] = {hash: strategyFingerprint(strategy),
-   sha: <origin/main sha>}` (`hash` via `strategyFingerprint` from
-   `packages/intentionsutil/src/router.ts`; `sha` via `git rev-parse
-   origin/main` in the bootstrap-interim hand-stamp path, or
-   `apply-node-transition.ts --strategy-sha` under a live router), leaving every
-   other serving strategy's entry untouched — which unfreezes the subtree
-   against this strategy without disturbing the others. (A tactic still at
-   `execution: null` has no map to re-stamp until the machinery seeds one.)
+   `map[<re-evaluated-strategy-id>] = {hash: <fingerprint>, sha: <origin/main
+   sha>}`, where `hash` is the value printed by
+
+   ```bash
+   npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <re-evaluated-strategy-id>
+   ```
+
+   (the single runnable callsite for `strategyFingerprint(strategy)`,
+   `packages/intentionsutil/src/router.ts`), and `sha` is obtained via `git
+   rev-parse origin/main` in the bootstrap-interim hand-stamp path, or
+   `apply-node-transition.ts --strategy-sha` under a live router — leaving every
+   other serving strategy's entry untouched, which unfreezes the subtree against
+   this strategy without disturbing the others. (A tactic still at `execution:
+   null` has no map to re-stamp until the machinery seeds one.)
 4. Lands the amendments via `graph-commit`.
 
 Until a live router exists, re-evaluation runs **inline** in the same session
