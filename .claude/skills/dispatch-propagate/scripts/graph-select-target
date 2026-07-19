@@ -31,9 +31,25 @@
 # disarms auto-merge (`gh pr ready --undo`) — then emits the resolved ladder
 # phase. These two graph-commit writes are the only writes selection makes.
 #
-# Usage: graph-select-target [--top <n>] [--pace-exempt-only]
+# Usage: graph-select-target [--top <n>] [--pace-exempt-only] [--standalone]
 #
 #   --top <n>            Print at most <n> selected nodes (default 1).
+#   --standalone         Self-contained concurrency safety for manual/emulated
+#                        invocation: acquire the shared dispatch lock, apply the
+#                        same live-worker headroom cap dispatch-select-tick's
+#                        --manual branch uses, claim each selected node in the
+#                        reservation ledger, and release the lock — folding in
+#                        the lock+headroom+claim cycle dispatch-select-tick
+#                        otherwise wraps around this selector. NESTING: this flag
+#                        acquires AND unconditionally releases the lock in one
+#                        invocation, and its terminal --release is a strict
+#                        self-release keyed on CLAUDE_CODE_SESSION_ID. Acquire is
+#                        re-entrant (same-session no-op) but release is NOT, so a
+#                        nested --standalone call would drop an OUTER hold. Use
+#                        --standalone ONLY from standalone/manual callers that do
+#                        not already hold dispatch-acquire-lock (no existing call
+#                        site passes it: neither dispatch-select-tick's call nor
+#                        its --pace-exempt-only probe does).
 #   --pace-exempt-only   The probe lane for a paced-to-zero worker target
 #                        (strategy clarification 14; legacy `priority` parity):
 #                        first consult `dispatch-target-workers --exhausted` —
@@ -90,6 +106,11 @@ source "$SCRIPT_DIR/lib-decision-log.sh" 2>/dev/null || true
 
 TOP=1
 PACE_EXEMPT_ONLY=""
+STANDALONE=""
+# STANDALONE_LOCKED gates the _cleanup EXIT trap's lock release: set to 1 only
+# once --standalone has actually acquired the lock (step below), so the trap
+# never releases a lock this invocation does not hold.
+STANDALONE_LOCKED=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --top)
@@ -97,9 +118,14 @@ while [[ $# -gt 0 ]]; do
         || { echo "graph-select-target: --top requires a positive integer" >&2; exit 2; }
       TOP="$2"; shift 2 ;;
     --pace-exempt-only) PACE_EXEMPT_ONLY=1; shift ;;
+    # --standalone: acquire the shared lock + apply the live-worker headroom cap
+    # + claim each selected node, then unconditionally self-release the lock.
+    # Never pass it from a caller already holding dispatch-acquire-lock — the
+    # terminal self-release would drop that outer hold (see header comment).
+    --standalone) STANDALONE=1; shift ;;
     *)
       echo "graph-select-target: unknown argument '$1'" >&2
-      echo "usage: graph-select-target [--top <n>] [--pace-exempt-only]" >&2
+      echo "usage: graph-select-target [--top <n>] [--pace-exempt-only] [--standalone]" >&2
       exit 2 ;;
   esac
 done
@@ -137,6 +163,13 @@ SNAPSHOT_DIR=""
 _cleanup() {
   _selection_log_emit
   [[ -n "$SNAPSHOT_DIR" ]] && rm -rf "$SNAPSHOT_DIR"
+  # Standalone lock release (guarded so it fires only once --standalone actually
+  # acquired the lock). Living in the EXIT trap covers EVERY exit path between
+  # the standalone acquire and the final claim/release — the no-store early exit,
+  # mktemp/git-archive/select-targets.ts failures, and any path added later —
+  # without a hand-release at each site. Strict self-release; see the --standalone
+  # header note on why nesting under an existing hold is forbidden.
+  [[ -n "${STANDALONE_LOCKED:-}" ]] && "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1
 }
 trap '_cleanup' EXIT
 
@@ -152,6 +185,53 @@ if [[ -n "$PACE_EXEMPT_ONLY" ]]; then
     DISPOSITION="exhausted"
     echo "empty"
     exit 0
+  fi
+fi
+
+# --- Standalone concurrency safety (--standalone) -----------------------------
+# Folds in the SAME lock-acquire -> headroom-check -> (clamp) cycle
+# dispatch-select-tick wraps around this selector, so a manual/emulated-tick
+# caller gets the same double-dispatch protection. The claim (reservation_write)
+# and the release both happen after selection (the release via the _cleanup
+# EXIT trap, keyed on STANDALONE_LOCKED). Selector failure degrades to `empty`
+# exit 0 — the convention dispatch-select-tick uses at this selector's call site.
+if [[ -n "$STANDALONE" ]]; then
+  # (a) Acquire the shared dispatch lock. Anything other than `acquired`
+  # (busy, lock-error) degrades to empty rather than erroring.
+  LOCK=$("$SCRIPT_DIR/dispatch-acquire-lock" --wait) || true
+  if [[ "$LOCK" != acquired ]]; then
+    DISPOSITION="lock-unavailable"
+    echo "empty"
+    exit 0
+  fi
+  STANDALONE_LOCKED=1
+
+  # (b) Live-worker headroom cap — EXACTLY dispatch-select-tick's --manual
+  # branch formula ("manual context-dependent fan-out"), including its
+  # busy-read failure guard. LIVE_COUNT = busy workers + reservations;
+  # EXHAUSTED fails open to `ok` on missing telemetry. daemon UNKNOWN
+  # (busy-worker read failed) → skip the headroom computation and fail open
+  # to TOP=1 (the standalone analogue of dispatch-select-tick's "GAP stays 1"),
+  # never leaving TOP unclamped when live-worker count is unknown.
+  if BUSY=$(claude_agents_count_busy_workers); then
+    RESV=$(reservation_count)
+    LIVE_COUNT=$(( BUSY + RESV ))
+    MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max)
+    EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
+    HEADROOM=$(( MAX_WORKERS - LIVE_COUNT ))
+    (( HEADROOM < 0 )) && HEADROOM=0
+    if [[ "$EXHAUSTED" == exhausted ]] || (( HEADROOM == 0 )); then
+      # Concurrency-cap disposition (mirror dispatch-select-tick's): nothing to
+      # select. The lock is released by the _cleanup EXIT trap.
+      DISPOSITION="concurrency-cap"
+      echo "empty"
+      exit 0
+    fi
+
+    # (c) Clamp the effective --top to the headroom ceiling.
+    (( TOP > HEADROOM )) && TOP=$HEADROOM
+  else
+    (( TOP > 1 )) && TOP=1
   fi
 fi
 
@@ -385,6 +465,15 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha; do
   elif (( rc == 1 )); then
     skip_note "$id" "$emit_phase"
     continue
+  fi
+
+  # --standalone: claim the node in the reservation ledger (uniform node-id
+  # claiming) so a concurrent tick sees it reserved. Same call shape (incl. the
+  # 1>&2 redirect) dispatch-select-tick's emit_graph_selection uses; a failed
+  # ledger write is a budget undercount, not a selection abort.
+  if [[ -n "$STANDALONE" ]]; then
+    reservation_write "$id" "$id" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2 \
+      || echo "graph-select-target: reservation_write failed for $id; proceeding without a ledger entry (budget may undercount this slot)" >&2
   fi
 
   SELECTED_LINES+="node $id $kind $emit_phase"$'\n'
