@@ -43,9 +43,15 @@ function parseArgs(argv: string[]): Args {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     switch (a) {
-      case "--dir":
-        out.dir = argv[++i];
+      case "--dir": {
+        const value = argv[++i];
+        if (value === undefined || value === "") {
+          process.stderr.write(USAGE);
+          process.exit(1);
+        }
+        out.dir = value;
         break;
+      }
       case "--help":
       case "-h":
         process.stdout.write(USAGE);
