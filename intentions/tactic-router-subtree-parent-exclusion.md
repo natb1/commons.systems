@@ -43,8 +43,14 @@ attention:
     10befb49. This deliberately overtakes the auto-serialization pin per the
     same author direction; that node stays #2 with its own boost untouched. The
     boost flows nowhere else (no blocked_by, no children)."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-router-subtree-parent-exclusion
+  pr: 2912
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
