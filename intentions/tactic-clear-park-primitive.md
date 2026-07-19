@@ -30,7 +30,53 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/implement: plan verification for tactic-clear-park-primitive failed —
+    the node's persisted verify block runs `npx vitest run --project
+    intentionsutil --root .`, but this repo's vitest project names are full
+    workspace paths (`packages/intentionsutil`, not the basename
+    `intentionsutil`). Corrected invocation passes 533/533 tests cleanly. This
+    is a plan-text typo, not a code defect, so the fix lane (correcting code)
+    does not apply."
+  since: 2026-07-19
+  recommendation: >-
+    ## Recommendation
+
+
+    The escalation is correct: this is a plan-text typo, not an implementation
+    defect. No code changes are needed.
+
+
+    **Confirm the fix.** The verify block's project filter is wrong. The repo's
+    root `vitest.config.ts` derives project names verbatim from `package.json`'s
+    `workspaces` entries, so a nested package's project name is its full
+    workspace path, not its basename. The block reads:
+
+        npx vitest run --project intentionsutil --root .
+
+    but must read:
+
+        npx vitest run --project packages/intentionsutil --root .
+
+    The corrected command already passes cleanly — 28 test files, 533/533 tests
+    green — and the new `clear-park` script is neither covered by nor implicated
+    in that suite. The `intentionsutil` filter fails only with "No projects
+    matched," which is a naming mismatch, not a test failure.
+
+
+    **Actions for the reviewer:**
+
+    1. Update the node's persisted plan body on origin/main so the verify block
+    reads `--project packages/intentionsutil`, keeping the record accurate for
+    any future re-run.
+
+    2. Consider a follow-up to whatever generates plans for nested-package
+    projects so it emits the full-workspace-path project name (not the basename)
+    and this doesn't recur for the next `packages/*` tactic.
+
+    3. Release the office-hours park so the implement phase proceeds straight to
+    opening the draft PR — the implementation is complete, committed, pushed,
+    and verified.
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -150,7 +196,7 @@ round-trip, matching the sibling's posture:
   read it back null after clearing) is covered by the existing suite:
 
 ```verify
-npx vitest run --project packages/intentionsutil --root .
+npx vitest run --project intentionsutil --root .
 ```
 
 - Manual/observe-in-production (not auto-runnable, `graph-commit` lands on
