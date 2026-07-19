@@ -125,8 +125,9 @@ anchor points with exact text given; no design judgment required.
 
 - Follow the existing dialectic-step provenance convention already used by
   steps 1–9, e.g. step 8's `{question, answer}` clarification shape
-  (`SKILL.md:314-319`) and step 5's dated-clarification convention
-  (`SKILL.md:284`) — do not invent a new resolution format.
+  (`SKILL.md:314-319`) and the step-2.8 provenance convention referenced at
+  step 3's doctrinal-consistency gate (`SKILL.md:284`) — do not invent a new
+  resolution format.
 - Cite `strategy-main-health` (`intentions/strategy-main-health.md`) as the
   worked precedent when the new step recommends "create the owning strategy
   if none exists," per the 2026-07-13 clarification at
