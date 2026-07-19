@@ -9,6 +9,7 @@
 // module operates only on already-parsed { node, body } triples.
 
 import type { IntentionNode } from "./schema.js";
+import { isPlainObject } from "./schema.js";
 
 /** A single field that diverged on both sides and could not be auto-resolved. */
 export interface FieldConflict {
@@ -85,15 +86,13 @@ export function eq(a: unknown, b: unknown): boolean {
     }
     return true;
   }
-  if (typeof a === "object" && typeof b === "object") {
-    const ao = a as Record<string, unknown>;
-    const bo = b as Record<string, unknown>;
-    const aKeys = Object.keys(ao);
-    const bKeys = Object.keys(bo);
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
     if (aKeys.length !== bKeys.length) return false;
     for (const key of aKeys) {
-      if (!Object.prototype.hasOwnProperty.call(bo, key)) return false;
-      if (!eq(ao[key], bo[key])) return false;
+      if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+      if (!eq(a[key], b[key])) return false;
     }
     return true;
   }
@@ -153,13 +152,16 @@ export function mergeIntentionNodes(
   const hasBase = base !== null;
   // Start from a shallow clone of theirs — it supplies the fallback for every
   // conflicted field and the baseline shape for keys we then overwrite.
-  const merged = { ...theirs.node } as IntentionNode;
-  const mergedRec = merged as unknown as Record<string, unknown>;
+  const merged: IntentionNode = { ...theirs.node };
+  // Generic field-by-field assignment below needs a string-keyed view; no
+  // single static key type applies across heterogeneous keyof IntentionNode
+  // keys (and the dotted "attributes.<key>" pseudo-keys further down).
+  const mergedRec = merged as unknown as Record<string, unknown>; // type-safety-ok: generic dynamic-key assignment target, see comment above
 
   // List fields: union-dedup, base-free.
   for (const field of LIST_FIELDS) {
-    const theirsList = theirs.node[field] as unknown[];
-    const oursList = ours.node[field] as unknown[];
+    const theirsList = theirs.node[field] as unknown[]; // type-safety-ok: field ranges over keyof IntentionNode, but LIST_FIELDS restricts it to array-typed keys at runtime
+    const oursList = ours.node[field] as unknown[]; // type-safety-ok: same LIST_FIELDS array-typed-key invariant as theirsList above
     mergedRec[field] = unionList(theirsList, oursList);
   }
 
@@ -199,7 +201,7 @@ export function mergeIntentionNodes(
     }
     // Present on both sides.
     if (key === "conditions" && Array.isArray(oursAttrs[key]) && Array.isArray(theirsAttrs[key])) {
-      mergedAttrs[key] = unionList(theirsAttrs[key] as unknown[], oursAttrs[key] as unknown[]);
+      mergedAttrs[key] = unionList(theirsAttrs[key], oursAttrs[key]);
       continue;
     }
     const inBase = Object.prototype.hasOwnProperty.call(baseAttrs, key);
@@ -224,7 +226,7 @@ export function mergeIntentionNodes(
     theirs.body,
   );
   if (bodyResult.conflict) conflicts.push(bodyResult.conflict);
-  const body = bodyResult.value as string;
+  const body = bodyResult.value as string; // type-safety-ok: scalarMerge is generic over unknown; body's own three inputs (base/ours/theirs) are always string, so its result is too
 
   return { merged, body, conflicts };
 }
