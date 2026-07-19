@@ -544,13 +544,20 @@ land() {
 # correctly and — for a tactic — its authoritative body is preserved. Uses a
 # throwaway tsx module rather than hand-editing YAML.
 park_write() {
-  local since reason tmpts
+  local since reason tmpts prune_csv
   since="$(date -u +%Y-%m-%d)"
   reason="graph-commit: concurrent-edit conflict — manual merge needed"
+  # Comma-join PRUNE_IDS (already populated by main()'s arg parsing) so the
+  # tsx helper can tell a prune id (no on-disk snapshot — a deletion has
+  # nothing to preserve) from an ordinary edit id (snapshotted to
+  # SNAP_DIR/<id>.md by snapshot(), graph-commit:272-280) when composing each
+  # node's recommendation.
+  prune_csv="$(IFS=,; echo "${PRUNE_IDS[*]:-}")"
   tmpts="$(mktemp --suffix=.mts)" || die "could not create temp file for the parking write"
   cat >"$tmpts" <<'TS'
-// argv: <storeModule> <intentionsDir> <since> <reason> <id...>
-const [storePath, intentionsDir, since, reason, ...ids] = process.argv.slice(2);
+// argv: <storeModule> <intentionsDir> <since> <reason> <snapDir> <pruneCsv> <id...>
+const [storePath, intentionsDir, since, reason, snapDir, pruneCsv, ...ids] = process.argv.slice(2);
+const pruneSet = new Set(pruneCsv ? pruneCsv.split(",") : []);
 const { readNode, writeNode } = await import(storePath);
 // Two-pass for atomicity: read every node up front so an unreadable id fails
 // BEFORE any write — a single read-modify-write loop that threw mid-way would
@@ -558,12 +565,32 @@ const { readNode, writeNode } = await import(storePath);
 const nodes = ids.map((id) => readNode(intentionsDir, id));
 for (let i = 0; i < nodes.length; i++) {
   const node = nodes[i];
-  node.office_hours = { reason, since };
+  const id = ids[i];
+  const recommendation = pruneSet.has(id)
+    ? "A concurrent writer landed an overlapping edit to this node while this " +
+      "session's prune was in flight; the prune was NOT landed (a deletion has " +
+      "no content snapshot). Recommended: the losing writer re-reads the " +
+      "current origin/main content, decides whether the prune still applies, " +
+      "and re-runs graph-commit (--prune, or a fresh edit) on the reconciled " +
+      "result — that same commit clears this office_hours park. A third " +
+      "session encountering this park while the loser is still working should " +
+      "wait rather than attempt its own merge (the mailbox discipline)."
+    : `A concurrent writer landed an overlapping edit to this node while this ` +
+      `session's edit was in flight; this writer's content was NOT landed. ` +
+      `This session's unlanded content is preserved at ${snapDir}/${id}.md ` +
+      `(this machine only — may not survive past this session). Recommended: ` +
+      `the losing writer re-reads the current origin/main content, manually ` +
+      `merges in its intended edit, and re-runs graph-commit on the merged ` +
+      `result — that same commit clears this office_hours park. A third ` +
+      `session encountering this park while the loser is still working should ` +
+      `wait rather than attempt its own merge (the mailbox discipline).`;
+  node.office_hours = { reason, since, recommendation };
   writeNode(intentionsDir, node);
-  process.stderr.write(`graph-commit: set office_hours on ${ids[i]} (since=${since})\n`);
+  process.stderr.write(`graph-commit: set office_hours on ${id} (since=${since})\n`);
 }
 TS
-  if ! npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "${ALL_IDS[@]}" >&2; then
+
+  if ! npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "$SNAP_DIR" "$prune_csv" "${ALL_IDS[@]}" >&2; then
     rm -f "$tmpts"
     die "failed to write the office_hours parking record"
   fi
