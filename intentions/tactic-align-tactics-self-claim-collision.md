@@ -26,8 +26,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-align-tactics-self-claim-collision
+  pr: 2897
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -135,3 +142,24 @@ Manual: trace a graph-launched `/align-tactics` round (strategy lane) and confir
 Step 0.2 does **not** match its own just-spawned `--name "$id"` session as a
 pre-existing claim, while a genuinely concurrent session in the same worktree
 still stops the run.
+
+## needs-main residue
+
+QA pass on PR #2897 (2026-07-18) resolved all script-verifiable acceptance
+items (6/6 PASS, full `test-dispatch-scripts.sh` suite 2955/2955). One item
+could not be verified at merge time and is deferred to `main-qa`:
+
+### 1. End-to-end graph-launched round: self-claim not matched, concurrent session still stops the run
+- URL path: current (graph-native `/align-tactics` strategy-lane launch path)
+- Expected outcome: in a real graph-launched round the orchestrator proceeds
+  instead of falsely aborting on itself (Step 0.2's `worktree_has_live_session`
+  call now excludes its own session id), while a genuinely concurrent live
+  session in the same worktree still registers as a held claim and stops the
+  run.
+- Finding: this is a live-routing observation of `dispatch-graph-execute`'s
+  strategy-lane spawn (`--name "$id"`) and `/align-tactics` Step 0.2, not
+  resolvable by a single script assertion at merge time — it requires
+  observing a real graph-launched round post-merge. The unit-level simulation
+  (`lib-claude-agents.sh`'s `worktree_has_live_session` exclude_sid behavior)
+  is already covered and passing; this residue item covers only the
+  live end-to-end routing behavior.
