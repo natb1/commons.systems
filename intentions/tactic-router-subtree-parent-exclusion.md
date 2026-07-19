@@ -43,14 +43,16 @@ attention:
     10befb49. This deliberately overtakes the auto-serialization pin per the
     same author direction; that node stays #2 with its own boost untouched. The
     boost flows nowhere else (no blocked_by, no children)."
-phase: qa
+phase: review
 execution:
   branch: tactic-router-subtree-parent-exclusion
   pr: 2912
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -222,3 +224,22 @@ Manual:
   router from re-selecting it; a human or a later session reviewing
   `tactic-graph-native-dispatch` clears its own park once satisfied the fix is
   live on `origin/main`.
+
+## needs-main residue
+
+- **id:** 6
+  **title:** office_hours park on tactic-graph-native-dispatch is documented
+  as NOT cleared by this PR
+  **url_path:** current
+  **expected_outcome:** The caveat is recorded as an acceptance-criterion
+  clarification; nothing in this PR's diff is expected to touch
+  `tactic-graph-native-dispatch`'s park.
+  **finding:** planned-deferral — this PR explicitly defers clearing the
+  `tactic-graph-native-dispatch` `office_hours` park to a later
+  session/human review with a post-merge commit touching that node; QA only
+  confirmed the caveat is documented (present in this PR's own Verification
+  section above), not that the park is cleared. Measured downstream: a
+  session reviewing `tactic-graph-native-dispatch` post-merge should confirm
+  neither it nor `tactic-firebase-demo-saas-app` still surfaces as an
+  align-tactics candidate (e.g. via `select-targets.ts` against
+  `origin/main`), then clear the park itself once satisfied.
