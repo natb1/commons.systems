@@ -1,0 +1,42 @@
+[
+  {
+    "ref": "strategy-s",
+    "referencedBy": "tactic-freeze-resurface-stale-children-only"
+  },
+  {
+    "ref": "tactic-only",
+    "referencedBy": "tactic-graph-split-orphan-guard"
+  },
+  {
+    "ref": "tactic-sibling",
+    "referencedBy": "tactic-freeze-resurface-stale-children-only"
+  },
+  {
+    "ref": "tactic-stale",
+    "referencedBy": "tactic-freeze-resurface-stale-children-only"
+  },
+  {
+    "ref": "delegation-food-supply",
+    "referencedBy": "tactic-delegation-food-supply-record"
+  },
+  {
+    "ref": "tactic-only",
+    "referencedBy": "tactic-graph-digest-tooling"
+  },
+  {
+    "ref": "tactic-signal-path-attention",
+    "referencedBy": "tactic-graph-native-dispatch"
+  },
+  {
+    "ref": "virtue-anthropic-claude-growth",
+    "referencedBy": "tactic-mount-delegation-migration"
+  },
+  {
+    "ref": "strategy-stoicism-premeditatio-malorum",
+    "referencedBy": "tactic-mount-tradition-migration"
+  },
+  {
+    "ref": "issue-siblings",
+    "referencedBy": "tactic-review-lows-automation"
+  }
+]
