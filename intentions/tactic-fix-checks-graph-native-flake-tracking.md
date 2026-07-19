@@ -27,14 +27,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: implement
 execution:
   branch: tactic-fix-checks-graph-native-flake-tracking
   pr: 2901
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: null
 validates: []
 blocked_by: []
