@@ -319,10 +319,10 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    etc.) plus an ISO date, placed wherever it reads best in the sentence —
    a front-loaded parenthetical is preferred, e.g.
    `"(Recorded 2026-07-05 interview.) ..."`, but any placement is accepted.
-   The newest ISO date anywhere in the answer is its effective date — this
-   is the `readingDate()` contract (`packages/intentionsutil/src/router.ts`)
-   extracts verb-agnostically, and that `coverage.ts`'s `lastReviewedOf`
-   depends on. An amendment adds a new dated clause rather than rewriting
+   The newest ISO date anywhere in the answer is its effective date — the
+   `readingDate()` contract (`packages/intentionsutil/src/router.ts`)
+   extracts it verb-agnostically, and `coverage.ts`'s `lastReviewedOf`
+   depends on it. An amendment adds a new dated clause rather than rewriting
    the old one, so the history of resolutions stays legible. Get the date
    via `date -u +%Y-%m-%d`, never hand-guessed. `validateGraph` rule 17
    mechanically enforces the date-presence half of this convention; the
