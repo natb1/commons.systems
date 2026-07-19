@@ -150,6 +150,20 @@ BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
 packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
 ```
 
+**Exception: a re-plan (or a Step-2 `split` disposition, at strategy scope)
+that discovers a genuine split.** If a soft-frozen re-plan, or a Step 2 item 2
+`split` disposition applied at strategy scope, finds the tactic must split
+into a new born-parked sibling, that sibling is genuinely new work — but it
+must never land via a separate later `graph-commit` call. Land the parent
+edit and the new sibling in the **same** `graph-commit --base "$BASE"
+<tactic-id> <new-sibling-id>` call; the `--base` manifest still covers only
+the pre-existing parent id, and the new sibling — having no `origin/main`
+blob — is simply absent from it. This closes the 2026-07-18 near-miss: a
+parent edit landed alone as `c037cec7`, the sibling-add `graph-commit` lost
+the push race five times and landed nothing, leaving `main` with a parent
+describing a split sibling that did not exist there — recovered same-day as
+`032768e5`.
+
 There is **no strategy edit** in either case — a per-node tactic-target session
 never touches the serving strategy's frontmatter (`rounds`, clarifications, or
 otherwise), in contrast to the strategy-target flow, which may. If a
@@ -310,7 +324,9 @@ a strategy.
    produce a fresh reading and the strategy dead-ends at the round cap.
 2. **Consume the draft tactics.** Each draft child (`phase` absent **and
    `office_hours` unset**, retained by `/align-strategy`) is **finalized,
-   split, merged, or pruned** — it is input, never left dangling. A
+   split (a split lands its parent edit and new sibling atomically in one
+   `graph-commit` call, never two — see Step 5 item 3), merged, or pruned**
+   — it is input, never left dangling. A
    `phase`-absent child *with* `office_hours` set is a born-parked tactic from a
    prior round, not a draft (see Idempotency): leave it alone, do not run it
    through this path. Finalizing reuses the draft's retained body as
@@ -544,13 +560,20 @@ Per tactic:
    finalizing a draft, this replaces the retained draft body with the plan.
 
 3. **Land via `graph-commit`.** One `graph-commit` per tactic, or a small
-   batch (e.g. a parent plus its immediate children, or the drift-clarified
-   strategy alongside the round's tactics) in one call:
+   batch (e.g. a parent plus its immediate children, the drift-clarified
+   strategy alongside the round's tactics, or a split-parent tactic alongside
+   its new born-parked sibling) in one call:
 
    ```bash
    packages/intentionsutil/scripts/graph-commit --base "$BASE" \
      <tactic-id> [<tactic-id> ...] [<strategy-id>]
    ```
+
+   A split's parent edit and its new sibling must never land as two separate
+   `graph-commit` calls — the 2026-07-18 near-miss (`c037cec7` landed the
+   parent alone; the follow-up sibling-add call lost the push race five times
+   and landed nothing, recovered same-day as `032768e5`) is the concrete
+   failure this closes.
 
    Pass `--base "$BASE"` (the manifest from `dump-node.ts` above) whenever the
    call touches a pre-existing node; omit it for a round that only creates new
@@ -642,9 +665,11 @@ decompose fresh. It:
    edited term) is a shortlisting heuristic only; it never disposes of a
    tactic — disposition of each open child requires the full-body re-read
    (strategy clarification 32).
-2. **Amends, prunes, or confirms** each open tactic against the edited
-   substance — revise a plan whose premise changed, prune a tactic the edit
-   made unnecessary, confirm one still valid — rather than authoring a new
+2. **Amends, prunes, splits, or confirms** each open tactic against the
+   edited substance — revise a plan whose premise changed, prune a tactic the
+   edit made unnecessary, split one into a new born-parked sibling (landed
+   atomically with the parent edit per the Tactic target section's split
+   exception above), confirm one still valid — rather than authoring a new
    round. **Amendment completeness** (clarification 32): an amendment is
    complete only when the tactic's **whole node** — `statement`,
    `rationale`, the `## Context` prose, every unit, and `## Verification` —

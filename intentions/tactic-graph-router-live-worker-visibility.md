@@ -16,11 +16,11 @@ rationale: "Surfaced 2026-07-07: a manual emulated router tick and the live
   daemon session's mechanical-conflict park) at once. Root cause confirmed by
   code read (2026-07-18): dispatch-select-tick's --manual branch already
   computes live-worker headroom (busy-worker count plus reservation-ledger
-  count, versus MAX_WORKERS -- the daemon's own autonomous gate instead
-  compares against TARGET_N, a separate pace-derived target) and holds
-  dispatch-acquire-lock across its call to graph-select-target and the
-  resulting reservation_write claim (dispatch-select-tick Step 0 lock acquire
-  through emit_graph_selection's reservation_write+release_lock) -- but
+  count, versus MAX_WORKERS -- the daemon's own autonomous gate instead compares
+  against TARGET_N, a separate pace-derived target) and holds
+  dispatch-acquire-lock across its call to graph-select-target and the resulting
+  reservation_write claim (dispatch-select-tick Step 0 lock acquire through
+  emit_graph_selection's reservation_write+release_lock) -- but
   graph-select-target itself performs NEITHER the lock acquisition NOR the
   headroom check when invoked directly. Any caller outside
   dispatch-select-tick's wrapper -- specifically an ad hoc manual/emulated-tick
@@ -42,8 +42,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-graph-router-live-worker-visibility
+  pr: 2918
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null

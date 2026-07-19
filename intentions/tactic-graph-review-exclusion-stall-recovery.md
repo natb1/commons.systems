@@ -27,7 +27,182 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    /implement: implementation deviated from the persisted plan on
+
+    tactic-graph-review-exclusion-stall-recovery. Between planning and this
+
+    session, tactic-fix-interrupt-orthogonal-state (PR #2905, merged
+
+    2026-07-18/19) refactored the CI-fix interrupt from a `phase: "fix"` value
+
+    into the orthogonal `execution.fix` field, and removed `"fix"` from the
+
+    `Phase` enum entirely. The node's persisted plan body's Unit 2 (calling
+
+    `apply-node-transition.ts --ci failing` to write `phase: "fix"`) is no
+    longer
+
+    implementable as written — that flag and phase value no longer exist.
+
+
+    I adapted Unit 2 to the current architecture rather than blocking: the
+
+    selector's review+reviewed exclusion (router.ts) is now fix-aware
+
+    (`&& t.execution?.fix == null`), and the new reconciler
+
+    (reconcile-graph-review-stall) enters the interrupt via the existing
+
+    `apply-fix-state.ts --set-fix` primitive (the same write
+
+    `graph-select-target`'s CI-red gate would make) instead of writing a phase
+
+    value. Unit 1 (the `needsReviewStallRecovery` predicate) was unaffected by
+
+    the drift and landed as originally planned. Both units are implemented,
+
+    tested (568/568 vitest, 2973/2973 dispatch-script tests), and pushed as
+
+    PR #2920 (draft).
+
+
+    This is a genuine architecture-level adaptation, not a mechanical
+
+    translation the frozen plan anticipated — flagging for human review before
+
+    this proceeds to fix-checks/qa/review.
+  since: 2026-07-19
+  recommendation: >-
+    # Office-hours review: `tactic-graph-review-exclusion-stall-recovery` (PR
+    #2920)
+
+
+    ## What you're picking up
+
+
+    An autonomous `/implement` session built the 2-unit plan for this tactic and
+    opened draft PR #2920. Mid-implementation it caught that the plan's Unit 2
+    design was written against a `phase: "fix"` / `apply-node-transition.ts --ci
+    failing` mechanism that PR #2905 (`tactic-fix-interrupt-orthogonal-state`,
+    merged 07-18/19) had already deleted in favor of an orthogonal
+    `execution.fix` field. Rather than follow the stale plan text blindly, it
+    adapted Unit 2 to the current primitives and parked the whole PR for you.
+    Unit 1 landed exactly as planned and is not in question.
+
+
+    The underlying goal is unchanged: a `phase: review` + `reviewed`-marker
+    tactic is permanently excluded from the selector
+    (`packages/intentionsutil/src/router.ts`), so if its armed auto-merge later
+    goes CONFLICTING or its CI turns red, nothing picks it back up. The fix
+    makes the exclusion fix-aware and adds a reconciler that re-enters such
+    stranded nodes into the fix lane.
+
+
+    ## The two things worth your judgment
+
+
+    The adapted design hinges on one behavioral assumption that the reviewer —
+    not the implementer — should ratify:
+
+
+    - **Is `execution.fix` set by `apply-fix-state.ts --set-fix`, with no
+    `graph-select-target` involvement, a state the rest of the pipeline safely
+    consumes?** The new reconciler
+    `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall`
+    writes `execution.fix` directly (mirroring the write the normal CI-red gate
+    makes) and lands it via its own `graph-commit`. The selector then stops
+    excluding the node (`t.execution?.fix == null` clause in `router.ts`) and
+    re-surfaces it as a `fix` candidate. The open question: does `/fix-checks` —
+    or any other `execution.fix` consumer — assume that field was *always*
+    written by `graph-select-target` specifically, or is it agnostic to the
+    writer? If any consumer keys off provenance, this reconciler produces a
+    state they weren't built to handle. This is the load-bearing check.
+
+
+    - **Should the stale plan body be corrected?**
+    `intentions/tactic-graph-review-exclusion-stall-recovery.md`'s body still
+    literally describes the defunct `phase: "fix"` mechanism from PR #2905's
+    pre-refactor world. It was left untouched — body edits are an
+    align-tactics/align-strategy job, out of scope for an implement session.
+    Decide whether to correct/annotate it to match the shipped design or leave
+    it as historical record with a note pointing at the adaptation.
+
+
+    ## Coverage caveat (not a defect)
+
+
+    There is no end-to-end test of the reconciler's `gh`-polling path, because
+    no production case has ever hit this stall — it's a defensive recovery path
+    for a rare regression. This matches the sibling `reconcile-graph-merged`,
+    which also has no such test, and matches what the plan's own Verification
+    section already acknowledged. Unit-level coverage is solid:
+    `needsReviewStallRecovery` in `transitions.ts` is tested across all six
+    ci×mergeable combinations (vitest 568/568), and the reconciler has
+    silent-fake parity in `test-dispatch-scripts.sh` (2973/2973). Don't hold the
+    missing e2e against it unless you disagree with the sibling precedent.
+
+
+    ## Post-park resolution (2026-07-19, same session)
+
+
+    Both judgment items above were resolved interactively with the user after
+    the park:
+
+
+    - **Provenance question: resolved — writer-agnostic, safe as shipped.**
+    `FixState` (`schema.ts:370`) is `{since, attempt, pushed_sha}` — provenance
+    is not even representable. Every consumer keys only on the field's value:
+    the selector (`router.ts:305`), `check-node-selection.ts`'s fix-presence
+    gate (:219-228), `/fix-checks`'s entry gate (SKILL.md:63), and
+    `_gate_fix_active` (which on green runs `--clear-fix`, whose re-review reset
+    is exactly right for a recovered node). `/fix-checks`'s "disarm auto-merge
+    on every push" section explicitly anticipates past-review nodes with stale
+    merge-arms.
+
+    - **Plan body: revised and landed** (graph-commit 7a597ae7 on main,
+    CAS-guarded, frontmatter untouched). The body now describes the shipped
+    `execution.fix` design with a revision note explaining the PR #2905
+    adaptation.
+
+    - **Re-validated after the body edit**: vitest 568/568,
+    test-dispatch-scripts 2973/2973.
+
+
+    Remaining for office-hours: only next-action 1 (read the PR #2920 diff) and
+    4 (route to review or merge).
+
+
+    ## Concrete next actions
+
+
+    1. **Read the diff on PR #2920** — focus on the `router.ts` exclusion clause
+    and the new `reconcile-graph-review-stall` script; Unit 1 (`transitions.ts`)
+    needs only a skim.
+
+    2. **Resolve the `execution.fix` provenance question**: check whether
+    `/fix-checks` (and any other `execution.fix` reader) cares who wrote the
+    field, or treats a non-null `execution.fix` uniformly regardless of writer.
+    This decides whether the reconciler is safe as-shipped.
+
+    3. **Decide the plan-body disposition**: correct/annotate
+    `intentions/tactic-graph-review-exclusion-stall-recovery.md` to the adapted
+    design, or leave it with a historical note — likely a follow-up
+    align-tactics pass, not a change on this PR.
+
+    4. **If satisfied on (2):** re-route the tactic back to `review` for the
+    normal review phase (the adapted design deviated from the plan and deserves
+    a review pass), or merge if you're confident the shipped diff is
+    review-clean. **If not satisfied on (2):** file the consumer-compatibility
+    concern and hold the PR pending that fix.
+
+
+    References:
+
+    - #2920: https://github.com/natb1/commons.systems/pull/2920
+
+    - #2905: https://github.com/natb1/commons.systems/pull/2905
 pace_exempt: false
 rounds: null
 attributes:
