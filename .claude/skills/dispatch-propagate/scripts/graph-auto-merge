@@ -100,8 +100,14 @@ CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
 # archive that tree once and reuse it for every candidate (mirror transition-node).
 SNAP_DIR="$(mktemp -d)" || { echo "graph-auto-merge: mktemp failed" >&2; exit 1; }
 trap 'rm -rf "$SNAP_DIR"' EXIT
+# Do NOT fall back to an empty snapshot: compute-freshness against an empty
+# origin/main tree finds every candidate absent and returns scopeStale:false,
+# which would silently disable the fail-closed freshness gate for the whole
+# tick (a fail-open degradation). A transient git failure or missing/unfetched
+# origin/main ref must hard-error, not merge.
 if ! (cd "$REPO_ROOT" && git archive origin/main intentions 2>/dev/null | tar -x -C "$SNAP_DIR"); then
-  mkdir -p "$SNAP_DIR/intentions"
+  echo "graph-auto-merge: git archive origin/main intentions failed (cannot build freshness snapshot)" >&2
+  exit 1
 fi
 
 # ---- Step 4: per-candidate sense + fail-closed freshness gate + merge --------
@@ -127,7 +133,13 @@ while IFS=$'\t' read -r id pr; do
   # ---- CI verdict (REST, memoized) — merge only on passing ------------------
   # pending → in progress, retry next tick; failing → the fix interrupt owns red
   # CI (do NOT merge, do NOT route the fix here). Both skip silently.
-  VERDICT=$(dispatch_ci_verdict_rest "$(jq -r '.headRefOid' <<<"$PR_JSON")")
+  rc=0
+  VERDICT=$(dispatch_ci_verdict_rest "$(jq -r '.headRefOid' <<<"$PR_JSON")") || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "graph-auto-merge: dispatch_ci_verdict_rest #$pr for $id failed (rc=$rc)" >&2
+    HARD_ERROR=1
+    continue
+  fi
   [[ "$VERDICT" == "passing" ]] || continue
 
   # ---- Fail-closed tactic-scope fingerprint re-check ------------------------
@@ -144,6 +156,15 @@ while IFS=$'\t' read -r id pr; do
   if [[ "$rc" -ne 0 ]]; then
     echo "graph-auto-merge: freshness computation failed for $id" >&2
     HARD_ERROR=1
+    continue
+  fi
+  # Hold whenever the freshness comparison did not actually run against a real
+  # origin/main node: a missing/empty stamp (stampMissing) or a node absent from
+  # the snapshot (nodeOnMain!=true) both leave scopeStale:false without any real
+  # chain-of-custody check. Fail closed — these must HOLD, not merge.
+  if [[ "$(jq -r '.stampMissing' <<<"$FRESH")" == "true" \
+     || "$(jq -r '.nodeOnMain' <<<"$FRESH")" != "true" ]]; then
+    echo "held $id (missing-stamp)"
     continue
   fi
   if [[ "$(jq -r '.scopeStale' <<<"$FRESH")" == "true" ]]; then

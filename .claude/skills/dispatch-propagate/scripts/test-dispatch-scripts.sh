@@ -30636,6 +30636,28 @@ GAM_ROOT=$(mktemp -d)
 GAM_SCRIPTS="$GAM_ROOT/.claude/skills/dispatch-propagate/scripts"
 mkdir -p "$GAM_SCRIPTS" "$GAM_ROOT/bin" "$GAM_ROOT/stub" "$GAM_ROOT/cache" \
          "$GAM_ROOT/config" "$GAM_ROOT/.claude/worktrees"
+# graph-auto-merge's REPO_ROOT resolves to GAM_ROOT itself (4 levels up from
+# GAM_SCRIPTS), so its `git archive origin/main intentions` runs for real here
+# — the fail-closed freshness-gate fix makes that call hard-error instead of
+# silently degrading to an empty snapshot on failure, so origin/main must
+# genuinely resolve. Mirror the dispatch-graph-scope-sweep fixture above: a
+# real git repo seeded with an intentions/ tree, pushed to a local bare remote
+# and fetched, so refs/remotes/origin/main resolves without network or a git
+# stub. The freshness computation itself is still fully mocked by the fake
+# `node` below, so the tree's actual content never matters — only that the
+# archive succeeds.
+GAM_BARE=$(mktemp -d)
+git init -q -b main "$GAM_ROOT"
+git -C "$GAM_ROOT" config user.email t@t
+git -C "$GAM_ROOT" config user.name t
+mkdir -p "$GAM_ROOT/intentions"
+echo '# placeholder' > "$GAM_ROOT/intentions/placeholder.md"
+git -C "$GAM_ROOT" add -A
+git -C "$GAM_ROOT" commit -q -m seed
+git init -q --bare -b main "$GAM_BARE"
+git -C "$GAM_ROOT" remote add origin "$GAM_BARE"
+git -C "$GAM_ROOT" push -q origin main
+git -C "$GAM_ROOT" fetch -q origin
 # REPO_ROOT is derived from the script's real location, so the copy is physical;
 # dispatch-config-load and lib.sh sit alongside (both resolved via SCRIPT_DIR).
 cp "$SCRIPT_DIR"/graph-auto-merge "$SCRIPT_DIR"/dispatch-config-load \
@@ -30802,7 +30824,7 @@ assert_eq "graph-auto-merge (f): kill-switch exit 0" "0" "$gam_f_rc"
 if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_f_m=present; else gam_f_m=absent; fi
 assert_eq "graph-auto-merge (f): kill-switch issues no merge" "absent" "$gam_f_m"
 
-rm -rf "$GAM_ROOT"
+rm -rf "$GAM_ROOT" "$GAM_BARE"
 
 # ============================================================================
 # summary
