@@ -213,6 +213,30 @@ export function incrementAttempt(execution: Execution, phase: string): Execution
 
 // --- Reconciler (Unit 2) -----------------------------------------------------
 
+/** GitHub's PR mergeability enum, as gh_pr_view_rest projects it. */
+export type Mergeable = "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+
+/**
+ * Whether an armed `phase: review` tactic carrying the `reviewed` marker has
+ * regressed and must be routed back to `fix` by the review-stall reconciler
+ * (`tactic-graph-review-exclusion-stall-recovery`). Once a node reaches
+ * `review` and picks up the `reviewed` marker, the selector's reviewed-marker
+ * exclusion (`router.ts:296`, `tactic-graph-selector-reviewed-exclusion`)
+ * removes it from selection entirely — so `transition-node`'s normal
+ * `fixInterrupt` path never runs for this node again via selection, and a
+ * later CI regression or merge conflict would otherwise strand it forever.
+ *
+ * A `failing` CI verdict or a `CONFLICTING` mergeability is a genuine
+ * regression that must be recovered. `UNKNOWN` mergeability and any non-
+ * `failing` CI verdict are NOT treated as a regression here: GitHub computes
+ * mergeability asynchronously and self-heals `UNKNOWN` to a real value on a
+ * later sweep — the same no-op posture `dispatch-reconcile-ready` takes on an
+ * `UNKNOWN` read.
+ */
+export function needsReviewStallRecovery(ci: CiVerdict, mergeable: Mergeable): boolean {
+  return ci === "failing" || mergeable === "CONFLICTING";
+}
+
 /**
  * The phase a merged-out-of-band tactic reconciles to: `main-qa` when the node
  * carries a needs-main residue section (verified post-merge, strategy

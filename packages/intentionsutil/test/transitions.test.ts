@@ -10,6 +10,7 @@ import {
   incrementAttempt,
   reconcileMergedPhase,
   reconcileClosedPhase,
+  needsReviewStallRecovery,
   hasNeedsMainResidue,
   stampRound,
   inboundBlockers,
@@ -180,6 +181,32 @@ describe("reconciler routing", () => {
 
   it("routes a closed-not-merged tactic straight to done", () => {
     expect(reconcileClosedPhase()).toBe("done");
+  });
+});
+
+describe("needsReviewStallRecovery", () => {
+  it("regresses on a failing CI verdict regardless of mergeability", () => {
+    expect(needsReviewStallRecovery("failing", "MERGEABLE")).toBe(true);
+  });
+
+  it("regresses on a CONFLICTING mergeability regardless of CI verdict", () => {
+    expect(needsReviewStallRecovery("passing", "CONFLICTING")).toBe(true);
+  });
+
+  it("regresses when both a failing verdict and CONFLICTING mergeability hold", () => {
+    expect(needsReviewStallRecovery("failing", "CONFLICTING")).toBe(true);
+  });
+
+  it("is not a regression when CI passes and the PR is mergeable", () => {
+    expect(needsReviewStallRecovery("passing", "MERGEABLE")).toBe(false);
+  });
+
+  it("is not a regression when both CI and mergeability are unknown", () => {
+    expect(needsReviewStallRecovery("unknown", "UNKNOWN")).toBe(false);
+  });
+
+  it("self-heals: an UNKNOWN mergeability with passing CI is not a regression", () => {
+    expect(needsReviewStallRecovery("passing", "UNKNOWN")).toBe(false);
   });
 });
 
