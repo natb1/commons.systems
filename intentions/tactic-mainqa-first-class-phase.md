@@ -50,7 +50,10 @@ rationale: "Retained from the 2026-07-09 /align-strategy review round, then
   align-tactics itself uses for its writes, then self-advances phase:implement
   -> done in the same graph-commit call, since router-driven /implement
   selection does not apply to a tactic whose entire work product is graph
-  mutation rather than code."
+  mutation rather than code. Executed 2026-07-18: all 12 nodes migrated to
+  phase:main-qa with office_hours unchanged, migration-boilerplate deduped per
+  Unit 2, and this tactic self-advanced to phase:done in the same graph-commit
+  landing all 13 nodes."
 reading: null
 gap: null
 serves:
@@ -60,7 +63,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution: null
 validates: []
 blocked_by: []
