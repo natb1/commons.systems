@@ -16362,19 +16362,29 @@ assert_eq "phase-effort: empty-string-arg → exit 2" "2" "$pe_rc"
 
 # --- review-fix/SKILL.md model-tiering content guards (#1172) -----------------
 # The review-fix orchestrator runs on Sonnet; fix-authoring is delegated to an
-# Opus subagent and its /code-review pass is detection-only. Guard both facts so
-# a regression that re-introduces Sonnet-authored fixes (or a --fix /code-review)
-# is caught here.
+# Opus subagent. The review-fix.js `--fix` guard below is INTENTIONALLY
+# INVERTED from the original #1172 doctrine ("code-review is detection-only,
+# no --fix"): tactic-review-phase-trust-builtin-review deliberately reverses
+# this — code-review now runs `/code-review max --fix` and applies its own
+# fixes directly (Lane-A trust-the-built-in doctrine), with only its
+# un-auto-fixed residue dispositioned by the new residue phase. Per
+# .claude/rules/test-integrity.md, re-pointing a guard whose asserted doctrine
+# the author has deliberately reversed is not weakening a red test — the first
+# assertion below (Opus fix-authoring) is untouched because that invariant
+# still holds.
 REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 RF_SKILL="$REPO_ROOT/.claude/skills/review-fix/SKILL.md"
+RF_WORKFLOW="$REPO_ROOT/.claude/workflows/review-fix.js"
 
 echo "Test: review-fix/SKILL.md pins fix-authoring to Opus (model: opus present)"
 if grep -q 'model: opus' "$RF_SKILL"; then rf_opus=yes; else rf_opus=no; fi
 assert_eq "review-fix: Opus fix-authoring pinned" "yes" "$rf_opus"
 
-echo "Test: review-fix/SKILL.md runs /code-review detection-only (no --fix)"
-if grep -q -- '/code-review max --fix' "$RF_SKILL"; then rf_fix=yes; else rf_fix=no; fi
-assert_eq "review-fix: no /code-review max --fix invocation" "no" "$rf_fix"
+echo "Test: review-fix.js invokes /code-review with --fix (Lane-A trust-the-built-in doctrine, tactic-review-phase-trust-builtin-review)"
+assert_eq "review-fix.js: /code-review --fix call site present" "1" "$(grep -c -- "AND the \`--fix\` flag" "$RF_WORKFLOW" || true)"
+
+echo "Test: review-fix.js contains the residue phase (tactic-review-phase-trust-builtin-review)"
+assert_eq "review-fix.js: residue phase present" "1" "$(grep -c -- "title: 'residue'" "$RF_WORKFLOW" || true)"
 
 # ============================================================================
 # spawn fake-claude harness (shared)
