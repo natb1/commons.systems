@@ -1,4 +1,5 @@
 import { IntentionSchemaError } from "./errors.js";
+import { buildIdRefMatchers, classifyRef, extractIdRefs } from "./id-refs.js";
 
 // --- Enums -----------------------------------------------------------------
 
@@ -27,12 +28,15 @@ export const TOOLING_KINDS: readonly ToolingKind[] = ["actuator", "sensor"];
 /**
  * Persisted dispatch phase a tactic sits in. A future graph-native router
  * transitions this; the schema only validates the value is one of the enum.
+ *
+ * `"fix"` is deliberately NOT a member: the CI-fix interrupt lives entirely in
+ * the orthogonal `execution.fix` field (see `FixState`), set/cleared by the
+ * graph selector off the live CI verdict, independent of `phase`.
  */
 export type Phase =
   | "draft"
   | "align-tactics"
   | "implement"
-  | "fix"
   | "qa"
   | "review"
   | "main-qa"
@@ -42,7 +46,6 @@ export const PHASES: readonly Phase[] = [
   "draft",
   "align-tactics",
   "implement",
-  "fix",
   "qa",
   "review",
   "main-qa",
@@ -358,12 +361,32 @@ export type StrategyStampValue = string | { hash: string; sha: string };
  *    re-stamp rewrites the field. No hashing logic lives here — only the
  *    typed field.
  */
+/**
+ * A CI-fix interrupt in flight on a tactic, orthogonal to `phase`. `since` is
+ * the interrupt date (`date -u +%Y-%m-%d`); `attempt` is the fix-attempt
+ * counter (replaces the `attempts["fix"]` convention); `pushed_sha` is the
+ * last SHA `/fix-checks` pushed — the pending-CI guard, null before the first
+ * push.
+ */
+export interface FixState {
+  since: string;
+  attempt: number;
+  pushed_sha: string | null;
+}
+
 export interface Execution {
   branch: string;
   pr: number | null;
   attempts: Record<string, number>; // per-phase attempt counts
   markers: string[];
   strategy_fingerprint: string | Record<string, StrategyStampValue> | null;
+  /**
+   * Optional (not just nullable) at the type level: existing `Execution`
+   * object literals across the codebase predate this field and are out of
+   * scope for this additive-only unit. `validateExecution` always populates
+   * it (to a validated object or `null`) on any value it returns.
+   */
+  fix?: FixState | null;
 }
 
 /** A first-class parking record: why a node is in office hours and since when. */
@@ -469,6 +492,22 @@ function validateStrategyFingerprint(
   return out;
 }
 
+/**
+ * Nullable `FixState` object: string `since`, number `attempt`, nullable
+ * string `pushed_sha`.
+ */
+function validateFixState(value: unknown, field: string): FixState | null {
+  if (value == null) return null;
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object or null for ${field}, got ${typeof value}`);
+  }
+  return {
+    since: requireDateString(value.since, `${field}.since`),
+    attempt: requireNonNegativeInt(value.attempt, `${field}.attempt`),
+    pushed_sha: optionalString(value.pushed_sha, `${field}.pushed_sha`),
+  };
+}
+
 function validateExecution(value: unknown, field: string): Execution {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
@@ -479,6 +518,7 @@ function validateExecution(value: unknown, field: string): Execution {
     attempts: validateAttempts(value.attempts, `${field}.attempts`),
     markers: validateIdArray(value.markers, `${field}.markers`),
     strategy_fingerprint: validateStrategyFingerprint(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
+    fix: validateFixState(value.fix, `${field}.fix`),
   };
 }
 
@@ -624,6 +664,11 @@ export function validateNode(value: unknown): IntentionNode {
  *  16. Every node's `status` must be a key in its kind node's declared
  *      `attributes.status_vocabulary` (a missing declaration on the kind node
  *      is itself an error).
+ *  17. Every `clarifications[].answer` carries a dated provenance clause — a
+ *      `YYYY-MM-DD` substring placed anywhere in the string (placement-agnostic,
+ *      uniform across every kind). This is the convention `readingDate()`
+ *      (router.ts) and `coverage.ts`'s `lastReviewedOf` parse to date a
+ *      clarification; a dateless answer silently breaks those consumers.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -799,6 +844,19 @@ export function validateGraph(nodes: IntentionNode[]): void {
         }
       }
     }
+    // Rule 17: every clarifications[].answer carries a dated provenance clause
+    // (a YYYY-MM-DD substring, placed anywhere). This is the same date pattern
+    // readingDate() (router.ts) uses; it is inlined rather than imported because
+    // router.ts already imports from this file (a back-import would cycle). The
+    // machine consumers this protects are readingDate() and coverage.ts's
+    // lastReviewedOf, which parse this date to timestamp a clarification.
+    for (let i = 0; i < node.clarifications.length; i++) {
+      if (!/\d{4}-\d{2}-\d{2}/.test(node.clarifications[i].answer)) {
+        problems.push(
+          `${node.id}: clarifications[${i}].answer carries no dated provenance clause (YYYY-MM-DD) — see readingDate()`,
+        );
+      }
+    }
   }
   // Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
   // flags every node that participates in a cycle (a tactic transitively
@@ -839,5 +897,116 @@ export function validateGraph(nodes: IntentionNode[]): void {
   }
   if (problems.length > 0) {
     throw new IntentionSchemaError(`Graph integrity violations:\n${problems.join("\n")}`);
+  }
+}
+
+/**
+ * Planned-reference heuristic, shared by `validateGraphProseRefs` (below) and
+ * the digest's DANGLING-REFS annotation (`digest.ts` imports this). Does some
+ * OTHER currently-open (`phase !== "done"`) tactic's `statement` or body mention
+ * `ref`? A missing reference that IS so mentioned is a forward reference to
+ * planned-but-not-yet-committed work rather than a genuine dangling ref.
+ *
+ * Lives here (not in `digest.ts`) so the browser-safe graph barrel — which
+ * includes `schema.ts` but must never reach `digest.ts`'s Node-only transitive
+ * deps — can use it; `digest.ts` reuses this one implementation rather than
+ * duplicating the closure.
+ *
+ *  - Matches `ref` as a whole id token (same `[\w-]` boundaries as `idShape`),
+ *    so a missing `tactic-x` is not falsely "planned" by an unrelated
+ *    `tactic-x-v2`.
+ *  - Excludes the referencing node itself: every missing ref is, by
+ *    construction, present in its own referencing text (that is how it was
+ *    extracted), so a self-match would make EVERY missing ref falsely
+ *    "planned". `[planned]` must mean some OTHER open tactic mentions it.
+ */
+export function mentionsRef(
+  nodes: IntentionNode[],
+  bodies: Map<string, string>,
+  ref: string,
+  referencedBy: string,
+): boolean {
+  const escaped = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`);
+  return nodes.some(
+    (t) =>
+      t.kind === "tactic" &&
+      t.phase !== "done" &&
+      t.id !== referencedBy &&
+      (re.test(t.statement) || re.test(bodies.get(t.id) ?? "")),
+  );
+}
+
+/**
+ * Prose referential integrity: every backtick-quoted, id-shaped reference in a
+ * node's PROSE (not its structural edges) must resolve to a live or pruned
+ * node, be a forward reference to planned-but-uncommitted work, or be
+ * grandfathered by the baseline.
+ *
+ * `validateGraph` checks structural edges (parent/serves/blocked_by/…). This is
+ * the SEPARATE prose check: a node's `rationale`/`clarifications`/body can name
+ * a sibling node id in prose that does not exist on main (e.g. the sibling's own
+ * graph-commit lost a push race), and no structural rule catches it. Kept
+ * separate — `validateGraph` stays a pure function of `IntentionNode[]` alone;
+ * this needs the node bodies and the git-derived deleted-id set the caller
+ * gathers.
+ *
+ * Scanned fields per node: `statement`, `rationale` (when non-null),
+ * `attention.rationale` (when `attention` is non-null), every
+ * `clarifications[].answer`, and the node's markdown body (when present in
+ * `bodies`). The id-shape/backtick/classification logic is reused from
+ * `id-refs.ts` (same semantics as the digest's DANGLING-REFS table); the
+ * planned-reference exemption is `mentionsRef` (above), shared with the digest.
+ *
+ * `baseline` grandfathers pre-existing prose-dangling references (keys of the
+ * form `"<ref>|<referencedBy>"`) so the CI check does not retroactively break
+ * main; it should not grow going forward.
+ *
+ * Throws a single IntentionSchemaError listing ALL problems found, matching
+ * `validateGraph`'s collect-then-throw contract.
+ */
+export function validateGraphProseRefs(
+  nodes: IntentionNode[],
+  bodies: Map<string, string>,
+  deletedIds: string[],
+  baseline: Set<string>,
+): void {
+  const storeIds = new Set(nodes.map((n) => n.id));
+  const deleted = new Set(deletedIds);
+  // Vocabulary and kind prefixes are built the SAME way the digest's
+  // tableDanglingRefs builds them (current store ids ∪ deleted ids; prefixes
+  // derived from the vocabulary, never a hardcoded kind list).
+  const vocab = new Set<string>([...storeIds, ...deleted]);
+  const prefixes = new Set([...vocab].map((id) => id.split("-")[0]).filter((p) => p.length > 0));
+  const matchers = buildIdRefMatchers(prefixes);
+
+  const problems: string[] = [];
+  for (const node of nodes) {
+    // Every prose field to scan for this node.
+    const texts: string[] = [node.statement];
+    if (node.rationale !== null) texts.push(node.rationale);
+    if (node.attention !== null) texts.push(node.attention.rationale);
+    for (const c of node.clarifications) texts.push(c.answer);
+    const body = bodies.get(node.id);
+    if (body !== undefined) texts.push(body);
+
+    // Dedup refs across the node's fields so one (node, ref) pair is at most one
+    // problem even when the ref appears in both, say, rationale and body.
+    const refs = new Set<string>();
+    for (const text of texts) {
+      for (const ref of extractIdRefs(text, matchers, vocab, node.id)) refs.add(ref);
+    }
+    for (const ref of refs) {
+      if (classifyRef(ref, storeIds, deleted) !== "missing") continue;
+      if (mentionsRef(nodes, bodies, ref, node.id)) continue; // planned forward reference
+      if (baseline.has(`${ref}|${node.id}`)) continue; // grandfathered
+      problems.push(
+        `${node.id}: prose reference \`${ref}\` does not resolve to a node ` +
+          `(not planned by any open tactic, not baselined)`,
+      );
+    }
+  }
+  if (problems.length > 0) {
+    throw new IntentionSchemaError(`Prose reference violations:\n${problems.join("\n")}`);
   }
 }

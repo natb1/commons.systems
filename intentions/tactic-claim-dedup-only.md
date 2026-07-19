@@ -48,8 +48,7 @@ attention: null
 phase: implement
 execution: null
 validates: []
-blocked_by:
-  - tactic-align-tactics-self-claim-collision
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
