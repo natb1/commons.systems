@@ -8,12 +8,14 @@ owner: ai
 status: codified
 parent: null
 rationale: "Retained from the 2026-07-09 /align-strategy review round, replanned
-  2026-07-19: the node has grown to 77 clarifications with 14 identified
-  superseded-in-place chains (a later entry explicitly amends or replaces an
-  earlier one) plus dense, settled router-mechanism detail (fuses, fingerprints,
-  quorum floors, claiming semantics, serialization) recorded at dialectic grain
-  across roughly two-thirds of the array — a design document wearing a strategy
-  node. kind-strategy's body-function rule (2026-07-09) names the strategy body
+  2026-07-19 and corrected 2026-07-19 (opus validation pass caught a dropped
+  entry and two broken cross-references — see the Correction note in the body):
+  the node has grown to 78 clarifications with 14 identified superseded-in-place
+  chains (a later entry explicitly amends or replaces an earlier one) plus
+  dense, settled router-mechanism detail (fuses, fingerprints, quorum floors,
+  claiming semantics, serialization) recorded at dialectic grain across the
+  majority of the array — a design document wearing a strategy node.
+  kind-strategy's body-function rule (2026-07-09) names the strategy body
   as the fold-target. The store-side blocker that had this tactic on hold —
   non-tactic node bodies being regenerated/cosmetic on every write, so a
   strategy body could not durably hold folded content — cleared 2026-07-19 when
@@ -21,9 +23,9 @@ rationale: "Retained from the 2026-07-09 /align-strategy review round, replanned
   (store.ts now preserves every kind's body verbatim; only a brand-new file gets
   the placeholder). This tactic performs the fold: settled router mechanism
   moves into topic-organized body sections, superseded-in-place chains compress
-  to short in-array pointers, and the clarifications array shrinks to its live,
-  still-being-decided remainder (about 12 of the current 77 entries) plus the
-  pointers — shrinking the surface where ordinal-citation bugs breed."
+  to short in-array pointers, and the clarifications array shrinks to its
+  remainder (about 12 of the current 78 entries) plus the pointers — shrinking
+  the surface where ordinal-citation bugs breed."
 reading: null
 gap: null
 serves:
@@ -46,9 +48,18 @@ attributes: {}
 
 ## Context
 
+**Correction (2026-07-19, opus validation pass):** the version of this plan
+first landed miscounted the array at 77 entries and dropped entry 78
+entirely (a real, later-authored entry that amends entry 58's
+implementation-vehicle assignment — folded into Unit 4 below). The same pass
+found two broken cross-references in Unit 2 (pointing at a unit/section that
+does not own the content being referenced) and a stale/overclaimed premise in
+the soft-freeze note below. All are fixed in this revision; see each unit for
+the specific correction.
+
 `strategy-graph-native-dispatch` (`intentions/strategy-graph-native-dispatch.md`)
-has accumulated 77 `clarifications:` entries across many `/align-strategy`
-design rounds. Roughly two-thirds of them (~65 of 77) are either (a) settled
+has 78 `clarifications:` entries across many `/align-strategy` design
+rounds. The majority of them (~66 of 78) are either (a) settled
 router-mechanism detail — fingerprint/freeze gates, worktree claiming,
 serialization, pace/backlog, phase transitions, recovery, review/QA
 disposition, execution substrate, fuses — recorded at dialectic grain, or (b)
@@ -59,8 +70,29 @@ place. Per `kind-strategy`'s body-function rule (2026-07-09,
 body, not the live clarification list — the strategy has become "a design
 document wearing a strategy node" (this tactic's own rationale). This tactic
 folds that settled content into topic-organized body sections and compresses
-the array to its live remainder plus short pointers, so the array reads as
-the current dialectic record instead of a 77-entry history.
+the array to its remainder plus short pointers, so the array reads as the
+current dialectic record instead of a 78-entry history.
+
+The ~12-entry remainder this plan leaves untouched (Unit 7's complement list)
+is **not** uniformly "still-being-decided" — a spot check found several read
+as settled doctrine (align-family conventions, drift-review process,
+provenance conventions) that is simply outside this tactic's router-mechanism
++ superseded-chain scope, not undecided. Do not force these into
+`## Router Mechanism` sections; leaving settled-but-out-of-scope doctrine as
+ordinary clarification entries is correct, only genuinely undecided posture
+and router-mechanism/chain content are this tactic's concern. One of the
+twelve, entry 69, cites "the backlog flag" (entry 9's mechanism) as still
+active alongside calculated attention (entry 11) — on its face this looks
+inconsistent with entry 11 "deleting the backlog flag" (Unit 4's chain
+below), but entry 69's own citations are by position (`clarification 9`,
+`clarification 11`), and positions never change under this fold (only the
+cited entries' `answer:` text shortens to a pointer) — so entry 69's
+citations keep resolving correctly and require no edit. Unit 4 should still
+sanity-check this apparent inconsistency against current mechanism (does an
+authored "backlog" label still exist as a naming convention distinct from the
+calculated-attention ranking formula, or is entry 69 using stale language?)
+and, if entry 69 does turn out to be stale, fix it with a minimal two-line
+addendum rather than treating that as this tactic's own scope creep.
 
 This was blocked on `tactic-nontactic-body-durability` — until 2026-07-19,
 `writeNode` regenerated every non-tactic body from `statement` on every
@@ -70,7 +102,7 @@ shipped on PR #2890 (`store.ts`'s `readExistingBody` /
 `assertNoBodyLoss` now cover every kind); this tactic is unblocked.
 
 **On `tactic-clarification-citation-ids` (id-based citation):** that tactic's
-own Unit 3 explicitly defers a "big-bang rewrite" of this node's 77-entry
+own Unit 3 explicitly defers a "big-bang rewrite" of this node's 78-entry
 history and says ordinal references "upgrade opportunistically as nodes are
 next amended" — this fold *is* that opportunistic amendment. At authoring
 time (2026-07-19, `origin/main` at `57c7452d`) `tactic-clarification-citation-
@@ -92,11 +124,15 @@ runs, prefer `<node-id>#<slug>` citations instead and mint slugs via
 `strategyFingerprint(strategy)` (`packages/intentionsutil/src/router.ts`),
 which could soft-freeze any open child tactic whose
 `execution.strategy_fingerprint["strategy-graph-native-dispatch"]` entry is
-stamped. At authoring time all 25 currently-open child tactics of this
-strategy carry `execution: null` (bootstrap-interim — the router has not yet
-populated an execution object for any of them), so there is nothing to
-re-stamp today. Unit 7 below re-checks this at execution time, since new
-children may have opened between now and then.
+stamped. The open-child count is a moving target under active concurrent
+work — it was 25 at this plan's first authoring and 33 (19 with a populated
+`execution` object) a few hours later at the correction pass — so never trust
+a number quoted here; what matters is that **zero** of them, at either
+check, carried a non-null `execution.strategy_fingerprint` entry for this
+strategy (bootstrap-interim: the router does not yet stamp fingerprints even
+where it has populated other `execution` fields), so there is nothing to
+re-stamp today. Unit 7 below re-runs this query live at execution time — its
+result is the only one that matters, not this paragraph's snapshot.
 
 **Line numbers below anchor to `origin/main` at `57c7452d` (2026-07-19).**
 Earlier units in this plan edit the same file, so line numbers drift as the
@@ -126,10 +162,9 @@ but the in-array pointer is what keeps the chain legible without opening
 **Scope:**
 
 - Add `## Router Mechanism` as a new top-level heading in
-  `intentions/strategy-graph-native-dispatch.md`'s body (after the existing
-  `# tactic-graph-native-dispatch-fold`... — no, after the strategy's own
-  `# <statement>` title line, which is currently the body's only content),
-  with a one-paragraph intro noting this section holds settled router/graph
+  `intentions/strategy-graph-native-dispatch.md`'s body, after the strategy's
+  own `# <statement>` title line (currently the body's only content), with a
+  one-paragraph intro noting this section holds settled router/graph
   mechanism moved down from the clarification history per the body-function
   rule, organized by topic.
 - Add `### Phase Transitions & Fix State` under it, folding: entries 1, 3,
@@ -175,9 +210,13 @@ mechanism is a judgment call, not a mechanical transcription).
   heading here instead), folding entries 10, 34, 36, 39, 66, 70, 73, 75 and
   two chains:
   - **Chain — mid-flight-edit rule → scope fingerprint → chain of
-    custody**: entries 34 → 36 → 39, amended by 62 and scoped by 73 (62 and
-    73 are folded by Units 1 and 5 respectively — cross-reference them by
-    section name rather than re-stating their content here). Record: entry
+    custody**: entries 34 → 36 → 39, amended by 62 (timing) and scoped by 73
+    (materiality). **Correction (2026-07-19): the original text of this plan
+    said 62 and 73 are "folded by Units 1 and 5 respectively" — wrong on
+    both counts. Entry 62 is folded by Unit 6, §Execution Substrate (its
+    own content is the tick's two-phase timing, not a phase-transition
+    topic); entry 73 is folded by *this unit* (Unit 2), in the second chain
+    immediately below — it is not owned by any other unit.** Record: entry
     34's mid-flight-edit rule (an author edit to a claimed tactic's scope
     lands freely mid-phase; "its transition write stands"); entry 36
     superseding that with a tactic-scope fingerprint gate (mismatch holds
@@ -185,9 +224,10 @@ mechanism is a judgment call, not a mechanical transcription).
     36's "holds and re-runs" clause with chain-of-custody (staleness
     demotes to `phase: implement`, requiring an unbroken
     implement→qa→review re-run against the merge-time scope fingerprint).
-    State 39's rule as current, with forward-pointers to §Phase Transitions
-    & Fix State (for 62's timing change) and §Recovery & Review Disposition
-    (for 73's materiality scoping).
+    State 39's rule as current, with a forward-pointer to §Execution
+    Substrate (Unit 6) for 62's timing change, and a same-section
+    backward-pointer to this section's second chain below for 73's
+    materiality scoping (no cross-unit pointer needed for 73).
   - **Chain — soft-freeze → materiality-scoped freeze → scope-inert
     restamp**: entries 10 → 70 → 73. Entry 10's strategy-substance
     fingerprint (statement/clarifications/conditions/serves/signal) stamped
@@ -195,9 +235,10 @@ mechanism is a judgment call, not a mechanical transcription).
     superseding this with materiality scoping (the editing round classifies
     each open child, re-stamping orthogonal ones in the same commit; stamp
     widens to `{hash, sha}`); entry 73 extending the same materiality
-    principle to the tactic-local scope-custody stamp from the other chain
-    above. State 70 and 73's rules as current (73 is also cross-referenced
-    from the other chain).
+    principle to the tactic-local scope-custody stamp from the chain above
+    (mid-flight-edit → scope fingerprint → chain of custody). Both entries
+    of this chain (70 and 73) are folded here, in this same section — state
+    both rules as current.
   - Non-chain entries: 36 (both gates bracketing a worker: start-gate and
     write-gate — note this is subsumed by the chain above, fold once), 66
     (fix decoupled from fingerprint/phase machinery — cross-reference
@@ -253,7 +294,19 @@ already-well-specified mechanism paragraphs — low ambiguity).
     extensible weighted sum of read-time-derived terms (authored
     override/boost, structural on-path signal membership, capture
     resolution) — and deletes the backlog flag. State 11's rule as
-    current.
+    current. **Before folding, check entry 69** (a live, untouched entry —
+    see Context's note above): it describes a tactic "marked with the
+    backlog flag ... at decomposition" alongside calculated-attention
+    ranking, which reads as if the backlog flag still exists post-11. Entry
+    69's own positional citations (`clarification 9`, `clarification 11`)
+    remain valid after this fold regardless (positions don't change, only
+    `answer:` text shortens), so no edit to entry 69 is *required* — but
+    resolve the apparent inconsistency in this section's prose: either the
+    "backlog flag" persists today as an authored naming/tracking label
+    distinct from the ranking formula (in which case say so, and entry 69
+    is not stale), or entry 69 is using retired terminology (in which case
+    add a two-line addendum to entry 69 noting the terminology is
+    historical, without expanding entry 69 back to full prose).
   - **Chain — pace override / concurrency ceiling → single-node ceiling
     bypass**: entries 33, 49 → 76. Entry 33 fixed `max_concurrent_workers`
     as the one true global ceiling; entry 49 established that explicit
@@ -267,22 +320,36 @@ already-well-specified mechanism paragraphs — low ambiguity).
     priority label becomes `pace_exempt` (14); a signal's resolution
     ranking IS the owning node's authored boost, no new per-signal rank
     field (56).
-- `### Serialization & Commit` folds entries 2, 16, 58 and one chain:
-  - **Chain — manual-merge-park → automatic serialization**: entry 2 → 58.
-    Entry 2 fixed the single-node rebase-retry write path with same-node
-    races failing closed to a manual-merge park; entry 58 supersedes the
-    fail-closed clause with an automatic five-rung resolution ladder
-    (rebase auto-merge → field-level merge → stale-base re-read/re-apply →
-    model reconciliation → true-conflict park only), and node-id claiming
-    narrows to scheduling dedup that never blocks an edit. State 58's rule
-    as current.
+- `### Serialization & Commit` folds entries 2, 16, 58, 78 and one
+  three-link chain:
+  - **Chain — manual-merge-park → automatic serialization → ladder-vehicle
+    split**: entry 2 → 58 → 78. Entry 2 fixed the single-node rebase-retry
+    write path with same-node races failing closed to a manual-merge park;
+    entry 58 supersedes the fail-closed clause with an automatic five-rung
+    resolution ladder (rebase auto-merge → field-level merge → stale-base
+    re-read/re-apply → model reconciliation → true-conflict park only), and
+    node-id claiming narrows to scheduling dedup that never blocks an edit.
+    **Entry 78 (2026-07-19, added by the correction pass — the original
+    plan dropped this entry) amends 58's *implementation-vehicle*
+    assignment only, not its ladder doctrine**: layers 1–3 (the
+    deterministic, unit-testable rebase/merge/re-read steps) are owned by
+    the `graph-commit` script; layers 4–5 (model reconciliation and the
+    true-conflict park) are owned by the `dispatch-conflict` skill as an
+    opus subagent, since no script in the repo runs a scoped model
+    evaluation. `tactic-dispatch-conflict-greenfield` is `blocked_by
+    tactic-graph-commit-auto-serialization` to encode this ordering. State
+    58's ladder doctrine as current and unamended, with 78's
+    vehicle-ownership split stated as the current implementation
+    assignment on top of it — do not present 78 as superseding 58's
+    doctrine, only its vehicle assignment.
   - Non-chain entry: direct push accepted once a SHA carries the four
     required contexts, via a `graph/**` scratch-branch CI fast path (16).
-- Compress entries 2, 9, 11, 14, 16, 33, 49, 56, 58, 76 in `clarifications:`
-  to pointers.
+- Compress entries 2, 9, 11, 14, 16, 33, 49, 56, 58, 76, 78 in
+  `clarifications:` to pointers.
 
 **Recommended model:** opus (calculated attention and the five-rung
-serialization ladder are load-bearing, subtle mechanisms — get the
+serialization ladder are load-bearing, subtle mechanisms, and entry 78's
+doctrine-vs-vehicle distinction is an easy one to get wrong — get the
 "current rule" synthesis wrong here and a future reader mis-implements
 scheduling or commit-conflict handling).
 
@@ -410,11 +477,15 @@ consistent across units without contradiction is the hard part).
 - Compress entries 5, 17, 24, 25, 26, 35, 41, 42, 43, 45, 46, 47, 50, 54, 62,
   63, 67, 68, 71 in `clarifications:` to pointers.
 
-**Recommended model:** sonnet, except do the entry-67 discrepancy check
-(the grep + judgment call on whether to state the rename as settled or flag
-it as stale) at opus — if unsure which model to run the whole unit at, run
-it at opus; the discrepancy check is the one place this unit requires
-judgment rather than transcription.
+**Recommended model:** opus. **Correction (2026-07-19):** the original plan
+recommended sonnet with only the entry-67 discrepancy check bumped to opus.
+That under-models this unit: it is the largest single fold (19 entries, two
+chains) and carries the heaviest inter-unit cross-reference load of any unit
+in this plan (47→53 to Unit 1, 24's recovery role shared with Unit 5, 62
+referenced from Unit 2) — exactly the "cross-cutting" case the
+model-selection heuristic (`.claude/skills/implement-unit/SKILL.md`, lines
+31–39) reserves for opus. Run the whole unit at opus, not just the
+entry-67 check.
 
 ### Unit 7 — Consistency pass, fingerprint re-stamp check, and final compression
 
@@ -423,23 +494,31 @@ judgment rather than transcription.
 **Scope:**
 
 - Read the full amended `intentions/strategy-graph-native-dispatch.md` body
-  and frontmatter. Confirm every one of the 65 entries folded by Units 1–6
-  (listed above; the complement — currently entries 6, 7, 8, 27, 28, 32, 38,
-  44, 55, 57, 69, 74 by 1-indexed position at this plan's authoring time,
-  recompute at execution time since positions shift as entries compress —
-  see Reuse) is either still a full live entry (untouched) or a pointer of
-  the Units-intro form. No entry should be left as full original text where
-  a later entry in its chain superseded it — that is exactly the defect
-  this tactic exists to remove.
+  and frontmatter. Confirm every one of the 66 entries folded by Units 1–6
+  (listed above, including entry 78 added to Unit 4 by the correction pass;
+  the complement — currently entries 6, 7, 8, 27, 28, 32, 38, 44, 55, 57, 69,
+  74 by 1-indexed position at this plan's authoring time, recompute at
+  execution time since positions shift as entries compress — see Reuse) is
+  either still a full live entry (untouched) or a pointer of the Units-intro
+  form. No entry should be left as full original text where a later entry in
+  its chain superseded it — that is exactly the defect this tactic exists to
+  remove. **Do not trust the "77" or "65" figures anywhere in this plan's
+  prose if you find them** — the array has 78 entries as of the correction
+  pass and may have grown further by execution time; the authoritative count
+  is always `jq '.clarifications | length'` on a fresh dump, never a number
+  quoted in this plan.
 - Confirm no `### ` section under `## Router Mechanism` states a rule that
   contradicts another section's cross-reference to it (the cross-references
   authored in Units 2, 5, and 6 above are the ones to check first).
 - **Fingerprint re-stamp check**: re-run the open-children query from this
-  plan's Context section (see Reuse) against the current graph. If any
-  child tactic serving `strategy-graph-native-dispatch` now has a non-null
-  `execution.strategy_fingerprint["strategy-graph-native-dispatch"]` entry
-  (none did at this plan's authoring time — all 25 open children carried
-  `execution: null`), classify it: this fold changes no strategy posture
+  plan's Context section (see Reuse) against the current graph — do not
+  trust the open-child counts quoted in the Context section's soft-freeze
+  note (25 at first authoring, 33 a few hours later); only a fresh query
+  matters. If any child tactic serving `strategy-graph-native-dispatch` now
+  has a non-null `execution.strategy_fingerprint["strategy-graph-native-
+  dispatch"]` entry (none did at either check so far — check both the
+  `{hash, sha}` object form and the deprecated-legacy bare-string form, per
+  Reuse below), classify it: this fold changes no strategy posture
   (conditions, signal, scope, priority) and no rule's substance, only where
   the substance is recorded — so every such child classifies as orthogonal
   per the materiality-scoped freeze principle (§Fingerprint & Freeze, Unit
@@ -476,9 +555,16 @@ live classification judgment at that point, not just a query).
   `packages/intentionsutil/src/store.ts`, filtering
   `n.kind === "tactic" && (n.serves||[]).includes("strategy-graph-native-
   dispatch") && n.phase && n.phase !== "done"`, and reading each
-  `n.execution?.strategy_fingerprint?.["strategy-graph-native-dispatch"]`.
-  Run any such one-off script from outside a sandboxed shell (write it to a
-  scratch path, not inline `-e`, since `tsx`'s IPC pipe needs
+  `n.execution?.strategy_fingerprint`. That field's type
+  (`packages/intentionsutil/src/schema.ts`'s `StrategyFingerprint`-adjacent
+  types) is `string | Record<string, StrategyStampValue> | null` — a legacy
+  bare-string stamp is a different (older, single-strategy) shape than the
+  current per-strategy map, so index with
+  `typeof fp === "string" ? fp : fp?.["strategy-graph-native-dispatch"]`,
+  never a bare `fp["strategy-graph-native-dispatch"]` (that silently returns
+  `undefined` — a false "not stamped" — against a legacy bare-string
+  stamp). Run any such one-off script from outside a sandboxed shell (write
+  it to a scratch path, not inline `-e`, since `tsx`'s IPC pipe needs
   `dangerouslyDisableSandbox: true` in this repo's sandbox).
 - This skill's (`align-tactics`) own Idempotency section's
   `grep -rl '^  - <strategy-id>$' intentions/tactic-*.md` recipe, for a
@@ -503,11 +589,12 @@ Prose:
   original `question:` text verbatim and its original recorded date —
   diff the before/after array and confirm no date or question was altered
   or dropped, only the `answer:` text shortened to a pointer.
-- The ~12 entries this plan classifies as live (untouched) still read as
-  live, undecided posture (conditions, scope, priority) — not settled
-  mechanism that should have been folded. If Unit 7 finds one that should
-  have been folded, fold it there rather than leaving the gap for a future
-  round.
+- The ~12 entries this plan leaves untouched still read as either genuinely
+  undecided posture (conditions, scope, priority) or settled doctrine that
+  is legitimately out of this tactic's router-mechanism + superseded-chain
+  scope (see Context's note on this) — not settled *router mechanism* that
+  should have been folded. If Unit 7 finds one that should have been
+  folded, fold it there rather than leaving the gap for a future round.
 - The strategy's `statement`, `rationale`, `success_signal`, `reading`,
   `gap`, `attributes.conditions`, and `serves` are byte-for-byte unchanged
   by this tactic — only `clarifications:` (compression) and the body

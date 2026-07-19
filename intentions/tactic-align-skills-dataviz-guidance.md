@@ -25,13 +25,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-align-skills-dataviz-guidance
   pr: 2907
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []
