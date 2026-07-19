@@ -62,7 +62,7 @@ interface Args {
   dir: string;
 }
 
-/** Today's date in UTC as YYYY-MM-DD — the `FixState.since` stamp. */
+/** Today's date in UTC, formatted YYYY-MM-DD — the `FixState.since` stamp. */
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -185,7 +185,10 @@ export function applyFixState(args: Args): FixStateResult {
       `apply-fix-state: --record-push on ${args.id} but execution.fix is null (no interrupt in flight to record a push against)`,
     );
   }
-  const sha = args.pushedSha as string;
+  if (args.pushedSha === null) {
+    throw new Error("apply-fix-state: --record-push requires a sha (mode is 'record' but pushedSha is null)");
+  }
+  const sha = args.pushedSha;
   node.execution = { ...execution, fix: { ...currentFix, pushed_sha: sha } };
   writeNode(args.dir, node);
   return { mode: "record", id: args.id, wrote: true, pushed_sha: sha };
