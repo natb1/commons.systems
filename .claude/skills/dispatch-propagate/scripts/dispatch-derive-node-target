@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# dispatch-derive-node-target — shared front-door target-derivation script for
+# the graph-native tactic phase skills (tactic-dispatch-skill-input-contract
+# Unit 1). Replaces each phase skill's hand-rolled branch-name parsing +
+# sed/git-archive dance with one scripted call: validate the node id, confirm
+# the current worktree branch matches it, snapshot the node from origin/main,
+# read it via the intentionsutil store primitives, gate on the expected phase,
+# and (optionally) resolve the open PR.
+#
+# Usage: dispatch-derive-node-target <node-id> --expect-phase <phase> [--pr-mode none|optional|required]
+#
+#   <node-id>        The node id this session is operating on. Must match the
+#                     node-id slug regex AND the current checked-out branch
+#                     name (tactic phase worktrees are branch==node-id, mirrors
+#                     dispatch-graph-execute's provisioning contract).
+#   --expect-phase    Required. The phase the caller expects the node to be
+#                     persisted at. Mismatch is a stale-selection signal (exit
+#                     3), not a usage error — the caller decides how to react.
+#   --pr-mode         none (default): skip PR resolution, never calls gh.
+#                     optional: resolve the open PR if one exists; empty is
+#                     NOT an error.
+#                     required: resolve the open PR; empty PR IS an error
+#                     (exit 4).
+#
+# Stdout (success only):
+#   === NODE <node-id> ===
+#   PHASE: <phase>
+#   PR: <num>|none
+#   === NODE-JSON ===
+#   <compact single-line JSON — the full readNode() frontmatter object>
+#   === NODE-BODY ===
+#   <raw markdown body, verbatim>
+#
+# Exit codes:
+#   0  success
+#   1  node-not-found / read-failure (absent from origin/main, or the store
+#      primitives failed to read it)
+#   2  usage error (bad node-id, missing --expect-phase) or branch mismatch
+#   3  phase mismatch (--expect-phase does not match the node's persisted phase)
+#   4  --pr-mode required and no open PR was found
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+
+usage() {
+  echo "usage: dispatch-derive-node-target <node-id> --expect-phase <phase> [--pr-mode none|optional|required]" >&2
+}
+
+NODE_ID="${1:-}"
+if [[ -z "$NODE_ID" ]]; then
+  usage
+  exit 2
+fi
+shift || true
+
+if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  echo "dispatch-derive-node-target: invalid node id '$NODE_ID' (must match ^[a-z][a-z0-9]*(-[a-z0-9]+)*\$)" >&2
+  exit 2
+fi
+
+EXPECT_PHASE=""
+PR_MODE="none"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --expect-phase)
+      EXPECT_PHASE="${2:-}"
+      shift 2 ;;
+    --pr-mode)
+      PR_MODE="${2:-}"
+      shift 2 ;;
+    *)
+      echo "dispatch-derive-node-target: unexpected argument '$1'" >&2
+      usage
+      exit 2 ;;
+  esac
+done
+
+if [[ -z "$EXPECT_PHASE" ]]; then
+  echo "dispatch-derive-node-target: --expect-phase is required and must be non-empty" >&2
+  usage
+  exit 2
+fi
+
+case "$PR_MODE" in
+  none|optional|required) ;;
+  *)
+    echo "dispatch-derive-node-target: --pr-mode must be one of none|optional|required, got '$PR_MODE'" >&2
+    usage
+    exit 2 ;;
+esac
+
+# --- Step 2: branch consistency check ----------------------------------------
+CUR_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$CUR_BRANCH" != "$NODE_ID" ]]; then
+  echo "dispatch-derive-node-target: current branch '$CUR_BRANCH' does not match node id '$NODE_ID'" >&2
+  exit 2
+fi
+
+# --- Step 3: snapshot intentions/<node-id>.md from origin/main --------------
+git fetch origin main --quiet
+
+SNAP_DIR="$(mktemp -d)" || { echo "dispatch-derive-node-target: mktemp failed" >&2; exit 1; }
+trap 'rm -rf "$SNAP_DIR"' EXIT
+
+if ! git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -x -C "$SNAP_DIR"; then
+  echo "dispatch-derive-node-target: node '$NODE_ID' not found at origin/main (intentions/$NODE_ID.md)" >&2
+  exit 1
+fi
+
+# --- Step 4: read the node via the intentionsutil store primitives ----------
+COMBINED_JSON="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+  const { readNode, readNodeBody } = await import("./packages/intentionsutil/src/store.js");
+  const id = process.argv[1];
+  process.stdout.write(JSON.stringify({ node: readNode(process.argv[2], id), body: readNodeBody(process.argv[2], id) }));
+' "$NODE_ID" "$SNAP_DIR/intentions") )"
+if [[ $? -ne 0 || -z "$COMBINED_JSON" ]]; then
+  echo "dispatch-derive-node-target: could not read node '$NODE_ID' from the origin/main snapshot" >&2
+  exit 1
+fi
+
+# --- Step 5: phase gate --------------------------------------------------
+ACTUAL_PHASE="$(jq -r '.node.phase' <<<"$COMBINED_JSON")"
+if [[ "$ACTUAL_PHASE" != "$EXPECT_PHASE" ]]; then
+  echo "dispatch-derive-node-target: node '$NODE_ID' is at phase '$ACTUAL_PHASE', expected '$EXPECT_PHASE'" >&2
+  exit 3
+fi
+
+# --- Step 6: PR resolution ------------------------------------------------
+PR_NUM=""
+if [[ "$PR_MODE" == "optional" || "$PR_MODE" == "required" ]]; then
+  PR_NUM="$(gh pr list --head "$NODE_ID" --state open --json number --jq '.[0].number // empty')"
+  if [[ "$PR_MODE" == "required" && -z "$PR_NUM" ]]; then
+    echo "dispatch-derive-node-target: --pr-mode required but no open PR was found for '$NODE_ID'" >&2
+    exit 4
+  fi
+fi
+
+# --- Step 7: emit -----------------------------------------------------------
+printf '=== NODE %s ===\n' "$NODE_ID"
+printf 'PHASE: %s\n' "$ACTUAL_PHASE"
+if [[ -n "$PR_NUM" ]]; then
+  printf 'PR: %s\n' "$PR_NUM"
+else
+  printf 'PR: none\n'
+fi
+printf '=== NODE-JSON ===\n'
+jq -c '.node' <<<"$COMBINED_JSON"
+printf '=== NODE-BODY ===\n'
+jq -r '.body' <<<"$COMBINED_JSON"
+
+exit 0
