@@ -21226,6 +21226,20 @@ echo called >> "$STUB_DIR/auto-merge-calls.log"
 exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/dispatch-auto-merge"
+  # tactic-graph-tick-node-lane-auto-merge Unit 3: fake graph-auto-merge invoked
+  # by the node-lane Step 1d (cont.) block, gated on the same OPEN_MB condition
+  # as dispatch-auto-merge above. Logs its invocation and emits a configurable
+  # merge line so a wiring test can assert the tick prefixes it with `merge: `.
+  # The real merge logic has its own unit tests (graph-auto-merge); here we only
+  # verify the tick wiring.
+  cat > "$TMPDIR_TEST/graph-auto-merge" <<'FAKE'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
+echo called >> "$STUB_DIR/graph-auto-merge-calls.log"
+[[ -n "${SEL_GRAPH_AUTO_MERGE_OUT:-}" ]] && printf '%s\n' "$SEL_GRAPH_AUTO_MERGE_OUT"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/graph-auto-merge"
   # #1812: fake dispatch-retriage-orphaned-followups invoked unconditionally by
   # Step 2e. Logs its invocation and emits a configurable line so a wiring test
   # can assert the tick prefixes it with `retriage: `. SILENT by default (emits
@@ -21388,7 +21402,7 @@ sel_tick_teardown() {
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
-    SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT \
+    SEL_AUTO_MERGE_OUT SEL_GRAPH_AUTO_MERGE_OUT SEL_RETRIAGE_OUT \
     SEL_MAIN_BROKEN_SHA SEL_SYNC_BROKEN_LATCHED SEL_JIT_SCAN \
     SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_CENSUS_OUT \
     SEL_CALENDAR_OUT SEL_STATEMENTS_OUT \
@@ -21606,6 +21620,49 @@ else
 fi
 assert_eq "auto-merge suppressed: dispatch-auto-merge NOT invoked" "absent" \
   "$([[ -f "$STUB_DIR/auto-merge-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 1d (cont.): node-lane auto-merge wiring, main healthy → invoked -----
+# (tactic-graph-tick-node-lane-auto-merge Unit 3). main is healthy (no
+# main-broken-open.txt → OPEN_MB empty), so the node-lane block runs
+# graph-auto-merge and prefixes each of its lines with `merge: `, the same
+# prefix convention the issue-lane block uses. The fake emits
+# SEL_GRAPH_AUTO_MERGE_OUT.
+echo "Test: select-tick node-lane auto-merge wiring (main healthy) → merge: line, graph-auto-merge invoked"
+sel_tick_setup
+export SEL_GRAPH_AUTO_MERGE_OUT="merged #77 (tactic-y)"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if grep -q '^merge: merged #77 (tactic-y)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'merge: merged #77 (tactic-y)'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'merge: merged #77 (tactic-y)'"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "node-lane auto-merge wiring: graph-auto-merge invoked" "present" \
+  "$([[ -f "$STUB_DIR/graph-auto-merge-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 1d (cont.): node-lane auto-merge suppressed while main is broken ----
+# (tactic-graph-tick-node-lane-auto-merge Unit 3). An open main-broken latch
+# (OPEN_MB non-empty) suppresses the node-lane block exactly like it suppresses
+# the issue-lane block: graph-auto-merge is NOT invoked and no `merge:` line
+# attributable to it is emitted, even though the fake would emit one if called.
+echo "Test: select-tick node-lane auto-merge suppressed while main is broken"
+sel_tick_setup
+export SEL_MAIN_BROKEN_SHA=redsha1
+printf '99\n' > "$STUB_DIR/main-broken-open.txt"
+export SEL_GRAPH_AUTO_MERGE_OUT="merged #77 (tactic-y)"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'merge: merged #77' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: no node-lane 'merge:' line while main is broken"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no node-lane 'merge:' line while main is broken"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "node-lane auto-merge suppressed: graph-auto-merge NOT invoked" "absent" \
+  "$([[ -f "$STUB_DIR/graph-auto-merge-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- Step 2e: re-triage orphaned follow-ups wiring (#1812) -------------------

@@ -445,6 +445,24 @@ if [[ -z "$OPEN_MB" ]]; then
   fi
 fi
 
+# --- Step 1d (cont.): node-lane auto-merge (tick-owned) ----------------------
+# Graph-lane analog of the issue-lane auto-merge block above, gated on the SAME
+# OPEN_MB main-known-good condition: a node-lane merge must be suppressed while
+# main is broken or main health is UNKNOWN, exactly like the issue-lane merge.
+# graph-auto-merge merges reviewed node-lane PRs this tick, keyed off each
+# node's `reviewed` execution marker. reconcile-graph-merged (below, which runs
+# unconditionally and already honors a grace window via its GRACE/AGE check)
+# absorbs the merge to done/main-qa on a subsequent tick, so it never races a
+# still-settling merge from this tick.
+if [[ -z "$OPEN_MB" ]]; then
+  GRAPH_MERGE_OUT=$("$SCRIPT_DIR/graph-auto-merge") || true
+  if [[ -n "$GRAPH_MERGE_OUT" ]]; then
+    while IFS= read -r merge_line; do
+      [[ -n "$merge_line" ]] && echo "merge: $merge_line"
+    done <<< "$GRAPH_MERGE_OUT"
+  fi
+fi
+
 # --- Step 1d (cont.): post-merge reconciliation (#2512) ----------------------
 # Closes any issue GitHub's merge-time auto-close silently left OPEN (see #2481).
 # Runs unconditionally (NOT gated on $OPEN_MB): it merges nothing, only repairs
