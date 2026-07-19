@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# reconcile-graph-review-stall — the review-stall recovery sweep
+# (tactic-graph-review-exclusion-stall-recovery Unit 2). Sibling of
+# reconcile-graph-merged: it absorbs out-of-band PR events for open
+# graph-native tactics that are STUCK in phase:review with the `reviewed`
+# marker (armed auto-merge), rather than terminal ones.
+#
+# A phase:review + reviewed tactic is excluded from selector candidates
+# entirely (router.ts's REVIEWED_MARKER exclusion), so the normal
+# graph-select-target CI-red gate — which only runs on candidates the
+# selector already emits — never gets a chance to run on it. If the armed
+# merge cannot complete (CI turns red, or the PR goes CONFLICTING), the node
+# would otherwise be stranded forever. This sweep independently polls each
+# such node's PR and, when a regression is detected, enters the CI-fix
+# interrupt directly (the same execution.fix write graph-select-target's
+# _gate_maybe_interrupt would have made), which the router.ts fix-aware
+# carve-out (tactic-graph-review-exclusion-stall-recovery) then re-surfaces
+# as a `fix` candidate on the next selection tick.
+#
+# A still-OPEN PR with no regression, or one whose mergeability is still
+# UNKNOWN (GitHub computes it asynchronously and self-heals), is a no-op —
+# not a signal this sweep should act on. A merged/closed PR is
+# reconcile-graph-merged's job, not this sweep's.
+#
+# Doctrine: run from a main-based checkout (the sweep writes state-only
+# commits on main). Sandbox: the CALLER wraps every invocation with
+# dangerouslyDisableSandbox — gh needs network + TLS, and node --import
+# tsx/esm needs the npm cache (see .claude/rules/sandbox.md).
+#
+# Stdout protocol: exactly `recovered <id> -> fix (ci=<verdict> merge=<state>)`
+# per tactic acted on; NOTHING for a skip.
+#
+# Exit codes: 0 always (including a no-op sweep and any per-node error —
+# best-effort, matching reconcile-graph-merged's doctrine); 1 only for a hard
+# failure that prevents the sweep from running at all (e.g. the enumeration
+# one-liner itself erroring).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
+
+# --- Enumerate stranded review+reviewed tactics ------------------------------
+# One node pass: print `<id>\t<pr>` for every tactic at phase:review carrying
+# the `reviewed` marker, with no interrupt already active (defensive — should
+# always hold given the selector exclusion, but skip rather than double-enter
+# if it doesn't) and a non-null execution.pr.
+CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+  const { listNodes } = await import("./packages/intentionsutil/src/store.js");
+  const { REVIEWED_MARKER } = await import("./packages/intentionsutil/src/transitions.js");
+  for (const n of listNodes("./intentions")) {
+    if (n.kind !== "tactic") continue;
+    if (n.phase !== "review") continue;
+    if (!n.execution || !n.execution.markers.includes(REVIEWED_MARKER)) continue;
+    if (n.execution.fix != null) continue;
+    const pr = n.execution.pr;
+    if (pr === null || pr === undefined) continue;
+    process.stdout.write(n.id + "\t" + pr + "\n");
+  }
+') )" || { echo "reconcile-graph-review-stall: node enumeration failed" >&2; exit 1; }
+
+[[ -z "$CANDIDATES" ]] && exit 0
+
+# --- Per candidate: poll the PR, decide, and land its own graph-commit -------
+while IFS=$'\t' read -r id pr; do
+  [[ -n "$id" && -n "$pr" ]] || continue
+
+  PR_JSON=$(gh_pr_view_rest "$pr" 2>/dev/null) || {
+    echo "reconcile-graph-review-stall: gh_pr_view_rest #$pr for $id failed" >&2
+    continue
+  }
+  [[ -n "$PR_JSON" ]] || {
+    echo "reconcile-graph-review-stall: gh_pr_view_rest #$pr for $id returned empty" >&2
+    continue
+  }
+
+  STATE=$(jq -r '.state' <<<"$PR_JSON")
+  if [[ "$STATE" != "OPEN" ]]; then
+    continue   # merged/closed — reconcile-graph-merged's job
+  fi
+
+  MERGEABLE=$(jq -r '.mergeable' <<<"$PR_JSON")
+  HEAD_SHA=$(jq -r '.headRefOid' <<<"$PR_JSON")
+
+  RAW_VERDICT=$(dispatch_ci_verdict_rest "$HEAD_SHA" 2>/dev/null) || RAW_VERDICT=""
+  case "$RAW_VERDICT" in
+    passing|failing) VERDICT="$RAW_VERDICT" ;;
+    *) VERDICT="unknown" ;;   # pending or a call failure — not a regression
+  esac
+
+  NEEDS_RECOVERY=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+    const { needsReviewStallRecovery } = await import("./packages/intentionsutil/src/transitions.js");
+    const ci = process.argv[1];
+    const mergeable = process.argv[2];
+    process.stdout.write(String(needsReviewStallRecovery(ci, mergeable)));
+  ' "$VERDICT" "$MERGEABLE") ) || {
+    echo "reconcile-graph-review-stall: needsReviewStallRecovery eval failed for $id" >&2
+    continue
+  }
+
+  [[ "$NEEDS_RECOVERY" == "true" ]] || continue
+
+  if ! node --import tsx/esm "$UTIL_SCRIPTS/apply-fix-state.ts" "$id" --set-fix --dir "$REPO_ROOT/intentions" >/dev/null; then
+    echo "reconcile-graph-review-stall: apply-fix-state --set-fix failed for $id" >&2
+    continue
+  fi
+
+  if ! "$GRAPH_COMMIT" -m "graph: enter fix-interrupt on stalled review $id (ci=$VERDICT merge=$MERGEABLE)" "$id"; then
+    echo "reconcile-graph-review-stall: graph-commit failed for $id (fix state applied on disk, not landed)" >&2
+    continue
+  fi
+
+  echo "recovered $id -> fix (ci=$VERDICT merge=$MERGEABLE)"
+done <<<"$CANDIDATES"
+
+exit 0

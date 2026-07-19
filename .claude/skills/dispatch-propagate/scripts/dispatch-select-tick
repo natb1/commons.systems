@@ -474,6 +474,22 @@ if [[ -n "$RECONCILE_GRAPH_OUT" ]]; then
   done <<< "$RECONCILE_GRAPH_OUT"
 fi
 
+# Review-stall recovery sweep (tactic-graph-review-exclusion-stall-recovery
+# Unit 2). Runs unconditionally and best-effort right after reconcile-graph-
+# merged absorbs what it can: it only acts on a still-OPEN PR (never races the
+# merged/closed case reconcile-graph-merged owns) and only enters a fix
+# interrupt on a regressed node (a strictly additive, reversible write —
+# apply-fix-state --clear-fix resolves it later), so it is safe during a
+# main-broken episode. This whole script already runs with the sandbox
+# disabled (see the header note), covering the new script's gh (TLS) + node
+# --import tsx/esm (npm cache) needs — no new sandbox wiring required.
+REVIEW_STALL_OUT=$("$SCRIPT_DIR/reconcile-graph-review-stall") || true
+if [[ -n "$REVIEW_STALL_OUT" ]]; then
+  while IFS= read -r stall_line; do
+    [[ -n "$stall_line" ]] && echo "review-stall: $stall_line"
+  done <<< "$REVIEW_STALL_OUT"
+fi
+
 # Standing per-tick reconciliation-debt duty (tactic-graph-census-recurrence
 # Unit 2). Runs right after the same-tick reconciler above absorbs what it can,
 # so what remains is the persistent owed-prune / orphan debt a census must

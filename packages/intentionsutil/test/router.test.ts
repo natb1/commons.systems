@@ -183,6 +183,20 @@ describe("tactic eligibility", () => {
     expect(candidateIds(nodes)).toEqual([]);
   });
 
+  it("re-surfaces a phase:review reviewed tactic as a fix candidate once execution.fix is set", () => {
+    const fix = { since: "2026-07-18", attempt: 1, pushed_sha: null };
+    const nodes = [
+      tactic({
+        id: "tactic-review-stalled",
+        phase: "review",
+        execution: { ...exec({ markers: ["reviewed"] }), fix },
+      }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    expect(candidateIds(nodes)).toEqual(["tactic-review-stalled"]);
+    expect(sel.candidates[0]).toMatchObject({ id: "tactic-review-stalled", phase: "fix" });
+  });
+
   it("still selects a phase:review tactic without the 'reviewed' marker", () => {
     const nodes = [
       tactic({

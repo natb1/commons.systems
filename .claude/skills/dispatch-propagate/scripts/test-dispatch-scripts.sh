@@ -21233,6 +21233,7 @@ FAKE
   # byte-identical.
   for _hs in dispatch-reconcile-merged:SEL_RECONCILE_MERGED_OUT \
              reconcile-graph-merged:SEL_RECONCILE_GRAPH_OUT \
+             reconcile-graph-review-stall:SEL_REVIEW_STALL_OUT \
              dispatch-graph-census:SEL_CENSUS_OUT \
              dispatch-jit-calendar-import:SEL_CALENDAR_OUT \
              dispatch-statements-scan:SEL_STATEMENTS_OUT; do
@@ -21455,7 +21456,7 @@ sel_tick_teardown() {
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
     SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT \
     SEL_MAIN_BROKEN_SHA SEL_SYNC_BROKEN_LATCHED SEL_JIT_SCAN \
-    SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_CENSUS_OUT \
+    SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_REVIEW_STALL_OUT SEL_CENSUS_OUT \
     SEL_CALENDAR_OUT SEL_STATEMENTS_OUT \
     DISPATCH_DECISION_LOG_DIR
 }

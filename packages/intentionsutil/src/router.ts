@@ -286,7 +286,16 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     if (!isOpenTactic(t)) continue;
     if (frozenTacticIds.has(t.id)) continue;
     if (!blockersComplete(t, byId)) continue;
-    if (t.phase === "review" && t.execution?.markers.includes(REVIEWED_MARKER)) continue;
+    // A clean reviewed node (no active fix) stays excluded from re-selection —
+    // its armed auto-merge is tick-owned, not selector-owned. But once a
+    // review-stall reconciler (tactic-graph-review-exclusion-stall-recovery)
+    // enters execution.fix on a stranded node — because its armed merge
+    // cannot complete (CI red or PR CONFLICTING) and the normal
+    // graph-select-target CI-red gate never got a chance to run on it
+    // (candidates it never sees can't be gated) — the node must resume being
+    // surfaced, now as a `fix` candidate via the phase-override below, so
+    // /fix-checks can act and apply-fix-state --clear-fix can later resolve it.
+    if (t.phase === "review" && t.execution?.markers.includes(REVIEWED_MARKER) && t.execution?.fix == null) continue;
     candidates.push({
       id: t.id,
       kind: "tactic",
