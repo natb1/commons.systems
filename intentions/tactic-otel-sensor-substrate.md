@@ -27,13 +27,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-otel-sensor-substrate
   pr: 2900
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
@@ -150,3 +151,23 @@ Prose — the deliverable is an evaluation, not a runtime behavior change:
   this tactic.
 - No production routing or sensor behavior changes as a result of the evaluation
   alone; any adoption is a separate, author-approved follow-up.
+
+## needs-main residue
+
+Item filed by `/qa-fix` (PR #2900) — disposition `needs-main` (planned
+deferral), not machine-verifiable at this PR's merge time.
+
+- **id:** 8
+- **title:** Honest-deferral reframe is an acceptable deviation from literal
+  "before/after" verification prose
+- **url_path:** current
+- **expected_outcome:** A human confirms the deferral reframing is a
+  legitimate, author-level acceptable deviation and the memo's reasoning is
+  honest and sound — the live-trial before/after itself remains deferred to a
+  future ephemeral trial.
+- **finding:** The tactic explicitly states the live OTel trial was not run in
+  this sandboxed, network-isolated session and is left for a future ephemeral
+  docker-collector trial; the actual before/after subagent-attribution
+  measurement is deferred downstream, and whether the mechanism-comparison
+  reframe acceptably satisfies the literal verification prose is an author
+  call this QA pass cannot execute.
