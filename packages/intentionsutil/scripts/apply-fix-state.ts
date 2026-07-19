@@ -164,6 +164,16 @@ export function applyFixState(args: Args): FixStateResult {
   }
 
   if (args.mode === "clear") {
+    // Null-interrupt guard, mirroring `--record-push`: clearing a node that
+    // carries no active interrupt is meaningless, and — worse — would spuriously
+    // trip the re-review reset below on a `reviewed` node (resetting `phase` to
+    // `review` and stripping the marker, forcing a needless re-review and
+    // disarming a valid merge). Refuse rather than proceed unconditionally.
+    if (currentFix === null) {
+      throw new Error(
+        `apply-fix-state: --clear-fix on ${args.id} but execution.fix is null (no interrupt in flight to clear)`,
+      );
+    }
     // Resolve the interrupt. Re-review reset: a fix landed after review must be
     // re-reviewed, so return the node to `review` when it carries the reviewed
     // marker — AND strip that marker, so the review pass actually re-runs (both
