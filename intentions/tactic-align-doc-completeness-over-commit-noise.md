@@ -6,7 +6,7 @@ statement: In the align skills, record documentation where it is materially
   strategy clarification to a draft-tactic to keep the commit small; and measure
   any freeze/re-stamp cost via the authoritative predicate, not a grep
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Surfaced 2026-07-19: during the /align-strategy round recording the
   subagent-cwd invariant, Claude recommended draft-tactic-only over a strategy
@@ -28,7 +28,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: implement
 execution: null
 validates: []
 blocked_by: []
@@ -65,41 +65,85 @@ misjudgements the author corrected:
    recorded "verify freeze blast-radius via the selector, never grep; stamp
    coverage may be zero" — it predicted this exactly and was not applied.)
 
-## The instruction to encode in `/align-strategy`
+Both lessons belong in `/align-strategy` (the skill whose Step 5 makes exactly
+this record-vs-defer, cost-weighing decision) so future rounds neither trade
+documentation correctness for commit size nor misjudge that trade on a bad
+measurement.
 
-Fold both into `.claude/skills/align-strategy/SKILL.md` (Step 5, near the
-materiality-scoped-freeze / re-stamp guidance):
+## Unit 1 — Fold both rules into `align-strategy/SKILL.md` Step 5
 
-- **Documentation-completeness dominates commit size.** When an interview outcome
-  is materially a property of a strategy (an invariant of its contract, a
-  resolved edge case, a doctrine correction), record it as a strategy
-  clarification on that strategy — do **not** relocate it to a draft tactic to
-  reduce commit size or re-stamp count. Commit size is never a reason to put
-  documentation in the wrong place.
+**Scope.** `.claude/skills/align-strategy/SKILL.md`, Step 5. Insert one new
+subsection immediately before the existing `**Materiality-scoped freeze —
+classify each open child.**` paragraph at
+`.claude/skills/align-strategy/SKILL.md:477` (i.e. directly after the
+"Bundle any draft tactic nodes..." paragraph ending at line 470, before line
+477). Insert the following (matching the file's existing bold-lead-in bullet
+style used by the surrounding Step 5 prose):
 
-- **Measure freeze/re-stamp cost via the authoritative predicate, never a grep.**
-  Before weighing a clarification's re-stamp burden, compute the actual frozen
-  set with `readNode` + `isFingerprintStale` (or `strategyFingerprint` +
-  the stamp read the selector uses), not a text `grep` of the
-  `strategy_fingerprint` field — a null-valued key matches the grep but freezes
-  nothing. A cost estimate that drives a recording decision must come from the
-  same predicate the router uses.
+```markdown
+**Documentation completeness over commit size.** When an interview outcome is
+materially a property of the strategy under edit (an invariant of its
+contract, a resolved edge case, a doctrine correction), record it as a
+strategy clarification on that strategy — never relocate it to a draft tactic,
+or omit it, to keep the commit small or to avoid a re-stamp. Commit size is
+never a reason to put documentation in the wrong place; the materiality-scoped
+freeze below is what keeps a warranted clarification's *blast radius* small —
+it is not a reason to avoid recording the clarification itself.
 
-## Reuse / anchors
+**Measure freeze/re-stamp cost via the authoritative predicate, never a
+grep.** If a recording or materiality decision turns on how many open children
+a clarification would freeze, compute the actual set with `readNode` +
+`isFingerprintStale` (`packages/intentionsutil/src/transitions.ts`) — or
+`strategyFingerprint` (`packages/intentionsutil/src/router.ts`) plus the same
+per-child stamp read the router's selector uses — never a text `grep` over
+`strategy_fingerprint`. A `grep -c` (or similar) over that field counts the
+key line itself, so a null-valued stamp (`strategy_fingerprint: null` — not
+stale, per `isFingerprintStale`) is indistinguishable from a real one in the
+grep count and inflates the estimate. A cost estimate that drives a recording
+or materiality decision must come from the same predicate the router uses, not
+a text search.
+```
+
+Out of scope for this unit: no change to the *behavior* of the
+materiality-scoped freeze classification (the three buckets at
+`.claude/skills/align-strategy/SKILL.md:491-506`) — only the new prose
+directly above it, and only within Step 5. No other skill file changes.
+
+**Recommended model:** sonnet — a single well-specified prose insertion at a
+named anchor, no design judgment beyond matching the file's existing bullet
+style.
+
+**Dependencies:** none.
+
+## Reuse
 
 - `packages/intentionsutil/src/router.ts` — `strategyFingerprint` (hashes
   `clarifications`, so adding one changes the fingerprint).
 - `packages/intentionsutil/src/transitions.ts` — `isFingerprintStale`
   (`null` → not stale; bare string → stale iff `!==`; map → stale iff the
   strategy key's hash `!==`).
-- `.claude/skills/align-strategy/SKILL.md` Step 5 — materiality-scoped-freeze /
-  re-stamp guidance (where this instruction is folded in).
+- `.claude/skills/align-strategy/SKILL.md:477-520` — the existing
+  materiality-scoped-freeze / re-stamp section this unit's insertion sits
+  directly above; reuse its bold-lead-in bullet prose style rather than
+  inventing a new one.
 - Memory `freeze-stamp-coverage-verify-via-selector` — the pre-existing
-  "verify via selector, never grep" rule this round failed to apply.
+  "verify via selector, never grep" rule this round's incident failed to
+  apply; this unit is that rule's first landing inside a skill file rather
+  than only in memory.
 
-## Verification (prose)
+## Verification
 
-The `/align-strategy` skill text names both rules (documentation-completeness
-over commit size; measure freeze cost via the authoritative predicate) at Step 5,
-and a subsequent round recording a strategy-level invariant records it as a
-clarification without shrinking it to a draft tactic to save commit size.
+Prose only — this is a documentation-only change with no runtime surface:
+
+- `.claude/skills/align-strategy/SKILL.md` Step 5 names both rules
+  (documentation-completeness over commit size; measure freeze/re-stamp cost
+  via the authoritative predicate, never a grep) in a subsection immediately
+  before the materiality-scoped-freeze paragraph.
+- The inserted prose does not alter the three-bucket classification logic
+  (orthogonal / materially affected / must-land-first migration) that follows
+  it — read the diff to confirm only the new subsection was added, no
+  surrounding text changed meaning.
+- A subsequent `/align-strategy` round recording a strategy-level invariant
+  records it as a clarification on the strategy without shrinking it to a
+  draft tactic to save commit size, and if it needs to weigh re-stamp cost,
+  does so via `isFingerprintStale`/`strategyFingerprint`, not `grep`.

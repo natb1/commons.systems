@@ -22,17 +22,37 @@ rationale: "Surfaced by /review-fix of PR #2867
   strategy-explicit-intent. PR #2867 has merged to origin/main (commit 1249fea4)
   and re-verified at finalize time (2026-07-18) that design-canvas support is
   still step 2.9 in the current align-strategy/SKILL.md, so this tactic is
-  finalized into a directly-executable one-unit plan."
+  finalized into a directly-executable one-unit plan. Resolved out-of-band
+  before its own plan executed: a concurrent session finalized
+  tactic-align-skills-dataviz-guidance directly with the corrected step-2.9
+  numbering, so this tactic's Unit 1 became moot without ever running. Verified
+  via an Opus subagent validation pass (2026-07-18): grep for step 2.7 in the
+  target node returns zero hits."
 reading: null
 gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: This tactic's Unit 1 plan targeted
+      tactic-align-skills-dataviz-guidance's stale step-2.7 references, but that
+      draft was independently finalized by a concurrent session before this
+      tactic's plan executed. Does the drift still need fixing?
+    answer: "No. The concurrent finalize of tactic-align-skills-dataviz-guidance
+      rewrote its frontmatter statement, body H1, and body content from scratch,
+      already using the corrected step-2.9 numbering throughout — verified by
+      grep (zero step-2.7 hits) and by an independent Opus subagent validation
+      pass. This tactic's own plan never executed and is now a no-op: its
+      target's status:raw precondition no longer holds (the target is
+      codified/implement with different content), so running the plan literally
+      would find no old_string to edit. Transitioning this tactic straight to
+      phase: done, out-of-band-absorption style (no implement/fix/qa/review
+      re-run needed), per the same pattern used for merged-with-residue tactics.
+      Recorded 2026-07-18 /align-tactics round."
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution: null
 validates: []
 blocked_by: []
@@ -44,7 +64,22 @@ attributes:
 ---
 # Update the stale /align-strategy step-number reference (step 2.7 to step 2.9, design-canvas support) at all three sites in the tactic-align-skills-dataviz-guidance draft after PR #2867's Step 2 renumbering
 
-## Context
+> **Resolved out-of-band, 2026-07-18 — this tactic's plan never executed.**
+> Between this tactic's finalize-landing and its plan's execution, a
+> concurrent session independently finalized `tactic-align-skills-dataviz-guidance`
+> directly from its raw-draft form into a full two-unit `/dataviz`-wiring plan
+> — and in doing so already wrote the correct "step 2.9 (design-canvas
+> support)" everywhere the draft had previously said "step 2.7". `grep -c
+> "step 2\.7" intentions/tactic-align-skills-dataviz-guidance.md` returns 0.
+> Independently verified by an Opus subagent validation pass (see the
+> clarification above). The plan below (Unit 1 and its Verification) is kept
+> for record-completeness but is **stale as an executable instruction** — do
+> not run it; the target it names is no longer `status: raw` and no longer
+> contains the string it was written to replace. This node is transitioned
+> straight to `phase: done` without an implement/fix/qa/review pass, the same
+> pattern used for tactics whose work is absorbed by a concurrent merge.
+
+## Context (as originally finalized — retained for record-completeness, superseded by the note above)
 
 PR #2867 (`tactic-align-strategy-alignment-tests`, merged as commit
 `1249fea4`) renumbered `/align-strategy`'s Step 2 dialectic steps, shifting
