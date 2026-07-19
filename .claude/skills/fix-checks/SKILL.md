@@ -248,7 +248,13 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
         **open or closed**. Run the deterministic, state-spanning guard FIRST and
         only file fresh when it reports no match. This closes the old leak where a
         closed same-fingerprint issue read as "already resolved, so a recurrence is
-        new information" and got re-filed as a duplicate. In this thread
+        new information" and got re-filed as a duplicate.
+
+        Sub-steps 1 and 2 above (capture `RUN_ID`, compute the fingerprint) are
+        `TARGET_KIND`-agnostic and unchanged for both lanes. From here, sub-steps 3
+        and 4 branch on `TARGET_KIND`.
+
+        **Legacy lane (`TARGET_KIND=issue`):** In this thread
         (`dangerouslyDisableSandbox: true` — the script calls `gh`):
         1. Write the recurrence body to `tmp/flake-recurrence.md` (git-ignored
            `tmp/`, like the accumulator): the fingerprint, the reproduce command,
@@ -317,7 +323,102 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
                pre-existing (possibly human-filed, differently-titled) issue. Do
                **NOT** reassert its title — re-titling an unrelated issue would
                corrupt it. Flake issue = `#<M>`, disposition `EXISTING`.
-     4. **Block the PR's tracked issue on the flake issue.** In this thread, use
+
+        **Node lane (`TARGET_KIND=node`):** GitHub Issues are disabled repo-wide
+        on the node lane, so this sub-step never calls `gh issue` or `/file-issue`
+        — the whole find-or-file-and-block sequence is graph-native, driven by
+        Unit 1's `dispatch-flake-dedup-node` (a pure search+decide+print tool —
+        it never writes any `intentions/*.md` file and never calls
+        `graph-commit` itself; the writes below are this sub-step's own).
+        1. Write the recurrence body to `tmp/flake-recurrence.md` (git-ignored
+           `tmp/`, like the accumulator and like the legacy lane) — the same
+           content shape: the fingerprint, the reproduce command, the failure
+           excerpt, and a `recurred on PR #<pr> / run <url>` line. Do this once
+           regardless of lane; do not duplicate the write if a prior branch
+           already produced it in this run.
+        2. Resolve the PR head SHA for the ancestry check (needed only when the
+           guard reaches a `phase: done` node, but always safe to resolve):
+           ```bash
+           HEAD_SHA=$(gh pr view "$PR_NUM" --json headRefOid --jq .headRefOid)
+           ```
+           (`dangerouslyDisableSandbox: true` — calls `gh`.)
+        3. Run the guard:
+           ```bash
+           DISP=$(.claude/skills/dispatch-propagate/scripts/dispatch-flake-dedup-node \
+             "<fingerprint>" --body-file tmp/flake-recurrence.md --head-ref "$HEAD_SHA")
+           ```
+           It prints exactly one line: `NONE`, `EXISTING <tactic-id>`,
+           `REOPENED <tactic-id>`, or `STALE <tactic-id>`. Parse it into a
+           disposition and (when present) the tactic id.
+        4. Branch on the disposition:
+           - **`NONE`** — no matching flake tactic exists. Write a **new** flake
+             tactic node. Construct its frontmatter JSON and pass it to
+             `write-node.ts` (same recipe as `align-tactics/SKILL.md`'s
+             "Step 5 — Record"; `dangerouslyDisableSandbox: true`, and use an
+             explicit `/tmp/claude-<uid>` scratch path for the temp JSON file —
+             not `$TMPDIR`, unset under sandbox-off, and not the job's own tmp
+             dir, read-only under sandbox):
+             `kind: "tactic"`, `owner: "ai"`, `status: "codified"`,
+             `phase: "implement"`, `execution: null`, `validates: []`,
+             `office_hours: null`, `blocked_by: []`, and `serves` copied
+             **verbatim** from the source tactic `$N`'s own `serves` array (read
+             `intentions/$N.md`'s frontmatter first) — per `align-tactics`
+             clarification 27 ("artifact-owner placement"), a flake tracking
+             tactic is an honest byproduct of the strategy(s) the source tactic
+             already serves, not a forced default; carry every entry if the
+             source has more than one. Give the new node a short, content-derived
+             id, e.g. `tactic-flake-<kebab-check-name>` (author's judgment —
+             follow existing tactic-id naming in `intentions/`). No `--base` is
+             needed (brand-new node):
+             ```bash
+             npx tsx packages/intentionsutil/scripts/write-node.ts --file <json>
+             ```
+             Then `Edit` the new node's body (everything after the closing `---`
+             frontmatter fence — `write-node.ts` does not touch it) to carry the
+             fingerprint **verbatim** (this exact string is what
+             `dispatch-flake-dedup-node`'s grep matches against on future runs —
+             it must appear byte-identical), the reproduce command, and the
+             failure excerpt/diagnosis — the same fields `tmp/flake-recurrence.md`
+             carries. Land the frontmatter write and the body `Edit` together in
+             one call:
+             ```bash
+             packages/intentionsutil/scripts/graph-commit <new-tactic-id>
+             ```
+             Flake tactic = `<new-tactic-id>`, disposition `CREATED`.
+           - **`EXISTING <tactic-id>` / `REOPENED <tactic-id>`** — a matching
+             flake tactic already exists. First dump a `--base` manifest for it
+             (pre-existing node — same optimistic-concurrency guard
+             `align-tactics` Step 5 uses):
+             ```bash
+             BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+               --out-dir /tmp/claude-<uid>/dump <tactic-id>)
+             ```
+             `Edit` the existing tactic's body to **append** the recurrence
+             content (`tmp/flake-recurrence.md`'s content) — never replace the
+             existing body. For `REOPENED` **only**, additionally reset the
+             frontmatter `phase` from `done` back to `implement`: read the
+             node's current full frontmatter (via `dump-node.ts`'s manifest or
+             directly from `intentions/<tactic-id>.md`), change only `phase`,
+             and re-run `write-node.ts` with the modified JSON. Land whichever of
+             the body `Edit` (both dispositions) and the frontmatter rewrite
+             (`REOPENED` only) applied, in one call:
+             ```bash
+             packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
+             ```
+             Flake tactic = `<tactic-id>`, disposition `EXISTING` or `REOPENED`
+             per the guard's line.
+           - **`STALE <tactic-id>`** — mirrors the legacy lane's STALE
+             suppression exactly: do **nothing** — no create, no body append, no
+             reopen, no frontmatter change. Flake tactic = `<tactic-id>`,
+             disposition `STALE`. Skip the node-lane sub-step 4 below entirely
+             (the same exception the legacy lane's `STALE` branch carves out).
+             Record the accumulator note (sub-step 5) marking this recurrence as
+             suppressed-stale — the `<tactic-id> (STALE-SUPPRESSED)` entry — then
+             fall through directly to sub-step 6 (post accumulator, push
+             nothing).
+     4. **Block the PR's tracked issue on the flake issue.**
+
+        **Legacy lane (`TARGET_KIND=issue`):** In this thread, use
         the PR body already captured in Step 1's pack output (`=== PR ===` section)
         and parse its `Closes #N` line(s) for the issue(s) this PR implements. For **each** tracked issue, record a
         `blocked_by` dependency **on that tracked issue, targeting each flake issue
@@ -335,6 +436,34 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
         `REOPENED`) — it makes no open-only assumption about the flake issue's
         state. **`STALE` is the one exception: skip this sub-step entirely** —
         deferred by design (see the `STALE` branch above).
+
+        **Node lane (`TARGET_KIND=node`):** On `NONE`/`EXISTING`/`REOPENED`
+        **only** (STALE already skipped straight past this sub-step above), set
+        `blocked_by` on the **source tactic** — `$N`, the node this `/fix-checks`
+        run targets — to include the flake tactic's id. This replaces the legacy
+        lane's GitHub dependencies-API call; no `gh issue`/dependencies-API call
+        ever happens on the node lane. Same reverse-direction note as the legacy
+        lane: the flake tactic is the *blocker*, the source tactic `$N` is the
+        *blocked* one (the reverse of `/review-fix`, which records `blocked_by`
+        on the new node).
+
+        Read `$N`'s current `blocked_by` array (`dump-node.ts`/reading
+        `intentions/$N.md`'s frontmatter). If the flake tactic's id is already
+        present, this is a no-op (idempotent re-run) — skip the write. Otherwise
+        append it and land the one-field frontmatter change:
+        ```bash
+        BASE_N=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+          --out-dir /tmp/claude-<uid>/dump "$N")
+        npx tsx packages/intentionsutil/scripts/write-node.ts --file <updated-N.json>
+        packages/intentionsutil/scripts/graph-commit --base "$BASE_N" "$N"
+        ```
+        **This must go through `write-node.ts` + `graph-commit`, not
+        `transition-node`** — `transition-node` only mutates `phase`/`--set-pr`
+        and has no `blocked_by` handling, so this is a deliberate deviation from
+        how the rest of this node-lane skill normally advances phase. Do **not**
+        escalate to office-hours for this outcome — the node-lane escalation seam
+        (`$CLAUDE_JOB_DIR/office-hours-reason`) is not written here; self-blocking
+        the source tactic on the flake tactic is a normal, non-escalating action.
      5. **Record a flake iteration in the accumulator** (the skill's top-level
         Step 7) — see [Accumulator](#accumulator); a flake entry is visually
         distinct from a generic no-repro one.
@@ -447,11 +576,17 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
   - **Why not caught** — the `why_not_caught` diagnosis.
   - **Fix** — the fix applied and its commit SHA. Include only when **Outcome**
     is `fixed`; omit otherwise.
-  - **Flake issue** — *`flake` outcome only* — the canonical tracking issue, written
+  - **Flake issue** — *`flake` outcome only* — the canonical tracking record.
+    **Legacy lane** (`TARGET_KIND=issue`): the GitHub tracking issue, written
     as `#<N> (CREATED)`, `#<N> (EXISTING)`, `#<N> (REOPENED)`, or
     `#<N> (STALE-SUPPRESSED)` per the `dispatch-flake-dedup` / `/file-issue`
-    disposition. `STALE-SUPPRESSED` marks a recurrence suppressed as a stale-head
-    false positive — no reopen was fired. Omit for every other outcome.
+    disposition. **Node lane** (`TARGET_KIND=node`): the flake tracking tactic
+    id, written as `<tactic-id> (CREATED)`, `<tactic-id> (EXISTING)`,
+    `<tactic-id> (REOPENED)`, or `<tactic-id> (STALE-SUPPRESSED)` per the
+    `dispatch-flake-dedup-node` disposition — parallel to the legacy form, just
+    a tactic id instead of an issue number. `STALE-SUPPRESSED` marks a
+    recurrence suppressed as a stale-head false positive — no reopen was fired.
+    Omit for every other outcome.
   - **Fingerprint** — *`flake` outcome only* — the dedupe key computed in the
     Flake sub-path (the failing check name plus the stable identifier). Omit for
     every other outcome.
