@@ -3,7 +3,7 @@
 # over dispatch-select-tick → dispatch-graph-execute (+ aux bg jobs), with NO
 # model session.
 #
-# Usage: dispatch-tick [--manual]
+# Usage: dispatch-tick [--manual] [<node-id>]
 #
 # This is the scripted equivalent of the routing the dispatch-propagate SKILL.md
 # (Tables 1 and 2) used to describe for a model router session. Replacing that
@@ -213,18 +213,27 @@ fi
 # (dispatch-select-tick rejects any positional arg itself). Reject one here too,
 # before any setup below runs.
 MANUAL=""
+NODE_ARG=""
 for a in "$@"; do
   case "$a" in
     --manual) MANUAL=1 ;;
     --*)
       echo "dispatch-tick: unknown flag '$a'" >&2
-      echo "usage: dispatch-tick [--manual]" >&2
+      echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
       exit 2
       ;;
     *)
-      echo "dispatch-tick: explicit issue/PR targeting ('${a#\#}') was removed with the legacy issue lane; the graph selector owns target selection" >&2
-      echo "usage: dispatch-tick [--manual]" >&2
-      exit 2
+      # A positional arg shaped like a graph node id
+      # (tactic-graph-explicit-node-dispatch Unit 2) is the explicit
+      # single-node targeting entry point; the graph selector owns everything
+      # else. Reuse provision-node-worktree's node-id slug regex verbatim.
+      if [[ "$a" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+        NODE_ARG="$a"
+      else
+        echo "dispatch-tick: explicit issue/PR targeting ('${a#\#}') was removed with the legacy issue lane; the graph selector owns target selection" >&2
+        echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
+        exit 2
+      fi
       ;;
   esac
 done
@@ -350,6 +359,8 @@ fi
 # passthrough AND the decision line) so journald and a live relay see it all.
 if [[ -n "$MANUAL" ]]; then
   SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" --manual)
+elif [[ -n "$NODE_ARG" ]]; then
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$NODE_ARG")
 else
   SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick")
 fi
@@ -374,6 +385,11 @@ case "${1:-}" in
   busy)
     echo "dispatch-tick: another tick holds the lock (busy); nothing to do" >&2
     exit 0
+    ;;
+  node-not-selectable)
+    node="${2:-}"
+    echo "dispatch-tick: node '$node' is not selectable — nothing dispatched" >&2
+    exit 1
     ;;
   empty)
     # #1557: an autonomous `empty` tick (work queued, but every reachable open

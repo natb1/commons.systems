@@ -22223,6 +22223,77 @@ esac
 assert_eq "--manual + number → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
 
+# --- --manual + a node-id-shaped arg → exit 2 (usage error, before the lock) -
+# tactic-graph-explicit-node-dispatch Unit 2: a node-id-shaped positional is now
+# recognized (NODE_ARG), but --manual is the "no specific target" fan-out mode —
+# semantically incompatible with an explicit single-node target. Mirrors the
+# --manual + explicit-number usage-error test above.
+echo "Test: select-tick --manual + node-id-shaped arg → exit 2"
+sel_tick_setup
+err=$("$TMPDIR_TEST/dispatch-select-tick" --manual foo-bar 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"cannot be combined with --manual"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "--manual + node-id → usage error, exit 2" "ok" "$status"
+assert_eq "--manual + node-id: lock not left held" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- explicit node-id, not selectable → node-not-selectable, aux triggers skipped
+# tactic-graph-explicit-node-dispatch Unit 2: an explicit node-id arg calls
+# `graph-select-target --node <id>` instead of the ranked `--top` query. When
+# selection fails (the fake graph selector's default is `empty`, simulating a
+# node absent from candidates or gated out), the tick must emit
+# `node-not-selectable <id>` — NOT fall through to Step 3b's aux triggers
+# (JIT-reminder scan, main-broken check), which would silently substitute an
+# unrelated job for the node the human explicitly asked for.
+echo "Test: select-tick explicit node-id, not selectable → node-not-selectable, no aux triggers"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-jit-scan" <<'FAKE'
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/jit-scan-invoked.log"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-jit-scan"
+out=$(run_sel_tick zzz-nonexistent-node)
+assert_eq "node-not-selectable: decision line" "node-not-selectable zzz-nonexistent-node" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-not-selectable: graph selector called --node <id>" "--node zzz-nonexistent-node" \
+  "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+assert_eq "node-not-selectable: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "node-not-selectable: JIT-reminder scan NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/jit-scan-invoked.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- explicit node-id, exhausted → concurrency-cap, no headroom/pace-curve check
+# The one hard floor the explicit-node path still respects is genuine token
+# exhaustion (mirrors the --manual branch's own EXHAUSTED check). No headroom or
+# MAX_WORKERS ceiling check applies — those are exactly what this path bypasses.
+echo "Test: select-tick explicit node-id + exhausted → concurrency-cap"
+sel_tick_setup
+export SEL_EXHAUSTED=exhausted
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit exhausted: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-explicit exhausted: graph selector NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+assert_eq "node-explicit exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- explicit node-id, selectable → graph decision, pace/cap gate bypassed ---
+# Even with LIVE_COUNT at/over TARGET_N, an explicit node-id dispatch is NOT
+# throttled — the whole point of tactic-graph-explicit-node-dispatch is that a
+# human's explicit dispatch overrides the pace curve.
+echo "Test: select-tick explicit node-id + at-cap live count → still selects (gate bypassed)"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=5
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit at-cap: decision line" "graph 1 foo-bar:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-explicit at-cap: graph selector called --node <id> (not --top)" \
+  "--node foo-bar" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+sel_tick_teardown
+
 # --- AC3 non-fatal guarantee: unwritable log dir does NOT kill the tick -------
 # Point DISPATCH_DECISION_LOG_DIR at a path that cannot be created (a sub-path of
 # an existing regular file). The lib's mkdir -p will fail with ENOTDIR. The
@@ -22819,6 +22890,29 @@ esac
 assert_eq "positional arg → usage error, exit 2" "ok" "$status"
 assert_eq "positional arg: select-tick never invoked" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- node-id-shaped positional arg is forwarded to select-tick (raw, no flag) -
+# tactic-graph-explicit-node-dispatch Unit 2: a node-id-shaped positional is now
+# recognized as NODE_ARG and forwarded to dispatch-select-tick as a raw
+# positional (not a flag). Here the fake select-tick emits a
+# `node-not-selectable <id>` decision line (Unit 2's new disposition), and the
+# tick must exit non-zero (1), print a stderr message naming the node, and NOT
+# invoke dispatch-graph-execute.
+echo "Test: dispatch-tick node-id arg forwarded to select-tick; node-not-selectable → exit 1, no graph-execute"
+tick_setup
+export TICK_DECISION="node-not-selectable foo-bar"
+err=$("$TMPDIR_TEST/dispatch-tick" foo-bar 2>&1 1>/dev/null) ; rc=$?
+assert_eq "node-arg-fwd: select-tick received the raw node-id (no flag)" "foo-bar" \
+  "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
+assert_eq "node-not-selectable: exit 1" "1" "$rc"
+case "$err" in
+  *"foo-bar"*"not selectable"*) status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "node-not-selectable: stderr names the node" "ok" "$status"
+assert_eq "node-not-selectable: no graph-execute call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- headless tick (no CLAUDE_CODE_SESSION_ID) synthesizes a stable id --------

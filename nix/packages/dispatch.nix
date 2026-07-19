@@ -2,7 +2,7 @@
 
 # Foreground bash wrapper that execs dispatch-tick (never an interactive claude session).
 # Bare `dispatch` -> dispatch-tick --manual (one gate-exempt worker).
-# `dispatch <N>` -> dispatch-tick <N> (explicit target, skips the concurrency gate).
+# `dispatch <node-id>` -> dispatch-tick <node-id> (explicit single-node target, skips the pace/concurrency gate).
 # Execs the in-repo checkout script rather than vendoring it into the Nix store,
 # because dispatch-tick calls sibling scripts via $SCRIPT_DIR and needs gh,
 # the local Claude daemon, and tmp state from the checkout.
