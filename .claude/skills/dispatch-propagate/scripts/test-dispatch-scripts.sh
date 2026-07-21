@@ -21421,6 +21421,13 @@ case "$*" in
   "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
   "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
+  # resolve_project_root (lib.sh) + assert_primary_checkout_on_main (added by
+  # PR #2925) run before the main-sync: return a non-empty git-common-dir so the
+  # project-root dirname succeeds, and report the primary checkout as on `main`
+  # so the invariant passes. Without these the catch-all returns empty, the
+  # invariant sees branch != main, and dispatch-select-tick aborts exit 2.
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/.bare" ;;
+  "-C "*" symbolic-ref --short HEAD") echo main ;;
   *) exit 0 ;;
 esac
 STUB
