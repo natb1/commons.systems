@@ -40,13 +40,12 @@ attention:
     composes to 75.33 once finalized/selected. Silent reversion of landed graph
     state is a data-loss class defect worth fixing before lower-severity queue
     work."
-phase: qa
+phase: implement
 execution:
   branch: tactic-park-node-fresh-main-clobber-fix
   pr: 2928
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
 validates: []
@@ -302,3 +301,10 @@ primitive that a sibling tactic is concurrently changing).
   pointer, mailbox instructions) — `tactic-graph-commit-park-context`.
 - The Stop-hook's self-close insertion after the park-backstop block —
   `tactic-graph-node-session-reap` (PR #2922).
+
+## needs-main residue
+
+- **id**: 8 — No further silent-clobber incidents in production over subsequent dispatch runs
+  - url_path: current
+  - expected_outcome: No production incidents of repeated re-park or silent clobber are observed after this fix ships.
+  - finding: Only confirmable by monitoring live autonomous dispatch/graph state over time, not assertable at this PR's merge; the merge-time behavioral invariants (marker consumption, fresh-origin/main read-before-write, CAS refusal on concurrent advance, absent-node refusal) are already covered by qa-fix items 1-7, which all ran and PASSed: `bash .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` (2985/2985 passed), `bash packages/intentionsutil/scripts/test-park-node.sh` (3/3 passed), and `npx tsx packages/intentionsutil/scripts/validate-graph.ts` (ok, 400 nodes).
