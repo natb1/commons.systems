@@ -73,10 +73,7 @@ execution:
     - planned
     - qa-done
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-21
-    attempt: 1
-    pushed_sha: fe3ea8c1de8218c70ac298c5a7402344162e88bd
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
