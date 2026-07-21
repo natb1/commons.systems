@@ -51,6 +51,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 usage() {
   echo "usage: dispatch-derive-node-target <node-id> (--expect-phase <phase> | --expect-fix-active) [--pr-mode none|optional|required]" >&2
@@ -158,7 +159,11 @@ fi
 # --- Step 6: PR resolution ------------------------------------------------
 PR_NUM=""
 if [[ "$PR_MODE" == "optional" || "$PR_MODE" == "required" ]]; then
-  PR_NUM="$(gh pr list --head "$NODE_ID" --state open --json number --jq '.[0].number // empty')"
+  PR_JSON="$(gh_pr_list_rest --state open --head "$NODE_ID" --limit 1)" || {
+    echo "dispatch-derive-node-target: gh_pr_list_rest --head '$NODE_ID' failed" >&2
+    exit 1
+  }
+  PR_NUM="$(jq -r '.[0].number // empty' <<<"$PR_JSON")"
   if [[ "$PR_MODE" == "required" && -z "$PR_NUM" ]]; then
     echo "dispatch-derive-node-target: --pr-mode required but no open PR was found for '$NODE_ID'" >&2
     exit 4

@@ -122,16 +122,27 @@ FIXEOF
 
 # --- gh stub -----------------------------------------------------------------
 # A real $PATH shim (the SUT invokes `gh` by bare name, not via
-# "$SCRIPT_DIR/gh"). Reads GH_PR_NUM and echoes it for a `pr list` invocation;
-# logs its full argv to $GH_LOG so a test can assert "gh was never called".
+# "$SCRIPT_DIR/gh"). The SUT resolves its open-PR lookup through lib.sh's
+# gh_pr_list_rest, which shells out to `gh repo view --json owner -q
+# .owner.login` (to resolve the --head owner) and then `gh api --paginate
+# repos/{owner}/{repo}/pulls?...` — never the retired `gh pr list` porcelain.
+# Reads GH_PR_NUM and echoes a matching REST-shaped PR object for the `api`
+# call; logs its full argv to $GH_LOG so a test can assert "gh was never
+# called".
 STUB_DIR="$TMP_ROOT/stub"
 mkdir -p "$STUB_DIR"
 GH_LOG="$TMP_ROOT/gh.log"
 cat > "$STUB_DIR/gh" <<'STUBEOF'
 #!/usr/bin/env bash
 echo "$@" >> "$GH_LOG"
-if [[ "$1" == "pr" && "$2" == "list" ]]; then
-  printf '%s' "${GH_PR_NUM:-}"
+if [[ "$1" == "repo" && "$2" == "view" ]]; then
+  echo "testowner"
+elif [[ "$1" == "api" ]]; then
+  if [[ -n "${GH_PR_NUM:-}" ]]; then
+    printf '[{"number": %s, "state": "open", "merged_at": null, "created_at": "2026-01-01T00:00:00Z"}]\n' "$GH_PR_NUM"
+  else
+    printf '[]\n'
+  fi
 fi
 STUBEOF
 chmod +x "$STUB_DIR/gh"
