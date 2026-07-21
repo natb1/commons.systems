@@ -42,14 +42,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: implement
 execution:
   branch: tactic-graph-router-live-worker-visibility
   pr: 2918
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: null
   fix:
     since: 2026-07-21
