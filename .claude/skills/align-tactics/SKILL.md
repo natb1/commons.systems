@@ -45,7 +45,7 @@ On-demand or router-invoked. The sole argument is a node id, either:
 - `/align-tactics tactic-<slug>` — finalize or re-plan a single **frozen**
   tactic (draft/raw, or soft-frozen — the router selects exactly the tactics
   its `frozenTacticSelectable` gate approves,
-  `packages/intentionsutil/src/router.ts:482`). This is the per-node target
+  `packages/intentionsutil/src/router.ts:496`). This is the per-node target
   path (see "Tactic target — per-node finalize or re-plan", below).
 
 With no argument, stop and report that a node id (`strategy-<slug>` or
@@ -99,50 +99,105 @@ checkout: a concurrent session's dirty tracked file blocks this run's
 When the argument is a `tactic-<slug>` (not a `strategy-<slug>`), this session
 operates on **exactly one pre-existing tactic node** — the router queued it
 because its `frozenTacticSelectable` gate approved it as an `align-tactics`
-candidate (`packages/intentionsutil/src/router.ts:482`;
-`resolveFrozenDescendant` at line 453 is the strategy-side inverse the selector
-uses). There is **no** strategy decomposition, no draft sweep, and no `rounds`
-bump here — Steps 1–5 below are the strategy-target flow; this subsection is the
-parallel tactic-target flow, reusing pieces of them **by reference**. It runs
-the same Step 0 claim/worktree mechanics (keyed on the tactic id) and the same
-Autonomy contract (below).
+candidate (`packages/intentionsutil/src/router.ts:496`;
+`resolveFrozenDescendant` at line 467 is the strategy-side inverse the selector
+uses). Both consult the graph **selector** (`selectGraphTargets`): selectability
+(phase/status/`office_hours`/blockers) is already decided before this session
+runs, so this session does **not** re-decide it — it only picks the disposition
+and lands the write. There is **no** strategy decomposition, no draft sweep, and
+no `rounds` bump here — Steps 1–2 below are the strategy-target flow; this
+subsection is the parallel tactic-target flow, reusing pieces of them **by
+reference**. It runs the same Step 0 claim/worktree mechanics (keyed on the
+tactic id) and the same Autonomy contract (below).
 
-A frozen tactic target is **either** draft/raw or soft-frozen; read its
-frontmatter to tell which:
+Like the strategy-target flow, the decompose/plan judgment runs **inside the
+Workflow** (`.claude/workflows/align-tactics.js`), not on this caller thread —
+invoked in `mode: "tactic"`, where the `decompose` phase is skipped entirely
+(there is nothing to decompose; only this one node's plan body needs authoring,
+or its re-plan reconciliation). This session's job around it is the same
+three-part shape as Step 1/Step 2: **assemble the input, invoke the Workflow,
+and land the single-node graph write it returns** (via the Step 2 writer).
+
+**Read the node and decide draft/raw vs soft-frozen.** A frozen tactic target is
+**either** draft/raw or soft-frozen; read its frontmatter to tell which. This
+session picks the `phase` value it will land, but the finalize-vs-re-plan
+*judgment* (what the reconciled body should say) is the Workflow's tactic-mode
+job, not this thread's:
 
 - **Draft/raw** (`phase` absent — `phase: null`, never decomposed) →
-  **finalize** it. This is Step 3 ("Plan each claude-eligible tactic") applied
-  to exactly this **one** tactic: run the Explore/Plan fan-out (or, for a
-  trivial tactic, write the plan directly), landing it at `phase: implement`
-  with a full clean-session plan in its body per the Step-3 plan schema. Do
+  **finalize** it: land it at `phase: implement` with a full clean-session plan
+  in its body per the Step-2 plan schema (the Workflow authors that body). Do
   **NOT** sweep the serving strategy's other draft tactics — that draft
-  consume/split/merge/prune path is the strategy-target flow's job (Step 2 item
-  2). Do **NOT** bump the strategy's `rounds` counter — round accounting is
-  completion-time and prod-verified (see "Strategy round accounting" in Step 5).
-  **Whole-node reconcile** (clarification 32, per "Re-evaluation mode" item 2):
-  rewrite any stale draft narrative in `statement`, `rationale`,
-  `attention.rationale`, and the body so none of it contradicts the finalized
-  state — **while preserving the authored `attention.boost` value** (do not
-  reset or renumber it). Frontmatter on landing: `status: codified`,
-  `phase: implement`, `execution: null`, and `validates: []` unless this tactic
-  itself produces the strategy's signal reading (in which case
-  `validates: [<strategy-id>]`, the Step 2 item 5 convention).
+  consume/split/merge/prune path is the strategy-target flow's job (the
+  Workflow's decompose phase, Step 1). Do **NOT** bump the strategy's `rounds`
+  counter — round accounting is completion-time and prod-verified (see "Strategy
+  round accounting" in Step 2). **Whole-node reconcile** (clarification 32, per
+  "Re-evaluation mode" item 2): the Workflow rewrites any stale draft narrative
+  in `statement`, `rationale`, `attention.rationale`, and the body so none of it
+  contradicts the finalized state — **while preserving the authored
+  `attention.boost` value** (do not reset or renumber it). Frontmatter on
+  landing: `status: codified`, `phase: implement`, `execution: null`, and
+  `validates: []` unless this tactic itself produces the strategy's signal
+  reading (in which case `validates: [<strategy-id>]`, the Step-2 frontmatter
+  convention).
 
 - **Soft-frozen** (`phase` already set to an in-flight value — `implement`,
   `fix`, `qa` — but its `execution.strategy_fingerprint` entry for one serving
   strategy is stale) → **re-plan** it. This is exactly "## Re-evaluation mode"
   (below) applied to this **one** tactic instead of a strategy-wide open-child
-  sweep. Reconcile the whole node against the current serving-strategy substance
-  (the whole-node reconciliation bar, clarification 32, per Re-evaluation mode
-  item 2), re-stamp **only** the re-evaluated strategy's entry in
-  `execution.strategy_fingerprint` to the `{hash: strategyFingerprint(strategy),
+  sweep. The Workflow reconciles the whole node against the current
+  serving-strategy substance (the whole-node reconciliation bar, clarification
+  32, per Re-evaluation mode item 2). **Preserve the existing in-flight
+  `phase`** — a re-plan reconciles the body, it never relabels the tactic back
+  to `implement`; so `args.target_node.phase` carries the current phase and the
+  Step-2 writer lands that same phase, overriding Step 2 item 1's new-tactic
+  `phase: implement` default. Re-stamp **only** the re-evaluated strategy's entry
+  in `execution.strategy_fingerprint` to the `{hash: strategyFingerprint(strategy),
   sha: <origin/main sha>}` object form (Re-evaluation mode item 3) and leave
   every other serving strategy's entry untouched (a tactic still at
-  `execution: null` has no map to re-stamp), and land via `graph-commit`.
+  `execution: null` has no map to re-stamp).
 
-**Both cases land the single pre-existing node** via `graph-commit --base` —
-dump it first with `dump-node.ts`, the exact Step-5 "Capture a base manifest"
-mechanic, so a stale read of a live node is refused mechanically:
+**Build `args`.** Assemble the Workflow input in `mode: "tactic"`:
+
+```
+args = {
+  mode:         "tactic",
+  strategy:     { id, statement, rationale, success_signal, reading, gap,
+                  clarifications: [ ... ], conditions: [ ... ],
+                  rounds: { count, last_completed, last_aligned } },  // serving strategy, READ-ONLY context
+  target_node:  { id, statement, rationale, body, phase },            // the single tactic being (re)planned
+  reuse_hunts:  [ { focus, scope }, ... ],                            // up to 3 (default 1)
+  existing_ids: [ ... ],                                              // pre-existing ids in the strategy's corpus
+}
+```
+
+`args.strategy` is the serving strategy's substance as **read-only context** for
+the Workflow's finalize-vs-re-plan judgment — the Workflow reads it; this
+session's apply-result writer **never** edits the strategy. `target_node.phase`
+is the value read above (absent for draft/raw, the in-flight phase for
+soft-frozen); it is how the Workflow's tactic-mode prompts tell finalize from
+re-plan. The router's `frozenTacticSelectable`/`resolveFrozenDescendant` gates
+decide only *selectability* against the live selector — **not** the
+reconciliation — so the serving strategy's substance must ride in `args` for the
+Workflow to judge draft-vs-soft-frozen disposition and reconcile the node
+against it.
+
+**Invoke the Workflow tool on `.claude/workflows/align-tactics.js`**, passing
+`args` (this skill is a sanctioned caller — no `ultracode` keyword). It returns
+the single target tactic with its authored `body_markdown` merged in, plus any
+`plans`/`parks`; the `tactics` array holds exactly the one node, and `gates`,
+`prunes`, and `greenfield_drops` are empty in tactic mode.
+
+**Apply the result via the Step 2 writer, above.** The single-node result lands
+through the **same** apply-result writer as the strategy-target flow —
+"## Step 2 — Apply the Workflow result" — with one node (not a subtree) to
+write: `dump-node.ts` (base manifest) → `write-node.ts` (frontmatter, with the
+`phase` decided above) → body `Edit` (the Workflow's `body_markdown`) →
+`graph-commit --base`. Do **not** duplicate that writer here; the only
+tactic-mode specializations are the `phase` choice above (`implement` for a
+finalize, the preserved in-flight phase for a re-plan) and the single-strategy
+fingerprint re-stamp on a soft-frozen re-plan. In the single-node shape of the
+Step-2 mechanic the base manifest and commit name exactly one id:
 
 ```bash
 BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
@@ -150,12 +205,12 @@ BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
 packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
 ```
 
-**Exception: a re-plan (or a Step-2 `split` disposition, at strategy scope)
-that discovers a genuine split.** If a soft-frozen re-plan, or a Step 2 item 2
-`split` disposition applied at strategy scope, finds the tactic must split
-into a new born-parked sibling, that sibling is genuinely new work — but it
-must never land via a separate later `graph-commit` call. Land the parent
-edit and the new sibling in the **same** `graph-commit --base "$BASE"
+**Exception: a re-plan (or a strategy-scope `split` disposition) that discovers
+a genuine split.** If a soft-frozen re-plan, or a strategy-scope `split`
+disposition (the Workflow's decompose phase, landed via Step 2), finds the
+tactic must split into a new born-parked sibling, that sibling is genuinely new
+work — but it must never land via a separate later `graph-commit` call. Land the
+parent edit and the new sibling in the **same** `graph-commit --base "$BASE"
 <tactic-id> <new-sibling-id>` call; the `--base` manifest still covers only
 the pre-existing parent id, and the new sibling — having no `origin/main`
 blob — is simply absent from it. This closes the 2026-07-18 near-miss: a
@@ -666,10 +721,20 @@ that recorded the strategy edit — the way every round on
 **Per-node re-evaluation.** Under `tactic-graph-frozen-tactic-dispatch`, the
 router may now queue re-evaluation as a **per-node** `/align-tactics
 <tactic-id>` session targeting exactly one soft-frozen tactic, rather than only
-the strategy-wide open-child sweep this section historically described. The
-disposition bar is identical — the same whole-node reconciliation (item 2) and
-single-strategy re-stamp (item 3) — applied to the one target. See "Tactic
-target — per-node finalize or re-plan", above, for that flow.
+the strategy-wide open-child sweep this section describes. That per-node form
+does **not** run the inline sweep above: it builds `mode: "tactic"` `args`,
+invokes the Workflow to reconcile the one node, and lands the single-node result
+through the Step 2 writer — see "Tactic target — per-node finalize or re-plan",
+above, for that flow. The disposition bar is identical to this section's — the
+same whole-node reconciliation (item 2) and single-strategy re-stamp (item 3),
+now authored by the Workflow's tactic-mode prompts — applied to the one target.
+
+The strategy-wide open-child sweep in items 1–5 above stays **inline** on this
+caller thread: it re-evaluates the whole strategy's open children together
+(coordinated prune/split/confirm decisions landing in one `graph-commit`), which
+the Workflow's `mode: "tactic"` contract — exactly one `target_node` per call —
+does not express. It is the bootstrap-interim / author-invoked path; only the
+router-queued per-node form routes through the Workflow.
 
 A strategy-corpus census script is planned as an enumeration hook for the
 open-child sweep above (`tactic-align-tactics-mechanical-floor` Unit 2);
