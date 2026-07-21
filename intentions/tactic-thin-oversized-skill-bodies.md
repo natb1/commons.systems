@@ -35,11 +35,17 @@ attention:
     strategy-token-economy carries no strategy-level boost, so the tactic
     carries the full weight itself; boost 15 clears the current working max
     (~14.5)."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-thin-oversized-skill-bodies
+  pr: 2927
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
-blocked_by:
-  - tactic-phase-standup-audit-lens
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

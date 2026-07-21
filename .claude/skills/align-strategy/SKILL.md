@@ -351,6 +351,18 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    other. Caveat: a freshly synced component is absent from the canvas
    until the project is opened/refreshed — warn the author if this is
    their first look at a same-session sync.
+10. **Persistent-layer ownership gate.** Whenever this interview is about to
+    record standing structure — a node that owns a `success_signal` that is
+    read on an ongoing basis, a node carrying a standing `attention`
+    boost/override,
+    or any node that other machinery permanently references — the recorded
+    owner must be `kind: strategy` (or `virtue`), never a tactic. Tactics are
+    transient by definition: they complete and leave the selectable graph.
+    If a tactic is proposed as a standing owner, surface it as an interview
+    question, never record-and-fix-later: recommend the owning strategy, and
+    propose creating one if none exists (`strategy-main-health` is the worked
+    precedent, created 2026-07-13 for exactly this reason). Resolution lands
+    as a dated `clarifications` entry per the step-2.8 provenance convention.
 
 **The `/file-issue` 8-category evaluation, folded into the steps above**
 (so nothing from the coverage matrix silently drops):
@@ -430,6 +442,12 @@ substance itself; a substantive TODO with no backing node is a
 review-phase finding, not something this skill should ever produce.
 
 ## Step 5 — Record
+
+Before constructing the JSON to land, re-confirm that no node about to be
+recorded this round — as a `success_signal` owner or a standing `attention`
+boost/override carrier — is `kind: tactic`. This is the same gate as dialectic
+step 10, restated here as the final pre-write check so a resolution made earlier
+in a long interview is not silently dropped by the time the JSON is constructed.
 
 Write the full node through `write-node.ts` — never hand-edit the YAML
 frontmatter:
@@ -546,6 +564,30 @@ this step's worktree-local `.scope-fingerprint` re-stamp protects a single
 **tactic**'s own scope-custody gate from being tripped by a scope-inert edit
 to that tactic's own body. Two unrelated stamps, two unrelated mechanisms —
 do not conflate them.
+
+**Documentation completeness over commit size.** When an interview outcome is
+materially a property of the strategy under edit (an invariant of its
+contract, a resolved edge case, a doctrine correction), record it as a
+strategy clarification on that strategy — never relocate it to a draft tactic,
+or omit it, to keep the commit small or to avoid a re-stamp. Commit size is
+never a reason to put documentation in the wrong place; the materiality-scoped
+freeze below is what keeps a warranted clarification's *blast radius* small —
+it is not a reason to avoid recording the clarification itself.
+
+**Measure freeze/re-stamp cost via the authoritative predicate, never a
+grep.** If a recording or materiality decision turns on how many open children
+a clarification would freeze, compute the actual set with `readNode`
+(`packages/intentionsutil/src/store.ts`, re-exported via the package index
+barrel) + `isFingerprintStale`
+(`packages/intentionsutil/src/transitions.ts`) — or
+`strategyFingerprint` (`packages/intentionsutil/src/router.ts`) plus the same
+per-child stamp read the router's selector uses — never a text `grep` over
+`strategy_fingerprint`. A `grep -c` (or similar) over that field counts the
+key line itself, so a null-valued stamp (`strategy_fingerprint: null` — not
+stale, per `isFingerprintStale`) is indistinguishable from a real one in the
+grep count and inflates the estimate. A cost estimate that drives a recording
+or materiality decision must come from the same predicate the router uses, not
+a text search.
 
 **Materiality-scoped freeze — classify each open child.** If this is an edit
 to a strategy that has open (non-draft, non-`done`) child tactics with an

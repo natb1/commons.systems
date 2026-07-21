@@ -46,18 +46,22 @@ attention:
     tactic-graph-commit-auto-serialization (boost 64, itself on the signal path
     so rank = boost + 5.33), which was boosted to the frontier top in a separate
     /align-tactics session; the earlier 58 had fallen below it. 75 clears 69.33
-    with ~5.67 margin while staying well below the permanent strategy-main-health
-    trunk (rank 101, the sole node above it). The boost flows undecayed to the
-    one node this tactic is blocked_by (tactic-align-family-opus-default, PR
-    #2886, now reviewed and in merge-ready-hold), the intended critical-path
-    prioritization (the blocker must merge first to unblock this node); no
-    unrelated node is distorted."
+    with ~5.67 margin while staying well below the permanent
+    strategy-main-health trunk (rank 101, the sole node above it). The boost
+    flows undecayed to the one node this tactic is blocked_by
+    (tactic-align-family-opus-default, PR #2886, now reviewed and in
+    merge-ready-hold), the intended critical-path prioritization (the blocker
+    must merge first to unblock this node); no unrelated node is distorted."
 phase: implement
 execution: null
 validates: []
-blocked_by:
-  - tactic-align-family-opus-default
-office_hours: null
+blocked_by: []
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-19
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /fix-conflicts once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}
