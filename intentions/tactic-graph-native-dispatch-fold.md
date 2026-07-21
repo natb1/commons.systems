@@ -15,10 +15,10 @@ rationale: "Retained from the 2026-07-09 /align-strategy review round, replanned
   dense, settled router-mechanism detail (fuses, fingerprints, quorum floors,
   claiming semantics, serialization) recorded at dialectic grain across the
   majority of the array — a design document wearing a strategy node.
-  kind-strategy's body-function rule (2026-07-09) names the strategy body
-  as the fold-target. The store-side blocker that had this tactic on hold —
-  non-tactic node bodies being regenerated/cosmetic on every write, so a
-  strategy body could not durably hold folded content — cleared 2026-07-19 when
+  kind-strategy's body-function rule (2026-07-09) names the strategy body as the
+  fold-target. The store-side blocker that had this tactic on hold — non-tactic
+  node bodies being regenerated/cosmetic on every write, so a strategy body
+  could not durably hold folded content — cleared 2026-07-19 when
   tactic-nontactic-body-durability's greenfield contract shipped on PR #2890
   (store.ts now preserves every kind's body verbatim; only a brand-new file gets
   the placeholder). This tactic performs the fold: settled router mechanism
@@ -35,8 +35,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-graph-native-dispatch-fold
+  pr: 2925
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -578,7 +587,7 @@ live classification judgment at that point, not just a query).
 npx tsx packages/intentionsutil/scripts/validate-graph.ts
 ```
 ```verify
-npx vitest run --project intentionsutil --root .
+npx vitest run --project packages/intentionsutil --root .
 ```
 
 Prose:
