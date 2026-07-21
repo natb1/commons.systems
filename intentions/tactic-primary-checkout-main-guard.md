@@ -33,25 +33,30 @@ success_signal: null
 attention:
   boost: 80
   override: null
-  rationale: "Author-directed 2026-07-21: boost to top ranking. This is the root-cause
-    fix for the 2026-07-21 incident on tactic-graph-native-dispatch-fold / PR #2925, where
-    the tactic's 6 Unit commits were pushed straight to origin/main with no PR (bypassing
-    CI/review) — the failed-cd-worktree-drops-into-main-checkout drift: an /implement session
-    tried to provision the fold worktree, `git worktree add` failed (branch already checked
-    out in a leftover worktree), the chained `cd` failed, so the session silently continued
-    in the primary checkout (on main) and commit-merge-push pushed to main. This tactic's
-    fail-loudly-on-drift guard prevents exactly that. Sized at 80 — above the live
-    discretionary composed max (75.33, tactic-park-node-fresh-main-clobber-fix, the sibling
-    main-clobber fix) so this childless tactic serving strategy-autonomous-execution
-    (inherited base 0) becomes the top discretionary dispatch target — and kept below the
-    strategy-main-health ceiling (100, author-override-guarded), which it must not displace."
-phase: implement
+  rationale: "Author-directed 2026-07-21: boost to top ranking. This is the
+    root-cause fix for the 2026-07-21 incident on
+    tactic-graph-native-dispatch-fold / PR #2925, where the tactic's 6 Unit
+    commits were pushed straight to origin/main with no PR (bypassing CI/review)
+    — the failed-cd-worktree-drops-into-main-checkout drift: an /implement
+    session tried to provision the fold worktree, `git worktree add` failed
+    (branch already checked out in a leftover worktree), the chained `cd`
+    failed, so the session silently continued in the primary checkout (on main)
+    and commit-merge-push pushed to main. This tactic's fail-loudly-on-drift
+    guard prevents exactly that. Sized at 80 — above the live discretionary
+    composed max (75.33, tactic-park-node-fresh-main-clobber-fix, the sibling
+    main-clobber fix) so this childless tactic serving
+    strategy-autonomous-execution (inherited base 0) becomes the top
+    discretionary dispatch target — and kept below the strategy-main-health
+    ceiling (100, author-override-guarded), which it must not displace."
+phase: qa
 execution:
   branch: tactic-primary-checkout-main-guard
-  pr: null
+  pr: 2929
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: f51f76ac14405b0ccbb0e47f33e0fae1e341c60a45ec9ae6b329170b7227ae05
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
