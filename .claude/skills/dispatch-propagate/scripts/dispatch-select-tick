@@ -384,75 +384,18 @@ fi
 # non-main worktree or manual /dispatch tick refreshes too (#2104, invariant #2).
 refresh_lock
 
-# --- Step 1c: complete the main-red tactic node when main has recovered ------
-# A diagnosed red episode leaves an open graph tactic node
-# `tactic-main-red-<shortsha>` (written/refreshed by dispatch-diagnose-main) —
-# the gate's per-episode latch, serving strategy-main-health. A node is "open"
-# while its phase is not "done" AND office_hours is null (a node parked in
-# office_hours is a since-resolved episode). Once origin/main goes green again,
-# complete the open node(s) to phase: "done" so the next red episode re-fires the
-# gate on first detection. A graph write is a side effect, so it lives here in the
-# lock-holding orchestrator, not in the pure selector. The open-node graph read is
-# cheap and gates the extra CI read (via repo-health --main-broken-sha) to the
-# red/recovering window only; this runs every tick — independent of the local
-# branch — including a capped tick, so recovery is observed even when no worker is
-# spawned. A failed graph read is treated as UNKNOWN (never silently empty),
-# exactly as the old gh issue-list failure was, so a transient read error never
-# masquerades as "main healthy".
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-OPEN_MAIN_RED=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
-  const { listNodes } = await import("./packages/intentionsutil/src/store.js");
-  for (const n of listNodes("./intentions")) {
-    if (!n.id.startsWith("tactic-main-red-")) continue;
-    if (n.phase === "done") continue;
-    if (n.office_hours !== null) continue;
-    process.stdout.write(n.id + "\n");
-  }
-') ) || {
-  echo 'dispatch-select-tick: graph read of open tactic-main-red-* nodes failed; treating main health as UNKNOWN' >&2
-  OPEN_MAIN_RED=UNKNOWN
-}
-if [[ -n "$OPEN_MAIN_RED" && "$OPEN_MAIN_RED" != "UNKNOWN" ]]; then
-  # Use explicit exit-code capture: a failed probe would produce empty
-  # output, which -z would treat as "green" and incorrectly complete the latch.
-  # The probe lives in the standalone repo-health sensor: repo-health
-  # --main-broken-sha runs the two-source CI aggregation and, as a side effect,
-  # reconciles its durable label-free latch record. An empty stdout means green.
-  MB_SHA=""
-  if ! MB_SHA=$("$SCRIPT_DIR/repo-health" --main-broken-sha); then
-    MB_SHA="UNKNOWN"
-  fi
-  if [[ -z "$MB_SHA" ]]; then
-    # main is green again — complete each open tactic-main-red-* node to
-    # phase: "done" (re-arming the gate). ONLY when the node's execution is still
-    # null: a node past draft with a live execution is an in-flight fix owning
-    # its own PR/qa/review lifecycle, which completes it normally; this mechanical
-    # completion must never preempt in-progress work. Best-effort per node — a
-    # single node's completion failing must not abort the tick (each write path is
-    # guarded with `|| true`).
-    while IFS= read -r node_id; do
-      [[ -n "$node_id" ]] || continue
-      EXECUTION=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
-        const { readNode } = await import("./packages/intentionsutil/src/store.js");
-        const n = readNode("./intentions", process.argv[1]);
-        process.stdout.write((n.execution === null || n.execution === undefined) ? "null\n" : "set\n");
-      ' "$node_id") ) || continue
-      [[ "$EXECUTION" == "null" ]] || continue
-      # Compare-and-swap edit: dump the current node (writes base-manifest.txt),
-      # patch phase → "done", write it back through the validation gate, then land
-      # it with graph-commit --base (the manifest refuses a stale-read overwrite).
-      COMPLETE_DIR=$(mktemp -d) || continue
-      (
-        cd "$REPO_ROOT" || exit 1
-        MANIFEST=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$COMPLETE_DIR" "$node_id") || exit 1
-        jq '.phase = "done"' "$COMPLETE_DIR/$node_id.json" > "$COMPLETE_DIR/$node_id.patched.json" || exit 1
-        npx tsx packages/intentionsutil/scripts/write-node.ts --file "$COMPLETE_DIR/$node_id.patched.json" || exit 1
-        packages/intentionsutil/scripts/graph-commit --base "$MANIFEST" -m "graph: complete $node_id (main-health green)" "$node_id"
-      ) 1>&2 || true
-      rm -rf "$COMPLETE_DIR"
-    done <<<"$OPEN_MAIN_RED"
-  fi
-fi
+# --- Step 1c: sync the main-red graph latch (tactic-graph-main-self-heal) ----
+# The open-node read + green-main recovery-completion now live in their own
+# script, dispatch-graph-main-red-sync (extracted from this file's former
+# inline block so it is independently fakeable by the test harness, matching
+# the repo-health / graph-select-target script-per-concern convention — see
+# that script's header for the full contract: the open tactic-main-red-*
+# read, the phase:"done" completion on green, and the stdout protocol). This
+# runs every tick — independent of the local branch — including a capped
+# tick, so recovery is observed even when no worker is spawned. A failed
+# invocation (non-zero exit) is folded into UNKNOWN here too, so a transient
+# failure of the sub-script never masquerades as "main healthy".
+OPEN_MAIN_RED=$("$SCRIPT_DIR/dispatch-graph-main-red-sync") || OPEN_MAIN_RED=UNKNOWN
 
 # --- Step 1d: reconcile router-owned PR readiness (best-effort) -------------
 RECONCILE_OUT=$("$SCRIPT_DIR/dispatch-reconcile-ready") || true
