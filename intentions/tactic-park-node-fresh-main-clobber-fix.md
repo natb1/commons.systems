@@ -40,8 +40,15 @@ attention:
     composes to 75.33 once finalized/selected. Silent reversion of landed graph
     state is a data-loss class defect worth fixing before lower-severity queue
     work."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-park-node-fresh-main-clobber-fix
+  pr: 2928
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
