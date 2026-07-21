@@ -329,7 +329,15 @@ a strategy.
    — it is input, never left dangling. A
    `phase`-absent child *with* `office_hours` set is a born-parked tactic from a
    prior round, not a draft (see Idempotency): leave it alone, do not run it
-   through this path. Finalizing reuses the draft's retained body as
+   through this path. The sweep excludes one more derived set the same way:
+   compute which tactic ids appear as another tactic's `parent` anywhere in the
+   corpus, and skip any draft-shaped child in that set — a subtree-parent is
+   permanently `phase`-absent by design (it only completes when its last child
+   does) and is a container, not an undecomposed draft, per the same
+   derived-set exclusion `selectGraphTargets`'s frozen-tactic branch applies
+   (`packages/intentionsutil/src/router.ts`; tactic-router-subtree-parent-exclusion);
+   leave it in place rather than finalizing, splitting, merging, or pruning it.
+   Finalizing reuses the draft's retained body as
    the starting context for its plan (step 3); pruning drops a draft that the
    round does not need (record why in the pruning commit message).
 3. **Shape the subtree.** A leaf tactic is **exactly one PR**. Larger shapes
