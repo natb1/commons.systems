@@ -49,10 +49,7 @@ execution:
     - planned
     - qa-done
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-21
-    attempt: 1
-    pushed_sha: 53e037bbc6cabd5f7491b9c06c80f8d6ca5f6864
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
