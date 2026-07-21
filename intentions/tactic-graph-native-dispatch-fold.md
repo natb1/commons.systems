@@ -35,86 +35,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-graph-native-dispatch-fold
   pr: 2925
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: Step 0.5 origin/main merge failed with a non-fast-forward push
-    rejection (exit 7), not a normal merge conflict (exit 3). Investigation
-    found the tactic's 6 Unit commits exist TWICE under different SHAs with
-    identical messages/author: once properly on the PR branch
-    (origin/tactic-graph-native-dispatch-fold), and once directly on origin/main
-    with NO associated PR (confirmed via gh api commits/<sha>/pulls). main
-    already contains this tactic's full content out-of-band. This is a
-    git-history integrity issue on shared main (likely a prior worktree/cd
-    mishap pushing feature commits straight to main), not something qa-fix
-    should attempt to repair via rebase/force-push. Escalating for human
-    decision: verify the two tactic-owned files
-    (strategy-graph-native-dispatch.md, tactic-graph-native-dispatch-fold.md)
-    are truly equivalent between main and the PR branch, then likely close PR
-    #2925 without merging and transition the node past qa manually."
-  since: 2026-07-21
-  recommendation: >-
-    ## Recommendation: PR #2925 / `tactic-graph-native-dispatch-fold`
-
-
-    **What happened.** A prior implement or qa session for this tactic pushed
-    its six Unit commits straight to `main`, bypassing the PR, CI, and review.
-    The tells: the same six commit messages/author appear twice under different
-    SHAs — once on the PR branch, once directly on `main` with *no associated
-    PR*. This matches memory pattern
-    `failed-cd-worktree-drops-into-main-checkout`: a `cd` mishap landed the
-    session's git ops on the `main` worktree instead of the feature worktree. A
-    later local `pull --rebase` then dropped the now-duplicate commits via
-    patch-equivalence, collapsing local HEAD onto `main`'s tip — which is why
-    the plain `push` to the PR branch (still at `c0bb0de2`) was rejected
-    non-fast-forward. This is a history-integrity issue on shared `main`,
-    correctly left to a human.
-
-
-    **Decision to make.** `main` already carries this tactic's real content, so
-    #2925 is almost certainly closeable without loss — but **confirm first**.
-    Ignore the full-branch diff (noisy; it "deletes" content actually superseded
-    by unrelated later `main` commits). Instead diff only the two files this
-    tactic owns:
-
-
-    ```
-
-    git diff origin/main origin/tactic-graph-native-dispatch-fold -- \
-      intentions/strategy-graph-native-dispatch.md \
-      intentions/tactic-graph-native-dispatch-fold.md
-    ```
-
-
-    **If equivalent (expected):**
-
-    1. `gh pr close 2925 --comment "Content already on main via direct pushes
-    (SHAs 568a9a22…14063cea); PR is redundant. Closing without merge — no
-    content lost."` (no closing keyword.)
-
-    2. Transition the node past `qa` — do **not** re-run a QA walkthrough
-    against an empty diff. Check `PHASES`/`PHASE_LADDER` in
-    `packages/intentionsutil/src` for whether the next phase is `review` or
-    `done`, then transition there.
-
-
-    **If the two-file diff differs:** treat as a real conflict — recreate the PR
-    branch from current `main`, re-apply only the tactic's unique diff cleanly,
-    and re-run qa-fix.
-
-
-    **Follow-up.** File a separate tactic for the root-cause worktree/`cd` bug
-    (`failed-cd-worktree-drops-into-main-checkout`) so direct-to-main pushes
-    stop recurring.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
