@@ -70,7 +70,7 @@ execution:
   fix:
     since: 2026-07-21
     attempt: 1
-    pushed_sha: 27925a6d5c65845ab96f23f831d306d1d896ad73
+    pushed_sha: f6b754e89cde0463b7b5c5cc87b941d633b7e058
 validates: []
 blocked_by: []
 office_hours: null
