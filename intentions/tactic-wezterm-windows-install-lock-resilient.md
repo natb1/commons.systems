@@ -35,7 +35,11 @@ execution:
   pr: null
   attempts: {}
   markers: []
-  strategy_fingerprint: cdd3e771c3dc1c1953b1e8b52163c954a63bc94ce64994ad03fdd24f7a234575
+  strategy_fingerprint:
+    strategy-owned-orchestration:
+      hash: 5676f66f6e8500eb8752095c960615ded3fc06d00df9ab5c3038af3f9b700aec
+      sha: bc642990d1344d4418bafdc924ef77e3903b0b61
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
