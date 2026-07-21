@@ -22,11 +22,112 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-dispatch-skill-input-contract
+  pr: 2923
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: opus fix-planner scope-deviation on finding #13 (fix-checks
+    --expect-fix-active extension, a design-judgment item) — the fix-planner
+    declined to author a fix because confirming/reverting this plan-scope
+    extension is a decision the tactic issue does not authorize an agent to
+    make; adversarial skeptics found strong evidence the extension is sound and
+    necessary (not scope creep), but resolving the confirm-vs-revert call is out
+    of scope for an autonomous fix. Escalating to office-hours."
+  since: 2026-07-21
+  recommendation: >-
+    ## Decision needed
+
+
+    PR #2923 is QA-clean except for one open question that needs your call: **is
+    the `--expect-fix-active` mode added to `dispatch-derive-node-target` (and
+    used in `fix-checks/SKILL.md`) an intentional, sound correction to the
+    tactic plan — or scope creep to revert?**
+
+
+    The plan for Unit 1 enumerated only `--expect-phase <phase>` for the shared
+    script. The implementing commit went beyond that enumeration by adding a
+    separate `--expect-fix-active` mode. The autonomous fix-planner declined to
+    ratify this on its own because confirming the extension as intended (rather
+    than reverting to force literal plan conformance) is a judgment the tactic's
+    issue text does not authorize an agent to make. That is why it is parked for
+    you — not because anything is broken.
+
+
+    Two outcomes are on the table:
+
+
+    - **Approve as-is** — accept the extension as a correct plan fix, merge, and
+    optionally add a note to the tactic node body recording that Unit 1's scope
+    was extended for this reason.
+
+    - **Revert/rework** — strip `--expect-fix-active`, returning the shared
+    script to `--expect-phase`-only. Note that a literal `--expect-phase fix`
+    cannot work (see below), so a strict-conformance version would need a
+    different mechanism to gate the fix-checks case, not the plan's original
+    wording.
+
+
+    ## Why the evidence leans toward "approve" (still your call)
+
+
+    - The plan's literal instruction is dead-on-arrival: commit 878519f3 (#2905,
+    landed 2026-07-18, one day before this PR's fix-checks unit commit) removed
+    `"fix"` from the `Phase` union / `PHASES` array entirely. Implementing
+    `--expect-phase fix` as written would gate on a value that can never occur,
+    breaking fix-checks.
+
+    - `fix-checks/SKILL.md`'s own pre-existing prose (predating this PR) already
+    documents that phase is never `fix` — a CI-fix interrupt is carried
+    orthogonally on `execution.fix`, and no node is ever persisted at phase
+    `fix`. The extension matches that existing model rather than contradicting
+    it.
+
+    - Both adversarial skeptic votes (2 independent, both "refuted") found the
+    extension is a sound, essentially-mandatory correction, not scope creep.
+
+    - The implementing commit message frames the addition explicitly as
+    correcting a plan defect by extending the shared script with
+    `--expect-fix-active` — so the intent is on the record, it just needs a
+    human to confirm the plan should bend to it.
+
+
+    The one thing the evidence does not settle is authorization: whether the
+    plan should be treated as extendable here. That is the human decision, not a
+    rubber stamp.
+
+
+    ## Where to look
+
+
+    - `.claude/skills/dispatch-propagate/scripts/dispatch-derive-node-target` —
+    the `--expect-fix-active` mode implementation.
+
+    - `.claude/skills/fix-checks/SKILL.md` — its usage, plus the pre-existing
+    "phase is never fix / execution.fix is orthogonal" prose.
+
+    - `intentions/tactic-dispatch-skill-input-contract.md` — Unit 1's original
+    scope (the `--expect-phase`-only enumeration) and Unit 3's scope, for the
+    full plan context.
+
+    - Commit 878519f3 (#2905) — the change that removed `"fix"` from the phase
+    enum, which is why the plan's literal `--expect-phase fix` would not work.
+
+
+    ## Everything else passed
+
+
+    This is the only item blocking the PR. Of the 12 script-verifiable QA
+    checks, 11 passed outright; the 12th — a legacy-lane byte-identical check —
+    was separately assessed as already-satisfied with no defect. Resolve this
+    one question and the PR is clear.
 pace_exempt: false
 rounds: null
 attributes: {}

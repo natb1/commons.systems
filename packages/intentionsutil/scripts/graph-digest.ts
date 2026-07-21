@@ -17,13 +17,13 @@
 // byte-identical stdout. (The deleted-ids input is derived from committed git
 // history, which is stable for a given commit.)
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes } from "../src/store.js";
 import { extractBody } from "../src/frontmatter.js";
 import { renderDigest, renderTables, type DigestInput } from "../src/digest.js";
+import { deletedNodeIds } from "./lib-deleted-node-ids.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/graph-digest.ts`, so the
@@ -33,32 +33,9 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");
 
-/**
- * Ids whose `intentions/<id>.md` was deleted at any point in git history —
- * used to classify a DANGLING-REFS reference as `pruned` rather than `missing`.
- * Shelled here (the digest module stays pure); a git failure surfaces as a
- * clear error rather than a silent empty list (see .claude/rules/code-style.md).
- *
- * `--no-renames` disables git's rename detection so an id migration (e.g. the
- * repo's `issue-N` -> `tactic-N` rename) reports the old path as a plain delete
- * — otherwise git classifies it as a rename (R), the `--diff-filter=D` filter
- * drops it, and a lingering reference to the old id is misclassified `missing`
- * instead of `pruned`. It also makes the result independent of git's
- * similarity heuristic, matching the module's determinism guarantee.
- */
-function deletedNodeIds(): string[] {
-  const out = execFileSync(
-    "git",
-    ["-C", repoRoot, "log", "--diff-filter=D", "--no-renames", "--name-only", "--pretty=format:", "--", "intentions/"],
-    { encoding: "utf8" },
-  );
-  const ids = new Set<string>();
-  for (const line of out.split("\n")) {
-    const m = line.match(/^intentions\/(.+)\.md$/);
-    if (m) ids.add(m[1]);
-  }
-  return [...ids];
-}
+// `deletedNodeIds` (git-shelled, was local here) now lives in the shared
+// `./lib-deleted-node-ids.ts` so `validate-graph.ts` reuses the exact same
+// implementation.
 
 function gatherInput(): DigestInput {
   const nodes = listNodes(intentionsDir);
