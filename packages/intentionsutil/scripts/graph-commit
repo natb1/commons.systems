@@ -697,7 +697,7 @@ try_land() {
   for (( attempt=1; attempt<=MAX_PUSH_ATTEMPTS; attempt++ )); do
     if ! git pull --rebase origin main >&2; then
       if ! rebase_in_progress; then
-        die "'git pull --rebase origin main' failed and left no rebase in progress (dirty tree or fetch failure)"
+        die "'git pull --rebase origin main' failed and left no rebase in progress (fetch failure or another unexpected git error — an unrelated dirty tracked file would have been caught by the pre-flight check)"
       fi
       echo "graph-commit: rebase conflict on attempt $attempt/$MAX_PUSH_ATTEMPTS (concurrent edit to the same node); attempting layer-2 field-level auto-merge before parking" >&2
       if ! try_layer2_resolve; then
@@ -811,21 +811,34 @@ JQ
 # correctly and — for a tactic — its authoritative body is preserved. Uses a
 # throwaway tsx module rather than hand-editing YAML.
 #
-# Two shapes of park, keyed on whether the layer-2/3 accumulator
-# (CONFLICT_FIELDS_JSON) captured any field-level divergence detail:
-#   - has entries → office_hours.reason carries the stable "mechanical-unresolved"
-#     marker (a contract a future dispatch-conflict skill greps for) plus the
-#     count of diverged fields, and office_hours.recommendation holds the
-#     per-conflict breakdown built by build_recommendation().
-#   - empty/absent (unset global, missing file, or a `[]` array — a park for a
-#     reason unrelated to a mechanical-merge attempt) → the original plain reason
-#     and NO recommendation (recommendation=null). This preserves pre-Unit-4
-#     behavior exactly for that case.
+# office_hours.recommendation is composed ADDITIVELY from two independently
+# planned layers (tactic-graph-commit-auto-serialization Unit 4 appends to,
+# never replaces, tactic-graph-commit-park-context's text):
+#   - BASE (park-context): a per-id recovery recommendation the tsx helper sets
+#     for EVERY parked node — snapshot pointer, mailbox discipline, and a
+#     prune-vs-edit distinction.
+#   - APPENDED (this tactic, layers 1-3): keyed on whether the layer-2/3
+#     accumulator (CONFLICT_FIELDS_JSON) captured field-level divergence detail.
+#     Has entries → office_hours.reason is upgraded to the stable
+#     "mechanical-unresolved" marker (a contract a future dispatch-conflict skill
+#     greps for) plus the count of diverged fields, and build_recommendation()'s
+#     per-conflict field breakdown is appended after the base recovery text.
+#     Empty/absent (unset global, missing file, or a `[]` array — a park
+#     unrelated to a mechanical-merge attempt) → the plain concurrent-edit reason
+#     and the base recovery recommendation only, with no field breakdown.
 park_write() {
-  local since reason tmpts rec_file=""
+  local since reason tmpts prune_csv rec_file=""
   since="$(date -u +%Y-%m-%d)"
   reason="graph-commit: concurrent-edit conflict — manual merge needed"
 
+  # Layers 1-3 (this tactic): if the layer-2/3 accumulator captured field-level
+  # divergence, upgrade the reason to the greppable "mechanical-unresolved"
+  # marker and render build_recommendation()'s per-conflict field breakdown to a
+  # file. It is passed OUT OF BAND via GRAPH_COMMIT_RECOMMENDATION_FILE (a path
+  # to a tempfile), not argv: it can be a long, multi-line string, and keeping it
+  # off argv both dodges argv length/shell-quoting limits AND preserves the
+  # helper's positional-argument contract. The helper appends it after each
+  # node's base recovery recommendation. Unset/empty → base recovery text only.
   if [[ -n "$CONFLICT_FIELDS_JSON" && -s "$CONFLICT_FIELDS_JSON" ]]; then
     local n
     n="$(jq 'length' "$CONFLICT_FIELDS_JSON")"
@@ -836,32 +849,61 @@ park_write() {
     fi
   fi
 
+  # Comma-join PRUNE_IDS (from tactic-graph-commit-park-context, already
+  # populated by main()'s arg parsing) so the tsx helper can tell a prune id (no
+  # on-disk snapshot — a deletion has nothing to preserve) from an ordinary edit
+  # id (snapshotted to SNAP_DIR/<id>.md by snapshot(), graph-commit:272-280) when
+  # composing each node's base recovery recommendation.
+  prune_csv="$(IFS=,; echo "${PRUNE_IDS[*]:-}")"
   tmpts="$(mktemp --suffix=.mts)" || die "could not create temp file for the parking write"
   cat >"$tmpts" <<'TS'
-// argv: <storeModule> <intentionsDir> <since> <reason> <id...>
-// The recommendation text is passed OUT OF BAND via the env var
-// GRAPH_COMMIT_RECOMMENDATION_FILE (a path to a tempfile), not argv: it can be a
-// long, multi-line string, and keeping it off argv both dodges argv
-// length/shell-quoting limits AND preserves this module's positional-argument
-// contract (id list starts at position 4) unchanged. Unset/empty → null.
+// argv: <storeModule> <intentionsDir> <since> <reason> <snapDir> <pruneCsv> <id...>
+// Composes office_hours.recommendation additively (tactic-graph-commit-auto-
+// serialization Unit 4 appends to, never replaces, park-context's text): the
+// per-id BASE recovery recommendation below (snapshot pointer / mailbox
+// discipline / prune-vs-edit) always applies, and this tactic's field-level
+// breakdown — passed OUT OF BAND via GRAPH_COMMIT_RECOMMENDATION_FILE — is
+// appended after it when a mechanical merge left field divergence
+// (unset/empty env var → base recovery text only).
 import { readFileSync } from "node:fs";
-const [storePath, intentionsDir, since, reason, ...ids] = process.argv.slice(2);
-const { readNode, writeNode } = await import(storePath);
+const [storePath, intentionsDir, since, reason, snapDir, pruneCsv, ...ids] = process.argv.slice(2);
+const pruneSet = new Set(pruneCsv ? pruneCsv.split(",") : []);
 const recFile = process.env.GRAPH_COMMIT_RECOMMENDATION_FILE || "";
-const recommendation = recFile ? readFileSync(recFile, "utf8") : null;
+const fieldBreakdown = recFile ? readFileSync(recFile, "utf8").trimEnd() : "";
+const { readNode, writeNode } = await import(storePath);
 // Two-pass for atomicity: read every node up front so an unreadable id fails
 // BEFORE any write — a single read-modify-write loop that threw mid-way would
 // leave the earlier ids mutated on disk, uncommitted.
 const nodes = ids.map((id) => readNode(intentionsDir, id));
 for (let i = 0; i < nodes.length; i++) {
   const node = nodes[i];
+  const id = ids[i];
+  const base = pruneSet.has(id)
+    ? "A concurrent writer landed an overlapping edit to this node while this " +
+      "session's prune was in flight; the prune was NOT landed (a deletion has " +
+      "no content snapshot). Recommended: the losing writer re-reads the " +
+      "current origin/main content, decides whether the prune still applies, " +
+      "and re-runs graph-commit (--prune, or a fresh edit) on the reconciled " +
+      "result — that same commit clears this office_hours park. A third " +
+      "session encountering this park while the loser is still working should " +
+      "wait rather than attempt its own merge (the mailbox discipline)."
+    : `A concurrent writer landed an overlapping edit to this node while this ` +
+      `session's edit was in flight; this writer's content was NOT landed. ` +
+      `This session's unlanded content is preserved at ${snapDir}/${id}.md ` +
+      `(this machine only — may not survive past this session). Recommended: ` +
+      `the losing writer re-reads the current origin/main content, manually ` +
+      `merges in its intended edit, and re-runs graph-commit on the merged ` +
+      `result — that same commit clears this office_hours park. A third ` +
+      `session encountering this park while the loser is still working should ` +
+      `wait rather than attempt its own merge (the mailbox discipline).`;
+  const recommendation = fieldBreakdown ? `${base}\n\n${fieldBreakdown}` : base;
   node.office_hours = { reason, since, recommendation };
   writeNode(intentionsDir, node);
-  process.stderr.write(`graph-commit: set office_hours on ${ids[i]} (since=${since})\n`);
+  process.stderr.write(`graph-commit: set office_hours on ${id} (since=${since})\n`);
 }
 TS
   if ! GRAPH_COMMIT_RECOMMENDATION_FILE="$rec_file" \
-       npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "${ALL_IDS[@]}" >&2; then
+       npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "$SNAP_DIR" "$prune_csv" "${ALL_IDS[@]}" >&2; then
     rm -f "$tmpts"
     die "failed to write the office_hours parking record"
   fi
@@ -907,6 +949,46 @@ park_and_exit() {
     echo "error: graph-commit: could not land the parking write for ${ALL_IDS[*]} — office_hours set locally but not pushed to main" >&2
   fi
   exit 1
+}
+
+# --- Pre-flight: refuse on unrelated dirty tracked files --------------------
+# try_land()'s `git pull --rebase origin main` refuses outright when ANY
+# tracked file is dirty, including files entirely unrelated to this call's
+# node set (observed: a modified flake.lock in a freshly-provisioned
+# worktree). Left unchecked, that refusal surfaces as try_land()'s generic
+# "dirty tree or fetch failure" die() — indistinguishable from a genuine
+# environment problem, and it never names the offending paths. Catch it here,
+# before ANY tree mutation — in particular before ensure_intentions_only_base()
+# could run a `git reset --hard` that would silently discard the very dirt
+# this is trying to surface — scoped to exclude exactly the paths this call is
+# about to write (those are expected to be dirty; that is the point). Ignores
+# untracked (`??`) entries: only a dirty TRACKED file blocks `git pull
+# --rebase`, per the observed failure mode (code-style.md: clear error over a
+# silent fallback such as --autostash, which would hide rather than surface
+# the anomaly).
+assert_clean_outside_ids() {
+  local dirty
+  dirty="$(git status --porcelain)"
+  [[ -z "$dirty" ]] && return 0
+  local -A ours=()
+  local id
+  for id in "${ALL_IDS[@]}"; do
+    ours["intentions/$id.md"]=1
+  done
+  local offending="" line path
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ "$line" == '??'* ]] && continue
+    path="${line:3}"
+    [[ -n "${ours[$path]:-}" ]] && continue
+    offending+="$line"$'\n'
+  done <<<"$dirty"
+  if [[ -n "$offending" ]]; then
+    echo "error: graph-commit: refusing to start — unrelated dirty tracked file(s) outside this call's node set:" >&2
+    printf '%s' "$offending" >&2
+    echo "       stash or commit these first (e.g. 'git stash -u'), then re-run graph-commit — it resumes safely (a prior partial local commit is detected and just pushed forward)." >&2
+    exit 1
+  fi
 }
 
 # --- Main ------------------------------------------------------------------
@@ -993,6 +1075,14 @@ main() {
   # those signals into a normal exit so cleanup() (snapshot removal, remote
   # scratch-branch delete) always runs on signal death.
   trap 'exit 130' INT TERM
+
+  # Pre-flight (tactic-graph-commit-park-context): refuse when an unrelated
+  # tracked file is dirty, BEFORE the first tree mutation. In this tactic's
+  # layered design check_base_freshness runs the layer-3 stale-base auto-merge,
+  # which overwrites node files on disk and can reach park_and_exit()'s
+  # `git reset --hard`; the guard must run ahead of it so a stray dirty file is
+  # surfaced (and named) rather than silently discarded.
+  assert_clean_outside_ids
 
   check_base_freshness
 

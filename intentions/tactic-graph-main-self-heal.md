@@ -52,7 +52,10 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix: null
+  fix:
+    since: 2026-07-21
+    attempt: 1
+    pushed_sha: 3d23a5e73e3fdd2d7a2812eedfb48f6951931229
 validates: []
 blocked_by: []
 office_hours: null
