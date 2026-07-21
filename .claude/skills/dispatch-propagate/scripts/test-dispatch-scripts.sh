@@ -21357,11 +21357,18 @@ FAKE
            "$TMPDIR_TEST/dispatch-escalate-sync-broken"
 
   # PATH-shimmed git: branch defaults to main; fetch/merge succeed unless a
-  # FAKE_GIT_*_FAIL env var is set.
+  # FAKE_GIT_*_FAIL env var is set. The `-C <path> symbolic-ref --short HEAD`
+  # case backs lib.sh's assert_primary_checkout_on_main (b8a1ba75), which
+  # dispatch-select-tick's Step 1 main-sync now calls before the ff-only merge —
+  # default SEL_PRIMARY_CHECKOUT_BRANCH=main models the normal in-place primary
+  # checkout so every pre-existing test's main-sync path is unaffected; a test
+  # covering the drift invariant sets SEL_PRIMARY_CHECKOUT_BRANCH to something
+  # else.
   cat > "$TMPDIR_TEST/bin/git" <<'STUB'
 #!/usr/bin/env bash
 case "$*" in
   "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
+  -C\ *\ symbolic-ref\ --short\ HEAD) echo "${SEL_PRIMARY_CHECKOUT_BRANCH:-main}" ;;
   "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   *) exit 0 ;;
@@ -21468,6 +21475,7 @@ sel_tick_teardown() {
     SEL_MAIN_BROKEN_SHA SEL_MAIN_RED_NODES SEL_SYNC_BROKEN_LATCHED SEL_JIT_SCAN \
     SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_CENSUS_OUT \
     SEL_CALENDAR_OUT SEL_STATEMENTS_OUT \
+    SEL_PRIMARY_CHECKOUT_BRANCH \
     DISPATCH_DECISION_LOG_DIR
 }
 
@@ -21492,6 +21500,26 @@ assert_eq "empty: decision log last record .disposition" "empty" \
   "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
 assert_eq "empty: decision log last record .site" "select-tick" \
   "$(tail -n1 "$DLOG_FILE" | jq -r '.site')"
+sel_tick_teardown
+
+# --- primary checkout drifted off main → internal-error, exit 2 -------------
+# lib.sh's assert_primary_checkout_on_main (b8a1ba75) guards the Step 1
+# main-sync: a primary checkout not on `main` (the 2026-07-21 direct-to-main
+# incident, PR #2925) must fail loudly rather than let the ff-only merge run
+# against the wrong branch. dispatch-select-tick surfaces this as exit 2 with
+# no decision line, WITHOUT releasing the lock (the invariant violation is not
+# a normal terminal disposition the lock-release contract covers).
+echo "Test: select-tick primary checkout drifted off main → internal-error, exit 2"
+sel_tick_setup
+export SEL_PRIMARY_CHECKOUT_BRANCH="some-other-branch"
+rc=0; out=$(run_sel_tick) || rc=$?
+assert_eq "drift: exit 2" "2" "$rc"
+assert_eq "drift: no decision line" "" "$out"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "drift: decision log last record .disposition" "internal-error" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "drift: decision log last record .skip_reason" "primary-checkout-not-on-main" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
 sel_tick_teardown
 
 # --- graph selection → reserved under the node id, lock RELEASED --------------
