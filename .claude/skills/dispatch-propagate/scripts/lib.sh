@@ -1734,6 +1734,31 @@ resolve_project_root() {
   dirname "$common_dir"
 }
 
+# Assert the primary checkout at <path> is on `main`. This is the invariant
+# recorded as a condition on strategy-autonomous-execution: unattended paths
+# (main-sync's ff-only merge, worktree provisioning's project-root lookup)
+# assume the primary checkout never leaves `main`. Never auto-switches — a
+# drifted primary checkout is a bug to fail loudly on and repair by hand, not
+# something to silently correct out from under a caller. Prints nothing and
+# returns 0 when on `main`; otherwise prints a loud stderr message naming the
+# invariant, what was found, and the repair command, and returns 1.
+# Args: $1 = path to the primary checkout worktree.
+assert_primary_checkout_on_main() {
+  local path="$1" branch
+  branch=$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)
+  if [[ $? -eq 0 && "$branch" == "main" ]]; then
+    return 0
+  fi
+  echo "assert_primary_checkout_on_main: INVARIANT VIOLATED — the primary checkout at '$path' must stay on 'main' (condition on strategy-autonomous-execution)." >&2
+  if [[ -n "$branch" ]]; then
+    echo "assert_primary_checkout_on_main: found branch '$branch' instead." >&2
+  else
+    echo "assert_primary_checkout_on_main: HEAD is detached or not resolvable." >&2
+  fi
+  echo "assert_primary_checkout_on_main: repair with: git -C '$path' switch main" >&2
+  return 1
+}
+
 # Print the canonical dispatch selection-lock file path to stdout. An explicit
 # DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup (tests rely on
 # this). Otherwise the lock lives at the shared project-root tmp/ (not a per-

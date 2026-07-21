@@ -274,6 +274,16 @@ if [[ "$BRANCH" == "main" ]]; then
     MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
   fi
 
+  # Guard the primary-checkout-on-main invariant (condition on
+  # strategy-autonomous-execution; tactic-primary-checkout-main-guard) before
+  # any op below assumes it — the ff-only merge can only fast-forward a
+  # checkout that is actually on main.
+  assert_primary_checkout_on_main "$MAIN_WORKTREE" || {
+    DLOG_DISPOSITION="internal-error"
+    DLOG_SKIP_REASON="primary-checkout-not-on-main"
+    exit 2
+  }
+
   # Decision A — defer while a live sync-repair session is mutating the main
   # worktree, but fail OPEN on a daemon UNKNOWN (rc 1). claude_sessions_under
   # returns rc 0 only on a definite list; a row whose name is `sync-repair` and
