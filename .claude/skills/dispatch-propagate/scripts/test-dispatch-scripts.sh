@@ -21351,16 +21351,19 @@ FAKE
 #!/usr/bin/env bash
 case "$*" in
   "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
-  -C\ *\ symbolic-ref\ --short\ HEAD) echo "${FAKE_GIT_BRANCH:-main}" ;;
   "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   # resolve_project_root (lib.sh) + assert_primary_checkout_on_main (added by
   # PR #2925) run before the main-sync: return a non-empty git-common-dir so the
-  # project-root dirname succeeds, and report the primary checkout as on `main`
-  # so the invariant passes. Without these the catch-all returns empty, the
+  # project-root dirname succeeds, and report the primary checkout's branch —
+  # FAKE_GIT_PRIMARY_BRANCH is a knob dedicated to the guard's target, distinct
+  # from FAKE_GIT_BRANCH (which drives the tick's OWN branch check above and
+  # gates whether the main-sync block runs at all); it falls back to
+  # FAKE_GIT_BRANCH, then "main", so every existing test (which never sets it)
+  # is unaffected. Without a match here the catch-all returns empty, the
   # invariant sees branch != main, and dispatch-select-tick aborts exit 2.
   "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/.bare" ;;
-  "-C "*" symbolic-ref --short HEAD") echo main ;;
+  "-C "*" symbolic-ref --short HEAD") echo "${FAKE_GIT_PRIMARY_BRANCH:-${FAKE_GIT_BRANCH:-main}}" ;;
   *) exit 0 ;;
 esac
 STUB
@@ -21452,7 +21455,7 @@ sel_tick_teardown() {
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     DISPATCH_LOCK_WAIT_TIMEOUT DISPATCH_LOCK_WAIT_INTERVAL \
-    FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
+    FAKE_GIT_BRANCH FAKE_GIT_PRIMARY_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
     SEL_EXHAUSTED SEL_PRIORITY_ONLY \
     SEL_MAX_WORKERS SEL_NPRIO_AVAIL SEL_DEFAULT_TARGET \
@@ -21875,6 +21878,41 @@ DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
 assert_eq "guard-pass: disposition not internal-error" "empty" \
   "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
 assert_eq "guard-pass: skip_reason not primary-checkout-not-on-main" "" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+sel_tick_teardown
+
+# --- on-main but primary checkout off-main: the guard HALTS the tick ----------
+# Inverse of the guard-PASS case above: this pins the guard's ACTUAL-HALT property
+# at the wiring level. FAKE_GIT_BRANCH is left unset so BRANCH=main and the
+# main-sync block IS entered, but the dedicated FAKE_GIT_PRIMARY_BRANCH knob drives
+# the guard's target (MAIN_WORKTREE, checked via `-C <path> symbolic-ref --short
+# HEAD`) off `main` — impossible with the old single knob, which coupled BRANCH and
+# the guard target. assert_primary_checkout_on_main must fire: exit 2, NO normal
+# selection decision line on stdout, and a decision-log record stamped
+# disposition=internal-error / skip_reason=primary-checkout-not-on-main. This case
+# FAILS if a future change mis-wires the guard to no-op on a drifted primary checkout.
+echo "Test: select-tick on-main but primary checkout off-main → guard halts (exit 2)"
+sel_tick_setup
+export FAKE_GIT_PRIMARY_BRANCH="707-some-branch"
+# The script runs under `set -e`; this is the first sel-tick case where the
+# tick legitimately exits non-zero, so the substitution must be shielded or
+# set -e kills the whole suite before the assertions below ever run (mirrors
+# test-primary-checkout-guard.sh's set +e / set -e bracketing).
+set +e
+out=$(run_sel_tick) ; rc=$?
+set -e
+assert_eq "guard-halt: exit 2 (the guard's exit)" "2" "$rc"
+# The guard short-circuits before selection: the tail stdout line is NOT a decision
+# line (in particular NOT the on-main `empty` the guard-pass case asserts) — it is
+# empty, same tail pattern as that case but inverted.
+assert_eq "guard-halt: no selection decision line (tail not 'empty')" "" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+# Structured decision-log: last record carries the guard's disposition + reason
+# (same jq pattern as the guard-pass case, opposite values).
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "guard-halt: disposition internal-error" "internal-error" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "guard-halt: skip_reason primary-checkout-not-on-main" "primary-checkout-not-on-main" \
   "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
 sel_tick_teardown
 
