@@ -276,12 +276,12 @@ result = {
 }
 ```
 
-The Workflow's fix-authoring agents (non-isolated, `model: opus`) have already
-edited the working tree by the time `result` is returned — this includes THREE
-sources of edits merged into the one envelope above: the shared Lane-B Opus fix
-fan-out, Lane-A code-review's own `/code-review max --fix` edits, and the
-residue phase's applied resolve-dispositioned fixes. The skill's context never
-holds raw findings — only this compact summary. **See
+The Workflow's fix-authoring agents (non-isolated, Opus) have already edited the
+working tree by the time `result` is returned — this includes THREE sources
+of edits merged into the one envelope above: the shared Lane-B Opus fix fan-out,
+Lane-A code-review's own `/code-review max --fix` edits, and the residue phase's
+applied resolve-dispositioned fixes. The skill's context never holds raw
+findings — only this compact summary. **See
 `references/schema-edge-cases-notes.md`** for the full model split across
 finder/fix/classify stages (#1172, #2872, tactic-review-phase-trust-builtin-review).
 
