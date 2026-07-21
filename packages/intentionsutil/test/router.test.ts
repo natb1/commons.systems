@@ -672,6 +672,16 @@ describe("frozen-node candidates", () => {
     });
   });
 
+  it("a tactic named as another tactic's parent is not draft-selectable, even though it is phase-null", () => {
+    const nodes = [
+      tactic({ id: "tactic-parent", phase: null }),
+      tactic({ id: "tactic-child", phase: null, parent: "tactic-parent" }),
+    ];
+    const ids = candidateIds(nodes);
+    expect(ids).toContain("tactic-child");
+    expect(ids).not.toContain("tactic-parent");
+  });
+
   it("a parked draft tactic emits no candidate", () => {
     const nodes = [
       tactic({
