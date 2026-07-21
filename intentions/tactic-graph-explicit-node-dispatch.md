@@ -59,8 +59,18 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-graph-explicit-node-dispatch
+  pr: 2921
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-21
+    attempt: 1
+    pushed_sha: 27925a6d5c65845ab96f23f831d306d1d896ad73
 validates: []
 blocked_by: []
 office_hours: null
