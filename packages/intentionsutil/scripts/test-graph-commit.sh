@@ -47,9 +47,14 @@
 #      edit is rebuilt on origin/main, ONLY the intentions/ change lands (the
 #      code commit is excluded), exit 0, and the worktree HEAD is restored to
 #      the PR tip
-#  17. far-ahead worktree + --prune: a deletion issued from a far-ahead PR
+#  17. overlapping edit vs prune conflict: park recommendation omits a
+#      snapshot path (no content to preserve) and states the
+#      prune-reconciliation instruction instead
+#  18. far-ahead worktree + --prune: a deletion issued from a far-ahead PR
 #      branch lands on main (the node is removed) without landing the code
 #      commit, HEAD restored
+#  19. an unrelated dirty tracked file outside the node set: clear pre-flight
+#      error naming the file, no rebase/CI attempted, main untouched
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -98,7 +103,7 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
 }
 for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2-migration \
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
-          t-farahead t-farahead-prune; do
+          t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight; do
   seed_node "$id"
 done
 git -C "$SEED" add -A
@@ -190,16 +195,24 @@ SH
 cat >"$WORK/bin/npx" <<'SH'
 #!/usr/bin/env bash
 # npx shim: emulates `npx tsx <helper> <storeModule> <intentionsDir> <since>
-# <reason> <id...>` (graph-commit's park_write) without node. Mirrors the real
-# helper's two-pass shape: verify every id is readable first, then write all.
+# <reason> <snapDir> <pruneCsv> <id...>` (graph-commit's park_write) without
+# node. Mirrors the real helper's two-pass shape: verify every id is readable
+# first, then write all; fakes a recommendation string per-id distinguishing a
+# pruned id (no snapshot) from an ordinary edit id (snapshot path included) so
+# tests can assert on the distinction without needing the real store.ts.
 [[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
 shift 3   # tsx, helper script path, store module path
-dir="$1"; since="$2"; reason="$3"; shift 3
+dir="$1"; since="$2"; reason="$3"; snap_dir="$4"; prune_csv="$5"; shift 5
 for id in "$@"; do
   [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
 done
 for id in "$@"; do
-  printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
+  if [[ ",$prune_csv," == *",$id,"* ]]; then
+    rec="prune, no content snapshot, mailbox discipline"
+  else
+    rec="unlanded content preserved at ${snap_dir}/${id}.md; mailbox discipline"
+  fi
+  printf 'office_hours: {reason: "%s", since: %s, recommendation: "%s"}\n' "$reason" "$since" "$rec" >>"$dir/$id.md"
   echo "graph-commit: set office_hours on $id (since=$since)" >&2
 done
 SH
@@ -292,6 +305,13 @@ if [[ -n "$snap" && -f "$snap/t-conflict.md" ]] && grep -q 'B-loses' "$snap/t-co
   ok "overlap: losing writer's content preserved in the kept snapshot dir"
 else
   no "overlap snapshot preservation (snap='$snap')"
+fi
+if [[ -n "$snap" ]] && grep -q 'recommendation' <<<"$content" \
+   && grep -q "$snap/t-conflict.md" <<<"$content" \
+   && grep -q 'mailbox discipline' <<<"$content"; then
+  ok "overlap: office_hours recommendation carries the snapshot path and mailbox instruction"
+else
+  no "overlap: recommendation missing snapshot path or mailbox instruction"; printf '%s\n' "$content"
 fi
 
 # --- Case 5: concluded check failure — immediate die, no retry burn -------------
@@ -544,7 +564,34 @@ else
   no "far-ahead worktree (rc=$rc restored=$restored far_tip=$far_tip code-on-main=$(grep -c 'src/feature.js' <<<"$main_tree"))"; printf '%s\n' "$out"
 fi
 
-# --- Case 17: far-ahead worktree + --prune --------------------------------------
+# --- Case 17: overlapping edit vs prune conflict — park recommendation covers the prune branch ---
+# A rebase CONFLICT where the losing writer's commit is a --prune (delete)
+# racing another writer's edit to the SAME node exercises park_write()'s
+# prune-vs-edit recommendation branch (Unit 1): a pruned id has no on-disk
+# snapshot, so its recommendation must say so instead of pointing at a
+# (nonexistent) SNAP_DIR/<id>.md.
+set_mode green
+W8="$WORK/w8"; W9="$WORK/w9"
+make_clone "$W8" writer-8
+make_clone "$W9" writer-9
+sync_clone "$W8"; sync_clone "$W9"
+edit_line "$W8" t-prune-conflict 1 W8-edit
+run_gc "$W8" t-prune-conflict >/dev/null 2>&1
+rm -f "$W9/intentions/t-prune-conflict.md"
+out="$(run_gc "$W9" --prune t-prune-conflict 2>&1)"; rc=$?
+content="$(origin_show t-prune-conflict)"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'concurrent-edit conflict' <<<"$out" \
+   && grep -q 'line1: W8-edit' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 'recommendation' <<<"$content" \
+   && ! grep -q 'preserved at' <<<"$content"; then
+  ok "prune-vs-edit conflict: park recommendation omits a snapshot path for a pruned id"
+else
+  no "prune-vs-edit conflict handling (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 18: far-ahead worktree + --prune --------------------------------------
 # A prune issued from the same far-ahead PR branch: the node is removed from
 # main, the code commit is still excluded, and HEAD is restored.
 set_mode green
@@ -561,6 +608,26 @@ if [[ $rc -eq 0 ]] \
   ok "far-ahead worktree + --prune: node removed from main, code commit excluded, HEAD restored"
 else
   no "far-ahead prune (rc=$rc restored2=$restored2 far_tip2=$far_tip2)"; printf '%s\n' "$out"
+fi
+
+# --- Case 19: unrelated dirty tracked file — clear pre-flight error, no rebase attempted ---
+set_mode green
+W10="$WORK/w10"
+make_clone "$W10" writer-10
+sync_clone "$W10"
+edit_line "$W10" t-dirty-preflight 1 dirty-edit
+echo "unrelated local change" >>"$W10/packages/intentionsutil/src/store.js"
+before_sha="$(origin_sha)"
+out="$(run_gc "$W10" t-dirty-preflight 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'unrelated dirty tracked file' <<<"$out" \
+   && grep -q 'store.js' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]] \
+   && [[ "$(gh_calls)" -eq 0 ]]; then
+  ok "unrelated dirty tracked file: clear pre-flight error names the file, no rebase/CI attempted, main untouched"
+else
+  no "unrelated dirty tracked file pre-flight (rc=$rc)"; printf '%s\n' "$out"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
