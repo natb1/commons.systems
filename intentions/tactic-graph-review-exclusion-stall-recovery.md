@@ -34,7 +34,166 @@ execution:
   fix: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: qa-fix's gated fix-planner flagged a scope-deviation on
+    opus-fixable residue for PR #2920 — the disposition classifier judged the
+    test-dispatch-scripts.sh harness FAIL opus-fixable, but the fix-planner
+    refused to author a fix because it is inherited main-breakage from unrelated
+    commit b8a1ba75 (assert_primary_checkout_on_main invariant added without
+    matching test-stub coverage), and fixing sel_tick_setup's git stub is
+    shared-test-infra work outside this PR's review-stall-reconciler scope.
+    Escalating to office-hours for a human scope call (fix separately vs. fold
+    into this PR). The node's own acceptance criteria (units 1 and 2) are fully
+    verified and passing; the production-observation item is recorded as a
+    needs-main residue section on the node body, already landed on origin/main."
+  since: 2026-07-21
+  recommendation: >-
+    # Park recommendation — PR #2920 test-harness abort (scope call)
+
+
+    **Addressed to:** the human resolving this park
+
+    **Node:** `tactic-graph-review-exclusion-stall-recovery` (PR #2920)
+
+    **TL;DR recommendation:** Option (a) with urgency. Spin up a **separate,
+    urgent main-repair tactic** to fix the shared `test-dispatch-scripts.sh` git
+    stub. Do **not** fold it into #2920. Merge #2920 after that fix lands and CI
+    is green. If no one can pick up the separate fix within a tick or two,
+    Option (b) (2-line same-PR fix) is an acceptable fallback — but it leaves
+    main red for everyone else in the meantime.
+
+
+    ---
+
+
+    ## What I verified (not just restated from the park note)
+
+
+    1. **Commit `b8a1ba75` is on `origin/main`** (merged 2026-07-21) and added
+    `assert_primary_checkout_on_main` at `lib.sh:1749`. It calls `git -C "$path"
+    symbolic-ref --short HEAD` (line 1751) and, via `resolve_project_root` (line
+    1733), `git rev-parse --path-format=absolute --git-common-dir`.
+
+
+    2. **The `sel_tick_setup()` git stub on `origin/main` handles neither.** The
+    stub (in `test-dispatch-scripts.sh`, the `cat > .../bin/git` block ~line
+    21351) has exactly three cases — `rev-parse --abbrev-ref HEAD`, `fetch
+    origin main`, `merge --ff-only origin/main` — plus a silent `*) exit 0`
+    catch-all. So `symbolic-ref --short HEAD` falls through, returns empty,
+    `branch=""` ≠ `main` → the invariant prints `INVARIANT VIOLATED` and returns
+    1, aborting the whole suite under `set -e`.
+
+
+    3. **`origin/main`'s harness contains zero occurrences of `symbolic-ref`.**
+    That is the decisive fact for Decision #1: **main is currently red for
+    `test-dispatch-scripts.sh` for every PR/tactic that runs it, not just
+    #2920.** `b8a1ba75` shipped a new `dispatch-select-tick` invariant *and*
+    added no stub coverage for it in the shared harness — so the first
+    `sel_tick` test aborts the suite regardless of which branch runs it.
+
+
+    4. **This is not #2920's bug.** #2920 only extended the same file; its own
+    new `review-stall:` wiring test happens to sit downstream of the abort. The
+    fix-planner's scope-deviation call is **correct**: the owed work belongs to
+    `b8a1ba75`'s lineage (shared test-infra), not to the review-stall-reconciler
+    scope.
+
+
+    ---
+
+
+    ## Decision 1 — is main red for others right now? Yes.
+
+
+    Treat this as a **standalone main-breakage** independent of #2920. Any
+    dispatch tactic that touches `dispatch-select-tick` and runs
+    `test-dispatch-scripts.sh` in CI is hitting the same exit-2 abort today.
+    This warrants its own repair whether or not #2920 ever merges. It is the
+    more urgent of the two issues buried in this park.
+
+
+    ## Decision 2 — where does the harness fix live? Separate tactic
+    (preferred).
+
+
+    **Greenfield-correct answer:** the stub gap is shared test-infra debt
+    created by `b8a1ba75`. Its clean home is a small urgent tactic/PR that
+    repairs the harness for the whole fleet, is verified green on its own, and
+    is then inherited by #2920 (and every other in-flight branch) on the next
+    `origin/main` merge. This keeps #2920's diff scoped to the review-stall
+    reconciler it was planned for.
+
+
+    **Recommended sequencing:**
+
+    1. Open the harness-repair tactic; add the two missing cases to
+    `sel_tick_setup()`'s git stub (see exact patch below).
+
+    2. Run `bash
+    .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` to
+    confirm the suite runs to completion (no exit-2 abort).
+
+    3. Land it, confirm CI green on main.
+
+    4. Merge `origin/main` into #2920, re-run the same suite so #2920's own new
+    `review-stall:` test now executes, and merge #2920.
+
+
+    **Acceptable fallback (Option b)** — only if the separate repair won't be
+    picked up promptly and you want #2920 unblocked now: authorize the 2-line
+    stub fix inside #2920. It is genuinely low-risk (additive cases before the
+    `*) exit 0` catch-all, matching the pattern already used at lines 6671 and
+    6897 in the same file). The cost is a slightly muddied #2920 scope and, more
+    importantly, **main stays red for other branches until #2920 merges** — so
+    this does not discharge the Decision-1 obligation on its own.
+
+
+    ## The exact fix (either option)
+
+
+    Add these two cases to the `sel_tick_setup()` git stub, before `*) exit 0
+    ;;` (case matches `$*`, so the `-C <path>` prefix needs a glob):
+
+
+    ```sh
+
+    "-C "*" symbolic-ref --short HEAD") echo main ;;
+
+    "rev-parse --path-format=absolute --git-common-dir") echo
+    "$TMPDIR_TEST/.bare" ;;
+
+    ```
+
+
+    `echo main` satisfies the on-main invariant for the happy-path sel_tick
+    tests; the git-common-dir case just needs to return a non-empty path so
+    `resolve_project_root`'s `dirname` succeeds. Confirm against the real
+    invocation at `lib.sh:1751` / `:1733` and the existing stub style at
+    `test-dispatch-scripts.sh:6671` and `:6897`.
+
+
+    ## One thing to flag back upstream
+
+
+    `b8a1ba75` shipped an invariant with **no harness coverage of its own**
+    (zero `symbolic-ref` mocks anywhere in the suite) and broke a pre-existing
+    suite. Whoever owns the repair tactic should also add a dedicated off-main
+    test for `assert_primary_checkout_on_main` so the invariant is actually
+    exercised, not merely mocked-around. That closes the real gap rather than
+    just silencing the abort.
+
+
+    ## Not in scope for this park (already settled — do not reopen)
+
+
+    #2920's own acceptance is fully verified: 579/579 intentionsutil vitest
+    incl. the 6 `needsReviewStallRecovery` cases and the router
+    fix-aware-exclusion case; the `router.ts` `&& t.execution?.fix == null`
+    carve-out; the executable `reconcile-graph-review-stall` script and its
+    `dispatch-select-tick` `review-stall:` wiring. The end-to-end
+    observe-in-production item already rides with the node as a `## needs-main
+    residue` section on `origin/main`. None of that needs your attention here —
+    only the harness scope call does.
 pace_exempt: false
 rounds: null
 attributes:
@@ -300,18 +459,3 @@ posture the sibling reconcilers were verified under.
 - **Source PR**: #2888 (`execution.pr` on `tactic-graph-selector-reviewed-exclusion`)
 - **Implementation PR**: #2920 (draft; carries the plan adaptation described
   in the revision note above)
-
-## needs-main residue
-
-- id: 8; title: Production regression recovery fires end-to-end on a real
-  stranded review PR; url_path: current; expected_outcome: A genuinely
-  stranded review+reviewed node is routed back to fix by the reconciler in
-  live dispatch, no longer stalling indefinitely; finding: No live
-  graph-native PR fixture exists to drive an end-to-end regression in CI —
-  this is a planned, acknowledged deferral to production observation (see
-  the "Manual" verification item above). After this PR lands, the next time
-  a `phase: review` + `reviewed` tactic's armed PR actually regresses
-  (`origin/main` moves it to `CONFLICTING`, or a required re-run turns CI
-  persistently red), confirm `dispatch-select-tick`'s next tick emits a
-  `review-stall: recovered <id> -> fix (...)` line and that the node lands
-  with `execution.fix` set.
