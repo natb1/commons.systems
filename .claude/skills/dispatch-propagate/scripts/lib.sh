@@ -1734,28 +1734,33 @@ resolve_project_root() {
   dirname "$common_dir"
 }
 
-# Assert the primary checkout at <path> is on `main`. This is the invariant
-# recorded as a condition on strategy-autonomous-execution: unattended paths
-# (main-sync's ff-only merge, worktree provisioning's project-root lookup)
-# assume the primary checkout never leaves `main`. Never auto-switches — a
-# drifted primary checkout is a bug to fail loudly on and repair by hand, not
-# something to silently correct out from under a caller. Prints nothing and
-# returns 0 when on `main`; otherwise prints a loud stderr message naming the
-# invariant, what was found, and the repair command, and returns 1.
-# Args: $1 = path to the primary checkout worktree.
+# Assert the primary checkout at <path> is on `main`. Returns 0 silently when it
+# is; otherwise prints a loud, labeled error to stderr and returns 1 — never
+# auto-switches. The primary checkout (the worktree with `main` checked out) is
+# assumed by two unattended paths: the dispatch-select-tick main-sync
+# (`git fetch origin main && git merge --ff-only origin/main`, which can only
+# fast-forward a checkout actually on `main`) and provision-node-worktree's
+# project-root resolution (which finds the worktree with `main` checked out).
+# A drift off `main` (e.g. a failed `git worktree add` + chained `cd` falling
+# through to the primary checkout — the 2026-07-21 direct-to-main incident,
+# PR #2925) silently breaks both. This is a condition on
+# `strategy-autonomous-execution`. Capture symbolic-ref's output and status so a
+# caller under `set -e` is not killed — call as `... || { … }` or in an `if`.
 assert_primary_checkout_on_main() {
-  local path="$1" branch
-  branch=$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)
-  if [[ $? -eq 0 && "$branch" == "main" ]]; then
+  local path="$1" branch rc
+  branch="$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)"
+  rc=$?
+  if [[ $rc -eq 0 && "$branch" == "main" ]]; then
     return 0
   fi
-  echo "assert_primary_checkout_on_main: INVARIANT VIOLATED — the primary checkout at '$path' must stay on 'main' (condition on strategy-autonomous-execution)." >&2
-  if [[ -n "$branch" ]]; then
-    echo "assert_primary_checkout_on_main: found branch '$branch' instead." >&2
+  local found
+  if [[ $rc -ne 0 ]]; then
+    found="detached HEAD or not resolvable"
   else
-    echo "assert_primary_checkout_on_main: HEAD is detached or not resolvable." >&2
+    found="'$branch'"
   fi
-  echo "assert_primary_checkout_on_main: repair with: git -C '$path' switch main" >&2
+  echo "assert_primary_checkout_on_main: INVARIANT VIOLATED — the primary checkout at '$path' must stay on 'main' (a condition on strategy-autonomous-execution), but found $found." >&2
+  echo "  Repair: git -C \"$path\" switch main" >&2
   return 1
 }
 

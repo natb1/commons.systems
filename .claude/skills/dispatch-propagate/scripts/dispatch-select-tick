@@ -274,10 +274,12 @@ if [[ "$BRANCH" == "main" ]]; then
     MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
   fi
 
-  # Guard the primary-checkout-on-main invariant (condition on
-  # strategy-autonomous-execution; tactic-primary-checkout-main-guard) before
-  # any op below assumes it — the ff-only merge can only fast-forward a
-  # checkout that is actually on main.
+  # Prevent-at-source guard: the main-sync below (`git merge --ff-only
+  # origin/main`) can only fast-forward a checkout actually on `main`, and a
+  # non-main primary checkout also breaks provision-node-worktree's project-root
+  # resolution. If the primary checkout has drifted off `main` (the 2026-07-21
+  # direct-to-main incident, PR #2925), fail loudly here rather than merging in
+  # the wrong branch. Never auto-switch — that is a deliberate human/caller act.
   assert_primary_checkout_on_main "$MAIN_WORKTREE" || {
     DLOG_DISPOSITION="internal-error"
     DLOG_SKIP_REASON="primary-checkout-not-on-main"
