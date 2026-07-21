@@ -41,9 +41,86 @@ attention:
 phase: implement
 execution: null
 validates: []
-blocked_by:
-  - tactic-phase-standup-audit-lens
-office_hours: null
+blocked_by: []
+office_hours:
+  reason: "/implement: implementation deviated from the persisted plan on
+    tactic-phase-boot-offload-launcher. Unit 1 done (PR #2926); Unit 2 targets
+    retired dispatch-launch-worker and its own blocking lens
+    (tactic-phase-standup-audit-lens) does not exist in the repo."
+  since: 2026-07-19
+  recommendation: >-
+    # Recommendation: `tactic-phase-boot-offload-launcher`
+
+
+    ## Status
+
+
+    - **Unit 1 — done.** PR #2926 removes qa-fix's redundant in-session
+    `origin/main` merge at Step 0.5, since `provision-node-worktree` already
+    merges before the phase worker spawns (mirrors review-fix's #1426 pattern).
+    Legacy issue lane left unchanged (launch chain retired). Ready for review on
+    its own.
+
+    - **Unit 2 — not implemented.** Its target,
+    `dispatch-launch-worker:161-164`, was deleted by PR #2869 (commit a8c4898d)
+    when the harness moved to the graph-only path. The launcher is now
+    `dispatch-graph-execute` + `provision-node-worktree`, which write nothing
+    into the worktree. The plan-text mechanism no longer exists.
+
+
+    ## Options for Unit 2
+
+
+    **(a) Unblock the scoping question first.** Write the missing
+    `tactic-phase-standup-audit-lens` node (the body prose names it as the input
+    that decides which preamble steps are safe to offload; it is absent from the
+    repo). Do this only if you believe a general offload framework is worth
+    designing — it is the largest scope.
+
+
+    **(b) Narrow Unit 2 to one real slice.** Extend the existing
+    `DISPATCH_PR_LIST_FILE` mechanism (introduced in PR #1646, today scoped to
+    selection-time inside `dispatch-select-target`/`dispatch-ci-ready`) across
+    the worker-session boundary for the qa and review phases only — where a PR
+    already exists at launch. Feed a precomputed PR number / context-pack as
+    **advisory-only** input, with the phase skill's existing idempotency
+    preamble doing an in-session freshness check on cache miss or staleness.
+    This is the one slice with plausible payoff.
+
+
+    **(c) Close Unit 2 as not-worth-it.** The only guardrail-safe value (the
+    post-merge merge-base SHA, already `provision-node-worktree`'s
+    `$ORIGIN_SHA`) is a free local `git merge-base` — precomputing it saves ~0
+    and adds a file-read seam. Caching `dispatch-context-pack` violates the
+    node's own freshness bound (labels/CI drift between launch and start). If
+    you take this path, update the node's rationale to record that
+    `dispatch-launch-worker` is retired.
+
+
+    **Recommendation:** ship #2926, then take **(b)** if PR-context
+    re-resolution is a measured cost in qa/review, otherwise **(c)**. Reserve
+    **(a)** only if a broad offload lens is independently wanted.
+
+
+    ## Regardless of choice
+
+
+    Fix the doc/frontmatter inconsistency: the body prose still names
+    `tactic-phase-standup-audit-lens` as a blocker, but the frontmatter
+    `blocked_by` is empty (`[]`), so the graph does not actually gate on it.
+    Update the prose to match the frontmatter (or add the link if the gate is
+    intended — but per option (b)/(c) it should just be dropped).
+
+
+    References:
+
+    - #2926: https://github.com/natb1/commons.systems/pull/2926
+
+    - #2869: https://github.com/natb1/commons.systems/pull/2869
+
+    - #1646: https://github.com/natb1/commons.systems/pull/1646
+
+    - #1426: https://github.com/natb1/commons.systems/pull/1426
 pace_exempt: false
 rounds: null
 attributes: {}
