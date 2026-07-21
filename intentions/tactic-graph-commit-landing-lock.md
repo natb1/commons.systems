@@ -32,55 +32,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-commit-landing-lock
   pr: 2915
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA found one needs-main residue item whose disposition
-    (\"planned-deferral\", verifiable only via sustained observation of
-    graph-commit invocation logs across concurrent real-world usage, not a
-    point-in-time check) routes to human review — no deployed public URL or
-    Claude-in-Chrome-checkable surface exists for it, so the conservative
-    \"uncertain -> human\" default applies rather than transitioning to main-qa.
-    Escalating to office-hours; the tactic itself (Units 1-3) is otherwise fully
-    verified: test-graph-commit.sh passes 31/31 including all 4 new landing-lock
-    cases, and the one script-verifiable QA-plan FAIL (a naive substring-grep
-    false positive on this PR's own branch name colliding with \"landing-lock\")
-    was reclassified already-satisfied since the precise ref-namespace check and
-    the suite's own lock-hygiene cases both confirm the real property holds."
-  since: 2026-07-21
-  recommendation: >-
-    Recommended next steps:
-
-    1. Confirm the code itself is done:
-    `packages/intentionsutil/scripts/test-graph-commit.sh` passes 31/31
-    (verified this pass), including the 4 new landing-lock functional cases
-    (contention-is-cheap, dead-holder steal, live-holder wait, lock-ref
-    hygiene).
-
-    2. Decide how to track the one deferred item: after this PR merges and is in
-    active use, watch real `graph-commit` invocation logs during a period of
-    concurrent dispatch activity for absence of "could not land on main after N
-    attempts" exhaustion events (the regression this tactic exists to fix), and
-    confirm the new "could not claim the landing lock within ...s" log line — if
-    it ever appears — stays rare relative to successful claims. This is
-    inherently a downstream/monitoring check, not something verifiable at merge
-    time.
-
-    3. If desired, this observation could itself become a lightweight follow-up
-    tactic/reminder (e.g. a JIT check after some days of use) rather than a
-    one-off manual glance — that's a judgment call for the human reviewer.
-
-    4. No code changes are recommended from this QA pass — the implementation
-    appears complete and correct.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -695,6 +659,10 @@ the above passes):
   have exhausted `MAX_PUSH_ATTEMPTS`, and confirm the new "could not claim
   the landing lock within ...s" log line (when it does appear) is rare
   relative to successful claims, not the common case.
+  **Skipped at office-hours (2026-07-21):** reviewed and explicitly not
+  tracked as a follow-up tactic or scheduled check — the code itself is
+  fully verified (test-graph-commit.sh 31/31), and this observation is
+  left informal rather than made a tracked deliverable.
 - Spot-check that a `graph-commit` process killed mid-hold (e.g. `kill -9`
   during `await_checks()` in a manual local test, not via the automated
   harness) leaves `refs/graph/landing-lock` present but with a now-past
