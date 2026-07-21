@@ -926,9 +926,15 @@ park_and_exit() {
   KEEP_SNAP=1
   echo "graph-commit: concurrent-edit conflict on ${ALL_IDS[*]}; parking node(s) — this writer's content is NOT landed" >&2
   echo "graph-commit: this writer's unlanded content is preserved at $SNAP_DIR for the manual merge" >&2
-  # Sync to fresh origin/main. The tree is clean of tracked modifications here
-  # (the conflicting rebase could only start on a clean tree and was aborted),
-  # so the reset discards exactly the local conflicting commit — nothing else.
+  # Sync to fresh origin/main. Both callers reach here with the writer's content
+  # already captured in SNAP_DIR by snapshot() (run before check_base_freshness),
+  # so the reset is safe to run regardless of what it discards:
+  #   - rc-12 (layer-2) caller: the tree is clean of tracked modifications (the
+  #     conflicting rebase could only start on a clean tree and was aborted), so
+  #     the reset discards exactly the local conflicting commit — nothing else.
+  #   - layer-3 caller (from inside check_base_freshness): no rebase ran and the
+  #     tree still holds the writer's uncommitted node edits; the reset discards
+  #     them, but SNAP_DIR already preserves them for the manual merge.
   # NOTE (deployment): `git reset --hard` is a tree-updating op; when this
   # script is driven through the sandboxed Bash tool it needs
   # dangerouslyDisableSandbox if origin/main advanced read-only paths
@@ -1084,6 +1090,18 @@ main() {
   # surfaced (and named) rather than silently discarded.
   assert_clean_outside_ids
 
+  # Capture the writer's intended on-disk content BEFORE check_base_freshness.
+  # Layer 3's stale-base park (park_and_exit, reached from inside
+  # check_base_freshness on an unresolvable same-field divergence) runs
+  # `git reset --hard FETCH_HEAD`, which discards the writer's uncommitted node
+  # edits. snapshot() is the only surviving copy of that content on every
+  # fail-closed park path, and cleanup() keeps SNAP_DIR (KEEP_SNAP=1) so the park
+  # message can point at it for the manual merge. Running it here — rather than
+  # after the freshness check — makes the layer-3 park preserve the writer's
+  # content just as the layer-2 rc-12 park does; otherwise the reset destroys it
+  # and the "preserved at $SNAP_DIR" message is a false claim.
+  snapshot
+
   check_base_freshness
 
   # Default commit message (the parking commit message is derived inside
@@ -1102,12 +1120,11 @@ main() {
   #     invocation safe to just retry after any partial failure between
   #     commit_files() and a successful push.
   CURRENT_MSG="$msg"
-  snapshot
   # If this is a far-ahead PR-branch worktree, rebuild the edit on an
   # intentions/-only base so the fast path can stamp it (cleanup() restores the
   # original HEAD). No-op for the main checkout and clean/intentions-only
-  # worktrees. Runs after snapshot() so the writer's content is captured before
-  # the reset overwrites the working tree.
+  # worktrees. Runs after snapshot() (taken above, before check_base_freshness)
+  # so the writer's content is captured before the reset overwrites the tree.
   ensure_intentions_only_base
   if id_files_dirty; then
     commit_files

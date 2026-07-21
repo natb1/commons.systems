@@ -889,8 +889,10 @@ if [[ $rc -eq 1 ]] \
    && grep -q 'mechanical-unresolved' <<<"$content" \
    && grep -q 'writer9-value' <<<"$content" \
    && grep -q 'concurrent-value' <<<"$content" \
-   && [[ "$calls" -eq 1 ]]; then
-  ok "layer 3: stale --base same-field divergence stays mechanical-unresolved (parks via a single stamp poll, no prior retry loop)"
+   && [[ "$calls" -eq 1 ]] \
+   && [[ -n "$snap" && -f "$snap/t-field-base-bad.md" ]] \
+   && grep -q 'writer9-value' "$snap/t-field-base-bad.md"; then
+  ok "layer 3: stale --base same-field divergence stays mechanical-unresolved (parks via a single stamp poll, no prior retry loop), and SNAP_DIR retains the writer's original node content"
 else
   no "layer 3 base conflict (rc=$rc calls=$calls)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi

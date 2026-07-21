@@ -55,9 +55,28 @@ function main(): void {
   const base = basePath === "" ? null : readNodeFile(basePath);
 
   // An empty --theirs means the id did not exist on the already-landed side.
-  // theirs is normally "the already-landed content"; when it is genuinely
-  // absent, ours is the only content, so ours wins outright — synthesize a
-  // theirs equal to ours with a null base so the merge is a clean pass-through.
+  // Its meaning depends on whether a base existed:
+  //
+  //   - empty --base AND empty --theirs → genuine add/add. The id never existed
+  //     for this node on either the base or the already-landed side, so ours is
+  //     the only content that ever existed and wins outright — synthesize a
+  //     theirs equal to ours with a null base so the merge is a clean
+  //     pass-through.
+  //
+  //   - non-empty --base AND empty --theirs → delete/modify divergence. The
+  //     node existed at base and we edited it, but the other writer DELETED it
+  //     on the already-landed side. Synthesizing theirs=ours here would
+  //     silently re-create the node from our content and revert the other
+  //     writer's already-landed deletion with no conflict and no park —
+  //     defeating the guarantee that the already-landed edit is never
+  //     overwritten automatically. Report it as an unresolved conflict and do
+  //     NOT write --out so the caller parks.
+  if (theirsPath === "" && base !== null) {
+    const conflicts = [{ field: "<node>", ours: ours.node.id, theirs: null }];
+    process.stdout.write(JSON.stringify({ resolved: false, conflicts }) + "\n");
+    process.exit(0);
+  }
+
   const theirs = theirsPath === "" ? { node: ours.node, body: ours.body } : readNodeFile(theirsPath);
   const effectiveBase = theirsPath === "" ? null : base;
 
