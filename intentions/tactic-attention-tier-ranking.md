@@ -86,3 +86,23 @@ safety), tactic-mainqa-deploy-auth-diagnostics (secret-leak observation).
   subtree; nothing compounds (max, not sum).
 - After the main-health flip: red-main fix tactics still outrank all tier-1/2
   work in the selector's ordered candidate list.
+
+## Per-tier boost namespace (added 2026-07-21, author-directed)
+
+This tactic's scope grows: boost is not a single tier-orthogonal scalar but a
+**per-tier boost namespace**. A boost value is meaningful only within the tier
+it was chosen for — different tiers can be on entirely different boost scales,
+so a value chosen mid-way in tier 1 could wrongly dominate tier 2 if carried in.
+Changing a node's tier therefore does not carry its boost: the target tier's
+boost is absent until a fresh value is selected. This is a mechanical guarantee
+(the `Attention` interface in `packages/intentionsutil/src/schema.ts` and the
+`validate-graph` shape check), not a scripting convention. See the three
+2026-07-21 clarifications on `strategy-graph-drives-dispatch` (the boost-to-top
+operation, the per-tier namespace, and tier-change as a distinct operation).
+
+Exact storage shape (a map keyed by tier vs a tier-tagged value) is a design
+choice for this tactic's finalization. **Open consideration:** how a per-tier
+boost composes with the recorded downward flow of authored boosts along
+`parent`/`serves` (the 2026-07-07 / 2026-07-13 flow clarifications). The
+attention-write tooling that consumes this namespace is drafted separately in
+`tactic-attention-boost-scripts`.
