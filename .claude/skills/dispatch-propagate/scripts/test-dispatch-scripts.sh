@@ -21845,6 +21845,32 @@ assert_eq "off-main: reaches selection (empty, not sync-failed)" "empty" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
 
+# --- on-main: a healthy tick passes the primary-checkout guard (QA finding 7) --
+# The main-sync block runs assert_primary_checkout_on_main "$MAIN_WORKTREE" before
+# the ff-only merge; a violation short-circuits the tick to `exit 2` with
+# disposition=internal-error / skip_reason=primary-checkout-not-on-main and emits
+# NO stdout decision line. This pins the guard's NO-FALSE-HALT property at the
+# WIRING level (the isolated helper is already covered by
+# test-primary-checkout-guard.sh): a default on-main tick (FAKE_GIT_BRANCH unset →
+# BRANCH=main AND the guard target resolves to 'main', so the guard passes
+# silently) must clear the guard and reach normal selection, NOT be halted. This
+# case FAILS if a future change mis-wires the guard to halt healthy on-main ticks.
+echo "Test: select-tick on-main tick passes the primary-checkout guard (not halted)"
+sel_tick_setup
+out=$(run_sel_tick) ; rc=$?
+assert_eq "guard-pass: exit 0 (not guard's exit 2)" "0" "$rc"
+assert_eq "guard-pass: reaches selection (empty, guard did not halt)" "empty" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+# Structured decision-log: the guard-fired path would stamp disposition
+# internal-error + skip_reason primary-checkout-not-on-main. A clean pass is
+# disposition=empty / skip_reason empty (same jq pattern as the empty-queue test).
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "guard-pass: disposition not internal-error" "empty" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "guard-pass: skip_reason not primary-checkout-not-on-main" "" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+sel_tick_teardown
+
 # --- JIT created lines are passed through, prefixed --------------------------
 echo "Test: select-tick passes JIT output through prefixed"
 sel_tick_setup
