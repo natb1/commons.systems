@@ -65,7 +65,9 @@ execution:
     attempt: 1
     pushed_sha: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-hook-tests-select-tick
+  - tactic-flake-unit-tests-select-tick
 office_hours: null
 pace_exempt: false
 rounds: null
