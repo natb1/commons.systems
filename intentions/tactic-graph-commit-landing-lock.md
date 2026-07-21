@@ -56,7 +56,7 @@ office_hours:
     false positive on this PR's own branch name colliding with \"landing-lock\")
     was reclassified already-satisfied since the precise ref-namespace check and
     the suite's own lock-hygiene cases both confirm the real property holds."
-  since: 2026-07-19
+  since: 2026-07-21
   recommendation: >-
     Recommended next steps:
 
