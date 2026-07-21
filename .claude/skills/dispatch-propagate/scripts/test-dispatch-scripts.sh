@@ -19312,6 +19312,74 @@ assert_eq "stop: park-node failure → hook still exits 0" "0" "$rc"
 assert_eq "stop: park-node failure → park-node was still attempted once" "1" "$(wc -l < "$ROOT/park-calls.log")"
 stopnc_teardown
 
+# --- marker consumed after successful park (reason-only) --------------------
+echo "Test: dispatch-stop successful park consumes the reason marker"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)
+assert_eq "stop: park success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park success → reason marker deleted" "0" "$?"
+stopnc_teardown
+
+# --- consumed marker prevents re-park on a later Stop event ------------------
+echo "Test: dispatch-stop does not re-park on a second Stop event after marker consumed"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)
+rc2=$(stopnc_run)   # marker already consumed by the first run
+assert_eq "stop: second run → exit 0" "0" "$rc2"
+assert_eq "stop: second run → park-node still called only once total" "1" "$(wc -l < "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- marker survives a failed park (reason-only) so a later retry can fire ---
+echo "Test: dispatch-stop failed park leaves the reason marker in place"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
+rc=$(stopnc_run)
+assert_eq "stop: park failure → exit 0" "0" "$rc"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park failure → reason marker survives" "0" "$?"
+stopnc_teardown
+
+# --- marker consumed after successful park (reason + recommendation) --------
+echo "Test: dispatch-stop successful park consumes both markers when a recommendation is present"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+rc=$(stopnc_run)
+assert_eq "stop: park+reco success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park+reco success → reason marker deleted" "0" "$?"
+[ ! -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: park+reco success → recommendation marker deleted" "0" "$?"
+stopnc_teardown
+
+# --- both markers survive a failed park (reason + recommendation) -----------
+echo "Test: dispatch-stop failed park leaves both markers in place when a recommendation is present"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
+rc=$(stopnc_run)
+assert_eq "stop: park+reco failure → exit 0" "0" "$rc"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park+reco failure → reason marker survives" "0" "$?"
+[ -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: park+reco failure → recommendation marker survives" "0" "$?"
+stopnc_teardown
+
 # ============================================================================
 # dispatch-finalize-phase tests (#2243)
 # ============================================================================
