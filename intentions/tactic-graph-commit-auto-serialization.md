@@ -64,13 +64,14 @@ attention:
     here by re-reading origin/main and combining both writers' text, exactly the
     layer-2/3 structural field-level merge this tactic's own plan below makes
     automatic); boost preserved unchanged across the finalize."
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-commit-auto-serialization
   pr: 2911
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
 validates: []
