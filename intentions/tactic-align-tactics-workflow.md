@@ -63,11 +63,9 @@ execution:
   fix:
     since: 2026-07-21
     attempt: 1
-    pushed_sha: null
+    pushed_sha: 73ca41c910228c7eee89f7bee99105be5f635e7e
 validates: []
-blocked_by:
-  - tactic-flake-hook-tests-select-tick
-  - tactic-flake-unit-tests-select-tick
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
