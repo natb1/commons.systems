@@ -16,10 +16,11 @@
 
 import { parse } from "yaml";
 import type { IntentionNode } from "./schema.js";
-import { validateGraph } from "./schema.js";
+import { validateGraph, mentionsRef } from "./schema.js";
 import { IntentionSchemaError } from "./errors.js";
 import { extractFrontmatter } from "./frontmatter.js";
 import { readingDate } from "./router.js";
+import { buildIdRefMatchers, classifyRef, extractIdRefs } from "./id-refs.js";
 
 /**
  * Inputs the CLI gathers for the digest. Kept as plain data so the module
@@ -273,17 +274,6 @@ function tableNearDup(nodes: IntentionNode[], threshold = 0.6): string {
 
 // --- DANGLING-REFS ---------------------------------------------------------
 
-// The kind-prefix alternation, regex-escaped and id-sorted. Kind prefixes are
-// DERIVED from the vocabulary (never a hardcoded kind list), so the extractor
-// tracks whatever kinds the graph actually holds. Shared by every
-// prefix-derived matcher so escaping and ordering never drift between them (ids
-// are only path-safety validated, so a prefix can contain a regex metacharacter).
-function escapedPrefixAlt(prefixes: Set<string>): string {
-  return sortedIds(prefixes)
-    .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("|");
-}
-
 interface DanglingRef {
   ref: string;
   referencedBy: string;
@@ -308,85 +298,43 @@ function tableDanglingRefs(input: DigestInput): string {
   const deletedIds = new Set(input.deletedIds);
   const vocab = new Set<string>([...storeIds, ...deletedIds]);
   const prefixes = new Set([...vocab].map((id) => id.split("-")[0]).filter((p) => p.length > 0));
-  const alt = escapedPrefixAlt(prefixes);
-  // Boundaries reject [\w-] on either side so a real id inside a longer compound
-  // (e.g. `tactic-x` inside `tactic-x-v2`) does not match.
-  const idShape = new RegExp(`(?<![\\w-])(?:${alt})-[a-z0-9]+(?:-[a-z0-9]+)*(?![\\w-])`, "g");
-  // Backtick-quoted content: `...` on a single line.
-  const backtickRe = /`([^`\n]+)`/g;
-  // Family wildcard inside backticks: <prefix>-...-*
-  const wildcardRe = new RegExp(`^(?:${alt})-[a-z0-9-]+-\\*$`);
-  // Anchored id-shape test for a whole backtick span, built once from the same
-  // escaped alternation (hoisted out of the per-match loop below).
-  const anchoredIdShape = new RegExp(`^(?:${alt})-[a-z0-9]+(?:-[a-z0-9]+)*$`);
-
-  const classify = (ref: string): "live" | "pruned" | "missing" =>
-    storeIds.has(ref) ? "live" : deletedIds.has(ref) ? "pruned" : "missing";
+  const matchers = buildIdRefMatchers(prefixes);
 
   const refs: DanglingRef[] = [];
   const wildcardRows: string[] = [];
 
   for (const node of input.nodes) {
     const body = input.bodies.get(node.id) ?? "";
-    const seen = new Set<string>();
+    const seenWildcards = new Set<string>();
 
-    // Explicit backtick references (the only source of `missing` classifications).
-    for (const m of body.matchAll(backtickRe)) {
+    // Family wildcards inside backticks: <prefix>-...-* — resolved against
+    // member nodes and reported separately from the live/pruned/missing refs.
+    for (const m of body.matchAll(matchers.backtickRe)) {
       const t = m[1].trim();
-      if (wildcardRe.test(t)) {
-        if (seen.has(t)) continue; // same wildcard quoted twice in one body — dedup
-        seen.add(t);
-        const prefix = t.slice(0, -1); // drop trailing '*'
-        const members = [...storeIds].filter((id) => id.startsWith(prefix)).length;
-        wildcardRows.push(`  ${renderId(node.id)} -> ${renderId(t)} (${members} member${members === 1 ? "" : "s"})`);
-        continue;
-      }
-      // id-shaped? reuse the anchored test built once above.
-      if (anchoredIdShape.test(t)) {
-        if (t !== node.id && !seen.has(t)) {
-          seen.add(t);
-          refs.push({ ref: t, referencedBy: node.id, klass: classify(t) });
-        }
-      }
+      if (!matchers.wildcardRe.test(t)) continue;
+      if (seenWildcards.has(t)) continue; // same wildcard quoted twice in one body — dedup
+      seenWildcards.add(t);
+      const prefix = t.slice(0, -1); // drop trailing '*'
+      const members = [...storeIds].filter((id) => id.startsWith(prefix)).length;
+      wildcardRows.push(`  ${renderId(node.id)} -> ${renderId(t)} (${members} member${members === 1 ? "" : "s"})`);
     }
 
-    // Vocabulary references anywhere in prose (live/pruned only — a token not in
-    // vocab is skipped, so prose compounds never become `missing`).
-    for (const m of body.matchAll(idShape)) {
-      const t = m[0];
-      if (t === node.id || seen.has(t)) continue;
-      if (vocab.has(t)) {
-        seen.add(t);
-        refs.push({ ref: t, referencedBy: node.id, klass: classify(t) });
-      }
+    for (const ref of extractIdRefs(body, matchers, vocab, node.id)) {
+      refs.push({ ref, referencedBy: node.id, klass: classifyRef(ref, storeIds, deletedIds) });
     }
   }
 
   // Planned-reference annotation: does any OPEN (non-done) tactic's statement or
   // body mention a missing ref? The planned-vs-violation judgment stays with the
-  // audit; the digest only flags the heuristic.
-  const openTactics = input.nodes.filter((n) => n.kind === "tactic" && n.phase !== "done");
-  const mentionsRef = (ref: string, referencedBy: string): boolean => {
-    // Match the ref as a whole id token (same [\w-] boundaries as idShape), so a
-    // missing `tactic-x` is not falsely "planned" by an unrelated `tactic-x-v2`.
-    // Exclude the referencing node itself: every missing ref is, by construction,
-    // present in its own referencing body (that is how it was extracted above), so
-    // a self-match would make EVERY missing ref falsely "planned". `[planned]` must
-    // mean some OTHER open tactic mentions the ref.
-    const escaped = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`);
-    return openTactics.some(
-      (t) => t.id !== referencedBy && (re.test(t.statement) || re.test(input.bodies.get(t.id) ?? "")),
-    );
-  };
-
+  // audit; the digest only flags the heuristic. Shared with
+  // validateGraphProseRefs via the exported `mentionsRef` above.
   const missing = refs.filter((r) => r.klass === "missing");
   const pruned = refs.filter((r) => r.klass === "pruned");
   const liveCount = refs.filter((r) => r.klass === "live").length;
 
   const missingRows = missing
     .map((r) => {
-      const annot = mentionsRef(r.ref, r.referencedBy)
+      const annot = mentionsRef(input.nodes, input.bodies, r.ref, r.referencedBy)
         ? " [planned: open tactic mentions it]"
         : " [no open mention]";
       return `  MISSING ${renderId(r.ref)} <- ${renderId(r.referencedBy)}${annot}`;
