@@ -565,6 +565,30 @@ this step's worktree-local `.scope-fingerprint` re-stamp protects a single
 to that tactic's own body. Two unrelated stamps, two unrelated mechanisms —
 do not conflate them.
 
+**Documentation completeness over commit size.** When an interview outcome is
+materially a property of the strategy under edit (an invariant of its
+contract, a resolved edge case, a doctrine correction), record it as a
+strategy clarification on that strategy — never relocate it to a draft tactic,
+or omit it, to keep the commit small or to avoid a re-stamp. Commit size is
+never a reason to put documentation in the wrong place; the materiality-scoped
+freeze below is what keeps a warranted clarification's *blast radius* small —
+it is not a reason to avoid recording the clarification itself.
+
+**Measure freeze/re-stamp cost via the authoritative predicate, never a
+grep.** If a recording or materiality decision turns on how many open children
+a clarification would freeze, compute the actual set with `readNode`
+(`packages/intentionsutil/src/store.ts`, re-exported via the package index
+barrel) + `isFingerprintStale`
+(`packages/intentionsutil/src/transitions.ts`) — or
+`strategyFingerprint` (`packages/intentionsutil/src/router.ts`) plus the same
+per-child stamp read the router's selector uses — never a text `grep` over
+`strategy_fingerprint`. A `grep -c` (or similar) over that field counts the
+key line itself, so a null-valued stamp (`strategy_fingerprint: null` — not
+stale, per `isFingerprintStale`) is indistinguishable from a real one in the
+grep count and inflates the estimate. A cost estimate that drives a recording
+or materiality decision must come from the same predicate the router uses, not
+a text search.
+
 **Materiality-scoped freeze — classify each open child.** If this is an edit
 to a strategy that has open (non-draft, non-`done`) child tactics with an
 existing stamped `execution.strategy_fingerprint` entry for this strategy, the
