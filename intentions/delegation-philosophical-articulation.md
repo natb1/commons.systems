@@ -101,7 +101,13 @@ attributes:
     tactic-dialog-review-aristotle-hexis; the boost-vs-numbering item exited the
     slate 2026-07-18 — author-ratified at the /align-strategy round, recorded on
     strategy-graph-review-curriculum — leaving the rest of the ledger on the
-    dialog gate"
+    dialog gate; extended 2026-07-21 with the energeia/kinesis layering
+    articulation — kind-tactic's layer-placement test glossed as hexis-like
+    persistent-layer content (complete at every moment of its holding) versus
+    kinesis-like tactic content (complete only at its terminal end; NE X.4
+    1174a-b, Metaphysics Θ.6 1048b) — Claude-drafted, adopted by the author as a
+    deferral at the 2026-07-21 layer-placement interview, reviewed at
+    tactic-reading-chunk-33-aristotle-energeia-kinesis"
   origin: chosen
   divergence:
     level: moderate
