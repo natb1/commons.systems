@@ -22577,6 +22577,11 @@ tick_setup() {
   # (#1068) the tick writes resolves through dispatch_lock_file to a path inside
   # the test tree (not the host repo's tmp/).
   export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
+  # Pin the pause sentinel to a path INSIDE the test tree that does not exist by
+  # default, so the tick's pause guard never fires from a real host flag file at
+  # the default $HOME/.local/share/commons-dispatch/paused. A pause test creates
+  # this file explicitly to exercise the guard.
+  export DISPATCH_PAUSE_FLAG="$TMPDIR_TEST/paused"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -22645,7 +22650,7 @@ tick_teardown() {
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_SEL_RC TICK_GRAPH_EXEC_RC \
     TICK_SEL_PRE TICK_GRAPH_EXEC_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
-    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC
+    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -22660,6 +22665,42 @@ assert_eq "busy: no graph-execute call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
 assert_eq "busy: no spawn-job call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- pause sentinel: autonomous tick with flag present → no-op before select ---
+# The pause flag makes an AUTONOMOUS tick exit before dispatch-select-tick and
+# before dispatch-refresh-rate-limits, so it spawns nothing and arms no reseed.
+# Already-running workers are separate sessions the tick never signals, so this
+# pause does not interfere with in-flight work.
+echo "Test: dispatch-tick paused (flag present, autonomous) → exit 0, no select-tick/refresh/spawn"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused: exit 0" "0" "$rc"
+assert_eq "paused: stdout announces pause" "1" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
+assert_eq "paused: select-tick NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "paused: refresh-rate-limits NOT run (guard exits before it)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/order.log" ] && echo 1 || echo 0)"
+assert_eq "paused: no graph-execute" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
+assert_eq "paused: no spawn-job" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- pause sentinel: --manual overrides the flag → the tick runs normally ------
+echo "Test: dispatch-tick --manual with flag present → overrides pause, runs select-tick"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="busy"
+out=$(run_tick --manual) && rc=0 || rc=$?
+assert_eq "manual-override: exit 0" "0" "$rc"
+assert_eq "manual-override: select-tick WAS called" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "manual-override: not announced as paused" "0" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
 tick_teardown
 
 # --- concurrency-cap / sync-repair-pending / sync-broken ---------------------

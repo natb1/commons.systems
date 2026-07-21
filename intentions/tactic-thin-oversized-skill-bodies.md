@@ -46,7 +46,7 @@ execution:
   fix:
     since: 2026-07-21
     attempt: 1
-    pushed_sha: 513046b929b0d64d8ee80b6bf838dc56740baca3
+    pushed_sha: f27db5cd7e5a9d1332ddaafd7e86b0fde62936cd
 validates: []
 blocked_by: []
 office_hours: null
