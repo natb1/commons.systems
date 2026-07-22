@@ -48,8 +48,7 @@ clarifications:
 tooling_goals: []
 success_signal:
   observable: origin/main HEAD check-run conclusions — the trunk's own-pipeline CI status
-  sensor: main-health (SensorRegistry, local-first — own-pipeline CI per
-    read-sensors.ts doctrine)
+  sensor: main-health
   threshold: "green: every check on the current origin/main HEAD concludes success
     (or neutral/skipped)"
   is_proxy: false

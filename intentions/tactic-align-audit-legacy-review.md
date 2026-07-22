@@ -26,7 +26,47 @@ serves:
   - strategy-graph-native-dispatch
   - strategy-explicit-intent
 recovers: []
-clarifications: []
+clarifications:
+  - question: Resolution of the sitting's three decisions (2026-07-22, at author
+      direction).
+    answer: "Resolved 2026-07-22. The owner directed this human-owned sitting be
+      resolved by Claude's own review and recommendations rather than deferred
+      to a future sitting; the dispositions are Claude-authored at author
+      direction, recorded with transparent provenance per
+      strategy-explicit-intent's deferral doctrine, and the one residual
+      capture-tension (a Claude-performed ratification of Claude-drafted
+      wording) is surfaced for the owner to re-open. Decision 1 (engine
+      inclusion) — neither the rung-5 dialectic nor the /align-strategy
+      improvement pass folds into /align-audit, and neither is retired. The
+      sitting's 'both engines retired' premise is stale on current origin/main:
+      the rung-5 dialectic is live and unchanged in /align-init's scheduled
+      align-jit trigger (.claude/skills/align-init/SKILL.md lines 17, 220-763;
+      the
+      align-decomposer/consistency/delegability-assessor/contrarian/signal-asse\
+      ssor agent defs are all present), carried forward by
+      tactic-align-init-skill (#2781, commit 11241c21) after this sitting was
+      authored; the improvement pass is live and unchanged in /align-strategy
+      step 1 no-text branch (.claude/skills/align-strategy/SKILL.md lines
+      135-170: corpus staleness sweep, greenfield-relevance gate,
+      unserved-virtue census, author candidate menu). Both sit at the correct
+      altitude — the on-demand align interview skills — while /align-audit
+      deliberately never conducts an interview nor rewrites virtue/strategy
+      substance; the anti-calcification contrarian+consistency role is intact in
+      /align-init, so /align-audit need not carry it. No engine-inclusion
+      amendment to tactic-align-audit-skill. Boldness: high (verified
+      current-repo facts). Decision 2 (successor-cadence deferral on
+      strategy-explicit-intent) — ratified in author-owned substance, corrected
+      in factual premise; recorded on strategy-explicit-intent. The doctrine
+      'the cadence must actually recur or recorded doctrine calcifies into
+      dogma' is ratified unchanged; the deferral's framing of the office-hours
+      sittings, grounding rounds, and standing-conditions sweep as SUCCESSORS to
+      a retired scheduled engine is corrected — the scheduled rung-5 dialectic
+      is live (Decision 1), so those mechanisms are COMPLEMENTARY to it, not
+      replacements. Decision 3 (tactic-condition-review-sweep rehoming) — home
+      settled: /align-audit; recorded on that node, its office_hours park
+      cleared and its blocked_by edge to this sitting removed, left status:raw
+      for a fresh /align-tactics finalize scoped to the coverage-and-record
+      residual. Not pruned. Boldness: medium (a parsimony/altitude judgment)."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -34,19 +74,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Office-hours review sitting (~30 author-minutes): read this node's body
-    — the retained designs of the retired rung-5 dialectic engine and the
-    retired /align-strategy improvement pass — and decide, per component,
-    inclusion in /align-audit (amend tactic-align-audit-skill), retirement for
-    good, or another home. Then ratify or rework the Claude-drafted
-    successor-cadence wording held as a deferral on strategy-explicit-intent
-    (its re-derivation-cadence condition and the 2026-07-09 deferral
-    clarification), and settle tactic-condition-review-sweep's rehoming. Record
-    every disposition as dated clarifications on the touched nodes in one
-    graph-commit."
-  since: 2026-07-09
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
