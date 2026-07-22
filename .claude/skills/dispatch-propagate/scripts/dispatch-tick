@@ -159,7 +159,7 @@ if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
 else
   PROJECT_ROOT=$(resolve_project_root) \
     || { echo "dispatch-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
-  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+  MAIN_WORKTREE="$PROJECT_ROOT"   # de-bare: the project root IS the main checkout
 fi
 
 # --- Topic-usage daily producer (#2505) -------------------------------------
@@ -228,6 +228,22 @@ for a in "$@"; do
       ;;
   esac
 done
+
+# --- Pause sentinel: stop autonomous scheduling, do not interfere with running work ---
+# When the pause flag file exists, an AUTONOMOUS tick (heartbeat timer, reseed
+# timer) does nothing: it exits here — before dispatch-select-tick, any spawn,
+# and any reseed-arming — so no new workers are scheduled and the tick arms no
+# follow-up reseed. Already-running workers are separate sessions and are left
+# untouched, so they run to completion. This is the durable, non-interfering
+# pause: unlike stopping/masking the systemd timers (which ensure_heartbeat_units
+# recreates on the next tick), a firing timer here becomes a harmless no-op.
+# A manual `dispatch --manual` run OVERRIDES the pause (deliberate human action).
+# Resume by removing the flag file. The path is overridable for tests.
+DISPATCH_PAUSE_FLAG="${DISPATCH_PAUSE_FLAG:-${XDG_DATA_HOME:-$HOME/.local/share}/commons-dispatch/paused}"
+if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
+  echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick"
+  exit 0
+fi
 
 # --- Synthesize a session identity for the headless tick ---------------------
 # The terminal `dispatch` command may or may not run inside a .claude session:

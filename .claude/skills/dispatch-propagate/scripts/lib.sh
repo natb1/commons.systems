@@ -1734,6 +1734,36 @@ resolve_project_root() {
   dirname "$common_dir"
 }
 
+# Assert the primary checkout at <path> is on `main`. Returns 0 silently when it
+# is; otherwise prints a loud, labeled error to stderr and returns 1 — never
+# auto-switches. The primary checkout (the worktree with `main` checked out) is
+# assumed by two unattended paths: the dispatch-select-tick main-sync
+# (`git fetch origin main && git merge --ff-only origin/main`, which can only
+# fast-forward a checkout actually on `main`) and provision-node-worktree's
+# project-root resolution (which finds the worktree with `main` checked out).
+# A drift off `main` (e.g. a failed `git worktree add` + chained `cd` falling
+# through to the primary checkout — the 2026-07-21 direct-to-main incident,
+# PR #2925) silently breaks both. This is a condition on
+# `strategy-autonomous-execution`. Capture symbolic-ref's output and status so a
+# caller under `set -e` is not killed — call as `... || { … }` or in an `if`.
+assert_primary_checkout_on_main() {
+  local path="$1" branch rc
+  branch="$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)"
+  rc=$?
+  if [[ $rc -eq 0 && "$branch" == "main" ]]; then
+    return 0
+  fi
+  local found
+  if [[ $rc -ne 0 ]]; then
+    found="detached HEAD or not resolvable"
+  else
+    found="'$branch'"
+  fi
+  echo "assert_primary_checkout_on_main: INVARIANT VIOLATED — the primary checkout at '$path' must stay on 'main' (a condition on strategy-autonomous-execution), but found $found." >&2
+  echo "  Repair: git -C \"$path\" switch main" >&2
+  return 1
+}
+
 # Print the canonical dispatch selection-lock file path to stdout. An explicit
 # DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup (tests rely on
 # this). Otherwise the lock lives at the shared project-root tmp/ (not a per-
@@ -2240,8 +2270,9 @@ cleanup_stale_worktree_processes() {
     echo "WARNING: git rev-parse --git-common-dir failed; skipping stale cleanup" >&2
     return 0
   }
-  # Resolve to absolute path; worktrees live as siblings of the git common dir
-  worktree_root="$(cd "$git_common_dir/.." && pwd)/worktrees"
+  # Resolve to absolute path; native worktrees live under <repo>/.claude/worktrees
+  # (standard Claude Code layout — the git common dir's parent is the repo root).
+  worktree_root="$(cd "$git_common_dir/.." && pwd)/.claude/worktrees"
 
   # Prune stale admin entries so the list below reflects on-disk worktrees only.
   git worktree prune 2>/dev/null || true
