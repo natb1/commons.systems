@@ -56,6 +56,7 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint:
     strategy-autonomous-execution:
       hash: dd3961ce32c3f94852763ecd1212f9799714b6002b418e430bf2c9477437c9de
