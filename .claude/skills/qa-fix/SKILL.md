@@ -148,7 +148,7 @@ lane note below), so Step 0.5's merge is skipped and the tree is already
 post-merge. Either way the local diff at Step 1 — and the Step 2a
 `dispatch-context-pack … --diff` that mirrors it — reflects the merged tree. A
 pack `--diff` here in the preamble would be a redundant post-merge call duplicating
-that local diff, and this idempotency call cannot carry a post-merge diff anyway.
+that local diff.
 `--phase-log` is exempt from that reasoning: it is a cheap comment fetch (the same
 gh round-trip that `--pr` already makes), not a diff, so requesting it adds no
 post-merge cost.
