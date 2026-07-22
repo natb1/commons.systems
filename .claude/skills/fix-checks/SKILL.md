@@ -94,9 +94,22 @@ only to RECORD what this iteration did and stop:
 
   ```bash
   HEAD_SHA=$(git rev-parse HEAD)
+  if ! git fetch origin main >&2; then
+    echo "fix-checks: could not fetch origin/main to refresh $N before recording push" >&2
+    exit 1
+  fi
+  if ! FRESH_BLOB="$(git rev-parse "origin/main:intentions/$N.md" 2>/dev/null)"; then
+    echo "fix-checks: intentions/$N.md does not exist on origin/main — cannot refresh a node that is not landed" >&2
+    exit 1
+  fi
+  if ! git show "origin/main:intentions/$N.md" > "intentions/$N.md"; then
+    echo "fix-checks: could not refresh intentions/$N.md from origin/main" >&2
+    exit 1
+  fi
   node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
     "$N" --record-push "$HEAD_SHA"
-  .claude/skills/dispatch-propagate/scripts/graph-commit \
+  packages/intentionsutil/scripts/graph-commit \
+    --base "$N=$FRESH_BLOB" \
     -m "graph: record fix push $HEAD_SHA on $N" "$N"
   ```
 
