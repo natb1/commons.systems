@@ -285,10 +285,18 @@ case "$(basename "$2")" in
       esac
     done
 
-    # theirs genuinely absent (the id no longer exists on the landed side):
-    # ours is the only content, so ours wins outright (mirrors merge-node.ts's
-    # real documented behavior for an empty --theirs).
+    # theirs genuinely absent (the id no longer exists on the landed side).
+    # Branches on --base, mirroring merge-node.ts:74-78: if base is also
+    # empty/absent, this is a genuine add/add and ours is the only content,
+    # so ours wins outright. If base is non-empty, theirs going empty means
+    # the landed side deleted a node ours still edits — an unresolved
+    # delete/modify conflict, not a silent ours-wins.
     if [[ -z "$theirs" ]]; then
+      if [[ -n "$base" && -f "$base" && -s "$base" ]]; then
+        id="$(basename "$ours" .md)"
+        printf '{"resolved":false,"conflicts":[{"field":"<node>","ours":"%s","theirs":null}]}\n' "$id"
+        exit 0
+      fi
       [[ -n "$out" && -n "$ours" ]] && cp -- "$ours" "$out"
       printf '{"resolved":true,"conflicts":[]}\n'
       exit 0
