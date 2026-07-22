@@ -25,7 +25,10 @@
 #                       tmp/dispatch-worktree marker (graph claiming is the
 #                       reservation ledger + node-id-named sessions), and no
 #                       git-common-dir anchoring — no graph-native path may
-#                       assume the legacy `.bare` layout.
+#                       assume a bare-repo / git-common-dir-anchored layout.
+#                       (The repo is now a standard checkout: git-common-dir is
+#                       `.git` at the repo root. The former `.bare` bare-repo
+#                       layout was retired 2026-07-21.)
 #
 # Both lanes pre-evaluate .envrc via `direnv exec` so Claude's non-interactive
 # subprocess shells have node on PATH (direnv's shell hook only fires for
@@ -90,8 +93,9 @@ fi
 
 if [ "$LANE" = legacy ]; then
   # --git-common-dir is the same absolute path from any worktree of this repo
-  # (classic .git or bare .bare layout alike), so anchoring there gives every
-  # legacy worktree a consistent, non-nested registry root.
+  # (now `.git` at the repo root; the former `.bare` bare-repo layout was
+  # retired 2026-07-21), so anchoring there gives every legacy worktree a
+  # consistent, non-nested registry root.
   GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) \
     || { echo "[worktree-create] ERROR: git rev-parse --git-common-dir failed" >&2; exit 1; }
   NEW_PATH="$GIT_COMMON_DIR/.claude/worktrees/$BRANCH"

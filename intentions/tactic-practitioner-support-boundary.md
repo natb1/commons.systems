@@ -26,7 +26,10 @@ execution:
   pr: null
   attempts: {}
   markers: []
-  strategy_fingerprint: eba54509bcf50288fd06dd7b30c182cfbf2fb51a12cccdb42b230c0a53b3f2d0
+  strategy_fingerprint:
+    hash: 191979ad4ab22b48e2bb9e463c9d8240301157cca6344c3380fb84c8680e108b
+    sha: 64eba22370600ebd7b5d102a1efe2983cba202be
+  fix: null
 validates: []
 blocked_by:
   - tactic-support-boundary-approval

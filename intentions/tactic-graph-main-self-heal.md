@@ -44,18 +44,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-main-self-heal
   pr: 2919
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-21
-    attempt: 1
-    pushed_sha: 3d23a5e73e3fdd2d7a2812eedfb48f6951931229
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -372,3 +371,44 @@ The current red episode that motivated this round is tracked separately by
 `tactic-graph-fastpath-guard-diff-base` (phase: qa, its own office-hours park)
 — unrelated file surface (a GitHub Actions guard job), no overlap with this
 tactic's scope.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #2919) — two acceptance-criteria items the node body
+itself flags as "manual/observed, deferred to qa/main-qa"; neither is
+script-verifiable in a read-only QA pass against the current repo state, so
+both are deferred here for post-merge verification.
+
+### 1. Rule-18 boost-dominance guard fires, respects the ACK escape, never blocks strategy-main-health's own attention
+
+- id: 9
+- URL path: current
+- Expected outcome: Guard errors on a dominating scratch node, passes once the
+  ACK substring is present, and never blocks edits to strategy-main-health
+  itself, with the threshold read live from the graph.
+- Finding: requires authoring/mutating scratch graph nodes to exercise
+  validateGraph rule 18's boost/override/ACK-escape branches directly — a
+  write-path exercise out of scope for a read-only QA pass. Partial
+  confirmation already obtained script-verifiably during QA: `validate-graph`
+  passes cleanly against the real 408-node graph with rule 18 active,
+  confirming the guard is correctly inert against every existing node (no
+  false positives on real data).
+
+### 2. Red-main end-to-end: sensor read → diagnose-main node minting → select-tick suppression → green auto-completion
+
+- id: 10
+- URL path: current
+- Expected outcome: the full red→suppress→green→complete lifecycle behaves as
+  designed end-to-end, with drain-state monotonicity preserved (no gh issue,
+  no label, no re-enabled repo feature at any step).
+- Finding: requires simulating a genuinely red origin/main and a full
+  dispatch-tick run to exercise the complete lifecycle end-to-end; not safely
+  script-verifiable in a QA pass (main is currently genuinely red for an
+  unrelated, already-tracked reason — `tactic-graph-fastpath-guard-diff-base`
+  — which is not this tactic's episode to simulate against). Each individual
+  mechanism was independently confirmed piecewise during QA: the
+  `main-health` sensor's read matches real `repo-health` output (including
+  the current real red state), `dispatch-graph-main-red-sync` runs cleanly
+  against the real graph and exits 0, and the `OPEN_MAIN_RED` gating wiring in
+  `dispatch-select-tick` is fully renamed off `OPEN_MB` with no leftover
+  gh-issue latch.

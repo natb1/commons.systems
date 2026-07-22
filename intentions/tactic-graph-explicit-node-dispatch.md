@@ -59,18 +59,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-explicit-node-dispatch
   pr: 2921
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix:
-    since: 2026-07-21
+    since: 2026-07-22
     attempt: 1
-    pushed_sha: f6b754e89cde0463b7b5c5cc87b941d633b7e058
+    pushed_sha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -344,3 +345,30 @@ run `dispatch <that-node-id>` from the main checkout — confirm the tick's own
 `origin/main` sync catches the checkout up before `provision-node-worktree`
 runs, so the worker provisions at the *new* phase instead of aborting exit-12
 stale-selection.
+
+## needs-main residue
+
+Recorded by `/qa-fix` (PR #2921): the automated test suite (`test-dispatch-scripts.sh`,
+3009/3009 passed, including every new `NODE_ARG`/`--node` assertion) and static
+verification of the 8 code-behaviors this diff introduces all PASSed. The four
+manual test-plan items below require live production dispatch state (a real
+pace curve, real live workers, a real `origin/main` lag, real token exhaustion)
+that cannot exist in a static QA checkout — they are deferred here for
+post-merge verification against deployed main.
+
+1. **Node-id dispatch at zero pace curve + live workers >= max still spawns**
+   - URL path: n/a
+   - Expected outcome: explicit node dispatch bypasses the pace/MAX_WORKERS gate and still spawns despite zero pace budget and a full worker slate.
+   - Finding: requires live production dispatch state (pace curve pinned to zero, live workers at/over ceiling) that cannot exist in a static QA checkout; matches the PR's own unchecked manual box.
+2. **Genuine exhaustion still emits `concurrency-cap` for a node-id**
+   - URL path: n/a
+   - Expected outcome: the genuine-exhaustion floor holds even for explicit node dispatch — no spawn, `concurrency-cap` emitted.
+   - Finding: depends on a genuine live rate-limit/exhaustion window that cannot be produced from a static checkout; matches the PR's own unchecked manual box.
+3. **Re-dispatching a live node refuses cleanly; unknown node id fails clearly**
+   - URL path: n/a
+   - Expected outcome: live-claim re-dispatch and unknown-id both yield `node-not-selectable`, with no fall-through to aux triggers, against real graph/worktree state.
+   - Finding: requires a live worker holding a real claim and real graph state; the exclusion path is unit-tested but the live-infrastructure behavior matches the PR's own unchecked manual boxes.
+4. **`origin/main` stale-tree sync catches the checkout up before provisioning**
+   - URL path: n/a
+   - Expected outcome: the pre-existing `origin/main` sync fires ahead of selection when invoked from the main checkout, so provisioning sees the advanced phase.
+   - Finding: requires a real out-of-band `origin/main` advance vs. a lagging live main checkout; this sync path is pre-existing and untouched by the diff, so it is verified downstream against live state, not from a static checkout.

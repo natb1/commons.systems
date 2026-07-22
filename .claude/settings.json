@@ -154,8 +154,7 @@
     "autoAllowBashIfSandboxed": true,
     "filesystem": {
       "allowWrite": [
-        "../../.bare",
-        "../../worktrees"
+        ".git"
       ]
     }
   },

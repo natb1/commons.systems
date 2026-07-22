@@ -42,17 +42,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-graph-router-live-worker-visibility
   pr: 2918
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
-  fix: null
+  fix:
+    since: 2026-07-21
+    attempt: 1
+    pushed_sha: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-hook-tests-select-tick
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -273,3 +276,17 @@ Manual/observational:
   step instead of hand-rolling a `worker_cap`; this is a process change for
   future emulation runs, not something this tactic can verify mechanically —
   note it for the author at the next emulated tick.
+
+## needs-main residue
+
+- id: 6
+  title: Concurrency design soundness and the manual-tick launcher process change
+  url_path: n/a
+  expected_outcome: The author confirms the concurrency design is sound and
+    accepts the manual-tick launcher migration (adopting
+    `graph-select-target --standalone --top <N>` as the selection step,
+    replacing a hand-rolled `worker_cap`) as a downstream process change to
+    apply at the next emulated tick.
+  finding: Planned deferral — this is a process change for future
+    manual/emulated-tick launcher runs, not mechanically verifiable at this
+    PR's merge; note it for the author at the next emulated tick.
