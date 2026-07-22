@@ -75,6 +75,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
 
 if [[ $# -lt 1 ]]; then
   echo "usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]" >&2
@@ -82,13 +84,9 @@ if [[ $# -lt 1 ]]; then
 fi
 
 # Project root = the worktree with `main` checked out (substrate clarification
-# 23). DISPATCH_GRAPH_MAIN_WORKTREE is the test override, authoritative.
-if [[ -n "${DISPATCH_GRAPH_MAIN_WORKTREE:-}" ]]; then
-  PROJECT_ROOT="$DISPATCH_GRAPH_MAIN_WORKTREE"
-else
-  PROJECT_ROOT=$(git worktree list --porcelain 2>/dev/null \
-    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
-fi
+# 23). resolve_main_worktree honors DISPATCH_GRAPH_MAIN_WORKTREE, the test
+# override.
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
   echo "dispatch-graph-execute: cannot resolve the project root (no worktree with 'main' checked out)" >&2
   exit 2
