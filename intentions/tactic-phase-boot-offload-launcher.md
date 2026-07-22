@@ -36,13 +36,14 @@ attention:
     strategy-token-economy carries no strategy-level boost, so the tactic
     carries the full weight itself; boost 15 clears the current working max
     (~14.5)."
-phase: qa
+phase: review
 execution:
   branch: tactic-phase-boot-offload-launcher
   pr: 2926
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
 validates: []
@@ -197,3 +198,29 @@ end-to-end):
   completes via the in-session fallback.
 - Phase-success parity: the first post-change `qa` runs must complete their full
   contract with no regression.
+
+## needs-main residue
+
+Recorded by `/qa-fix` (attempt 1, PR #2926) — items whose acceptance criterion is
+a downstream/observational check, not assertable at this PR's merge time.
+Verified via `/qa-main` post-merge against deployed main.
+
+- **id 6 — Live node-lane qa worker drops the redundant merge + second context-pack while acting on a post-merge tree**
+  - URL path: current
+  - Expected outcome: the node-lane qa worker boots more cheaply (round-trip
+    count drops toward `review-fix`'s ~3–4) yet still operates on a fully
+    post-merge tree.
+  - Finding: measured downstream via a live `qa-fix` node-lane run and its
+    transcript/standup-cost lens, not assertable at this PR's merge time.
+- **id 7 — Legacy issue-lane hand-run qa-fix still completes via the in-session merge fallback**
+  - URL path: current
+  - Expected outcome: dropping the merge on the node lane does not regress the
+    issue lane, which retains the in-session merge fallback.
+  - Finding: requires an actual legacy-issue-lane `qa-fix` run, not observable
+    from this PR's static diff at merge time.
+- **id 8 — Phase-success parity across the first post-change node-lane qa runs**
+  - URL path: current
+  - Expected outcome: the first post-change `qa` runs finish their contract
+    with no new failures attributable to the dropped merge.
+  - Finding: downstream phase-success parity is observable only across
+    subsequent live `qa` runs, not at this PR's merge time.
