@@ -149,6 +149,45 @@ Sites and their disposition:
   re-model to the standard `.git` common dir; for fixtures that only exist to
   test a legacy script, co-land with `tactic-legacy-router-removal`.
 
+## `worktrees/main` primary-checkout residual — hotfixed 2026-07-21
+
+Step 3 above ("purge sibling-`worktrees/` assumptions from dispatch scripts")
+had a missed residual: the de-bare moved the primary checkout from
+`<repo>/worktrees/main` to the repo root, but nine dispatch scripts plus
+`office-hours-select-target` still defaulted `MAIN_WORKTREE` to
+`$PROJECT_ROOT/worktrees/main` (now a dead path), and the host systemd units
+(`dispatch-heartbeat.service`, `dispatch-tick-recover.service`,
+`dispatch-sweep-periodic.service`) hard-coded that path in `ExecStart`/
+`WorkingDirectory`. Effect: manual `dispatch` aborted at
+`assert_primary_checkout_on_main` (exit 2); the headless heartbeat failed even
+earlier at systemd `203/EXEC`, so the autonomous fleet was silently down.
+
+Landed as an in-session direct-to-main hotfix (fleet paused via the
+`~/.local/share/commons-dispatch/paused` sentinel — only manual `dispatch`
+executes for now):
+
+- `MAIN_WORKTREE` default `$PROJECT_ROOT/worktrees/main` → `$PROJECT_ROOT` (the
+  standard-layout primary checkout) in: `dispatch-tick`, `dispatch-select-tick`,
+  `dispatch-schedule-reseed`, `dispatch-schedule-convergence-reseed`,
+  `dispatch-schedule-target-reseed`, `dispatch-schedule-rate-limit-resume`,
+  `dispatch-spawn-tick`, `dispatch-spawn-sweep`, `dispatch-tick-recover`; plus
+  `office-hours-select-target`'s `resolve_main_worktree` (`$root/worktrees/main`
+  → `$root`). Functional-doc comments updated to match.
+- Host systemd units regenerated at the repo root via `ensure_heartbeat_units` /
+  `ensure_sweep_timer` / `ensure_recover_unit`.
+
+## Remaining scope — still open under this node
+
+- `.bare` / `worktrees/main` **test fixtures** (enumerated in the section above)
+  — purge or re-model to the standard `.git` layout; legacy-script sites co-land
+  with `tactic-legacy-router-removal`.
+- **Narrative `worktrees/main` comments** in `office-hours-select-target`
+  (lines ~115, ~452, ~573) — descriptive only, reword to the standard layout.
+- **Greenfield DRY**: the `MAIN_WORKTREE` resolution idiom is copy-pasted across
+  ~10 scripts. Centralize it (a shared lib helper, or adopt
+  `dispatch-graph-execute`'s robust `git worktree list … branch main`
+  resolution) so a future layout change is one edit, not ten.
+
 This node stays open (`raw`) until the fixture purge lands (kept-code sites
 here; legacy-script sites via `tactic-legacy-router-removal`), at which point
 the tactic's own success signal — "No repo machinery references `.bare`" — is
