@@ -21351,6 +21351,12 @@ FAKE
 #!/usr/bin/env bash
 case "$*" in
   "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
+  *"symbolic-ref --short HEAD")
+    # assert_primary_checkout_on_main (b8a1ba75) probes the MAIN worktree's
+    # branch via `git -C <main-worktree> symbolic-ref --short HEAD`. The select-
+    # tick tests model a primary checkout correctly on `main` (the precondition
+    # the main-sync path assumes), so answer `main`.
+    echo "${FAKE_GIT_MAIN_WORKTREE_BRANCH:-main}" ;;
   "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   *) exit 0 ;;
