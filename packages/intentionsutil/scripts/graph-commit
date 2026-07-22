@@ -29,8 +29,15 @@
 # retries, and deletes it on every exit path).
 #
 # Usage:
-#   graph-commit [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]
+#   graph-commit [-C <repo-path>] [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]
 #   graph-commit -m 'graph: seed dispatch state' tactic-graph-commit
+#   graph-commit -C /path/to/worktree -m 'graph: land edit' tactic-foo
+#
+# -C <path> (alias --repo <path>): the checkout whose intentions/ this
+#   invocation commits. The repo root is resolved from this path (else cwd) via
+#   `git rev-parse --show-toplevel` — NEVER from this script's own on-disk
+#   location. `-C` is the canonical spelling; pass it when graph-commit is not
+#   run from inside the target repo (e.g. invoked by absolute path from a worktree).
 #   graph-commit -m 'graph: prune done tactics' --prune tactic-foo --prune tactic-bar
 #   graph-commit --base tactic-foo=3f1a9c... tactic-foo
 #
@@ -79,16 +86,27 @@
 set -euo pipefail
 
 # --- Paths -----------------------------------------------------------------
-# Resolve the repo root from this script's own location, never from cwd:
-# the script lives at packages/intentionsutil/scripts/graph-commit, so the repo
-# root is three directories up. All git and file operations run from there.
+# SCRIPT_DIR locates this script's SIBLING scripts/modules on disk — store.js
+# (the parking fallback's tsx import) and merge-node.ts (the layer-2 auto-merge
+# CLI). Those always live alongside the installed script, so they are resolved
+# from SCRIPT_DIR regardless of which checkout the caller is committing.
+#
+# REPO_ROOT — the checkout whose intentions/ this invocation commits — is
+# deliberately NOT derived from SCRIPT_DIR. It is resolved from the CALLER (the
+# -C/--repo argument, else cwd) inside main() via `git rev-parse --show-toplevel`
+# so graph-commit always commits the caller's checkout, never the checkout this
+# script file happens to live in. Deriving it from the script's own location was
+# the incident bug: a ../../../-climbing relative invocation from inside a
+# worktree resolved to the PRIMARY checkout's copy of this script, silently
+# committed the primary checkout, and printed a false "landed" success.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-INTENTIONS_DIR="$REPO_ROOT/intentions"
 # store.ts is imported by the parking fallback via tsx (.js → .ts resolution).
-STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
+STORE_MODULE="$SCRIPT_DIR/../src/store.js"
 # merge-node.ts is the layer-2 field-level auto-merge CLI (run_merge_node()).
-MERGE_NODE_SCRIPT="$REPO_ROOT/packages/intentionsutil/scripts/merge-node.ts"
+MERGE_NODE_SCRIPT="$SCRIPT_DIR/merge-node.ts"
+# REPO_ROOT / INTENTIONS_DIR are caller-derived and set inside main() AFTER
+# option parsing (they depend on the parsed -C/--repo argument, so they cannot
+# be top-of-file constants resolved before main() runs).
 
 # Total commit → rebase → stamp → push attempts before a pure (conflict-free)
 # rejection is declared a busy-main failure. Overridable for tests.
@@ -161,7 +179,7 @@ die() {
 }
 
 usage() {
-  echo "usage: graph-commit [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]" >&2
+  echo "usage: graph-commit [-C <repo-path>] [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]" >&2
 }
 
 # --- Prune / base id helpers -------------------------------------------------
@@ -999,14 +1017,14 @@ assert_clean_outside_ids() {
 
 # --- Main ------------------------------------------------------------------
 main() {
-  cd "$REPO_ROOT"
-
-  local msg=""
-  # Parse [-m <msg>] and positional ids. `--` ends option parsing.
+  local msg="" REPO_ARG=""
+  # Parse [-m <msg>] [-C <path>] and positional ids. `--` ends option parsing.
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -m|--message) [[ $# -ge 2 ]] || { usage; die "-m requires a message argument"; }
                     msg="$2"; shift 2 ;;
+      -C|--repo) [[ $# -ge 2 ]] || { usage; die "-C requires a repo path argument"; }
+                 REPO_ARG="$2"; shift 2 ;;
       --prune) [[ $# -ge 2 ]] || { usage; die "--prune requires a node id argument"; }
                PRUNE_IDS+=("$2"); shift 2 ;;
       --base) [[ $# -ge 2 ]] || { usage; die "--base requires an <id>=<blobsha> argument or a manifest file path"; }
@@ -1017,6 +1035,19 @@ main() {
       *) IDS+=("$1"); shift ;;
     esac
   done
+
+  # Resolve the repo to commit from the CALLER (the -C/--repo argument when
+  # given, else cwd), never from this script's own on-disk location. SCRIPT_DIR
+  # still locates sibling scripts (store.js, merge-node.ts) above; only the
+  # committed checkout is caller-derived. Fail loudly rather than falling back to
+  # the script's own checkout when the resolved-from path is not inside a git
+  # repo (code-style.md: clear error over a silent fallback).
+  local RESOLVE_FROM="${REPO_ARG:-$(pwd)}"
+  if ! REPO_ROOT="$(git -C "$RESOLVE_FROM" rev-parse --show-toplevel 2>/dev/null)"; then
+    die "'$RESOLVE_FROM' is not inside a git repository — graph-commit commits the CALLER's checkout (resolved from -C/--repo, else the current directory), never this script's own location. Pass -C <path> when not running from inside the target repo."
+  fi
+  INTENTIONS_DIR="$REPO_ROOT/intentions"
+  cd "$REPO_ROOT"
 
   if [[ "${#IDS[@]}" -eq 0 && "${#PRUNE_IDS[@]}" -eq 0 ]]; then
     usage
@@ -1129,6 +1160,28 @@ main() {
   if id_files_dirty; then
     commit_files
   else
+    # Nothing staged for any id. Under the caller-derived repo resolution above,
+    # a "clean" tree has two possible meanings, and they must be told apart:
+    #   - benign: this id already matches origin/main (already landed
+    #     out-of-band, or a prior attempt committed but did not push) → land the
+    #     current HEAD (a trivial no-op push when HEAD == origin/main).
+    #   - MIS-POINTED -C: the resolved repo holds content for this id that
+    #     DIFFERS from origin/main yet nothing is staged. Before caller-derived
+    #     resolution this could not happen; now it can only mean the wrong
+    #     checkout was targeted (a bad -C, or cwd pointing at another repo).
+    #     Emitting the "landed" success here would repeat the incident bug — a
+    #     false success for a tree that was never going to change origin/main.
+    # Compare per id against origin/main using the FETCH_HEAD already populated
+    # by ensure_intentions_only_base()'s fetch above (do NOT fetch again). Both
+    # blobs absent/empty (id absent both places) is benign (equal empty strings).
+    local id local_blob main_blob
+    for id in "${ALL_IDS[@]}"; do
+      local_blob="$(git rev-parse "HEAD:intentions/$id.md" 2>/dev/null || true)"
+      main_blob="$(git rev-parse "FETCH_HEAD:intentions/$id.md" 2>/dev/null || true)"
+      if [[ "$local_blob" != "$main_blob" ]]; then
+        die "the resolved repo ($REPO_ROOT) holds intentions/$id.md content differing from origin/main but has nothing staged to commit. Under graph-commit's caller-derived repo resolution this can only mean a mis-pointed -C/--repo (or cwd targeting the wrong checkout) — refusing to emit a false 'landed' for a tree that was never going to change origin/main (HEAD blob=${local_blob:-<absent>}, origin/main blob=${main_blob:-<absent>})"
+      fi
+    done
     echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD (nothing to commit, or a prior attempt already committed but did not push)" >&2
   fi
 
