@@ -631,6 +631,283 @@ export function validateNode(value: unknown): IntentionNode {
 // --- Graph-level validation --------------------------------------------------
 
 /**
+ * True when `kind-<kind>` exists and does NOT flag `attributes.goal_layer`. The
+ * shared gate behind the goal-layer-only rules (attention — rule 5; office_hours
+ * / pace_exempt — rule 11). A missing kind node is rule 1's concern, so this
+ * returns false there (no goal-layer complaint on top of the missing-kind one).
+ */
+function kindIsNotGoalLayer(kind: string, byId: Map<string, IntentionNode>): boolean {
+  const kindNode = byId.get(`kind-${kind}`);
+  return kindNode !== undefined && kindNode.attributes.goal_layer !== true;
+}
+
+/**
+ * Rules 6-9 shape: for each `targets` entry that ALREADY resolves, require its
+ * kind to be `expected`. Dangling entries are left to rules 2-4, so this never
+ * double-reports a broken edge.
+ */
+function checkResolvedEdgeKinds(
+  node: IntentionNode,
+  targets: string[],
+  edge: string,
+  expected: string,
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  for (const target of targets) {
+    const targetNode = byId.get(target);
+    if (targetNode === undefined) continue; // dangling — rules 2-4 own it
+    if (targetNode.kind !== expected) {
+      problems.push(
+        `${node.id}: ${edge} "${target}" must resolve to a kind "${expected}" node, got kind "${targetNode.kind}"`,
+      );
+    }
+  }
+}
+
+/**
+ * Rules 13-14 shape: every `targets` entry must resolve AND be of kind
+ * `expected`. Unlike `checkResolvedEdgeKinds`, this owns the dangling case for
+ * these edges (no separate existence rule covers blocked_by / validates).
+ */
+function checkRequiredEdgeKinds(
+  node: IntentionNode,
+  targets: string[],
+  edge: string,
+  expected: string,
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  for (const target of targets) {
+    const targetNode = byId.get(target);
+    if (targetNode === undefined) {
+      problems.push(`${node.id}: ${edge} "${target}" does not resolve to a node`);
+      continue;
+    }
+    if (targetNode.kind !== expected) {
+      problems.push(
+        `${node.id}: ${edge} "${target}" must resolve to a kind "${expected}" node, got kind "${targetNode.kind}"`,
+      );
+    }
+  }
+}
+
+/** Rules 1-4: kind, parent, serves and recovers all name an existing node. */
+function checkExistenceEdges(
+  node: IntentionNode,
+  ids: Set<string>,
+  problems: string[],
+): void {
+  if (!ids.has(`kind-${node.kind}`)) {
+    problems.push(`${node.id}: kind "${node.kind}" has no kind-${node.kind} node`);
+  }
+  if (node.parent !== null && !ids.has(node.parent)) {
+    problems.push(`${node.id}: parent "${node.parent}" does not resolve to a node`);
+  }
+  for (const target of node.serves) {
+    if (!ids.has(target)) {
+      problems.push(`${node.id}: serves "${target}" does not resolve to a node`);
+    }
+  }
+  for (const target of node.recovers) {
+    if (!ids.has(target)) {
+      problems.push(`${node.id}: recovers "${target}" does not resolve to a node`);
+    }
+  }
+}
+
+/** Rule 6: a resolved parent must share the node's kind. */
+function checkParentKind(
+  node: IntentionNode,
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  if (node.parent === null) return;
+  const parentNode = byId.get(node.parent);
+  if (parentNode !== undefined && parentNode.kind !== node.kind) {
+    problems.push(
+      `${node.id}: parent "${node.parent}" has kind "${parentNode.kind}", expected same kind "${node.kind}"`,
+    );
+  }
+}
+
+/** Rules 5 & 11: attention, office_hours and pace_exempt are goal-layer-only. */
+function checkGoalLayerOnlyFields(
+  node: IntentionNode,
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  if (node.attention !== null && kindIsNotGoalLayer(node.kind, byId)) {
+    problems.push(
+      `${node.id}: attention is only valid on goal-layer kinds — kind-${node.kind} does not set attributes.goal_layer`,
+    );
+  }
+  if (node.office_hours !== null && kindIsNotGoalLayer(node.kind, byId)) {
+    problems.push(
+      `${node.id}: office_hours is only valid on goal-layer kinds — kind-${node.kind} does not set attributes.goal_layer`,
+    );
+  }
+  if (node.pace_exempt && kindIsNotGoalLayer(node.kind, byId)) {
+    problems.push(
+      `${node.id}: pace_exempt is only valid on goal-layer kinds — kind-${node.kind} does not set attributes.goal_layer`,
+    );
+  }
+}
+
+/**
+ * Rules 9, 10 & 12: kind-typed field placement — recovers/rounds are
+ * strategy-only, and phase/execution/blocked_by/validates are tactic-only.
+ */
+function checkKindTypedFields(node: IntentionNode, problems: string[]): void {
+  if (node.recovers.length > 0 && node.kind !== "strategy") {
+    problems.push(
+      `${node.id}: recovers is only valid on kind "strategy" nodes, got kind "${node.kind}"`,
+    );
+  }
+  if (node.rounds !== null && node.kind !== "strategy") {
+    problems.push(
+      `${node.id}: rounds is only valid on kind "strategy" nodes, got kind "${node.kind}"`,
+    );
+  }
+  if (node.kind === "tactic") return;
+  if (node.phase !== null) {
+    problems.push(
+      `${node.id}: phase is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
+    );
+  }
+  if (node.execution !== null) {
+    problems.push(
+      `${node.id}: execution is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
+    );
+  }
+  if (node.blocked_by.length > 0) {
+    problems.push(
+      `${node.id}: blocked_by is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
+    );
+  }
+  if (node.validates.length > 0) {
+    problems.push(
+      `${node.id}: validates is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
+    );
+  }
+}
+
+/** Rule 16: status must be a key in the kind node's status_vocabulary. */
+function checkStatusVocabulary(
+  node: IntentionNode,
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  const kindNode = byId.get(`kind-${node.kind}`);
+  if (kindNode === undefined) return;
+  const vocab = kindNode.attributes.status_vocabulary;
+  if (!isPlainObject(vocab) || Object.keys(vocab).length === 0) {
+    problems.push(`${node.id}: kind-${node.kind} has no attributes.status_vocabulary declared`);
+  } else if (!Object.prototype.hasOwnProperty.call(vocab, node.status)) {
+    problems.push(
+      `${node.id}: status "${node.status}" is not declared in kind-${node.kind}'s status_vocabulary`,
+    );
+  }
+}
+
+/**
+ * Rule 17: every clarifications[].answer carries a dated provenance clause (a
+ * YYYY-MM-DD substring, placed anywhere). This is the same date pattern
+ * readingDate() (router.ts) uses; it is inlined rather than imported because
+ * router.ts already imports from this file (a back-import would cycle). The
+ * machine consumers this protects are readingDate() and coverage.ts's
+ * lastReviewedOf, which parse this date to timestamp a clarification.
+ */
+function checkClarificationDates(node: IntentionNode, problems: string[]): void {
+  for (let i = 0; i < node.clarifications.length; i++) {
+    if (!/\d{4}-\d{2}-\d{2}/.test(node.clarifications[i].answer)) {
+      problems.push(
+        `${node.id}: clarifications[${i}].answer carries no dated provenance clause (YYYY-MM-DD) — see readingDate()`,
+      );
+    }
+  }
+}
+
+/**
+ * Rule 18: no node other than strategy-main-health may match or exceed its
+ * dominant attention.boost via either attention.boost or attention.override.
+ * Threshold (`dominantBoost`) is read live by the caller; when null the guard is
+ * inert. An author may opt out with "ACK: main-health-dominance" in the node's
+ * attention.rationale.
+ */
+function checkAttentionDominance(
+  node: IntentionNode,
+  dominantBoost: number | null,
+  problems: string[],
+): void {
+  if (
+    dominantBoost === null ||
+    node.id === "strategy-main-health" ||
+    node.attention === null ||
+    node.attention.rationale.includes("ACK: main-health-dominance")
+  ) {
+    return;
+  }
+  const { boost, override } = node.attention;
+  if (boost !== null && boost >= dominantBoost) {
+    problems.push(
+      `${node.id}: attention.boost (${boost}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
+    );
+  }
+  if (override !== null && override >= dominantBoost) {
+    problems.push(
+      `${node.id}: attention.override (${override}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
+    );
+  }
+}
+
+/**
+ * Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
+ * flags every node that participates in a cycle (a tactic transitively blocked
+ * by itself). Dangling edges are reported by rule 13, not traversed.
+ */
+function checkBlockedByCycles(
+  nodes: IntentionNode[],
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  const CYCLE_WHITE = 0;
+  const CYCLE_GRAY = 1;
+  const CYCLE_BLACK = 2;
+  const color = new Map<string, number>(nodes.map((n) => [n.id, CYCLE_WHITE]));
+  const inCycle = new Set<string>();
+  const path: string[] = [];
+  const visit = (id: string): void => {
+    color.set(id, CYCLE_GRAY);
+    path.push(id);
+    const node = byId.get(id);
+    if (node !== undefined) {
+      for (const target of node.blocked_by) {
+        if (!byId.has(target)) continue; // dangling — rule 13 owns it
+        if (color.get(target) === CYCLE_GRAY) {
+          // Back edge: everything from `target` to here is on the cycle.
+          for (const member of path.slice(path.indexOf(target))) {
+            inCycle.add(member);
+          }
+        } else if (color.get(target) === CYCLE_WHITE) {
+          visit(target);
+        }
+      }
+    }
+    path.pop();
+    color.set(id, CYCLE_BLACK);
+  };
+  for (const node of nodes) {
+    if (color.get(node.id) === CYCLE_WHITE) visit(node.id);
+  }
+  for (const id of inCycle) {
+    problems.push(
+      `${id}: blocked_by forms a cycle — a tactic cannot be transitively blocked by itself`,
+    );
+  }
+}
+
+/**
  * Referential integrity over a whole node set. Per-node shape is `validateNode`'s
  * job; this checks the edges BETWEEN nodes:
  *
@@ -701,239 +978,35 @@ export function validateGraph(nodes: IntentionNode[]): void {
       ? mainHealthNode.attention.boost
       : null;
   for (const node of nodes) {
-    if (!ids.has(`kind-${node.kind}`)) {
-      problems.push(`${node.id}: kind "${node.kind}" has no kind-${node.kind} node`);
-    }
-    if (node.parent !== null && !ids.has(node.parent)) {
-      problems.push(`${node.id}: parent "${node.parent}" does not resolve to a node`);
-    }
-    for (const target of node.serves) {
-      if (!ids.has(target)) {
-        problems.push(`${node.id}: serves "${target}" does not resolve to a node`);
-      }
-    }
-    for (const target of node.recovers) {
-      if (!ids.has(target)) {
-        problems.push(`${node.id}: recovers "${target}" does not resolve to a node`);
-      }
-    }
-    if (node.attention !== null) {
-      const kindNode = byId.get(`kind-${node.kind}`);
-      if (kindNode !== undefined && kindNode.attributes.goal_layer !== true) {
-        problems.push(
-          `${node.id}: attention is only valid on goal-layer kinds — kind-${node.kind} does not set attributes.goal_layer`,
-        );
-      }
-    }
-    if (node.parent !== null && byId.has(node.parent)) {
-      const parentNode = byId.get(node.parent)!;
-      if (parentNode.kind !== node.kind) {
-        problems.push(
-          `${node.id}: parent "${node.parent}" has kind "${parentNode.kind}", expected same kind "${node.kind}"`,
-        );
-      }
-    }
+    // Rules 1-4: every referenced id exists.
+    checkExistenceEdges(node, ids, problems);
+    // Rules 5 & 11: attention / office_hours / pace_exempt are goal-layer-only.
+    checkGoalLayerOnlyFields(node, byId, problems);
+    // Rule 6: a resolved parent shares the node's kind.
+    checkParentKind(node, byId, problems);
+    // Rules 7-8: resolved serves targets carry the kind the layer requires.
     if (node.kind === "tactic") {
-      for (const target of node.serves) {
-        if (!byId.has(target)) continue;
-        const targetNode = byId.get(target)!;
-        if (targetNode.kind !== "strategy") {
-          problems.push(
-            `${node.id}: serves "${target}" must resolve to a kind "strategy" node, got kind "${targetNode.kind}"`,
-          );
-        }
-      }
+      checkResolvedEdgeKinds(node, node.serves, "serves", "strategy", byId, problems);
     }
     if (node.kind === "strategy") {
-      for (const target of node.serves) {
-        if (!byId.has(target)) continue;
-        const targetNode = byId.get(target)!;
-        if (targetNode.kind !== "virtue") {
-          problems.push(
-            `${node.id}: serves "${target}" must resolve to a kind "virtue" node, got kind "${targetNode.kind}"`,
-          );
-        }
-      }
+      checkResolvedEdgeKinds(node, node.serves, "serves", "virtue", byId, problems);
+      // Rule 9: resolved recovers targets are delegation nodes.
+      checkResolvedEdgeKinds(node, node.recovers, "recovers", "delegation", byId, problems);
     }
-    if (node.recovers.length > 0 && node.kind !== "strategy") {
-      problems.push(
-        `${node.id}: recovers is only valid on kind "strategy" nodes, got kind "${node.kind}"`,
-      );
-    }
-    if (node.kind === "strategy") {
-      for (const target of node.recovers) {
-        if (!byId.has(target)) continue;
-        const targetNode = byId.get(target)!;
-        if (targetNode.kind !== "delegation") {
-          problems.push(
-            `${node.id}: recovers "${target}" must resolve to a kind "delegation" node, got kind "${targetNode.kind}"`,
-          );
-        }
-      }
-    }
-    // Rule 10: tactic-only dispatch fields.
-    if (node.kind !== "tactic") {
-      if (node.phase !== null) {
-        problems.push(
-          `${node.id}: phase is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
-        );
-      }
-      if (node.execution !== null) {
-        problems.push(
-          `${node.id}: execution is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
-        );
-      }
-      if (node.blocked_by.length > 0) {
-        problems.push(
-          `${node.id}: blocked_by is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
-        );
-      }
-      if (node.validates.length > 0) {
-        problems.push(
-          `${node.id}: validates is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
-        );
-      }
-    }
-    // Rule 11: office_hours / pace_exempt are goal-layer-only — same gate as
-    // attention (rule 5): the kind node must set attributes.goal_layer.
-    if (node.office_hours !== null) {
-      const kindNode = byId.get(`kind-${node.kind}`);
-      if (kindNode !== undefined && kindNode.attributes.goal_layer !== true) {
-        problems.push(
-          `${node.id}: office_hours is only valid on goal-layer kinds — kind-${node.kind} does not set attributes.goal_layer`,
-        );
-      }
-    }
-    if (node.pace_exempt) {
-      const kindNode = byId.get(`kind-${node.kind}`);
-      if (kindNode !== undefined && kindNode.attributes.goal_layer !== true) {
-        problems.push(
-          `${node.id}: pace_exempt is only valid on goal-layer kinds — kind-${node.kind} does not set attributes.goal_layer`,
-        );
-      }
-    }
-    // Rule 12: rounds is strategy-only.
-    if (node.rounds !== null && node.kind !== "strategy") {
-      problems.push(
-        `${node.id}: rounds is only valid on kind "strategy" nodes, got kind "${node.kind}"`,
-      );
-    }
-    // Rule 13: every blocked_by entry resolves to an existing tactic.
-    for (const target of node.blocked_by) {
-      const targetNode = byId.get(target);
-      if (targetNode === undefined) {
-        problems.push(`${node.id}: blocked_by "${target}" does not resolve to a node`);
-        continue;
-      }
-      if (targetNode.kind !== "tactic") {
-        problems.push(
-          `${node.id}: blocked_by "${target}" must resolve to a kind "tactic" node, got kind "${targetNode.kind}"`,
-        );
-      }
-    }
-    // Rule 14: every validates entry resolves to an existing strategy.
-    for (const target of node.validates) {
-      const targetNode = byId.get(target);
-      if (targetNode === undefined) {
-        problems.push(`${node.id}: validates "${target}" does not resolve to a node`);
-        continue;
-      }
-      if (targetNode.kind !== "strategy") {
-        problems.push(
-          `${node.id}: validates "${target}" must resolve to a kind "strategy" node, got kind "${targetNode.kind}"`,
-        );
-      }
-    }
-    // Rule 16: status must be a key in the kind node's status_vocabulary.
-    {
-      const kindNode = byId.get(`kind-${node.kind}`);
-      if (kindNode !== undefined) {
-        const vocab = kindNode.attributes.status_vocabulary;
-        if (!isPlainObject(vocab) || Object.keys(vocab).length === 0) {
-          problems.push(
-            `${node.id}: kind-${node.kind} has no attributes.status_vocabulary declared`,
-          );
-        } else if (!Object.prototype.hasOwnProperty.call(vocab, node.status)) {
-          problems.push(
-            `${node.id}: status "${node.status}" is not declared in kind-${node.kind}'s status_vocabulary`,
-          );
-        }
-      }
-    }
-    // Rule 17: every clarifications[].answer carries a dated provenance clause
-    // (a YYYY-MM-DD substring, placed anywhere). This is the same date pattern
-    // readingDate() (router.ts) uses; it is inlined rather than imported because
-    // router.ts already imports from this file (a back-import would cycle). The
-    // machine consumers this protects are readingDate() and coverage.ts's
-    // lastReviewedOf, which parse this date to timestamp a clarification.
-    for (let i = 0; i < node.clarifications.length; i++) {
-      if (!/\d{4}-\d{2}-\d{2}/.test(node.clarifications[i].answer)) {
-        problems.push(
-          `${node.id}: clarifications[${i}].answer carries no dated provenance clause (YYYY-MM-DD) — see readingDate()`,
-        );
-      }
-    }
-    // Rule 18: no node other than strategy-main-health may match or exceed its
-    // dominant attention.boost via either attention.boost or attention.override.
-    // Threshold (dominantBoost) is read live above; when null the guard is
-    // inert. An author may opt out with "ACK: main-health-dominance" in the
-    // node's attention.rationale.
-    if (
-      dominantBoost !== null &&
-      node.id !== "strategy-main-health" &&
-      node.attention !== null &&
-      !node.attention.rationale.includes("ACK: main-health-dominance")
-    ) {
-      const { boost, override } = node.attention;
-      if (boost !== null && boost >= dominantBoost) {
-        problems.push(
-          `${node.id}: attention.boost (${boost}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
-        );
-      }
-      if (override !== null && override >= dominantBoost) {
-        problems.push(
-          `${node.id}: attention.override (${override}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
-        );
-      }
-    }
+    // Rules 9, 10 & 12: kind-typed field placement.
+    checkKindTypedFields(node, problems);
+    // Rules 13-14: blocked_by / validates resolve to the required kind.
+    checkRequiredEdgeKinds(node, node.blocked_by, "blocked_by", "tactic", byId, problems);
+    checkRequiredEdgeKinds(node, node.validates, "validates", "strategy", byId, problems);
+    // Rule 16: status is in the kind node's status_vocabulary.
+    checkStatusVocabulary(node, byId, problems);
+    // Rule 17: clarification answers carry a dated provenance clause.
+    checkClarificationDates(node, problems);
+    // Rule 18: main-health attention dominance.
+    checkAttentionDominance(node, dominantBoost, problems);
   }
-  // Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
-  // flags every node that participates in a cycle (a tactic transitively
-  // blocked by itself). Dangling edges are reported by rule 13, not traversed.
-  const CYCLE_WHITE = 0;
-  const CYCLE_GRAY = 1;
-  const CYCLE_BLACK = 2;
-  const color = new Map<string, number>(nodes.map((n) => [n.id, CYCLE_WHITE]));
-  const inCycle = new Set<string>();
-  const path: string[] = [];
-  const visit = (id: string): void => {
-    color.set(id, CYCLE_GRAY);
-    path.push(id);
-    const node = byId.get(id);
-    if (node !== undefined) {
-      for (const target of node.blocked_by) {
-        if (!byId.has(target)) continue; // dangling — rule 13 owns it
-        if (color.get(target) === CYCLE_GRAY) {
-          // Back edge: everything from `target` to here is on the cycle.
-          for (const member of path.slice(path.indexOf(target))) {
-            inCycle.add(member);
-          }
-        } else if (color.get(target) === CYCLE_WHITE) {
-          visit(target);
-        }
-      }
-    }
-    path.pop();
-    color.set(id, CYCLE_BLACK);
-  };
-  for (const node of nodes) {
-    if (color.get(node.id) === CYCLE_WHITE) visit(node.id);
-  }
-  for (const id of inCycle) {
-    problems.push(
-      `${id}: blocked_by forms a cycle — a tactic cannot be transitively blocked by itself`,
-    );
-  }
+  // Rule 15: reject cycles in the blocked_by graph.
+  checkBlockedByCycles(nodes, byId, problems);
   if (problems.length > 0) {
     throw new IntentionSchemaError(`Graph integrity violations:\n${problems.join("\n")}`);
   }

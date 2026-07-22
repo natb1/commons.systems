@@ -10,11 +10,13 @@
 # A diagnosed red episode leaves an open graph tactic node
 # `tactic-main-red-<shortsha>` (written/refreshed by dispatch-diagnose-main) —
 # the gate's per-episode latch, serving strategy-main-health. A node is "open"
-# while its phase is not "done" AND office_hours is null (a node parked in
-# office_hours is a since-resolved episode). Once origin/main goes green again,
-# this script completes the open node(s) to phase: "done" so the next red
-# episode re-fires the gate on first detection. A graph write is a side effect
-# of this script, not of the pure selector.
+# while its phase is not "done" — regardless of office_hours. A node parked in
+# office_hours is NOT a since-resolved episode: the park means the fix hit a
+# blocker and awaits a human while main is still red, so it must keep the gate
+# closed. Only phase == "done" re-arms the latch. Once origin/main goes green
+# again, this script completes the open node(s) — parked ones included — to
+# phase: "done" so the next red episode re-fires the gate on first detection. A
+# graph write is a side effect of this script, not of the pure selector.
 #
 # Usage: dispatch-graph-main-red-sync
 #
@@ -49,7 +51,13 @@ OPEN_MAIN_RED=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   for (const n of listNodes("./intentions")) {
     if (!n.id.startsWith("tactic-main-red-")) continue;
     if (n.phase === "done") continue;
-    if (n.office_hours !== null) continue;
+    // NOTE: office_hours-parked nodes are DELIBERATELY kept open. A park means
+    // the fix hit a blocker and awaits a human — the red episode is unresolved
+    // and main is still red. Excluding parked nodes would re-open the
+    // auto-merge gate (dispatch-select-tick gates SOLELY on OPEN_MAIN_RED being
+    // empty) and merge ready PRs onto a still-broken main. Only phase == "done"
+    // re-arms the latch; the recovery-completion loop below drives that
+    // transition once repo-health reports main green again.
     process.stdout.write(n.id + "\n");
   }
 ') ) || {

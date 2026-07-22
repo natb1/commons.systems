@@ -148,6 +148,16 @@ const ghExecOpts = {
  * above) and reads as `"unknown"`, which can never equal the threshold string,
  * so `gap` stays non-null and the sensor fails safe rather than reporting a
  * false green.
+ *
+ * SIDE EFFECT: unlike the other sensors in this file, reading this one is not
+ * pure. `repo-health --main-broken-sha` reconciles the durable `main_broken`
+ * latch record as a documented side effect (red → set/refresh the sha, green →
+ * clear it; `repo-health:59-65`). So naming the `main-health` sensor in a
+ * `read-sensors` run mutates that latch state, not just the node's
+ * `reading`/`gap`. This coupling is intentional — the latch and the sensor
+ * reading are two views of the same origin/main CI status — but it means this
+ * sensor breaks the file header's "no side-effect" promise in addition to its
+ * "no network" one.
  */
 const mainHealthSensor: Sensor = {
   name: MAIN_HEALTH_SENSOR_NAME,
