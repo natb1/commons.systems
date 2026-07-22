@@ -46,7 +46,45 @@ execution:
   fix: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA needs a human on tactic-sync-reader-skill (PR #2798). Item
+    5 (\"golden-path sync produces correct, idempotent excerpts and clear item
+    reporting\") was reclassified opus-fixable by the disposition Workflow's
+    skeptics, but the gated fix-planner found no actual code defect and declined
+    via scope-deviation: the criterion is the golden-path run against the
+    author's real DRM-free epub content, which the node body's own \"Manual
+    checks\" section already defers to a human. Item 6 (\"a generated excerpt
+    opens correctly on a real e-reader device\") is a planned-deferral
+    classified needs-main, but its verification needs a real physical e-reader
+    device — unreachable by /qa-main's read-only browser flow — so per the
+    node-lane doctrine it escalates directly as needs-human rather than being
+    written as /qa-main residue. All script-verifiable acceptance items (test
+    suite, typecheck, CLI arg/config error paths, delete-outside-managed-dir
+    safety guard) already PASSED autonomously this pass."
+  since: 2026-07-22
+  recommendation: >-
+    Best next steps for the human reviewer:
+
+
+    1. Item 5 (golden-path sync): run `/sync-reader <reader_dir> <share_dir>`
+    (or the `.claude/skills/sync-reader/scripts/sync-reader.ts` CLI directly)
+    against a real DRM-free epub matched to an active `tactic-reading-chunk-*`
+    citation. Confirm the extracted excerpt covers the right cited range, the
+    filename carries the correct zero-padded priority prefix, a second run makes
+    no changes (idempotent), and the printed report clearly explains any
+    missing/ambiguous/unmapped chunks.
+
+    2. Item 6 (device-grade validity): copy one generated excerpt epub onto the
+    real USB e-reader (or open it in a device-grade reader such as Calibre) and
+    confirm it opens and paginates correctly.
+
+    3. All other acceptance items (test suite 54/54, typecheck, CLI usage/config
+    error paths, and the delete-outside-managed-dir safety guard) already passed
+    autonomously this session — no further action needed on those.
+
+    4. If both manual checks pass, clear this park (office_hours) and let the
+    tactic proceed to `review`; if either surfaces a real defect, park stays and
+    a follow-up fix is warranted.
 pace_exempt: false
 rounds: null
 attributes: {}
