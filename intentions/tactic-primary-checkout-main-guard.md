@@ -62,7 +62,99 @@ execution:
   fix: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: '/qa-fix: PR #2929 (tactic-primary-checkout-main-guard) at qa-fix
+    attempt cap (2/2). Disposition workflow classified the sole open residue
+    item (chain-safety-audit scope question) as opus-fixable, refuting the
+    "needs human" framing, but plan_fix was false at the cap so no fix plan ran
+    (fix_plan=null). Escalating to office-hours per the cap-reached rule; no new
+    attempt label applied. See PR #2929 comment and recommendation for details.'
+  since: 2026-07-22
+  recommendation: >-
+    # Office-hours recommendation: tactic-primary-checkout-main-guard (PR #2929)
+
+
+    ## What this is
+
+
+    A cap-reached park, not a stuck or ambiguous bug. PR #2929 passed 3 of 4
+    qa-fix
+
+    plan items by machine check (isolated guard test 5/5, full dispatch-scripts
+    suite
+
+    3002/3002, both guard-pass/guard-halt wiring cases present and asserted).
+    The only
+
+    open item is a scope-completeness check on the tactic's Unit 1 "chain-safety
+    audit"
+
+    criterion — and that check has already been answered. It is parking only
+    because
+
+    the PR is at the qa-fix attempt cap (2 of 2), so the Opus fix phase
+    deliberately
+
+    did not run this pass. There is no irreducible ambiguity here.
+
+
+    ## Default recommendation: record the finding and close it out
+
+
+    The audit is effectively already done. Both live provisioning call sites
+    already
+
+    satisfy the chain-safety pattern the audit was meant to enforce:
+
+
+    - `dispatch-provision-from-remote:84` wraps its `git worktree add` in an
+      `if ! ...; then echo err; exit 2; fi` — loud failure, no bare chained `cd`.
+    - `provision-node-worktree:108-115` uses `git -C "$PROJECT_ROOT"` / `git -C
+    "$WT"`
+      throughout, with explicit post-add existence checks and named error exits.
+
+    The third named target, `dispatch-materialize-spawn` (`:449,481,490`), no
+    longer
+
+    exists — it was deleted in `a8c4898d` (PR #2869, an unrelated legacy
+    rewire), so
+
+    those references in the tactic scope are stale. An independent disposition
+    pass
+
+    re-verified all of this from the live repo (grep + read, not trusting the QA
+
+    claims) and its skeptic panel voted 2/2 that this needs no human judgment.
+
+
+    So: paste the paragraph above (or a condensed form) into the tactic body of
+
+    `tactic-primary-checkout-main-guard` and/or a PR #2929 comment, treat the
+
+    chain-safety-audit acceptance criterion as satisfied, and let the tactic
+    proceed.
+
+    No code change is needed — nothing is broken, and there is nothing left to
+    fix.
+
+
+    ## If you want a discrete audit artifact instead
+
+
+    If you'd rather have a written audit as its own deliverable (not just this
+
+    investigation trail), two options: author it directly — it's a one-paragraph
+
+    addition, faster than another automated pass — or reset/raise the qa-fix
+    attempt
+
+    cap and let a future pass write it. Either way the technical conclusion is
+    the
+
+    same; this is a bookkeeping choice about where the audit is recorded, not an
+    open
+
+    question about the code.
 pace_exempt: false
 rounds: null
 attributes: {}
