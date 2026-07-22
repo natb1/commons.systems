@@ -56,7 +56,7 @@ execution:
   fix:
     since: 2026-07-22
     attempt: 1
-    pushed_sha: 78fbbedd9e9c459bf85b13bd9723f8af09cea684
+    pushed_sha: ea3201036f0850192952a454eb29fd1dd3f0574f
 validates: []
 blocked_by:
   - tactic-flake-pid-cleanup-stale-worktree
