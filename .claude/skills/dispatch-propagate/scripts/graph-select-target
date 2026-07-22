@@ -80,6 +80,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
 
 # The selection log reuses the decision-log appender with its own file: the lib
 # resolves its target from DISPATCH_DECISION_LOG_FILE at source time.
@@ -187,8 +189,7 @@ done
 # main is checked out at the project root). worktree_has_live_session is
 # name-keyed on the basename, so the root resolution is presentational — the
 # basename (the node id) is what is matched against live session names.
-NATIVE_ROOT=$(git -C "$REPO_ROOT" worktree list --porcelain \
-  | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
+NATIVE_ROOT=$(resolve_main_worktree "$REPO_ROOT")
 NATIVE_ROOT="${NATIVE_ROOT:-$REPO_ROOT}"
 
 skip_note() { # <id> <reason>
