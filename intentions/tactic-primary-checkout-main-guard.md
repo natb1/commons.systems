@@ -48,18 +48,22 @@ attention:
     strategy-autonomous-execution (inherited base 0) becomes the top
     discretionary dispatch target — and kept below the strategy-main-health
     ceiling (100, author-override-guarded), which it must not displace."
-phase: qa
+phase: review
 execution:
   branch: tactic-primary-checkout-main-guard
   pr: 2929
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint:
     strategy-autonomous-execution:
       hash: dd3961ce32c3f94852763ecd1212f9799714b6002b418e430bf2c9477437c9de
       sha: 70a48530c0c61b972f57db69f283ddb0e6554612
-  fix: null
+  fix:
+    since: 2026-07-22
+    attempt: 1
+    pushed_sha: null
 validates: []
 blocked_by: []
 office_hours: null
