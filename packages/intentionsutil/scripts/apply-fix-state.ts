@@ -7,7 +7,7 @@
 // object on stdout for the shell caller (`graph-select-target`, `/fix-checks`)
 // to act on and to land via `graph-commit`.
 //
-// The three modes are mutually exclusive:
+// The five modes are mutually exclusive:
 //
 //   --set-fix          Enter the interrupt. Writes
 //                      `execution.fix = { since: <today UTC>, attempt: 1,
@@ -35,25 +35,46 @@
 //                      verdict on the recorded sha is a fresh push awaiting CI,
 //                      not a green resolution). Errors if no interrupt is set.
 //
+//   --spend-attempt    Spend one attempt against the in-flight interrupt:
+//                      writes `execution.fix.attempt + 1`, preserving
+//                      `since`/`pushed_sha`. Called by `/fix-checks` each pass
+//                      it spends against the retry budget. Errors if no
+//                      interrupt is set.
+//
+//   --park-if-capped   Enforce the retry cap (`FIX_ATTEMPT_CAP`,
+//                      `src/transitions.ts`). If `execution.fix.attempt` exceeds
+//                      the cap, writes a first-class `office_hours` park record
+//                      (parity with the legacy `dispatch:fix-checks-attempt-<n>`
+//                      escalation) AND resets `execution.fix.attempt` to 1 in
+//                      the same write, giving a human-cleared node a fresh
+//                      budget. If the cap is not exceeded, makes NO write.
+//                      Called by `graph-select-target` before dispatching a
+//                      node back into the fix interrupt. Errors if no
+//                      interrupt is set.
+//
 // Usage:
 //   node --import tsx/esm apply-fix-state.ts <node-id> \
-//     (--set-fix | --clear-fix | --record-push <sha>) [--dir <intentions-dir>]
+//     (--set-fix | --clear-fix | --record-push <sha> | --spend-attempt | --park-if-capped) \
+//     [--dir <intentions-dir>]
 //
 // Stdout: one JSON object, shape per mode —
-//   set-fix:      { "mode": "set",    "id", "attempt": <n>, "since": <date>, "wrote": true }
-//   clear-fix:    { "mode": "clear",  "id", "phase": <resolved>, "reset": bool, "wrote": true }
-//   record-push:  { "mode": "record", "id", "pushed_sha": <sha>, "wrote": true }
+//   set-fix:        { "mode": "set",        "id", "attempt": <n>, "since": <date>, "wrote": true }
+//   clear-fix:      { "mode": "clear",      "id", "phase": <resolved>, "reset": bool, "wrote": true }
+//   record-push:    { "mode": "record",     "id", "pushed_sha": <sha>, "wrote": true }
+//   spend-attempt:  { "mode": "spend",      "id", "attempt": <n>, "wrote": true }
+//   park-if-capped: { "mode": "park-check", "id", "parked": true, "attempt": <consumed>, "wrote": true }
+//                or { "mode": "park-check", "id", "parked": false, "wrote": false }
 
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readNode, writeNode } from "../src/store.js";
 import type { Execution, FixState } from "../src/schema.js";
-import { REVIEWED_MARKER } from "../src/transitions.js";
+import { FIX_ATTEMPT_CAP, REVIEWED_MARKER } from "../src/transitions.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
 
-type Mode = "set" | "clear" | "record";
+type Mode = "set" | "clear" | "record" | "spend" | "park-check";
 
 interface Args {
   id: string;
@@ -74,7 +95,9 @@ export function parseArgs(argv: string[]): Args {
   let dir = join(repoRoot, "intentions");
   const setMode = (m: Mode): void => {
     if (mode !== null) {
-      throw new Error("apply-fix-state: --set-fix, --clear-fix, and --record-push are mutually exclusive");
+      throw new Error(
+        "apply-fix-state: --set-fix, --clear-fix, --record-push, --spend-attempt, and --park-if-capped are mutually exclusive",
+      );
     }
     mode = m;
   };
@@ -96,6 +119,12 @@ export function parseArgs(argv: string[]): Args {
         pushedSha = v;
         break;
       }
+      case "--spend-attempt":
+        setMode("spend");
+        break;
+      case "--park-if-capped":
+        setMode("park-check");
+        break;
       case "--dir": {
         const v = argv[++i];
         if (v === undefined || v === "") throw new Error("apply-fix-state: --dir requires a directory argument");
@@ -110,7 +139,9 @@ export function parseArgs(argv: string[]): Args {
   }
   if (id === "") throw new Error("apply-fix-state: <node-id> is required");
   if (mode === null) {
-    throw new Error("apply-fix-state: one of --set-fix | --clear-fix | --record-push <sha> is required");
+    throw new Error(
+      "apply-fix-state: one of --set-fix | --clear-fix | --record-push <sha> | --spend-attempt | --park-if-capped is required",
+    );
   }
   return { id, mode, pushedSha, dir };
 }
@@ -124,7 +155,7 @@ export interface FixStateResult {
   mode: Mode;
   id: string;
   wrote: boolean;
-  /** set: the attempt counter written. */
+  /** set/spend: the attempt counter written. park-check (parked): the count of attempts consumed before the park. */
   attempt?: number;
   /** set: the `since` date written. */
   since?: string;
@@ -134,6 +165,8 @@ export interface FixStateResult {
   reset?: boolean;
   /** record: the pushed sha written to `execution.fix.pushed_sha`. */
   pushed_sha?: string;
+  /** park-check: whether the retry cap was exceeded and office_hours was written. */
+  parked?: boolean;
 }
 
 /**
@@ -187,6 +220,51 @@ export function applyFixState(args: Args): FixStateResult {
     node.execution = { ...execution, markers, fix: null };
     writeNode(args.dir, node);
     return { mode: "clear", id: args.id, wrote: true, phase: node.phase ?? "implement", reset };
+  }
+
+  if (args.mode === "spend") {
+    // Spend one attempt against the in-flight interrupt (the fix-checks SKILL.md
+    // caller consumes this per pass). Null-interrupt guard, mirroring
+    // `--record-push`: spending against no interrupt is meaningless.
+    if (currentFix === null) {
+      throw new Error(
+        `apply-fix-state: --spend-attempt on ${args.id} but execution.fix is null (no interrupt in flight to spend against)`,
+      );
+    }
+    const fix: FixState = { ...currentFix, attempt: currentFix.attempt + 1 };
+    node.execution = { ...execution, fix };
+    writeNode(args.dir, node);
+    return { mode: "spend", id: args.id, wrote: true, attempt: fix.attempt };
+  }
+
+  if (args.mode === "park-check") {
+    // Enforce the retry cap (graph-select-target's enforcement point). Null-
+    // interrupt guard, mirroring `--record-push`: checking a cap against no
+    // interrupt is meaningless.
+    if (currentFix === null) {
+      throw new Error(
+        `apply-fix-state: --park-if-capped on ${args.id} but execution.fix is null (no interrupt in flight to check a cap against)`,
+      );
+    }
+    if (currentFix.attempt > FIX_ATTEMPT_CAP) {
+      const consumed = currentFix.attempt - 1;
+      node.office_hours = {
+        reason:
+          `/fix-checks retry budget exhausted: ${consumed} attempts concluded with PR #${execution.pr ?? "?"} ` +
+          `still red (execution.fix.attempt=${currentFix.attempt}, since ${currentFix.since}) — restoring the legacy ` +
+          `dispatch:fix-checks-attempt-<n> escalation.`,
+        since: todayUtc(),
+        recommendation:
+          `Review the fix-checks accumulator (tmp/fix-checks-summary.md in the node's worktree, also posted as PR ` +
+          `comments) to diagnose why ${FIX_ATTEMPT_CAP} automated attempts did not resolve CI. Clear office_hours to ` +
+          `resume automated fix-checks with a fresh retry budget (attempt was reset to 1), or abandon/redesign the ` +
+          `tactic if the current approach cannot work.`,
+      };
+      node.execution = { ...execution, fix: { ...currentFix, attempt: 1 } };
+      writeNode(args.dir, node);
+      return { mode: "park-check", id: args.id, wrote: true, parked: true, attempt: consumed };
+    }
+    return { mode: "park-check", id: args.id, wrote: false, parked: false };
   }
 
   // record: stamp the pushed sha onto an already-set interrupt.
