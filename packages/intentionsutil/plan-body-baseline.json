@@ -1,0 +1,7 @@
+[
+  { "id": "tactic-dispatch-skill-input-contract", "marker": "context" },
+  { "id": "tactic-flake-hook-tests-select-tick", "marker": "context" },
+  { "id": "tactic-flake-hook-tests-select-tick", "marker": "model" },
+  { "id": "tactic-flake-hook-tests-select-tick", "marker": "verification" },
+  { "id": "tactic-graph-main-worktree-resolver-dry", "marker": "verification" }
+]

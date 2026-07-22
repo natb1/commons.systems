@@ -7,21 +7,21 @@
 # origin/main through graph-commit.
 #
 # Spec: intentions/tactic-graph-native-dispatch.md §1.1, §2.4; strategy
-# clarifications 10, 18, 22. The DECISION (ladder edge, fix interrupt + resume,
+# clarifications 10, 18, 22. The DECISION (unconditional forward ladder edge,
 # residue→main-qa, freshness holds) lives in the pure `transitions` module,
 # applied via apply-node-transition.ts; this wrapper owns only the environmental
-# parts: the origin/main snapshot, the CI verdict sensor, the fingerprint gates,
-# arming gh auto-merge, and refreshing the phase-start stamp.
+# parts: the origin/main snapshot, the fingerprint gates, arming gh auto-merge,
+# and refreshing the phase-start stamp.
+#
+# The forward transition is CI-BLIND: it never reads a CI verdict and never
+# routes a tactic into `fix`. A CI-fix interrupt is carried orthogonally on
+# `execution.fix` and routed by the selector, leaving `phase` at its real ladder
+# position — so this wrapper has no CI sensor.
 #
 # Doctrine: the transition is a STATE-ONLY commit on main, never on the work PR
 # branch (strategy clarification 15). Run this from a main-based checkout; from
 # a PR-branch worktree the caller applies the reset-dance graph-commit needs
 # (same constraint as park-node).
-#
-# Sensor: CI verdict via dispatch_ci_verdict_rest on the PR head sha
-# (passing/failing/pending; pending maps to the pure layer's `unknown` = not
-# a fix interrupt). No PR yet → unknown (a pre-PR implement completion advances
-# to qa without a CI gate).
 #
 # Freshness gates (compute-freshness.ts over the origin/main snapshot):
 #   - scope-stale → delegate to demote-node-to-implement (the backward
@@ -103,19 +103,6 @@ PHASE="$(jq -r '.phase // "implement"' <<<"$NODE_JSON")"
 PR="$SET_PR"
 [[ -z "$PR" ]] && PR="$(jq -r '.execution.pr // empty' <<<"$NODE_JSON")"
 
-# --- CI verdict sensor -------------------------------------------------------
-CI="unknown"
-if [[ -n "$PR" ]]; then
-  HEAD_SHA="$(gh_pr_view_rest "$PR" 2>/dev/null | jq -r '.headRefOid // empty')" || true
-  if [[ -n "$HEAD_SHA" ]]; then
-    case "$(dispatch_ci_verdict_rest "$HEAD_SHA" 2>/dev/null || echo pending)" in
-      failing) CI="failing" ;;
-      passing) CI="passing" ;;
-      *) CI="unknown" ;;
-    esac
-  fi
-fi
-
 # --- Freshness gates over an origin/main snapshot ----------------------------
 SNAP_DIR="$(mktemp -d)" || { echo "transition-node: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$SNAP_DIR"' EXIT
@@ -144,8 +131,8 @@ if [[ "$SCOPE_STALE" == "true" && "$PHASE" != "main-qa" ]]; then
   exit 1
 fi
 
-# --- Apply the forward/hold/fix decision to the local store ------------------
-APPLY_FLAGS=("$NODE_ID" "--ci" "$CI")
+# --- Apply the forward/hold decision to the local store ----------------------
+APPLY_FLAGS=("$NODE_ID")
 [[ "$STRATEGY_STALE" == "true" ]] && APPLY_FLAGS+=("--strategy-stale")
 [[ -n "$SET_PR" ]] && APPLY_FLAGS+=("--set-pr" "$SET_PR")
 if ! RESULT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/apply-node-transition.ts" "${APPLY_FLAGS[@]}") )"; then

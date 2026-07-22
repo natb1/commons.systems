@@ -13,9 +13,61 @@
 // read raw bodies off disk, so it takes the store `dir` as an argument and is
 // wired into validate-graph.ts after `validateGraph`.
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { readNodeBody } from "./store.js";
 import { IntentionSchemaError } from "./errors.js";
 import type { IntentionNode } from "./schema.js";
+
+/**
+ * The three plan-schema markers this lint requires, used as the `marker` field
+ * of a baseline entry (below).
+ */
+export type PlanBodyMarker = "context" | "model" | "verification";
+
+/**
+ * One grandfathered pre-existing violation: node `id` is permitted to lack
+ * `marker`. This mirrors `prose-ref-baseline.json`'s role for
+ * `validateGraphProseRefs` — it grandfathers violations that already existed
+ * when the lint was introduced, so landing the lint does not retroactively
+ * break main. It should NOT grow going forward: a newly planned tactic missing
+ * a marker is a violation to fix, not a baseline entry to add. Fixing a
+ * baselined node's body (adding the marker) makes its entry dead — remove it
+ * then so the ratchet only tightens.
+ */
+export type PlanBodyBaselineEntry = { id: string; marker: PlanBodyMarker };
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const baselinePath = join(scriptDir, "..", "plan-body-baseline.json");
+
+function isPlanBodyBaselineEntry(value: unknown): value is PlanBodyBaselineEntry {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    "marker" in value &&
+    typeof (value as { id: unknown }).id === "string" &&
+    ((value as { marker: unknown }).marker === "context" ||
+      (value as { marker: unknown }).marker === "model" ||
+      (value as { marker: unknown }).marker === "verification")
+  );
+}
+
+/**
+ * Load the grandfather baseline (`../plan-body-baseline.json` by default) as a
+ * Set of `"<id>|<marker>"` keys — the shape `lintTacticBodies` consults. Throws
+ * a descriptive error rather than silently defaulting when the file is missing
+ * or malformed, matching the code-style "clear errors over defensive fallbacks"
+ * rule.
+ */
+export function loadPlanBodyBaseline(path: string = baselinePath): Set<string> {
+  const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+  if (!Array.isArray(parsed) || !parsed.every(isPlanBodyBaselineEntry)) {
+    throw new Error(`${path}: expected a JSON array of {id, marker} objects`);
+  }
+  return new Set(parsed.map((e) => `${e.id}|${e.marker}`));
+}
 
 /**
  * Phases in which a tactic's body must carry a full clean-session plan. A tactic
@@ -57,8 +109,17 @@ function isMainqaModelExempt(id: string): boolean {
  *     "**Recommended model:**", etc.), unless the node is `tactic-mainqa-*`,
  *   - a `## Verification` heading (`/^##\s+Verification\b/im`, so
  *     "## Verification checklist" still counts).
+ *
+ * `baseline` grandfathers pre-existing `"<id>|<marker>"` violations (see
+ * `loadPlanBodyBaseline`); a baselined {node, marker} pair is skipped. Defaults
+ * to an empty set — callers that want no grandfathering (e.g. unit tests) omit
+ * it; `validate-graph.ts` passes `loadPlanBodyBaseline()`.
  */
-export function lintTacticBodies(dir: string, nodes: IntentionNode[]): void {
+export function lintTacticBodies(
+  dir: string,
+  nodes: IntentionNode[],
+  baseline: ReadonlySet<string> = new Set(),
+): void {
   const problems: string[] = [];
   for (const node of nodes) {
     if (node.kind !== "tactic") continue;
@@ -66,13 +127,17 @@ export function lintTacticBodies(dir: string, nodes: IntentionNode[]): void {
 
     const body = readNodeBody(dir, node.id);
 
-    if (!/^##\s+Context\b/im.test(body)) {
+    if (!/^##\s+Context\b/im.test(body) && !baseline.has(`${node.id}|context`)) {
       problems.push(`${node.id}: body is missing a "## Context" heading`);
     }
-    if (!isMainqaModelExempt(node.id) && !/recommended model/i.test(body)) {
+    if (
+      !isMainqaModelExempt(node.id) &&
+      !/recommended model/i.test(body) &&
+      !baseline.has(`${node.id}|model`)
+    ) {
       problems.push(`${node.id}: body is missing a "Recommended model" line`);
     }
-    if (!/^##\s+Verification\b/im.test(body)) {
+    if (!/^##\s+Verification\b/im.test(body) && !baseline.has(`${node.id}|verification`)) {
       problems.push(`${node.id}: body is missing a "## Verification" heading`);
     }
   }

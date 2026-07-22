@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
-import { lintTacticBodies } from "../src/planlint.js";
+import { lintTacticBodies, loadPlanBodyBaseline } from "../src/planlint.js";
 import { listNodes } from "../src/store.js";
 
 function tempDir(): string {
@@ -142,5 +142,82 @@ describe("lintTacticBodies", () => {
     if (!(caught instanceof Error)) throw new Error("unreachable");
     expect(caught.message).toMatch(/tactic-a/);
     expect(caught.message).toMatch(/tactic-b/);
+  });
+
+  describe("grandfather baseline", () => {
+    it("grandfathers a baselined {id, marker} violation", () => {
+      const dir = tempDir();
+      // Missing Context only; baselined for context → passes.
+      const body = `# t\n\nRecommended model: sonnet\n\n## Verification\n\nv\n`;
+      writeRawNode(dir, { id: "tactic-a", body });
+      const baseline = new Set(["tactic-a|context"]);
+      expect(() => lintTacticBodies(dir, listNodes(dir), baseline)).not.toThrow();
+    });
+
+    it("is scoped per-marker — baselining one marker does not excuse another", () => {
+      const dir = tempDir();
+      // Missing both Context and Verification; baseline covers only context.
+      const body = `# t\n\nRecommended model: sonnet\n`;
+      writeRawNode(dir, { id: "tactic-a", body });
+      const baseline = new Set(["tactic-a|context"]);
+      expect(() => lintTacticBodies(dir, listNodes(dir), baseline)).toThrow(
+        /tactic-a.*Verification/,
+      );
+    });
+
+    it("grandfathers all three markers of one node when each is baselined", () => {
+      const dir = tempDir();
+      writeRawNode(dir, { id: "tactic-a", body: "no markers here\n" });
+      const baseline = new Set(["tactic-a|context", "tactic-a|model", "tactic-a|verification"]);
+      expect(() => lintTacticBodies(dir, listNodes(dir), baseline)).not.toThrow();
+    });
+
+    it("baseline entry for one node does not grandfather a different node", () => {
+      const dir = tempDir();
+      writeRawNode(dir, { id: "tactic-a", body: "no markers\n" });
+      writeRawNode(dir, { id: "tactic-b", body: "no markers\n" });
+      const baseline = new Set(["tactic-a|context", "tactic-a|model", "tactic-a|verification"]);
+      expect(() => lintTacticBodies(dir, listNodes(dir), baseline)).toThrow(/tactic-b/);
+    });
+  });
+
+  describe("loadPlanBodyBaseline", () => {
+    it("parses a valid baseline file into <id>|<marker> keys", () => {
+      const dir = tempDir();
+      const path = join(dir, "baseline.json");
+      writeFileSync(
+        path,
+        JSON.stringify([
+          { id: "tactic-a", marker: "context" },
+          { id: "tactic-a", marker: "verification" },
+        ]),
+      );
+      const set = loadPlanBodyBaseline(path);
+      expect(set.has("tactic-a|context")).toBe(true);
+      expect(set.has("tactic-a|verification")).toBe(true);
+      expect(set.has("tactic-a|model")).toBe(false);
+    });
+
+    it("throws on a malformed entry (unknown marker)", () => {
+      const dir = tempDir();
+      const path = join(dir, "baseline.json");
+      writeFileSync(path, JSON.stringify([{ id: "tactic-a", marker: "bogus" }]));
+      expect(() => loadPlanBodyBaseline(path)).toThrow(/expected a JSON array/);
+    });
+
+    it("throws on a non-array top level", () => {
+      const dir = tempDir();
+      const path = join(dir, "baseline.json");
+      writeFileSync(path, JSON.stringify({ id: "tactic-a", marker: "context" }));
+      expect(() => loadPlanBodyBaseline(path)).toThrow(/expected a JSON array/);
+    });
+
+    it("loads the repo baseline and grandfathers exactly its listed violations", () => {
+      // The committed baseline must parse and must NOT be empty (it exists to
+      // grandfather the pre-existing violators found when this lint landed).
+      const set = loadPlanBodyBaseline();
+      expect(set.size).toBeGreaterThan(0);
+      expect(set.has("tactic-flake-hook-tests-select-tick|context")).toBe(true);
+    });
   });
 });

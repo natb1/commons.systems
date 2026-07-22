@@ -31,27 +31,43 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 58
+  boost: 75
   override: null
   rationale: "Boosted to top of the discretionary frontier by author direction
-    (2026-07-18). Rearchitecting /align-tactics into a structural Workflow makes
-    the Opus-decision / Sonnet-orchestrator model tiering unbreakable, closing
-    the #2886 regression surface — high-leverage graph-native-dispatch
-    infrastructure the author elevated above its ordinary implement-phase
-    backlog rank. The boost is sized against the composed selector rank, not the
-    raw-boost column: with no inbound compounding the node's rank equals its
-    boost exactly, so 58 tops the current discretionary max (~51.3 on
-    tactic-materiality-scoped-freeze) with margin while staying well below the
-    permanent strategy-main-health trunk (rank 101, the sole node above it). The
-    boost flows undecayed to the one node this tactic is blocked_by
-    (tactic-align-family-opus-default, PR #2886), lifting that blocker to ~66 —
-    the intended critical-path prioritization (the blocker must merge first), no
-    unrelated node is distorted."
-phase: implement
-execution: null
+    (re-boosted 2026-07-18 from the earlier 58). Rearchitecting /align-tactics
+    into a structural Workflow makes the Opus-decision / Sonnet-orchestrator
+    model tiering unbreakable, closing the #2886 regression surface —
+    high-leverage graph-native-dispatch infrastructure the author elevated above
+    its ordinary implement-phase backlog rank. The boost is sized against the
+    composed selector rank, not the raw-boost column: this node has no inbound
+    compounding and is off the signal/capture path, so its derived terms are
+    zero and its rank equals its boost exactly (verified via select-targets —
+    boost 75 → rank 75). That tops the current discretionary max of 69.33 on
+    tactic-graph-commit-auto-serialization (boost 64, itself on the signal path
+    so rank = boost + 5.33), which was boosted to the frontier top in a separate
+    /align-tactics session; the earlier 58 had fallen below it. 75 clears 69.33
+    with ~5.67 margin while staying well below the permanent
+    strategy-main-health trunk (rank 101, the sole node above it). The boost
+    flows undecayed to the one node this tactic is blocked_by
+    (tactic-align-family-opus-default, PR #2886, now reviewed and in
+    merge-ready-hold), the intended critical-path prioritization (the blocker
+    must merge first to unblock this node); no unrelated node is distorted."
+phase: qa
+execution:
+  branch: tactic-align-tactics-workflow
+  pr: 2931
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-21
+    attempt: 1
+    pushed_sha: 73ca41c910228c7eee89f7bee99105be5f635e7e
 validates: []
 blocked_by:
-  - tactic-align-family-opus-default
+  - tactic-flake-hook-tests-select-tick
+  - tactic-flake-unit-tests-select-tick
 office_hours: null
 pace_exempt: false
 rounds: null

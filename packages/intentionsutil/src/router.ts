@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
 import { isStrategyStale, REVIEWED_MARKER } from "./transitions.js";
 import { PHASES } from "./schema.js";
-import type { IntentionNode, Phase } from "./schema.js";
+import type { FixState, IntentionNode, Phase } from "./schema.js";
 
 // Graph router v2, first half: selection (tactic-graph-router-selector).
 //
@@ -18,25 +18,6 @@ import type { IntentionNode, Phase } from "./schema.js";
 
 // --- Types -------------------------------------------------------------------
 
-/**
- * The phase ladder, closest-to-done first (strategy clarification 22).
- *
- * Historical: this drove the within-rank selection tiebreak until
- * tactic-graph-frozen-tactic-dispatch replaced it with a progression ordinal
- * over the full `PHASES` order (see `progressionIndex`). The selection sort no
- * longer consults it; it is retained as a public export for downstream
- * consumers. Note the progression ordinal reorders `fix` vs `qa` relative to
- * this ladder (`qa` is now more-progressed than `fix`).
- */
-export const PHASE_LADDER: readonly string[] = [
-  "main-qa",
-  "review",
-  "fix",
-  "qa",
-  "implement",
-  "align-tactics",
-];
-
 /** One selectable node, in selection order. */
 export interface GraphCandidate {
   id: string;
@@ -49,6 +30,16 @@ export interface GraphCandidate {
   pace_exempt: boolean;
   /** The tactic's execution.pr — the wrapper's sensor-gate input. Null for strategies. */
   pr: number | null;
+  /**
+   * The tactic's raw `execution.fix` interrupt state, or null. Surfaced so the
+   * shell sensor-gate (`graph-select-target`) reads the interrupt AND its
+   * `pushed_sha` (the pending-CI guard) straight off the candidate object
+   * without a second store read — the CI-routing decision (enter/resolve fix)
+   * is bash's, but the state it keys on stays in this pure TS layer. Null for
+   * strategies and for a tactic with no active interrupt. Note `phase` above is
+   * already overwritten to `"fix"` whenever this is non-null.
+   */
+  fix: FixState | null;
   /**
    * True when this candidate is a soft-freeze re-evaluation session (strategy
    * clarification 10) rather than an ordinary decomposition round — a stale
@@ -223,15 +214,17 @@ function progressionIndex(candidate: GraphCandidate, byId: Map<string, Intention
  *
  * Soft-freeze gate (strategy clarification 10): an open tactic stamped with a
  * non-null `execution.strategy_fingerprint` differing from the serving
- * strategy's current substance fingerprint freezes the subtree — its tactics
- * are excluded from their normal phase skill (in-flight phases finish on their
- * own), and a `freeze` event is logged. Per
- * tactic-graph-frozen-tactic-dispatch (clarification 52) the re-evaluation now
- * targets the frozen TACTICS directly: each subtree tactic re-surfaces as a
- * `kind: "tactic", phase: "align-tactics", reevaluation: true` candidate
- * (office_hours null and complete blockers still apply), rather than the
- * strategy id. Null fingerprints are not stale — stamping starts when the
- * align machinery lands.
+ * strategy's current substance fingerprint freezes only that stale-stamped
+ * child — not its whole sibling subtree — excluding it from its normal phase
+ * skill (in-flight phases finish on their own), and a `freeze` event is
+ * logged. Per tactic-graph-frozen-tactic-dispatch (clarification 52) the
+ * re-evaluation now targets the frozen TACTICS directly: each stale child
+ * re-surfaces as a `kind: "tactic", phase: "align-tactics", reevaluation:
+ * true` candidate (office_hours null and complete blockers still apply),
+ * rather than the strategy id. A fresh-stamped or null-stamped sibling under
+ * the same strategy is untouched by another child's staleness and keeps its
+ * ordinary phase-skill candidate. Null fingerprints are not stale — stamping
+ * starts when the align machinery lands.
  *
  * Frozen-tactic candidates (tactic-graph-frozen-tactic-dispatch): draft/raw
  * tactics (`phase: draft` or null) are also first-class selectable candidates
@@ -277,7 +270,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     // its serving strategies has since drifted.
     const stale = children.filter((t) => isOpenTactic(t) && isStrategyStale(t.execution, s.id, fp));
     if (stale.length === 0) continue;
-    for (const t of children) frozenTacticIds.add(t.id);
+    for (const t of stale) frozenTacticIds.add(t.id);
     events.push({
       event: "freeze",
       strategy: s.id,
@@ -286,6 +279,15 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
   }
 
   const candidates: GraphCandidate[] = [];
+
+  // Subtree-parent ids: a tactic named as another tactic's `parent` is a
+  // permanent container that completes only when its last child completes.
+  // It is always phase-null by design, so it must not re-surface as an
+  // undecomposed draft align-tactics candidate below.
+  const subtreeParentIds = new Set<string>();
+  for (const t of tactics) {
+    if (t.parent !== null) subtreeParentIds.add(t.parent);
+  }
 
   // --- Tactic candidates -------------------------------------------------------
   for (const t of tactics) {
@@ -297,10 +299,14 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     candidates.push({
       id: t.id,
       kind: "tactic",
-      phase: t.phase,
+      // A tactic under an active CI-fix interrupt (`execution.fix` set) is
+      // emitted as a `fix` candidate regardless of its preserved ladder `phase`;
+      // its real `phase` stays put and the interrupt is carried orthogonally.
+      phase: t.execution?.fix != null ? "fix" : t.phase,
       rank: attention.get(t.id)?.value ?? 0,
       pace_exempt: t.pace_exempt,
       pr: t.execution?.pr ?? null,
+      fix: t.execution?.fix ?? null,
       reevaluation: false,
     });
   }
@@ -318,6 +324,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     if (t.office_hours !== null) continue;
     if (!blockersComplete(t, byId)) continue;
     if (isDraft(t)) {
+      if (subtreeParentIds.has(t.id)) continue; // permanent container, not an undecomposed draft
       candidates.push({
         id: t.id,
         kind: "tactic",
@@ -325,6 +332,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
         rank: attention.get(t.id)?.value ?? 0,
         pace_exempt: t.pace_exempt,
         pr: null,
+        fix: null,
         reevaluation: false,
       });
     } else if (frozenTacticIds.has(t.id) && isOpenTactic(t)) {
@@ -335,6 +343,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
         rank: attention.get(t.id)?.value ?? 0,
         pace_exempt: t.pace_exempt,
         pr: t.execution?.pr ?? null,
+        fix: t.execution?.fix ?? null,
         reevaluation: true,
       });
     }
@@ -351,6 +360,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
       rank: attention.get(s.id)?.value ?? 0,
       pace_exempt: s.pace_exempt,
       pr: null,
+      fix: null,
       reevaluation,
     });
 

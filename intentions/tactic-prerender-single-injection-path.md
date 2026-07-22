@@ -29,7 +29,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  security: true
 ---
 # Collapse the blog prerender to the PageShell single-root injection path, retiring the legacy regex/string injection
 

@@ -63,12 +63,19 @@ checkout: a concurrent session's dirty tracked file blocks this run's
 1. **Resolve the target node id** — the `strategy-<slug>` or `tactic-<slug>`
    argument (this skill never selects its own target).
 2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
-   already exists with a live session — `worktree_has_live_session <path>`
+   already exists with a live session — `worktree_has_live_session <path>
+   "$CLAUDE_CODE_SESSION_ID"`
    (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
    run with `dangerouslyDisableSandbox: true`) — the claim is held by
-   another session: stop and report the held claim, then end the run. A
-   held claim is **not** an `office_hours` park (it is not one of the three
-   autonomy-contract conditions below) and **not** a defect.
+   another session: stop and report the held claim, then end the run. Pass
+   this session's own id as the second (exclusion) argument so a
+   graph-launched orchestrator — the strategy-lane spawn in
+   `dispatch-graph-execute` uses `dispatch-spawn-job --name "$id"`, whose
+   name equals this worktree's basename — does not match its own
+   just-spawned session as a pre-existing claim; a genuinely different live
+   session in the same worktree still counts as a held claim and stops the
+   run. A held claim is **not** an `office_hours` park (it is not one of the
+   three autonomy-contract conditions below) and **not** a defect.
 3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
    or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
@@ -142,6 +149,20 @@ BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
   --out-dir "$TMPDIR/dump" <tactic-id>)
 packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
 ```
+
+**Exception: a re-plan (or a Step-2 `split` disposition, at strategy scope)
+that discovers a genuine split.** If a soft-frozen re-plan, or a Step 2 item 2
+`split` disposition applied at strategy scope, finds the tactic must split
+into a new born-parked sibling, that sibling is genuinely new work — but it
+must never land via a separate later `graph-commit` call. Land the parent
+edit and the new sibling in the **same** `graph-commit --base "$BASE"
+<tactic-id> <new-sibling-id>` call; the `--base` manifest still covers only
+the pre-existing parent id, and the new sibling — having no `origin/main`
+blob — is simply absent from it. This closes the 2026-07-18 near-miss: a
+parent edit landed alone as `c037cec7`, the sibling-add `graph-commit` lost
+the push race five times and landed nothing, leaving `main` with a parent
+describing a split sibling that did not exist there — recovered same-day as
+`032768e5`.
 
 There is **no strategy edit** in either case — a per-node tactic-target session
 never touches the serving strategy's frontmatter (`rounds`, clarifications, or
@@ -278,9 +299,18 @@ Drift review is **two-sided** (strategy clarification 8):
     Land it as a dated `clarifications` entry on the strategy without
     interrupting, and continue the round.
 
-Every clarification `answer` ends with a provenance sentence in the existing
-convention, e.g. `"...Recorded 2026-07-05 /align-tactics round."` (date via
-`date -u +%Y-%m-%d`).
+Every clarification `answer` carries a dated provenance clause: an event verb
+(Recorded / Amended / Reviewed / clarified / adopted, etc.) plus an ISO date,
+placed wherever it reads best in the sentence — a front-loaded parenthetical
+is preferred, e.g. `"(Recorded 2026-07-05 /align-tactics round.) ..."`, but any
+placement is accepted. The newest ISO date anywhere in the answer is its
+effective date — the `readingDate()` contract
+(`packages/intentionsutil/src/router.ts`) extracts it verb-agnostically, and
+`coverage.ts`'s `lastReviewedOf` depends on it. An amendment adds a new dated
+clause rather than rewriting the old one. Get the date via
+`date -u +%Y-%m-%d`, never hand-guessed. `validateGraph` rule 17 mechanically
+enforces the date-presence half of this convention; the event verb is
+documented style, not linted.
 
 This absorbs the `/plan-issue` relevance/drift, convention-drift, and
 merged-work-overlap review (§4 coverage matrix) — unchanged in substance, with
@@ -300,10 +330,20 @@ a strategy.
    produce a fresh reading and the strategy dead-ends at the round cap.
 2. **Consume the draft tactics.** Each draft child (`phase` absent **and
    `office_hours` unset**, retained by `/align-strategy`) is **finalized,
-   split, merged, or pruned** — it is input, never left dangling. A
+   split (a split lands its parent edit and new sibling atomically in one
+   `graph-commit` call, never two — see Step 5 item 3), merged, or pruned**
+   — it is input, never left dangling. A
    `phase`-absent child *with* `office_hours` set is a born-parked tactic from a
    prior round, not a draft (see Idempotency): leave it alone, do not run it
-   through this path. Finalizing reuses the draft's retained body as
+   through this path. The sweep excludes one more derived set the same way:
+   compute which tactic ids appear as another tactic's `parent` anywhere in the
+   corpus, and skip any draft-shaped child in that set — a subtree-parent is
+   permanently `phase`-absent by design (it only completes when its last child
+   does) and is a container, not an undecomposed draft, per the same
+   derived-set exclusion `selectGraphTargets`'s frozen-tactic branch applies
+   (`packages/intentionsutil/src/router.ts`; tactic-router-subtree-parent-exclusion);
+   leave it in place rather than finalizing, splitting, merging, or pruning it.
+   Finalizing reuses the draft's retained body as
    the starting context for its plan (step 3); pruning drops a draft that the
    round does not need (record why in the pruning commit message).
 3. **Shape the subtree.** A leaf tactic is **exactly one PR**. Larger shapes
@@ -392,21 +432,41 @@ write it into the tactic's node body. Reuse `/plan-issue`'s Explore/Plan
 subagent fan-out and its plan-quality bar verbatim — only the landing changes.
 
 **Explore/Plan fan-out.** This skill runs in the caller's thread, so it fans
-out the built-in `Explore` and `Plan` subagents directly (no orchestrator, no
-nesting), exactly as `/plan-issue` Steps 3–5:
+out the built-in `Explore` and `Plan` subagents directly (no intermediate
+orchestrator, no nesting), exactly as `/plan-issue` Steps 3–5:
 
-- Launch up to **3** `Explore` agents in parallel (usually 1), reuse-first:
-  have them hunt existing functions, utilities, and patterns to reuse rather
-  than propose new code. The built-in agents skip `CLAUDE.md` and git history,
-  so pass the tactic's scope and the strategy's intent inline; require a
-  compact `path:line`-anchored findings block, not whole-file dumps.
+**Model routing (strategy-token-economy clarification 10).** This
+`/align-tactics` session is the **Sonnet orchestrator** — the router launches
+it on Sonnet (`dispatch-graph-execute`'s `ORCH_MODEL="sonnet"`), and it stays
+Sonnet: it fans out subagents, threads their findings, and authors node bodies
+and frontmatter, but it does **not** itself decide plan substance. The
+decompose-to-signal judgment — the plan's units, their scope, sequencing, and
+recommended models — is the **`Plan` subagent's** work, and that subagent is
+launched with an explicit **`model: opus`** so its reasoning runs on Opus
+independent of this session's Sonnet model. The `Explore` reuse-hunt is a
+mechanical search and stays cost-demotable — launch it with `model: sonnet` (or
+`model: haiku` for a small, well-scoped hunt); never force it onto Opus.
+
+- Launch up to **3** `Explore` agents in parallel (usually 1), reuse-first,
+  each with an explicit `model: sonnet` (or `model: haiku` for a small hunt) —
+  demotable, never Opus. Have them hunt existing functions, utilities, and
+  patterns to reuse rather than propose new code. The built-in agents skip
+  `CLAUDE.md` and git history, so pass the tactic's scope and the strategy's
+  intent inline; require a compact `path:line`-anchored findings block, not
+  whole-file dumps.
 - Launch **1–3** `Plan` agents (usually 1; multiple only for large or
   architectural work, each a distinct framing per
   `.claude/rules/design-proposals.md` — lead with the ideal greenfield design,
-  add a brownfield migration path when warranted). Feed each the Explore
-  findings, the tactic scope, the plan schema below, and the `/implement-unit`
-  model-selection heuristic inline (the `Plan` agent will not read the skill
-  file). Synthesize multiple proposals into a single recommended approach.
+  add a brownfield migration path when warranted), each launched with an
+  explicit **`model: opus`** (the Agent/Task tool's `model` parameter) so the
+  decompose-to-signal reasoning runs on Opus regardless of this session's
+  Sonnet model — do **not** let the `Plan` subagent inherit the orchestrator's
+  Sonnet by omitting `model`. Feed each the Explore findings, the tactic scope,
+  the plan schema below, and the `/implement-unit` model-selection heuristic
+  inline (the `Plan` agent will not read the skill file). Synthesize multiple
+  proposals into a single recommended approach, then author the node body from
+  that Opus output — the Sonnet orchestrator transcribes and reconciles the
+  plan into the schema; it does not rewrite the plan's substance.
 - Trivial tactics (a typo, a one-line change, a simple rename) skip the
   fan-out — write the one-unit plan directly.
 
@@ -514,13 +574,20 @@ Per tactic:
    finalizing a draft, this replaces the retained draft body with the plan.
 
 3. **Land via `graph-commit`.** One `graph-commit` per tactic, or a small
-   batch (e.g. a parent plus its immediate children, or the drift-clarified
-   strategy alongside the round's tactics) in one call:
+   batch (e.g. a parent plus its immediate children, the drift-clarified
+   strategy alongside the round's tactics, or a split-parent tactic alongside
+   its new born-parked sibling) in one call:
 
    ```bash
    packages/intentionsutil/scripts/graph-commit --base "$BASE" \
      <tactic-id> [<tactic-id> ...] [<strategy-id>]
    ```
+
+   A split's parent edit and its new sibling must never land as two separate
+   `graph-commit` calls — the 2026-07-18 near-miss (`c037cec7` landed the
+   parent alone; the follow-up sibling-add call lost the push race five times
+   and landed nothing, recovered same-day as `032768e5`) is the concrete
+   failure this closes.
 
    Pass `--base "$BASE"` (the manifest from `dump-node.ts` above) whenever the
    call touches a pre-existing node; omit it for a round that only creates new
@@ -568,18 +635,26 @@ map** `{<strategy-id>: {hash, sha}}` — one entry per serving strategy — that
 the router's soft-freeze trigger compares against each serving strategy's
 current substance (strategy clarification 10). At mint time this session stamps
 only the **decomposed** strategy's entry: `{<decomposed-strategy-id>: {hash:
-strategyFingerprint(strategy), sha: <origin/main sha>}}`, where the `hash` is
-`strategyFingerprint(strategy)` from `packages/intentionsutil/src/router.ts` —
-always that helper, never a hand-computed hash — and `sha` is the origin/main
-commit the hash was taken against, obtained with `git rev-parse origin/main` in
-the bootstrap-interim hand-stamp path (a live router passes it through
-`apply-node-transition.ts --strategy-sha`). A serving strategy absent from the
-map is never stale (per-strategy null), so an honest multi-serves tactic is not
-born frozen against its other serving strategies; those entries are filled by
-whichever session decomposes or re-evaluates each of them. Untouched
-sibling-strategy entries in the same map are left as-is — this session converts
-only the key it is re-stamping, never a key it is not touching (opportunistic
-conversion, not bulk migration). A tactic not yet advanced still carries
+<fingerprint>, sha: <origin/main sha>}}`, where the `hash` is the value printed
+by
+
+```bash
+npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <decomposed-strategy-id>
+```
+
+run against a fresh `origin/main` at stamp time — the single runnable callsite
+for `strategyFingerprint(strategy)` (`packages/intentionsutil/src/router.ts`);
+never hand-compute the hash, and never re-derive the recipe inline — always run
+this command. `sha` is the origin/main commit the hash was taken against,
+obtained with `git rev-parse origin/main` in the bootstrap-interim hand-stamp
+path (a live router passes it through `apply-node-transition.ts --strategy-sha`).
+A serving strategy absent from the map is never stale (per-strategy null), so an
+honest multi-serves tactic is not born frozen against its other serving
+strategies; those entries are filled by whichever session decomposes or
+re-evaluates each of them. Untouched sibling-strategy entries in the same map
+are left as-is — this session converts only the key it is re-stamping, never a
+key it is not touching (opportunistic conversion, not bulk migration). A tactic
+not yet advanced still carries
 `execution: null` (no map to stamp); the map is seeded the first time an
 `execution` object exists. The bare-string form is deprecated-legacy — never
 emit it. In the bootstrap interim with no live router, the mint-time stamp is
@@ -604,9 +679,11 @@ decompose fresh. It:
    edited term) is a shortlisting heuristic only; it never disposes of a
    tactic — disposition of each open child requires the full-body re-read
    (strategy clarification 32).
-2. **Amends, prunes, or confirms** each open tactic against the edited
-   substance — revise a plan whose premise changed, prune a tactic the edit
-   made unnecessary, confirm one still valid — rather than authoring a new
+2. **Amends, prunes, splits, or confirms** each open tactic against the
+   edited substance — revise a plan whose premise changed, prune a tactic the
+   edit made unnecessary, split one into a new born-parked sibling (landed
+   atomically with the parent edit per the Tactic target section's split
+   exception above), confirm one still valid — rather than authoring a new
    round. **Amendment completeness** (clarification 32): an amendment is
    complete only when the tactic's **whole node** — `statement`,
    `rationale`, the `## Context` prose, every unit, and `## Verification` —
@@ -620,15 +697,66 @@ decompose fresh. It:
    fingerprint-triggered re-evaluation.
 3. Re-stamps **only the re-evaluated strategy's entry** in each surviving
    tactic's `execution.strategy_fingerprint` map — set
-   `map[<re-evaluated-strategy-id>] = {hash: strategyFingerprint(strategy),
-   sha: <origin/main sha>}` (`hash` via `strategyFingerprint` from
-   `packages/intentionsutil/src/router.ts`; `sha` via `git rev-parse
-   origin/main` in the bootstrap-interim hand-stamp path, or
-   `apply-node-transition.ts --strategy-sha` under a live router), leaving every
-   other serving strategy's entry untouched — which unfreezes the subtree
-   against this strategy without disturbing the others. (A tactic still at
-   `execution: null` has no map to re-stamp until the machinery seeds one.)
+   `map[<re-evaluated-strategy-id>] = {hash: <fingerprint>, sha: <origin/main
+   sha>}`, where `hash` is the value printed by
+
+   ```bash
+   npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <re-evaluated-strategy-id>
+   ```
+
+   (the single runnable callsite for `strategyFingerprint(strategy)`,
+   `packages/intentionsutil/src/router.ts`), and `sha` is obtained via `git
+   rev-parse origin/main` in the bootstrap-interim hand-stamp path, or
+   `apply-node-transition.ts --strategy-sha` under a live router — leaving every
+   other serving strategy's entry untouched, which unfreezes the subtree against
+   this strategy without disturbing the others. (A tactic still at `execution:
+   null` has no map to re-stamp until the machinery seeds one.)
 4. Lands the amendments via `graph-commit`.
+5. **Scope-inert re-stamp — protect each amended tactic's own scope custody.**
+   Step 2's amendment edits the **body** of open (non-`draft`, non-`done`)
+   tactics — precisely clarification 32's amendment-completeness scenario. A
+   body edit to an in-flight tactic trips that tactic's own chain-of-custody
+   scope gate: the worktree-local `.claude/worktrees/<id>.scope-fingerprint`
+   stamp no longer matches the tactic's current body fingerprint, and the gate
+   demotes the tactic back to `implement`, discarding its qa/review custody.
+   That is correct for a real plan-substance change, but an amendment mandated
+   solely by the completeness bar — a reconciliation note, a provenance
+   annotation, a drift-review correction — often leaves the plan substance
+   unchanged, and there the demotion is spurious (PR #2888 was falsely demoted
+   from review to implement this way).
+
+   Classify this round's own edit, **per tactic**, as **scope-inert** (plan
+   substance unchanged) versus **material or unsure**. The rule is fail-closed:
+   **only** a confident scope-inert verdict re-stamps; on **any** doubt — a
+   merely plausible substance change included — do nothing further here. Leave
+   the worktree-local stamp untouched and let custody demote the tactic exactly
+   as it does today; that demotion-on-doubt is the existing correct behavior,
+   not a failure mode to work around.
+
+   For each confidently scope-inert tactic, **after** its amendment has landed
+   via `graph-commit` in this **same** round (step 4, so it is on origin/main),
+   run:
+
+   ```bash
+   npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>
+   ```
+
+   It must run post-`graph-commit`: the script reads the tactic's current
+   on-disk body and the current `origin/main` sha to compute the stamp, so a
+   pre-landing run would stamp stale content. Record the scope-inert
+   classification and the re-stamped tactic ids in this round's record.
+
+   This is a **completely different** mechanism from item 3's re-stamp — do not
+   conflate the two. Item 3 re-stamps `execution.strategy_fingerprint`, a
+   **node-frontmatter** map keyed per serving strategy, computed via
+   `strategyFingerprint`, and landed as a node write in the round's
+   `graph-commit`; it tracks per-strategy substance drift across the subtree.
+   This item re-stamps the worktree-local
+   `.claude/worktrees/<id>.scope-fingerprint` **file**, computed via
+   `tacticScopeFingerprint` through the Unit-1 script; it is **never** a node
+   write and **never** a `graph-commit` of its own, and it tracks a single
+   tactic's own body-scope drift. Two unrelated stamps, two unrelated
+   mechanisms.
 
 Until a live router exists, re-evaluation runs **inline** in the same session
 that recorded the strategy edit — the way every round on

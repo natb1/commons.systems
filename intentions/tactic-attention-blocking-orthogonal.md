@@ -83,3 +83,11 @@ Unit tests on `resolveAttention` + router ordering: a blocker of a
 boost-100 node orders ahead of unrelated rank-99 work while its own rank
 value is unchanged; a node blocking two hot nodes takes the max, not the
 sum; downward flow cases unchanged.
+
+## Note (2026-07-18)
+
+Absorbed in part by draft tactic-attention-tier-ranking: under the tier model
+the precedence lift operates on the lexicographic (tier, rank) pair, and that
+tactic carries the implementation (including dropping the superseded backward
+blocked_by additive flow this draft targeted). See
+strategy-graph-drives-dispatch's 2026-07-18 clarifications.

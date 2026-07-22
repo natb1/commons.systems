@@ -7,20 +7,18 @@ owner: ai
 status: codified
 parent: null
 rationale: "Boot-boilerplate facet of the standup-cost lever
-  (strategy-token-economy clarification 12). The launcher chain
-  (dispatch-launch-worker -> provision-node-worktree -> dispatch-merge-main)
-  already runs the deterministic prelude before the session exists, and passes N
-  and the worktree path as prompt args, yet phase skills re-derive them
-  in-session; boot judgment content is near-zero. review-fix already dropped its
-  in-session fetch/merge (review-fix/SKILL.md:199-201, ~3-4 boot round-trips)
-  because the launcher merged; qa-fix has not (re-does the merge at Step 0.5,
-  qa-fix/SKILL.md:227-233, plus a redundant second context-pack, ~6-7
-  round-trips). Propagate the review-fix pattern to qa-fix and push
-  precomputable prelude (N, PR link, merge-base, context-pack) into the launcher
-  as a prepared file. Freshness-bounded: launcher precompute is allowed only for
-  values fixed at launch or produced by the launcher's own merge step, never a
-  value that can go stale against the merged tree (qa-fix's diff must stay
-  post-merge). Parity-gated and measured by tactic-phase-standup-audit-lens."
+  (strategy-token-economy clarification 12). Original scope was two units: (1)
+  propagate review-fix's dropped in-session origin/main merge to qa-fix (qa-fix
+  re-did the merge at Step 0.5 plus a redundant second context-pack, ~6-7
+  round-trips vs review-fix's ~3-4), and (2) push precomputable prelude into the
+  launcher as a prepared file. Disposition 2026-07-21 (office-hours drain): Unit
+  1 delivered in PR #2926; Unit 2 CLOSED as not-worth-it -- its plan target
+  dispatch-launch-worker was retired by PR #2869 (the launcher is now
+  dispatch-graph-execute + provision-node-worktree + dispatch-merge-main, which
+  write nothing into the worktree), the only guardrail-safe precompute value is
+  a free local git merge-base, and caching context-pack would violate the
+  freshness bound. The tactic-phase-standup-audit-lens gate the plan named never
+  existed; blocked_by stayed []."
 reading: null
 gap: null
 serves:
@@ -38,11 +36,20 @@ attention:
     strategy-token-economy carries no strategy-level boost, so the tactic
     carries the full weight itself; boost 15 clears the current working max
     (~14.5)."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-phase-boot-offload-launcher
+  pr: 2926
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-22
+    attempt: 1
+    pushed_sha: 6a2149ab8f4f3b919d9b0294fef380c8ce03f416
 validates: []
-blocked_by:
-  - tactic-phase-standup-audit-lens
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -50,6 +57,30 @@ attributes: {}
 ---
 
 # Offload precomputable phase-boot prelude to the launcher and propagate review-fix's dropped in-session merge to qa-fix
+
+## Disposition (2026-07-21, office-hours drain)
+
+Scope narrowed to Unit 1 only; **Unit 2 closed as not-worth-it**.
+
+- **Unit 1 — delivered.** PR #2926 drops `qa-fix`'s redundant in-session
+  `origin/main` merge at Step 0.5 (mirrors `review-fix`'s #1426 pattern). All CI
+  green, mergeable — proceeds through review normally.
+- **Unit 2 — closed, not implemented.** Its plan target
+  `dispatch-launch-worker` was retired by PR #2869 when the harness moved to the
+  graph-only path; the launcher is now `dispatch-graph-execute` +
+  `provision-node-worktree` + `dispatch-merge-main`, which write nothing into the
+  worktree, so the plan-text mechanism no longer exists. The only guardrail-safe
+  precompute value (the post-merge merge-base, already
+  `provision-node-worktree`'s `$ORIGIN_SHA`) is a free local `git merge-base`
+  worth ~0; caching `dispatch-context-pack` would violate this node's own
+  freshness bound (labels/CI drift between launch and start). If a broad
+  launcher→session offload framework is later wanted, file it as a fresh tactic.
+- The `tactic-phase-standup-audit-lens` gate named in the historical body prose
+  below **never existed in the repo**; the frontmatter `blocked_by` is already
+  `[]` and the graph never gated on it. The prose reference is corrected below.
+
+The Context/Unit-1/Verification sections below are the original plan, retained as
+the historical record; read them through this disposition.
 
 ## Context
 
@@ -81,9 +112,12 @@ tree. `qa-fix`'s diff must stay **post-merge**: it is computed after the
 launcher's merge, so it may be reused, but any value that could change once the
 tree is merged must still be derived in-session.
 
-**Measure-first.** `blocked_by: [tactic-phase-standup-audit-lens]` — read the
-lens's per-phase scriptable-vs-judgment split for `qa-fix` before choosing which
-preamble steps to offload.
+**Measure-first (historical intent; gate never materialized).** The original
+plan wanted an audit lens (`tactic-phase-standup-audit-lens`) to give the
+per-phase scriptable-vs-judgment split before choosing which preamble steps to
+offload. That node was never written and the frontmatter `blocked_by` stayed
+`[]`, so nothing ever gated on it — see the Disposition above. Unit 2 is closed,
+so the lens is moot.
 
 ## Unit 1 — propagate review-fix's dropped in-session merge to qa-fix
 
@@ -116,7 +150,12 @@ Reuse:
   `provision-node-worktree` — the launcher merge step whose guarantee this unit
   depends on.
 
-## Unit 2 — push precomputable prelude into the launcher as a prepared file
+## Unit 2 — CLOSED as not-worth-it (original plan retained below for the record)
+
+Closed 2026-07-21 — see the Disposition section above. The target
+`dispatch-launch-worker` no longer exists (retired by PR #2869), and the
+remaining precompute values are either free-to-recompute or forbidden by this
+node's freshness bound. The original plan text follows unchanged as history.
 
 **Recommended model:** opus
 
