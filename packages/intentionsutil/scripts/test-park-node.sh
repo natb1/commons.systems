@@ -213,7 +213,17 @@ fi
 # concurrent change on origin/main for the node, then delegates to the real
 # graph-commit (graph-commit.real). The real graph-commit's check_base_freshness
 # then re-fetches, sees origin's blob no longer matches the FRESH_BLOB token
-# park-node resolved, and refuses — exactly the collision the guard must catch.
+# park-node resolved, and refuses to land this writer's content — exactly the
+# collision the compare-and-swap guard must catch. (check_base_freshness first
+# attempts a layer-3 structural three-way merge; in this deliberately node-free
+# harness merge-node.ts cannot run, so the merge fails and graph-commit parks
+# fail-closed — the concurrent content survives on main, unclobbered.)
+#
+# The wrapper overwrites the git-tracked graph-commit path, so it is committed
+# into clone C's local history (below) before park-node runs: otherwise the
+# rewritten tracked file reads as an unrelated dirty file to graph-commit's
+# assert_clean_outside_ids pre-flight guard, which would refuse to start BEFORE
+# the compare-and-swap check this case exercises.
 C="$WORK/c"
 make_clone "$C" writer-c
 # Install the wrapper in park-node's SCRIPT_DIR (the same dir park-node lives in
@@ -240,6 +250,11 @@ fi
 exec "$SD/graph-commit.real" "$@"
 SH
 chmod +x "$C/packages/intentionsutil/scripts/graph-commit"
+# Commit the wrapper substitution into clone C's local history (a throwaway local
+# commit, never pushed) so the working tree is clean before park-node runs — see
+# the assert_clean_outside_ids note above.
+git -C "$C" add -A
+git -C "$C" commit -qm 'test: install concurrent-write graph-commit wrapper'
 
 before_sha="$(origin_sha)"
 out="$(
@@ -250,8 +265,15 @@ out="$(
   bash packages/intentionsutil/scripts/park-node t-concurrent 'provision-failed' 2>&1
 )"; rc=$?
 content="$(origin_show t-concurrent)"
+# graph-commit's --base compare-and-swap detects the advance (its
+# check_base_freshness sees origin's blob no longer matches FRESH_BLOB) and
+# refuses to land this writer's content — evidenced by the "checking --base
+# freshness" preamble followed by the fail-closed "concurrent-edit conflict"
+# park. Net: park exits non-zero, the concurrent edit survives on main, and no
+# office_hours park lands.
 if [[ $rc -ne 0 ]] \
-   && grep -q 'stale base' <<<"$out" \
+   && grep -q 'checking --base freshness' <<<"$out" \
+   && grep -q 'concurrent-edit conflict' <<<"$out" \
    && grep -q 'line14: concurrent edit' <<<"$content" \
    && ! grep -q 'office_hours' <<<"$content"; then
   ok "concurrent origin/main advance is refused: park exits non-zero, concurrent content survives, no park landed"
