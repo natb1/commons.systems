@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool: surface-conditional finders (code-review, security domain reviewers) in parallel → code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
+description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool on two lanes: code-review and security-review (Lane A) run their own built-in review-and-fix — code-review via `/code-review max --fix`, applying its own edits — trusting the built-ins, with un-auto-fixed residue dispositioned (resolve/defer/ignore) by a dedicated Opus residue phase; every other finder — domain security reviewers, cost, codeql, npm, erosion (Lane B) — still goes through code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -36,14 +36,57 @@ Before running any step, hydrate the PR and diff context in **one** call. This
 single `dispatch-context-pack --pr --diff` call replaces both the old idempotency
 PR fetch and Step 1's diff capture — review-fix has no `origin/main` merge between
 the preamble and Step 1 (the dispatch tick merges `origin/main` before spawning
-this skill), so one combined call up top is correct. The branch encodes the issue
-number as `<N>-…`, so derive `N` from it first (the pack takes the issue number,
-not the branch). Use `dangerouslyDisableSandbox: true` — the pack calls `gh`:
+this skill), so one combined call up top is correct. The branch names either a
+legacy issue (`<N>-…`) or a graph-native node — split the keyspace first:
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-N="${BRANCH%%-*}"
-.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log --diff \
+case "$BRANCH" in
+  [0-9]*-*)
+    N="${BRANCH%%-*}"; TARGET_KIND=issue ;;
+  *)
+    # Graph-native node lane: worktree named after the intention node id.
+    NODE_ID="$BRANCH"
+    git fetch origin main --quiet
+    NODE_MD=$(git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -xO 2>/dev/null) || {
+      echo "/review-fix: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
+      exit 1
+    }
+    NODE_PHASE=$(printf '%s\n' "$NODE_MD" | sed -n 's/^phase: *//p' | head -1)
+    if [ "$NODE_PHASE" != "review" ]; then
+      echo "/review-fix: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'review'" >&2
+      exit 1
+    fi
+    N="$NODE_ID"; TARGET_KIND=node ;;
+esac
+```
+
+On the node lane, `$N` is the node id (keys `tmp/` filenames); never pass
+`--issue`. **On the node lane no gh issue is ever read or written.** The
+completion and output-filing seams are re-keyed below (**Node-target lane**).
+
+```bash
+case "$TARGET_KIND" in
+  issue)
+    PACK_TARGET="$N"
+    PACK_FLAGS=(--pr --phase-log --diff)
+    ;;
+  node)
+    # The branch IS the node id, not an issue-prefixed name — dispatch-find-pr's
+    # issue→PR branch-prefix lookup does not apply. Resolve the PR by branch
+    # head instead (same primitive dispatch-sweep and /office-hours use for a
+    # node-id worktree; review never runs without an open PR, so a miss here is
+    # a real error).
+    PR_NUM=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+    if [ -z "$PR_NUM" ]; then
+      echo "/review-fix: node '$N' has no open PR — review-fix requires one" >&2
+      exit 1
+    fi
+    PACK_TARGET="$PR_NUM"
+    PACK_FLAGS=(--pr --phase-log --diff --pr-is-number)
+    ;;
+esac
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PACK_TARGET" "${PACK_FLAGS[@]}" \
   | tee "tmp/pack-$N.txt"
 ```
 
@@ -80,6 +123,32 @@ output — do not re-resolve any of them later:
   Workflow `args` / Step 1 review context so the review pass sees what qa-fix
   already tried. An absent note leaves the review unchanged.
 
+### Node-target lane (`TARGET_KIND=node`)
+
+Every step runs unchanged except these re-keyed seams:
+
+- **Completion.** Do **not** apply `dispatch:reviewed` via
+  `dispatch-complete-phase`, and do **not** call `dispatch-mark-complete` /
+  `dispatch-finalize-phase`. Invoke the graph-native transition writer, which
+  records the `reviewed` marker in `execution.markers` and — on a clean review —
+  arms gh auto-merge (same config gate as today), all as one state-only
+  graph-commit on `origin/main`; the reconciler sweep absorbs the out-of-band
+  merge to `done`:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
+  ```
+
+  The graph-tick worker runs it with the reset-dance a PR-branch worktree needs;
+  the skill hands it the node id and never writes the graph directly.
+- **Deferred findings (Step 5).** On the node lane, deferred/security follow-up
+  findings become **draft tactic nodes**, not gh follow-up issues — see the
+  node-lane branch in Step 5.
+- **Escalation.** Instead of `dispatch:office-hours`, write the reason to
+  `$CLAUDE_JOB_DIR/office-hours-reason` (and best-next-steps to
+  `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook parks the node via
+  `park-node`. See `.claude/hooks/dispatch-stop.sh`.
+
 Once `PR_NUM` is confirmed present, stamp it into this session's dispatch
 sidecar so the token audit can join the session to its PR (#1861). Its failure
 is non-fatal — the script exits 0 on any miss. Use `dangerouslyDisableSandbox:
@@ -98,12 +167,54 @@ flush. Routing re-entry through Step 7 means its flush guard also carries any
 commits an interrupted prior run left stranded — the flush that lets the router
 resolve `mergeable == MERGEABLE` and promote the PR to ready.
 
+The node lane has no `dispatch:reviewed` label to test — `transition-node`
+records this skill's terminal action as a `reviewed` marker in
+`execution.markers`, not a gh label (see the Completion bullet above). So the
+parallel node-lane check keys on that marker: if `reviewed` is a member of the
+node's `execution.markers` list, this is an interrupted prior run — **skip Steps
+1–6** and go straight to Step 7's terminal flush, exactly as the label check
+routes the issue lane.
+
+Parse this from the already-fetched `NODE_MD` (the `intentions/$NODE_ID.md`
+frontmatter read from `origin/main` in the preamble) with a **scoped** match —
+not a naive `grep -q reviewed <<<"$NODE_MD"`. `execution.markers` is a nested
+YAML list (`  markers:` under the top-level `execution:` key, with `    -
+<marker>` items), so a bare `grep` for the token `reviewed` would false-match it
+appearing in the node body, the `validates`/`serves` edges, a rationale, or any
+other field, and wrongly trigger the skip-Steps-1–6 re-entry path — bypassing
+the actual review pass. Isolate the markers list to the execution block and test
+for an exact `reviewed` list item:
+
+```bash
+NODE_REVIEWED=$(printf '%s\n' "$NODE_MD" | awk '
+  $0 == "execution:"          { in_exec = 1; next }
+  in_exec && /^[^[:space:]]/  { exit }                  # new top-level key ends the execution block
+  in_exec && /^  markers:/    { in_markers = 1; next }
+  in_exec && in_markers && /^  [^[:space:]]/ { in_markers = 0 }  # next execution key ends the list
+  in_markers && /^    - reviewed[[:space:]]*$/ { print "1"; exit }
+')
+# Non-empty NODE_REVIEWED => the reviewed marker is already written: skip Steps 1–6.
+```
+
+The `reviewed` marker is the node lane's terminal action and is already written,
+so re-entry is a no-op beyond that flush, which likewise carries any commits an
+interrupted prior run left stranded.
+
 On this re-entry path the Workflow has not run — so Step 7 **skips the phase-log
 write entirely** (the prior accurate entry stays durable), treats the deviation
 criterion as not met (`result.deviation` is absent), skips the outcome-envelope
 emit, and writes the phase-completed marker. Otherwise run all steps in order.
 
 ## Steps
+
+**Resume from durable state.** A run that finds an existing review comment
+already carrying recorded dispositions (Step 6's incremental comment), or fix
+commits beyond the branch base (`git merge-base HEAD origin/main`), treats them
+as resume input, not an error: read the prior comment's dispositions and diff
+the committed fixes against the base, then continue from there — never
+re-litigate a recorded verdict and never redo a committed fix. The worktree and
+the PR survive a dead session; only reasoning-in-progress is lost, so a resumed
+run rebuilds nothing that already reached durable state.
 
 ### 1. Capture the diff context and run the inline bash scans
 
@@ -258,9 +369,17 @@ to pass to the Workflow.
 #### Finder agents (when `surface=code`)
 
 The Workflow fans out agent finders based on `surface` and `app_or_rules`. The
-`code-review` quality finder always runs. When `surface === 'code'`, the following
+`code-review` quality finder always runs — via `/code-review max --fix`,
+applying its own working-tree edits directly; only its un-auto-fixed residue is
+dispositioned (resolve/defer/ignore) by the new residue phase. When `surface === 'code'`, the following
 domain finders also run. Four are gated on `surface=code` alone; four additionally
 require `app_or_rules=true` (application/functions/rules source):
+
+`code-review` and `security-review` are Lane A: they trust the built-in
+`/code-review` and `/security-review` skills to do their own review-and-fix
+rather than feeding the shared dedup/classify/verify/fix pipeline below — see
+the "Disposition table" (Step 4) and the Model split note for how their output
+reaches this skill's disposition set.
 
 **`surface === 'code'`** (any code-surface diff):
 - **input-validation** — Hunt injection in the changed code: SQL/NoSQL injection, XSS,
@@ -273,7 +392,9 @@ require `app_or_rules=true` (application/functions/rules source):
   scenario as a finding. Build scenarios from the code under review, not a checklist of
   known vulnerabilities.
 - **security-review** — Invokes the built-in `/security-review` skill for a broad
-  security pass.
+  security pass. It has no `--fix` flag, so it stays findings-only as before — but its
+  entire output is now residue, dispositioned (resolve/defer/ignore) by the new
+  residue phase rather than feeding the shared dedup/classify/verify/fix pipeline.
 
 **`surface === 'code' && app_or_rules=true`** (app/functions/rules source):
 - **auth** — Auth and access control: Firestore rules coverage for paths the diff touches,
@@ -342,8 +463,15 @@ result = {
 ```
 
 The Workflow's fix-authoring agents (non-isolated, Opus) have already edited the
-working tree by the time `result` is returned. The skill's context never holds raw
-findings — only this compact summary.
+working tree by the time `result` is returned — this now includes THREE sources
+of edits merged into the one envelope above: the shared Lane-B Opus fix fan-out,
+Lane-A code-review's own `/code-review max --fix` edits, and the residue phase's
+applied resolve-dispositioned fixes. Their fix-agent prompts (built in
+`.claude/workflows/review-fix.js`, fix phase) carry, verbatim: "Read any file
+with the Read tool
+before your first Edit or Write to it in this session — the edit is rejected
+otherwise and the retry burns the tokens twice." The skill's context never holds
+raw findings — only this compact summary.
 
 ### 3. Commit the Workflow's working-tree edits via one commit-merge-push
 
@@ -417,6 +545,14 @@ Workflow's classifier preserves **both** vocabularies: the security pass's
 | Deferred | code-review | Valid but out of scope for this PR; filed as a `blocked_by` follow-up in Step 6. |
 | Out-of-scope | security | A genuine concern, but in pre-existing code the diff did not touch; meaningful CodeQL/npm out-of-scope findings are filed as `security` follow-ups in Step 6. |
 
+For `code-review` and `security-review` sources specifically, these buckets are
+populated differently from the rest of this table: code-review's own outcome
+(`fixed` / `skipped` / `no_change_needed`, from its `--fix` run) and the residue
+phase's resolve/defer/ignore disposition fill these buckets directly — this
+pipeline's own classify/verify/fix stages never run over Lane-A findings, and
+now only classify Lane-B sources (domain security finders, cost, codeql, npm,
+erosion).
+
 A finding is **never Dismissed/Disregarded purely because the change is small.**
 If a code-review finding is a real improvement within the PR's scope,
 classify it Fixed and implement it — regardless of how trivial the diff is.
@@ -444,6 +580,43 @@ out-of-scope findings do not evaporate when the PR merges. The Workflow has
 prepared filing structures in `result.deferred_filings` and
 `result.security_followup_input`; this skill executes the actual `gh` calls.
 Skip a path when its bucket is empty.
+
+**Node-target lane (`TARGET_KIND=node`) — supersedes 5a/5b entirely.** A node
+target files **no gh issue**: new work never enters the graph through gh
+(strategy condition 1). The prepared `result.deferred_filings` and
+`result.security_followup_input` structures are instead written as **draft
+tactic nodes** — `status: raw`, no `phase`, `serves` the same strategy this
+tactic serves — batched per component, one `write-node.ts` build plus one
+`graph-commit`. Each draft's body records the finding provenance:
+`file:line`, failure scenario, adversarial verdict, and the source PR
+(`execution.pr`). `body` is not a `write-node.ts` input field — the script
+discards unknown keys, and a new node's body is always regenerated from
+`statement` as a `# <statement>` placeholder
+(`packages/intentionsutil/src/store.ts:47`). So write each draft's provenance as
+a separate step, folded into the one-build-plus-one-commit sequence above:
+
+1. Run `write-node.ts` with only the frontmatter fields above (including
+   `status: raw`).
+2. Then edit each `intentions/<draft-id>.md` directly, replacing the generated
+   `# <statement>` placeholder that appears after the closing `---` fence with
+   the provenance content (`file:line`, failure scenario, adversarial verdict,
+   and `execution.pr`).
+3. Then run `graph-commit`.
+
+These hand-authored bodies are durable across any later frontmatter-only rewrite
+of these nodes: `writeNode` calls `readExistingTacticBody`
+(`packages/intentionsutil/src/store.ts:84-88`), which reads a `tactic` node's
+on-disk body verbatim and reuses it instead of regenerating the placeholder
+whenever the file already exists — so a subsequent write that only touches
+frontmatter preserves the provenance written in step 2. Skip the
+`dispatch:review-followup` label, the
+`<!-- dispatch:source-pr -->` marker, and the orphan-retriage machinery
+entirely — drafts are inert until a later `/align-tactics` round finalizes
+them, and that round re-validates the provenance against what actually merged.
+Use the worktree's own `packages/intentionsutil/scripts/write-node.ts` +
+`graph-commit` (the graph-tick worker applies the reset-dance a PR-branch
+worktree needs). Then skip to Step 6. The legacy lane (`TARGET_KIND=issue`)
+runs 5a/5b below unchanged.
 
 `result.followups_deferred` is the count of Step-5a filing subagents the Workflow queued (not yet filed); it drives the Step-5a fan-out and is NOT the value emitted to `--followups-filed`. Track instead how many Step-5a and Step-5b follow-ups were ACTUALLY filed this run — count only NEW `<disposition>` records (EXISTING records returned by `/file-issue` were not filed this phase). Use the already-captured `<N>` records from the "Capture each `<N>`" lines in 5a and 5b for this count; introduce no new tracking mechanism. Pass that count, not `result.followups_deferred`, as the `--followups-filed` total.
 
@@ -614,10 +787,28 @@ The 5a and 5b follow-up subagents touch only GitHub and the working tree never,
 so they may be fanned out in the same message as one another (Step 3's
 `/commit-merge-push` has already returned by this point).
 
-### 6. Post exactly one PR comment
+### 6. Post exactly one PR comment — composed incrementally
 
-Reuse the `PR_NUM` captured in the preamble — do not re-resolve. Post **one**
-comment covering **every** finding from `result.dispositions` and its bucket.
+Reuse the `PR_NUM` captured in the preamble — do not re-resolve. There is still
+exactly **one** comment covering **every** finding from `result.dispositions`
+and its bucket — but **compose it incrementally**, not only at phase end, so a
+dead session leaves the resolved-so-far dispositions already on the PR (condition
+9: phase progress whose only home is the session is a defect):
+
+- Give the comment body a first-line marker `<!-- dispatch:review-fix -->` (the
+  marker-comment anchor pattern `dispatch-write-plan` / `dispatch-qa-noprogress`
+  use — first line only, matched by `startswith`, never `contains`).
+- **Create** the comment as soon as the first finder/verify disposition
+  resolves, via `post-pr-comment.sh` (which returns the new comment ID). Capture
+  that ID.
+- **Edit it in place** as each subsequent disposition resolves — rewrite the
+  body file and `gh api repos/{owner}/{repo}/issues/comments/<id> -X PATCH
+  --field body=@tmp/<file>` (use `dangerouslyDisableSandbox: true`). A resumed
+  run re-finds the same comment by its marker via the `dispatch_marker_comment_id`
+  helper (`lib.sh`) rather than posting a duplicate.
+- The phase-end pass then only **finalizes** the same comment — one last
+  edit-in-place with the complete bucket set below; it does not post a second
+  comment.
 
 Write the comment body to a file under the repo's `tmp/` directory. The body file
 **must** live under `tmp/` because `post-pr-comment.sh` restricts paths to that
@@ -652,11 +843,23 @@ both quality finders died — the model was likely throttled). If every bucket i
 empty and there was no security note, the comment is still well-formed (render
 empty buckets as `_None._`).
 
-Then post it (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
+Then flush it (use `dangerouslyDisableSandbox: true` — these invoke `gh`).
+On the **first** flush, create the marker comment and capture its ID:
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
+CID=$(.claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>)
 ```
+
+On every **subsequent** flush and the phase-end finalize, edit the same comment
+in place (never a second `post-pr-comment.sh` — that would stack a duplicate):
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/${REPO}/issues/comments/${CID}" -X PATCH --field body=@tmp/<file>
+```
+
+A resumed run recovers `CID` by re-finding the `<!-- dispatch:review-fix -->`
+marker comment (`dispatch_marker_comment_id`, `lib.sh`) instead of re-creating it.
 
 ### 7. Apply the terminal label, then write the marker (or park on deviation)
 
@@ -725,7 +928,9 @@ No attempt counter — review is single-pass, so the default `--attempt 1` appli
 The upsert is idempotent on the `(review, 1)` key. Why re-entry must not re-write:
 the phase-log write PRECEDES the `dispatch:reviewed` apply (above), and re-entry
 is GATED on `dispatch:reviewed` already being present (see preamble: "If the
-labels line already includes `dispatch:reviewed`"). So whenever re-entry fires, the
+labels line already includes `dispatch:reviewed`") — or, on the node lane, on the
+parallel `reviewed`-in-`execution.markers` check (see preamble: "if `reviewed` is
+present in `execution.markers`"). So whenever re-entry fires, the
 accurate `(review, 1)` entry the original run wrote is guaranteed already durable
 on the comment. The script enforces the skip via `--reentry true`, preserving it.
 A re-write on re-entry has no prior-pass data to restate (`result` is absent), so
@@ -923,14 +1128,26 @@ phase-log write and outcome-envelope emit, and writes the phase-completed marker
 not met). Readiness is the router's projection, reconciled on later ticks — not
 something re-entry asserts.
 
-**Model split (#1172).** The dispatch chain runs this `review` phase orchestrator
-on **Sonnet** (via `dispatch-phase-model`, which maps `review →
-claude-sonnet-4-6`). The model tiering is now owned by the Workflow's per-`agent()`
-`model:` settings: finder agents (code-review, security domains) run on
-**Sonnet**, dedup/classify/verify agents run on **Sonnet**, and **fix-authoring
-Opus fix agents** (`model: opus`) write all working-tree changes. Fix-authoring is
-pinned to Opus **exactly once** in the Workflow's fix phase — there is no
-double-tiering. The orchestrator (this skill) authors no product code.
+**Model split (#1172, #2872, tactic-review-phase-trust-builtin-review).** The
+dispatch chain runs this `review` phase orchestrator on **Sonnet** (via
+`dispatch-phase-model`, which maps `review → sonnet`) — always; there is no
+learned policy that can promote the orchestrator to Opus. The model tiering is
+owned by the Workflow's per-`agent()` `model:` settings, and Opus is reserved
+for the genuinely complex, generative subtasks: **finder agents run on Opus**
+(`model: opus`) — the always-on `code-review` finder now runs `/code-review max
+--fix` and applies its own working-tree edits directly (no longer
+detection-only — this is the tactic-review-phase-trust-builtin-review reversal
+of the prior #1172 doctrine), the `/security-review` pass stays findings-only
+(no `--fix` flag), and the surface-gated security/cost domain lenses run
+detection-only as before, since finding real bugs and vulnerabilities in the
+diff is the core reasoning of the phase. **Fix-authoring agents run on Opus**
+(`model: opus`), writing all working-tree changes: this now includes both the
+shared Lane-B fix fan-out over classified/verified findings AND the new
+**residue phase** subagent (also Opus), which additionally applies
+resolve-dispositioned fixes for Lane-A's (code-review's and security-review's)
+un-auto-fixed residue. The cheaper mechanical stages — dedup, classify, and the
+adversarial verify skeptics — run on **Sonnet**, and now scope only to Lane-B
+findings. The orchestrator (this skill) authors no product code.
 
 **Probe-wave throttle short-circuit (#1857).** On a `code` surface the Workflow
 splits the finder fan-out into two waves instead of one barrier. Wave 1 launches

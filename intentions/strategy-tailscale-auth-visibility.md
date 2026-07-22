@@ -38,9 +38,7 @@ gap: reading 'router-host key expiry disabled in the admin console 2026-07-07
   console, an interactive-shell-login check names Tailscale auth state on each
   machine, and the next NeedsLogin incident is first diagnosed by the named
   check rather than forensic debugging'
-serves:
-  - virtue-progressive-detachment
-  - virtue-alignment-of-attachments
+serves: []
 recovers: []
 clarifications:
   - question: Does this strategy cover all expiring credentials in the environment
@@ -75,6 +73,21 @@ clarifications:
       still produce NeedsLogin; the detection net stays in scope on the router
       host as a safety net for the residual causes. Recorded 2026-07-07
       interview.
+  - question: How is the observable's 'and at office-hours for the router host'
+      surface delivered, given the office-hours signal surface is cloud-side
+      SaaS sampling with no view of local machine state?
+    answer: The office-hours feed is design-entangled (no local->cloud push path
+      exists today; functions/src/project-signals-core.ts samples only external
+      SaaS into Firestore) and is captured this round as born-parked
+      tactic-tailscale-office-hours-auth-signal for author design ratification
+      (Firestore push vs graph/status-file, reconciled with the
+      strategy-graph-native-dispatch office-hours-snapshot work), rather than
+      auto-planned. The round's minimum signal-threshold path — router-host key
+      expiry disabled [already done per the reading], an interactive-shell-login
+      check on each machine (tactic-tailscale-shell-health-check), and the next
+      NeedsLogin incident diagnosed by a named check (that check plus
+      tactic-wezterm-config-auth-diagnostics) — is delivered by the two planned
+      tactics. Recorded 2026-07-13 /align-tactics round.
 tooling_goals: []
 success_signal:
   observable: a Tailscale NeedsLogin event on any machine surfaces as a named
@@ -94,7 +107,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - the dispatch-router host remains a stationary home machine; if it becomes

@@ -10,8 +10,10 @@ import { createImageArchiveRenderer } from "../viewer/image-archive.js";
 import { getFile, putFile } from "../media-cache.js";
 import { isLocalId, getLocalItem, resolveLocalBlob, whenLocalFolderReady } from "../library.js";
 import type { PositionStore } from "../sidecar.js";
-import { makeSidecarPositionStore } from "../sidecar.js";
+import { makeSidecarPositionStore, makeSidecarAnnotationsStore } from "../sidecar.js";
 import { makeFirestorePositionStore } from "../reading-position.js";
+import type { Annotation, AnnotationsStore } from "../annotations.js";
+import { coerceAnnotationList } from "../annotations.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
@@ -71,6 +73,58 @@ export function pickPositionStore(
   if (isLocal) return makeSidecarPositionStore(item.storagePath);
   if (userUid) return makeFirestorePositionStore(userUid, item.id);
   return makeLocalStoragePositionStore(item.id);
+}
+
+function annotationsStorageKey(mediaId: string): string {
+  return `annotations:${mediaId}`;
+}
+
+/**
+ * An AnnotationsStore backed by localStorage, keyed on `mediaId`. Used for
+ * cloud items regardless of auth — there is deliberately no Firestore tier for
+ * annotations (reading notes must not accumulate in a vendor silo), so a
+ * signed-in cloud reader's annotations stay device-local. A malformed stored
+ * value is coerced to `[]` at the edge rather than crashing the viewer.
+ */
+export function makeLocalStorageAnnotationsStore(mediaId: string): AnnotationsStore {
+  const key = annotationsStorageKey(mediaId);
+  return {
+    async load(): Promise<Annotation[]> {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw === null) return [];
+        return coerceAnnotationList(JSON.parse(raw));
+      } catch (e) {
+        reportError(new Error("Could not load annotations from localStorage", { cause: e }));
+        return [];
+      }
+    },
+    async save(annotations: Annotation[]): Promise<void> {
+      try {
+        localStorage.setItem(key, JSON.stringify(annotations));
+      } catch (e) {
+        reportError(new Error("Could not save annotations to localStorage", { cause: e }));
+      }
+    },
+  };
+}
+
+/**
+ * Pick the annotations store for the viewer. Routing mirrors pickPositionStore
+ * on `isLocal` — a local item ALWAYS uses the sidecar (keyed on the bare
+ * filename) — EXCEPT there is no Firestore tier: a signed-in cloud item routes
+ * to localStorage just like an anonymous one, so annotations never touch
+ * Firestore. `userUid` is accepted for signature symmetry with pickPositionStore
+ * and to keep the call site uniform; it does not affect routing.
+ */
+export function pickAnnotationsStore(
+  item: MediaItem,
+  isLocal: boolean,
+  userUid: string | null,
+): AnnotationsStore {
+  void userUid;
+  if (isLocal) return makeSidecarAnnotationsStore(item.storagePath);
+  return makeLocalStorageAnnotationsStore(item.id);
 }
 
 export type ViewFrame =
@@ -175,6 +229,7 @@ export function resolveViewerProps(
   const spath = item.storagePath;
   const uid = local ? null : user?.uid ?? null;
   const store = pickPositionStore(item, local, uid);
+  const annotationsStore = pickAnnotationsStore(item, local, uid);
 
   if (local) {
     // The resolveSource closure rejects when the file is gone. It reports the
@@ -194,9 +249,9 @@ export function resolveViewerProps(
       });
     switch (item.mediaType) {
       case "pdf":
-        return { item, createRenderer: (onError) => createPdfRenderer(onError), resolveSource: resolveLocal, store, uid };
+        return { item, createRenderer: (onError) => createPdfRenderer(onError), resolveSource: resolveLocal, store, annotationsStore, uid };
       case "epub":
-        return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: resolveLocal, store, uid };
+        return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: resolveLocal, store, annotationsStore, uid };
       default:
         throw new Error(`Unsupported local mediaType in viewer: ${item.mediaType}`);
     }
@@ -206,11 +261,11 @@ export function resolveViewerProps(
 
   switch (item.mediaType) {
     case "pdf":
-      return { item, createRenderer: (onError) => createPdfRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, uid };
+      return { item, createRenderer: (onError) => createPdfRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, annotationsStore, uid };
     case "epub":
-      return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, uid };
+      return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, annotationsStore, uid };
     case "image-archive":
-      return { item, createRenderer: (onError) => createImageArchiveRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, uid };
+      return { item, createRenderer: (onError) => createImageArchiveRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, annotationsStore, uid };
     default: {
       const _exhaustive: never = item.mediaType;
       throw new Error(`Unsupported mediaType in viewer: ${_exhaustive}`);

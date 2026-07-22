@@ -53,7 +53,7 @@ clarifications:
       figures in the token audit remain useful as allowance-consumption proxies
       for ranking, not as a bill to minimize. Recorded 2026-07-04 interview.
   - question: Which routing decisions may the control loop make automatically?
-    answer: Only those grounded in yield metrics whose denominator the routed phase
+    answer: "Only those grounded in yield metrics whose denominator the routed phase
       can actually move. The 2026-07-03 audit's qa→Opus promotion is a
       measurement artifact — qa's fixes route through /implement-unit subagents
       and never land in the outcome envelope's fixes_applied, so pooled qa
@@ -62,6 +62,11 @@ clarifications:
       Promotions from such metrics stay untrusted until the accounting is fixed
       or the phase routes on a metric it can move (detail retained on
       tactic-outcome-envelope-qa-accounting). Recorded 2026-07-04 interview.
+      Amended 2026-07-16: superseded — no routing decision is applied
+      automatically. The audit-written policy loop is now advisory: it surfaces
+      routing recommendations grounded in verified yield metrics, and every
+      routing change (demotion, promotion, or effort tuning) requires explicit
+      author approval before implementation. See clarification 10."
   - question: Do the skill-contract disciplines get recorded, or stay folklore?
     answer: "Recorded, two families. Context discipline: Explore-subagent fan-out
       returning compact findings, clean-context phase boundaries, and model
@@ -73,7 +78,12 @@ clarifications:
       background sessions that author no code (diagnostics, reminders, digest,
       main-qa verification) launch on Sonnet instead of inheriting Opus (detail
       retained on tactic-noncodegen-session-model-defaults). Recorded 2026-07-04
-      interview."
+      interview. Amended 2026-07-16: the 'sonnet/haiku on subagents of Opus
+      parents' rule is now a special case, not universal — under clarification
+      10 the /align-tactics orchestrator is itself Sonnet and deliberately
+      spawns an Opus plan-creation subagent (a cheap parent with one expensive
+      child); the cost-discipline still governs the Explore reuse-hunt fan-out.
+      See clarification 10."
   - question: What did /align-tactics round 1's drift review find?
     answer: "Immaterial refinements, no condition failures. (a) qa-fix's fix lane
       already maintains a landed-fix tally (SKILL.md Step 3.7), so the
@@ -108,7 +118,13 @@ clarifications:
       /align-tactics decomposition is high-stakes to the signal, so a cheaper
       model is a permanent gap in the record, not a recoverable cost saving.
       Explore/Plan fan-out spawned by these sessions stays demotable to Sonnet
-      or Haiku per clarification 4. Recorded 2026-07-06 interview."
+      or Haiku per clarification 4. Recorded 2026-07-06 interview. Amended
+      2026-07-16: still holds for /align-strategy (interactive-only,
+      whole-session Opus), but NOT for /align-tactics — under clarification 10
+      the dispatch-launched /align-tactics worker runs a Sonnet orchestrator and
+      delegates the decompose-to-signal judgment and per-tactic plan authoring
+      to an Opus subagent, rather than running the whole session on Opus. See
+      clarification 10."
   - question: Is the align-family Opus default demotable by the audit-written policy
       loop, like other phases?
     answer: "No — it is a floor, exempt from downward demotion. The routing
@@ -116,7 +132,11 @@ clarifications:
       verified yield metrics, but the align family is the audit step itself:
       demoting the audit to optimize its own cost is self-defeating. Only the
       Explore/Plan fan-out under these sessions remains demotable. Recorded
-      2026-07-06 interview."
+      2026-07-06 interview. Amended 2026-07-16: the floor is deprecated. Under
+      clarification 10 there is no per-phase downward-demotion exemption;
+      instead all audit-driven routing is advisory and author-gated, which
+      protects the high-stakes work without a special allowlist. See
+      clarification 10."
   - question: How is the Opus default enforced on the human-invoked interactive
       path, which has no router to set the model?
     answer: "As an intended default plus measurement, not a hard guarantee. The
@@ -128,7 +148,218 @@ clarifications:
       token-economy sensor), which can read after the fact whether an
       align-family session actually ran on Opus. The enforcement mechanism is
       retained as draft tactic-align-family-opus-default. Recorded 2026-07-06
-      interview."
+      interview. Amended 2026-07-16: this enforcement (SKILL.md model: opus
+      frontmatter plus after-the-fact audit) now describes /align-strategy,
+      which stays whole-session Opus. /align-tactics interactive invocation
+      follows the split in clarification 10 (Sonnet orchestrator plus Opus
+      plan-creation subagent). See clarification 10."
+  - question: Under graph-native phase execution (Shape B), what is the standing
+      model-routing default?
+    answer: "The top-level phase orchestrator session runs on sonnet; workflow
+      subagents run on opus only when the work calls for it — an implementation
+      unit whose Recommended model is opus, or an explicitly opus-instructed
+      review such as /code-review max and /security-review. Default subagents
+      (finders, classifiers, verifiers) stay on sonnet. This generalizes the
+      existing sonnet-default node (tactic-noncodegen-session-model-defaults)
+      and opus-when-instructed node (tactic-align-family-opus-default) into the
+      standing rule for the phase-orchestrator architecture recorded on
+      strategy-graph-native-dispatch (Shape B, clarification 24 amended
+      2026-07-11). It is a throughput lever, not a spend cut: an opus token
+      draws the prepaid weekly allowance several times faster than a sonnet
+      token, so pinning orchestrators to sonnet and reserving opus for the
+      subagents whose yield justifies it converts the same allowance into more
+      closed tactics. Recorded 2026-07-11 interview."
+  - question: How does /align-tactics route models (2026-07-16), and does the
+      audit-written policy loop still apply routing changes automatically?
+    answer: "Three changes, recorded 2026-07-16 interview. (1) The dispatch-launched
+      /align-tactics worker no longer runs whole-session on Opus. Its
+      orchestration — the mechanical bookkeeping of a decomposition round:
+      node-id reservation, park-field writes, the clause-coverage walk, and the
+      graph-commit — runs on the Sonnet orchestrator session. Both high-stakes
+      cognitive acts are delegated to an Opus subagent: the decompose-to-signal
+      judgment (the two-sided drift review and deciding which tactic nodes
+      exist) AND each claude-eligible tactic's full plan-body authoring. The
+      Explore reuse-hunt fan-out stays demotable to Sonnet or Haiku. This
+      relocates the 2026-07-06 Opus requirement (clarification 6) from the whole
+      session onto the subagent that does the work the floor protected —
+      'decomposition is high-stakes to the signal' is preserved, because the
+      decompose judgment and plan authoring are exactly what runs on Opus —
+      while cutting the cost of the orchestration around it. It makes
+      /align-tactics conform to the Shape B standing default (clarification 9:
+      Sonnet orchestrator, Opus subagents where the work calls for it).
+      Motivating observation: router-launched /align-tactics workers were
+      authoring tactic plans on Sonnet, because the worker launched on Sonnet
+      and its Plan subagent inherited that model. (2) /align-strategy is
+      unchanged: it is interactive-only (no dispatch launch path) and its
+      interview dialectic IS the audit and is non-delegable, so it stays
+      whole-session Opus via SKILL.md model: opus frontmatter. (3) The
+      align-family Opus floor (clarification 7) is deprecated and the
+      audit-written policy loop becomes advisory: it no longer applies ANY
+      routing change automatically — demotion, promotion, or effort tuning
+      alike. When the audit can demonstrate a task runs on a cheaper model
+      without compromising quality (or otherwise warrants a routing change), it
+      MUST surface the recommendation; implementation requires explicit author
+      approval. This supersedes clarification 3 (which licensed some automatic
+      routing) and removes the need for a per-phase floor exemption. Mechanism
+      retained as draft tactic-align-family-opus-default (the align-tactics
+      split) and tactic-audit-routing-advisory-gate (the advisory policy loop).
+      Recorded 2026-07-16 interview. Amended 2026-07-18: the align-tactics split
+      executes as a deterministic Workflow (`.claude/workflows/align-tactics.js`
+      via the Workflow tool, /review-fix-shaped), not an ad-hoc per-callsite
+      `model: opus` addition — see clarification 14 for the three-tier
+      delegation and the office-hours-park autonomy coupling."
+  - question: May an autonomous worker self-schedule a fallback wakeup while waiting
+      on harness-tracked background work?
+    answer: "No — the harness re-invokes the session automatically when a tracked
+      background Workflow or Task completes, so a self-scheduled short-interval
+      ScheduleWakeup fallback only fires redundantly after that
+      auto-notification has already resumed and finished the work, producing a
+      no-progress round that burns the weekly allowance without closing any
+      tactic — this strategy's named failing state, and a case of the 'error
+      hygiene' throughput lever the rationale records. Discipline: schedule no
+      fallback for harness-tracked work; reserve fallbacks for external state
+      the harness cannot observe (a CI run, a deploy, a remote queue), sized to
+      that state's change cadence, and for an idle heartbeat with no specific
+      signal use a long delay (1200s+, per ScheduleWakeup's own guidance) rather
+      than a short poll that misses the prompt cache and fires before anything
+      can have changed. Live failure 2026-07-16: a /qa-fix worker (node
+      tactic-recovery-drill-firebase, PR #2877) set a 270s fallback while its
+      Step 3.5 disposition Workflow ran in the background; the task-notification
+      resumed the session and it completed every remaining step first, then the
+      270s timer fired on a now-stale prompt with nothing left to do — one
+      wasted no-progress round. Recorded 2026-07-16 interview."
+  - question: What is the fixed per-session standup cost of a phase-orchestrator
+      session, and how is it reduced?
+    answer: "A phase-orchestrator session (/implement, /qa-fix, /review-fix) pays a
+      large fixed cost to stand up before any tactic-closing work begins, even
+      though the work is mostly predetermined outside the metered session — the
+      reasoning already lives in a fixed workflow script
+      (.claude/workflows/qa-fix.js, review-fix.js) and the deterministic prelude
+      already runs in the launcher chain (dispatch-launch-worker ->
+      provision-node-worktree -> dispatch-merge-main) before the session exists.
+      This standup cost is a context-discipline throughput lever, extending
+      clarification 4, with two facets. (1) SKILL-body prose: the harness loads
+      the full SKILL.md on invocation and it persists for the whole session;
+      Claude Code's own guidance caps SKILL.md at 500 lines with detail moved to
+      on-demand reference files, and qa-fix (1,523 lines) and review-fix (1,088)
+      run 2-3x over — the fix is the standard, plausible-today Claude Code
+      pattern (thin body under 500 lines plus references/*.md loaded only when
+      read), not a harness change; confirmed against the Claude Code skills docs
+      this round, which corrected an earlier framing that assumed a harness
+      lazy-load capability was required. (2) Boot boilerplate: the opening
+      tool-call sequence re-derives in-session what is already known outside it
+      — N and the worktree path (already prompt args,
+      dispatch-launch-worker:164), the PR link (already resolved by the router),
+      and the origin/main merge (already done by the launcher); boot judgment
+      content is near-zero. review-fix already dropped its in-session merge
+      (review-fix/SKILL.md:199-201) and runs ~3-4 boot round-trips; qa-fix has
+      not adopted this and re-does the merge (Step 0.5, qa-fix/SKILL.md:227-233)
+      plus a redundant second context-pack at ~6-7 round-trips. Discipline: keep
+      only args-computation and near-zero-judgment bookends in the metered
+      session; push precomputable prelude into the launcher and thin the body to
+      references. Measurement precedes control (this strategy's rationale): no
+      current audit lens joins the two facets — lens 2 captures the
+      tool-round-trip preamble only as generic n-grams, lens 9 the prose
+      footprint — so this round retains three draft tactics:
+      tactic-phase-standup-audit-lens (a per-phase standup-cost lens, measure
+      first), tactic-thin-oversized-skill-bodies (the SKILL-body thinning to
+      under 500 lines plus references), and tactic-phase-boot-offload-launcher
+      (propagate review-fix's boot-offload to qa-fix plus launcher precompute).
+      Two guardrails bind those tactics as conditions: a parity gate — thinning
+      or offload must hold phase-success parity, since dropped instruction
+      regresses the phase invisibly, and reference files must be linked from
+      SKILL.md so the model loads them on demand — and a freshness bound —
+      launcher precompute is allowed only for values fixed at launch or produced
+      by the launcher's own merge step, never a value that can go stale against
+      the merged tree, so qa-fix's diff must stay post-merge. Recorded
+      2026-07-16 interview."
+  - question: What did /align-tactics round 2's drift review find?
+    answer: "Immaterial refinements, no condition failures. (a) The success signal
+      is now measurable: round-1's instrument tactic-token-economy-sensor is
+      done and read-sensors produces a reading (utilization ~7% weekly; tactics
+      28d: 231 created / 91 closed, net +140), so no new instrument tactic is
+      needed this round. The reading shows both failing states active —
+      under-utilization (7% far below 100%, paid capacity idle) and backlog
+      growth (net +140, closure below arrival); under-utilization is a
+      pace/arrival concern owned by the pace curve
+      (strategy-graph-native-dispatch clarification 14), while the routing and
+      standup-cost levers this round decomposes address the closure-velocity
+      side. (b) Clarification 10's actuator-side 'make the audit-written routing
+      policy loop advisory' is already realized by PR #2872, which retired the
+      learned/adaptive phase-model-policy (#2028): dispatch-phase-model is now a
+      static map with a no-auto-promote invariant and /dispatch-token-audit is
+      report-only. tactic-audit-routing-advisory-gate is therefore re-scoped to
+      its surviving residual (a structured routing-recommendation output surface
+      plus the documented manual approval-and-apply convention), with the
+      superseded actuator-change unit dropped per the greenfield-relevance gate
+      (clarification 26). (c) Clarification 10's orchestrator-Sonnet half of the
+      align-family split is already in place (dispatch-graph-execute hardcodes
+      ORCH_MODEL=sonnet), so tactic-align-family-opus-default is scoped to its
+      residual: the explicit Opus decompose/plan subagent in align-tactics Step
+      3 and the align-strategy model:opus frontmatter. Round 2 decomposes the
+      seven retained drafts (the three standup-cost tactics of clarification 12,
+      the two clarification-10 routing tactics, the self-claim-collision bug
+      from PR #2870, and the OTel-substrate evaluation) into phase:implement
+      tactics; none carry a validates edge, as all are off the success-signal
+      path the done sensor already measures. Recorded 2026-07-16 /align-tactics
+      round 2. Amended 2026-07-18: the align-tactics-split residual is further
+      split — PR #2886 lands the model:opus params (increment 1), and the full
+      /review-fix-shaped Workflow rearchitecture is retained as draft
+      tactic-align-tactics-workflow for a later round; see clarification 14."
+  - question: How does the /align-tactics align-family model-routing split
+      (clarification 10) execute — an ad-hoc per-callsite model addition, or a
+      deterministic Workflow?
+    answer: "As a deterministic Workflow, not an ad-hoc per-callsite `model: opus`
+      addition. Clarification 10 fixed WHO runs on which model (Sonnet
+      orchestrator, Opus for the two high-stakes acts); this clarification fixes
+      HOW /align-tactics executes that split: a
+      `.claude/workflows/align-tactics.js` invoked through the Workflow tool,
+      the same architecture as /review-fix and /qa-fix — NOT `model: opus`
+      bolted onto the caller-thread Explore/Plan subagent calls the skill fans
+      out today (align-tactics SKILL.md:377, 'runs in the caller's thread ... no
+      orchestrator'), which is the fragile shape PR #2886 /
+      tactic-align-family-opus-default currently ships. Three-tier delegation:
+      (i) SONNET top-level orchestrator — node-id reservation, park-field
+      writes, the clause-coverage walk, graph-commit, and assembling node bodies
+      from subagent output; it carries no plan substance. (ii) OPUS subagents
+      for the key decisions — the two-sided drift-review verdict (which
+      conditions failed), the decompose-to-signal judgment (which tactic nodes
+      exist), and each claude-eligible tactic's plan-body authoring. (iii)
+      SONNET subagents for delegable gathering — the Explore reuse-hunt /
+      prior-art scan, the mechanical drift scan (grep the corpus, gather
+      candidates), and clause-coverage evidence gathering. Adopt/diverge: ADOPT
+      the Workflow, DIVERGE from 'the ad-hoc model-param split is enough' — (a)
+      ad-hoc tiering is fragile: any future edit adding a Plan/Agent call
+      without `model: opus` silently regresses the highest-stakes act to Sonnet
+      (the exact motivating bug in tactic-align-family-opus-default), whereas a
+      deterministic script makes the tiering structural; (b) it is consistent
+      with clarification 12, which endorses 'the reasoning already lives in a
+      fixed workflow script' — the Workflow moves align-tactics' reasoning into
+      exactly such a script; (c) /align-tactics is autonomous and never
+      AskUserQuestion mid-run, so a Workflow (which cannot run an interactive
+      dialectic) is a natural fit. Autonomy-contract coupling: 'never
+      AskUserQuestion' holds INSIDE the Workflow — when the plan cannot be fully
+      derived from the graph or otherwise needs author intervention, the
+      orchestrator parks the tactic node to office_hours via the existing
+      three-condition park mechanism (align-tactics SKILL.md:139-186), and the
+      resulting office-hours session is where AskUserQuestion legitimately runs
+      with the author; the park escape hatch was confirmed present this round.
+      Scope: the Workflow is the single autonomous execution model for ALL
+      /align-tactics invocations — router-launched and hand-triggered alike;
+      there is no separate interactive path, a human invocation just triggers
+      the same autonomous flow. /align-strategy stays OUT and remains
+      whole-session Opus: its interview IS interactive AskUserQuestion dialectic
+      a Workflow cannot run. The clean rule: /align-tactics is autonomous →
+      Workflow-able; /align-strategy is interactive → not. Migration is
+      brownfield: PR #2886 (tactic-align-family-opus-default) lands the
+      model:opus params as increment 1 (a correct subset), then draft
+      tactic-align-tactics-workflow carries the full /review-fix-shaped
+      rearchitecture, decomposed by a later /align-tactics round; the
+      rearchitecture must hold plan-quality/phase-success parity and keep the
+      script plus thinned SKILL body within clarification 12's standup-cost
+      discipline. Off the success-signal path (no validates edge), measured
+      after the fact by the token-economy sensor's by-node/by-phase attribution.
+      Recorded 2026-07-18 interview."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -139,9 +370,18 @@ tooling_goals:
       strategy subtree (shared with strategy-autonomous-execution via
       tactic-attention-surface-velocity-pace)
   - kind: actuator
-    statement: phase→model and phase→effort routing in the graph-native launch
-      chain, with the fail-closed demotable allowlist and the audit-written
-      policy loop
+    statement: "phase-to-model and phase-to-effort routing in the graph-native
+      launch chain. The audit-written policy loop is advisory (clarification
+      10): it surfaces routing recommendations — model/effort demotions and
+      promotions — grounded in verified yield metrics, and every routing change
+      requires explicit author approval before implementation; no routing change
+      is applied automatically. The /align-tactics worker executes as a
+      deterministic Workflow (`.claude/workflows/align-tactics.js`,
+      /review-fix-shaped, clarification 14): a Sonnet top-level orchestrator,
+      Opus subagents for the decompose-to-signal judgment / two-sided
+      drift-review verdict / per-tactic plan authoring, and Sonnet subagents for
+      the Explore reuse-hunt and mechanical gathering; the reuse-hunt fan-out
+      stays demotable to Sonnet or Haiku."
 success_signal:
   observable: weekly allowance utilization together with claude-eligible tactic
     closure velocity (created vs closed)
@@ -157,7 +397,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - the plan stays prepaid with a weekly allowance (Max 20x); metered
@@ -166,8 +408,11 @@ attributes:
     - the token audit stays runnable and attributable across the router
       migration — a session that cannot be attributed to a node and phase is
       invisible to every control loop here
-    - routing automation acts only on yield metrics whose accounting is verified
-      (the qa fixes_applied gap is open as of 2026-07-04)
+    - routing recommendations are grounded only on yield metrics whose
+      accounting is verified (the qa fixes_applied gap is open as of
+      2026-07-04), and every routing change requires explicit author approval
+      before implementation — the audit-written policy loop surfaces
+      recommendations, it never auto-applies (clarification 10)
     - pace machinery stays operational config outside the graph
       (strategy-graph-native-dispatch clarification 14); this strategy records
       requirements, not machinery

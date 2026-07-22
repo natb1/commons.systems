@@ -19,13 +19,18 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-graph-router-transitions
+  pr: 2813
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
 validates: []
-blocked_by:
-  - tactic-graph-router-selector
-  - tactic-graph-commit
-  - tactic-worker-start-revalidation
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

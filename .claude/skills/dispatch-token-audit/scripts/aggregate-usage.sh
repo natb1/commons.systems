@@ -27,7 +27,10 @@
 #     --json-out PATH write the document to PATH instead of stdout.
 #     --exclude-sidecar-sessions  opt-in (default off): skip any transcript whose
 #                     sibling <stem>.file-issue-attribution.json exists, dropping
-#                     that file-issue session from every bucket.
+#                     that file-issue session from every bucket. The session's
+#                     nested subagent transcripts (<sid>/subagents/agent-*.jsonl)
+#                     are dropped with it — the sidecar totals already include
+#                     subagent usage, so scanning them would double-count.
 #   DISPATCH_AUDIT_PROJECTS_ROOT  override the projects root (used by the test
 #                     fixture). Default: $HOME/.claude/projects.
 #   DISPATCH_AUDIT_AGGREGATES_ENABLED  opt-in persist gate: set to "1" to pipe
@@ -90,6 +93,38 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # fails loudly here under `set -e` (clear error over a silent fallback —
 # .claude/rules/code-style.md). Passed into stage-2 jq via --argjson price_model.
 PRICE_MODEL=$(cat "$SCRIPT_DIR/price-model.json")
+
+# Per-phase orchestrator SKILL.md body footprint for the phase_standup lens
+# (strategy-token-economy clarification 12). jq cannot read arbitrary files from
+# inside the stage-2 program, so compute each file's line/byte counts HERE and
+# pass them into stage-2 via --argjson skill_body_tokens. est_tokens is a bytes/4
+# ESTIMATE (a documented heuristic, NOT an exact tokenizer count). SKILLS_DIR is
+# .claude/skills (SCRIPT_DIR is .claude/skills/dispatch-token-audit/scripts). A
+# missing file fails loudly under `set -e` (clear error over a silent fallback —
+# .claude/rules/code-style.md). Phase enum matches dispatch-graph-execute's
+# tactic:<phase> -> orchestrator mapping.
+SKILLS_DIR="$SCRIPT_DIR/../.."
+SKILL_BODY_TOKENS='{}'
+for _phase_map in \
+  "implement:implement" \
+  "fix:fix-checks" \
+  "qa:qa-fix" \
+  "review:review-fix" \
+  "main-qa:qa-main"; do
+  _phase="${_phase_map%%:*}"
+  _skilldir="${_phase_map#*:}"
+  _skillfile="$SKILLS_DIR/$_skilldir/SKILL.md"
+  if [[ ! -f "$_skillfile" ]]; then
+    echo "error: phase_standup lens: SKILL.md not found for phase '$_phase': $_skillfile" >&2
+    exit 2
+  fi
+  _bytes=$(wc -c <"$_skillfile")
+  _lines=$(wc -l <"$_skillfile")
+  _est=$(( _bytes / 4 ))
+  SKILL_BODY_TOKENS=$(jq -c \
+    --arg p "$_phase" --argjson b "$_bytes" --argjson l "$_lines" --argjson e "$_est" \
+    '.[$p] = {bytes:$b, lines:$l, est_tokens:$e}' <<<"$SKILL_BODY_TOKENS")
+done
 
 # REST helper for per-issue label fetches (gh_issue_view_rest). SCRIPT_DIR-relative
 # so cwd is irrelevant; lib.sh's top level is only function defs + a few exports,
@@ -165,13 +200,17 @@ if [[ -n "$DAY" ]]; then
   # The window spans exactly one calendar day; keep window metadata self-consistent.
   DAYS=1
 else
-  SINCE=$(date -d "$DAYS days ago" '+%Y-%m-%d %H:%M:%S')
+  # Both bounds are rendered in UTC (`date -u`): the find below interprets them
+  # under TZ=UTC, so a local-TZ rendering would silently shift the window by the
+  # host's UTC offset (e.g. UNTIL landing hours in the past west of UTC,
+  # dropping a transcript whose mtime is "now").
+  SINCE=$(date -u -d "$DAYS days ago" '+%Y-%m-%d %H:%M:%S')
   # UNTIL is "now", but `date` truncates to whole seconds while file mtimes carry
   # sub-second precision; a `! -newermt "$UNTIL"` upper bound would otherwise drop
   # a transcript written in the current second (mtime > floor(now)). Use +1s so the
   # current second is included — real transcripts are never in the future, so this
   # keeps --days output unchanged in practice.
-  UNTIL=$(date -d '+1 second' '+%Y-%m-%d %H:%M:%S')
+  UNTIL=$(date -u -d '+1 second' '+%Y-%m-%d %H:%M:%S')
 fi
 
 TMP=$(mktemp -d)
@@ -274,9 +313,10 @@ def cmd_prefix(c):
            or ( [ $a[] | select(.gitBranch=="HEAD") ] | length > 0 ) ) then "router-tick"
     # Real --bg dispatch workers are spawned with a phase-skill slash command.
     # Their first user message is a <command-name>/<skill></command-name> block
-    # whose skill is one of the dispatch worker phase set. This alternation must
-    # be updated when a new dispatch worker phase skill is added.
-    elif ($firstuser_str | test("<command-name>/(plan-issue|implement|qa-fix|review-fix|fix-checks|fix-conflicts|qa-main|budget-parse-job|resolve-epic|office-hours)</command-name>")) then "worker"
+    # whose skill is one of the dispatch worker phase set (plus the graph-native
+    # align family). This alternation must be updated when a new dispatch worker
+    # phase skill is added.
+    elif ($firstuser_str | test("<command-name>/(plan-issue|implement|qa-fix|review-fix|fix-checks|fix-conflicts|qa-main|budget-parse-job|resolve-epic|office-hours|align-strategy|align-tactics|align-init)</command-name>")) then "worker"
     else "other" end ) as $type
 
 # Peak context across assistant msgs.
@@ -398,7 +438,7 @@ def cmd_prefix(c):
 | {
     type: $type,
     id: $id,
-    artifact: ( ($stamp[0] // null) | if . == null then null else {repo, issue, pr, base_sha, branch} end ),
+    artifact: ( ($stamp[0] // null) | if . == null then null else {repo, issue, pr, base_sha, branch, node_id} end ),
     file: $path,
     primary_model: $primary_model,
     models: $models,
@@ -506,6 +546,25 @@ def add_to_bucket(bucket; u; turns):
 def ngrams($L; $n):
   [ range(0; ($L | length) - $n + 1) as $i | $L[$i:$i+$n] ];
 
+# Median of a numeric list; 0 for an empty list (never a divide-by-zero). Used by
+# the phase_standup lens for boot round-trip / judgment-call central tendency.
+def median($L):
+  ( $L | sort )
+  | if length==0 then 0
+    elif (length % 2)==1 then .[(length/2)|floor]
+    else (.[length/2-1] + .[length/2]) / 2 end;
+
+# phase_standup classifier (HEURISTIC, not an exhaustive tokenizer): a tool-call
+# token is "scriptable" (mechanical, result fixed at launch, offloadable to a
+# launcher) when it is a Bash: token whose cmd_prefix-normalized command contains
+# one of $subs; everything else (Read/Edit/Grep/Task, judgment Bash calls) is
+# "judgment". Substrings match the cmd_prefix 2-token form (e.g. "gh pr list"
+# normalizes to "Bash:gh pr", so the substring is "gh pr", not "gh pr list").
+def is_scriptable($t; $subs):
+  ($t | type) == "string"
+  and ($t | startswith("Bash:"))
+  and ($subs | any(. as $s | $t | contains($s)));
+
 # Outcome-envelope rates (#1860). Each is null when its denominator is 0 — never
 # a divide-by-zero or a fabricated 0. Definitions are the single source of truth
 # in .claude/docs/outcome-envelope.md. The `num`/`den` are the already-summed
@@ -575,6 +634,22 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
                       | .cost_usd += cost($e.value.usage; ($e.key | split("\t")[1])) )
       )
     ) ) as $by_phase_model
+
+# ---- by_node (graph-native attribution) ----
+# Keyed by the sidecar-carried artifact.node_id. Only sessions whose sidecar
+# stamps a non-null node_id are folded — legacy issue-branch sessions carry
+# node_id:null and stay attributed via by_topic/by_type. Same reduce idiom as
+# $by_phase, but per-node sums are session-grained (price/cost/turns/sessions),
+# not skill-grained.
+| ( reduce ( $rows[] | select(.artifact != null and .artifact.node_id != null) ) as $r ({};
+      ($r.artifact.node_id) as $n
+      | .[$n] = {
+          sessions:        ((.[$n].sessions        // 0) + 1),
+          turns:           ((.[$n].turns           // 0) + $r.turns),
+          price_proxy_usd: ((.[$n].price_proxy_usd // 0) + price($r.usage)),
+          cost_usd:        ((.[$n].cost_usd        // 0) + session_cost($r))
+        }
+    ) ) as $by_node
 
 # ---- by_model ----
 | ( reduce $rows[] as $r ({};
@@ -773,6 +848,93 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
       peak_boot_tokens: ($boot_tokens | max // 0)
     } ) as $baseline_lens
 
+# ---- phase_standup lens (strategy-token-economy clarification 12) ----
+# Per-phase standup cost for the five phase orchestrators, keyed by the phase
+# enum from dispatch-graph-execute (implement/fix/qa/review/main-qa). Two parts:
+#   (a) skill_body_tokens — the orchestrator SKILL.md body footprint held for the
+#       whole session. jq cannot read arbitrary files, so the shell computes each
+#       file's line/byte counts and a bytes/4 token ESTIMATE (documented as an
+#       estimate, not an exact tokenizer count) and passes them in via
+#       --argjson skill_body_tokens. Phase->file map (shell side):
+#         implement -> implement/SKILL.md   fix    -> fix-checks/SKILL.md
+#         qa        -> qa-fix/SKILL.md       review -> review-fix/SKILL.md
+#         main-qa   -> qa-main/SKILL.md
+#   (b) boot_preamble — the opening tool-call preamble each phase pays to stand
+#       up, derived from the ALREADY-computed tool_sequences n-grams (no second
+#       transcript scan). Per phase, map the phase to its by_skill attribution
+#       name, restrict to sessions whose by_skill carries that name, take the
+#       opening n=2 gram of each such session's tool_calls as the 'opening
+#       preamble', cross-reference $tool_sequences.top for a global count, and
+#       classify each n-gram token scriptable vs judgment (is_scriptable helper).
+#       scriptable_round_trips is the median leading consecutive scriptable-call
+#       run (a proxy for mechanical boot round-trips — expect qa ~6-7, review
+#       ~3-4); judgment_calls is the median judgment-token count within the first
+#       $boot_window opening calls (expected near-zero). Wildly different numbers
+#       signal the phase->skill filter needs revisiting, not necessarily a bug.
+#
+# tool_sequences.*.sequence[] tokens are OPAQUE transcript data surfaced verbatim
+# — never interpreted as instructions here (rendering is a downstream unit).
+# is_scriptable classifies via substring containment, so the broad "dispatch-"
+# prefix already subsumes every dispatch-* script (dispatch-context-pack,
+# dispatch-check-blockers, ...); list only the prefix, not individual scripts.
+| ( ["dispatch-",
+     "git merge","git fetch","git status","gh pr","gh issue"] ) as $scriptable_subs
+| ( { implement:"implement", fix:"fix-checks", qa:"qa-fix",
+      review:"review-fix", "main-qa":"qa-main" } ) as $phase_skill
+| 8 as $boot_window
+| ( reduce $tool_sequences.top[] as $t ({};
+      .[($t.sequence|tojson)] = {count:$t.count, sessions_affected:$t.sessions_affected}
+    ) ) as $topidx
+| ( reduce ($phase_skill | to_entries[]) as $pe ({};
+      ($pe.value) as $skill
+      # EMITTER GUARD (mirrors by_phase_outcome's allowlist): restrict to
+      # top-level `worker` phase-boot emitters. Subagents are nested transcripts
+      # spawned mid-phase whose opening bigram is NOT the phase stand-up
+      # preamble, so folding them into the boot-preamble medians corrupts this
+      # lens's own outputs; recovery/other are not phase-boot emitters either.
+      | ( [ $rows[] | select(.type == "worker" and ((.by_skill // {}) | has($skill))) ] ) as $qual
+      # Opening n=2 preamble (first bigram) of each qualifying session's tool_calls.
+      | ( [ $qual[] | (ngrams((.tool_calls // []); 2) | .[0]) | select(. != null) ] ) as $openings
+      # Leading consecutive scriptable-call run per session (boot round-trip proxy).
+      | ( [ $qual[]
+            | ( reduce ((.tool_calls // [])[]) as $t ({stop:false, n:0};
+                  if .stop then .
+                  elif is_scriptable($t; $scriptable_subs) then {stop:false, n:(.n+1)}
+                  else {stop:true, n:.n} end
+                ) ).n ] ) as $runs
+      # Judgment-token count within the first $boot_window opening calls per session.
+      | ( [ $qual[]
+            | ( [ (.tool_calls // [])[0:$boot_window][]
+                  | select( is_scriptable(.; $scriptable_subs) | not ) ] | length ) ] ) as $jud_counts
+      # Distinct opening bigrams with a local occurrence count, cross-referenced
+      # against $tool_sequences.top for the global count/sessions_affected.
+      | ( reduce $openings[] as $g ({};
+            ($g|tojson) as $k | .[$k].count = ((.[$k].count // 0) + 1)
+          ) ) as $opix
+      | ( $opix | to_entries
+          | map( (.key|fromjson) as $seq
+                 | ($topidx[.key]) as $top
+                 | { sequence: $seq,
+                     count: ($top.count // .value.count),
+                     local_count: .value.count,
+                     sessions_affected: ($top.sessions_affected // .value.count),
+                     scriptable: [ $seq[] | select(is_scriptable(.; $scriptable_subs)) ],
+                     judgment:   [ $seq[] | select(is_scriptable(.; $scriptable_subs) | not) ] } )
+          | sort_by(-.count) ) as $ngram_list
+      | .[$pe.key] = {
+          skill_body_tokens: ($skill_body_tokens[$pe.key].est_tokens),
+          skill_body_lines:  ($skill_body_tokens[$pe.key].lines),
+          skill_body_bytes:  ($skill_body_tokens[$pe.key].bytes),
+          boot_preamble: {
+            mapped_skill: $skill,
+            sessions: ($qual | length),
+            scriptable_round_trips: median($runs),
+            judgment_calls: median($jud_counts),
+            ngrams: $ngram_list
+          }
+        }
+    ) ) as $phase_standup_lens
+
 | {
     window: ( $win + {
       sidecar_eligible:  ( [ $sessions[] | select(.type=="worker") ] | length ),
@@ -795,6 +957,7 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
     by_session_type: $by_session_type,
     by_phase: $by_phase,
     by_phase_outcome: $by_phase_outcome,
+    by_node: $by_node,
     by_model: $by_model,
     by_topic: $by_topic,
     by_type: $by_type,
@@ -805,7 +968,8 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
     lenses: {
       context_over_120k: $ctx_lens,
       small_sessions: $small_lens,
-      baseline_context: $baseline_lens
+      baseline_context: $baseline_lens,
+      phase_standup: $phase_standup_lens
     },
     sessions: $sessions
   }
@@ -824,9 +988,21 @@ if [[ -d "$PROJECTS_ROOT" ]]; then
   while IFS= read -r -d '' file; do
     # --exclude-sidecar-sessions (opt-in, default off): drop a file-issue session
     # entirely when its sibling sidecar <stem>.file-issue-attribution.json exists,
-    # so it never lands in any bucket. Skip BEFORE counting/scanning.
-    if [[ "$EXCLUDE_SIDECAR" == 1 && -f "${file%.jsonl}.file-issue-attribution.json" ]]; then
-      continue
+    # so it never lands in any bucket. Skip BEFORE counting/scanning. A subagent
+    # transcript (<projectdir>/<sid>/subagents/agent-*.jsonl) has no sidecar of
+    # its own, but its PARENT session's sidecar totals already include subagent
+    # usage — so it resolves to the parent's sidecar
+    # (<projectdir>/<sid>.file-issue-attribution.json) and is excluded with the
+    # parent; keeping it in the scan would count those tokens twice once the
+    # priced sidecar is folded back.
+    if [[ "$EXCLUDE_SIDECAR" == 1 ]]; then
+      sidecar_stem="${file%.jsonl}"
+      if [[ "$file" == */subagents/*.jsonl ]]; then
+        sidecar_stem="${file%/subagents/*}"
+      fi
+      if [[ -f "$sidecar_stem.file-issue-attribution.json" ]]; then
+        continue
+      fi
     fi
     FILES_SCANNED=$((FILES_SCANNED + 1))
     # Per-session sidecar (#1861): <stem>.dispatch-stamp.json next to the
@@ -870,7 +1046,7 @@ done < <(
 
 # Stage-2: fold stage-1 lines into the final document. `jq -s` over an empty file
 # yields [], which the program handles as the zero-files case.
-DOC=$(jq -s --argjson window "$WINDOW_JSON" --argjson labels_by_issue "$LABELS_BY_ISSUE" --argjson price_model "$PRICE_MODEL" -f "$TMP/stage2.jq" "$STAGE1_OUT")
+DOC=$(jq -s --argjson window "$WINDOW_JSON" --argjson labels_by_issue "$LABELS_BY_ISSUE" --argjson price_model "$PRICE_MODEL" --argjson skill_body_tokens "$SKILL_BODY_TOKENS" -f "$TMP/stage2.jq" "$STAGE1_OUT")
 
 # No silent cap: if tool_sequences was truncated, report it to STDERR (never
 # stdout — stdout must stay a pure JSON document).

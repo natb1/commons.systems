@@ -3,7 +3,7 @@ import { logError } from "@commons-systems/errorutil/log";
 import {
   MAGIC, SALT_LEN, IV_LEN, HEADER_LEN, PBKDF2_ITERATIONS, KEY_LEN,
   encryptData, decryptData,
-} from "./crypto-core.js";
+} from "@commons-systems/crypto-core";
 
 export { SALT_LEN, IV_LEN, HEADER_LEN, PBKDF2_ITERATIONS, KEY_LEN };
 
@@ -15,6 +15,13 @@ export function isEncrypted(data: ArrayBuffer): boolean {
 
 export interface BencCrypto {
   encrypt(plaintext: string, password: string): Promise<ArrayBuffer>;
+  /**
+   * Decrypts a BENC buffer. The input `data` buffer is NOT consumed: the
+   * implementation clones it internally before any Web Worker transfer, so the
+   * caller's buffer stays intact and it is safe to call `decrypt` again on the
+   * same buffer — e.g. to retry with a corrected password after a wrong-password
+   * rejection.
+   */
   decrypt(data: ArrayBuffer, password: string): Promise<string>;
 }
 
@@ -57,6 +64,9 @@ export function createBencCrypto(opts: { validationError: (message: string) => E
           p.reject(new Error(e.message || "Worker error"));
         }
         pending.clear();
+        // Terminate the worker before dropping the reference so the PBKDF2
+        // thread is reclaimed; nulling alone leaks it.
+        worker?.terminate();
         worker = null;
       };
       return worker;
@@ -75,7 +85,16 @@ export function createBencCrypto(opts: { validationError: (message: string) => E
       pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
       const msgData = msg.data;
       if (msgData instanceof ArrayBuffer) {
-        w.postMessage({ ...msg, id }, [msgData]);
+        // Clone before transfer. Transferring the caller's buffer detaches it
+        // (byteLength becomes 0), so a retry on the SAME buffer — e.g.
+        // decrypt(sameBuffer, correctedPassword) after a wrong-password
+        // rejection — would fail the isEncrypted guard in decrypt() and throw
+        // the misleading "File is not in BENC encrypted format." instead of a
+        // password error. Cloning keeps the caller's buffer intact so retries
+        // are safe by default. BENC files are small (budget/office-hours
+        // snapshots), so the copy cost is negligible.
+        const clone = msgData.slice(0);
+        w.postMessage({ ...msg, id, data: clone }, [clone]);
       } else {
         w.postMessage({ ...msg, id });
       }

@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+#
+# dispatch-daemon-liveness — report whether the managed dispatch daemon is up
+# and ticking unattended, distinguishing the managed lingering unit from a
+# transient interactive daemon.
+#
+# strategy-autonomous-execution's success signal needs a liveness observable on
+# the managed lingering daemon (dispatch-claude-daemon.service, defined at
+# nix/home/claude-code.nix). An interactive `claude agents` invocation spawns
+# its OWN transient `claude daemon` process — a child of that session, living
+# OUTSIDE the unit cgroup — which masks a dead managed service (on 2026-07-08 a
+# transient daemon masked a dead managed unit for roughly a day). Backlog drain
+# alone therefore cannot prove UNATTENDED execution: the queue can drain while
+# the managed unit is dead, carried by a transient daemon that dies with the
+# interactive session. This sensor reads systemd/proc facts directly and
+# classifies every live `claude daemon` process by cgroup — managed (inside the
+# unit cgroup) vs transient (any other) — so the masking case is legible.
+#
+# Report-only. No remediation, no office-hours/dashboard integration (graph-fed
+# panels are tactic-attention-surface-velocity-pace's surface).
+#
+# Verdicts and exit codes (clear errors over fallbacks — .claude/rules/code-style.md):
+#   0  managed-live            — a managed daemon (unit cgroup) is running AND
+#                                linger is on AND the heartbeat timer is active.
+#   2  transient-substituting  — no managed daemon, but a transient daemon IS
+#                                serving (the 2026-07-08 masking case).
+#   3  down                    — no `claude daemon` process at all.
+#   4  degraded                — a managed daemon is running but linger is off
+#                                or the heartbeat timer is inactive (autonomy is
+#                                not durable: it will not survive a logout /
+#                                reboot, or ticks are not firing on schedule).
+#
+# The daemon census is the source of truth for liveness: a unit systemctl
+# reports "active" whose MainPID is dead still yields `down` because no process
+# is classified managed. Unit ActiveState/MainPID/ActiveEnterTimestamp/NRestarts
+# are surfaced verbatim for continuity ("active since before the logout window,
+# no restarts during it").
+#
+# Why proc/systemd over `claude agents --json`: the sandbox's network namespace
+# blocks the daemon socket, so a sandboxed `claude agents` query returns `[]`
+# indistinguishable from "no sessions" (see lib-claude-agents.sh's UNKNOWN
+# fail-safe). systemd unit state and /proc/<pid>/cgroup are readable facts that
+# do not depend on the daemon answering. Run this sensor unsandboxed on the host.
+#
+# Usage:
+#   dispatch-daemon-liveness            human-readable report
+#   dispatch-daemon-liveness --json     machine-readable JSON reading
+#   dispatch-daemon-liveness -h|--help  this help
+#
+# Command injection points (default to the real binaries; overridden by the
+# test harness — mirrors the $systemctl_cmd pattern at lib.sh:2775):
+#   DISPATCH_LIVENESS_SYSTEMCTL_CMD  (default: systemctl)
+#   DISPATCH_LIVENESS_LOGINCTL_CMD   (default: loginctl)
+#   DISPATCH_LIVENESS_PGREP_CMD      (default: pgrep)
+#   DISPATCH_LIVENESS_PROC_DIR       (default: /proc)   — dir holding <pid>/cgroup
+#   DISPATCH_LIVENESS_USER           (default: $USER)    — subject of loginctl
+
+set -uo pipefail
+
+readonly UNIT="dispatch-claude-daemon.service"
+readonly HEARTBEAT_TIMER="dispatch-heartbeat.timer"
+# pgrep -f matches against the full command line; the managed unit's ExecStart
+# is `claude daemon run`, and a transient interactive daemon runs the same
+# `claude daemon` command, so this pattern enumerates both.
+readonly DAEMON_PATTERN="claude daemon"
+
+SYSTEMCTL_CMD="${DISPATCH_LIVENESS_SYSTEMCTL_CMD:-systemctl}"
+LOGINCTL_CMD="${DISPATCH_LIVENESS_LOGINCTL_CMD:-loginctl}"
+PGREP_CMD="${DISPATCH_LIVENESS_PGREP_CMD:-pgrep}"
+PROC_DIR="${DISPATCH_LIVENESS_PROC_DIR:-/proc}"
+LIVENESS_USER="${DISPATCH_LIVENESS_USER:-${USER:-$(id -un)}}"
+
+# Exit codes, keyed by verdict.
+readonly CODE_MANAGED_LIVE=0
+readonly CODE_TRANSIENT_SUBSTITUTING=2
+readonly CODE_DOWN=3
+readonly CODE_DEGRADED=4
+
+usage() {
+  sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'
+}
+
+JSON=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json) JSON=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "dispatch-daemon-liveness: unknown argument: $1" >&2; echo "usage: dispatch-daemon-liveness [--json]" >&2; exit 64 ;;
+  esac
+done
+
+# --- systemd property read --------------------------------------------------
+# `systemctl --user show <unit> -p K1 -p K2 ...` prints one `KEY=VALUE` line per
+# property (VALUE may itself contain `=`; split on the FIRST `=` only). Returns
+# the value of $2 from the output captured in $1, or empty if absent. A truly
+# missing systemctl binary is an environment error and dies (clear errors over
+# fallbacks); an inactive/absent unit is NOT an error — systemctl prints
+# ActiveState=inactive and exits 0.
+show_prop() {
+  local show_output="$1" key="$2" line
+  while IFS= read -r line; do
+    if [[ "$line" == "$key="* ]]; then
+      printf '%s' "${line#"$key"=}"
+      return 0
+    fi
+  done <<<"$show_output"
+  printf ''
+}
+
+# --- gather managed-unit facts ----------------------------------------------
+if ! UNIT_SHOW="$("$SYSTEMCTL_CMD" --user show "$UNIT" \
+      -p ActiveState -p SubState -p MainPID -p ActiveEnterTimestamp -p NRestarts 2>&1)"; then
+  echo "dispatch-daemon-liveness: '$SYSTEMCTL_CMD --user show $UNIT' failed:" >&2
+  echo "$UNIT_SHOW" >&2
+  exit 69
+fi
+UNIT_ACTIVE_STATE="$(show_prop "$UNIT_SHOW" ActiveState)"
+UNIT_SUB_STATE="$(show_prop "$UNIT_SHOW" SubState)"
+UNIT_MAIN_PID="$(show_prop "$UNIT_SHOW" MainPID)"
+UNIT_ACTIVE_ENTER="$(show_prop "$UNIT_SHOW" ActiveEnterTimestamp)"
+UNIT_NRESTARTS="$(show_prop "$UNIT_SHOW" NRestarts)"
+
+# --- gather heartbeat-timer facts -------------------------------------------
+if ! HB_SHOW="$("$SYSTEMCTL_CMD" --user show "$HEARTBEAT_TIMER" \
+      -p ActiveState -p SubState -p LastTriggerUSec 2>&1)"; then
+  echo "dispatch-daemon-liveness: '$SYSTEMCTL_CMD --user show $HEARTBEAT_TIMER' failed:" >&2
+  echo "$HB_SHOW" >&2
+  exit 69
+fi
+HB_ACTIVE_STATE="$(show_prop "$HB_SHOW" ActiveState)"
+HB_SUB_STATE="$(show_prop "$HB_SHOW" SubState)"
+HB_LAST_TRIGGER="$(show_prop "$HB_SHOW" LastTriggerUSec)"
+
+# --- gather linger fact ------------------------------------------------------
+# `loginctl show-user <user> --property=Linger --value` prints `yes`/`no`. On a
+# host where the user has no session AND linger is off, loginctl exits non-zero
+# ("No such user/process") — that unqueryable state is itself the degraded
+# signal we want to report, so treat a failed query as "not yes" (LINGER=""),
+# surface it raw, and let the verdict gate flag it. This is report data, not an
+# operation failure to abort on.
+if ! LINGER="$("$LOGINCTL_CMD" show-user "$LIVENESS_USER" --property=Linger --value 2>/dev/null)"; then
+  LINGER=""
+fi
+
+# --- daemon census -----------------------------------------------------------
+# Enumerate every live `claude daemon` process and classify each by cgroup:
+# /proc/<pid>/cgroup containing the unit name => managed (inside the unit
+# cgroup); anything else (or an unreadable cgroup) => transient. pgrep exits 1
+# when there are NO matches — that is "no daemons", not an error, hence `|| true`.
+DAEMON_PIDS="$("$PGREP_CMD" -f "$DAEMON_PATTERN" 2>/dev/null || true)"
+
+MANAGED_COUNT=0
+TRANSIENT_COUNT=0
+# CENSUS_ROWS: newline-delimited "<pid> <class>" — fed to jq for the --json array.
+CENSUS_ROWS=""
+if [[ -n "$DAEMON_PIDS" ]]; then
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    local_class="transient"
+    cgroup_file="$PROC_DIR/$pid/cgroup"
+    if [[ -r "$cgroup_file" ]] && grep -q "$UNIT" "$cgroup_file" 2>/dev/null; then
+      local_class="managed"
+      MANAGED_COUNT=$((MANAGED_COUNT + 1))
+    else
+      TRANSIENT_COUNT=$((TRANSIENT_COUNT + 1))
+    fi
+    CENSUS_ROWS+="$pid $local_class"$'\n'
+  done <<<"$DAEMON_PIDS"
+fi
+
+MANAGED_PRESENT=false
+[[ "$MANAGED_COUNT" -gt 0 ]] && MANAGED_PRESENT=true
+TRANSIENT_PRESENT=false
+[[ "$TRANSIENT_COUNT" -gt 0 ]] && TRANSIENT_PRESENT=true
+
+# --- verdict -----------------------------------------------------------------
+HB_IS_ACTIVE=false
+[[ "$HB_ACTIVE_STATE" == "active" ]] && HB_IS_ACTIVE=true
+
+if [[ "$MANAGED_PRESENT" == true ]]; then
+  if [[ "$LINGER" == "yes" && "$HB_IS_ACTIVE" == true ]]; then
+    VERDICT="managed-live"
+    EXIT_CODE=$CODE_MANAGED_LIVE
+  else
+    VERDICT="degraded"
+    EXIT_CODE=$CODE_DEGRADED
+  fi
+elif [[ "$TRANSIENT_PRESENT" == true ]]; then
+  VERDICT="transient-substituting"
+  EXIT_CODE=$CODE_TRANSIENT_SUBSTITUTING
+else
+  VERDICT="down"
+  EXIT_CODE=$CODE_DOWN
+fi
+
+# Reason for the verdict — the degraded specifics matter to a reader.
+DEGRADED_REASON=""
+if [[ "$VERDICT" == "degraded" ]]; then
+  [[ "$LINGER" != "yes" ]] && DEGRADED_REASON+="linger not enabled (Linger=${LINGER:-<unqueryable>}); "
+  [[ "$HB_IS_ACTIVE" != true ]] && DEGRADED_REASON+="heartbeat timer not active (ActiveState=${HB_ACTIVE_STATE:-<empty>}); "
+  DEGRADED_REASON="${DEGRADED_REASON%; }"
+fi
+
+# --- output ------------------------------------------------------------------
+# Build the census JSON array from the "<pid> <class>" rows. printf|jq is used
+# (never `echo "$VAR" | jq` — banned by .claude/rules/shell-json.md) so no shell
+# escape interpretation touches the data.
+CENSUS_JSON="$(printf '%s' "$CENSUS_ROWS" | jq -R -s '
+  split("\n") | map(select(length > 0) | (split(" ")) | {pid: (.[0] | tonumber), class: .[1]})')"
+
+if [[ "$JSON" -eq 1 ]]; then
+  jq -n \
+    --arg verdict "$VERDICT" \
+    --argjson exit_code "$EXIT_CODE" \
+    --arg unit_name "$UNIT" \
+    --arg unit_active_state "$UNIT_ACTIVE_STATE" \
+    --arg unit_sub_state "$UNIT_SUB_STATE" \
+    --arg unit_main_pid "$UNIT_MAIN_PID" \
+    --arg unit_active_enter "$UNIT_ACTIVE_ENTER" \
+    --arg unit_nrestarts "$UNIT_NRESTARTS" \
+    --arg linger "$LINGER" \
+    --arg hb_timer "$HEARTBEAT_TIMER" \
+    --arg hb_active_state "$HB_ACTIVE_STATE" \
+    --arg hb_sub_state "$HB_SUB_STATE" \
+    --arg hb_last_trigger "$HB_LAST_TRIGGER" \
+    --argjson managed_present "$MANAGED_PRESENT" \
+    --argjson transient_present "$TRANSIENT_PRESENT" \
+    --argjson census "$CENSUS_JSON" \
+    --arg degraded_reason "$DEGRADED_REASON" \
+    '{
+      verdict: $verdict,
+      exit_code: $exit_code,
+      degraded_reason: (if $degraded_reason == "" then null else $degraded_reason end),
+      unit: {
+        name: $unit_name,
+        active_state: $unit_active_state,
+        sub_state: $unit_sub_state,
+        main_pid: $unit_main_pid,
+        active_enter_timestamp: $unit_active_enter,
+        n_restarts: $unit_nrestarts
+      },
+      linger: $linger,
+      heartbeat: {
+        timer: $hb_timer,
+        active_state: $hb_active_state,
+        sub_state: $hb_sub_state,
+        last_trigger_usec: $hb_last_trigger
+      },
+      managed_present: $managed_present,
+      transient_present: $transient_present,
+      census: $census
+    }'
+  exit "$EXIT_CODE"
+fi
+
+# Human-readable report.
+printf 'dispatch daemon liveness: %s\n' "$VERDICT"
+[[ -n "$DEGRADED_REASON" ]] && printf '  reason: %s\n' "$DEGRADED_REASON"
+printf '\n'
+printf 'Managed unit (%s):\n' "$UNIT"
+printf '  ActiveState=%s SubState=%s MainPID=%s\n' "$UNIT_ACTIVE_STATE" "$UNIT_SUB_STATE" "$UNIT_MAIN_PID"
+printf '  ActiveEnterTimestamp=%s\n' "$UNIT_ACTIVE_ENTER"
+printf '  NRestarts=%s\n' "$UNIT_NRESTARTS"
+printf 'Linger (%s): %s\n' "$LIVENESS_USER" "${LINGER:-<unqueryable>}"
+printf 'Heartbeat (%s):\n' "$HEARTBEAT_TIMER"
+printf '  ActiveState=%s SubState=%s LastTriggerUSec=%s\n' "$HB_ACTIVE_STATE" "$HB_SUB_STATE" "$HB_LAST_TRIGGER"
+printf 'Daemon census (managed=%s transient=%s):\n' "$MANAGED_COUNT" "$TRANSIENT_COUNT"
+if [[ -n "$CENSUS_ROWS" ]]; then
+  while IFS= read -r row; do
+    [[ -n "$row" ]] || continue
+    printf '  pid %s\n' "$row"
+  done <<<"$CENSUS_ROWS"
+else
+  printf '  (no claude daemon processes)\n'
+fi
+
+exit "$EXIT_CODE"

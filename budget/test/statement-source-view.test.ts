@@ -19,10 +19,34 @@ vi.mock("../src/statement-file-resolver.js", () => ({
   resolveSourceFile: vi.fn(),
 }));
 
-import { openStatementSource, isPdfName } from "../src/pages/statement-source-view";
+import { openStatementSource, isPdfName, pickSourceStatement } from "../src/pages/statement-source-view";
+import type { Statement } from "../src/firestore.js";
 import { getActiveDataSource } from "../src/active-data-source.js";
 import * as statementsDir from "../src/statements-dir.js";
 import * as resolver from "../src/statement-file-resolver.js";
+
+// sid builds the branded StatementId from a plain string in test data.
+const sid = (v: string): Statement["statementId"] =>
+  v as unknown as Statement["statementId"]; // type-safety-ok: test-only branded StatementId construction
+
+// Minimal Statement factory for pickSourceStatement tests — only the fields the
+// picker reads (statementId, balanceDate, sourceFile) matter.
+function srcStmt(overrides: Partial<Statement>): Statement {
+  return {
+    id: "id",
+    statementId: sid("Bank-1234-2025-01"),
+    institution: "Bank",
+    account: "1234",
+    balance: 0,
+    period: "2025-01",
+    balanceDate: null,
+    lastTransactionDate: null,
+    groupId: null,
+    virtual: false,
+    sourceFile: null,
+    ...overrides,
+  };
+}
 
 // Typed handles to the mocked functions.
 const mockDataSource = getActiveDataSource() as unknown as {
@@ -67,6 +91,48 @@ describe("isPdfName", () => {
     expect(isPdfName("x.ofx")).toBe(false);
     expect(isPdfName("pdf")).toBe(false);
     expect(isPdfName("x.pdf.csv")).toBe(false);
+  });
+});
+
+describe("pickSourceStatement", () => {
+  it("returns an exact statementId match (legacy month-keyed or virtual)", () => {
+    const stmts = [
+      srcStmt({ statementId: sid("Bank-1234-2025-01"), sourceFile: "legacy.qfx" }),
+      srcStmt({ statementId: sid("Bank-1234-2025-01-31"), sourceFile: "date-keyed.qfx" }),
+    ];
+    expect(pickSourceStatement(stmts, "Bank-1234-2025-01")?.sourceFile).toBe("legacy.qfx");
+  });
+
+  it("resolves a month-keyed transaction id to a date-keyed anchor by prefix", () => {
+    const stmts = [
+      srcStmt({ statementId: sid("Bank-1234-2025-01-15"), balanceDate: "2025-01-15", sourceFile: "mid.qfx" }),
+    ];
+    expect(pickSourceStatement(stmts, "Bank-1234-2025-01")?.sourceFile).toBe("mid.qfx");
+  });
+
+  it("prefers the anchor with a sourceFile over one without", () => {
+    const stmts = [
+      srcStmt({ statementId: sid("Bank-1234-2025-01-31"), balanceDate: "2025-01-31", sourceFile: null }),
+      srcStmt({ statementId: sid("Bank-1234-2025-01-15"), balanceDate: "2025-01-15", sourceFile: "mid.qfx" }),
+    ];
+    expect(pickSourceStatement(stmts, "Bank-1234-2025-01")?.sourceFile).toBe("mid.qfx");
+  });
+
+  it("among sourced anchors, prefers the latest balanceDate", () => {
+    const stmts = [
+      srcStmt({ statementId: sid("Bank-1234-2025-01-15"), balanceDate: "2025-01-15", sourceFile: "mid.qfx" }),
+      srcStmt({ statementId: sid("Bank-1234-2025-01-28"), balanceDate: "2025-01-28", sourceFile: "late.qfx" }),
+    ];
+    expect(pickSourceStatement(stmts, "Bank-1234-2025-01")?.sourceFile).toBe("late.qfx");
+  });
+
+  it("does not match a different account's anchors sharing a numeric prefix boundary", () => {
+    // "Bank-1234-2025-01" must not prefix-match "Bank-1234-2025-010" style ids;
+    // the "-" separator guards the boundary. A different month is excluded.
+    const stmts = [
+      srcStmt({ statementId: sid("Bank-1234-2025-02-15"), sourceFile: "feb.qfx" }),
+    ];
+    expect(pickSourceStatement(stmts, "Bank-1234-2025-01")).toBeUndefined();
   });
 });
 

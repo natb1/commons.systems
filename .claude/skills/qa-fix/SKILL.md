@@ -58,16 +58,39 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
 Before running any step, resolve the PR number and its labels via
 `dispatch-context-pack` (use `dangerouslyDisableSandbox: true` — it calls `gh`).
-The branch name encodes the issue number (`<N>-…`), so derive `N` first:
+This runs before Step 0's target-resolution case statement below, so it
+performs the same keyspace split itself rather than assuming an issue-prefixed
+branch:
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-N="${BRANCH%%-*}"
-.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log
+case "$BRANCH" in
+  [0-9]*-*)
+    N="${BRANCH%%-*}"
+    .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log
+    ;;
+  *)
+    # Graph-native node lane: the branch IS the node id, not an issue-prefixed
+    # name — dispatch-find-pr's issue→PR branch-prefix lookup does not apply.
+    # Resolve the PR by branch head instead (same primitive dispatch-sweep and
+    # /office-hours use for a node-id worktree), then fetch it directly via the
+    # pack's --pr-is-number mode (qa never runs without an open PR, so a miss
+    # here is a real error, not the legitimate "PR: none" plan-phase case).
+    N="$BRANCH"
+    PR_NUM=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+    if [ -z "$PR_NUM" ]; then
+      echo "/qa-fix: node '$BRANCH' has no open PR — qa-fix requires one" >&2
+      exit 1
+    fi
+    .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --phase-log --pr-is-number
+    ;;
+esac
 ```
 
-Read `PR_NUM` and the labels line from the `=== PR ===` section of the output.
-From the `=== PHASE-LOG #N ===` section of the **same** output, read the prior
+Read `PR_NUM` and the labels line from the `=== PR ===` section of the output
+(on the node lane `PR_NUM` is already known from the `gh pr list` call above;
+the pack output still carries the same value in its `PR #<num>` line — confirm
+they agree). From the `=== PHASE-LOG #N ===` section of the **same** output, read the prior
 handoff note as `PRIOR_PHASE_LOG` — the running "what-failed / what-changed"
 digest earlier phases (implement / a prior qa attempt) wrote. Treat the sentinel
 `phase-log: none` as empty (`PRIOR_PHASE_LOG=''`). It is advisory context for the
@@ -150,16 +173,96 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    ```bash
    BRANCH=$(basename "$(git rev-parse --show-toplevel)")
    case "$BRANCH" in
-     [0-9]*-*) N="${BRANCH%%-*}" ;;
+     [0-9]*-*)
+       N="${BRANCH%%-*}"; TARGET_KIND=issue ;;
      *)
-       echo "/qa-fix: current branch '$BRANCH' is not a target worktree (expected '<N>-…')" >&2
-       exit 1
-       ;;
+       # Graph-native node lane: worktree named after the intention node id.
+       NODE_ID="$BRANCH"
+       git fetch origin main --quiet
+       NODE_MD=$(git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -xO 2>/dev/null) || {
+         echo "/qa-fix: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
+         exit 1
+       }
+       NODE_PHASE=$(printf '%s\n' "$NODE_MD" | sed -n 's/^phase: *//p' | head -1)
+       if [ "$NODE_PHASE" != "qa" ]; then
+         echo "/qa-fix: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'qa'" >&2
+         exit 1
+       fi
+       # Re-entry guard: parking sets office_hours without changing phase, so a
+       # stale self-scheduled wakeup re-firing mid-session (bypassing the
+       # selector's office_hours-null gate) must not re-run qa-fix against a
+       # node already handed to a human for review. This must agree with the
+       # canonical selection gate `readParked`
+       # (packages/intentionsutil/scripts/check-node-selection.ts:90-93):
+       # a node is parked iff the first-class `office_hours` is non-null OR a
+       # non-null `attributes.office_hours` squatter block is present. The
+       # squatter convention is live until tactic-schema-migration-backfill
+       # lands, and a squatter-parked node keeps the literal top-level
+       # `office_hours: null` alongside a populated `attributes.office_hours`
+       # block — so a top-level-only check would miss it and re-run QA against a
+       # parked node.
+       #
+       # Match only the YAML frontmatter (the lines between the first and
+       # second `---` delimiters), never the markdown body — a prose body line
+       # reading exactly `office_hours: null` (e.g. docs quoting this guard)
+       # must not be mistaken for the node's actual state.
+       # Capture matches as text (never rely on `grep -q`'s exit code, which is
+       # unreliable on empty input under some grep wrappers) and test for
+       # emptiness.
+       NODE_FRONTMATTER=$(printf '%s\n' "$NODE_MD" | awk '/^---$/{d++; next} d==1{print} d>=2{exit}')
+       PARKED=""
+       # First-class park: an unparked node carries the literal
+       # `office_hours: null`; its absence means a nested block replaced it.
+       FIRST_CLASS_NULL=$(printf '%s\n' "$NODE_FRONTMATTER" | grep -xF 'office_hours: null')
+       [ -z "$FIRST_CLASS_NULL" ] && PARKED=1
+       # Squatter park: a non-null indented `office_hours:` line nested under
+       # `attributes:` (block form has an empty value with children below;
+       # inline form has a non-null scalar). Select indented `office_hours:`
+       # lines, then drop the `null` ones — anything left means a populated
+       # squatter block.
+       SQUATTER=$(printf '%s\n' "$NODE_FRONTMATTER" \
+            | grep -E '^[[:space:]]+office_hours:' \
+            | grep -vE '^[[:space:]]+office_hours:[[:space:]]+null[[:space:]]*$')
+       [ -n "$SQUATTER" ] && PARKED=1
+       if [ -n "$PARKED" ]; then
+         echo "/qa-fix: node '$NODE_ID' is already office_hours-parked at origin/main — nothing to do" >&2
+         exit 0
+       fi
+       N="$NODE_ID"; TARGET_KIND=node ;;
    esac
    ```
 
-   `<N>` is the issue number used by the remaining steps for their `tmp/`
-   filenames.
+   `$N` keys the remaining steps' `tmp/` filenames (the issue number on the legacy
+   lane, the node id on the node lane). `$TARGET_KIND` selects the lane at the
+   seams that differ — see **Node-target lane** below. **On the node lane no gh
+   issue is ever read or written.**
+
+   ### Node-target lane (`TARGET_KIND=node`)
+
+   Every step runs unchanged except these re-keyed seams:
+
+   - **Context / PR.** Skip the `--issue` slices. `PR_NUM` is already resolved by
+     the Idempotency preamble above (via `gh pr list --head`, not the
+     issue-keyed `dispatch-find-pr` lookup `--pr` normally does) — reuse it, do
+     not re-derive.
+   - **Completion.** On a clean pass do **not** apply `dispatch:qa-done` via
+     `dispatch-complete-phase`, and do **not** call `dispatch-mark-complete` /
+     `dispatch-finalize-phase`. Invoke the graph-native transition writer, which
+     records the `qa-done` marker in `execution.markers` and advances the phase
+     (`qa → review`, or `qa → main-qa` when a needs-main residue section was
+     appended — Step 3.6 node lane) as one state-only graph-commit on
+     `origin/main`:
+
+     ```bash
+     .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
+     ```
+
+     The graph-tick worker runs it with the reset-dance a PR-branch worktree
+     needs; the skill hands it the node id and never writes the graph directly.
+   - **Escalation.** Instead of `dispatch:office-hours`, write the reason to
+     `$CLAUDE_JOB_DIR/office-hours-reason` (and best-next-steps to
+     `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook parks the node
+     via `park-node`. See `.claude/hooks/dispatch-stop.sh`.
 
 0.5. **Merge `origin/main` into the working branch.** Call the script first (use
    `dangerouslyDisableSandbox: true` — git writes + `git push` over HTTPS; see
@@ -231,12 +334,23 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
 
    a. **Capture the live context pack** (use `dangerouslyDisableSandbox: true` — it
       calls `gh`; see `.claude/rules/sandbox.md`). Capture its stdout to paste into
-      the subagent prompt:
+      the subagent prompt. **Legacy lane** (`TARGET_KIND=issue`):
       ```bash
       .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --issue --pr --diff
       ```
       `--issue` gives the acceptance criteria, `--pr` the PR number/labels/CI, and
       `--diff` the changed files and hunks — the complete triage input in one call.
+
+      **Node lane** (`TARGET_KIND=node`): never pass `--issue` (no gh issue
+      exists); reuse `$PR_NUM` from the Idempotency preamble with
+      `--pr-is-number`:
+      ```bash
+      .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --diff --pr-is-number
+      ```
+      The acceptance-criteria role `--issue` plays on the legacy lane is filled
+      by `$NODE_MD` (the node body, already read at Step 0) — paste it into the
+      subagent prompt alongside this pack's output in place of the `=== ISSUE
+      ===` section.
 
    b. **Launch exactly one triage subagent** — Agent tool, `subagent_type:
       general-purpose`, **`model: opus`** (the canonical bounded-Opus pattern from
@@ -318,6 +432,19 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
 
    After the triage subagent returns, increment `SKILL_SUBAGENTS` by 1 (the one
    bounded Opus triage fork always runs).
+
+   **Flush the triage plan as produced (condition 9).** As soon as the plan
+   returns — **before** any fixing begins — write it to a durable human-readable
+   QA-summary PR comment (a first-line `<!-- dispatch:qa-summary -->` marker; the
+   incremental marker-comment edit-in-place pattern review-fix Step 6 uses —
+   create via `post-pr-comment.sh`, capture the comment ID, then `gh api … -X
+   PATCH` to edit in place). Then update each item's verdict **as each item
+   resolves** through Step 3's lanes — not only in the Step 4 phase-end post
+   (`:1003`). Phase progress whose only home is the session is a defect: a dead
+   session must leave the plan and the resolved-so-far verdicts already on the PR.
+   This summary comment is **distinct** from the machine `<!-- dispatch:qa-residue
+   -->` id-set marker `dispatch-qa-noprogress` owns (`:837`) — that marker is
+   already flushed per attempt and is untouched here.
 
    Step 3 parses this returned list and routes each item by its `Classification`
    value (and, for `script-verifiable`, by its `Command` shape) into one of three
@@ -651,6 +778,22 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    `needs-main` item from triggering a park on its own account, never suppresses a
    park caused by another class.
 
+   **Node-target lane (`TARGET_KIND=node`) — supersedes the gh filing below.**
+   A node target files **nothing anywhere**. Instead, append a `## needs-main
+   residue` section to the tactic's **own body** (`intentions/<node-id>.md` —
+   bodies are authoritative for tactics), one entry per `needs-main` item with
+   its `id`, `title`, `url_path`, `expected_outcome`, and `finding`. That append
+   rides in the Step-4 state-only completion commit (the `transition-node` write);
+   the reconciler then routes the merged tactic to its `main-qa` phase (the
+   transition writer picks `qa → main-qa` because the residue section is present),
+   where `tactic-main-qa-phase`'s handler owns verification. Only
+   machine/browser-verifiable items become residue: verifiability is triaged here
+   at record time (the `route` computation below already classifies every item),
+   and a prod observation needing human judgment stays `needs-human` →
+   `office_hours` (the Escalation seam), never residue. This makes the legacy
+   boot-then-reject waste structurally impossible on the node lane. Skip the rest
+   of this step; the legacy lane (`TARGET_KIND=issue`) runs it unchanged.
+
    This mirrors `/review-fix` Step 5a/5b — the canonical "file a `blocked_by`
    follow-up via `/file-issue` from a dispatch phase" recipe (subagent fan-out,
    `dispatch-followup-exists` skip, `===FILE-ISSUE-RESULTS===` parsing,
@@ -857,6 +1000,9 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
       (`id` / `dependencies` / `resolves_ids` are for your ordering and the Step 4
       comment, not passed through; `resolves_ids` is **also** read to compute the
       `--fixes-applied` count below, but is still not passed into `/implement-unit`).
+      Fold into each unit's `context`, verbatim: "Read any file with the Read tool
+      before your first Edit or Write to it in this session — the edit is rejected
+      otherwise and the retry burns the tokens twice."
       The draft PR already exists — open **NO** new
       PR. A unit completing in this `/implement-unit` loop is mid-loop, not the end
       of the turn — continue to the next unit, then Steps 4 and 5 and the marker;
@@ -1006,7 +1152,10 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    re-resolve.
 
    Write a markdown summary to `tmp/qa-fix-summary-<n>.md` (where `<n>` is the
-   Step-0-resolved issue number `<N>`). Include:
+   Step-0-resolved issue number `<N>`) with a first line of `<!-- dispatch:qa-summary
+   -->` — the same marker the Step-2 incremental flush uses, so this phase-end
+   post **finalizes that same comment in place** rather than stacking a second.
+   Include:
    - Items executed (across all three lanes).
    - PASS / FAIL / SKIP counts.
    - **Deferred to office-hours** — each `needs-human-judgment` item **whose
@@ -1088,9 +1237,18 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
      their acceptance criterion provably met at QA time — no code defect exists and
      no human input is needed — so they are dropped as PASS and do not park the PR.
 
-   Post via (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
+   Finalize the `<!-- dispatch:qa-summary -->` comment in place (use
+   `dangerouslyDisableSandbox: true` — these invoke `gh`). Re-find it by marker
+   via `dispatch_marker_comment_id` (`lib.sh`); edit it if it exists (the Step-2
+   flush created it), else create it once:
    ```bash
-   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/qa-fix-summary-<n>.md
+   REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+   CID=$(dispatch_marker_comment_id "$PR_NUM" '<!-- dispatch:qa-summary -->')
+   if [ -n "$CID" ]; then
+     gh api "repos/${REPO}/issues/comments/${CID}" -X PATCH --field body=@tmp/qa-fix-summary-<n>.md
+   else
+     .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/qa-fix-summary-<n>.md
+   fi
    ```
 
    **Write the qa phase-log entry.** After the summary is posted, write a terse
@@ -1392,3 +1550,14 @@ the number of fixing passes per PR is hard-capped at `CAP` (default 2,
 `DISPATCH_QA_FIX_ATTEMPT_CAP`): at the cap the lane escalates instead of fixing.
 Together the durable commits + the attempt label bound both the work redone and
 the total number of fix attempts.
+
+**Resume contract (condition 9).** A re-selected worker rooting in the same
+worktree treats the durable state as resume input, never an error. Items the
+prior `<!-- dispatch:qa-summary -->` comment already marks resolved are **not**
+re-derived — the incremental flush (Step 2) means those verdicts survived the
+dead session (Step 3's triage already narrows on the prior summary, `:263`;
+this states it as a contract). Per-unit fix commits are already durable via
+`/commit-merge-push` (see the paragraph above; do not restate) — a resumed
+fixing pass re-QAs against the landed work rather than redoing it. Diff the
+worktree against the branch base and read the prior comment; continue from
+there.

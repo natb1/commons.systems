@@ -2,8 +2,10 @@ import * as pdfjsLib from "pdfjs-dist";
 import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
-import type { OutlineEntry, SearchableRenderer, SearchResult, SearchResponse } from "./types.js";
+import type { OutlineEntry, SearchableRenderer, SearchResult, SearchResponse, SelectionAnchor } from "./types.js";
 import { parsePositionPage, MAX_SEARCH_RESULTS } from "./types.js";
+import type { Annotation } from "../annotations.js";
+import { hasPdfAnchor } from "../annotations.js";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -208,8 +210,22 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
   // recent call only — earlier entries are cleared by the unwrapHighlights()
   // call at the start of applyHighlight).
   const highlightRestores: { div: HTMLElement; originalText: string }[] = [];
-  interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; layout: PageLayout | null; }
+  interface SpreadPage { page: number; renderTask: RenderTask; textLayer: TextLayer | null; layout: PageLayout | null; }
   const spreadPages: SpreadPage[] = [];
+
+  // --- Persistent annotation highlights ---
+  // The full annotation list (set by the viewer via setAnnotations). Persistent
+  // highlights are re-derived from this list onto every rendered text layer, so
+  // they survive search highlight/unhighlight and re-appear after every
+  // renderTextLayer. Distinct from search's single-active pendingHighlight.
+  let annotations: Annotation[] = [];
+  // Per-text-layer record of the divs an annotation paint mutated, so a repaint
+  // (setAnnotations, or a re-render of the same layer) can restore only THIS
+  // layer's divs to pristine before re-wrapping — keyed per layer so a spread's
+  // two text layers never reset each other. WeakMap: entries vanish with the
+  // layer. Never restores a div a search highlight currently owns (see
+  // applyAnnotationHighlights) so search bookkeeping is never corrupted.
+  const annotationRestoresByLayer = new WeakMap<TextLayer, { div: HTMLElement; originalText: string }[]>();
   const outlinePageMap = new WeakMap<OutlineEntry, number>();
 
   type PdfOutlineItem = {
@@ -324,10 +340,19 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
     page: PDFPageProxy,
     cssViewport: PageViewport,
     targetDiv: HTMLDivElement,
+    shouldAbort?: () => boolean,
   ): Promise<{ tl: TextLayer; layout: PageLayout } | null> {
     if (destroyed) return null;
     const textContent = await page.getTextContent();
     if (destroyed) return null;
+    // Generation guard: a newer render may have superseded this one while
+    // getTextContent() was in flight. Bail BEFORE touching the shared
+    // targetDiv — otherwise this stale render's replaceChildren() would wipe
+    // the winner's text layer and its TextLayer would paint stale-page text
+    // (invisible but selectable) over the current page. The loser's `tl` is
+    // never registered in activeTextLayer/spreadPages, so nothing else can
+    // cancel it; it must self-abort here.
+    if (shouldAbort?.()) return null;
 
     // Reconstruct the page layout from the SAME items the TextLayer renders, so
     // layout.items stays index-aligned with tl.textDivs. hasEOL is read from
@@ -348,6 +373,12 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       // A superseding render cancelled this text layer — benign, mirrors the
       // canvas RenderingCancelledException handling in renderPageToCanvas.
       if ((e as Error).name !== "AbortException") throw e;
+      return null;
+    }
+    // Superseded during tl.render(): cancel the just-rendered layer and discard
+    // it so the winner's layer stays authoritative and no stale text lingers.
+    if (shouldAbort?.()) {
+      tl.cancel();
       return null;
     }
     return { tl, layout };
@@ -424,6 +455,152 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
     highlightRestores.length = 0;
   }
 
+  /**
+   * Merge a div's overlapping/adjacent local segments into sorted, disjoint
+   * ranges so two annotations on the same text-layer div both paint (a single
+   * replaceChildren rebuild covering all of them) instead of the last winning.
+   */
+  function mergeSegments(
+    segs: { localStart: number; localEnd: number }[],
+  ): { s: number; e: number }[] {
+    segs.sort((a, b) => a.localStart - b.localStart);
+    const merged: { s: number; e: number }[] = [];
+    for (const { localStart, localEnd } of segs) {
+      const last = merged[merged.length - 1];
+      if (last && localStart <= last.e) last.e = Math.max(last.e, localEnd);
+      else merged.push({ s: localStart, e: localEnd });
+    }
+    return merged;
+  }
+
+  /**
+   * (Re)apply persistent annotation highlights for `pageNum` onto the text layer
+   * `tl` (reconstructed layout `layout`). Idempotent: it first restores this
+   * layer's previously annotation-painted divs to pristine, then re-derives the
+   * highlight spans from the current `annotations` list, so a removed annotation
+   * leaves no stale span and a re-render repaints cleanly.
+   *
+   * COEXISTENCE WITH SEARCH: search's applyHighlight/unwrapHighlights own their
+   * own divs via highlightRestores. This function never restores or repaints a
+   * div a search highlight currently owns (skips any div in highlightRestores),
+   * so it can never desync search's restore log. Because annotation spans
+   * preserve div.textContent, search's offset math (which reads div.textContent)
+   * stays correct even over an annotated div; when search overlays such a div it
+   * simply replaces the annotation span, which the next render/clearSearch
+   * repaint restores. Called AFTER renderTextLayer and BEFORE the search
+   * pendingHighlight apply, so an active search result overlays the annotation.
+   */
+  function applyAnnotationHighlights(
+    tl: TextLayer,
+    layout: PageLayout,
+    pageNum: number,
+  ): void {
+    const searchDivs = new Set(highlightRestores.map((r) => r.div));
+    // Restore this layer's previously-painted divs (except any search now owns).
+    const prev = annotationRestoresByLayer.get(tl) ?? [];
+    for (const { div, originalText } of prev) {
+      if (searchDivs.has(div)) continue;
+      div.textContent = originalText;
+    }
+    const fresh: { div: HTMLElement; originalText: string }[] = [];
+    annotationRestoresByLayer.set(tl, fresh);
+
+    const divs = tl.textDivs;
+    // Collect each annotation's per-div segments for this page.
+    const perDiv = new Map<number, { localStart: number; localEnd: number }[]>();
+    for (const ann of annotations) {
+      if (!hasPdfAnchor(ann) || ann.page !== pageNum) continue;
+      for (const seg of offsetToItemRanges(layout.items, ann.offset, ann.length)) {
+        const arr = perDiv.get(seg.divIndex);
+        if (arr) arr.push({ localStart: seg.localStart, localEnd: seg.localEnd });
+        else perDiv.set(seg.divIndex, [{ localStart: seg.localStart, localEnd: seg.localEnd }]);
+      }
+    }
+    for (const [divIndex, segs] of perDiv) {
+      const div = divs[divIndex];
+      // Leave a div a search highlight currently owns; it repaints on clear.
+      if (!div || searchDivs.has(div)) continue;
+      const original = div.textContent ?? "";
+      fresh.push({ div, originalText: original });
+      const children: Node[] = [];
+      let cursor = 0;
+      for (const { s, e } of mergeSegments(segs)) {
+        if (s > cursor) children.push(document.createTextNode(original.slice(cursor, s)));
+        const span = document.createElement("span");
+        span.className = "annotation-highlight";
+        span.appendChild(document.createTextNode(original.slice(s, e)));
+        children.push(span);
+        cursor = e;
+      }
+      if (cursor < original.length) children.push(document.createTextNode(original.slice(cursor)));
+      div.replaceChildren(...children);
+    }
+  }
+
+  /** Repaint annotations on every currently-rendered text layer (single + spread). */
+  function reapplyAllAnnotations(): void {
+    if (activeTextLayer && activeLayout) {
+      applyAnnotationHighlights(activeTextLayer, activeLayout, _currentPage);
+    }
+    for (const sp of spreadPages) {
+      if (sp.textLayer && sp.layout) {
+        applyAnnotationHighlights(sp.textLayer, sp.layout, sp.page);
+      }
+    }
+  }
+
+  /**
+   * Map a selection boundary (node + offset) to a character offset within the
+   * text-layer div that contains it, and to that div's index. Uses a Range from
+   * the div start to the boundary so nested highlight spans are handled
+   * transparently (Range.toString() collects only text). Returns null when the
+   * boundary is not inside any of the layer's divs.
+   */
+  function locateBoundary(
+    divs: readonly HTMLElement[],
+    node: Node,
+    nodeOffset: number,
+  ): { divIndex: number; local: number } | null {
+    for (let k = 0; k < divs.length; k++) {
+      const div = divs[k];
+      if (div === node || div.contains(node)) {
+        const r = document.createRange();
+        r.setStart(div, 0);
+        try {
+          r.setEnd(node, nodeOffset);
+        } catch {
+          return null;
+        }
+        return { divIndex: k, local: r.toString().length };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Compute a SelectionAnchor from the current window selection against a single
+   * text layer + its layout, or null when the selection does not resolve to a
+   * non-empty range inside this layer.
+   */
+  function anchorFromLayer(
+    tl: TextLayer,
+    layout: PageLayout,
+    pageNum: number,
+    range: Range,
+  ): SelectionAnchor | null {
+    const divs = tl.textDivs;
+    const start = locateBoundary(divs, range.startContainer, range.startOffset);
+    const end = locateBoundary(divs, range.endContainer, range.endOffset);
+    if (!start || !end) return null;
+    const a = layout.items[start.divIndex].start + start.local;
+    const b = layout.items[end.divIndex].start + end.local;
+    const offset = Math.min(a, b);
+    const length = Math.max(a, b) - offset;
+    if (length <= 0) return null;
+    const quote = layout.text.slice(offset, offset + length);
+    return { position: String(pageNum), quote, page: pageNum, offset, length };
+  }
+
   async function renderPage(pageNum: number): Promise<void> {
     if (!pdfDoc || !canvas || !container) return;
 
@@ -476,16 +653,20 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
 
     renderTask = result.task;
     if (textLayerDiv) {
-      const layerResult = await renderTextLayer(result.page, result.cssViewport, textLayerDiv);
+      const layerResult = await renderTextLayer(result.page, result.cssViewport, textLayerDiv, () => gen !== renderGen);
       if (gen !== renderGen) {
         layerResult?.tl.cancel();
         return;
       }
       activeTextLayer = layerResult?.tl ?? null;
       activeLayout = layerResult?.layout ?? null;
-      // Reaching here means this render won the gen race (checked just above,
-      // no await since). Apply a pending search highlight for this page. Kept
-      // set (not cleared) so a ResizeObserver re-render re-applies it.
+      // Reaching here means this render won the gen race (checked just above, no
+      // await since). Paint persistent annotation highlights first, then overlay
+      // any pending search highlight for this page (kept set — not cleared — so a
+      // ResizeObserver re-render re-applies it).
+      if (activeTextLayer && activeLayout) {
+        applyAnnotationHighlights(activeTextLayer, activeLayout, pageNum);
+      }
       if (pendingHighlight && pendingHighlight.page === pageNum && activeTextLayer && activeLayout) {
         applyHighlight(activeTextLayer, activeLayout, pendingHighlight);
       }
@@ -519,7 +700,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       if (!result) return;
       if (gen !== spreadGen) return;
 
-      const layerResult = await renderTextLayer(result.page, result.cssViewport, tlDiv);
+      const layerResult = await renderTextLayer(result.page, result.cssViewport, tlDiv, () => gen !== spreadGen);
       if (gen !== spreadGen) {
         // Cancel the in-flight text layer; wrapper removal is handled by finally.
         layerResult?.tl.cancel();
@@ -528,7 +709,11 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       committed = true;
       const tl = layerResult?.tl ?? null;
       const layout = layerResult?.layout ?? null;
-      spreadPages.push({ renderTask: result.task, textLayer: tl, layout });
+      spreadPages.push({ page: pageNum, renderTask: result.task, textLayer: tl, layout });
+      // Annotations first, search overlay second — same order as renderPage.
+      if (tl && layout) {
+        applyAnnotationHighlights(tl, layout, pageNum);
+      }
       if (pendingHighlight && pendingHighlight.page === pageNum && tl && layout) {
         applyHighlight(tl, layout, pendingHighlight);
       }
@@ -741,6 +926,34 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
     clearSearch(): void {
       unwrapHighlights();
       pendingHighlight = null;
+      // unwrapHighlights restored search-owned divs to their captured text,
+      // flattening any annotation span they carried; repaint annotations so
+      // persistent highlights survive a search clear.
+      reapplyAllAnnotations();
+    },
+
+    getSelectionAnchor(): SelectionAnchor | null {
+      const sel = typeof window.getSelection === "function" ? window.getSelection() : null;
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+      const range = sel.getRangeAt(0);
+      // Try the single-page layer, then each spread layer; the selection lives
+      // in exactly one rendered text layer.
+      if (activeTextLayer && activeLayout) {
+        const anchor = anchorFromLayer(activeTextLayer, activeLayout, _currentPage, range);
+        if (anchor) return anchor;
+      }
+      for (const sp of spreadPages) {
+        if (sp.textLayer && sp.layout) {
+          const anchor = anchorFromLayer(sp.textLayer, sp.layout, sp.page, range);
+          if (anchor) return anchor;
+        }
+      }
+      return null;
+    },
+
+    setAnnotations(next: Annotation[]): void {
+      annotations = next;
+      reapplyAllAnnotations();
     },
 
     destroy(): void {
@@ -779,6 +992,8 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       unwrapHighlights();
       pendingHighlight = null;
       pageLayoutCache.clear();
+      // Release annotation state (the WeakMap entries drop with their layers).
+      annotations = [];
     },
   };
 }

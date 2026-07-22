@@ -112,6 +112,23 @@ clarifications:
       tactic-schema-md-deprecation edits .claude/skills/align-init/SKILL.md,
       which auto-mode blocks at commit — that tactic needs the self-modification
       office-hours lane. Recorded 2026-07-09 interview."
+  - question: What did the 2026-07-11 pre-decomposition sweep observe?
+    answer: "The SCHEMA.md reference census grew from the interview's 8 to 11 files:
+      .claude/skills/align-tactics/SKILL.md:242 and
+      .claude/skills/dispatch-propagate/scripts/audit-copy-changes.sh:65 (both
+      name SCHEMA.md as a practitioner-doc example in the copy-gate exclusion
+      list) and packages/intentionsutil/SEPARABILITY.md gap 5 (whose 'extend
+      SCHEMA.md' remediation this strategy supersedes). Three of the eleven live
+      under .claude/skills, so the self-modification office-hours lane covers
+      three files, not one — handled as the born-parked gate
+      tactic-align-skill-schema-pointers, which blocks
+      tactic-schema-md-deprecation so no skill file ever points at a deleted
+      file. Non-null stored gap values now number 16 (the review counted 9).
+      schema.ts has since gained first-class office_hours.recommendation and
+      Execution objects, so born-parked recommendations and plan-time
+      strategy_fingerprint stamps use real fields. All immaterial to the
+      decomposition shape; recorded without interrupting the round. Recorded
+      2026-07-11 /align-tactics round."
 tooling_goals:
   - kind: actuator
     statement: kind-declaration-driven validation — validateGraph reads status
@@ -134,7 +151,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - kind nodes stay the sole schema authority — no second document claims

@@ -70,6 +70,21 @@ clarifications:
       sync engine (no CRDTs, no offline queue): your-files-on-your-disk is the
       ownership claim, and cross-device continuity is the user's folder-sync
       choice. Recorded 2026-07-07 interview."
+  - question: What owned-data classes does the durability practice cover, as
+      instrumented this round?
+    answer: "First-pass inventory instrumented by the durability audit
+      (tactic-durability-audit-instrument), carried as owner-editable manifest
+      data rather than hard-coded: (1) encrypted budget .benc snapshots —
+      user-held file plus the Google Drive shared-drive copy
+      (delegation-cloud-backup); (2) bank statements — plaintext downloads on
+      the same shared drive; (3) app sidecar state — plain-JSON .commons-*
+      directories inside the user's own media folders (print/audio), riding the
+      user's folder sync; (4) git repositories including this intention graph —
+      local checkout plus GitHub. The inventory is a first pass for the owner to
+      ratify or amend at the born-parked redundancy-design decision
+      (tactic-durability-redundancy-design); the audit reads it as data, so
+      amending the inventory needs no re-plan. Recorded 2026-07-11
+      /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: every owned-data class has a redundant off-machine copy and a
@@ -85,7 +100,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - storage redundancy stays affordable at individual scale (local disks plus

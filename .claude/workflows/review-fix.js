@@ -50,6 +50,7 @@ export const meta = {
     { title: 'classify' },
     { title: 'verify' },
     { title: 'fix' },
+    { title: 'residue' },
     { title: 'file' },
   ],
 };
@@ -174,7 +175,117 @@ const FIX_SCHEMA = {
   },
 };
 
+// Return shape for the trust-the-built-in review-and-fix sources (code-review,
+// security-review). These sources run the built-in skills with defaults and let
+// them apply their own edits; the finder reports the fixes they applied (`fixed`)
+// and the residue they did not auto-fix (`residue`) for a later three-way
+// resolve/defer/ignore disposition. security-review has no fix capability, so it
+// always returns `fixed: []`.
+const LANE_A_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['fixed', 'residue'],
+  properties: {
+    fixed: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['location', 'fix_summary', 'touched_files'],
+        properties: {
+          location: { type: 'string' },
+          fix_summary: { type: 'string' },
+          touched_files: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    residue: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['location', 'description', 'severity', 'category', 'exploit_scenario', 'recommended_fix'],
+        properties: {
+          location: { type: 'string' },
+          description: { type: 'string' },
+          severity: { enum: ['high', 'medium', 'low'] },
+          category: { type: 'string' },
+          exploit_scenario: { type: 'string' },
+          recommended_fix: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+// Disposition schema for the "residue" phase — the ONE opus subagent that
+// three-way dispositions every Lane-A residue item (resolve / defer / ignore),
+// applies "resolve" fixes to the working tree in-session, and reports the
+// disposition of each. `applied` is true ONLY for a resolve whose fix actually
+// landed. `followup_title`/`followup_body` are populated ONLY for defers.
+const RESIDUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['items'],
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'ref',
+          'source',
+          'severity',
+          'in_contract',
+          'disposition',
+          'applied',
+          'touched_files',
+          'fix_summary',
+          'rationale',
+          'followup_title',
+          'followup_body',
+        ],
+        properties: {
+          ref: { type: 'string' },
+          source: { enum: ['code-review', 'security-review'] },
+          severity: { enum: ['high', 'medium', 'low'] },
+          in_contract: { type: 'boolean' },
+          disposition: { enum: ['resolve', 'defer', 'ignore'] },
+          applied: { type: 'boolean' },
+          touched_files: { type: 'array', items: { type: 'string' } },
+          fix_summary: { type: 'string' },
+          rationale: { type: 'string' },
+          followup_title: { type: 'string' },
+          followup_body: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+// Independent working-tree verification schema — consumed by a SEPARATE agent that
+// is fed NO finding data (only a git instruction), so it cannot be steered by a
+// prompt-injection payload embedded in an attacker-controlled finding description.
+// It reports the files actually modified in the working tree so a residue item's
+// self-reported `applied`/`touched_files` can be checked against reality before the
+// escalation gate or the phantom-fix accounting trusts it.
+const RESIDUE_TREE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['modified_files'],
+  properties: {
+    modified_files: { type: 'array', items: { type: 'string' } },
+  },
+};
+
 // --- inline kernel helpers (thin mirrors of the pure scripts) ----------------
+
+// The trust-the-built-in review-and-fix sources: these run the built-in review
+// skills with defaults, let them apply their own edits, and return a
+// fixed/residue envelope (LANE_A_SCHEMA) rather than findings for the shared
+// gather→classify→verify→fix pipeline.
+const LANE_A = new Set(['code-review', 'security-review']);
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-finders
 // Returns the AGENT finder-source set (the codeql/npm finders are NOT agents —
@@ -290,6 +401,24 @@ const SCHEMA_BLURB = [
   'Return { "findings": [ ...those objects... ] }. If you find nothing, return { "findings": [] }.',
 ].join('\n');
 
+// Schema spec for the trust-the-built-in review-and-fix lane (code-review,
+// security-review): a { fixed, residue } envelope rather than a findings list.
+const LANE_A_BLURB = [
+  'Return an object with exactly two arrays: "fixed" and "residue".',
+  'Each "fixed" entry is an object with exactly these fields:',
+  '- "location": "path:line" of the finding the built-in review fixed',
+  '- "fix_summary": one line describing what the built-in review changed',
+  '- "touched_files": array of file paths edited for that fix',
+  'Each "residue" entry (a finding NOT auto-fixed) is an object with exactly these fields:',
+  '- "location": "path:line"',
+  '- "description": what the issue is and why it is a risk',
+  '- "severity": "high" | "medium" | "low"',
+  '- "category": the finding\'s category (code-review category or vulnerability class)',
+  '- "exploit_scenario": the concrete attack scenario, or "" for a non-security finding',
+  '- "recommended_fix": the concrete corrective action',
+  'Return { "fixed": [ ... ], "residue": [ ... ] }. Use [] for an empty array.',
+].join('\n');
+
 function diffContext(args) {
   const base = args.merge_base || 'origin/main';
   const filesStr = (args.changed_files || []).join(', ') || '(see git diff HEAD)';
@@ -321,24 +450,41 @@ function finderPrompt(name, args) {
   const ctx = diffContext(args);
   if (name === 'code-review') {
     return [
-      'You are a findings-only code-review subagent.',
-      'Invoke the built-in `/code-review` skill via the Skill tool with the `max` effort argument,',
-      'FINDINGS-ONLY — do NOT pass the `--fix` flag; apply no fixes.',
+      'You are a code-review-and-fix subagent. You trust the built-in review to apply its own fixes.',
+      'Invoke the built-in `/code-review` skill via the Skill tool with the `max` effort argument',
+      'AND the `--fix` flag, so it applies its own working-tree edits after reviewing.',
       ctx,
-      'Once /code-review returns, continue: normalize every finding it produced to the schema below',
-      'with Source "code-review" and OWASP "" and STRIDE "" (code-review findings are not security-classified).',
-      SCHEMA_BLURB,
+      '/code-review reports each finding via ReportFindings with a per-finding `outcome` of',
+      '`fixed`, `no_change_needed`, or `skipped`. Once it returns, build a `{ fixed, residue }` object:',
+      '- For every finding with outcome "fixed", append to `fixed[]`: `location` (from the finding\'s',
+      '  file/line), `fix_summary` (a one-line summary of what changed, drawn from the finding\'s',
+      '  `summary`), `touched_files` (the file(s) it edited for that finding).',
+      '- For every finding with outcome "skipped", append to `residue[]`: `location`, `description`',
+      '  (from the finding\'s `failure_scenario`/`summary`), `severity` (map code-review\'s implicit',
+      '  confidence/severity as best judged; default "medium" if unclear), `category` (from the',
+      '  finding\'s `category` field), `exploit_scenario` ("" if not a security-flavored finding —',
+      '  code-review findings are not necessarily exploits), `recommended_fix` (a specific corrective',
+      '  action).',
+      '- IGNORE every finding with outcome "no_change_needed" entirely — add it to neither array.',
+      'Return `{ fixed: [...], residue: [...] }` matching the schema below.',
+      LANE_A_BLURB,
     ].join('\n');
   }
   if (name === 'security-review') {
     return [
-      'You are a findings-only security-review subagent.',
-      'Invoke the built-in `/security-review` skill via the Skill tool.',
+      'You are a security-review subagent for the trust-the-built-in review-and-fix lane.',
+      'Invoke the built-in `/security-review` skill via the Skill tool. Note: security-review has NO',
+      '`--fix` flag and edits nothing — it is inherently findings-only, and it already runs its own',
+      'internal false-positive filter (confidence >= 8, HIGH/MEDIUM severity only) before returning',
+      'its markdown report.',
       ctx,
-      'Once /security-review returns, continue: normalize every finding to the schema below with',
-      'Source "security-review". Map its severity to Confidence (high/medium/low → high/medium/low),',
-      'and infer the OWASP category and STRIDE element from each finding\'s category and description.',
-      SCHEMA_BLURB,
+      'Once /security-review returns its markdown report, normalize EVERY finding in that report into',
+      '`residue[]`: `location`, `description`, `severity` (map the report\'s HIGH/MEDIUM directly to',
+      '"high"/"medium"), `category` (the finding\'s vulnerability category, e.g. OWASP-style),',
+      '`exploit_scenario` (the concrete attack scenario from the report), `recommended_fix` (the',
+      'concrete remediation from the report).',
+      'Return `{ fixed: [], residue: [...] }` — `fixed` is always empty for this source.',
+      LANE_A_BLURB,
     ].join('\n');
   }
   if (name === 'cost') {
@@ -407,11 +553,22 @@ log(
     `${securityFinders.length} security finder(s) pending for surface=${_a.surface}`
 );
 
+// Finders run on Opus (#2872). Finding real bugs and vulnerabilities in the diff
+// is the genuinely complex, generative subtask of this workflow — the orchestrator
+// stays on Sonnet and delegates this reasoning to Opus subagents. This covers the
+// always-on `/code-review` quality finder, the `/security-review` pass, and the
+// surface-gated security/cost domain lenses. Cheaper mechanical stages downstream
+// (dedup, classify) stay on Sonnet; fix-authoring is already Opus.
+// Lane-A finders (code-review, security-review) run the trust-the-built-in
+// review-and-fix skills and return a { fixed, residue } envelope (LANE_A_SCHEMA),
+// so they must launch with that schema — NOT the shared FINDINGS_SCHEMA. Their
+// prompts are already Lane-A-aware (finderPrompt branches on the name). Lane-B
+// finders (everything else) keep the FINDINGS_SCHEMA findings-list shape.
 const launchFinder = (name) => () =>
   agent(finderPrompt(name, _a), {
-    model: 'sonnet',
+    model: 'opus',
     agentType: 'general-purpose',
-    schema: FINDINGS_SCHEMA,
+    schema: LANE_A.has(name) ? LANE_A_SCHEMA : FINDINGS_SCHEMA,
     label: `find:${name}`,
     phase: 'finders',
   });
@@ -425,6 +582,9 @@ const qualityResults = await parallel(qualityFinders.map(launchFinder));
 let securityResults = [];
 let coverage_incomplete = false;
 let coverage_note = '';
+// A throttled wave 1 (qualityDead) now ALSO correctly means "no code-review
+// self-fixes were applied" — code-review is a Lane-A finder that applies its own
+// edits, so a null result contributes no fixed/residue to the Lane-A capture below.
 const qualityDead = qualityResults.filter(Boolean).length === 0;
 if (securityFinders.length && qualityDead) {
   coverage_incomplete = true;
@@ -438,11 +598,63 @@ if (securityFinders.length && qualityDead) {
   securityResults = await parallel(securityFinders.map(launchFinder));
 }
 
-const finderResults = qualityResults.concat(securityResults);
+// Tag each result with the finder NAME that produced it. The two results arrays
+// are parallel to their source finder-name arrays (qualityFinders/securityFinders),
+// so zip each before concatenating. The name association is load-bearing: it lets
+// the Lane-B gather below filter out the Lane-A results by name (their shape is
+// { fixed, residue }, not { findings }) once other Lane-B finders are mixed into
+// securityResults — positional array-concat alone would lose it.
+const finderResults = qualityFinders
+  .map((name, i) => ({ name, res: qualityResults[i] }))
+  .concat(securityFinders.map((name, i) => ({ name, res: securityResults[i] })));
 
-// Gather: surviving finder findings + the prescanned codeql/npm findings.
+// --- Lane-A capture (code-review, security-review) ---------------------------
+// These two finders bypass the shared dedup→classify→verify→fix pipeline. Capture
+// their raw { fixed, residue } results here, separately from the Lane-B gather, so
+// a LATER unit's "residue" phase can dispose of the residue and merge the fixes.
+// code-review is wave 1 (qualityFinders has exactly one entry when present).
+const codeReviewResult = qualityResults[qualityFinders.indexOf('code-review')] || null;
+// security-review is a wave-2 finder (only launched when surface === 'code');
+// securityFinders and securityResults are parallel/same-index.
+const securityReviewIdx = securityFinders.indexOf('security-review');
+const securityReviewResult = securityReviewIdx >= 0 ? securityResults[securityReviewIdx] : null;
+
+// Seed fixed[] early with code-review's own applied fixes. Synthesize sequential
+// ids in array order. Unit 4 merges laneAFixed into the final fixed[] envelope;
+// this unit only builds and exposes it. security-review applies no fixes (its
+// fixed[] is always empty), so only code-review contributes here.
+const laneAFixed = ((codeReviewResult && codeReviewResult.fixed) || []).map((e, n) => ({
+  id: `code-review-fix-${n}`,
+  location: e.location,
+  fix_summary: e.fix_summary,
+  touched_files: e.touched_files,
+}));
+
+// Combined Lane-A residue, each item tagged with its source so Unit 3 knows which
+// finder produced it.
+const laneAResidue = []
+  .concat(
+    ((codeReviewResult && codeReviewResult.residue) || []).map((r) =>
+      Object.assign({}, r, { source: 'code-review' })
+    )
+  )
+  .concat(
+    ((securityReviewResult && securityReviewResult.residue) || []).map((r) =>
+      Object.assign({}, r, { source: 'security-review' })
+    )
+  );
+log(
+  `finders: Lane-A captured — code-review fixes=${laneAFixed.length}, ` +
+    `residue=${laneAResidue.length}`
+);
+
+// Gather: surviving Lane-B finder findings + the prescanned codeql/npm findings.
+// Lane-A results (code-review, security-review) are EXCLUDED — their { fixed,
+// residue } shape carries no `findings`, and they are disposed of separately.
 let allFindings = [];
-for (const res of finderResults.filter(Boolean)) {
+for (const { name, res } of finderResults) {
+  if (LANE_A.has(name)) continue;
+  if (!res) continue;
   for (const f of res.findings || []) allFindings.push(f);
 }
 for (const f of _a.prescanned_findings || []) allFindings.push(f);
@@ -807,6 +1019,7 @@ if (fileGroups.size) {
       const prompt = [
         `Apply the recommended fix for each of these findings in file ${file}.`,
         'Edit the working tree ONLY — make NO commits and NO pushes (a later step commits).',
+        'Read any file with the Read tool before your first Edit or Write to it in this session — the edit is rejected otherwise and the retry burns the tokens twice.',
         'Findings to resolve:',
         findingList,
         'Return { "touched_files": [...], "fix_summary": "one-line summary of what you changed",',
@@ -856,8 +1069,265 @@ const upheldErosionIds = new Set(
   keptFindings.filter((f) => f.Source === 'erosion' && f.verify === 'Upheld').map((f) => f.id)
 );
 
+// --- 5b. RESIDUE (ONE opus subagent, sequenced AFTER the fix fan-out) ---------
+// Lane-A findings (code-review, security-review) never entered the shared
+// dedup→classify→verify→fix pipeline: they are ALREADY CONFIRMED by the built-ins'
+// own internal verification. Their un-auto-fixed residue (laneAResidue, already
+// source-tagged in the finders phase) is dispositioned here by a single opus
+// subagent via a three-way resolve/defer/ignore rule; "resolve" fixes are applied
+// to the working tree IN-SESSION. This phase runs after the FIX phase's parallel
+// fan-out fully resolves so no two agents edit the working tree concurrently.
+phase('residue');
+
+// Local truncation — inlined to avoid an ordering dependency on the `truncate`
+// function declaration defined later in file-prep.
+const residueTruncate = (text) => (text || '').trim().replace(/\s+/g, ' ').slice(0, 140);
+// Blocker-issue attribution for defer filings — mirrors the Lane-B `blockerNums`
+// computation (defined later in file-prep); duplicated here since that const is
+// out of scope at this insertion point.
+const residueBlockerNums =
+  _a.implementing_issues && _a.implementing_issues.length
+    ? _a.implementing_issues
+    : 'independent';
+
+let residueDispositions = [];
+let laneAResidueFixed = [];
+let laneADispositions = [];
+let laneADeferred = [];
+// Original-residue-index → whether the item's fix is VERIFIED-resolved (a resolve
+// whose claimed touched_files were confirmed modified in the working tree). Keyed
+// by laneAResidue index (not the agent's echoed fields) so the deviation gate can
+// judge escalation from the finder's own output. Empty when there is no residue.
+const residueResolvedByIdx = new Map();
+
+if (laneAResidue.length === 0) {
+  log('residue: no Lane-A residue to disposition — skipping the subagent.');
+} else {
+  // Synthesize a stable ref id per item in array order so the agent can echo it
+  // back and we can zip its disposition to the original residue item by index.
+  const residueForAgent = laneAResidue.map((r, i) => ({
+    ref: `residue-${i}`,
+    location: r.location,
+    description: r.description,
+    severity: r.severity,
+    category: r.category,
+    exploit_scenario: r.exploit_scenario,
+    recommended_fix: r.recommended_fix,
+    source: r.source,
+  }));
+  const base = _a.merge_base || 'origin/main';
+  const filesStr = (_a.changed_files || []).join(', ') || '(see git diff HEAD)';
+  const residuePrompt = [
+    'You are the residue-disposition subagent for the trust-the-built-in review lane.',
+    'You are given a list of findings that the built-in /code-review and /security-review',
+    'skills surfaced but did NOT auto-fix. These findings are ALREADY CONFIRMED by the',
+    "built-ins' own internal verification (code-review's own review pass; security-review's",
+    'own confidence>=8 HIGH/MEDIUM false-positive filter). Do NOT re-run adversarial',
+    'skepticism or try to refute them — the only job is to DECIDE DISPOSITION and, for',
+    'resolves, apply the fix.',
+    '',
+    `Contract context: the pending diff is against merge base \`${base}\`. Changed files: ${filesStr}.`,
+    'Inspect the introduced diff read-only to judge whether each item is IN-CONTRACT: use',
+    `Bash/git (e.g. \`git diff ${base}...HEAD\`) or read the changed files, and reason about`,
+    "whether the finding concerns something the diff's own tactic/plan claims to deliver, or",
+    'the security/integrity of code the diff itself introduced, versus pre-existing surface',
+    'the diff merely touched.',
+    '',
+    'Apply this three-way rule EXACTLY:',
+    '- Resolve (apply the fix to the working tree): confirmed AND breaks the tactic\'s own',
+    "  contract — the deliverable its plan claims, or the security/integrity of what the diff",
+    '  itself introduced — ALWAYS, regardless of cost; OR confirmed out-of-contract AND cheaper',
+    '  to fix than to defer.',
+    '- Defer (file a follow-up, do not edit): confirmed, real, out-of-contract, and EXPENSIVE',
+    '  to fix (pre-existing surface the diff merely touched, defense-in-depth where the design',
+    '  already fails closed, robustness under conditions no signal path exercises).',
+    '- Ignore (audit-line only, no edit, no follow-up): refuted, unreachable failure scenario,',
+    '  below the meaningfulness threshold, or a fix that would add a defensive fallback contrary',
+    "  to this project's code-style rule (prefer clear errors over defensive fallbacks — no",
+    "  speculative validation for scenarios that can't happen).",
+    '',
+    'For every item disposed as "resolve": actually apply the fix in the working tree NOW.',
+    'Edit the working tree ONLY — make NO commits and NO pushes (a later step commits).',
+    'Read any file with the Read tool before your first Edit or Write to it in this session — the edit is rejected otherwise and the retry burns the tokens twice.',
+    '',
+    'Return { "items": [ ... ] } with EXACTLY one object per input item, each carrying:',
+    '- ref: the item\'s ref (echo it back unchanged)',
+    '- source: the item\'s source ("code-review" | "security-review")',
+    '- severity: the item\'s severity ("high" | "medium" | "low")',
+    '- in_contract: boolean — is this in the diff\'s own contract?',
+    '- disposition: "resolve" | "defer" | "ignore"',
+    '- applied: boolean — true ONLY if disposition is "resolve" AND you actually applied the fix',
+    '- touched_files: array of file paths you edited (empty if not applicable)',
+    '- fix_summary: one line describing what you changed (empty if not applicable)',
+    '- rationale: why this disposition',
+    '- followup_title: a short follow-up title (empty unless disposition is "defer")',
+    '- followup_body: the follow-up body (empty unless disposition is "defer")',
+    '',
+    `Findings to disposition:\n${JSON.stringify(residueForAgent, null, 2)}`,
+  ].join('\n');
+
+  subagentsLaunched += 1;
+  const residueRes = await agent(residuePrompt, {
+    model: 'opus',
+    agentType: 'general-purpose',
+    schema: RESIDUE_SCHEMA,
+    label: 'residue',
+    phase: 'residue',
+  });
+  const items = (residueRes && residueRes.items) || [];
+  residueDispositions = items;
+
+  // Independent working-tree verification of `applied`. The residue agent's own
+  // `applied`/`touched_files` are self-reported and never checked against reality;
+  // an item can claim `disposition:'resolve', applied:true` while editing nothing
+  // (an honest error, or a prompt-injection payload embedded in an attacker-
+  // controlled finding description steering the agent). Trusting that claim lets a
+  // vulnerability merge as "Fixed" and lets the deviation gate treat a high-severity
+  // security finding as resolved. Confirm the claimed edits actually landed: capture
+  // the working-tree's real modified-file set via a SEPARATE agent fed ONLY a git
+  // instruction (no finding descriptions reach it, so the injection cannot steer it).
+  let modifiedSet = new Set();
+  const anyResolveApplied = items.some(
+    (it) => it.disposition === 'resolve' && it.applied === true
+  );
+  if (anyResolveApplied) {
+    subagentsLaunched += 1;
+    const treeRes = await agent(
+      [
+        'Run `git diff --name-only HEAD` in the current working tree and return the',
+        'EXACT list of repo-relative file paths it prints — the files with uncommitted',
+        'modifications. Make NO edits, NO commits, NO pushes; this is a read-only check.',
+        'Return { "modified_files": [ ...paths... ] }. Return [] if it prints nothing.',
+      ].join('\n'),
+      {
+        model: 'sonnet',
+        agentType: 'general-purpose',
+        schema: RESIDUE_TREE_SCHEMA,
+        label: 'residue-tree-verify',
+        phase: 'residue',
+      }
+    );
+    for (const p of (treeRes && treeRes.modified_files) || []) {
+      const s = String(p).trim();
+      if (s) modifiedSet.add(s);
+    }
+  }
+  // A claimed touched file is "really modified" only if it matches a path in the
+  // git-diff set. Tolerate absolute-vs-repo-relative reporting by suffix match.
+  const pathReallyModified = (t) => {
+    const tf = String(t).trim();
+    if (!tf) return false;
+    if (modifiedSet.has(tf)) return true;
+    for (const m of modifiedSet) {
+      if (m === tf || m.endsWith('/' + tf) || tf.endsWith('/' + m)) return true;
+    }
+    return false;
+  };
+
+  // Zip each disposition back to its original residue item by ref index to recover
+  // location/description/category/exploit_scenario/recommended_fix (the schema does
+  // not carry these on the disposition object).
+  for (const item of items) {
+    const idx = Number(String(item.ref).replace(/^residue-/, ''));
+    const orig = laneAResidue[idx];
+    if (!orig) {
+      log(`residue: disposition ref ${item.ref} maps to no original residue item — skipping.`);
+      continue;
+    }
+    // Trust `applied:true` ONLY when the working tree confirms it: the claimed
+    // touched_files must be non-empty AND every one present in the git-diff set.
+    // A resolve+applied:true with no corresponding tree change is a phantom fix —
+    // treated as UNRESOLVED so it is not bucketed Fixed and (for a high-severity
+    // security finding) the deviation gate below still fires.
+    const appliedVerified =
+      item.disposition === 'resolve' &&
+      item.applied === true &&
+      Array.isArray(item.touched_files) &&
+      item.touched_files.length > 0 &&
+      item.touched_files.every(pathReallyModified);
+    if (item.disposition === 'resolve' && item.applied === true && !appliedVerified) {
+      log(
+        `residue: ${item.ref} claimed resolve+applied but no matching working-tree change — treating as unresolved.`
+      );
+    }
+    // Record verified-resolution keyed on the ORIGINAL residue index so the
+    // deviation gate can judge escalation from the finder's own severity/source.
+    residueResolvedByIdx.set(idx, appliedVerified);
+
+    // Fixed entry for a VERIFIED applied resolve only.
+    if (appliedVerified) {
+      laneAResidueFixed.push({
+        id: item.ref,
+        location: orig.location,
+        fix_summary: item.fix_summary || '',
+        touched_files: item.touched_files || [],
+      });
+    }
+    // Deferred filing for a defer.
+    if (item.disposition === 'defer') {
+      const title =
+        (item.followup_title && item.followup_title.trim()) ||
+        residueTruncate(orig.description).slice(0, 80);
+      const body =
+        (item.followup_body && item.followup_body.trim()) ||
+        [
+          orig.description,
+          '',
+          `Recommended fix: ${orig.recommended_fix}`,
+          '',
+          `Rationale: ${item.rationale || ''}`,
+          '',
+          `Backlink: #${_a.pr_num}`,
+        ].join('\n');
+      laneADeferred.push({
+        title,
+        body,
+        blocker_issue_nums: residueBlockerNums,
+      });
+    }
+    // Disposition-audit entry. bucket mapping:
+    //   resolve + VERIFIED applied   → Fixed
+    //   resolve + unverified/phantom → Required (unresolved; not dropped)
+    //   ignore                       → Informational
+    //   defer                        → Deferred
+    let bucket;
+    if (item.disposition === 'resolve') {
+      bucket = appliedVerified ? 'Fixed' : 'Required';
+    } else if (item.disposition === 'ignore') {
+      bucket = 'Informational';
+    } else {
+      bucket = 'Deferred';
+    }
+    const entry = {
+      id: item.ref,
+      short_desc: residueTruncate(orig.description),
+      location: orig.location,
+      bucket,
+      sources: [item.source],
+    };
+    if (bucket === 'Fixed' || bucket === 'Required') {
+      entry.recommended_fix = orig.recommended_fix;
+    }
+    laneADispositions.push(entry);
+  }
+  log(
+    `residue: ${items.length} dispositioned — fixed=${laneAResidueFixed.length}, ` +
+      `deferred=${laneADeferred.length}, audit=${laneADispositions.length}`
+  );
+}
+
 // --- 6. FILE-PREP (pure JS, no gh) -------------------------------------------
 phase('file');
+
+// Merge code-review's own applied fixes (laneAFixed, from the finders phase) and
+// the residue phase's applied resolves (laneAResidueFixed) into the terminal
+// fixed[] envelope array — appended here (in file-prep, AFTER fixedIds was already
+// computed in the earlier FIX phase) rather than earlier, because fixedIds is a
+// Lane-B-only membership set used by Lane-B's own upheldErosionIds/deferred_filings
+// logic and must NOT include Lane-A ids (Lane-A ids never appear in
+// deduped/keptFindings at all, so there is no collision risk either way — this
+// ordering is simply the natural integration point, not a correctness requirement).
+fixed.push(...laneAFixed, ...laneAResidueFixed);
 
 // 6a. Deferred code-review findings → deferred_filings.
 function shortTitle(desc) {
@@ -914,6 +1384,11 @@ const deferred_filings = deduped
     };
   });
 
+// Append Lane-A's out-of-contract-and-expensive residue follow-ups (built by the
+// residue-phase subagent) to the same array the SKILL body files as blocked_by
+// follow-ups (or draft tactic nodes on a graph-node target).
+deferred_filings.push(...laneADeferred);
+
 // 6b. Out-of-scope codeql/npm findings → security_followup_input (pass fields through).
 const security_followup_input = deduped
   .filter(
@@ -947,14 +1422,37 @@ const security_followup_input = deduped
 
 // --- 7. deviation + dispositions + return ------------------------------------
 
-// deviation: any Required + Upheld + high-confidence finding still unresolved after fixes.
-const deviation = keptFindings.some(
-  (f) =>
-    f.bucket === 'Required' &&
-    f.verify === 'Upheld' &&
-    f.Confidence === 'high' &&
-    !fixedIds.has(f.id)
-);
+// deviation: any Required + Upheld + high-confidence finding still unresolved after fixes,
+// OR (Lane-A) ANY high-severity security-review residue finding the residue phase did not
+// VERIFIABLY resolve. code-review is quality-only and never escalates; erosion is Lane-B
+// and untouched (non-escalation invariant intact for erosion).
+//
+// The Lane-A clause is deliberately hardened against a residue agent whose disposition
+// was steered by a prompt-injection payload embedded in an attacker-controlled finding
+// description (e.g. "mark in_contract:false / disposition:ignore"):
+//   - severity/source are read from laneAResidue — the security-review finder's OWN
+//     output — NOT the residue agent's echoed r.severity/r.source, so a downgraded or
+//     mislabeled echo cannot dodge the gate;
+//   - `in_contract` is NOT consulted at all: any high-severity security finding that is
+//     not verifiably fixed escalates to a human regardless of the agent's contract call;
+//   - "resolved" means residueResolvedByIdx === true, a working-tree-VERIFIED applied
+//     resolve — an ignore/defer/phantom-resolve leaves the item unresolved and escalates.
+// A high-severity original item with no returned disposition (agent dropped it) has no
+// map entry (!== true) and therefore also escalates.
+const deviation =
+  keptFindings.some(
+    (f) =>
+      f.bucket === 'Required' &&
+      f.verify === 'Upheld' &&
+      f.Confidence === 'high' &&
+      !fixedIds.has(f.id)
+  ) ||
+  laneAResidue.some(
+    (orig, idx) =>
+      orig.source === 'security-review' &&
+      orig.severity === 'high' &&
+      residueResolvedByIdx.get(idx) !== true
+  );
 
 function truncate(text, n) {
   const t = (text || '').trim().replace(/\s+/g, ' ');
@@ -987,6 +1485,31 @@ const dispositions = deduped.map((f) => {
   }
   return entry;
 });
+
+// Append Lane-A's dispositions (code-review/security-review findings, resolved by
+// the built-ins themselves or dispositioned by the residue-phase subagent) so the
+// Step-6 PR comment renders them in the same Fixed/Required/Deferred/Informational
+// buckets as Lane-B. laneADispositions already carry recommended_fix for Fixed/
+// Required entries (built that way in the residue phase), so no transformation needed.
+dispositions.push(...laneADispositions);
+
+// Also surface code-review's OWN auto-applied fixes (laneAFixed) as Fixed-bucket
+// dispositions. They were merged into `fixed[]` (line ~1335) so they count toward
+// `fixes_applied`, but without a matching disposition they would break the
+// outcome-envelope invariant `fixes_applied === count of Fixed-bucket dispositions`
+// (.claude/docs/outcome-envelope.md) and let `hit_rate = fixes_applied /
+// findings_surfaced` exceed 1.0. laneAResidueFixed already appears in
+// laneADispositions as Fixed, so only laneAFixed needs adding here.
+dispositions.push(
+  ...laneAFixed.map((e) => ({
+    id: e.id,
+    short_desc: truncate(e.fix_summary, 140),
+    location: e.location,
+    bucket: 'Fixed',
+    sources: ['code-review'],
+    recommended_fix: e.fix_summary,
+  }))
+);
 
 // --- outcome-envelope counts (Unit 3, issue #1860) ---------------------------
 // Computed per .claude/docs/outcome-envelope.md. Unit 4 passes these straight

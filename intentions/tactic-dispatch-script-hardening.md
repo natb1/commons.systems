@@ -28,8 +28,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-dispatch-script-hardening
+  pr: 2840
+  attempts: {}
+  markers:
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -104,7 +111,7 @@ Scope:
 **Recommended model:** sonnet
 
 Scope:
-- `.claude/skills/align/scripts/gather-context.sh:71` via
+- `.claude/skills/align-init/scripts/gather-context.sh:74` via
   `lib.sh:412-455`: `gh_issue_list_rest --state closed --limit 100`
   fetches one page of 100 *mixed* issues+PRs, then filters PRs out
   client-side. In this PR-dominated repo the "recent 100 closed issues"

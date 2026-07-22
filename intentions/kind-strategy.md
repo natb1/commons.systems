@@ -83,5 +83,9 @@ attributes:
   edges:
     - "recovers: ids of the delegation records this strategy's work unwinds
       (top-level field, resolved by validateGraph)"
+  status_vocabulary:
+    raw: not yet dialectically examined
+    refining: under active dialectic
+    codified: the author has personally settled this strategy against present conditions
 ---
 # Strategy — the highest goals a virtue generates against present conditions

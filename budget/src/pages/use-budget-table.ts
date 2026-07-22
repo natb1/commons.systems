@@ -102,8 +102,11 @@ export function useBudgetTableInteractivity(
           }
           await getActiveDataSource().updateBudget(budgetId, { name: target.value });
         } else if (target.classList.contains("edit-allowance")) {
-          const allowance = Number(target.value);
-          if (!Number.isFinite(allowance) || allowance < 0) {
+          // Number("") is 0, not NaN — guard the emptied input explicitly so a
+          // cleared field is rejected rather than silently persisting allowance 0.
+          const raw = target.value.trim();
+          const allowance = Number(raw);
+          if (raw === "" || !Number.isFinite(allowance) || allowance < 0) {
             showInputError(target, "Allowance must be a non-negative number");
             return;
           }
@@ -241,6 +244,29 @@ export function useOverridesTableInteractivity(
 
         const firstBudget = budgets[0];
         const dateStr = toISODate(Date.now());
+
+        // Overrides are deduped by date (collectOverridesForBudget keys a Map by
+        // dateMs). Inserting a today-dated $0 row when one already exists for
+        // today would silently clobber it on the immediate save. Instead, edit
+        // the existing same-date override in place: focus its balance input so
+        // the user updates the real value rather than zeroing it.
+        const existingRow = [
+          ...container.querySelectorAll<HTMLElement>(`.override-row[data-budget-id="${firstBudget.id}"]`),
+        ].find(
+          (r) => r.querySelector<HTMLInputElement>(".edit-override-date")?.value === dateStr,
+        );
+        if (existingRow) {
+          const balanceInput = existingRow.querySelector<HTMLInputElement>(".edit-override-balance");
+          if (balanceInput) {
+            balanceInput.focus();
+            balanceInput.select();
+            // Bring the row into view where the environment supports it.
+            if (typeof balanceInput.scrollIntoView === "function") {
+              balanceInput.scrollIntoView({ block: "nearest" });
+            }
+          }
+          return;
+        }
 
         const newRow = document.createElement("div");
         newRow.className = "override-row";

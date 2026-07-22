@@ -50,7 +50,7 @@ describe("renderHomeHtml", () => {
 
   it("renders post titles as links in h2 elements", () => {
     const html = renderHomeHtml([publishedPost]);
-    expect(html).toContain('class="post-link"');
+    expect(html).toContain('class="post-link u-url"');
     expect(html).toContain("Hello World</span></a>");
     expect(html).toContain('href="/post/hello-world"');
   });
@@ -130,7 +130,7 @@ describe("renderHomeHtml", () => {
       "hello-world": { html: "<p>Body</p>", title: "Override Title" },
     };
     const html = renderHomeHtml([publishedPost], "/post/", contentMap);
-    expect(html).toContain('<span class="post-title">Override Title</span>');
+    expect(html).toContain('<span class="post-title p-name">Override Title</span>');
   });
 
   it("falls back to metadata title when contentMap title is null", () => {
@@ -138,7 +138,7 @@ describe("renderHomeHtml", () => {
       "hello-world": { html: "<p>Body</p>", title: null },
     };
     const html = renderHomeHtml([publishedPost], "/post/", contentMap);
-    expect(html).toContain('<span class="post-title">Hello World</span>');
+    expect(html).toContain('<span class="post-title p-name">Hello World</span>');
   });
 
   it("renders Loading placeholder for posts not in contentMap", () => {
@@ -147,5 +147,50 @@ describe("renderHomeHtml", () => {
     };
     const html = renderHomeHtml([publishedPost], "/post/", contentMap);
     expect(html).toContain("Loading...");
+  });
+
+  it("carries h-entry microformat classes on the article and its parts", () => {
+    const contentMap: Record<string, PostContent> = {
+      "hello-world": { html: "<p>Body</p>", title: "Hello World" },
+    };
+    const html = renderHomeHtml([publishedPost], "/post/", contentMap);
+    // h-entry on the article wrapper (merged with the ds card class).
+    expect(html).toMatch(/<article[^>]*class="[^"]*\bh-entry\b[^"]*"/);
+    // u-url on the permalink, p-name on the title, dt-published on the time,
+    // e-content on the content div.
+    expect(html).toContain('class="post-link u-url"');
+    expect(html).toContain('class="post-title p-name"');
+    expect(html).toContain('class="dt-published"');
+    expect(html).toContain('id="post-content-hello-world" class="e-content"');
+  });
+
+  it("renders a u-syndication block when the post carries syndication URLs", () => {
+    const syndicated: PostMeta = {
+      ...publishedPost,
+      syndication: ["https://mastodon.example/@me/1", "https://bsky.app/profile/me/post/2"],
+    };
+    const html = renderHomeHtml([syndicated]);
+    expect(html).toContain("Also posted at");
+    expect(html).toContain(
+      '<a rel="syndication" class="u-syndication" href="https://mastodon.example/@me/1">',
+    );
+    expect(html).toContain(
+      '<a rel="syndication" class="u-syndication" href="https://bsky.app/profile/me/post/2">',
+    );
+    // Hostname is the visible label.
+    expect(html).toContain(">mastodon.example</a>");
+    expect(html).toContain(">bsky.app</a>");
+  });
+
+  it("omits the syndication block when the post has no syndication URLs", () => {
+    const html = renderHomeHtml([publishedPost]);
+    expect(html).not.toContain("u-syndication");
+    expect(html).not.toContain("Also posted at");
+  });
+
+  it("omits the syndication block when syndication is an empty array", () => {
+    const empty: PostMeta = { ...publishedPost, syndication: [] };
+    const html = renderHomeHtml([empty]);
+    expect(html).not.toContain("u-syndication");
   });
 });

@@ -32,15 +32,11 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, one sitting of at most 30 author-minutes: read
-    Protagoras 352b-358d against tradition-plato's virtue-as-knowledge
-    divergence. Not claude-executable — the chunk exists to verify the delegated
-    articulation personally (the recovery path of
-    delegation-philosophical-articulation). At office-hours: re-open the
-    questions in the node body against the text; amend where the reading
-    contradicts (the reading wins), ratify where it holds — cascade targets are
-    kind-virtue's hexis rationale and the knowledge-map clarification on
-    strategy-explicit-intent; stamp the delegation's last_exercised."
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record). This chunk: Protagoras 352b-358d against tradition-plato's
+    virtue-as-knowledge divergence. Cascade targets on amend: kind-virtue's
+    hexis rationale and the knowledge-map clarification on
+    strategy-explicit-intent."
   since: 2026-07-08
   recommendation: null
 pace_exempt: false

@@ -34,15 +34,9 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, one sitting of at most 30 author-minutes: read
-    Republic VI 505a-511e against tradition-plato and the 2026-07-08 function
-    clarifications on strategy-explicit-intent. Not claude-executable — the
-    chunk exists to verify the delegated articulation personally (the recovery
-    path of delegation-philosophical-articulation). At office-hours: re-open the
-    questions in the node body against the text; amend the records where the
-    reading contradicts them (the reading wins), ratify where they hold; stamp
-    the delegation's last_exercised; the completed chunk counts toward
-    strategy-philosophical-grounding's signal."
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record). This chunk: Republic VI 505a-511e against tradition-plato
+    and the 2026-07-08 function clarifications on strategy-explicit-intent."
   since: 2026-07-08
   recommendation: null
 pace_exempt: false

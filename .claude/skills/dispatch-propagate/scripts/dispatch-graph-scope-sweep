@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# dispatch-graph-scope-sweep — the pre-selection scope-staleness sweep
+# (tactic-tick-scriptable-then-spawn Unit 2). Each tick, BEFORE the worker-group
+# spawn, it finds every idle graph-native tactic whose scope drifted since its
+# phase started and demotes it back to `implement` as a scriptable non-worker
+# disposition — moving the demote that used to happen only at worker-launch time
+# (dispatch-graph-execute's exit-13 case, still present as a post-sweep safety
+# net) into phase 1, so a metadata-only demote never silently consumes a SPAWN_N
+# launch slot.
+#
+# The DECISION (which tactics are scope-stale) is computed by the network-free,
+# unit-tested list-scope-stale-tactics.ts (the Unit-1 enumerator behind a thin
+# CLI); this script owns the LIVENESS gathering and the LANDING half (invoking
+# the existing demote-node-to-implement primitive per stale id), mirroring the
+# decision/land split of dispatch-graph-census and reconcile-graph-merged.
+#
+# Claimed set (must match graph-select-target's exactly — reservation OR live):
+# a node the selector will NOT touch must also be one this sweep will NOT demote,
+# else the sweep races the selector by mutating a node selection considers
+# claimed. graph-select-target:248-252 skips a node when `reservation_exists`
+# OR `worktree_has_live_session`, so the sweep excludes BOTH halves:
+#
+#   - Reserved: dispatch-graph-execute deliberately KEEPS a node's reservation
+#     across ticks on ci-waiting (case 10) and spawn-failure (case 0) so the
+#     budget keeps counting the slot and the node is re-selected on a later tick.
+#     Such a node is reserved-but-not-live when the next tick's sweep runs (the
+#     sweep precedes the concurrency gate's reservation_sweep). Demoting it would
+#     clear its execution markers out from under an outstanding reservation while
+#     selection still considers it claimed — an unsynchronized graph mutation.
+#     So any candidate with `reservation_exists "$id"` is skipped before DEMOTE.
+#   - Live: an in-flight worker owns its own scope, so its node must NOT be
+#     swept. The live node-id set is derived from claude_agents_list_all (the
+#     machine-wide daemon query), keeping only session names shaped like graph
+#     node ids (`^tactic-` / `^strategy-`) — for node-lane workers the session
+#     name IS the node id (see graph-select-target's "Claimed set", which keys
+#     worktree_has_live_session on "$NATIVE_ROOT/.claude/worktrees/$id"). An
+#     UNKNOWN from claude_agents_list_all is NOT an empty live set: an empty set
+#     could under-count and wrongly sweep a live node, so on UNKNOWN this script
+#     skips the sweep entirely this tick and logs a diagnostic rather than
+#     guessing.
+#
+# The scope stamp for each node is <repo>/.claude/worktrees/<id>.scope-fingerprint
+# (the convention demote-node-to-implement:46 and provision-node-worktree:86
+# stamp), passed as --stamp-dir; the store is the standard <repo>/intentions/.
+#
+# Sandbox: this needs `dangerouslyDisableSandbox: true`. claude_agents_list_all
+# reaches the local daemon over a Unix socket (a sandboxed call returns `[]`,
+# indistinguishable from "no sessions" — see .claude/rules/sandbox.md's
+# "claude agents --json" section), and demote-node-to-implement's graph-commit
+# needs gh (TLS) + network. The caller (dispatch-select-tick) already runs with
+# the sandbox disabled, covering both.
+#
+# Stdout protocol (one line per demoted node, caller prefixes with `scope-sweep: `):
+#   scope-stale <id>   — the tactic was demoted to implement and landed on main.
+#
+# Best-effort: mirrors dispatch-graph-census's doctrine — a failure here must not
+# abort the tick. A failed demote of one node logs a diagnostic to stderr and
+# continues to the next; the sweep itself always exits 0. Exit is non-zero ONLY
+# for a hard config/environment error that makes the sweep unable to run at all
+# (e.g. an unresolvable REPO_ROOT).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+# lib-reservation-ledger.sh provides reservation_exists (the reservation half of
+# graph-select-target's claimed set); it transitively re-sources
+# lib-claude-agents.sh (idempotent, load-guarded).
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)" || {
+  echo "dispatch-graph-scope-sweep: could not resolve REPO_ROOT" >&2; exit 1; }
+UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+ENUM_TS="$UTIL_SCRIPTS/list-scope-stale-tactics.ts"
+DEMOTE="$UTIL_SCRIPTS/demote-node-to-implement"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+STAMP_DIR="$REPO_ROOT/.claude/worktrees"
+
+# --- Gather the live node-id set (fail-safe: skip the sweep on UNKNOWN) --------
+# claude_agents_list_all emits sessionId<TAB>status<TAB>name (name is column 3),
+# returns 0 with the live-session lines (empty for a genuine "no sessions"), or 1
+# on UNKNOWN with empty stdout. On UNKNOWN we cannot know the live set, and an
+# empty set could wrongly sweep a live node — so skip the whole sweep this tick.
+if ! AGENTS_TSV=$(claude_agents_list_all); then
+  echo "dispatch-graph-scope-sweep: claude_agents_list_all UNKNOWN (daemon unreachable) — skipping the sweep this tick" >&2
+  exit 0
+fi
+
+# Keep only node-id-shaped session names (the node-lane worker session name IS
+# the node id); build the repeated --live flags for the enumerator.
+LIVE_ARGS=()
+while IFS=$'\t' read -r _ _ name; do
+  [[ -n "$name" ]] || continue
+  if [[ "$name" =~ ^(tactic|strategy)- ]]; then
+    LIVE_ARGS+=(--live "$name")
+  fi
+done <<< "$AGENTS_TSV"
+
+# --- Enumerate the scope-stale tactics (network-free, read-only) --------------
+if ! STALE_OUT=$( (cd "$REPO_ROOT" && node --import tsx/esm "$ENUM_TS" \
+    --dir "$INTENTIONS_DIR" --stamp-dir "$STAMP_DIR" "${LIVE_ARGS[@]}") ); then
+  echo "dispatch-graph-scope-sweep: scope-stale enumeration failed — skipping the sweep this tick" >&2
+  exit 0
+fi
+
+# --- Demote each stale tactic (best-effort per node) --------------------------
+# Reserved-half exclusion (matches graph-select-target's claimed set): a node
+# whose reservation is still outstanding — dispatch-graph-execute keeps it across
+# ci-waiting / spawn-failure ticks — is re-selected on a later tick, so demoting
+# it here would race the selector. The ledger is the SHARED project-root
+# tmp/dispatch-reservations (reservation_exists resolves it via git-common-dir),
+# so the check runs from within the repo. The reserved marker basename is the
+# node id (node-lane worker session name == node id), matching how
+# graph-select-target keys reservation_exists.
+while IFS= read -r id; do
+  [[ -n "$id" ]] || continue
+  if ( cd "$REPO_ROOT" && reservation_exists "$id" ); then
+    echo "dispatch-graph-scope-sweep: $id is reserved (outstanding reservation) — skipping demote (claimed by the selector)" >&2
+    continue
+  fi
+  if "$DEMOTE" "$id" >&2; then
+    echo "scope-stale $id"
+  else
+    echo "dispatch-graph-scope-sweep: demote-node-to-implement failed for $id (continuing to the next stale node)" >&2
+  fi
+done <<< "$STALE_OUT"
+
+exit 0

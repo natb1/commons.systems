@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { generateRssXml, type RssPost } from "./feed-rss.ts";
+import { validatePublishedPosts } from "./post-types.ts";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
 export interface FeedXmlConfig {
@@ -18,28 +19,15 @@ export interface FeedConfig extends FeedXmlConfig {
 export function buildFeedXml(config: FeedXmlConfig): string {
   const { title, siteUrl, seed, postLinkPrefix } = config;
 
-  const postsCollection = seed.collections.find((c) => c.name === "posts");
-  if (!postsCollection) {
-    throw new Error("No 'posts' collection found in seed data");
-  }
-
-  const posts: RssPost[] = [];
-  for (const doc of postsCollection.documents) {
-    const data = doc.data as Record<string, unknown>;
-    if (data.published !== true) continue;
-
-    if (typeof data.title !== "string") {
-      throw new Error(`Post "${doc.id}" is missing a title`);
-    }
-
-    posts.push({
-      id: doc.id,
-      title: data.title,
-      publishedAt: typeof data.publishedAt === "string" ? data.publishedAt : undefined,
-      previewDescription: typeof data.previewDescription === "string" ? data.previewDescription : undefined,
-      previewImage: typeof data.previewImage === "string" ? data.previewImage : undefined,
-    });
-  }
+  // Reuse the canonical published-post gate so the RSS feed's published set
+  // matches the sitemap's (sitemap.ts also calls validatePublishedPosts).
+  const posts: RssPost[] = validatePublishedPosts(seed).map((post) => ({
+    id: post.id,
+    title: post.title,
+    publishedAt: post.publishedAt,
+    previewDescription: post.previewDescription,
+    previewImage: post.previewImage,
+  }));
 
   posts.sort((a, b) => {
     const aTime = a.publishedAt ? new Date(a.publishedAt).getTime() : NaN;

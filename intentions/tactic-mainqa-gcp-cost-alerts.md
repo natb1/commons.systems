@@ -20,7 +20,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -28,6 +28,7 @@ office_hours:
   reason: needs project-owner GCP credentials and mutates production
     monitoring/billing config — owner action (~30 min runbook)
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -36,13 +37,14 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issue (closed, content preserved here): 2693 —
-needs-main residue from the monitoring-alerts work (issue 2688, PR 2691).
-Cost alerting on the live GCP project guards real spend and stays relevant
-while any Firebase surface remains — the app tier persists even as the
-office-hours owner tier retires. Owner action: needs project-owner GCP
-credentials and mutates production monitoring config. Runbook:
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issue (closed, content
+preserved here): 2693 — needs-main residue from the monitoring-alerts work
+(issue 2688, PR 2691). Cost alerting on the live GCP project guards real
+spend and stays relevant while any Firebase surface remains — the app tier
+persists even as the office-hours owner tier retires. Owner action: needs
+project-owner GCP credentials and mutates production monitoring config.
+Runbook:
 `ops/scripts/apply-alerts.sh` + `.claude/docs/monitoring-alerts.md`.
 
 ## Verification checklist

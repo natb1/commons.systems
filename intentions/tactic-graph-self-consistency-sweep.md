@@ -23,8 +23,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
-phase: implement
+attention:
+  boost: 4
+  override: null
+  rationale: "Owed-prune debt authority: the census that reconciles
+    done-but-present nodes (incl. the 2026-07-10 deferred batch and PR-2788
+    closed-unmerged anomaly) sits at rank 0 and never runs. Raised by the router
+    (bootstrap tick 2026-07-10) so the deferred prune debt gets executed."
+phase: done
 execution: null
 validates: []
 blocked_by: []

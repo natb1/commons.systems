@@ -4,8 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/crypto.ts",
-    "./core": "./src/crypto-core.ts"
+    ".": "./src/crypto.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -13,6 +12,7 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@commons-systems/crypto-core": "*",
     "@commons-systems/errorutil": "*"
   }
 }

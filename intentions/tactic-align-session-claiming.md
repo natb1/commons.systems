@@ -38,11 +38,17 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-align-session-claiming
+  pr: 2804
+  attempts: {}
+  markers:
+    - planned
+    - reviewed
+  strategy_fingerprint: 7964be73bb6a26bb77ec516c22d07677de94ee20965f93b02442867fff492731
 validates: []
-blocked_by:
-  - tactic-graph-router-selector
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -125,11 +131,22 @@ Scope:
 `graph-select-target` script exists).
 
 Scope:
-- Assert (and if missing, add) that `graph-select-target`'s claimed-set
-  derivation treats ANY existing `.claude/worktrees/<node-id>` as a held
-  claim — including worktrees created by human-invoked sessions that never
-  touched the router's reservation ledger. Add a test: create a bare
-  node-id worktree, run selection, assert the node is skipped.
+- Shipped (PR 2804): `graph-select-target`'s claimed-set gate
+  (`.claude/skills/dispatch-propagate/scripts/graph-select-target:368-372`)
+  skips a node id when `reservation_exists "$id"` OR
+  `worktree_has_live_session "$NATIVE_ROOT/.claude/worktrees/$id"` — bare
+  worktree-directory existence alone is NOT a claim (matches Unit 1's own
+  live-session ⇔ worktree liveness rule; per the #1474 doctrine an orphan
+  worktree fails open). The shipped test
+  (`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`,
+  "graph-select-target — live session in a human-created node-id worktree
+  is skipped (Unit 3)") covers a human-invoked session's worktree — one
+  that claims by authoring in `<root>/.claude/worktrees/<node-id>` and
+  never writes a router reservation-ledger marker — on two cases: (a) the
+  worktree has a live session named `<node-id>` — skipped; (b) the same
+  worktree with no live session (a bare/orphan worktree, daemon reports
+  `[]`) — still selected, the negative control proving directory existence
+  alone is not a claim.
 
 ## Reuse
 

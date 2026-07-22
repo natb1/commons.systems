@@ -30,15 +30,11 @@ validates:
   - strategy-complete-grounding
 blocked_by: []
 office_hours:
-  reason: "Candidate-tradition reading, one sitting of at most 30 author-minutes:
-    Pettit against the heteronomy reading of capture and the irreversibility
-    axis. Not claude-executable — the chunk exists to establish relevance and
-    author understanding personally before any tradition record exists. At
-    office-hours: read the essay, work the relevance questions in the node body,
-    then create tradition-republicanism (adopted/diverged, including any
-    chosen_over against tradition-kant at the irreversibility axis), or record a
-    dismissal clarification on strategy-complete-grounding; stamp last_exercised
-    on delegation-philosophical-articulation."
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (candidate-tradition). This chunk: Pettit against the heteronomy reading of
+    capture and the irreversibility axis; create tradition-republicanism
+    (including any chosen_over against tradition-kant at the irreversibility
+    axis)."
   since: 2026-07-07
   recommendation: null
 pace_exempt: false

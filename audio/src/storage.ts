@@ -2,24 +2,18 @@ import { getDownloadURL, ref } from "firebase/storage";
 import { logError } from "@commons-systems/errorutil/log";
 import { storage, STORAGE_NAMESPACE } from "./firebase.js";
 import { getFile, putFile, removeFile, CACHE_UPDATED_EVENT } from "./audio-cache.js";
+import { AUDIO_FORMATS, AUDIO_MIME_TYPES } from "./types.js";
+import type { AudioFormat } from "./types.js";
 export { removeFile };
-
-const MIME_TYPES: Record<string, string> = {
-  ".mp3": "audio/mpeg",
-  ".m4a": "audio/mp4",
-  ".aac": "audio/aac",
-  ".flac": "audio/flac",
-  ".ogg": "audio/ogg",
-  ".wav": "audio/wav",
-};
 
 function mimeTypeFromPath(path: string): string {
   const dotIndex = path.lastIndexOf(".");
   if (dotIndex < 0) throw new Error(`Cannot infer MIME type: no file extension in path '${path}'`);
-  const ext = path.slice(dotIndex).toLowerCase();
-  const mime = MIME_TYPES[ext];
-  if (!mime) throw new Error(`Unsupported audio format '${ext}' in path '${path}'`);
-  return mime;
+  const ext = path.slice(dotIndex + 1).toLowerCase();
+  if (!(AUDIO_FORMATS as readonly string[]).includes(ext)) {
+    throw new Error(`Unsupported audio format '${ext}' in path '${path}'`);
+  }
+  return AUDIO_MIME_TYPES[ext as AudioFormat]; // type-safety-ok: the AUDIO_FORMATS.includes guard above narrows ext to an AudioFormat
 }
 
 export async function getMediaDownloadUrl(storagePath: string): Promise<string> {

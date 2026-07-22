@@ -32,18 +32,16 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, ~30 author-minutes of independent reading (the
-    session may span sittings): Theaetetus 148e-151d and Meno 79e-86c against
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record). This chunk: Theaetetus 148e-151d and Meno 79e-86c against
     tradition-plato's method entries and the 2026-07-08 interview-method
-    deferral. Not claude-executable — the author is reviewing doctrine Claude
-    drafted. At office-hours: re-open the node body's questions against the
-    texts; amend or ratify the interview-method clarification on
+    deferral; amend or ratify the interview-method clarification on
     strategy-philosophical-grounding and the delegated-scope entry on
     delegation-philosophical-articulation; record any reading-wins catch in
-    divergence.contradictions; stamp last_exercised. Second deferral under
-    review since 2026-07-09: the maieutic naming of type a's elicitation limb
-    (strategy-explicit-intent types clarification) — amend or ratify it against
-    the midwife passage in the same sitting."
+    divergence.contradictions. Second deferral under review since 2026-07-09:
+    the maieutic naming of type a's elicitation limb (strategy-explicit-intent
+    types clarification) — amend or ratify against the midwife passage in the
+    same sitting."
   since: 2026-07-08
   recommendation: null
 pace_exempt: false

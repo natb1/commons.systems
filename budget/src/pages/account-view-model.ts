@@ -8,6 +8,7 @@
 import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
 import { accountKey, splitAccountKey, type DerivedAccountBalance } from "../balance.js";
+import { formatUtcDate } from "./format-utc-date.js";
 
 export interface AccountRow {
   institution: string;
@@ -36,12 +37,22 @@ export function buildAccountRows(
     }
   }
 
-  // Find latest statement per (institution, account) by comparing period strings (YYYY-MM format, zero-padded, so lexicographic order equals chronological order)
+  // Find latest statement per (institution, account). Periods are YYYY-MM
+  // (zero-padded, so lexicographic order equals chronological order). Multiple
+  // date-keyed anchors can now share a period, so break period ties by
+  // balanceDate (ISO YYYY-MM-DD, also lexicographic = chronological; a null
+  // balanceDate sorts earliest) — this surfaces the newest observation's
+  // balance rather than picking arbitrarily.
   const latestStatements = new Map<string, Statement>();
   for (const stmt of statements) {
     const k = accountKey(stmt.institution, stmt.account);
     const existing = latestStatements.get(k);
-    if (!existing || stmt.period > existing.period) {
+    if (
+      !existing ||
+      stmt.period > existing.period ||
+      (stmt.period === existing.period &&
+        (stmt.balanceDate ?? "") > (existing.balanceDate ?? ""))
+    ) {
       latestStatements.set(k, stmt);
     }
   }
@@ -94,7 +105,7 @@ export function buildAccountRows(
 
 export function formatDate(ms: number | null): string {
   if (ms === null) return "";
-  return new Date(ms).toLocaleDateString();
+  return formatUtcDate(ms);
 }
 
 export function formatSignedCurrency(n: number): string {

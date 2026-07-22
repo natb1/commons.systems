@@ -61,6 +61,7 @@ export function showDropdown(input: HTMLInputElement, options: string[], filterO
     const item = document.createElement("div");
     item.className = "autocomplete-item";
     item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", "false");
     item.id = `autocomplete-option-${i}`;
     item.textContent = opt;
     item.addEventListener("mousedown", (e) => {
@@ -72,11 +73,22 @@ export function showDropdown(input: HTMLInputElement, options: string[], filterO
   });
 
   function updateSelection(index: number): void {
-    items.forEach((el) => el.classList.remove("selected"));
+    items.forEach((el) => {
+      el.classList.remove("selected");
+      el.setAttribute("aria-selected", "false");
+    });
     selectedIndex = index;
     if (index >= 0 && index < items.length) {
-      items[index].classList.add("selected");
-      input.setAttribute("aria-activedescendant", items[index].id);
+      const el = items[index];
+      el.classList.add("selected");
+      el.setAttribute("aria-selected", "true");
+      // The list is scrollable; without this the highlight can move below the
+      // fold invisibly once there are more options than fit. Guard the call for
+      // environments (jsdom/happy-dom) that do not implement scrollIntoView.
+      if (typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ block: "nearest" });
+      }
+      input.setAttribute("aria-activedescendant", el.id);
     } else {
       input.removeAttribute("aria-activedescendant");
     }

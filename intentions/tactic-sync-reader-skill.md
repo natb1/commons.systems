@@ -39,7 +39,11 @@ execution:
   pr: 2798
   attempts: {}
   markers: []
-  strategy_fingerprint: 4938e3dd607b936f594cb15964e7096ae8da08b91c2177910589282473b95a68
+  strategy_fingerprint:
+    strategy-graph-native-dispatch:
+      hash: 2984f3e1b320656f005dbdf04e93a4ab6e6c707b7553e23c16485bbcb9fd70c5
+      sha: 95913ceb8f780bb38059a207585a00836789b6fd
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -289,7 +293,7 @@ Out of scope: file naming, reader I/O, report.
   allowlist), relay the printed report to the user verbatim, and — for
   first-time setup — copy `sync-reader.example.json` to
   `<project-root>/dispatch.config/sync-reader.json` and fill in the two
-  paths. Invocation style precedent: `.claude/skills/align/SKILL.md:106`.
+  paths. Invocation style precedent: `.claude/skills/align-init/SKILL.md:141`.
 - `.claude/skills/sync-reader/sync-reader.example.json` — committed
   template: `{"reader_dir": "/media/<user>/<device>", "share_dir": "/mnt/print-share"}`
   (precedent: `.claude/skills/dispatch-propagate/scripts/auto-merge.example.json`).

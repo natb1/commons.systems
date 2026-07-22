@@ -26,8 +26,142 @@ blocked_by:
   - tactic-graph-router-transitions
   - tactic-dispatch-lifecycle-sensor
   - tactic-phase-skill-node-targets
-  - tactic-main-qa-phase
-office_hours: null
+office_hours:
+  reason: "implement: tactic-legacy-router-removal Unit 1 could only be partially
+    completed - several 'legacy' scripts are still live-wired into the
+    graph-native tick and general harness; remaining scope needs a re-plan. See
+    office-hours-recommendation for the full checklist."
+  since: 2026-07-12
+  recommendation: >-
+    ## Recommended next steps — `tactic-legacy-router-removal`
+
+
+    ### Already safely landed (do NOT re-verify)
+
+    Commit `5c753ba7`, merged as `ee12fc1b`, pushed to
+    `origin/tactic-legacy-router-removal`. The non-live-wired portion of Unit 1
+    is done:
+
+    - **Legacy office-hours entry surface deleted** — `office-hours` shell
+    script (attach/resume/provision verbs), `office-hours-select-target`,
+    `dispatch-office-hours-strip.sh` UserPromptSubmit hook (deregistered from
+    `settings.json`), `office-hours/SKILL.md` rewritten to node-id-only,
+    `office-hours.nix` repointed to `office-hours-graph`, dead test sections
+    removed. Fully superseded by `office-hours-graph`.
+
+    - **Legacy `<issue-num>-<slug>` worktree lane deleted** —
+    `worktree-create.sh` reduced to the graph lane
+    (`.claude/worktrees/<node-id>` only); dropped `.bare` anchoring, gh-identity
+    stub, `tmp/dispatch-worktree` marker. Superseded by Claude Code native
+    worktrees.
+
+    - `npm test --prefix packages/intentionsutil` — 404 passing, clean —
+    reconfirmed after the partial Unit 1 change.
+
+
+    These have no remaining callers. They are done and merged — pick up from the
+    coupling checklist below, not from scratch. No PR was opened (the remaining
+    scope wasn't buildable this pass — see below); the branch
+    `tactic-legacy-router-removal` carries the commit directly.
+
+
+    ### Blocked — remaining Unit 1 coupling points
+
+    Each legacy script below is still live-wired. The drain gate (empty queue)
+    proves no legacy *work* flows; it does **not** mean these are *rewired*.
+    Each needs a graph-native target confirmed (or confirmed-not-to-exist-yet)
+    before its counterpart can be deleted:
+
+
+    - [ ] **`dispatch-spawn-job`** — NOT legacy, must stay. Used by
+    `dispatch-graph-execute` (graph-native per-node runner) and `dispatch-tick`
+    aux jobs (sync-repair, diagnose-main, jit-reminder). Action: remove from
+    deletion scope entirely; no rewire.
+
+    - [ ] **`dispatch-select-target`** — owns `--main-broken-sha` (repo-health
+    latch, called unconditionally by `dispatch-select-tick`, not lane-gated) and
+    `--priority-only` (pace-exempt fallback). Action: extract/relocate
+    main-broken detection to a graph-native home, or confirm the graph path
+    should own it, before deleting.
+
+    - [ ] **`dispatch-select-tick` legacy-selection path** — behaviorally inert
+    today (graph selector runs first, queue empty) but coupled to
+    `dispatch-select-target` above and embedded in a ~900-line orchestrator that
+    also runs sync, the sync-broken/main-broken latches, auto-merge,
+    reconcile-merged for the graph path. Action: reduce to graph+latch-only,
+    keeping the still-live latches.
+
+    - [ ] **`dispatch-phase`** — pure read-only sensor; no write/derivation
+    split exists to make. Live callers are `statusline.sh`,
+    `dispatch-scan-recoverable-deaths`, `dispatch-stop.sh`,
+    `restore-dispatch-skill.sh` — NOT a graph transitions layer (graph execute
+    uses persisted phase). Action: rewire each sensor caller off
+    `dispatch:*`-label derivation, or keep the sensor, before touching it —
+    gutting it breaks the status line.
+
+    - [ ] **`dispatch:*` labels** — woven through live paths:
+    `dispatch:main-broken`/`sync-broken` (repo-health latches in
+    `dispatch-select-tick`); `dispatch:office-hours` (written by
+    `dispatch-input-block.sh`, `dispatch-stop.sh`,
+    `dispatch-scan-recoverable-deaths`; read by `dispatch-trace-leaf`,
+    `dispatch-select-target`); `dispatch:planned`/`qa-done`/`reviewed` (drive
+    `dispatch-phase`/`dispatch-route`). Action: retire per-label only after its
+    readers/writers are moved to graph-native state.
+
+    - [ ] **`dispatch-materialize-spawn` / `dispatch-launch-worker`** —
+    legacy-only, but `dispatch-tick`'s `run_materialize()` still calls
+    `dispatch-materialize-spawn` on explicit/pr/issue decisions. Action: reduce
+    `dispatch-tick` (shared router carrying both branches) to graph+aux-only
+    first.
+
+
+    Minor prose-only loose ends, non-blocking: stale references in
+    `dispatch-propagate/reference.md`, `dispatch-mark-deviation:31`,
+    `approve-workflow-commands.sh:64`, and a few `test-dispatch-scripts.sh`
+    comments.
+
+
+    ### Recommended path forward
+
+    1. **Re-scope, don't force.** The remaining Unit 1 work is
+    "rewire-then-delete" across the live dispatch system, not "delete
+    already-dead code" — materially bigger blast radius than this tactic
+    assumed. Split it into its own follow-up tactic (likely a sibling under
+    `tactic-graph-native-dispatch`), scoped to: *rewire
+    `dispatch-select-tick`/`dispatch-phase`/`dispatch-tick`'s remaining
+    `dispatch:*`-label and legacy-script dependencies onto graph-native
+    equivalents, then delete `dispatch-select-target`,
+    `dispatch-materialize-spawn`, `dispatch-launch-worker`, and the drained
+    labels.* It needs its own planning pass. Explicitly carve out
+    `dispatch-spawn-job` as keep-forever.
+
+    2. **Alternatively**, rule on individual coupling points above where you're
+    confident the graph path should simply own the behavior (e.g. main-broken
+    latch) — that lets those specific deletions proceed under the original scope
+    without a full re-plan.
+
+    3. **Keep Units 2 and 3 gated appropriately** (see below — this overrides
+    the implementer's own suggestion on Unit 3).
+
+
+    ### Units 2 and 3 status
+
+    - **Unit 2 — not attempted.** Depends on Unit 1 explicitly per the plan.
+    Keep blocked on the re-scoped follow-up.
+
+    - **Unit 3 — not attempted. Also gated, despite having no explicit `Depends
+    on: Unit 1` line.** Unit 3 prunes nodes whose relevance "expires" at drain
+    completion — specifically `tactic-dispatch-gh-api-interim-hardening`, whose
+    demotion note ties its deletion to the legacy-gh surface actually being
+    removed, and the `tactic-review-lows-automation` sweep of "legacy dispatch
+    scripts" items whose subject files this tactic deletes. Since the legacy-gh
+    surface (`dispatch-select-target`, `dispatch-phase`'s derivation, the
+    `dispatch:*` labels, `dispatch-materialize-spawn`/`dispatch-launch-worker`)
+    is NOT actually removed yet, the expiry event Unit 3 keys off has not
+    occurred. Pruning `tactic-dispatch-gh-api-interim-hardening` now would drop
+    an interim-hardening exception while the surface it hardens is still live —
+    premature and potentially unsafe. Hold Unit 3 until the re-scoped Unit 1
+    follow-up actually lands the deletions.
 pace_exempt: false
 rounds: null
 attributes: {}

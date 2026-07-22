@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
-import { validateGraph, validateNode } from "../src/schema.js";
+import { validateGraph, validateGraphProseRefs, validateNode } from "../src/schema.js";
 
 describe("validateNode", () => {
   it("accepts a valid full node", () => {
@@ -77,6 +78,7 @@ describe("validateNode", () => {
       attempts: { implement: 1, qa: 2 },
       markers: ["dispatch:qa"],
       strategy_fingerprint: "abc123",
+      fix: null,
     });
     expect(result.validates).toEqual(["strategy-1"]);
     expect(result.blocked_by).toEqual(["tactic-2"]);
@@ -86,7 +88,11 @@ describe("validateNode", () => {
       recommendation: "escalate to the author",
     });
     expect(result.pace_exempt).toBe(true);
-    expect(result.rounds).toEqual({ count: 3, last_completed: "2026-07-02" });
+    expect(result.rounds).toEqual({
+      count: 3,
+      last_completed: "2026-07-02",
+      last_aligned: null,
+    });
   });
 
   it("defaults execution nested nullables and tolerates a bare execution", () => {
@@ -104,7 +110,196 @@ describe("validateNode", () => {
       attempts: {},
       markers: [],
       strategy_fingerprint: null,
+      fix: null,
     });
+  });
+
+  it("accepts a per-strategy strategy_fingerprint map", () => {
+    const result = validateNode({
+      id: "n1-fp-map",
+      kind: "tactic",
+      statement: "Execution with a per-strategy fingerprint map.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: { "strategy-a": "hash-a", "strategy-b": "hash-b" },
+      },
+    });
+    expect(result.execution?.strategy_fingerprint).toEqual({
+      "strategy-a": "hash-a",
+      "strategy-b": "hash-b",
+    });
+  });
+
+  it("accepts the deprecated-legacy bare-string strategy_fingerprint", () => {
+    const result = validateNode({
+      id: "n1-fp-legacy",
+      kind: "tactic",
+      statement: "Execution with a legacy bare-string fingerprint.",
+      owner: "ai",
+      status: "raw",
+      execution: { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: "legacy-hash" },
+    });
+    expect(result.execution?.strategy_fingerprint).toBe("legacy-hash");
+  });
+
+  it("rejects a strategy_fingerprint map with a non-string value", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-bad",
+        kind: "tactic",
+        statement: "Malformed fingerprint map.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": 123 },
+        },
+      }),
+    ).toThrow(/Expected string or \{hash, sha\} object for execution.strategy_fingerprint.strategy-a/);
+  });
+
+  it("accepts a strategy_fingerprint map value that is a {hash, sha} object", () => {
+    const result = validateNode({
+      id: "n1-fp-obj",
+      kind: "tactic",
+      statement: "Execution with an object-form fingerprint entry.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: { "strategy-a": { hash: "hash-a", sha: "sha-a" } },
+      },
+    });
+    expect(result.execution?.strategy_fingerprint).toEqual({
+      "strategy-a": { hash: "hash-a", sha: "sha-a" },
+    });
+  });
+
+  it("accepts a mixed map with one bare-string legacy entry and one {hash, sha} object entry", () => {
+    const result = validateNode({
+      id: "n1-fp-mixed",
+      kind: "tactic",
+      statement: "Execution with a mixed-form fingerprint map.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: {
+          "strategy-a": "hash-a",
+          "strategy-b": { hash: "hash-b", sha: "sha-b" },
+        },
+      },
+    });
+    expect(result.execution?.strategy_fingerprint).toEqual({
+      "strategy-a": "hash-a",
+      "strategy-b": { hash: "hash-b", sha: "sha-b" },
+    });
+  });
+
+  it("rejects a {hash, sha} map object value missing hash", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-nohash",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry missing hash.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { sha: "sha-a" } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects a {hash, sha} map object value missing sha", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-nosha",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry missing sha.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: "hash-a" } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects a {hash, sha} map object value with a non-string hash or sha", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-badhash",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry with a numeric hash.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: 123, sha: "sha-a" } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+    expect(() =>
+      validateNode({
+        id: "n1-fp-badsha",
+        kind: "tactic",
+        statement: "Object-form fingerprint entry with a numeric sha.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": { hash: "hash-a", sha: 456 } },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects a strategy_fingerprint that is neither string, object, nor null", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-array",
+        kind: "tactic",
+        statement: "Array fingerprint is not a valid stamp.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: ["nope"],
+        },
+      }),
+    ).toThrow(/Expected string, object, or null for execution.strategy_fingerprint/);
   });
 
   it("rejects a phase that is not one of the enum", () => {
@@ -118,6 +313,18 @@ describe("validateNode", () => {
         phase: "shipping",
       }),
     ).toThrow();
+  });
+
+  it("accepts the main-qa phase", () => {
+    const result = validateNode({
+      id: "n1-main-qa",
+      kind: "tactic",
+      statement: "A tactic in post-merge main-qa verification.",
+      owner: "ai",
+      status: "codified",
+      phase: "main-qa",
+    });
+    expect(result.phase).toBe("main-qa");
   });
 
   it("rejects an execution with a non-object attempts", () => {
@@ -380,6 +587,29 @@ describe("validateNode", () => {
     ).toThrow();
   });
 
+  it("accepts any non-empty status string (status is not a central enum)", () => {
+    const result = validateNode({
+      id: "n3d",
+      kind: "tactic",
+      statement: "Custom kind-specific status.",
+      owner: "human",
+      status: "anything-nonempty",
+    });
+    expect(result.status).toBe("anything-nonempty");
+  });
+
+  it("rejects an empty-string status", () => {
+    expect(() =>
+      validateNode({
+        id: "n3e",
+        kind: "tactic",
+        statement: "Empty status.",
+        owner: "human",
+        status: "",
+      }),
+    ).toThrow(/status must be a non-empty string/);
+  });
+
   it("rejects a bad enum value", () => {
     expect(() =>
       validateNode({
@@ -573,7 +803,14 @@ describe("validateGraph", () => {
       office_hours: partial.office_hours ?? null,
       pace_exempt: partial.pace_exempt ?? false,
       rounds: partial.rounds ?? null,
-      attributes: partial.attributes ?? {},
+      // Default status_vocabulary covers the "raw"/"codified" statuses these
+      // fixtures use, so kind-node fixtures satisfy rule 16 (every node's
+      // status must be a key in its kind node's status_vocabulary) without
+      // every test needing to declare one explicitly. Tests that need to
+      // exercise rule 16 itself pass their own `attributes` to override this.
+      attributes: partial.attributes ?? {
+        status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+      },
     };
   }
 
@@ -587,7 +824,10 @@ describe("validateGraph", () => {
         id: "kind-strategy",
         kind: "kind",
         status: "codified",
-        attributes: { goal_layer: true },
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
       }),
       gnode({ id: "kind-delegation", kind: "kind", status: "codified" }),
       gnode({ id: "virtue-root", kind: "virtue", status: "codified", parent: null }),
@@ -851,13 +1091,19 @@ describe("validateGraph", () => {
         id: "kind-strategy",
         kind: "kind",
         status: "codified",
-        attributes: { goal_layer: true },
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
       }),
       gnode({
         id: "kind-tactic",
         kind: "kind",
         status: "codified",
-        attributes: { goal_layer: true },
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
       }),
     ];
   }
@@ -962,7 +1208,7 @@ describe("validateGraph", () => {
   it("throws when rounds is set on a non-strategy", () => {
     const nodes = [
       ...kindNodes(),
-      gnode({ id: "tactic-1", kind: "tactic", rounds: { count: 1, last_completed: null } }),
+      gnode({ id: "tactic-1", kind: "tactic", rounds: { count: 1, last_completed: null, last_aligned: null } }),
     ];
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-1: rounds is only valid on kind "strategy" nodes, got kind "tactic"/,
@@ -972,7 +1218,11 @@ describe("validateGraph", () => {
   it("passes when rounds sits on a strategy", () => {
     const nodes = [
       ...kindNodes(),
-      gnode({ id: "strategy-1", kind: "strategy", rounds: { count: 2, last_completed: "2026-07-01" } }),
+      gnode({
+        id: "strategy-1",
+        kind: "strategy",
+        rounds: { count: 2, last_completed: "2026-07-01", last_aligned: null },
+      }),
     ];
     expect(() => validateGraph(nodes)).not.toThrow();
   });
@@ -1064,5 +1314,284 @@ describe("validateGraph", () => {
       gnode({ id: "tactic-c", kind: "tactic" }),
     ];
     expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  // --- Rule 16: status must be a key in the kind node's status_vocabulary --
+
+  it("passes when a node's status is a key in its kind node's status_vocabulary", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-tactic",
+        kind: "kind",
+        status: "codified",
+        attributes: { status_vocabulary: { codified: "Complete." } },
+      }),
+      gnode({ id: "tactic-1", kind: "tactic", status: "codified" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when a node's status is not declared in its kind node's status_vocabulary", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-tactic",
+        kind: "kind",
+        status: "codified",
+        attributes: { status_vocabulary: { codified: "Complete." } },
+      }),
+      gnode({ id: "tactic-1", kind: "tactic", status: "raw" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: status "raw" is not declared in kind-tactic's status_vocabulary/,
+    );
+  });
+
+  it("throws when a kind node has no attributes.status_vocabulary declared", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified", attributes: {} }),
+      gnode({ id: "tactic-1", kind: "tactic", status: "raw" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: kind-tactic has no attributes\.status_vocabulary declared/,
+    );
+  });
+
+  // Rule 17: clarifications[].answer must carry a dated provenance clause.
+  it("accepts a dated clarification regardless of date placement (front, trailing, mid)", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        clarifications: [
+          { question: "front-loaded?", answer: "(Recorded 2026-07-05 by author) settled." },
+          { question: "trailing?", answer: "Settled the scope. Recorded 2026-07-05." },
+          { question: "mid-sentence?", answer: "On 2026-07-05 the author ratified this." },
+        ],
+      }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rejects a dateless clarification, naming the node id and clarification index", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        clarifications: [
+          { question: "dated?", answer: "Recorded 2026-07-05." },
+          { question: "dateless?", answer: "No date anywhere in this answer." },
+        ],
+      }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: clarifications\[1\]\.answer carries no dated provenance clause/,
+    );
+  });
+
+  it("passes a node with an empty clarifications array (the gnode default)", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "tactic-1", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("accumulates all dateless clarifications across nodes into one thrown error", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        clarifications: [{ question: "q", answer: "No date here." }],
+      }),
+      gnode({
+        id: "virtue-1",
+        kind: "virtue",
+        clarifications: [{ question: "q", answer: "Also no date." }],
+      }),
+    ];
+    let caught: unknown;
+    try {
+      validateGraph(nodes);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    if (!(caught instanceof Error)) throw new Error("unreachable");
+    expect(caught.message).toMatch(/tactic-1: clarifications\[0\]\.answer carries no dated provenance clause/);
+    expect(caught.message).toMatch(/virtue-1: clarifications\[0\]\.answer carries no dated provenance clause/);
+  });
+});
+
+describe("validateGraphProseRefs", () => {
+  /** Build a full IntentionNode fixture for prose-ref tests. */
+  function pnode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
+    return {
+      id: partial.id,
+      kind: partial.kind,
+      statement: partial.statement ?? `Statement for ${partial.id}`,
+      owner: partial.owner ?? "human",
+      status: partial.status ?? "raw",
+      parent: partial.parent ?? null,
+      serves: partial.serves ?? [],
+      recovers: partial.recovers ?? [],
+      rationale: partial.rationale ?? null,
+      reading: partial.reading ?? null,
+      gap: partial.gap ?? null,
+      clarifications: partial.clarifications ?? [],
+      tooling_goals: partial.tooling_goals ?? [],
+      success_signal: partial.success_signal ?? null,
+      attention: partial.attention ?? null,
+      phase: partial.phase ?? null,
+      execution: partial.execution ?? null,
+      validates: partial.validates ?? [],
+      blocked_by: partial.blocked_by ?? [],
+      office_hours: partial.office_hours ?? null,
+      pace_exempt: partial.pace_exempt ?? false,
+      rounds: partial.rounds ?? null,
+      attributes: partial.attributes ?? {},
+    };
+  }
+
+  // A real node so the "tactic-" kind prefix exists in the derived vocabulary
+  // (prefixes are derived from the store ids, never hardcoded).
+  const realTactic = pnode({ id: "tactic-real", kind: "tactic" });
+
+  it("throws on a missing backtick ref in rationale", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "See `tactic-missing` for context." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-missing` does not resolve to a node/,
+    );
+  });
+
+  it("throws on a missing backtick ref in a clarification answer", () => {
+    const nodes = [
+      realTactic,
+      pnode({
+        id: "tactic-a",
+        kind: "tactic",
+        clarifications: [{ question: "q", answer: "Depends on `tactic-missing`." }],
+      }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-missing` does not resolve to a node/,
+    );
+  });
+
+  it("throws on a missing backtick ref in the body", () => {
+    const nodes = [realTactic, pnode({ id: "tactic-a", kind: "tactic" })];
+    const bodies = new Map([["tactic-a", "# heading\n\nBlocked on `tactic-missing`.\n"]]);
+    expect(() => validateGraphProseRefs(nodes, bodies, [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-missing` does not resolve to a node/,
+    );
+  });
+
+  it("passes when a backtick ref resolves to a live node in the store", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Depends on `tactic-real`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
+  });
+
+  it("passes when a backtick ref names a pruned (deleted) node", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Superseded `tactic-gone`." }),
+    ];
+    expect(() =>
+      validateGraphProseRefs(nodes, new Map(), ["tactic-gone"], new Set()),
+    ).not.toThrow();
+  });
+
+  it("passes a missing ref that an OTHER open tactic plans (mentions in its statement)", () => {
+    const nodes = [
+      realTactic,
+      // An open (non-done) tactic whose statement mentions the id — the ref is a
+      // forward reference to planned-but-uncommitted work, not a dangling ref.
+      pnode({
+        id: "tactic-planner",
+        kind: "tactic",
+        phase: "implement",
+        statement: "This will create tactic-planned.",
+      }),
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Coordinates with `tactic-planned`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
+  });
+
+  it("does NOT treat a missing ref as planned when the only mentioning tactic is done", () => {
+    const nodes = [
+      realTactic,
+      pnode({
+        id: "tactic-planner",
+        kind: "tactic",
+        phase: "done",
+        statement: "This created tactic-planned.",
+      }),
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Coordinates with `tactic-planned`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-planned` does not resolve to a node/,
+    );
+  });
+
+  it("passes a missing, non-planned ref that is present in the baseline", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Example id `tactic-example`." }),
+    ];
+    const baseline = new Set(["tactic-example|tactic-a"]);
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], baseline)).not.toThrow();
+  });
+
+  it("never flags a non-backticked prose compound that merely looks id-shaped", () => {
+    const nodes = [
+      realTactic,
+      // Plain-text "tactic-only" used as English prose (no backticks) — a
+      // non-backticked token counts only if it is in the known vocabulary, so it
+      // can never be classified missing.
+      pnode({
+        id: "tactic-a",
+        kind: "tactic",
+        rationale: "This is the tactic-only case discussed above.",
+      }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
+  });
+
+  it("lists ALL prose-ref violations in one throw", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Needs `tactic-x`." }),
+      pnode({
+        id: "tactic-b",
+        kind: "tactic",
+        clarifications: [{ question: "q", answer: "Also `tactic-y`." }],
+      }),
+    ];
+    let caught: unknown;
+    try {
+      validateGraphProseRefs(nodes, new Map(), [], new Set());
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    if (!(caught instanceof Error)) throw new Error("unreachable");
+    expect(caught.message).toContain("tactic-a: prose reference `tactic-x`");
+    expect(caught.message).toContain("tactic-b: prose reference `tactic-y`");
   });
 });

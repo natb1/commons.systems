@@ -1,4 +1,5 @@
 import { IntentionSchemaError } from "./errors.js";
+import { buildIdRefMatchers, classifyRef, extractIdRefs } from "./id-refs.js";
 
 // --- Enums -----------------------------------------------------------------
 
@@ -7,10 +8,17 @@ export type Owner = "human" | "ai" | "procedure";
 
 export const OWNERS: readonly Owner[] = ["human", "ai", "procedure"];
 
-/** Lifecycle stage of a node as it moves from raw intention to codified work. */
-export type Status = "raw" | "refining" | "delegated" | "codified";
+/**
+ * Lifecycle stage of a node as it moves from raw intention to codified work.
+ * Widened to `string`: the set of valid statuses is per-kind data (each kind
+ * node's `attributes.status_vocabulary`), not a central enum in code —
+ * enforced by `validateGraph`, not `validateNode` (which has no graph
+ * context). `STATUSES` is kept as the legacy default vocabulary values for
+ * callers that still reference it.
+ */
+export type Status = string;
 
-export const STATUSES: readonly Status[] = ["raw", "refining", "delegated", "codified"];
+export const STATUSES: readonly string[] = ["raw", "refining", "delegated", "codified"];
 
 /** What kind of tooling a goal codifies. */
 export type ToolingKind = "actuator" | "sensor";
@@ -20,23 +28,27 @@ export const TOOLING_KINDS: readonly ToolingKind[] = ["actuator", "sensor"];
 /**
  * Persisted dispatch phase a tactic sits in. A future graph-native router
  * transitions this; the schema only validates the value is one of the enum.
+ *
+ * `"fix"` is deliberately NOT a member: the CI-fix interrupt lives entirely in
+ * the orthogonal `execution.fix` field (see `FixState`), set/cleared by the
+ * graph selector off the live CI verdict, independent of `phase`.
  */
 export type Phase =
   | "draft"
   | "align-tactics"
   | "implement"
-  | "fix"
   | "qa"
   | "review"
+  | "main-qa"
   | "done";
 
 export const PHASES: readonly Phase[] = [
   "draft",
   "align-tactics",
   "implement",
-  "fix",
   "qa",
   "review",
+  "main-qa",
   "done",
 ];
 
@@ -319,19 +331,62 @@ function validateAttention(value: unknown, field: string): Attention {
 // --- Dispatch-state structured fields --------------------------------------
 
 /**
+ * A single strategy soft-freeze stamp value. Either:
+ *  - a bare substance-hash string (legacy/deprecated form, see below), or
+ *  - `{hash, sha}`: `hash` is the same substance-fields hash, and `sha` is the
+ *    `origin/main` commit the hash was computed against — i.e. the exact
+ *    revision of `intentions/<strategy-id>.md` the stamp reflects. A stale
+ *    child can recover the precise delta via
+ *    `git diff <sha>..origin/main -- intentions/<strategy-id>.md` instead of
+ *    only knowing *that* it drifted.
+ */
+export type StrategyStampValue = string | { hash: string; sha: string };
+
+/**
  * Live execution record a router stamps on a tactic in flight. Valid on
  * tactics only (enforced by `validateGraph`).
  *
- *  - `strategy_fingerprint` is a hash of the serving strategy's substance
- *    fields, stamped at plan time and later compared by a router's mid-flight
- *    soft-freeze trigger. No hashing logic lives here — only the typed field.
+ *  - `strategy_fingerprint` is a per-strategy map `{<strategy-id>: <StrategyStampValue>}`
+ *    of each serving strategy's substance-fields hash, stamped at plan/re-evaluation
+ *    time and later compared by a router's mid-flight soft-freeze trigger. A
+ *    serving strategy absent from the map is never stale (per-strategy null
+ *    semantics). Each map value is either a bare hash string or a `{hash, sha}`
+ *    object recording the `origin/main` commit the hash was taken against
+ *    (see `StrategyStampValue`). The top-level bare-string form (the whole
+ *    field, not a map value) is DEPRECATED-LEGACY: it predates multi-serves
+ *    stamping and is compared against every serving strategy (a single string
+ *    cannot equal two substance hashes, so a multi-serves tactic was born
+ *    permanently stale). Legacy strings are accepted transiently and convert
+ *    to map form by natural churn — every writer emits map form now, and each
+ *    re-stamp rewrites the field. No hashing logic lives here — only the
+ *    typed field.
  */
+/**
+ * A CI-fix interrupt in flight on a tactic, orthogonal to `phase`. `since` is
+ * the interrupt date (`date -u +%Y-%m-%d`); `attempt` is the fix-attempt
+ * counter (replaces the `attempts["fix"]` convention); `pushed_sha` is the
+ * last SHA `/fix-checks` pushed — the pending-CI guard, null before the first
+ * push.
+ */
+export interface FixState {
+  since: string;
+  attempt: number;
+  pushed_sha: string | null;
+}
+
 export interface Execution {
   branch: string;
   pr: number | null;
   attempts: Record<string, number>; // per-phase attempt counts
   markers: string[];
-  strategy_fingerprint: string | null;
+  strategy_fingerprint: string | Record<string, StrategyStampValue> | null;
+  /**
+   * Optional (not just nullable) at the type level: existing `Execution`
+   * object literals across the codebase predate this field and are out of
+   * scope for this additive-only unit. `validateExecution` always populates
+   * it (to a validated object or `null`) on any value it returns.
+   */
+  fix?: FixState | null;
 }
 
 /** A first-class parking record: why a node is in office hours and since when. */
@@ -341,10 +396,16 @@ export interface OfficeHours {
   recommendation: string | null;
 }
 
-/** `/align-tactics` re-evaluation round accounting; valid on strategies only. */
+/**
+ * `/align-tactics` re-evaluation round accounting; valid on strategies only.
+ * `last_completed` is verified-in-prod completion time (advances only when a
+ * non-draft child prunes); `last_aligned` is the date the last `/align-tactics`
+ * round *landed* (align-decompose time), stamped independently of completion.
+ */
 export interface Rounds {
   count: number;
   last_completed: string | null;
+  last_aligned: string | null;
 }
 
 function requireNumber(value: unknown, field: string): number {
@@ -375,6 +436,11 @@ function requireDateString(value: unknown, field: string): string {
   return s;
 }
 
+function optionalDateString(value: unknown, field: string): string | null {
+  if (value == null) return null;
+  return requireDateString(value, field);
+}
+
 function validateAttempts(value: unknown, field: string): Record<string, number> {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
@@ -386,6 +452,62 @@ function validateAttempts(value: unknown, field: string): Record<string, number>
   return out;
 }
 
+/**
+ * The soft-freeze stamp: a per-strategy fingerprint map
+ * `{<strategy-id>: <StrategyStampValue>}`, a bare string (deprecated-legacy
+ * top-level form, accepted transiently), or null. Each map value is either a
+ * bare substance-hash string (legacy) or a `{hash, sha}` object — `sha` is the
+ * `origin/main` commit the hash was taken against, letting a stale child
+ * recover the exact delta via `git diff <sha>..origin/main --
+ * intentions/<strategy-id>.md`. A malformed value (non-string, non-object, or
+ * an object missing/mistyping `hash`/`sha`) is rejected.
+ */
+function validateStrategyFingerprint(
+  value: unknown,
+  field: string,
+): string | Record<string, StrategyStampValue> | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value; // deprecated-legacy bare-string form
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(
+      `Expected string, object, or null for ${field}, got ${typeof value}`,
+    );
+  }
+  const out: Record<string, StrategyStampValue> = {};
+  for (const [key, fp] of Object.entries(value)) {
+    const stampField = `${field}.${key}`;
+    if (typeof fp === "string") {
+      out[key] = fp;
+    } else if (isPlainObject(fp)) {
+      out[key] = {
+        hash: requireString(fp.hash, `${stampField}.hash`),
+        sha: requireString(fp.sha, `${stampField}.sha`),
+      };
+    } else {
+      throw new IntentionSchemaError(
+        `Expected string or {hash, sha} object for ${stampField}, got ${typeof fp}`,
+      );
+    }
+  }
+  return out;
+}
+
+/**
+ * Nullable `FixState` object: string `since`, number `attempt`, nullable
+ * string `pushed_sha`.
+ */
+function validateFixState(value: unknown, field: string): FixState | null {
+  if (value == null) return null;
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object or null for ${field}, got ${typeof value}`);
+  }
+  return {
+    since: requireDateString(value.since, `${field}.since`),
+    attempt: requireNonNegativeInt(value.attempt, `${field}.attempt`),
+    pushed_sha: optionalString(value.pushed_sha, `${field}.pushed_sha`),
+  };
+}
+
 function validateExecution(value: unknown, field: string): Execution {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
@@ -395,7 +517,8 @@ function validateExecution(value: unknown, field: string): Execution {
     pr: value.pr == null ? null : requireNonNegativeInt(value.pr, `${field}.pr`),
     attempts: validateAttempts(value.attempts, `${field}.attempts`),
     markers: validateIdArray(value.markers, `${field}.markers`),
-    strategy_fingerprint: optionalString(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
+    strategy_fingerprint: validateStrategyFingerprint(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
+    fix: validateFixState(value.fix, `${field}.fix`),
   };
 }
 
@@ -417,6 +540,7 @@ function validateRounds(value: unknown, field: string): Rounds {
   return {
     count: requireNonNegativeInt(value.count, `${field}.count`),
     last_completed: optionalString(value.last_completed, `${field}.last_completed`),
+    last_aligned: optionalDateString(value.last_aligned, `${field}.last_aligned`),
   };
 }
 
@@ -445,6 +569,10 @@ export function validateNode(value: unknown): IntentionNode {
   if (kind === "") {
     throw new IntentionSchemaError("kind must be a non-empty string");
   }
+  const status = requireString(value.status, "status");
+  if (status === "") {
+    throw new IntentionSchemaError("status must be a non-empty string");
+  }
 
   return {
     // Required core.
@@ -452,7 +580,7 @@ export function validateNode(value: unknown): IntentionNode {
     kind,
     statement: requireString(value.statement, "statement"),
     owner: requireOneOf(value.owner, OWNERS, "owner"),
-    status: requireOneOf(value.status, STATUSES, "status"),
+    status,
 
     // Optional scalars — absent/null tolerated, default null.
     parent: optionalString(value.parent, "parent"),
@@ -533,6 +661,14 @@ export function validateNode(value: unknown): IntentionNode {
  *  14. Every `validates` entry resolves to an existing `kind: "strategy"` node.
  *  15. `blocked_by` edges contain no cycle (a tactic transitively blocked by
  *      itself is invalid).
+ *  16. Every node's `status` must be a key in its kind node's declared
+ *      `attributes.status_vocabulary` (a missing declaration on the kind node
+ *      is itself an error).
+ *  17. Every `clarifications[].answer` carries a dated provenance clause — a
+ *      `YYYY-MM-DD` substring placed anywhere in the string (placement-agnostic,
+ *      uniform across every kind). This is the convention `readingDate()`
+ *      (router.ts) and `coverage.ts`'s `lastReviewedOf` parse to date a
+ *      clarification; a dateless answer silently breaks those consumers.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -692,6 +828,35 @@ export function validateGraph(nodes: IntentionNode[]): void {
         );
       }
     }
+    // Rule 16: status must be a key in the kind node's status_vocabulary.
+    {
+      const kindNode = byId.get(`kind-${node.kind}`);
+      if (kindNode !== undefined) {
+        const vocab = kindNode.attributes.status_vocabulary;
+        if (!isPlainObject(vocab) || Object.keys(vocab).length === 0) {
+          problems.push(
+            `${node.id}: kind-${node.kind} has no attributes.status_vocabulary declared`,
+          );
+        } else if (!Object.prototype.hasOwnProperty.call(vocab, node.status)) {
+          problems.push(
+            `${node.id}: status "${node.status}" is not declared in kind-${node.kind}'s status_vocabulary`,
+          );
+        }
+      }
+    }
+    // Rule 17: every clarifications[].answer carries a dated provenance clause
+    // (a YYYY-MM-DD substring, placed anywhere). This is the same date pattern
+    // readingDate() (router.ts) uses; it is inlined rather than imported because
+    // router.ts already imports from this file (a back-import would cycle). The
+    // machine consumers this protects are readingDate() and coverage.ts's
+    // lastReviewedOf, which parse this date to timestamp a clarification.
+    for (let i = 0; i < node.clarifications.length; i++) {
+      if (!/\d{4}-\d{2}-\d{2}/.test(node.clarifications[i].answer)) {
+        problems.push(
+          `${node.id}: clarifications[${i}].answer carries no dated provenance clause (YYYY-MM-DD) — see readingDate()`,
+        );
+      }
+    }
   }
   // Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
   // flags every node that participates in a cycle (a tactic transitively
@@ -732,5 +897,116 @@ export function validateGraph(nodes: IntentionNode[]): void {
   }
   if (problems.length > 0) {
     throw new IntentionSchemaError(`Graph integrity violations:\n${problems.join("\n")}`);
+  }
+}
+
+/**
+ * Planned-reference heuristic, shared by `validateGraphProseRefs` (below) and
+ * the digest's DANGLING-REFS annotation (`digest.ts` imports this). Does some
+ * OTHER currently-open (`phase !== "done"`) tactic's `statement` or body mention
+ * `ref`? A missing reference that IS so mentioned is a forward reference to
+ * planned-but-not-yet-committed work rather than a genuine dangling ref.
+ *
+ * Lives here (not in `digest.ts`) so the browser-safe graph barrel — which
+ * includes `schema.ts` but must never reach `digest.ts`'s Node-only transitive
+ * deps — can use it; `digest.ts` reuses this one implementation rather than
+ * duplicating the closure.
+ *
+ *  - Matches `ref` as a whole id token (same `[\w-]` boundaries as `idShape`),
+ *    so a missing `tactic-x` is not falsely "planned" by an unrelated
+ *    `tactic-x-v2`.
+ *  - Excludes the referencing node itself: every missing ref is, by
+ *    construction, present in its own referencing text (that is how it was
+ *    extracted), so a self-match would make EVERY missing ref falsely
+ *    "planned". `[planned]` must mean some OTHER open tactic mentions it.
+ */
+export function mentionsRef(
+  nodes: IntentionNode[],
+  bodies: Map<string, string>,
+  ref: string,
+  referencedBy: string,
+): boolean {
+  const escaped = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`);
+  return nodes.some(
+    (t) =>
+      t.kind === "tactic" &&
+      t.phase !== "done" &&
+      t.id !== referencedBy &&
+      (re.test(t.statement) || re.test(bodies.get(t.id) ?? "")),
+  );
+}
+
+/**
+ * Prose referential integrity: every backtick-quoted, id-shaped reference in a
+ * node's PROSE (not its structural edges) must resolve to a live or pruned
+ * node, be a forward reference to planned-but-uncommitted work, or be
+ * grandfathered by the baseline.
+ *
+ * `validateGraph` checks structural edges (parent/serves/blocked_by/…). This is
+ * the SEPARATE prose check: a node's `rationale`/`clarifications`/body can name
+ * a sibling node id in prose that does not exist on main (e.g. the sibling's own
+ * graph-commit lost a push race), and no structural rule catches it. Kept
+ * separate — `validateGraph` stays a pure function of `IntentionNode[]` alone;
+ * this needs the node bodies and the git-derived deleted-id set the caller
+ * gathers.
+ *
+ * Scanned fields per node: `statement`, `rationale` (when non-null),
+ * `attention.rationale` (when `attention` is non-null), every
+ * `clarifications[].answer`, and the node's markdown body (when present in
+ * `bodies`). The id-shape/backtick/classification logic is reused from
+ * `id-refs.ts` (same semantics as the digest's DANGLING-REFS table); the
+ * planned-reference exemption is `mentionsRef` (above), shared with the digest.
+ *
+ * `baseline` grandfathers pre-existing prose-dangling references (keys of the
+ * form `"<ref>|<referencedBy>"`) so the CI check does not retroactively break
+ * main; it should not grow going forward.
+ *
+ * Throws a single IntentionSchemaError listing ALL problems found, matching
+ * `validateGraph`'s collect-then-throw contract.
+ */
+export function validateGraphProseRefs(
+  nodes: IntentionNode[],
+  bodies: Map<string, string>,
+  deletedIds: string[],
+  baseline: Set<string>,
+): void {
+  const storeIds = new Set(nodes.map((n) => n.id));
+  const deleted = new Set(deletedIds);
+  // Vocabulary and kind prefixes are built the SAME way the digest's
+  // tableDanglingRefs builds them (current store ids ∪ deleted ids; prefixes
+  // derived from the vocabulary, never a hardcoded kind list).
+  const vocab = new Set<string>([...storeIds, ...deleted]);
+  const prefixes = new Set([...vocab].map((id) => id.split("-")[0]).filter((p) => p.length > 0));
+  const matchers = buildIdRefMatchers(prefixes);
+
+  const problems: string[] = [];
+  for (const node of nodes) {
+    // Every prose field to scan for this node.
+    const texts: string[] = [node.statement];
+    if (node.rationale !== null) texts.push(node.rationale);
+    if (node.attention !== null) texts.push(node.attention.rationale);
+    for (const c of node.clarifications) texts.push(c.answer);
+    const body = bodies.get(node.id);
+    if (body !== undefined) texts.push(body);
+
+    // Dedup refs across the node's fields so one (node, ref) pair is at most one
+    // problem even when the ref appears in both, say, rationale and body.
+    const refs = new Set<string>();
+    for (const text of texts) {
+      for (const ref of extractIdRefs(text, matchers, vocab, node.id)) refs.add(ref);
+    }
+    for (const ref of refs) {
+      if (classifyRef(ref, storeIds, deleted) !== "missing") continue;
+      if (mentionsRef(nodes, bodies, ref, node.id)) continue; // planned forward reference
+      if (baseline.has(`${ref}|${node.id}`)) continue; // grandfathered
+      problems.push(
+        `${node.id}: prose reference \`${ref}\` does not resolve to a node ` +
+          `(not planned by any open tactic, not baselined)`,
+      );
+    }
+  }
+  if (problems.length > 0) {
+    throw new IntentionSchemaError(`Prose reference violations:\n${problems.join("\n")}`);
   }
 }

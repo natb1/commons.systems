@@ -25,7 +25,7 @@ import type {
 } from "./firestore.js";
 import { assertLegStateTransition } from "./firestore.js";
 import seedData from "virtual:budget-seed-data";
-import { getAll, get, put, deleteRecord } from "./idb.js";
+import { getAll, get, put, deleteRecord, runInWriteTransaction } from "./idb.js";
 import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbAccount, IdbJournalEntry, IdbJournalLeg, IdbReconciliationEvent, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
 import { idbToTransaction, validateReimbursementRange } from "./entities/transaction.js";
 import { idbToStatement } from "./entities/statement.js";
@@ -218,16 +218,24 @@ export class SeedDataSource implements DataSource {
   }
 }
 
-/** Read-modify-write: get a record, throw if missing, merge fields, put back. */
+/**
+ * Read-modify-write in a single read-write transaction: get a record, throw if
+ * missing, merge fields, put back. Because the get and put share one
+ * transaction — and IndexedDB serializes read-write transactions on the same
+ * store — two overlapping edits to the same row can no longer both read the
+ * stale value and clobber each other; the second edit reads the first's result.
+ */
 async function updateRecord<T extends { id: string }>(
   store: Parameters<typeof get>[0],
   id: string,
   label: string,
   fields: Partial<T>,
 ): Promise<void> {
-  const row = await get<T>(store, id);
-  if (!row) throw new Error(`${label} ${id} not found`);
-  await put(store, { ...row, ...fields } as unknown as Record<string, unknown>);
+  await runInWriteTransaction([store], async (tx) => {
+    const row = await tx.get<T>(store, id);
+    if (!row) throw new Error(`${label} ${id} not found`);
+    await tx.put(store, { ...row, ...fields });
+  });
 }
 
 export class IdbDataSource implements DataSource {
@@ -339,14 +347,20 @@ export class IdbDataSource implements DataSource {
   }
 
   async updateJournalLegCleared(legId: string, cleared: boolean): Promise<void> {
-    const row = await get<IdbJournalLeg>("journalLegs", legId);
-    if (!row) throw new Error(`Journal leg ${legId} not found`);
-    // assertLegStateTransition reads the domain shape; only cleared/reconciledAt matter.
-    assertLegStateTransition(
-      { cleared: row.cleared, reconciledAt: row.reconciledAtMs == null ? null : Timestamp.fromMillis(row.reconciledAtMs) },
-      cleared,
-    );
-    await put("journalLegs", { ...row, cleared } as unknown as Record<string, unknown>);
+    // Read-modify-write in a single read-write transaction (see updateRecord):
+    // the get and the transition check and the put share one transaction, so a
+    // concurrent toggle of the same leg can't validate against a stale
+    // cleared/reconciledAt snapshot and then clobber the other's write.
+    await runInWriteTransaction(["journalLegs"], async (tx) => {
+      const row = await tx.get<IdbJournalLeg>("journalLegs", legId);
+      if (!row) throw new Error(`Journal leg ${legId} not found`);
+      // assertLegStateTransition reads the domain shape; only cleared/reconciledAt matter.
+      assertLegStateTransition(
+        { cleared: row.cleared, reconciledAt: row.reconciledAtMs == null ? null : Timestamp.fromMillis(row.reconciledAtMs) },
+        cleared,
+      );
+      await tx.put("journalLegs", { ...row, cleared });
+    });
   }
 
   async createReconciliationEvent(
@@ -356,16 +370,21 @@ export class IdbDataSource implements DataSource {
     const reconciledThrough = new Date(fields.reconciledThroughDateMs).toISOString().slice(0, 10);
     const id = `${accountDocId(fields.institution, fields.account)}_${reconciledThrough}`;
     const record: IdbReconciliationEvent = { id, ...fields, legIds: [...legIds] };
-    await put("reconciliationEvents", record as unknown as Record<string, unknown>);
-    // Stamp each cleared leg as reconciled by this event.
-    await Promise.all(
-      legIds.map((legId) =>
-        updateRecord<IdbJournalLeg>("journalLegs", legId, "Journal leg", {
+    // Record the event and stamp each cleared leg as reconciled by it in one
+    // transaction: a partial failure (e.g. a missing leg) rolls the whole thing
+    // back, so we never persist an event whose legs are left un-stamped.
+    await runInWriteTransaction(["reconciliationEvents", "journalLegs"], async (tx) => {
+      await tx.put("reconciliationEvents", record);
+      for (const legId of legIds) {
+        const leg = await tx.get<IdbJournalLeg>("journalLegs", legId);
+        if (!leg) throw new Error(`Journal leg ${legId} not found`);
+        await tx.put("journalLegs", {
+          ...leg,
           reconciledAtMs: fields.reconciledAtMs,
           reconciledEventId: id,
-        }),
-      ),
-    );
+        });
+      }
+    });
     return idbToReconciliationEvent(record);
   }
 
@@ -387,12 +406,12 @@ export class IdbDataSource implements DataSource {
       note: entry.note ?? null,
       legCount: legs.length,
     };
-    await put("journalEntries", entryRecord as unknown as Record<string, unknown>);
     const legIds: string[] = [];
+    const legRecords: IdbJournalLeg[] = [];
     for (const leg of legs) {
       const legId = crypto.randomUUID();
       legIds.push(legId);
-      const legRecord: IdbJournalLeg = {
+      legRecords.push({
         id: legId,
         entryId,
         accountId: leg.accountId,
@@ -403,9 +422,17 @@ export class IdbDataSource implements DataSource {
         reconciledAtMs: null,
         reconciledEventId: null,
         statementItemId: null,
-      };
-      await put("journalLegs", legRecord as unknown as Record<string, unknown>);
+      });
     }
+    // Write the entry and all its legs in one transaction: a crash mid-sequence
+    // can no longer leave a `legCount: N` entry with fewer than N legs, which
+    // clearedBalance would silently mis-compute.
+    await runInWriteTransaction(["journalEntries", "journalLegs"], async (tx) => {
+      await tx.put("journalEntries", entryRecord);
+      for (const legRecord of legRecords) {
+        await tx.put("journalLegs", legRecord);
+      }
+    });
     return { entryId, legIds };
   }
 
