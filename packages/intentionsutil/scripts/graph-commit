@@ -671,7 +671,12 @@ try_layer2_resolve() {
   # Every conflicted id resolved and staged — continue the rebase. If it
   # unexpectedly fails (a stage we did not enumerate, a hook, etc.), treat it as
   # unresolved so the caller aborts and parks — do not assume infallibility.
-  git rebase --continue >&2 || return 1
+  # GIT_EDITOR=true (scoped to this call only) keeps the implicit
+  # commit-message-edit step non-interactive: it reuses the replayed commit
+  # message instead of trying to open an editor, which fails in
+  # non-interactive environments (e.g. CI) with no EDITOR/VISUAL/core.editor
+  # configured and TERM=dumb.
+  GIT_EDITOR=true git rebase --continue >&2 || return 1
   return 0
 }
 
