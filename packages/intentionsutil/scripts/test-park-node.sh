@@ -20,7 +20,8 @@
 # content into the landed content. The fix: park-node fetches origin/main,
 # overwrites the local file with origin/main's content BEFORE the read, and
 # passes graph-commit a `--base <id>=<blobsha>` compare-and-swap token so a
-# concurrent advance is refused rather than clobbered.
+# concurrent advance is detected and auto-merged onto — or auto-parked when the
+# merge is mechanically unresolvable — rather than silently clobbered.
 #
 # Covers:
 #   1. Stale far-ahead worktree park does NOT revert landed content: a
