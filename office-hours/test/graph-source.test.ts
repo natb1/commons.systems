@@ -135,9 +135,12 @@ describe("readCloneFreshness", () => {
   });
 
   it("follows a worktree checkout's .git FILE (absolute gitdir) and its commondir to FETCH_HEAD", async () => {
-    // The layout this repo itself uses: `.git` is a one-line file pointing at
-    // `<root>/.bare/worktrees/main`, whose `commondir` (../..) is the shared
-    // `.bare` common dir holding FETCH_HEAD.
+    // Models the retired `.bare` bare-repo layout (this repo no longer uses
+    // it): `.git` is a one-line file pointing at `<root>/.bare/worktrees/main`,
+    // whose `commondir` (../..) is the `.bare` common dir holding FETCH_HEAD.
+    // The picked root contains both the `.git` pointer and the common dir — the
+    // condition this suffix-probing branch needs. Whether this scenario is now
+    // dead is tracked by tactic-retire-bare-layout.
     const root = dir({
       ".git": file("gitdir: /home/user/repo/.bare/worktrees/main\n"),
       ".bare": dir({

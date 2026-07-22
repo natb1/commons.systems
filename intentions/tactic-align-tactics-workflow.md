@@ -52,16 +52,23 @@ attention:
     (tactic-align-family-opus-default, PR #2886, now reviewed and in
     merge-ready-hold), the intended critical-path prioritization (the blocker
     must merge first to unblock this node); no unrelated node is distorted."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-align-tactics-workflow
+  pr: 2931
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-21
+    attempt: 1
+    pushed_sha: 73ca41c910228c7eee89f7bee99105be5f635e7e
 validates: []
-blocked_by: []
-office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-19
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /fix-conflicts once it accepts node targets.
+blocked_by:
+  - tactic-flake-hook-tests-select-tick
+  - tactic-flake-unit-tests-select-tick
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

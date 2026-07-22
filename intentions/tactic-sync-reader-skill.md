@@ -33,7 +33,7 @@ attention:
     rest of strategy-graph-native-dispatch. Scoped to curriculum-execution
     tactics only, not the reading-chunk tactics under
     strategy-philosophical-grounding, which remain unboosted."
-phase: qa
+phase: implement
 execution:
   branch: tactic-sync-reader-skill
   pr: 2798
@@ -46,59 +46,7 @@ execution:
   fix: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "QA (2026-07-10) on PR #2798 (CI green) found two real-data correctness
-    defects, one fixed and pushed, one needing a human design decision. FIXED
-    and verified: excerpt rebuilds were nondeterministic because JSZip
-    auto-creates parent-directory zip entries (META-INF/, OEBPS/, OEBPS/Fonts/,
-    etc.) stamped with the real wall clock instead of the code's fixed date,
-    silently defeating the mirror's write-vs-keep byte comparison -- a live sync
-    would get a full re-write every run instead of a no-op. Reproduced against a
-    real downloaded Republic epub across separate process invocations (4 of 5
-    runs matched, 1 differed), root-caused to JSZip's folderAdd falling back to
-    new Date() for auto-created folders, fixed in
-    packages/sync-reader/src/excerpt.ts by forcing every zip.files directory
-    entry's date after all files are added, and covered by a new non-flaky
-    regression test in test/excerpt.test.ts (confirmed red on the pre-fix code,
-    green after) -- commit e54b6736, already pushed to the
-    tactic-sync-reader-skill branch, CI re-run green. UNFIXED and blocking:
-    multi-work chunk citation mismapping. The CLI
-    (.claude/skills/sync-reader/scripts/sync-reader.ts) matches only
-    chunk.passages[0].work against the share epubs (const primary =
-    chunk.passages[0]; matchWork(primary.work, sources)), then maps every
-    passage's range against that single matched source. 9 of the 24 live
-    tactic-reading-chunk-* nodes cite passages spanning two different works
-    within one chunk: chunk ids 3, 4, 7, 8, 14, 15, 16, 17, 18 (e.g.
-    chunk-7-liberality-schole cites Aristotle Nicomachean Ethics IV.1 and X.7
-    plus Aristotle Politics I.2 in the same chunk). For any such chunk the
-    non-primary work's range gets matched against the wrong source epub's table
-    of contents -- structurally certain from the code (matchWork runs once per
-    chunk), and depending on the real epub's TOC this surfaces as either a
-    spurious unmapped report or, worse, a silent wrong excerpt with no error
-    when a designator like a roman-numeral book number happens to also exist in
-    the wrong book's TOC -- directly against the tactic's own stated
-    clear-errors-over-defensive-fallbacks design principle. This needs a human
-    decision, not a mechanical fix, because the plan commits to one excerpt epub
-    per chunk with one filename per chunk, and a multi-work chunk cannot satisfy
-    that without a real design choice: (a) build one excerpt merging sections
-    from two different source epubs, a nontrivial change since excerpt.ts
-    assumes a single source throughout; (b) write multiple files per chunk,
-    which breaks the stated one-file-per-chunk unit; (c) restructure the 9
-    affected reading-chunk nodes (owner: human) into per-work sub-chunks; or (d)
-    explicitly detect and report multi-work chunks as unsupported, which is safe
-    but leaves 37 percent of the live curriculum permanently un-synced until (a)
-    or (c) lands. Next steps: at office-hours, pick a resolution among (a)
-    through (d) or another, then dispatch a fresh pass against the current PR
-    branch (the determinism fix above is already landed, do not redo it). Minor,
-    worth a yes/no while a human is already looking: the current active-chunk
-    filter (phase not equal to done) is spec-compliant per the tactic body's
-    Unit 1 scope but also pulls in the 8 draft/office-hours-parked
-    candidate:true reading chunks (e.g.
-    tactic-reading-chunk-10-hirschman-exit-voice) that have not yet been through
-    author review -- confirm whether those should reach the physical reader
-    before promotion, or whether that is acceptable as designed."
-  since: 2026-07-10
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -416,3 +364,17 @@ device-grade validity. Note for Claude sessions: runs against the real USB
 reader and network share, and writing `dispatch.config/sync-reader.json`,
 need `dangerouslyDisableSandbox` (paths are outside the sandbox allowlist);
 plain `npx vitest run` does not.
+
+## QA items skipped by author (2026-07-22)
+
+QA (PR #2798) escalated two manual-verification acceptance items to
+office-hours; the author reviewed and explicitly waived both rather than
+running the manual checks — clearing the park:
+
+- Golden-path sync against real content (extraction correctness, priority
+  naming, mirroring, retirement, report clarity, idempotency) — skipped.
+- Device-grade epub validity on a real e-reader — skipped.
+
+All script-verifiable acceptance items (test suite 54/54, typecheck, CLI
+arg/config error paths, delete-outside-managed-dir safety guard) already
+passed autonomously.

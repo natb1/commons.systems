@@ -35,18 +35,17 @@ attention:
     strategy-token-economy carries no strategy-level boost, so the tactic
     carries the full weight itself; boost 15 clears the current working max
     (~14.5)."
-phase: qa
+phase: review
 execution:
   branch: tactic-thin-oversized-skill-bodies
   pr: 2927
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-21
-    attempt: 1
-    pushed_sha: 124bd39c654183b916411c3a0d7a35d1353a7e0b
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -159,3 +158,28 @@ pre-thinning baseline. Phase-success parity is observed in production: the next
 `qa`/`review` phase runs on a real PR must complete their full contracts with no
 regression — a dropped instruction regresses the phase invisibly, so watch the
 first post-thinning runs.
+
+## needs-main residue
+
+Items from the `/qa-fix` QA triage plan on PR #2927 classified `needs-main`
+(planned deferrals — genuinely only verifiable against merged `main`/production,
+not at merge time):
+
+- id: 16
+  title: Thinned review-fix body reads as a self-contained, coherent procedure
+  url_path: .claude/skills/review-fix/SKILL.md
+  expected_outcome: An agent loading only the body understands the fan-out and
+    knows when to Read each reference; readability is preserved.
+  finding: Not walked (subjective judgment call, flagged planned-deferral) —
+    genuinely only assessable once the thinned body is exercised by a real
+    review-fix phase run.
+
+- id: 17
+  title: No regression in the first real qa/review phase runs post-merge
+  url_path: current
+  expected_outcome: The first live runs of both thinned skills complete their
+    full contracts (dispositions, auto-fix loop, labels, follow-ups, PR comment)
+    post-merge with no missing-reference stall or dropped step.
+  finding: Not walked — only verifiable in production by observing the first
+    post-merge qa/review phase runs. The PR's own Verification section calls
+    this a manual/production check.

@@ -341,10 +341,13 @@ interface GitDirs {
  *    (unless a `commondir` file says otherwise).
  *  - worktree checkout: `.git` is a one-line FILE, `gitdir: <path>`. FSA
  *    exposes no absolute paths, so an absolute gitdir is located by probing
- *    its path suffixes under the picked root — the layout this repo itself
- *    uses (`.git` → `<root>/.bare/worktrees/main`). The git dir's `commondir`
- *    file (typically `../..`) is then applied to the KNOWN segment path, since
- *    FSA handles cannot walk `..`.
+ *    its path suffixes under the picked root (e.g. `.git` →
+ *    `<root>/.git/worktrees/<name>`, common dir `<root>/.git`). The git dir's
+ *    `commondir` file (typically `../..`) is then applied to the KNOWN segment
+ *    path, since FSA handles cannot walk `..`. (This branch is satisfiable only
+ *    when the picked root contains the common dir; it modeled the retired
+ *    `.bare` bare-repo layout — its disposition is tracked by
+ *    tactic-retire-bare-layout.)
  */
 async function resolveGitDirs(root: FileSystemDirectoryHandle): Promise<GitDirs> {
   const dotGitDir = await getChildDirectory(root, ".git");

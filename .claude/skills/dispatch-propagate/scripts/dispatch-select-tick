@@ -265,13 +265,14 @@ if [[ "$BRANCH" == "main" ]]; then
 
   # Resolve the main worktree the same way dispatch-tick does: an explicit
   # DISPATCH_TICK_MAIN_WORKTREE override is authoritative and bypasses the git
-  # lookup (tests rely on this); otherwise it is <project-root>/worktrees/main.
+  # lookup (tests rely on this); otherwise it is the project root itself — the
+  # standard-layout primary checkout (was <project-root>/worktrees/main pre-de-bare).
   if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
     MAIN_WORKTREE="$DISPATCH_TICK_MAIN_WORKTREE"
   else
     PROJECT_ROOT=$(resolve_project_root) \
       || { DLOG_DISPOSITION="internal-error"; DLOG_SKIP_REASON="resolve-project-root-failed"; echo "dispatch-select-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
-    MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+    MAIN_WORKTREE="$PROJECT_ROOT"   # de-bare: the project root IS the main checkout
   fi
 
   # Prevent-at-source guard: the main-sync below (`git merge --ff-only
@@ -396,40 +397,18 @@ fi
 # non-main worktree or manual /dispatch tick refreshes too (#2104, invariant #2).
 refresh_lock
 
-# --- Step 1c: re-arm the main-broken latch when main has recovered -----------
-# A diagnosed red episode leaves an open dispatch:main-broken issue — the gate's
-# per-episode latch (#1085). Once origin/main goes green again, close it so the
-# next red episode re-fires the gate on first detection. Closing an issue is a
-# side effect, so it lives here in the lock-holding orchestrator, not in the pure
-# selector. The open-issue query is cheap and gates the extra CI read (via
-# repo-health --main-broken-sha) to the red/recovering window only;
-# this runs every tick — independent of the local branch — including a capped
-# tick, so recovery is observed even when no worker is spawned.
-OPEN_MB=$(gh_issue_list_rest --label "dispatch:main-broken" --state open \
-  | jq -r '.[].number') || {
-  echo 'dispatch-select-tick: gh issue list (dispatch:main-broken) failed; treating main health as UNKNOWN' >&2
-  OPEN_MB=UNKNOWN
-}
-if [[ -n "$OPEN_MB" && "$OPEN_MB" != "UNKNOWN" ]]; then
-  # Use explicit exit-code capture: a failed probe would produce empty
-  # output, which -z would treat as "green" and incorrectly close the latch.
-  # The probe now lives in the standalone repo-health sensor (rewire-then-delete
-  # off the legacy selector surface): repo-health --main-broken-sha runs the same
-  # two-source CI aggregation and, as a side effect, reconciles its durable
-  # label-free latch record. The gh-labeled dispatch:main-broken issue below stays
-  # as the human-visibility announcement (OPEN_MB); the durable record is the
-  # label-free latch state a graph-native reader consults.
-  MB_SHA=""
-  if ! MB_SHA=$("$SCRIPT_DIR/repo-health" --main-broken-sha); then
-    MB_SHA="UNKNOWN"
-  fi
-  if [[ -z "$MB_SHA" ]]; then
-    for n in $OPEN_MB; do
-      gh_issue_close_rest "$n" \
-        --comment "origin/main is green again; closing the main-broken latch (re-arming the gate)." 1>&2 || true
-    done
-  fi
-fi
+# --- Step 1c: sync the main-red graph latch (tactic-graph-main-self-heal) ----
+# The open-node read + green-main recovery-completion now live in their own
+# script, dispatch-graph-main-red-sync (extracted from this file's former
+# inline block so it is independently fakeable by the test harness, matching
+# the repo-health / graph-select-target script-per-concern convention — see
+# that script's header for the full contract: the open tactic-main-red-*
+# read, the phase:"done" completion on green, and the stdout protocol). This
+# runs every tick — independent of the local branch — including a capped
+# tick, so recovery is observed even when no worker is spawned. A failed
+# invocation (non-zero exit) is folded into UNKNOWN here too, so a transient
+# failure of the sub-script never masquerades as "main healthy".
+OPEN_MAIN_RED=$("$SCRIPT_DIR/dispatch-graph-main-red-sync") || OPEN_MAIN_RED=UNKNOWN
 
 # --- Step 1d: reconcile router-owned PR readiness (best-effort) -------------
 RECONCILE_OUT=$("$SCRIPT_DIR/dispatch-reconcile-ready") || true
@@ -442,13 +421,13 @@ fi
 # --- Step 1d (cont.): auto-merge every ready PR (#1739) ----------------------
 # Runs after dispatch-reconcile-ready (a PR demoted this tick is seen as draft
 # and skipped). Auto-merge runs ONLY when
-# OPEN_MB is definitively empty — i.e. main health is known-good. It is suppressed
-# both while main is broken (OPEN_MB lists open main-broken issues, from Step 1c)
-# and when main health is UNKNOWN (the Step 1c gh issue list failed): a transient
-# gh failure must not defeat this load-bearing safety gate. Auto-merge is ON by
-# default; dispatch.config/auto-merge.json is an opt-OUT kill-switch
-# (enabled:false suppresses it).
-if [[ -z "$OPEN_MB" ]]; then
+# OPEN_MAIN_RED is definitively empty — i.e. main health is known-good. It is
+# suppressed both while main is broken (OPEN_MAIN_RED lists open tactic-main-red-*
+# nodes, from Step 1c) and when main health is UNKNOWN (the Step 1c graph read
+# failed): a transient read failure must not defeat this load-bearing safety gate.
+# Auto-merge is ON by default; dispatch.config/auto-merge.json is an opt-OUT
+# kill-switch (enabled:false suppresses it).
+if [[ -z "$OPEN_MAIN_RED" ]]; then
   MERGE_OUT=$("$SCRIPT_DIR/dispatch-auto-merge") || true
   if [[ -n "$MERGE_OUT" ]]; then
     while IFS= read -r merge_line; do
@@ -459,7 +438,7 @@ fi
 
 # --- Step 1d (cont.): post-merge reconciliation (#2512) ----------------------
 # Closes any issue GitHub's merge-time auto-close silently left OPEN (see #2481).
-# Runs unconditionally (NOT gated on $OPEN_MB): it merges nothing, only repairs
+# Runs unconditionally (NOT gated on $OPEN_MAIN_RED): it merges nothing, only repairs
 # already-merged work's closing issues, so it is safe during a main-broken
 # episode. Best-effort: a failure here must not abort the tick.
 RECONCILE_MERGED_OUT=$("$SCRIPT_DIR/dispatch-reconcile-merged") || true
@@ -632,11 +611,11 @@ if [[ -z "$MANUAL" ]]; then
       # spawn its diagnose job even at cap (the legacy priority-LABELED PR/issue
       # bypass and the CI-pending `waiting` reseed died with the legacy selector).
       # main-broken first-detection: probe repo-health only when no
-      # dispatch:main-broken announcement issue is open yet (OPEN_MB, Step 1c) —
-      # once diagnose-main has filed it, the latch stands down. repo-health
+      # tactic-main-red-* node is open yet (OPEN_MAIN_RED, Step 1c) — once
+      # diagnose-main has written it, the latch stands down. repo-health
       # --main-broken-sha is the live CI probe and the durable label-free latch
       # writer in one (empty stdout / non-zero → green or UNKNOWN → no bypass).
-      if [[ -z "$OPEN_MB" ]] && MB_CAP=$("$SCRIPT_DIR/repo-health" --main-broken-sha) && [[ -n "$MB_CAP" ]]; then
+      if [[ -z "$OPEN_MAIN_RED" ]] && MB_CAP=$("$SCRIPT_DIR/repo-health" --main-broken-sha) && [[ -n "$MB_CAP" ]]; then
         # Spawned as its own lock-free bg job — release the lock here.
         release_lock
         DLOG_DISPOSITION="main-broken"
@@ -818,14 +797,14 @@ if [[ -n "$JIT_LINE" ]]; then
 fi
 
 # main-broken first-detection latch: emit only when main is red AND no
-# dispatch:main-broken announcement issue is open yet (OPEN_MB, computed in
-# Step 1c) — once diagnose-main has filed it, the latch stands down so graph work
-# flows while main is still red. repo-health --main-broken-sha is the live CI
-# probe and the durable label-free latch writer in one; empty stdout / non-zero
-# (green or an errored probe) means no gate. OPEN_MB=UNKNOWN (Step 1c gh failure)
+# tactic-main-red-* node is open yet (OPEN_MAIN_RED, computed in Step 1c) — once
+# diagnose-main has written it, the latch stands down so graph work flows while
+# main is still red. repo-health --main-broken-sha is the live CI probe and the
+# durable label-free latch writer in one; empty stdout / non-zero (green or an
+# errored probe) means no gate. OPEN_MAIN_RED=UNKNOWN (Step 1c graph read failure)
 # is non-empty, so this fail-safe skips emission rather than firing on unknown
 # health.
-if [[ -z "$OPEN_MB" ]]; then
+if [[ -z "$OPEN_MAIN_RED" ]]; then
   if MB_SEL=$("$SCRIPT_DIR/repo-health" --main-broken-sha) && [[ -n "$MB_SEL" ]]; then
     release_lock
     DLOG_DISPOSITION="main-broken"
