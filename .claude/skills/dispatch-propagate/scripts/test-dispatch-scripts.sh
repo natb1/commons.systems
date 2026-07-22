@@ -21432,18 +21432,20 @@ FAKE
            "$TMPDIR_TEST/dispatch-escalate-sync-broken"
 
   # PATH-shimmed git: branch defaults to main; fetch/merge succeed unless a
-  # FAKE_GIT_*_FAIL env var is set. The `-C <path> symbolic-ref --short HEAD`
-  # case backs lib.sh's assert_primary_checkout_on_main (b8a1ba75), which
-  # dispatch-select-tick's Step 1 main-sync now calls before the ff-only merge —
-  # default SEL_PRIMARY_CHECKOUT_BRANCH=main models the normal in-place primary
-  # checkout so every pre-existing test's main-sync path is unaffected; a test
-  # covering the drift invariant sets SEL_PRIMARY_CHECKOUT_BRANCH to something
-  # else.
+  # FAKE_GIT_*_FAIL env var is set. The single `-C <path> symbolic-ref --short
+  # HEAD` arm below backs lib.sh's assert_primary_checkout_on_main
+  # (b8a1ba75), which dispatch-select-tick's Step 1 main-sync now calls before
+  # the ff-only merge — precedence FAKE_GIT_PRIMARY_BRANCH > (older)
+  # SEL_PRIMARY_CHECKOUT_BRANCH > FAKE_GIT_BRANCH > "main", so every
+  # pre-existing test's main-sync path is unaffected and either knob can drive
+  # the drift invariant. (There were previously two case arms matching this
+  # same command shape — bash `case` takes the first match, so the older arm
+  # silently shadowed the newer FAKE_GIT_PRIMARY_BRANCH knob; collapsed into
+  # one arm here.)
   cat > "$TMPDIR_TEST/bin/git" <<'STUB'
 #!/usr/bin/env bash
 case "$*" in
   "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
-  -C\ *\ symbolic-ref\ --short\ HEAD) echo "${SEL_PRIMARY_CHECKOUT_BRANCH:-main}" ;;
   "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   # resolve_project_root (lib.sh) + assert_primary_checkout_on_main (added by
@@ -21452,11 +21454,12 @@ case "$*" in
   # FAKE_GIT_PRIMARY_BRANCH is a knob dedicated to the guard's target, distinct
   # from FAKE_GIT_BRANCH (which drives the tick's OWN branch check above and
   # gates whether the main-sync block runs at all); it falls back to
-  # FAKE_GIT_BRANCH, then "main", so every existing test (which never sets it)
-  # is unaffected. Without a match here the catch-all returns empty, the
-  # invariant sees branch != main, and dispatch-select-tick aborts exit 2.
+  # SEL_PRIMARY_CHECKOUT_BRANCH (the older knob), then FAKE_GIT_BRANCH, then
+  # "main", so every existing test (which never sets it) is unaffected.
+  # Without a match here the catch-all returns empty, the invariant sees
+  # branch != main, and dispatch-select-tick aborts exit 2.
   "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/.bare" ;;
-  "-C "*" symbolic-ref --short HEAD") echo "${FAKE_GIT_PRIMARY_BRANCH:-${FAKE_GIT_BRANCH:-main}}" ;;
+  "-C "*" symbolic-ref --short HEAD") echo "${FAKE_GIT_PRIMARY_BRANCH:-${SEL_PRIMARY_CHECKOUT_BRANCH:-${FAKE_GIT_BRANCH:-main}}}" ;;
   *) exit 0 ;;
 esac
 STUB
