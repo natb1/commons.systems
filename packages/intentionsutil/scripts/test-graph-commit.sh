@@ -74,6 +74,12 @@
 #      with the prune-specific sentinel note
 #  24. an unrelated dirty tracked file outside the node set: clear pre-flight
 #      error naming the file, no rebase/CI attempted, main untouched
+#  25. delete/modify divergence: another writer's deletion lands on main FIRST
+#      (genuine rm+commit+push, not --prune), then a stale --base edit races
+#      it: exit 1, no false "layer 2/3 auto-resolved" claim, the node is
+#      re-materialized onto main carrying office_hours and the
+#      "delete/modify divergence" recommendation, and the writer's original
+#      field content survives in the re-materialized body
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -153,6 +159,7 @@ seed_field_node t-field-merge "fieldA: base" "fieldB: base"
 seed_field_node t-field-conflict "sentinel: base"
 seed_field_node t-field-base-ok "fieldA: base" "fieldB: base"
 seed_field_node t-field-base-bad "sentinel: base"
+seed_field_node t-field-delete-edit "fieldA: base"
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -963,6 +970,45 @@ if [[ $rc -eq 1 ]] \
   ok "unrelated dirty tracked file: clear pre-flight error names the file, no rebase/CI attempted, main untouched"
 else
   no "unrelated dirty tracked file pre-flight (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 25: delete/modify divergence — deletion lands first, edit races it via stale --base ---
+# The reverse of case 23's direction: there, an edit landed first and a
+# --prune raced it via a rebase CONFLICT. Here, a genuine deletion (rm + commit
+# + push, not --prune) lands on origin/main FIRST, and a second writer's field
+# edit — holding a --base blob sha captured before the deletion — races it via
+# the stale-base path (layer 3), not a rebase conflict. merge-node.ts's
+# --theirs-empty branch (Unit 1) reports this unresolved rather than silently
+# treating it as an add/add ours-wins, and park_and_exit()'s re-materialization
+# fix (Unit 2) lands the writer's snapshot back onto main with office_hours
+# instead of crashing on the now-absent target file.
+set_mode green
+W11="$WORK/w11"
+make_clone "$W11" writer-11
+base_de_sha="$(git -C "$W11" hash-object intentions/t-field-delete-edit.md)"
+edit_field "$W11" t-field-delete-edit fieldA writer11-edit
+# do NOT commit/push W11's edit yet — it stays local, matching the stale-base
+# setup cases 21-22 use, so the --base sha above is now stale once the
+# deletion below lands.
+
+W12="$WORK/w12"
+make_clone "$W12" writer-12
+rm -f "$W12/intentions/t-field-delete-edit.md"
+git -C "$W12" commit -qam 'test: delete t-field-delete-edit'
+git -C "$W12" push -q origin main
+
+out="$(run_gc "$W11" -m 'test: delete vs edit' --base "t-field-delete-edit=$base_de_sha" t-field-delete-edit 2>&1)"; rc=$?
+content="$(origin_show t-field-delete-edit 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && ! grep -q 'layer 2/3 auto-resolved' <<<"$out" \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 'delete/modify divergence' <<<"$content" \
+   && grep -q 'fieldA: writer11-edit' <<<"$content"; then
+  ok "delete/modify divergence: deletion lands first, stale-base edit races it, park re-materializes the node with office_hours"
+else
+  no "delete/modify divergence (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
