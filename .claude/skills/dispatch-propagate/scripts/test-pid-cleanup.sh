@@ -24,6 +24,37 @@ fail() {
   echo $(( $(cat "$FAIL_FILE") + 1 )) > "$FAIL_FILE"
 }
 
+# Poll (up to $3 x 0.05s, default 5s) until a `ps -axo pid=,args=` line whose
+# PID is $1 also contains substring $2. Returns as soon as the condition
+# holds instead of a fixed sleep — fork()/exec() completion and `ps` snapshot
+# visibility are not on a fixed schedule under a loaded/throttled CI runner.
+wait_for_pid_args() {
+  local pid="$1" needle="$2" attempts="${3:-100}" i
+  for ((i = 0; i < attempts; i++)); do
+    if ps -axo pid=,args= 2>/dev/null | awk -v p="$pid" -v n="$needle" '$1 == p && index($0, n) {f=1} END{exit !f}'; then
+      return 0
+    fi
+    sleep 0.05
+  done
+  return 1
+}
+
+# Poll (up to $2 x 0.05s, default 5s) for a PID whose parent is $1. Echoes
+# the child PID and returns 0 once found; returns 1 on timeout. Same
+# fixed-schedule problem as wait_for_pid_args, but for fork() completion.
+wait_for_child_pid() {
+  local parent="$1" attempts="${2:-100}" i child
+  for ((i = 0; i < attempts; i++)); do
+    child=$(ps -axo pid=,ppid= 2>/dev/null | awk -v p="$parent" '$2 == p {print $1; exit}')
+    if [ -n "$child" ]; then
+      printf '%s' "$child"
+      return 0
+    fi
+    sleep 0.05
+  done
+  return 1
+}
+
 # Source lib.sh from the repo root so git commands work
 cd "$REPO_ROOT"
 source "$SCRIPT_DIR/lib.sh"
@@ -158,7 +189,8 @@ echo "=== Test: cleanup_stale_worktree_processes kills stale, keeps active ==="
   perl -e 'sleep 300' -- "$STALE_WT/sentinel" &
   STALE_PID=$!
   trap 'kill -9 $ACTIVE_PID $STALE_PID 2>/dev/null || true' EXIT
-  sleep 0.3
+  wait_for_pid_args "$ACTIVE_PID" "$REAL_WT/sentinel"
+  wait_for_pid_args "$STALE_PID" "$STALE_WT/sentinel"
 
   cleanup_stale_worktree_processes
 
@@ -258,7 +290,7 @@ echo "=== Test: cleanup_stale_worktree_processes prunes before listing ==="
   perl -e 'sleep 300' -- "$STALE_WT/sentinel" &
   FIXTURE_PID=$!
   trap 'kill -9 $FIXTURE_PID 2>/dev/null || true' EXIT
-  sleep 0.3
+  wait_for_pid_args "$FIXTURE_PID" "$STALE_WT/sentinel"
 
   cleanup_stale_worktree_processes
 
@@ -295,9 +327,8 @@ echo "=== Test: cleanup_stale_worktree_processes kills child processes ==="
   PARENT_PID=$!
   CHILD_PID=""
   trap 'kill -9 $PARENT_PID 2>/dev/null || true; [ -n "$CHILD_PID" ] && kill -9 $CHILD_PID 2>/dev/null || true' EXIT
-  sleep 0.5
 
-  CHILD_PID=$(ps -axo pid=,ppid= | awk -v p="$PARENT_PID" '$2 == p {print $1; exit}')
+  CHILD_PID=$(wait_for_child_pid "$PARENT_PID") || CHILD_PID=""
 
   if [ -z "$CHILD_PID" ]; then
     fail "could not locate child of fixture parent $PARENT_PID"
