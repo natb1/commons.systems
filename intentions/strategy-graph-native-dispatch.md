@@ -1012,6 +1012,66 @@ clarifications:
       authoritative predicate (isFingerprintStale over non-null stamps) shows
       this strategy has zero stamped open children at recording time, so this
       clarification freezes nothing and required no re-stamps."
+  - question: The residual `.bare` bare-repo layout is kept as backward-compat for
+      the draining gh lane (clarification 23) — is it merely descoped from
+      graph-native machinery, or does the greenfield physically retire it? And
+      does the body's claim that graph worktrees sit at 'the harness default
+      location, entered via EnterWorktree' hold today?
+    answer: "(Amended 2026-07-21 interview.) The greenfield physically retires the
+      `.bare` bare-repo-with-worktrees layout: main becomes the standard git
+      working root with `.git` inside it, and Claude Code native worktrees under
+      `<repo>/.claude/worktrees/` are the only worktree surface — no `.bare`
+      common dir, no sibling `worktrees/` container. The body's 'harness default
+      location, entered via EnterWorktree' claim was aspirational and has
+      diverged from reality (the graph-lagging-reality hazard, the inverse of
+      strategy-explicit-intent's content-staleness): the harness keys the
+      project on the git-common-dir (`.bare`), so its actual managed worktree
+      root is `<.bare>/.claude/worktrees/`, while graph worktrees are
+      provisioned at `<main-checkout>/.claude/worktrees/`. The two diverge, so
+      `EnterWorktree(path=…)` into any graph worktree is rejected as 'outside
+      .claude/worktrees/' and prompts for a permission-root relocation (harmless
+      — approval relocates correctly). Descoping `.bare` from scripts
+      (clarification 23's 'no machinery references `.bare`') does NOT fix this —
+      only physically de-baring makes the harness key on the main checkout and
+      aligns with the Claude Code default where `<repo>/.claude/worktrees/`
+      re-entry is prompt-free. This widens clarification 23's retirement target
+      from the legacy-lane hook conventions to the physical layout itself."
+  - question: Is the legacy gh drain gate — 'no new work enters via gh' — satisfied,
+      and what does that unblock?
+    answer: "(Reviewed 2026-07-21.) Yes: GitHub issues are structurally disabled on
+      the repo (`hasIssuesEnabled: false`), so the drain is complete and the
+      monotonic-drain condition holds by construction — issues cannot re-enter.
+      `tactic-legacy-router-removal`'s gate (gh queue drained) is therefore met
+      and it is unblocked. gh pull requests still flow as the code-review/merge
+      substrate for graph-native tactics; that is not gh-issue orchestration and
+      is out of scope for this retirement."
+  - question: How is the `.bare` retirement executed — a dispatched /align-tactics
+      tactic run by the fleet, a re-anchoring of graph worktrees to `.bare` to
+      match the validator, or something else?
+    answer: "(Recorded 2026-07-21 interview.) The author elected a direct-to-main
+      in-session hotfix, bypassing the dispatch workflow, executed only after
+      all active sessions are drained and scheduling is disabled (manual fleet
+      quiesce). Rejected alternatives: (i) re-anchoring graph worktrees to
+      `<.bare>/.claude/worktrees/` to match the validator — it stops the prompt
+      but preserves the legacy layout and violates the standing 'no graph-native
+      path may assume the legacy `.bare` layout' rule (clarification 23), so it
+      was diverged from; (ii) leaving the prompt in place as harmless — rejected
+      because relying on Claude Code harness defaults over legacy implementation
+      constraints is the intent. A draft tactic (`tactic-retire-bare-layout`)
+      records the migration scope in the graph as the sole tracker; its
+      execution is the hotfix, not a fleet dispatch."
+  - question: Does physically de-baring to rely on Claude Code native worktrees
+      deepen coupling to proprietary harness machinery, against
+      strategy-owned-orchestration?
+    answer: "(Reviewed 2026-07-21 interview.) It stays within the coupling
+      clarification 23 already accepted: native worktrees are the execution
+      substrate, while router/selection/transition/provisioning logic remains
+      owned, offline-testable code (Shape B, clarification 24). De-baring
+      changes the repo topology to the harness default but adds no new
+      dependence on harness machinery beyond the worktree layer already
+      committed. No new `recovers` edge is warranted (no delegation node covers
+      the Claude Code harness); existing `recovers: delegation-github` is
+      unchanged — gh issues retired, gh PRs remain by design."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1424,6 +1484,26 @@ History: entry 12 (2026-07-03) originally committed this one-worktree-per-tactic
 isolation to the legacy `worktree-create.sh` hook and node-id naming under the
 `.bare` + sibling `worktrees/` layout; entry 23 (2026-07-05) retired that
 mechanism in favor of native worktrees while keeping the isolation rule itself.
+
+**Physical `.bare` retirement — the harness-default claim corrected (amended
+2026-07-21).** The "harness default location, entered via `EnterWorktree`" claim
+above was aspirational: it holds only after the repo is de-bared. Under the
+current bare-repo layout the harness keys the project on the git-common-dir
+(`.bare`), so its actual managed worktree root is `<.bare>/.claude/worktrees/`,
+while graph worktrees are provisioned at `<main-checkout>/.claude/worktrees/`.
+The two diverge, so `EnterWorktree(path=…)` into a graph worktree is rejected as
+"outside .claude/worktrees/" and prompts for a permission-root relocation
+(harmless — approval relocates correctly). Descoping `.bare` from scripts does
+not fix this. The greenfield therefore physically retires the bare-repo layout:
+main becomes the standard git working root with `.git` inside it, and Claude
+Code native worktrees under `<repo>/.claude/worktrees/` are the only worktree
+surface — no `.bare` common dir, no sibling `worktrees/`. This widens
+`tactic-legacy-router-removal`'s target (the legacy-lane hook conventions) to
+include the physical layout itself, tracked as `tactic-retire-bare-layout`. gh
+issues are now structurally disabled (`hasIssuesEnabled: false`), so the drain
+gate is satisfied; gh pull requests remain the code-review/merge substrate by
+design. Executed as a direct-to-main in-session hotfix under a manual fleet
+quiesce, bypassing dispatch (see the 2026-07-21 clarifications).
 
 **Uniform node-id claiming ledger covers both tactic and strategy sessions.**
 (Entry 13, 2026-07-03 interview.) Concurrency is a first-class requirement, not

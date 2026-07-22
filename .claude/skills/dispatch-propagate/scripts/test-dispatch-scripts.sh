@@ -6736,6 +6736,12 @@ sweep_setup() {
   mkdir -p "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/scripts" \
            "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees" \
            "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
+  # dispatch-sweep now defaults WORKTREES_ROOT to <project>/.claude/worktrees
+  # (standard layout). This fixture keeps the worktrees under project/worktrees;
+  # inject that path via the test seam so the sweep logic is exercised regardless
+  # of the default. Re-modeling the fixture to .claude/worktrees is tracked on
+  # tactic-retire-bare-layout (deferred fixture-purge scope).
+  export DISPATCH_SWEEP_WORKTREES_ROOT="$TMPDIR_TEST/project/worktrees"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   # dispatch-sweep sources lib.sh via its SCRIPT_DIR (the scripts/ copy) — so
@@ -6961,8 +6967,9 @@ sweep_teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
-  # DISPATCH_CONFIG_DIR is sweep-local — never leak it into later non-sweep tests.
-  unset DISPATCH_CONFIG_DIR
+  # DISPATCH_CONFIG_DIR / DISPATCH_SWEEP_WORKTREES_ROOT are sweep-local — never
+  # leak them into later non-sweep tests.
+  unset DISPATCH_CONFIG_DIR DISPATCH_SWEEP_WORKTREES_ROOT
   # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
   unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
 }
@@ -19312,6 +19319,74 @@ assert_eq "stop: park-node failure → hook still exits 0" "0" "$rc"
 assert_eq "stop: park-node failure → park-node was still attempted once" "1" "$(wc -l < "$ROOT/park-calls.log")"
 stopnc_teardown
 
+# --- marker consumed after successful park (reason-only) --------------------
+echo "Test: dispatch-stop successful park consumes the reason marker"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)
+assert_eq "stop: park success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park success → reason marker deleted" "0" "$?"
+stopnc_teardown
+
+# --- consumed marker prevents re-park on a later Stop event ------------------
+echo "Test: dispatch-stop does not re-park on a second Stop event after marker consumed"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)
+rc2=$(stopnc_run)   # marker already consumed by the first run
+assert_eq "stop: second run → exit 0" "0" "$rc2"
+assert_eq "stop: second run → park-node still called only once total" "1" "$(wc -l < "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- marker survives a failed park (reason-only) so a later retry can fire ---
+echo "Test: dispatch-stop failed park leaves the reason marker in place"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
+rc=$(stopnc_run)
+assert_eq "stop: park failure → exit 0" "0" "$rc"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park failure → reason marker survives" "0" "$?"
+stopnc_teardown
+
+# --- marker consumed after successful park (reason + recommendation) --------
+echo "Test: dispatch-stop successful park consumes both markers when a recommendation is present"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+rc=$(stopnc_run)
+assert_eq "stop: park+reco success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park+reco success → reason marker deleted" "0" "$?"
+[ ! -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: park+reco success → recommendation marker deleted" "0" "$?"
+stopnc_teardown
+
+# --- both markers survive a failed park (reason + recommendation) -----------
+echo "Test: dispatch-stop failed park leaves both markers in place when a recommendation is present"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
+rc=$(stopnc_run)
+assert_eq "stop: park+reco failure → exit 0" "0" "$rc"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park+reco failure → reason marker survives" "0" "$?"
+[ -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: park+reco failure → recommendation marker survives" "0" "$?"
+stopnc_teardown
+
 # ============================================================================
 # dispatch-finalize-phase tests (#2243)
 # ============================================================================
@@ -22621,6 +22696,11 @@ tick_setup() {
   # (#1068) the tick writes resolves through dispatch_lock_file to a path inside
   # the test tree (not the host repo's tmp/).
   export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
+  # Pin the pause sentinel to a path INSIDE the test tree that does not exist by
+  # default, so the tick's pause guard never fires from a real host flag file at
+  # the default $HOME/.local/share/commons-dispatch/paused. A pause test creates
+  # this file explicitly to exercise the guard.
+  export DISPATCH_PAUSE_FLAG="$TMPDIR_TEST/paused"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -22689,7 +22769,7 @@ tick_teardown() {
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_SEL_RC TICK_GRAPH_EXEC_RC \
     TICK_SEL_PRE TICK_GRAPH_EXEC_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
-    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC
+    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -22704,6 +22784,42 @@ assert_eq "busy: no graph-execute call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
 assert_eq "busy: no spawn-job call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- pause sentinel: autonomous tick with flag present → no-op before select ---
+# The pause flag makes an AUTONOMOUS tick exit before dispatch-select-tick and
+# before dispatch-refresh-rate-limits, so it spawns nothing and arms no reseed.
+# Already-running workers are separate sessions the tick never signals, so this
+# pause does not interfere with in-flight work.
+echo "Test: dispatch-tick paused (flag present, autonomous) → exit 0, no select-tick/refresh/spawn"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused: exit 0" "0" "$rc"
+assert_eq "paused: stdout announces pause" "1" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
+assert_eq "paused: select-tick NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "paused: refresh-rate-limits NOT run (guard exits before it)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/order.log" ] && echo 1 || echo 0)"
+assert_eq "paused: no graph-execute" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
+assert_eq "paused: no spawn-job" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- pause sentinel: --manual overrides the flag → the tick runs normally ------
+echo "Test: dispatch-tick --manual with flag present → overrides pause, runs select-tick"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="busy"
+out=$(run_tick --manual) && rc=0 || rc=$?
+assert_eq "manual-override: exit 0" "0" "$rc"
+assert_eq "manual-override: select-tick WAS called" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "manual-override: not announced as paused" "0" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
 tick_teardown
 
 # --- concurrency-cap / sync-repair-pending / sync-broken ---------------------

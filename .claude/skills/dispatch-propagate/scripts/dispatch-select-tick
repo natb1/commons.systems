@@ -279,13 +279,14 @@ if [[ "$BRANCH" == "main" ]]; then
 
   # Resolve the main worktree the same way dispatch-tick does: an explicit
   # DISPATCH_TICK_MAIN_WORKTREE override is authoritative and bypasses the git
-  # lookup (tests rely on this); otherwise it is <project-root>/worktrees/main.
+  # lookup (tests rely on this); otherwise it is the project root itself — the
+  # standard-layout primary checkout (was <project-root>/worktrees/main pre-de-bare).
   if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
     MAIN_WORKTREE="$DISPATCH_TICK_MAIN_WORKTREE"
   else
     PROJECT_ROOT=$(resolve_project_root) \
       || { DLOG_DISPOSITION="internal-error"; DLOG_SKIP_REASON="resolve-project-root-failed"; echo "dispatch-select-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
-    MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+    MAIN_WORKTREE="$PROJECT_ROOT"   # de-bare: the project root IS the main checkout
   fi
 
   # Prevent-at-source guard: the main-sync below (`git merge --ff-only
