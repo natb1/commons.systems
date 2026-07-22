@@ -62,11 +62,17 @@ if [[ -n "$JOB_NAME" && -n "$_HOOK_ROOT" && -f "$_HOOK_ROOT/intentions/$JOB_NAME
       # in-session park applies the reset-dance; this backstop does not) is
       # non-fatal, matching this hook's best-effort philosophy.
       if [ -n "$_OH_RECO" ]; then
-        "$_PARK" "$JOB_NAME" "$_OH_REASON" "$_OH_RECO" >/dev/null 2>&1 \
-          || echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' failed (non-fatal)" >&2
+        if "$_PARK" "$JOB_NAME" "$_OH_REASON" "$_OH_RECO" >/dev/null 2>&1; then
+          rm -f "$_OH_REASON_FILE" "$CLAUDE_JOB_DIR/office-hours-recommendation"
+        else
+          echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' failed (non-fatal)" >&2
+        fi
       else
-        "$_PARK" "$JOB_NAME" "$_OH_REASON" >/dev/null 2>&1 \
-          || echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' failed (non-fatal)" >&2
+        if "$_PARK" "$JOB_NAME" "$_OH_REASON" >/dev/null 2>&1; then
+          rm -f "$_OH_REASON_FILE"
+        else
+          echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' failed (non-fatal)" >&2
+        fi
       fi
     fi
   fi

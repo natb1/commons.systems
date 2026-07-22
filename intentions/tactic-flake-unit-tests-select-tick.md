@@ -7,7 +7,20 @@ statement: Fix the flaky dispatch-select-tick lock-fixture test in
 owner: ai
 status: codified
 parent: null
-rationale: null
+rationale: "Closed as a duplicate of PR #2933 (sibling tactic
+  tactic-flake-hook-tests-select-tick). Both the unit-tests and hook-tests CI
+  jobs execute the SAME file,
+  .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh (hook-tests
+  runs it directly; unit-tests runs it via run-unit-tests.sh's --pr-scripts
+  test-*.sh loop). The set -e crash lives in that file, not in either job's
+  wrapper, so #2933's fix to the file's run_sel_tick/run_tick call sites
+  resolves both jobs' flake at once. #2933's diff is a strict superset of this
+  tactic's scope (its 45 guarded sites include all 44 of this tactic's plus the
+  dispatch-tick run_tick site). This tactic's own branch carried an equivalent
+  44-site fix at commit 20600969 but it adds no coverage #2933 lacks, so no PR
+  was opened. Root cause confirmed via the failing run's raw log (gh run view
+  --job 88729272080 --log): crash 112ms after the test's echo line with zero
+  PASS/FAIL output."
 reading: null
 gap: null
 serves:
@@ -17,7 +30,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution: null
 validates: []
 blocked_by: []

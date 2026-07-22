@@ -29,8 +29,7 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by:
-  - tactic-graph-commit-auto-serialization
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
