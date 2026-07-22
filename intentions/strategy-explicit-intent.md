@@ -321,7 +321,13 @@ clarifications:
       tactic-align-audit-legacy-review office-hours sitting ratifies or reworks
       this successor-cadence wording when it decides /align-audit inclusion of
       the retired rung-5 dialectic and the retired /align-strategy improvement
-      pass. Recorded 2026-07-09 /align consolidation interview."
+      pass. Recorded 2026-07-09 /align consolidation interview. Amended
+      2026-07-22 (tactic-align-audit-legacy-review sitting): the 'is retired'
+      premise is corrected — the scheduled rung-5 dialectic was carried forward
+      unchanged into /align-init (tactic-align-init-skill, #2781), so it is
+      live, not retired; the listed mechanisms are complementary cadence to it,
+      not its successors. The author-owned doctrine (the cadence must recur) is
+      ratified. See the 2026-07-22 clarification on this node."
   - question: What did the chunk-2 reading (NE II.1-6) amend in the 2026-07-09
       cadence-as-habituation deferral?
     answer: "Amended at chunk 2 (II.1-4). The habituation half is ratified and
@@ -346,6 +352,30 @@ clarifications:
       in II.1-4 — destruction is always by contrary or deficient doing;
       Aristotle analyzes the internal hexis only, and the graph-desync mechanism
       is outside his scope. Recorded 2026-07-13 /reading-review chunk 2."
+  - question: Is the 2026-07-09 successor-cadence deferral ratified — now that the
+      scheduled align rung-5 dialectic it treated as retired is in fact live in
+      /align-init?
+    answer: "Ratified in substance, corrected in premise; resolved 2026-07-22 at the
+      tactic-align-audit-legacy-review sitting (owner-directed Claude
+      resolution). The author-owned doctrine is ratified unchanged: the
+      re-derivation cadence must actually recur or recorded doctrine calcifies
+      into dogma. The Claude-drafted premise is corrected: the prior deferral
+      framed the office-hours review sittings, periodic grounding rounds, and
+      standing-conditions sweep as the SUCCESSOR cadence to a retired scheduled
+      rung-5 dialectic. That engine was not permanently retired — the 2026-07-09
+      consolidation retired the standalone /align skill, but
+      tactic-align-init-skill (#2781, commit 11241c21) carried the rung-5
+      dialectic forward unchanged into /align-init's scheduled align-jit trigger
+      (.claude/skills/align-init/SKILL.md lines 220-763). So the scheduled
+      dialectic is the primary re-derivation cadence, and the office-hours
+      sittings, grounding rounds, and the standing-conditions sweep (rehomed to
+      /align-audit — see tactic-condition-review-sweep) are COMPLEMENTARY
+      cadence mechanisms, not its replacements. Residual capture-tension
+      surfaced for the owner: this ratification of Claude-drafted wording was
+      itself Claude-performed at the owner's explicit direction rather than by
+      the owner's independent argument — re-open if that trades away too much of
+      the human-authored-substance guard. Boldness: high on the facts, medium on
+      the ratify-vs-defer call."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
@@ -365,6 +395,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - graph maintenance stays cheap enough that nodes track reality rather than
@@ -375,13 +406,12 @@ attributes:
       injected into the delegatee's harness (rules, memory, node bodies, plans
       carrying graph doctrine); an injection lapse reverts the delegatee to
       vendor defaults
-    - the re-derivation cadence actually recurs — the office-hours review
-      sittings (including tactic-align-audit-legacy-review, which decides the
-      retired align rung-5 dialectic's successor), the periodic grounding
-      rounds, and the standing-conditions sweep (rehoming from the retired
-      rung-5 consistency pass toward /align-audit, decided at that same sitting)
-      run on their cycle; a lapse lets recorded doctrine calcify into dogma
-      unchallenged, the same cadence-lapse capture mechanism the grounding
-      strategies and the delegatee-education condition above already name
+    - the re-derivation cadence actually recurs — the scheduled align-jit rung-5
+      dialectic (live in /align-init), the office-hours review sittings, the
+      periodic grounding rounds, and the standing-conditions sweep (rehomed to
+      /align-audit) run on their cycle; a lapse lets recorded doctrine calcify
+      into dogma unchallenged, the same cadence-lapse capture mechanism the
+      grounding strategies and the delegatee-education condition above already
+      name
 ---
 # Govern by an explicit, self-describing intention graph
