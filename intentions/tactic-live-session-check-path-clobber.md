@@ -39,9 +39,10 @@ execution:
   fix:
     since: 2026-07-22
     attempt: 1
-    pushed_sha: 00d124821e1e0c9f497ec5d30f703bde56f193f0
+    pushed_sha: 7d67a8c15b27124933414afd26f446cfe667bc01
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-park-node-concurrent-write-refusal
 office_hours: null
 pace_exempt: false
 rounds: null
