@@ -68,3 +68,26 @@ update the test's expected-outcome assertion to match `graph-commit`'s current
 layered conflict-resolution behavior — likely both.
 
 recurred on PR #2927 / run https://github.com/natb1/commons.systems/actions/runs/29887717446/job/88821643737
+
+---
+
+recurred on PR #2917 / run https://github.com/natb1/commons.systems/actions/runs/29888298326/job/88823410246
+
+Failure excerpt (CI, PR #2917, run 29888298326, job 88823410246):
+```
+PASS: stale far-ahead park: landed body edit survives, office_hours set, HEAD restored
+FAIL: concurrent-write refusal (rc=1 before_sha=cf63341125d2e4c5b61feafdb80b2c715f72e3bf)
+From /tmp/tmp.r6CHsmhkCg/origin
+ * branch            main       -> FETCH_HEAD
+npx shim: set office_hours on t-concurrent (since=2026-07-22)
+error: graph-commit: refusing to start — unrelated dirty tracked file(s) outside this call's node set:
+ M packages/intentionsutil/scripts/graph-commit
+       stash or commit these first (e.g. 'git stash -u'), then re-run graph-commit — it resumes safely (a prior partial local commit is detected and just pushed forward).
+park-node: graph-commit failed for t-concurrent; the office_hours write is on disk but not landed
+...
+PASS: absent node: park-node refuses a node not on origin/main (exit 1), main unchanged
+
+passed: 2  failed: 1
+```
+
+Same root cause as the PR #2927 recurrence above — this is PR #2917's own diff (`tactic-live-session-check-path-clobber`, a `lib-claude-agents.sh` zsh path-clobber fix) and does not touch `test-park-node.sh` or `graph-commit`. Not caused by this PR's change.
