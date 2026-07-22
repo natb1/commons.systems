@@ -36,10 +36,7 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-22
-    attempt: 1
-    pushed_sha: 02c7529033afd17b77cd1574616b1e56b968771e
+  fix: null
 validates: []
 blocked_by:
   - tactic-flake-park-node-concurrent-write-refusal
