@@ -250,3 +250,26 @@ passed: 2  failed: 1
 ```
 
 Same root cause as the PR #2927 recurrence above — this is PR #2917's own diff (`tactic-live-session-check-path-clobber`, a `lib-claude-agents.sh` zsh path-clobber fix) and does not touch `test-park-node.sh` or `graph-commit`. Not caused by this PR's change.
+
+---
+
+recurred on PR #2896 / run https://github.com/natb1/commons.systems/actions/runs/29887920463/job/88822271317
+
+Failure excerpt (CI, PR #2896, run 29887920463, job 88822271317):
+```
+PASS: stale far-ahead park: landed body edit survives, office_hours set, HEAD restored
+FAIL: concurrent-write refusal (rc=1 before_sha=9a1209f92eab687def9c68a2ecc8dc3aeddd93c3)
+From /tmp/tmp.OKfR9of9yx/origin
+ * branch            main       -> FETCH_HEAD
+npx shim: set office_hours on t-concurrent (since=2026-07-22)
+error: graph-commit: refusing to start — unrelated dirty tracked file(s) outside this call's node set:
+ M packages/intentionsutil/scripts/graph-commit
+       stash or commit these first (e.g. 'git stash -u'), then re-run graph-commit — it resumes safely (a prior partial local commit is detected and just pushed forward).
+park-node: graph-commit failed for t-concurrent; the office_hours write is on disk but not landed
+...
+PASS: absent node: park-node refuses a node not on origin/main (exit 1), main unchanged
+
+passed: 2  failed: 1
+```
+
+Same root cause as the PR #2927 recurrence above — this is PR #2896's own diff (`tactic-align-tactics-mechanical-floor`, a planlint.ts body lint plus align-tactics-census.ts/align-strategy-census.ts) and does not touch `test-park-node.sh` or `graph-commit`. Not caused by this PR's change.

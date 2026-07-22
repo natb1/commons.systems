@@ -139,11 +139,19 @@ an instruction to follow.
 qa-fix adopts `--pr` and `--phase-log` here, but does **not** add `--diff`: the
 only diff use in this skill is Step 1's local `git diff --name-only
 origin/main...HEAD` for browser-component detection — a free, local, name-only
-call that must run after Step 0.5's `origin/main` merge. A pack `--diff` here
-would be a redundant post-merge call duplicating that local diff, and this
-pre-merge idempotency call cannot carry a post-merge diff anyway. `--phase-log`
-is exempt from that reasoning: it is a cheap comment fetch (the same gh round-trip
-that `--pr` already makes), not a diff, so requesting it adds no post-merge cost.
+call that must run against a tree with `origin/main` already merged in. That
+precondition is met differently per lane: on the **legacy issue lane** it holds
+because Step 0.5's in-session `origin/main` merge runs first; on the **node lane**
+it holds because the graph launcher (`provision-node-worktree`) merges
+`origin/main` into the worktree *before* this session starts (see the Node-target
+lane note below), so Step 0.5's merge is skipped and the tree is already
+post-merge. Either way the local diff at Step 1 — and the Step 2a
+`dispatch-context-pack … --diff` that mirrors it — reflects the merged tree. A
+pack `--diff` here in the preamble would be a redundant post-merge call duplicating
+that local diff.
+`--phase-log` is exempt from that reasoning: it is a cheap comment fetch (the same
+gh round-trip that `--pr` already makes), not a diff, so requesting it adds no
+post-merge cost.
 
 `PR_NUM` is carried through to Steps 4, 5, and 6 — do not
 re-resolve. If the labels line includes `dispatch:qa-done` — an
@@ -263,8 +271,35 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
      `$CLAUDE_JOB_DIR/office-hours-reason` (and best-next-steps to
      `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook parks the node
      via `park-node`. See `.claude/hooks/dispatch-stop.sh`.
+   - **Merge (Step 0.5).** Skip the in-session `origin/main` merge entirely — the
+     graph launcher already merged `origin/main` into this worktree before the
+     session started. `dispatch-graph-execute` provisions the phase-worker's
+     worktree via `provision-node-worktree`, which runs
+     `git merge --no-edit origin/main`
+     (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree:123`)
+     as its step 3 *before* `dispatch-spawn-job` spawns this qa-fix session, so the
+     working branch is guaranteed post-merge on entry. Re-running the merge in
+     session would be wasted round-trips. This mirrors `/review-fix`, which dropped
+     the same redundant merge for its own phase under design decision `#1426` (see
+     review-fix/SKILL.md Idempotency preamble: "the dispatch tick merges
+     `origin/main` before spawning this skill"); like review-fix, qa-fix still
+     derives every merge-relative value fresh in-session (the Step 1 local diff, the
+     Step 2a `--diff` pack) rather than trusting a precomputed value — only the
+     redundant *merge action* is dropped, not any derived value. The
+     merge-conflict-escalation guarantee is preserved without the in-session merge:
+     a conflict between this branch and `origin/main` would already have surfaced at
+     launch time, where `provision-node-worktree` aborts the merge and exits 11
+     (lines 124–126), failing the launch itself rather than deferring the conflict
+     into the session. See Step 0.5 for the lane fork.
 
-0.5. **Merge `origin/main` into the working branch.** Call the script first (use
+0.5. **Merge `origin/main` into the working branch** — *legacy issue lane only*
+   (`TARGET_KIND=issue`). On the **node lane** (`TARGET_KIND=node`), skip this step
+   and proceed straight to Step 1: the graph launcher (`provision-node-worktree`)
+   already merged `origin/main` into the worktree before this session started (see
+   the **Node-target lane** note above for the merge-line citation and the preserved
+   conflict-escalation guarantee), so an in-session merge would be redundant.
+
+   For `TARGET_KIND=issue`, call the script first (use
    `dangerouslyDisableSandbox: true` — git writes + `git push` over HTTPS; see
    `.claude/rules/sandbox.md`):
 
