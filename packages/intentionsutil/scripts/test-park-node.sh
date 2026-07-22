@@ -26,12 +26,16 @@
 #   1. Stale far-ahead worktree park does NOT revert landed content: a
 #      concurrent body edit landed on origin survives, and office_hours is set.
 #   2. A concurrent origin/main write that lands between park-node resolving
-#      FRESH_BLOB and graph-commit's --base freshness check is REFUSED (park-node
-#      exits non-zero, the concurrent content survives on main, no park lands).
-#      Reliably triggered — without a literal race — by a test wrapper standing
-#      in for graph-commit that lands the concurrent change, then delegates to
-#      the real graph-commit whose check_base_freshness sees origin has moved
-#      past FRESH_BLOB.
+#      FRESH_BLOB and graph-commit's --base freshness check is REFUSED — this
+#      writer's own edit is NOT landed and park-node exits non-zero — while the
+#      concurrent content survives on main. graph-commit's fail-closed design
+#      (layers 1-3 auto-serialize mechanical contention) additionally lands its
+#      own office_hours park onto the fresh origin/main content in the same
+#      motion, so the refusal is not a silent no-op. Reliably triggered —
+#      without a literal race — by a test wrapper standing in for graph-commit
+#      that lands the concurrent change, then delegates to the real
+#      graph-commit whose check_base_freshness sees origin has moved past
+#      FRESH_BLOB.
 #   3. A node absent from origin/main is refused before any write (exit 1).
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
@@ -125,16 +129,42 @@ SH
 
 cat >"$WORK/bin/npx" <<'SH'
 #!/usr/bin/env bash
-# npx shim: emulate `npx tsx <helper> <store> <dir> <since> <reason>
-# <recommendation> <id>` (park-node's office_hours write) without node. Appends
-# an office_hours line to $dir/$id.md — the file park-node has already refreshed
-# from origin/main.
+# npx shim: emulates without node the invocations graph-commit/park-node make
+# via `npx tsx ...` for the office_hours write, plus a stub for the layers-1-3
+# mechanical 3-way merge tool:
+#   (a) park-node's own direct write: <dir> <since> <reason> <recommendation> <id>
+#       — exactly 5 args remain after stripping tsx/helper/store.
+#   (b) graph-commit's park_write() concurrent-edit-conflict parking helper:
+#       <dir> <since> <reason> <snapDir> <pruneCsv> <id...> — 6+ args remain
+#       (snapDir/pruneCsv occupy the recommendation/id slots, and one or more
+#       ids follow). Distinguished from (a) by arg count since pruneCsv is
+#       always present (possibly empty) as its own arg.
+#   (c) graph-commit's merge-node.ts 3-way text merge (flag-based argv:
+#       --base/--ours/--theirs/--out, no store-module positional arg at all —
+#       does not fit (a)/(b)'s shape). No real merge tool exists in this
+#       no-node harness, so this always reports failure, which is what makes
+#       graph-commit's layers 1-3 fall through to the layer-3 conflict-park
+#       path — exactly the refusal behavior this file's case 2 verifies.
 [[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
+if [[ "$2" == *merge-node.ts ]]; then
+  echo "npx shim: no real 3-way merge tool available (test harness stub)" >&2
+  exit 1
+fi
 shift 3   # tsx, helper script path, store module path
-dir="$1"; since="$2"; reason="$3"; recommendation="$4"; id="$5"
-[[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
-printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
-echo "npx shim: set office_hours on $id (since=$since)" >&2
+dir="$1"; since="$2"; reason="$3"
+if [[ $# -eq 5 ]]; then
+  id="$5"
+  [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
+  printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
+  echo "npx shim: set office_hours on $id (since=$since)" >&2
+else
+  shift 5   # dir, since, reason, snapDir, pruneCsv — remaining args are ids
+  for id in "$@"; do
+    [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
+    printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
+    echo "npx shim: set office_hours on $id (since=$since)" >&2
+  done
+fi
 SH
 chmod +x "$WORK/bin/gh" "$WORK/bin/npx"
 
@@ -240,6 +270,13 @@ fi
 exec "$SD/graph-commit.real" "$@"
 SH
 chmod +x "$C/packages/intentionsutil/scripts/graph-commit"
+# Commit the wrapper substitution locally in C so its working tree is clean
+# relative to its own HEAD. Otherwise graph-commit.real's assert_clean_outside_ids()
+# pre-flight guard (added in PR #2914) sees the modified-but-uncommitted
+# graph-commit file itself as an unrelated dirty tracked file and refuses to
+# start, masking the concurrent-write-refusal scenario this case exercises.
+git -C "$C" add -A
+git -C "$C" commit -qm 'test: install graph-commit wrapper'
 
 before_sha="$(origin_sha)"
 out="$(
@@ -250,11 +287,16 @@ out="$(
   bash packages/intentionsutil/scripts/park-node t-concurrent 'provision-failed' 2>&1
 )"; rc=$?
 content="$(origin_show t-concurrent)"
+# graph-commit's fail-closed design (layers 1-3 auto-serialize mechanical
+# contention) refuses to land THIS writer's edit — park-node exits non-zero —
+# but the same fail-closed sequence lands ITS OWN office_hours park onto the
+# fresh origin/main content as the recorded outcome, so `office_hours` IS
+# expected in the post-state (it is graph-commit's park, not this writer's).
 if [[ $rc -ne 0 ]] \
-   && grep -q 'stale base' <<<"$out" \
+   && grep -q 'concurrent-edit conflict' <<<"$out" \
    && grep -q 'line14: concurrent edit' <<<"$content" \
-   && ! grep -q 'office_hours' <<<"$content"; then
-  ok "concurrent origin/main advance is refused: park exits non-zero, concurrent content survives, no park landed"
+   && grep -q 'office_hours' <<<"$content"; then
+  ok "concurrent origin/main advance is refused: park-node exits non-zero, concurrent content survives, graph-commit's own park lands"
 else
   no "concurrent-write refusal (rc=$rc before_sha=$before_sha)"
   printf '%s\n' "$out"; printf '%s\n' "$content"
