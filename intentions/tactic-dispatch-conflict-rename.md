@@ -58,7 +58,8 @@ execution:
     attempt: 1
     pushed_sha: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-pid-cleanup-stale-worktree
 office_hours: null
 pace_exempt: false
 rounds: null
