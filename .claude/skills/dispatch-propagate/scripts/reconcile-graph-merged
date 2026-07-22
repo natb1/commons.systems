@@ -111,7 +111,7 @@ if [[ "${#PRUNE[@]}" -eq 0 && "${#EDIT[@]}" -eq 0 ]]; then
   exit 0
 fi
 
-GC_ARGS=(-m "graph: reconcile merged/closed tactics")
+GC_ARGS=(-C "$REPO_ROOT" -m "graph: reconcile merged/closed tactics")
 for id in "${PRUNE[@]}"; do GC_ARGS+=(--prune "$id"); done
 for id in "${EDIT[@]}"; do GC_ARGS+=("$id"); done
 

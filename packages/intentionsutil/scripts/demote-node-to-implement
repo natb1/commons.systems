@@ -74,7 +74,7 @@ MSG="graph: demote $NODE_ID to implement (scope drift)"
 if [[ -n "$PROVENANCE" ]]; then
   MSG="$MSG"$'\n\n'"$PROVENANCE"
 fi
-if ! "$SCRIPT_DIR/graph-commit" -m "$MSG" "$NODE_ID"; then
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" -m "$MSG" "$NODE_ID"; then
   echo "demote-node-to-implement: graph-commit failed for $NODE_ID; the demotion write is on disk but not landed" >&2
   exit 1
 fi

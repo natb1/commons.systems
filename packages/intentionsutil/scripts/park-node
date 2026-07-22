@@ -95,7 +95,7 @@ if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SI
   exit 1
 fi
 
-if ! "$SCRIPT_DIR/graph-commit" --base "$NODE_ID=$FRESH_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
   echo "park-node: graph-commit failed for $NODE_ID; the office_hours write is on disk but not landed" >&2
   exit 1
 fi
