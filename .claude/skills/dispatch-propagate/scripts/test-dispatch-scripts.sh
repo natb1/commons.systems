@@ -19990,7 +19990,11 @@ echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
 PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 
 # Map of chain-skill SKILL.md → allowed count of EnterWorktree+ExitWorktree
-# substring mentions (grep -oE counts each occurrence, not each line).
+# substring mentions (grep -oE counts each occurrence, not each line). The scan
+# covers each skill's SKILL.md AND any references/*.md it splits normative
+# doctrine into (tactic-thin-oversized-skill-bodies): a worktree-switch
+# instruction relocated out of the thinned SKILL.md body into a reference file
+# would otherwise evade this guard.
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch-propagate/SKILL.md"]=0
   # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
@@ -20015,8 +20019,17 @@ for relpath in "${!CHAIN_GUARD_EXPECTED[@]}"; do
     echo "  FAIL: chain-guard: file missing: $relpath"
     continue
   fi
-  actual=$({ grep -oE 'EnterWorktree|ExitWorktree' "$abspath" || true; } | wc -l | tr -d ' ')
-  assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count" \
+  # Scan the SKILL.md body plus any references/*.md the skill splits normative
+  # doctrine into, so relocated worktree-switch instructions cannot evade the guard.
+  guard_files=("$abspath")
+  refs_dir="$(dirname "$abspath")/references"
+  if [[ -d "$refs_dir" ]]; then
+    while IFS= read -r ref_md; do
+      guard_files+=("$ref_md")
+    done < <(find "$refs_dir" -type f -name '*.md' | sort)
+  fi
+  actual=$({ grep -hoE 'EnterWorktree|ExitWorktree' "${guard_files[@]}" || true; } | wc -l | tr -d ' ')
+  assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count (SKILL.md + references)" \
     "$expected" "$actual"
 done
 
