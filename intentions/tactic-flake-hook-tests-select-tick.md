@@ -60,3 +60,12 @@ consistent with a timing-sensitive fixture rather than a regression introduced
 by any particular branch's diff.
 
 recurred on PR #2931 / run https://github.com/natb1/commons.systems/actions/runs/29858634211/job/88729272080
+
+recurred on PR #2918 / run https://github.com/natb1/commons.systems/actions/runs/29856546467/job/88722182155
+
+Local reproduction attempt (PR #2918): full `test-dispatch-scripts.sh` run
+(3006/3006 tests) passes cleanly, including this exact section — consistent
+with the already-diagnosed timing-sensitive lock fixture, not a regression
+from PR #2918's diff (`graph-select-target`'s `--standalone` mode and its own
+new test section, inserted well after this crash site at line ~30943 and
+never touching it).
