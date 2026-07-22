@@ -21450,16 +21450,21 @@ case "$*" in
   "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   # resolve_project_root (lib.sh) + assert_primary_checkout_on_main (added by
   # PR #2925) run before the main-sync: return a non-empty git-common-dir so the
-  # project-root dirname succeeds, and report the primary checkout's branch —
-  # FAKE_GIT_PRIMARY_BRANCH is a knob dedicated to the guard's target, distinct
-  # from FAKE_GIT_BRANCH (which drives the tick's OWN branch check above and
-  # gates whether the main-sync block runs at all); it falls back to
-  # SEL_PRIMARY_CHECKOUT_BRANCH (the older knob), then FAKE_GIT_BRANCH, then
-  # "main", so every existing test (which never sets it) is unaffected.
-  # Without a match here the catch-all returns empty, the invariant sees
-  # branch != main, and dispatch-select-tick aborts exit 2.
+  # project-root dirname succeeds, and report the primary checkout's branch via
+  # `-C <path> symbolic-ref --short HEAD`. A prior origin/main merge left TWO
+  # competing knobs for this target in two separate, mutually shadowing case
+  # arms — the newer SEL_PRIMARY_CHECKOUT_BRANCH and the older
+  # FAKE_GIT_PRIMARY_BRANCH — where bash `case` takes the first match, so one
+  # arm always silently shadowed the other's knob. Unified into ONE arm
+  # honoring both: SEL_PRIMARY_CHECKOUT_BRANCH, then FAKE_GIT_PRIMARY_BRANCH,
+  # then FAKE_GIT_BRANCH (the tick's OWN branch check above, gating whether the
+  # main-sync block runs at all), then "main". No test sets more than one of
+  # these knobs at once, so this precedence order is behavior-preserving for
+  # every existing test; guard-pass tests set none (-> main, guard passes),
+  # each drift test sets exactly one (-> that branch, guard halts exit 2). No
+  # knob is dropped and no test is weakened.
   "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/.bare" ;;
-  "-C "*" symbolic-ref --short HEAD") echo "${FAKE_GIT_PRIMARY_BRANCH:-${SEL_PRIMARY_CHECKOUT_BRANCH:-${FAKE_GIT_BRANCH:-main}}}" ;;
+  "-C "*" symbolic-ref --short HEAD") echo "${SEL_PRIMARY_CHECKOUT_BRANCH:-${FAKE_GIT_PRIMARY_BRANCH:-${FAKE_GIT_BRANCH:-main}}}" ;;
   *) exit 0 ;;
 esac
 STUB
