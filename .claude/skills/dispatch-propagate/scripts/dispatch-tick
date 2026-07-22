@@ -238,6 +238,18 @@ for a in "$@"; do
   esac
 done
 
+# --manual (the "no specific target" fan-out mode) and an explicit single-node
+# target are semantically incompatible. Reject the combination HERE — the if/elif
+# dispatch below would otherwise silently take the --manual branch and drop the
+# named node. dispatch-select-tick guards the same combination and exits 2, but
+# it never sees both (the elif forwards only one), so mirror the guard at this
+# entry point rather than leaving it unreachable.
+if [[ -n "$MANUAL" && -n "$NODE_ARG" ]]; then
+  echo "dispatch-tick: a node-id argument cannot be combined with --manual" >&2
+  echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
+  exit 2
+fi
+
 # --- Pause sentinel: stop autonomous scheduling, do not interfere with running work ---
 # When the pause flag file exists, an AUTONOMOUS tick (heartbeat timer, reseed
 # timer) does nothing: it exits here — before dispatch-select-tick, any spawn,
