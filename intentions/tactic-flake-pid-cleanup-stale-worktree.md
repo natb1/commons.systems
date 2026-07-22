@@ -17,12 +17,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-flake-pid-cleanup-stale-worktree
-  pr: null
+  pr: 2940
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
   fix: null
 validates: []
