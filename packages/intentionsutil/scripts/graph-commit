@@ -865,7 +865,8 @@ park_write() {
 // breakdown — passed OUT OF BAND via GRAPH_COMMIT_RECOMMENDATION_FILE — is
 // appended after it when a mechanical merge left field divergence
 // (unset/empty env var → base recovery text only).
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync, copyFileSync } from "node:fs";
+import { join } from "node:path";
 const [storePath, intentionsDir, since, reason, snapDir, pruneCsv, ...ids] = process.argv.slice(2);
 const pruneSet = new Set(pruneCsv ? pruneCsv.split(",") : []);
 const recFile = process.env.GRAPH_COMMIT_RECOMMENDATION_FILE || "";
@@ -874,7 +875,24 @@ const { readNode, writeNode } = await import(storePath);
 // Two-pass for atomicity: read every node up front so an unreadable id fails
 // BEFORE any write — a single read-modify-write loop that threw mid-way would
 // leave the earlier ids mutated on disk, uncommitted.
-const nodes = ids.map((id) => readNode(intentionsDir, id));
+//
+// Delete/modify divergence: park_and_exit() reset --hard to fresh origin/main
+// BEFORE calling us, so a node another writer's already-landed change deleted
+// is ABSENT on disk here. A naive readNode() would throw ENOENT and crash the
+// park before it records office_hours. For a non-prune id whose target file is
+// missing (a prune id genuinely has no snapshot — leave that case to fail), we
+// re-materialize this session's in-flight edit from its snapshot at the TARGET
+// path so readNode succeeds AND writeNode's body-preservation (readExistingBody
+// reads intentionsDir/<id>.md) sees the writer's real authored body instead of
+// falling back to a generated placeholder — avoiding silent body loss.
+const deletedSet = new Set();
+const nodes = ids.map((id) => {
+  if (!pruneSet.has(id) && !existsSync(join(intentionsDir, `${id}.md`))) {
+    copyFileSync(join(snapDir, `${id}.md`), join(intentionsDir, `${id}.md`));
+    deletedSet.add(id);
+  }
+  return readNode(intentionsDir, id);
+});
 for (let i = 0; i < nodes.length; i++) {
   const node = nodes[i];
   const id = ids[i];
@@ -887,6 +905,21 @@ for (let i = 0; i < nodes.length; i++) {
       "result — that same commit clears this office_hours park. A third " +
       "session encountering this park while the loser is still working should " +
       "wait rather than attempt its own merge (the mailbox discipline)."
+    : deletedSet.has(id)
+    ? `This is a delete/modify divergence: a concurrent writer's already-landed ` +
+      `change DELETED this node from origin/main while this session's edit was ` +
+      `in flight. On the fresh origin/main the node was absent, so it was ` +
+      `re-materialized from this session's in-flight edit and its authored body ` +
+      `preserved. This session's unlanded content is preserved at ` +
+      `${snapDir}/${id}.md (this machine only — may not survive past this ` +
+      `session). Recommended: the human decides between two intents. To KEEP ` +
+      `the re-materialized node (this session's edit is intentional and should ` +
+      `override the deletion), confirm the content and re-run graph-commit on ` +
+      `it. To CONFIRM the other writer's deletion (the edit is obsolete), ` +
+      `re-issue graph-commit --prune ${id}. Either action clears this ` +
+      `office_hours park. A third session encountering this park while the ` +
+      `loser is still working should wait rather than attempt its own merge ` +
+      `(the mailbox discipline).`
     : `A concurrent writer landed an overlapping edit to this node while this ` +
       `session's edit was in flight; this writer's content was NOT landed. ` +
       `This session's unlanded content is preserved at ${snapDir}/${id}.md ` +

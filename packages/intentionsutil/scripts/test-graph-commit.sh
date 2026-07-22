@@ -370,9 +370,24 @@ case "$(basename "$2")" in
   *)
     shift 3   # tsx, helper script path, store module path
     dir="$1"; since="$2"; reason="$3"; snap_dir="$4"; prune_csv="$5"; shift 5
+    # Delete/modify divergence: a non-prune id whose target file is absent but
+    # whose snapshot exists was deleted by another writer's already-landed
+    # change while this session's edit was in flight; re-materialize it from the
+    # snapshot (mirrors the real helper) and record it as a divergence. Hard-
+    # error only when NEITHER the target nor the snapshot exists.
+    deleted_csv=""
     for id in "$@"; do
-      [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
+      if [[ -f "$dir/$id.md" ]]; then
+        continue
+      fi
+      if [[ ",$prune_csv," != *",$id,"* && -f "$snap_dir/$id.md" ]]; then
+        cp "$snap_dir/$id.md" "$dir/$id.md"
+        deleted_csv="$deleted_csv,$id"
+        continue
+      fi
+      echo "npx shim: unreadable node $id" >&2; exit 1
     done
+    deleted_csv="$deleted_csv,"
     # The out-of-band field breakdown (mechanical-unresolved detail), appended
     # after each node's base recovery text — mirrors the real helper.
     field_breakdown=""
@@ -382,6 +397,8 @@ case "$(basename "$2")" in
     for id in "$@"; do
       if [[ ",$prune_csv," == *",$id,"* ]]; then
         rec="prune, no content snapshot, mailbox discipline"
+      elif [[ ",$deleted_csv," == *",$id,"* ]]; then
+        rec="delete/modify divergence: other writer deleted this node while this session's edit was in flight; re-materialized from ${snap_dir}/${id}.md; keep and re-run graph-commit or confirm deletion via graph-commit --prune ${id}; mailbox discipline"
       else
         rec="unlanded content preserved at ${snap_dir}/${id}.md; mailbox discipline"
       fi
