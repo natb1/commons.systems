@@ -9,7 +9,8 @@ export type ChunkOutcome =
   | { kind: "missing"; chunkId: string; work: string }
   | { kind: "ambiguous"; chunkId: string; work: string; candidates: string[] }
   | { kind: "unmapped"; chunkId: string; work: string; range: string; reason: string }
-  | { kind: "incomplete"; chunkId: string };
+  | { kind: "incomplete"; chunkId: string }
+  | { kind: "multi-work"; chunkId: string; works: string[] };
 
 export interface ReportInput {
   outcomes: ChunkOutcome[];
@@ -27,6 +28,7 @@ export function renderReport(input: ReportInput): string {
   const ambiguous = input.outcomes.filter((o) => o.kind === "ambiguous");
   const unmapped = input.outcomes.filter((o) => o.kind === "unmapped");
   const incomplete = input.outcomes.filter((o) => o.kind === "incomplete");
+  const multiWork = input.outcomes.filter((o) => o.kind === "multi-work");
 
   const out: string[] = [];
   out.push("sync-reader report", "");
@@ -73,10 +75,19 @@ export function renderReport(input: ReportInput): string {
       incomplete.map((o) => (o.kind === "incomplete" ? o.chunkId : "")),
     ),
   );
+  out.push(
+    ...section(
+      "MULTI-WORK — unsupported: one excerpt file maps to one source epub. " +
+        "Restructure into per-work chunks (or await multi-work excerpt support).",
+      multiWork.map((o) =>
+        o.kind === "multi-work" ? `${o.chunkId}: ${o.works.join(" | ")}` : "",
+      ),
+    ),
+  );
   out.push(...section("DELETED (retired)", input.deleted));
 
   if (
-    missing.length + ambiguous.length + unmapped.length + incomplete.length === 0 &&
+    missing.length + ambiguous.length + unmapped.length + incomplete.length + multiWork.length === 0 &&
     synced.length > 0
   ) {
     out.push("All active chunks synced.", "");

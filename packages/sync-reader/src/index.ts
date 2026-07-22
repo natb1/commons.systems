@@ -3,7 +3,7 @@
 
 export { loadConfig } from "./config.js";
 export type { SyncReaderConfig } from "./config.js";
-export { readActiveChunks } from "./curriculum.js";
+export { readActiveChunks, chunkWorks } from "./curriculum.js";
 export type { ActiveChunk, Passage } from "./curriculum.js";
 export { openEpub } from "./epub-read.js";
 export type { EpubSource, EpubMeta, ManifestItem, TocEntry } from "./epub-read.js";

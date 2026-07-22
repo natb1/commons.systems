@@ -27,8 +27,9 @@ const CHUNK_PREFIX = "tactic-reading-chunk-";
 /**
  * Return every active curriculum chunk in the store, id-sorted (inherited from
  * `listNodes`). Filters to `tactic-reading-chunk-*` nodes carrying
- * `attributes.curriculum` whose `phase !== "done"`; validates each curriculum
- * shape and throws on a malformed one.
+ * `attributes.curriculum` whose `phase !== "done"` and whose curriculum is not
+ * flagged `candidate: true`; validates each curriculum shape and throws on a
+ * malformed one.
  */
 export function readActiveChunks(intentionsDir: string): ActiveChunk[] {
   const chunks: ActiveChunk[] = [];
@@ -37,9 +38,37 @@ export function readActiveChunks(intentionsDir: string): ActiveChunk[] {
     const curriculum = node.attributes.curriculum;
     if (curriculum === undefined) continue;
     if (node.phase === "done") continue;
+    // A `candidate: true` chunk is a draft not yet through author review; it
+    // must not reach the physical reader before promotion. Promotion clears the
+    // flag (or resolves the node), after which it syncs like any other chunk.
+    if (isCandidate(curriculum)) continue;
     chunks.push(parseCurriculum(node.id, curriculum));
   }
   return chunks;
+}
+
+/**
+ * The distinct works cited across a chunk's passages, in first-seen order. A
+ * chunk with more than one is a multi-work chunk: it cannot be excerpted to a
+ * single source epub, so the CLI reports it as unsupported rather than matching
+ * every passage against the first passage's work.
+ */
+export function chunkWorks(chunk: ActiveChunk): string[] {
+  const seen: string[] = [];
+  for (const p of chunk.passages) {
+    if (!seen.includes(p.work)) seen.push(p.work);
+  }
+  return seen;
+}
+
+/** True when a raw curriculum object carries `candidate: true`. */
+function isCandidate(raw: unknown): boolean {
+  return (
+    typeof raw === "object" &&
+    raw !== null &&
+    !Array.isArray(raw) &&
+    (raw as Record<string, unknown>).candidate === true // type-safety-ok: reading one optional flag off attributes.curriculum before full parse
+  );
 }
 
 function parseCurriculum(id: string, raw: unknown): ActiveChunk {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeNode } from "@commons-systems/intentionsutil";
 import type { IntentionNodeInput } from "@commons-systems/intentionsutil/schema";
-import { readActiveChunks } from "../src/curriculum.js";
+import { chunkWorks, readActiveChunks } from "../src/curriculum.js";
 
 describe("readActiveChunks", () => {
   let dir: string;
@@ -118,5 +118,48 @@ describe("readActiveChunks", () => {
       },
     });
     expect(() => readActiveChunks(dir)).toThrow(/work/);
+  });
+
+  it("excludes candidate:true chunks (draft, not yet author-promoted)", () => {
+    write({
+      id: "tactic-reading-chunk-10-hirschman-exit-voice",
+      attributes: {
+        curriculum: {
+          priority: 18,
+          candidate: true,
+          passages: [{ work: "Hirschman, Exit, Voice, and Loyalty", range: "chs. 1-3, 7" }],
+        },
+      },
+    });
+    expect(readActiveChunks(dir)).toEqual([]);
+  });
+});
+
+describe("chunkWorks", () => {
+  it("returns the single work for a single-work chunk", () => {
+    expect(
+      chunkWorks({
+        id: "tactic-reading-chunk-1-plato-cave",
+        priority: 1,
+        passages: [
+          { work: "Plato, Republic", range: "VII 514a-521b" },
+          { work: "Plato, Republic", range: "VI 507b-509c" },
+        ],
+      }),
+    ).toEqual(["Plato, Republic"]);
+  });
+
+  it("returns each distinct work in first-seen order for a multi-work chunk", () => {
+    expect(
+      chunkWorks({
+        id: "tactic-reading-chunk-7-liberality-schole",
+        priority: 7,
+        passages: [
+          { work: "Aristotle, Nicomachean Ethics", range: "IV.1" },
+          { work: "Aristotle, Politics", range: "I.2" },
+          { work: "Aristotle, Nicomachean Ethics", range: "X.7" },
+        ],
+      }),
+    ).toEqual(["Aristotle, Nicomachean Ethics", "Aristotle, Politics"]);
   });
 });

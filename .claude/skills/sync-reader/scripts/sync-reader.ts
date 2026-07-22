@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   applyMirror,
   buildExcerpt,
+  chunkWorks,
   desiredFilename,
   loadConfig,
   managedDirFor,
@@ -100,6 +101,15 @@ async function main(): Promise<void> {
     // extract yet — surface it so the author fills it in, rather than skipping.
     if (chunk.passages.length === 0) {
       outcomes.push({ kind: "incomplete", chunkId: chunk.id });
+      continue;
+    }
+    // A chunk citing passages from more than one work cannot be excerpted to a
+    // single source epub: matching only the first passage's work would map the
+    // rest against the wrong epub (a silent wrong excerpt). Report it as
+    // unsupported instead — clear error over defensive fallback.
+    const works = chunkWorks(chunk);
+    if (works.length > 1) {
+      outcomes.push({ kind: "multi-work", chunkId: chunk.id, works });
       continue;
     }
     const primary = chunk.passages[0];
