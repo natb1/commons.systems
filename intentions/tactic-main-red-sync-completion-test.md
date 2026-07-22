@@ -24,7 +24,26 @@ phase: done
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
+    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
+  since: 2026-07-22
+  recommendation: >-
+    A concurrent writer landed an overlapping edit to this node while this
+    session's edit was in flight; this writer's content was NOT landed. This
+    session's unlanded content is preserved at
+    /tmp/tmp.1qjbcMlBRv/tactic-main-red-sync-completion-test.md (this machine
+    only — may not survive past this session). Recommended: the losing writer
+    re-reads the current origin/main content, manually merges in its intended
+    edit, and re-runs graph-commit on the merged result — that same commit
+    clears this office_hours park. A third session encountering this park while
+    the loser is still working should wait rather than attempt its own merge
+    (the mailbox discipline).
+
+
+    Diverged field 'phase' on tactic-main-red-sync-completion-test:
+      this session's value: implement
+      origin/main's value: done
 pace_exempt: false
 rounds: null
 attributes: {}
