@@ -28,13 +28,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-graph-node-session-reap
   pr: 2922
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
 validates: []
@@ -544,3 +543,11 @@ overrides and never invoke a real daemon):
   (`CLAUDE_JOB_DIR` gate).
 - A mid-phase-dead worker's orphaned job is removed by the sweep pass, not
   left indefinitely.
+
+## needs-main residue
+
+- **id:** 10
+- **title:** Real-daemon reap and interactive-session safety observed in production
+- **url_path:** current
+- **expected outcome:** Terminal node-worker exits (clean, parked, and mid-phase-dead) leave no registry entry, phase/office_hours state is durable, and interactive sessions are preserved.
+- **finding:** Requires live `claude agents --json` / `claude rm` calls against the local daemon (which the shell fixtures fake entirely) and observation of real session lifecycle; only verifiable downstream in production, not at PR-merge time in this sandboxed session. Planned deferral: the acceptance criteria for real-daemon reap/self-close and interactive-session safety are documented as non-assertable at merge time — verify by observing `claude agents --json` before/after a real node-worker Stop-hook fire and a real `dispatch-sweep` pass against a worktree whose owning job died mid-phase.
