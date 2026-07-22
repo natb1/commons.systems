@@ -96,7 +96,7 @@ only to RECORD what this iteration did and stop:
   HEAD_SHA=$(git rev-parse HEAD)
   node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
     "$N" --record-push "$HEAD_SHA"
-  .claude/skills/dispatch-propagate/scripts/graph-commit \
+  packages/intentionsutil/scripts/graph-commit \
     -m "graph: record fix push $HEAD_SHA on $N" "$N"
   ```
 
