@@ -1,23 +1,26 @@
 ---
 id: tactic-fix-interrupt-attempt-cap
 kind: tactic
-statement: "Bound the node-lane CI-fix interrupt with a retry cap: increment
-  execution.attempts.fix per /fix-checks iteration and park to office_hours once
-  it exceeds a threshold, restoring the escalation the legacy
-  dispatch:fix-checks-attempt-<n> label lane provided"
+statement: "Bound the node-lane CI-fix interrupt with a retry cap: spend
+  execution.fix.attempt once per completed /fix-checks pass and park to
+  office_hours when the capped attempt concludes red, restoring the escalation
+  the legacy dispatch:fix-checks-attempt-<n> label lane provided"
 owner: ai
 status: codified
 parent: null
-rationale: The node-lane fix interrupt's attempt counter
-  (execution.attempts.fix, via the already-unit-tested but never-called
-  incrementAttempt helper) was dead code carried over from a pre-router-v2
-  module (apply-fix-state.ts) that no longer exists. Without it, a
-  persistently-red tactic PR is re-selected into /fix-checks forever with no
-  office-hours escalation, unlike the legacy issue lane's 3-attempt cap.
-  Verified 2026-07-19 against the current router-v2 architecture (transitions.ts
-  / apply-node-transition.ts / transition-node) that the bug is real and unfixed
-  in its new location, not superseded by tactic-router-failure-fuses (a distinct
-  silent-worker-death fuse, not a live-retry-loop cap).
+rationale: "The node-lane fix interrupt has no retry cap: a persistently-red
+  tactic PR is re-selected into /fix-checks forever with no office-hours
+  escalation, unlike the legacy issue lane's 3-attempt cap. Re-planned
+  2026-07-19 against the post-PR-#2905 architecture (the orthogonal
+  execution.fix FixState; the prior plan targeted the superseded
+  phase-becomes-fix model in transitions.ts/apply-node-transition.ts). Verified
+  in this worktree: FixState.attempt exists (schema.ts) but only apply-fix-state
+  --set-fix ever writes it (entry / defensive double-call);
+  graph-select-target's _gate_fix_active still-red branch re-emits fix
+  unconditionally forever; nothing reads attempt to cap retries; and the fix
+  worker's no-push outcomes (generic no-repro, flake) make no graph write at
+  all, so counting must be a worker-side spend per completed pass, not a
+  selector-side sha observation."
 reading: null
 gap: null
 serves:
@@ -27,187 +30,262 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-fix-interrupt-attempt-cap
+  pr: 2934
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-22
+    attempt: 2
+    pushed_sha: cc584b203a1f64157b5b2367cf549597df8a6a2b
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-park-node-concurrent-write-refusal
 office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-
-# Bound the node-lane CI-fix interrupt with a retry cap: increment execution.attempts.fix per /fix-checks iteration and park to office_hours once it exceeds a threshold, restoring the escalation the legacy dispatch:fix-checks-attempt-<n> label lane provided
+# Bound the node-lane CI-fix interrupt with a retry cap: spend execution.fix.attempt once per completed /fix-checks pass and park to office_hours when the capped attempt concludes red, restoring the escalation the legacy dispatch:fix-checks-attempt-<n> label lane provided
 
 ## Context
 
-The node-lane CI-fix interrupt (`fix` phase, `strategy clarification 18`) has no
-retry cap. A tactic whose PR stays red across repeated `/fix-checks` passes
-(a recurring "generic no-repro", or a fix that never actually greens CI) is
-re-selected and re-dispatched to `/fix-checks` every tick forever, with no
-office-hours escalation — a regression from the legacy issue lane, which caps
-retries at 3 via `dispatch:fix-checks-attempt-<n>` labels and escalates through
-the Stop hook (`.claude/skills/fix-checks/SKILL.md` Step 5).
+The node-lane CI-fix interrupt has no retry cap. A tactic whose PR stays red
+across repeated `/fix-checks` passes (a recurring generic no-repro, or fixes
+that never green CI) is re-selected and re-dispatched to `/fix-checks` every
+tick forever, with no office-hours escalation — a regression from the legacy
+issue lane, which caps retries at 3 via `dispatch:fix-checks-attempt-<n>`
+labels and escalates through the Stop hook
+(`.claude/skills/fix-checks/SKILL.md` Step 5).
 
-This finding originates from `/review-fix` on PR #2905
-(`tactic-fix-interrupt-orthogonal-state`), which located the gap in a
-now-superseded module (`apply-fix-state.ts` / `_gate_fix_active`,
-`graph-select-target:283`) that no longer exists — the router v2 rewrite
-(`tactic-graph-router-transitions`) relocated the fix-interrupt decision to
-`packages/intentionsutil/src/transitions.ts`'s `decideTransition` /
-`incrementAttempt` and the `execution.attempts: Record<string, number>` map
-(`schema.ts`'s `Execution` type). The underlying bug carried over unchanged
-into the new location: `incrementAttempt` is defined and unit-tested
-(`transitions.test.ts:207-211`) but has **zero** production callers —
-`apply-node-transition.ts` never calls it — and nothing anywhere reads
-`execution.attempts.fix` to bound retries. This unit re-locates the fix to the
-current architecture.
+This plan was re-authored 2026-07-19 (a per-node `/align-tactics` re-plan)
+because the prior plan targeted the pre-PR-#2905 architecture — a
+`phase`-becomes-`"fix"` model routed through `transitions.ts`'s
+`decideTransition` and `apply-node-transition.ts`. PR #2905 ("Model the CI-fix
+interrupt as orthogonal execution state, not a phase value", merged
+2026-07-18) replaced that model: `decideTransition` is now CI-blind (its own
+header says so), and the interrupt is carried on `execution.fix`
+(`FixState { since, attempt, pushed_sha }`, `schema.ts:370-374`), owned by the
+selector via `apply-fix-state.ts`.
 
-**Current flow (verified 2026-07-19 against this worktree):**
+**Current flow (verified 2026-07-19 in this worktree):**
 
-- `decideTransition` (`packages/intentionsutil/src/transitions.ts:173-212`)
-  is the pure phase-ladder decision. Its `phase === "fix"` branch (lines
-  202-210) either resumes forward on green CI or "stays in fix" on
-  anything else (`unknown`/`failing`) — unconditionally, with no attempt
-  accounting.
-- `applyNodeTransition` (`packages/intentionsutil/scripts/apply-node-transition.ts:163-230`)
-  is the impure mutation layer: it calls `decideTransition`, applies marker
-  writes, and calls `writeNode`. It never touches `execution.attempts`.
-- `.claude/skills/dispatch-propagate/scripts/transition-node` is the shell
-  wrapper that reads the CI verdict via `gh` and invokes
-  `apply-node-transition.ts`, then lands the result via `graph-commit`.
-- `.claude/skills/fix-checks/SKILL.md`'s node-target lane (lines 58-80) calls
-  `transition-node "$N" --set-pr "$PR_NUM"` **only on a clean fix (CI green
-  after the push)** — "instead of `dispatch-mark-complete`". On every other
-  outcome (generic no-repro, flake, main-already-fixed, or an actual fix that
-  doesn't green CI), Step 9 (lines 419-428) runs unchanged: it writes only the
-  `dispatch-mark-complete --phase fix-checks` job-dir marker (the Stop hook's
-  silent-death backstop signal — unrelated to graph state) and stops.
-  `transition-node` is never invoked on a still-red outcome, so
-  `execution.attempts.fix` never advances and the node just sits at
-  `phase: fix`, endlessly re-selectable (`graph-select-target`'s `fix|qa|review`
-  sensor gate only checks CI *readiness*, not attempt count).
+- Entry: `graph-select-target`'s `_gate_maybe_interrupt`
+  (`.claude/skills/dispatch-propagate/scripts/graph-select-target:237`) sees
+  CONCLUDED-RED at an interruptible phase and runs
+  `apply-fix-state --set-fix`, writing
+  `execution.fix = { since, attempt: 1, pushed_sha: null }`
+  (`packages/intentionsutil/scripts/apply-fix-state.ts:153-164`). Only a
+  defensive double-call ever bumps `attempt` after that.
+- Push recording: `/fix-checks`'s node-lane completion seam
+  (`.claude/skills/fix-checks/SKILL.md:81-108`) runs
+  `apply-fix-state --record-push <sha>` + `graph-commit` **only when the pass
+  pushed a commit**. The no-push outcomes (generic no-repro, flake) make **no
+  graph write at all** — the seam says so explicitly ("If this iteration
+  pushed NOTHING ... make NO graph write").
+- Retry loop: `_gate_fix_active` (`graph-select-target:257`) resolves on
+  green (`--clear-fix` + re-review reset), holds on a pending recorded push
+  (the `pushed_sha == _CI_HEAD` guard, line 276), and on the `*)` still-red
+  case re-emits `"fix"` unconditionally forever (line ~283) — **the uncapped
+  loop this tactic bounds**. Nothing anywhere reads `execution.fix.attempt`
+  to cap retries or write `office_hours`.
 
-## Unit 1 — increment and cap the fix-attempt counter, call transition-node on every fix-checks completion
+**Design: worker-side spend, selector-side enforcement.**
+
+- *Counting must be a worker-side write, once per completed `/fix-checks`
+  pass.* A selector-side count (bumping in the `*)` branch per still-red tick)
+  overcounts — the selector ticks repeatedly while one fix worker is still
+  running, and the dispatcher's occupied-worktree skip happens after the gate.
+  Keying the count on the recorded `pushed_sha` concluding red undercounts —
+  the no-push outcomes never record a sha, so the recurring generic-no-repro
+  loop (the motivating live case) would stay uncounted. The legacy lane counts
+  per `/fix-checks` invocation, all outcomes that reach its Step 5; parity
+  means the worker spends one budget unit at its completion seam for every
+  outcome that reaches Step 9 (i.e. everything except needs-human, which
+  stops at Step 4 and parks separately — the exact legacy exclusion).
+- *Enforcement belongs in the selector's `*)` branch* — the sole CI-routing
+  authority post-#2905. Parking there, at the moment the capped attempt's CI
+  has actually CONCLUDED red, means the cap'th attempt's push still gets its
+  chance to resolve green (`passing` → `--clear-fix`, budget irrelevant)
+  before any park fires. This eliminates the prior plan's accepted tradeoff
+  (a good final fix parked before its CI concluded) rather than accepting it.
+- *`attempt` semantics (unchanged from `--set-fix`):* `attempt` is the number
+  of the attempt currently armed — `--set-fix` writes 1 (first attempt armed),
+  and each completed pass's spend increments it (the next attempt's number).
+  The cap condition is therefore `attempt > FIX_ATTEMPT_CAP`: with a cap of 3,
+  entry=1, spends after each pass make it 2, 3, then 4 — and 4 > 3 parks after
+  exactly 3 completed passes, matching the legacy 3-attempt cap.
+- *Park leaves the interrupt intact but resets the budget.* The park write
+  sets `office_hours` (which alone removes the node from selection —
+  `router.ts`'s §3.1 eligibility requires `office_hours` null, lines 197-203;
+  no new selection-side gate is needed) and resets `fix.attempt` to 1, so a
+  human clearing `office_hours` resumes automated fix-checks with a fresh
+  budget instead of instantly re-parking on the next still-red tick. The
+  consumed count is preserved in the `office_hours.reason` text.
+
+## Unit 1 — apply-fix-state: `--spend-attempt` and `--park-if-capped` modes, `FIX_ATTEMPT_CAP`
 
 **Scope.**
 
-1. `packages/intentionsutil/src/transitions.ts` — export a new constant next to
-   `FIX_INTERRUPTIBLE` (line 95):
+1. `packages/intentionsutil/src/transitions.ts` — export a new constant next
+   to `FIX_INTERRUPTIBLE` (line 98):
    ```ts
-   /** Retry-cap parity with the legacy `dispatch:fix-checks-attempt-<n>` label lane (SKILL.md Step 5's `N < 3 ? N + 1 : 3`, escalating at >= 3). */
+   /** Retry-cap parity with the legacy `dispatch:fix-checks-attempt-<n>` label lane (fix-checks SKILL.md Step 5, escalating at 3 attempts). */
    export const FIX_ATTEMPT_CAP = 3;
    ```
-   No change to `decideTransition` itself — the cap check reads `prevPhase`
-   plus `decision.phase`, both already available to the caller, so the pure
-   ladder decision does not need to know about attempts.
+   No other transitions.ts change — `decideTransition` stays CI-blind and
+   fix-blind.
 
-2. `packages/intentionsutil/scripts/apply-node-transition.ts`:
-   - Import `incrementAttempt` and `FIX_ATTEMPT_CAP` from `../src/transitions.js`
-     (extend the existing import block at lines 42-48).
-   - Add a `--date <YYYY-MM-DD>` flag to `parseArgs` (alongside `--strategy-sha`
-     at line 114): `case "--date": out.date = argv[++i]; break;`. Add
-     `date: string | null` to the `Args` interface, defaulting to `null` in
-     `parseArgs`'s initial `out`.
-   - In `applyNodeTransition` (after the `const decision = decideTransition(...)`
-     call at line 184, before the existing marker-writing block at line 196),
-     insert the fix-attempt accounting. This is keyed on `prevPhase === "fix"`
-     — that condition is true **only** when this call is itself the completion
-     of an actual `/fix-checks` worker run (the *first* entry into `fix`, fired
-     from `decideTransition`'s branch 3, always has `prevPhase !== "fix"` by
-     construction of `FIX_INTERRUPTIBLE`, so it correctly never spends budget):
+2. `packages/intentionsutil/scripts/apply-fix-state.ts` — add two modes to the
+   existing mutually-exclusive mode set (`--set-fix | --clear-fix |
+   --record-push`), following the file's existing `setMode` / `applyFixState`
+   structure exactly:
+   - **`--spend-attempt`** (mode `"spend"`): errors if `execution.fix` is null
+     (mirror the `--record-push` null-interrupt guard, lines 193-197);
+     otherwise writes `fix.attempt + 1` preserving `since`/`pushed_sha`.
+     Result: `{ "mode": "spend", "id", "attempt": <new>, "wrote": true }`.
+     Called by `/fix-checks`'s node-lane completion seam once per completed
+     pass (Unit 3).
+   - **`--park-if-capped`** (mode `"park-check"`): errors if `execution.fix`
+     is null. If `fix.attempt > FIX_ATTEMPT_CAP` (import the constant from
+     `../src/transitions.js`): set
      ```ts
-     let parked = false;
-     if (prevPhase === "fix") {
-       if (decision.phase === "fix") {
-         // Still not green after this fix-checks worker's push — one attempt spent.
-         execution = incrementAttempt(execution, "fix");
-         if ((execution.attempts.fix ?? 0) >= FIX_ATTEMPT_CAP) {
-           if (args.date === null) {
-             throw new Error("apply-node-transition: --date is required to park at the fix-attempt cap");
-           }
-           parked = true;
-         }
-       } else {
-         // Resumed onto the forward ladder — clear the spent retry budget.
-         execution = { ...execution, attempts: { ...execution.attempts, fix: 0 } };
-       }
-     }
+     node.office_hours = {
+       reason: `/fix-checks retry budget exhausted: ${consumed} attempts concluded with PR #${execution.pr ?? "?"} still red (execution.fix.attempt=${currentFix.attempt}, since ${currentFix.since}) — restoring the legacy dispatch:fix-checks-attempt-<n> escalation.`,
+       since: todayUtc(),
+       recommendation: `Review the fix-checks accumulator (tmp/fix-checks-summary.md in the node's worktree, also posted as PR comments) to diagnose why ${FIX_ATTEMPT_CAP} automated attempts did not resolve CI. Clear office_hours to resume automated fix-checks with a fresh retry budget (attempt was reset to 1), or abandon/redesign the tactic if the current approach cannot work.`,
+     };
      ```
-   - After the existing `if (decision.demote) {...} else if (!decision.hold) {...}`
-     block (lines 211-216), add the office_hours write:
-     ```ts
-     if (parked) {
-       node.office_hours = {
-         reason: `/fix-checks: CI still ${args.ci} after ${FIX_ATTEMPT_CAP} fix-checks attempts (execution.attempts.fix=${execution.attempts.fix}) — retry budget exhausted, restoring the dispatch:fix-checks-attempt-<n> escalation.`,
-         since: args.date as string,
-         recommendation: `Review the PR's CI failures and the fix-checks accumulator (tmp/fix-checks-summary.md in the node's worktree) to diagnose why ${FIX_ATTEMPT_CAP} automated attempts did not resolve it. Clear office_hours to resume automated fix-checks, or abandon/redesign the tactic if the current approach cannot work.`,
-       };
-     }
-     ```
-     Placement note: this does not conflict with the existing `demote`/`hold`
-     branches — `decision.hold` is already `true` on the still-red path, so
-     `node.phase` is correctly left unchanged (still `"fix"`); the router's
-     eligibility gate (`router.ts:292`, `t.office_hours !== null`) is what
-     actually removes the node from selection, no phase change needed.
-   - Extend the `ApplyResult` interface (line 147) with `parked: boolean` and
-     return it from `applyNodeTransition`.
+     where `consumed = currentFix.attempt - 1`, AND reset
+     `fix: { ...currentFix, attempt: 1 }` in the same write. Result:
+     `{ "mode": "park-check", "id", "parked": true, "attempt": <consumed>, "wrote": true }`.
+     If not capped: make **no write**; result
+     `{ "mode": "park-check", "id", "parked": false, "wrote": false }`.
+     Called by the selector's `*)` still-red branch (Unit 2). The
+     `office_hours` shape `{reason, since, recommendation}` matches
+     `park-node`'s write (`packages/intentionsutil/scripts/park-node:59-64`)
+     and `schema.ts`'s validated field; `todayUtc()` already exists in this
+     file (line 66).
+   - Extend the header usage/doc comment and the `FixStateResult` interface
+     (`parked?: boolean` for the park-check mode; `attempt` is already there).
+   - Update `parseArgs`'s mode-required error message to name all five modes.
 
-3. `.claude/skills/dispatch-propagate/scripts/transition-node`:
-   - Add `"--date" "$(date -u +%Y-%m-%d)"` to the `APPLY_FLAGS` array
-     (unconditionally — harmless when no park fires).
-   - After reading `HOLD` from `$RESULT` (line 157), also read
-     `PARKED="$(jq -r '.parked' <<<"$RESULT")"`.
-   - Before the existing `if [[ "$HOLD" == "true" ]]` block (line 184), add:
-     ```bash
-     if [[ "$PARKED" == "true" ]]; then
-       echo "parked $NODE_ID at fix (attempt-cap exhausted)"
-       exit 0
-     fi
-     ```
-   - Update the header's "Stdout" doc comment (lines 36-41) to list the new
-     `parked <id> at fix (attempt-cap exhausted)` outcome line.
-
-4. `.claude/skills/fix-checks/SKILL.md`:
-   - Rewrite the node-lane preamble (lines 58-80): replace the "on a clean fix
-     (CI green after the push) the completion seam invokes ... instead of ...
-     `dispatch-mark-complete`" framing with: the completion seam calls
-     `transition-node "$N" --set-pr "$PR_NUM"` **unconditionally, on every
-     outcome that reaches Step 9** (not gated on CI verdict — `transition-node`
-     reads the live CI verdict itself and either resumes the ladder or records
-     a spent fix-attempt) — **in addition to** Step 9's `dispatch-mark-complete`
-     call, not instead of it (that marker is the Stop hook's silent-death
-     backstop signal, unrelated to graph state, per
-     `.claude/hooks/dispatch-stop.sh`'s header comment — leave it untouched).
-   - Update Step 9 (lines 419-428) to add the node-lane branch: after the
-     existing `dispatch-mark-complete` call, for `TARGET_KIND=node` only, add:
-     ```bash
-     .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
-     ```
-     This runs for every outcome that reaches Step 9 — i.e. every outcome
-     except needs-human, matching legacy Step 5's exclusion (needs-human
-     parks separately via the job-dir `office-hours-reason` sentinel before
-     Step 9 and never touches the retry counter, unchanged by this unit).
-
-**Recommended model:** sonnet — the design and exact insertion points are fully
-specified above; the remaining work is mechanical (apply the edits, run tests).
+**Recommended model:** sonnet — insertion points and semantics fully specified;
+the work is mechanical.
 
 **Dependencies:** none.
 
+## Unit 2 — graph-select-target: enforce the cap in `_gate_fix_active`'s still-red branch
+
+**Scope.**
+
+`.claude/skills/dispatch-propagate/scripts/graph-select-target`, the `*)` case
+of `_gate_fix_active` (line ~283). Replace:
+
+```bash
+    *)
+      # failing again (a fix attempt did not clear CI) → stay in fix, ready to
+      # retry; do NOT re-clear or re-set anything.
+      echo "fix"; return 0 ;;
+```
+
+with:
+
+```bash
+    *)
+      # failing again (a fix attempt did not clear CI). Enforce the retry cap
+      # before re-arming: once FIX_ATTEMPT_CAP completed passes have concluded
+      # red, --park-if-capped writes office_hours (+ budget reset) and this
+      # node leaves the eligible set; otherwise stay in fix, ready to retry.
+      # Do NOT re-clear or re-set the interrupt itself.
+      out=$(_apply_fix "$id" --park-if-capped 2>/dev/null) \
+        || { echo "fix-cap-check-failed"; return 1; }
+      if [[ "$(jq -r '.parked' <<<"$out" 2>/dev/null)" == "true" ]]; then
+        if ! _graph_commit_fix "graph: park $id (fix-attempt cap exhausted)" "$id"; then
+          echo "fix-cap-park-commit-failed"; return 1
+        fi
+        echo "fix-attempt-cap-parked"; return 1
+      fi
+      echo "fix"; return 0 ;;
+```
+
+Notes: `_apply_fix` / `_graph_commit_fix` are this file's existing helpers
+(lines 207-216) — the write lands in the `NATIVE_ROOT` main store and the
+commit path matches the existing `--set-fix`/`--clear-fix` call sites. A
+failed check fails closed (skip with reason, rc 1), consistent with the
+sibling `fix-clear-failed` / `fix-write-failed` reasons and
+`.claude/rules/code-style.md` (clear error over silent fallback). Also update
+the file's header comment (lines 26-30 describe the gate's dispositions) to
+mention the cap park.
+
+**Recommended model:** sonnet.
+
+**Dependencies:** Unit 1 (the `--park-if-capped` mode must exist).
+
+## Unit 3 — fix-checks SKILL.md: spend one budget unit per completed node-lane pass
+
+**Scope.**
+
+`.claude/skills/fix-checks/SKILL.md`, node-lane completion seam
+(lines 81-108) and Step 9's node-lane paragraph (lines 617-622):
+
+1. Rewrite the completion-seam bullets so **every outcome that reaches Step 9
+   spends one budget unit**, replacing the current push/no-push write split:
+   - Pushed a commit: run `--spend-attempt`, then `--record-push "$HEAD_SHA"`,
+     then ONE `graph-commit` landing both on-disk writes:
+     ```bash
+     HEAD_SHA=$(git rev-parse HEAD)
+     node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
+       "$N" --spend-attempt
+     node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
+       "$N" --record-push "$HEAD_SHA"
+     .claude/skills/dispatch-propagate/scripts/graph-commit \
+       -m "graph: record fix attempt + push $HEAD_SHA on $N" "$N"
+     ```
+   - Pushed nothing (generic no-repro / flake): the "make NO graph write"
+     rule is replaced — run `--spend-attempt` + `graph-commit` (message
+     `"graph: record fix attempt (no push) on $N"`). This is the change that
+     makes the recurring generic-no-repro loop countable at all.
+   - Needs-human is unchanged: it stops at Step 4 before this seam and never
+     spends (legacy parity — its Step 5 exclusion).
+2. Update the seam's framing prose ("This worker's completion duty is only to
+   RECORD what this iteration did") to name both records: the spent attempt
+   (always) and the pushed sha (push outcomes only), and why the spend is
+   worker-side (the selector cannot distinguish a still-running worker from a
+   completed no-repro pass — see the tactic node's Context).
+3. Update Step 9's node-lane paragraph (lines 617-622) to match: the node
+   lane's completion is the `--spend-attempt` (+ `--record-push` when pushed)
+   + `graph-commit` write from the completion seam — no longer "or nothing
+   (when it pushed nothing)".
+
+**Recommended model:** sonnet.
+
+**Dependencies:** Unit 1 (the `--spend-attempt` mode must exist before the
+skill documents it).
+
 ## Reuse
 
-- `incrementAttempt` (`packages/intentionsutil/src/transitions.ts:242-245`) —
-  already exists, already unit-tested; this unit is what finally calls it.
-- `router.ts`'s existing `office_hours !== null` eligibility gate
-  (`packages/intentionsutil/src/router.ts:292`) — no new selection-side gate
-  needed; setting `office_hours` is sufficient to stop reselection.
-- The `office_hours: {reason, since, recommendation}` shape and the
-  `park-node` script's `date -u +%Y-%m-%d` convention
-  (`packages/intentionsutil/scripts/park-node:38`) — reused for the `since`
-  format and the reason/recommendation split, without calling `park-node`
-  itself (the write folds into `apply-node-transition.ts`'s existing single
-  `writeNode` + the wrapper's existing single `graph-commit`, avoiding a
-  second write).
+- `apply-fix-state.ts`'s existing structure — `setMode` mutual-exclusivity,
+  `todayUtc()`, the null-interrupt guards, `FixStateResult`, the
+  readNode→writeNode round-trip (`packages/intentionsutil/scripts/apply-fix-state.ts`).
+  Both new modes are siblings of the three existing ones, not a new script.
+- `graph-select-target`'s `_apply_fix` / `_graph_commit_fix` helpers
+  (lines 207-216) — the cap check reuses them verbatim.
+- `router.ts`'s existing `office_hours === null` eligibility gate (§3.1,
+  comments at lines 197-203) — setting `office_hours` is sufficient to stop
+  reselection; no new selection-side gate.
+- The `office_hours: {reason, since, recommendation}` shape from `park-node`
+  (`packages/intentionsutil/scripts/park-node`) and `schema.ts` — reused
+  without calling `park-node` itself (the write folds into `apply-fix-state`'s
+  single `writeNode`; the selector's existing `_graph_commit_fix` lands it).
+- `FIX_ATTEMPT_CAP`'s value (3) and the spend-per-invocation semantics from
+  the legacy lane (`.claude/skills/fix-checks/SKILL.md` Step 5's
+  `dispatch:fix-checks-attempt-<n>` handling) — parity restored, not
+  re-designed.
 
 ## Verification
 
@@ -215,32 +293,43 @@ specified above; the remaining work is mechanical (apply the edits, run tests).
 npx vitest run --project packages/intentionsutil --root .
 ```
 
+```verify
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app packages/intentionsutil
+```
+
+Extend `packages/intentionsutil/test/apply-fix-state.test.ts` (its existing
+`describe("applyFixState store round-trip")` / `describe("apply-fix-state
+parseArgs")` blocks):
+
+- `--spend-attempt` on an active interrupt increments `attempt` and preserves
+  `since`/`pushed_sha`; on `execution.fix: null` it throws (guard parity with
+  `--record-push`).
+- `--park-if-capped` with `attempt <= FIX_ATTEMPT_CAP` writes nothing and
+  returns `parked: false`; with `attempt > FIX_ATTEMPT_CAP` (seed
+  `attempt: 4`) it returns `parked: true`, sets `office_hours` with a non-null
+  `recommendation` and a `reason` naming the consumed count (3), and resets
+  `fix.attempt` to 1; on `execution.fix: null` it throws.
+- End-to-end counter walk: `--set-fix` (attempt=1) → 3 × `--spend-attempt`
+  (attempt=4) → `--park-if-capped` parks; then `--clear-fix` after a human
+  clear nulls `fix` entirely (fresh budget for a future regression —
+  existing behavior, assert it still holds with `office_hours` present).
+- `parseArgs` accepts the two new modes and still rejects combined modes.
+
 Manual / prose:
 
-- Confirm `npx tsx packages/intentionsutil/scripts/validate-graph.ts` passes
-  (no schema regressions from the `Execution`/`ApplyResult` shape changes —
-  `attempts` was already `Record<string, number>`, so no schema.ts edit is
-  needed).
-- Add/extend `packages/intentionsutil/test/apply-node-transition.test.ts` cases
-  (parity with the file's existing `applyNodeTransition` walk-the-ladder style,
-  using `seedTactic(dir, "fix", ...)` to start directly in `fix`):
-  - Three consecutive `applyNodeTransition({..., ci: "failing"})` calls from a
-    `fix`-phase seed increment `execution.attempts.fix` 1, 2, 3, and the third
-    call's result has `parked: true` with `node.office_hours` set (`reason`,
-    `since` matching the passed `--date`, non-null `recommendation`).
-  - The *first* interrupt entry (`seedTactic(dir, "review", ...)` +
-    `ci: "failing"`) leaves `execution.attempts` empty — entering `fix` never
-    spends budget.
-  - A resume (`ci: "passing"` while already `phase: "fix"` with a nonzero
-    `attempts.fix`) resets `attempts.fix` to `0`.
-  - `parseArgs` accepts `--date <YYYY-MM-DD>`.
-- Interactively re-read the edited `.claude/skills/fix-checks/SKILL.md`
-  node-lane section end to end once, confirming Step 9's new node-lane branch
-  reads correctly alongside the existing `dispatch-mark-complete` call and the
-  needs-human exclusion (Step 4) is undisturbed.
-- Observe in production: the next real node-lane tactic that regresses CI
-  across 3 `/fix-checks` passes should land with `office_hours` set instead of
-  being re-selected a 4th time — confirm via `graph-selection.jsonl`'s
-  `skipped` entries citing that node id once parked (no code change needed if
-  this is not directly observable pre-merge; note it as a production
-  observation, not a blocking check).
+- `npx tsx packages/intentionsutil/scripts/validate-graph.ts` passes (no
+  schema change is made — `FixState.attempt` and
+  `office_hours.recommendation` are already validated fields).
+- No bash test harness covers `_gate_fix_active` (checked 2026-07-19:
+  `test-dispatch-scripts.sh` has no `_gate_fix_active` cases), so Unit 2 is
+  reviewed by reading: confirm the `*)` branch's three exits (cap-check
+  failure → `fix-cap-check-failed` rc 1; parked → commit + 
+  `fix-attempt-cap-parked` rc 1; not capped → `fix` rc 0) and that
+  `passing`/`pending` branches are untouched.
+- Re-read the edited fix-checks SKILL.md node-lane seam end to end:
+  every Step-9-reaching outcome now spends; needs-human still does not; the
+  push case lands spend + record-push in one `graph-commit`.
+- Observe in production: the next node-lane tactic that stays red across 3
+  completed `/fix-checks` passes lands with `office_hours` set (reason naming
+  3 consumed attempts) instead of a 4th dispatch; a tactic whose 3rd push
+  goes green resolves via `--clear-fix` with no park.

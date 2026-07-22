@@ -139,11 +139,19 @@ an instruction to follow.
 qa-fix adopts `--pr` and `--phase-log` here, but does **not** add `--diff`: the
 only diff use in this skill is Step 1's local `git diff --name-only
 origin/main...HEAD` for browser-component detection — a free, local, name-only
-call that must run after Step 0.5's `origin/main` merge. A pack `--diff` here
-would be a redundant post-merge call duplicating that local diff, and this
-pre-merge idempotency call cannot carry a post-merge diff anyway. `--phase-log`
-is exempt from that reasoning: it is a cheap comment fetch (the same gh round-trip
-that `--pr` already makes), not a diff, so requesting it adds no post-merge cost.
+call that must run against a tree with `origin/main` already merged in. That
+precondition is met differently per lane: on the **legacy issue lane** it holds
+because Step 0.5's in-session `origin/main` merge runs first; on the **node lane**
+it holds because the graph launcher (`provision-node-worktree`) merges
+`origin/main` into the worktree *before* this session starts (see the Node-target
+lane note below), so Step 0.5's merge is skipped and the tree is already
+post-merge. Either way the local diff at Step 1 — and the Step 2a
+`dispatch-context-pack … --diff` that mirrors it — reflects the merged tree. A
+pack `--diff` here in the preamble would be a redundant post-merge call duplicating
+that local diff.
+`--phase-log` is exempt from that reasoning: it is a cheap comment fetch (the same
+gh round-trip that `--pr` already makes), not a diff, so requesting it adds no
+post-merge cost.
 
 `PR_NUM` is carried through to Steps 4, 5, and 6 — do not
 re-resolve. If the labels line includes `dispatch:qa-done` — an
@@ -188,6 +196,46 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
          echo "/qa-fix: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'qa'" >&2
          exit 1
        fi
+       # Re-entry guard: parking sets office_hours without changing phase, so a
+       # stale self-scheduled wakeup re-firing mid-session (bypassing the
+       # selector's office_hours-null gate) must not re-run qa-fix against a
+       # node already handed to a human for review. This must agree with the
+       # canonical selection gate `readParked`
+       # (packages/intentionsutil/scripts/check-node-selection.ts:90-93):
+       # a node is parked iff the first-class `office_hours` is non-null OR a
+       # non-null `attributes.office_hours` squatter block is present. The
+       # squatter convention is live until tactic-schema-migration-backfill
+       # lands, and a squatter-parked node keeps the literal top-level
+       # `office_hours: null` alongside a populated `attributes.office_hours`
+       # block — so a top-level-only check would miss it and re-run QA against a
+       # parked node.
+       #
+       # Match only the YAML frontmatter (the lines between the first and
+       # second `---` delimiters), never the markdown body — a prose body line
+       # reading exactly `office_hours: null` (e.g. docs quoting this guard)
+       # must not be mistaken for the node's actual state.
+       # Capture matches as text (never rely on `grep -q`'s exit code, which is
+       # unreliable on empty input under some grep wrappers) and test for
+       # emptiness.
+       NODE_FRONTMATTER=$(printf '%s\n' "$NODE_MD" | awk '/^---$/{d++; next} d==1{print} d>=2{exit}')
+       PARKED=""
+       # First-class park: an unparked node carries the literal
+       # `office_hours: null`; its absence means a nested block replaced it.
+       FIRST_CLASS_NULL=$(printf '%s\n' "$NODE_FRONTMATTER" | grep -xF 'office_hours: null')
+       [ -z "$FIRST_CLASS_NULL" ] && PARKED=1
+       # Squatter park: a non-null indented `office_hours:` line nested under
+       # `attributes:` (block form has an empty value with children below;
+       # inline form has a non-null scalar). Select indented `office_hours:`
+       # lines, then drop the `null` ones — anything left means a populated
+       # squatter block.
+       SQUATTER=$(printf '%s\n' "$NODE_FRONTMATTER" \
+            | grep -E '^[[:space:]]+office_hours:' \
+            | grep -vE '^[[:space:]]+office_hours:[[:space:]]+null[[:space:]]*$')
+       [ -n "$SQUATTER" ] && PARKED=1
+       if [ -n "$PARKED" ]; then
+         echo "/qa-fix: node '$NODE_ID' is already office_hours-parked at origin/main — nothing to do" >&2
+         exit 0
+       fi
        N="$NODE_ID"; TARGET_KIND=node ;;
    esac
    ```
@@ -223,8 +271,35 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
      `$CLAUDE_JOB_DIR/office-hours-reason` (and best-next-steps to
      `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook parks the node
      via `park-node`. See `.claude/hooks/dispatch-stop.sh`.
+   - **Merge (Step 0.5).** Skip the in-session `origin/main` merge entirely — the
+     graph launcher already merged `origin/main` into this worktree before the
+     session started. `dispatch-graph-execute` provisions the phase-worker's
+     worktree via `provision-node-worktree`, which runs
+     `git merge --no-edit origin/main`
+     (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree:123`)
+     as its step 3 *before* `dispatch-spawn-job` spawns this qa-fix session, so the
+     working branch is guaranteed post-merge on entry. Re-running the merge in
+     session would be wasted round-trips. This mirrors `/review-fix`, which dropped
+     the same redundant merge for its own phase under design decision `#1426` (see
+     review-fix/SKILL.md Idempotency preamble: "the dispatch tick merges
+     `origin/main` before spawning this skill"); like review-fix, qa-fix still
+     derives every merge-relative value fresh in-session (the Step 1 local diff, the
+     Step 2a `--diff` pack) rather than trusting a precomputed value — only the
+     redundant *merge action* is dropped, not any derived value. The
+     merge-conflict-escalation guarantee is preserved without the in-session merge:
+     a conflict between this branch and `origin/main` would already have surfaced at
+     launch time, where `provision-node-worktree` aborts the merge and exits 11
+     (lines 124–126), failing the launch itself rather than deferring the conflict
+     into the session. See Step 0.5 for the lane fork.
 
-0.5. **Merge `origin/main` into the working branch.** Call the script first (use
+0.5. **Merge `origin/main` into the working branch** — *legacy issue lane only*
+   (`TARGET_KIND=issue`). On the **node lane** (`TARGET_KIND=node`), skip this step
+   and proceed straight to Step 1: the graph launcher (`provision-node-worktree`)
+   already merged `origin/main` into the worktree before this session started (see
+   the **Node-target lane** note above for the merge-line citation and the preserved
+   conflict-escalation guarantee), so an in-session merge would be redundant.
+
+   For `TARGET_KIND=issue`, call the script first (use
    `dangerouslyDisableSandbox: true` — git writes + `git push` over HTTPS; see
    `.claude/rules/sandbox.md`):
 

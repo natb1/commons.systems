@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool: surface-conditional finders (code-review, security domain reviewers) in parallel → code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
+description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool on two lanes: code-review and security-review (Lane A) run their own built-in review-and-fix — code-review via `/code-review max --fix`, applying its own edits — trusting the built-ins, with un-auto-fixed residue dispositioned (resolve/defer/ignore) by a dedicated Opus residue phase; every other finder — domain security reviewers, cost, codeql, npm, erosion (Lane B) — still goes through code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -369,9 +369,17 @@ to pass to the Workflow.
 #### Finder agents (when `surface=code`)
 
 The Workflow fans out agent finders based on `surface` and `app_or_rules`. The
-`code-review` quality finder always runs. When `surface === 'code'`, the following
+`code-review` quality finder always runs — via `/code-review max --fix`,
+applying its own working-tree edits directly; only its un-auto-fixed residue is
+dispositioned (resolve/defer/ignore) by the new residue phase. When `surface === 'code'`, the following
 domain finders also run. Four are gated on `surface=code` alone; four additionally
 require `app_or_rules=true` (application/functions/rules source):
+
+`code-review` and `security-review` are Lane A: they trust the built-in
+`/code-review` and `/security-review` skills to do their own review-and-fix
+rather than feeding the shared dedup/classify/verify/fix pipeline below — see
+the "Disposition table" (Step 4) and the Model split note for how their output
+reaches this skill's disposition set.
 
 **`surface === 'code'`** (any code-surface diff):
 - **input-validation** — Hunt injection in the changed code: SQL/NoSQL injection, XSS,
@@ -384,7 +392,9 @@ require `app_or_rules=true` (application/functions/rules source):
   scenario as a finding. Build scenarios from the code under review, not a checklist of
   known vulnerabilities.
 - **security-review** — Invokes the built-in `/security-review` skill for a broad
-  security pass.
+  security pass. It has no `--fix` flag, so it stays findings-only as before — but its
+  entire output is now residue, dispositioned (resolve/defer/ignore) by the new
+  residue phase rather than feeding the shared dedup/classify/verify/fix pipeline.
 
 **`surface === 'code' && app_or_rules=true`** (app/functions/rules source):
 - **auth** — Auth and access control: Firestore rules coverage for paths the diff touches,
@@ -453,7 +463,10 @@ result = {
 ```
 
 The Workflow's fix-authoring agents (non-isolated, Opus) have already edited the
-working tree by the time `result` is returned. Their fix-agent prompts (built in
+working tree by the time `result` is returned — this now includes THREE sources
+of edits merged into the one envelope above: the shared Lane-B Opus fix fan-out,
+Lane-A code-review's own `/code-review max --fix` edits, and the residue phase's
+applied resolve-dispositioned fixes. Their fix-agent prompts (built in
 `.claude/workflows/review-fix.js`, fix phase) carry, verbatim: "Read any file
 with the Read tool
 before your first Edit or Write to it in this session — the edit is rejected
@@ -531,6 +544,14 @@ Workflow's classifier preserves **both** vocabularies: the security pass's
 | False-positive | security | Not an actual vulnerability — a misread of the code or a non-issue; each with a one-line rationale. |
 | Deferred | code-review | Valid but out of scope for this PR; filed as a `blocked_by` follow-up in Step 6. |
 | Out-of-scope | security | A genuine concern, but in pre-existing code the diff did not touch; meaningful CodeQL/npm out-of-scope findings are filed as `security` follow-ups in Step 6. |
+
+For `code-review` and `security-review` sources specifically, these buckets are
+populated differently from the rest of this table: code-review's own outcome
+(`fixed` / `skipped` / `no_change_needed`, from its `--fix` run) and the residue
+phase's resolve/defer/ignore disposition fill these buckets directly — this
+pipeline's own classify/verify/fix stages never run over Lane-A findings, and
+now only classify Lane-B sources (domain security finders, cost, codeql, npm,
+erosion).
 
 A finding is **never Dismissed/Disregarded purely because the change is small.**
 If a code-review finding is a real improvement within the PR's scope,
@@ -1107,18 +1128,26 @@ phase-log write and outcome-envelope emit, and writes the phase-completed marker
 not met). Readiness is the router's projection, reconciled on later ticks — not
 something re-entry asserts.
 
-**Model split (#1172, #2872).** The dispatch chain runs this `review` phase
-orchestrator on **Sonnet** (via `dispatch-phase-model`, which maps `review →
-sonnet`) — always; there is no learned policy that can promote the orchestrator to
-Opus. The model tiering is owned by the Workflow's per-`agent()` `model:` settings,
-and Opus is reserved for the genuinely complex, generative subtasks: **finder
-agents run on Opus** (`model: opus`) — the always-on `/code-review` quality
-finder, the `/security-review` pass, and the surface-gated security/cost domain
-lenses, since finding real bugs and vulnerabilities in the diff is the core
-reasoning of the phase — and **fix-authoring agents run on Opus** (`model: opus`),
-writing all working-tree changes. The cheaper mechanical stages — dedup, classify,
-and the adversarial verify skeptics — run on **Sonnet**. The orchestrator (this
-skill) authors no product code.
+**Model split (#1172, #2872, tactic-review-phase-trust-builtin-review).** The
+dispatch chain runs this `review` phase orchestrator on **Sonnet** (via
+`dispatch-phase-model`, which maps `review → sonnet`) — always; there is no
+learned policy that can promote the orchestrator to Opus. The model tiering is
+owned by the Workflow's per-`agent()` `model:` settings, and Opus is reserved
+for the genuinely complex, generative subtasks: **finder agents run on Opus**
+(`model: opus`) — the always-on `code-review` finder now runs `/code-review max
+--fix` and applies its own working-tree edits directly (no longer
+detection-only — this is the tactic-review-phase-trust-builtin-review reversal
+of the prior #1172 doctrine), the `/security-review` pass stays findings-only
+(no `--fix` flag), and the surface-gated security/cost domain lenses run
+detection-only as before, since finding real bugs and vulnerabilities in the
+diff is the core reasoning of the phase. **Fix-authoring agents run on Opus**
+(`model: opus`), writing all working-tree changes: this now includes both the
+shared Lane-B fix fan-out over classified/verified findings AND the new
+**residue phase** subagent (also Opus), which additionally applies
+resolve-dispositioned fixes for Lane-A's (code-review's and security-review's)
+un-auto-fixed residue. The cheaper mechanical stages — dedup, classify, and the
+adversarial verify skeptics — run on **Sonnet**, and now scope only to Lane-B
+findings. The orchestrator (this skill) authors no product code.
 
 **Probe-wave throttle short-circuit (#1857).** On a `code` surface the Workflow
 splits the finder fan-out into two waves instead of one barrier. Wave 1 launches

@@ -6736,6 +6736,12 @@ sweep_setup() {
   mkdir -p "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/scripts" \
            "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees" \
            "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
+  # dispatch-sweep now defaults WORKTREES_ROOT to <project>/.claude/worktrees
+  # (standard layout). This fixture keeps the worktrees under project/worktrees;
+  # inject that path via the test seam so the sweep logic is exercised regardless
+  # of the default. Re-modeling the fixture to .claude/worktrees is tracked on
+  # tactic-retire-bare-layout (deferred fixture-purge scope).
+  export DISPATCH_SWEEP_WORKTREES_ROOT="$TMPDIR_TEST/project/worktrees"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   # dispatch-sweep sources lib.sh via its SCRIPT_DIR (the scripts/ copy) — so
@@ -6961,8 +6967,9 @@ sweep_teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
-  # DISPATCH_CONFIG_DIR is sweep-local — never leak it into later non-sweep tests.
-  unset DISPATCH_CONFIG_DIR
+  # DISPATCH_CONFIG_DIR / DISPATCH_SWEEP_WORKTREES_ROOT are sweep-local — never
+  # leak them into later non-sweep tests.
+  unset DISPATCH_CONFIG_DIR DISPATCH_SWEEP_WORKTREES_ROOT
   # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
   unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
 }
@@ -9416,6 +9423,61 @@ ca_basename=$(basename "$CA_DIR")
 write_fake_claude "[{\"sessionId\":\"s-pause\",\"pid\":6,\"status\":\"paused\",\"name\":\"$ca_basename\"}]" 0
 if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "paused occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+# --- Test 8e: exclude_sid self-exclusion (tactic-align-tactics-self-claim-collision) ---
+#
+# A graph-launched /align-tactics orchestrator is spawned with
+# `--name "$id"` — the same name as its own worktree basename — so its own
+# just-spawned session can otherwise self-match Step 0.2's live-claim check.
+# The optional exclude_sid argument lets a caller pass its own session id so
+# that self-match is excluded, while a genuinely different live session under
+# the same name still counts as a held claim.
+
+echo "Test: worktree_has_live_session with exclude_sid treats a self-named-match session as free"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"self-sess\",\"pid\":1,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR" "self-sess"; then live=occupied; else live=free; fi
+assert_eq "self-exclude: only-self session with exclude_sid reports free" "free" "$live"
+ca_teardown
+
+echo "Test: worktree_has_live_session with no exclude_sid still reports occupied for the same session"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"self-sess\",\"pid\":1,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "self-exclude: same session without exclude_sid reports occupied (backward compatible)" "occupied" "$live"
+ca_teardown
+
+echo "Test: worktree_has_live_session with exclude_sid still reports occupied for a different live session"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"other-sess\",\"pid\":2,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR" "self-sess"; then live=occupied; else live=free; fi
+assert_eq "self-exclude: a different live session with the same name still reports occupied" "occupied" "$live"
+ca_teardown
+
+# The exact disambiguation exclude_sid exists to provide: exclude MY session yet
+# STILL detect a concurrent OTHER session that shares the worktree name. A future
+# refactor to a whole-list filter (e.g. "free if any excluded-sid row is present")
+# would pass every case above yet regress here to a dangerous false-negative — two
+# live sessions in one worktree reported free, allowing concurrent authoring that
+# corrupts the graph-commit rebase. Assert both row orderings lock the behavior in.
+echo "Test: worktree_has_live_session with exclude_sid reports occupied when self AND another live session share the name (self-first)"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"self-sess\",\"pid\":1,\"status\":\"busy\",\"name\":\"$ca_basename\"},{\"sessionId\":\"other-sess\",\"pid\":2,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR" "self-sess"; then live=occupied; else live=free; fi
+assert_eq "self-exclude: self+other under same name (self-first) reports occupied" "occupied" "$live"
+ca_teardown
+
+echo "Test: worktree_has_live_session with exclude_sid reports occupied when self AND another live session share the name (other-first)"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"other-sess\",\"pid\":2,\"status\":\"busy\",\"name\":\"$ca_basename\"},{\"sessionId\":\"self-sess\",\"pid\":1,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR" "self-sess"; then live=occupied; else live=free; fi
+assert_eq "self-exclude: self+other under same name (other-first) reports occupied" "occupied" "$live"
 ca_teardown
 
 # --- Test 9: claude_sessions_under invokes `claude` with --cwd <path> -------
@@ -16362,19 +16424,29 @@ assert_eq "phase-effort: empty-string-arg → exit 2" "2" "$pe_rc"
 
 # --- review-fix/SKILL.md model-tiering content guards (#1172) -----------------
 # The review-fix orchestrator runs on Sonnet; fix-authoring is delegated to an
-# Opus subagent and its /code-review pass is detection-only. Guard both facts so
-# a regression that re-introduces Sonnet-authored fixes (or a --fix /code-review)
-# is caught here.
+# Opus subagent. The review-fix.js `--fix` guard below is INTENTIONALLY
+# INVERTED from the original #1172 doctrine ("code-review is detection-only,
+# no --fix"): tactic-review-phase-trust-builtin-review deliberately reverses
+# this — code-review now runs `/code-review max --fix` and applies its own
+# fixes directly (Lane-A trust-the-built-in doctrine), with only its
+# un-auto-fixed residue dispositioned by the new residue phase. Per
+# .claude/rules/test-integrity.md, re-pointing a guard whose asserted doctrine
+# the author has deliberately reversed is not weakening a red test — the first
+# assertion below (Opus fix-authoring) is untouched because that invariant
+# still holds.
 REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 RF_SKILL="$REPO_ROOT/.claude/skills/review-fix/SKILL.md"
+RF_WORKFLOW="$REPO_ROOT/.claude/workflows/review-fix.js"
 
 echo "Test: review-fix/SKILL.md pins fix-authoring to Opus (model: opus present)"
 if grep -q 'model: opus' "$RF_SKILL"; then rf_opus=yes; else rf_opus=no; fi
 assert_eq "review-fix: Opus fix-authoring pinned" "yes" "$rf_opus"
 
-echo "Test: review-fix/SKILL.md runs /code-review detection-only (no --fix)"
-if grep -q -- '/code-review max --fix' "$RF_SKILL"; then rf_fix=yes; else rf_fix=no; fi
-assert_eq "review-fix: no /code-review max --fix invocation" "no" "$rf_fix"
+echo "Test: review-fix.js invokes /code-review with --fix (Lane-A trust-the-built-in doctrine, tactic-review-phase-trust-builtin-review)"
+assert_eq "review-fix.js: /code-review --fix call site present" "1" "$(grep -c -- "AND the \`--fix\` flag" "$RF_WORKFLOW" || true)"
+
+echo "Test: review-fix.js contains the residue phase (tactic-review-phase-trust-builtin-review)"
+assert_eq "review-fix.js: residue phase present" "1" "$(grep -c -- "title: 'residue'" "$RF_WORKFLOW" || true)"
 
 # ============================================================================
 # spawn fake-claude harness (shared)
@@ -19247,6 +19319,74 @@ assert_eq "stop: park-node failure → hook still exits 0" "0" "$rc"
 assert_eq "stop: park-node failure → park-node was still attempted once" "1" "$(wc -l < "$ROOT/park-calls.log")"
 stopnc_teardown
 
+# --- marker consumed after successful park (reason-only) --------------------
+echo "Test: dispatch-stop successful park consumes the reason marker"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)
+assert_eq "stop: park success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park success → reason marker deleted" "0" "$?"
+stopnc_teardown
+
+# --- consumed marker prevents re-park on a later Stop event ------------------
+echo "Test: dispatch-stop does not re-park on a second Stop event after marker consumed"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)
+rc2=$(stopnc_run)   # marker already consumed by the first run
+assert_eq "stop: second run → exit 0" "0" "$rc2"
+assert_eq "stop: second run → park-node still called only once total" "1" "$(wc -l < "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- marker survives a failed park (reason-only) so a later retry can fire ---
+echo "Test: dispatch-stop failed park leaves the reason marker in place"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
+rc=$(stopnc_run)
+assert_eq "stop: park failure → exit 0" "0" "$rc"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park failure → reason marker survives" "0" "$?"
+stopnc_teardown
+
+# --- marker consumed after successful park (reason + recommendation) --------
+echo "Test: dispatch-stop successful park consumes both markers when a recommendation is present"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+rc=$(stopnc_run)
+assert_eq "stop: park+reco success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park+reco success → reason marker deleted" "0" "$?"
+[ ! -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: park+reco success → recommendation marker deleted" "0" "$?"
+stopnc_teardown
+
+# --- both markers survive a failed park (reason + recommendation) -----------
+echo "Test: dispatch-stop failed park leaves both markers in place when a recommendation is present"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
+rc=$(stopnc_run)
+assert_eq "stop: park+reco failure → exit 0" "0" "$rc"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park+reco failure → reason marker survives" "0" "$?"
+[ -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: park+reco failure → recommendation marker survives" "0" "$?"
+stopnc_teardown
+
 # ============================================================================
 # dispatch-finalize-phase tests (#2243)
 # ============================================================================
@@ -21288,6 +21428,13 @@ case "$*" in
   "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
   "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
+  # resolve_project_root (lib.sh) + assert_primary_checkout_on_main (added by
+  # PR #2925) run before the main-sync: return a non-empty git-common-dir so the
+  # project-root dirname succeeds, and report the primary checkout as on `main`
+  # so the invariant passes. Without these the catch-all returns empty, the
+  # invariant sees branch != main, and dispatch-select-tick aborts exit 2.
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/.bare" ;;
+  "-C "*" symbolic-ref --short HEAD") echo main ;;
   *) exit 0 ;;
 esac
 STUB
@@ -22478,6 +22625,11 @@ tick_setup() {
   # (#1068) the tick writes resolves through dispatch_lock_file to a path inside
   # the test tree (not the host repo's tmp/).
   export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
+  # Pin the pause sentinel to a path INSIDE the test tree that does not exist by
+  # default, so the tick's pause guard never fires from a real host flag file at
+  # the default $HOME/.local/share/commons-dispatch/paused. A pause test creates
+  # this file explicitly to exercise the guard.
+  export DISPATCH_PAUSE_FLAG="$TMPDIR_TEST/paused"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -22546,7 +22698,7 @@ tick_teardown() {
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_SEL_RC TICK_GRAPH_EXEC_RC \
     TICK_SEL_PRE TICK_GRAPH_EXEC_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
-    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC
+    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -22561,6 +22713,42 @@ assert_eq "busy: no graph-execute call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
 assert_eq "busy: no spawn-job call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- pause sentinel: autonomous tick with flag present → no-op before select ---
+# The pause flag makes an AUTONOMOUS tick exit before dispatch-select-tick and
+# before dispatch-refresh-rate-limits, so it spawns nothing and arms no reseed.
+# Already-running workers are separate sessions the tick never signals, so this
+# pause does not interfere with in-flight work.
+echo "Test: dispatch-tick paused (flag present, autonomous) → exit 0, no select-tick/refresh/spawn"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused: exit 0" "0" "$rc"
+assert_eq "paused: stdout announces pause" "1" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
+assert_eq "paused: select-tick NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "paused: refresh-rate-limits NOT run (guard exits before it)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/order.log" ] && echo 1 || echo 0)"
+assert_eq "paused: no graph-execute" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
+assert_eq "paused: no spawn-job" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- pause sentinel: --manual overrides the flag → the tick runs normally ------
+echo "Test: dispatch-tick --manual with flag present → overrides pause, runs select-tick"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="busy"
+out=$(run_tick --manual) && rc=0 || rc=$?
+assert_eq "manual-override: exit 0" "0" "$rc"
+assert_eq "manual-override: select-tick WAS called" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "manual-override: not announced as paused" "0" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
 tick_teardown
 
 # --- concurrency-cap / sync-repair-pending / sync-broken ---------------------
@@ -24934,6 +25122,276 @@ STUB
   if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
   assert_eq "flake-dedup: closed match, missing --run-id → no reopen" "no" "$r"
   flake_dedup_teardown
+
+  # ============================================================================
+  # === dispatch-flake-dedup-node (tactic-fix-checks-graph-native-flake-tracking) ===
+  # ============================================================================
+  # Node-lane sibling of dispatch-flake-dedup: no gh stub, no network — it works
+  # against real local git state (intentions/tactic-*.md working-tree content plus
+  # origin/main history for the phase:done ancestry gate). Uses real git repos,
+  # mirroring the dispatch-merge-main convention above rather than the gh-stub
+  # harness used for the issue-lane sibling.
+
+  echo "Test: dispatch-flake-dedup-node"
+
+  FDN="$SCRIPT_DIR/dispatch-flake-dedup-node"
+  FDN_FP="acceptance — fellspiral/e2e/navigation.spec.ts:4:3 page loads without JS errors @smoke"
+
+  # Helper: build an origin + worktree pair with an intentions/ dir, mirroring
+  # merge_main_setup's real-git convention. Callers add commits/files on top.
+  fdn_setup() {
+    FDN_TMPDIR=$(mktemp -d)
+    FDN_ORIGIN="$FDN_TMPDIR/origin"
+    FDN_WORKTREE="$FDN_TMPDIR/worktree"
+
+    git init -q "$FDN_ORIGIN"
+    git -C "$FDN_ORIGIN" config user.email "test@test"
+    git -C "$FDN_ORIGIN" config user.name "Test"
+    git -C "$FDN_ORIGIN" checkout -q -b main 2>/dev/null || true
+    mkdir -p "$FDN_ORIGIN/intentions"
+    touch "$FDN_ORIGIN/seed.txt"
+    git -C "$FDN_ORIGIN" add seed.txt
+    git -C "$FDN_ORIGIN" commit -q -m "initial"
+  }
+
+  # Clone origin into the worktree once the caller has finished seeding origin
+  # commits. Populates refs/remotes/origin/main via the clone.
+  fdn_clone() {
+    git clone -q "$FDN_ORIGIN" "$FDN_WORKTREE"
+    git -C "$FDN_WORKTREE" config user.email "test@test"
+    git -C "$FDN_WORKTREE" config user.name "Test"
+  }
+
+  fdn_teardown() {
+    rm -rf "$FDN_TMPDIR"
+    unset FDN_TMPDIR FDN_ORIGIN FDN_WORKTREE
+  }
+
+  # Run the script with cwd = the worktree, so `git rev-parse --show-toplevel`
+  # and the `intentions/tactic-*.md` glob resolve against it.
+  fdn_run() {
+    (cd "$FDN_WORKTREE" && "$FDN" "$@")
+  }
+
+  # CASE 1 — no fingerprint anywhere → NONE.
+  fdn_setup
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  out=$(fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md")
+  assert_eq "flake-dedup-node: no match → NONE" "NONE" "$out"
+  fdn_teardown
+
+  # CASE 2 — open (phase: implement) match → EXISTING <id>. No --head-ref needed
+  # (the ancestry gate only fires on a phase:done match).
+  fdn_setup
+  cat > "$FDN_ORIGIN/intentions/tactic-flake-nav-smoke.md" <<EOF
+---
+id: tactic-flake-nav-smoke
+phase: implement
+---
+# Flaky CI tracker
+
+Fingerprint: $FDN_FP
+EOF
+  git -C "$FDN_ORIGIN" add intentions/tactic-flake-nav-smoke.md
+  git -C "$FDN_ORIGIN" commit -q -m "create flake tactic"
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  out=$(fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md")
+  assert_eq "flake-dedup-node: open match → EXISTING <id>" "EXISTING tactic-flake-nav-smoke" "$out"
+  fdn_teardown
+
+  # CASE 3 — phase-absent match (never phase-set) → treated as open → EXISTING.
+  fdn_setup
+  cat > "$FDN_ORIGIN/intentions/tactic-flake-nav-smoke.md" <<EOF
+---
+id: tactic-flake-nav-smoke
+---
+# Flaky CI tracker
+
+Fingerprint: $FDN_FP
+EOF
+  git -C "$FDN_ORIGIN" add intentions/tactic-flake-nav-smoke.md
+  git -C "$FDN_ORIGIN" commit -q -m "create flake tactic (unphased)"
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  out=$(fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md")
+  assert_eq "flake-dedup-node: phase-absent match → EXISTING <id>" "EXISTING tactic-flake-nav-smoke" "$out"
+  fdn_teardown
+
+  # CASE 4 — done match, --head-ref descends from the closing commit → REOPENED.
+  fdn_setup
+  cat > "$FDN_ORIGIN/intentions/tactic-flake-nav-smoke.md" <<EOF
+---
+id: tactic-flake-nav-smoke
+phase: implement
+---
+# Flaky CI tracker
+
+Fingerprint: $FDN_FP
+EOF
+  git -C "$FDN_ORIGIN" add intentions/tactic-flake-nav-smoke.md
+  git -C "$FDN_ORIGIN" commit -q -m "create flake tactic"
+  sed -i 's/^phase: implement$/phase: done/' "$FDN_ORIGIN/intentions/tactic-flake-nav-smoke.md"
+  git -C "$FDN_ORIGIN" add intentions/tactic-flake-nav-smoke.md
+  git -C "$FDN_ORIGIN" commit -q -m "complete flake tactic"
+  CLOSING_SHA=$(git -C "$FDN_ORIGIN" rev-parse HEAD)
+  fdn_clone
+  # A commit descending from the closing commit — the PR branch's head contains
+  # the fix.
+  touch "$FDN_WORKTREE/downstream.txt"
+  git -C "$FDN_WORKTREE" add downstream.txt
+  git -C "$FDN_WORKTREE" commit -q -m "downstream of the fix"
+  HEAD_SHA=$(git -C "$FDN_WORKTREE" rev-parse HEAD)
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  out=$(fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md" --head-ref "$HEAD_SHA")
+  assert_eq "flake-dedup-node: done match, head contains fix → REOPENED <id>" "REOPENED tactic-flake-nav-smoke" "$out"
+  fdn_teardown
+
+  # CASE 5 — done match, --head-ref does NOT descend from the closing commit →
+  # STALE. Build a branch that diverges BEFORE the closing commit.
+  fdn_setup
+  cat > "$FDN_ORIGIN/intentions/tactic-flake-nav-smoke.md" <<EOF
+---
+id: tactic-flake-nav-smoke
+phase: implement
+---
+# Flaky CI tracker
+
+Fingerprint: $FDN_FP
+EOF
+  git -C "$FDN_ORIGIN" add intentions/tactic-flake-nav-smoke.md
+  git -C "$FDN_ORIGIN" commit -q -m "create flake tactic"
+  PRE_CLOSE_SHA=$(git -C "$FDN_ORIGIN" rev-parse HEAD)
+  sed -i 's/^phase: implement$/phase: done/' "$FDN_ORIGIN/intentions/tactic-flake-nav-smoke.md"
+  git -C "$FDN_ORIGIN" add intentions/tactic-flake-nav-smoke.md
+  git -C "$FDN_ORIGIN" commit -q -m "complete flake tactic"
+  fdn_clone
+  # A commit that branches off BEFORE the closing commit — the PR branch is
+  # stale and does not contain the fix.
+  git -C "$FDN_WORKTREE" checkout -q "$PRE_CLOSE_SHA" -b stale-branch
+  touch "$FDN_WORKTREE/stale.txt"
+  git -C "$FDN_WORKTREE" add stale.txt
+  git -C "$FDN_WORKTREE" commit -q -m "stale PR branch commit"
+  STALE_HEAD_SHA=$(git -C "$FDN_WORKTREE" rev-parse HEAD)
+  git -C "$FDN_WORKTREE" checkout -q main
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  out=$(fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md" --head-ref "$STALE_HEAD_SHA" 2>"$FDN_TMPDIR/err")
+  assert_eq "flake-dedup-node: done match, head behind fix → STALE <id>" "STALE tactic-flake-nav-smoke" "$out"
+  if grep -q 'suppressing reopen' "$FDN_TMPDIR/err"; then g=yes; else g=no; fi
+  assert_eq "flake-dedup-node: stale → suppression logged to stderr" "yes" "$g"
+  fdn_teardown
+
+  # CASE 6 — done match, missing --head-ref → non-zero exit + stderr (the
+  # ancestry gate requires it, mirroring the issue lane's --run-id requirement).
+  fdn_setup
+  cat > "$FDN_ORIGIN/intentions/tactic-flake-nav-smoke.md" <<EOF
+---
+id: tactic-flake-nav-smoke
+phase: done
+---
+# Flaky CI tracker
+
+Fingerprint: $FDN_FP
+EOF
+  git -C "$FDN_ORIGIN" add intentions/tactic-flake-nav-smoke.md
+  git -C "$FDN_ORIGIN" commit -q -m "create done flake tactic"
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  if fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md" 2>"$FDN_TMPDIR/err"; then ec=0; else ec=$?; fi
+  assert_eq "flake-dedup-node: done match, missing --head-ref → non-zero exit" "1" "$ec"
+  if grep -q 'head-ref is required' "$FDN_TMPDIR/err"; then g=yes; else g=no; fi
+  assert_eq "flake-dedup-node: done match, missing --head-ref → stderr error" "yes" "$g"
+  fdn_teardown
+
+  # CASE 7 — fingerprint matches more than one tactic node → error, non-zero exit.
+  fdn_setup
+  cat > "$FDN_ORIGIN/intentions/tactic-flake-a.md" <<EOF
+---
+id: tactic-flake-a
+phase: implement
+---
+Fingerprint: $FDN_FP
+EOF
+  cat > "$FDN_ORIGIN/intentions/tactic-flake-b.md" <<EOF
+---
+id: tactic-flake-b
+phase: implement
+---
+Fingerprint: $FDN_FP
+EOF
+  git -C "$FDN_ORIGIN" add intentions/tactic-flake-a.md intentions/tactic-flake-b.md
+  git -C "$FDN_ORIGIN" commit -q -m "duplicate flake tactics"
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  if fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md" 2>"$FDN_TMPDIR/err"; then ec=0; else ec=$?; fi
+  assert_eq "flake-dedup-node: multiple matches → non-zero exit" "1" "$ec"
+  if grep -q 'matched multiple tactic nodes' "$FDN_TMPDIR/err"; then g=yes; else g=no; fi
+  assert_eq "flake-dedup-node: multiple matches → stderr error" "yes" "$g"
+  fdn_teardown
+
+  # CASE 8 — (guardrail) missing --body-file → usage error, exit 2.
+  fdn_setup
+  fdn_clone
+  if fdn_run "$FDN_FP" 2>"$FDN_TMPDIR/err"; then ec=0; else ec=$?; fi
+  assert_eq "flake-dedup-node: missing --body-file → exit 2" "2" "$ec"
+  fdn_teardown
+
+  # CASE 9 — an UNRELATED node quotes the fingerprint in prose but carries no
+  # canonical `Fingerprint: <fp>` label line → must NOT match (the match is
+  # scoped to the label, not a bare substring anywhere in a body) → NONE.
+  fdn_setup
+  cat > "$FDN_ORIGIN/intentions/tactic-plan-fix-nav.md" <<EOF
+---
+id: tactic-plan-fix-nav
+phase: implement
+---
+# Planning node
+
+We should fix: $FDN_FP
+EOF
+  git -C "$FDN_ORIGIN" add intentions/tactic-plan-fix-nav.md
+  git -C "$FDN_ORIGIN" commit -q -m "unrelated planning node quoting the fingerprint"
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  out=$(fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md")
+  assert_eq "flake-dedup-node: unrelated prose mention (no label) → NONE" "NONE" "$out"
+  fdn_teardown
+
+  # CASE 10 — phase-ABSENT frontmatter, but the BODY carries a verbatim CI
+  # excerpt line beginning `phase: done`. Phase extraction is bounded to the
+  # frontmatter block, so the body line must NOT be read as the node's phase:
+  # the node is treated as open → EXISTING (no --head-ref demanded).
+  fdn_setup
+  cat > "$FDN_ORIGIN/intentions/tactic-flake-nav-smoke.md" <<EOF
+---
+id: tactic-flake-nav-smoke
+---
+# Flaky CI tracker
+
+Fingerprint: $FDN_FP
+
+Recurrence excerpt:
+phase: done
+EOF
+  git -C "$FDN_ORIGIN" add intentions/tactic-flake-nav-smoke.md
+  git -C "$FDN_ORIGIN" commit -q -m "phase-absent node with 'phase: done' in body excerpt"
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  out=$(fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md")
+  assert_eq "flake-dedup-node: body 'phase: done' not read as phase → EXISTING <id>" "EXISTING tactic-flake-nav-smoke" "$out"
+  fdn_teardown
+
+  # CASE 11 — (guardrail) --head-ref passed as the final token with no value →
+  # clean usage error (exit 2), not a set -u 'unbound variable' abort.
+  fdn_setup
+  fdn_clone
+  printf 'recurred on PR #900\n' > "$FDN_TMPDIR/body.md"
+  if fdn_run "$FDN_FP" --body-file "$FDN_TMPDIR/body.md" --head-ref 2>"$FDN_TMPDIR/err"; then ec=0; else ec=$?; fi
+  assert_eq "flake-dedup-node: --head-ref with no value → exit 2" "2" "$ec"
+  if grep -q 'head-ref requires a value' "$FDN_TMPDIR/err"; then g=yes; else g=no; fi
+  assert_eq "flake-dedup-node: --head-ref with no value → stderr usage error" "yes" "$g"
+  fdn_teardown
 
 echo ""
 echo "=== dispatch-mark-complete / dispatch-mark-deviation ==="

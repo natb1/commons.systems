@@ -131,11 +131,22 @@ Scope:
 `graph-select-target` script exists).
 
 Scope:
-- Assert (and if missing, add) that `graph-select-target`'s claimed-set
-  derivation treats ANY existing `.claude/worktrees/<node-id>` as a held
-  claim — including worktrees created by human-invoked sessions that never
-  touched the router's reservation ledger. Add a test: create a bare
-  node-id worktree, run selection, assert the node is skipped.
+- Shipped (PR 2804): `graph-select-target`'s claimed-set gate
+  (`.claude/skills/dispatch-propagate/scripts/graph-select-target:368-372`)
+  skips a node id when `reservation_exists "$id"` OR
+  `worktree_has_live_session "$NATIVE_ROOT/.claude/worktrees/$id"` — bare
+  worktree-directory existence alone is NOT a claim (matches Unit 1's own
+  live-session ⇔ worktree liveness rule; per the #1474 doctrine an orphan
+  worktree fails open). The shipped test
+  (`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`,
+  "graph-select-target — live session in a human-created node-id worktree
+  is skipped (Unit 3)") covers a human-invoked session's worktree — one
+  that claims by authoring in `<root>/.claude/worktrees/<node-id>` and
+  never writes a router reservation-ledger marker — on two cases: (a) the
+  worktree has a live session named `<node-id>` — skipped; (b) the same
+  worktree with no live session (a bare/orphan worktree, daemon reports
+  `[]`) — still selected, the negative control proving directory existence
+  alone is not a claim.
 
 ## Reuse
 

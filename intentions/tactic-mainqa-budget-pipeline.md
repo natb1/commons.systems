@@ -20,7 +20,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -29,6 +29,7 @@ office_hours:
     statement, encryption password) — live production verification migrated from
     the legacy main-qa queue
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -37,13 +38,14 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issues (closed, content preserved here): 2680,
-2681, 2679, 2703 — needs-main residue from the budget-sync orchestrator
-(issue 2645, PR 2678) and the shared-crypto migration (issue 2668, PR 2695).
-Owned local-first budgeting (`strategy-recover-finance`) is target-state.
-One owner sitting: live Drive mount (/mnt/g), the distributed budget-etl
-binary, a real statement file, the real encryption password.
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issues (closed, content
+preserved here): 2680, 2681, 2679, 2703 — needs-main residue from the
+budget-sync orchestrator (issue 2645, PR 2678) and the shared-crypto
+migration (issue 2668, PR 2695). Owned local-first budgeting
+(`strategy-recover-finance`) is target-state. One owner sitting: live Drive
+mount (/mnt/g), the distributed budget-etl binary, a real statement file, the
+real encryption password.
 
 ## Verification checklist
 

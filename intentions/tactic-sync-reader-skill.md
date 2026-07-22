@@ -39,62 +39,52 @@ execution:
   pr: 2798
   attempts: {}
   markers: []
-  strategy_fingerprint: 4938e3dd607b936f594cb15964e7096ae8da08b91c2177910589282473b95a68
+  strategy_fingerprint:
+    strategy-graph-native-dispatch:
+      hash: 2984f3e1b320656f005dbdf04e93a4ab6e6c707b7553e23c16485bbcb9fd70c5
+      sha: 95913ceb8f780bb38059a207585a00836789b6fd
+  fix: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "QA (2026-07-10) on PR #2798 (CI green) found two real-data correctness
-    defects, one fixed and pushed, one needing a human design decision. FIXED
-    and verified: excerpt rebuilds were nondeterministic because JSZip
-    auto-creates parent-directory zip entries (META-INF/, OEBPS/, OEBPS/Fonts/,
-    etc.) stamped with the real wall clock instead of the code's fixed date,
-    silently defeating the mirror's write-vs-keep byte comparison -- a live sync
-    would get a full re-write every run instead of a no-op. Reproduced against a
-    real downloaded Republic epub across separate process invocations (4 of 5
-    runs matched, 1 differed), root-caused to JSZip's folderAdd falling back to
-    new Date() for auto-created folders, fixed in
-    packages/sync-reader/src/excerpt.ts by forcing every zip.files directory
-    entry's date after all files are added, and covered by a new non-flaky
-    regression test in test/excerpt.test.ts (confirmed red on the pre-fix code,
-    green after) -- commit e54b6736, already pushed to the
-    tactic-sync-reader-skill branch, CI re-run green. UNFIXED and blocking:
-    multi-work chunk citation mismapping. The CLI
-    (.claude/skills/sync-reader/scripts/sync-reader.ts) matches only
-    chunk.passages[0].work against the share epubs (const primary =
-    chunk.passages[0]; matchWork(primary.work, sources)), then maps every
-    passage's range against that single matched source. 9 of the 24 live
-    tactic-reading-chunk-* nodes cite passages spanning two different works
-    within one chunk: chunk ids 3, 4, 7, 8, 14, 15, 16, 17, 18 (e.g.
-    chunk-7-liberality-schole cites Aristotle Nicomachean Ethics IV.1 and X.7
-    plus Aristotle Politics I.2 in the same chunk). For any such chunk the
-    non-primary work's range gets matched against the wrong source epub's table
-    of contents -- structurally certain from the code (matchWork runs once per
-    chunk), and depending on the real epub's TOC this surfaces as either a
-    spurious unmapped report or, worse, a silent wrong excerpt with no error
-    when a designator like a roman-numeral book number happens to also exist in
-    the wrong book's TOC -- directly against the tactic's own stated
-    clear-errors-over-defensive-fallbacks design principle. This needs a human
-    decision, not a mechanical fix, because the plan commits to one excerpt epub
-    per chunk with one filename per chunk, and a multi-work chunk cannot satisfy
-    that without a real design choice: (a) build one excerpt merging sections
-    from two different source epubs, a nontrivial change since excerpt.ts
-    assumes a single source throughout; (b) write multiple files per chunk,
-    which breaks the stated one-file-per-chunk unit; (c) restructure the 9
-    affected reading-chunk nodes (owner: human) into per-work sub-chunks; or (d)
-    explicitly detect and report multi-work chunks as unsupported, which is safe
-    but leaves 37 percent of the live curriculum permanently un-synced until (a)
-    or (c) lands. Next steps: at office-hours, pick a resolution among (a)
-    through (d) or another, then dispatch a fresh pass against the current PR
-    branch (the determinism fix above is already landed, do not redo it). Minor,
-    worth a yes/no while a human is already looking: the current active-chunk
-    filter (phase not equal to done) is spec-compliant per the tactic body's
-    Unit 1 scope but also pulls in the 8 draft/office-hours-parked
-    candidate:true reading chunks (e.g.
-    tactic-reading-chunk-10-hirschman-exit-voice) that have not yet been through
-    author review -- confirm whether those should reach the physical reader
-    before promotion, or whether that is acceptable as designed."
-  since: 2026-07-10
-  recommendation: null
+  reason: "/qa-fix: QA needs a human on tactic-sync-reader-skill (PR #2798). Item
+    5 (\"golden-path sync produces correct, idempotent excerpts and clear item
+    reporting\") was reclassified opus-fixable by the disposition Workflow's
+    skeptics, but the gated fix-planner found no actual code defect and declined
+    via scope-deviation: the criterion is the golden-path run against the
+    author's real DRM-free epub content, which the node body's own \"Manual
+    checks\" section already defers to a human. Item 6 (\"a generated excerpt
+    opens correctly on a real e-reader device\") is a planned-deferral
+    classified needs-main, but its verification needs a real physical e-reader
+    device — unreachable by /qa-main's read-only browser flow — so per the
+    node-lane doctrine it escalates directly as needs-human rather than being
+    written as /qa-main residue. All script-verifiable acceptance items (test
+    suite, typecheck, CLI arg/config error paths, delete-outside-managed-dir
+    safety guard) already PASSED autonomously this pass."
+  since: 2026-07-22
+  recommendation: >-
+    Best next steps for the human reviewer:
+
+
+    1. Item 5 (golden-path sync): run `/sync-reader <reader_dir> <share_dir>`
+    (or the `.claude/skills/sync-reader/scripts/sync-reader.ts` CLI directly)
+    against a real DRM-free epub matched to an active `tactic-reading-chunk-*`
+    citation. Confirm the extracted excerpt covers the right cited range, the
+    filename carries the correct zero-padded priority prefix, a second run makes
+    no changes (idempotent), and the printed report clearly explains any
+    missing/ambiguous/unmapped chunks.
+
+    2. Item 6 (device-grade validity): copy one generated excerpt epub onto the
+    real USB e-reader (or open it in a device-grade reader such as Calibre) and
+    confirm it opens and paginates correctly.
+
+    3. All other acceptance items (test suite 54/54, typecheck, CLI usage/config
+    error paths, and the delete-outside-managed-dir safety guard) already passed
+    autonomously this session — no further action needed on those.
+
+    4. If both manual checks pass, clear this park (office_hours) and let the
+    tactic proceed to `review`; if either surfaces a real defect, park stays and
+    a follow-up fix is warranted.
 pace_exempt: false
 rounds: null
 attributes: {}
