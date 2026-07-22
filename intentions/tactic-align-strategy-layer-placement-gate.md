@@ -34,8 +34,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-align-strategy-layer-placement-gate
+  pr: 2935
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
