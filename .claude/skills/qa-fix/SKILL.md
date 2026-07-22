@@ -289,7 +289,7 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
      merge-conflict-escalation guarantee is preserved without the in-session merge:
      a conflict between this branch and `origin/main` would already have surfaced at
      launch time, where `provision-node-worktree` aborts the merge and exits 11
-     (lines 124–125), failing the launch itself rather than deferring the conflict
+     (lines 124–126), failing the launch itself rather than deferring the conflict
      into the session. See Step 0.5 for the lane fork.
 
 0.5. **Merge `origin/main` into the working branch** — *legacy issue lane only*
