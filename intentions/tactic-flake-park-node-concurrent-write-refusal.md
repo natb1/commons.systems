@@ -20,7 +20,46 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: '/implement: no code change in scope — the concurrent-write refusal
+    flake this node targets was already fixed on origin/main by commit 71a7ddd45
+    (merged 2026-07-22T21:11:34, after all three CI failures this node recorded,
+    ~03:09-03:23 UTC same day). Verified via 8/8 clean local reruns of
+    test-park-node.sh and zero "concurrent-write" matches in post-fix CI
+    hook-tests logs. Parking for a human decision rather than opening an
+    empty/no-op PR.'
+  since: 2026-07-22
+  recommendation: >-
+    ## Recommendation: very likely already fixed by 71a7ddd45
+
+
+    The specific bug this node targets — Case 2's concurrent-write refusal
+    failing because the wrapper swap of
+    `packages/intentionsutil/scripts/graph-commit` trips
+    `assert_clean_outside_ids` — was fixed on main by commit `71a7ddd45` (merged
+    2026-07-22T21:11:34, after all three recorded CI failures at ~03:09-03:23
+    UTC). That commit added `git add` + `git commit` of the wrapper right after
+    it is installed (test-park-node.sh lines 278-284), exactly the fix this
+    node's own diagnosis proposed.
+
+
+    Evidence it holds:
+
+    - Local: ran the test 8 times on current origin/main content — 8/8 passed
+    3/3, including Case 2, no flakiness.
+
+    - CI: hook-tests failures after the fix landed grep zero matches for
+    "concurrent-write". The failures in that window were a different test
+    (`guard-halt` / `primary-checkout-not-on-main`), outside this node's scope.
+
+
+    Suggested next action: mark this node done with no PR, citing `71a7ddd45` as
+    the actual fix commit (or a doc-only body update noting it). No code change
+    remains in scope.
+
+
+    Residual uncertainty: the original bug was intermittent. If you want higher
+    confidence, trigger a few repeat hook-tests CI runs before closing.
 pace_exempt: false
 rounds: null
 attributes: {}
