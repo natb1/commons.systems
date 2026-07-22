@@ -255,7 +255,7 @@ export function applyFixState(args: Args): FixStateResult {
           `dispatch:fix-checks-attempt-<n> escalation.`,
         since: todayUtc(),
         recommendation:
-          `Review the fix-checks accumulator (tmp/fix-checks-summary.md in the node's worktree, also posted as PR ` +
+          `Review the fix-checks accumulator (tmp/fix-checks-summary.md in the node's worktree, also posted in PR ` +
           `comments) to diagnose why ${FIX_ATTEMPT_CAP} automated attempts did not resolve CI. Clear office_hours to ` +
           `resume automated fix-checks with a fresh retry budget (attempt was reset to 1), or abandon/redesign the ` +
           `tactic if the current approach cannot work.`,
