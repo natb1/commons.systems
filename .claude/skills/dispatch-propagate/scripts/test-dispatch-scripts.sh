@@ -21435,13 +21435,13 @@ FAKE
   # FAKE_GIT_*_FAIL env var is set. The single `-C <path> symbolic-ref --short
   # HEAD` arm below backs lib.sh's assert_primary_checkout_on_main
   # (b8a1ba75), which dispatch-select-tick's Step 1 main-sync now calls before
-  # the ff-only merge — precedence FAKE_GIT_PRIMARY_BRANCH > (older)
-  # SEL_PRIMARY_CHECKOUT_BRANCH > FAKE_GIT_BRANCH > "main", so every
+  # the ff-only merge — precedence SEL_PRIMARY_CHECKOUT_BRANCH >
+  # FAKE_GIT_PRIMARY_BRANCH > FAKE_GIT_BRANCH > "main", so every
   # pre-existing test's main-sync path is unaffected and either knob can drive
   # the drift invariant. (There were previously two case arms matching this
-  # same command shape — bash `case` takes the first match, so the older arm
-  # silently shadowed the newer FAKE_GIT_PRIMARY_BRANCH knob; collapsed into
-  # one arm here.)
+  # same command shape — bash `case` takes the first match, so the earlier
+  # SEL_PRIMARY_CHECKOUT_BRANCH arm silently shadowed the older
+  # FAKE_GIT_PRIMARY_BRANCH knob; collapsed into one arm here.)
   cat > "$TMPDIR_TEST/bin/git" <<'STUB'
 #!/usr/bin/env bash
 case "$*" in
