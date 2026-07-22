@@ -18,7 +18,13 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-flake-pid-cleanup-stale-worktree
+  pr: null
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
