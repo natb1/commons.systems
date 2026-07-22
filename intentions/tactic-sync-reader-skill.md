@@ -33,12 +33,13 @@ attention:
     rest of strategy-graph-native-dispatch. Scoped to curriculum-execution
     tactics only, not the reading-chunk tactics under
     strategy-philosophical-grounding, which remain unboosted."
-phase: qa
+phase: review
 execution:
   branch: tactic-sync-reader-skill
   pr: 2798
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint:
     strategy-graph-native-dispatch:
       hash: 2984f3e1b320656f005dbdf04e93a4ab6e6c707b7553e23c16485bbcb9fd70c5
@@ -46,45 +47,7 @@ execution:
   fix: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA needs a human on tactic-sync-reader-skill (PR #2798). Item
-    5 (\"golden-path sync produces correct, idempotent excerpts and clear item
-    reporting\") was reclassified opus-fixable by the disposition Workflow's
-    skeptics, but the gated fix-planner found no actual code defect and declined
-    via scope-deviation: the criterion is the golden-path run against the
-    author's real DRM-free epub content, which the node body's own \"Manual
-    checks\" section already defers to a human. Item 6 (\"a generated excerpt
-    opens correctly on a real e-reader device\") is a planned-deferral
-    classified needs-main, but its verification needs a real physical e-reader
-    device — unreachable by /qa-main's read-only browser flow — so per the
-    node-lane doctrine it escalates directly as needs-human rather than being
-    written as /qa-main residue. All script-verifiable acceptance items (test
-    suite, typecheck, CLI arg/config error paths, delete-outside-managed-dir
-    safety guard) already PASSED autonomously this pass."
-  since: 2026-07-22
-  recommendation: >-
-    Best next steps for the human reviewer:
-
-
-    1. Item 5 (golden-path sync): run `/sync-reader <reader_dir> <share_dir>`
-    (or the `.claude/skills/sync-reader/scripts/sync-reader.ts` CLI directly)
-    against a real DRM-free epub matched to an active `tactic-reading-chunk-*`
-    citation. Confirm the extracted excerpt covers the right cited range, the
-    filename carries the correct zero-padded priority prefix, a second run makes
-    no changes (idempotent), and the printed report clearly explains any
-    missing/ambiguous/unmapped chunks.
-
-    2. Item 6 (device-grade validity): copy one generated excerpt epub onto the
-    real USB e-reader (or open it in a device-grade reader such as Calibre) and
-    confirm it opens and paginates correctly.
-
-    3. All other acceptance items (test suite 54/54, typecheck, CLI usage/config
-    error paths, and the delete-outside-managed-dir safety guard) already passed
-    autonomously this session — no further action needed on those.
-
-    4. If both manual checks pass, clear this park (office_hours) and let the
-    tactic proceed to `review`; if either surfaces a real defect, park stays and
-    a follow-up fix is warranted.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -402,3 +365,17 @@ device-grade validity. Note for Claude sessions: runs against the real USB
 reader and network share, and writing `dispatch.config/sync-reader.json`,
 need `dangerouslyDisableSandbox` (paths are outside the sandbox allowlist);
 plain `npx vitest run` does not.
+
+## QA items skipped by author (2026-07-22)
+
+QA (PR #2798) escalated two manual-verification acceptance items to
+office-hours; the author reviewed and explicitly waived both rather than
+running the manual checks — clearing the park:
+
+- Golden-path sync against real content (extraction correctness, priority
+  naming, mirroring, retirement, report clarity, idempotency) — skipped.
+- Device-grade epub validity on a real e-reader — skipped.
+
+All script-verifiable acceptance items (test suite 54/54, typecheck, CLI
+arg/config error paths, delete-outside-managed-dir safety guard) already
+passed autonomously.
