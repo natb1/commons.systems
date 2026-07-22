@@ -2,7 +2,7 @@
 id: tactic-flake-park-node-concurrent-write-refusal
 kind: tactic
 statement: Fix park-node's Case 2 test in test-park-node.sh (concurrent-write
-  refusal) causing the hook-tests CI job to intermittently fail
+  refusal) causing the hook-tests CI job to fail deterministically
 owner: ai
 status: codified
 parent: null
@@ -184,7 +184,7 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Fix park-node's Case 2 test in test-park-node.sh (concurrent-write refusal) causing the hook-tests CI job to intermittently fail
+# Fix park-node's Case 2 test in test-park-node.sh (concurrent-write refusal) causing the hook-tests CI job to fail deterministically
 
 Fingerprint: hook-tests — packages/intentionsutil/scripts/test-park-node.sh:259
 
