@@ -364,31 +364,3 @@ device-grade validity. Note for Claude sessions: runs against the real USB
 reader and network share, and writing `dispatch.config/sync-reader.json`,
 need `dangerouslyDisableSandbox` (paths are outside the sandbox allowlist);
 plain `npx vitest run` does not.
-
-## needs-main residue
-
-QA (PR #2798) verified every script-verifiable acceptance item (test suite,
-typecheck, CLI arg/config error paths, delete-outside-managed-dir safety guard)
-autonomously via shell commands — all PASS. Two items need verification against
-real content/hardware that this session cannot provide, and are recorded here
-for `/qa-main` (or, where noted, a human) to verify post-merge:
-
-- id: 5 — Golden-path sync produces correct, idempotent excerpts and clear item
-  reporting. url_path: current. expected_outcome: for the author running the
-  tool against real content, excerpts extract the right ranges, are named by
-  priority, mirror correctly to the reader, resolved chunks are retired,
-  unresolved/missing/ambiguous items are called out understandably, and a
-  second run makes no changes. finding: this session's shell-command lane
-  exercised the CLI's error paths and safety guards but had no real DRM-free
-  epub content or curriculum citation to exercise the actual extraction/mapping
-  logic end-to-end (the QA disposition workflow's skeptics judged this
-  autonomously verifiable in principle via a synthetic fixture — a fixture-based
-  check is left for `/qa-main` or a future pass, not fabricated here against
-  fragile ad hoc content).
-- id: 6 — A generated excerpt opens correctly on a real e-reader device.
-  url_path: current. expected_outcome: the produced epubs are valid at device
-  grade — they open and read correctly on the actual reader, not just as
-  structurally well-formed files. finding: device-grade epub validity needs a
-  real e-reader/device; the node body's own "Manual checks" section above
-  already defers this to a human with a real DRM-free epub and reader — planned
-  deferral, measured downstream, not assertable at merge time.
