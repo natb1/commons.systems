@@ -7,7 +7,20 @@ statement: Fix the flaky dispatch-select-tick lock-fixture test in
 owner: ai
 status: codified
 parent: null
-rationale: null
+rationale: "Closed as a duplicate of PR #2933 (sibling tactic
+  tactic-flake-hook-tests-select-tick). Both the unit-tests and hook-tests CI
+  jobs execute the SAME file,
+  .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh (hook-tests
+  runs it directly; unit-tests runs it via run-unit-tests.sh's --pr-scripts
+  test-*.sh loop). The set -e crash lives in that file, not in either job's
+  wrapper, so #2933's fix to the file's run_sel_tick/run_tick call sites
+  resolves both jobs' flake at once. #2933's diff is a strict superset of this
+  tactic's scope (its 45 guarded sites include all 44 of this tactic's plus the
+  dispatch-tick run_tick site). This tactic's own branch carried an equivalent
+  44-site fix at commit 20600969 but it adds no coverage #2933 lacks, so no PR
+  was opened. Root cause confirmed via the failing run's raw log (gh run view
+  --job 88729272080 --log): crash 112ms after the test's echo line with zero
+  PASS/FAIL output."
 reading: null
 gap: null
 serves:
@@ -17,54 +30,11 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "tactic-flake-unit-tests-select-tick duplicates work already shipped in
-    an open sibling PR: #2933 (branch tactic-flake-hook-tests-select-tick)
-    guards every out=$(run_sel_tick ...) / out=$(run_tick ...) call site in
-    .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh against
-    the exact same set -e crash this tactic targets, and additionally covers the
-    dispatch-tick section's run_tick site, which this tactic's own scope did not
-    include. This tactic's own branch (tactic-flake-unit-tests-select-tick)
-    already carries an equivalent 44-site fix at commit 20600969, pushed to
-    origin, but opening a second PR here would conflict with and duplicate
-    #2933's diff on the same file/lines."
-  since: 2026-07-21
-  recommendation: >-
-    # Recommended next steps
-
-
-    - **If PR #2933 merges cleanly**: this tactic node is redundant. Do not open
-    a
-      PR from branch `tactic-flake-unit-tests-select-tick` — its 44-site fix is a
-      strict subset of #2933's 45-site fix (identical guard pattern, same file,
-      same lines, minus #2933's extra `dispatch-tick` `run_tick` site). Close this
-      tactic without a PR once #2933 lands, and delete the now-unused
-      `tactic-flake-unit-tests-select-tick` branch.
-
-    - **If PR #2933 is closed/rejected instead** (e.g. review finds a problem
-    with
-      its approach): resume this tactic by opening a draft PR directly from the
-      already-pushed branch `tactic-flake-unit-tests-select-tick` (commit
-      `20600969`, verified locally: 175/175 assertions passing in an isolated
-      run of the `dispatch-select-tick` test section). Since this is a graph-native
-      tactic with no backing GitHub issue, use `gh pr create --draft` directly
-      (no `Closes #N` line — there is no issue to close). Also check whether
-      #2933's extra `run_tick` fix (the one site this tactic's scope excluded)
-      should be folded in at that point, since it fixes the same root cause.
-
-    - Root cause for context: `test-dispatch-scripts.sh` runs under
-      `set -euo pipefail`; the `dispatch-select-tick` test section's
-      `out=$(run_sel_tick ...)` call sites had no guard, so any transient nonzero
-      exit from `dispatch-select-tick` (plausible under real CI resource
-      pressure) tripped `errexit` and crashed the entire 30944-line test file
-      immediately, before any `assert_eq` ran — confirmed by pulling the actual
-      failing CI run's raw log (`gh run view --job 88729272080 --log`), which
-      showed the crash 112ms after the test's own echo line with zero PASS/FAIL
-      output.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

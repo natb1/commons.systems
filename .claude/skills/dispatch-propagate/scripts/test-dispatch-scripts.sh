@@ -6736,6 +6736,12 @@ sweep_setup() {
   mkdir -p "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/scripts" \
            "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees" \
            "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
+  # dispatch-sweep now defaults WORKTREES_ROOT to <project>/.claude/worktrees
+  # (standard layout). This fixture keeps the worktrees under project/worktrees;
+  # inject that path via the test seam so the sweep logic is exercised regardless
+  # of the default. Re-modeling the fixture to .claude/worktrees is tracked on
+  # tactic-retire-bare-layout (deferred fixture-purge scope).
+  export DISPATCH_SWEEP_WORKTREES_ROOT="$TMPDIR_TEST/project/worktrees"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   # dispatch-sweep sources lib.sh via its SCRIPT_DIR (the scripts/ copy) — so
@@ -6961,8 +6967,9 @@ sweep_teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
-  # DISPATCH_CONFIG_DIR is sweep-local — never leak it into later non-sweep tests.
-  unset DISPATCH_CONFIG_DIR
+  # DISPATCH_CONFIG_DIR / DISPATCH_SWEEP_WORKTREES_ROOT are sweep-local — never
+  # leak them into later non-sweep tests.
+  unset DISPATCH_CONFIG_DIR DISPATCH_SWEEP_WORKTREES_ROOT
   # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
   unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
 }
@@ -19310,6 +19317,74 @@ printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
 rc=$(stopnc_run)
 assert_eq "stop: park-node failure → hook still exits 0" "0" "$rc"
 assert_eq "stop: park-node failure → park-node was still attempted once" "1" "$(wc -l < "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- marker consumed after successful park (reason-only) --------------------
+echo "Test: dispatch-stop successful park consumes the reason marker"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)
+assert_eq "stop: park success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park success → reason marker deleted" "0" "$?"
+stopnc_teardown
+
+# --- consumed marker prevents re-park on a later Stop event ------------------
+echo "Test: dispatch-stop does not re-park on a second Stop event after marker consumed"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)
+rc2=$(stopnc_run)   # marker already consumed by the first run
+assert_eq "stop: second run → exit 0" "0" "$rc2"
+assert_eq "stop: second run → park-node still called only once total" "1" "$(wc -l < "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- marker survives a failed park (reason-only) so a later retry can fire ---
+echo "Test: dispatch-stop failed park leaves the reason marker in place"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
+rc=$(stopnc_run)
+assert_eq "stop: park failure → exit 0" "0" "$rc"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park failure → reason marker survives" "0" "$?"
+stopnc_teardown
+
+# --- marker consumed after successful park (reason + recommendation) --------
+echo "Test: dispatch-stop successful park consumes both markers when a recommendation is present"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+rc=$(stopnc_run)
+assert_eq "stop: park+reco success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park+reco success → reason marker deleted" "0" "$?"
+[ ! -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: park+reco success → recommendation marker deleted" "0" "$?"
+stopnc_teardown
+
+# --- both markers survive a failed park (reason + recommendation) -----------
+echo "Test: dispatch-stop failed park leaves both markers in place when a recommendation is present"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
+rc=$(stopnc_run)
+assert_eq "stop: park+reco failure → exit 0" "0" "$rc"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park+reco failure → reason marker survives" "0" "$?"
+[ -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: park+reco failure → recommendation marker survives" "0" "$?"
 stopnc_teardown
 
 # ============================================================================
