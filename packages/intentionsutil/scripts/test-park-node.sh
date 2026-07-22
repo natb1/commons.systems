@@ -240,6 +240,15 @@ fi
 exec "$SD/graph-commit.real" "$@"
 SH
 chmod +x "$C/packages/intentionsutil/scripts/graph-commit"
+# Commit the wrapper swap so the clone's working tree is clean before park-node
+# runs graph-commit: graph-commit's own assert_clean_outside_ids() pre-flight
+# guard refuses to start on ANY dirty tracked file outside this call's node
+# set, and an uncommitted mv+overwrite of the tracked graph-commit script would
+# otherwise trip that guard with an unrelated-dirty-file error, masking the
+# concurrent-write refusal this case means to exercise.
+git -C "$C" add packages/intentionsutil/scripts/graph-commit \
+                packages/intentionsutil/scripts/graph-commit.real
+git -C "$C" commit -qm 'test: install concurrent-write wrapper'
 
 before_sha="$(origin_sha)"
 out="$(
@@ -251,7 +260,7 @@ out="$(
 )"; rc=$?
 content="$(origin_show t-concurrent)"
 if [[ $rc -ne 0 ]] \
-   && grep -q 'stale base' <<<"$out" \
+   && grep -q 'concurrent-edit conflict' <<<"$out" \
    && grep -q 'line14: concurrent edit' <<<"$content" \
    && ! grep -q 'office_hours' <<<"$content"; then
   ok "concurrent origin/main advance is refused: park exits non-zero, concurrent content survives, no park landed"
