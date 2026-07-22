@@ -148,8 +148,11 @@ echo "=== Test: cleanup_stale_worktree_processes kills stale, keeps active ==="
   source "$SCRIPT_DIR/lib.sh"
   REAL_WT="$(git rev-parse --show-toplevel)"
   # Stale path must be under this repo's worktree root so the repo-scoped
-  # pgrep in cleanup_stale_worktree_processes finds it
-  STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/worktrees/deleted-$$"
+  # pgrep in cleanup_stale_worktree_processes finds it. Native worktrees live
+  # under <repo>/.claude/worktrees (standard Claude Code layout, since the
+  # 2026-07-21 de-bare migration) — mirrors cleanup_stale_worktree_processes'
+  # own worktree_root derivation in lib.sh.
+  STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/.claude/worktrees/deleted-$$"
 
   # Process from a real active worktree
   perl -e 'sleep 300' -- "$REAL_WT/sentinel" &
@@ -236,7 +239,7 @@ echo "=== Test: cleanup_stale_worktree_processes prunes before listing ==="
   # Mock `git worktree list` so its output flips based on whether prune ran first:
   # without the prune call, list reports the stale path as still-active and the
   # orphan would survive. The test passes only if the production code prunes first.
-  STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/worktrees/612-prune-test-fixture-$$"
+  STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/.claude/worktrees/612-prune-test-fixture-$$"
   REAL_WT="$(git rev-parse --show-toplevel)"
   PRUNE_CALLED_MARKER="${TEST_TMPDIR}/prune_called_$$"
   REAL_ENTRY=$(printf 'worktree %s\nHEAD abc123\nbranch refs/heads/main\n\n' "$REAL_WT")
@@ -279,7 +282,7 @@ echo "=== Test: cleanup_stale_worktree_processes kills child processes ==="
   # whose own args do NOT match. The child is reachable only through tree-walk;
   # if `_collect_tree_pids` cannot enumerate children (sandbox-blocked pgrep),
   # the parent dies but the child is orphaned.
-  STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/worktrees/612-tree-test-fixture-$$"
+  STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/.claude/worktrees/612-tree-test-fixture-$$"
   REAL_WT="$(git rev-parse --show-toplevel)"
   REAL_ENTRY=$(printf 'worktree %s\nHEAD abc123\nbranch refs/heads/main\n\n' "$REAL_WT")
 
