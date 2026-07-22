@@ -26,12 +26,20 @@
 #   1. Stale far-ahead worktree park does NOT revert landed content: a
 #      concurrent body edit landed on origin survives, and office_hours is set.
 #   2. A concurrent origin/main write that lands between park-node resolving
-#      FRESH_BLOB and graph-commit's --base freshness check is REFUSED (park-node
-#      exits non-zero, the concurrent content survives on main, no park lands).
-#      Reliably triggered — without a literal race — by a test wrapper standing
-#      in for graph-commit that lands the concurrent change, then delegates to
-#      the real graph-commit whose check_base_freshness sees origin has moved
-#      past FRESH_BLOB.
+#      FRESH_BLOB and graph-commit's --base freshness check is FAILED CLOSED:
+#      park-node's own edit is never landed (park-node exits non-zero), and the
+#      concurrent writer's content survives on main — but graph-commit's layers
+#      1-3 (auto-serialize mechanical contention, #2911) mean the collision
+#      itself is not a bare refusal. check_base_freshness attempts a structural
+#      three-way merge (layer 3) first; when that can't resolve, graph-commit
+#      parks the node on top of the concurrent content via office_hours itself
+#      (park_and_exit/park_write) before exiting 1. So the end state is: the
+#      concurrent edit survives AND office_hours ends up set — just not by
+#      park-node's own edit, and not as a straight pre-#2911 "stale base"
+#      rejection. Reliably triggered — without a literal race — by a test
+#      wrapper standing in for graph-commit that lands the concurrent change,
+#      then delegates to the real graph-commit whose check_base_freshness sees
+#      origin has moved past FRESH_BLOB.
 #   3. A node absent from origin/main is refused before any write (exit 1).
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
@@ -125,16 +133,46 @@ SH
 
 cat >"$WORK/bin/npx" <<'SH'
 #!/usr/bin/env bash
-# npx shim: emulate `npx tsx <helper> <store> <dir> <since> <reason>
-# <recommendation> <id>` (park-node's office_hours write) without node. Appends
-# an office_hours line to $dir/$id.md — the file park-node has already refreshed
-# from origin/main.
+# npx shim: emulate the `npx tsx ...` invocations graph-commit and park-node
+# make for office_hours writes, without node. Three call shapes reach here:
+#
+#   1. park-node's own office_hours write (park-node:93):
+#        tsx <helper> <store> <dir> <since> <reason> <recommendation> <id>
+#   2. graph-commit's layer-2/3 structural merge (run_merge_node(),
+#      graph-commit:398), invoked as:
+#        tsx <merge-node.ts> --base <f> --ours <f> --theirs <f> --out <f>
+#      Not emulated: real three-way field merging is out of scope for this
+#      harness. A non-zero exit here is exactly the "tool crash" path
+#      run_merge_node() already handles (graph-commit:400-406) — it records a
+#      generic unresolved-conflict sentinel and returns 1, which is the
+#      correct outcome for exercising the fail-closed park below it.
+#   3. graph-commit's own parking write (park_write(), graph-commit:860,905-906):
+#        tsx <helper> <store> <dir> <since> <reason> <snapDir> <pruneCsv> <id...>
+#      Shares its first six positionals with shape 1 but adds a pruneCsv
+#      positional and supports multiple trailing ids.
 [[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
+script="$2"
+if [[ "$3" == "--base" ]]; then
+  echo "npx shim: structural merge not emulated (treated as unresolved): $script" >&2
+  exit 1
+fi
 shift 3   # tsx, helper script path, store module path
-dir="$1"; since="$2"; reason="$3"; recommendation="$4"; id="$5"
-[[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
-printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
-echo "npx shim: set office_hours on $id (since=$since)" >&2
+dir="$1"; since="$2"; reason="$3"
+shift 3
+write_office_hours() { # <id>
+  local id="$1"
+  [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
+  printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
+  echo "npx shim: set office_hours on $id (since=$since)" >&2
+}
+if [[ $# -eq 2 ]]; then
+  # Shape 1: <recommendation> <id>.
+  write_office_hours "$2"
+else
+  # Shape 3: <snapDir> <pruneCsv> <id...>.
+  shift 2
+  for id in "$@"; do write_office_hours "$id"; done
+fi
 SH
 chmod +x "$WORK/bin/gh" "$WORK/bin/npx"
 
@@ -204,7 +242,8 @@ fi
 
 # ---------------------------------------------------------------------------
 # Case 2: a concurrent origin/main write between FRESH_BLOB resolution and the
-# --base freshness check is REFUSED, not clobbered.
+# --base freshness check is FAILED CLOSED — park-node's own edit never lands,
+# and the concurrent writer's content is never clobbered — not a bare refusal.
 # ---------------------------------------------------------------------------
 # park-node's own fetch and graph-commit's check_base_freshness fetch happen
 # back-to-back inside one synchronous process, so there is no natural injection
@@ -213,7 +252,13 @@ fi
 # concurrent change on origin/main for the node, then delegates to the real
 # graph-commit (graph-commit.real). The real graph-commit's check_base_freshness
 # then re-fetches, sees origin's blob no longer matches the FRESH_BLOB token
-# park-node resolved, and refuses — exactly the collision the guard must catch.
+# park-node resolved, and attempts a layer-3 structural merge; the harness's npx
+# shim doesn't emulate real merging, so that merge reports unresolved (the same
+# "tool crash" path a genuine unmergeable conflict takes), and graph-commit
+# fails closed via park_and_exit(): it resets to origin/main (keeping the
+# concurrent writer's content), sets office_hours on the node itself, lands that
+# parking commit, and still exits 1 — this writer's own edit is NOT the one that
+# landed. That is the collision this case must catch.
 C="$WORK/c"
 make_clone "$C" writer-c
 # Install the wrapper in park-node's SCRIPT_DIR (the same dir park-node lives in
@@ -240,6 +285,16 @@ fi
 exec "$SD/graph-commit.real" "$@"
 SH
 chmod +x "$C/packages/intentionsutil/scripts/graph-commit"
+# Commit the wrapper swap so the fixture clone's working tree is clean before
+# park-node runs: graph-commit's assert_clean_outside_ids pre-flight guard
+# (added in #2914) refuses to start on ANY dirty tracked file outside the node
+# set being written, and the overwritten-but-uncommitted graph-commit script
+# itself would trip that guard before check_base_freshness — the logic this
+# case exists to exercise — ever runs. Mirrors Case 1, which already proves
+# graph-commit tolerates a worktree HEAD carrying a committed, non-intentions
+# change ahead of origin/main.
+git -C "$C" add packages/intentionsutil/scripts/graph-commit
+git -C "$C" commit -qm 'test: swap in concurrent-edit wrapper for graph-commit'
 
 before_sha="$(origin_sha)"
 out="$(
@@ -251,12 +306,12 @@ out="$(
 )"; rc=$?
 content="$(origin_show t-concurrent)"
 if [[ $rc -ne 0 ]] \
-   && grep -q 'stale base' <<<"$out" \
+   && grep -q 'concurrent-edit conflict' <<<"$out" \
    && grep -q 'line14: concurrent edit' <<<"$content" \
-   && ! grep -q 'office_hours' <<<"$content"; then
-  ok "concurrent origin/main advance is refused: park exits non-zero, concurrent content survives, no park landed"
+   && grep -q 'office_hours' <<<"$content"; then
+  ok "concurrent origin/main advance fails closed: park-node exits non-zero, concurrent content survives, graph-commit parks the node itself"
 else
-  no "concurrent-write refusal (rc=$rc before_sha=$before_sha)"
+  no "concurrent-write fail-closed park (rc=$rc before_sha=$before_sha)"
   printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
