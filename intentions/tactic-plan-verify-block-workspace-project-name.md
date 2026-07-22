@@ -1,5 +1,4 @@
 ---
----
 id: tactic-plan-verify-block-workspace-project-name
 kind: tactic
 statement: Plan authoring must emit full workspace-path vitest project names
