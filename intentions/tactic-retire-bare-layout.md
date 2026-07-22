@@ -176,11 +176,40 @@ executes for now):
 - Host systemd units regenerated at the repo root via `ensure_heartbeat_units` /
   `ensure_sweep_timer` / `ensure_recover_unit`.
 
+## `<repo>/worktrees` container residual — hotfixed 2026-07-21
+
+A second, distinct de-bare residual (surfaced reviewing the primary-checkout
+hotfix): three sites still resolved the **native worktree container** as the
+retired sibling `<repo>/worktrees` instead of `<repo>/.claude/worktrees` — a
+path that no longer exists. Unlike the primary-checkout residual, this one did
+not crash; it silently mis-scoped:
+
+- `lib.sh` `cleanup_stale_worktree_processes` (process-match prefix) — never
+  matched a native worktree, so stale-worktree-process cleanup was a no-op.
+- `dispatch-sweep` `WORKTREES_ROOT` — the direct-child filter never matched a
+  native worktree, so the sweep skipped every one.
+- `commit-merge-push` `WORKTREES_ROOT` — the `--worktree` containment guard
+  would reject every `.claude/worktrees/<id>` path as "not under the worktrees
+  root" (latent: no current caller passes `--worktree`).
+
+Fixed (direct-to-main hotfix): all three repointed to `<repo>/.claude/worktrees`
+(comments updated to match). `dispatch-sweep` gained a
+`DISPATCH_SWEEP_WORKTREES_ROOT` test seam (mirroring `commit-merge-push`'s
+`DISPATCH_WORKTREES_ROOT`) so its fixture injects the container path; the sweep
+fixture's dir-name re-model to `.claude/worktrees` stays deferred to the
+fixture-purge scope below. `commit-merge-push`'s and `cleanup`'s own tests were
+unaffected (override-seam'd / mirror the loop, not the real function). Full
+dispatch suite: 2993/2994 — the one failure (`dispatch-complete-phase owns
+BFD4F2`) is a pre-existing environment-specific flake unrelated to layout,
+present identically on the pre-hotfix baseline.
+
 ## Remaining scope — still open under this node
 
-- `.bare` / `worktrees/main` **test fixtures** (enumerated in the section above)
-  — purge or re-model to the standard `.git` layout; legacy-script sites co-land
-  with `tactic-legacy-router-removal`.
+- `.bare` / `worktrees/main` **test fixtures** (enumerated in the section above,
+  plus the `dispatch-sweep` `project/worktrees` fixture now injected via the
+  `DISPATCH_SWEEP_WORKTREES_ROOT` seam) — purge or re-model to the standard
+  `.git` / `.claude/worktrees` layout; legacy-script sites co-land with
+  `tactic-legacy-router-removal`.
 - **Narrative `worktrees/main` comments** in `office-hours-select-target`
   (lines ~115, ~452, ~573) — descriptive only, reword to the standard layout.
 - **Greenfield DRY**: the `MAIN_WORKTREE` resolution idiom is copy-pasted across

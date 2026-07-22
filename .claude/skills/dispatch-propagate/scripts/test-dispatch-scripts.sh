@@ -6736,6 +6736,12 @@ sweep_setup() {
   mkdir -p "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/scripts" \
            "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees" \
            "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
+  # dispatch-sweep now defaults WORKTREES_ROOT to <project>/.claude/worktrees
+  # (standard layout). This fixture keeps the worktrees under project/worktrees;
+  # inject that path via the test seam so the sweep logic is exercised regardless
+  # of the default. Re-modeling the fixture to .claude/worktrees is tracked on
+  # tactic-retire-bare-layout (deferred fixture-purge scope).
+  export DISPATCH_SWEEP_WORKTREES_ROOT="$TMPDIR_TEST/project/worktrees"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   # dispatch-sweep sources lib.sh via its SCRIPT_DIR (the scripts/ copy) — so
@@ -6961,8 +6967,9 @@ sweep_teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
-  # DISPATCH_CONFIG_DIR is sweep-local — never leak it into later non-sweep tests.
-  unset DISPATCH_CONFIG_DIR
+  # DISPATCH_CONFIG_DIR / DISPATCH_SWEEP_WORKTREES_ROOT are sweep-local — never
+  # leak them into later non-sweep tests.
+  unset DISPATCH_CONFIG_DIR DISPATCH_SWEEP_WORKTREES_ROOT
   # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
   unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
 }
