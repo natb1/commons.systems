@@ -56,14 +56,12 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint:
     strategy-autonomous-execution:
       hash: dd3961ce32c3f94852763ecd1212f9799714b6002b418e430bf2c9477437c9de
       sha: 70a48530c0c61b972f57db69f283ddb0e6554612
-  fix:
-    since: 2026-07-22
-    attempt: 1
-    pushed_sha: 38d9d716571200b28975059d375cc6204a838787
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
