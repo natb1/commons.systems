@@ -12,7 +12,7 @@
 #      remote branch, or a local branch named <node-id> when present).
 #   3. Merge origin/main into the branch — the merged-tree guarantee every
 #      phase runs under. A conflict is NOT resolved here (exit 11; the caller
-#      routes /fix-conflicts or parks).
+#      routes /dispatch-conflict or parks).
 #   4. CI-ready gate where a PR exists (dispatch-ci-ready, branch form): a
 #      draft PR whose checks have not concluded is not actionable (exit 10).
 #   5. direnv warm-up so the agent's non-interactive subshells have node on
@@ -25,7 +25,7 @@
 #   0   provisioned (or reused), merged clean, CI verdict actionable.
 #   10  ci-waiting: a draft PR's checks are still in progress. Retry next tick.
 #   11  merge-conflict: origin/main does not merge clean (merge aborted; the
-#       tree is left unmodified). The caller routes /fix-conflicts (a tactic
+#       tree is left unmodified). The caller routes /dispatch-conflict (a tactic
 #       with a PR) or parks the node.
 #   12  stale-selection: the node's directive changed after selection (pruned,
 #       phase advanced, parked, or a serving strategy's substance edited). The

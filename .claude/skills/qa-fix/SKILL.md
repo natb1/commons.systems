@@ -354,7 +354,7 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
 
    b. **Launch exactly one triage subagent** — Agent tool, `subagent_type:
       general-purpose`, **`model: opus`** (the canonical bounded-Opus pattern from
-      `.claude/skills/fix-conflicts/SKILL.md` § 5). This is one of two Opus calls
+      `.claude/skills/dispatch-conflict/SKILL.md` § 5). This is one of two Opus calls
       in the skill (the other is the Step 3.5 disposition Workflow's classify agent);
       the qa-fix session itself stays Sonnet. The subagent reasons
       over the pasted pack text and returns the plan — it does **not** run the pack,
