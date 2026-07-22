@@ -17,42 +17,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-flake-pid-cleanup-stale-worktree
   pr: 2940
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA auto-fix planning failed for opus-fixable item #5
-    (\"Timeout budget (5s / 100x0.05s) well-chosen for shared-runner variance\")
-    — the gated fix-planner returned zero implementation units with no
-    scope-deviation, i.e. it found no actionable code change to make. This is a
-    judgment call the auto-fix lane could not resolve on its own; escalating to
-    office-hours for human review. A secondary needs-main item (#6,
-    planned-deferral — absence of flake recurrence across future CI runs, a
-    downstream/monitoring observation) was also identified but has NOT yet been
-    committed to the graph as main-qa residue, since this pass escalates rather
-    than completing (the residue append rides on a transition-node commit that
-    only happens on a completing pass). PR #2940's own changes (the
-    polling-helper flake fix) passed all 4 script-verifiable QA checks cleanly:
-    direct run, 5x repeat run, correct scoping of the sleep replacement, and
-    bounded/non-hanging polling helpers."
-  since: 2026-07-22
-  recommendation: 'Review PR #2940 (the test-pid-cleanup.sh flake fix — all 4
-    automated QA checks already PASS). The only open question is item #5: is the
-    5s/100-attempt polling timeout budget in the new
-    wait_for_pid_args/wait_for_child_pid helpers well-chosen for CI variance?
-    The auto-fix planner found no code change to make, suggesting the current
-    value is likely fine as-is. If you agree, clear this park and let qa-fix
-    re-run (it will pick up item #6 — the planned-deferral "no recurrence" item
-    — as a needs-main follow-up and complete normally). If you want the timeout
-    tuned differently, direct the change and re-run qa-fix.'
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
