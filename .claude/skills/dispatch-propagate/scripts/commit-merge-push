@@ -127,7 +127,7 @@ fi
 # in a foreign repo. The worktrees root is anchored on this SCRIPT's own
 # location (trusted), never on cwd or the argument. Derivation mirrors lib.sh's
 # resolve_project_root: project root = parent of the git common dir; worktrees
-# root = <project-root>/worktrees. An explicit DISPATCH_WORKTREES_ROOT overrides
+# root = <project-root>/.claude/worktrees. An explicit DISPATCH_WORKTREES_ROOT overrides
 # the git lookup (test seam, same convention as DISPATCH_CONFIG_DIR /
 # DISPATCH_LOCK_FILE).
 if [[ -n "$WORKTREE" ]]; then
@@ -140,7 +140,7 @@ if [[ -n "$WORKTREE" ]]; then
       echo "$PROG: cannot resolve the script's repository (for worktrees-root check)" >&2
       exit 2
     fi
-    WORKTREES_ROOT="$(dirname -- "$COMMON_DIR")/worktrees"
+    WORKTREES_ROOT="$(dirname -- "$COMMON_DIR")/.claude/worktrees"
   fi
   if ! WORKTREES_ROOT_REAL=$(realpath -- "$WORKTREES_ROOT" 2>/dev/null); then
     echo "$PROG: cannot resolve worktrees root '$WORKTREES_ROOT'" >&2

@@ -2270,8 +2270,9 @@ cleanup_stale_worktree_processes() {
     echo "WARNING: git rev-parse --git-common-dir failed; skipping stale cleanup" >&2
     return 0
   }
-  # Resolve to absolute path; worktrees live as siblings of the git common dir
-  worktree_root="$(cd "$git_common_dir/.." && pwd)/worktrees"
+  # Resolve to absolute path; native worktrees live under <repo>/.claude/worktrees
+  # (standard Claude Code layout — the git common dir's parent is the repo root).
+  worktree_root="$(cd "$git_common_dir/.." && pwd)/.claude/worktrees"
 
   # Prune stale admin entries so the list below reflects on-disk worktrees only.
   git worktree prune 2>/dev/null || true
