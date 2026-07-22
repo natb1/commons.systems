@@ -30,7 +30,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution: null
 validates: []
 blocked_by: []

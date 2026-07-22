@@ -21,70 +21,7 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/implement: candidate fix (git update-index --assume-unchanged on the
-    wrapper path in test-park-node.sh Case 2's disposable clone) was implemented
-    and passed 5/5 local runs, but a subagent security-review flagged it as
-    potentially defeating graph-commit's assert_clean_outside_ids guard rather
-    than root-causing the still-unreproduced CI-only race; reverted rather than
-    landing on uncertain judgment. Needs a human call on whether the
-    harness-only suppression is safe or whether the intermittent guard trip
-    signals a real race in graph-commit's own commit/status-check sequencing."
-  since: 2026-07-22
-  recommendation: >-
-    # Recommendation: tactic-flake-park-node-case2-dirty-tree-guard
-
-
-    ## Decision needed
-
-    One judgment call: is `git update-index --assume-unchanged
-    packages/intentionsutil/scripts/graph-commit` in Case 2's disposable test
-    clone legitimate harness hardening, or a mask over a real race in
-    graph-commit?
-
-
-    The case for landing: the flag is scoped only to the throwaway clone
-    (deleted post-test), touches no production code, and weakens none of Case
-    2's PASS/FAIL assertions (the 'concurrent-edit conflict' /
-    'mechanical-unresolved' greps are untouched). It only stops git from
-    tracking dirtiness on the wrapper path the test itself installs.
-
-
-    The case against: the guard trips despite the add+commit that should make
-    the tracked path clean. If assert_clean_outside_ids (graph-commit:~975, git
-    status --porcelain) intermittently sees the path dirty after a local commit,
-    that same status-vs-commit ordering could misfire in real park_and_exit()
-    runs (graph-commit:~920-957, git fetch + git reset --hard FETCH_HEAD).
-    assume-unchanged would hide that signal, not fix it. That is why it wasn't
-    landed autonomously.
-
-
-    ## To pin the root cause first (recommended before landing)
-
-    Don't blanket-suppress. In test-park-node.sh Case 2 (~252-292), add
-    temporary diagnostics: dump git status --porcelain plus date +%s.%N
-    immediately before and after each of mv, wrapper-write, git add, git commit.
-    Then either loop the test under CI-like parallel load, or add a
-    retry-with-diagnostics wrapper (retry the guard check, logging porcelain
-    output on each miss) instead of assume-unchanged. If the porcelain snapshot
-    shows the path dirty after the commit returns, the race is in graph-commit's
-    status timing and deserves a real fix. If it's always clean locally and only
-    CI trips, the harness fix is defensible.
-
-
-    ## If you accept the harness fix
-
-    The patch is known: add `git update-index --assume-unchanged
-    packages/intentionsutil/scripts/graph-commit` in the clone after the
-    existing add+commit. Reapply directly.
-
-
-    ## Cleanup
-
-    Once resolved, merge the two duplicate nodes —
-    tactic-flake-park-node-case2-dirty-tree-guard and
-    tactic-flake-park-node-concurrent-write-refusal (same fingerprint family,
-    same signature) — into one.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
