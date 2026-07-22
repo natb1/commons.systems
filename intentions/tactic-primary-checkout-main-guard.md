@@ -63,7 +63,7 @@ execution:
   fix:
     since: 2026-07-22
     attempt: 1
-    pushed_sha: null
+    pushed_sha: 38d9d716571200b28975059d375cc6204a838787
 validates: []
 blocked_by: []
 office_hours: null
