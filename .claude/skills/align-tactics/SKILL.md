@@ -339,7 +339,11 @@ a strategy.
    leave it in place rather than finalizing, splitting, merging, or pruning it.
    Finalizing reuses the draft's retained body as
    the starting context for its plan (step 3); pruning drops a draft that the
-   round does not need (record why in the pruning commit message).
+   round does not need (record why in the pruning commit message). Before
+   finalizing, re-check the draft's content against kind-tactic's authoring
+   test (`intentions/kind-tactic.md`, 2026-07-21 clarification) — a draft that
+   is actually a standing requirement belongs on the strategy or kind as a
+   clarification, not promoted to `phase: implement` as a tactic.
 3. **Shape the subtree.** A leaf tactic is **exactly one PR**. Larger shapes
    become subtrees: child tactics carry `parent: <tactic-id>` (same-kind edge,
    `validateGraph` rule 6), and execution order is encoded with
