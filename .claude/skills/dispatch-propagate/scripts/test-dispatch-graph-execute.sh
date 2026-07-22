@@ -52,6 +52,7 @@ cp "$SCRIPT_DIR/dispatch-graph-execute" "$SUT_DIR/dispatch-graph-execute"
 cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$SUT_DIR/lib-reservation-ledger.sh"
 cp "$SCRIPT_DIR/lib.sh" "$SUT_DIR/lib.sh"
 cp "$SCRIPT_DIR/lib-claude-agents.sh" "$SUT_DIR/lib-claude-agents.sh"
+cp "$SCRIPT_DIR/lib-graph-worktree.sh" "$SUT_DIR/lib-graph-worktree.sh"
 cp "$SCRIPT_DIR/dispatch-phase-effort" "$SUT_DIR/dispatch-phase-effort"
 chmod +x "$SUT_DIR/dispatch-graph-execute" "$SUT_DIR/dispatch-phase-effort"
 

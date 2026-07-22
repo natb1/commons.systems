@@ -45,10 +45,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-dispatch-conflict-rename
+  pr: 2937
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-22
+    attempt: 1
+    pushed_sha: 78fbbedd9e9c459bf85b13bd9723f8af09cea684
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-pid-cleanup-stale-worktree
 office_hours: null
 pace_exempt: false
 rounds: null
