@@ -30,18 +30,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-fix-interrupt-attempt-cap
   pr: 2934
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-22
-    attempt: 2
-    pushed_sha: cc584b203a1f64157b5b2367cf549597df8a6a2b
+  fix: null
 validates: []
 blocked_by:
   - tactic-flake-park-node-concurrent-write-refusal
@@ -333,3 +329,17 @@ Manual / prose:
   completed `/fix-checks` passes lands with `office_hours` set (reason naming
   3 consumed attempts) instead of a 4th dispatch; a tactic whose 3rd push
   goes green resolves via `--clear-fix` with no park.
+
+## needs-main residue
+
+### 7. Observe in production: cap actually triggers a park end-to-end
+
+- URL path: current
+- Expected outcome: Cap engages after exactly 3 completed passes (parity with
+  the legacy `dispatch:fix-checks-attempt-<n>` lane), human-clear yields a
+  fresh budget, green-on-3rd resolves cleanly without a park, and the
+  `office_hours` recommendation is actionable.
+- Finding: planned deferral — the real cap-triggering-a-park path requires a
+  live node traversing 3 red `/fix-checks` passes in production dispatch;
+  this is the PR's own unchecked "Observe in production" test-plan item and
+  cannot be exercised by the static/unit-test QA lane.
