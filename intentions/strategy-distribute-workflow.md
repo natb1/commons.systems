@@ -102,6 +102,36 @@ clarifications:
       migration clarification above), now carrying explicit blocked_by edges to
       the gate, rather than being finalized against a design still in flux.
       Recorded 2026-07-11 /align-tactics round."
+  - question: How is the CI/nix Playwright chromium browser-version drift kept from
+      recurring, and how does it relate to the node-toolchain single-source
+      axis?
+    answer: "(Recorded 2026-07-22 interview.) The Playwright browser mismatch is a
+      second, independent toolchain-drift axis, distinct from and orthogonal to
+      the node-version axis the 2026-07-07 clarification single-sources. It is
+      the npm-pinned @playwright/test chromium revision drifting from the
+      chromium that the nix-provided pkgs.playwright-driver ships, driven by an
+      automated nixpkgs bump moving playwright-driver forward — not by
+      node-version drift (the 2026-07-07 clarification's attribution of the
+      mismatch to node drift was imprecise; the node axis is
+      tactic-node-toolchain-single-source, this browser axis is its own tactic).
+      It recurred 2026-07-21: flake bump a12b1779 took playwright-driver to
+      1.61.1 (chromium 1228) while @playwright/test stayed 1.60.0 (chromium
+      1223); the npm pin was hand-bumped to 1.61.1 in PR #2930.
+      check-playwright-version-sync.sh detects the drift but cannot prevent it —
+      every nixpkgs bump re-opens the gap. Greenfield (endorsed 2026-07-22
+      interview): nix is authoritative — nixpkgs decides which chromium exists —
+      and the npm pin follows by construction; the invariant is @playwright/test
+      == pkgs.playwright-driver.version (verified 2026-07-22: nix eval reports
+      1.61.1, matching the npm pin). Couple them at the mover: wrap `nix flake
+      update` so it reads playwright-driver.version, rewrites the
+      @playwright/test pin in root and audio package.json, runs npm install, and
+      stages all together in one commit, so a flake bump can never land drift;
+      check-playwright-version-sync.sh stays as the backstop. Fix drafted at
+      tactic-playwright-nix-browser-single-source. Rejected alternatives:
+      overlay-pin playwright-driver in nix (inverts the source of truth to npm
+      but adds an overlay you hand-bump anyway and fights nixpkgs updates); drop
+      nix browsers for npx playwright install (loses nix's offline/reproducible
+      guarantee and reintroduces a CI network download)."
 tooling_goals: []
 success_signal:
   observable: practitioners encountering and forking the workflow — entry-point
@@ -120,6 +150,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - a practitioner audience for autonomy tooling exists and is reachable

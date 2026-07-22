@@ -1,34 +1,38 @@
 # Sandbox
 
-Two paths are in the sandbox write-allowlist — `sandbox.filesystem.allowWrite`
-in `.claude/settings.json` — both relative to a worktree's project root:
+This is a standard Claude Code repository: the working tree at the repo root is
+the git root (`.git` is a normal directory inside it), and Claude Code native
+worktrees live under `.claude/worktrees/`. (It was formerly a
+bare-repo-with-worktrees layout keyed on a `.bare` common dir; that was retired
+2026-07-21 — older `.bare`-referencing notes are historical.)
 
-- `../../.bare` — the shared git common dir (index, objects, refs, and worktree
-  registrations under `.bare/worktrees/`).
-- `../../worktrees` — the worktree checkouts themselves. `git worktree remove`
-  deletes a worktree's *working directory* in addition to its `.bare/`
-  registration, so the container of all worktrees must be writable too.
+One path is in the sandbox write-allowlist — `sandbox.filesystem.allowWrite`
+in `.claude/settings.json` — relative to the project root:
+
+- `.git` — the git directory (index, objects, refs, and worktree registrations
+  under `.git/worktrees/`). The worktree checkouts themselves live under the
+  working tree (`.claude/worktrees/`), which is writable by default.
 
 Most git operations work **without** `dangerouslyDisableSandbox`:
 
-- `git add` / `git commit` — write to the index and objects under the writable `../../.bare` common dir.
-- `git worktree add` / `git worktree remove` — operate on the writable `../../worktrees` container and `../../.bare`.
+- `git add` / `git commit` — write to the index and objects under the writable `.git` dir.
+- `git worktree add` / `git worktree remove` — register/deregister under
+  `.git/worktrees/` and create/delete the checkout under the writable working tree.
 - `git push` / `git fetch` — use HTTPS to `github.com`, an allowlisted host.
 
 Tree-updating ops (`merge`, `checkout`, `rebase`, `reset`) require care — see the next section.
 
-If either allowlisted entry is missing, the matching write fails read-only — e.g.
-`Unable to create '.bare/worktrees/<branch>/index.lock': Read-only file system`
-on a commit, or `failed to delete '.../worktrees/<branch>': Read-only file
-system` from `git worktree remove`.
+If the `.git` allowlist entry is missing, the matching write fails read-only —
+e.g. `Unable to create '.git/worktrees/<branch>/index.lock': Read-only file
+system` on a commit.
 
 ## Tree-updating git ops touching read-only paths
 
 `git merge`, `git checkout`, `git rebase`, and `git reset` update the working tree
 **non-transactionally**: they write files one at a time and abort on the first
 failure. When such an op touches files under the sandbox's read-only
-`denyWithinAllow` carve-out paths — `.claude/skills/`, `config/`, and `.git`
-(read-only even on the `main` worktree) — it:
+`denyWithinAllow` carve-out paths — `.claude/skills/`, `.claude/hooks/`, and the
+other `.claude/` config carve-outs — it:
 
 1. Writes the writable files successfully.
 2. Aborts with an error like:
