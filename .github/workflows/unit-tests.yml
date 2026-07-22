@@ -195,6 +195,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-daemon-liveness.sh
       - name: Run park-node CAS-guard tests
         run: packages/intentionsutil/scripts/test-park-node.sh
+      - name: Run transition-node CAS-guard tests
+        run: packages/intentionsutil/scripts/test-transition-node.sh
       - name: Run budget-config-load tests
         run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests
