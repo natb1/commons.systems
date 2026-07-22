@@ -26,7 +26,6 @@ blocked_by:
   - tactic-graph-router-transitions
   - tactic-dispatch-lifecycle-sensor
   - tactic-phase-skill-node-targets
-  - tactic-legacy-dispatch-rewire-delete
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -34,22 +33,66 @@ attributes: {}
 ---
 # drain complete: remove the legacy gh router and dispatch:* label conventions
 
-## Status — re-scoped 2026-07-22
+## Status — Unit 1 fully complete (2026-07-22 correction)
 
 The gh queue drained (Step 0 gate discharged), and Unit 1's *non-live-wired*
 deletions landed (partial commit on branch `tactic-legacy-router-removal`, merged
 `ee12fc1b`): the legacy office-hours entry surface and the legacy
-`<issue-num>-<slug>` worktree lane are gone. The **remaining** Unit 1 work —
-rewiring `dispatch-select-tick` / `dispatch-phase` / `dispatch-tick`'s live
-`dispatch:*`-label and legacy-script dependencies onto graph-native state, then
-deleting the drained scripts and labels — turned out to be materially larger than
-this tactic assumed (rewire-then-delete across the live dispatch system, not
-delete-already-dead-code). It has been **split into a follow-up sibling,
-`tactic-legacy-dispatch-rewire-delete`**, which needs its own `/align-tactics`
-planning pass. This node is now `blocked_by` that follow-up. When it lands, this
-node runs only **Units 2 and 3** below — Unit 1's remainder lives in the
-follow-up. See that node's body for the full coupling-point checklist and the
-`dispatch-spawn-job` keep-forever carve-out.
+`<issue-num>-<slug>` worktree lane deletion (the `office-hours` shell entry,
+`office-hours-select-target`) are gone.
+
+The office_hours park this node carried since 2026-07-12 recorded the
+*remaining* Unit 1 work — rewiring `dispatch-select-tick` / `dispatch-phase` /
+`dispatch-tick`'s live `dispatch:*`-label and legacy-script dependencies onto
+graph-native state, then deleting the drained scripts and labels — as still
+outstanding. On 2026-07-22 that 10-day-stale recommendation was actioned
+without re-checking current graph/repo state: a follow-up sibling,
+`tactic-legacy-dispatch-rewire-delete`, was split out to re-plan it.
+
+That follow-up was a duplicate. In the 10 days between the park being written
+(2026-07-12) and the split (2026-07-22), a separately-recorded tactic,
+`tactic-dispatch-legacy-rewire`, already planned and landed the exact same
+rewire-then-delete scope — repo-health latch extraction (Unit 1), a
+`dispatch:*` label-consumer audit/rewire (Unit 2), and the orchestrator
+reduction plus dead-script deletion (Unit 3) — merged as PR #2869
+(`a8c4898d`) and pruned as done on 2026-07-18 (`a7273245`), four days *before*
+the 2026-07-22 split. `/align-tactics`, invoked on the split sibling on
+2026-07-22, re-verified current repo state against the 2026-07-12 checklist
+and confirmed it is now stale: `dispatch-select-target`, `dispatch-phase`,
+`dispatch-materialize-spawn`, `dispatch-launch-worker`, `dispatch-trace-leaf`,
+and `dispatch-route` are all deleted from
+`.claude/skills/dispatch-propagate/scripts/`; the main-broken/sync-broken
+latches now live in a label-free `repo-health` sensor called from
+`dispatch-select-tick`; `dispatch-select-tick`'s legacy gh-issue-queue
+selection path is gone (its own header cites `tactic-dispatch-legacy-rewire
+Unit 3`); `dispatch-tick` has no `run_materialize()` / materialize-spawn call
+left. The `dispatch:*` labels still read/written today
+(`dispatch:office-hours`, `planned`, `qa-done`, `reviewed`,
+`review-followup`, `chain-stalled`, and `sync-broken` as an
+announcement-only mirror over the now label-free latch) are not un-rewired
+legacy debt — they are current design in active service of the still-live
+legacy issue-lane skills (`office-hours`'s dual-lane mode, `plan-issue`,
+`qa-fix`, `review-fix`) that **Unit 2** below retires, or a human-visibility
+mirror `tactic-dispatch-legacy-rewire` Unit 1 deliberately kept.
+
+The two hook files the 2026-07-12 checklist also flagged —
+`.claude/hooks/dispatch-office-hours-strip.sh` (still registered as a
+UserPromptSubmit hook, stripping `dispatch:office-hours` on the legacy
+`<issue-num>-*` lane) and `.claude/hooks/worktree-create.sh` (still supports
+both the legacy `<issue-num>-<slug>` lane and the graph `<node-id>` lane) —
+are likewise correctly still live: they retire naturally as part of **Unit
+2** (retiring the legacy authoring skills that still produce `<issue-num>-*`
+work), not as additional Unit-1-shaped rewire work.
+
+`tactic-legacy-dispatch-rewire-delete` has been pruned (duplicate of
+already-completed work; see this commit's message) rather than re-planned.
+Unit 1 is therefore **fully complete** — both its non-live-wired half
+(`ee12fc1b`) and its live-wired half (`tactic-dispatch-legacy-rewire`, PR
+#2869). The dangling `blocked_by` edge to the pruned follow-up has been
+dropped from this node's frontmatter; the three remaining `blocked_by`
+entries (`tactic-graph-router-transitions`, `tactic-dispatch-lifecycle-sensor`,
+`tactic-phase-skill-node-targets`) are all already `phase: done`, so this node
+is now unblocked to proceed on **Units 2 and 3** below.
 
 ## Context
 
@@ -69,10 +112,12 @@ gate is a plan step.
 
 ## Unit 1 — remove the selector and phase-derivation surface
 
-> **Carved out (2026-07-22).** The non-live-wired half of this unit landed
-> (see Status above). The live-wired remainder moved to the follow-up
-> `tactic-legacy-dispatch-rewire-delete`; do **not** re-attempt it here. The
-> original scope is retained below for provenance only.
+> **Complete (2026-07-22 correction).** The non-live-wired half landed
+> directly on this branch (`ee12fc1b`); the live-wired half landed via the
+> separately-recorded `tactic-dispatch-legacy-rewire` (PR #2869, merged and
+> pruned 2026-07-18) — see Status above for the full reconciliation. Do
+> **not** re-attempt any of it. The original scope is retained below for
+> provenance only.
 
 **Recommended model:** opus
 
@@ -105,9 +150,8 @@ deletion cites its matrix row or its graph-native replacement tactic.
 
 **Recommended model:** sonnet
 
-Depends on: the follow-up `tactic-legacy-dispatch-rewire-delete` (which now
-carries Unit 1's live-wired remainder) — expressed as this node's `blocked_by`
-edge, so the router holds Unit 2 until that follow-up completes.
+Depends on: nothing further — Unit 1 (both halves) is complete (see Status
+above); this node's `blocked_by` set no longer gates on it.
 
 Scope: retire `/file-issue` and `/plan-issue` skill docs with pointers to
 their successors. (The gh↔graph mapping layer — `intention-emit`,
@@ -123,11 +167,11 @@ Scope:
 - The greenfield-relevance gate (strategy clarification, 2026-07-06) names
   this tactic as the expiry event for interim-live-risk exceptions on the
   legacy-gh surface. The expiry event is the surface being **actually
-  removed** — i.e. the follow-up `tactic-legacy-dispatch-rewire-delete`
-  landing its deletions — **not** merely the queue draining (recorded
-  2026-07-22 with the re-scope). Since this node is `blocked_by` that
-  follow-up, that ordering is enforced. When it lands, prune the nodes that
-  expire with it: `tactic-dispatch-gh-api-interim-hardening` (demoted draft whose
+  removed** — **not** merely the queue draining. That removal already
+  happened: `tactic-dispatch-legacy-rewire` (PR #2869, merged and pruned
+  2026-07-18) landed the live-wired deletions (see Status above), so the
+  expiry event has occurred and Unit 3 is unblocked on that count. Prune the
+  nodes that expire with it: `tactic-dispatch-gh-api-interim-hardening` (demoted draft whose
   demotion note says delete here), and sweep
   `tactic-review-lows-automation`'s "legacy dispatch scripts" section —
   drop the items whose subject files this tactic deletes, keep the
@@ -140,9 +184,11 @@ Scope:
 
 ## Dependencies
 
-- `tactic-legacy-dispatch-rewire-delete` — the 2026-07-22 re-scope follow-up
-  carrying Unit 1's live-wired remainder; it must land its rewire-then-delete
-  before Units 2 and 3 here run. Added to the frontmatter `blocked_by` set.
+- `tactic-legacy-dispatch-rewire-delete` — a 2026-07-22 re-scope follow-up
+  that turned out to duplicate already-landed work (`tactic-dispatch-legacy-rewire`,
+  PR #2869, merged and pruned 2026-07-18 — see Status above); pruned rather
+  than re-planned. No longer a dependency; dropped from the frontmatter
+  `blocked_by` set.
 - `tactic-graph-router-transitions`, `tactic-dispatch-lifecycle-sensor`,
   `tactic-phase-skill-node-targets`, `tactic-main-qa-phase`,
   `tactic-office-hours-graph-entry` — the frontmatter `blocked_by` set:
