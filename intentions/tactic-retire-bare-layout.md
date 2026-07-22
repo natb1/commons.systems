@@ -5,7 +5,7 @@ statement: Retire the .bare bare-repo layout — main becomes the standard git
   root; Claude Code native worktrees under <repo>/.claude/worktrees/ are the
   only worktree surface
 owner: ai
-status: codified
+status: raw
 parent: null
 rationale: "Surfaced 2026-07-21 (strategy-graph-native-dispatch interview): the
   .bare bare-repo-with-worktrees layout makes the Claude Code harness key the
@@ -90,45 +90,66 @@ Sketch — to be finalized before execution:
 - `npx tsx packages/intentionsutil/scripts/validate-graph.ts` passes;
   `npm test --prefix packages/intentionsutil` green.
 
-## Outcome (2026-07-21) — core delivered, script residual deferred
+## Status (2026-07-21) — core migration delivered; `.bare` purge remaining
 
-The statement is **achieved**: the repo is now a standard Claude Code
-repository (`git rev-parse --git-common-dir` → `.git`, `core.bare=false`, `main`
-the primary working tree at the repo root), Claude Code native worktrees under
-`<repo>/.claude/worktrees/` are the only worktree surface, and
-`EnterWorktree(path=…)` into a graph worktree completes with **no**
-permission-root relocation prompt — verified in a fresh session and again in
-this one.
+The core migration is **done** and the user-facing goal is met: the repo is a
+standard Claude Code repository (`git rev-parse --git-common-dir` → `.git`,
+`core.bare=false`, `main` the primary working tree at the repo root), Claude
+Code native worktrees under `<repo>/.claude/worktrees/` are the only worktree
+surface, and `EnterWorktree(path=…)` into a graph worktree completes with **no**
+permission-root relocation prompt — verified in multiple fresh sessions.
 
 Delivered:
 
 - **De-bare migration** via a fresh-clone swap (old layout retained as the
   author-owned backup `commons.systems.bare-bak`).
 - **`.claude/settings.json`** sandbox `allowWrite` → `[".git"]` (was
-  `["../../.bare","../../worktrees"]`) — commit `183600bc`; sandboxed `git
-  worktree add` + commit succeed without an override.
+  `["../../.bare","../../worktrees"]`) — commit `183600bc`.
 - **`.claude/rules/sandbox.md`** rewritten for the standard layout (commit
   `73127088`).
-- **Auto-memory** re-keyed to the new project slug (the git-common-dir change
-  moved the Claude project identity); the de-bare is recorded as a project
-  memory so `.bare`-era notes are marked historical.
-- Decision + rejected alternatives recorded on `strategy-graph-native-dispatch`
+- **Stale `.bare` comments** corrected in `.claude/hooks/worktree-create.sh`
+  and `office-hours/src/graph-source.ts` (+ its test comment).
+- **Auto-memory** re-keyed to the new project slug; de-bare recorded as a
+  project memory so `.bare`-era notes are marked historical.
+- Decision + rejected alternatives on `strategy-graph-native-dispatch`
   (clarifications dated 2026-07-21, commit `70a48530`).
 
-Deferred (not part of this statement, and not a blocker — the prompt is already
-gone):
+## Remaining scope — purge `.bare` from test fixtures
 
-- **Collapsing `worktree-create.sh` to a single graph lane** (and the broader
-  purge of `.bare` strings from live dispatch scripts) is owned by
-  `tactic-legacy-router-removal`, which is parked in office-hours because
-  several legacy scripts remain live-wired into the graph-native tick and need a
-  re-plan. Removing the legacy lane here would re-open that parked scope and risk
-  live dispatch — out of scope for a hygiene pass. The legacy lane's
-  `--git-common-dir` anchoring is not broken by the de-bare (it now resolves
-  `.git`); it is simply dead, since no `<issue-num>-<slug>` branches are created
-  with gh issues disabled.
-- **Residual `.bare` mentions** in dispatch scripts / `office-hours` are
-  layout-agnostic robustness (code that resolves the graph source under *either*
-  layout) and test fixtures that exercise that code. They are not a dependency
-  on the bare layout; leaving them is deliberate (removing robustness has no
-  upside and would weaken tests).
+Correction to an earlier note that mislabeled these as "layout-agnostic
+robustness": they are **not** robustness. The tested production code
+(`resolve_project_root`, `resolveGitDirs`) is layout-generic and has **no**
+`.bare`-specific branch — there is no dead production code to remove. But
+several **test fixtures model the retired `.bare` layout**, and a test that
+exercises a scenario the standard layout can never produce is pinning a dead
+scenario. Those must be purged (not kept). Per-site, this is either deleting a
+dead-scenario test or re-modeling a fixture to the standard `.git` layout — it
+is **not** a blind `.bare`→`.git` rename (in the standard layout a worktree's
+`.git` *file* and the common `.git` *dir* collide by name and live in different
+containers, so re-modeling is semantic, not textual).
+
+Sites and their disposition:
+
+- `office-hours/src/graph-source.ts` `resolveGitDirs` worktree-`.git`-FILE
+  branch + its test (`graph-source.test.ts` "follows a worktree checkout's .git
+  FILE …"): satisfiable only when the picked root contains the common dir —
+  the `.bare` layout. Likely dead in the standard layout (a picked worktree's
+  common dir sits at the repo root, unreachable via FSA). Confirm office-hours'
+  intended FSA usage, then remove the branch + test or re-model. Self-contained
+  to office-hours.
+- `test-dispatch-scripts.sh` "5. bare+worktree repo resolution" block
+  (`make_bare_worktree_fixture`, tests 5/5b–5e) tests `dispatch-write-plan` /
+  `dispatch-read-plan` (legacy gh-issue scripts) against the `.bare` layout —
+  a dead scenario for scripts already slated for deletion. **Co-lands with
+  `tactic-legacy-router-removal`** (which deletes those scripts); do not
+  duplicate here.
+- Remaining `.bare` fixtures in `test-dispatch-scripts.sh` (worktree-list
+  parsing, `resolve_project_root`), `test-phase-log-reentry.sh`,
+  `test-write-phase-log.sh`, `test-worktree-remove.sh`: for **kept** plumbing,
+  re-model to the standard `.git` common dir; for fixtures that only exist to
+  test a legacy script, co-land with `tactic-legacy-router-removal`.
+
+This node stays open (`raw`) until the fixture purge lands (kept-code sites
+here; legacy-script sites via `tactic-legacy-router-removal`), at which point
+the tactic's own success signal — "No repo machinery references `.bare`" — is
+met.
