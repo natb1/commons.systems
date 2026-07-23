@@ -18,8 +18,7 @@ attention: null
 phase: implement
 execution: null
 validates: []
-blocked_by:
-  - tactic-graph-explicit-node-dispatch
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

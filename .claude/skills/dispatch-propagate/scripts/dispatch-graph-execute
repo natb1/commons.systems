@@ -190,13 +190,13 @@ for spec in "$@"; do
       echo "waiting $id"
       ;;
     11)
-      # merge-conflict. /fix-conflicts does NOT accept node targets
-      # (fix-conflicts/SKILL.md exits on any non-`[0-9]*-*` branch), so a graph
-      # node's conflict parks rather than routing to /fix-conflicts; routing is
+      # merge-conflict. /dispatch-conflict does NOT accept node targets
+      # (dispatch-conflict/SKILL.md exits on any non-`[0-9]*-*` branch), so a graph
+      # node's conflict parks rather than routing to /dispatch-conflict; routing is
       # a future follow-up gated on node-target support.
       if "$PARK_NODE" "$id" \
           "origin/main does not merge clean into this tactic's branch (provision exit 11)" \
-          "Resolve the conflict by hand in the node worktree and re-run the phase, or route to /fix-conflicts once it accepts node targets."; then
+          "Resolve the conflict by hand in the node worktree and re-run the phase, or route to /dispatch-conflict once it accepts node targets."; then
         echo "parked $id"
       else
         echo "failed $id park-failed"

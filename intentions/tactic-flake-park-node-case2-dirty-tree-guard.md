@@ -22,69 +22,43 @@ execution: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "/implement: candidate fix (git update-index --assume-unchanged on the
-    wrapper path in test-park-node.sh Case 2's disposable clone) was implemented
-    and passed 5/5 local runs, but a subagent security-review flagged it as
-    potentially defeating graph-commit's assert_clean_outside_ids guard rather
-    than root-causing the still-unreproduced CI-only race; reverted rather than
-    landing on uncertain judgment. Needs a human call on whether the
-    harness-only suppression is safe or whether the intermittent guard trip
-    signals a real race in graph-commit's own commit/status-check sequencing."
-  since: 2026-07-22
+  reason: "/implement: no code fix needed — this node's recorded CI failure (PR
+    #2936, 2026-07-22T16:57:21-04:00) is a stale pre-fix run of a bug already
+    fixed by commit 71a7ddd45a5 (merged 2026-07-22T17:11:34-04:00, PR #2926),
+    which duplicates the already-closed sibling node
+    tactic-flake-park-node-concurrent-write-refusal. Verified locally: 5/5 clean
+    test-park-node.sh runs on current origin/main HEAD (a18bf1c1), and zero
+    hook-tests/PR-Checks failures across ~21 post-fix CI runs
+    (2026-07-22T21:11:34Z through 2026-07-23T00:00Z). Parking for
+    human/align-tactics review to close as duplicate rather than opening a no-op
+    PR."
+  since: 2026-07-23
   recommendation: >-
-    # Recommendation: tactic-flake-park-node-case2-dirty-tree-guard
+    Close this node with no PR, mirroring the sibling
+    `tactic-flake-park-node-concurrent-write-refusal`'s closure and citing the
+    same fix commit 71a7ddd45a5 ("qa-fix: skip redundant node-lane origin/main
+    merge (Step 0.5) (#2926)"), which added the `git add`/`git commit` of the
+    Case 2 graph-commit wrapper swap so the tracked-file modification no longer
+    trips `assert_clean_outside_ids`. This node's only recorded failure (PR
+    #2936, 20:57:21Z / 16:57:21 -04:00) predates the fix landing (17:11:34
+    -04:00) by 14 minutes, so it is a stale pre-fix run — no code change is
+    needed. Record it as a duplicate recurrence note pointing at the sibling
+    rather than opening independent work.
 
 
-    ## Decision needed
-
-    One judgment call: is `git update-index --assume-unchanged
-    packages/intentionsutil/scripts/graph-commit` in Case 2's disposable test
-    clone legitimate harness hardening, or a mask over a real race in
-    graph-commit?
-
-
-    The case for landing: the flag is scoped only to the throwaway clone
-    (deleted post-test), touches no production code, and weakens none of Case
-    2's PASS/FAIL assertions (the 'concurrent-edit conflict' /
-    'mechanical-unresolved' greps are untouched). It only stops git from
-    tracking dirtiness on the wrapper path the test itself installs.
+    Confirmed post-fix: local reproduction passed 5/5 runs (3/3 subcases each)
+    on current origin/main HEAD (a18bf1c1). Also checked ~21 "PR Checks" CI runs
+    created after 2026-07-22T21:11:34Z (the fix's UTC landing time) through
+    2026-07-23T00:00Z — all succeeded (one still in-progress at check time),
+    zero recurrences of the assert_clean_outside_ids / concurrent-write
+    signature. This confirms the diagnosis: safe to close.
 
 
-    The case against: the guard trips despite the add+commit that should make
-    the tracked path clean. If assert_clean_outside_ids (graph-commit:~975, git
-    status --porcelain) intermittently sees the path dirty after a local commit,
-    that same status-vs-commit ordering could misfire in real park_and_exit()
-    runs (graph-commit:~920-957, git fetch + git reset --hard FETCH_HEAD).
-    assume-unchanged would hide that signal, not fix it. That is why it wasn't
-    landed autonomously.
+    References:
 
+    - #2926: https://github.com/natb1/commons.systems/pull/2926
 
-    ## To pin the root cause first (recommended before landing)
-
-    Don't blanket-suppress. In test-park-node.sh Case 2 (~252-292), add
-    temporary diagnostics: dump git status --porcelain plus date +%s.%N
-    immediately before and after each of mv, wrapper-write, git add, git commit.
-    Then either loop the test under CI-like parallel load, or add a
-    retry-with-diagnostics wrapper (retry the guard check, logging porcelain
-    output on each miss) instead of assume-unchanged. If the porcelain snapshot
-    shows the path dirty after the commit returns, the race is in graph-commit's
-    status timing and deserves a real fix. If it's always clean locally and only
-    CI trips, the harness fix is defensible.
-
-
-    ## If you accept the harness fix
-
-    The patch is known: add `git update-index --assume-unchanged
-    packages/intentionsutil/scripts/graph-commit` in the clone after the
-    existing add+commit. Reapply directly.
-
-
-    ## Cleanup
-
-    Once resolved, merge the two duplicate nodes —
-    tactic-flake-park-node-case2-dirty-tree-guard and
-    tactic-flake-park-node-concurrent-write-refusal (same fingerprint family,
-    same signature) — into one.
+    - #2936: https://github.com/natb1/commons.systems/pull/2936
 pace_exempt: false
 rounds: null
 attributes: {}

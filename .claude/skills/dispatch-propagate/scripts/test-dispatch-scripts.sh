@@ -16422,24 +16422,28 @@ echo "Test: dispatch-phase-effort with an empty-string arg exits 2"
 if "$SCRIPT_DIR/dispatch-phase-effort" "" 2>/dev/null; then pe_rc=0; else pe_rc=$?; fi
 assert_eq "phase-effort: empty-string-arg → exit 2" "2" "$pe_rc"
 
-# --- review-fix/SKILL.md model-tiering content guards (#1172) -----------------
+# --- review-fix model-tiering content guards (#1172) --------------------------
 # The review-fix orchestrator runs on Sonnet; fix-authoring is delegated to an
 # Opus subagent. The review-fix.js `--fix` guard below is INTENTIONALLY
 # INVERTED from the original #1172 doctrine ("code-review is detection-only,
 # no --fix"): tactic-review-phase-trust-builtin-review deliberately reverses
 # this — code-review now runs `/code-review max --fix` and applies its own
 # fixes directly (Lane-A trust-the-built-in doctrine), with only its
-# un-auto-fixed residue dispositioned by the new residue phase. Per
-# .claude/rules/test-integrity.md, re-pointing a guard whose asserted doctrine
-# the author has deliberately reversed is not weakening a red test — the first
-# assertion below (Opus fix-authoring) is untouched because that invariant
-# still holds.
+# un-auto-fixed residue dispositioned by the new residue phase.
+#
+# The Opus fix-authoring guard below targets review-fix.js (the RUNTIME file
+# that actually enforces the pin at its fix fan-out `agent()` call), NOT the
+# SKILL.md prose. tactic-thin-oversized-skill-bodies moves fixed doctrine out
+# of the orchestrator body into references/*.md, so a grep against the thinned
+# SKILL.md body was a brittle proxy — a later thinning pass could relocate the
+# string again. Per .claude/rules/test-integrity.md, re-pointing this guard at
+# the mechanism that enforces the invariant strengthens it (the "Opus
+# fix-authoring" invariant still holds); it is not weakening a red test.
 REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
-RF_SKILL="$REPO_ROOT/.claude/skills/review-fix/SKILL.md"
 RF_WORKFLOW="$REPO_ROOT/.claude/workflows/review-fix.js"
 
-echo "Test: review-fix/SKILL.md pins fix-authoring to Opus (model: opus present)"
-if grep -q 'model: opus' "$RF_SKILL"; then rf_opus=yes; else rf_opus=no; fi
+echo "Test: review-fix.js pins fix-authoring to Opus (model: 'opus' present in the runtime)"
+if grep -q "model: 'opus'" "$RF_WORKFLOW"; then rf_opus=yes; else rf_opus=no; fi
 assert_eq "review-fix: Opus fix-authoring pinned" "yes" "$rf_opus"
 
 echo "Test: review-fix.js invokes /code-review with --fix (Lane-A trust-the-built-in doctrine, tactic-review-phase-trust-builtin-review)"
@@ -19986,7 +19990,11 @@ echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
 PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 
 # Map of chain-skill SKILL.md → allowed count of EnterWorktree+ExitWorktree
-# substring mentions (grep -oE counts each occurrence, not each line).
+# substring mentions (grep -oE counts each occurrence, not each line). The scan
+# covers each skill's SKILL.md AND any references/*.md it splits normative
+# doctrine into (tactic-thin-oversized-skill-bodies): a worktree-switch
+# instruction relocated out of the thinned SKILL.md body into a reference file
+# would otherwise evade this guard.
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch-propagate/SKILL.md"]=0
   # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
@@ -20011,8 +20019,17 @@ for relpath in "${!CHAIN_GUARD_EXPECTED[@]}"; do
     echo "  FAIL: chain-guard: file missing: $relpath"
     continue
   fi
-  actual=$({ grep -oE 'EnterWorktree|ExitWorktree' "$abspath" || true; } | wc -l | tr -d ' ')
-  assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count" \
+  # Scan the SKILL.md body plus any references/*.md the skill splits normative
+  # doctrine into, so relocated worktree-switch instructions cannot evade the guard.
+  guard_files=("$abspath")
+  refs_dir="$(dirname "$abspath")/references"
+  if [[ -d "$refs_dir" ]]; then
+    while IFS= read -r ref_md; do
+      guard_files+=("$ref_md")
+    done < <(find "$refs_dir" -type f -name '*.md' | sort)
+  fi
+  actual=$({ grep -hoE 'EnterWorktree|ExitWorktree' "${guard_files[@]}" || true; } | wc -l | tr -d ' ')
+  assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count (SKILL.md + references)" \
     "$expected" "$actual"
 done
 
@@ -21432,34 +21449,39 @@ FAKE
            "$TMPDIR_TEST/dispatch-escalate-sync-broken"
 
   # PATH-shimmed git: branch defaults to main; fetch/merge succeed unless a
-  # FAKE_GIT_*_FAIL env var is set. The `-C <path> symbolic-ref --short HEAD`
-  # case backs lib.sh's assert_primary_checkout_on_main (b8a1ba75), which
-  # dispatch-select-tick's Step 1 main-sync now calls before the ff-only merge —
-  # default SEL_PRIMARY_CHECKOUT_BRANCH=main models the normal in-place primary
-  # checkout so every pre-existing test's main-sync path is unaffected; a test
-  # covering the drift invariant sets SEL_PRIMARY_CHECKOUT_BRANCH to something
-  # else.
+  # FAKE_GIT_*_FAIL env var is set. The single `-C <path> symbolic-ref --short
+  # HEAD` arm below backs lib.sh's assert_primary_checkout_on_main
+  # (b8a1ba75), which dispatch-select-tick's Step 1 main-sync now calls before
+  # the ff-only merge — precedence SEL_PRIMARY_CHECKOUT_BRANCH >
+  # FAKE_GIT_PRIMARY_BRANCH > FAKE_GIT_BRANCH > "main", so every
+  # pre-existing test's main-sync path is unaffected and either knob can drive
+  # the drift invariant. (There were previously two case arms matching this
+  # same command shape — bash `case` takes the first match, so the earlier
+  # SEL_PRIMARY_CHECKOUT_BRANCH arm silently shadowed the older
+  # FAKE_GIT_PRIMARY_BRANCH knob; collapsed into one arm here.)
   cat > "$TMPDIR_TEST/bin/git" <<'STUB'
 #!/usr/bin/env bash
 case "$*" in
   "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
-  # resolve_project_root (lib.sh) + assert_primary_checkout_on_main report the
-  # primary checkout's branch via `-C <path> symbolic-ref --short HEAD`. A prior
-  # origin/main merge left TWO competing knobs for this target in two separate,
-  # mutually shadowing case arms: the newer SEL_PRIMARY_CHECKOUT_BRANCH and the
-  # older FAKE_GIT_PRIMARY_BRANCH (PR #2925). The first arm matched every
-  # `-C <path> symbolic-ref` call, so the second (FAKE_GIT_PRIMARY_BRANCH) arm
-  # was dead and its drift test could never see its knob. Unify into ONE arm
-  # honoring both — SEL_PRIMARY_CHECKOUT_BRANCH, then FAKE_GIT_PRIMARY_BRANCH,
-  # then FAKE_GIT_BRANCH, then "main". guard-pass tests set none (-> main, guard
-  # passes); each drift test sets exactly one (-> that branch, guard halts). No
-  # knob is dropped and no test is weakened.
-  -C\ *\ symbolic-ref\ --short\ HEAD) echo "${SEL_PRIMARY_CHECKOUT_BRANCH:-${FAKE_GIT_PRIMARY_BRANCH:-${FAKE_GIT_BRANCH:-main}}}" ;;
   "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
-  # resolve_project_root needs a non-empty git-common-dir so the project-root
-  # dirname succeeds before the main-sync guard's symbolic-ref probe runs.
+  # resolve_project_root (lib.sh) + assert_primary_checkout_on_main (added by
+  # PR #2925) run before the main-sync: return a non-empty git-common-dir so the
+  # project-root dirname succeeds, and report the primary checkout's branch via
+  # `-C <path> symbolic-ref --short HEAD`. A prior origin/main merge left TWO
+  # competing knobs for this target in two separate, mutually shadowing case
+  # arms — the newer SEL_PRIMARY_CHECKOUT_BRANCH and the older
+  # FAKE_GIT_PRIMARY_BRANCH — where bash `case` takes the first match, so one
+  # arm always silently shadowed the other's knob. Unified into ONE arm
+  # honoring both: SEL_PRIMARY_CHECKOUT_BRANCH, then FAKE_GIT_PRIMARY_BRANCH,
+  # then FAKE_GIT_BRANCH (the tick's OWN branch check above, gating whether the
+  # main-sync block runs at all), then "main". No test sets more than one of
+  # these knobs at once, so this precedence order is behavior-preserving for
+  # every existing test; guard-pass tests set none (-> main, guard passes),
+  # each drift test sets exactly one (-> that branch, guard halts exit 2). No
+  # knob is dropped and no test is weakened.
   "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/.bare" ;;
+  "-C "*" symbolic-ref --short HEAD") echo "${SEL_PRIMARY_CHECKOUT_BRANCH:-${FAKE_GIT_PRIMARY_BRANCH:-${FAKE_GIT_BRANCH:-main}}}" ;;
   *) exit 0 ;;
 esac
 STUB
@@ -22427,6 +22449,77 @@ esac
 assert_eq "--manual + number → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
 
+# --- --manual + a node-id-shaped arg → exit 2 (usage error, before the lock) -
+# tactic-graph-explicit-node-dispatch Unit 2: a node-id-shaped positional is now
+# recognized (NODE_ARG), but --manual is the "no specific target" fan-out mode —
+# semantically incompatible with an explicit single-node target. Mirrors the
+# --manual + explicit-number usage-error test above.
+echo "Test: select-tick --manual + node-id-shaped arg → exit 2"
+sel_tick_setup
+err=$("$TMPDIR_TEST/dispatch-select-tick" --manual foo-bar 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"cannot be combined with --manual"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "--manual + node-id → usage error, exit 2" "ok" "$status"
+assert_eq "--manual + node-id: lock not left held" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- explicit node-id, not selectable → node-not-selectable, aux triggers skipped
+# tactic-graph-explicit-node-dispatch Unit 2: an explicit node-id arg calls
+# `graph-select-target --node <id>` instead of the ranked `--top` query. When
+# selection fails (the fake graph selector's default is `empty`, simulating a
+# node absent from candidates or gated out), the tick must emit
+# `node-not-selectable <id>` — NOT fall through to Step 3b's aux triggers
+# (JIT-reminder scan, main-broken check), which would silently substitute an
+# unrelated job for the node the human explicitly asked for.
+echo "Test: select-tick explicit node-id, not selectable → node-not-selectable, no aux triggers"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-jit-scan" <<'FAKE'
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/jit-scan-invoked.log"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-jit-scan"
+out=$(run_sel_tick zzz-nonexistent-node)
+assert_eq "node-not-selectable: decision line" "node-not-selectable zzz-nonexistent-node" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-not-selectable: graph selector called --node <id>" "--node zzz-nonexistent-node" \
+  "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+assert_eq "node-not-selectable: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "node-not-selectable: JIT-reminder scan NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/jit-scan-invoked.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- explicit node-id, exhausted → concurrency-cap, no headroom/pace-curve check
+# The one hard floor the explicit-node path still respects is genuine token
+# exhaustion (mirrors the --manual branch's own EXHAUSTED check). No headroom or
+# MAX_WORKERS ceiling check applies — those are exactly what this path bypasses.
+echo "Test: select-tick explicit node-id + exhausted → concurrency-cap"
+sel_tick_setup
+export SEL_EXHAUSTED=exhausted
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit exhausted: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-explicit exhausted: graph selector NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+assert_eq "node-explicit exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- explicit node-id, selectable → graph decision, pace/cap gate bypassed ---
+# Even with LIVE_COUNT at/over TARGET_N, an explicit node-id dispatch is NOT
+# throttled — the whole point of tactic-graph-explicit-node-dispatch is that a
+# human's explicit dispatch overrides the pace curve.
+echo "Test: select-tick explicit node-id + at-cap live count → still selects (gate bypassed)"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=5
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit at-cap: decision line" "graph 1 foo-bar:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-explicit at-cap: graph selector called --node <id> (not --top)" \
+  "--node foo-bar" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+sel_tick_teardown
+
 # --- AC3 non-fatal guarantee: unwritable log dir does NOT kill the tick -------
 # Point DISPATCH_DECISION_LOG_DIR at a path that cannot be created (a sub-path of
 # an existing regular file). The lib's mkdir -p will fail with ENOTDIR. The
@@ -23064,6 +23157,29 @@ esac
 assert_eq "positional arg → usage error, exit 2" "ok" "$status"
 assert_eq "positional arg: select-tick never invoked" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- node-id-shaped positional arg is forwarded to select-tick (raw, no flag) -
+# tactic-graph-explicit-node-dispatch Unit 2: a node-id-shaped positional is now
+# recognized as NODE_ARG and forwarded to dispatch-select-tick as a raw
+# positional (not a flag). Here the fake select-tick emits a
+# `node-not-selectable <id>` decision line (Unit 2's new disposition), and the
+# tick must exit non-zero (1), print a stderr message naming the node, and NOT
+# invoke dispatch-graph-execute.
+echo "Test: dispatch-tick node-id arg forwarded to select-tick; node-not-selectable → exit 1, no graph-execute"
+tick_setup
+export TICK_DECISION="node-not-selectable foo-bar"
+err=$("$TMPDIR_TEST/dispatch-tick" foo-bar 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "node-arg-fwd: select-tick received the raw node-id (no flag)" "foo-bar" \
+  "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
+assert_eq "node-not-selectable: exit 1" "1" "$rc"
+case "$err" in
+  *"foo-bar"*"not selectable"*) status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "node-not-selectable: stderr names the node" "ok" "$status"
+assert_eq "node-not-selectable: no graph-execute call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- headless tick (no CLAUDE_CODE_SESSION_ID) synthesizes a stable id --------
@@ -28586,13 +28702,13 @@ assert_eq "recover fix-checks: stdout is 'fix-checks'" "fix-checks" "$out"
 assert_eq "recover fix-checks: exit 0" "0" "$rc"
 drdp_teardown
 
-# --- Test 6: /fix-conflicts → "fix-conflicts", exit 0 ------------------------
-echo "Test: /fix-conflicts tag → stdout 'fix-conflicts', exit 0"
+# --- Test 6: /dispatch-conflict → "fix-conflicts", exit 0 --------------------
+echo "Test: /dispatch-conflict tag → stdout 'fix-conflicts', exit 0"
 drdp_setup
-_drdp_fixture "$TMPDIR_TEST/fcon.jsonl" "fix-conflicts"
+_drdp_fixture "$TMPDIR_TEST/fcon.jsonl" "dispatch-conflict"
 if out=$("$DRDP" "$TMPDIR_TEST/fcon.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "recover fix-conflicts: stdout is 'fix-conflicts'" "fix-conflicts" "$out"
-assert_eq "recover fix-conflicts: exit 0" "0" "$rc"
+assert_eq "recover dispatch-conflict: stdout is 'fix-conflicts'" "fix-conflicts" "$out"
+assert_eq "recover dispatch-conflict: exit 0" "0" "$rc"
 drdp_teardown
 
 # --- Test 7: /office-hours → empty stdout, non-zero exit ---------------------

@@ -159,23 +159,32 @@ const ghExecOpts = {
  * sensor breaks the file header's "no side-effect" promise in addition to its
  * "no network" one.
  */
+/**
+ * Standalone probe body, extracted so tests can exercise all three branches
+ * (green/red/unknown) against a fake `binaryPath` without shelling to the
+ * real `repo-health` script. `mainHealthSensor.read()` below is a thin
+ * wrapper that supplies the real default path. Exported for unit tests
+ * (mirrors `readWeeklyUtilization`, `readTacticVelocity`, etc. above).
+ */
+export function readMainHealth(binaryPath: string): string {
+  let sha: string;
+  try {
+    sha = execFileSync(binaryPath, ["--main-broken-sha"], ghExecOpts).trim();
+  } catch {
+    return "unknown";
+  }
+  if (sha === "") {
+    return "green: every check on the current origin/main HEAD concludes success (or neutral/skipped)";
+  }
+  return `red: ${sha} has one or more failing checks`;
+}
+
 const mainHealthSensor: Sensor = {
   name: MAIN_HEALTH_SENSOR_NAME,
   read(): string {
-    let sha: string;
-    try {
-      sha = execFileSync(
-        join(repoRoot, ".claude", "skills", "dispatch-propagate", "scripts", "repo-health"),
-        ["--main-broken-sha"],
-        ghExecOpts,
-      ).trim();
-    } catch {
-      return "unknown";
-    }
-    if (sha === "") {
-      return "green: every check on the current origin/main HEAD concludes success (or neutral/skipped)";
-    }
-    return `red: ${sha} has one or more failing checks`;
+    return readMainHealth(
+      join(repoRoot, ".claude", "skills", "dispatch-propagate", "scripts", "repo-health"),
+    );
   },
 };
 
