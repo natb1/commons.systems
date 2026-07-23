@@ -7,12 +7,12 @@ owner: ai
 status: codified
 parent: null
 rationale: "Finalized 2026-07-11 /align-tactics round from the retained
-  2026-07-05 review-lows draft, narrowed by the greenfield-relevance gate:
-  GitHub issues are disabled (the gh queue drained and retired), so every
-  legacy-gh-router finding is dropped as superseded by
-  tactic-legacy-router-removal — only live-surface fixes remain (CI verification
-  wrappers, session hooks, align-init fetch helpers). Dropped units are recorded
-  in the body with their superseding node."
+  2026-07-05 review-lows draft, scoped to live-surface fixes: CI verification
+  wrappers, session hooks, align-init fetch helpers. Of the legacy-gh-router
+  findings, only dispatch-select-target and dispatch-route are genuinely
+  resolved (their scripts are deleted from origin/main); the rest remain open
+  and are not covered by tactic-legacy-router-removal. See the Dropped units
+  section in the body for the per-finding detail."
 reading: null
 gap: null
 serves:
@@ -41,11 +41,12 @@ attributes: {}
 ## Context
 
 Live-surface residue of the 2026-07-05 code review lows (draft split from the
-deleted mixed sweep per the placement doctrine). Narrowed 2026-07-11 by the
-greenfield-relevance gate: GitHub issues are disabled — the gh dispatch queue
-drained and retired — so every legacy-gh-router finding is dropped as
-superseded by `tactic-legacy-router-removal` (see Dropped units). What
-remains: three small live-surface fixes, one PR.
+deleted mixed sweep per the placement doctrine). Scoped 2026-07-11 to
+live-surface fixes. Of the legacy-gh-router findings, only
+`dispatch-select-target` and `dispatch-route` are genuinely resolved (their
+scripts are deleted from origin/main); the rest remain open and are not covered
+by `tactic-legacy-router-removal` (see Dropped units for the per-finding
+detail). What remains here: three small live-surface fixes, one PR.
 
 ## Unit 1 — CI wrapper false-green patterns
 
