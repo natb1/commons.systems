@@ -189,8 +189,8 @@ echo "=== Test: cleanup_stale_worktree_processes kills stale, keeps active ==="
   perl -e 'sleep 300' -- "$STALE_WT/sentinel" &
   STALE_PID=$!
   trap 'kill -9 $ACTIVE_PID $STALE_PID 2>/dev/null || true' EXIT
-  wait_for_pid_args "$ACTIVE_PID" "$REAL_WT/sentinel"
-  wait_for_pid_args "$STALE_PID" "$STALE_WT/sentinel"
+  wait_for_pid_args "$ACTIVE_PID" "$REAL_WT/sentinel" || fail "active fixture PID never became visible in ps"
+  wait_for_pid_args "$STALE_PID" "$STALE_WT/sentinel" || fail "stale fixture PID never became visible in ps"
 
   cleanup_stale_worktree_processes
 
@@ -290,7 +290,7 @@ echo "=== Test: cleanup_stale_worktree_processes prunes before listing ==="
   perl -e 'sleep 300' -- "$STALE_WT/sentinel" &
   FIXTURE_PID=$!
   trap 'kill -9 $FIXTURE_PID 2>/dev/null || true' EXIT
-  wait_for_pid_args "$FIXTURE_PID" "$STALE_WT/sentinel"
+  wait_for_pid_args "$FIXTURE_PID" "$STALE_WT/sentinel" || fail "fixture PID never became visible in ps"
 
   cleanup_stale_worktree_processes
 
