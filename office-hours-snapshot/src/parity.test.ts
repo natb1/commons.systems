@@ -250,6 +250,7 @@ describe("checkParity — clean parity", () => {
       computedAt: NOW,
       chainHealth: { liveSessions: 3 },
       scope: "full",
+      memberEmails: MEMBERS,
       window: { samples: 100, issueSamples: 100 },
     };
     const result = await checkParity(serializeSnapshot(input), { reader: readerFor(cleanFixtures()), namespace: NS });
