@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+#
+# test-graph-write-rollback.sh — functional harness for the write-failure
+# rollback added to transition-node, dispatch-graph-census, and
+# dispatch-graph-main-red-sync (tactic-graph-write-failure-rollback Units
+# 2/4/5). Each case forces a downstream `graph-commit` to fail AFTER the
+# script's own mutation already landed on disk, then asserts the mutation was
+# rolled back — a clean intentions/ tree, never a leaked dirty/deleted file
+# that would trip graph-commit's assert_clean_outside_ids guard for every
+# other unrelated node.
+#
+# Mirrors packages/intentionsutil/scripts/test-park-node.sh's harness shape: a
+# throwaway bare origin + a real git clone, with the REAL
+# packages/intentionsutil/src copied in (plus its package.json for ESM
+# resolution) and a node_modules SYMLINK to this repo's own — so the real
+# TypeScript mutation primitives (apply-node-transition.ts, compute-freshness.ts,
+# dump-node.ts, write-node.ts, graph-census-debt.ts) execute for real, not via a
+# shim. Only graph-commit itself and (for the main-red-sync case) repo-health
+# are stubbed, standing in for a real land failure / a green main.
+#
+# Covers:
+#   1. transition-node: a graph-commit failure after apply-node-transition.ts's
+#      real write rolls intentions/<id>.md back to origin/main (byte-identical
+#      `git diff` against the clone's HEAD).
+#   2. dispatch-graph-census, born-fresh case: a graph-commit failure after a
+#      brand-new census node's write-node.ts write DELETES the file (no prior
+#      blob to restore to) rather than leaving it dirty.
+#   3. dispatch-graph-main-red-sync: a completion failure (a) emits a non-empty
+#      stderr diagnostic naming the node (regression guard for the old
+#      `... ) 1>&2 || true` total swallow) and (b) leaves the working tree
+#      clean (`git status --porcelain intentions/` empty) afterward.
+#
+# No network needed; requires bash + git + jq + a real node/npx tsx (resolved
+# against a read-only node_modules symlink to this repo's own — never written).
+set -uo pipefail
+
+HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REAL_REPO_ROOT="$(cd "$HARNESS_DIR/../../../.." && pwd)"
+UTIL_SCRIPTS_SRC="$REAL_REPO_ROOT/packages/intentionsutil/scripts"
+INTENTIONSUTIL_SRC="$REAL_REPO_ROOT/packages/intentionsutil/src"
+
+for f in transition-node dispatch-graph-census dispatch-graph-main-red-sync lib.sh dispatch-config-load; do
+  [[ -f "$HARNESS_DIR/$f" ]] || { echo "error: $f not found at $HARNESS_DIR/$f" >&2; exit 1; }
+done
+command -v jq >/dev/null || { echo "error: jq not found" >&2; exit 1; }
+
+WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
+trap 'rm -rf "$WORK"' EXIT
+
+PASS=0; FAIL=0
+ok() { echo "PASS: $1"; PASS=$((PASS + 1)); }
+no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
+
+# new_origin <name> — a fresh bare origin (one per case: each case seeds an
+# independent world-state, so a shared origin would reject the second case's
+# push as a non-fast-forward of the first case's unrelated history). Sets the
+# global ORIGIN var the helpers below read.
+ORIGIN=""
+new_origin() {
+  ORIGIN="$WORK/$1-origin.git"
+  git init -q --bare "$ORIGIN"
+  git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
+}
+
+# build_seed_repo <dst-dir> — a bare-bones real-execution repo tree: the real
+# packages/intentionsutil/src + package.json (for ESM "type": "module"
+# resolution), the graph scripts under test, their sourced/invoked real TS
+# primitives, and a node_modules symlink (read-only, never written).
+build_seed_repo() {
+  local dst="$1"
+  mkdir -p "$dst/intentions" \
+           "$dst/packages/intentionsutil/scripts" \
+           "$dst/packages/intentionsutil/src" \
+           "$dst/.claude/skills/dispatch-propagate/scripts"
+  cp -r "$INTENTIONSUTIL_SRC/." "$dst/packages/intentionsutil/src/"
+  cp "$REAL_REPO_ROOT/packages/intentionsutil/package.json" "$dst/packages/intentionsutil/package.json"
+  cp "$UTIL_SCRIPTS_SRC/graph-commit" "$dst/packages/intentionsutil/scripts/graph-commit"
+  cp "$UTIL_SCRIPTS_SRC/apply-node-transition.ts" "$dst/packages/intentionsutil/scripts/apply-node-transition.ts"
+  cp "$UTIL_SCRIPTS_SRC/compute-freshness.ts" "$dst/packages/intentionsutil/scripts/compute-freshness.ts"
+  cp "$UTIL_SCRIPTS_SRC/dump-node.ts" "$dst/packages/intentionsutil/scripts/dump-node.ts"
+  cp "$UTIL_SCRIPTS_SRC/write-node.ts" "$dst/packages/intentionsutil/scripts/write-node.ts"
+  cp "$UTIL_SCRIPTS_SRC/graph-census-debt.ts" "$dst/packages/intentionsutil/scripts/graph-census-debt.ts"
+  chmod +x "$dst/packages/intentionsutil/scripts/graph-commit"
+  cp "$HARNESS_DIR/lib.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib.sh"
+  cp "$HARNESS_DIR/dispatch-config-load" "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
+  chmod +x "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
+}
+
+# init_and_push <dir> — git-init a seeded tree, commit, push to ORIGIN main.
+init_and_push() {
+  local dir="$1"
+  git -C "$dir" init -q -b main
+  git -C "$dir" config user.email harness@test
+  git -C "$dir" config user.name harness
+  git -C "$dir" remote add origin "$ORIGIN"
+  git -C "$dir" add -A
+  git -C "$dir" commit -qm seed
+  git -C "$dir" push -q origin main
+}
+
+# clone_with_node_modules <dst> — clone ORIGIN and symlink in a real
+# node_modules (read-only, untracked — never committed, so graph-commit's
+# assert_clean_outside_ids '??' exemption covers it).
+clone_with_node_modules() {
+  local dst="$1"
+  git clone -q "$ORIGIN" "$dst"
+  git -C "$dst" config user.email harness@test
+  git -C "$dst" config user.name harness
+  ln -s "$REAL_REPO_ROOT/node_modules" "$dst/node_modules"
+}
+
+fail_graph_commit() { # <dir> — replace graph-commit with an unconditional failure.
+  cat >"$1/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+echo "graph-commit wrapper: simulated post-mutation failure" >&2
+exit 1
+SH
+  chmod +x "$1/packages/intentionsutil/scripts/graph-commit"
+}
+
+# ===========================================================================
+# Case 1: transition-node byte-identical restore-on-failure
+# (tactic-graph-write-failure-rollback Unit 2).
+# ===========================================================================
+T1="$WORK/t1-seed"
+build_seed_repo "$T1"
+cp "$HARNESS_DIR/transition-node" "$T1/.claude/skills/dispatch-propagate/scripts/transition-node"
+chmod +x "$T1/.claude/skills/dispatch-propagate/scripts/transition-node"
+cat >"$T1/intentions/t-transition.md" <<'NODE'
+---
+id: t-transition
+kind: tactic
+statement: harness node for transition-node rollback test
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+---
+# harness node for transition-node rollback test
+NODE
+new_origin t1
+init_and_push "$T1"
+
+C1="$WORK/t1-clone"
+clone_with_node_modules "$C1"
+fail_graph_commit "$C1"
+
+out="$(
+  cd "$C1" || exit 99
+  bash .claude/skills/dispatch-propagate/scripts/transition-node t-transition 2>&1
+)"; rc=$?
+diff_after="$(git -C "$C1" diff -- intentions/t-transition.md)"
+if [[ $rc -ne 0 ]] && [[ -z "$diff_after" ]]; then
+  ok "transition-node byte-identical restore: real apply-node-transition.ts mutation is rolled back on graph-commit failure (git diff empty)"
+else
+  no "transition-node byte-identical restore (rc=$rc)"
+  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+fi
+
+# ===========================================================================
+# Case 2: dispatch-graph-census born-fresh delete-on-failure
+# (tactic-graph-write-failure-rollback Unit 4).
+# ===========================================================================
+T2="$WORK/t2-seed"
+build_seed_repo "$T2"
+cp "$HARNESS_DIR/dispatch-graph-census" "$T2/.claude/skills/dispatch-propagate/scripts/dispatch-graph-census"
+chmod +x "$T2/.claude/skills/dispatch-propagate/scripts/dispatch-graph-census"
+# A single done-but-present node is enough owed-prune debt to cross a
+# threshold of 1 (graph-census-debt.ts: total = |donePresent ∪ orphans ∪
+# mergedUnabsorbed|).
+cat >"$T2/intentions/t-done.md" <<'NODE'
+---
+id: t-done
+kind: tactic
+statement: a done-but-present node contributing owed-prune debt
+owner: ai
+status: codified
+phase: done
+serves: []
+---
+# a done-but-present node contributing owed-prune debt
+NODE
+new_origin t2
+init_and_push "$T2"
+
+C2="$WORK/t2-clone"
+clone_with_node_modules "$C2"
+fail_graph_commit "$C2"
+CENSUS_CFG_DIR="$WORK/t2-config"
+mkdir -p "$CENSUS_CFG_DIR"
+echo '{"threshold": 1}' >"$CENSUS_CFG_DIR/census.json"
+
+out="$(
+  cd "$C2" || exit 99
+  export DISPATCH_CONFIG_DIR="$CENSUS_CFG_DIR"
+  bash .claude/skills/dispatch-propagate/scripts/dispatch-graph-census 2>&1
+)"; rc=$?
+CENSUS_ID="tactic-graph-census-$(date -u +%Y-%m-%d)"
+status_after="$(git -C "$C2" status --porcelain intentions/)"
+if [[ $rc -ne 0 ]] \
+   && grep -q "born-node write was rolled back (file deleted)" <<<"$out" \
+   && [[ ! -e "$C2/intentions/$CENSUS_ID.md" ]] \
+   && [[ -z "$status_after" ]]; then
+  ok "dispatch-graph-census born-fresh delete-on-failure: the newly-written census file is deleted, tree clean"
+else
+  no "dispatch-graph-census born-fresh delete-on-failure (rc=$rc, id=$CENSUS_ID)"
+  printf '%s\n' "$out"; printf 'status: %s\n' "$status_after"
+fi
+
+# ===========================================================================
+# Case 3: dispatch-graph-main-red-sync surfaces the failure + leaves a clean
+# tree (tactic-graph-write-failure-rollback Unit 5). repo-health is stubbed to
+# report main GREEN (empty stdout) so the recovery-completion loop runs; the
+# real dump-node.ts/write-node.ts perform the mutation, then the failing
+# graph-commit wrapper forces the rollback path.
+# ===========================================================================
+T3="$WORK/t3-seed"
+build_seed_repo "$T3"
+cp "$HARNESS_DIR/dispatch-graph-main-red-sync" "$T3/.claude/skills/dispatch-propagate/scripts/dispatch-graph-main-red-sync"
+chmod +x "$T3/.claude/skills/dispatch-propagate/scripts/dispatch-graph-main-red-sync"
+cat >"$T3/.claude/skills/dispatch-propagate/scripts/repo-health" <<'SH'
+#!/usr/bin/env bash
+# Stub: always reports main green (empty stdout), regardless of flags.
+exit 0
+SH
+chmod +x "$T3/.claude/skills/dispatch-propagate/scripts/repo-health"
+cat >"$T3/intentions/tactic-main-red-abc1234.md" <<'NODE'
+---
+id: tactic-main-red-abc1234
+kind: tactic
+statement: harness open main-red latch node
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+---
+# harness open main-red latch node
+NODE
+new_origin t3
+init_and_push "$T3"
+
+C3="$WORK/t3-clone"
+clone_with_node_modules "$C3"
+fail_graph_commit "$C3"
+
+stdout_out="$(
+  cd "$C3" || exit 99
+  bash .claude/skills/dispatch-propagate/scripts/dispatch-graph-main-red-sync 2>"$WORK/t3-stderr.log"
+)"
+rc=$?
+stderr_out="$(cat "$WORK/t3-stderr.log")"
+status_after="$(git -C "$C3" status --porcelain intentions/)"
+if [[ "$rc" -eq 0 ]] \
+   && grep -q '^tactic-main-red-abc1234$' <<<"$stdout_out" \
+   && grep -q 'completion of tactic-main-red-abc1234 failed; write rolled back' <<<"$stderr_out" \
+   && [[ -z "$status_after" ]]; then
+  ok "dispatch-graph-main-red-sync: failed completion surfaces a stderr diagnostic naming the node and leaves the tree clean"
+else
+  no "dispatch-graph-main-red-sync silent-failure guard (rc=$rc)"
+  printf 'stdout: %s\n' "$stdout_out"; printf 'stderr: %s\n' "$stderr_out"
+  printf 'status: %s\n' "$status_after"
+fi
+
+echo
+echo "passed: $PASS  failed: $FAIL"
+[[ $FAIL -eq 0 ]] || exit 1
+exit 0
