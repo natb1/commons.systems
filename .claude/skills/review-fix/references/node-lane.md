@@ -40,24 +40,22 @@ node's `execution.markers` list, this is an interrupted prior run — **skip Ste
 1–6** and go straight to Step 7's terminal flush, exactly as the label check
 routes the issue lane.
 
-Parse this from the already-fetched `NODE_MD` (the `intentions/$NODE_ID.md`
-frontmatter read from `origin/main` in the preamble) with a **scoped** match —
-not a naive `grep -q reviewed <<<"$NODE_MD"`. `execution.markers` is a nested
-YAML list (`  markers:` under the top-level `execution:` key, with `    -
-<marker>` items), so a bare `grep` for the token `reviewed` would false-match it
-appearing in the node body, the `validates`/`serves` edges, a rationale, or any
-other field, and wrongly trigger the skip-Steps-1–6 re-entry path — bypassing
-the actual review pass. Isolate the markers list to the execution block and test
-for an exact `reviewed` list item:
+Query this from the front door's structured `NODE_JSON` (the full
+`intentions/$NODE_ID.md` frontmatter as real JSON, emitted by
+`dispatch-derive-node-target` in the preamble). Because `NODE_JSON` is already
+parsed JSON, a `jq` query on the exact `.execution.markers` path has no
+scraping-ambiguity to guard against — the hazard the superseded `awk` scrape
+existed to dodge (a bare `grep` for the token `reviewed` false-matching the node
+body, the `validates`/`serves` edges, or a rationale, and wrongly triggering the
+skip-Steps-1–6 re-entry path) cannot arise against a typed path. Apply the same
+discipline the audit baseline uses — derive from `NODE-JSON`/`origin/main` state,
+never from anything that could echo attacker-controlled PR-body text:
 
 ```bash
-NODE_REVIEWED=$(printf '%s\n' "$NODE_MD" | awk '
-  $0 == "execution:"          { in_exec = 1; next }
-  in_exec && /^[^[:space:]]/  { exit }                  # new top-level key ends the execution block
-  in_exec && /^  markers:/    { in_markers = 1; next }
-  in_exec && in_markers && /^  [^[:space:]]/ { in_markers = 0 }  # next execution key ends the list
-  in_markers && /^    - reviewed[[:space:]]*$/ { print "1"; exit }
-')
+NODE_REVIEWED=""
+if jq -e '(.execution.markers // []) | index("reviewed") != null' <<<"$NODE_JSON" >/dev/null; then
+  NODE_REVIEWED=1
+fi
 # Non-empty NODE_REVIEWED => the reviewed marker is already written: skip Steps 1–6.
 ```
 
