@@ -1086,6 +1086,7 @@ gh_commit_is_ancestor_rest() {
 #     (same value the porcelain `headRefName` carries).
 #   - headRefOid: the PR's head commit oid, remapped from REST's `head.sha`
 #     (same value the porcelain `headRefOid` carries).
+#   - mergeCommitSha: the base commit the PR landed as (REST merge_commit_sha; null until merged)
 #   - labels: narrowed to the porcelain-visible key (`name`) rather than passing
 #     the full REST label objects through (same as gh_issue_view_rest's labels).
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
@@ -1129,6 +1130,7 @@ gh_pr_view_rest() {
     body: (.body // ""),
     state: (.state | ascii_upcase),
     mergedAt: .merged_at,
+    mergeCommitSha: .merge_commit_sha,
     mergeable: (
       if .mergeable == true then "MERGEABLE"
       elif .mergeable == false then "CONFLICTING"
