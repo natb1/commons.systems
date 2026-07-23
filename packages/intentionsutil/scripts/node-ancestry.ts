@@ -170,7 +170,8 @@ export function buildAncestryProjection(dir: string, id: string): AncestryProjec
       );
       break;
     }
-    const curId = queue.shift() as string;
+    const curId = queue.shift();
+    if (curId === undefined) break;
     let node: IntentionNode;
     try {
       node = readNode(dir, curId);
@@ -245,7 +246,7 @@ function renderBlock(a: AncestorEntry): string {
 }
 
 /**
- * Render the projection as Markdown — the single form every consumer reads. The
+ * Render the projection into Markdown — the single form every consumer reads. The
  * file opens with a one-line header naming it read-only ancestry decision
  * context for `<root>`, then one block per ancestor (nearest-first, fixed field
  * order), then, when there are truncation/cycle notices, a trailing `> NOTE —`
