@@ -142,8 +142,14 @@ checkout like the rest.
 Its `graph-commit` runs inside `( ... ) 1>&2 || true` within a `while read` loop,
 so a failure produces **no error at all**: nothing is logged, the residue is left,
 and the loop proceeds to the next node — potentially adding another dirty file per
-iteration. This is a distinct defect from the residue itself; a graph write must
-not fail silently even once rollback exists.
+iteration.
+
+This unit implements `strategy-graph-native-dispatch`'s 2026-07-23 no-silent-write
+clarification, a standing invariant distinct from the no-residue one: every graph
+write that fails to land surfaces a diagnostic naming the node and the failure, and
+no call site may swallow the error. Satisfying rollback does not satisfy this — a
+rollback that exits silently leaves a clean tree and no signal. Audit the other five
+sites against it too, not just this one; unit 6 asserts on stderr for that reason.
 
 Decide during implementation whether a failed completion should abort the sweep or
 log-and-continue. Log-and-continue matches `dispatch-graph-scope-sweep`'s
