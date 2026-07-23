@@ -86,7 +86,17 @@ MUTATED=0
 trap '
   rc=$?
   if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
-    git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$REPO_ROOT/intentions/$NODE_ID.md"
+    # Restore from the immutable pre-mutation blob ($FRESH_BLOB), not the
+    # moving origin/main ref: a concurrent fetch that prunes/relocates the node
+    # would make a `show origin/main:...` fail AFTER `>` already truncated the
+    # file to zero bytes, leaking the exact corrupt-empty node this rollback
+    # exists to prevent. Write to a temp path and mv only on success, so a
+    # failed show never leaves a truncated node file.
+    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$REPO_ROOT/intentions/$NODE_ID.md.rollback"; then
+      mv "$REPO_ROOT/intentions/$NODE_ID.md.rollback" "$REPO_ROOT/intentions/$NODE_ID.md"
+    else
+      rm -f "$REPO_ROOT/intentions/$NODE_ID.md.rollback"
+    fi
   fi
 ' EXIT
 

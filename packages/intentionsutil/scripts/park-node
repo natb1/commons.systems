@@ -88,7 +88,15 @@ trap '
   rc=$?
   rm -f "$TMPTS"
   if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
-    git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$INTENTIONS_DIR/$NODE_ID.md"
+    # Restore from the immutable blob SHA captured before the mutation, not the
+    # moving origin/main ref (a concurrent fetch may have pruned/relocated the
+    # node). Write to a temp file and mv into place only on success, so a failed
+    # git-show never truncates the node file to zero bytes.
+    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$INTENTIONS_DIR/$NODE_ID.md.rollback"; then
+      mv "$INTENTIONS_DIR/$NODE_ID.md.rollback" "$INTENTIONS_DIR/$NODE_ID.md"
+    else
+      rm -f "$INTENTIONS_DIR/$NODE_ID.md.rollback"
+    fi
   fi
 ' EXIT
 cat >"$TMPTS" <<'TS'

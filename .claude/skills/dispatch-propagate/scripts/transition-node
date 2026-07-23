@@ -114,7 +114,15 @@ trap '
   rc=$?
   rm -rf "$SNAP_DIR"
   if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
-    git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$REPO_ROOT/intentions/$NODE_ID.md"
+    # Restore from the immutable blob SHA captured before the mutation, not the
+    # moving origin/main ref (a concurrent fetch may have pruned/relocated the
+    # node). Write to a temp file and mv into place only on success, so a failed
+    # git-show never truncates the node file to zero bytes.
+    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$REPO_ROOT/intentions/$NODE_ID.md.rollback"; then
+      mv "$REPO_ROOT/intentions/$NODE_ID.md.rollback" "$REPO_ROOT/intentions/$NODE_ID.md"
+    else
+      rm -f "$REPO_ROOT/intentions/$NODE_ID.md.rollback"
+    fi
   fi
 ' EXIT
 if ! (cd "$REPO_ROOT" && git archive origin/main intentions 2>/dev/null | tar -x -C "$SNAP_DIR"); then
