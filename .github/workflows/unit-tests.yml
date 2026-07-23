@@ -38,6 +38,8 @@ jobs:
         with:
           node-version-file: .node-version
           cache: 'npm'
+      - name: Install zsh (needed by zsh-shebang regression tests)
+        run: sudo apt-get update && sudo apt-get install -y zsh
       - name: Run unit tests
         run: .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh
 
