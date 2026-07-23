@@ -21,7 +21,6 @@ phase: null
 execution: null
 validates: []
 blocked_by:
-  - tactic-domain-selection-owner-review
   - tactic-flake-unit-tests-select-tick
   - tactic-dispatch-stop-backstop-comment
 office_hours: null
