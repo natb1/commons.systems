@@ -29,6 +29,11 @@
 #      stderr diagnostic naming the node (regression guard for the old
 #      `... ) 1>&2 || true` total swallow) and (b) leaves the working tree
 #      clean (`git status --porcelain intentions/` empty) afterward.
+#   4. dispatch-graph-main-red-sync origin-absent refusal: a node enumerated
+#      into OPEN_MAIN_RED whose origin/main:intentions/<id>.md blob cannot be
+#      rev-parsed (no landed content to roll back to) is SKIPPED without any
+#      mutation — a stderr diagnostic names it, the tree stays clean — while the
+#      per-node `while read` loop still processes the other open node.
 #
 # No network needed; requires bash + git + jq + a real node/npx tsx (resolved
 # against a read-only node_modules symlink to this repo's own — never written).
@@ -259,6 +264,88 @@ if [[ "$rc" -eq 0 ]] \
   ok "dispatch-graph-main-red-sync: failed completion surfaces a stderr diagnostic naming the node and leaves the tree clean"
 else
   no "dispatch-graph-main-red-sync silent-failure guard (rc=$rc)"
+  printf 'stdout: %s\n' "$stdout_out"; printf 'stderr: %s\n' "$stderr_out"
+  printf 'status: %s\n' "$status_after"
+fi
+
+# ===========================================================================
+# Case 4: dispatch-graph-main-red-sync refuses to mutate a node absent from
+# origin/main (tactic-graph-write-failure-rollback Unit 5 gap fix). A node whose
+# origin/main:intentions/<id>.md blob cannot be rev-parsed at the FRESH_BLOB
+# capture point has no clean state to roll back to, so mutating it anyway would
+# leak exactly the dirty file the rollback exists to prevent (the restore is
+# guarded on a non-empty blob). The script must skip ONLY that node (a stderr
+# diagnostic naming it, tree left clean) while the per-node `while read` loop
+# still processes the other open node. repo-health is stubbed GREEN so the
+# recovery-completion loop runs; graph-commit is stubbed to fail so the
+# present-on-origin node exercises the rollback path — proving the loop
+# continued past the skipped node.
+# ===========================================================================
+T4="$WORK/t4-seed"
+build_seed_repo "$T4"
+cp "$HARNESS_DIR/dispatch-graph-main-red-sync" "$T4/.claude/skills/dispatch-propagate/scripts/dispatch-graph-main-red-sync"
+chmod +x "$T4/.claude/skills/dispatch-propagate/scripts/dispatch-graph-main-red-sync"
+cat >"$T4/.claude/skills/dispatch-propagate/scripts/repo-health" <<'SH'
+#!/usr/bin/env bash
+# Stub: always reports main green (empty stdout), regardless of flags.
+exit 0
+SH
+chmod +x "$T4/.claude/skills/dispatch-propagate/scripts/repo-health"
+# Node A is seeded AND pushed to origin, so its FRESH_BLOB capture succeeds and
+# it exercises the (stubbed-failing) graph-commit rollback path.
+cat >"$T4/intentions/tactic-main-red-aaa1111.md" <<'NODE'
+---
+id: tactic-main-red-aaa1111
+kind: tactic
+statement: harness open main-red latch node present on origin
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+---
+# harness open main-red latch node present on origin
+NODE
+new_origin t4
+init_and_push "$T4"
+
+C4="$WORK/t4-clone"
+clone_with_node_modules "$C4"
+fail_graph_commit "$C4"
+# Node B exists ONLY in the clone (committed locally, never pushed), so
+# listNodes enumerates it into OPEN_MAIN_RED while origin/main:intentions/<id>.md
+# genuinely does not exist — the FRESH_BLOB capture fails, triggering the refusal.
+cat >"$C4/intentions/tactic-main-red-bbb2222.md" <<'NODE'
+---
+id: tactic-main-red-bbb2222
+kind: tactic
+statement: harness open main-red latch node absent from origin
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+---
+# harness open main-red latch node absent from origin
+NODE
+git -C "$C4" add intentions/tactic-main-red-bbb2222.md
+git -C "$C4" commit -qm 'local-only latch node absent from origin'
+
+stdout_out="$(
+  cd "$C4" || exit 99
+  bash .claude/skills/dispatch-propagate/scripts/dispatch-graph-main-red-sync 2>"$WORK/t4-stderr.log"
+)"
+rc=$?
+stderr_out="$(cat "$WORK/t4-stderr.log")"
+status_after="$(git -C "$C4" status --porcelain intentions/)"
+if [[ "$rc" -eq 0 ]] \
+   && grep -q 'intentions/tactic-main-red-bbb2222.md does not exist on origin/main' <<<"$stderr_out" \
+   && grep -q 'skipping tactic-main-red-bbb2222' <<<"$stderr_out" \
+   && grep -q 'completion of tactic-main-red-aaa1111 failed; write rolled back' <<<"$stderr_out" \
+   && [[ -z "$status_after" ]]; then
+  ok "dispatch-graph-main-red-sync: a node absent from origin/main is skipped (no mutation, stderr names it) while the loop still processes the present node"
+else
+  no "dispatch-graph-main-red-sync origin-absent refusal guard (rc=$rc)"
   printf 'stdout: %s\n' "$stdout_out"; printf 'stderr: %s\n' "$stderr_out"
   printf 'status: %s\n' "$status_after"
 fi

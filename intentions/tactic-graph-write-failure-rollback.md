@@ -436,3 +436,11 @@ Manual / observational checks:
 - Confirm Unit 6: trigger the guard with a leaked office_hours-only residue
   file and confirm the message names the file as likely residue and prints
   the exact clearing command.
+
+## needs-main residue
+
+- id: 10
+  title: Unit 8 deferral boundary — confirm no partial target-redesign work leaked into this PR
+  url_path: current
+  expected_outcome: This PR delivers only Units 1-7 (in-place restore-on-failure); Unit 8 (cutting a scratch checkout from origin/main as the eventual target design) is genuinely untouched, deferred behind the external tactic tactic-graph-commit-cwd-repo-resolution.
+  finding: The 10-file diff contains no scratch-checkout / worktree-cutting code and no reference to tactic-graph-commit-cwd-repo-resolution — consistent with Unit 8 being purely deferred prose in the node body, not partially implemented. This is a planned, documented deferral (the node body's own Unit 8 section states the blocker explicitly), not a QA defect. Disposition workflow classified this needs-main (verify-later, not a fixable defect) rather than already-satisfied since the criterion is a planned deferral non-assertable at merge time.

@@ -103,7 +103,21 @@ if [[ -n "$OPEN_MAIN_RED" && "$OPEN_MAIN_RED" != "UNKNOWN" ]]; then
       # from THIS iteration would trip graph-commit's assert_clean_outside_ids
       # and cascade-fail every SUBSEQUENT node's `graph-commit --base`. The
       # rollback below guarantees each iteration hands the next a clean tree.
-      FRESH_BLOB=$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$node_id.md" 2>/dev/null) || FRESH_BLOB=""
+      #
+      # A capture FAILURE (the node is absent from origin/main at this instant —
+      # e.g. a stale $OPEN_MAIN_RED enumeration racing a concurrent prune/merge)
+      # is a HARD per-node refusal, mirroring the single-shot siblings
+      # demote-node-to-implement / transition-node: with no landed blob there is
+      # no clean state to roll back to, so mutating anyway would leak exactly the
+      # dirty file this rollback exists to prevent (the restore below would be
+      # silently skipped). Skip ONLY this node and let the loop continue with the
+      # rest — unlike the single-shot siblings, this is a per-node `while read`
+      # loop, so the correct refusal is `continue`, not `exit 1`.
+      if ! FRESH_BLOB=$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$node_id.md" 2>/dev/null) || [[ -z "$FRESH_BLOB" ]]; then
+        echo "dispatch-graph-main-red-sync: intentions/$node_id.md does not exist on origin/main — refusing to mutate a node with no landed content to roll back to; skipping $node_id" >&2
+        rm -rf "$COMPLETE_DIR"
+        continue
+      fi
       if ! (
         cd "$REPO_ROOT" || exit 1
         MANIFEST=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$COMPLETE_DIR" "$node_id") || exit 1
