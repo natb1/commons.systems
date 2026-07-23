@@ -95,19 +95,39 @@ Scope:
 
 ## Dropped units (greenfield-relevance gate, 2026-07-11)
 
-- All legacy dispatch-script findings (`dispatch-reconcile-merged:61`
-  creation-ordered window, `dispatch-select-target:270` unpaginated
-  main-broken check, `dispatch-find-owning-pr:92` any-error-as-404,
-  `dispatch-route:179,196,211,277-284` undiagnosed parks,
+- Correction (2026-07-23, tactic-legacy-router-removal Unit 3): the original
+  2026-07-11 note below assumed `tactic-legacy-router-removal` would delete
+  every script named across this section. Checked against origin/main as of
+  2026-07-23: only `dispatch-select-target` and `dispatch-route` are actually
+  gone (deleted via the separately-recorded `tactic-dispatch-legacy-rewire`,
+  PR #2869). The rest were never in `tactic-legacy-router-removal`'s scope —
+  its body only ever named `dispatch-select-target`, `dispatch-phase`'s
+  derivation logic, `dispatch-materialize-spawn`, `dispatch-launch-worker`,
+  `dispatch-trace-leaf`, `dispatch-route`, the office-hours entry surface, and
+  the legacy worktree-create.sh lane. Findings against scripts outside that
+  list remain open and unresolved — confirmed still present on origin/main as
+  of 2026-07-23 — not dropped in the sense of resolved, just left out of that
+  tactic's plan. This entry is a documentation correction only; it does not
+  commit to fixing them or create new units.
+- `dispatch-select-target:270` (unpaginated main-broken check) and
+  `dispatch-route:179,196,211,277-284` (undiagnosed parks) — genuinely
+  resolved: both scripts are confirmed deleted from origin/main as of
+  2026-07-23. No further action needed.
+- Remaining legacy dispatch-script findings — still open, not covered by
+  `tactic-legacy-router-removal`: `dispatch-reconcile-merged:61`
+  creation-ordered window, `dispatch-find-owning-pr:92` any-error-as-404,
   `dispatch-attempt-count` remove-then-add bump, `gh_retry:125-151`
-  non-idempotent POST retries) — superseded by `tactic-legacy-router-removal`
-  (issues disabled; the surface is scheduled for deletion).
+  non-idempotent POST retries. All four scripts are confirmed still present
+  on origin/main as of 2026-07-23.
 - lib.sh duplication lows (`gh label create` idiom x8, marker-comment upsert
   copies, `dispatch-attempt-count`/`dispatch-qa-fix-attempt` near-clones) —
-  same supersession.
+  still open, not covered by `tactic-legacy-router-removal`; the duplicated
+  code is confirmed still present on origin/main as of 2026-07-23.
 - Dead-script deletions (`issue-siblings`, `wait-for-url.sh`,
-  `check-inbox-age`, `dispatch-reclaim-audit`) — deferred to the same
-  removal tactic's deletion sweep.
+  `check-inbox-age`, `dispatch-reclaim-audit`) — still open, not covered by
+  `tactic-legacy-router-removal` (it never scheduled a deletion sweep for
+  these); all four are confirmed still present on origin/main as of
+  2026-07-23.
 - Token-audit local-time window (`aggregate-usage.sh:168,174,846`) — already
   tracked at `tactic-token-audit-node-attribution` Unit 4.
 
