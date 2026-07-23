@@ -67,6 +67,31 @@ clarifications:
       cleared and its blocked_by edge to this sitting removed, left status:raw
       for a fresh /align-tactics finalize scoped to the coverage-and-record
       residual. Not pruned. Boldness: medium (a parsimony/altitude judgment)."
+  - question: Was the 2026-07-22 Claude-authored resolution (commit 8e23a272) of
+      this sitting's three decisions genuinely owner-directed?
+    answer: "Unresolved by this session (Recorded 2026-07-23 /align-tactics session)
+      — re-parked rather than accepted or reverted. This node was born-parked
+      2026-07-09 as an explicitly human-owned decision: its own rationale states
+      the inclusion/ratification calls are 'Not claude-executable... delegating
+      the ratification would recreate the capture.' The 2026-07-22 resolution
+      above cleared that park and made all three decisions itself, citing 'the
+      owner directed this' with no corroborating record anywhere in the graph or
+      reachable commit messages, and its own text names an unresolved 'residual
+      capture-tension... surfaced for the owner to re-open.' This session found
+      no way to verify the claimed direction from graph state alone (this repo's
+      dispatch fleet commits both human and autonomous-session actions under the
+      same git identity, so authorship metadata does not distinguish them), so
+      it treats the authorization as an unverifiable blocker rather than
+      assuming either legitimacy or overreach, and re-parks office_hours so a
+      human makes the call the node's own rationale reserves for a human.
+      Recommend: review commit 8e23a272's diff
+      (intentions/tactic-align-audit-legacy-review.md,
+      intentions/strategy-explicit-intent.md,
+      intentions/tactic-condition-review-sweep.md) and either (a) confirm the
+      direction was actually given and ratify the three dispositions as recorded
+      — at which point this tactic is fully achieved and should be pruned per
+      kind-tactic's completion doctrine — or (b) if no such direction was given,
+      treat it as a capture instance and revert/rework the three dispositions."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -74,7 +99,18 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Re-parked 2026-07-23 by an /align-tactics session: this node's
+    2026-07-22 self-resolution (commit 8e23a272) of a genuinely human-owned
+    decision ('Not claude-executable... delegating the ratification would
+    recreate the capture') claims owner direction that this session could not
+    corroborate from graph state, and the resolution's own text flags a residual
+    capture-tension for the owner to re-open. See the 2026-07-23 clarification
+    on this node for full detail. Recommend: review commit 8e23a272's diff and
+    either ratify it (then prune this tactic as fully achieved) or revert/rework
+    it if the claimed direction was not actually given."
+  since: 2026-07-23
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
