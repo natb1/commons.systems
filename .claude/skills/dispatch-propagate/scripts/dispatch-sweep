@@ -284,6 +284,29 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
           continue
           ;;
       esac
+    else
+      # No PR and no issue-number prefix -> a bare node-id worktree (branch =
+      # tactic id or similar, never had a PR, e.g. an office-hours session's
+      # worktree). No issue to query; reap purely on local git + liveness
+      # state, reusing the CLOSED-issue arm's two guards verbatim.
+      if worktree_has_live_session "$wt_path"; then
+        log "SKIP_NODE_LIVE_SESSION: '$wt_path' branch=$wt_branch"
+      elif worktree_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
+        if git worktree remove "$wt_path" 2>>"$LOG_FILE"; then
+          git worktree prune 2>/dev/null || true
+          if ! git branch -D "$wt_branch" >>"$LOG_FILE" 2>&1; then
+            log "BRANCH_DELETE_FAILED: branch=$wt_branch (worktree removed; branch retained)"
+          fi
+          # Clear any not-in-sync marker so a future same-named worktree never
+          # inherits a stale grace timestamp.
+          reap_marker_clear "$PROJECT_ROOT" "$(basename "$wt_path")" || true
+          log "REMOVE_NODE: '$wt_path' branch=$wt_branch"
+        else
+          log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
+        fi
+      else
+        reap_or_skip_not_in_sync NODE "$wt_path" "$wt_branch" "$(basename "$wt_path")" "node=$wt_branch"
+      fi
     fi
     continue
   fi
