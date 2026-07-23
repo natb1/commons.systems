@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -29,6 +29,7 @@ office_hours:
   reason: observable only on the next real claude-code flake bump and home-manager
     activation on the live host
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -37,10 +38,11 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issues (closed, content preserved here): 2757,
-2756 — needs-main residue from the daemon nix-module work (issue 2736, PR
-2755). This is the fix for the recurring stale-daemon failure mode
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issues (closed, content
+preserved here): 2757, 2756 — needs-main residue from the daemon nix-module
+work (issue 2736, PR 2755). This is the fix for the recurring stale-daemon
+failure mode
 (background sessions running the old claude-code binary until a manual
 `systemctl --user restart dispatch-claude-daemon.service`). The daemon
 substrate carries graph-native workers too, so the check outlives the legacy

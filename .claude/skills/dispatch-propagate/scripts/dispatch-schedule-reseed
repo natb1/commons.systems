@@ -96,8 +96,8 @@
 #
 #   DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE
 #     Override the main worktree path. When set, the script does NOT require
-#     a git repo. Default: <project-root>/worktrees/main, where project-root
-#     is the parent of git --git-common-dir. Mirrors
+#     a git repo. Default: the project root itself (parent of git
+#     --git-common-dir), which IS the primary main checkout. Mirrors
 #     dispatch-spawn-tick's idiom.
 #
 #   DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD
@@ -396,7 +396,7 @@ if [[ -n "${DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE:-}" ]]; then
 else
   PROJECT_ROOT=$(resolve_project_root) \
     || { echo "dispatch-schedule-reseed: not in a git repo and DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE is unset" >&2; exit 2; }
-  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+  MAIN_WORKTREE="$PROJECT_ROOT"   # de-bare: the project root IS the main checkout
 fi
 
 # Install the OnFailure recovery unit (dispatch-tick-recover.service) before

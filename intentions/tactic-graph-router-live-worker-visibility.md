@@ -16,11 +16,11 @@ rationale: "Surfaced 2026-07-07: a manual emulated router tick and the live
   daemon session's mechanical-conflict park) at once. Root cause confirmed by
   code read (2026-07-18): dispatch-select-tick's --manual branch already
   computes live-worker headroom (busy-worker count plus reservation-ledger
-  count, versus MAX_WORKERS -- the daemon's own autonomous gate instead
-  compares against TARGET_N, a separate pace-derived target) and holds
-  dispatch-acquire-lock across its call to graph-select-target and the
-  resulting reservation_write claim (dispatch-select-tick Step 0 lock acquire
-  through emit_graph_selection's reservation_write+release_lock) -- but
+  count, versus MAX_WORKERS -- the daemon's own autonomous gate instead compares
+  against TARGET_N, a separate pace-derived target) and holds
+  dispatch-acquire-lock across its call to graph-select-target and the resulting
+  reservation_write claim (dispatch-select-tick Step 0 lock acquire through
+  emit_graph_selection's reservation_write+release_lock) -- but
   graph-select-target itself performs NEITHER the lock acquisition NOR the
   headroom check when invoked directly. Any caller outside
   dispatch-select-tick's wrapper -- specifically an ad hoc manual/emulated-tick
@@ -43,10 +43,24 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-graph-router-live-worker-visibility
+  pr: 2918
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-21
+    attempt: 1
+    pushed_sha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-23
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /dispatch-conflict once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -266,3 +280,17 @@ Manual/observational:
   step instead of hand-rolling a `worker_cap`; this is a process change for
   future emulation runs, not something this tactic can verify mechanically —
   note it for the author at the next emulated tick.
+
+## needs-main residue
+
+- id: 6
+  title: Concurrency design soundness and the manual-tick launcher process change
+  url_path: n/a
+  expected_outcome: The author confirms the concurrency design is sound and
+    accepts the manual-tick launcher migration (adopting
+    `graph-select-target --standalone --top <N>` as the selection step,
+    replacing a hand-rolled `worker_cap`) as a downstream process change to
+    apply at the next emulated tick.
+  finding: Planned deferral — this is a process change for future
+    manual/emulated-tick launcher runs, not mechanically verifiable at this
+    PR's merge; note it for the author at the next emulated tick.

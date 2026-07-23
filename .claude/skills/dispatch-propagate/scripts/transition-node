@@ -7,23 +7,23 @@
 # origin/main through graph-commit.
 #
 # Spec: intentions/tactic-graph-native-dispatch.md §1.1, §2.4; strategy
-# clarifications 10, 18, 22. The DECISION (ladder edge, fix interrupt + resume,
+# clarifications 10, 18, 22. The DECISION (unconditional forward ladder edge,
 # residue→main-qa, freshness holds) lives in the pure `transitions` module,
 # applied via apply-node-transition.ts; this wrapper owns only the environmental
-# parts: the origin/main snapshot, the CI verdict sensor, the fingerprint gates,
-# and refreshing the phase-start stamp. Arming/merge of a reviewed node-lane PR
-# is owned by the tick reconciler (graph-auto-merge); this script only records
-# the `reviewed` execution marker via apply-node-transition — it never merges.
+# parts: the origin/main snapshot, the fingerprint gates, and refreshing the
+# phase-start stamp. Arming/merge of a reviewed node-lane PR is owned by the tick
+# reconciler (graph-auto-merge); this script only records the `reviewed` execution
+# marker via apply-node-transition — it never merges.
+#
+# The forward transition is CI-BLIND: it never reads a CI verdict and never
+# routes a tactic into `fix`. A CI-fix interrupt is carried orthogonally on
+# `execution.fix` and routed by the selector, leaving `phase` at its real ladder
+# position — so this wrapper has no CI sensor.
 #
 # Doctrine: the transition is a STATE-ONLY commit on main, never on the work PR
 # branch (strategy clarification 15). Run this from a main-based checkout; from
 # a PR-branch worktree the caller applies the reset-dance graph-commit needs
 # (same constraint as park-node).
-#
-# Sensor: CI verdict via dispatch_ci_verdict_rest on the PR head sha
-# (passing/failing/pending; pending maps to the pure layer's `unknown` = not
-# a fix interrupt). No PR yet → unknown (a pre-PR implement completion advances
-# to qa without a CI gate).
 #
 # Freshness gates (compute-freshness.ts over the origin/main snapshot):
 #   - scope-stale → delegate to demote-node-to-implement (the backward
@@ -100,24 +100,12 @@ refresh_stamp() {
   printf '%s %s\n' "$fp" "$sha" > "$stamp_file" 2>/dev/null || true
 }
 
-# --- Read the current phase + PR --------------------------------------------
+# --- Read the current phase --------------------------------------------------
+# The PR number reaches the graph via --set-pr (SET_PR → apply-node-transition);
+# this script no longer resolves or acts on the PR itself — merging is the tick
+# reconciler's job (graph-auto-merge).
 NODE_JSON="$(read_node_json)" || { echo "transition-node: could not read node $NODE_ID" >&2; exit 2; }
 PHASE="$(jq -r '.phase // "implement"' <<<"$NODE_JSON")"
-PR="$SET_PR"
-[[ -z "$PR" ]] && PR="$(jq -r '.execution.pr // empty' <<<"$NODE_JSON")"
-
-# --- CI verdict sensor -------------------------------------------------------
-CI="unknown"
-if [[ -n "$PR" ]]; then
-  HEAD_SHA="$(gh_pr_view_rest "$PR" 2>/dev/null | jq -r '.headRefOid // empty')" || true
-  if [[ -n "$HEAD_SHA" ]]; then
-    case "$(dispatch_ci_verdict_rest "$HEAD_SHA" 2>/dev/null || echo pending)" in
-      failing) CI="failing" ;;
-      passing) CI="passing" ;;
-      *) CI="unknown" ;;
-    esac
-  fi
-fi
 
 # --- Freshness gates over an origin/main snapshot ----------------------------
 SNAP_DIR="$(mktemp -d)" || { echo "transition-node: mktemp failed" >&2; exit 2; }
@@ -146,8 +134,8 @@ if [[ "$SCOPE_STALE" == "true" && "$PHASE" != "main-qa" ]]; then
   exit 1
 fi
 
-# --- Apply the forward/hold/fix decision to the local store ------------------
-APPLY_FLAGS=("$NODE_ID" "--ci" "$CI")
+# --- Apply the forward/hold decision to the local store ----------------------
+APPLY_FLAGS=("$NODE_ID")
 [[ "$STRATEGY_STALE" == "true" ]] && APPLY_FLAGS+=("--strategy-stale")
 [[ -n "$SET_PR" ]] && APPLY_FLAGS+=("--set-pr" "$SET_PR")
 if ! RESULT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/apply-node-transition.ts" "${APPLY_FLAGS[@]}") )"; then
@@ -167,6 +155,9 @@ fi
 refresh_stamp
 
 # --- Clean review completion: defer merge to the tick reconciler -------------
+# The worker records the `reviewed` marker (written above by apply-node-transition);
+# the tick's graph-auto-merge sweep does the label-free, CI-validated,
+# fingerprint-fresh merge. This script never merges.
 if [[ "$ARM_MERGE" == "true" ]]; then
   echo "review-complete $NODE_ID (merge deferred to tick)"
   exit 0

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
-import { validateGraph, validateNode } from "../src/schema.js";
+import { validateGraph, validateGraphProseRefs, validateNode } from "../src/schema.js";
 
 describe("validateNode", () => {
   it("accepts a valid full node", () => {
@@ -78,6 +78,7 @@ describe("validateNode", () => {
       attempts: { implement: 1, qa: 2 },
       markers: ["dispatch:qa"],
       strategy_fingerprint: "abc123",
+      fix: null,
     });
     expect(result.validates).toEqual(["strategy-1"]);
     expect(result.blocked_by).toEqual(["tactic-2"]);
@@ -109,6 +110,7 @@ describe("validateNode", () => {
       attempts: {},
       markers: [],
       strategy_fingerprint: null,
+      fix: null,
     });
   });
 
@@ -1355,5 +1357,324 @@ describe("validateGraph", () => {
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-1: kind-tactic has no attributes\.status_vocabulary declared/,
     );
+  });
+
+  // Rule 17: clarifications[].answer must carry a dated provenance clause.
+  it("accepts a dated clarification regardless of date placement (front, trailing, mid)", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        clarifications: [
+          { question: "front-loaded?", answer: "(Recorded 2026-07-05 by author) settled." },
+          { question: "trailing?", answer: "Settled the scope. Recorded 2026-07-05." },
+          { question: "mid-sentence?", answer: "On 2026-07-05 the author ratified this." },
+        ],
+      }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rejects a dateless clarification, naming the node id and clarification index", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        clarifications: [
+          { question: "dated?", answer: "Recorded 2026-07-05." },
+          { question: "dateless?", answer: "No date anywhere in this answer." },
+        ],
+      }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: clarifications\[1\]\.answer carries no dated provenance clause/,
+    );
+  });
+
+  it("passes a node with an empty clarifications array (the gnode default)", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "tactic-1", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("accumulates all dateless clarifications across nodes into one thrown error", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        clarifications: [{ question: "q", answer: "No date here." }],
+      }),
+      gnode({
+        id: "virtue-1",
+        kind: "virtue",
+        clarifications: [{ question: "q", answer: "Also no date." }],
+      }),
+    ];
+    let caught: unknown;
+    try {
+      validateGraph(nodes);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    if (!(caught instanceof Error)) throw new Error("unreachable");
+    expect(caught.message).toMatch(/tactic-1: clarifications\[0\]\.answer carries no dated provenance clause/);
+    expect(caught.message).toMatch(/virtue-1: clarifications\[0\]\.answer carries no dated provenance clause/);
+  });
+
+  // Rule 18: strategy-main-health dominant-attention guard.
+  type Attn = { boost: number | null; override: number | null; rationale: string };
+
+  /**
+   * Build a minimal goal-layer node set with a dominant `strategy-main-health`
+   * (default attention.boost 100) and a sibling `strategy-other` carrying
+   * `siblingAttention`. Pass `mainHealthAttention: null` to null out
+   * strategy-main-health's attention (exercises the inert path).
+   */
+  function mainHealthNodes(
+    siblingAttention: Attn | null,
+    opts: { mainHealthAttention?: Attn | null } = {},
+  ): IntentionNode[] {
+    const mhAttention: Attn | null =
+      "mainHealthAttention" in opts
+        ? (opts.mainHealthAttention ?? null)
+        : { boost: 100, override: null, rationale: "Author-directed: dominant." };
+    return [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
+      }),
+      gnode({ id: "strategy-main-health", kind: "strategy", attention: mhAttention }),
+      gnode({ id: "strategy-other", kind: "strategy", attention: siblingAttention }),
+    ];
+  }
+
+  it("Rule 18: throws when another node's attention.boost matches the dominant boost", () => {
+    const nodes = mainHealthNodes({ boost: 100, override: null, rationale: "trying to tie" });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-other: attention\.boost \(100\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
+    );
+  });
+
+  it("Rule 18: throws when another node's attention.boost exceeds the dominant boost", () => {
+    const nodes = mainHealthNodes({ boost: 101, override: null, rationale: "trying to beat" });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-other: attention\.boost \(101\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
+    );
+  });
+
+  it("Rule 18: throws when another node's attention.override matches or exceeds the dominant boost", () => {
+    const nodes = mainHealthNodes({ boost: null, override: 100, rationale: "override tie" });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-other: attention\.override \(100\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
+    );
+  });
+
+  it("Rule 18: passes when the node opts out with ACK: main-health-dominance in its rationale", () => {
+    const nodes = mainHealthNodes({
+      boost: 100,
+      override: null,
+      rationale: "Deliberately co-dominant. ACK: main-health-dominance",
+    });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 18: passes for a sibling boost strictly below the dominant boost", () => {
+    const nodes = mainHealthNodes({ boost: 99, override: null, rationale: "below" });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 18: is inert when strategy-main-health's attention is null (no dominance to protect)", () => {
+    const nodes = mainHealthNodes(
+      { boost: 100, override: null, rationale: "would-be violation" },
+      { mainHealthAttention: null },
+    );
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 18: does not constrain strategy-main-health's own attention.boost", () => {
+    // The guard excludes the node itself: strategy-main-health carrying a boost
+    // equal to its own threshold must not self-trip.
+    const nodes = mainHealthNodes(null);
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+});
+
+describe("validateGraphProseRefs", () => {
+  /** Build a full IntentionNode fixture for prose-ref tests. */
+  function pnode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
+    return {
+      id: partial.id,
+      kind: partial.kind,
+      statement: partial.statement ?? `Statement for ${partial.id}`,
+      owner: partial.owner ?? "human",
+      status: partial.status ?? "raw",
+      parent: partial.parent ?? null,
+      serves: partial.serves ?? [],
+      recovers: partial.recovers ?? [],
+      rationale: partial.rationale ?? null,
+      reading: partial.reading ?? null,
+      gap: partial.gap ?? null,
+      clarifications: partial.clarifications ?? [],
+      tooling_goals: partial.tooling_goals ?? [],
+      success_signal: partial.success_signal ?? null,
+      attention: partial.attention ?? null,
+      phase: partial.phase ?? null,
+      execution: partial.execution ?? null,
+      validates: partial.validates ?? [],
+      blocked_by: partial.blocked_by ?? [],
+      office_hours: partial.office_hours ?? null,
+      pace_exempt: partial.pace_exempt ?? false,
+      rounds: partial.rounds ?? null,
+      attributes: partial.attributes ?? {},
+    };
+  }
+
+  // A real node so the "tactic-" kind prefix exists in the derived vocabulary
+  // (prefixes are derived from the store ids, never hardcoded).
+  const realTactic = pnode({ id: "tactic-real", kind: "tactic" });
+
+  it("throws on a missing backtick ref in rationale", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "See `tactic-missing` for context." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-missing` does not resolve to a node/,
+    );
+  });
+
+  it("throws on a missing backtick ref in a clarification answer", () => {
+    const nodes = [
+      realTactic,
+      pnode({
+        id: "tactic-a",
+        kind: "tactic",
+        clarifications: [{ question: "q", answer: "Depends on `tactic-missing`." }],
+      }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-missing` does not resolve to a node/,
+    );
+  });
+
+  it("throws on a missing backtick ref in the body", () => {
+    const nodes = [realTactic, pnode({ id: "tactic-a", kind: "tactic" })];
+    const bodies = new Map([["tactic-a", "# heading\n\nBlocked on `tactic-missing`.\n"]]);
+    expect(() => validateGraphProseRefs(nodes, bodies, [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-missing` does not resolve to a node/,
+    );
+  });
+
+  it("passes when a backtick ref resolves to a live node in the store", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Depends on `tactic-real`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
+  });
+
+  it("passes when a backtick ref names a pruned (deleted) node", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Superseded `tactic-gone`." }),
+    ];
+    expect(() =>
+      validateGraphProseRefs(nodes, new Map(), ["tactic-gone"], new Set()),
+    ).not.toThrow();
+  });
+
+  it("passes a missing ref that an OTHER open tactic plans (mentions in its statement)", () => {
+    const nodes = [
+      realTactic,
+      // An open (non-done) tactic whose statement mentions the id — the ref is a
+      // forward reference to planned-but-uncommitted work, not a dangling ref.
+      pnode({
+        id: "tactic-planner",
+        kind: "tactic",
+        phase: "implement",
+        statement: "This will create tactic-planned.",
+      }),
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Coordinates with `tactic-planned`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
+  });
+
+  it("does NOT treat a missing ref as planned when the only mentioning tactic is done", () => {
+    const nodes = [
+      realTactic,
+      pnode({
+        id: "tactic-planner",
+        kind: "tactic",
+        phase: "done",
+        statement: "This created tactic-planned.",
+      }),
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Coordinates with `tactic-planned`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-planned` does not resolve to a node/,
+    );
+  });
+
+  it("passes a missing, non-planned ref that is present in the baseline", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Example id `tactic-example`." }),
+    ];
+    const baseline = new Set(["tactic-example|tactic-a"]);
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], baseline)).not.toThrow();
+  });
+
+  it("never flags a non-backticked prose compound that merely looks id-shaped", () => {
+    const nodes = [
+      realTactic,
+      // Plain-text "tactic-only" used as English prose (no backticks) — a
+      // non-backticked token counts only if it is in the known vocabulary, so it
+      // can never be classified missing.
+      pnode({
+        id: "tactic-a",
+        kind: "tactic",
+        rationale: "This is the tactic-only case discussed above.",
+      }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
+  });
+
+  it("lists ALL prose-ref violations in one throw", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Needs `tactic-x`." }),
+      pnode({
+        id: "tactic-b",
+        kind: "tactic",
+        clarifications: [{ question: "q", answer: "Also `tactic-y`." }],
+      }),
+    ];
+    let caught: unknown;
+    try {
+      validateGraphProseRefs(nodes, new Map(), [], new Set());
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    if (!(caught instanceof Error)) throw new Error("unreachable");
+    expect(caught.message).toContain("tactic-a: prose reference `tactic-x`");
+    expect(caught.message).toContain("tactic-b: prose reference `tactic-y`");
   });
 });

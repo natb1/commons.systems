@@ -105,8 +105,9 @@
 #                                        `systemctl`.
 #   DISPATCH_SPAWN_TICK_MAIN_WORKTREE    The main worktree path. When set, the
 #                                        script does NOT require a git repo.
-#                                        Default: <project-root>/worktrees/main,
-#                                        via resolve_project_root (lib.sh).
+#                                        Default: the project root itself (the
+#                                        primary main checkout), via
+#                                        resolve_project_root (lib.sh).
 #
 # Called from the dispatch hooks (the worker Stop-hook and the input-block hook)
 # and the reseed timers — all of which run OUTSIDE Claude's Bash sandbox. A
@@ -144,14 +145,14 @@ source "$SCRIPT_DIR/lib.sh"
 # The headless tick runs from the main worktree (where every autonomous tick is
 # rooted). An explicit DISPATCH_SPAWN_TICK_MAIN_WORKTREE is authoritative and
 # bypasses the git lookup — tests rely on this. Otherwise resolve_project_root
-# (lib.sh) returns the project root in both classic (.git) and bare (.bare)
-# layouts.
+# (lib.sh) returns the project root (parent of git --git-common-dir), which
+# under the standard layout IS the primary main checkout.
 if [[ -n "${DISPATCH_SPAWN_TICK_MAIN_WORKTREE:-}" ]]; then
   MAIN_WORKTREE="$DISPATCH_SPAWN_TICK_MAIN_WORKTREE"
 else
   PROJECT_ROOT=$(resolve_project_root) \
     || { echo "dispatch-spawn-tick: not in a git repo and DISPATCH_SPAWN_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
-  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+  MAIN_WORKTREE="$PROJECT_ROOT"   # de-bare: the project root IS the main checkout
 fi
 
 # Install the OnFailure recovery unit (dispatch-tick-recover.service) before

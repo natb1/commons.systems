@@ -51,7 +51,7 @@ import {
 } from "../src/router.js";
 import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
 import { isPlainObject } from "../src/schema.js";
-import type { IntentionNode, StrategyStampValue } from "../src/schema.js";
+import type { FixState, IntentionNode, StrategyStampValue } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
 // --- Exit codes ------------------------------------------------------------
@@ -152,6 +152,27 @@ function readMarkers(node: IntentionNode): string[] {
 }
 
 /**
+ * The node's active CI-fix interrupt (`execution.fix`), first-class or squatter,
+ * else null (tactic-fix-interrupt-orthogonal-state). The interrupt is
+ * graph-native-only and the squatter subtrees (attention-surface / token-economy)
+ * predate it, so in practice only the first-class read fires; the squatter
+ * fallback is kept for uniformity with `readMarkers` / `readStrategyFingerprint`.
+ */
+function readFixState(node: IntentionNode): FixState | null {
+  const firstClass = node.execution?.fix ?? null;
+  if (firstClass !== null) return firstClass;
+  const squatExec = node.attributes.execution;
+  if (squatExec !== null && typeof squatExec === "object" && "fix" in squatExec) {
+    const fix = (squatExec as { fix?: unknown }).fix;
+    if (isPlainObject(fix) && typeof fix.since === "string" && typeof fix.attempt === "number") {
+      const pushed = fix.pushed_sha;
+      return { since: fix.since, attempt: fix.attempt, pushed_sha: typeof pushed === "string" ? pushed : null };
+    }
+  }
+  return null;
+}
+
+/**
  * Run the five re-validation checks against a store the caller guarantees is at
  * fresh origin/main. Pure: reads files, returns a result — no process exit, no
  * direct stdio. Throws only on a genuinely malformed store (a node file that
@@ -189,8 +210,24 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
   // not-parked check so a parked strategy fails with the clearer not-parked
   // message. All other phases keep the literal stored-phase equality (tactic
   // phases are first-class and persisted, so equality is correct there).
+  //
+  // `fix` is likewise a directive the selector emits but never stores on the
+  // node: a CI-fix interrupt lives on `execution.fix` while `phase` stays at its
+  // real ladder position (implement/qa/review), so `phase` is never literally
+  // `"fix"`. A literal `readPhase === "fix"` would exit-12 every fix candidate.
+  // For `fix` the equality is replaced by an interrupt-presence gate: the
+  // interrupt must still be set (a null `execution.fix` means it was resolved
+  // between selection and execute-time — a stale selection).
   const phase = readPhase(node);
-  if (selectedPhase === "align-tactics") {
+  if (selectedPhase === "fix") {
+    if (readFixState(node) === null) {
+      return fail(
+        EXIT_STALE_SELECTION,
+        "phase",
+        `selected fix but ${nodeId} carries no execution.fix interrupt (resolved since selection)`,
+      );
+    }
+  } else if (selectedPhase === "align-tactics") {
     if (node.kind === "strategy") {
       // A strategy is align-selected at its native null phase; any non-null
       // stored phase (first-class or squatter) is a stale advance.
