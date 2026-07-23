@@ -972,6 +972,48 @@ park_and_exit() {
 # --rebase`, per the observed failure mode (code-style.md: clear error over a
 # silent fallback such as --autostash, which would hide rather than surface
 # the anomaly).
+# Heuristic fingerprint check for a single offending path: does its diff from
+# HEAD touch ONLY frontmatter marker fields (office_hours / phase / their
+# nested block lines)? This is the exact shape left behind by a failed-write
+# leak (park-node, transition-node, etc. interrupted mid-flight after editing
+# the marker fields but before graph-commit landed the change) — as opposed to
+# an unrelated file that happens to be dirty for some other reason. Not a full
+# YAML parser: a body edit, a frontmatter edit to any other field, or a diff
+# that can't be classified all correctly fall through to "not residue" (the
+# safe direction — the caller still lists the file under the generic
+# unrelated-dirty-file path with the blanket 'git stash -u' suggestion).
+_offending_path_is_marker_only_residue() {
+  local path="$1"
+  [[ "$path" == intentions/*.md ]] || return 1
+  local diff
+  diff="$(git diff HEAD -- "$path" 2>/dev/null)"
+  [[ -n "$diff" ]] || return 1
+  local dline sign content trimmed in_marker_block=0 saw_change=0
+  while IFS= read -r dline; do
+    [[ "$dline" == '+++'* || "$dline" == '---'* || "$dline" == '@@'* || "$dline" == '\ '* ]] && continue
+    [[ "$dline" == [+-]* ]] || continue
+    sign="${dline:0:1}"
+    content="${dline:1}"
+    trimmed="${content#"${content%%[![:space:]]*}"}"
+    [[ -z "$trimmed" ]] && continue
+    saw_change=1
+    if [[ "$content" == [[:space:]]* ]]; then
+      # Indented line: only acceptable as a continuation inside a marker
+      # block (e.g. office_hours: {reason: ..., cleared_at: ...} spread over
+      # lines) opened by a prior top-level line in this same diff.
+      [[ "$in_marker_block" == 1 ]] || return 1
+      continue
+    fi
+    # Top-level (unindented) changed line: must be exactly a marker field.
+    case "$trimmed" in
+      office_hours:*|execution:*) in_marker_block=1 ;;
+      phase:*) in_marker_block=0 ;;
+      *) return 1 ;;
+    esac
+  done <<<"$diff"
+  [[ "$saw_change" == 1 ]]
+}
+
 assert_clean_outside_ids() {
   local dirty
   # Reconcile the index's cached stat data with the working tree before reading
@@ -1003,7 +1045,27 @@ assert_clean_outside_ids() {
   if [[ -n "$offending" ]]; then
     echo "error: graph-commit: refusing to start — unrelated dirty tracked file(s) outside this call's node set:" >&2
     printf '%s' "$offending" >&2
-    echo "       stash or commit these first (e.g. 'git stash -u'), then re-run graph-commit — it resumes safely (a prior partial local commit is detected and just pushed forward)." >&2
+    local residue_line residue_path generic="" residue=""
+    while IFS= read -r residue_line; do
+      [[ -z "$residue_line" ]] && continue
+      residue_path="${residue_line:3}"
+      if _offending_path_is_marker_only_residue "$residue_path"; then
+        residue+="$residue_line"$'\n'
+      else
+        generic+="$residue_line"$'\n'
+      fi
+    done <<<"$offending"
+    if [[ -n "$residue" ]]; then
+      echo "       LIKELY LEAKED-WRITE RESIDUE (diff touches only office_hours/phase marker fields — the fingerprint of a park-node/transition-node/etc. write that was interrupted before its graph-commit landed). Clear it directly:" >&2
+      while IFS= read -r residue_line; do
+        [[ -z "$residue_line" ]] && continue
+        residue_path="${residue_line:3}"
+        echo "         git -C \"$REPO_ROOT\" checkout -- $residue_path" >&2
+      done <<<"$residue"
+    fi
+    if [[ -n "$generic" ]]; then
+      echo "       stash or commit these first (e.g. 'git stash -u'), then re-run graph-commit — it resumes safely (a prior partial local commit is detected and just pushed forward)." >&2
+    fi
     exit 1
   fi
 }

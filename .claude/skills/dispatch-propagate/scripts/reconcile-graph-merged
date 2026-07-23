@@ -89,12 +89,49 @@ if [[ "$STATES" == "{}" ]]; then
 fi
 
 # --- Decide + apply the store mutations --------------------------------------
+# Plan-then-apply for a rollback path: a --no-apply run yields the plan's exact
+# edit∪prune id set WITHOUT touching disk; we snapshot each of those ids from
+# origin/main, THEN run the real apply. Both runs read the same unmutated
+# intentions/ dir (nothing else writes it between them), so the plan is
+# deterministic — the snapshotted ids match the ids the apply run mutates. On
+# any failure of the apply run or the graph-commit, RESTORE_ON_FAILURE dumps
+# each snapshot blob back over its file (rewriting edits and recreating pruned
+# deletions), leaving intentions/ clean rather than tripping graph-commit's
+# assert_clean_outside_ids guard for every other node.
 STATES_FILE="$(mktemp)" || { echo "reconcile-graph-merged: mktemp failed" >&2; exit 1; }
-trap 'rm -f "$STATES_FILE"' EXIT
+declare -A SNAPSHOT=()
+RESTORE_ON_FAILURE=0
+restore_snapshot() {
+  local sid blob
+  for sid in "${!SNAPSHOT[@]}"; do
+    blob="${SNAPSHOT[$sid]}"
+    git -C "$REPO_ROOT" show "$blob" > "$REPO_ROOT/intentions/$sid.md"
+  done
+}
+# Single EXIT trap (bash traps REPLACE on a signal, not stack): always drop the
+# temp file, and roll the write back when a post-snapshot step armed the flag.
+trap 'rc=$?; rm -f "$STATES_FILE"; [[ "$RESTORE_ON_FAILURE" -ne 0 ]] && restore_snapshot; exit $rc' EXIT
 printf '%s' "$STATES" > "$STATES_FILE"
 
+# Step 1: plan-only run (no disk mutation) to learn the id set to snapshot.
+PLAN_ONLY="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/reconcile-graph.ts" --pr-states "$STATES_FILE" --no-apply) )" || {
+  echo "reconcile-graph-merged: reconcile-graph.ts --no-apply failed" >&2; exit 1; }
+
+# Step 2: snapshot every planned id (edit ∪ prune) from origin/main. All planned
+# ids are landed nodes present on origin/main; a rev-parse miss is a hard error —
+# that id can't be safely mutated without a rollback path.
+while IFS= read -r sid; do
+  [[ -n "$sid" ]] || continue
+  blob=$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$sid.md" 2>/dev/null) || {
+    echo "reconcile-graph-merged: cannot snapshot $sid from origin/main (no rollback path)" >&2; exit 1; }
+  SNAPSHOT[$sid]="$blob"
+done < <(jq -r '(.edit[]?, .prune[]?)' <<<"$PLAN_ONLY")
+
+# Step 3: real apply run — mutates disk; its stdout drives the rest of the
+# script. Arm the rollback: any failure from here through graph-commit restores.
+RESTORE_ON_FAILURE=1
 PLAN="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/reconcile-graph.ts" --pr-states "$STATES_FILE") )" || {
-  echo "reconcile-graph-merged: reconcile-graph.ts failed" >&2; exit 1; }
+  echo "reconcile-graph-merged: reconcile-graph.ts failed (write rolled back)" >&2; exit 1; }
 
 # Report deferrals (residue→main-qa, inert until tactic-main-qa-phase).
 while IFS= read -r d; do
@@ -116,9 +153,11 @@ for id in "${PRUNE[@]}"; do GC_ARGS+=(--prune "$id"); done
 for id in "${EDIT[@]}"; do GC_ARGS+=("$id"); done
 
 if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
-  echo "reconcile-graph-merged: graph-commit failed (plan applied on disk, not landed)" >&2
+  echo "reconcile-graph-merged: graph-commit failed (write rolled back)" >&2
   exit 1
 fi
+# Landed — disarm the rollback so the clean exit keeps the committed state.
+RESTORE_ON_FAILURE=0
 
 # Report what was reconciled.
 while IFS= read -r r; do
