@@ -44,36 +44,35 @@ attributes: {}
 ---
 # Move the personal instance config (host configs, identity, ssh pubkeys, group id, host user) out of the framework flake.nix — commons.systems carries zero personal values and CI builds placeholder instance configs
 
-## Park history — RESOLVED 2026-07-23. Do not re-park on the WezTerm hash.
+## Park history — resolved 2026-07-23
 
 This node was parked 2026-07-11 (re-audited 2026-07-23) on a single external
 blocker: CI `nixos-build` was red because of a stale hash on the fixed-output
 derivation `WezTerm-windows-nightly.zip`, pinned in `nix/home/wezterm-pin.nix`
-— a file **this tactic never touches**. The park was never about this diff.
+— a file this tactic never touches. The park was never about this diff.
 
-**That blocker is gone.** PR #2953 (branch `wezterm-pin-refresh`) merged
+That blocker is gone. PR #2953 (branch `wezterm-pin-refresh`) merged
 2026-07-23T15:32:11Z as merge commit `0f51056b9`, moving `windowsZipHash` on
 `main` to `sha256-bTvVHVpB8Mh6g2lF2RB9Egs2IApanVb5Z1R2M9UCZZ8=`, and its own
-`nixos-build` passed. The repo author explicitly directed the unpark on
-2026-07-23 (verbatim: "Unpark 2848 since 2953 is now merged"), and
-`origin/main` was merged into branch `tactic-nix-instance-flake-extraction`
-the same day so the PR picks up the corrected pin. `office_hours` was cleared
-to `null` in that same pass.
+`nixos-build` passed.
 
-Binding on any later session that reads this node:
+On 2026-07-23 the repo author directed the unpark (verbatim: "Unpark 2848
+since 2953 is now merged"). `origin/main` was merged into branch
+`tactic-nix-instance-flake-extraction` the same day as `7a9cdfd7`, so the PR
+picks up the corrected pin, and CI run 30024309981 came back green across all
+15 jobs — including `nixos-build` and `darwin-build`. `office_hours` was
+cleared to `null` in the same pass.
 
-- **Do not re-park on a stale WezTerm hash premise.** The hash values quoted in
-  the old park text (`sha256-Beo9...`, `sha256-QiVmQOEZ...`, pin version
-  `20260707-093716`) are historical and were already stale when written. Before
-  citing any hash blocker, read `nix/home/wezterm-pin.nix` on the *current*
-  `origin/main` and on the *current* PR head — never from this prose.
-- **A park needs a live, first-hand-verified blocker dated at the time of
-  parking.** Re-deriving a park from this node's own history is a stale-premise
-  re-park; a sibling node in this repo had a human ratification at `0066efb3`
-  overridden exactly that way. The author direction above supersedes the old
-  park text and is not re-openable by inference.
-- If `nixos-build` goes red again, diagnose the *actual* failure from the
-  current CI log first, and record the run/job ids and the real cause.
+The hash values quoted in the old park text — `sha256-Beo9...`,
+`sha256-QiVmQOEZ...`, and pin version `20260707-093716` — are historical.
+They were already stale when written and describe no current state; the live
+values are in `nix/home/wezterm-pin.nix` on the current `origin/main` and on
+the current PR head.
+
+What a park rests on, as a matter of practice: a live blocker, verified
+first-hand and dated at the time of parking. A park re-derived from a node's
+own history is a stale-premise park — a sibling node in this repo had a human
+ratification at `0066efb3` overridden exactly that way.
 
 Branch viability at unpark: `git merge origin/main` into the branch was clean
 (no conflicts); no commit on `main` had touched `flake.nix` or
