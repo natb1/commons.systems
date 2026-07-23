@@ -22,6 +22,9 @@
 #   launch <node-id> <cwd>     → fresh-launch a session in <cwd>, attach
 #   empty                      → queue empty, no launch
 #   empty not-parked <node-id> → the named node is absent or not parked, no launch
+#   held <node-id> <job-id>    → the explicitly-targeted node already has a live
+#                                session (job <job-id>) — a collision to surface,
+#                                never a silent fall-through or duplicate launch
 #
 # Sandbox: `claude agents --json` reaches the local daemon over a Unix socket;
 # a sandboxed call returns `[]` indistinguishable from "no sessions" (see
@@ -89,6 +92,16 @@ park_live_on_main() {
 resolve_directive() {
   if [[ -n "$TARGET" ]]; then
     if park_live_on_main "$TARGET"; then
+      # An explicit human target on an already-live node is a collision to
+      # surface, never a silent fall-through or duplicate launch. This preempts
+      # the normal launch directive: check liveness BEFORE consulting the
+      # selector so an occupied target errors (`held`) rather than launching.
+      local target_job
+      target_job=$(job_id_for_name "$TARGET")
+      if [[ -n "$target_job" ]]; then
+        echo "held $TARGET $target_job"
+        return 0
+      fi
       npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$TARGET"
     else
       # park_live_on_main fails for three distinct states: a genuine
@@ -120,13 +133,23 @@ resolve_directive() {
     exit 1
   fi
   local score nid date
+  local nid_job
   while IFS=$'\t' read -r score nid date; do
     [[ -z "$nid" ]] && continue
-    if park_live_on_main "$nid"; then
-      npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$nid"
-      return 0
+    if ! park_live_on_main "$nid"; then
+      echo "office-hours: skipping $nid — park already cleared on origin/main (stale-worktree false positive)." >&2
+      continue
     fi
-    echo "office-hours: skipping $nid — park already cleared on origin/main (stale-worktree false positive)." >&2
+    # A node parked on main but already claimed by a live session (office-hours
+    # or worker, both now named after the bare node id) is skipped to the next
+    # rank — the same liveness-keyed dedup worker sessions use.
+    nid_job=$(job_id_for_name "$nid")
+    if [[ -n "$nid_job" ]]; then
+      echo "office-hours: skipping $nid — a live session (job $nid_job) is already in progress." >&2
+      continue
+    fi
+    npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$nid"
+    return 0
   done <<<"$listing"
   echo "empty"
 }
@@ -146,6 +169,10 @@ case "$verb" in
     echo "office-hours: node $a park already cleared on origin/main (stale-worktree false positive) — nothing to launch."
     exit 0
     ;;
+  held)
+    echo "office-hours: a live session named $a already exists (job $b) — attach it with 'claude attach $b' rather than launching a duplicate on an explicitly-targeted, occupied node." >&2
+    exit 1
+    ;;
   empty)
     if [[ "$a" == "not-parked" ]]; then
       echo "office-hours: node $b is not parked — nothing to launch for it."
@@ -156,12 +183,63 @@ case "$verb" in
     ;;
   launch)
     node_id="$a"
-    cwd="$b"
-    name="office-hours-$node_id"
+    name="$node_id"
 
-    # Always-fresh launch: a live session already named office-hours-<node-id>
-    # means a duplicate name (this entry never implicitly attaches). A clear
-    # error naming the job id beats a duplicate or a forbidden implicit attach.
+    # Provision (or reuse) the node-id worktree so the launched session runs
+    # resident in it under the bare node-id name that liveness-detection
+    # (job_id_for_name / worktree_has_live_session) actually recognizes. This
+    # translates the node lane of .claude/hooks/worktree-create.sh (which is a
+    # WorktreeCreate hook, fired only through the EnterWorktree tool inside an
+    # already-running session — not callable from this pre-session script), and
+    # deliberately avoids `provision-node-worktree` (that primitive does
+    # CI-ready/PR gating, merge-conflict and scope-staleness handling — all
+    # worker/phase machinery wrong for a read-only, no-commit, no-PR session).
+    # Git is scoped via `git -C "$SCRIPT_DIR"`, matching this script's
+    # cwd-independence convention (see park_live_on_main).
+    #
+    # Project root = the worktree with `main` checked out, resolved from the
+    # worktree registry exactly as graph-select-target does.
+    PROJECT_ROOT=$(git -C "$SCRIPT_DIR" worktree list --porcelain \
+      | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
+    if [[ -z "$PROJECT_ROOT" ]]; then
+      echo "office-hours: no worktree with 'main' checked out; cannot resolve the project root for node-id worktree '$node_id'." >&2
+      exit 1
+    fi
+    NEW_PATH="$PROJECT_ROOT/.claude/worktrees/$node_id"
+
+    # Reuse-then-create, mirroring the hook's node lane: reuse an existing
+    # worktree as-is; else prefer a remote branch, then a local branch, then a
+    # fresh branch off origin/main.
+    if [[ -e "$NEW_PATH" ]]; then
+      : # reuse the existing worktree as-is
+    elif git -C "$SCRIPT_DIR" ls-remote --heads --exit-code origin "$node_id" >/dev/null 2>&1; then
+      git -C "$SCRIPT_DIR" fetch origin "$node_id" >/dev/null 2>&1
+      git -C "$SCRIPT_DIR" worktree add "$NEW_PATH" "$node_id" >/dev/null 2>&1
+    elif git -C "$SCRIPT_DIR" rev-parse --verify --quiet "$node_id" >/dev/null 2>&1; then
+      git -C "$SCRIPT_DIR" worktree add "$NEW_PATH" "$node_id" >/dev/null 2>&1
+    else
+      git -C "$SCRIPT_DIR" fetch origin main >/dev/null 2>&1
+      git -C "$SCRIPT_DIR" worktree add -b "$node_id" "$NEW_PATH" origin/main >/dev/null 2>&1
+    fi
+
+    # Best-effort direnv warm-up mirroring the hook, but NEVER fatal —
+    # office-hours is read-only, so a direnv blip must not block a human review
+    # session. Log a warning to stderr and continue.
+    if ! direnv allow "$NEW_PATH" >/dev/null 2>&1 \
+        || ! direnv exec "$NEW_PATH" true >/dev/null 2>&1; then
+      echo "office-hours: warning — direnv warm-up for $NEW_PATH failed; continuing (read-only session)." >&2
+    fi
+
+    # The launched session runs resident in the node-id worktree, overriding
+    # whatever cwd office-hours-select.ts emitted ($b) — resolveSessionCwd stays
+    # advisory-only for the non-provisioning callers.
+    cwd="$NEW_PATH"
+
+    # Always-fresh launch: a live session already named <node-id> means a
+    # duplicate name (this entry never implicitly attaches). A clear error
+    # naming the job id beats a duplicate or a forbidden implicit attach. This
+    # is the last-moment TOCTOU gate between selection and launch — a node that
+    # went live in that narrow window errors rather than double-launching.
     existing=$(job_id_for_name "$name")
     if [[ -n "$existing" ]]; then
       echo "office-hours: a live session named $name already exists (job $existing) — attach it with 'claude attach $existing' rather than launching a duplicate." >&2
