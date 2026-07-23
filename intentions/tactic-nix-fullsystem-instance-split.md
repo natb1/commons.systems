@@ -35,8 +35,7 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by:
-  - tactic-nix-export-nixos-modules
+blocked_by: []
 office_hours:
   reason: Needs owner design ratification (nixosModules.default scope, CI
     full-system build coverage once the real instance leaves the public repo,

@@ -23,7 +23,6 @@ execution: null
 validates:
   - strategy-graph-native-dispatch
 blocked_by:
-  - tactic-graph-router-transitions
   - tactic-phase-skill-node-targets
 office_hours: null
 pace_exempt: false
