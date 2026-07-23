@@ -475,4 +475,57 @@ the node out of the park, and the marker alone lets the Stop hook
 
 ### `ambiguous <reason>` — confirm the existing park, report, stop
 
-(The `ambiguous` confirm-and-report path is added by Unit 5 of this plan.)
+The divergence needs human judgment. The node **stays parked — it already is**:
+`graph-commit` parked it to `office_hours` before Lane 2 ran, and this lane
+made no graph write to change that. No new `office_hours` write is required by
+default, and nothing about the park changed — so there is **no marker to
+write** either. Unlike Lane 1's Step 6 (which writes a phase-completed marker on
+`resolved`) or Lane 2's own `resolved` path above (which writes one on a
+successful land), this path writes **no** phase-completed marker: nothing was
+completed, the node stays where `graph-commit` left it.
+
+This is a **no-op park-confirmation, not a fresh park**. So Lane 2 does **NOT**
+invoke `.claude/skills/dispatch-propagate/escalation-recommend.md`'s
+spawn-recommend-park sequence. That pattern exists to *add* a missing
+recommendation before a *fresh* park — but `graph-commit`'s
+`build_recommendation()` already wrote a complete field-breakdown recommendation
+into `office_hours.recommendation` (the same breakdown Lane 2 parsed above).
+Re-running escalation-recommend would be redundant, and could overwrite that
+useful detail. This contrasts deliberately with **Lane 1's own Step 7**
+`ambiguous` path, which *does* still call `escalation-recommend.md` unchanged —
+because Lane 1 is performing a *fresh* park on a live git conflict, a genuinely
+different situation from Lane 2's already-parked node.
+
+Default (minimal, acceptable) behavior: **report and stop**. Surface the
+subagent's `<reason>` and which field(s) remain diverged to the caller/log —
+say plainly that no autonomous resolution was possible and the node stays
+parked for human review — then **stop**. No graph write, no marker write.
+
+**Optional enhancement (judgment, not required).** If the subagent's `<reason>`
+surfaces a genuinely new best-next-step *beyond* the mechanical field breakdown
+already in `office_hours.recommendation`, the skill **may** append it to that
+field — same write-back shape as the `resolved` path above, but appending text
+to `.office_hours.recommendation` rather than clearing `.office_hours`
+(schema `packages/intentionsutil/src/schema.ts:392-397`). This is optional; the
+default acceptable behavior is confirm-and-report only, with no write:
+
+```bash
+git checkout origin/main -- "intentions/$NODE_ID.md"
+SCRATCH="/tmp/claude-$(id -u)/dispatch-conflict-$NODE_ID"
+mkdir -p "$SCRATCH"
+npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$SCRATCH" "$NODE_ID"
+jq --arg extra "$NEXT_STEP" \
+  '.office_hours.recommendation = (.office_hours.recommendation + "\n\n" + $extra)' \
+  "$SCRATCH/$NODE_ID.json" > "$SCRATCH/$NODE_ID.appended.json"
+npx tsx packages/intentionsutil/scripts/write-node.ts --file "$SCRATCH/$NODE_ID.appended.json"
+packages/intentionsutil/scripts/graph-commit \
+  -m "graph: note next step on parked $NODE_ID" "$NODE_ID"
+```
+
+Even on this enhancement path the node **stays parked** and **no** phase-completed
+marker is written — the append only enriches the recommendation a human will
+read. Run the network / `gh` / `npx` paths here with
+`dangerouslyDisableSandbox: true` (npm cache + network), per
+`.claude/rules/sandbox.md`.
+
+Then **stop**.
