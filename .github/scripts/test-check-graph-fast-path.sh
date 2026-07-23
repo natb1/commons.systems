@@ -56,16 +56,17 @@ shas_json() {
   jq -n '$ARGS.positional' --args "$@"
 }
 
-# run_check REPO_DIR SHAS_JSON — run check-graph-fast-path.sh with CWD=repo and
-# PUSHED_COMMITS=SHAS_JSON. Sets RC and STDERR (combined stdout+stderr, since the
+# run_check REPO_DIR SHAS_JSON [HEAD_SHA] — run check-graph-fast-path.sh with
+# CWD=repo, PUSHED_COMMITS=SHAS_JSON, and PUSHED_HEAD_SHA=HEAD_SHA (optional third
+# arg, defaults to empty). Sets RC and STDERR (combined stdout+stderr, since the
 # guard emits its ::error:: messages on stdout) for assertion helpers.
 RC=0
 STDERR=""
 run_check() {
-  local repo="$1" shas="$2"
+  local repo="$1" shas="$2" head_sha="${3:-}"
   RC=0
   STDERR=""
-  STDERR=$(cd "$repo" && export PUSHED_COMMITS="$shas" && "$CHECK_SCRIPT" 2>&1) || RC=$?
+  STDERR=$(cd "$repo" && export PUSHED_COMMITS="$shas" PUSHED_HEAD_SHA="$head_sha" && "$CHECK_SCRIPT" 2>&1) || RC=$?
 }
 
 # assert_exit EXPECTED_RC DESCRIPTION
@@ -205,14 +206,81 @@ assert_exit 1 "(d2) gitlink-mode entry: exit 1"
 assert_stderr_contains "intentions/sub" "(d2) gitlink-mode entry: offending path named"
 
 # ---------------------------------------------------------------------------
-# Case (e): Empty PUSHED_COMMITS ([]) → exit 1 (fail-closed).
+# Case (e): Empty PUSHED_COMMITS ([]) with no PUSHED_HEAD_SHA → exit 1.
+#
+# Fail-closed: with no head SHA there is no way to prove the pushed commit already
+# landed on origin/main, so the guard refuses.
 # ---------------------------------------------------------------------------
-echo "--- case (e): empty PUSHED_COMMITS → exit 1 (fail-closed) ---"
+echo "--- case (e): empty PUSHED_COMMITS, no head SHA → exit 1 (fail-closed) ---"
 REPO=$(make_temp_repo)
 
 run_check "$REPO" "$(shas_json)"
 assert_exit 1 "(e) empty PUSHED_COMMITS: exit 1"
 assert_stderr_contains "empty" "(e) empty PUSHED_COMMITS: fail-closed reason named"
+
+# ---------------------------------------------------------------------------
+# Case (e2): Empty PUSHED_COMMITS + head SHA reachable from origin/main → exit 0.
+#
+# The benign concurrent already-landed push: github.event.commits is empty
+# because a byte-identical commit landed first, but the pushed HEAD SHA is
+# provably reachable from origin/main, so the guard skips verification.
+# ---------------------------------------------------------------------------
+echo "--- case (e2): empty PUSHED_COMMITS, head SHA already on origin/main → exit 0 ---"
+REPO=$(make_temp_repo)
+
+mkdir -p "$REPO/intentions"
+printf 'strategy body\n' > "$REPO/intentions/strategy-foo.md"
+git -C "$REPO" add intentions/strategy-foo.md
+git -C "$REPO" commit -q -m "add intention"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+git -C "$REPO" update-ref refs/remotes/origin/main "$SHA"
+
+run_check "$REPO" "$(shas_json)" "$SHA"
+assert_exit 0 "(e2) empty PUSHED_COMMITS, head already on origin/main: exit 0"
+assert_stderr_contains "already reachable from origin/main" "(e2) benign-skip reason named"
+
+# ---------------------------------------------------------------------------
+# Case (e3): Empty PUSHED_COMMITS + head SHA NOT reachable from origin/main → exit 1.
+#
+# Fail-closed: the pushed HEAD is a child of origin/main, not reachable from it,
+# so the guard cannot prove it already landed.
+# ---------------------------------------------------------------------------
+echo "--- case (e3): empty PUSHED_COMMITS, head SHA not on origin/main → exit 1 ---"
+REPO=$(make_temp_repo)
+
+mkdir -p "$REPO/intentions"
+printf 'base\n' > "$REPO/intentions/base.md"
+git -C "$REPO" add intentions/base.md
+git -C "$REPO" commit -q -m "base"
+SHA_BASE=$(git -C "$REPO" rev-parse HEAD)
+git -C "$REPO" update-ref refs/remotes/origin/main "$SHA_BASE"
+
+printf 'a\n' > "$REPO/intentions/a.md"
+git -C "$REPO" add intentions/a.md
+git -C "$REPO" commit -q -m "child of base, not on origin/main"
+SHA_CHILD=$(git -C "$REPO" rev-parse HEAD)
+
+run_check "$REPO" "$(shas_json)" "$SHA_CHILD"
+assert_exit 1 "(e3) empty PUSHED_COMMITS, head not on origin/main: exit 1"
+assert_stderr_contains "NOT reachable from origin/main" "(e3) fail-closed reason named"
+
+# ---------------------------------------------------------------------------
+# Case (e4): Empty PUSHED_COMMITS + head SHA set but origin/main ref absent → exit 1.
+#
+# Fail-closed: without an origin/main ref the guard cannot verify reachability.
+# ---------------------------------------------------------------------------
+echo "--- case (e4): empty PUSHED_COMMITS, origin/main ref absent → exit 1 ---"
+REPO=$(make_temp_repo)
+
+mkdir -p "$REPO/intentions"
+printf 'a\n' > "$REPO/intentions/a.md"
+git -C "$REPO" add intentions/a.md
+git -C "$REPO" commit -q -m "add a, no origin/main ref set"
+SHA=$(git -C "$REPO" rev-parse HEAD)
+
+run_check "$REPO" "$(shas_json)" "$SHA"
+assert_exit 1 "(e4) empty PUSHED_COMMITS, origin/main absent: exit 1"
+assert_stderr_contains "origin/main is not available" "(e4) fail-closed reason named"
 
 # ---------------------------------------------------------------------------
 # Case (f): A merge commit among the pushed SHAs → exit 1.
