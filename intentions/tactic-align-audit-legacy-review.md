@@ -92,6 +92,48 @@ clarifications:
       — at which point this tactic is fully achieved and should be pruned per
       kind-tactic's completion doctrine — or (b) if no such direction was given,
       treat it as a capture instance and revert/rework the three dispositions."
+  - question: Does the 2026-07-22 resolution's Decision 1 survive review of the
+      graph's own retirement plan for the rung-5 dialectic and /align-init?
+    answer: "No — Decision 1 is refuted on the graph record (Recorded 2026-07-23
+      /align-tactics session, at author prompting that /align-init is
+      deprecated). Decision 1 argued the sitting's 'both engines retired'
+      premise was 'stale on current origin/main' because the rung-5 dialectic is
+      'live and unchanged in /align-init', carried forward by
+      tactic-align-init-skill '(#2781, commit 11241c21) AFTER this sitting was
+      authored'. Three independent problems. (a) The chronology is backwards:
+      11241c21 landed 2026-07-07, two days BEFORE the 2026-07-09 consolidation
+      clarification that retired the engines and authored this sitting — so the
+      retirement decision was taken with #2781 already in hand, not superseded
+      by it. (b) The greenfield-relevance gate was skipped:
+      tactic-align-entrypoint-consolidation is a non-draft, status:codified
+      tactic at phase:implement whose statement is 'fold in and remove
+      /align-init, retire the align jit and rung-5 dialectic engine'; its point
+      (3) records the authoritative decision that the align jit, the rung-5
+      dialectic, AND /align-strategy's improvement pass are retired, with 'both
+      engines' content retained verbatim in tactic-align-audit-legacy-review (an
+      office-hours sitting deciding future /align-audit inclusion; untouched by
+      this tactic)'. It was finalized 2026-07-18 — nine days after the sitting
+      and eleven after #2781 — re-affirming the retirement in full knowledge of
+      both. strategy-graph-native-dispatch's own statement likewise calls
+      /align-init a FORMER skill consolidated into /align. So 'live on
+      origin/main' meant only 'not yet deleted by a blocked tactic', which is
+      precisely the doomed-surface case the greenfield gate exists to catch. (c)
+      The conclusion inverts the sitting's purpose: the graph designates THIS
+      node as the place to decide whether the two retiring engines' content
+      moves into /align-audit or dies, and the consolidation tactic explicitly
+      holds it out of scope so that decision survives. Ruling the premise stale
+      dissolved the question the sitting exists to answer. Knock-on: Decision
+      2's 'correction' of the successor-cadence framing to 'complementary' rests
+      on the same refuted premise, so the original SUCCESSOR framing stands and
+      the amended re-derivation-cadence condition now landed on
+      strategy-explicit-intent names a retiring engine as live cadence; Decision
+      3's /align-audit conclusion may stand on its independent
+      altitude/parsimony reasoning, but its stated premise that the
+      align-consistency role is live in /align-init is likewise refuted.
+      Recommend: revert or rework all three dispositions (commit 8e23a272) and
+      re-run the sitting against the intended post-consolidation end state
+      rather than current origin/main, deciding per engine — into /align-audit,
+      or retired for good."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -100,15 +142,25 @@ execution: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "Re-parked 2026-07-23 by an /align-tactics session: this node's
-    2026-07-22 self-resolution (commit 8e23a272) of a genuinely human-owned
-    decision ('Not claude-executable... delegating the ratification would
-    recreate the capture') claims owner direction that this session could not
-    corroborate from graph state, and the resolution's own text flags a residual
-    capture-tension for the owner to re-open. See the 2026-07-23 clarification
-    on this node for full detail. Recommend: review commit 8e23a272's diff and
-    either ratify it (then prune this tactic as fully achieved) or revert/rework
-    it if the claimed direction was not actually given."
+  reason: "Re-parked 2026-07-23 by an /align-tactics session. Two grounds, the
+    second decisive. (1) This node's 2026-07-22 self-resolution (commit
+    8e23a272) of a decision its own rationale reserves for a human ('Not
+    claude-executable... delegating the ratification would recreate the
+    capture') claims owner direction this session could not corroborate from
+    graph state, and its own text flags a residual capture-tension for the owner
+    to re-open. (2) Substantively, that resolution's Decision 1 is refuted on
+    the graph record: it called the 'engines retired' premise stale because
+    rung-5 is 'live in /align-init', but /align-init is itself deprecated —
+    tactic-align-entrypoint-consolidation (status:codified, phase:implement)
+    removes it and retires the rung-5 engine, was finalized 2026-07-18
+    re-affirming that retirement, and explicitly holds THIS sitting out of scope
+    so it can decide the engines' /align-audit inclusion; the cited PR #2781
+    also predates the sitting by two days rather than postdating it. Decisions 2
+    and 3 inherit the refuted premise. See the two 2026-07-23 clarifications on
+    this node for full detail. Recommend: revert or rework commit 8e23a272's
+    three dispositions, then re-run the sitting against the intended
+    post-consolidation end state — per engine, into /align-audit or retired for
+    good."
   since: 2026-07-23
   recommendation: null
 pace_exempt: false
