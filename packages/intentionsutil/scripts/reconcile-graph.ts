@@ -22,9 +22,15 @@
 // each falsely trip the last-child rule.
 //
 // Usage:
-//   node --import tsx/esm reconcile-graph.ts --pr-states <json-file> [--dir <intentions-dir>] [--date <YYYY-MM-DD>]
+//   node --import tsx/esm reconcile-graph.ts --pr-states <json-file> [--dir <intentions-dir>] [--date <YYYY-MM-DD>] [--no-apply]
 //
 // <json-file> maps tactic id → "merged" | "closed" (open PRs omitted).
+//
+// --no-apply runs the IDENTICAL traversal/decision passes but skips every
+// mutating side-effect (the writeNode/rmSync calls) — the returned Plan (its
+// prune/edit/deferred/reconciled arrays) is byte-for-byte identical to an apply
+// run over the same unmutated dir, so the caller can snapshot the plan's id set
+// from origin/main BEFORE the apply run dirties disk (plan-then-apply rollback).
 // Stdout: one JSON object
 //   { "prune": [...ids], "edit": [...ids], "deferred": [{id,reason}], "reconciled": [{id,target}] }
 
@@ -49,6 +55,10 @@ interface Args {
   dir: string;
   prStatesFile: string;
   date: string;
+  // Plan-only mode: run the identical decision passes but skip every mutating
+  // side-effect. Optional so in-process callers (tests) may omit it — undefined
+  // is treated as false. parseArgs always sets a definite boolean.
+  noApply?: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -56,6 +66,7 @@ function parseArgs(argv: string[]): Args {
     dir: join(repoRoot, "intentions"),
     prStatesFile: "",
     date: new Date().toISOString().slice(0, 10),
+    noApply: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -68,6 +79,9 @@ function parseArgs(argv: string[]): Args {
         break;
       case "--date":
         out.date = argv[++i];
+        break;
+      case "--no-apply":
+        out.noApply = true;
         break;
       default:
         throw new Error(`reconcile-graph: unknown flag '${a}'`);
@@ -120,7 +134,7 @@ export function reconcileGraph(args: Args): Plan {
   for (const id of mainQaTargets) {
     const node = readNode(args.dir, id);
     node.phase = "main-qa" as typeof node.phase;
-    writeNode(args.dir, node);
+    if (!args.noApply) writeNode(args.dir, node);
     editSet.add(id);
     plan.reconciled.push({ id, target: "main-qa" });
   }
@@ -139,7 +153,7 @@ export function reconcileGraph(args: Args): Plan {
       if (doneSet.has(inbound)) continue;
       const node = readNode(args.dir, inbound);
       node.blocked_by = node.blocked_by.filter((b) => b !== id);
-      writeNode(args.dir, node);
+      if (!args.noApply) writeNode(args.dir, node);
       editSet.add(inbound);
     }
 
@@ -159,7 +173,7 @@ export function reconcileGraph(args: Args): Plan {
         const strategy = byId.get(sid);
         if (strategy !== undefined && strategy.kind === "strategy") {
           strategy.rounds = stampRound(strategy.rounds, args.date);
-          writeNode(args.dir, strategy);
+          if (!args.noApply) writeNode(args.dir, strategy);
           editSet.add(sid);
           strategiesStamped.add(sid);
         }
@@ -171,7 +185,7 @@ export function reconcileGraph(args: Args): Plan {
 
   // Delete the pruned node files last (after all reads above).
   for (const id of doneSet) {
-    rmSync(join(args.dir, `${id}.md`));
+    if (!args.noApply) rmSync(join(args.dir, `${id}.md`));
     plan.prune.push(id);
   }
 

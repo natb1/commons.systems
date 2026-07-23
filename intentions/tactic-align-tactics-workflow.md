@@ -60,10 +60,7 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-21
-    attempt: 1
-    pushed_sha: 73ca41c910228c7eee89f7bee99105be5f635e7e
+  fix: null
 validates: []
 blocked_by:
   - tactic-flake-unit-tests-select-tick

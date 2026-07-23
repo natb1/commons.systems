@@ -1199,6 +1199,57 @@ clarifications:
       steps, completion verification, edge repair, and dependent satisfaction
       are already mechanical; the only judgment step (doctrine-home) compensated
       for authoring-time placement leaks the layer-placement gate now prevents."
+  - question: "The reservation-ledger reaper (reservation_sweep) is wired only into
+      dispatch paths that reach the selection stage: the pause sentinel
+      short-circuits the autonomous heartbeat before it, and the --manual
+      fan-out path deliberately skips it. In the standing paused-scheduling +
+      manual-only operating mode nothing reaps the ledger, so it drifts stale
+      (dead-session orphans inflate live=N and throttle manual fan-out). What is
+      the cross-mode ledger-validity requirement, and the design that meets it?"
+    answer: "(Recorded 2026-07-23 interview.) Invariant: the reservation ledger must
+      read as VALID in every operating mode — (a) cron/timer-scheduled
+      autonomous execution, (b) paused-scheduling with manual-only dispatch, and
+      (c) paused-scheduling with no dispatch — not only when an autonomous tick
+      reaches selection. The pause sentinel
+      ($XDG_DATA_HOME/commons-dispatch/paused, dispatch-tick) gates worker
+      SPAWNING, never ledger BOOKKEEPING: pausing scheduling must never pause
+      reconciliation. Greenfield design (ideal, led per design-proposals): (1)
+      sweep-on-read — fold reservation_sweep into the ledger's count/read API
+      (reservation_count) so every consumer is reconciled by construction and no
+      call site can read stale; this reconcile-at-consumption framing also
+      covers manual reads during pause (the 30s boot-grace still protects
+      brand-new markers); (2) reaping decoupled from the pause sentinel — a
+      lightweight ledger sweep on the timer-driven heartbeat runs BEFORE the
+      pause short-circuit, bounding orphan accumulation during long pauses with
+      no manual ticks (kept out of the gh-heavy, throttled dispatch-sweep
+      worktree-GC pass, which solves a different problem); (3) reap-on-exit
+      (tactic-graph-node-session-reap, PR #2922) as the write-side complement so
+      the happy path never strands a marker, leaving the sweep as the crash-only
+      backstop. Steelman refinement: the rival 'reconcile only at
+      scheduling-resume' is insufficient because manual dispatch consumes the
+      ledger DURING pause; sweep-on-read is that rival's valid core (no
+      pointless background reaper when nobody reads) reconciled with the
+      requirement. Brownfield migration path (greenfield is multi-PR and
+      reverses a recorded aside): (i) parity fix — reservation_sweep in the
+      --manual block before reservation_count
+      (tactic-manual-path-reservation-sweep); (ii) pause-independent reaper —
+      reservation_sweep in dispatch-tick before the pause short-circuit
+      (tactic-heartbeat-sweep-before-pause); (iii) land PR #2922 reap-on-exit;
+      (iv) converge — sweep-on-read in the ledger count API, removing the
+      now-redundant per-path sweep calls: the autonomous call, the explicit-node
+      call (PR #2952), and (i) (tactic-ledger-sweep-on-read). This REVERSES the
+      aside in tactic-explicit-node-reservation-sweep-policy (PR #2952) that
+      '--manual need not sweep — its non-sweep only affects fan-out pacing,
+      never a hard refusal, so the paths need not move in lockstep': that
+      reasoning holds for the explicit-node hard-refusal it addressed, but did
+      not consider the paused+manual mode, where manual non-sweep is not a
+      pacing optimization but total reaper dormancy — the ledger's only live
+      consumer running with no reconciler. PR #2952's own deliverable (the
+      NODE_ARG branch sweep) is unchanged; only its broader 'manual is safe'
+      aside is superseded. Boost note: the two parity-fix tactics are boosted to
+      the top of NORMAL work but below the strategy-main-health emergency
+      ceiling (boost 100), which the 2026-07-13 guard keeps dominant — the
+      ledger fix is important but is not a red-main emergency."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1348,7 +1399,14 @@ attributes:
       escalations still surface via the office-hours PARKED panel). Auto-close
       remains the doctrinal default for the two clean terminal states, and the
       session is never router substrate
+    - paused-scheduling with manual-only dispatch is a supported STANDING
+      operating mode, not a degraded or temporary state — the pause sentinel
+      gates worker spawning only, never reservation-ledger reconciliation — so
+      every ledger-consuming invariant (e.g. the selection-time busy+reserved
+      count) must hold in it without relying on the autonomous heartbeat's
+      reaper
 ---
+
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
 
 ## Router Mechanism
