@@ -28,8 +28,15 @@ attention:
   rationale: "Author-directed 2026-07-23 /align-strategy round: the top-3 systemic
     gaps (PR custody, scripted census, playwright retry) rank ahead of the
     low-urgency tracked gaps once finalized."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-playwright-install-retry-lock
+  pr: 2958
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -168,4 +175,12 @@ Manual / observe-in-production (cannot be reproduced locally — the bug require
 ## Implementation instruction
 
 Implement each unit in a subagent launched via the Agent/Task tool with `model` set to that unit's Recommended model above (Unit 1: sonnet, Unit 2: opus). Supply the unit's Scope and this node's Context to the subagent prompt; constrain it to working-tree edits only.
+
+## needs-main residue
+
+- id: item-6
+- title: Real-CI dpkg-lock + non-root flock behavior (PR-stated manual caveat)
+- url_path: current
+- expected_outcome: On real contention, CI shows a genuine second `apt-get` attempt from a clean dpkg lock; the `wait_for_dpkg_lock` shared `flock` probe either reads the root-owned lock cleanly or, if it hits `EACCES` as the non-root runner, that is captured as a follow-up (e.g. switch to `sudo flock`).
+- finding: Cannot be verified locally — requires a live CI run with genuine `apt-get`/`dpkg` mirror contention causing a real timeout. All 10 relevant unit tests pass locally (3030/3030 total suite), and the shipped code in `lib.sh` matches the PR description (`wait_for_dpkg_lock` defined, `kill_tree` and `wait_for_dpkg_lock` called from `playwright_install_with_deps`, elapsed-time guard present). Planned deferral: the PR body itself frames this as observe-on-real-CI, filing a follow-up only if `EACCES` proves noisy in practice.
 
