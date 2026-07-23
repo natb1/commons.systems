@@ -30,11 +30,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: done
+phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-23
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /dispatch-conflict once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -68,3 +73,7 @@ consistent with a timing-sensitive fixture rather than a regression from this
 branch's diff.
 
 recurred on PR #2931 / run https://github.com/natb1/commons.systems/actions/runs/29858634211/job/88729272028
+
+## Integrity reset (2026-07-23)
+
+Reset `phase: done` → `implement` by the 2026-07-23 /align-strategy round (census hold 2): the node was falsely done — no merged work anywhere; claimed substitute PR #2933 is an open draft and the guard is absent from main. Same remedy and precedent as tactic-main-red-sync-completion-test's reset. PR #2933 remains the candidate carrier: land it or re-derive; do not prune this node while the flake guard is absent from main.

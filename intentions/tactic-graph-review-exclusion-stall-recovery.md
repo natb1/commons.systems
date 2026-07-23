@@ -36,14 +36,8 @@ execution:
     attempt: 1
     pushed_sha: 6fd600c3ad07ddc35d63a6497cb94d7019ef3465
 validates: []
-blocked_by:
-  - tactic-flake-park-node-concurrent-write-refusal
-office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-22
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /fix-conflicts once it accepts node targets.
+blocked_by: []
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:

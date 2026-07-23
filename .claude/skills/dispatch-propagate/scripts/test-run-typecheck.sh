@@ -233,4 +233,32 @@ assert_eq "deletion: working tree clean after run (nothing resurrected/staged)" 
 [ ! -f "$REPO/ws/src/extra.ts" ] && _t6_extra=absent || _t6_extra=present
 assert_eq "deletion: deleted file not left on disk" "absent" "$_t6_extra"
 
+# --- Test 7: addition branch — HEAD adds a file origin/main does not have -----
+# Mirror image of Test 6. `git checkout origin/main -- <ws>` reverts the files
+# origin/main has but cannot delete one it lacks, so a branch-new file used to
+# survive into the baseline probe at HEAD content while everything it depends on
+# reverted. The baseline then failed on the branch's own new code and the whole
+# workspace was skipped as "pre-existing errors" — so ANY branch that added a
+# file silently disabled typechecking for that workspace, and a real error in it
+# was reported as a pass. Here the added file is the one carrying the error: it
+# must surface as a regression, not a skip.
+echo "Test 7: addition branch -> error in a branch-new file is detected, not skipped"
+make_repo ws clean clean
+write_state dirty "$REPO/ws/src/added.ts"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "head (add added.ts carrying the error)"
+make_shims "$REPO"
+run_sut
+[ "$RC" -ne 0 ] && _t7_rc=nonzero || _t7_rc=zero
+assert_eq "addition: exit non-zero" "nonzero" "$_t7_rc"
+assert_contains "addition: reported as a regression" "Typecheck regressions" "$OUT"
+case "$OUT" in
+  *pre-existing*) _t7_skip=skipped ;;
+  *) _t7_skip=not-skipped ;;
+esac
+assert_eq "addition: baseline not poisoned by the added file" "not-skipped" "$_t7_skip"
+assert_eq "addition: working tree clean after run" "" "$(git -C "$REPO" status --porcelain)"
+[ -f "$REPO/ws/src/added.ts" ] && _t7_added=present || _t7_added=absent
+assert_eq "addition: added file restored after baseline probe" "present" "$_t7_added"
+
 report_results

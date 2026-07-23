@@ -21598,7 +21598,7 @@ run_sel_tick() {
 # --- empty queue → release + empty ------------------------------------------
 echo "Test: select-tick empty queue → empty, lock released"
 sel_tick_setup
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "empty: exit 0" "0" "$rc"
 assert_eq "empty: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "empty: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21641,7 +21641,7 @@ sel_tick_teardown
 echo "Test: select-tick graph selection → graph decision, node reserved, lock released, legacy skipped"
 sel_tick_setup
 export SEL_GRAPH_TARGET="node tactic-x tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "graph: decision line" "graph 1 tactic-x:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "graph: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21660,7 +21660,7 @@ echo "Test: select-tick graph multi-node selection → one decision line, both r
 sel_tick_setup
 export SEL_TARGET_N=3
 export SEL_GRAPH_TARGET=$'node tactic-a tactic review\nnode strategy-s strategy align-tactics'
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "graph multi: decision line" \
   "graph 2 tactic-a:tactic:review strategy-s:strategy:align-tactics" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21674,7 +21674,7 @@ sel_tick_setup
 # SEL_GRAPH_TARGET unset → the graph selector returns empty; no JIT reminder is
 # due and main is green, so the tick falls through to the `empty` decision. The
 # legacy gh selector (dispatch-select-target) that used to drain here is gone.
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "graph empty: graph selector consulted first" "1" \
   "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
 assert_eq "graph empty: decision line" "empty" \
@@ -21690,7 +21690,7 @@ echo "Test: select-tick at-cap graph pace-exempt probe → graph decision, legac
 sel_tick_setup
 export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
 export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "pace-exempt: decision line" "graph 1 tactic-p:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "pace-exempt: node reserved" "1" \
@@ -21707,7 +21707,7 @@ export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
 # Graph pace-exempt lane empty (SEL_GRAPH_PACE_EXEMPT unset) and main green
 # (SEL_MAIN_BROKEN_SHA unset) → no surviving at-cap bypass; hard cap. The legacy
 # --priority-only probe (dispatch-select-target) died with the legacy selector.
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "at-cap fallback: graph pace-exempt probe consulted" "1" \
   "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
 assert_eq "at-cap fallback: decision line" "concurrency-cap" \
@@ -21720,7 +21720,7 @@ echo "Test: select-tick at-cap exhausted → no graph pace-exempt probe (hard fl
 sel_tick_setup
 export SEL_TARGET_N=1 SEL_LIVE_COUNT=1 SEL_EXHAUSTED=exhausted
 export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "exhausted: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "exhausted: graph pace-exempt probe not consulted" "0" \
@@ -21734,7 +21734,7 @@ sel_tick_setup
 # reports a sha (Step 3b) → main-broken decision, spawned downstream as a
 # lock-free bg job so the lock is released.
 export SEL_MAIN_BROKEN_SHA=abc1234
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "main-broken: decision line" "main-broken abc1234" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "main-broken: lock released" "" \
@@ -21757,7 +21757,7 @@ sel_tick_setup
 # behavior: every consumer this tick gates on the tick's initial read, not a
 # post-completion re-read).
 export SEL_MAIN_RED_NODES="tactic-main-red-abc1234"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "main-red-sync green+open: sync invoked" "present" \
   "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo present || echo absent)"
 assert_eq "main-red-sync green+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21773,7 +21773,7 @@ sel_tick_setup
 # Step 3b main-broken emission and Step 1d auto-merge both stay suppressed.
 export SEL_MAIN_BROKEN_SHA=redsha1
 export SEL_MAIN_RED_NODES="tactic-main-red-redsha1"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "main-red-sync red+open: sync invoked" "present" \
   "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo present || echo absent)"
 assert_eq "main-red-sync red+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21787,7 +21787,7 @@ sel_tick_setup
 # SEL_MAIN_RED_NODES unset (default empty) → OPEN_MAIN_RED is empty this tick;
 # main is also healthy (SEL_MAIN_BROKEN_SHA unset), so Step 3b finds nothing to
 # emit either. The sync script still runs unconditionally every tick.
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "main-red-sync green+no-node: sync invoked" "present" \
   "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo present || echo absent)"
 assert_eq "main-red-sync green+no-node: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21801,7 +21801,7 @@ sel_tick_teardown
 echo "Test: select-tick auto-merge wiring (main healthy) → merge: line, auto-merge invoked"
 sel_tick_setup
 export SEL_AUTO_MERGE_OUT="merged #42"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 TOTAL=$((TOTAL + 1))
 if grep -q '^merge: merged #42$' <<<"$out"; then
   PASS=$((PASS + 1)); echo "  PASS: tick emits 'merge: merged #42'"
@@ -21826,7 +21826,7 @@ echo "Test: select-tick auto-merge suppressed while main is broken"
 sel_tick_setup
 export SEL_MAIN_RED_NODES="tactic-main-red-redsha1"
 export SEL_AUTO_MERGE_OUT="merged #42"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 TOTAL=$((TOTAL + 1))
 if ! grep -q 'merge:' <<<"$out"; then
   PASS=$((PASS + 1)); echo "  PASS: no 'merge:' line while main is broken"
@@ -21844,7 +21844,7 @@ sel_tick_teardown
 echo "Test: select-tick re-triage wiring → retriage: line, retriage script invoked"
 sel_tick_setup
 export SEL_RETRIAGE_OUT="retriaged #101 (source PR #1704 closed unmerged)"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 TOTAL=$((TOTAL + 1))
 if grep -q '^retriage: retriaged #101 (source PR #1704 closed unmerged)$' <<<"$out"; then
   PASS=$((PASS + 1)); echo "  PASS: tick emits 'retriage: retriaged #101 ...'"
@@ -21861,7 +21861,7 @@ echo "Test: select-tick failing merge under cap → sync-failed, counter bumped"
 sel_tick_setup
 export FAKE_GIT_MERGE_FAIL=1   # local main cannot ff-merge origin/main
 # Default sessions = UNKNOWN (fall through); no sync-broken latch; counter absent (=0).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "sync-failed: decision line" "sync-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "sync-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21878,7 +21878,7 @@ echo "Test: select-tick live sync-repair session → sync-repair-pending, merge 
 sel_tick_setup
 export SEL_SESSIONS_UNDER_RC=0
 export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tbusy\tsync-repair'
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "defer: decision line" "sync-repair-pending" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "defer: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21896,7 +21896,7 @@ sel_tick_setup
 export SEL_SESSIONS_UNDER_RC=0
 export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tstopped\tsync-repair'
 export FAKE_GIT_MERGE_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "stopped-defer: decision line" "sync-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "stopped-defer: merge attempted" "present" \
@@ -21909,7 +21909,7 @@ sel_tick_setup
 printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # already at the cap
 export FAKE_GIT_MERGE_FAIL=1
 # No sync-broken latch open yet → the cap branch escalates (find-or-create).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-escalate: decision line" "sync-broken" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-escalate: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21929,7 +21929,7 @@ sel_tick_setup
 printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # already at the cap
 export FAKE_GIT_FETCH_FAIL=1   # cannot reach origin/main (fetch fails, no merge)
 # No sync-broken latch open yet → the cap branch escalates (find-or-create).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-fetch-escalate: decision line" "sync-broken" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-fetch-escalate: escalate called" "present" \
@@ -21947,7 +21947,7 @@ sel_tick_setup
 # so the failing-merge branch returns sync-broken WITHOUT escalating or bumping.
 export SEL_SYNC_BROKEN_LATCHED=latched
 export FAKE_GIT_MERGE_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "latched: decision line" "sync-broken" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "latched: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21964,7 +21964,7 @@ printf '[{"number":77}]\n' > "$STUB_DIR/sync-broken-open.json"   # stale latch t
 printf '2\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # stale counter to reset
 # Merge succeeds (default, no FAKE_GIT_MERGE_FAIL) → fall through to select-target
 # (default `empty`).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "recover: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 # REST close (#2256): POST .../issues/77/comments (re-arm message) + PATCH
 # .../issues/77 (state=closed).
@@ -21982,7 +21982,7 @@ sel_tick_setup
 # Graph queue empty; dispatch-jit-scan (Step 3b) reports a due reminder → the
 # tick emits it and releases the lock (spawned downstream as a bg job).
 export SEL_JIT_SCAN="jit-reminder owner/repo 42 PVT_x ITEM_y"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "jit-reminder: decision line" "jit-reminder owner/repo 42 PVT_x ITEM_y" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "jit-reminder: lock released" "" \
@@ -21993,7 +21993,7 @@ sel_tick_teardown
 echo "Test: select-tick sync failure on main → sync-failed, lock released"
 sel_tick_setup
 export FAKE_GIT_FETCH_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "sync-failed: decision line" "sync-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "sync-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22004,7 +22004,7 @@ echo "Test: select-tick off main skips sync (fetch-fail ignored)"
 sel_tick_setup
 export FAKE_GIT_BRANCH="707-some-branch"
 export FAKE_GIT_FETCH_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "off-main: reaches selection (empty, not sync-failed)" "empty" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
@@ -22021,7 +22021,7 @@ sel_tick_teardown
 # case FAILS if a future change mis-wires the guard to halt healthy on-main ticks.
 echo "Test: select-tick on-main tick passes the primary-checkout guard (not halted)"
 sel_tick_setup
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "guard-pass: exit 0 (not guard's exit 2)" "0" "$rc"
 assert_eq "guard-pass: reaches selection (empty, guard did not halt)" "empty" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -22053,7 +22053,7 @@ export FAKE_GIT_PRIMARY_BRANCH="707-some-branch"
 # set -e kills the whole suite before the assertions below ever run (mirrors
 # test-primary-checkout-guard.sh's set +e / set -e bracketing).
 set +e
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 set -e
 assert_eq "guard-halt: exit 2 (the guard's exit)" "2" "$rc"
 # The guard short-circuits before selection: the tail stdout line is NOT a decision
@@ -22079,7 +22079,7 @@ echo "weekly-review: created #42"
 echo "standup: debounced"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-jit-engine"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "jit passthrough: created line prefixed" "1" \
   "$(printf '%s\n' "$out" | grep -cF 'jit: weekly-review: created #42')"
 assert_eq "jit passthrough: debounced line prefixed" "1" \
@@ -22098,7 +22098,7 @@ cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
 echo '[{"sessionId":"other-live-session","pid":2,"status":"busy","name":"x","cwd":""}]'
 FAKE
 chmod +x "$TMPDIR_TEST/fake-claude"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "busy: decision line" "busy" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "busy: foreign holder untouched (not released)" "other-live-session" \
   "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22164,7 +22164,7 @@ sel_tick_teardown
 echo "Test: select-tick TARGET_N=0 passes the guard (no exit 2)"
 sel_tick_setup
 export SEL_LIVE_COUNT=0 SEL_TARGET_N=0 SEL_EXHAUSTED=ok
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "TARGET_N=0: exit 0 (guard not tripped)" "0" "$rc"
 assert_eq "TARGET_N=0: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -22179,7 +22179,7 @@ sel_tick_teardown
 echo "Test: select-tick at cap, not exhausted, no priority item → concurrency-cap"
 sel_tick_setup
 export SEL_LIVE_COUNT=2 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "cap: reseed scheduled" "called" "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
@@ -22208,7 +22208,7 @@ export SEL_LIVE_COUNT=2 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
 printf '%s' "{\"check_runs\": $GREEN_ROLLUP}" > "$STUB_DIR/check-runs-sha42.json"
 printf '[{"number":42,"isDraft":true,"mergeable":"MERGEABLE","headRefOid":"sha42","labels":[{"name":"dispatch:reviewed"}]}]\n' \
   > "$STUB_DIR/reconcile-pr-list.json"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-reconcile: decision line still concurrency-cap" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-reconcile: ready: promoted line appears before decision" "1" \
@@ -22222,7 +22222,7 @@ echo "Test: select-tick under cap → gap = target − live on the decision line
 sel_tick_setup
 export SEL_LIVE_COUNT=1 SEL_TARGET_N=4
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "under-cap: decision line" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "under-cap: gap drives the graph fan-out width (4 − 1 = 3)" "--top 3" \
   "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
@@ -22233,7 +22233,7 @@ echo "Test: select-tick daemon UNKNOWN → fail open, gap=1"
 sel_tick_setup
 export SEL_LIVE_COUNT_FAIL=1 SEL_TARGET_N=4
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "fail-open: decision line" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "fail-open: gap=1 drives the graph fan-out width" "--top 1" \
   "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
@@ -22251,7 +22251,7 @@ printf 'session=resv-1\nissue=900\ntimestamp=2026-01-01T00:00:00Z\n' \
   > "$DISPATCH_RESERVATION_DIR/900-test"
 export SEL_AGENTS_TSV=$'resv-1\tbusy\tworkerX'
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "effective-live: decision line" "graph 1 t1:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "effective-live: gap = 4 − (1 busy + 1 reserved) = 2 drives graph --top" "--top 2" \
@@ -22268,7 +22268,7 @@ export SEL_LIVE_COUNT=1 SEL_TARGET_N=2
 printf 'session=resv-1\nissue=900\ntimestamp=2026-01-01T00:00:00Z\n' \
   > "$DISPATCH_RESERVATION_DIR/900-test"
 export SEL_AGENTS_TSV=$'resv-1\tbusy\tworkerX'
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "effective-cap: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "effective-cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22289,7 +22289,7 @@ echo "Test: select-tick empty ledger → gap unchanged from pre-ledger gate"
 sel_tick_setup
 export SEL_LIVE_COUNT=1 SEL_TARGET_N=4
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "empty-ledger: decision line" "graph 1 t1:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "empty-ledger: gap = 4 − 1 (RESV=0) drives graph --top" "--top 3" \
@@ -22395,7 +22395,7 @@ sel_tick_teardown
 echo "Test: select-tick autonomous no-arg at cap, no priority item → concurrency-cap"
 sel_tick_setup
 export SEL_LIVE_COUNT=3 SEL_TARGET_N=0 SEL_EXHAUSTED=ok
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "autonomous-cap: decision line is concurrency-cap" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "autonomous-cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22416,7 +22416,7 @@ export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
 # (the at-cap main-broken bypass, Step 1b) → main-broken decision, spawned
 # lock-free downstream.
 export SEL_MAIN_BROKEN_SHA=deadbeef
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-mainbroken: decision line" "main-broken deadbeef" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-mainbroken: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22435,7 +22435,7 @@ export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=exhausted
 # Even with a graph pace-exempt node available, genuine token exhaustion is the
 # one hard floor: the tick short-circuits BEFORE the pace-exempt probe.
 export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-exhausted: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22541,7 +22541,7 @@ sel_tick_setup
 # failure is the directory creation, not a missing decision_log_append function.
 touch "$TMPDIR_TEST/decisionlog-blocker"
 export DISPATCH_DECISION_LOG_DIR="$TMPDIR_TEST/decisionlog-blocker/sub"
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "AC3 nonfatal: tick exit 0 despite unwritable log dir" "0" "$rc"
 assert_eq "AC3 nonfatal: terminal token is still empty" "empty" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -23121,7 +23121,7 @@ tick_teardown
 echo "Test: dispatch-tick echoes select-tick passthrough + decision"
 tick_setup
 export TICK_DECISION="empty" TICK_SEL_PRE="jit: weekly-review: created #42"
-out=$(run_tick)
+out=$(run_tick) || true
 assert_eq "passthrough: jit line echoed" "1" \
   "$(printf '%s\n' "$out" | grep -cF 'jit: weekly-review: created #42')"
 assert_eq "passthrough: decision echoed" "1" \

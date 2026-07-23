@@ -27,10 +27,10 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint: 3178ea5e04e119ed9cce5cb1e0b573e7e011aef2e70dbd39c0449a854a61a204
+  fix: null
 validates:
   - strategy-recover-finance
-blocked_by:
-  - tactic-budget-overlap-anchor-merge
+blocked_by: []
 office_hours:
   reason: 'qa 2026-07-11: Unit 1 (PR #2842, the /budget skill reading-stamp
     sub-step) verified end-to-end -- dump-node.ts -> edit reading/gap ->

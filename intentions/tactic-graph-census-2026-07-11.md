@@ -20,18 +20,11 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
-office_hours:
-  reason: "Reconciliation debt reached 52 (52 owed prune(s), 0 unverified
-    PR-merge(s), 0 orphan(s)); a census is owed to drain it. Next steps: run the
-    census over the batch listed in this node's body — prune each
-    done-but-present node with graph-commit --prune (repairing inbound
-    blocked_by edges in the same commit, per
-    tactic-graph-self-consistency-sweep), absorb any unverified PR-merge, and
-    repair any orphan's dangling parent/serves; then resolve this node (phase ->
-    done) so the recurrence latch clears."
-  since: 2026-07-11
-  recommendation: null
+blocked_by:
+  - tactic-domain-selection-owner-review
+  - tactic-flake-unit-tests-select-tick
+  - tactic-dispatch-stop-backstop-comment
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
