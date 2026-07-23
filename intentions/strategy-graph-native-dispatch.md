@@ -1126,6 +1126,37 @@ clarifications:
       written into the NODE at park time -- never in the working tree of a
       checkout other sessions depend on. Recomputing a failed write is cheap;
       unblocking a shared checkout by hand is not."
+  - question: dispatch-graph-main-red-sync's graph-commit runs inside a `( ... ) ||
+      true` subshell in a loop, so a failed graph write produces no error at
+      all. Is "a graph write never fails silently" a standing invariant distinct
+      from the no-residue rule?
+    answer: "(Recorded 2026-07-23 interview, extending the same-day no-residue
+      clarification.) Yes, and it is a distinct standing invariant, not the same
+      rule restated: every graph write that fails to land surfaces a diagnostic
+      naming the node and the failure, and no call site may swallow the error.
+      The two are complementary -- no-residue governs what a failed write leaves
+      BEHIND (shared-checkout state), this governs whether the failure is
+      OBSERVABLE at all. Either can be satisfied while the other is violated: a
+      rollback that exits silently leaves a clean tree and no signal, and a loud
+      failure can still leave residue. Found while auditing the call-site census
+      for tactic-graph-write-failure-rollback: dispatch-graph-main-red-sync:104
+      runs its graph-commit inside `( ... ) 1>&2 || true` within a `while read`
+      loop, so a failure is swallowed entirely -- nothing logged, residue left,
+      and the loop proceeds to the next node, potentially adding another dirty
+      file per iteration. Operationally silence is the worse half of the pair:
+      residue at least announces itself at the next graph-commit, whereas a
+      swallowed failure leaves the graph quietly not saying what the router
+      believes it says. Recorded at this layer for the same reason as the
+      no-residue rule -- nothing today prevents a seventh call site from adding
+      another `|| true`, and the requirement outlives
+      tactic-graph-write-failure-rollback (unit 3), which implements it. Freeze
+      classification for this round: the strategy's one stamped open child,
+      tactic-qa-fix-instrument-signoff-classify (review), is ORTHOGONAL -- it
+      narrows qa-fix's classify prompt for non-user-facing audit-instrument
+      sign-off and depends on nothing recorded here -- so its
+      strategy_fingerprint was re-stamped in this same commit rather than left
+      to freeze. It was classified on the substance of the delta, not on its
+      rank."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:

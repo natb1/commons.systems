@@ -18,47 +18,17 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-flake-park-node-case2-dirty-tree-guard
+  pr: 2942
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/implement: no code fix needed — this node's recorded CI failure (PR
-    #2936, 2026-07-22T16:57:21-04:00) is a stale pre-fix run of a bug already
-    fixed by commit 71a7ddd45a5 (merged 2026-07-22T17:11:34-04:00, PR #2926),
-    which duplicates the already-closed sibling node
-    tactic-flake-park-node-concurrent-write-refusal. Verified locally: 5/5 clean
-    test-park-node.sh runs on current origin/main HEAD (a18bf1c1), and zero
-    hook-tests/PR-Checks failures across ~21 post-fix CI runs
-    (2026-07-22T21:11:34Z through 2026-07-23T00:00Z). Parking for
-    human/align-tactics review to close as duplicate rather than opening a no-op
-    PR."
-  since: 2026-07-23
-  recommendation: >-
-    Close this node with no PR, mirroring the sibling
-    `tactic-flake-park-node-concurrent-write-refusal`'s closure and citing the
-    same fix commit 71a7ddd45a5 ("qa-fix: skip redundant node-lane origin/main
-    merge (Step 0.5) (#2926)"), which added the `git add`/`git commit` of the
-    Case 2 graph-commit wrapper swap so the tracked-file modification no longer
-    trips `assert_clean_outside_ids`. This node's only recorded failure (PR
-    #2936, 20:57:21Z / 16:57:21 -04:00) predates the fix landing (17:11:34
-    -04:00) by 14 minutes, so it is a stale pre-fix run — no code change is
-    needed. Record it as a duplicate recurrence note pointing at the sibling
-    rather than opening independent work.
-
-
-    Confirmed post-fix: local reproduction passed 5/5 runs (3/3 subcases each)
-    on current origin/main HEAD (a18bf1c1). Also checked ~21 "PR Checks" CI runs
-    created after 2026-07-22T21:11:34Z (the fix's UTC landing time) through
-    2026-07-23T00:00Z — all succeeded (one still in-progress at check time),
-    zero recurrences of the assert_clean_outside_ids / concurrent-write
-    signature. This confirms the diagnosis: safe to close.
-
-
-    References:
-
-    - #2926: https://github.com/natb1/commons.systems/pull/2926
-
-    - #2936: https://github.com/natb1/commons.systems/pull/2936
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
