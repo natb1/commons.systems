@@ -346,6 +346,17 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    `AskUserQuestion` with visual aids: build mockup/variant artifacts on
    `@commons-systems/ds` and sync them to the claude.ai/design canvas via
    `DesignSync`, so the author disambiguates by pointing at a variant.
+   For a chart, dashboard, or data-viz requirement, first load the
+   `/dataviz` built-in skill — its procedure governs the recorded design:
+   form chosen by the data's job (including its "is it even a chart" test),
+   color assigned by role (categorical/sequential/diverging/status) never by
+   rank, the categorical palette run through `/dataviz`'s validator script
+   (never eyeballed), mark specs and spacers, a default hover layer, and an
+   accessibility pass (legend for ≥2 series, table view, a selected — not
+   auto-flipped — dark mode). `/dataviz` and the design canvas compose, not
+   compete: `/dataviz` supplies the design method and its computable checks;
+   the canvas still supplies the mockup/variant artifacts for author
+   disambiguation, now built to follow `/dataviz`.
    Canvas artifacts are interview aids, not deliverables — the resolution
    they produce is recorded as an ordinary dated clarification like any
    other. Caveat: a freshly synced component is absent from the canvas
@@ -363,6 +374,19 @@ recommendation on trust, never a quiet drop. When the author accepts one:
     propose creating one if none exists (`strategy-main-health` is the worked
     precedent, created 2026-07-13 for exactly this reason). Resolution lands
     as a dated `clarifications` entry per the step-2.8 provenance convention.
+11. **Layer-placement gate.** Before recording any interview outcome, classify
+    its content against kind-tactic's authoring test (`intentions/kind-tactic.md`,
+    2026-07-21 clarification, "Where does an interview outcome land — strategy
+    layer or tactic layer?"): a standing requirement — one that must still hold
+    after every tactic currently serving the strategy completes and is pruned —
+    lands as a strategy or kind clarification; a completable change lands as a
+    draft tactic (Step 4); a split outcome lands as both, the invariant as a
+    clarification and its implementing fix as a tactic. Open-children
+    orthogonality and freeze/re-stamp cost are **never** placement inputs — they
+    govern only the materiality classification's blast radius (see
+    "Documentation completeness over commit size" and "Materiality-scoped
+    freeze", below), a separate, later decision. Cite kind-tactic's test; do
+    not restate its rationale here.
 
 **The `/file-issue` 8-category evaluation, folded into the steps above**
 (so nothing from the coverage matrix silently drops):
@@ -572,7 +596,10 @@ strategy clarification on that strategy — never relocate it to a draft tactic,
 or omit it, to keep the commit small or to avoid a re-stamp. Commit size is
 never a reason to put documentation in the wrong place; the materiality-scoped
 freeze below is what keeps a warranted clarification's *blast radius* small —
-it is not a reason to avoid recording the clarification itself.
+it is not a reason to avoid recording the clarification itself. Whether the
+outcome belongs in the persistent layer at all is decided upstream, by
+dialectic step 11 (Layer-placement gate); this section governs only the blast
+radius of a placement already made there.
 
 **Measure freeze/re-stamp cost via the authoritative predicate, never a
 grep.** If a recording or materiality decision turns on how many open children

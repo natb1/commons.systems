@@ -209,19 +209,19 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # DISPATCH_AGENTS_SNAPSHOT. Writes the raw array (even `[]`) and returns the
   # command's exit status so the caller can fall back to live reads on failure.
   claude_agents_snapshot_capture() {
-    local path="${1:-}"
-    if [[ -z "$path" ]]; then
+    local pth="${1:-}"
+    if [[ -z "$pth" ]]; then
       printf 'lib-claude-agents: claude_agents_snapshot_capture requires a <path> argument\n' >&2
       return 1
     fi
-    "${CLAUDE_AGENTS_CMD:-claude}" agents --json >"$path" 2>/dev/null
+    "${CLAUDE_AGENTS_CMD:-claude}" agents --json >"$pth" 2>/dev/null
   }
 
   # claude_sessions_under <path> — emit live sessions under <path> as TSV.
   # See the header comment for the return-code contract.
   claude_sessions_under() {
-    local path="${1:-}"
-    if [[ -z "$path" ]]; then
+    local pth="${1:-}"
+    if [[ -z "$pth" ]]; then
       printf 'lib-claude-agents: claude_sessions_under requires a <path> argument\n' >&2
       return 1
     fi
@@ -231,7 +231,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     # (127), the daemon unreachable, or any other failure — means the session
     # state cannot be determined: unknown.
     local out
-    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json --cwd "$path" 2>/dev/null); then
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json --cwd "$pth" 2>/dev/null); then
       return 1
     fi
 
@@ -547,14 +547,14 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # dispatch-graph-execute with --name "$id" — does not self-match). Omitted or
   # empty preserves today's behavior for all other callers.
   worktree_has_live_session() {
-    local path="${1:-}"
-    if [[ -z "$path" ]]; then
+    local pth="${1:-}"
+    if [[ -z "$pth" ]]; then
       printf 'lib-claude-agents: worktree_has_live_session requires a <path> argument\n' >&2
       return 0  # fail safe: treat as occupied
     fi
     local exclude_sid="${2:-}"
     local base num
-    base="$(basename "$path")"
+    base="$(basename "$pth")"
     num="${base%%-*}"
 
     # One machine-wide fetch covers both names — `claude_agents_list_all` is the
