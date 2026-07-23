@@ -1176,7 +1176,7 @@ describe("validateGraph", () => {
       gnode({
         id: "virtue-1",
         kind: "virtue",
-        office_hours: { reason: "parked", since: "2026-07-03", recommendation: null },
+        office_hours: { reason: "parked", since: "2026-07-03", recommendation: null, session_type: "other" },
       }),
     ];
     expect(() => validateGraph(nodes)).toThrow(
@@ -1200,7 +1200,7 @@ describe("validateGraph", () => {
       gnode({
         id: "strategy-1",
         kind: "strategy",
-        office_hours: { reason: "awaiting input", since: "2026-07-03", recommendation: null },
+        office_hours: { reason: "awaiting input", since: "2026-07-03", recommendation: null, session_type: "other" },
         pace_exempt: true,
       }),
     ];

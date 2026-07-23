@@ -55,7 +55,7 @@ function boost(amount: number): Attention {
 }
 
 function parked(recommendation: string | null = null): OfficeHours {
-  return { reason: "parked", since: "2026-07-06", recommendation };
+  return { reason: "parked", since: "2026-07-06", recommendation, session_type: "other" };
 }
 
 describe("officeHoursQueue", () => {

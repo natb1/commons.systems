@@ -268,6 +268,7 @@ function applyParkCheck(
   }
   const consumed = fix.attempt - 1;
   node.office_hours = {
+    session_type: "other",
     reason:
       `/fix-checks retry budget exhausted: ${consumed} attempts concluded with PR #${execution.pr ?? "?"} ` +
       `still red (execution.fix.attempt=${fix.attempt}, since ${fix.since}) — restoring the legacy ` +
