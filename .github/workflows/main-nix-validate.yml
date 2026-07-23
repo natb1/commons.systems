@@ -1,0 +1,40 @@
+name: Main Nix Validate
+
+# Post-merge guard: unit-tests.yml's nixos-build job only runs pre-merge on
+# branch pushes (branches-ignore: [main, 'graph/**']), so origin/main itself
+# is never rebuilt there. This workflow closes that gap by rebuilding on
+# every nix-touching push to main. Deliberately a paths-filtered push
+# trigger, not a cron schedule.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/main-nix-validate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nixos-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # No CI runtime baseline yet: the Build step has executed 0 times (it is
+    # gated on nix-file changes and every run so far has skipped it). 30 min is
+    # a conservative runaway guard vs GitHub's 6h default; tighten to ~2x the
+    # observed p95 once 3-5 real warm-cache runs accumulate. (#2636)
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+        with:
+          extra-conf: |
+            extra-substituters = https://claude-code.cachix.org
+            extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk=
+      - name: Build nixosConfigurations.nixos
+        run: .github/scripts/build-nixos-config.sh
