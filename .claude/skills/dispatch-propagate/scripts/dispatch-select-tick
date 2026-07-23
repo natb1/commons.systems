@@ -738,6 +738,16 @@ elif [[ -n "$NODE_ARG" ]]; then
     exit 0
   fi
   # Not exhausted: GAP stays 1 (its default above) — falls through to Step 3.
+  # Reconcile the reservation ledger before Step 3 consults graph-select-target
+  # --node (tactic-explicit-node-reservation-sweep-policy): an explicit human
+  # dispatch of a named node should see accurate claim state, not a stale
+  # marker left by a dead session. Mirrors the autonomous block's own
+  # best-effort sweep call above (source + call, never fails the tick).
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-claude-agents.sh"
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+  reservation_sweep 1>&2 || true
 fi
 
 # --- Step 2: run the JIT engine (best-effort) --------------------------------
