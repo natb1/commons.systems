@@ -28702,13 +28702,13 @@ assert_eq "recover fix-checks: stdout is 'fix-checks'" "fix-checks" "$out"
 assert_eq "recover fix-checks: exit 0" "0" "$rc"
 drdp_teardown
 
-# --- Test 6: /fix-conflicts → "fix-conflicts", exit 0 ------------------------
-echo "Test: /fix-conflicts tag → stdout 'fix-conflicts', exit 0"
+# --- Test 6: /dispatch-conflict → "fix-conflicts", exit 0 --------------------
+echo "Test: /dispatch-conflict tag → stdout 'fix-conflicts', exit 0"
 drdp_setup
-_drdp_fixture "$TMPDIR_TEST/fcon.jsonl" "fix-conflicts"
+_drdp_fixture "$TMPDIR_TEST/fcon.jsonl" "dispatch-conflict"
 if out=$("$DRDP" "$TMPDIR_TEST/fcon.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "recover fix-conflicts: stdout is 'fix-conflicts'" "fix-conflicts" "$out"
-assert_eq "recover fix-conflicts: exit 0" "0" "$rc"
+assert_eq "recover dispatch-conflict: stdout is 'fix-conflicts'" "fix-conflicts" "$out"
+assert_eq "recover dispatch-conflict: exit 0" "0" "$rc"
 drdp_teardown
 
 # --- Test 7: /office-hours → empty stdout, non-zero exit ---------------------

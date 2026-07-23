@@ -3,7 +3,7 @@
 This reference carries the full prompt contract for the single bounded Opus
 triage subagent authored in Step 2 of `SKILL.md`. The body launches exactly one
 triage subagent — Agent tool, `subagent_type: general-purpose`, **`model: opus`**
-(the canonical bounded-Opus pattern from `.claude/skills/fix-conflicts/SKILL.md`
+(the canonical bounded-Opus pattern from `.claude/skills/dispatch-conflict/SKILL.md`
 § 5). This is one of two Opus calls in the skill (the other is the Step 3.5
 disposition Workflow's classify agent); the qa-fix session itself stays Sonnet.
 The subagent reasons over the pasted pack text and returns the plan — it does

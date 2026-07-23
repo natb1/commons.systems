@@ -303,7 +303,7 @@ git status --porcelain
 
 - **If empty** → call `commit-merge-push --merge-only`. Even with no code changes
   this still pushes `origin HEAD`, carrying any pending local merge left by
-  `dispatch-merge-main` / `/fix-conflicts` to origin (the no-op-push contract this
+  `dispatch-merge-main` / `/dispatch-conflict` to origin (the no-op-push contract this
   step relies on — Step 7's flush guard is the authoritative backstop only when
   this entire step is skipped).
 - **If non-empty** → call:

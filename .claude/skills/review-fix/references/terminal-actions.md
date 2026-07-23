@@ -9,7 +9,7 @@ the full original detail.
 
 **First, flush any unpushed local commits — the terminal flush of the "never
 push a bare merge commit" contract.** `dispatch-merge-main` (pre-spawn) and
-`/fix-conflicts` merge `origin/main` into this worktree **locally**
+`/dispatch-conflict` merge `origin/main` into this worktree **locally**
 and never push, relying on each phase skill's own push point to carry the merge
 to origin. `/review-fix` is the chain's **terminal phase**: this is the chain's
 last push point — once it applies `dispatch:reviewed`, the router only flips the
