@@ -8,6 +8,14 @@
 //   npx tsx packages/intentionsutil/scripts/office-hours-select.ts            # queue head
 //   npx tsx packages/intentionsutil/scripts/office-hours-select.ts <node-id>  # single item
 //   npx tsx packages/intentionsutil/scripts/office-hours-select.ts --list     # human view
+//   npx tsx packages/intentionsutil/scripts/office-hours-select.ts --type <t> # queue head of type <t>
+//   npx tsx packages/intentionsutil/scripts/office-hours-select.ts --type <t> --list  # list restricted to type <t>
+//
+// `--type <t>` takes one of the SessionType values (see
+// `../src/schema.ts` SESSION_TYPES): requirement-discovery,
+// curriculum-review, other. It is mutually exclusive with a node-id
+// positional (an unknown --type value or that combination is a stderr error
+// + exit 2, same as the existing --list-vs-positional check).
 //
 // stdout disposition contract (exactly one line, except --list):
 //   launch <node-id> <cwd>     — launch here; cwd is the node's worktree if it
@@ -17,6 +25,9 @@
 // stderr is advisory-only: a `NOTE — <node-id> is blocked by open tactic(s): …`
 // line when the node has unresolved `blocked_by` edges. Signal, not gate — it
 // never suppresses the stdout line.
+//
+// --list output columns: `<rank>\t<sessionType>\t<nodeId>\t<since>` per line
+// (rank is the soft-penalty-adjusted rank, not raw attention).
 
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -28,6 +39,7 @@ import {
   type OfficeHoursSelection,
   type OpenBlocker,
 } from "../src/officeHours.js";
+import { SESSION_TYPES, type SessionType } from "../src/schema.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/office-hours-select.ts`,
@@ -95,18 +107,38 @@ export function formatDisposition(
 function main(): void {
   const args = process.argv.slice(2);
   const wantList = args.includes("--list");
-  const positionals = args.filter((a) => !a.startsWith("--"));
+
+  const typeIdx = args.indexOf("--type");
+  const typeValue = typeIdx !== -1 ? args[typeIdx + 1] : undefined;
+
+  const positionals = args.filter((a, i) => !a.startsWith("--") && i !== typeIdx + 1);
 
   if (wantList && positionals.length > 0) {
     process.stderr.write("office-hours-select: --list is mutually exclusive with a node-id\n");
     process.exit(2);
   }
 
+  if (typeIdx !== -1 && positionals.length > 0) {
+    process.stderr.write("office-hours-select: --type is mutually exclusive with a node-id\n");
+    process.exit(2);
+  }
+
+  let sessionType: SessionType | undefined;
+  if (typeIdx !== -1) {
+    if (typeValue === undefined || !SESSION_TYPES.includes(typeValue as SessionType)) {
+      process.stderr.write(
+        `office-hours-select: unknown --type "${typeValue}" (expected: ${SESSION_TYPES.join(", ")})\n`,
+      );
+      process.exit(2);
+    }
+    sessionType = typeValue as SessionType;
+  }
+
   const nodes = listNodes(intentionsDir);
 
   if (wantList) {
-    for (const m of officeHoursQueue(nodes)) {
-      process.stdout.write(`${m.rank}\t${m.nodeId}\t${m.since}\n`);
+    for (const m of officeHoursQueue(nodes, sessionType)) {
+      process.stdout.write(`${m.rank}\t${m.sessionType}\t${m.nodeId}\t${m.since}\n`);
     }
     return;
   }
@@ -117,7 +149,7 @@ function main(): void {
     process.exit(2);
   }
 
-  const disposition = selectOfficeHours(nodes, target);
+  const disposition = selectOfficeHours(nodes, target, sessionType);
   const { stdout, stderr } = formatDisposition(disposition, (id) =>
     resolveSessionCwd(repoRoot, id),
   );
