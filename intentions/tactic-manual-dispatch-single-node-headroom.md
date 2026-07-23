@@ -28,14 +28,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: implement
 execution:
   branch: tactic-manual-dispatch-single-node-headroom
   pr: 2944
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: null
   fix: null
 validates: []
