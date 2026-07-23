@@ -158,7 +158,7 @@ built-in harness Claude Code ships.
 | plan | Unplanned work item | [plan-issue](.claude/skills/plan-issue/SKILL.md) → `/align-tactics` |
 | implement | Planned, no PR | [implement](.claude/skills/implement/SKILL.md) |
 | fix-checks | Draft PR, CI failed | [fix-checks](.claude/skills/fix-checks/SKILL.md) |
-| fix-conflicts | Draft PR, `origin/main` merge conflict | [fix-conflicts](.claude/skills/fix-conflicts/SKILL.md) |
+| fix-conflicts | Draft PR, `origin/main` merge conflict | [dispatch-conflict](.claude/skills/dispatch-conflict/SKILL.md) |
 | qa | Draft PR, CI green | [qa-fix](.claude/skills/qa-fix/SKILL.md) |
 | review | QA passed — terminal code + security review, flips draft→ready | [review-fix](.claude/skills/review-fix/SKILL.md) |
 
