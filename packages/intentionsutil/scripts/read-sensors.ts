@@ -143,11 +143,20 @@ const ghExecOpts = {
  * neutral/skipped). Empty stdout maps to the exact `strategy-main-health`
  * `success_signal.threshold` string verbatim (though `deriveGap` compares
  * case/whitespace-insensitively, `sensors.ts:98-112`); non-empty stdout maps to
- * a fixed `red: <sha> ...` phrase — never raw log content. A `repo-health`
- * invocation failure (non-zero exit) must not throw (total-sensor contract
- * above) and reads as `"unknown"`, which can never equal the threshold string,
- * so `gap` stays non-null and the sensor fails safe rather than reporting a
- * false green.
+ * a fixed `red: <sha> ...` phrase — never raw log content. That green literal
+ * stays the frozen threshold-matching case — no `strategy-main-health` edit is
+ * needed by this unit.
+ *
+ * `repo-health --main-broken-sha` also exits non-zero (3) with the literal
+ * stdout token `NO_ATTRIBUTABLE_CHECKS` when the attributable check-run/
+ * workflow-run set for origin/main HEAD is empty or entirely misattributed to
+ * another branch (fail-closed: cannot confirm green, but it's not a confirmed
+ * red SHA either). That case reads as a distinct fixed `"unknown: ..."`
+ * phrase, not the plain `"unknown"` used for any other invocation failure.
+ * Either way, a `repo-health` invocation failure (non-zero exit) must not
+ * throw (total-sensor contract above); both unknown readings can never equal
+ * the threshold string, so `gap` stays non-null and the sensor fails safe
+ * rather than reporting a false green.
  *
  * SIDE EFFECT: unlike the other sensors in this file, reading this one is not
  * pure. `repo-health --main-broken-sha` reconciles the durable `main_broken`
@@ -170,7 +179,14 @@ export function readMainHealth(binaryPath: string): string {
   let sha: string;
   try {
     sha = execFileSync(binaryPath, ["--main-broken-sha"], ghExecOpts).trim();
-  } catch {
+  } catch (err: unknown) {
+    if (
+      isPlainObject(err) &&
+      typeof err.stdout === "string" &&
+      err.stdout.trim() === "NO_ATTRIBUTABLE_CHECKS"
+    ) {
+      return "unknown: no check on the current origin/main HEAD is attributable to main's own workflow (empty or misattributed check set) — cannot confirm green";
+    }
     return "unknown";
   }
   if (sha === "") {

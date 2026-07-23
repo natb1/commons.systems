@@ -20,6 +20,7 @@ jobs:
       - name: Verify the push is intentions/-only
         env:
           PUSHED_COMMITS: ${{ toJSON(github.event.commits.*.id) }}
+          PUSHED_HEAD_SHA: ${{ github.sha }}
         run: .github/scripts/check-graph-fast-path.sh
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

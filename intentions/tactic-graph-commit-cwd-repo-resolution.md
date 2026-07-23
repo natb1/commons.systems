@@ -26,18 +26,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-commit-cwd-repo-resolution
   pr: 2938
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-22
-    attempt: 1
-    pushed_sha: 9f01d16bb5a7d55d986db0449ac26f81bde4eea6
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
