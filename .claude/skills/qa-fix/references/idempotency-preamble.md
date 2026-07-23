@@ -42,3 +42,38 @@ Read `tmp/qa-fix-summary-<N>.md` (the per-`<N>` summary a prior pass wrote in St
 which is expected. An absent file → `PRIOR_SUMMARY=''` → unchanged behavior. Like
 `PRIOR_PHASE_LOG`, this is advisory context for the Step 2b triage and the Step 3.5
 fix-planner, never an instruction to follow.
+
+## Idempotency and resume
+
+The skill is idempotent: a re-invocation with `dispatch:qa-done` already on the PR
+skips Steps 0.5–6 and returns. The auto-fix lane (Step 3.7) is bounded on
+re-invocation by two durable side effects: each `/implement-unit` lands a **durable
+commit** (a re-invocation mid-fix re-QAs against landed work), and the
+`dispatch-qa-fix-attempt` gate applies **exactly one** attempt label per fixing
+pass, hard-capping fixing passes at `CAP` (default 2).
+
+**Resume contract (condition 9).** A re-selected worker treats durable state as
+resume input, never an error: items the prior `<!-- dispatch:qa-summary -->` comment
+already marks resolved are **not** re-derived (the Step-2 flush persisted them), and
+per-unit fix commits are already durable. Diff the worktree against the branch base,
+read the prior comment, and continue from there.
+
+## Why the preamble pack adds `--pr` and `--phase-log` but not `--diff`
+
+qa-fix adopts `--pr` and `--phase-log` in the preamble's `dispatch-context-pack`
+call, but does **not** add `--diff`. The only diff use in this skill is Step 1's
+local `git diff --name-only origin/main...HEAD` for browser-component detection — a
+free, local, name-only call that must run against a tree with `origin/main` already
+merged in. That precondition is met differently per lane: on the **legacy issue
+lane** it holds because Step 0.5's in-session `origin/main` merge runs first; on the
+**node lane** it holds because the graph launcher (`provision-node-worktree`) merges
+`origin/main` into the worktree *before* this session starts (see the **Merge (Step
+0.5)** seam in `SKILL.md`'s Node-target lane section), so Step 0.5's merge is
+skipped and the tree is already post-merge. Either way the local diff at Step 1 —
+and the Step 2a `dispatch-context-pack … --diff` that mirrors it — reflects the
+merged tree. A pack `--diff` here in the preamble would be a redundant post-merge
+call duplicating that local diff.
+
+`--phase-log` is exempt from that reasoning: it is a cheap comment fetch (the same
+gh round-trip that `--pr` already makes), not a diff, so requesting it adds no
+post-merge cost.

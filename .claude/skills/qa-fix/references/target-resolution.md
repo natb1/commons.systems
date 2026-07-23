@@ -60,3 +60,27 @@ esac
 lane, the node id on the node lane). `$TARGET_KIND` selects the lane at the seams
 that differ — see **Node-target lane** in `SKILL.md`. **On the node lane no gh
 issue is ever read or written.**
+
+## Node-lane Step 0.5 — why the in-session `origin/main` merge is skipped
+
+On the node lane, `SKILL.md` Step 0.5 is skipped entirely: the graph launcher
+already merged `origin/main` into this worktree before the session started.
+`dispatch-graph-execute` provisions the phase-worker's worktree via
+`provision-node-worktree`, which runs `git merge --no-edit origin/main`
+(`.claude/skills/dispatch-propagate/scripts/provision-node-worktree:123`) as its
+step 3 *before* `dispatch-spawn-job` spawns this qa-fix session, so the working
+branch is guaranteed post-merge on entry. Re-running the merge in session would be
+wasted round-trips.
+
+This mirrors `/review-fix`, which dropped the same redundant merge for its own
+phase under design decision `#1426` (see review-fix/SKILL.md Idempotency preamble:
+"the dispatch tick merges `origin/main` before spawning this skill"). Like
+review-fix, qa-fix still derives every merge-relative value fresh in-session (the
+Step 1 local diff, the Step 2a `--diff` pack) rather than trusting a precomputed
+value — only the redundant *merge action* is dropped, not any derived value.
+
+The merge-conflict-escalation guarantee is preserved without the in-session merge:
+a conflict between this branch and `origin/main` would already have surfaced at
+launch time, where `provision-node-worktree` aborts the merge and exits 11 (lines
+124-126), failing the launch itself rather than deferring the conflict into the
+session.

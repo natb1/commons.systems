@@ -144,9 +144,16 @@ each fork site.
      `$CLAUDE_JOB_DIR/office-hours-reason` (and best-next-steps to
      `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook parks the node
      via `park-node` (see `.claude/hooks/dispatch-stop.sh`).
+   - **Merge (Step 0.5).** Skip the in-session `origin/main` merge entirely — the
+     graph launcher (`provision-node-worktree`) already merged `origin/main` into
+     this worktree before this session started, and an unresolvable conflict would
+     have failed the launch (exit 11) rather than reaching here. **See
+     [`references/target-resolution.md`](references/target-resolution.md).**
 
-0.5. **Merge `origin/main` into the working branch** (use
-   `dangerouslyDisableSandbox: true` — git writes + `git push` over HTTPS):
+0.5. **Merge `origin/main` into the working branch** — *legacy issue lane only*
+   (`TARGET_KIND=issue`); on the **node lane** skip it and go straight to Step 1.
+   For `TARGET_KIND=issue` call the script first (use `dangerouslyDisableSandbox:
+   true` — git writes + `git push` over HTTPS; see `.claude/rules/sandbox.md`):
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/commit-merge-push --merge-only
@@ -485,15 +492,5 @@ server or re-run the walkthrough after escalating.
 
 ## Notes
 
-The skill is idempotent: a re-invocation with `dispatch:qa-done` already on the PR
-skips Steps 0.5–6 and returns. The auto-fix lane (Step 3.7) is bounded on
-re-invocation by two durable side effects: each `/implement-unit` lands a **durable
-commit** (a re-invocation mid-fix re-QAs against landed work), and the
-`dispatch-qa-fix-attempt` gate applies **exactly one** attempt label per fixing
-pass, hard-capping fixing passes at `CAP` (default 2).
-
-**Resume contract (condition 9).** A re-selected worker treats durable state as
-resume input, never an error: items the prior `<!-- dispatch:qa-summary -->` comment
-already marks resolved are **not** re-derived (the Step-2 flush persisted them), and
-per-unit fix commits are already durable. Diff the worktree against the branch base,
-read the prior comment, and continue from there.
+Idempotency, auto-fix boundedness, and the condition-9 resume contract are recorded in
+[`references/idempotency-preamble.md`](references/idempotency-preamble.md) § Idempotency and resume.
