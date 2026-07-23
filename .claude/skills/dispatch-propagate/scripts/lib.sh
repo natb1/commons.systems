@@ -1692,10 +1692,43 @@ playwright_install_with_deps() {
     if [ "$attempt" -gt 1 ]; then
       echo "playwright_install_with_deps: attempt $attempt/$attempts" >&2
     fi
-    if timeout --kill-after=30 "$timeout_s" npx playwright install --with-deps chromium; then
+
+    # Background the bounded install so we can capture its PID and, on a stall,
+    # kill the WHOLE tree — `timeout` alone only signals npx/node, leaving the
+    # sudo/apt-get/dpkg grandchildren alive to hold the dpkg lock (PR #2946).
+    # The outer `timeout` bound is looser than our own deadline so OUR watchdog
+    # fires first, while node's apt-get child is still a live descendant
+    # (before node's death reparents it to init, out of kill_tree's reach).
+    timeout --kill-after=30 "$((timeout_s + 60))" \
+      npx playwright install --with-deps chromium &
+    local install_pid=$!
+    local start_ts; start_ts=$(date +%s)
+
+    # Watchdog: after timeout_s of REAL wall-clock, if the install is still
+    # running it has stalled — kill its whole tree. The elapsed-time guard
+    # makes this inert when `sleep` is stubbed instant (unit tests): no real
+    # time passed => not a stall.
+    (
+      sleep "$timeout_s"
+      now=$(date +%s)
+      if [ "$((now - start_ts))" -ge "$timeout_s" ] && kill -0 "$install_pid" 2>/dev/null; then
+        kill_tree "$install_pid"
+      fi
+    ) &
+    local watchdog_pid=$!
+
+    local rc=0
+    wait "$install_pid" || rc=$?
+    kill "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+
+    if [ "$rc" -eq 0 ]; then
       return 0
     fi
+
     echo "playwright_install_with_deps: attempt $attempt/$attempts failed or timed out after ${timeout_s}s" >&2
+    kill_tree "$install_pid" 2>/dev/null || true   # sweep survivors on non-stall failures too
+    wait_for_dpkg_lock
     attempt=$((attempt + 1))
     if [ "$attempt" -le "$attempts" ]; then
       sleep 5

@@ -5401,6 +5401,7 @@ rc=0
   unset PLAYWRIGHT_BROWSERS_PATH
   export NPX_EXIT=1
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
   export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
   export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-3"
@@ -5499,6 +5500,7 @@ rc=0
   source "$TMPDIR_TEST/lib.sh"
   unset PLAYWRIGHT_BROWSERS_PATH
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
   export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
   export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-5"
@@ -5512,6 +5514,76 @@ assert_eq "timeout-stall → rc non-zero" "nonzero" "$rc_state"
 assert_eq "timeout-stall → npx args (timeout path)" \
   $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
   "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 6. Stall → whole tree killed before retry (PR #2946 root-cause fix).
+#    The npx stub backgrounds a REAL grandchild (/bin/sleep 30) and `wait`s on
+#    it, so the process tree stays alive until something kills it — mirroring
+#    the real apt-get/dpkg grandchildren that `timeout` alone leaves running.
+#    With PLAYWRIGHT_INSTALL_TIMEOUT=1 the watchdog's REAL 1s deadline fires,
+#    kill_tree kills the whole tree (npx + grandchild), attempt 1 is treated as
+#    failed, and attempt 2 runs — proving the retry is real AND the
+#    grandchildren actually die. The `sleep` stub is selective: real only for
+#    the 1s watchdog deadline, instant otherwise (kill_tree's 2s grace, the 5s
+#    retry backoff), keeping the test ~2s. Uses the REAL kill_tree (not stubbed).
+echo "Test: playwright_install_with_deps stall → tree killed before retry"
+setup
+# Capture the real `sleep` binary BEFORE the stub shadows it on PATH — its path
+# is system-specific (a nix-store path here, /bin/sleep elsewhere), so resolve
+# it dynamically and hand it to the stubs via $REAL_SLEEP.
+REAL_SLEEP="$(command -v sleep)"
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+"$REAL_SLEEP" 30 &                     # real grandchild: keeps the tree alive
+gc=$!
+[[ -n "${GRANDCHILD_PIDS:-}" ]] && echo "$gc" >> "$GRANDCHILD_PIDS"
+wait                                   # block until the tree is killed
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift                                  # drop the <timeout_s> duration arg
+exec "$@"                              # transparent passthrough → npx keeps PID
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+# Selective: real-sleep only the 1s watchdog deadline; instant otherwise.
+if [[ "$1" == "1" ]]; then exec "$REAL_SLEEP" 1; fi
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-6"
+GRANDCHILD_PIDS="$TMPDIR_TEST/grandchildren-6"
+: > "$GRANDCHILD_PIDS"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_TIMEOUT=1
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-6"
+  export GRANDCHILD_PIDS="$TMPDIR_TEST/grandchildren-6"
+  export REAL_SLEEP
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "stall → 2 npx calls (attempt 1 killed → retry is real)" "2" "$(cat "$NPX_COUNT_FILE")"
+assert_eq "stall → rc non-zero" "nonzero" "$rc_state"
+# Give the SIGKILL a beat to land, then assert every grandchild is dead — the
+# tree was actually killed, not just the npx/node child.
+"$REAL_SLEEP" 1
+gc_alive=0
+while IFS= read -r gcpid; do
+  [[ -z "$gcpid" ]] && continue
+  if kill -0 "$gcpid" 2>/dev/null; then gc_alive=$((gc_alive + 1)); fi
+done < "$GRANDCHILD_PIDS"
+assert_eq "stall → all grandchildren killed (whole tree died)" "0" "$gc_alive"
 teardown
 
 # ============================================================================
