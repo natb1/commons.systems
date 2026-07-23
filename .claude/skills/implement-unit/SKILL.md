@@ -41,11 +41,50 @@ The caller supplies:
 ## Steps
 
 1. **Launch an implementation subagent** via the Agent tool using the caller-supplied
-   `model`. The prompt includes `context` and `scope`, plus two explicit constraints:
-   *the subagent edits the working tree only — no commits, no pushes*, and,
-   verbatim: "Read any file with the Read tool
-   before your first Edit or Write to it in this session — the edit is rejected
-   otherwise and the retry burns the tokens twice."
+   `model`. The prompt includes `context` and `scope`, plus three explicit constraints:
+   *the subagent edits the working tree only — no commits, no pushes*; verbatim:
+   "Read any file with the Read tool before your first Edit or Write to it in this
+   session — the edit is rejected otherwise and the retry burns the tokens twice.";
+   and an **absolute-worktree-path constraint** (see below).
+
+   **Absolute-worktree-path constraint.** The Agent tool can pin a spawned
+   subagent's working directory to the primary checkout instead of this launching
+   worktree. A subagent that then uses relative paths silently writes into the wrong
+   checkout — the launching worktree's `git status` stays clean, and the entire unit
+   of work is lost (this happened for real on 2026-07-19). To close this, compute the
+   worktree root in **your OWN shell** — the orchestrating session's cwd is correctly
+   the worktree; only the subagent's cwd is at risk of drifting — and fold the literal
+   path into the prompt before launch:
+
+   ```bash
+   WT=$(git rev-parse --show-toplevel)
+   ```
+
+   Then include this constraint in the prompt, substituting the computed `<WT>`:
+
+   > "The launching worktree root is `<WT>`. Your working directory may be pinned to
+   > a different checkout. EVERY Read/Write/Edit path you use MUST be absolute and MUST
+   > begin with `<WT>` — never relative, never outside it. A relative path can silently
+   > land your edit in the wrong checkout and lose the entire unit."
+
+   As a second, independent line of defense, snapshot the primary checkout's git
+   status with the contamination guard **immediately before** the Agent-tool launch,
+   then diff against that baseline **immediately after** the subagent returns (before
+   Step 2's commit-merge-push):
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/subagent-contamination-guard baseline impl-step1
+   ```
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/subagent-contamination-guard check impl-step1
+   ```
+
+   `baseline` degrades to a safe no-op (`SKIP`) when there is no separate primary
+   checkout to worry about. A non-zero `check` exit is a **LOUD STOP**: do NOT proceed
+   to Step 2, and do NOT attempt any auto-relocation of the contaminated files. The
+   guard prints an `INVARIANT VIOLATED` message with a `Repair:` line — follow it:
+   manually relocate the listed files into the worktree, then re-run the unit.
 
    - **If the unit's `scope` touches `firestore.rules` or Firestore queries**
      (collection/query reads or writes, or security-rule code), `Read
