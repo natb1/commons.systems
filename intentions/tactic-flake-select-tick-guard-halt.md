@@ -21,7 +21,46 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/implement: tactic-flake-select-tick-guard-halt duplicates
+    tactic-flake-select-tick-primary-checkout-guard-halt (same
+    test-dispatch-scripts.sh:22026 flake, no new lead found) - needs
+    human/align-tactics dedup decision"
+  since: 2026-07-23
+  recommendation: >-
+    This node (tactic-flake-select-tick-guard-halt) is a duplicate of
+    tactic-flake-select-tick-primary-checkout-guard-halt — same test
+    (test-dispatch-scripts.sh:22026, the "select-tick on-main but primary
+    checkout off-main -> guard halts" case), same phase (implement), same
+    failure signature, filed 3 minutes apart from two separate CI recurrences
+    (PR #2938 and PR #2939).
+
+
+    Recommended next steps:
+
+    1. Close/park one of the two nodes as a duplicate of the other (per the
+    precedent in tactic-flake-park-node-concurrent-write-refusal /
+    tactic-flake-park-node-case2-dirty-tree-guard, where align-tactics or a
+    human merges duplicate flake-tracking nodes). Keep whichever has the more
+    complete diagnosis - they're currently comparable in depth.
+
+    2. If pursuing a fix rather than closing as duplicate: the guard wiring
+    itself (lib.sh's assert_primary_checkout_on_main, the PATH-shimmed git stub,
+    and dispatch-select-tick's MAIN_WORKTREE resolution) reads as deterministic
+    on static review - no cross-test env leak, no PATH accumulation bug, no
+    obvious ordering issue found this session. Since this flake does not
+    reproduce locally (documented on both nodes across 7+ combined local runs),
+    a fix attempt likely needs CI-side instrumentation instead: temporarily add
+    a diagnostic-only echo of `command -v git`, `$PATH`, and the exported
+    FAKE_GIT_PRIMARY_BRANCH/SEL_PRIMARY_CHECKOUT_BRANCH values right before the
+    guard-halt test block, land it, and wait for the next CI recurrence to
+    capture what the runner actually saw - rather than guessing further from a
+    non-reproducing local environment.
+
+    3. Do not weaken or skip the guard-halt test to make CI green - per
+    .claude/rules/test-integrity.md this is a real assertion pinning a real
+    safety guard (the 2026-07-21 direct-to-main incident it guards against, PR
+    #2925).
 pace_exempt: false
 rounds: null
 attributes: {}
