@@ -15,14 +15,18 @@ rationale: "Red main halts the autonomous dispatch chain — no new work is safe
   validate this node and inherit its standing boost through the normal downward
   attention flow; the boost's dominance is maintained by a write-path guard
   (author override required to out-boost or reduce it), never by recompute."
-reading: "origin/main HEAD 9f364306 green 2026-07-13: all check runs concluded
-  success (acceptance, preview-and-smoke, lint, unit-tests, guard, Analyze
-  go/python/actions) — success_signal threshold met. Manual observation standing
-  in for the not-yet-implemented main-health sensor
-  (tactic-graph-main-self-heal): it validates the signal (gap null, reading set)
-  so the router strategy lane stops emitting this node as an align-tactics
-  decomposition candidate. Overwrite or null this reading when main next goes
-  red, or when the sensor lands and takes over the read."
+reading: "unreliable — signal under repair (hand-set 2026-07-23; the next
+  read-sensors run overwrites this with readMainHealth()'s literal output).
+  origin/main HEAD e2136ff9 carries eight check-runs, all concluding success,
+  but ALL inherited from a Graph Fast Path run on a graph/** branch sharing the
+  sha; none of unit-tests.yml's fifteen merge-gating jobs is present, so this
+  green is VACUOUS with respect to the trunk's own suite. Earlier the same day
+  HEAD 1edf47ee read red on two inherited `guard: failure` runs from the benign
+  fast-path race (tactic-graph-fastpath-guard-diff-base, PR 2898). Both readings
+  illustrate the attribution defect recorded in this round's clarifications
+  rather than main's actual content health. Supersedes the 2026-07-13 manual
+  stand-in, whose own instruction was to hand over once the sensor landed — it
+  has (readMainHealth, merged 2026-07-23)."
 gap: null
 serves: []
 recovers: []
@@ -45,13 +49,113 @@ clarifications:
       guard detail lands with the self-heal implementation (draft
       tactic-graph-main-self-heal); until then any align skip the selector emits
       for it is expected and benign. Recorded 2026-07-13 interview."
+  - question: What does the main-health signal actually observe — does a green
+      reading mean main's own merge-gating suite passed?
+    answer: >-
+      (Recorded 2026-07-23 interview, surfaced by the wezterm-pin round.) No —
+      and is_proxy is corrected from false to true on this date. Verified
+      against origin/main: .github/workflows/unit-tests.yml carries fifteen jobs
+      (unit-tests, rules-test, lint, dead-code, storybook-smoke, typecheck,
+      hook-tests, test-integrity, playwright-version-sync, type-safety-sensor,
+      firestore-query-bounds-sensor, go-tests, darwin-build, nixos-build,
+      firebase-audit) under `on: push: branches-ignore: [main, 'graph/**']`.
+      NONE of them ever runs on main. The only workflows that can fire on a push
+      to main are the four paths-gated deploys (prod-deploy, firestore-deploy,
+      functions-deploy, storage-deploy), and prod-deploy additionally
+      paths-ignores nix/**, *.nix, flake.lock, .claude/** and intentions/** — so
+      a nix-only or graph-only commit to main triggers no workflow at all.
+
+
+      The trunk's merge-gating suite is validated PRE-merge on the branch push,
+      never post-merge on main. That is a coherent design (trunk = the merge of
+      validated branches), but it has a specific consequence this node must
+      state: the observable reads a strict — sometimes empty — subset of the
+      checks that actually gate a merge, and it is blind by construction to any
+      breakage whose cause lies OUTSIDE the repo, because such breakage arrives
+      with no commit to trigger a branch build.
+
+
+      The wezterm pin is the worked example: upstream repackaged a pinned asset,
+      nixos-build went red on every nix-touching branch, and main's reading
+      stayed green throughout — the breakage stayed invisible until an unrelated
+      nix-touching PR happened to absorb it. Whether main should get its own
+      post-merge or time-triggered validation is retained at
+      tactic-main-post-merge-validation; it is a real cost question (a nix build
+      runs roughly 22 minutes) and is not decided by this clarification.
+  - question: Can this signal distinguish "every check passed" from "no check ran",
+      and whose checks is it actually reading?
+    answer: >-
+      (Recorded 2026-07-23 interview.) Not today — two defects, both verified
+      live, pulling in opposite directions.
+
+
+      First, it fails OPEN on an empty set. repo-health's main_broken_sha()
+      counts check-runs and workflow-runs whose conclusion falls in the failure
+      set and prints the sha only when that count exceeds zero, so zero checks
+      yields zero failures, and readMainHealth() returns the threshold string
+      verbatim (packages/intentionsutil/scripts/read-sensors.ts;
+      .claude/skills/dispatch-propagate/scripts/repo-health). A vacuous green is
+      mechanically indistinguishable from a real one.
+
+
+      Second, the check-runs it does read are COINCIDENTAL rather than main's
+      own. graph-commit pushes a scratch sha to a graph/** branch and
+      fast-forwards that SAME sha onto main, so Graph Fast Path's check-runs
+      attach to a sha main shares and are then read as main's health. Verified
+      2026-07-23 14:30Z: origin/main HEAD 1edf47ee carried eighteen check-runs,
+      ALL from three Graph Fast Path runs on unrelated graph/** branches, two of
+      them `guard: failure` — so the sensor would have reported main RED for the
+      benign "No changes relative to origin/main" race already diagnosed at
+      tactic-graph-fastpath-guard-diff-base (PR 2898, phase qa), a defect in
+      another branch's workflow rather than in main's content. Main advanced to
+      e2136ff9 minutes later and read green again on eight inherited check-runs,
+      none from the merge-gating suite.
+
+
+      So the signal is simultaneously fail-open (blind to fifteen jobs) and
+      falsely fail-closed (inherits unrelated branches' failures), which is why
+      is_proxy is corrected to true. Fix drafted at
+      tactic-main-health-signal-attribution. Note the coupling this creates:
+      tactic-graph-fastpath-guard-diff-base is not only a graph-lane fix, it
+      removes a live source of false main-red.
+  - question: Why was the threshold string left byte-identical when is_proxy was
+      corrected?
+    answer: >-
+      (Recorded 2026-07-23 interview.) Deliberate, and a constraint every future
+      fix must respect. deriveGap
+      (packages/intentionsutil/src/sensors.ts:98-112) treats a signal as met
+      ONLY when the trimmed, case-insensitive reading equals the threshold
+      exactly — there is no numeric or fuzzy parsing — and readMainHealth()
+      returns the literal string "green: every check on the current origin/main
+      HEAD concludes success (or neutral/skipped)", which is this node's
+      threshold verbatim.
+
+
+      Editing the threshold text alone would therefore make the sensor's green
+      output stop matching it, leaving gap permanently non-null on a node
+      carrying attention boost 100 — a standing false red pinned to the top of
+      the attention order, which the write-path guard would then protect. So
+      this round amended is_proxy (not compared) and observable (prose, not
+      compared) and left threshold byte-identical.
+
+
+      The threshold string and readMainHealth()'s return value are one coupled
+      pair: they must change in the same commit, by the tactic that fixes the
+      sensor. Recorded here because the coupling is invisible from either side
+      alone — the strategy node looks like free prose, and the sensor looks like
+      a private implementation detail.
 tooling_goals: []
 success_signal:
-  observable: origin/main HEAD check-run conclusions — the trunk's own-pipeline CI status
+  observable: "origin/main HEAD check-run and workflow-run conclusions — a PROXY
+    for trunk health, not a direct read of it: the sensor reads whichever checks
+    happen to be attached to main's HEAD sha, which excludes the entire
+    merge-gating suite in unit-tests.yml and may include check-runs produced by
+    graph/** branch workflows that merely share the sha (see the 2026-07-23
+    clarifications)"
   sensor: main-health
   threshold: "green: every check on the current origin/main HEAD concludes success
     (or neutral/skipped)"
-  is_proxy: false
+  is_proxy: true
 attention:
   boost: 100
   override: null
@@ -72,6 +176,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes: {}
 ---
 # origin/main stays green: a continuously releasable trunk, red episodes self-healing through the sensor flow
