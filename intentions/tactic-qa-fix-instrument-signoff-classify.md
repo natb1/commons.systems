@@ -32,7 +32,8 @@ execution:
   branch: qa-fix-instrument-signoff-classify
   pr: 2910
   attempts: {}
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint:
     strategy-graph-native-dispatch:
       hash: 1e7785c0705d5f8d8e642493d6d8ea56c2ebfa0f9e46fba162c171ec80c21e57

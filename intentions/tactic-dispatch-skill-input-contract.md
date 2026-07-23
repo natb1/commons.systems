@@ -33,7 +33,59 @@ execution:
   fix: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA found no functional defects (12/12 script-verifiable checks
+    pass, 20/20 new-script tests, 53/53 + 3022/3022 + 34/34 regression suites
+    pass), but two residue items require human ratification the gated
+    fix-planner declined to resolve as in-scope code changes (scope-deviation):
+    (1) three divergent NODE_JSON/NODE_BODY parsing idioms (sed/awk/jq) across
+    sibling skills, and (2) fix-checks's new --expect-fix-active gate mode
+    extending the shared derivation script beyond Unit 1's original single-mode
+    spec. Fix-planner's stated deviation reason: \"Both findings are human
+    judgment/ratification items (unify parsing idiom follow-up; ratify
+    intentional --expect-fix-active gate), not code defects; resolving them
+    requires decisions the issue does not authorize, not in-scope code
+    changes.\" See the recommendation comment for a suggested resolution."
+  since: 2026-07-23
+  recommendation: >-
+    # Office-hours recommendation: `tactic-dispatch-skill-input-contract`
+    (#2923)
+
+
+    Nothing here blocks merge on correctness. All 12 script-verifiable checks
+    pass, the new `dispatch-derive-node-target` has 20/20 tests, and three
+    regression suites are green. Both open items are style/scope calls, not
+    defects. This is low-risk and reversible.
+
+
+    **Item 1 — parsing-idiom divergence.** Three skills parse the same `===
+    NODE-JSON ===` / `=== NODE-BODY ===` contract three ways: `sed`
+    (`implement`), `awk` state-machine (`qa-fix`, `qa-main`), and `jq`
+    (`review-fix`). All correct today. "Resolve" here means: pick the `jq` idiom
+    (most robust to format drift) and rewrite the `sed`/`awk` call sites to
+    match — a ~4-line-per-site follow-up.
+
+
+    **Item 2 — `--expect-fix-active` gate mode.** The landed script grew a
+    second gate mode beyond Unit 1's spec, used only by `fix-checks`'s node
+    lane. The PR body already justifies it: no node ever persists at phase
+    `fix`, so the literal `--expect-phase fix` in the original spec could never
+    have worked. "Resolve" means one of: (a) ratify it in the Design Decisions
+    section as still "one narrowly-scoped shared script," or (b) note it as a
+    Unit-1 spec correction. This is bookkeeping, not code.
+
+
+    **My default:** ratify both and let #2923 merge. Item 2's justification is
+    sound and already written down; item 1's divergence is cosmetic and the
+    idioms are individually correct. The automation was appropriately cautious
+    in not editing code it wasn't scoped to touch, but neither item earns a
+    merge delay.
+
+
+    Still reasonable if you'd rather: split item 1 into a tiny "unify on `jq`"
+    follow-up unit before or after merge, and/or add one sentence to the Design
+    Decisions section ratifying the two-mode script. Skipping both entirely is
+    also fine.
 pace_exempt: false
 rounds: null
 attributes: {}
