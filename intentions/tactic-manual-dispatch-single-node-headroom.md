@@ -28,13 +28,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-manual-dispatch-single-node-headroom
   pr: 2944
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
 validates: []
@@ -183,3 +182,18 @@ test-case inversion; no cross-cutting design judgment.
 ```verify
 .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
 ```
+
+## needs-main residue
+
+- id: 6
+  title: Live production manual dispatch at a saturated fleet launches exactly
+    one worker for the top-ranked node
+  url_path: n/a
+  expected_outcome: The operator's deliberate dispatch produces one real
+    worker on the top node past the ceiling — the end-to-end behavior the
+    tactic guarantees, observable only against a live saturated fleet with
+    real graph-select-target ranking and worker registration.
+  finding: "planned-deferral — the PR's Test Plan leaves this item unchecked;
+    it depends on live production dispatch state (real saturation, real
+    ranking, real spawn/claim) that cannot be asserted at merge time in this
+    sandbox."
