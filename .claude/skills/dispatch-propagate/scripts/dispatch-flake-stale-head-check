@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# Stale-head guard for the flake classifier's NONE path.
+# Usage:
+#   dispatch-flake-stale-head-check --head-ref <sha> --reproduce-cmd <cmd>
+#
+# Prints exactly one line:
+#   CURRENT     — the failure is trustworthy as a new flake; the caller files it.
+#   STALE-HEAD  — the failure does not reproduce at origin/main; do NOT file.
+#                 The PR's remedy is to merge origin/main and re-run.
+#
+# WHY THIS EXISTS
+#   `dispatch-flake-dedup-node` already has a stale-head gate, but its header is
+#   explicit that it applies to ONE branch only:
+#
+#     "--head-ref is REQUIRED only when this branch is actually reached (a
+#      phase: done match found) ... OPEN/NONE never consult it."
+#
+#   So when NO node yet tracks a fingerprint (the NONE disposition), the caller
+#   files a fresh flake tactic with no staleness check at all. A CI failure that
+#   is fully deterministic on an out-of-date PR head — already fixed on
+#   origin/main — is therefore minted as a brand-new "flake" that nobody can
+#   reproduce.
+#
+#   This fired on 2026-07-22: a shadowed `case` arm in test-dispatch-scripts.sh's
+#   fake-git stub made a dispatch-select-tick guard-halt wiring test fail
+#   deterministically. The arm was unified on origin/main, but four PR heads
+#   predating the unification kept emitting the signature and produced TWO
+#   separate flake tactic nodes (filed 3 minutes apart), both later pruned as
+#   non-defects.
+#
+# WHY BEHAVIORAL, NOT ANCESTRY
+#   On NONE there is no prior node, hence no fix commit F to test ancestry
+#   against — `git merge-base --is-ancestor <fix> <head>`, the technique the
+#   done-branch gate uses, simply has no second operand here. The only decisive
+#   question is behavioral: does the failure still reproduce at current
+#   origin/main? So tier 2 below actually runs the reproduce command there.
+#
+# WHY A SEPARATE SCRIPT
+#   `dispatch-flake-dedup-node` is contractually "purely a search+decide+print
+#   tool", does "NO NETWORK", and never executes anything. Running a test suite
+#   inside it would break all three properties, so this lives alongside it
+#   instead of within it.
+#
+# FAIL LOUD
+#   Every error path exits non-zero WITHOUT printing a disposition. A guard that
+#   silently answered CURRENT on error would re-open the exact hole it closes
+#   (.claude/rules/code-style.md).
+set -euo pipefail
+
+head_ref=""
+reproduce_cmd=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --head-ref)
+      [[ $# -ge 2 ]] || { echo "error: dispatch-flake-stale-head-check: --head-ref requires a value" >&2; exit 2; }
+      head_ref="$2"; shift 2 ;;
+    --reproduce-cmd)
+      [[ $# -ge 2 ]] || { echo "error: dispatch-flake-stale-head-check: --reproduce-cmd requires a value" >&2; exit 2; }
+      reproduce_cmd="$2"; shift 2 ;;
+    *)
+      echo "error: dispatch-flake-stale-head-check: unexpected argument '$1'" >&2
+      echo "usage: dispatch-flake-stale-head-check --head-ref <sha> --reproduce-cmd <cmd>" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$head_ref" ]]; then
+  echo "error: dispatch-flake-stale-head-check: --head-ref <sha> is required" >&2
+  exit 2
+fi
+if [[ -z "$reproduce_cmd" ]]; then
+  echo "error: dispatch-flake-stale-head-check: --reproduce-cmd <cmd> is required" >&2
+  exit 2
+fi
+
+# Operate from the repo root so the throwaway worktree path and the reproduce
+# command's relative paths both resolve. A failure here is a misconfigured
+# environment — fail loud, do not fall back (.claude/rules/code-style.md).
+repo_root=$(git rev-parse --show-toplevel) || {
+  echo "error: dispatch-flake-stale-head-check: not inside a git repository" >&2
+  exit 2
+}
+cd "$repo_root"
+
+# The head ref must resolve — an unknown/typo'd SHA must not be silently treated
+# as "behind main" (which would suppress a real flake as STALE-HEAD).
+if ! git rev-parse --verify --quiet "${head_ref}^{commit}" >/dev/null; then
+  echo "error: dispatch-flake-stale-head-check: --head-ref '$head_ref' does not resolve to a commit" >&2
+  exit 2
+fi
+
+# origin/main is the comparison baseline for both tiers; it must be fetched.
+if ! git rev-parse --verify --quiet origin/main >/dev/null; then
+  echo "error: dispatch-flake-stale-head-check: origin/main is not available (fetch it first)" >&2
+  exit 2
+fi
+
+# --- Tier 1: cheap ancestry short-circuit -------------------------------------
+# If origin/main's tip is already contained in the head, the head is current:
+# whatever it is failing on cannot be explained by a fix it is missing. Trust the
+# failure and skip the (expensive) suite run entirely.
+# --is-ancestor exits 0/1 cleanly; any OTHER exit is a bad ref etc. — fail loud.
+if git merge-base --is-ancestor origin/main "$head_ref"; then
+  echo "CURRENT"
+  exit 0
+else
+  rc=$?
+  if [[ "$rc" -ne 1 ]]; then
+    echo "error: dispatch-flake-stale-head-check: git merge-base --is-ancestor failed (exit $rc) comparing origin/main against --head-ref '$head_ref'" >&2
+    exit 2
+  fi
+fi
+
+# --- Tier 2: behavioral check at origin/main ----------------------------------
+# The head is behind main, so the failure MIGHT be explained by a fix the head
+# lacks. Settle it by running the reproduce command against a clean checkout of
+# origin/main. A throwaway detached worktree keeps the caller's tree untouched.
+probe_dir=$(mktemp -d) || {
+  echo "error: dispatch-flake-stale-head-check: could not create a temp dir for the origin/main probe" >&2
+  exit 2
+}
+probe_tree="$probe_dir/main"
+
+cleanup() {
+  # Remove the registration first, then the directory: `git worktree remove`
+  # refuses a dirty tree (the reproduce command may have left artifacts), so
+  # --force is required for the removal to be reliable.
+  git -C "$repo_root" worktree remove --force "$probe_tree" >/dev/null 2>&1 || true
+  rm -rf "$probe_dir"
+}
+trap cleanup EXIT
+
+if ! git worktree add --detach "$probe_tree" origin/main >/dev/null 2>&1; then
+  echo "error: dispatch-flake-stale-head-check: could not create an origin/main probe worktree at '$probe_tree'" >&2
+  exit 2
+fi
+
+# Run the reproduce command at origin/main. Its stdout/stderr go to OUR stderr so
+# the disposition stays the only thing on stdout, and so a caller inspecting the
+# log can see what main actually did.
+probe_rc=0
+( cd "$probe_tree" && eval "$reproduce_cmd" ) >&2 2>&1 || probe_rc=$?
+
+# Distinguish "the command could not run at all" from "the command ran and
+# failed". 126 (not executable) and 127 (not found) mean the probe was never a
+# real test — treating that as "still fails at main" would wrongly answer
+# CURRENT, so fail loud instead.
+if [[ "$probe_rc" -eq 126 || "$probe_rc" -eq 127 ]]; then
+  echo "error: dispatch-flake-stale-head-check: reproduce command was not runnable at origin/main (exit $probe_rc): $reproduce_cmd" >&2
+  exit 2
+fi
+
+if [[ "$probe_rc" -eq 0 ]]; then
+  # Passes at main, fails on the head → the head is missing the fix.
+  echo "dispatch-flake-stale-head-check: '$reproduce_cmd' passes at origin/main but the head '$head_ref' is behind it — stale head, not a flake" >&2
+  echo "STALE-HEAD"
+  exit 0
+fi
+
+# Still fails at main → the head being behind does not explain it. Real signal.
+echo "CURRENT"
+exit 0
