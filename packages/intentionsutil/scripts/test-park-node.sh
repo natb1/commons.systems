@@ -86,7 +86,7 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
     for i in $(seq 1 12); do echo "line$i: base"; done
   } >"$SEED/intentions/$1.md"
 }
-for id in t-stale t-concurrent; do
+for id in t-stale t-concurrent t-pr t-pr-bad-arg; do
   seed_node "$id"
 done
 git -C "$SEED" add -A
@@ -153,17 +153,30 @@ if [[ "$2" == *merge-node.ts ]]; then
 fi
 shift 3   # tsx, helper script path, store module path
 dir="$1"; since="$2"; reason="$3"
-if [[ $# -eq 5 ]]; then
-  ids=("$5")
-else
+# Disambiguate (a) park-node's direct write — dir since reason recommendation
+# id [pr] — from (b) graph-commit's park_write — dir since reason snapDir
+# pruneCsv id... — by whether arg4 is a real directory (snapDir always is;
+# park-node's free-text recommendation never is). Argcount alone no longer
+# distinguishes them: park-node now always appends a trailing pr slot (empty
+# or numeric), so its direct-write shape is 6 args wide, same as (b)'s
+# minimum (snapDir pruneCsv + one id).
+if [[ -d "$4" ]]; then
   shift 5   # dir, since, reason, snapDir, pruneCsv
   ids=("$@")
-fi
-for id in "${ids[@]}"; do
+  for id in "${ids[@]}"; do
+    [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
+    printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
+    echo "npx shim: set office_hours on $id (since=$since)" >&2
+  done
+else
+  recommendation="$4"; id="$5"; pr="${6:-}"
   [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
   printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
-  echo "npx shim: set office_hours on $id (since=$since)" >&2
-done
+  if [[ -n "$pr" ]]; then
+    printf 'execution_pr: %s\n' "$pr" >>"$dir/$id.md"
+  fi
+  echo "npx shim: set office_hours on $id (since=$since) recommendation='$recommendation'" >&2
+fi
 SH
 chmod +x "$WORK/bin/gh" "$WORK/bin/npx"
 
@@ -321,6 +334,55 @@ if [[ $rc -eq 1 ]] \
   ok "absent node: park-node refuses a node not on origin/main (exit 1), main unchanged"
 else
   no "absent node refusal (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 4: --pr threads through to the write, and pre-existing frontmatter
+# (simulating execution.branch/attempts/markers) survives untouched.
+# ---------------------------------------------------------------------------
+F="$WORK/f"
+make_clone "$F" writer-f
+before_content="$(origin_show t-pr)"
+out="$(run_pn "$F" --pr 2942 t-pr 'unit-test park with pr' 2>&1)"; rc=$?
+content="$(origin_show t-pr)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'execution_pr: 2942' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content" \
+   && [[ "$content" == "$before_content"$'\n'*office_hours* ]]; then
+  ok "park --pr <n>: execution.pr recorded, pre-existing content preserved"
+else
+  no "park --pr <n> (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 5: park without --pr leaves execution untouched (no execution_pr line).
+# ---------------------------------------------------------------------------
+G="$WORK/g"
+make_clone "$G" writer-g
+before_sha="$(origin_sha)"
+out="$(run_pn "$G" t-concurrent 'unit-test park without pr' 2>&1)"; rc=$?
+# t-concurrent was already parked+mutated by case 2; re-park it here just to
+# confirm the no-flag path never emits execution_pr regardless.
+content="$(origin_show t-concurrent)"
+if ! grep -q 'execution_pr:' <<<"$content"; then
+  ok "park without --pr: no execution_pr line emitted"
+else
+  no "park without --pr unexpectedly emitted execution_pr"; printf '%s\n' "$content"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 6: --pr with a non-integer value is rejected before any fetch/write.
+# ---------------------------------------------------------------------------
+H="$WORK/h"
+make_clone "$H" writer-h
+before_sha="$(origin_sha)"
+out="$(run_pn "$H" --pr not-a-number t-pr-bad-arg 'should not park' 2>&1)"; rc=$?
+if [[ $rc -eq 2 ]] \
+   && grep -q 'must be a non-negative integer' <<<"$out" \
+   && [[ "$(origin_sha)" == "$before_sha" ]]; then
+  ok "park --pr <non-integer>: rejected (exit 2), origin/main untouched"
+else
+  no "park --pr <non-integer> rejection (rc=$rc)"; printf '%s\n' "$out"
 fi
 
 echo
