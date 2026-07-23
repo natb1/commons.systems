@@ -1072,6 +1072,60 @@ clarifications:
       committed. No new `recovers` edge is warranted (no delegation node covers
       the Claude Code harness); existing `recovers: delegation-github` is
       unchanged — gh issues retired, gh PRs remain by design."
+  - question: A graph-write primitive that mutates the node file in the shared
+      checkout and then fails to land leaves the mutation on disk, where it
+      blocks every subsequent graph-commit for every other node. Is "a failed
+      graph write leaves no residue" a standing invariant of this strategy, and
+      what is the target design?
+    answer: "(Recorded 2026-07-23 interview, from the 2026-07-23 manual tick
+      failure.) A standing invariant, binding the CLASS of graph-write
+      primitives rather than only the two scripts that exhibited it: a graph
+      write that fails to land leaves NO residue in the shared checkout. Target
+      design (greenfield): a primitive never uses the shared checkout as scratch
+      space -- it cuts scratch from origin/main, does the read-modify-write
+      there, and graph-commits from there, so a failure leaves the primary
+      checkout untouched by construction. This is the rule /align-strategy Step
+      0 already binds interactive sessions to (\"never author strategy edits in
+      the shared main checkout: a second concurrent session's dirty tracked file
+      blocks your graph-commit rebase\"); the primitives simply do not follow
+      it. Brownfield first step, shippable in one PR: snapshot the node blob
+      before mutating and restore it on every failure path. The incident:
+      park-node:98 and demote-node-to-implement:78 both mutate
+      intentions/<id>.md in the primary checkout, call graph-commit, and on
+      failure print \"the ... write is on disk but not landed\" and exit 1,
+      leaving it there; graph-commit's assert_clean_outside_ids then refuses
+      every subsequent call for every OTHER node, so one node's failed park
+      bricks the whole tick and the error names a file unrelated to the node
+      being worked. dispatch-graph-scope-sweep:122 calls the demote primitive in
+      a loop that explicitly continues past failures, so one stray write
+      cascades into every later demote in that sweep. Same family as the
+      2026-07-21 cwd-resolution invariant (a worktree invocation can never
+      silently commit the primary checkout) and placed at this layer for the
+      same reason: the requirement outlives its implementing tactic
+      (tactic-graph-write-failure-rollback, drafted this round). Freeze cost
+      measured with the authoritative predicate (readNode + isFingerprintStale),
+      never a grep: all 29 open children carry a null strategy_fingerprint,
+      which isFingerprintStale treats as not-stale, so this clarification
+      freezes nothing and required no re-stamps."
+  - question: "Steelman: should a failed graph write deliberately LEAVE its mutation
+      on disk as forensic evidence and a cheap retry point, rather than rolling
+      back?"
+    answer: "(Recorded 2026-07-23 interview.) Diverged from, with the reason
+      recorded. The rival framing is real: leaving the write means a human can
+      inspect exactly what the primitive intended and re-run graph-commit
+      without recomputing it, and a rollback discards that. It is rejected
+      because the residue lives in a SHARED resource -- its forensic value
+      accrues to the one node that failed, while its cost is borne by every
+      other node in the tick, none of which can land any graph write until a
+      human clears a file they never touched. The asymmetry is structural, not
+      incidental: the 2026-07-23 tick lost two legitimate scope-stale demotions
+      to a stray park write left by a third, unrelated node. Durable evidence
+      belongs in the tick journal and in the park's own
+      office_hours.recommendation -- this strategy's existing
+      park-recommendation condition already requires that recoverable context be
+      written into the NODE at park time -- never in the working tree of a
+      checkout other sessions depend on. Recomputing a failed write is cheap;
+      unblocking a shared checkout by hand is not."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
