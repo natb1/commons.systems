@@ -43,8 +43,15 @@ attention:
     the strategy-main-health ceiling (100, author-override-guarded), which it
     does not displace. Paired with tactic-graph-write-failure-rollback, which
     carries the amplifier half of the same incident."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-subagent-cwd-worktree-guard
+  pr: 2957
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
