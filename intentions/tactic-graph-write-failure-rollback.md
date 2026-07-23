@@ -85,13 +85,14 @@ attention:
     strategy-main-health ceiling (100, author-override-guarded), which it does
     not displace. Paired with tactic-subagent-cwd-worktree-guard, which carries
     the seed half of the same incident."
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-write-failure-rollback
   pr: 2959
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
 validates: []
