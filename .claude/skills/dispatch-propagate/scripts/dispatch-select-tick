@@ -672,13 +672,18 @@ elif [[ -n "$MANUAL" ]]; then
   # is globally exhausted first; the `priority` label is the cap bypass, not an
   # ordering signal). LIVE_COUNT mirrors the
   # autonomous block's effective-live count (busy workers + reservations); the
-  # manual path does NOT sweep the reservation ledger (a possibly-stale count
-  # can only make manual fan-out more conservative, which is safe).
+  # manual path now reconciles the ledger first (per strategy-graph-native-dispatch,
+  # 2026-07-23): in the standing paused+manual-only operating mode, the pause
+  # sentinel makes the autonomous heartbeat exit before it ever calls
+  # reservation_sweep, so the manual tick is the ONLY live consumer of the
+  # reservation ledger and must sweep it itself, or dead-session orphan markers
+  # accumulate unboundedly and inflate live=N with phantom workers.
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-reservation-ledger.sh"
   if BUSY=$(claude_agents_count_busy_workers); then
+    reservation_sweep 1>&2 || true
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
     TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
