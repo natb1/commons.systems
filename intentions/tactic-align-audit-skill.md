@@ -57,8 +57,7 @@ execution:
   fix: null
 validates:
   - strategy-graph-integrity
-blocked_by:
-  - tactic-graph-digest-tooling
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

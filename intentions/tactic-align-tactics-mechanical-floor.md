@@ -81,21 +81,18 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: qa
+phase: review
 execution:
   branch: tactic-align-tactics-mechanical-floor
   pr: 2896
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-22
-    attempt: 1
-    pushed_sha: 4cd2094fef128fbcacecb775da0b1927a52218b8
+  fix: null
 validates: []
-blocked_by:
-  - tactic-flake-park-node-concurrent-write-refusal
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

@@ -25,8 +25,7 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by:
-  - tactic-dispatch-skill-input-contract
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

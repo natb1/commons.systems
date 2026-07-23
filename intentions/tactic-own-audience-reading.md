@@ -27,7 +27,6 @@ validates:
   - strategy-own-audience
 blocked_by:
   - tactic-indieweb-audience
-  - tactic-indieweb-syndication-markup
 office_hours: null
 pace_exempt: false
 rounds: null

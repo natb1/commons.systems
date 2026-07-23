@@ -94,6 +94,13 @@ git -C "$REPO_ROOT" fetch origin main --quiet 2>/dev/null || \
 ensure_deps
 
 REGRESSIONS=()
+# Skips are tracked by class: a tsconfig-less workspace has nothing to check and
+# is benign, whereas a baseline-failure skip means we verified nothing about a
+# workspace we were asked to verify. Reporting at the bottom depends on the
+# distinction, so the two are never merged into one counter.
+SKIPPED_NO_TSCONFIG=()
+SKIPPED_BASELINE=()
+CHECKED=0
 
 for ws in "${APP_DIRS[@]}"; do
   echo "=== Typecheck: $ws ==="
@@ -106,6 +113,7 @@ for ws in "${APP_DIRS[@]}"; do
   # misreported as a pre-existing typecheck failure.
   if [ ! -f "$REPO_ROOT/$ws/tsconfig.json" ]; then
     echo "$ws: no tsconfig.json — skipping (non-TS workspace)"
+    SKIPPED_NO_TSCONFIG+=("$ws")
     continue
   fi
 
@@ -113,6 +121,24 @@ for ws in "${APP_DIRS[@]}"; do
   if git -C "$REPO_ROOT" rev-parse --verify "origin/main:$ws" >/dev/null 2>&1; then
     TOUCHED_WORKSPACES+=("$ws")
     git -C "$REPO_ROOT" checkout origin/main -- "$ws"
+
+    # `checkout origin/main -- "$ws"` reverts every file origin/main HAS, but it
+    # cannot delete a file origin/main does NOT have. So without this step every
+    # branch-new file stays on disk at HEAD content while the code it depends on
+    # reverts to origin/main — and the baseline compile fails on the branch's own
+    # new code. That failure was then reported as "origin/main has pre-existing
+    # typecheck errors" and the workspace skipped, meaning ANY PR that adds a
+    # file to a workspace silently disabled typechecking for that whole
+    # workspace. Remove those files so the baseline is really origin/main; the
+    # reset->checkout->clean restore below brings them back, since they are
+    # tracked at HEAD. `--no-renames` matters: with rename detection on, a file
+    # moved within the workspace is reported as R rather than A, so its new path
+    # would survive the probe and poison the baseline exactly as before.
+    while IFS= read -r added_file; do
+      [ -z "$added_file" ] && continue
+      rm -f "$REPO_ROOT/$added_file"
+    done < <(git -C "$REPO_ROOT" diff --name-only --no-renames --diff-filter=A origin/main HEAD -- "$ws")
+
     baseline_ok=true
     (cd "$REPO_ROOT" && npx tsc --noEmit --project "$ws") >/dev/null 2>&1 || baseline_ok=false
     # Restore HEAD version immediately; don't wait for the trap.
@@ -129,7 +155,8 @@ for ws in "${APP_DIRS[@]}"; do
     git -C "$REPO_ROOT" clean -fdq -- "$ws"
 
     if [ "$baseline_ok" = false ]; then
-      echo "$ws: skipping — origin/main has pre-existing typecheck errors"
+      echo "$ws: skipping — origin/main has pre-existing typecheck errors" >&2
+      SKIPPED_BASELINE+=("$ws")
       continue
     fi
   else
@@ -137,6 +164,7 @@ for ws in "${APP_DIRS[@]}"; do
     pass_suffix=" (new workspace)"
   fi
 
+  CHECKED=$((CHECKED + 1))
   if (cd "$REPO_ROOT" && npx tsc --noEmit --project "$ws"); then
     echo "$ws: typecheck passed$pass_suffix"
   else
@@ -152,4 +180,22 @@ if [ ${#REGRESSIONS[@]} -gt 0 ]; then
   exit 1
 fi
 
-echo "All typecheck targets passed."
+# A baseline-failure skip means this run verified nothing about a workspace it
+# was asked to verify, so it is always reported — never folded into a pass line.
+if [ ${#SKIPPED_BASELINE[@]} -gt 0 ]; then
+  echo "" >&2
+  echo "WARNING: NOT typechecked (origin/main baseline fails): ${SKIPPED_BASELINE[*]}" >&2
+fi
+
+# Nothing was actually typechecked. This exits 0 on purpose: a baseline skip now
+# means origin/main is genuinely broken, and a PR author is not responsible for
+# that (the contract is pinned by test-run-typecheck.sh "Test 3: dirty baseline
+# + dirty HEAD -> skipped", which asserts exit 0). What must not happen is
+# claiming a pass — so say plainly that nothing was verified.
+if [ "$CHECKED" -eq 0 ]; then
+  echo "No workspace was typechecked: ${#SKIPPED_NO_TSCONFIG[@]} non-TS, ${#SKIPPED_BASELINE[@]} baseline-skipped."
+  echo "This run verified nothing — it is not a pass."
+  exit 0
+fi
+
+echo "All typecheck targets passed ($CHECKED checked, $(( ${#SKIPPED_NO_TSCONFIG[@]} + ${#SKIPPED_BASELINE[@]} )) skipped)."
