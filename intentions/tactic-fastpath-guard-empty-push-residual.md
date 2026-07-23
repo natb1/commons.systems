@@ -24,13 +24,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-fastpath-guard-empty-push-residual
   pr: 2956
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
 validates: []
@@ -390,3 +389,21 @@ Manual / observe-in-production checks:
 - No `blocked_by` dependency on any other graph node — none found. No
   data-visualization guidance applies (this is a CI shell script, not a
   chart).
+
+## needs-main residue
+
+- **id:** 8
+- **title:** Real concurrent-landing race no longer false-fails in production
+- **url_path:** current
+- **expected_outcome:** The double-blocking behavior reported on 2026-07-23
+  does not recur; a provably-already-landed concurrent push is skipped via
+  the `::notice::` benign path, not fail-closed.
+- **finding:** Verifiable only against a live concurrent-landing race in
+  production, not assertable at merge time. The merge-time proxy — the
+  hermetic (e2) harness case — already passed
+  (`bash .github/scripts/test-check-graph-fast-path.sh`, all 19 cases green).
+  Planned deferral: observe the next real concurrent `graph-commit` race and
+  confirm the losing invocation's `graph/**` push emits the
+  `::notice::PUSHED_COMMITS is empty but pushed HEAD <sha> is already
+  reachable from origin/main ...` line and exits 0, landing without manual
+  `git reset --hard origin/main` recovery.
