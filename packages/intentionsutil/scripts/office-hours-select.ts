@@ -11,7 +11,15 @@
 //
 // stdout disposition contract (exactly one line, except --list):
 //   launch <node-id> <cwd>     — launch here; cwd is the node's worktree if it
-//                                exists, else the repo root
+//                                exists, else the repo root. This cwd is
+//                                ADVISORY ONLY for the `office-hours-graph`
+//                                launch path: that script provisions (or
+//                                reuses) the node-id worktree itself and
+//                                overrides this value with the provisioned
+//                                path before launch. It stays accurate as-is
+//                                for callers that don't provision, e.g.
+//                                `--list` and the `/office-hours` skill's
+//                                single-item readiness relay.
 //   empty                      — nothing parked (queue-head mode)
 //   empty not-parked <node-id> — the named node is absent or not parked
 // stderr is advisory-only: a `NOTE — <node-id> is blocked by open tactic(s): …`

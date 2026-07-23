@@ -315,6 +315,16 @@ selecting the parked node from the graph. A parked node is one whose
 Read-only and kind-aware: surface the node's parked context, review-and-recommend,
 report where to engage, and stop. No graph write, no label, no phase action.
 
+For a tactic node, `office-hours-graph` provisions (reuse-then-create) the
+node-id worktree itself before launch — fresh off `origin/main` when it must
+create one — and launches the session named after the bare node id (not
+`office-hours-<node-id>`), the same name convention worker/phase sessions use.
+This makes the session visible to liveness detection: an untargeted
+`/office-hours` launch skips a parked node that already has a live session
+(office-hours or worker) and selects the next-ranking parked node instead, and
+an explicit `/office-hours <node-id>` naming an already-live node errors (the
+`held` directive) rather than falling through or double-launching.
+
 1. **Read the node.** Read `intentions/<node-id>.md` frontmatter with the Read
    tool — offline, no `gh`. If `office_hours` is null the node is not parked:
    report that and **stop**.
@@ -369,9 +379,14 @@ report where to engage, and stop. No graph write, no label, no phase action.
      `/align-strategy` or `/align-tactics` on `<node-id>`.
    - **Tactic node** — name the item's worktree `.claude/worktrees/<node-id>`
      ("engage here" when the current session's cwd is already it) and
-     `execution.pr` when non-null. Advise the human that a parked worktree may
-     have gone stale while parked, so before resuming analysis there they
-     should run `assert-worktree-fresh`
+     `execution.pr` when non-null. `office-hours-graph` provisions/reuses this
+     worktree itself before launch, fetching and branching off `origin/main`
+     when it creates one — so a *freshly launched* session already starts
+     current, and no human freshening step is needed for it. The staleness risk
+     is narrower now: only a worktree that has since sat idle after the
+     session launched (parked mid-review, main moved on in the meantime) can go
+     stale. Before resuming analysis in that case, advise the human to run
+     `assert-worktree-fresh`
      (`.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh`) or
      freshen via `git fetch origin main && git merge origin/main` — a non-zero
      exit (stale checkout **or** failed fetch) means freshen first. This is
