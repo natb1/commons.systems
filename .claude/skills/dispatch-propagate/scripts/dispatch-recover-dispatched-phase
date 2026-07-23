@@ -13,7 +13,7 @@
 #   /plan-issue    → plan
 #   /implement     → implement
 #   /fix-checks    → fix-checks
-#   /fix-conflicts → fix-conflicts
+#   /dispatch-conflict → fix-conflicts  (retired alias /fix-conflicts also accepted)
 #   /qa-fix        → qa
 #   /review-fix    → review
 #   anything else  → exit 1 (no output)
@@ -72,7 +72,7 @@ case "$SKILL" in
   plan-issue)    echo "plan"          ;;
   implement)     echo "implement"     ;;
   fix-checks)    echo "fix-checks"    ;;
-  fix-conflicts) echo "fix-conflicts" ;;
+  fix-conflicts|dispatch-conflict) echo "fix-conflicts" ;;
   qa-fix)        echo "qa"            ;;
   review-fix)    echo "review"        ;;
   *)             exit 1               ;;

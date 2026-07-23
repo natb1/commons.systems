@@ -7,7 +7,12 @@
 // a registry, reads the current measurement, derives the mechanical gap, and
 // persists `{ ...node, reading, gap }` — preserving every other field. It reads
 // only the local store and runs only local own-execution commands (no gh API,
-// no analytics, no network).
+// no analytics, no network) — with one deliberate exception: the main-health
+// sensor below shells to `gh` to read the trunk's OWN check-run conclusions.
+// That is still local-first own-execution in this driver's sense (it is the
+// repo observing its OWN pipeline, not external/analytics activity), so it is
+// registered here rather than living behind an opt-in flag like the FLAGGED
+// external sensors described below.
 //
 // Run from anywhere (the store dir is resolved relative to this file, not cwd):
 //   npx tsx packages/intentionsutil/scripts/read-sensors.ts
@@ -22,6 +27,11 @@
 // PageSpeed Insights, anything that observes activity beyond one's own
 // execution) are FLAGGED, opt-in, and deliberately NOT registered here; they
 // live in `.claude/skills/align-init/scripts/fetch-*.sh` behind explicit flags.
+// Own-pipeline CI/check-run status is a different case: even where its probe
+// (below, main-health) shells to `gh`, it observes the repo's OWN execution
+// (own check-run conclusions), not external or analytics activity, so it is
+// explicitly classed local-first and registered here despite the `no gh API`
+// phrasing above, which describes the OTHER sensors in this file.
 //
 // A node naming a sensor that is not registered is NOT silently skipped and does
 // NOT crash the batch: it is collected and reported to stderr at the end. That
@@ -92,6 +102,89 @@ const gitSensor: Sensor = {
     } catch {
       return "git: unknown";
     }
+  },
+};
+
+// --- main-health sensor ------------------------------------------------------
+// Name `"main-health"` — the short canonical key `strategy-main-health` (and
+// the tactic nodes the self-heal flow auto-creates) name in
+// `success_signal.sensor` (same match-the-declared-name contract token-
+// economy/lifecycle/intention-store use below). Own-pipeline CI/check-run
+// status is a local-first own-execution sensor per this file's header comment,
+// even though its probe shells out to `gh`: checking one's OWN repo's OWN
+// check-run conclusions is the same "own pipeline" class as the vitest/git
+// sensors above — it is distinct from the deliberately-excluded
+// external/analytics sensors (site analytics, PageSpeed Insights, anything
+// observing activity beyond one's own execution) that stay opt-in behind
+// `.claude/skills/align-init/scripts/`.
+
+/** The short canonical `success_signal.sensor` key this sensor registers under. */
+const MAIN_HEALTH_SENSOR_NAME = "main-health";
+
+/**
+ * Exec options for `repo-health --main-broken-sha`, kept separate from the
+ * shared `execOpts` above. `execOpts` backs this file's LOCAL-ONLY, no-network
+ * commands (git diff/status); `repo-health --main-broken-sha` shells out to
+ * `gh` (network + TLS) to probe origin/main's CI, so it gets its own binding —
+ * same cwd/encoding/stdio shape, but a distinct name so a reader never mistakes
+ * this sensor for one of the no-network ones.
+ */
+const ghExecOpts = {
+  cwd: repoRoot,
+  encoding: "utf8" as const,
+  stdio: ["ignore", "pipe", "ignore"] as ["ignore", "pipe", "ignore"],
+};
+
+/**
+ * Own-pipeline CI-status sensor. Shells to
+ * `.claude/skills/dispatch-propagate/scripts/repo-health --main-broken-sha`,
+ * which prints origin/main HEAD's full SHA on stdout when a check has failed,
+ * and prints nothing when every check on that HEAD concludes success (or
+ * neutral/skipped). Empty stdout maps to the exact `strategy-main-health`
+ * `success_signal.threshold` string verbatim (though `deriveGap` compares
+ * case/whitespace-insensitively, `sensors.ts:98-112`); non-empty stdout maps to
+ * a fixed `red: <sha> ...` phrase — never raw log content. A `repo-health`
+ * invocation failure (non-zero exit) must not throw (total-sensor contract
+ * above) and reads as `"unknown"`, which can never equal the threshold string,
+ * so `gap` stays non-null and the sensor fails safe rather than reporting a
+ * false green.
+ *
+ * SIDE EFFECT: unlike the other sensors in this file, reading this one is not
+ * pure. `repo-health --main-broken-sha` reconciles the durable `main_broken`
+ * latch record as a documented side effect (red → set/refresh the sha, green →
+ * clear it; `repo-health:59-65`). So naming the `main-health` sensor in a
+ * `read-sensors` run mutates that latch state, not just the node's
+ * `reading`/`gap`. This coupling is intentional — the latch and the sensor
+ * reading are two views of the same origin/main CI status — but it means this
+ * sensor breaks the file header's "no side-effect" promise in addition to its
+ * "no network" one.
+ */
+/**
+ * Standalone probe body, extracted so tests can exercise all three branches
+ * (green/red/unknown) against a fake `binaryPath` without shelling to the
+ * real `repo-health` script. `mainHealthSensor.read()` below is a thin
+ * wrapper that supplies the real default path. Exported for unit tests
+ * (mirrors `readWeeklyUtilization`, `readTacticVelocity`, etc. above).
+ */
+export function readMainHealth(binaryPath: string): string {
+  let sha: string;
+  try {
+    sha = execFileSync(binaryPath, ["--main-broken-sha"], ghExecOpts).trim();
+  } catch {
+    return "unknown";
+  }
+  if (sha === "") {
+    return "green: every check on the current origin/main HEAD concludes success (or neutral/skipped)";
+  }
+  return `red: ${sha} has one or more failing checks`;
+}
+
+const mainHealthSensor: Sensor = {
+  name: MAIN_HEALTH_SENSOR_NAME,
+  read(): string {
+    return readMainHealth(
+      join(repoRoot, ".claude", "skills", "dispatch-propagate", "scripts", "repo-health"),
+    );
   },
 };
 
@@ -660,6 +753,7 @@ export function buildDefaultRegistry(): SensorRegistry {
   const registry = new SensorRegistry();
   registry.register(vitestSensor);
   registry.register(gitSensor);
+  registry.register(mainHealthSensor);
   registry.register(tokenEconomySensor);
   registry.register(lifecycleSensor);
   // Register the intention-store sensor last and have it derive the set of

@@ -34,28 +34,12 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint: e8bfd621082c91d5522fdde6bc85a01b86434ba41050391283992af28154c21f
+  fix: null
 validates:
   - strategy-domain-selection
 blocked_by:
   - tactic-domain-selection-scoring
-office_hours:
-  reason: "Owner selection decision on the 2026-07 domain-selection round: review
-    the drafted scoring dossier in tactic-domain-selection-scoring's body and,
-    per raw candidate record, select or explicitly defer. Not ai-decidable —
-    strategy-domain-selection's sensor is owner review at office-hours, and
-    selection mints owner-interview work. If the dossier section is missing from
-    that node's body, the scoring tactic (this tactic's blocked_by) has not
-    completed yet — wait for it."
-  since: 2026-07-11
-  recommendation: "Work from the dossier's draft recommendations — ratify or
-    revise each rather than re-scoring from scratch (≤30 minutes with the
-    dossier prepared). Record the select/defer outcome as a dated clarification
-    on strategy-domain-selection; set its reading (e.g. 2026-07 round: all raw
-    records scored — <selected ids> selected, rest explicitly deferred),
-    re-derive gap against the threshold, and stamp rounds {count: 1,
-    last_completed: <date>}. For each selected candidate, run /align-strategy to
-    mint the recovery strategy (naming the delegation record in its recovers).
-    For each deferral, confirm the record's interim path stays named."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

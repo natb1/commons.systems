@@ -27,56 +27,16 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-clear-park-primitive
+  pr: 2947
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/implement: plan verification for tactic-clear-park-primitive failed —
-    the node's persisted verify block runs `npx vitest run --project
-    intentionsutil --root .`, but this repo's vitest project names are full
-    workspace paths (`packages/intentionsutil`, not the basename
-    `intentionsutil`). Corrected invocation passes 533/533 tests cleanly. This
-    is a plan-text typo, not a code defect, so the fix lane (correcting code)
-    does not apply."
-  since: 2026-07-19
-  recommendation: >-
-    ## Recommendation
-
-
-    The escalation is correct: this is a plan-text typo, not an implementation
-    defect. No code changes are needed.
-
-
-    **Confirm the fix.** The verify block's project filter is wrong. The repo's
-    root `vitest.config.ts` derives project names verbatim from `package.json`'s
-    `workspaces` entries, so a nested package's project name is its full
-    workspace path, not its basename. The block reads:
-
-        npx vitest run --project intentionsutil --root .
-
-    but must read:
-
-        npx vitest run --project packages/intentionsutil --root .
-
-    The corrected command already passes cleanly — 28 test files, 533/533 tests
-    green — and the new `clear-park` script is neither covered by nor implicated
-    in that suite. The `intentionsutil` filter fails only with "No projects
-    matched," which is a naming mismatch, not a test failure.
-
-
-    **Actions for the reviewer:**
-
-    1. Update the node's persisted plan body on origin/main so the verify block
-    reads `--project packages/intentionsutil`, keeping the record accurate for
-    any future re-run.
-
-    2. Consider a follow-up to whatever generates plans for nested-package
-    projects so it emits the full-workspace-path project name (not the basename)
-    and this doesn't recur for the next `packages/*` tactic.
-
-    3. Release the office-hours park so the implement phase proceeds straight to
-    opening the draft PR — the implementation is complete, committed, pushed,
-    and verified.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -196,7 +156,7 @@ round-trip, matching the sibling's posture:
   read it back null after clearing) is covered by the existing suite:
 
 ```verify
-npx vitest run --project intentionsutil --root .
+npx vitest run --project packages/intentionsutil --root .
 ```
 
 - Manual/observe-in-production (not auto-runnable, `graph-commit` lands on
@@ -209,3 +169,37 @@ npx vitest run --project intentionsutil --root .
   exits 0 without a new commit (idempotency). The full drain-lane terminal
   disposition is exercised in production once
   `tactic-office-hours-self-modification-skill` wires the call.
+
+## needs-main residue
+
+`/qa-fix` ran the autonomous QA pass on PR #2947 (2026-07-23). All
+script-verifiable items passed (syntax check, executable+shebang check, usage-error
+exit codes). Two acceptance criteria are genuine planned deferrals — their
+verification requires a live `git fetch origin/main` and a real `graph-commit`
+landing on `main`, both out of scope for an automated non-mutating check — so they
+are deferred here for post-merge verification against deployed main:
+
+- **id 4** — Idempotent no-op exit 0 when the node is already unparked on
+  origin/main
+  - url_path: current (CLI script, no URL)
+  - expected_outcome: Against a node whose `office_hours` is already `null` on
+    origin/main, `clear-park <node-id>` prints an already-unparked note, exits 0,
+    and does NOT invoke `graph-commit` (no empty commit lands).
+  - finding: exercising this path requires a live `git fetch origin main` and an
+    `npx tsx` execution against `store.ts` against a real already-unparked node —
+    network/mutating side effects out of scope for an automated non-mutating
+    shell check in this sandbox; verify by running `clear-park` against a real
+    already-unparked scratch node on main.
+
+- **id 5** — Full clear-and-land round-trip, `--base` compare-and-swap, and
+  stale-base refusal
+  - url_path: current (CLI script, no URL)
+  - expected_outcome: Against a genuinely parked node, `clear-park <node-id>
+    "<note>"` clears the park and `graph-commit` lands the edit on origin/main
+    with the correct commit message; separately, a since-advanced `--base` is
+    refused (exit 1) rather than silently reverting intervening changes.
+  - finding: the production round-trip (real fetch, real store write,
+    `graph-commit` landing on `origin/main`, and the stale-base refusal path)
+    requires network and repository-mutating side effects out of scope for an
+    automated non-mutating check; verify by running `clear-park` against a real
+    parked scratch node on main, and by testing the stale-base refusal directly.
