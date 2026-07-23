@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# subagent-contamination-guard — baseline-before / check-after contamination
+# guard bracketing each Agent-tool subagent launch.
+#
+# The Agent tool can pin a spawned subagent's cwd to the primary checkout
+# instead of the launching worktree, so a subagent using relative paths can
+# silently write into the wrong checkout while the launching worktree's git
+# status stays clean. This script snapshots the primary checkout's
+# `git status --porcelain` before the subagent launches (`baseline <label>`)
+# and diffs it after (`check <label>`), flagging any newly-dirty paths there
+# as contamination.
+#
+# State must persist to a FILE, not a shell variable: shell state does not
+# survive across separate Bash tool calls, and the Agent-tool subagent launch
+# sits between the "before" and "after" invocations.
+#
+# Usage:
+#   subagent-contamination-guard baseline <label>
+#   subagent-contamination-guard check <label>
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib-graph-worktree.sh
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
+
+usage() {
+  echo "Usage: subagent-contamination-guard baseline <label>" >&2
+  echo "       subagent-contamination-guard check <label>" >&2
+}
+
+SUBCOMMAND="${1:-}"
+LABEL="${2:-}"
+
+if [[ "$SUBCOMMAND" != "baseline" && "$SUBCOMMAND" != "check" ]]; then
+  usage
+  exit 2
+fi
+
+if [[ -z "$LABEL" ]]; then
+  usage
+  exit 2
+fi
+
+CUR="$(git rev-parse --show-toplevel)"
+SNAP="$TMPDIR/contamination-$(git rev-parse --show-toplevel | tr '/' '_')-${LABEL}.baseline"
+
+if [[ "$SUBCOMMAND" == "baseline" ]]; then
+  PRIMARY="$(resolve_main_worktree 2>/dev/null || true)"
+
+  if [[ -z "$PRIMARY" ]] || [[ "$PRIMARY" -ef "$CUR" ]]; then
+    # No primary checkout resolvable, or we ARE the primary checkout —
+    # contamination is impossible (also covers a future harness fix that
+    # correctly pins subagent cwd to the launching worktree).
+    printf 'SKIP\n' >"$SNAP"
+    exit 0
+  fi
+
+  git -C "$PRIMARY" status --porcelain >"$SNAP"
+  exit 0
+fi
+
+# check
+if [[ ! -f "$SNAP" ]]; then
+  echo "subagent-contamination-guard: no baseline found at '$SNAP' for label '$LABEL' — baseline never ran (a wiring bug). Run 'subagent-contamination-guard baseline $LABEL' before the subagent launch." >&2
+  exit 2
+fi
+
+FIRST_LINE="$(head -n1 "$SNAP" || true)"
+if [[ "$FIRST_LINE" == "SKIP" ]]; then
+  exit 0
+fi
+
+PRIMARY="$(resolve_main_worktree 2>/dev/null || true)"
+
+AFTER="$(git -C "$PRIMARY" status --porcelain)"
+NEW="$(comm -13 <(sort "$SNAP") <(sort <<<"$AFTER"))"
+
+if [[ -z "$NEW" ]]; then
+  exit 0
+fi
+
+{
+  echo "subagent-contamination-guard: INVARIANT VIOLATED — subagent writes landed in the primary checkout '$PRIMARY' instead of the launching worktree '$CUR'. Contaminating paths:"
+  echo "$NEW"
+  echo "  Repair: manually move each listed file into the launching worktree '$CUR' and re-run the unit — do not auto-relocate."
+} >&2
+
+exit 1
