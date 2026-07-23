@@ -1641,6 +1641,36 @@ ensure_deps() {
   fi
 }
 
+# ---- wait_for_dpkg_lock — best-effort wait for the dpkg/apt lock to free ----
+# On real CI a timed-out `apt-get` (see playwright_install_with_deps below)
+# leaves its apt-get/dpkg grandchildren running in the background holding
+# /var/lib/dpkg/lock-frontend, so an immediate retry fails fast on
+# "E: Could not get lock" instead of actually retrying. This polls the lock
+# with a non-blocking `flock -s` (shared probe: succeeds once no writer holds
+# it) for up to DPKG_LOCK_WAIT_TIMEOUT seconds before giving up. Best-effort:
+# degrades to a no-op when the lock file is absent or `flock` isn't installed
+# (mirrors the lib-decision-log.sh `command -v flock` guard), and always
+# returns 0 so it never fails the caller.
+# Tunables (env): DPKG_LOCK_FILE (default /var/lib/dpkg/lock-frontend),
+# DPKG_LOCK_WAIT_TIMEOUT (default 30 seconds).
+wait_for_dpkg_lock() {
+  local lockfile="${DPKG_LOCK_FILE:-/var/lib/dpkg/lock-frontend}"
+  local deadline="${DPKG_LOCK_WAIT_TIMEOUT:-30}"
+  [ -e "$lockfile" ] || return 0
+  command -v flock >/dev/null 2>&1 || return 0
+
+  local waited=0
+  while [ "$waited" -lt "$deadline" ]; do
+    if flock -s -n "$lockfile" true 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "wait_for_dpkg_lock: ${lockfile} still held after ${deadline}s; retrying anyway" >&2
+  return 0
+}
+
 # ---- playwright_install_with_deps — bounded, timed Playwright browser install -
 # Wraps `npx playwright install --with-deps chromium` (which shells out to apt-get
 # and can stall indefinitely on a flaky archive mirror — #1899) in a per-attempt
