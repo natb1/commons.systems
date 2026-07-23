@@ -75,6 +75,27 @@ describe("parseXml", () => {
     });
   });
 
+  it("skips rel=self when no rel=alternate link is present in Atom feed", () => {
+    // A feed with only a self link (its own API URL) and a non-alternate,
+    // non-self link (e.g. replies) must never surface the self link as the
+    // post URL; it should fall through to the other link instead.
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Only Self and Replies</title>
+    <link rel="self" href="https://example.com/feeds/posts/default/2"/>
+    <link rel="replies" href="https://example.com/2026/07/with-replies.html"/>
+    <published>2026-07-01T00:00:00Z</published>
+  </entry>
+</feed>`;
+    const result = parseXml(feed);
+    expect(result).toEqual({
+      title: "Only Self and Replies",
+      url: "https://example.com/2026/07/with-replies.html",
+      publishedAt: "2026-07-01T00:00:00Z",
+    });
+  });
+
   it("drops publishedAt when Atom date is unparseable", () => {
     const feed = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -129,6 +150,26 @@ describe("parseXml", () => {
     expect(result).toEqual({
       title: "Bad Published Good Updated",
       url: "https://example.com/bad-published-good-updated",
+      publishedAt: "2026-02-01T00:00:00Z",
+    });
+  });
+
+  it("strips a namespace declaration separated by a newline (Firefox emission)", () => {
+    // Firefox/pretty-printers may put whitespace other than a single space
+    // between the tag name and xmlns; the strip regex must accept any
+    // whitespace or the namespace survives and every selector misses.
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed
+  xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Newline Namespace Post</title>
+    <link href="https://example.com/newline-ns"/>
+    <published>2026-02-01T00:00:00Z</published>
+  </entry>
+</feed>`;
+    expect(parseXml(feed)).toEqual({
+      title: "Newline Namespace Post",
+      url: "https://example.com/newline-ns",
       publishedAt: "2026-02-01T00:00:00Z",
     });
   });

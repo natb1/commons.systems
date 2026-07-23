@@ -52,6 +52,7 @@ vi.mock("../src/sidecar.js", () => ({
   cacheMetadataBatch: vi.fn(() => Promise.resolve()),
   getMetadata: vi.fn(() => Promise.resolve(undefined)),
   setLocalDirectory: vi.fn(() => Promise.resolve()),
+  clearLocalDirectory: vi.fn(),
 }));
 
 import {

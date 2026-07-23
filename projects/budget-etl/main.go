@@ -190,10 +190,7 @@ func runDirJSON(dir, groupName string, disc parse.DiscoverOpts, output fileOpts)
 	maxDates := maxTransactionDates(allTxns)
 	allStmts := buildStatementData(parsed, maxDates)
 	allStmts = append(allStmts, deriveMonthlyStatements(parsed)...)
-	allStmts, err = dedupStatementData(allStmts)
-	if err != nil {
-		return fmt.Errorf("statements: %w", err)
-	}
+	allStmts = dedupStatementData(allStmts)
 
 	return runOutputJSON(allTxns, allStmts, groupName, output)
 }
@@ -205,7 +202,8 @@ func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.Statement
 	exportTxns := make([]export.Transaction, len(allTxns))
 	for i, txn := range allTxns {
 		exportTxns[i] = export.Transaction{
-			ID:                budget.TransactionDocID(txn.StatementID, txn.TransactionID),
+			ID:                budget.TransactionDocID(txn.Institution, txn.Account, txn.TransactionID),
+			TransactionID:     txn.TransactionID, // FITID; runOutputJSON only handles real dir-parsed transactions
 			Institution:       txn.Institution,
 			Account:           txn.Account,
 			Description:       txn.Description,
@@ -258,6 +256,21 @@ func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.Statement
 // reproduces "synchrony-virtual-".
 func virtualStmtPrefix(targetInstitution, targetAccount string) string {
 	return targetInstitution + "-" + targetAccount + "-"
+}
+
+// virtualRuleKey returns a stable identity for a virtual-transaction rule,
+// folded into each generated virtual doc ID so two distinct rules matching one
+// source transaction produce distinct doc IDs instead of colliding (and
+// silently overwriting one Firestore doc). Two genuinely different rules differ
+// in at least one field; identical rules are true duplicates that may share an
+// ID harmlessly. It is deterministic across runs, so a virtual transaction's
+// doc ID is stable and re-imports upsert rather than duplicate.
+func virtualRuleKey(r export.VirtualTransactionRule) string {
+	return strings.Join([]string{
+		r.Institution, r.Account, r.Category, r.DescriptionContains,
+		r.TargetInstitution, r.TargetAccount, r.TargetCategory, r.TargetBudget,
+		r.BudgetID,
+	}, "\x00")
 }
 
 // seedLegacyVirtualTransactionRules seeds the legacy Synchrony->pet rule when
@@ -335,13 +348,12 @@ func generateVirtualTransactions(
 		txnsByBudgetID: make(map[string][]budget.TransactionData),
 	}
 
-	type dateAmount struct {
-		date   string
-		amount int64
-	}
-
 	for _, rule := range vrules {
-		seen := make(map[dateAmount]bool)
+		// Dedup matched sources by source doc ID (which embeds the FITID) per
+		// rule, not by (date, amount): a same-day split payment is two distinct
+		// source transactions with equal date and amount, and keying on
+		// (date, amount) would collapse them into a single virtual transaction.
+		seen := make(map[string]bool)
 		periods := make(map[string]bool)
 
 		for i, txn := range allTxns {
@@ -364,16 +376,26 @@ func generateVirtualTransactions(
 				continue
 			}
 
-			// Dedup by (date, amount) per rule
-			key := dateAmount{date: txn.Timestamp.Format("2006-01-02"), amount: txn.Amount}
-			if seen[key] {
+			if seen[txnDocIDs[i]] {
 				continue
 			}
-			seen[key] = true
+			seen[txnDocIDs[i]] = true
 
 			period := txn.Timestamp.Format("2006-01")
 			stmtID := virtualStmtPrefix(rule.TargetInstitution, rule.TargetAccount) + period
-			virtualDocID := "virtual-" + txnDocIDs[i]
+			// Fold the rule identity into the virtual transaction's doc ID so two
+			// rules matching this same source transaction produce distinct doc IDs
+			// instead of colliding on "virtual-"+source and silently overwriting one
+			// Firestore doc. The virtual transaction lives in the rule's target
+			// account, so it takes that account's (institution, account, FITID)
+			// identity with a synthetic FITID folding the rule key and source doc ID.
+			// Like all virtual IDs these are regenerated every run from the source
+			// set and skipped on input (they carry Virtual=true, filtered at the
+			// runInputJSON/runMerge input loops), so the shift from the old
+			// statement-embedded source scheme to (institution, account, FITID)
+			// needs no snapshot migration — no stale virtual ID is ever read back.
+			virtualDocID := "virtual-" + budget.TransactionDocID(
+				rule.TargetInstitution, rule.TargetAccount, virtualRuleKey(rule)+"\x00"+txnDocIDs[i])
 
 			vtxn := budget.TransactionData{
 				Institution:   rule.TargetInstitution,
@@ -531,13 +553,16 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		}
 		acctID := journal.AccountID(t.Institution, t.Account)
 		allTxns = append(allTxns, budget.TransactionData{
-			Institution:   t.Institution,
-			Account:       t.Account,
-			Description:   t.Description,
-			Amount:        int64(math.Round(t.Amount * 100)),
-			Timestamp:     ts,
-			StatementID:   t.StatementID,
-			TransactionID: t.ID,
+			Institution: t.Institution,
+			Account:     t.Account,
+			Description: t.Description,
+			Amount:      int64(math.Round(t.Amount * 100)),
+			Timestamp:   ts,
+			StatementID: t.StatementID,
+			// Doc ID passes through opaquely via txnDocIDs (t.ID). This field
+			// carries the stable bank FITID forward for durability; empty for
+			// snapshots written before the transactionId field existed.
+			TransactionID: t.TransactionID,
 			IsCreditCard:  priorLiabilities[acctID],
 		})
 		txnDocIDs = append(txnDocIDs, t.ID)
@@ -803,6 +828,14 @@ func buildExportTxns(allTxns []budget.TransactionData, docIDs []string, normMap 
 			NormalizedPrimary: true,
 			Virtual:           txn.Virtual,
 		}
+		// Persist the stable bank id (FITID) for real transactions so future
+		// doc-ID scheme changes can re-derive IDs from the snapshot alone.
+		// budget.TransactionData.TransactionID holds the FITID for dir-parsed
+		// transactions and the carried-forward FITID for snapshot-sourced ones;
+		// virtual transactions carry a synthetic id and are excluded.
+		if !txn.Virtual {
+			et.TransactionID = txn.TransactionID
+		}
 		if txn.Budget != "" {
 			b := txn.Budget
 			et.Budget = &b
@@ -1011,6 +1044,17 @@ func parseAndClassify(input *export.Output, dir string, disc parse.DiscoverOpts)
 	}
 	log.Printf("parsed files: %d usable, %d skipped", len(parsed), skipped)
 
+	// Migrate the input snapshot's legacy statement-embedded doc IDs to the new
+	// statement-independent scheme BEFORE computing which dir transactions are
+	// new. Without this, a transaction already present in the snapshot under a
+	// legacy ID would be misreported as new (its dir-derived new-scheme ID would
+	// not match the legacy ID in inputIDs). This mutates input in place; callers
+	// (runReport, runMerge) share the pointer, so runMerge's snapshot is migrated
+	// for the remainder of its merge pipeline as well. The remap is built from
+	// the just-parsed files, so it is idempotent (a native new-scheme ID misses
+	// the remap and passes through unchanged).
+	migrateSnapshotIDs(input, buildLegacyRemap(parsed))
+
 	// Build set of doc IDs already in input
 	inputIDs := make(map[string]bool, len(input.Transactions))
 	for _, t := range input.Transactions {
@@ -1024,7 +1068,7 @@ func parseAndClassify(input *export.Output, dir string, disc parse.DiscoverOpts)
 
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
-			docID := budget.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			docID := budget.TransactionDocID(pf.sf.Institution, pf.sf.Account, t.TransactionID)
 			if dirSeen[docID] || inputIDs[docID] {
 				continue
 			}
@@ -1230,10 +1274,7 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	// Build statements from dir-parsed files (maxDates computed later after merge)
 	dirStmts := buildStatementData(parsed, nil)
 	dirStmts = append(dirStmts, deriveMonthlyStatements(parsed)...)
-	dirStmts, err = dedupStatementData(dirStmts)
-	if err != nil {
-		return fmt.Errorf("statements: %w", err)
-	}
+	dirStmts = dedupStatementData(dirStmts)
 
 	// Build input lookup by doc ID
 	inputByID := make(map[string]export.Transaction, len(inp.Transactions))
@@ -1267,6 +1308,17 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 		dirDocIDs[id] = true
 	}
 
+	// Preserve user edits (Note, Reimbursement) on input transactions the dir
+	// path does not re-parse — notably regenerated virtual transactions, which
+	// are skipped below and whose doc IDs are stable across runs. Mirrors
+	// runInputJSON, which seeds editsMap from every input transaction; without
+	// this, runMerge silently drops the user's edits on virtual transactions.
+	for _, t := range inp.Transactions {
+		if _, ok := editsMap[t.ID]; !ok {
+			editsMap[t.ID] = txnEdits{note: t.Note, reimbursement: t.Reimbursement}
+		}
+	}
+
 	// Append input-only transactions (not in dir), skipping virtual transactions
 	for _, t := range inp.Transactions {
 		if dirDocIDs[t.ID] || t.Virtual {
@@ -1278,13 +1330,16 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 		}
 		acctID := journal.AccountID(t.Institution, t.Account)
 		allTxns = append(allTxns, budget.TransactionData{
-			Institution:   t.Institution,
-			Account:       t.Account,
-			Description:   t.Description,
-			Amount:        int64(math.Round(t.Amount * 100)),
-			Timestamp:     ts,
-			StatementID:   t.StatementID,
-			TransactionID: t.ID,
+			Institution: t.Institution,
+			Account:     t.Account,
+			Description: t.Description,
+			Amount:      int64(math.Round(t.Amount * 100)),
+			Timestamp:   ts,
+			StatementID: t.StatementID,
+			// Doc ID passes through opaquely via allDocIDs (t.ID). This field
+			// carries the stable bank FITID forward for durability; empty for
+			// snapshots written before the transactionId field existed.
+			TransactionID: t.TransactionID,
 			IsCreditCard:  priorLiabilities[acctID],
 		})
 		allDocIDs = append(allDocIDs, t.ID)
@@ -1334,7 +1389,7 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 
 	// Merge statements: dir overrides by statementID, retain input-only
 	maxDates := maxTransactionDates(allTxns)
-	exportStmts := mergeStatements(dirStmts, inp.Statements, maxDates)
+	exportStmts := mergeStatements(dirStmts, inp.Statements, maxDates, vrules)
 	// Append virtual Synchrony statements
 	exportStmts = append(exportStmts, vsr.statements...)
 
@@ -1369,30 +1424,51 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 }
 
 // mergeStatements merges dir-parsed statements with input statements.
-// Merge priority by statementID: real dir > real input > derived/virtual anchor.
-// A real dir statement overrides the stale snapshot copy of the same ID. A
+// Merge priority: real dir > real input > derived/virtual anchor. A real dir
+// statement overrides the stale snapshot copy of the same anchor ID. A
 // derived/virtual anchor never shadows a real statement (dir or input); it
-// gap-fills only — emitted solely for a period with no real statement. Virtual
-// input statements (stale prior-snapshot anchors) are skipped and recomputed.
-// Uses maxDates to set LastTransactionDate on all statements (dir and input-only).
-func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statement, maxDates map[string]*time.Time) []export.Statement {
+// gap-fills only — emitted solely for an account-month with no real statement.
+// Uses maxDates to set LastTransactionDate on all statements.
+//
+// Anchors are keyed by as-of date (budget.AnchorID). Two consequences:
+//   - Real (non-virtual) input statements are migrated to the new keying on
+//     read — their anchor ID and doc ID are recomputed from BalanceDate (or the
+//     last day of Period when absent) — so a re-parsed file with the same
+//     DTASOF collides to the same ID as its dir counterpart and dir wins.
+//   - Coverage (which drives derived-anchor gap-fill and the legacy-drop guard)
+//     is tracked per (institution, account, period), NOT per anchor ID, since a
+//     real mid-month observation and a month-end virtual anchor no longer share
+//     an ID.
+//
+// Derived monthly anchors carried in the input snapshot are retained as
+// gap-fillers, mirroring runInputJSON: deriveMonthlyStatements only re-derives
+// anchors for single-statement accounts, so once a second file joins an
+// account the dir path stops producing them and the input's stored anchors are
+// the only surviving source of that account's balance history. Only *generated*
+// virtual statements (recomputed from vrules after this merge) are dropped here.
+func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statement, maxDates map[string]*time.Time, vrules []export.VirtualTransactionRule) []export.Statement {
 	for i := range dirStmts {
 		key := accountKey(dirStmts[i].Institution, dirStmts[i].Account)
 		dirStmts[i].LastTransactionDate = maxDates[key]
 	}
 	dirExport := buildExportStatements(dirStmts)
 
-	// realDirByStmtID tracks the IDs of non-virtual (real) dir statements so a
-	// stale input copy of the same ID is dropped in favor of the real dir one.
+	// realDirByStmtID tracks the anchor IDs of non-virtual (real) dir statements
+	// so a stale input copy of the same ID is dropped in favor of the real dir
+	// one. realDirByMonth tracks the account-months a real dir observation
+	// covers, so a legacy input observation lacking a balanceDate can be dropped
+	// when the dir already has a real observation for that month.
 	realDirByStmtID := make(map[string]bool, len(dirExport))
+	realDirByMonth := make(map[string]bool, len(dirExport))
 	for _, s := range dirExport {
 		if !s.Virtual {
 			realDirByStmtID[s.StatementID] = true
+			realDirByMonth[accountMonthKey(s.Institution, s.Account, s.Period)] = true
 		}
 	}
 
-	// covered tracks IDs already emitted by a real statement (dir or input), so
-	// a derived anchor only fills periods with no real statement.
+	// covered tracks account-months already emitted by a real statement (dir or
+	// input), so a derived anchor only fills months with no real statement.
 	covered := make(map[string]bool, len(dirExport))
 
 	// Seed result with the real (non-virtual) dir statements.
@@ -1402,13 +1478,29 @@ func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statem
 			continue
 		}
 		result = append(result, s)
-		covered[s.StatementID] = true
+		covered[accountMonthKey(s.Institution, s.Account, s.Period)] = true
 	}
 
-	// Real input statements: skip virtual ones and those overridden by a real
-	// dir statement; otherwise retain and update LastTransactionDate.
+	// Real input statements: migrate to date-keyed anchor IDs, then skip those
+	// overridden by a real dir statement or superseded as a stale monthly
+	// representation of a re-parsed file; otherwise retain and update
+	// LastTransactionDate. Virtual input statements are handled by the
+	// derived-input anchor gap-fill below.
 	for _, s := range inputStmts {
-		if s.Virtual || realDirByStmtID[s.StatementID] {
+		if s.Virtual {
+			continue
+		}
+		bd := parseBalanceDate(s.BalanceDate)
+		s.StatementID = budget.AnchorID(s.Institution, s.Account, bd, s.Period)
+		s.ID = budget.StatementDocID(s.StatementID)
+		if realDirByStmtID[s.StatementID] {
+			continue
+		}
+		// Drop a legacy input observation lacking a balanceDate when a real dir
+		// observation already covers the same account-month: it is a stale
+		// monthly representation of a re-parsed file, and keeping it would double
+		// the month's anchors.
+		if bd == nil && realDirByMonth[accountMonthKey(s.Institution, s.Account, s.Period)] {
 			continue
 		}
 		// Update input-only statement's LastTransactionDate from merged transactions
@@ -1418,25 +1510,70 @@ func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statem
 			s.LastTransactionDate = &v
 		}
 		result = append(result, s)
-		covered[s.StatementID] = true
+		covered[accountMonthKey(s.Institution, s.Account, s.Period)] = true
 	}
 
 	// Derived/virtual dir anchors gap-fill only: emit one solely when no real
-	// statement (dir or input) already covers its period.
+	// statement (dir or input) already covers its account-month.
 	for _, s := range dirExport {
-		if !s.Virtual || covered[s.StatementID] {
+		mk := accountMonthKey(s.Institution, s.Account, s.Period)
+		if !s.Virtual || covered[mk] {
 			continue
 		}
 		result = append(result, s)
-		covered[s.StatementID] = true
+		covered[mk] = true
+	}
+
+	// Derived input anchors gap-fill: retain a virtual input statement that is a
+	// derived monthly anchor (NOT a generated virtual statement, which runMerge
+	// recomputes from the rules) when no real statement or dir anchor already
+	// covers its account-month. Without this, a multi-file account — whose dir
+	// path no longer re-derives anchors — permanently loses its balance history.
+	// The retained anchor's StatementID is left as-is (not migrated to the
+	// date-keyed scheme): it was already written by a prior AnchorID-keyed run,
+	// or is a legacy month-keyed anchor kept only as a gap-filler, not something
+	// a real dir/input observation needs to collide against.
+	for _, s := range inputStmts {
+		mk := accountMonthKey(s.Institution, s.Account, s.Period)
+		if !s.Virtual || covered[mk] || isGeneratedVirtualStmt(s.StatementID, vrules) {
+			continue
+		}
+		key := accountKey(s.Institution, s.Account)
+		if t, ok := maxDates[key]; ok {
+			v := export.FormatTimestamp(*t)
+			s.LastTransactionDate = &v
+		}
+		result = append(result, s)
+		covered[mk] = true
 	}
 
 	return result
 }
 
+// parseBalanceDate parses an export.Statement.BalanceDate ("YYYY-MM-DD"; empty
+// when absent) into a *time.Time, returning nil for the empty string. It panics
+// on a non-empty malformed date — a corrupt prior-snapshot balanceDate is an
+// unrecoverable input error, not a state to paper over with a fallback.
+func parseBalanceDate(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		panic(fmt.Sprintf("mergeStatements: malformed balanceDate %q: %v", s, err))
+	}
+	return &t
+}
+
 // accountKey returns a composite map key for an (institution, account) pair.
 func accountKey(institution, account string) string {
 	return institution + "\x00" + account
+}
+
+// accountMonthKey returns a composite map key for an (institution, account,
+// period) triple, identifying one account-month.
+func accountMonthKey(institution, account, period string) string {
+	return institution + "\x00" + account + "\x00" + period
 }
 
 // maxTransactionDates computes the latest transaction date per (institution, account)
@@ -1503,18 +1640,22 @@ func deriveMonthlyStatements(parsed []parsedFile) []budget.StatementData {
 			continue
 		}
 
-		// For each month boundary (first of month), derive the balance by computing
-		// the sum of all transactions on or after that boundary, then:
-		//   derived_balance = known_balance + txn_sum_from_boundary_onward
-		// This reverses the effect of those transactions to get the earlier balance.
+		// For each month boundary, derive the balance at the END of that month
+		// (its last day) by reversing only the transactions that occur AFTER the
+		// month — those dated on or after the first of the *next* month:
+		//   derived_balance = known_balance + txn_sum_from_next_month_onward
+		// Reversing the month's own transactions too would yield the balance at
+		// the START of the month, leaving every anchor one month stale.
 		//
 		// Skip the balance date's own month — the original statement already covers it.
 		beforeLen := len(derived)
 		for m := firstMonth; m.Before(balMonth); m = m.AddDate(0, 1, 0) {
-			// Sum all transactions with date >= boundary (first of this month)
+			// Sum all transactions dated on or after the first of the next month,
+			// so month m's own transactions stay in its end-of-month balance.
+			nextMonth := m.AddDate(0, 1, 0)
 			var txnSum int64
 			for _, t := range pf.result.Transactions {
-				if !t.Date.Before(m) {
+				if !t.Date.Before(nextMonth) {
 					txnSum += t.Amount
 				}
 			}
@@ -1526,7 +1667,10 @@ func deriveMonthlyStatements(parsed []parsedFile) []budget.StatementData {
 			lastDay := m.AddDate(0, 1, -1)
 			bd := lastDay
 
-			stmtID := k.inst + "-" + k.acct + "-" + period
+			// Key the virtual anchor by its month-end as-of date via the same
+			// helper real observations use, so a real mid-month observation and
+			// this month-end anchor no longer share an ID.
+			stmtID := budget.AnchorID(k.inst, k.acct, &bd, period)
 
 			derived = append(derived, budget.StatementData{
 				StatementID: stmtID,
@@ -1556,7 +1700,10 @@ func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []b
 			balanceDate = &bd
 		}
 		out[i] = budget.StatementData{
-			StatementID:         pf.sf.StatementID(),
+			// Anchors are keyed by as-of date (budget.AnchorID), not month, so
+			// overlapping observations of one account-month export separately.
+			// Period stays "YYYY-MM" for display/grouping.
+			StatementID:         budget.AnchorID(pf.sf.Institution, pf.sf.Account, balanceDate, pf.sf.Period),
 			Institution:         pf.sf.Institution,
 			Account:             pf.sf.Account,
 			Balance:             pf.result.Balance,

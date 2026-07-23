@@ -221,6 +221,41 @@ describe("checkParity — clean parity", () => {
     expect(result.divergences.filter((d) => d.kind === "type-mismatch")).toEqual([]);
     expect(result.ok).toBe(true);
   });
+
+  it("does not report the snapshot-only forksDetail as an extra-key divergence", async () => {
+    // The local snapshot's github carries forksDetail; the hosted Firestore
+    // producer never emits it (fixture github has no forksDetail). Parity must
+    // exclude it rather than flag an extra-key.
+    const input: SnapshotInput = {
+      samples: [USAGE_SAMPLE],
+      reminders: [REMINDER],
+      queueMetrics: QUEUE,
+      issueSamples: [ISSUE_SAMPLE],
+      topicUsage: [TOPIC],
+      projectSignals: {
+        ...SIGNALS,
+        github: {
+          ...SIGNALS.github!, // type-safety-ok: SIGNALS.github is a fixture literal, always defined
+          forksDetail: [
+            {
+              owner: "forker",
+              repoUrl: "https://github.com/forker/commons.systems",
+              createdAt: "2026-01-01T00:00:00Z",
+              pushedAt: "2026-06-01T00:00:00Z",
+              stars: 2,
+            },
+          ],
+        },
+      },
+      computedAt: NOW,
+      chainHealth: { liveSessions: 3 },
+      scope: "full",
+      window: { samples: 100, issueSamples: 100 },
+    };
+    const result = await checkParity(serializeSnapshot(input), { reader: readerFor(cleanFixtures()), namespace: NS });
+    expect(result.divergences.filter((d) => d.kind === "extra-key")).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
 });
 
 describe("checkParity — divergences", () => {

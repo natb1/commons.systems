@@ -83,7 +83,31 @@ attributes:
     tactic-reading-chunk-2-aristotle-hexis, range widened to NE II.1-6), and the
     AI-alignment correspondence on the delegatee-education doctrine (reviewed at
     tactic-reading-chunk-25-constitutional-ai, Constitutional AI sections 1 and
-    3-4)"
+    3-4); extended 2026-07-13 with the cross-guard articulation from the chunk-2
+    sitting — tension_with requalified as a graph-native inter-virtue
+    cross-guard (each sibling's excess falls in the other's field) with explicit
+    intra-virtue mean triples on the mobility children — Claude-drafted, adopted
+    by the author as a deferral ('execute greenfield recommendation as
+    deferred'), reviewed at tactic-reading-chunk-5-aristotle-phronesis (NE VI,
+    phronesis as Aristotle's own inter-virtue coordinator); extended 2026-07-18
+    with the chunk-5 deferred slate — the entire outcome ledger of the NE VI +
+    III.4 sitting (the Q1-Q4 draft verdicts, integration recommendations R1-R24
+    with the probe-2 corollary, the vocabulary/quote retention drafts, and
+    Claude's boost-vs-numbering frontier recommendation), deferred en bloc by
+    the author's glare ruling pending author recall, origination, and
+    ratification; quarantined on and reviewed at
+    tactic-dialog-review-aristotle-phronesis, with the retroactive cave and
+    hexis items reviewed at tactic-dialog-review-plato-cave and
+    tactic-dialog-review-aristotle-hexis; the boost-vs-numbering item exited the
+    slate 2026-07-18 — author-ratified at the /align-strategy round, recorded on
+    strategy-graph-review-curriculum — leaving the rest of the ledger on the
+    dialog gate; extended 2026-07-21 with the energeia/kinesis layering
+    articulation — kind-tactic's layer-placement test glossed as hexis-like
+    persistent-layer content (complete at every moment of its holding) versus
+    kinesis-like tactic content (complete only at its terminal end; NE X.4
+    1174a-b, Metaphysics Θ.6 1048b) — Claude-drafted, adopted by the author as a
+    deferral at the 2026-07-21 layer-placement interview, reviewed at
+    tactic-reading-chunk-33-aristotle-energeia-kinesis"
   origin: chosen
   divergence:
     level: moderate
@@ -102,6 +126,18 @@ attributes:
         found and amended 2026-07-07 chunk 1 (the reading wins), recorded here
         retroactively 2026-07-08 when every reading-wins catch became a required
         contradictions entry
+      - the 2026-07-09 cadence-as-habituation deferral as drafted said 'drift
+        between sittings is the hexis decaying' — the author's position was
+        graph-model desynchronization (internal hexis evolves, record grows
+        stale as its model), and NE II.1 grounds destruction by contrary
+        practice, not decay-by-inactivity; found and amended 2026-07-13 chunk 2,
+        the reading wins
+      - the chunk-5 R15b homing-gate rider as Claude drafted it generalized the
+        author's case-specific born-parked condition (desire-tracking strategies
+        without an aligned mechanism) into a standing born-parked rule for
+        derived strategies — caught by the author in-sitting (2026-07-16
+        exchange); classified in-sitting through the R16 lens as doxa promoted
+        to doctrine without ratification; recorded 2026-07-18, the reading wins
   irreversibility:
     recovery_path: relearn — read the cited texts against each tradition record,
       chunked in tactic-tradition-reading-program; each verified record flips
@@ -110,9 +146,14 @@ attributes:
       cited passage-by-passage on the records
     gated: false — nothing about the way back is held by either delegatee; the texts
       outlive both
-    last_exercised: "2026-07-07 — chunk 1 (Republic VII 514a-521b): tradition-plato
-      amended (misdirection, agency of turning, Form of the Good), cascades to
-      both roots and strategy-external-calibration"
+    last_exercised: "2026-07-17 — chunk 5 (NE VI + III.4): reading and per-chapter
+      comprehension dialectic completed with the three-movement structure; the
+      sitting's amend/ratify outcomes were deferred en bloc (2026-07-18 glare
+      ruling) to tactic-dialog-review-aristotle-phronesis, so no tradition
+      record moved this round; the recovery loop's exercise is the comprehension
+      record itself (eleven textual corrections including the end-setter gate)
+      plus one reading-wins catch (the R15b misstatement, recorded in
+      contradictions)"
   classification: platform — demands buy-in while unverified; decays toward tool
     as records flip to codified
   non_delegable_floor: the capacity to notice a recorded articulation
@@ -125,5 +166,11 @@ attributes:
     tactic-reading-chunk-18-dialectic-method (Theaetetus midwifery, Meno
     elenchus), added to the curriculum for that purpose"
   last_assessed: 2026-07-09
+  household:
+    shared: false
+    basis: The author's virtue-layer doctrinal articulation held on trust until
+      re-derived; no household attachment.
+    consent: []
+    preferences: []
 ---
 # Virtue-layer articulation delegated to Claude and the canonical traditions until personally re-derived

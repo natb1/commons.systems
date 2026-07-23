@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   toIso,
   serializeSnapshot,
+  foldProjectSignals,
   type SnapshotInput,
 } from "./snapshot.js";
 import type { UsageSample } from "../../office-hours/src/usage-samples.js";
@@ -222,5 +223,54 @@ describe("serializeSnapshot", () => {
     expect("window" in snap).toBe(false);
     // undefined would be dropped by stringify and break round-trip equality
     expect(JSON.parse(JSON.stringify(snap))).toEqual(snap);
+  });
+
+  describe("foldProjectSignals — the analytics-scope fold", () => {
+    const FOLD_NOW = new Date("2026-07-01T06:00:00.000Z");
+
+    function freshSignals(): ProjectSignalsSnapshot {
+      return {
+        computedAt: FOLD_NOW,
+        groupId: "g1",
+        memberEmails: ["nathan@natb1.com"],
+        github: { repo: "natb1/commons.systems", stars: 9, forks: 2, watchers: 4 },
+      };
+    }
+
+    it("replaces ONLY projectSignals; every other prior field survives verbatim", () => {
+      const prior = serializeSnapshot(buildInput());
+      const folded = foldProjectSignals(prior, freshSignals(), FOLD_NOW);
+
+      // Surgical: computedAt + scope + all five other fields untouched.
+      expect(folded.computedAt).toBe(prior.computedAt);
+      expect(folded.scope).toBe("full");
+      expect(folded.chainHealth).toEqual(prior.chainHealth);
+      expect(folded.window).toEqual(prior.window);
+      expect(folded.samples).toBe(prior.samples);
+      expect(folded.reminders).toBe(prior.reminders);
+      expect(folded.queueMetrics).toBe(prior.queueMetrics);
+      expect(folded.issueSamples).toBe(prior.issueSamples);
+      expect(folded.topicUsage).toBe(prior.topicUsage);
+
+      // The section itself is replaced and serialized (ISO computedAt).
+      expect(folded.projectSignals?.computedAt).toBe("2026-07-01T06:00:00.000Z");
+      expect(folded.projectSignals?.github?.stars).toBe(9);
+      assertNoTimestamps(folded);
+      expect(JSON.parse(JSON.stringify(folded))).toEqual(folded);
+    });
+
+    it("starts from an analytics-scoped skeleton when no prior snapshot exists", () => {
+      const folded = foldProjectSignals(null, freshSignals(), FOLD_NOW);
+      expect(folded.scope).toBe("analytics");
+      expect(folded.computedAt).toBe("2026-07-01T06:00:00.000Z");
+      expect(folded.samples).toEqual([]);
+      expect(folded.reminders).toEqual([]);
+      expect(folded.queueMetrics).toBeNull();
+      expect(folded.issueSamples).toEqual([]);
+      expect(folded.topicUsage).toEqual([]);
+      expect(folded.projectSignals?.github?.forks).toBe(2);
+      assertNoTimestamps(folded);
+      expect(JSON.parse(JSON.stringify(folded))).toEqual(folded);
+    });
   });
 });

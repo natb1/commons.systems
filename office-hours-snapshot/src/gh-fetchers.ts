@@ -25,7 +25,7 @@ import { execFile } from "node:child_process";
 import { parseJitDueMarker } from "../../functions/src/office-hours-sync-core.js";
 import type { OfficeHoursItem } from "../../functions/src/office-hours-sync-core.js";
 import type { ParkedIssue } from "../../functions/src/dispatch-queue-metrics-core.js";
-import type { GithubSignals } from "../../functions/src/project-signals-core.js";
+import type { GithubSignals } from "./project-signals-core.js";
 
 // ---------------------------------------------------------------------------
 // Injectable transport boundary
@@ -342,6 +342,16 @@ interface GithubReferrerResponse {
   uniques: number;
 }
 
+interface GithubForkResponse {
+  // GitHub returns `owner: null` for a fork whose owning account was later
+  // deleted — the per-entry transform must tolerate it, not assume a login.
+  owner: { login: string } | null;
+  html_url: string;
+  created_at: string;
+  pushed_at: string;
+  stargazers_count: number;
+}
+
 /** gh adapter for collectProjectSignalsCore's `fetchGithub` dep. */
 export async function fetchGithub(
   repo: string,
@@ -349,25 +359,61 @@ export async function fetchGithub(
 ): Promise<GithubSignals> {
   // Public stats — always collected. Mirrors fetchGithubStatsLive's mapping.
   const statsJson = await ghRest<GithubRepoResponse>(`repos/${repo}`, run);
-  const stats: Pick<GithubSignals, "repo" | "stars" | "forks" | "watchers"> = {
+  const result: GithubSignals = {
     repo,
     stars: statsJson.stargazers_count,
     forks: statsJson.forks_count,
     watchers: statsJson.watchers_count,
   };
 
+  // Fork detail and traffic each only need `repo` — independent of each other
+  // and of the stats fetch above. Fire them concurrently (below) so total
+  // latency is max(forks, traffic), not their sum. Each branch tolerates its own
+  // failure (resolving to undefined) so a missing scope on one never voids the
+  // other or the public stats.
+
+  // Fork detail — one page (100) of forks, newest first; the total count already
+  // rides `forks`. The try/catch guards ONLY the network fetch; the per-entry
+  // transform uses flatMap to drop a single malformed fork (e.g. `owner` null for
+  // a since-deleted account) while keeping the rest — mirroring the read-side
+  // parseGithubSignals, rather than voiding the whole list on one bad entry.
+  const collectForksDetail = async (): Promise<GithubSignals["forksDetail"]> => {
+    let forks: GithubForkResponse[];
+    try {
+      forks = await ghRest<GithubForkResponse[]>(
+        `repos/${repo}/forks?sort=newest&per_page=100`,
+        run,
+      );
+    } catch {
+      // no fork-listing access / fetch failure — omit forksDetail, keep stats.
+      return undefined;
+    }
+    return forks.flatMap((f) =>
+      f.owner?.login
+        ? [
+            {
+              owner: f.owner.login,
+              repoUrl: f.html_url,
+              createdAt: f.created_at,
+              pushedAt: f.pushed_at,
+              stars: f.stargazers_count,
+            },
+          ]
+        : [],
+    );
+  };
+
   // Traffic needs push access; any error (e.g. 403) means "no access" — omit the
   // traffic key but keep the public stats. Mirrors project-signals.ts:248-256
   // and fetchGithubTrafficLive's three-endpoint mapping.
-  try {
-    const [clones, views, referrers] = await Promise.all([
-      ghRest<GithubTrafficCountResponse>(`repos/${repo}/traffic/clones`, run),
-      ghRest<GithubTrafficCountResponse>(`repos/${repo}/traffic/views`, run),
-      ghRest<GithubReferrerResponse[]>(`repos/${repo}/traffic/popular/referrers`, run),
-    ]);
-    return {
-      ...stats,
-      traffic: {
+  const collectTraffic = async (): Promise<GithubSignals["traffic"]> => {
+    try {
+      const [clones, views, referrers] = await Promise.all([
+        ghRest<GithubTrafficCountResponse>(`repos/${repo}/traffic/clones`, run),
+        ghRest<GithubTrafficCountResponse>(`repos/${repo}/traffic/views`, run),
+        ghRest<GithubReferrerResponse[]>(`repos/${repo}/traffic/popular/referrers`, run),
+      ]);
+      return {
         clonesCount: clones.count,
         clonesUniques: clones.uniques,
         viewsCount: views.count,
@@ -377,11 +423,21 @@ export async function fetchGithub(
           count: r.count,
           uniques: r.uniques,
         })),
-      },
-    };
-  } catch {
-    return stats;
-  }
+      };
+    } catch {
+      // no traffic access — omit traffic, keep stats.
+      return undefined;
+    }
+  };
+
+  const [forksDetail, traffic] = await Promise.all([
+    collectForksDetail(),
+    collectTraffic(),
+  ]);
+  if (forksDetail !== undefined) result.forksDetail = forksDetail;
+  if (traffic !== undefined) result.traffic = traffic;
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------

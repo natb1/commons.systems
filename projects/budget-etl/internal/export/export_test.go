@@ -70,10 +70,10 @@ func TestWriteFileRoundTrip(t *testing.T) {
 		},
 		Budgets: []Budget{
 			{
-				ID:              "budget-food",
-				Name:            "groceries",
+				ID:        "budget-food",
+				Name:      "groceries",
 				Allowance: 150.00,
-				Rollover:        "debt",
+				Rollover:  "debt",
 			},
 		},
 		BudgetPeriods: []BudgetPeriod{
@@ -1077,9 +1077,9 @@ func TestJournalLegValidate(t *testing.T) {
 
 func TestAccountValidate(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		acctType AccountType
-		wantErr bool
+		wantErr  bool
 	}{
 		{"asset", AccountTypeAsset, false},
 		{"liability", AccountTypeLiability, false},
@@ -1163,6 +1163,28 @@ func TestWriteFileValidatesOutput(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "accounts[0]") {
 			t.Errorf("error should name the offending account index, got %v", err)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("file should not exist after validation failure, stat err = %v", err)
+		}
+	})
+
+	t.Run("duplicate transaction doc id writes no file", func(t *testing.T) {
+		out := minimalOutput("household")
+		// Two transactions sharing a doc ID: on upload one Firestore document
+		// silently overwrites the other, so Validate must reject it.
+		out.Transactions = []Transaction{
+			{ID: "dup", Institution: "x", Account: "1", Description: "A", Amount: 1, Timestamp: "2025-01-01T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"},
+			{ID: "dup", Institution: "x", Account: "1", Description: "B", Amount: 2, Timestamp: "2025-01-02T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"},
+		}
+
+		path := filepath.Join(t.TempDir(), "budget.json")
+		err := WriteFile(path, out, "")
+		if err == nil {
+			t.Fatal("WriteFile: expected error for duplicate transaction doc id")
+		}
+		if !strings.Contains(err.Error(), "duplicate transaction doc id") {
+			t.Errorf("error should name the duplicate doc id, got %v", err)
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("file should not exist after validation failure, stat err = %v", err)

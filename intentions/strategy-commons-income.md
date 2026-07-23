@@ -64,13 +64,13 @@ office_hours:
     condition 1 — commons artifacts have non-author users whose demand supports
     paid hosting, support, or productized tiers — does not hold against current
     author state. strategy-progressive-validation records tier 2 (validate with
-    users) as not entered as of 2026-07-06, and tier entry is an explicit dated
-    author declaration that no downstream strategy may infer from activity.
-    Every signal-path tactic (any paid tier or offering) would plan against this
-    dead premise, and the threshold (any recurring commons-derived income) is
-    unreachable without non-author users. No instrument tactic is needed
-    meanwhile: the revenue half of the sensor already exists (budget income
-    statement reports income by category, budget/src/income-statement.ts;
+    users) as not entered as of 2026-07-06; per its tier-entry rule, that entry
+    is a dated author declaration no downstream strategy may infer from
+    activity. Every signal-path tactic (any paid tier or offering) would plan
+    against this dead premise, and the threshold (any recurring commons-derived
+    income) is unreachable without non-author users. No instrument tactic is
+    needed meanwhile: the revenue half of the sensor already exists (budget
+    income statement reports income by category, budget/src/income-statement.ts;
     strategy-diversify-income rationale records the same). Decision needed at
     office-hours: keep this lane dormant until a tier-2 entry declaration lands
     on strategy-progressive-validation (clear this park then and re-run

@@ -18,7 +18,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: null
 execution:
   branch: tactic-attention-surface-graph-read
   pr: 2780
@@ -32,7 +32,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  phase: main-qa
 ---
 # browser graph read layer — File System Access API over the local clone, client-side tree build and resolveAttention, staleness surfaced loudly
 
@@ -112,3 +113,27 @@ output; point the handle at a stale clone and confirm the loud banner.
 
 Two units; each in a subagent with the unit's Recommended model; supply
 this Context and the unit's Scope; constrain to working-tree edits.
+
+## needs-main residue (review 2026-07-10)
+
+Terminal review (PR #2780) was clean: one confirmed finding — `readGraphNodes`
+sorted by raw file name instead of node id, so prefix-hyphen sibling ids
+(`tactic-graph-commit` vs `tactic-graph-commit-hardening`) rendered in swapped
+order versus the host `frontier-view.ts` — fixed on the branch and pinned with a
+regression test. Full office-hours (431) and intentionsutil (216) suites,
+type-safety-escapes, and knip all green. The `package-lock.json` churn beyond the
+`yaml` add was examined and is a beneficial normalization of origin/main's own
+stale lockfile, not a regression. Auto-merge armed (squash).
+
+The plan's "Manual" verification step is inherently browser-integration work that
+this node's code cannot exercise on its own — it needs the not-yet-wired UI
+consumer (`tactic-attention-surface-goals-page`, `blocked_by` this node) to
+render anything. Verify post-merge in main-qa (or, more naturally, as part of the
+goals-page tactic's own acceptance):
+
+1. Grant an FSA directory handle to a real repo clone in the office-hours owner
+   tier; confirm the tree renders and the attention rank order matches the
+   host-side `packages/intentionsutil/scripts/frontier-view.ts` output.
+2. Point the handle at a stale clone (last git sync older than
+   `STALE_CLONE_THRESHOLD_MS`, 6h) and confirm the blocking loud banner replaces
+   the view — stale rank never renders silently.

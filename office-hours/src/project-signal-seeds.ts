@@ -20,6 +20,22 @@ export const projectSignalSeeds: ProjectSignalSeed = {
     stars: 42,
     forks: 7,
     watchers: 15,
+    forksDetail: [
+      {
+        owner: "active-derivative",
+        repoUrl: "https://github.com/active-derivative/commons.systems",
+        createdAt: "2026-02-10T00:00:00Z",
+        pushedAt: "2026-06-28T00:00:00Z",
+        stars: 4,
+      },
+      {
+        owner: "drive-by-forker",
+        repoUrl: "https://github.com/drive-by-forker/commons.systems",
+        createdAt: "2026-03-05T00:00:00Z",
+        pushedAt: "2026-03-05T00:00:00Z",
+        stars: 0,
+      },
+    ],
     traffic: {
       clonesCount: 18,
       clonesUniques: 6,

@@ -1,7 +1,8 @@
 // The office-hours local-snapshot WIRE CONTRACT: one shared home for the on-disk
-// snapshot type and the serialize/decode pair, imported by BOTH the
-// firebase-admin producer (`office-hours-snapshot/src/`) and the reader dashboard
-// (`office-hours/src/`).
+// snapshot type, the serialize/decode pair, and the `--scope analytics` fold
+// (`foldProjectSignals`) that also builds a snapshot document — imported by BOTH
+// the firebase-admin producer (`office-hours-snapshot/src/`) and the reader
+// dashboard (`office-hours/src/`).
 //
 // Why this module exists: the producer used to define its own write shape and
 // the reader its own read shape, each deep-importing the other's internals via
@@ -65,8 +66,16 @@ export type SerializedProjectSignals = IsoDates<ProjectSignalsSnapshot>;
 // Snapshot metadata types
 // ---------------------------------------------------------------------------
 
-/** Whether this snapshot carries the full dashboard or only parked issues. */
-export type SnapshotScope = "full" | "parked-only";
+/**
+ * What this snapshot's producing run captured:
+ *   - "full"        — all six dashboard fields.
+ *   - "parked-only" — only the parked-issues data was refreshed.
+ *   - "analytics"   — only the projectSignals section was produced; it was
+ *     folded into the prior snapshot (see foldProjectSignals), so a folded doc
+ *     keeps the PRIOR run's scope. "analytics" appears on disk only when no
+ *     prior snapshot existed at fold time.
+ */
+export type SnapshotScope = "full" | "parked-only" | "analytics";
 
 /**
  * Coarse chain-health signals. Deliberately open/optional — an absent metric is
@@ -260,6 +269,8 @@ function serializeQueueMetricsToIso(
 /**
  * The project-signals snapshot's only Date is top-level `computedAt`; the nested
  * github/ga4/gsc/psi sub-objects carry no Date at any depth (see panel-equality.ts).
+ * Module-private: both callers (`serializeSnapshot` and the analytics
+ * `foldProjectSignals`) live here, so it is deliberately not exported.
  */
 function serializeProjectSignals(
   p: ProjectSignalsSnapshot,
@@ -301,6 +312,56 @@ export function serializeSnapshot(input: SnapshotInput): OfficeHoursSnapshot {
     topicUsage: input.topicUsage,
     projectSignals:
       input.projectSignals === null ? null : serializeProjectSignals(input.projectSignals, now),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Analytics fold
+// ---------------------------------------------------------------------------
+
+/**
+ * Fold a freshly-collected projectSignals section into the prior snapshot
+ * document (the `--scope analytics` write path).
+ *
+ * The fold is SURGICAL: every prior field — including top-level `computedAt`
+ * and `scope` — is preserved verbatim, and ONLY `projectSignals` is replaced.
+ * The section carries its own `computedAt` for analytics freshness; leaving the
+ * top-level watermark untouched keeps it an honest staleness signal for the
+ * full producer (a dead hourly timer must not be masked by the daily analytics
+ * fold).
+ *
+ * When no prior snapshot exists (first analytics run before any full run), the
+ * fold starts from an empty skeleton stamped `scope: "analytics"` so the reader
+ * can tell the non-signals fields were never produced. That skeleton carries
+ * `version: 1` like every other document this module emits: `decodeSnapshot`
+ * hard-rejects `raw.version !== 1`, so a version-less skeleton would be written
+ * to disk and then refused by the reader.
+ *
+ * Lives HERE rather than in the producer package because it constructs an
+ * `OfficeHoursSnapshot` — the wire shape this module owns. Keeping it beside
+ * the type is what makes the `version: 1` requirement compiler-enforced.
+ */
+export function foldProjectSignals(
+  prior: OfficeHoursSnapshot | null,
+  signals: ProjectSignalsSnapshot,
+  now: Date,
+): OfficeHoursSnapshot {
+  const nowIso = now.toISOString();
+  const projectSignals = serializeProjectSignals(signals, nowIso);
+  if (prior !== null) {
+    return { ...prior, projectSignals };
+  }
+  return {
+    version: 1,
+    computedAt: nowIso,
+    scope: "analytics",
+    chainHealth: {},
+    samples: [],
+    reminders: [],
+    queueMetrics: null,
+    issueSamples: [],
+    topicUsage: [],
+    projectSignals,
   };
 }
 

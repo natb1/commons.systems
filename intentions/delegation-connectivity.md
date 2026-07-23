@@ -21,6 +21,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   delegatee: the wired ISP; a cellular carrier as fallback
   delegated: household internet connectivity
@@ -42,5 +50,11 @@ attributes:
   review_trigger: a second wired provider reaching the address, or the ISP's terms
     shifting against the household
   last_assessed: 2026-07-02
+  household:
+    shared: true
+    basis: The rationale states one wired ISP carries the household's connectivity;
+      an ISP change affects the whole household's internet access.
+    consent: []
+    preferences: []
 ---
 # Home connectivity delegated to a single wired ISP, cellular as the only fallback

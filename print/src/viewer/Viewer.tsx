@@ -8,12 +8,17 @@ import { SearchPanel } from "./SearchPanel.js";
 import { OutlinePanel } from "./OutlinePanel.js";
 import { useBookmarks, pickBookmarksStore } from "./useBookmarks.js";
 import { BookmarksPanel } from "./BookmarksPanel.js";
+import { useAnnotations } from "./useAnnotations.js";
+import { AnnotationsPanel } from "./AnnotationsPanel.js";
+import { AnnotationCapture } from "./AnnotationCapture.js";
+import type { AnnotationsStore } from "../annotations.js";
 
 export interface ViewerProps {
   item: MediaItem;
   createRenderer: (onError: (err: unknown) => void) => ContentRenderer;
   resolveSource: () => Promise<string | ArrayBuffer>;
   store: PositionStore;
+  annotationsStore: AnnotationsStore;
   uid: string | null;
 }
 
@@ -24,7 +29,7 @@ export interface ViewerProps {
  * childless — the renderer/engine owns its subtree, so React must never
  * reconcile children into it (the AppNav mount-survival pattern).
  */
-export function Viewer({ item, createRenderer, resolveSource, store, uid }: ViewerProps) {
+export function Viewer({ item, createRenderer, resolveSource, store, annotationsStore, uid }: ViewerProps) {
   const controller = useViewerController({
     createRenderer,
     resolveSource,
@@ -48,6 +53,7 @@ export function Viewer({ item, createRenderer, resolveSource, store, uid }: View
     [controller.uid, controller.readFailed, controller.mediaId],
   );
   const bookmarks = useBookmarks(controller, bookmarksStore);
+  const annotations = useAnnotations(controller, annotationsStore);
 
   return (
     <div
@@ -58,6 +64,9 @@ export function Viewer({ item, createRenderer, resolveSource, store, uid }: View
       <div className="viewer-content">
         {/* Renderer-owned subtree: NEVER render React children into this node. */}
         <div className="viewer-canvas-wrap" ref={canvasWrapRef} />
+        {/* Sibling of the renderer-owned canvas-wrap (position: fixed), never a
+            child of it — the renderer owns that subtree. */}
+        <AnnotationCapture annotations={annotations} />
         {panelCollapsed && (
           <>
             <div className="tap-zone tap-zone-prev" onClick={goPrev} />
@@ -80,6 +89,7 @@ export function Viewer({ item, createRenderer, resolveSource, store, uid }: View
         <ViewerToolbar controller={controller} bookmarks={bookmarks} />
         <SearchPanel controller={controller} />
         <BookmarksPanel bookmarks={bookmarks} />
+        <AnnotationsPanel annotations={annotations} />
         <OutlinePanel controller={controller} />
         <div className="viewer-meta">
           <h3 className="viewer-title">{item.title}</h3>

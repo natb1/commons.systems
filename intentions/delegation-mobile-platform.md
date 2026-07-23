@@ -23,6 +23,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   delegatee: Apple (iOS, the App Store, iCloud)
   delegated: the mobile computing surface — what software may run, what reaches
@@ -48,5 +56,11 @@ attributes:
   review_trigger: App Store or iCloud policy shifts that narrow export, or
     selection as a recovery domain (strategy-domain-selection)
   last_assessed: 2026-07-02
+  household:
+    shared: true
+    basis: The household phones run iOS with shared iCloud photos, messaging, and
+      location; leaving the platform changes family members' mobile workflow.
+    consent: []
+    preferences: []
 ---
 # The mobile surface delegated to Apple — iOS, the App Store, and the phone

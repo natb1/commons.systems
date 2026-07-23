@@ -68,7 +68,10 @@ sensor_open_issues() {
 
 sensor_closed_issues() {
   echo "=== Closed Issues (recent 100) ==="
-  gh_issue_list_rest --state closed --limit 100 --include-title
+  # --paginate: this repo is PR-dominated, so a single mixed issues+PRs page of
+  # 100 would leave far fewer than 100 real issues after PR-filtering, silently.
+  # Forcing the paginate-then-slice path returns the true recent 100 issues.
+  gh_issue_list_rest --state closed --limit 100 --paginate --include-title
 }
 
 sensor_repo_stats() {
@@ -95,6 +98,11 @@ external_sensor_psi() {
   "$REPO_ROOT/.claude/skills/align-init/scripts/fetch-psi.sh" || true
 }
 
+external_sensor_forks() {
+  echo "=== Fork & Derivative Digest ==="
+  "$REPO_ROOT/.claude/skills/align-init/scripts/fetch-forks.sh" || true
+}
+
 {
 sensor_principle_roots
 echo ""
@@ -113,6 +121,8 @@ echo ""
 external_sensor_analytics
 echo ""
 external_sensor_psi
+echo ""
+external_sensor_forks
 } > "$OUTPUT"
 
 echo "$OUTPUT"

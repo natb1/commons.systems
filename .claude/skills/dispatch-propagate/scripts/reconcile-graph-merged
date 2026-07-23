@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# reconcile-graph-merged — the graph-native reconciler sweep
+# (tactic-graph-router-transitions Unit 2). The graph-lane analog of
+# dispatch-reconcile-merged: it absorbs out-of-band PR events for open
+# graph-native tactics into the graph state.
+#
+# For every open graph-native tactic (phase set, neither draft nor done) that
+# carries an execution.pr, it reads the PR state via gh and hands the terminal
+# ones to reconcile-graph.ts, which decides and applies the store mutations:
+#   - merged, needs-main residue on the node → `main-qa` (deferred until
+#     tactic-main-qa-phase adopts the phase value; inert now).
+#   - merged without residue, or closed-not-merged → `done`, which PRUNES the
+#     node and its edges (inbound blocked_by repaired) in the same commit, and
+#     stamps the serving strategy's round when its last non-draft child prunes.
+# The whole plan (prune + edits) lands as ONE graph-commit.
+#
+# GRACE window: a just-merged PR is not reconciled until it has aged past the
+# grace window, so the sweep never races a merge that is still settling.
+#
+# Doctrine: run from a main-based checkout (the sweep writes state-only commits
+# on main). Sandbox: the CALLER wraps every invocation with
+# dangerouslyDisableSandbox — gh needs network + TLS, and node --import tsx/esm
+# needs the npm cache (see .claude/rules/sandbox.md).
+#
+# Stdout protocol: exactly `reconciled <id> -> <target>` per tactic acted on,
+# and `deferred <id> (<reason>)` per deferred one; NOTHING for a skip.
+#
+# Exit codes: 0 (including a no-op sweep); 1 if any item hard-errored or the
+# graph-commit failed.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
+
+GRACE=${GRAPH_RECONCILE_GRACE:-600}
+NOW=${GRAPH_RECONCILE_NOW:-$(date -u +%s)}
+
+# --- Enumerate open graph-native tactics carrying a PR -----------------------
+# One node pass: print `<id>\t<pr>` for every open tactic (phase set, not
+# draft/done) whose execution.pr is non-null.
+OPEN_TACTICS="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+  const { listNodes } = await import("./packages/intentionsutil/src/store.js");
+  const open = new Set(["implement","fix","qa","review","main-qa"]);
+  for (const n of listNodes("./intentions")) {
+    if (n.kind !== "tactic") continue;
+    if (n.phase === null || !open.has(n.phase)) continue;
+    const pr = n.execution && n.execution.pr;
+    if (pr === null || pr === undefined) continue;
+    process.stdout.write(n.id + "\t" + pr + "\n");
+  }
+') )" || { echo "reconcile-graph-merged: node enumeration failed" >&2; exit 1; }
+
+[[ -z "$OPEN_TACTICS" ]] && exit 0
+
+# --- Resolve each PR's terminal state, honoring the grace window -------------
+STATES="{}"
+HARD_ERROR=0
+while IFS=$'\t' read -r id pr; do
+  [[ -n "$id" && -n "$pr" ]] || continue
+  rc=0
+  PR_JSON=$(gh_pr_view_rest "$pr" 2>/dev/null) || rc=$?
+  if [[ "$rc" -ne 0 || -z "$PR_JSON" ]]; then
+    echo "reconcile-graph-merged: gh_pr_view_rest #$pr for $id failed (rc=$rc)" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  STATE=$(jq -r '.state' <<<"$PR_JSON")
+  case "$STATE" in
+    MERGED)
+      MERGED_AT=$(jq -r '.mergedAt // empty' <<<"$PR_JSON")
+      if [[ -n "$MERGED_AT" ]]; then
+        AGE=$(( NOW - $(date -u -d "$MERGED_AT" +%s) ))
+        [[ "$AGE" -ge "$GRACE" ]] || continue   # still settling — next sweep
+      fi
+      STATES=$(jq -c --arg id "$id" '. + {($id): "merged"}' <<<"$STATES") ;;
+    CLOSED)
+      STATES=$(jq -c --arg id "$id" '. + {($id): "closed"}' <<<"$STATES") ;;
+    *) : ;;  # OPEN — nothing to reconcile
+  esac
+done <<<"$OPEN_TACTICS"
+
+# Nothing terminal this sweep.
+if [[ "$STATES" == "{}" ]]; then
+  [[ "$HARD_ERROR" -ne 0 ]] && exit 1
+  exit 0
+fi
+
+# --- Decide + apply the store mutations --------------------------------------
+STATES_FILE="$(mktemp)" || { echo "reconcile-graph-merged: mktemp failed" >&2; exit 1; }
+trap 'rm -f "$STATES_FILE"' EXIT
+printf '%s' "$STATES" > "$STATES_FILE"
+
+PLAN="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/reconcile-graph.ts" --pr-states "$STATES_FILE") )" || {
+  echo "reconcile-graph-merged: reconcile-graph.ts failed" >&2; exit 1; }
+
+# Report deferrals (residue→main-qa, inert until tactic-main-qa-phase).
+while IFS= read -r d; do
+  [[ -n "$d" ]] || continue
+  did=$(jq -r '.id' <<<"$d"); dreason=$(jq -r '.reason' <<<"$d")
+  echo "deferred $did ($dreason)"
+done < <(jq -c '.deferred[]?' <<<"$PLAN")
+
+# --- Land the plan as one graph-commit ---------------------------------------
+mapfile -t PRUNE < <(jq -r '.prune[]?' <<<"$PLAN")
+mapfile -t EDIT < <(jq -r '.edit[]?' <<<"$PLAN")
+if [[ "${#PRUNE[@]}" -eq 0 && "${#EDIT[@]}" -eq 0 ]]; then
+  [[ "$HARD_ERROR" -ne 0 ]] && exit 1
+  exit 0
+fi
+
+GC_ARGS=(-m "graph: reconcile merged/closed tactics")
+for id in "${PRUNE[@]}"; do GC_ARGS+=(--prune "$id"); done
+for id in "${EDIT[@]}"; do GC_ARGS+=("$id"); done
+
+if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
+  echo "reconcile-graph-merged: graph-commit failed (plan applied on disk, not landed)" >&2
+  exit 1
+fi
+
+# Report what was reconciled.
+while IFS= read -r r; do
+  [[ -n "$r" ]] || continue
+  rid=$(jq -r '.id' <<<"$r"); rtarget=$(jq -r '.target' <<<"$r")
+  echo "reconciled $rid -> $rtarget"
+done < <(jq -c '.reconciled[]?' <<<"$PLAN")
+
+[[ "$HARD_ERROR" -ne 0 ]] && exit 1
+exit 0

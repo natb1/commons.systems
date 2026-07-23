@@ -73,6 +73,16 @@ export function initPlayer(
       persistState(audioEl.currentTime || 0);
     }, POSITION_PERSIST_MS);
   }
+  // Cancel any pending position-persist timer. A timer armed while the old
+  // track played would otherwise fire after a track change/stop and persist
+  // the OLD `audioEl.currentTime` against the now-current track (or against a
+  // stopped queue), corrupting the restored position next session.
+  function cancelPositionThrottle(): void {
+    if (positionThrottle) {
+      clearTimeout(positionThrottle);
+      positionThrottle = null;
+    }
+  }
 
   function renderPlaylist(): void {
     if (queue.length === 0) {
@@ -111,6 +121,9 @@ export function initPlayer(
     currentIndex = index;
     // A track change starts at 0; audioEl.currentTime still holds the OLD track's
     // time here (src is set asynchronously after resolve), so persist position 0.
+    // Cancel any throttle armed by the OLD track before it can fire against this
+    // new one.
+    cancelPositionThrottle();
     persistState(0);
     renderPlaylist();
     revokeCurrentObjectUrl();
@@ -145,6 +158,9 @@ export function initPlayer(
   function stop(): void {
     playGeneration++;
     currentIndex = -1;
+    // Cancel any pending position-persist timer so it cannot fire against the
+    // stopped queue after playback ends.
+    cancelPositionThrottle();
     revokeCurrentObjectUrl();
     audioEl.pause();
     audioEl.removeAttribute("src");
@@ -260,9 +276,16 @@ export function initPlayer(
         stop();
         persistState(0);
       } else if (wasPlaying) {
-        // playTrack persists the new current track/position.
-        const nextIndex = idx < queue.length ? idx : 0;
-        playTrack(nextIndex);
+        if (idx < queue.length) {
+          // A following track shifted into the removed slot; play it.
+          // playTrack persists the new current track/position.
+          playTrack(idx);
+        } else {
+          // Removed the currently-playing LAST track: stop rather than wrap to
+          // index 0 and force-play the first track from 0:00.
+          stop();
+          persistState(0);
+        }
       } else {
         if (idx < currentIndex) currentIndex--;
         renderPlaylist();

@@ -24,6 +24,14 @@ function fakeStore(
 // The latest hook result, captured each render so tests read state + handlers.
 let captured: UseViewerControllerResult | null = null;
 
+// Non-null accessor for the captured hook result. Tests use this instead of a
+// `captured!` non-null assertion (a type-safety escape hatch); the leading `!`
+// guard here is not one.
+function result(): UseViewerControllerResult {
+  if (!captured) throw new Error("hook result not captured — mount() first");
+  return captured;
+}
+
 function Host(props: UseViewerControllerArgs): React.ReactElement {
   const r = useViewerController(props);
   captured = r;
@@ -213,6 +221,94 @@ describe("useViewerController persistence", () => {
     await act(async () => { await vi.runAllTimersAsync(); });
 
     expect(globalThis.reportError).toHaveBeenCalled();
+  });
+
+  it("pagehide flushes the pending debounced save before the timer fires", async () => {
+    const store = fakeStore();
+    await mount(defaultArgs({ store }));
+    await flushInit();
+
+    await act(async () => { result().goNext(); });
+    await flushInit();
+
+    // Fire pagehide before the 500ms debounce elapses — the save must flush now,
+    // not be dropped. Without a flush-on-hide listener, closing the tab within
+    // the debounce window loses the final page turn.
+    await act(async () => { window.dispatchEvent(new Event("pagehide")); });
+    await flushInit();
+
+    expect(store.save).toHaveBeenCalledWith("2");
+  });
+
+  it("visibilitychange to hidden flushes the pending debounced save", async () => {
+    const store = fakeStore();
+    await mount(defaultArgs({ store }));
+    await flushInit();
+
+    await act(async () => { result().goNext(); });
+    await flushInit();
+
+    const original = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    try {
+      await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+      await flushInit();
+    } finally {
+      if (original) Object.defineProperty(document, "visibilityState", original);
+    }
+
+    expect(store.save).toHaveBeenCalledWith("2");
+  });
+
+  it("a transiently failed save is retried on the next flush (position not marked saved)", async () => {
+    const save = vi.fn<(pos: string) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(undefined);
+    const store = fakeStore(null, { save });
+    await mount(defaultArgs({ store }));
+    await flushInit();
+
+    await act(async () => { result().goNext(); }); // to page 2
+    await flushInit();
+    await act(async () => { await vi.runAllTimersAsync(); }); // first save("2") rejects
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith("2");
+
+    // Re-issue a save for the SAME position. Because the failed save must not
+    // have recorded "2" as saved, this fires a fresh (successful) retry. If the
+    // code marked lastSavedPosition before the write settled, this would dedup
+    // out and never retry the lost position.
+    await act(async () => { result().goToPage(2); });
+    await flushInit();
+    await act(async () => { await vi.runAllTimersAsync(); });
+
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenNthCalledWith(2, "2");
+  });
+
+  it("opening with spread preference does not persist an init-only position shift", async () => {
+    // Saved position "3"; spread preference on. Init enters spread {2,3} whose
+    // position is the left page "2". That shift is init-only (zero user
+    // navigation) and must NOT be persisted, or it silently rewrites "3"→"2".
+    localStorage.setItem("spread-mode:m1", "true");
+    const store = fakeStore("3");
+    let cp = 1;
+    const renderer: ContentRenderer = {
+      ...makeMockRenderer({ renderPageInto: vi.fn().mockResolvedValue(undefined) }),
+      init: vi.fn().mockImplementation(async (_el: HTMLElement, _src: unknown, pos?: string) => {
+        cp = pos ? Number(pos) : 1;
+      }),
+      goToPage: vi.fn().mockImplementation(async (p: number) => { cp = p; }),
+      get currentPage() { return cp; },
+      get position() { return String(cp); },
+      get pageCount() { return 10; },
+    };
+    await mount(defaultArgs({ createRenderer: () => renderer, store }));
+    await flushInit();
+    await act(async () => { await vi.runAllTimersAsync(); });
+
+    expect(store.save).not.toHaveBeenCalled();
   });
 
   it("cleanup flushes pending save synchronously and calls renderer.destroy", async () => {
@@ -558,6 +654,56 @@ describe("useViewerController spread mode", () => {
     expect(renderResult).not.toHaveBeenCalled();
     expect(spread.clearSearch).not.toHaveBeenCalled();
   });
+
+  it("onPanelNavigate: spread → controller.goToPage(renderer.currentPage) re-renders the spread", async () => {
+    const renderPageInto = vi.fn().mockResolvedValue(undefined);
+    const spread = makeSpreadRenderer({ renderPageInto });
+    await mount(defaultArgs({ createRenderer: () => spread }));
+    await flushInit();
+    await act(async () => { result().toggleSpread(); });
+    await flushInit();
+
+    // Simulate a bookmark/outline click moving the underlying renderer, the way
+    // goToPosition / goToOutlineEntry do, then the panel calling onPanelNavigate.
+    await spread.goToPage(5);
+    renderPageInto.mockClear();
+    await act(async () => { result().onPanelNavigate(); });
+    await flushInit();
+
+    // The spread re-rendered to the renderer's new page (page 5 → spread 4–5).
+    const pages = renderPageInto.mock.calls.map((c) => c[0]);
+    expect(pages).toContain(4);
+    expect(pages).toContain(5);
+  });
+
+  it("onPanelNavigate: single mode does not touch a spread surface", async () => {
+    const single = makeMockRenderer();
+    await mount(defaultArgs({ createRenderer: () => single }));
+    await flushInit();
+    const before = result().navSignal;
+    await act(async () => { result().onPanelNavigate(); });
+    await flushInit();
+    // syncNav still fires (navSignal bumps) but there is no spread to render.
+    expect(result().navSignal).toBeGreaterThan(before);
+  });
+
+  it("getPosition: single reads the renderer; spread reads the controller's live page/label", async () => {
+    const renderer = makeSpreadRenderer();
+    await mount(defaultArgs({ createRenderer: () => renderer }));
+    await flushInit();
+    await renderer.goToPage(3);
+
+    expect(result().getPosition()).toEqual({ position: "3", label: "Page 3 / 10" });
+
+    await act(async () => { result().toggleSpread(); });
+    await flushInit();
+
+    // Page 3 sits in spread 2–3; the controller reports its left page + spread label.
+    expect(result().getPosition()).toEqual({
+      position: "2",
+      label: "Pages 2–3 / 10",
+    });
+  });
 });
 
 describe("useViewerController keyboard + panel", () => {
@@ -592,6 +738,21 @@ describe("useViewerController keyboard + panel", () => {
     await flushInit();
 
     expect(renderer.next).toHaveBeenCalled();
+  });
+
+  it("modified arrow keys (alt/ctrl/meta/shift) are ignored so browser/OS shortcuts still fire", async () => {
+    const renderer = makeMockRenderer();
+    await mount(defaultArgs({ createRenderer: () => renderer }));
+    await flushInit();
+
+    for (const modifier of ["altKey", "ctrlKey", "metaKey", "shiftKey"] as const) {
+      const event = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, [modifier]: true });
+      Object.defineProperty(event, "target", { value: document.body });
+      await act(async () => { document.dispatchEvent(event); });
+      await flushInit();
+    }
+
+    expect(renderer.prev).not.toHaveBeenCalled();
   });
 
   it("panelCollapsed toggles", async () => {

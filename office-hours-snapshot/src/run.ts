@@ -14,6 +14,12 @@
 //   exit if not ok — the write still PROCEEDS (dual-write: parity is a shape
 //   signal, not a gate)] → encrypt + atomic write + history via writeSnapshot.
 //
+// Scope "analytics" swaps the produce step for a surgical pipeline: collect
+// ONLY the projectSignals section (produceProjectSignals — GitHub/GA4/GSC/PSI,
+// all sources required by loadConfig) and fold it into the prior decrypted
+// snapshot document (foldProjectSignals), preserving every other field
+// verbatim; the parity/output tail is shared.
+//
 // Modes:
 //   --dry-run    skip the mount check, Secret Manager, and the Drive write; print
 //                the serialized snapshot JSON to stdout. Member emails come from
@@ -33,21 +39,24 @@ import {
   fetchGa4Live,
   fetchGscLive,
   fetchPsiLive,
-} from "../../functions/src/project-signals-core.js";
+} from "./project-signals-core.js";
 import type {
   Ga4AppSignals,
   GscSignals,
   PsiUrlSignals,
-} from "../../functions/src/project-signals-core.js";
+} from "./project-signals-core.js";
 
 import { createGhFetchers } from "./gh-fetchers.js";
 import {
   produceSnapshot,
+  produceProjectSignals,
   runUsageSampleWriter,
   type ProduceDeps,
+  type ProduceSignalsDeps,
   type PriorHistory,
 } from "./produce.js";
-import { serializeSnapshot } from "./snapshot.js";
+import type { ProjectSignalsSnapshot } from "../../office-hours/src/project-signals.js";
+import { serializeSnapshot, foldProjectSignals } from "./snapshot.js";
 import type { OfficeHoursSnapshot, SnapshotInput, SnapshotScope } from "./snapshot.js";
 import {
   writeSnapshot,
@@ -84,14 +93,16 @@ export function parseArgs(argv: string[]): Flags {
     else if (arg === "--plaintext") plaintext = true;
     else if (arg === "--scope") {
       const v = argv[++i];
-      if (v !== "full" && v !== "parked-only") {
-        throw new Error(`--scope must be "full" or "parked-only" (got "${v ?? ""}")`);
+      if (v !== "full" && v !== "parked-only" && v !== "analytics") {
+        throw new Error(
+          `--scope must be "full", "parked-only", or "analytics" (got "${v ?? ""}")`,
+        );
       }
       scope = v;
     } else if (arg.startsWith("--scope=")) {
       const v = arg.slice("--scope=".length);
-      if (v !== "full" && v !== "parked-only") {
-        throw new Error(`--scope must be "full" or "parked-only" (got "${v}")`);
+      if (v !== "full" && v !== "parked-only" && v !== "analytics") {
+        throw new Error(`--scope must be "full", "parked-only", or "analytics" (got "${v}")`);
       }
       scope = v;
     } else {
@@ -107,6 +118,8 @@ export function parseArgs(argv: string[]): Flags {
 
 export interface RunIo {
   produceSnapshot(deps: ProduceDeps, scope: SnapshotScope): Promise<SnapshotInput>;
+  /** Collect ONLY the projectSignals section (`--scope analytics`). */
+  produceProjectSignals(deps: ProduceSignalsDeps): Promise<ProjectSignalsSnapshot>;
   writeSnapshot(args: WriteSnapshotArgs): Promise<WriteSnapshotResult>;
   checkParity(snapshot: OfficeHoursSnapshot, deps: { reader: FirestoreReader; namespace: string }): Promise<ParityResult>;
   /** Build the live firebase-admin parity reader (constructed only for --parity). */
@@ -115,6 +128,8 @@ export interface RunIo {
   resolveMemberEmailsFromSecret(projectId: string, secretName: string): Promise<string[]>;
   /** Decrypt the prior `current` snapshot's series, or null when absent. */
   readPriorHistory(snapshotDir: string, password: string): Promise<PriorHistory | null>;
+  /** Decrypt the prior `current` snapshot DOCUMENT (analytics fold), or null when absent. */
+  readPriorSnapshot(snapshotDir: string, password: string): Promise<OfficeHoursSnapshot | null>;
   /** Deny-loud mount/precondition check; throws if the dir is missing. */
   statSnapshotDir(dir: string): void;
   /** DEBUG plaintext writer (--plaintext); returns the written path. */
@@ -163,21 +178,15 @@ function deserializeIssueSample(s: OfficeHoursSnapshot["issueSamples"][number]):
 }
 
 /**
- * Read + decrypt the prior `current` snapshot and recover its two series with
- * real Dates. A MISSING file → null (first run, fine). A present-but-undecryptable
- * file (wrong password / corrupt) → THROW (no silent history reset — see
- * .claude/rules/code-style.md). The office-hours `toUsageSample`/`toIssueSample`
- * parsers are NOT reused here: the serialized series carries ISO-string dates,
- * but those parsers require a Firestore `.toDate()` Timestamp, so they would
- * reject every serialized point and silently truncate the series. (The snapshot
- * now DOES carry the `memberEmails` those parsers also require — see snapshot-wire
- * — but the ISO/Timestamp mismatch alone still precludes reuse.) These bespoke
- * deserializers read the ISO strings back into Dates directly.
+ * Read + decrypt the prior `current` snapshot DOCUMENT (serialized form, ISO
+ * strings intact). A MISSING file → null (first run, fine). A
+ * present-but-undecryptable file (wrong password / corrupt) → THROW (no silent
+ * history reset — see .claude/rules/code-style.md).
  */
-async function defaultReadPriorHistory(
+async function defaultReadPriorSnapshot(
   snapshotDir: string,
   password: string,
-): Promise<PriorHistory | null> {
+): Promise<OfficeHoursSnapshot | null> {
   const file = path.join(snapshotDir, CURRENT_FILENAME);
   let buf: Buffer;
   try {
@@ -190,7 +199,26 @@ async function defaultReadPriorHistory(
   }
   const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer; // type-safety-ok: a file-backed Buffer is never SharedArrayBuffer-backed
   const plaintext = await decryptData(crypto.webcrypto.subtle, ab, password);
-  const snap = JSON.parse(plaintext) as OfficeHoursSnapshot; // type-safety-ok: decrypted prior snapshot is our own serialized shape
+  return JSON.parse(plaintext) as OfficeHoursSnapshot; // type-safety-ok: decrypted prior snapshot is our own serialized shape
+}
+
+/**
+ * Recover the prior snapshot's two series with real Dates. The office-hours
+ * `toUsageSample`/`toIssueSample` parsers are NOT reused here: the serialized
+ * series carries ISO-string dates, but those parsers require a Firestore
+ * `.toDate()` Timestamp, so they would reject every serialized point and
+ * silently truncate the series to one point. (The snapshot now DOES carry the
+ * `memberEmails` those parsers also require — see
+ * ../../office-hours/src/snapshot-wire.ts — but the ISO/Timestamp mismatch
+ * alone still precludes reuse.) These bespoke deserializers read the ISO
+ * strings back into Dates directly.
+ */
+async function defaultReadPriorHistory(
+  snapshotDir: string,
+  password: string,
+): Promise<PriorHistory | null> {
+  const snap = await defaultReadPriorSnapshot(snapshotDir, password);
+  if (snap === null) return null;
   return {
     samples: (snap.samples ?? []).map(deserializeUsageSample),
     issueSamples: (snap.issueSamples ?? []).map(deserializeIssueSample),
@@ -285,11 +313,13 @@ function defaultWritePlaintext(snapshotDir: string, json: unknown, _now: Date): 
 /** The real IO seam set used by the entrypoint. */
 export const defaultIo: RunIo = {
   produceSnapshot,
+  produceProjectSignals,
   writeSnapshot,
   checkParity,
   createParityReader: defaultCreateParityReader,
   resolveMemberEmailsFromSecret: defaultResolveMemberEmailsFromSecret,
   readPriorHistory: defaultReadPriorHistory,
+  readPriorSnapshot: defaultReadPriorSnapshot,
   statSnapshotDir: defaultStatSnapshotDir,
   writePlaintext: defaultWritePlaintext,
   now: () => new Date(),
@@ -426,36 +456,59 @@ export async function run(argv: string[], env: Env, io: RunIo = defaultIo): Prom
     // 2. Secrets: member-email PII + (already resolved) password.
     const memberEmails = await resolveMemberEmails(config, flags, io);
 
-    // 3. Build the real deps for produceSnapshot.
+    // 3. Build the real fetchers shared by both pipelines.
     const fetchers = createGhFetchers({
       groupRepo: config.groupRepo,
       githubRepo: config.githubRepo,
     });
     const google = buildGoogleFetchers(config);
-    const sampleUsage = buildSampleUsage(config);
 
-    // Prior history is read only on a real run with a password (dry-run never
-    // touches Drive). Absent ⇒ produceSnapshot starts a fresh series.
+    // Prior state is read only on a real run with a password (dry-run never
+    // touches Drive).
     const wantPrior = !flags.dryRun && password !== null && config.snapshotDir;
 
-    const deps: ProduceDeps = {
-      namespace: config.namespace,
-      groupId: config.groupId,
-      memberEmails,
-      queueRepos: config.queueRepos,
-      ...fetchers,
-      fetchGa4: google.fetchGa4,
-      fetchGsc: google.fetchGsc,
-      fetchPsi: google.fetchPsi,
-      now: () => now,
-      ...(sampleUsage ? { sampleUsage } : {}),
-      ...(wantPrior
-        ? { readPriorHistory: () => io.readPriorHistory(config.snapshotDir!, password!) } // type-safety-ok: wantPrior guards snapshotDir + password non-null
-        : {}),
-    };
+    let snapshot: OfficeHoursSnapshot;
+    if (flags.scope === "analytics") {
+      // Analytics pipeline: collect ONLY the projectSignals section and fold it
+      // into the prior snapshot document — every other field is preserved
+      // verbatim (see foldProjectSignals). loadConfig has already required every
+      // source for this scope, so the fetchers below are all non-null.
+      const signals = await io.produceProjectSignals({
+        namespace: config.namespace,
+        groupId: config.groupId,
+        memberEmails,
+        fetchGithub: fetchers.fetchGithub,
+        fetchGa4: google.fetchGa4,
+        fetchGsc: google.fetchGsc,
+        fetchPsi: google.fetchPsi,
+        now: () => now,
+      });
+      const prior = wantPrior
+        ? await io.readPriorSnapshot(config.snapshotDir!, password!) // type-safety-ok: wantPrior guards snapshotDir + password non-null
+        : null;
+      snapshot = foldProjectSignals(prior, signals, now);
+    } else {
+      const sampleUsage = buildSampleUsage(config);
 
-    const input = await io.produceSnapshot(deps, flags.scope);
-    const snapshot = serializeSnapshot(input);
+      const deps: ProduceDeps = {
+        namespace: config.namespace,
+        groupId: config.groupId,
+        memberEmails,
+        queueRepos: config.queueRepos,
+        ...fetchers,
+        fetchGa4: google.fetchGa4,
+        fetchGsc: google.fetchGsc,
+        fetchPsi: google.fetchPsi,
+        now: () => now,
+        ...(sampleUsage ? { sampleUsage } : {}),
+        ...(wantPrior
+          ? { readPriorHistory: () => io.readPriorHistory(config.snapshotDir!, password!) } // type-safety-ok: wantPrior guards snapshotDir + password non-null
+          : {}),
+      };
+
+      const input = await io.produceSnapshot(deps, flags.scope);
+      snapshot = serializeSnapshot(input);
+    }
 
     let exitCode = 0;
 

@@ -321,7 +321,55 @@ clarifications:
       tactic-align-audit-legacy-review office-hours sitting ratifies or reworks
       this successor-cadence wording when it decides /align-audit inclusion of
       the retired rung-5 dialectic and the retired /align-strategy improvement
-      pass. Recorded 2026-07-09 /align consolidation interview."
+      pass. Recorded 2026-07-09 /align consolidation interview. Amended
+      2026-07-23 (tactic-align-audit-legacy-review office-hours sitting, author
+      present): the 2026-07-22 'complementary, not successors' amendment is
+      reverted — its premise (rung-5 live in /align-init) was refuted:
+      tactic-align-entrypoint-consolidation removes /align-init and retires the
+      rung-5 engine, and the cited #2781 (2026-07-07) predates the 2026-07-09
+      retirement decision. The SUCCESSOR framing stands, ratified at the sitting
+      — see the 2026-07-23 clarification on this node."
+  - question: What did the chunk-2 reading (NE II.1-6) amend in the 2026-07-09
+      cadence-as-habituation deferral?
+    answer: "Amended at chunk 2 (II.1-4). The habituation half is ratified and
+      sharpened: the cadence maintains the disposition only insofar as each
+      sitting exercises it — a rubber-stamp sitting is contrary practice,
+      actively forming the wrong hexis (1103b6-25: states are produced and
+      destroyed from and through the same activities; and II.2's deficiency
+      destruction is likewise a doing — fleeing everything, shunning every
+      pleasure, 1104a20-25 — not an absence). The drift sentence is amended as a
+      misstatement of the author's position: 'drift between sittings is the
+      hexis decaying' — the author's meaning was synchronization drift: between
+      sittings the internal hexis continues to evolve and the graph grows stale
+      as its model. Adjudication (reconciling the covenant clarification on this
+      node): recall-first-delta senses the delta without deciding which side
+      moved — neither side presumptively wins; only the sitting's dialectic can
+      tell an evolved position from a lapsed one. Three scenarios: the internal
+      hexis evolved toward the good (the graph is stale as its model), the hexis
+      atrophied (a lapse — the record compels, the covenant's tacit-drift
+      guard), or the record was in error to begin with (it never matched the
+      internal hexis). Periodic review with dialectic is the guard against all
+      three. Decay-by-inactivity of the internal hexis found no textual support
+      in II.1-4 — destruction is always by contrary or deficient doing;
+      Aristotle analyzes the internal hexis only, and the graph-desync mechanism
+      is outside his scope. Recorded 2026-07-13 /reading-review chunk 2."
+  - question: Is the 2026-07-09 successor-cadence deferral ratified?
+    answer: "Ratified with the SUCCESSOR framing intact; resolved 2026-07-23 at the
+      tactic-align-audit-legacy-review office-hours sitting with the author
+      present — superseding the reverted 2026-07-22 Claude-authored resolution
+      (commit 8e23a272), whose premise (rung-5 live in /align-init) was refuted:
+      tactic-align-entrypoint-consolidation removes /align-init and retires the
+      rung-5 engine, and its own out-of-scope list reserves the engines' fate
+      for the sitting. The engines retire wholesale (sitting Decision 1); the
+      office-hours review sittings, periodic grounding rounds, and
+      standing-conditions sweep (rehomed to /align-audit;
+      tactic-condition-review-sweep) ARE the successor cadence. Accepted-gap
+      record: with the contrarian and consistency passes retired, no recurring
+      autonomous mechanism challenges recorded doctrine — the sitting cadence
+      explicitly carries the anti-calcification role, and a lapse in sittings is
+      the trigger to revisit this gap. The author-owned doctrine (the cadence
+      must actually recur or recorded doctrine calcifies into dogma) is ratified
+      unchanged."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
@@ -338,7 +386,10 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - graph maintenance stays cheap enough that nodes track reality rather than
@@ -350,12 +401,12 @@ attributes:
       carrying graph doctrine); an injection lapse reverts the delegatee to
       vendor defaults
     - the re-derivation cadence actually recurs — the office-hours review
-      sittings (including tactic-align-audit-legacy-review, which decides the
-      retired align rung-5 dialectic's successor), the periodic grounding
-      rounds, and the standing-conditions sweep (rehoming from the retired
-      rung-5 consistency pass toward /align-audit, decided at that same sitting)
-      run on their cycle; a lapse lets recorded doctrine calcify into dogma
-      unchallenged, the same cadence-lapse capture mechanism the grounding
-      strategies and the delegatee-education condition above already name
+      sittings, the periodic grounding rounds, and the standing-conditions sweep
+      (rehomed to /align-audit; tactic-condition-review-sweep) run on their
+      cycle, and the sittings explicitly carry the anti-calcification role of
+      the retired rung-5 contrarian and consistency passes (2026-07-23 sitting);
+      a lapse lets recorded doctrine calcify into dogma unchallenged, the same
+      cadence-lapse capture mechanism the grounding strategies and the
+      delegatee-education condition above already name
 ---
 # Govern by an explicit, self-describing intention graph

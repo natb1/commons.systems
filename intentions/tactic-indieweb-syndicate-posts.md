@@ -24,8 +24,7 @@ phase: null
 execution: null
 validates:
   - strategy-own-audience
-blocked_by:
-  - tactic-indieweb-syndication-markup
+blocked_by: []
 office_hours:
   reason: "Not claude-eligible: needs the author's platform accounts and target
     choice (~30 author-minutes). Decide the syndication targets (recommendation:
@@ -36,6 +35,7 @@ office_hours:
     seed data) so u-syndication links render. Blocked on
     tactic-indieweb-syndication-markup landing the metadata field."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}

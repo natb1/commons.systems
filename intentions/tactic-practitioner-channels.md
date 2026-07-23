@@ -4,7 +4,7 @@ kind: tactic
 statement: Identify the practitioner profile and the non-engagement channels to
   reach them, and fold per-post syndication into a reusable runbook
 owner: human
-status: raw
+status: delegated
 parent: null
 rationale: "Retained from gh #538's practitioner-channel half and the author's
   named gap during the 2026-07-06 tier-gate interview: the ideal practitioner
@@ -27,7 +27,20 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Author judgment the tier-entry test requires: identify the ideal
+    practitioner profile and the 2-3 non-engagement channels/venues to reach
+    them. Constraints already recorded in this node's body: no platform-first
+    submission protocols, no engagement-window mechanics, venues limited to the
+    communities tactic-join-indieweb names (IndieWeb, local-first,
+    self-hosting). Profile and venue selection is the author's call, not
+    claude-decidable."
+  since: 2026-07-11
+  recommendation: Spend one office-hours block naming the profile and the venues;
+    record them as a dated clarification on strategy-distribute-workflow. The
+    runbook-consolidation half of this tactic becomes delegable claude work once
+    that judgment exists — a later /align-tactics round decomposes it then. ~30
+    author-minutes.
 pace_exempt: false
 rounds: null
 attributes: {}

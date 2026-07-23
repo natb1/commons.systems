@@ -50,7 +50,9 @@ clarifications:
       foundation-laying while the deepest captures stand open. Recorded
       2026-07-06 interview."
   - question: Why does a strategy for resolving capture carry no recovers edge?
-    answer: "Sequencing is not unwinding — the precedent is
+    answer: "Sequencing is not unwinding (kind-delegation's abstention doctrine,
+      2026-07-09, is the auditable home: a strategy that is not unwinding an
+      entered delegation is not a recovers target) — the precedent is
       strategy-realign-attachments, which abstains for the same reason. The
       recovers edges stay on the strategies performing the recovery:
       strategy-recover-attention, strategy-recover-finance,
@@ -97,7 +99,39 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "No claude-eligible PR-sized decomposition this round.
+    strategy-recovery-critical-path is eligible by the
+    tactic-graph-native-dispatch §3.1 gate (office_hours null, gap non-null,
+    rounds null → count 0, only a draft child), but its success_signal cannot be
+    validated by any tactic this round: the sensor is owner review at
+    office-hours and the threshold (\"selections match the path, or deviations
+    are recorded, across review cycles\") is inherently multi-cycle owner
+    judgment that accumulates over time — no single decomposition round can
+    produce it. The strategy owns nothing but the order; the recovery work is
+    performed by other strategies (recovers edges live there), and the
+    mechanisms this node depends on are already owned and built elsewhere: the
+    distance-based reading-priority ordering (attributes.curriculum.distance) is
+    owned and phase:done on tactic-context-chunk-selection and implemented in
+    packages/intentionsutil/src/grounding.ts, and the portfolio-review cadence
+    that drives the review cycles is owned by strategy-exercise-recovery-paths
+    (clarification 4). The one draft child, tactic-recovery-critical-path, is a
+    re-derivable owner-facing ranking snapshot (re-derived at each portfolio
+    review), not code to build. The gap (\"the 'across review cycles' clause is
+    unproven\") therefore closes only as the owner conducts further
+    portfolio-review cycles, so there is nothing for /align-tactics to build.
+    Recommend: advance this signal by conducting the next recovery-critical-path
+    review cycle at office-hours — re-derive the portfolio ranking off the
+    current delegation records, confirm the next selected recovery step
+    (curriculum chunk or recovery-strategy effort) is the earliest unblocked
+    step on the critical path to the highest-severity open deferral, record any
+    deviation, and refresh the tactic-recovery-critical-path snapshot — rather
+    than expecting a claude decomposition round; leave the strategy in
+    status:refining until a claude-buildable gap appears (an interactive
+    session's commit touching this node clears this park). Parked 2026-07-13
+    /align-tactics round."
+  since: 2026-07-13
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:

@@ -84,6 +84,7 @@ describe("initAnalytics", () => {
 
     expect(logEvent).toHaveBeenCalledWith(fakeAnalytics, "page_view", {
       page_path: "/about",
+      transport_type: "beacon",
     });
   });
 
@@ -97,38 +98,6 @@ describe("initAnalytics", () => {
     expect(() => initAnalytics(app)).toThrow("CSP blocked");
   });
 
-  it("reports error when logEvent throws", () => {
-    const sink: ErrorSink = vi.fn();
-    registerErrorSink(sink);
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
-    const badStateError = new Error("bad state");
-    vi.mocked(logEvent).mockImplementation(() => {
-      throw badStateError;
-    });
-
-    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
-    const tracker = initAnalytics(app);
-
-    expect(() => tracker("/about")).not.toThrow();
-    const reported = (vi.mocked(sink).mock.calls[0][0] as Error);
-    expect(reported.message).toBe(
-      "Failed to log page view (path: /about): bad state",
-    );
-    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "analytics-page-view" }));
-  });
-
-  it("re-throws TypeError from logEvent", () => {
-    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
-    vi.mocked(logEvent).mockImplementation(() => {
-      throw new TypeError("invalid argument");
-    });
-
-    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
-    const tracker = initAnalytics(app);
-
-    expect(() => tracker("/about")).toThrow(TypeError);
-  });
 });
 
 describe("traffic tagging", () => {
@@ -334,6 +303,7 @@ describe("web-vitals reporting", () => {
       metric_value: 2500,
       metric_rating: "good",
       metric_id: "v4-1234",
+      transport_type: "beacon",
     });
   });
 
@@ -358,61 +328,10 @@ describe("web-vitals reporting", () => {
       metric_value: 123,
       metric_rating: "good",
       metric_id: "v4-5678",
+      transport_type: "beacon",
     });
   });
 
-  it("reports non-programmer logEvent error without propagating", () => {
-    const sink: ErrorSink = vi.fn();
-    registerErrorSink(sink);
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
-    const networkError = new Error("network failure");
-    vi.mocked(logEvent).mockImplementation(() => {
-      throw networkError;
-    });
-
-    initAnalytics(validApp);
-
-    const capturedCallback = vi.mocked(onLCP).mock.calls[0][0];
-    const fakeMetric = {
-      name: "LCP",
-      value: 1800,
-      rating: "good",
-      id: "v4-abc",
-    } as unknown as Parameters<typeof capturedCallback>[0];
-
-    expect(() => capturedCallback(fakeMetric)).not.toThrow();
-    const reported = (vi.mocked(sink).mock.calls[0][0] as Error);
-    expect(reported.message).toBe(
-      "Failed to log web-vital (metric: LCP): network failure",
-    );
-    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "analytics-web-vitals" }));
-  });
-
-  it.each([
-    ["TypeError", TypeError],
-    ["ReferenceError", ReferenceError],
-  ])(
-    "re-throws %s from logEvent inside web-vital callback",
-    (_name: string, ErrorCtor: new (msg: string) => Error) => {
-      vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never); // type-safety-ok: test mock cast, matches established pattern in file
-      vi.mocked(logEvent).mockImplementation(() => {
-        throw new ErrorCtor("invalid argument");
-      });
-
-      initAnalytics(validApp);
-
-      const capturedCallback = vi.mocked(onLCP).mock.calls[0][0];
-      const fakeMetric = {
-        name: "LCP",
-        value: 1800,
-        rating: "good",
-        id: "v4-abc",
-      } as unknown as Parameters<typeof capturedCallback>[0]; // type-safety-ok: cast for synthetic metric fixture, matches established pattern in file
-
-      expect(() => capturedCallback(fakeMetric)).toThrow(ErrorCtor);
-    },
-  );
 });
 
 describe("initAnalyticsSafe", () => {

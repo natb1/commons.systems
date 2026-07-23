@@ -26,9 +26,7 @@ gap: reading "reading defaults to owned tools (print carries the author's daily
   reading); listening has not displaced platform services" does not meet
   threshold "reading and listening both default to owned tools; platform
   services are deliberate exceptions, not defaults"
-serves:
-  - virtue-progressive-detachment
-  - virtue-alignment-of-attachments
+serves: []
 recovers:
   - delegation-attention-services
 clarifications:
@@ -74,7 +72,33 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "The 2026-07-07 /align-tactics round is fully landed on origin/main
+    (commit ffb822ee: retained drafts consumed,
+    tactic-review-lows-attention-tools and tactic-review-lows-shared-infra
+    planned at phase implement, tactic-audio-format-boundary absorbed into
+    attention-tools Unit 5 and pruned,
+    tactic-recover-attention-audio-displacement born-parked, rounds
+    initialized), and the strategy has nothing further an autonomous round can
+    decompose: its entire remaining signal path — displacing platform listening
+    with the owned audio player — is human-owned work already born-parked at
+    tactic-recover-attention-audio-displacement, while all seven non-draft child
+    tactics are deliberately off-path (validates empty), so with gap non-null
+    and rounds.count 0 the selector would re-emit this strategy every tick for
+    an empty round until this park. Next steps: author picks the
+    audio-displacement approach laid out on
+    tactic-recover-attention-audio-displacement — (a) content/ingestion pipeline
+    into the owned player, (b) default a listening category to the owned player
+    as a habit change, or (c) close a specific capability gap keeping the author
+    on the platform player — or scopes a first <=30-author-minute slice, records
+    the decision via /align-strategy (that interactive commit touching this
+    strategy also clears this park), then a fresh /align-tactics round plans the
+    claude-eligible parts; the seven in-flight implement tactics serving this
+    strategy are unaffected by this park (tactic eligibility checks each
+    tactic's own office_hours), and rounds accounting needs no change now (count
+    increments only when a round's final tactic completes)."
+  since: 2026-07-10
+  recommendation: null
 pace_exempt: false
 rounds:
   count: 0

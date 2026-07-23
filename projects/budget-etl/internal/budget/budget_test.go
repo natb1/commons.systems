@@ -42,19 +42,99 @@ func TestStatementDocID(t *testing.T) {
 	}
 }
 
+func TestAnchorID(t *testing.T) {
+	mustDate := func(s string) *time.Time {
+		d, err := time.Parse("2006-01-02", s)
+		if err != nil {
+			t.Fatalf("parsing %q: %v", s, err)
+		}
+		return &d
+	}
+
+	cases := []struct {
+		name        string
+		institution string
+		account     string
+		balanceDate *time.Time
+		period      string
+		want        string
+	}{
+		{
+			name:        "balanceDate present keys by as-of date",
+			institution: "bank",
+			account:     "1234",
+			balanceDate: mustDate("2025-01-15"),
+			period:      "2025-01",
+			want:        "bank-1234-2025-01-15",
+		},
+		{
+			name:        "nil balanceDate falls back to last day of period (31-day month)",
+			institution: "bank",
+			account:     "1234",
+			balanceDate: nil,
+			period:      "2025-01",
+			want:        "bank-1234-2025-01-31",
+		},
+		{
+			name:        "nil balanceDate fallback for February (non-leap)",
+			institution: "bank",
+			account:     "1234",
+			balanceDate: nil,
+			period:      "2025-02",
+			want:        "bank-1234-2025-02-28",
+		},
+		{
+			name:        "nil balanceDate fallback for February (leap year)",
+			institution: "bank",
+			account:     "1234",
+			balanceDate: nil,
+			period:      "2024-02",
+			want:        "bank-1234-2024-02-29",
+		},
+		{
+			// Two observations of one account-month at different as-of dates
+			// produce different anchor IDs — the keep-all-distinct contract.
+			name:        "same month different as-of date yields distinct ID",
+			institution: "bank",
+			account:     "1234",
+			balanceDate: mustDate("2025-01-28"),
+			period:      "2025-01",
+			want:        "bank-1234-2025-01-28",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := AnchorID(tc.institution, tc.account, tc.balanceDate, tc.period)
+			if got != tc.want {
+				t.Errorf("AnchorID = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAnchorIDPanicsOnMalformedPeriod(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on malformed period, got none")
+		}
+	}()
+	AnchorID("bank", "1234", nil, "not-a-period")
+}
+
 func TestTransactionDocID(t *testing.T) {
 	tests := []struct {
-		statementID   string
+		institution   string
+		account       string
 		transactionID string
 	}{
-		{"bankone-1234-2025-07", "ATM0055566"},
-		{"banktwo-5678-2025-05", "202501011000001"},
-		{"bankone-1234-2025-10", "1234567890202510172"},
+		{"bankone", "1234", "ATM0055566"},
+		{"banktwo", "5678", "202501011000001"},
+		{"bankone", "1234", "1234567890202510172"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.statementID+"/"+tt.transactionID, func(t *testing.T) {
-			id := TransactionDocID(tt.statementID, tt.transactionID)
+		t.Run(tt.institution+"/"+tt.account+"/"+tt.transactionID, func(t *testing.T) {
+			id := TransactionDocID(tt.institution, tt.account, tt.transactionID)
 
 			// Must be exactly 20 hex characters
 			if len(id) != 20 {
@@ -67,18 +147,76 @@ func TestTransactionDocID(t *testing.T) {
 			}
 
 			// Must be deterministic
-			id2 := TransactionDocID(tt.statementID, tt.transactionID)
+			id2 := TransactionDocID(tt.institution, tt.account, tt.transactionID)
 			if id != id2 {
 				t.Errorf("not deterministic: %q != %q", id, id2)
 			}
 		})
 	}
 
-	// Different inputs must produce different IDs
-	a := TransactionDocID("stmt-a", "txn-1")
-	b := TransactionDocID("stmt-b", "txn-1")
-	if a == b {
-		t.Errorf("different statements produced same doc ID: %q", a)
+	// Statement-independent identity: the same (institution, account, FITID)
+	// yields the same doc ID regardless of which export carried it. The old
+	// scheme mixed the statement ID (inferred month) into the hash, so this is
+	// the core guarantee of clarification 3.
+	same := TransactionDocID("bankone", "1234", "TXN-1")
+	if got := TransactionDocID("bankone", "1234", "TXN-1"); got != same {
+		t.Errorf("identity not statement-independent: %q != %q", got, same)
+	}
+
+	// Distinct across accounts.
+	if TransactionDocID("bankone", "1234", "TXN-1") == TransactionDocID("bankone", "9999", "TXN-1") {
+		t.Error("same FITID under different accounts produced same doc ID")
+	}
+
+	// Distinct across institutions.
+	if TransactionDocID("bankone", "1234", "TXN-1") == TransactionDocID("banktwo", "1234", "TXN-1") {
+		t.Error("same FITID under different institutions produced same doc ID")
+	}
+}
+
+func TestTransactionDocIDEmptyInputPanics(t *testing.T) {
+	cases := []struct {
+		name                        string
+		institution, account, txnID string
+	}{
+		{"empty institution", "", "1234", "TXN-1"},
+		{"empty account", "bankone", "", "TXN-1"},
+		{"empty transactionID", "bankone", "1234", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Error("expected panic on empty input, got none")
+				}
+			}()
+			TransactionDocID(c.institution, c.account, c.txnID)
+		})
+	}
+}
+
+func TestLegacyTransactionDocID(t *testing.T) {
+	// LegacyTransactionDocID reproduces the pre-clarification-3 formula:
+	// sha256(statementID + "/" + transactionID), truncated to 20 hex chars.
+	id := LegacyTransactionDocID("bankone-1234-2025-07", "TXN-1")
+	if len(id) != 20 {
+		t.Errorf("len = %d, want 20", len(id))
+	}
+	if id != LegacyTransactionDocID("bankone-1234-2025-07", "TXN-1") {
+		t.Error("not deterministic")
+	}
+
+	// The statement ID is part of the legacy hash: two exports of the same
+	// account whose inferred months diverge minted two distinct legacy IDs.
+	jan := LegacyTransactionDocID("bankone-1234-2025-01", "TXN-1")
+	feb := LegacyTransactionDocID("bankone-1234-2025-02", "TXN-1")
+	if jan == feb {
+		t.Error("legacy IDs for divergent months should differ")
+	}
+
+	// Legacy and new scheme are distinct for the same underlying transaction.
+	if LegacyTransactionDocID("bankone-1234-2025-07", "TXN-1") == TransactionDocID("bankone", "1234", "TXN-1") {
+		t.Error("legacy and new scheme produced the same doc ID")
 	}
 }
 

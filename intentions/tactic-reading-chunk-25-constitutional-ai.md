@@ -40,16 +40,14 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, ~30 author-minutes of independent reading (the
-    session may span sittings): Constitutional AI (Bai et al. 2022,
-    arXiv:2212.08073) sections 1, 3-4 against the 2026-07-09 AI-alignment
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record; type-b conduct). This chunk: Constitutional AI (Bai et al.
+    2022, arXiv:2212.08073) sections 1, 3-4 against the 2026-07-09 AI-alignment
     correspondence clarification on strategy-explicit-intent and the
-    delegated-scope entry on delegation-philosophical-articulation. Type-b
-    conduct: the author articulates from the text before Claude's account
-    appears. At office-hours: amend or ratify the correspondence clarification;
-    on ratification decide whether the correspondence merits a tradition record
-    (the parsimony question deferred at record time); record any reading-wins
-    catch in divergence.contradictions; stamp last_exercised."
+    delegated-scope entry on delegation-philosophical-articulation; amend or
+    ratify the correspondence clarification; on ratification decide whether the
+    correspondence merits a tradition record (the parsimony question deferred at
+    record time)."
   since: 2026-07-09
   recommendation: null
 pace_exempt: false

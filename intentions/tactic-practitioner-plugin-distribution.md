@@ -24,7 +24,9 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-tier3-entry-declaration
+  - tactic-legacy-router-removal
 office_hours: null
 pace_exempt: false
 rounds: null

@@ -28,9 +28,14 @@ rationale: "Recorded 2026-07-07 /align-strategy interview, from the same-day
   recovers edge on delegation-anthropic-claude (see clarification). Workers
   close the gap at tick (analysis and draft chunks only); the author closes the
   loop at office-hours."
-reading: null
-gap: no gap analysis has run yet; the durable-layer denominator is unmeasured
-  and the eight-candidate first batch is unread
+reading: "gap analysis 2026-07-10: 75 unmarked durable-layer nodes of 85; top
+  exposure: delegation-attention-services, delegation-communications,
+  delegation-social-publishing"
+gap: 75 of 85 durable-layer nodes are unmarked (10 virtues/strategies carry a
+  traditions mark, zero carry a grounding mark); exposure ranks all 21
+  delegations first — the divergence-high delegation-attention-services /
+  -communications / -social-publishing at the top — then the non-delegation
+  nodes by recovers-proximity to the nearest delegation.
 serves:
   - virtue-philosophical-mobility
   - virtue-progressive-detachment
@@ -138,7 +143,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - "the office-hours cadence holds — candidate chunks resolve there, so a
