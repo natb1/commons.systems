@@ -49,10 +49,7 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-21
-    attempt: 1
-    pushed_sha: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
