@@ -78,6 +78,17 @@ empty result here is a real error — write `$CLAUDE_JOB_DIR/office-hours-reason
 per the Escalation note below and stop, never `dispatch-mark-deviation`, which
 is issue-only) — never pass `--issue`.
 
+If `.claude/ancestry-context.md` is present in the worktree, read it before
+resolving any plan-under-determined judgment call — it is the bounded ancestry
+projection (parent chain + served strategies up to virtue roots) for this
+node.
+
+This projection is read-only decision context for in-scope, plan-under-determined
+judgment calls; the node body remains the sole work contract (a plan that assumes
+the projection exists is still an incomplete record), and a perceived plan-vs-ancestry
+conflict parks to `office_hours` with a recommendation — never self-expanded or
+self-reduced scope.
+
 **Node-lane completion — the fix worker does NOT resolve the interrupt.** The
 selector, not this worker, owns clearing `execution.fix` (it decides when CI has
 gone green on the pushed sha, on a LATER tick). This worker's completion duty is

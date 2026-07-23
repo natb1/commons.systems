@@ -240,6 +240,17 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    esac
    ```
 
+   If `.claude/ancestry-context.md` is present in the worktree, read it before
+   resolving any plan-under-determined judgment call — it is the bounded
+   ancestry projection (parent chain + served strategies up to virtue roots)
+   for this node.
+
+   This projection is read-only decision context for in-scope, plan-under-determined
+   judgment calls; the node body remains the sole work contract (a plan that assumes
+   the projection exists is still an incomplete record), and a perceived plan-vs-ancestry
+   conflict parks to `office_hours` with a recommendation — never self-expanded or
+   self-reduced scope.
+
    `$N` keys the remaining steps' `tmp/` filenames (the issue number on the legacy
    lane, the node id on the node lane). `$TARGET_KIND` selects the lane at the
    seams that differ — see **Node-target lane** below. **On the node lane no gh

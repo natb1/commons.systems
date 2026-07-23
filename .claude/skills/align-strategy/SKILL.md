@@ -100,6 +100,17 @@ blocks your `graph-commit` rebase, and a stale read races live phase state
    either way, **STOP** and freshen (`git fetch origin main && git merge
    origin/main`) before proceeding. Never treat a failed fetch as license to
    proceed on unverified state.
+4. **Load the ancestry projection.** After entering the worktree, load the
+   ancestry projection for the claimed node: read `.claude/ancestry-context.md`
+   if `provision-node-worktree` wrote it, otherwise run `npx tsx
+   packages/intentionsutil/scripts/node-ancestry.ts <node-id> --dir
+   "$(pwd)/intentions"` and hold its output.
+
+   This projection is read-only decision context for in-scope, plan-under-determined
+   judgment calls; the node body remains the sole work contract (a plan that assumes
+   the projection exists is still an incomplete record), and a perceived plan-vs-ancestry
+   conflict parks to `office_hours` with a recommendation — never self-expanded or
+   self-reduced scope.
 
 **Doctrine-recording rounds pin the pace curve.** A round that records
 governing dispatch doctrine (a concurrency-safety or
