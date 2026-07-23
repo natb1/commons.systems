@@ -22520,6 +22520,41 @@ assert_eq "node-explicit at-cap: graph selector called --node <id> (not --top)" 
   "--node foo-bar" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
 sel_tick_teardown
 
+# --- explicit node-id, stale reservation reclaimed by sweep → still selects ---
+# tactic-explicit-node-reservation-sweep-policy Unit 2: Unit 1 added a
+# reservation_sweep call to the explicit-node branch, mirroring the autonomous
+# path's sweep-before-count pattern. Plant a stale marker for the target node
+# under a session absent from the fake claude-agents registry, then confirm
+# the tick's own sweep (run at real wall-clock time, no DISPATCH_RESERVATION_NOW
+# override for the tick itself) reclaims it before graph-select-target --node is
+# consulted — so the explicit dispatch is NOT wrongly refused as
+# node-not-selectable due to a stranded marker.
+echo "Test: select-tick explicit node-id, stale reservation reclaimed by sweep → still selects"
+sel_tick_setup
+# Plant the stale marker with a far-past timestamp (real reservation_write,
+# sourced locally here — DISPATCH_RESERVATION_DIR is already exported by
+# sel_tick_setup). The reserving session ("dead-sess") is absent from
+# SEL_AGENTS_TSV below, so the sweep's liveness check treats it as stranded.
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z" reservation_write "foo-bar" "999" "dead-sess"
+# A different, unrelated LIVE session — feeds the FAKE claude_agents_list_all
+# sel_tick_setup already wires up, so the sweep sees a live registry that does
+# NOT include "dead-sess".
+export SEL_AGENTS_TSV=$'other-sess\tbusy\tworkerX'
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit stale-reservation: decision line" "graph 1 foo-bar:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+# The sweep reclaims (clears) the stale dead-sess marker before selection, but
+# a successful graph selection immediately re-claims foo-bar under the CURRENT
+# session (dispatch-select-tick's emit_graph_selection calls reservation_write
+# for every selected id) — so the marker file exists again by the time the
+# tick exits. Assert the RECLAIM happened by checking the marker's session=
+# line is no longer the stale "dead-sess" that would prove the sweep never ran.
+assert_eq "node-explicit stale-reservation: marker no longer owned by the dead session" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/foo-bar" ] && ! grep -q '^session=dead-sess$' "$DISPATCH_RESERVATION_DIR/foo-bar" && echo 1 || echo 0)"
+sel_tick_teardown
+
 # --- AC3 non-fatal guarantee: unwritable log dir does NOT kill the tick -------
 # Point DISPATCH_DECISION_LOG_DIR at a path that cannot be created (a sub-path of
 # an existing regular file). The lib's mkdir -p will fail with ENOTDIR. The
