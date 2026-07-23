@@ -22546,6 +22546,27 @@ assert_eq "manual-daemon-unknown: graph decision" "graph 1 t1:tactic:implement" 
 assert_eq "manual-daemon-unknown: graph selector called --top 1 (fail open)" "--top 1" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
 sel_tick_teardown
 
+# --- --manual sweeps a stale dead-session reservation before counting -------
+# A reservation marker whose session= id is absent from SEL_AGENTS_TSV (i.e.
+# no live session claims it) and whose timestamp is well past the boot grace
+# is stale/dead. reservation_sweep runs immediately before reservation_count
+# in the --manual fan-out block, so the stale marker is both excluded from
+# RESV and physically reclaimed (the marker file is deleted) by the time the
+# gap is computed: with BUSY=0 and RESV=0, gap == TARGET_N exactly as if the
+# marker never existed.
+echo "Test: select-tick --manual sweeps a stale dead-session reservation before counting"
+sel_tick_setup
+export SEL_LIVE_COUNT=0 SEL_TARGET_N=4
+export SEL_GRAPH_TARGET="node t1 tactic implement"
+printf 'session=resv-dead\nissue=900\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/900-test"
+out=$(run_sel_tick --manual)
+assert_eq "manual-sweep: gap = 4 − 0 (stale reservation swept, not counted)" "--top 4" \
+  "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+assert_eq "manual-sweep: stale reservation marker was reclaimed (deleted)" "0" \
+  "$([ -e "$DISPATCH_RESERVATION_DIR/900-test" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
 # --- autonomous no-arg at cap, not exhausted, no priority item → concurrency-cap ---
 # The exemption is --manual only. An autonomous no-arg tick at the budget with no
 # priority/main-broken item waiting still emits concurrency-cap — unchanged hard
