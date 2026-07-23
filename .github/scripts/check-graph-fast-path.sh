@@ -48,11 +48,23 @@ if [ "${#SHAS[@]}" -eq 0 ]; then
     echo "::error::PUSHED_COMMITS is empty and origin/main is not available to verify the pushed commit already landed. Refusing to fast-path (fail-closed)."
     exit 1
   fi
-  if git merge-base --is-ancestor "$HEAD_SHA" refs/remotes/origin/main 2>/dev/null; then
+  # `git merge-base --is-ancestor` distinguishes three outcomes we must NOT
+  # collapse: 0 = reachable (benign already-landed push, skip), 1 = definitively
+  # not an ancestor (fail-closed), any other code (typically 128) = git could not
+  # resolve HEAD_SHA — a malformed or unfetched object — which is an
+  # object-resolution failure, not a reachability verdict. We let git's stderr
+  # reach the CI log rather than swallowing it, so the real cause is visible.
+  rc=0
+  git merge-base --is-ancestor "$HEAD_SHA" refs/remotes/origin/main || rc=$?
+  if [ "$rc" -eq 0 ]; then
     echo "::notice::PUSHED_COMMITS is empty but pushed HEAD $HEAD_SHA is already reachable from origin/main (benign concurrent already-landed push). Skipping fast-path verification."
     exit 0
   fi
-  echo "::error::PUSHED_COMMITS is empty and pushed HEAD $HEAD_SHA is NOT reachable from origin/main — cannot prove it already landed. Refusing to fast-path (fail-closed)."
+  if [ "$rc" -eq 1 ]; then
+    echo "::error::PUSHED_COMMITS is empty and pushed HEAD $HEAD_SHA is NOT reachable from origin/main — cannot prove it already landed. Refusing to fast-path (fail-closed)."
+    exit 1
+  fi
+  echo "::error::PUSHED_COMMITS is empty and pushed HEAD SHA $HEAD_SHA could not be resolved (git merge-base --is-ancestor exit $rc; see git diagnostics above) — cannot prove it already landed. Refusing to fast-path (fail-closed)."
   exit 1
 fi
 
