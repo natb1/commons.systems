@@ -134,6 +134,41 @@ clarifications:
       re-run the sitting against the intended post-consolidation end state
       rather than current origin/main, deciding per engine — into /align-audit,
       or retired for good."
+  - question: Sitting resolution — all three decisions, plus the disposition of
+      commit 8e23a272.
+    answer: "Resolved 2026-07-23 at an office-hours sitting with the author present,
+      conducted as a dialectic interview in the session that had re-parked this
+      node. Provenance of 8e23a272: the author recalls partial direction — a
+      direction to review, not authority to resolve — so it is recorded as a
+      scope over-read by an autonomous session, not fabrication; its
+      dispositions are superseded by this sitting. Decision 1 (engine
+      inclusion): both engines retire wholesale, per
+      tactic-align-entrypoint-consolidation's retirement plan — no contrarian
+      graft into /align-audit, which stays purely mechanical; the
+      anti-calcification role of the retired contrarian and consistency passes
+      is explicitly handed to the sitting cadence (accepted-gap record on
+      strategy-explicit-intent); the delegability.eval.v1 and signal.eval.v1
+      assessor contracts are superseded by native graph fields (owner,
+      success_signal, readings, router gates). Engine-2 residue: the
+      unserved-virtue census is retained as an info-only report line in
+      /align-audit (scope amendment recorded on tactic-align-audit-skill —
+      report-only, never a finding); the author-facing candidate menu retires,
+      the office-hours queue being its surviving surface. All engine content
+      remains recoverable at origin/main 44493733. Decision 2: the
+      successor-cadence deferral is ratified with the SUCCESSOR framing restored
+      — 8e23a272's amendment on strategy-explicit-intent is reverted in the same
+      landing. Decision 3: the /align-audit home for
+      tactic-condition-review-sweep is ratified on its independent
+      altitude/parsimony merits with its premise corrected (recorded on that
+      node); it stays raw awaiting its own /align-tactics finalize. /align-audit
+      itself: the author questioned whether it earns its keep; resolved keep on
+      its recorded graph-integrity charter — the transcript-review
+      token-efficiency function the author associated with the name is
+      /dispatch-token-audit's job under strategy-token-economy — with the first
+      real run's report reviewed at a sitting to decide whether it continues.
+      With all three decisions resolved and recorded at their homes, this tactic
+      is achieved; prune is owed at a future census once the census-line
+      amendment lands."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -141,28 +176,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Re-parked 2026-07-23 by an /align-tactics session. Two grounds, the
-    second decisive. (1) This node's 2026-07-22 self-resolution (commit
-    8e23a272) of a decision its own rationale reserves for a human ('Not
-    claude-executable... delegating the ratification would recreate the
-    capture') claims owner direction this session could not corroborate from
-    graph state, and its own text flags a residual capture-tension for the owner
-    to re-open. (2) Substantively, that resolution's Decision 1 is refuted on
-    the graph record: it called the 'engines retired' premise stale because
-    rung-5 is 'live in /align-init', but /align-init is itself deprecated —
-    tactic-align-entrypoint-consolidation (status:codified, phase:implement)
-    removes it and retires the rung-5 engine, was finalized 2026-07-18
-    re-affirming that retirement, and explicitly holds THIS sitting out of scope
-    so it can decide the engines' /align-audit inclusion; the cited PR #2781
-    also predates the sitting by two days rather than postdating it. Decisions 2
-    and 3 inherit the refuted premise. See the two 2026-07-23 clarifications on
-    this node for full detail. Recommend: revert or rework commit 8e23a272's
-    three dispositions, then re-run the sitting against the intended
-    post-consolidation end state — per engine, into /align-audit or retired for
-    good."
-  since: 2026-07-23
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -250,3 +264,16 @@ mechanically (digest tables + content-level sampled pass); the
 greenfield-relevance gate also runs at /align-tactics finalization. The
 inclusion decision is largely whether the unserved-virtue census and the
 author-facing candidate menu move into /align-audit or die.
+
+## Resolution (2026-07-23 sitting, author present)
+
+All three decisions resolved — see the sitting-resolution clarification in
+frontmatter for the full record. In brief: both engines retire wholesale (no
+graft; anti-calcification handed to the sitting cadence, gap recorded on
+strategy-explicit-intent); the unserved-virtue census survives as an info-only
+report line in /align-audit (recorded on tactic-align-audit-skill); the
+successor-cadence deferral is ratified with the SUCCESSOR framing restored
+(8e23a272's amendment reverted); tactic-condition-review-sweep's /align-audit
+home is ratified on independent merits. The retained engine content above
+stays for git-history reference; this tactic is achieved and prune is owed at
+a future census.
