@@ -67,7 +67,24 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 90
+  override: null
+  rationale: "Author-directed 2026-07-23: boost to top ranking. This node carries
+    the amplifier half of the 2026-07-23 manual-dispatch-tick failure. One stray
+    uncommitted file in the primary checkout tripped graph-commit's
+    assert_clean_outside_ids, and because none of the six graph-commit callers
+    roll back, every refused call left its own plan on disk: the dirty set grew
+    from 1 file to 7 within a single tick, reconcile-graph-merged and three
+    demote-node-to-implement calls all failed, two nodes ended demote-failed, one
+    was skipped as stale-selection after reading its own unlanded demotion off
+    disk, and dispatch-graph-execute exited 1. Sized at 90, which composes to
+    95.33 with the boost 5 inherited from strategy-graph-native-dispatch, placing
+    it above the live discretionary composed max (90.33,
+    tactic-graph-router-live-worker-read-robust) and below the
+    strategy-main-health ceiling (100, author-override-guarded), which it does
+    not displace. Paired with tactic-subagent-cwd-worktree-guard, which carries
+    the seed half of the same incident."
 phase: null
 execution: null
 validates: []
