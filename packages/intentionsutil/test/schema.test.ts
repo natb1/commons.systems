@@ -481,6 +481,45 @@ describe("validateNode", () => {
     }
   });
 
+  it("accepts each of the three office_hours.session_type enum values", () => {
+    for (const sessionType of ["requirement-discovery", "curriculum-review", "other"]) {
+      const result = validateNode({
+        id: `n1-oh-type-${sessionType}`,
+        kind: "tactic",
+        statement: "Office hours with an explicit session_type.",
+        owner: "ai",
+        status: "raw",
+        office_hours: { reason: "parked", since: "2026-07-06", session_type: sessionType },
+      });
+      expect(result.office_hours?.session_type).toBe(sessionType);
+    }
+  });
+
+  it("defaults office_hours.session_type to other when omitted", () => {
+    const result = validateNode({
+      id: "n1-oh-notype",
+      kind: "tactic",
+      statement: "Office hours without a session_type.",
+      owner: "ai",
+      status: "raw",
+      office_hours: { reason: "parked", since: "2026-07-06" },
+    });
+    expect(result.office_hours?.session_type).toBe("other");
+  });
+
+  it("rejects an unknown office_hours.session_type", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-oh-badtype",
+        kind: "tactic",
+        statement: "Office hours with an unknown session_type.",
+        owner: "ai",
+        status: "raw",
+        office_hours: { reason: "parked", since: "2026-07-06", session_type: "workshop" },
+      }),
+    ).toThrow();
+  });
+
   it("rejects a rounds with a negative or non-integer count", () => {
     const base = {
       id: "n1-fracrounds",

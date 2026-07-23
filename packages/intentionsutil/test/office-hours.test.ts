@@ -7,8 +7,10 @@ import {
   officeHoursQueue,
   openBlockers,
   selectOfficeHours,
+  SESSION_TYPE_PENALTY,
   type OfficeHoursSelection,
 } from "../src/officeHours.js";
+import type { SessionType } from "../src/schema.js";
 import { formatDisposition, resolveSessionCwd } from "../scripts/office-hours-select.js";
 
 /** Build a full IntentionNode fixture, filling required/default fields. */
@@ -58,6 +60,11 @@ function parked(recommendation: string | null = null): OfficeHours {
   return { reason: "parked", since: "2026-07-06", recommendation, session_type: "other" };
 }
 
+/** Like `parked`, but with an explicit session_type (for penalty-ranking tests). */
+function parkedTyped(sessionType: SessionType, recommendation: string | null = null): OfficeHours {
+  return { reason: "parked", since: "2026-07-06", recommendation, session_type: sessionType };
+}
+
 describe("officeHoursQueue", () => {
   it("orders parked nodes by rank desc, id asc on ties, and excludes unparked", () => {
     const nodes = [
@@ -84,6 +91,114 @@ describe("officeHoursQueue", () => {
   it("returns an empty queue when nothing is parked", () => {
     const nodes = [...kinds(), anode({ id: "tactic-x", kind: "tactic" })];
     expect(officeHoursQueue(nodes)).toEqual([]);
+  });
+
+  it("soft-penalizes requirement-discovery/curriculum-review parks below an equal-attention other park", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-other",
+        kind: "tactic",
+        attention: boost(10),
+        office_hours: parkedTyped("other"),
+      }),
+      anode({
+        id: "tactic-reqdisc",
+        kind: "tactic",
+        attention: boost(10),
+        office_hours: parkedTyped("requirement-discovery"),
+      }),
+      anode({
+        id: "tactic-currev",
+        kind: "tactic",
+        attention: boost(10),
+        office_hours: parkedTyped("curriculum-review"),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+
+    expect(queue.map((m) => m.nodeId)).toEqual(["tactic-other", "tactic-currev", "tactic-reqdisc"]);
+    expect(queue.find((m) => m.nodeId === "tactic-other")?.rank).toBe(10);
+    expect(queue.find((m) => m.nodeId === "tactic-reqdisc")?.rank).toBe(10 * SESSION_TYPE_PENALTY);
+  });
+
+  it("lets a sufficiently boosted penalized park overtake a lower-boost other park (soft, not a hard floor)", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-other-low",
+        kind: "tactic",
+        attention: boost(3),
+        office_hours: parkedTyped("other"),
+      }),
+      anode({
+        id: "tactic-reqdisc-high",
+        kind: "tactic",
+        attention: boost(20),
+        office_hours: parkedTyped("requirement-discovery"),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+
+    expect(queue.map((m) => m.nodeId)).toEqual(["tactic-reqdisc-high", "tactic-other-low"]);
+  });
+
+  it("computes QueueMember.rank as rawAttention * SESSION_TYPE_PENALTY for a penalized type, and raw for other", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-other",
+        kind: "tactic",
+        attention: boost(8),
+        office_hours: parkedTyped("other"),
+      }),
+      anode({
+        id: "tactic-currev",
+        kind: "tactic",
+        attention: boost(8),
+        office_hours: parkedTyped("curriculum-review"),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+
+    expect(queue.find((m) => m.nodeId === "tactic-other")?.rank).toBe(8);
+    expect(queue.find((m) => m.nodeId === "tactic-currev")?.rank).toBe(8 * SESSION_TYPE_PENALTY);
+  });
+
+  it("exposes sessionType on every QueueMember and filters by sessionType when given", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-other",
+        kind: "tactic",
+        attention: boost(1),
+        office_hours: parkedTyped("other"),
+      }),
+      anode({
+        id: "tactic-reqdisc",
+        kind: "tactic",
+        attention: boost(1),
+        office_hours: parkedTyped("requirement-discovery"),
+      }),
+      anode({
+        id: "tactic-currev",
+        kind: "tactic",
+        attention: boost(1),
+        office_hours: parkedTyped("curriculum-review"),
+      }),
+    ];
+
+    const full = officeHoursQueue(nodes);
+    expect(full.map((m) => m.sessionType).sort()).toEqual(
+      ["curriculum-review", "other", "requirement-discovery"].sort(),
+    );
+
+    const filtered = officeHoursQueue(nodes, "requirement-discovery");
+    expect(filtered.map((m) => m.nodeId)).toEqual(["tactic-reqdisc"]);
+    expect(filtered.every((m) => m.sessionType === "requirement-discovery")).toBe(true);
   });
 });
 
