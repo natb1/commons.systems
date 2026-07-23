@@ -22,16 +22,29 @@ execution: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "Reconciliation debt reached 52 (52 owed prune(s), 0 unverified
-    PR-merge(s), 0 orphan(s)); a census is owed to drain it. Next steps: run the
-    census over the batch listed in this node's body — prune each
-    done-but-present node with graph-commit --prune (repairing inbound
-    blocked_by edges in the same commit, per
-    tactic-graph-self-consistency-sweep), absorb any unverified PR-merge, and
-    repair any orphan's dangling parent/serves; then resolve this node (phase ->
-    done) so the recurrence latch clears."
-  since: 2026-07-11
-  recommendation: null
+  reason: "Census run 2026-07-23: 58 of 61 owed prunes drained across 6
+    graph-commits, with inbound blocked_by repaired on 14 live nodes in the same
+    commits; validate-graph ok (358 nodes, 0 unresolved prose refs, 0 orphans, 0
+    unverified PR-merges). 3 nodes are deliberately NOT pruned and block
+    resolution of this census node: (1) tactic-domain-selection-scoring - its
+    2026-07 scoring dossier (8 delegation records scored, 2 selects) is the sole
+    copy in the repo and its live dependent tactic-domain-selection-owner-review
+    exists to ratify it; relocate the dossier to strategy-domain-selection
+    before pruning. (2) tactic-flake-unit-tests-select-tick - phase done but no
+    merged work; claimed substitute PR #2933 is still an open draft and the
+    guard is absent from main. (3) tactic-phase-skill-node-targets - one round-2
+    finding is still true and homeless: the .claude/hooks/dispatch-stop.sh:62-63
+    backstop comment asserts the backstop does not apply the reset-dance, stale
+    now that graph-commit is far-ahead-safe."
+  since: 2026-07-23
+  recommendation: "Resolve the three holds, then prune them and set this node
+    phase -> done to clear the recurrence latch. (1) relocate the scoring
+    dossier to strategy-domain-selection, then prune both it and its dependent's
+    blocker edge; (2) treat tactic-flake-unit-tests-select-tick as a
+    graph-integrity defect - reset it to an open phase (as was done for
+    tactic-main-red-sync-completion-test) or land PR #2933, do not prune a
+    falsely-done node; (3) fix the stale dispatch-stop.sh comment, or carry it
+    as a follow-up tactic, then prune."
 pace_exempt: false
 rounds: null
 attributes:
