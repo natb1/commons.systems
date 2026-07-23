@@ -399,5 +399,80 @@ The subagent must end its reply with exactly one of:
   diverged values, field contents, or any credential-like string, since it is
   surfaced verbatim in a public office-hours why-comment.
 
-(The `resolved` write-back/land path and the `ambiguous` confirm-and-report path
-are added by later units of this plan — Units 4 and 5.)
+### `resolved` — write back, clear the park, land
+
+The subagent reconciled the divergence. Apply its value(s) to the node's full
+JSON, clear the park, and land the write. Every block below runs the network /
+`gh` / `npx` (npm cache) paths, so run them with `dangerouslyDisableSandbox:
+true` — see `.claude/rules/sandbox.md`.
+
+First sync **only** this node file into the worktree from the `origin/main`
+already fetched in the read step above, then capture its full JSON. Syncing the
+file (rather than reading JSON out of a throwaway store) matters twice: the JSON
+capture reads `origin/main`'s current content, and `write-node.ts`'s
+body-preservation reads the same on-disk file below — a stale or absent local
+copy would either clobber the durable body or land against stale state. Capture
+the JSON with `dump-node.ts` (it writes `$SCRATCH/$NODE_ID.json`, the exact
+shape `readNode` returns, ready to pipe back into `write-node.ts`). It also
+writes a base-manifest — **ignore it**; this land is a normal edit with no
+`--base` (see below). Use an explicit `/tmp/claude-<uid>` scratch path, not
+`$TMPDIR` (unset under `dangerouslyDisableSandbox`):
+
+```bash
+git checkout origin/main -- "intentions/$NODE_ID.md"
+SCRATCH="/tmp/claude-$(id -u)/dispatch-conflict-$NODE_ID"
+mkdir -p "$SCRATCH"
+npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$SCRATCH" "$NODE_ID"
+```
+
+Apply the subagent's reconciled value(s) and clear the park. For **each**
+diverged field the subagent resolved, set `.<field>` to its reconciled value
+(JSON-encoded); then set `.office_hours` to `null`. Substitute the concrete
+`.<field> = <value>` assignments into the `jq` filter (a local read/write — no
+sandbox override needed):
+
+```bash
+jq '<.field1 = value1 | .field2 = value2 | …> | .office_hours = null' \
+  "$SCRATCH/$NODE_ID.json" > "$SCRATCH/$NODE_ID.reconciled.json"
+```
+
+Write the mutated JSON through `write-node.ts` — the sole node-mutation gate;
+full-node JSON in, `validateNode` re-applies defaults and drops unknown keys —
+then land it with a **normal-edit** `graph-commit` call, **deliberately without
+`--base`** (`dangerouslyDisableSandbox: true` — npm cache + network):
+
+```bash
+npx tsx packages/intentionsutil/scripts/write-node.ts --file "$SCRATCH/$NODE_ID.reconciled.json"
+if packages/intentionsutil/scripts/graph-commit \
+     -m "graph: reconcile mechanical-unresolved conflict on $NODE_ID" "$NODE_ID"; then
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete --phase fix-conflicts
+else
+  echo "/dispatch-conflict: graph-commit did not land $NODE_ID (a concurrent write re-parked it, or busy-main) — no phase marker written; Lane 2 will be re-invoked later" >&2
+fi
+```
+
+**Why no `--base`.** `--base`'s compare-and-swap is the wrong tool for a write
+that is *itself* resolving a park. The node is already parked **on**
+`origin/main`, so this write starts fresh from current `origin/main` state (the
+`git checkout origin/main -- …` above). If another writer races between this
+read and this commit, a `--base` mismatch would fail the lane closed on a CAS
+error — but that race is not an error here. Landing bare lets `graph-commit`'s
+own layers 1-3 take the race: they auto-merge it, or, worst case, re-park the
+node. A re-park just means Lane 2 gets invoked again later against the fresh
+park — the divergence routes back into the ladder, which is the desired
+behavior, not a failure. That is why the `else` branch above skips the
+phase-completed marker on any non-zero `graph-commit` exit: the node is either
+re-parked (mechanical-unresolved) or unlanded (busy-main), so there is nothing
+to mark complete — the chain simply re-invokes Lane 2 later.
+
+On the landed (exit 0) path, `dispatch-mark-complete --phase fix-conflicts`
+writes the **standard** phase-completed marker (no `--pr` on the node lane —
+there is no PR; this mirrors Lane 1's Step 6 without its PR-scoped flag). Unlike
+`/implement`'s node lane, this skill does **not** perform a `transition-node`
+write — clearing `office_hours` via the reconciled write above already advanced
+the node out of the park, and the marker alone lets the Stop hook
+(`.claude/hooks/dispatch-stop.sh`) propagate the chain normally. Then **stop**.
+
+### `ambiguous <reason>` — confirm the existing park, report, stop
+
+(The `ambiguous` confirm-and-report path is added by Unit 5 of this plan.)
