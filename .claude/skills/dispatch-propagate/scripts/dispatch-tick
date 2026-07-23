@@ -260,6 +260,20 @@ fi
 # recreates on the next tick), a firing timer here becomes a harmless no-op.
 # A manual `dispatch --manual` run OVERRIDES the pause (deliberate human action).
 # Resume by removing the flag file. The path is overridable for tests.
+#
+# The pause sentinel gates worker SPAWNING only, never ledger bookkeeping: a
+# dead session's reservation marker must still be reaped even on a paused
+# heartbeat, or it lingers stranded until dispatch resumes. Reap it here, on
+# the autonomous path only, before the pause check below can exit early.
+if [[ -z "$MANUAL" ]]; then
+  if ! declare -f reservation_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-claude-agents.sh"
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+  fi
+  reservation_sweep 1>&2 || true
+fi
 DISPATCH_PAUSE_FLAG="${DISPATCH_PAUSE_FLAG:-${XDG_DATA_HOME:-$HOME/.local/share}/commons-dispatch/paused}"
 if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
   echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick"
