@@ -28,8 +28,9 @@ there are no sentinels and no `<N> <worktree>` handoff.
 The skill has **two lanes**, chosen by a shared preamble (see "## Steps"):
 **Lane 1** resolves an `origin/main` git merge conflict on an issue-branch draft
 PR (the original behavior); **Lane 2** resolves a graph-native intention-node
-conflict parked by `graph-commit`, invoked by explicit node id (never by a router
-yet). The two-lane split follows the node/issue convention the other phase skills
+conflict parked by `graph-commit`, invoked by explicit node id or from the node's
+own worktree (branch == node id) — but never by an automatic dispatch tick yet.
+The two-lane split follows the node/issue convention the other phase skills
 adopted (`qa-main`, `office-hours`).
 
 Run **every** `gh` call here, and the scripts that invoke `gh`/`git` over the
@@ -49,7 +50,8 @@ preamble that reads `ARGUMENTS` and the worktree branch:
 - **Lane 2 — graph-native node conflict**: an intention-graph node parked to
   `office_hours` by `graph-commit` when its own mechanical merge could not
   reconcile a concurrent-edit conflict. Lane 2 is invoked by an **explicit node
-  id** — a human, or a future router — never automatically. Its steps live in the
+  id** or from the node's own worktree (branch == node id) — a human, or a future
+  router — never by an automatic dispatch tick yet. Its steps live in the
   "## Lane 2 — graph-native node conflict" section below (added in a later unit).
 
 ### Select the lane and resolve the target in place
@@ -57,34 +59,42 @@ preamble that reads `ARGUMENTS` and the worktree branch:
 `/dispatch-conflict` operates in place — the **current worktree (or an explicit
 node id) dictates the target**. For Lane 1 the router (`/dispatch-propagate`)
 enters the `<N>-…` target worktree before invoking this skill; this skill never
-switches. Discriminate the lane first — the `ARGUMENTS`-first idiom parallels
+switches. Discriminate the lane first — the `ARGUMENTS` inspection parallels
 `/office-hours` (`.claude/skills/office-hours/SKILL.md`), the branch shape
-parallels `/qa-main` (`.claude/skills/qa-main/SKILL.md`):
+parallels `/qa-main` (`.claude/skills/qa-main/SKILL.md`).
+
+**Inspect `ARGUMENTS` first.** `ARGUMENTS` is a prompt-text placeholder the model
+reads — **not** a shell environment variable, exactly as `/office-hours` inspects
+it. Do **not** test `$ARGUMENTS` inside a bash block; the Bash tool does not export
+it, so `[[ -n "$ARGUMENTS" ]]` is always empty there. Read its value directly and
+branch:
+
+- `ARGUMENTS` is a non-empty **non-numeric** node id → **Rule 1**: Lane 2, and set
+  `NODE_ID` to that id (a human, or a future router, passed it explicitly). Skip the
+  block below.
+- `ARGUMENTS` is **numeric** → not a supported target (Lane 1 is worktree-derived;
+  Lane 2 takes a node id). Print the error and stop:
+  `/dispatch-conflict: numeric ARGUMENTS is not a supported target`.
+- `ARGUMENTS` is **empty** → derive the lane from the worktree branch with the block
+  below (Rules 2 and 3).
 
 ```bash
 BRANCH=$(basename "$(git rev-parse --show-toplevel)")
-if [[ -n "$ARGUMENTS" ]]; then
-  if [[ "$ARGUMENTS" =~ ^[0-9]+$ ]]; then
-    echo "/dispatch-conflict: numeric ARGUMENTS '$ARGUMENTS' is not a supported target (Lane 1 is worktree-derived; Lane 2 takes a node id)" >&2
-    exit 1
-  fi
-  # Rule 1 — explicit non-numeric node id (human or future router): Lane 2.
-  LANE=2
-  NODE_ID="$ARGUMENTS"
-elif [[ "$BRANCH" == [0-9]*-* ]]; then
-  # Rule 2 — no argument + an issue-branch worktree: Lane 1 (unchanged behavior).
+if [[ "$BRANCH" == [0-9]*-* ]]; then
+  # Rule 2 — an issue-branch worktree: Lane 1 (unchanged behavior).
   LANE=1
   N="${BRANCH%%-*}"
 else
-  # Rule 3 — no argument + a non-issue branch: Lane 2 over the node whose id is
-  # the worktree branch name (the qa-main node-worktree shape).
+  # Rule 3 — a non-issue branch: Lane 2 over the node whose id is the worktree
+  # branch name (the qa-main node-worktree shape).
   LANE=2
   NODE_ID="$BRANCH"
 fi
 ```
 
-When `LANE=2`, skip the rest of Lane 1 and follow the "## Lane 2 — graph-native
-node conflict" section below. Otherwise `LANE=1` — continue with the Lane 1 steps.
+When Rule 1 fired, or the block above set `LANE=2`, skip the rest of Lane 1 and
+follow the "## Lane 2 — graph-native node conflict" section below. Otherwise
+`LANE=1` — continue with the Lane 1 steps.
 
 ## Lane 1 — issue-branch git conflict
 
@@ -321,8 +331,8 @@ Stop hook owns the disposition from the marker state.
 Lane 2 resolves a concurrent-edit conflict on an intention-graph node that
 `graph-commit` could not reconcile mechanically and parked to the node's
 `office_hours`. The preamble set `NODE_ID` and selected this lane; Lane 2 is
-invoked by explicit node id only (a human, or a future router — never a live
-dispatch tick yet).
+invoked by explicit node id or from the node's own worktree (branch == node id) —
+a human, or a future router — never by a live dispatch tick yet.
 
 Unlike Lane 1, Lane 2 does **not** reproduce a live git conflict: `graph-commit`
 already captured the entire conflict as structured text in
@@ -493,11 +503,15 @@ to mark complete — the chain simply re-invokes Lane 2 later.
 
 On the landed (exit 0) path, `dispatch-mark-complete --phase fix-conflicts`
 writes the **standard** phase-completed marker (no `--pr` on the node lane —
-there is no PR; this mirrors Lane 1's Step 6 without its PR-scoped flag). Unlike
-`/implement`'s node lane, this skill does **not** perform a `transition-node`
-write — clearing `office_hours` via the reconciled write above already advanced
-the node out of the park, and the marker alone lets the Stop hook
-(`.claude/hooks/dispatch-stop.sh`) propagate the chain normally. Then **stop**.
+there is no PR). Unlike `/implement`'s node lane, this skill does **not** perform
+a `transition-node` write — clearing `office_hours` via the reconciled write
+above already advanced the node out of the park. Node-lane chain continuation is
+then carried by the systemd heartbeat and the convergence reseed a graph execute
+arms — **not** by a Stop-hook read of this marker: for a graph-native node worker
+`.claude/hooks/dispatch-stop.sh`'s only duty is the escalation-park backstop (see
+that hook's header, and the graph-native `park-node` path), so the marker write
+here records phase completion but does not itself drive propagation. Then
+**stop**.
 
 ### `ambiguous <reason>` — confirm the existing park, report, stop
 
