@@ -5450,6 +5450,7 @@ rc=0
   source "$TMPDIR_TEST/lib.sh"
   unset PLAYWRIGHT_BROWSERS_PATH
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
   export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
   export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-4"

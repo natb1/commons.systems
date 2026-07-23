@@ -1719,8 +1719,17 @@ playwright_install_with_deps() {
 
     local rc=0
     wait "$install_pid" || rc=$?
-    kill "$watchdog_pid" 2>/dev/null || true
-    wait "$watchdog_pid" 2>/dev/null || true
+    # If the watchdog already fired (real elapsed >= deadline, i.e. a stall) it
+    # is mid kill_tree — let it finish the SIGTERM->grace->SIGKILL escalation
+    # instead of aborting it in the grace window (which would leave SIGTERM-
+    # ignoring grandchildren alive). Only cancel the watchdog when it is still
+    # idle in its initial sleep (fast success/failure, elapsed < deadline).
+    if [ "$(( $(date +%s) - start_ts ))" -ge "$timeout_s" ]; then
+      wait "$watchdog_pid" 2>/dev/null || true
+    else
+      kill "$watchdog_pid" 2>/dev/null || true
+      wait "$watchdog_pid" 2>/dev/null || true
+    fi
 
     if [ "$rc" -eq 0 ]; then
       return 0
