@@ -339,7 +339,11 @@ a strategy.
    leave it in place rather than finalizing, splitting, merging, or pruning it.
    Finalizing reuses the draft's retained body as
    the starting context for its plan (step 3); pruning drops a draft that the
-   round does not need (record why in the pruning commit message).
+   round does not need (record why in the pruning commit message). Before
+   finalizing, re-check the draft's content against kind-tactic's authoring
+   test (`intentions/kind-tactic.md`, 2026-07-21 clarification) — a draft that
+   is actually a standing requirement belongs on the strategy or kind as a
+   clarification, not promoted to `phase: implement` as a tactic.
 3. **Shape the subtree.** A leaf tactic is **exactly one PR**. Larger shapes
    become subtrees: child tactics carry `parent: <tactic-id>` (same-kind edge,
    `validateGraph` rule 6), and execution order is encoded with
@@ -457,10 +461,13 @@ mechanical search and stays cost-demotable — launch it with `model: sonnet` (o
   Sonnet model — do **not** let the `Plan` subagent inherit the orchestrator's
   Sonnet by omitting `model`. Feed each the Explore findings, the tactic scope,
   the plan schema below, and the `/implement-unit` model-selection heuristic
-  inline (the `Plan` agent will not read the skill file). Synthesize multiple
-  proposals into a single recommended approach, then author the node body from
-  that Opus output — the Sonnet orchestrator transcribes and reconciles the
-  plan into the schema; it does not rewrite the plan's substance.
+  inline (the `Plan` agent will not read the skill file) — when the unit
+  delivers a chart, dashboard, or other data-viz surface, first load the
+  `/dataviz` built-in skill (via the Skill tool), then feed its procedure
+  inline to the `Plan` agent, same reason. Synthesize multiple proposals into
+  a single recommended approach, then author the node body from that Opus
+  output — the Sonnet orchestrator transcribes and reconciles the plan into
+  the schema; it does not rewrite the plan's substance.
 - Trivial tactics (a typo, a one-line change, a simple rename) skip the
   fan-out — write the one-unit plan directly.
 
@@ -474,6 +481,15 @@ schema"):
   - **Scope** — files/behavior that change, what is out of scope, with
     `path:line` anchors so the build delegates each unit to `/implement-unit`
     without re-reading source.
+  - **Data-viz guidance (chart/dashboard units only)** — when the unit
+    delivers a chart, graph, plot, dashboard, or other data-viz surface: the
+    chosen form, the categorical palette (validated with `/dataviz`'s
+    validator script during planning, never eyeballed), and mark/interaction
+    specs, per `/dataviz`. Prose only — this per-unit field is not executed;
+    any auto-runnable palette check belongs in the plan's `## Verification`
+    section (the sole place ` ```verify ` blocks run), as a self-contained,
+    repo-runnable script that asserts the palette's thresholds directly with
+    no dependency on the bundled skill's install path.
   - **Recommended model** — `sonnet` or `opus`, per the model-selection
     heuristic at `.claude/skills/implement-unit/SKILL.md` (lines 31–39; the
     canonical home — do not restate the bullets here, same convention

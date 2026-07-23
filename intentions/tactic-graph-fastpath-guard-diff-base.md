@@ -37,36 +37,26 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "/qa-fix: QA passed 6/6 script-verifiable items; the 7th
-    (planned-deferral: confirm the guard job passes on the next real
-    intentions/-only graph/** push post-merge) is not browser/machine-verifiable
-    (no url_path, CI-run outcome rather than deployed-app behavior — /qa-main's
-    own filter would immediately bounce it to cannot-verify), so per the
-    node-lane residue-eligibility rule it is not written as needs-main residue;
-    it is treated as needs-human and escalated to office-hours for a human
-    glance."
-  since: 2026-07-19
-  recommendation: |-
-    ## Recommendation: tactic-graph-fastpath-guard-diff-base (PR #2898)
+  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
+    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
+  since: 2026-07-23
+  recommendation: >-
+    A concurrent writer landed an overlapping edit to this node while this
+    session's prune was in flight; the prune was NOT landed (a deletion has no
+    content snapshot). Recommended: the losing writer re-reads the current
+    origin/main content, decides whether the prune still applies, and re-runs
+    graph-commit (--prune, or a fresh edit) on the reconciled result — that same
+    commit clears this office_hours park. A third session encountering this park
+    while the loser is still working should wait rather than attempt its own
+    merge (the mailbox discipline).
 
-    This is a "confirm and observe" park, not a defect fix. There is no code to change and no design ambiguity. Six of seven QA items already passed automatically; the seventh is a post-merge observation that no local script or browser can check. Your job is a quick judgment call plus one post-merge watch.
 
-    **Step 1 — Sanity-check the deferral reasoning (2 minutes).** Open the PR's `## Verification` section and confirm the claim: the only way to close this loop is watching the `guard` job pass on the next real `intentions/`-only `graph/**` push after merge. This holds because a real GitHub Actions webhook payload/environment can't be perfectly simulated locally. Confirm the hermetic suite already does the best automation can — `.github/scripts/test-check-graph-fast-path.sh` simulates the payload shape in a temp repo (13/13 sub-cases green). If you agree that's as close as automation gets, the deferral is legitimate and `/qa-main` genuinely can't help (it browses deployed web pages at a `url_path`; a CI run's pass/fail is not a web page, so routing it there would just bounce to `cannot-verify`).
-
-    **Step 2 — Merge.** PR #2898 has 6/6 automated checks green. Merge it.
-
-    **Step 3 — Observe the next graph push (the actual confirmation).** The next graph-native tick (any `graph-commit`) pushes to `graph/**` automatically. Watch its `guard` job in the Graph Fast Path workflow go green:
-    - `gh run list --workflow=graph-fast-path.yml -L 5`, or
-    - https://github.com/natb1/commons.systems/actions/workflows/graph-fast-path.yml
-
-    If that job passes, this tactic is done — manually transition the node to `done` (or mark verified). No further code change.
-
-    **What actually matters (the real acceptance bar).** The old racy inline `git diff origin/main...HEAD` check was deleted and replaced by `.github/scripts/check-graph-fast-path.sh`. So the specific failure signature `No changes relative to origin/main — nothing to fast-path` cannot recur — the code that emitted it no longer exists. You do **not** need to reproduce the race to sign off. The race (origin/main advancing to contain the pushed commit before the guard's checkout runs) may not happen on the first push; its absence is not a failure, just "the race didn't get a chance to matter yet." A single clean `guard` run post-merge is sufficient. If you want extra confidence, keep an eye out over the next several graph pushes that the old error text never reappears — but that's optional belt-and-suspenders, not a gate.
-
-    **Files to glance at if you want to verify the change yourself:** `.github/scripts/check-graph-fast-path.sh` (new guard), `.github/workflows/graph-fast-path.yml` (wiring — confirm the old three-dot diff is gone and the script is invoked), `.github/scripts/test-check-graph-fast-path.sh` + `unit-tests.yml` (hermetic suite wiring). The pre-existing `validate-graph.ts` guard step is untouched and out of scope.
+    Unresolved conflict on tactic-qa-fix-instrument-signoff-classify: prune vs.
+    concurrent edit
 pace_exempt: false
 rounds: null
 attributes:
