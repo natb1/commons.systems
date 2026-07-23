@@ -52,6 +52,13 @@ export const PHASES: readonly Phase[] = [
   "done",
 ];
 
+export type SessionType = "requirement-discovery" | "curriculum-review" | "other";
+export const SESSION_TYPES: readonly SessionType[] = [
+  "requirement-discovery",
+  "curriculum-review",
+  "other",
+];
+
 // --- Structured optional fields --------------------------------------------
 
 /** A measurable signal that a node's intention is being met. */
@@ -394,6 +401,7 @@ export interface OfficeHours {
   reason: string;
   since: string;
   recommendation: string | null;
+  session_type: SessionType;
 }
 
 /**
@@ -530,6 +538,10 @@ function validateOfficeHours(value: unknown, field: string): OfficeHours {
     reason: requireString(value.reason, `${field}.reason`),
     since: requireDateString(value.since, `${field}.since`),
     recommendation: optionalString(value.recommendation, `${field}.recommendation`),
+    session_type:
+      value.session_type == null
+        ? "other"
+        : requireOneOf(value.session_type, SESSION_TYPES, `${field}.session_type`),
   };
 }
 

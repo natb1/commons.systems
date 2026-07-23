@@ -86,6 +86,7 @@ describe("validateNode", () => {
       reason: "needs human input",
       since: "2026-07-03",
       recommendation: "escalate to the author",
+      session_type: "other",
     });
     expect(result.pace_exempt).toBe(true);
     expect(result.rounds).toEqual({
@@ -436,6 +437,7 @@ describe("validateNode", () => {
       reason: "parked",
       since: "2026-07-06",
       recommendation: null,
+      session_type: "other",
     });
   });
 
