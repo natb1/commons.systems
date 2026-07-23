@@ -130,15 +130,27 @@ SH
 
 cat >"$WORK/bin/npx" <<'SH'
 #!/usr/bin/env bash
-# npx shim: emulates BOTH tsx office_hours writers without node, disambiguated
-# by argc (the two call sites' shapes never overlap):
-#   - park-node's own writer: <dir> <since> <reason> <recommendation> <id>
-#     (exactly 5 args after tsx/helper/store)
-#   - graph-commit's park_write(): <dir> <since> <reason> <snapDir> <pruneCsv>
-#     <id...> (6+ args — snapDir, pruneCsv, and one-or-more trailing ids)
-# Either way, appends an office_hours line to $dir/$id.md for each id — the
-# file park-node has already refreshed from origin/main.
+# npx shim: emulates without node the invocations graph-commit/park-node make
+# via `npx tsx ...` for the office_hours write, plus a stub for the layers-1-3
+# mechanical 3-way merge tool:
+#   (a) park-node's own direct write: <dir> <since> <reason> <recommendation> <id>
+#       — exactly 5 args remain after stripping tsx/helper/store.
+#   (b) graph-commit's park_write() concurrent-edit-conflict parking helper:
+#       <dir> <since> <reason> <snapDir> <pruneCsv> <id...> — 6+ args remain
+#       (snapDir/pruneCsv occupy the recommendation/id slots, and one or more
+#       ids follow). Distinguished from (a) by arg count since pruneCsv is
+#       always present (possibly empty) as its own arg.
+#   (c) graph-commit's merge-node.ts 3-way text merge (flag-based argv:
+#       --base/--ours/--theirs/--out, no store-module positional arg at all —
+#       does not fit (a)/(b)'s shape). No real merge tool exists in this
+#       no-node harness, so this always reports failure, which is what makes
+#       graph-commit's layers 1-3 fall through to the layer-3 conflict-park
+#       path — exactly the refusal behavior this file's case 2 verifies.
 [[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
+if [[ "$2" == *merge-node.ts ]]; then
+  echo "npx shim: no real 3-way merge tool available (test harness stub)" >&2
+  exit 1
+fi
 shift 3   # tsx, helper script path, store module path
 dir="$1"; since="$2"; reason="$3"
 if [[ $# -eq 5 ]]; then
@@ -280,8 +292,13 @@ out="$(
   bash packages/intentionsutil/scripts/park-node t-concurrent 'provision-failed' 2>&1
 )"; rc=$?
 content="$(origin_show t-concurrent)"
+# graph-commit's fail-closed design (layers 1-3 auto-serialize mechanical
+# contention) refuses to land THIS writer's edit — park-node exits non-zero —
+# but the same fail-closed sequence lands ITS OWN office_hours park onto the
+# fresh origin/main content as the recorded outcome, so `office_hours` IS
+# expected in the post-state (it is graph-commit's park, not this writer's).
 if [[ $rc -ne 0 ]] \
-   && grep -q 'graph-commit failed' <<<"$out" \
+   && grep -q 'concurrent-edit conflict' <<<"$out" \
    && grep -q 'line14: concurrent edit' <<<"$content" \
    && grep -q 'office_hours' <<<"$content" \
    && grep -q 'mechanical-unresolved' <<<"$content"; then

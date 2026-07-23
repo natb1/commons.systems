@@ -29,7 +29,11 @@
 # tick. On CONCLUDED-GREEN of an active interrupt it RESOLVES it — `apply-fix-state
 # --clear-fix` (+ the re-review reset when past review) + `graph-commit`, and
 # disarms auto-merge (`gh pr ready --undo`) — then emits the resolved ladder
-# phase. These two graph-commit writes are the only writes selection makes.
+# phase. On a still-red retry that has exhausted the fix-attempt cap (a
+# persistently-red PR), the gate instead parks the node — `apply-fix-state
+# --park-if-capped` + `graph-commit` — writing office_hours and dropping the
+# node out of the eligible set, rather than re-arming another retry forever.
+# These graph-commit writes are the only writes selection makes.
 #
 # Usage: graph-select-target [--top <n>] [--pace-exempt-only] [--node <id>]
 #
@@ -87,6 +91,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
 
 # The selection log reuses the decision-log appender with its own file: the lib
 # resolves its target from DISPATCH_DECISION_LOG_FILE at source time.
@@ -206,8 +212,7 @@ done
 # main is checked out at the project root). worktree_has_live_session is
 # name-keyed on the basename, so the root resolution is presentational — the
 # basename (the node id) is what is matched against live session names.
-NATIVE_ROOT=$(git -C "$REPO_ROOT" worktree list --porcelain \
-  | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
+NATIVE_ROOT=$(resolve_main_worktree "$REPO_ROOT")
 NATIVE_ROOT="${NATIVE_ROOT:-$REPO_ROOT}"
 
 skip_note() { # <id> <reason>
@@ -299,8 +304,19 @@ _gate_fix_active() {
       # /fix-checks.
       echo "fix"; return 0 ;;
     *)
-      # failing again (a fix attempt did not clear CI) → stay in fix, ready to
-      # retry; do NOT re-clear or re-set anything.
+      # failing again (a fix attempt did not clear CI). Enforce the retry cap
+      # before re-arming: once FIX_ATTEMPT_CAP completed passes have concluded
+      # red, --park-if-capped writes office_hours (+ budget reset) and this
+      # node leaves the eligible set; otherwise stay in fix, ready to retry.
+      # Do NOT re-clear or re-set the interrupt itself.
+      out=$(_apply_fix "$id" --park-if-capped 2>/dev/null) \
+        || { echo "fix-cap-check-failed"; return 1; }
+      if [[ "$(jq -r '.parked' <<<"$out" 2>/dev/null)" == "true" ]]; then
+        if ! _graph_commit_fix "graph: park $id (fix-attempt cap exhausted)" "$id"; then
+          echo "fix-cap-park-commit-failed"; return 1
+        fi
+        echo "fix-attempt-cap-parked"; return 1
+      fi
       echo "fix"; return 0 ;;
   esac
 }
