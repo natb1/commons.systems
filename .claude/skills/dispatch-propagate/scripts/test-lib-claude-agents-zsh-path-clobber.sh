@@ -65,34 +65,55 @@ path_before="$PATH"
 if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "empty: worktree_has_live_session reports free" "free" "$live"
 
-# --- Test 2: $PATH is byte-identical before/after — the load-bearing --------
-#             regression assertion. This is the assertion that fails pre-fix
-#             and passes post-fix, regardless of whether case 1 also flips
-#             (write_fake_claude's absolute-path CLAUDE_AGENTS_CMD bypasses
-#             $PATH lookup for the claude call itself, so only the bare
-#             `basename "$path"` call breaks pre-fix — do not treat case 1's
-#             pass as evidence the fix works).
-assert_eq "worktree_has_live_session: \$PATH unchanged after call" "$path_before" "$PATH"
+# The `$PATH-unchanged-after-call` assertion below is a SECONDARY sanity check,
+# NOT the regression discriminator: zsh restores the tied `path`/`$PATH` scalar
+# when a function's `local path` scope exits, so `$PATH` is byte-identical after
+# the call returns even against the buggy pre-fix library. The assertion that
+# actually fails pre-fix is Test 1's FUNCTIONAL check above — pre-fix, the tied
+# `$PATH` is clobbered to the worktree path *mid-call*, so the bare
+# `basename "$path"` (and, in the two tests below, the mid-call `jq` / fake-claude
+# `env`-shebang lookups) are not found and the function misbehaves. Each of the
+# three functions below is therefore covered by a real FUNCTIONAL assertion that
+# flips pre→post-fix, with the `$PATH-unchanged` line kept only as a secondary
+# sanity that the scope tie is restored.
+assert_eq "worktree_has_live_session: \$PATH unchanged after call (secondary sanity)" "$path_before" "$PATH"
 ca_teardown
 
-# --- Test 3: claude_sessions_under leaves $PATH unchanged -------------------
+# --- Test 3: claude_sessions_under returns a live session row ----------------
+#             The mid-call regression discriminator for claude_sessions_under:
+#             pre-fix, `local path=<cwd>` clobbers `$PATH` so the mid-call `jq`
+#             pass (and the fake-claude `env`-shebang lookup) are not found and
+#             the function returns 1 with empty output; post-fix it returns 0
+#             with the session's TSV row.
 
-echo "Test: claude_sessions_under leaves \$PATH unchanged"
+echo "Test: claude_sessions_under returns a matching session's TSV row"
 ca_setup
-write_fake_claude '[]' 0
+write_fake_claude '[{"sessionId":"sid1","pid":111,"status":"busy","name":"w"}]' 0
 path_before="$PATH"
-claude_sessions_under "$CA_DIR" >/dev/null 2>&1
-assert_eq "claude_sessions_under: \$PATH unchanged after call" "$path_before" "$PATH"
+if under_out=$(claude_sessions_under "$CA_DIR"); then under_rc=0; else under_rc=1; fi
+assert_eq "claude_sessions_under: returns 0 on a matching payload" "0" "$under_rc"
+assert_eq "claude_sessions_under: emits the session's TSV row" $'sid1\t111\tbusy\tw' "$under_out"
+assert_eq "claude_sessions_under: \$PATH unchanged after call (secondary sanity)" "$path_before" "$PATH"
 ca_teardown
 
-# --- Test 4: claude_agents_snapshot_capture leaves $PATH unchanged ----------
+# --- Test 4: claude_agents_snapshot_capture writes the payload ---------------
+#             The mid-call regression discriminator for claude_agents_snapshot_
+#             capture: pre-fix, `local path=<out>` clobbers `$PATH` so the fake
+#             claude's `#!/usr/bin/env bash` shebang cannot resolve `bash` on the
+#             clobbered path, the command fails, and the snapshot file is left
+#             empty (return 1); post-fix it returns 0 and the file holds the
+#             captured array.
 
-echo "Test: claude_agents_snapshot_capture leaves \$PATH unchanged"
+echo "Test: claude_agents_snapshot_capture writes the captured array to <path>"
 ca_setup
-write_fake_claude '[]' 0
+write_fake_claude '[{"sessionId":"sid1","pid":111,"status":"busy","name":"w"}]' 0
 path_before="$PATH"
-claude_agents_snapshot_capture "$CA_DIR/snapshot.json" >/dev/null 2>&1
-assert_eq "claude_agents_snapshot_capture: \$PATH unchanged after call" "$path_before" "$PATH"
+if claude_agents_snapshot_capture "$CA_DIR/snapshot.json"; then cap_rc=0; else cap_rc=1; fi
+assert_eq "claude_agents_snapshot_capture: returns 0" "0" "$cap_rc"
+assert_eq "claude_agents_snapshot_capture: snapshot file holds the payload" \
+  '[{"sessionId":"sid1","pid":111,"status":"busy","name":"w"}]' \
+  "$(cat "$CA_DIR/snapshot.json" 2>/dev/null)"
+assert_eq "claude_agents_snapshot_capture: \$PATH unchanged after call (secondary sanity)" "$path_before" "$PATH"
 ca_teardown
 
 echo ""
