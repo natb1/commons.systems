@@ -46,14 +46,17 @@ function node(dir: string, partial: Partial<IntentionNode> & { id: string; kind:
   }
 }
 
-function prStates(dir: string, states: Record<string, string>): string {
+function prStates(
+  dir: string,
+  states: Record<string, { state: string; mergedAt?: string; mergeCommitSha?: string }>,
+): string {
   const f = join(dir, "_states.json");
   writeFileSync(f, JSON.stringify(states));
   return f;
 }
 
 describe("reconcileGraph", () => {
-  it("prunes a merged no-residue tactic, repairs inbound blocked_by, stamps the round", () => {
+  it("transitions a merged no-residue tactic to done, records completion, leaves it present, stamps the round", () => {
     const dir = tempDir();
     node(dir, { id: "kind-strategy", kind: "kind" });
     node(dir, { id: "kind-tactic", kind: "kind" });
@@ -62,46 +65,96 @@ describe("reconcileGraph", () => {
       kind: "strategy",
       rounds: { count: 0, last_completed: null, last_aligned: null },
     });
-    node(dir, { id: "tactic-done", kind: "tactic", phase: "review", serves: ["strategy-s"] });
+    node(dir, {
+      id: "tactic-done",
+      kind: "tactic",
+      phase: "review",
+      serves: ["strategy-s"],
+      execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
     node(dir, { id: "tactic-next", kind: "tactic", phase: "draft", serves: ["strategy-s"], blocked_by: ["tactic-done"] });
 
-    const plan = reconcileGraph({ dir, prStatesFile: prStates(dir, { "tactic-done": "merged" }), date: "2026-07-10" });
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, {
+        "tactic-done": { state: "merged", mergedAt: "2026-07-11T12:00:00Z", mergeCommitSha: "sha1" },
+      }),
+      date: "2026-07-10",
+    });
 
-    expect(plan.prune).toEqual(["tactic-done"]);
     expect(plan.reconciled).toContainEqual({ id: "tactic-done", target: "done" });
-    expect(existsSync(join(dir, "tactic-done.md"))).toBe(false);
-    // Inbound blocked_by repaired.
-    expect(readNode(dir, "tactic-next").blocked_by).toEqual([]);
+    // No longer pruned — the node persists at phase done with completion evidence.
+    expect(existsSync(join(dir, "tactic-done.md"))).toBe(true);
+    expect(readNode(dir, "tactic-done").phase).toBe("done");
+    expect(readNode(dir, "tactic-done").execution?.completion).toEqual({
+      mergedAt: "2026-07-11T12:00:00Z",
+      mergeCommitSha: "sha1",
+      graphCommitSha: null,
+    });
+    // Edge repair no longer happens — the inbound blocked_by is left unchanged.
+    expect(readNode(dir, "tactic-next").blocked_by).toEqual(["tactic-done"]);
+    expect(plan.edit).not.toContain("tactic-next");
     // Round stamped (only a draft child remains).
     const s = readNode(dir, "strategy-s");
     expect(s.rounds).toEqual({ count: 1, last_completed: "2026-07-10", last_aligned: null });
     expect(plan.edit).toContain("strategy-s");
-    expect(plan.edit).toContain("tactic-next");
+    expect(plan.edit).toContain("tactic-done");
   });
 
-  it("routes a closed-not-merged tactic to done", () => {
+  it("routes a closed-not-merged tactic to done with no completion evidence", () => {
     const dir = tempDir();
     node(dir, { id: "kind-tactic", kind: "kind" });
-    node(dir, { id: "tactic-abandoned", kind: "tactic", phase: "qa" });
-    const plan = reconcileGraph({ dir, prStatesFile: prStates(dir, { "tactic-abandoned": "closed" }), date: "2026-07-10" });
-    expect(plan.prune).toEqual(["tactic-abandoned"]);
+    node(dir, {
+      id: "tactic-abandoned",
+      kind: "tactic",
+      phase: "qa",
+      execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, { "tactic-abandoned": { state: "closed" } }),
+      date: "2026-07-10",
+    });
+    expect(plan.reconciled).toContainEqual({ id: "tactic-abandoned", target: "done" });
+    expect(existsSync(join(dir, "tactic-abandoned.md"))).toBe(true);
+    expect(readNode(dir, "tactic-abandoned").phase).toBe("done");
+    // Closed-not-merged → no evidence recorded (census-flaggable integrity defect).
+    expect(readNode(dir, "tactic-abandoned").execution?.completion ?? null).toBe(null);
   });
 
-  it("routes a merged residue-bearing tactic to main-qa (schema now carries the phase)", () => {
+  it("routes a merged residue-bearing tactic to main-qa and records completion", () => {
     const dir = tempDir();
     node(dir, { id: "kind-tactic", kind: "kind" });
-    node(dir, { id: "tactic-residue", kind: "tactic", phase: "review" }, "# body\n\n## needs-main\n\nverify prod\n");
-    const plan = reconcileGraph({ dir, prStatesFile: prStates(dir, { "tactic-residue": "merged" }), date: "2026-07-10" });
-    expect(plan.prune).toEqual([]);
+    node(
+      dir,
+      {
+        id: "tactic-residue",
+        kind: "tactic",
+        phase: "review",
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+      },
+      "# body\n\n## needs-main\n\nverify prod\n",
+    );
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, {
+        "tactic-residue": { state: "merged", mergedAt: "2026-07-11T12:00:00Z", mergeCommitSha: "sha2" },
+      }),
+      date: "2026-07-10",
+    });
     expect(plan.deferred).toEqual([]);
     expect(plan.reconciled).toContainEqual({ id: "tactic-residue", target: "main-qa" });
     expect(plan.edit).toContain("tactic-residue");
-    // Not pruned — the node persists into its main-qa phase for post-merge verification.
     expect(existsSync(join(dir, "tactic-residue.md"))).toBe(true);
     expect(readNode(dir, "tactic-residue").phase).toBe("main-qa");
+    expect(readNode(dir, "tactic-residue").execution?.completion).toEqual({
+      mergedAt: "2026-07-11T12:00:00Z",
+      mergeCommitSha: "sha2",
+      graphCommitSha: null,
+    });
   });
 
-  it("stamps a strategy once when two sibling children are pruned in the same sweep", () => {
+  it("stamps a strategy once when two sibling children transition to done in the same sweep", () => {
     const dir = tempDir();
     node(dir, { id: "kind-strategy", kind: "kind" });
     node(dir, { id: "kind-tactic", kind: "kind" });
@@ -115,11 +168,12 @@ describe("reconcileGraph", () => {
 
     const plan = reconcileGraph({
       dir,
-      prStatesFile: prStates(dir, { "tactic-a": "merged", "tactic-b": "merged" }),
+      prStatesFile: prStates(dir, { "tactic-a": { state: "merged" }, "tactic-b": { state: "merged" } }),
       date: "2026-07-10",
     });
 
-    expect(plan.prune.sort()).toEqual(["tactic-a", "tactic-b"]);
+    expect(plan.reconciled).toContainEqual({ id: "tactic-a", target: "done" });
+    expect(plan.reconciled).toContainEqual({ id: "tactic-b", target: "done" });
     expect(readNode(dir, "strategy-s").rounds).toEqual({
       count: 1,
       last_completed: "2026-07-10",
@@ -139,11 +193,44 @@ describe("reconcileGraph", () => {
     node(dir, { id: "tactic-a", kind: "tactic", phase: "review", serves: ["strategy-s"] });
     node(dir, { id: "tactic-b", kind: "tactic", phase: "qa", serves: ["strategy-s"] });
 
-    const plan = reconcileGraph({ dir, prStatesFile: prStates(dir, { "tactic-a": "merged" }), date: "2026-07-10" });
-    expect(plan.prune).toEqual(["tactic-a"]);
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, { "tactic-a": { state: "merged" } }),
+      date: "2026-07-10",
+    });
+    expect(plan.reconciled).toContainEqual({ id: "tactic-a", target: "done" });
     expect(readNode(dir, "strategy-s").rounds).toEqual({
       count: 0,
       last_completed: null,
+      last_aligned: null,
+    });
+  });
+
+  it("stamps the round when the last non-done child reaches done, ignoring a sibling already done from a prior sweep", () => {
+    const dir = tempDir();
+    node(dir, { id: "kind-strategy", kind: "kind" });
+    node(dir, { id: "kind-tactic", kind: "kind" });
+    node(dir, {
+      id: "strategy-s",
+      kind: "strategy",
+      rounds: { count: 0, last_completed: null, last_aligned: null },
+    });
+    // A sibling already at phase done from a PRIOR sweep, present on disk and NOT
+    // in this sweep's pr-states. Without the `phase !== "done"` filter fix it
+    // would be miscounted as a live remaining child and block the stamp forever.
+    node(dir, { id: "tactic-prior", kind: "tactic", phase: "done", serves: ["strategy-s"] });
+    node(dir, { id: "tactic-now", kind: "tactic", phase: "review", serves: ["strategy-s"] });
+
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, { "tactic-now": { state: "merged" } }),
+      date: "2026-07-10",
+    });
+
+    expect(plan.reconciled).toContainEqual({ id: "tactic-now", target: "done" });
+    expect(readNode(dir, "strategy-s").rounds).toEqual({
+      count: 1,
+      last_completed: "2026-07-10",
       last_aligned: null,
     });
   });
@@ -152,8 +239,11 @@ describe("reconcileGraph", () => {
     const dir = tempDir();
     node(dir, { id: "kind-tactic", kind: "kind" });
     node(dir, { id: "tactic-draft", kind: "tactic", phase: "draft" });
-    const plan = reconcileGraph({ dir, prStatesFile: prStates(dir, { "tactic-draft": "merged" }), date: "2026-07-10" });
-    expect(plan.prune).toEqual([]);
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, { "tactic-draft": { state: "merged" } }),
+      date: "2026-07-10",
+    });
     expect(plan.reconciled).toEqual([]);
   });
 });
