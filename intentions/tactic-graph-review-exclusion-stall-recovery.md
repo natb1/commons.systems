@@ -31,10 +31,19 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix: null
+  fix:
+    since: 2026-07-22
+    attempt: 1
+    pushed_sha: 6fd600c3ad07ddc35d63a6497cb94d7019ef3465
 validates: []
-blocked_by: []
-office_hours: null
+blocked_by:
+  - tactic-flake-park-node-concurrent-write-refusal
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-22
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /fix-conflicts once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes:
@@ -300,3 +309,18 @@ posture the sibling reconcilers were verified under.
 - **Source PR**: #2888 (`execution.pr` on `tactic-graph-selector-reviewed-exclusion`)
 - **Implementation PR**: #2920 (draft; carries the plan adaptation described
   in the revision note above)
+
+## needs-main residue
+
+- id: 8; title: Production regression recovery fires end-to-end on a real
+  stranded review PR; url_path: current; expected_outcome: A genuinely
+  stranded review+reviewed node is routed back to fix by the reconciler in
+  live dispatch, no longer stalling indefinitely; finding: No live
+  graph-native PR fixture exists to drive an end-to-end regression in CI —
+  this is a planned, acknowledged deferral to production observation (see
+  the "Manual" verification item above). After this PR lands, the next time
+  a `phase: review` + `reviewed` tactic's armed PR actually regresses
+  (`origin/main` moves it to `CONFLICTING`, or a required re-run turns CI
+  persistently red), confirm `dispatch-select-tick`'s next tick emits a
+  `review-stall: recovered <id> -> fix (...)` line and that the node lands
+  with `execution.fix` set.

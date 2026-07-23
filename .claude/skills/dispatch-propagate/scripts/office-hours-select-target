@@ -217,7 +217,7 @@ resolve_main_worktree() {
     echo "office-hours-select-target: cannot resolve project root (not in a git repo?)" >&2
     return 1
   fi
-  printf '%s' "$root/worktrees/main"
+  printf '%s' "$root"   # de-bare: the project root IS the main checkout
 }
 
 # Open issues carrying dispatch:office-hours, with their creation times and

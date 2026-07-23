@@ -75,6 +75,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
 
 if [[ $# -lt 1 ]]; then
   echo "usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]" >&2
@@ -82,13 +84,9 @@ if [[ $# -lt 1 ]]; then
 fi
 
 # Project root = the worktree with `main` checked out (substrate clarification
-# 23). DISPATCH_GRAPH_MAIN_WORKTREE is the test override, authoritative.
-if [[ -n "${DISPATCH_GRAPH_MAIN_WORKTREE:-}" ]]; then
-  PROJECT_ROOT="$DISPATCH_GRAPH_MAIN_WORKTREE"
-else
-  PROJECT_ROOT=$(git worktree list --porcelain 2>/dev/null \
-    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
-fi
+# 23). resolve_main_worktree honors DISPATCH_GRAPH_MAIN_WORKTREE, the test
+# override.
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
   echo "dispatch-graph-execute: cannot resolve the project root (no worktree with 'main' checked out)" >&2
   exit 2
@@ -192,13 +190,13 @@ for spec in "$@"; do
       echo "waiting $id"
       ;;
     11)
-      # merge-conflict. /fix-conflicts does NOT accept node targets
-      # (fix-conflicts/SKILL.md exits on any non-`[0-9]*-*` branch), so a graph
-      # node's conflict parks rather than routing to /fix-conflicts; routing is
+      # merge-conflict. /dispatch-conflict does NOT accept node targets
+      # (dispatch-conflict/SKILL.md exits on any non-`[0-9]*-*` branch), so a graph
+      # node's conflict parks rather than routing to /dispatch-conflict; routing is
       # a future follow-up gated on node-target support.
       if "$PARK_NODE" "$id" \
           "origin/main does not merge clean into this tactic's branch (provision exit 11)" \
-          "Resolve the conflict by hand in the node worktree and re-run the phase, or route to /fix-conflicts once it accepts node targets."; then
+          "Resolve the conflict by hand in the node worktree and re-run the phase, or route to /dispatch-conflict once it accepts node targets."; then
         echo "parked $id"
       else
         echo "failed $id park-failed"

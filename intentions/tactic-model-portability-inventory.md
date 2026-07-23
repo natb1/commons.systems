@@ -98,7 +98,7 @@ and extend by fresh grep; do not treat this list as exhaustive):
   `.claude/skills/implement-unit/SKILL.md:31`; model names embedded in
   `.claude/skills/review-fix/SKILL.md`, `.claude/skills/qa-fix/SKILL.md`,
   `.claude/skills/office-hours/SKILL.md`, `.claude/skills/fix-checks/SKILL.md`,
-  `.claude/skills/fix-conflicts/SKILL.md`,
+  `.claude/skills/dispatch-conflict/SKILL.md`,
   `.claude/skills/commit-merge-push/SKILL.md`.
 - **(b) Harness/CLI mechanics** — the `claude --bg` spawn primitive
   (`.claude/skills/dispatch-propagate/scripts/dispatch-spawn-job:2`,

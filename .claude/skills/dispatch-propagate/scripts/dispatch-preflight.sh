@@ -55,7 +55,7 @@ fi
 
 # Check 2 — merge-tree conflict dry-run (PHASE-GATED). Run ONLY for the four
 # build phases. fix-conflicts/fix-checks/empty/unknown are EXEMPT: the codebase
-# deliberately routes merge conflicts to the /fix-conflicts phase rather than an
+# deliberately routes merge conflicts to the /dispatch-conflict phase rather than an
 # abort, so booting that worker IS the resolution; aborting it would re-abort
 # every tick forever (retry-forever starvation). An empty/unknown phase is the
 # dispatch-phase exit-3 / pending-CI case where the existing ci-waiting
