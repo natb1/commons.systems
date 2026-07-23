@@ -437,7 +437,29 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
            `REOPENED <tactic-id>`, or `STALE <tactic-id>`. Parse it into a
            disposition and (when present) the tactic id.
         4. Branch on the disposition:
-           - **`NONE`** — no matching flake tactic exists. Write a **new** flake
+           - **`NONE`** — no matching flake tactic exists. **Before filing
+             anything, run the stale-head guard.** `dispatch-flake-dedup-node`'s
+             own stale-head gate covers the `phase: done` branch ONLY — its
+             header states "OPEN/NONE never consult it" — so without this step a
+             failure that is deterministic on a head merely missing a fix already
+             on `origin/main` gets minted as a brand-new unreproducible flake
+             (the 2026-07-22 incident that produced two such nodes, both pruned):
+             ```bash
+             STALE=$(.claude/skills/dispatch-propagate/scripts/dispatch-flake-stale-head-check \
+               --head-ref "$HEAD_SHA" --reproduce-cmd "<reproduce command>")
+             ```
+             It prints `CURRENT` or `STALE-HEAD`, and exits non-zero **without**
+             a disposition on any error — treat a non-zero exit as a hard stop,
+             never as `CURRENT`.
+             - **`STALE-HEAD`** — the failure does not reproduce at
+               `origin/main`. Do **not** write a flake node and do not block the
+               PR on one. Record the outcome as `STALE-HEAD-SUPPRESSED` (see the
+               accumulator's flake-tracking-id bullet) and note in the accumulator
+               that the remedy is to merge `origin/main` into the PR branch and
+               re-run CI — the head is simply missing a fix that already landed.
+             - **`CURRENT`** — proceed with the node write below, unchanged.
+
+             On `CURRENT`, write a **new** flake
              tactic node. Construct its frontmatter JSON and pass it to
              `write-node.ts` (same recipe as `align-tactics/SKILL.md`'s
              "Step 5 — Record"; `dangerouslyDisableSandbox: true`, and use an
@@ -686,6 +708,11 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
     `dispatch-flake-dedup-node` disposition — parallel to the legacy form, just
     a tactic id instead of an issue number. `STALE-SUPPRESSED` marks a
     recurrence suppressed as a stale-head false positive — no reopen was fired.
+    A sixth value, bare `STALE-HEAD-SUPPRESSED` with no tactic id, marks the
+    `NONE`-path counterpart: `dispatch-flake-stale-head-check` found the failure
+    does not reproduce at `origin/main`, so **no node was created at all** and
+    there is no id to name. Record alongside it that the remedy is to merge
+    `origin/main` and re-run.
     Omit for every other outcome.
   - **Fingerprint** — *`flake` outcome only* — the dedupe key computed in the
     Flake sub-path (the failing check name plus the stable identifier). Omit for

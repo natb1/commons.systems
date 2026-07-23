@@ -201,6 +201,8 @@ jobs:
         run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests
         run: .claude/skills/dispatch-propagate/scripts/test-write-phase-log.sh
+      - name: Run flake stale-head guard tests
+        run: .claude/skills/dispatch-propagate/scripts/test-flake-stale-head-check.sh
       - name: Run stable-propagation gate tests
         run: .claude/skills/dispatch-propagate/scripts/test-run-smoke-tests.sh
       - name: Run prose-rule lint tests

@@ -38,6 +38,17 @@ clarifications:
       office_hours cleared and the blocked_by edge to the sitting removed; kept
       status:raw pending that finalize. Boldness: medium (parsimony/altitude
       judgment)."
+  - question: Does the 2026-07-22 rehoming to /align-audit stand, given its premise
+      (align-consistency live in /align-init) was refuted?
+    answer: "Ratified 2026-07-23 at the tactic-align-audit-legacy-review
+      office-hours sitting, author present, on independent grounds: the stated
+      premise is corrected — tactic-align-entrypoint-consolidation removes
+      /align-init and retires the rung-5 engine, so nothing in /align-init
+      covers the sweep — but the altitude/parsimony argument stands on its own:
+      a mechanical whole-graph coverage-and-record sweep of standing conditions
+      fits /align-audit's digest-first graph-integrity charter. Home confirmed
+      /align-audit; still status:raw awaiting its own /align-tactics finalize
+      scoped to the coverage-and-record residual."
 tooling_goals: []
 success_signal: null
 attention: null
