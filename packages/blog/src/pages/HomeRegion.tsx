@@ -83,6 +83,10 @@ export function HomeRegion({
         contentDiv.innerHTML = DOMPurify.sanitize(html, {
           ADD_ATTR: ["target", "fetchpriority", "loading"],
         });
+        // Mark the runtime-hydrated content so the guard above short-circuits
+        // the re-fetch on the next navigation. Not set on the error branch, so
+        // a failed fetch is retried. Mirrors the SSR marker in Home.tsx.
+        contentDiv.setAttribute("data-hydrated", "");
       } catch (error) {
         logError(error, { operation: "fetch-post", postId: post.id });
         if (!isCurrent()) return;

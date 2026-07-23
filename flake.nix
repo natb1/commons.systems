@@ -68,6 +68,10 @@
         packages = forAllSystems ({ pkgs, ... }: {
           dispatch = pkgs.callPackage ./nix/packages/dispatch.nix { };
           office-hours = pkgs.callPackage ./nix/packages/office-hours.nix { };
+          # WSL wezterm rebuilt from the pinned nightly (nix/home/wezterm-pin.nix).
+          # Exposed so `nix build .#wezterm` can verify the pin and so
+          # nix/home/sync-wezterm.sh can resolve the vendor hash against it.
+          wezterm = pkgs.callPackage ./nix/home/wezterm-package.nix { };
         });
 
         devShells = forAllSystems ({ pkgs, ... }:
@@ -118,18 +122,28 @@
       # `error: attribute 'claude-code' missing in set` at eval time. Apply
       # claude-code-nix.overlays.default to nixpkgs before using this module.
       #
-      # The WSL box is now built in-flake as nixosConfigurations.nixos (below),
-      # consuming nixos-wsl as a flake input rather than the channel — so the old
-      # channel-unresolvability caveat is gone. nix/nixos/configuration.nix is now
-      # identity-parameterized: the host user comes from config.instance.hostUser
-      # (this instance supplies it below), so no user name is hardcoded there.
-      # But a *reusable* nixosModules.default export is still NOT provided:
-      # exporting a reusable module — with the claude-code overlay threaded through
-      # and full instance parameterization (wsl.* and the rest) — is a larger step,
-      # deliberately deferred beyond this parameterization work and out of scope
-      # here.
+      # The WSL box is built in-flake as nixosConfigurations.nixos (below),
+      # consuming nixos-wsl as a flake input rather than the channel.
+      # nix/nixos/configuration.nix is identity-parameterized: the host user
+      # comes from config.instance.hostUser (this instance supplies it below),
+      # so no user name is hardcoded there.
+      #
+      # nixosModules.default exports that framework NixOS layer as a bare path,
+      # mirroring the two exports above. configuration.nix threads no flake
+      # inputs itself, but a consumer building a host from it must supply two
+      # things the module leaves open:
+      #   - nixos-wsl.nixosModules.default, which provides the wsl.* options
+      #     (wsl.enable, wsl.defaultUser) configuration.nix sets — without it
+      #     eval fails with an undefined-option error for wsl.enable.
+      #   - instance.hostUser (a typed str with no default, defined in
+      #     nix/nixos/host-user.nix and read throughout configuration.nix), the
+      #     host user name.
+      # A consumer that also wires home-manager.users.<name> through
+      # homeManagerModules.default additionally inherits that module's
+      # claude-code overlay prerequisite noted above.
       homeManagerModules = { default = ./nix/home/default.nix; };
       darwinModules      = { default = ./nix/darwin/default.nix; };
+      nixosModules       = { default = ./nix/nixos/configuration.nix; };
 
       # Shared integrated home-manager wiring for the two host configs.
       # darwinConfigurations.default and nixosConfigurations.nixos embed the same
@@ -206,7 +220,9 @@
         specialArgs = { inherit inputs; };
         modules = [
           nixos-wsl.nixosModules.default
-          ./nix/nixos/configuration.nix
+          # Consume the framework export a forker uses, not the path directly,
+          # so the in-repo host exercises the same entry point.
+          nixosModules.default
           home-manager.nixosModules.home-manager
           (mkIntegratedHmConfig {
             hostPlatform = "x86_64-linux";
@@ -249,7 +265,7 @@
       };
     in
     systemOutputs // {
-      inherit darwinConfigurations nixosConfigurations homeManagerModules darwinModules mkPkgs;
+      inherit darwinConfigurations nixosConfigurations homeManagerModules darwinModules nixosModules mkPkgs;
       overlays = {
         # The only overlay homeManagerModules.default requires: pins
         # pkgs.claude-code to the sadjow fork. A consumer wanting just the

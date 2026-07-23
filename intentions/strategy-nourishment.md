@@ -27,7 +27,19 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "align-tactics cannot decompose this strategy: it is a retain-not-refine
+    draft (status raw, owner human) with success_signal, conditions, and sensor
+    all unrecorded — its own rationale defers them to a dedicated
+    /align-strategy round. Decomposition targets the success_signal, and
+    signal/conditions are human-decided, so authoring them here would guess at
+    author intent (record-completeness gap, strategy clarification 31 /
+    condition 7). Next steps: run /align-strategy strategy-nourishment to fix
+    intent, conditions, success_signal, and sensor — including whether
+    delegation-food-supply enters the ledger per the 2026-07-02 mobility-virtue
+    clarifications — then let the router re-queue align-tactics."
+  since: 2026-07-11
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}

@@ -555,6 +555,44 @@ func TestApplyNormalization_ExactDateOnly(t *testing.T) {
 	}
 }
 
+func TestApplyNormalization_DifferentAccountsNotCollapsed(t *testing.T) {
+	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
+	// Two genuinely distinct charges: same day, amount, and description, but on
+	// different accounts and in different statements. Without an account key in
+	// the auto-normalization grouping these collapse into one, silently dropping
+	// a real transaction. They must remain distinct (no updates).
+	txns := []budget.NormTxn{
+		{DocID: "acctA", Description: "COSTCO GAS", Amount: 6000, Institution: "visa", Account: "1111", Timestamp: base, StatementID: "s1"},
+		{DocID: "acctB", Description: "COSTCO GAS", Amount: 6000, Institution: "visa", Account: "2222", Timestamp: base, StatementID: "s2"},
+	}
+
+	updates, err := ApplyNormalization(txns, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(updates) != 0 {
+		t.Errorf("distinct-account charges collapsed: got %d updates, want 0 (%+v)", len(updates), updates)
+	}
+}
+
+func TestApplyNormalization_SameAccountAcrossStatementsStillDedups(t *testing.T) {
+	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
+	// The same account's overlapping statements still auto-dedup after the key
+	// gained institution/account — the account key does not disable it.
+	txns := []budget.NormTxn{
+		{DocID: "x1", Description: "SPOTIFY", Amount: 999, Institution: "amex", Account: "3333", Timestamp: base, StatementID: "s1"},
+		{DocID: "x2", Description: "SPOTIFY", Amount: 999, Institution: "amex", Account: "3333", Timestamp: base, StatementID: "s2"},
+	}
+
+	updates, err := ApplyNormalization(txns, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(updates) != 2 {
+		t.Errorf("same-account duplicate not deduped: got %d updates, want 2", len(updates))
+	}
+}
+
 func TestApplyNormalization_PrimarySelection(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
 	// Same date, 3 overlapping statements

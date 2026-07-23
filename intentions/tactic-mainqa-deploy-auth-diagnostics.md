@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -30,6 +30,7 @@ office_hours:
     deliberately breaking credentials on a branch deploy) — cannot be asserted
     offline
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -38,10 +39,9 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-06 from the legacy gh main-qa queue during the target-state
-review (second sweep — these follow-ups were filed without the
-office-hours/help-wanted labels). Source issues (closed, content preserved
-here): 2549, 2547 — needs-main residue from the preview-deploy auth
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issues (closed, content
+preserved here): 2549, 2547 — needs-main residue from the preview-deploy auth
 diagnostics work (issue 2522, PR 2543). Redaction is unit-covered (harness
 case b); both end-to-end behaviors manifest only when a deploy actually fails
 auth in CI. Prior real-world instance of this failure class: the floating

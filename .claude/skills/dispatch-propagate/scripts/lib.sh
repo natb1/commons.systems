@@ -331,7 +331,7 @@ dispatch_marker_comment_id() {
 # per-tick scan was self-exhausting (#1601).
 #
 # Contract:
-#   gh_issue_list_rest --state <open|closed|all> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-title] [--include-body]
+#   gh_issue_list_rest --state <open|closed|all> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--paginate] [--include-title] [--include-body]
 #
 # Flags:
 #   --state  (required) open|closed|all. `all` is accepted — REST's
@@ -351,6 +351,15 @@ dispatch_marker_comment_id() {
 #            silently truncate to <= 100. The slice preserves the
 #            `len == limit ⇒ truncated` guard semantics: paginate-all-then-slice
 #            yields len == limit iff at least <limit> issues exist.
+#   --paginate (optional) force the paginate-then-slice path even when --limit is
+#            <= 100. Without it, a <= 100 limit fetches a SINGLE page of mixed
+#            issues+PRs, so PR-filtering silently leaves FEWER than <limit> real
+#            issues. With it (and a --limit), we --paginate at per_page=100,
+#            filter PRs, then slice to <limit> — yielding the true recent <limit>
+#            issues. Use this when a limit <= 100 must mean "up to <limit> real
+#            issues" rather than "issues among the first <limit> mixed rows"
+#            (e.g. align's recent-closed-issues context in a PR-dominated repo).
+#            A no-op without --limit (that path already paginates the full set).
 #   --include-title (optional) when present, the projected objects additionally
 #            carry a `title` field. Omitted by default so the repo-wide per-tick
 #            callers stay byte-identical and payload-lean.
@@ -372,7 +381,7 @@ dispatch_marker_comment_id() {
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
 gh_issue_list_rest() {
-  local state="" repo="" label="" limit="" include_title="" include_body=""
+  local state="" repo="" label="" limit="" include_title="" include_body="" force_paginate=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --state) state="$2"; shift 2 ;;
@@ -381,6 +390,7 @@ gh_issue_list_rest() {
       --limit) limit="$2"; shift 2 ;;
       --include-title) include_title=1; shift 1 ;;
       --include-body) include_body=1; shift 1 ;;
+      --paginate) force_paginate=1; shift 1 ;;
       *) echo "error: gh_issue_list_rest: unknown flag '$1'" >&2; return 1 ;;
     esac
   done
@@ -399,13 +409,21 @@ gh_issue_list_rest() {
   # When --limit > 100, REST clamps a single page's per_page to 100, so we must
   # --paginate at per_page=100 and slice the merged result down to <limit> in the
   # projection. A limit <= 100 fits one page (per_page=<limit>, no --paginate).
+  #
+  # The single-page <=100 optimization under-delivers ISSUES: REST returns mixed
+  # issues+PRs, so one page of per_page=<limit> mixed rows yields FEWER than
+  # <limit> real issues after the projection filters PRs out — silently, with no
+  # shortfall indicator. Callers that need up-to-<limit> real issues at a limit
+  # <= 100 pass --paginate to force the paginate-then-slice path (paginate at
+  # per_page=100, filter PRs, slice to <limit>), which returns the true recent
+  # <limit> issues instead.
   local paginate="" per_page="100" slice=""
   if [[ -n "$limit" ]]; then
     if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
       echo "error: gh_issue_list_rest: --limit must be a non-negative integer (got '$limit')" >&2
       return 1
     fi
-    if (( limit > 100 )); then
+    if (( limit > 100 )) || [[ -n "$force_paginate" ]]; then
       paginate=1
       per_page="100"
       slice="$limit"
@@ -1045,13 +1063,18 @@ gh_commit_is_ancestor_rest() {
 # gh_issue_view_rest.
 # Args: $1 = <N> (PR number, required); --repo owner/repo (optional).
 # Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
-#   named projection: {number, title, body, state, mergeable, mergeStateStatus,
-#   headRefName, headRefOid, labels:[{name}]}.
+#   named projection: {number, title, body, state, mergedAt, mergeable,
+#   mergeStateStatus, headRefName, headRefOid, labels:[{name}]}.
 # Byte-compat bridges over the raw REST shape:
 #   - state: lowercase `open`/`closed` → UPPERCASE via `ascii_upcase`. (REST has
 #     no distinct MERGED state — a merged PR is state `closed` — so a consumer
-#     that distinguishes the porcelain `MERGED` state must not migrate to this
-#     helper without handling that.)
+#     that distinguishes the porcelain `MERGED` state must test the `mergedAt`
+#     field below rather than string-comparing `state`.)
+#   - mergedAt: REST's `merged_at` (ISO timestamp, or null for open and for
+#     closed-unmerged PRs) passed through under the porcelain camelCase key,
+#     mirroring gh_prs_involving_rest's projection and how reconcile-graph-merged
+#     reads `.mergedAt`. This is the merged signal REST exposes: a PR is merged
+#     iff `mergedAt != null`.
 #   - mergeable: REST returns a BOOLEAN (true/false/null); the porcelain emits
 #     the GraphQL enum string `MERGEABLE`/`CONFLICTING`/`UNKNOWN` that dispatch
 #     call sites string-compare. Mapped explicitly: true→MERGEABLE,
@@ -1105,6 +1128,7 @@ gh_pr_view_rest() {
     title,
     body: (.body // ""),
     state: (.state | ascii_upcase),
+    mergedAt: .merged_at,
     mergeable: (
       if .mergeable == true then "MERGEABLE"
       elif .mergeable == false then "CONFLICTING"
@@ -1710,6 +1734,36 @@ resolve_project_root() {
   dirname "$common_dir"
 }
 
+# Assert the primary checkout at <path> is on `main`. Returns 0 silently when it
+# is; otherwise prints a loud, labeled error to stderr and returns 1 — never
+# auto-switches. The primary checkout (the worktree with `main` checked out) is
+# assumed by two unattended paths: the dispatch-select-tick main-sync
+# (`git fetch origin main && git merge --ff-only origin/main`, which can only
+# fast-forward a checkout actually on `main`) and provision-node-worktree's
+# project-root resolution (which finds the worktree with `main` checked out).
+# A drift off `main` (e.g. a failed `git worktree add` + chained `cd` falling
+# through to the primary checkout — the 2026-07-21 direct-to-main incident,
+# PR #2925) silently breaks both. This is a condition on
+# `strategy-autonomous-execution`. Capture symbolic-ref's output and status so a
+# caller under `set -e` is not killed — call as `... || { … }` or in an `if`.
+assert_primary_checkout_on_main() {
+  local path="$1" branch rc
+  branch="$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)"
+  rc=$?
+  if [[ $rc -eq 0 && "$branch" == "main" ]]; then
+    return 0
+  fi
+  local found
+  if [[ $rc -ne 0 ]]; then
+    found="detached HEAD or not resolvable"
+  else
+    found="'$branch'"
+  fi
+  echo "assert_primary_checkout_on_main: INVARIANT VIOLATED — the primary checkout at '$path' must stay on 'main' (a condition on strategy-autonomous-execution), but found $found." >&2
+  echo "  Repair: git -C \"$path\" switch main" >&2
+  return 1
+}
+
 # Print the canonical dispatch selection-lock file path to stdout. An explicit
 # DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup (tests rely on
 # this). Otherwise the lock lives at the shared project-root tmp/ (not a per-
@@ -1922,8 +1976,9 @@ resolve_dirty_apps() {
     return 1
   fi
 
-  # Build reverse dependency map: shared package -> consuming apps
-  declare -A shared_pkgs
+  # Build the DIRECT reverse dependency map: shared package -> apps that
+  # declare it directly in their package.json.
+  declare -A direct_dependents
   local app pkg dep_list dep_dir
   for app in "${!all_apps[@]}"; do
     pkg="$repo_root/$app/package.json"
@@ -1933,9 +1988,51 @@ resolve_dirty_apps() {
     fi
     while IFS= read -r dep_dir; do
       [ -z "$dep_dir" ] && continue
-      shared_pkgs["$dep_dir"]+="$app "
+      direct_dependents["$dep_dir"]+="$app "
     done <<< "$dep_list"
   done
+
+  # Compute the TRANSITIVE closure of internal-package dependents. Internal
+  # packages are themselves workspaces, so a dependent may in turn be consumed
+  # by other apps: a change to a leaf package must mark every app that depends
+  # on it transitively, not just its direct declarers. Concretely, fellspiral
+  # imports @commons-systems/blog which imports @commons-systems/ds, but
+  # fellspiral never declares ds — so a ds-only change must still test and
+  # deploy fellspiral. shared_pkgs[pkg] holds the transitive dependent set,
+  # keyed on the same leaf-dir short name the resolve loop below looks up.
+  declare -A shared_pkgs
+  local root_pkg cur nxt acc
+  for root_pkg in "${!direct_dependents[@]}"; do
+    unset _seen
+    declare -A _seen=()
+    local -a _queue=(${direct_dependents["$root_pkg"]})
+    while [ ${#_queue[@]} -gt 0 ]; do
+      cur="${_queue[0]}"
+      _queue=("${_queue[@]:1}")
+      [ -n "${_seen[$cur]+x}" ] && continue
+      _seen["$cur"]=1
+      # If cur is itself an internal package other apps consume, its direct
+      # dependents are transitive dependents of root_pkg too. direct_dependents
+      # is keyed on the dependency SHORT name (e.g. "blog"), but cur holds a
+      # full app/workspace path (e.g. "packages/blog") — the same short-name
+      # bridge the resolve loop below uses (`short="${ws##*/}"`). Looking up
+      # direct_dependents[$cur] directly here would silently never match for
+      # any package nested under packages/ (all of them), truncating the
+      # closure at depth 1.
+      local cur_short="${cur##*/}"
+      if [ -n "${direct_dependents[$cur_short]+x}" ]; then
+        for nxt in ${direct_dependents["$cur_short"]}; do
+          _queue+=("$nxt")
+        done
+      fi
+    done
+    acc=""
+    for cur in "${!_seen[@]}"; do
+      acc+="$cur "
+    done
+    shared_pkgs["$root_pkg"]="$acc"
+  done
+  unset _seen
 
   declare -A dirty_apps
   local file
@@ -1943,8 +2040,11 @@ resolve_dirty_apps() {
   while IFS= read -r file; do
     [ -z "$file" ] && continue
     case "$file" in
-      firebase.json|firestore.rules|storage.rules|package.json|package-lock.json)
-        # Root-level config changes affect all workspaces
+      firebase.json|firestore.rules|storage.rules|package.json|package-lock.json|vitest.config.ts)
+        # Root-level config changes affect all workspaces. vitest.config.ts is
+        # the root test config shared by every workspace's suite, so editing it
+        # alone must still resolve a non-empty dirty set (otherwise
+        # run-unit-tests exits 0 and a broken test config merges green).
         for app in "${!all_apps[@]}"; do
           dirty_apps["$app"]=1
         done
@@ -2170,8 +2270,9 @@ cleanup_stale_worktree_processes() {
     echo "WARNING: git rev-parse --git-common-dir failed; skipping stale cleanup" >&2
     return 0
   }
-  # Resolve to absolute path; worktrees live as siblings of the git common dir
-  worktree_root="$(cd "$git_common_dir/.." && pwd)/worktrees"
+  # Resolve to absolute path; native worktrees live under <repo>/.claude/worktrees
+  # (standard Claude Code layout — the git common dir's parent is the repo root).
+  worktree_root="$(cd "$git_common_dir/.." && pwd)/.claude/worktrees"
 
   # Prune stale admin entries so the list below reflects on-disk worktrees only.
   git worktree prune 2>/dev/null || true

@@ -31,22 +31,49 @@ rationale: >-
   axis, and per-record review_triggers never see the aggregate. This strategy
   reviews the whole attachment portfolio at once — both axes: aggregate
   irreversibility drift, and each record's imported virtues checked for drift
-  and fired review_triggers on the review_window cadence the records carry
-  (kind-delegation) — so aggregate drift has an owner. The divergence half is
-  why this strategy also serves virtue-alignment-of-attachments.
+  and fired review_triggers — event-based per kind-delegation's review model
+  (2026-07-09: review_window is retired; reading-program rounds and requirement
+  refinement are the standard triggers, with ad-hoc prioritization via the
+  capture-visibility surface) — so aggregate drift has an owner. The divergence
+  half is why this strategy also serves virtue-alignment-of-attachments.
 reading: null
 gap: null
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
 recovers: []
-clarifications: []
+clarifications:
+  - question: What does a decomposition round exercise, and do drills include
+      production cutover?
+    answer: "Round 1 (2026-07-11 /align-tactics) decomposes to the strategy's five
+      named drills plus the reading instrument and the portfolio review; the
+      records without named drills are reached through the reading the
+      instrument produces — the threshold spanning every record is expected to
+      converge over multiple rounds, not one. Drills walk the recovery path
+      end-to-end short of production cutover: the affordability condition (days,
+      not the price of the full recovery) entails that a drill re-hosts or
+      round-trips a real artifact and verifies it works, while the final
+      DNS/traffic cutover is documented, not executed. Declined-origin records
+      have no entered delegation to exercise; the instrument reports them as a
+      separate class and the portfolio review, not a drill, is their exercise.
+      Recorded 2026-07-11 /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: last_exercised on every delegation record in this graph
   sensor: the delegation records themselves
-  threshold: no record's last_exercised is null or older than its review window
+  threshold: no record's last_exercised is null, and no fired review_trigger is
+    left unactioned
   is_proxy: false
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - drills stay affordable — walking a path costs days, not the price of the

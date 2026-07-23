@@ -20,19 +20,22 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: tactic-main-qa-triage-before-provision
+  pr: 2784
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
+    - reviewed
+  strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: qa
-  execution:
-    strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
-    branch: tactic-main-qa-triage-before-provision
-    pr: 2784
+attributes: {}
 ---
 # main-qa triage before provision — run the browser-verifiability triage in the selection chain so unverifiable follow-ups never cost a worktree and session boot
 
@@ -124,3 +127,7 @@ agent-behavior commit gate — expect a grant prompt. `strategy_fingerprint`
 recipe (interim until tactic-graph-dispatch-schema lands): sha256 hex of
 `JSON.stringify({statement, clarifications, conditions, serves,
 success_signal, tooling_goals})` as loaded by intentionsutil `listNodes`.
+
+## main-qa residue (qa 2026-07-06)
+
+- Next real (non-synthetic) main-qa follow-up issue filed by the legacy lane that is NOT browser-verifiable: confirm dispatch-route's pre-provision gate fires end-to-end in production - no new <N>-qa-verify-* worktree is created, and the issue lands directly on dispatch:office-hours with a '/qa-main: ... parked pre-provision by dispatch-main-qa-triage' comment, with no Claude session spawned for it.

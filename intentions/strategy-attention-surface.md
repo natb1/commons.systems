@@ -138,11 +138,25 @@ success_signal:
   threshold: the office-hours ritual runs on the redesigned surface and the hosted
     Firestore owner tier is retired — all owner data local-first
   is_proxy: false
-attention: null
+attention:
+  boost: 3
+  override: null
+  rationale: "Author-directed 2026-07-07: the office-hours script improvements —
+    the snapshot producer/reader wire-contract fixes and the surface rebuild
+    subtree — are the second priority, sequenced after
+    strategy-graph-native-dispatch (boost 5): boost 3 ranks this strategy and
+    its tactics above all derived-only ranks (cap 2) and below the dispatch
+    migration."
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds:
+  count: 0
+  last_completed: null
 attributes:
-  rounds:
-    count: 0
-    last_completed: null
   conditions:
     - the local clone the surface reads stays fresh enough that attention and
       rank read from it track origin/main

@@ -64,7 +64,7 @@ Three skills are the human interface to the graph (superseding the
 issue-based `/file-issue` and `/plan-issue` — coverage matrix on the draft
 tactic [`tactic-graph-native-dispatch`](intentions/tactic-graph-native-dispatch.md)):
 
-- **`/align`** — the entrypoint for forks and consuming repos. Orients the
+- **`/align-init`** — the entrypoint for forks and consuming repos. Orients the
   user in the concepts above, validates the tooling deployment, reviews the
   inherited virtue roots (forks start from this repo's; the harness assumes
   inherited virtues and strategies are preserved), interviews for new or
@@ -158,7 +158,7 @@ built-in harness Claude Code ships.
 | plan | Unplanned work item | [plan-issue](.claude/skills/plan-issue/SKILL.md) → `/align-tactics` |
 | implement | Planned, no PR | [implement](.claude/skills/implement/SKILL.md) |
 | fix-checks | Draft PR, CI failed | [fix-checks](.claude/skills/fix-checks/SKILL.md) |
-| fix-conflicts | Draft PR, `origin/main` merge conflict | [fix-conflicts](.claude/skills/fix-conflicts/SKILL.md) |
+| fix-conflicts | Draft PR, `origin/main` merge conflict | [dispatch-conflict](.claude/skills/dispatch-conflict/SKILL.md) |
 | qa | Draft PR, CI green | [qa-fix](.claude/skills/qa-fix/SKILL.md) |
 | review | QA passed — terminal code + security review, flips draft→ready | [review-fix](.claude/skills/review-fix/SKILL.md) |
 
@@ -228,8 +228,9 @@ run-all-cleanup-preview.sh <pr-number>
 - **Agentic Coding Tools** (Claude Code): stand up your own `office-hours-nate` instance flake (template: [examples/office-hours-nate/flake.nix](examples/office-hours-nate/flake.nix)) that imports this framework's `homeManagerModules.default` and sets your identity, then `home-manager switch -b backup --flake <your-instance>#<system>` (evaluates purely on every platform — the `wezterm-windows` Windows binary is fetched at activation runtime via `curl`, not at eval time, so no `--impure` is needed).
 - **Infrastructure** (Firebase): hosting and storage for the apps this
   instance of the workflow builds.
-- **Intent**: run `/align` — it validates the deployment, walks the inherited
-  virtue roots, and records your first strategy.
+- **Intent**: run `/align-init` — it validates the deployment, walks the
+  inherited virtue roots, and hands off to `/align-strategy` to record your
+  first strategy.
 
 ## Where to go next
 

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // parseSGML parses OFX 1.x / QFX SGML files by scanning for SGML tags.
@@ -212,7 +214,80 @@ func sgmlTagValue(content, tag string) string {
 	// Value continues until next '<' or end of content
 	end := strings.Index(content[start:], "<")
 	if end < 0 {
-		return strings.TrimSpace(content[start:])
+		return decodeXMLEntities(strings.TrimSpace(content[start:]))
 	}
-	return strings.TrimSpace(content[start : start+end])
+	return decodeXMLEntities(strings.TrimSpace(content[start : start+end]))
+}
+
+// decodeXMLEntities decodes the five predefined XML entities and numeric
+// character references (&#nn; / &#xHH;) so the SGML path matches encoding/xml's
+// automatic entity decoding on the XML path — otherwise an OFX 1.x
+// "AT&amp;T" is stored literally while its OFX 2.x twin decodes to "AT&T",
+// causing garbled descriptions, failed categorization, and cross-format double
+// counting. An unknown entity or a bare '&' (OFX 1.x sometimes emits one
+// unescaped) is left unchanged, matching a lenient reader.
+func decodeXMLEntities(s string) string {
+	if !strings.ContainsRune(s, '&') {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if s[i] != '&' {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		semi := strings.IndexByte(s[i:], ';')
+		if semi < 0 {
+			// No terminator; emit the rest verbatim.
+			b.WriteString(s[i:])
+			break
+		}
+		ent := s[i : i+semi+1] // includes leading '&' and trailing ';'
+		switch ent {
+		case "&amp;":
+			b.WriteByte('&')
+		case "&lt;":
+			b.WriteByte('<')
+		case "&gt;":
+			b.WriteByte('>')
+		case "&quot;":
+			b.WriteByte('"')
+		case "&apos;":
+			b.WriteByte('\'')
+		default:
+			if r, ok := decodeCharRef(ent); ok {
+				b.WriteRune(r)
+			} else {
+				// Unknown entity or stray '&…;'; keep it verbatim.
+				b.WriteString(ent)
+			}
+		}
+		i += semi + 1
+	}
+	return b.String()
+}
+
+// decodeCharRef decodes a numeric character reference of the form &#123; or
+// &#x1F600; (case-insensitive x). Returns (rune, true) on success; (0, false)
+// for anything else.
+func decodeCharRef(ent string) (rune, bool) {
+	if len(ent) < 4 || !strings.HasPrefix(ent, "&#") || ent[len(ent)-1] != ';' {
+		return 0, false
+	}
+	body := ent[2 : len(ent)-1] // digits between "&#" and ";"
+	base := 10
+	if body != "" && (body[0] == 'x' || body[0] == 'X') {
+		base = 16
+		body = body[1:]
+	}
+	if body == "" {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(body, base, 32)
+	if err != nil || n < 0 || !utf8.ValidRune(rune(n)) {
+		return 0, false
+	}
+	return rune(n), true
 }

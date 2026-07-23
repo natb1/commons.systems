@@ -68,8 +68,14 @@ export function useBookmarks(
   const [loaded, setLoaded] = useState(false);
   const destroyed = useRef(false);
 
-  // Load on mount.
+  // Load whenever the effective store changes. Viewer memoizes the store on
+  // (uid, readFailed, mediaId), so a new store identity signals a store swap —
+  // e.g. an initial cloud read failed (local store) and Firestore later recovered
+  // (cloud store). Re-running the load reconciles the list rather than leaving it
+  // forked from the now-effective store. The `destroyed` guard is reset here (the
+  // cleanup of the prior run set it true) so a re-run's async result is applied.
   useEffect(() => {
+    destroyed.current = false;
     store
       .load()
       .then((b) => {
@@ -84,19 +90,18 @@ export function useBookmarks(
     return () => {
       destroyed.current = true;
     };
-  }, []); // intentional: load once on mount; store identity is stable per mount
+  }, [store]);
 
   const currentBookmarked = useMemo(() => {
-    const pos = controller.getRenderer()?.position;
+    const pos = controller.getPosition()?.position;
     return pos != null && bookmarks.some((b) => b.position === pos);
-    // navSignal is the signal that renderer.position has changed.
+    // navSignal is the signal that the current position has changed.
   }, [controller.navSignal, bookmarks]);
 
   function toggleBookmark() {
-    const r = controller.getRenderer();
-    if (!r) return;
-    const pos = r.position;
-    const label = r.positionLabel;
+    const current = controller.getPosition();
+    if (!current) return;
+    const { position: pos, label } = current;
     const next = bookmarks.some((b) => b.position === pos)
       ? bookmarks.filter((b) => b.position !== pos)
       : [...bookmarks, { position: pos, label }];

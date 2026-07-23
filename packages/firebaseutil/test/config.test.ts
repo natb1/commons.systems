@@ -41,17 +41,25 @@ describe("firebaseConfig", () => {
   });
 });
 
-describe("RECAPTCHA_SITE_KEY", () => {
-  it("reads from VITE_RECAPTCHA_SITE_KEY", async () => {
+describe("getRecaptchaSiteKey", () => {
+  it("reads from VITE_RECAPTCHA_SITE_KEY on call", async () => {
     import.meta.env.VITE_RECAPTCHA_SITE_KEY = "my-recaptcha-key";
-    const { RECAPTCHA_SITE_KEY } = await import("../src/config");
-    expect(RECAPTCHA_SITE_KEY).toBe("my-recaptcha-key");
+    const { getRecaptchaSiteKey } = await import("../src/config");
+    expect(getRecaptchaSiteKey()).toBe("my-recaptcha-key");
   });
 
-  it("throws when VITE_RECAPTCHA_SITE_KEY is missing", async () => {
+  it("does NOT throw at import when VITE_RECAPTCHA_SITE_KEY is missing", async () => {
     delete import.meta.env.VITE_RECAPTCHA_SITE_KEY;
-    await expect(() => import("../src/config")).rejects.toThrow(
-      "VITE_RECAPTCHA_SITE_KEY is required",
+    // Importing the config must succeed for apps that never enable App Check;
+    // the requirement is deferred to the getter.
+    await expect(import("../src/config")).resolves.toHaveProperty(
+      "getRecaptchaSiteKey",
     );
+  });
+
+  it("throws when called and VITE_RECAPTCHA_SITE_KEY is missing", async () => {
+    delete import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+    const { getRecaptchaSiteKey } = await import("../src/config");
+    expect(() => getRecaptchaSiteKey()).toThrow("VITE_RECAPTCHA_SITE_KEY is required");
   });
 });

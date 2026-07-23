@@ -24,7 +24,9 @@ rationale: >-
   Work that serves multiple tiers simultaneously is high leverage: the agentic
   coding workflow (including the skill system) is both the author's daily
   development tool (tier 1) and the most distinctive artifact for practitioner
-  distribution (tier 3); performance improvements serve both author usability
+  distribution (tier 3; layered claim canonically on
+  strategy-data-structure-first — the graph is the product, the harness its
+  reference consumer); performance improvements serve both author usability
   (tier 1) and the quality of artifacts users encounter (tier 2). Recognizing
   dual-tier work prevents the error of deprioritizing author-usage improvements
   as "polish" when they also serve distribution.
@@ -41,6 +43,12 @@ rationale: >-
   author declaration recorded as a clarification on this node — no downstream
   strategy, sensor, or router may infer entry from activity. As of 2026-07-06,
   tier 1 is validated by daily use; tiers 2, 3, and 4 are not entered.
+
+
+  Tier 1 alone is full project success: the outward tiers are optional
+  extensions the ladder permits, not stages the project is failing to reach. The
+  tier-specific failure tripwires from the former CHARTER.md are recorded as
+  conditions on this node, each naming its pre-committed response.
 reading: null
 gap: "no reading yet (threshold: no tooth is accepted without a named validating
   signal from the previous tier)"
@@ -85,6 +93,41 @@ clarifications:
       practitioner profile and channels are identified. These are the conditions
       checked; the declaration itself remains a judgment call, so no hard sensor
       drives entry. Recorded 2026-07-06 interview."
+  - question: What guards tier-3 practice conventions against calcifying into orthodoxy?
+    answer: "The former CHARTER.md named this as tier 3's failure mode: conventions
+      harden into an orthodoxy practitioners must adopt. The graph now carries
+      the general antidote — strategy-philosophical-grounding's calcification
+      discipline (recorded 2026-07-08 there): every broadening of context is a
+      re-evaluation opportunity, never additive accumulation, exercised as
+      recall-first delta, elenchus, rival-tradition steelman, and per-record
+      capstone reviews. That discipline currently guards the author's belief
+      layer; at tier-3 entry it extends to practice conventions — conventions
+      practitioners inherit get the same re-evaluation in ever-broadening
+      contexts, and a convention that can no longer be defended in dialectic is
+      amended, not enforced. Recorded 2026-07-08 interview."
+  - question: Which surface fronts each audience tier?
+    answer: "The former CHARTER.md audience-surfaces table, reconstructed: tier 2
+      (users) — the landing page, plus app onboarding surfaces once re-lit per
+      strategy-user-onboarding; tier 3 (practitioners, individual) — the README;
+      tier 3 (practitioners, institutional / service-sales) — the About page;
+      tier 4 (collaborators) — the intention graph itself, CHARTER's replacement
+      as the collaborator surface, extended by-reference via
+      strategy-graph-mounts (a collaborator's own graph mounts this one or is
+      mounted through the align-init consumer path; mount structure already
+      never assumes same-repo residence). The surfaces are ungated openness —
+      README, About, and the graph are public today; what the tier gate covers
+      is the invitations placed on them, per the gate-scope clarification above.
+      Recorded 2026-07-08 interview."
+  - question: What is the previous tier for a tier-1 tooth — what validating signal
+      does the threshold demand before a base-tier tooth is accepted?
+    answer: "Proposed by the round, reserved to the author: tier-1 teeth validate
+      against the author's own demonstrated need — the daily-use evidence that
+      validates tier 1 itself — so the teeth census
+      (tactic-ratchet-teeth-census) proposes named author-need evidence as each
+      tier-1 tooth's validating signal and flags any tooth with none. Whether
+      that reading stands, and whether teeth accepted before the census read
+      retroactively, is the author's call at the first office-hours reading
+      (tactic-ratchet-teeth-reading). Recorded 2026-07-11 /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: each accepted ratchet tooth has a recorded prior-tier signal that
@@ -99,10 +142,19 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - external engagement arrives in tiers whose signals are observable before
       the next tier's teeth are accepted
+    - the author maintains the artifacts because daily use demands it —
+      maintenance out of obligation is the tier-1 failure tripwire, and its
+      pre-committed response is archive-and-transfer under
+      strategy-reversible-institution's stand-down doctrine, not push-through
+    - silence after deliberate tier-3 publishing is a recognized outcome, not a
+      defect to escalate against — its pre-committed response is falling back to
+      tier-1 sufficiency, since tier 1 alone is full project success
 ---
 # Prioritize work by progressive validation

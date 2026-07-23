@@ -17,7 +17,7 @@ import {
   isValidGscSite,
   isValidPsiUrl,
   parseGa4HostApps,
-} from "../../functions/src/project-signals-core.js";
+} from "./project-signals-core.js";
 import type { SnapshotScope } from "./snapshot.js";
 
 /** A process-environment-shaped string map (process.env). */
@@ -198,6 +198,35 @@ export function loadConfig(env: Env, opts: LoadConfigOptions): SnapshotConfig {
     }
   }
   const psiApiKey = env.PAGESPEED_API_KEY || undefined;
+
+  // --- Analytics scope: every source is REQUIRED (clear errors over fallbacks).
+  //     The analytics timer exists to collect these signals; a missing credential
+  //     must fail the scope loudly, never silently skip a source. ---
+  if (opts.scope === "analytics") {
+    if (!githubRepo) {
+      throw new Error("PROJECT_SIGNALS_GITHUB_REPO is required for --scope analytics");
+    }
+    if (!google) {
+      throw new Error(
+        "GOOGLE_ANALYTICS_CLIENT_ID, GOOGLE_ANALYTICS_CLIENT_SECRET, and " +
+          "GOOGLE_ANALYTICS_REFRESH_TOKEN are required for --scope analytics",
+      );
+    }
+    if (!ga4PropertyId) {
+      throw new Error("PROJECT_SIGNALS_GA4_PROPERTY_ID is required for --scope analytics");
+    }
+    if (ga4HostApps.length === 0) {
+      throw new Error(
+        "PROJECT_SIGNALS_GA4_HOST_APPS must contain at least one host:app entry for --scope analytics",
+      );
+    }
+    if (psiUrls.length === 0) {
+      throw new Error("PROJECT_SIGNALS_PSI_URLS resolved to an empty list for --scope analytics");
+    }
+    if (!psiApiKey) {
+      throw new Error("PAGESPEED_API_KEY is required for --scope analytics");
+    }
+  }
 
   const usagePayloadFile = env.OFFICE_HOURS_USAGE_PAYLOAD_FILE || undefined;
 

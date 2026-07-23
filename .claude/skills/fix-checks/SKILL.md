@@ -19,18 +19,161 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
 
 ## Steps
 
+**Resume from durable state (condition 9).** This is a single-pass phase, so its
+mid-phase durable home is the **worktree-local accumulator file**
+`tmp/fix-checks-summary.md`, which persists for the worktree's life (Step 8's
+post is only the terminal flush — see [Accumulator](#accumulator)). A re-selected
+worker rooting in the same worktree treats these as resume input, never an error:
+the accumulator file's prior iterations, the `dispatch:fix-checks-attempt-<n>`
+attempt counter on the PR (Step 5), and the "main already fixed it" merge-commit
+reuse (Step 4) are all durable and carry forward — read them and continue rather
+than restarting the pass.
+
+**Target resolution — keyspace split.** The current worktree dictates the
+target. Split on its name before Step 1: `[0-9]*-*` is a legacy issue worktree
+(unchanged); anything else is a graph-native node id, and
+`intentions/<id>.md` must exist at `origin/main` under an active CI-fix interrupt
+— `execution.fix != null` (else exit 1). Note `phase` is NOT `fix`: a CI-fix
+interrupt is carried orthogonally on `execution.fix`, leaving `phase` at its real
+ladder position (implement/qa/review), so the gate reads `execution.fix`, never
+`phase`. Nested YAML is fragile to `sed`-scrape, so read the node through
+`readNode` and test `.execution.fix` with `jq`.
+
+```bash
+BRANCH=$(basename "$(git rev-parse --show-toplevel)")
+case "$BRANCH" in
+  [0-9]*-*)
+    N="${BRANCH%%-*}"; TARGET_KIND=issue ;;
+  *)
+    NODE_ID="$BRANCH"
+    git fetch origin main --quiet
+    # Extract the node from origin/main into a temp store and read it via
+    # readNode (the single validation gate), rather than sed-scraping frontmatter.
+    NODE_TMP=$(mktemp -d)
+    if ! git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -x -C "$NODE_TMP" 2>/dev/null; then
+      echo "/fix-checks: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
+      exit 1
+    fi
+    NODE_JSON=$(node --import tsx/esm -e '
+      const { readNode } = await import("./packages/intentionsutil/src/store.js");
+      process.stdout.write(JSON.stringify(readNode(process.argv[1], process.argv[2])));
+    ' "$NODE_TMP/intentions" "$NODE_ID") || {
+      echo "/fix-checks: could not read node '$NODE_ID' from origin/main" >&2; exit 1; }
+    rm -rf "$NODE_TMP"
+    if [ "$(jq -r '.execution.fix // "null"' <<<"$NODE_JSON")" = "null" ]; then
+      echo "/fix-checks: node '$NODE_ID' is not under a CI-fix interrupt (execution.fix is null) at origin/main" >&2
+      exit 1
+    fi
+    N="$NODE_ID"; TARGET_KIND=node ;;
+esac
+```
+
+**Node-target lane (`TARGET_KIND=node`).** Every step runs unchanged except:
+the PR number is resolved by branch head — `gh pr list --head "$BRANCH" --state
+open --json number --jq '.[0].number // empty'` (the branch IS the node id, not
+an issue-prefixed name, so the issue-keyed branch-prefix lookup `dispatch-find-pr`
+performs does not apply — use `dispatch-context-pack`'s `--pr-is-number` flag
+instead, see Step 1 below. fix-checks never runs without an open PR, so an
+empty result here is a real error — write `$CLAUDE_JOB_DIR/office-hours-reason`
+per the Escalation note below and stop, never `dispatch-mark-deviation`, which
+is issue-only) — never pass `--issue`.
+
+**Node-lane completion — the fix worker does NOT resolve the interrupt.** The
+selector, not this worker, owns clearing `execution.fix` (it decides when CI has
+gone green on the pushed sha, on a LATER tick). This worker's completion duty is
+to RECORD what this iteration did and stop: **every** outcome that reaches this
+seam SPENDS one attempt unit (`apply-fix-state --spend-attempt`), and push
+outcomes additionally record the pushed sha (`apply-fix-state --record-push`).
+The spend has to happen here, at the worker's completion seam, rather than on
+the selector: the selector cannot distinguish a still-running fix worker from a
+completed no-repro pass — both look identical from outside (no new sha, no
+marker) — so counting an attempt can only happen once, at the point a pass
+actually completes.
+
+- **If this iteration pushed a commit** (a real fix, or the Step 4
+  "main-already-fixed-it" merge-commit push): spend the attempt, then record the
+  pushed sha onto the active interrupt via `apply-fix-state --record-push`, then
+  land both state-only writes on `origin/main` in **one** `graph-commit`.
+  Recording the sha arms the selector's pending-CI guard, so a pending verdict on
+  this exact sha is never misread as a green resolution. Run this from the
+  PR-branch worktree with the reset-dance `graph-commit` needs there (same as
+  `/implement`'s node-lane completion did with `transition-node`):
+
+  ```bash
+  HEAD_SHA=$(git rev-parse HEAD)
+  node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
+    "$N" --spend-attempt
+  node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
+    "$N" --record-push "$HEAD_SHA"
+  .claude/skills/dispatch-propagate/scripts/graph-commit \
+    -m "graph: record fix attempt + push $HEAD_SHA on $N" "$N"
+  ```
+
+- **If this iteration pushed NOTHING** (the generic-no-repro / flake outcomes
+  Step 4 documents as pushing nothing): this is no longer a no-write outcome —
+  spend the attempt and land it with `graph-commit`. There is no new sha to
+  record, but the pass still consumed one retry, so it must be counted or the
+  selector's 3-attempt cap can never trigger for the recurring generic-no-repro
+  / flake loops:
+
+  ```bash
+  node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
+    "$N" --spend-attempt
+  .claude/skills/dispatch-propagate/scripts/graph-commit \
+    -m "graph: record fix attempt (no push) on $N" "$N"
+  ```
+
+  The interrupt otherwise stays exactly as it was; the selector re-launches
+  `/fix-checks` next tick (or the flake path files its own issue and the node is
+  no longer re-routed to fix — see Step 4), unless this spend now trips the
+  3-attempt cap, in which case the selector parks it instead.
+
+Do NOT call `transition-node` here: after the CI-blind redesign it no longer
+knows about `fix` and would force the ladder forward regardless of whether the
+fix actually worked. Do NOT clear `execution.fix`, reset `phase`, or write any
+completion marker — those are the selector's on a later green tick. The Stop hook
+(`.claude/hooks/dispatch-stop.sh`) needs nothing from this seam for a clean pass
+(it only backstops the escalation park); chain continuation is carried by the
+systemd heartbeat and the tick's convergence reseed.
+
+**Disarm auto-merge on every push.** Whenever this worker pushes ANY commit (a
+fix or the main-already-fixed-it merge), disarm auto-merge immediately as a
+safety action — a past-review node may still carry a stale merge-arm from before
+the regression, and the newly pushed code must not merge before it is re-reviewed
+(the selector applies the re-review reset when it later resolves the interrupt):
+
+```bash
+gh pr ready --undo "$PR_NUM"   # idempotent no-op when the PR was not merge-armed
+```
+
+Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
+`office-hours-recommendation`) for the Stop hook's `park-node`, never a gh label.
+**On the node lane no gh issue is ever read or written.**
+
 1. **Resolve the draft PR.** Run the context pack (`dangerouslyDisableSandbox:
-   true` — calls `gh`):
+   true` — calls `gh`). **Legacy lane** (`TARGET_KIND=issue`):
 
    ```bash
-   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack <issue-N> --pr
+   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr
+   ```
+
+   **Node lane** (`TARGET_KIND=node`): resolve `PR_NUM` via the branch-head
+   lookup from the Target-resolution section above, then fetch it directly
+   (never pass `--issue`):
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --pr-is-number
    ```
 
    This single call resolves the PR and captures its labels and body. From the
-   `=== PR ===` section: read `PR_NUM` from the `PR #<num>` line (or, if it
-   prints `PR: none`, fix-checks was dispatched without a PR — a router state
-   error — so call `dispatch-mark-deviation '/fix-checks: dispatched without a PR
-   — router state error'` and stop). The **labels** line and **body** captured
+   `=== PR ===` section: read `PR_NUM` from the `PR #<num>` line. **Legacy
+   lane:** if it prints `PR: none`, fix-checks was dispatched without a PR — a
+   router state error — so call `dispatch-mark-deviation '/fix-checks:
+   dispatched without a PR — router state error'` and stop. **Node lane:**
+   `PR: none` cannot occur here (Target resolution already required a
+   non-empty `PR_NUM` before this call); a pack failure here is a genuine `gh`
+   error — escalate via `office-hours-reason` per the Escalation note above and
+   stop, never `dispatch-mark-deviation` (issue-only). The **labels** line and **body** captured
    here are reused in later steps — Step 4's Flake sub-path reads the PR body for
    the `Closes #N` parse, and Step 5's attempt-counter computation reads the labels
    line — so they need not be re-fetched from GitHub. The `PR_NUM` resolved here is
@@ -140,6 +283,10 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
      git push origin HEAD
      ```
 
+     **Node lane:** this counts as a push — after it, disarm auto-merge
+     (`gh pr ready --undo "$PR_NUM"`) and record the pushed sha per the node-lane
+     completion seam above (`apply-fix-state --record-push` + `graph-commit`).
+
    - **Flake** — `is_flake == true`: the failure is an upstream flaky test or a
      CI-infrastructure hiccup, unrelated to this PR's own changes. Re-running
      `/fix-checks` would only re-reach this same outcome, so instead file the flake
@@ -176,7 +323,13 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         **open or closed**. Run the deterministic, state-spanning guard FIRST and
         only file fresh when it reports no match. This closes the old leak where a
         closed same-fingerprint issue read as "already resolved, so a recurrence is
-        new information" and got re-filed as a duplicate. In this thread
+        new information" and got re-filed as a duplicate.
+
+        Sub-steps 1 and 2 above (capture `RUN_ID`, compute the fingerprint) are
+        `TARGET_KIND`-agnostic and unchanged for both lanes. From here, sub-steps 3
+        and 4 branch on `TARGET_KIND`.
+
+        **Legacy lane (`TARGET_KIND=issue`):** In this thread
         (`dangerouslyDisableSandbox: true` — the script calls `gh`):
         1. Write the recurrence body to `tmp/flake-recurrence.md` (git-ignored
            `tmp/`, like the accumulator): the fingerprint, the reproduce command,
@@ -245,7 +398,124 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
                pre-existing (possibly human-filed, differently-titled) issue. Do
                **NOT** reassert its title — re-titling an unrelated issue would
                corrupt it. Flake issue = `#<M>`, disposition `EXISTING`.
-     4. **Block the PR's tracked issue on the flake issue.** In this thread, use
+
+        **Node lane (`TARGET_KIND=node`):** GitHub Issues are disabled repo-wide
+        on the node lane, so this sub-step never calls `gh issue` or `/file-issue`
+        — the whole find-or-file-and-block sequence is graph-native, driven by
+        Unit 1's `dispatch-flake-dedup-node` (a pure search+decide+print tool —
+        it never writes any `intentions/*.md` file and never calls
+        `graph-commit` itself; the writes below are this sub-step's own).
+        1. Write the recurrence body to `tmp/flake-recurrence.md` (git-ignored
+           `tmp/`, like the accumulator and like the legacy lane) — the same
+           content shape: the fingerprint, the reproduce command, the failure
+           excerpt, and a `recurred on PR #<pr> / run <url>` line. Do this once
+           regardless of lane; do not duplicate the write if a prior branch
+           already produced it in this run.
+        2. Resolve the PR head SHA for the ancestry check (needed only when the
+           guard reaches a `phase: done` node, but always safe to resolve):
+           ```bash
+           HEAD_SHA=$(gh pr view "$PR_NUM" --json headRefOid --jq .headRefOid)
+           ```
+           (`dangerouslyDisableSandbox: true` — calls `gh`.)
+        3. Run the guard:
+           ```bash
+           DISP=$(.claude/skills/dispatch-propagate/scripts/dispatch-flake-dedup-node \
+             "<fingerprint>" --body-file tmp/flake-recurrence.md --head-ref "$HEAD_SHA")
+           ```
+           It prints exactly one line: `NONE`, `EXISTING <tactic-id>`,
+           `REOPENED <tactic-id>`, or `STALE <tactic-id>`. Parse it into a
+           disposition and (when present) the tactic id.
+        4. Branch on the disposition:
+           - **`NONE`** — no matching flake tactic exists. **Before filing
+             anything, run the stale-head guard.** `dispatch-flake-dedup-node`'s
+             own stale-head gate covers the `phase: done` branch ONLY — its
+             header states "OPEN/NONE never consult it" — so without this step a
+             failure that is deterministic on a head merely missing a fix already
+             on `origin/main` gets minted as a brand-new unreproducible flake
+             (the 2026-07-22 incident that produced two such nodes, both pruned):
+             ```bash
+             STALE=$(.claude/skills/dispatch-propagate/scripts/dispatch-flake-stale-head-check \
+               --head-ref "$HEAD_SHA" --reproduce-cmd "<reproduce command>")
+             ```
+             It prints `CURRENT` or `STALE-HEAD`, and exits non-zero **without**
+             a disposition on any error — treat a non-zero exit as a hard stop,
+             never as `CURRENT`.
+             - **`STALE-HEAD`** — the failure does not reproduce at
+               `origin/main`. Do **not** write a flake node and do not block the
+               PR on one. Record the outcome as `STALE-HEAD-SUPPRESSED` (see the
+               accumulator's flake-tracking-id bullet) and note in the accumulator
+               that the remedy is to merge `origin/main` into the PR branch and
+               re-run CI — the head is simply missing a fix that already landed.
+             - **`CURRENT`** — proceed with the node write below, unchanged.
+
+             On `CURRENT`, write a **new** flake
+             tactic node. Construct its frontmatter JSON and pass it to
+             `write-node.ts` (same recipe as `align-tactics/SKILL.md`'s
+             "Step 5 — Record"; `dangerouslyDisableSandbox: true`, and use an
+             explicit `/tmp/claude-<uid>` scratch path for the temp JSON file —
+             not `$TMPDIR`, unset under sandbox-off, and not the job's own tmp
+             dir, read-only under sandbox):
+             `kind: "tactic"`, `owner: "ai"`, `status: "codified"`,
+             `phase: "implement"`, `execution: null`, `validates: []`,
+             `office_hours: null`, `blocked_by: []`, and `serves` copied
+             **verbatim** from the source tactic `$N`'s own `serves` array (read
+             `intentions/$N.md`'s frontmatter first) — per `align-tactics`
+             clarification 27 ("artifact-owner placement"), a flake tracking
+             tactic is an honest byproduct of the strategy(s) the source tactic
+             already serves, not a forced default; carry every entry if the
+             source has more than one. Give the new node a short, content-derived
+             id, e.g. `tactic-flake-<kebab-check-name>` (author's judgment —
+             follow existing tactic-id naming in `intentions/`). No `--base` is
+             needed (brand-new node):
+             ```bash
+             npx tsx packages/intentionsutil/scripts/write-node.ts --file <json>
+             ```
+             Then `Edit` the new node's body (everything after the closing `---`
+             frontmatter fence — `write-node.ts` does not touch it) to carry the
+             fingerprint **verbatim** (this exact string is what
+             `dispatch-flake-dedup-node`'s grep matches against on future runs —
+             it must appear byte-identical), the reproduce command, and the
+             failure excerpt/diagnosis — the same fields `tmp/flake-recurrence.md`
+             carries. Land the frontmatter write and the body `Edit` together in
+             one call:
+             ```bash
+             packages/intentionsutil/scripts/graph-commit <new-tactic-id>
+             ```
+             Flake tactic = `<new-tactic-id>`, disposition `CREATED`.
+           - **`EXISTING <tactic-id>` / `REOPENED <tactic-id>`** — a matching
+             flake tactic already exists. First dump a `--base` manifest for it
+             (pre-existing node — same optimistic-concurrency guard
+             `align-tactics` Step 5 uses):
+             ```bash
+             BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+               --out-dir /tmp/claude-<uid>/dump <tactic-id>)
+             ```
+             `Edit` the existing tactic's body to **append** the recurrence
+             content (`tmp/flake-recurrence.md`'s content) — never replace the
+             existing body. For `REOPENED` **only**, additionally reset the
+             frontmatter `phase` from `done` back to `implement`: read the
+             node's current full frontmatter (via `dump-node.ts`'s manifest or
+             directly from `intentions/<tactic-id>.md`), change only `phase`,
+             and re-run `write-node.ts` with the modified JSON. Land whichever of
+             the body `Edit` (both dispositions) and the frontmatter rewrite
+             (`REOPENED` only) applied, in one call:
+             ```bash
+             packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
+             ```
+             Flake tactic = `<tactic-id>`, disposition `EXISTING` or `REOPENED`
+             per the guard's line.
+           - **`STALE <tactic-id>`** — mirrors the legacy lane's STALE
+             suppression exactly: do **nothing** — no create, no body append, no
+             reopen, no frontmatter change. Flake tactic = `<tactic-id>`,
+             disposition `STALE`. Skip the node-lane sub-step 4 below entirely
+             (the same exception the legacy lane's `STALE` branch carves out).
+             Record the accumulator note (sub-step 5) marking this recurrence as
+             suppressed-stale — the `<tactic-id> (STALE-SUPPRESSED)` entry — then
+             fall through directly to sub-step 6 (post accumulator, push
+             nothing).
+     4. **Block the PR's tracked issue on the flake issue.**
+
+        **Legacy lane (`TARGET_KIND=issue`):** In this thread, use
         the PR body already captured in Step 1's pack output (`=== PR ===` section)
         and parse its `Closes #N` line(s) for the issue(s) this PR implements. For **each** tracked issue, record a
         `blocked_by` dependency **on that tracked issue, targeting each flake issue
@@ -263,6 +533,34 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         `REOPENED`) — it makes no open-only assumption about the flake issue's
         state. **`STALE` is the one exception: skip this sub-step entirely** —
         deferred by design (see the `STALE` branch above).
+
+        **Node lane (`TARGET_KIND=node`):** On `NONE`/`EXISTING`/`REOPENED`
+        **only** (STALE already skipped straight past this sub-step above), set
+        `blocked_by` on the **source tactic** — `$N`, the node this `/fix-checks`
+        run targets — to include the flake tactic's id. This replaces the legacy
+        lane's GitHub dependencies-API call; no `gh issue`/dependencies-API call
+        ever happens on the node lane. Same reverse-direction note as the legacy
+        lane: the flake tactic is the *blocker*, the source tactic `$N` is the
+        *blocked* one (the reverse of `/review-fix`, which records `blocked_by`
+        on the new node).
+
+        Read `$N`'s current `blocked_by` array (`dump-node.ts`/reading
+        `intentions/$N.md`'s frontmatter). If the flake tactic's id is already
+        present, this is a no-op (idempotent re-run) — skip the write. Otherwise
+        append it and land the one-field frontmatter change:
+        ```bash
+        BASE_N=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+          --out-dir /tmp/claude-<uid>/dump "$N")
+        npx tsx packages/intentionsutil/scripts/write-node.ts --file <updated-N.json>
+        packages/intentionsutil/scripts/graph-commit --base "$BASE_N" "$N"
+        ```
+        **This must go through `write-node.ts` + `graph-commit`, not
+        `transition-node`** — `transition-node` only mutates `phase`/`--set-pr`
+        and has no `blocked_by` handling, so this is a deliberate deviation from
+        how the rest of this node-lane skill normally advances phase. Do **not**
+        escalate to office-hours for this outcome — the node-lane escalation seam
+        (`$CLAUDE_JOB_DIR/office-hours-reason`) is not written here; self-blocking
+        the source tactic on the flake tactic is a normal, non-escalating action.
      5. **Record a flake iteration in the accumulator** (the skill's top-level
         Step 7) — see [Accumulator](#accumulator); a flake entry is visually
         distinct from a generic no-repro one.
@@ -330,6 +628,10 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
    classification — generic and flake push nothing, main-fixed pushed the merge
    commit — so there is nothing more to do here.
 
+   **Node lane:** immediately after `/implement-unit` pushes the fix, disarm
+   auto-merge (`gh pr ready --undo "$PR_NUM"`) and record the pushed HEAD sha per
+   the node-lane completion seam (`apply-fix-state --record-push` + `graph-commit`).
+
    `/implement-unit` returning here is mid-pass, not the end of the turn. Continue
    through Steps 7–9; the pass ends only at the Step 9 `dispatch-mark-complete`
    marker (or the Step 4 needs-human stop). Do not emit a closing summary; the next
@@ -345,19 +647,29 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
    ```
 
 9. **Write the phase-completed marker, then stop.** Reached by every outcome
-   **except** needs-human (which stopped in Step 4 without a marker). The Stop hook
-   (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
+   **except** needs-human (which stopped in Step 4 without a marker).
    `CLAUDE_JOB_DIR` unset = interactive run; the script no-ops with a clear
    diagnostic.
+
+   **Legacy lane only** (`TARGET_KIND=issue`):
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
      --phase fix-checks --pr "$PR_NUM"
    ```
 
+   **Node lane** (`TARGET_KIND=node`): write NO `dispatch-mark-complete` marker
+   (it is a gh-label vehicle, issue-only). The node lane's completion is the
+   `apply-fix-state --spend-attempt` (+ `--record-push` when this iteration
+   pushed) + `graph-commit` write from the completion seam above — every
+   outcome that reaches Step 9 spends one attempt unit there. The Stop hook
+   (`.claude/hooks/dispatch-stop.sh`) needs no marker from a clean node pass —
+   it only backstops the escalation park.
+
    Then **stop**. The `/dispatch-propagate` background-job chain drives the
-   next iteration — the next `/dispatch-propagate` job re-derives the phase
-   from CI ground truth and re-invokes `/fix-checks` if checks still fail.
+   next iteration — the selector observes the pushed sha's CI verdict on a later
+   tick and either resolves the interrupt (green) or re-invokes `/fix-checks`
+   (still red).
 
 ## Accumulator
 
@@ -375,11 +687,22 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
   - **Why not caught** — the `why_not_caught` diagnosis.
   - **Fix** — the fix applied and its commit SHA. Include only when **Outcome**
     is `fixed`; omit otherwise.
-  - **Flake issue** — *`flake` outcome only* — the canonical tracking issue, written
+  - **Flake issue** — *`flake` outcome only* — the canonical tracking record.
+    **Legacy lane** (`TARGET_KIND=issue`): the GitHub tracking issue, written
     as `#<N> (CREATED)`, `#<N> (EXISTING)`, `#<N> (REOPENED)`, or
     `#<N> (STALE-SUPPRESSED)` per the `dispatch-flake-dedup` / `/file-issue`
-    disposition. `STALE-SUPPRESSED` marks a recurrence suppressed as a stale-head
-    false positive — no reopen was fired. Omit for every other outcome.
+    disposition. **Node lane** (`TARGET_KIND=node`): the flake tracking tactic
+    id, written as `<tactic-id> (CREATED)`, `<tactic-id> (EXISTING)`,
+    `<tactic-id> (REOPENED)`, or `<tactic-id> (STALE-SUPPRESSED)` per the
+    `dispatch-flake-dedup-node` disposition — parallel to the legacy form, just
+    a tactic id instead of an issue number. `STALE-SUPPRESSED` marks a
+    recurrence suppressed as a stale-head false positive — no reopen was fired.
+    A sixth value, bare `STALE-HEAD-SUPPRESSED` with no tactic id, marks the
+    `NONE`-path counterpart: `dispatch-flake-stale-head-check` found the failure
+    does not reproduce at `origin/main`, so **no node was created at all** and
+    there is no id to name. Record alongside it that the remedy is to merge
+    `origin/main` and re-run.
+    Omit for every other outcome.
   - **Fingerprint** — *`flake` outcome only* — the dedupe key computed in the
     Flake sub-path (the failing check name plus the stable identifier). Omit for
     every other outcome.

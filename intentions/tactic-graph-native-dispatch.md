@@ -23,6 +23,44 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours:
+  reason: "/align-tactics tactic-graph-native-dispatch invoked as a per-node
+    finalize/re-plan target, but this node does not fit either category the
+    skill defines: it is neither an undecomposed draft nor soft-frozen — it is a
+    subtree-parent, self-documented in its own rationale as 'Not directly
+    executable (no phase); it completes when its last child completes.' It was
+    already decomposed 2026-07-03 and currently parents 8 children
+    (tactic-fix-interrupt-orthogonal-state: qa,
+    tactic-fix-checks-graph-native-flake-tracking: implement,
+    tactic-legacy-router-removal: implement, tactic-pending-merge-phase: draft,
+    plus 4 done). There is no plan to write and no valid way to land phase:
+    implement on it — its body is the subtree's shared spec, not a PR-sized
+    unit. Root cause: selectGraphTargets's frozen-tactic loop
+    (packages/intentionsutil/src/router.ts, isDraft at ~L125-127, frozen-tactic
+    candidates at ~L317-329) treats any tactic with phase===null as
+    draft-selectable for /align-tactics, with no exclusion for a tactic that is
+    itself another tactic's `parent` (i.e. a permanent, by-design non-executable
+    container). This is not an isolated case: tactic-firebase-demo-saas-app
+    matches the identical shape (status: codified, phase: null, 6 real children
+    via `parent`), so both nodes will keep re-surfacing as align-tactics
+    candidates every tick."
+  since: 2026-07-19
+  recommendation: "Router-code defect, now tracked:
+    tactic-router-subtree-parent-exclusion (drafted 2026-07-19 /align-strategy
+    round on strategy-graph-native-dispatch) records the fix — exclude any
+    tactic named as another tactic's `parent` from the isDraft-selectable set in
+    selectGraphTargets (packages/intentionsutil/src/router.ts), or introduce a
+    first-class marker distinguishing a genuine undecomposed draft from a
+    permanent subtree-parent. This park stands so the router stops re-selecting
+    this node every tick; clear it when that tactic lands its router fix
+    (clearing this park is named in that tactic's draft body as part of its
+    completion)."
+pace_exempt: false
+rounds: null
 attributes: {}
 ---
 # Build graph-native dispatch — subtree parent: schema, graph-commit, align skills, router v2, instrument, legacy removal
@@ -113,7 +151,7 @@ rounds:
   and delegations, but is authoritative content for tactics — draft context
   before finalization, the full clean-session plan after. Store change
   required: `writeNode` must preserve tactic bodies (until it ships, bodies
-  are hand-maintained; no automated writer touches tactic bodies).
+  are hand-maintained; no automated writer touches tactic bodies). (Correction, tick +6 2026-07-11: tactic-body preservation HAS shipped (`readExistingTacticBody` in store.ts), but NON-tactic bodies — strategy, kind, delegation, virtue — are REGENERATED from `statement` on every `writeNode`, so they are cosmetic and cannot durably hold content: reconcile-graph, read-sensors, park, and transition writes all clobber them. `writeNode` does NOT unconditionally preserve a node body — only a tactic's. The kind-strategy body-function rule (2026-07-09) and its consumers conflict with this; the contract is under decision at `tactic-nontactic-body-durability`, on which calibration-event-registry, mount-schema, and graph-native-dispatch-fold are blocked.) (Resolution, office hours 2026-07-18: the author RATIFIED the greenfield contract at `tactic-nontactic-body-durability` — ALL node bodies (virtues, strategies, delegations, kinds, tactics) are now durable, authoritative content, NOT a cosmetic render. `store.ts` drops the kind gate (`readExistingTacticBody` → `readExistingBody`, `assertNoTacticBodyLoss` → a kind-agnostic `assertNoBodyLoss`), so `writeNode` preserves every kind's body verbatim on rewrite and regenerates the `# ${statement}` placeholder only for a brand-new file — reconcile-graph, read-sensors, park, and transition writes no longer clobber a non-tactic body. This supersedes the "cosmetic render for virtues, strategies, and delegations" clause above. Shipped on PR #2890 (phase review); the three blocked consumers unblock on merge.)
 - **Blocking** stays the tactic-layer subtree mechanism recorded on
   `strategy-graph-drives-dispatch`: `blocked_by: [<tactic-id>...]`; nothing
   in a blocked subtree starts until the blocking subtree completes; the
@@ -337,16 +375,46 @@ A **strategy** is eligible for an `/align-tactics` session iff:
   newer than `rounds.last_completed`, and
 - `rounds.count < 2` (at the cap, the router parks it instead).
 
-A **tactic** is eligible for its phase skill iff `office_hours` is null,
-`phase` is neither `draft` nor `done`, its `blocked_by` set is fully
-complete, and its phase's sensor gate is satisfied.
+A **tactic** is eligible for its **phase skill** (e.g. `/implement`,
+`/fix-checks`, `/qa-fix`) iff `office_hours` is null, `phase` is neither
+`draft` nor `done`, its `blocked_by` set is fully complete, and its
+phase's sensor gate is satisfied. A frozen tactic — draft/raw (`phase`
+absent), or soft-frozen per the gate below — is ineligible for its phase
+skill by this same test, but is separately eligible for an
+`/align-tactics` session per the next paragraph.
+
+A **frozen tactic** (draft/raw, `phase` absent; or soft-frozen, per the
+soft-freeze gate below) is eligible for its own `/align-tactics` session
+iff `office_hours` is null and its `blocked_by` set is fully complete —
+parallel to how a strategy is eligible for its own `/align-tactics`
+session above. This is the first-class-selectability behavior implemented
+by `selectGraphTargets` in `packages/intentionsutil/src/router.ts`.
+
+A strategy with one or more eligible frozen descendants resolves, as the
+`/align-tactics` candidate, to its highest-ranked frozen descendant (by
+the same resolved-attention rank and ordering used everywhere else) —
+not to the strategy node itself; a strategy with no tactic children (a
+zero-tactic strategy) resolves to itself. The implementing primitive is
+`resolveFrozenDescendant` in `packages/intentionsutil/src/router.ts`.
+
+Within one attention-rank level, candidates now sort by a **progression
+ordinal** over the full schema `PHASES` order — `draft < align-tactics <
+implement < fix < qa < review < main-qa < done` — more-progressed first.
+This generalizes and replaces the old closest-to-done `PHASE_LADDER`
+(see §3.2, which also needs the corresponding update). It reorders `fix`
+and `qa`: under the progression ordinal, `qa` (further along the
+pipeline) now sorts before `fix`, the opposite of the old ladder's `fix`
+before `qa`.
 
 **Soft-freeze gate** (clarification 10): before selecting within a
 subtree, the router recomputes the serving strategy's substance
 fingerprint; any open tactic stamped with a stale
 `execution.strategy_fingerprint` freezes the subtree — no new selections,
-in-flight phases finish, one re-evaluation `/align-tactics` session is
-queued, the freeze is logged to the selection log. State writes
+in-flight phases finish, one re-evaluation `/align-tactics <tactic-id>`
+session is queued **per frozen tactic** in the subtree (not a single
+strategy-level session) — each frozen tactic re-surfaces individually as
+an `align-tactics` candidate at its own node id, per `selectGraphTargets`
+— the freeze is logged to the selection log. State writes
 (`reading`/`gap`/`rounds`/`office_hours`) never change the fingerprint.
 
 ### 3.2 Selection
@@ -358,9 +426,14 @@ weighted sum of read-time-derived terms — explicit author attention (an
 `override` pins), signal satisfaction (structural reachability to
 `validates`-terminals of unvalidated signals), capture resolution (from
 `recovers`-edge delegation axes) — with new conditions added as terms,
-never bands; clarification 11) → 4. within a rank level, phase ladder
-closest-to-done first: `main-qa → review → fix → qa → implement →
-align-tactics(strategy)`. Topic categories retire — topical priority is
+never bands; clarification 11) → 4. within a rank level, the progression
+ordinal over the full schema `PHASES` order (`draft < align-tactics <
+implement < fix < qa < review < main-qa < done`) sorts more-progressed
+first, i.e. closest-to-done first: `main-qa → review → qa → fix →
+implement → align-tactics`. This reorders `fix`/`qa` relative to the old
+closest-to-done ladder (which had `fix` before `qa`); `align-tactics` now
+covers both a strategy candidate and a frozen-tactic candidate at that
+same directive rung. Topic categories retire — topical priority is
 authored attention on the owning strategy.
 
 Claimed-set, reservation ledger, concurrency pacing
@@ -378,6 +451,59 @@ at a paced-to-zero budget the tick probes pace-exempt eligible nodes and
 admits one gate-exempt worker — bypassing the gate, not the count or the
 order — with `dispatch-target-workers --exhausted` as the hard floor no
 flag overrides (main-broken parity).
+
+**The concurrency cap is global** (2026-07-06 interview): the
+`max_concurrent_workers` bound (config default 8) caps the TOTAL of
+dispatch-managed workers live at any moment across all ticks, workflows,
+and lanes. The enforcement point is selection — busy + reserved counted
+from the ledger and liveness against the pace target, selecting only the
+gap. Per-workflow caps (`dispatch-graph-tick`'s `worker_cap`, an emulated
+tick's semaphore) are local backstops, never the enforcement point: two
+overlapping workflows each locally capped at 8 would otherwise run 16.
+Overlapping ticks are safe via claims, not serialization — a tick's
+lifetime ends at spawn; every selected node enters the reservation ledger
+at selection under the lock; the node-id-named runner session carries the
+claim for the phase's life; the sweep reconciles dead workers; a
+concurrent tick re-selects only unclaimed nodes. A single long-lived
+multi-node workflow is never the router mode — its subagents are
+invisible to node-id liveness, so it cannot carry claims.
+
+**Worker-start re-validation** (2026-07-06 interview): two gates bracket
+every worker, with no mid-run polling. At start, the provisioning
+prelude re-validates against fresh `origin/main` — node exists, persisted
+phase equals the selected phase (passed as an argument), `office_hours`
+null, strategy fingerprint unchanged where stamped; mismatch is a
+distinct exit and the next tick re-selects (a selected-but-unstarted
+worker counts as NOT started and yields to a soft freeze). The same
+prelude carries the **scope chain of custody** (chain-of-custody
+clarification, 2026-07-06, superseding the same-day scope-fingerprint
+entry's stay-at-completed-phase clause): a fix/qa/review worker starts
+only if the current **scope fingerprint** (statement + body hash;
+frontmatter state fields never included) equals the previous phase's
+stamp beside the worktree (`<fingerprint> <origin-main-sha>`); on pass
+the gate re-stamps. At write, the transition-time gate compares against
+the running phase's own stamp — a stale strategy fingerprint holds the
+transition for re-evaluation; a stale scope stamp (either gate) writes
+the backward transition `phase := implement` instead of a hold, with the
+`<stamped-sha>..origin/main` node-file commit range recorded in the
+demotion commit and on the PR as the routing-back provenance. Merge
+therefore requires an unbroken implement → qa → review chain all
+executed against the merge-time scope; machinery body appends (residue)
+never break custody because the transition writer refreshes the stamp to
+its post-write fingerprint. Demotion is pre-merge only — post-merge
+staleness routes per main-qa parity (§1.1). Author edits to a claimed
+tactic's scope still land freely and bind from the next selection; park
+the node to interrupt outright. Implementation:
+`tactic-worker-start-revalidation` (detect/stamp side) and
+`tactic-graph-router-transitions` Unit 1 (verify/demote side, the
+`demote-node-to-implement` primitive).
+
+**No session keepalive** (2026-07-06 interview): the graph is the
+long-horizon substrate; sessions are disposable executors. Continuity is
+durable state on `origin/main` re-entered by the cron heartbeat — dead
+ticks, workers, and queues recover by re-selection plus ledger sweep,
+never by resuming or keeping alive a session. A phase worker may run
+long; the ban is the router-as-session.
 
 ### 3.3 Coexistence and drain
 
@@ -407,7 +533,17 @@ GitHub is a separate strategy; design TBD.)
   an emulating session owes the phase skill's substance, not a checklist
   re-run; for `qa` that means the legacy `qa-fix` parity of §2.4
   (clarification 20), and for `review` the full `/review-fix` fan-out of
-  §2.4 (clarification 21) — a review phase is never skipped past.
+  §2.4 (clarification 21) — a review phase is never skipped past. An
+  emulating session also owes the router's claiming semantics (2026-07-06
+  interview): a reservation-ledger claim per selected node before fan-out,
+  each cleared with its transition write — so a concurrent tick's budget
+  and selection see the emulated workers, keeping the global worker cap
+  (§3.2) intact under overlap. And it owes the scope chain of custody
+  (§3.2): before each transition write it re-checks that no scope edit
+  landed after its phase's fresh read, and when it finds a post-read
+  edit — or a scope edit that landed after an earlier phase already
+  completed — it writes the demotion to `implement` instead of the
+  forward transition.
 
 ### 3.4 Worktree anchoring and claiming
 
@@ -439,8 +575,9 @@ worktrees where they are) and their conventions retire with
 hands the node-id set to a thin tick workflow script (the Workflow
 primitive) that fans out one `agent()` per selected node — never to the
 legacy launch scripts, which stay issue-lane-only and retire with the
-drain. The directive per node is `/align-tactics <id>` for a strategy,
-the tactic's persisted `phase` mapped to its phase skill otherwise;
+drain. The directive per node is `/align-tactics <id>` for a strategy or a
+frozen tactic (draft/raw, or soft-frozen), the tactic's persisted `phase`
+mapped to its phase skill for a non-frozen open tactic;
 `dispatch-route`'s label/PR-derived phase derivation does not apply to
 node targets (phase is persisted, clarification 1). Mechanics stay owned
 and deterministic per the thin-script condition: agents invoke a
@@ -474,6 +611,7 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 | Review-phase deferred filings (`/review-fix` follow-up issues) | Draft tactics batched per component, finalized by a later `/align-tactics` round (strategy clarification 19); refuted/below-threshold findings live only in the PR review comment |
 | QA needs-main follow-up filing (`qa-fix` Step 3.6 → main-qa issues) | Retired as an artifact — needs-main residue rides the source tactic into its `main-qa` phase; the qa-main handler verifies against prod (strategy clarification 22, §1.1) |
 | Finalize (assign, `help wanted`) | Retired — presence on `origin/main` with `phase` set *is* schedulability |
+| `fix-checks`'s Flake sub-path (find-or-file a flake-tracking issue, `blocked_by` the PR's tracked issue) — an indirect `/file-issue` caller, missed by the direct-caller rows above; dead on the node lane since GitHub Issues are disabled repo-wide (strategy clarification, 2026-07-16) | Find-or-create a fingerprint-keyed **tactic node** (fingerprint/reproduce-command/diagnosis in the body) and set `blocked_by` on the **source tactic** directly — no office-hours escalation; the router's existing `blocked_by`-completeness gate (`blockersComplete` in `packages/intentionsutil/src/router.ts`) already re-surfaces the source tactic once the flake-fix tactic reaches `phase: done`. Tracked by `tactic-fix-checks-graph-native-flake-tracking` |
 
 ### `/plan-issue` → `/align-tactics`
 
@@ -491,6 +629,17 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 | Trivial-task skip | Unchanged |
 
 ## 5. Subtree (round 1, recorded 2026-07-03; re-evaluated same day)
+
+**Current state (2026-07-10, self-consistency sweep):** ten of the fifteen
+round-1 children have completed and been pruned from the graph; five remain
+open, all `phase: implement` — `tactic-graph-router-transitions`,
+`tactic-phase-skill-node-targets`, `tactic-main-qa-phase`,
+`tactic-dispatch-lifecycle-sensor` (validates-terminal), and
+`tactic-legacy-router-removal` (validates-terminal). The count and diagram
+below are the historical round-1 decomposition, kept for the dependency order
+they record; pruned nodes they name (the align-skill tactics, the schema,
+graph-commit, router-selector, calculated-attention, the two hardening
+children, branch-protection) no longer exist as graph files.
 
 Fifteen children: the eleven round-1 nodes below, each a leaf = one PR
 unless noted, plus two clarification-19 deferral children finalized

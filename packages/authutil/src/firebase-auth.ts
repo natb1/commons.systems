@@ -107,6 +107,10 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
     return firebaseSignOut(auth).catch((error) => {
       logError(error, { operation: "sign-out" });
       showAuthError("Sign-out failed. Please try again.");
+      // Re-throw so a caller awaiting signOut() does not proceed as signed-out
+      // while the session is still live; the logError + showAuthError side
+      // effects above are preserved.
+      throw error;
     });
   }
 

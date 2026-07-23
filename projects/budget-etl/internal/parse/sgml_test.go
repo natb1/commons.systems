@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"encoding/xml"
 	"os"
 	"path/filepath"
 	"strings"
@@ -266,5 +267,51 @@ func TestParseSGML_CreditCardLiability(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("account %q not found in journal result", wantID)
+	}
+}
+
+func TestSGMLTagValueDecodesEntities(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		tag     string
+		want    string
+	}{
+		{"ampersand", "<NAME>AT&amp;T Wireless<FITID>1", "NAME", "AT&T Wireless"},
+		{"all predefined", "<MEMO>a&lt;b&gt;c&quot;d&apos;e&amp;f<FOO>", "MEMO", `a<b>c"d'e&f`},
+		{"decimal char ref", "<NAME>caf&#233;<FITID>1", "NAME", "café"},
+		{"hex char ref", "<NAME>caf&#xE9;<FITID>1", "NAME", "café"},
+		{"bare ampersand kept", "<NAME>Tom & Jerry<FITID>1", "NAME", "Tom & Jerry"},
+		{"unknown entity kept", "<NAME>a&nbsp;b<FITID>1", "NAME", "a&nbsp;b"},
+		{"no entity identity", "<NAME>Plain Text<FITID>1", "NAME", "Plain Text"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sgmlTagValue(tc.content, tc.tag); got != tc.want {
+				t.Errorf("sgmlTagValue(%q, %q) = %q, want %q", tc.content, tc.tag, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSGMLEntityParityWithXML confirms the SGML path decodes an entity to the
+// same value encoding/xml produces on the OFX 2.x (XML) twin, so a description
+// like AT&amp;T is stored identically regardless of source format.
+func TestSGMLEntityParityWithXML(t *testing.T) {
+	const raw = "AT&amp;T"
+
+	sgmlGot := sgmlTagValue("<NAME>"+raw+"<FITID>1", "NAME")
+
+	var xmlGot struct {
+		Name string `xml:"NAME"`
+	}
+	if err := xml.Unmarshal([]byte("<STMTTRN><NAME>"+raw+"</NAME></STMTTRN>"), &xmlGot); err != nil {
+		t.Fatalf("xml.Unmarshal: %v", err)
+	}
+	if sgmlGot != xmlGot.Name {
+		t.Errorf("SGML decode %q != XML decode %q", sgmlGot, xmlGot.Name)
+	}
+	if sgmlGot != "AT&T" {
+		t.Errorf("decoded value = %q, want %q", sgmlGot, "AT&T")
 	}
 }

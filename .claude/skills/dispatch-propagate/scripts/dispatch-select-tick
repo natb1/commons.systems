@@ -2,20 +2,25 @@
 # dispatch-select-tick — the /dispatch-propagate router's selection orchestrator
 # (the deterministic Steps 0-3 of the old SKILL.md, bundled into one script).
 #
-# Usage: dispatch-select-tick [--manual] [<issue-or-PR-number>]
+# Usage: dispatch-select-tick [--manual | <node-id>]
 #
 # Runs the lock acquisition, origin/main sync (only on `main`), the run-scoped
 # concurrency gate, the JIT engine, the Calendar JIT importer, the statements
 # scan, the orphaned-follow-up re-triage scan,
-# and target selection as one deterministic sequence and prints exactly ONE
+# and graph target selection as one deterministic sequence and prints exactly ONE
 # decision line as its LAST stdout line. Any JIT
 # `created`/`skipped`/`debounced` lines are passed through first, each prefixed
 # `jit: `, followed by any `calendar: ...` lines, followed by any
 # `statements: ...` lines, and any
-# `retriage: ...` lines. The router (SKILL.md)
-# routes on the final decision line; a model-decision seam (`main-broken` /
-# `jit-reminder`) and the worktree materialization (`dispatch-materialize-spawn`)
-# live on the other side of the seam, not here.
+# `retriage: ...` lines. The router (dispatch-tick)
+# routes on the final decision line.
+#
+# The legacy gh-issue selection lane — explicit-arg resolution, the priority /
+# pr / issue queue selector (dispatch-select-target), and the worktree
+# materialization (dispatch-materialize-spawn) — was deleted in
+# tactic-dispatch-legacy-rewire Unit 3. What remains is the graph selector plus
+# the two lane-independent aux triggers (jit-reminder, main-broken) and the
+# health/sync latches.
 #
 # Decision lines (the last stdout line is always exactly one of):
 #   busy             lock held by another tick; nothing acquired, nothing released.
@@ -25,49 +30,47 @@
 #   sync-repair-pending   a live sync-repair job is mutating the main worktree;
 #                    deferred. lock released; reseed armed.
 #   sync-broken      local main cannot ff-merge origin/main and the repair
-#                    attempt-cap is hit (or the latch is already open); a
-#                    dispatch:sync-broken issue is the latch. lock released;
+#                    attempt-cap is hit (or the latch is already open); the
+#                    repo-health durable record is the latch. lock released;
 #                    reseed armed; nothing spawned.
-#   resolver-failed  explicit arg is a genuine non-resolution (dispatch-resolve-arg
-#                    exit 2/3/4: 404, PR with no/many closing issues); lock released.
-#                    Only these three genuine-failure codes emit this. A transient
-#                    resolve-arg failure (exit 1) — or ANY other unexpected non-zero
-#                    code (127 not-found, 124 timeout, 137/143 signal/OOM kill) —
-#                    does NOT emit this; it propagates as exit 2 (see Exit code below).
 #   concurrency-cap  effective-live count (busy workers + outstanding reservations) >= target,
-#                    AND no priority/main-broken item waits to bypass it (or the rate-limit
+#                    AND no main-broken item waits to bypass it (or the rate-limit
 #                    window is genuinely exhausted); #725 re-seed scheduled; lock released.
-#   explicit <num> <gap>   explicit arg resolved to issue <num>; lock HELD.
-#   pr <num> <branch> <phase> <gap>   queue selected a PR; lock HELD.
-#   issue <num> <gap>   queue selected a help-wanted leaf; lock HELD.
+#   graph <count> <id:kind:phase>...   the graph selector picked <count> nodes
+#                    (tactic-graph-router-selector). Each node is already
+#                    reserved in the ledger under its NODE ID (the durable
+#                    claim), so the lock is RELEASED — the execute path
+#                    (dispatch-graph-execute, via dispatch-tick) runs lock-free.
 #   main-broken <sha>   origin/main is red; lock RELEASED (spawned as a bg job,
 #                    which runs lock-free).
 #   jit-reminder <repo> <num> <project> <item-id>   a JIT reminder is due; lock
 #                    RELEASED (spawned as a bg job, which runs lock-free).
 #   empty            nothing eligible; lock released.
 #
-# <gap> = max(1, TARGET_N − LIVE_COUNT) is the run-scoped spawn budget the
-# fan-out loop consumes (always >= 1 on a target line). On the autonomous queue
+# <gap> = max(1, TARGET_N − LIVE_COUNT) is the run-scoped spawn budget the graph
+# fan-out consumes (always >= 1 on a target line). On the autonomous queue
 # path LIVE_COUNT is the effective-live count,
 # effective_live = busy_workers + outstanding_reservations — a reservation counts
 # against the budget the instant it is written, with no wait for worker
-# registration — and the tick sweeps stranded reservations before counting. An
-# explicit-target run (a positional <number> is given) skips the concurrency gate
-# entirely (no sweep, no ledger count) and forces <gap> = 1 — a deliberately-named
-# target is not paced by the autonomous budget.
+# registration — and the tick sweeps stranded reservations before counting.
 # A `--manual` run (the bare human-typed `/dispatch` shim) QUERIES the live-count
-# and computes a context-dependent SPAWN_N = min(HEADROOM, max(N_PRIO, GAP, 1));
-# it overrides the pace-curve throttle but honors the `--exhausted` floor
-# (SPAWN_N=0 → emits `concurrency-cap`) and the MAX_WORKERS ceiling, and emits
-# <gap> = SPAWN_N.
-# The autonomous no-arg queue path keeps the full gate, but with a priority
-# bypass at cap (see the gate narrative below): a waiting priority/main-broken
-# item is still selected and spawned as ONE gate-exempt worker (<gap> = 1) even
-# at/over the worker budget. The only hard floor is genuine token exhaustion.
+# and computes a context-dependent SPAWN_N = max(1, min(max(N_PRIO, GAP, 1), HEADROOM));
+# it overrides the pace-curve throttle and, per human-dispatch-is-sovereign, always
+# launches its one highest-ranking-available node even at the MAX_WORKERS ceiling
+# (a bounded, deliberate max_concurrent_workers + 1 overage) — only the `--exhausted`
+# floor (genuine rate-limit token exhaustion) still blocks it outright
+# (SPAWN_N=0 → emits `concurrency-cap`), and emits <gap> = SPAWN_N.
+# The autonomous no-arg queue path keeps the full gate, but with a pace-exempt
+# bypass at cap (see the gate narrative below): a graph pace_exempt node, or a
+# newly-red main, is still surfaced even at/over the worker budget. The only hard
+# floor is genuine token exhaustion.
 #
-# Lock invariant (the three guards): HOLD on pr/issue/explicit; RELEASE on
-# empty/sync-failed/sync-repair-pending/sync-broken/resolver-failed/concurrency-cap/main-broken/jit-reminder;
-# NEVER release on busy (nothing was acquired).
+# Lock invariant: RELEASE the lock on every decision except busy (where nothing
+# was acquired). Every terminal path — graph/empty/sync-failed/
+# sync-repair-pending/sync-broken/concurrency-cap/main-broken/jit-reminder —
+# releases before it emits; nothing holds the lock past select-tick. The graph
+# release is safe because the per-node reservation markers (written before the
+# emit) are the durable claim a concurrent tick's graph selector already skips on.
 #
 # Requires `dangerouslyDisableSandbox: true` — sub-scripts write tmp state, call
 # `gh`, and query the local Claude daemon over a Unix socket. The `--wait` lock
@@ -75,8 +78,8 @@
 # See .claude/rules/sandbox.md.
 #
 # Exit code: 0 on every decision line; 2 on an internal/usage error surfaced on
-# stderr (e.g. non-numeric TARGET_N from dispatch-target-workers, or a
-# dispatch-resolve-arg exit-1 transient/infra failure on the explicit-arg path).
+# stderr (e.g. non-numeric TARGET_N from dispatch-target-workers, or a positional
+# arg — explicit targeting was removed with the legacy lane).
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch
 # scripts).
@@ -143,25 +146,34 @@ _dlog_select_emit() {
 # handler rather than clobbering this one (`trap ... EXIT` replaces, not stacks).
 trap '_dlog_select_emit' EXIT
 
-ARG=""
 MANUAL=""
+NODE_ARG=""
 for a in "$@"; do
   case "$a" in
     --manual) MANUAL=1 ;;
     --*) DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="unknown-flag"; echo "dispatch-select-tick: unknown flag '$a'" >&2; exit 2 ;;
     *)
-      if [[ -n "$ARG" ]]; then
-        DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="extra-args"
-        echo "dispatch-select-tick: unexpected extra arguments after <number>" >&2
+      # Explicit issue/PR targeting (`dispatch <N>`) was the legacy issue lane's
+      # entry point; that lane is gone and the graph selector owns target
+      # selection. A positional arg shaped like a graph node id
+      # (tactic-graph-explicit-node-dispatch Unit 2) is the new explicit
+      # single-node targeting entry point — recognize it here, before the lock
+      # is acquired or any mutating side-effect step runs. The regex is
+      # provision-node-worktree's node-id slug shape, reused verbatim.
+      if [[ "$a" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+        NODE_ARG="$a"
+      else
+        DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="explicit-targeting-removed"
+        echo "dispatch-select-tick: explicit issue/PR targeting ('${a#\#}') was removed with the legacy issue lane; the graph selector owns target selection" >&2
         exit 2
       fi
-      ARG="${a#\#}"
       ;;
   esac
 done
-if [[ -n "$MANUAL" && -n "$ARG" ]]; then
-  DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="manual-with-arg"
-  echo "dispatch-select-tick: --manual cannot be combined with an explicit <number>" >&2
+
+if [[ -n "${NODE_ARG:-}" && -n "$MANUAL" ]]; then
+  DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="node-arg-with-manual"
+  echo "dispatch-select-tick: a node-id argument cannot be combined with --manual" >&2
   exit 2
 fi
 
@@ -177,6 +189,47 @@ release_lock() {
 # the lock) or any error is swallowed.
 refresh_lock() {
   "$SCRIPT_DIR/dispatch-acquire-lock" --heartbeat >/dev/null 2>&1 || true
+}
+
+# --- Graph-lane decision emitter (tactic-graph-router-selector) ---------------
+# Consumes `node <id> <kind> <phase>` lines from graph-select-target on stdin.
+# For each node it writes one reservation-ledger marker under the NODE ID
+# (uniform claiming, strategy clarification 13 — one claimed set and one
+# ledger span both keyspaces: node ids beside issue numbers; a strategy id in
+# the ledger keeps its strategy unselectable while its /align-tactics session
+# is in flight). It then RELEASES the selection lock — the markers are the
+# durable claim; the execute path (dispatch-graph-execute) runs lock-free —
+# and emits the single `graph <count> <id:kind:phase>...` decision line.
+# Callers must have sourced lib-reservation-ledger.sh (both call sites are on
+# paths that already do).
+#   return 0 — decision line emitted; the caller exits 0.
+#   return 1 — stdin held no node lines; the caller falls through to the
+#              legacy selector.
+emit_graph_selection() {
+  local specs=() ids=() id kind phase line
+  while IFS= read -r line; do
+    case "$line" in
+      node\ *)
+        read -r _ id kind phase <<<"$line"
+        [[ -n "$id" && -n "$kind" && -n "$phase" ]] || continue
+        specs+=("$id:$kind:$phase")
+        ids+=("$id")
+        ;;
+    esac
+  done
+  (( ${#specs[@]} > 0 )) || return 1
+  for id in "${ids[@]}"; do
+    # Mirror dispatch-materialize-spawn's posture: a failed ledger write is a
+    # budget undercount, not a selection abort.
+    reservation_write "$id" "$id" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2 \
+      || echo "dispatch-select-tick: reservation_write failed for $id; proceeding without a ledger entry (budget may undercount this slot)" >&2
+  done
+  release_lock
+  DLOG_DISPOSITION="graph"
+  DLOG_TARGET=$(IFS=,; printf '%s' "${ids[*]}")
+  DLOG_PHASE="${specs[0]##*:}"
+  echo "graph ${#specs[@]} ${specs[*]}"
+  return 0
 }
 
 # --- Step 0: acquire the dispatch lock ---------------------------------------
@@ -228,14 +281,27 @@ if [[ "$BRANCH" == "main" ]]; then
 
   # Resolve the main worktree the same way dispatch-tick does: an explicit
   # DISPATCH_TICK_MAIN_WORKTREE override is authoritative and bypasses the git
-  # lookup (tests rely on this); otherwise it is <project-root>/worktrees/main.
+  # lookup (tests rely on this); otherwise it is the project root itself — the
+  # standard-layout primary checkout (was <project-root>/worktrees/main pre-de-bare).
   if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
     MAIN_WORKTREE="$DISPATCH_TICK_MAIN_WORKTREE"
   else
     PROJECT_ROOT=$(resolve_project_root) \
       || { DLOG_DISPOSITION="internal-error"; DLOG_SKIP_REASON="resolve-project-root-failed"; echo "dispatch-select-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
-    MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+    MAIN_WORKTREE="$PROJECT_ROOT"   # de-bare: the project root IS the main checkout
   fi
+
+  # Prevent-at-source guard: the main-sync below (`git merge --ff-only
+  # origin/main`) can only fast-forward a checkout actually on `main`, and a
+  # non-main primary checkout also breaks provision-node-worktree's project-root
+  # resolution. If the primary checkout has drifted off `main` (the 2026-07-21
+  # direct-to-main incident, PR #2925), fail loudly here rather than merging in
+  # the wrong branch. Never auto-switch — that is a deliberate human/caller act.
+  assert_primary_checkout_on_main "$MAIN_WORKTREE" || {
+    DLOG_DISPOSITION="internal-error"
+    DLOG_SKIP_REASON="primary-checkout-not-on-main"
+    exit 2
+  }
 
   # Decision A — defer while a live sync-repair session is mutating the main
   # worktree, but fail OPEN on a daemon UNKNOWN (rc 1). claude_sessions_under
@@ -282,10 +348,14 @@ if [[ "$BRANCH" == "main" ]]; then
 
   if [[ "$merge_ok" == 1 ]]; then
     # SUCCESS — local main ff-merges clean. ALWAYS reset the attempt counter and
-    # close any open dispatch:sync-broken latch (Decision B: a clean probe means
-    # a human resolved the tree, so the chain auto-recovers). Then fall through
-    # to Step 1c — do NOT exit.
+    # clear the sync-broken latch (Decision B: a clean probe means a human
+    # resolved the tree, so the chain auto-recovers). The LATCH STATE now lives in
+    # the repo-health sensor's durable label-free record — clear it there. The
+    # gh-labeled dispatch:sync-broken issue stays as the human-visibility
+    # announcement, so it is still closed here (kept in sync with the durable
+    # clear). Then fall through to Step 1c — do NOT exit.
     sync_repair_reset_attempts
+    "$SCRIPT_DIR/repo-health" --clear-sync-broken 1>&2 || true
     OPEN_SB=$(gh_issue_list_rest --state open --label "dispatch:sync-broken" | jq -r '.[].number')
     for n in $OPEN_SB; do
       gh_issue_close_rest "$n" \
@@ -293,9 +363,11 @@ if [[ "$BRANCH" == "main" ]]; then
     done
   else
     # FAILURE — local main is dirty or diverged. The latch is checked only AFTER
-    # a failed merge (Decision B); the probe itself is never suppressed.
-    OPEN_SB=$(gh_issue_list_rest --state open --label "dispatch:sync-broken" | jq -r '.[0].number // empty')
-    if [[ -n "$OPEN_SB" ]]; then
+    # a failed merge (Decision B); the probe itself is never suppressed. The
+    # "already latched?" state is read from the repo-health sensor's durable
+    # label-free record (no gh, no dispatch:sync-broken label query) — the latch
+    # state has moved off the legacy label surface.
+    if [[ "$("$SCRIPT_DIR/repo-health" --sync-broken-latched)" == "latched" ]]; then
       # a. Already latched — a human owns the tree. Spawn nothing.
       release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
@@ -306,12 +378,17 @@ if [[ "$BRANCH" == "main" ]]; then
     fi
     N=$(sync_repair_read_attempts)
     if [[ "$N" -ge 3 ]]; then
-      # b. Attempt cap hit — escalate to the find-or-create latch issue and stop
-      # respawning. The escalate script reads the captured merge stderr on stdin.
+      # b. Attempt cap hit — set the durable label-free latch (repo-health) AND
+      # file the find-or-create human-visibility issue (dispatch-escalate-sync-broken),
+      # then stop respawning. The durable latch is the state the "already latched?"
+      # read above consults; the labeled issue is the announcement kept in sync
+      # with it. The escalate script reads the captured merge stderr on stdin.
       # This branch is terminal; it does NOT bump the counter.
       if [[ "$fetch_ok" == 0 ]]; then
+        "$SCRIPT_DIR/repo-health" --set-sync-broken --reason fetch-failed 1>&2 || true
         "$SCRIPT_DIR/dispatch-escalate-sync-broken" --reason fetch-failed <<<"$FETCH_STDERR" 1>&2 || true
       else
+        "$SCRIPT_DIR/repo-health" --set-sync-broken --reason merge-failed 1>&2 || true
         "$SCRIPT_DIR/dispatch-escalate-sync-broken" --reason merge-failed <<<"$MERGE_STDERR" 1>&2 || true
       fi
       release_lock
@@ -336,34 +413,18 @@ fi
 # non-main worktree or manual /dispatch tick refreshes too (#2104, invariant #2).
 refresh_lock
 
-# --- Step 1c: re-arm the main-broken latch when main has recovered -----------
-# A diagnosed red episode leaves an open dispatch:main-broken issue — the gate's
-# per-episode latch (#1085). Once origin/main goes green again, close it so the
-# next red episode re-fires the gate on first detection. Closing an issue is a
-# side effect, so it lives here in the lock-holding orchestrator, not in the pure
-# selector. The open-issue query is cheap and gates the extra CI read (via
-# dispatch-select-target --main-broken-sha) to the red/recovering window only;
-# this runs every tick — independent of the local branch — including a capped
-# tick, so recovery is observed even when no worker is spawned.
-OPEN_MB=$(gh_issue_list_rest --label "dispatch:main-broken" --state open \
-  | jq -r '.[].number') || {
-  echo 'dispatch-select-tick: gh issue list (dispatch:main-broken) failed; treating main health as UNKNOWN' >&2
-  OPEN_MB=UNKNOWN
-}
-if [[ -n "$OPEN_MB" && "$OPEN_MB" != "UNKNOWN" ]]; then
-  # Use explicit exit-code capture: a failed --main-broken-sha would produce empty
-  # output, which -z would treat as "green" and incorrectly close the latch.
-  MB_SHA=""
-  if ! MB_SHA=$("$SCRIPT_DIR/dispatch-select-target" --main-broken-sha); then
-    MB_SHA="UNKNOWN"
-  fi
-  if [[ -z "$MB_SHA" ]]; then
-    for n in $OPEN_MB; do
-      gh_issue_close_rest "$n" \
-        --comment "origin/main is green again; closing the main-broken latch (re-arming the gate)." 1>&2 || true
-    done
-  fi
-fi
+# --- Step 1c: sync the main-red graph latch (tactic-graph-main-self-heal) ----
+# The open-node read + green-main recovery-completion now live in their own
+# script, dispatch-graph-main-red-sync (extracted from this file's former
+# inline block so it is independently fakeable by the test harness, matching
+# the repo-health / graph-select-target script-per-concern convention — see
+# that script's header for the full contract: the open tactic-main-red-*
+# read, the phase:"done" completion on green, and the stdout protocol). This
+# runs every tick — independent of the local branch — including a capped
+# tick, so recovery is observed even when no worker is spawned. A failed
+# invocation (non-zero exit) is folded into UNKNOWN here too, so a transient
+# failure of the sub-script never masquerades as "main healthy".
+OPEN_MAIN_RED=$("$SCRIPT_DIR/dispatch-graph-main-red-sync") || OPEN_MAIN_RED=UNKNOWN
 
 # --- Step 1d: reconcile router-owned PR readiness (best-effort) -------------
 RECONCILE_OUT=$("$SCRIPT_DIR/dispatch-reconcile-ready") || true
@@ -376,13 +437,13 @@ fi
 # --- Step 1d (cont.): auto-merge every ready PR (#1739) ----------------------
 # Runs after dispatch-reconcile-ready (a PR demoted this tick is seen as draft
 # and skipped). Auto-merge runs ONLY when
-# OPEN_MB is definitively empty — i.e. main health is known-good. It is suppressed
-# both while main is broken (OPEN_MB lists open main-broken issues, from Step 1c)
-# and when main health is UNKNOWN (the Step 1c gh issue list failed): a transient
-# gh failure must not defeat this load-bearing safety gate. Auto-merge is ON by
-# default; dispatch.config/auto-merge.json is an opt-OUT kill-switch
-# (enabled:false suppresses it).
-if [[ -z "$OPEN_MB" ]]; then
+# OPEN_MAIN_RED is definitively empty — i.e. main health is known-good. It is
+# suppressed both while main is broken (OPEN_MAIN_RED lists open tactic-main-red-*
+# nodes, from Step 1c) and when main health is UNKNOWN (the Step 1c graph read
+# failed): a transient read failure must not defeat this load-bearing safety gate.
+# Auto-merge is ON by default; dispatch.config/auto-merge.json is an opt-OUT
+# kill-switch (enabled:false suppresses it).
+if [[ -z "$OPEN_MAIN_RED" ]]; then
   MERGE_OUT=$("$SCRIPT_DIR/dispatch-auto-merge") || true
   if [[ -n "$MERGE_OUT" ]]; then
     while IFS= read -r merge_line; do
@@ -393,7 +454,7 @@ fi
 
 # --- Step 1d (cont.): post-merge reconciliation (#2512) ----------------------
 # Closes any issue GitHub's merge-time auto-close silently left OPEN (see #2481).
-# Runs unconditionally (NOT gated on $OPEN_MB): it merges nothing, only repairs
+# Runs unconditionally (NOT gated on $OPEN_MAIN_RED): it merges nothing, only repairs
 # already-merged work's closing issues, so it is safe during a main-broken
 # episode. Best-effort: a failure here must not abort the tick.
 RECONCILE_MERGED_OUT=$("$SCRIPT_DIR/dispatch-reconcile-merged") || true
@@ -403,19 +464,65 @@ if [[ -n "$RECONCILE_MERGED_OUT" ]]; then
   done <<< "$RECONCILE_MERGED_OUT"
 fi
 
+# Graph-lane analog: absorb out-of-band PR events for open graph-native tactics
+# into graph state (tactic-graph-census-recurrence Unit 1). Without this the
+# graph-native reconciler reconcile-graph-merged has no call-site, so a merged
+# graph-native node is never moved to done and the selector re-selects it every
+# tick as a stale review target. Runs unconditionally like its issue-lane
+# sibling above (it only absorbs already-merged work, safe during a main-broken
+# episode) and best-effort (a reconcile error must not abort the tick). This
+# whole script runs with the sandbox disabled (see the header note), so
+# reconcile-graph-merged's gh (TLS) + node --import tsx/esm (npm cache) needs
+# are covered without an extra wrapper.
+RECONCILE_GRAPH_OUT=$("$SCRIPT_DIR/reconcile-graph-merged") || true
+if [[ -n "$RECONCILE_GRAPH_OUT" ]]; then
+  while IFS= read -r graph_line; do
+    [[ -n "$graph_line" ]] && echo "reconcile-graph: $graph_line"
+  done <<< "$RECONCILE_GRAPH_OUT"
+fi
+
+# Standing per-tick reconciliation-debt duty (tactic-graph-census-recurrence
+# Unit 2). Runs right after the same-tick reconciler above absorbs what it can,
+# so what remains is the persistent owed-prune / orphan debt a census must
+# drain. Graph-only (no network — the per-tick duty is near-free), best-effort
+# (a failure must not abort the tick). When accumulated debt crosses the
+# configured threshold and no census node is already open, it births exactly one
+# born-parked census tactic naming the batch and lands it via graph-commit; the
+# born-parked node is the recurrence latch, so it births at most one at a time.
+CENSUS_OUT=$("$SCRIPT_DIR/dispatch-graph-census") || true
+if [[ -n "$CENSUS_OUT" ]]; then
+  while IFS= read -r census_line; do
+    [[ -n "$census_line" ]] && echo "census: $census_line"
+  done <<< "$CENSUS_OUT"
+fi
+
+# Pre-selection scope-staleness sweep (tactic-tick-scriptable-then-spawn). Runs
+# before the concurrency gate and selection below, so a scope-stale tactic is
+# demoted to `implement` as a scriptable non-worker disposition here in phase 1
+# rather than at worker-launch time (dispatch-graph-execute's exit-13 case, still
+# present as a post-sweep safety net). Moving the metadata-only demote out of the
+# launch group means it never silently consumes a SPAWN_N launch slot. Runs after
+# the reconcilers above absorb what they can, so only persistent scope drift
+# remains. Best-effort (a failure must not abort the tick); this whole script
+# runs with the sandbox disabled (see the header note), covering the sweep's
+# claude_agents_list_all daemon socket + demote-node-to-implement graph-commit.
+SCOPE_SWEEP_OUT=$("$SCRIPT_DIR/dispatch-graph-scope-sweep") || true
+if [[ -n "$SCOPE_SWEEP_OUT" ]]; then
+  while IFS= read -r sweep_line; do
+    [[ -n "$sweep_line" ]] && echo "scope-sweep: $sweep_line"
+  done <<< "$SCOPE_SWEEP_OUT"
+fi
+
 # Heartbeat: refresh after the auto-merge and reconcile-merged sub-steps complete (#2104, #2512).
 refresh_lock
 
-# --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -
-# Runs ONLY on the autonomous no-arg queue path. The explicit-target run (a
-# positional <number> was given) and the `--manual` run (the bare human-typed
-# `/dispatch` shim) DIVERGE here. The explicit-target run skips this gate
-# entirely — a deliberately-named target is not paced by the autonomous budget —
-# and keeps GAP=1. The `--manual` run runs its OWN context-dependent fan-out
-# computation (the `elif [[ -n "$MANUAL" ]]` branch below): it queries the
-# live-count, overrides the pace-curve throttle but honors the `--exhausted`
-# floor and the MAX_WORKERS ceiling, and emits <gap> = SPAWN_N (or
-# `concurrency-cap` when SPAWN_N=0).
+# --- Step 1b: run-scoped concurrency gate (autonomous queue path only) -------
+# Runs ONLY on the autonomous queue path. The `--manual` run (the bare
+# human-typed `/dispatch` shim) DIVERGES here: it runs its OWN
+# context-dependent fan-out computation (the `elif [[ -n "$MANUAL" ]]` branch
+# below) instead of this gate — it queries the live-count, overrides the
+# pace-curve throttle but honors the `--exhausted` floor and the MAX_WORKERS
+# ceiling, and emits <gap> = SPAWN_N (or `concurrency-cap` when SPAWN_N=0).
 # On the autonomous queue path the gate is evaluated ONCE per run. Before
 # counting, the gate sweeps stranded reservations (reservation_sweep) so it
 # reconciles the ledger first. LIVE_COUNT is then the effective-live count,
@@ -429,8 +536,8 @@ refresh_lock
 # per-worktree dedup in dispatch-spawn-job is the last-line defense.
 #
 # AT cap (LIVE_COUNT >= TARGET_N) the budget no longer hard-stops the run. The
-# budget paces only NON-priority autonomous fan-out; priority/main-broken work
-# bypasses it. There are three cases, evaluated in order:
+# budget paces only NON-pace-exempt autonomous fan-out; pace-exempt/main-broken
+# work bypasses it. There are three cases, evaluated in order:
 #   1. `dispatch-target-workers --exhausted` reports `exhausted` (the 5-hour or
 #      weekly window is genuinely ~100% used, reset still ahead) → HARD STOP for
 #      everything: release the lock, schedule the #725 re-seed, emit
@@ -438,30 +545,24 @@ refresh_lock
 #      is pure noise. This is distinct from "paced to 0 / at cap", which the
 #      pace/ramp math can produce while tokens remain; --exhausted is computed
 #      from telemetry independently of that math.
-#   2. Otherwise `dispatch-select-target --priority-only` probes the priority
-#      tier (its main-broken health gate runs first, so a main that broke WHILE
-#      at cap is now surfaced — the old early-exit fired before any selection):
-#        - `main-broken <sha>` → release the lock, echo it (the lock-free
-#          diagnose bg job spawns downstream).
-#        - `pr ...` / `issue ...` → HOLD the lock, append GAP=1 — ONE
-#          gate-exempt worker, exactly like explicit dispatch. It is
-#          still counted by claude_agents_count_busy_workers on later ticks, so
-#          it suppresses non-priority fan-out: it bypasses the GATE, not the
-#          COUNT.
-#        - `waiting <N>` → a priority PR exists but its CI is pending (#1444).
-#          At target=0 there is no busy worker re-probing priority on a
-#          baton-pass, so the pace reseed would strand the item until the pace
-#          window reopens. Arm the CI-cadence reseed instead:
-#          `dispatch-schedule-target-reseed <N>` re-runs dispatch-tick <N> on a
-#          short delay (CI concluded → spawns gate-exempt; still pending →
-#          re-arms, bounded by the ci-wait attempt counter → office-hours).
-#          At target>0 a busy worker already re-probes priority on each
-#          baton-pass, so the existing pace reseed (`dispatch-schedule-reseed`)
-#          is correct. Both paths release the lock and emit `concurrency-cap`.
-#   3. `empty` (no priority/main-broken item waiting) → the unchanged hard cap:
-#      release the lock, schedule the #725 re-seed, emit `concurrency-cap`.
+#   2. Otherwise probe `graph-select-target --pace-exempt-only` (the authored
+#      `pace_exempt` flag is the graph home of the legacy `priority` label): a
+#      hit HOLDS the lock and appends GAP=1 for ONE gate-exempt worker. It is
+#      still counted by claude_agents_count_busy_workers on later ticks, so it
+#      suppresses non-pace-exempt fan-out: it bypasses the GATE, not the COUNT.
+#   3. Otherwise check `repo-health --main-broken-sha` (its own live CI probe;
+#      a main that broke WHILE at cap is surfaced here even though no other
+#      item is pace-exempt) → release the lock, echo `main-broken <sha>` (the
+#      lock-free diagnose bg job spawns downstream).
+#   4. Neither bypass fires (no pace-exempt item, main healthy) → the unchanged
+#      hard cap: release the lock, schedule the #725 re-seed, emit
+#      `concurrency-cap`. (The legacy `dispatch-select-target --priority-only`
+#      probe this bypass used to run — including its `pr ...`/`issue ...`/
+#      `waiting <N>` dispositions and the `dispatch-schedule-target-reseed`
+#      CI-pending reseed — was deleted with the rest of the gh-issue lane in
+#      tactic-dispatch-legacy-rewire Unit 3.)
 GAP=1
-if [[ -z "$MANUAL" && -z "$ARG" ]]; then
+if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   # shellcheck source=/dev/null
@@ -489,9 +590,9 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
     LIVE_COUNT=$(( BUSY + RESV ))
     if (( LIVE_COUNT >= TARGET_N )); then
       echo "router: $LIVE_COUNT effective live ($BUSY busy + $RESV reserved) >= target $TARGET_N"
-      # At the worker budget. The budget paces NON-priority autonomous fan-out;
-      # priority / main-broken work bypasses it (one gate-exempt worker, GAP=1),
-      # exactly like an explicit-target run. The only hard stop is
+      # At the worker budget. The budget paces NON-pace-exempt autonomous
+      # fan-out; pace-exempt/main-broken work bypasses it (one gate-exempt
+      # worker, GAP=1). The only hard stop is
       # genuine token exhaustion: when the 5-hour or weekly window is actually
       # out of tokens (~100% used, reset still ahead), spawn nothing — including
       # the main-broken diagnose job. Distinguish "paced to 0 / at cap" (a
@@ -507,75 +608,45 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
         echo "concurrency-cap"
         exit 0
       fi
-      # Not exhausted: probe the priority-LABELED bypass items only (JIT output
-      # suppressed; the `priority` label = cap bypass, not ordering). The
-      # main-broken health gate runs first inside --priority-only, so a main that
-      # broke WHILE at cap is now surfaced (the old early-exit fired before any
-      # selection ran).
-      PRIO=$("$SCRIPT_DIR/dispatch-select-target" --priority-only) || PRIO="empty"
-      case "$PRIO" in
-        main-broken\ *)
-          # Spawned as its own lock-free bg job — release the lock here.
-          release_lock
-          DLOG_DISPOSITION="main-broken"
-          DLOG_TARGET="${PRIO#main-broken }"
-          DLOG_SKIP_REASON="priority-bypass-at-cap"
-          echo "$PRIO"
-          exit 0
-          ;;
-        pr\ *|issue\ *)
-          # One gate-exempt worker, exactly like an explicit dispatch <N>:
-          # hold the lock, append GAP=1. Counted by
-          # claude_agents_count_busy_workers on later ticks, so it suppresses
-          # non-priority fan-out — it bypasses the GATE, not the COUNT.
-          DLOG_DISPOSITION="${PRIO%% *}"
-          DLOG_TARGET=$(awk '{print $2}' <<<"$PRIO")
-          [[ "$PRIO" == pr\ * ]] && DLOG_PHASE=$(awk '{print $4}' <<<"$PRIO")
-          DLOG_SKIP_REASON="priority-bypass-at-cap"
-          # Heartbeat: fresh mtime for the cross-process handoff to dispatch-materialize-spawn (#2104).
-          refresh_lock
-          echo "$PRIO 1"
-          exit 0
-          ;;
-        empty)
-          # No priority/main-broken item waiting → hard cap as before.
-          release_lock
-          "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
-          DLOG_DISPOSITION="concurrency-cap"
-          DLOG_SKIP_REASON="at-cap-no-priority"
-          echo "concurrency-cap"
-          exit 0
-          ;;
-        waiting\ *)
-          # A CI-pending priority item exists (#1444). At target=0 the at-cap
-          # state has no busy worker re-probing priority on a baton-pass, so the
-          # pace reseed would strand it until the pace window reopens. Arm a
-          # CI-cadence reseed instead — dispatch-schedule-target-reseed re-runs
-          # dispatch-tick <N> on a short delay (CI concluded → spawns gate-exempt;
-          # still pending → re-arms, bounded by the ci-wait attempt counter →
-          # office-hours). At target>0 a busy worker already re-probes priority on
-          # each baton-pass, so the existing pace reseed is correct.
-          WAIT_NUM="${PRIO#waiting }"
-          release_lock
-          if (( TARGET_N == 0 )); then
-            "$SCRIPT_DIR/dispatch-schedule-target-reseed" "$WAIT_NUM" 1>&2 || true
-          else
-            "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
-          fi
-          DLOG_DISPOSITION="concurrency-cap"
-          DLOG_SKIP_REASON="priority-ci-pending"
-          DLOG_TARGET="$WAIT_NUM"
-          echo "concurrency-cap"
-          exit 0
-          ;;
-        *)
-          release_lock
-          DLOG_DISPOSITION="internal-error"
-          DLOG_SKIP_REASON="unexpected-priority-only"
-          echo "dispatch-select-tick: dispatch-select-target --priority-only emitted unexpected '$PRIO'" >&2
-          exit 2
-          ;;
-      esac
+      # Not exhausted: probe the graph pace-exempt lane FIRST
+      # (tactic-graph-router-selector; strategy clarification 14 — the authored
+      # `pace_exempt` flag is the graph home of the legacy priority label).
+      # Whichever lane finds an item first admits the ONE gate-exempt worker —
+      # at most one total across both keyspaces; the flag bypasses the pace
+      # GATE, not the count or the rank order. The probe's own `--exhausted`
+      # re-check inside graph-select-target is redundant here (checked above)
+      # but keeps the lane self-contained for other callers.
+      GPRIO=$("$SCRIPT_DIR/graph-select-target" --pace-exempt-only --top 1) \
+        || { echo "dispatch-select-tick: graph-select-target --pace-exempt-only failed; falling through to the legacy priority probe" >&2; GPRIO="empty"; }
+      if emit_graph_selection <<<"$GPRIO"; then
+        DLOG_SKIP_REASON="pace-exempt-bypass-at-cap"
+        exit 0
+      fi
+      # Graph pace-exempt lane empty → the only surviving at-cap bypass is a
+      # newly-red main: a red main outranks the pace budget and must still
+      # spawn its diagnose job even at cap (the legacy priority-LABELED PR/issue
+      # bypass and the CI-pending `waiting` reseed died with the legacy selector).
+      # main-broken first-detection: probe repo-health only when no
+      # tactic-main-red-* node is open yet (OPEN_MAIN_RED, Step 1c) — once
+      # diagnose-main has written it, the latch stands down. repo-health
+      # --main-broken-sha is the live CI probe and the durable label-free latch
+      # writer in one (empty stdout / non-zero → green or UNKNOWN → no bypass).
+      if [[ -z "$OPEN_MAIN_RED" ]] && MB_CAP=$("$SCRIPT_DIR/repo-health" --main-broken-sha) && [[ -n "$MB_CAP" ]]; then
+        # Spawned as its own lock-free bg job — release the lock here.
+        release_lock
+        DLOG_DISPOSITION="main-broken"
+        DLOG_TARGET="$MB_CAP"
+        DLOG_SKIP_REASON="main-broken-bypass-at-cap"
+        echo "main-broken $MB_CAP"
+        exit 0
+      fi
+      # Nothing to bypass the cap → hard cap as before.
+      release_lock
+      "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+      DLOG_DISPOSITION="concurrency-cap"
+      DLOG_SKIP_REASON="at-cap-no-priority"
+      echo "concurrency-cap"
+      exit 0
     fi
     GAP=$(( TARGET_N - LIVE_COUNT ))
   fi
@@ -583,15 +654,20 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
 elif [[ -n "$MANUAL" ]]; then
   # --- manual context-dependent fan-out (#1458) ------------------------------
   # A bare human-typed `/dispatch` spawns enough workers to cover available
-  # priority work eagerly while honoring the absolute MAX_WORKERS ceiling. It
-  # OVERRIDES the pace-curve throttle (a budget pause to TARGET_N=0 still fans
-  # out) but HONORS the genuine rate-limit floor (--exhausted) and the ceiling:
-  #   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)   absolute ceiling
+  # priority work eagerly while honoring the absolute MAX_WORKERS ceiling as its
+  # governing target below the ceiling. It OVERRIDES the pace-curve throttle (a
+  # budget pause to TARGET_N=0 still fans out) and, per human-dispatch-is-sovereign,
+  # a deliberate human `/dispatch` always launches its one highest-ranking-available
+  # node even at the ceiling — a bounded, deliberate max_concurrent_workers + 1
+  # overage. Only genuine rate-limit token exhaustion (--exhausted) still blocks a
+  # manual dispatch outright:
+  #   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)   ceiling below which HEADROOM governs
   #   GAP      = max(0, TARGET_N − LIVE_COUNT)      pace-curve budget gap
   #   N_PRIO   = count of selectable priority-LABELED (bypass) targets, capped at HEADROOM
-  #   SPAWN_N  = min(HEADROOM, max(N_PRIO, GAP, 1))
-  # The priority bypass and gap combine as a max (union), not additive buckets, so
-  # the total is capped at MAX_WORKERS. The fan-out itself runs rank-first through
+  #   SPAWN_N  = max(1, min(max(N_PRIO, GAP, 1), HEADROOM))
+  # The priority bypass and gap combine as a max (union), then are clamped by the
+  # ceiling — except a floor of exactly one node re-asserts itself past the ceiling
+  # when HEADROOM is 0, never wider. The fan-out itself runs rank-first through
   # dispatch-materialize-spawn's existing --gap N machinery (the highest rank level
   # is globally exhausted first; the `priority` label is the cap bypass, not an
   # ordering signal). LIVE_COUNT mirrors the
@@ -617,46 +693,60 @@ elif [[ -n "$MANUAL" ]]; then
     EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
     HEADROOM=$(( MAX_WORKERS - LIVE_COUNT ))
     (( HEADROOM < 0 )) && HEADROOM=0
-    if [[ "$EXHAUSTED" == exhausted ]] || (( HEADROOM == 0 )); then
-      # Genuine token exhaustion (the one hard floor priority cannot override),
-      # or no headroom under the ceiling → spawn nothing. Mirror the autonomous
-      # at-cap disposition: release the lock and emit concurrency-cap. No reseed
-      # — a manual run is a one-shot; the autonomous chain owns reseeds.
+    if [[ "$EXHAUSTED" == exhausted ]]; then
+      # Genuine token exhaustion is the one hard floor priority cannot override
+      # — spawn nothing. Mirror the autonomous at-cap disposition: release the
+      # lock and emit concurrency-cap. No reseed — a manual run is a one-shot;
+      # the autonomous chain owns reseeds. No headroom under the ceiling no
+      # longer short-circuits here: per human-dispatch-is-sovereign a deliberate
+      # human `/dispatch` still launches its one highest-ranking-available node
+      # at HEADROOM=0 (see the SPAWN_N floor-of-1 clamp below).
       release_lock
       DLOG_DISPOSITION="concurrency-cap"
-      if [[ "$EXHAUSTED" == exhausted ]]; then
-        DLOG_SKIP_REASON="manual-rate-limit-exhausted"
-        echo "router: manual fan-out: rate-limit window exhausted; nothing spawned"
-      else
-        DLOG_SKIP_REASON="manual-no-headroom"
-        echo "router: manual fan-out: $LIVE_COUNT live >= MAX_WORKERS $MAX_WORKERS; nothing spawned"
-      fi
+      DLOG_SKIP_REASON="manual-rate-limit-exhausted"
+      echo "router: manual fan-out: rate-limit window exhausted; nothing spawned"
       echo "concurrency-cap"
       exit 0
     fi
     GAP_BUDGET=$(( TARGET_N - LIVE_COUNT ))
     (( GAP_BUDGET < 0 )) && GAP_BUDGET=0
-    # N_PRIO: count selectable priority-LABELED (bypass) targets, capped at HEADROOM
-    # via --top. Only `pr`/`issue` lines count; `waiting` / `empty` / `main-broken`
-    # are 0 (CI-pending priority items are not selectable — keeps N_PRIO consistent
-    # with #1448's CI-cadence reseed instead of double-counting against it).
+    # N_PRIO: the legacy priority-LABELED bypass count is gone with the legacy
+    # selector; the graph pace-exempt lane owns pace-bypass now, and the graph
+    # fan-out (graph-select-target --top GAP) is rank-first. Manual fan-out width
+    # below the ceiling is therefore driven by the pace-curve gap alone; at the
+    # ceiling a floor of exactly one node re-asserts itself: SPAWN_N = max(1,
+    # min(max(N_PRIO, GAP_BUDGET, 1), HEADROOM)).
     N_PRIO=0
-    PRIO_LINES=$("$SCRIPT_DIR/dispatch-select-target" --priority-only --top "$HEADROOM") || PRIO_LINES=""
-    while IFS= read -r prio_line; do
-      case "$prio_line" in
-        pr\ *|issue\ *) N_PRIO=$(( N_PRIO + 1 )) ;;
-      esac
-    done <<< "$PRIO_LINES"
-    # SPAWN_N = min(HEADROOM, max(N_PRIO, GAP_BUDGET, 1))
+    # SPAWN_N = max(1, min(max(N_PRIO, GAP_BUDGET, 1), HEADROOM))
     SPAWN_N=$N_PRIO
     (( GAP_BUDGET > SPAWN_N )) && SPAWN_N=$GAP_BUDGET
     (( SPAWN_N < 1 )) && SPAWN_N=1
     (( SPAWN_N > HEADROOM )) && SPAWN_N=$HEADROOM
+    # Floor re-asserts past the ceiling clamp: HEADROOM=0 must still yield one
+    # deliberate node (human-dispatch-is-sovereign), never zero.
+    (( SPAWN_N < 1 )) && SPAWN_N=1
     echo "router: manual fan-out: SPAWN_N=$SPAWN_N (headroom=$HEADROOM, n_prio=$N_PRIO, gap=$GAP_BUDGET, live=$LIVE_COUNT, max=$MAX_WORKERS)"
     GAP=$SPAWN_N
   fi
   # daemon UNKNOWN (busy-worker read failed) → GAP stays 1 (fail open), matching
   # the autonomous fallback and today's one-worker manual behavior.
+elif [[ -n "$NODE_ARG" ]]; then
+  # Explicit single-node dispatch (tactic-graph-explicit-node-dispatch): skip
+  # the pace-curve throttle and the MAX_WORKERS ceiling entirely — an explicit
+  # human dispatch overrides the self-imposed pace curve, launching its one
+  # named node without a ceiling check. The one hard floor every other path in
+  # this file respects is genuine token exhaustion — mirror the --manual
+  # branch's own EXHAUSTED check (do not invent new exhaustion logic).
+  EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
+  if [[ "$EXHAUSTED" == exhausted ]]; then
+    release_lock
+    DLOG_DISPOSITION="concurrency-cap"
+    DLOG_SKIP_REASON="node-explicit-rate-limit-exhausted"
+    echo "router: explicit node dispatch: rate-limit window exhausted; nothing spawned"
+    echo "concurrency-cap"
+    exit 0
+  fi
+  # Not exhausted: GAP stays 1 (its default above) — falls through to Step 3.
 fi
 
 # --- Step 2: run the JIT engine (best-effort) --------------------------------
@@ -713,78 +803,72 @@ fi
 refresh_lock
 
 # --- Step 3: select the target -----------------------------------------------
-if [[ -n "$ARG" ]]; then
-  TARGET=$("$SCRIPT_DIR/dispatch-resolve-arg" "$ARG")
-  RESOLVE_RC=$?
-  if (( RESOLVE_RC == 0 )); then
-    DLOG_DISPOSITION="explicit"
-    DLOG_TARGET="$TARGET"
-    # Heartbeat: fresh mtime for the cross-process handoff to dispatch-materialize-spawn (#2104).
-    refresh_lock
-    echo "explicit $TARGET $GAP"
-    exit 0
-  fi
+# Explicit issue/PR targeting (`dispatch <N>`) was the legacy issue lane's entry
+# point (dispatch-resolve-arg → dispatch-select-target → dispatch-materialize-spawn).
+# That lane is gone; the graph selector owns target selection. A positional arg is
+# rejected at arg-parse time above (before the lock or any side-effect step), so
+# there is nothing to guard here.
+#
+# --- Step 3a: consult the graph selector (tactic-graph-router-selector) -------
+# The graph selector is now the ONLY queue selector — the legacy gh selector
+# (dispatch-select-target) and its worktree-materialization chain
+# (dispatch-materialize-spawn → dispatch-launch-worker) were deleted in
+# tactic-dispatch-legacy-rewire Unit 3. A selector failure degrades to `empty`
+# (fall through to the aux triggers below) rather than wedging the tick.
+if [[ -n "$NODE_ARG" ]]; then
+  GRAPH_OUT=$("$SCRIPT_DIR/graph-select-target" --node "$NODE_ARG") \
+    || { echo "dispatch-select-tick: graph-select-target --node failed; treating as empty" >&2; GRAPH_OUT="empty"; }
+else
+  GRAPH_OUT=$("$SCRIPT_DIR/graph-select-target" --top "$GAP") \
+    || { echo "dispatch-select-tick: graph-select-target failed; treating as empty" >&2; GRAPH_OUT="empty"; }
+fi
+if emit_graph_selection <<<"$GRAPH_OUT"; then
+  exit 0
+fi
+if [[ -n "$NODE_ARG" ]]; then
+  # Do NOT fall through to Step 3b's aux triggers (JIT reminder / main-broken) —
+  # that would silently substitute an unrelated job for the node the human
+  # explicitly asked for.
   release_lock
-  case "$RESOLVE_RC" in
-    2|3|4)
-      # Genuine non-resolution: 404 (2), PR with no closing issue (3), PR with
-      # many closing issues (4) — the target is genuinely gone or ambiguous.
-      # Bare exit 0 is correct even on the autonomous target-reseed timer path:
-      # the target cannot be resolved no matter how often we retry, so arming
-      # the OnFailure recovery net would loop the chain indefinitely. The
-      # OnFailure safety net is intentionally reserved for transient (exit 1)
-      # failures, where the target is known to be valid. (#1570)
-      DLOG_DISPOSITION="resolver-failed"
-      DLOG_SKIP_REASON="resolve-rc-$RESOLVE_RC"
-      echo "resolver-failed"
-      exit 0
-      ;;
-    *)
-      # Transient / infra resolve-arg failure. exit 1 is the explicit transient
-      # signal (auth, network, usage); any other unexpected non-zero code
-      # (127 command-not-found, 124 timeout, 137/143 signal/OOM kill, future
-      # codes) is treated the same — a crashed or missing resolver is an
-      # infrastructure failure, not a genuine non-resolution. Propagate non-zero
-      # so dispatch-tick exits non-zero and the reseed unit's OnFailure handler
-      # arms a chain continuation rather than silently dead-ending. (#1570)
-      DLOG_DISPOSITION="transient"
-      DLOG_SKIP_REASON="resolve-rc-$RESOLVE_RC"
-      echo "dispatch-select-tick: dispatch-resolve-arg transient/unexpected failure (exit $RESOLVE_RC) on arg '$ARG'; propagating non-zero" >&2
-      exit 2
-      ;;
-  esac
+  DLOG_DISPOSITION="node-not-selectable"
+  echo "node-not-selectable $NODE_ARG"
+  exit 0
 fi
 
-SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true
-case "$SELECTED" in
-  pr\ *|issue\ *)
-    # Hold the lock; append the run-scoped gap the fan-out loop consumes.
-    DLOG_DISPOSITION="${SELECTED%% *}"
-    DLOG_TARGET=$(awk '{print $2}' <<<"$SELECTED")
-    [[ "$SELECTED" == pr\ * ]] && DLOG_PHASE=$(awk '{print $4}' <<<"$SELECTED")
-    # Heartbeat: fresh mtime for the cross-process handoff to dispatch-materialize-spawn (#2104).
-    refresh_lock
-    echo "$SELECTED $GAP"
-    ;;
-  main-broken\ *|jit-reminder\ *)
-    # Spawned as their own bg jobs (lock-free), so release the lock here — a
-    # fresh bg session could not release this session's lock anyway (strict
-    # self-release). No gap appended.
+# --- Step 3b: aux triggers when the graph queue is empty (KEEP) ---------------
+# The two lane-independent aux triggers the deleted legacy selector used to emit
+# from its default mode. Both spawn their own lock-free bg job downstream
+# (dispatch-tick's jit-reminder / main-broken cases), so the lock is RELEASED
+# here. Priority order is preserved from the old dispatch-select-target default
+# mode: a due JIT reminder outranks a newly-red main.
+JIT_LINE=$("$SCRIPT_DIR/dispatch-jit-scan") || JIT_LINE=""
+if [[ -n "$JIT_LINE" ]]; then
+  release_lock
+  DLOG_DISPOSITION="jit-reminder"
+  DLOG_TARGET=$(awk '{print $3}' <<<"$JIT_LINE")
+  echo "$JIT_LINE"
+  exit 0
+fi
+
+# main-broken first-detection latch: emit only when main is red AND no
+# tactic-main-red-* node is open yet (OPEN_MAIN_RED, computed in Step 1c) — once
+# diagnose-main has written it, the latch stands down so graph work flows while
+# main is still red. repo-health --main-broken-sha is the live CI probe and the
+# durable label-free latch writer in one; empty stdout / non-zero (green or an
+# errored probe) means no gate. OPEN_MAIN_RED=UNKNOWN (Step 1c graph read failure)
+# is non-empty, so this fail-safe skips emission rather than firing on unknown
+# health.
+if [[ -z "$OPEN_MAIN_RED" ]]; then
+  if MB_SEL=$("$SCRIPT_DIR/repo-health" --main-broken-sha) && [[ -n "$MB_SEL" ]]; then
     release_lock
-    DLOG_DISPOSITION="${SELECTED%% *}"
-    DLOG_TARGET=$(awk '{print $2}' <<<"$SELECTED")
-    echo "$SELECTED"
-    ;;
-  empty)
-    release_lock
-    DLOG_DISPOSITION="empty"
-    echo "empty"
-    ;;
-  *)
-    release_lock
-    DLOG_DISPOSITION="internal-error"
-    DLOG_SKIP_REASON="unexpected-select-target"
-    echo "dispatch-select-tick: dispatch-select-target emitted unexpected '$SELECTED'" >&2
-    exit 2
-    ;;
-esac
+    DLOG_DISPOSITION="main-broken"
+    DLOG_TARGET="$MB_SEL"
+    echo "main-broken $MB_SEL"
+    exit 0
+  fi
+fi
+
+release_lock
+DLOG_DISPOSITION="empty"
+echo "empty"
+exit 0

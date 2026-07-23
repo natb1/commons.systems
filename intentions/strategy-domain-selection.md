@@ -56,7 +56,20 @@ gap: "no reading yet (threshold: no raw record sits unscored across a review cyc
 serves:
   - virtue-progressive-detachment
 recovers: []
-clarifications: []
+clarifications:
+  - question: What is a round's scoring scope, and who drafts the scores?
+    answer: "A scoring round covers every kind-delegation record at status: raw at
+      round time — the threshold's own scope — not the rationale's
+      standing-candidates snapshot, which can lag intake:
+      delegation-web-analytics entered the raw set 2026-07-03 and is in scope
+      for the 2026-07 round though the snapshot predates it. Excluded by status,
+      not judgment: delegation-client-income (refining; non-software recovery,
+      strategy minted directly per this rationale) and
+      delegation-knowledge-notes (refining; selected 2026-07-02). Scoring is
+      drafted by the round's ai tactic from the records' recorded axes; the
+      sensor is unchanged — the select-or-defer decision on each candidate
+      remains the owner's at office-hours, ratifying or revising the drafted
+      scores. Recorded 2026-07-11 /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: raw candidate records are periodically scored against these criteria
@@ -64,6 +77,16 @@ success_signal:
   sensor: owner review at office-hours
   threshold: no raw record sits unscored across a review cycle
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - domains keep appearing where the ownership cost-benefit has flipped and

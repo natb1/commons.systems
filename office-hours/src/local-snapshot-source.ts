@@ -23,10 +23,16 @@ interface OpenFilePickerOptions {
   multiple?: boolean;
   types?: { description?: string; accept: Record<string, string[]> }[];
 }
+interface DirectoryPickerOptions {
+  id?: string;
+  mode?: "read" | "readwrite";
+}
 declare global {
   interface Window {
     showOpenFilePicker(options?: OpenFilePickerOptions): Promise<FileSystemFileHandle[]>;
-    showDirectoryPicker?: unknown;
+    // Fully typed for graph-source.ts (the clone-directory picker); optional
+    // because directory picking ships behind file picking in some browsers.
+    showDirectoryPicker?(options?: DirectoryPickerOptions): Promise<FileSystemDirectoryHandle>;
   }
   interface FileSystemHandle {
     queryPermission(descriptor?: FileSystemHandlePermissionDescriptor): Promise<PermissionState>;

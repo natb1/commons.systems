@@ -1,19 +1,48 @@
 #!/usr/bin/env bash
-# WorktreeCreate hook: replace Claude Code's default worktree placement with
-# <git-common-dir>/.claude/worktrees/<branch>/ — anchored at the shared common
-# dir (not a per-worktree-nested path) so it matches where Claude Code's own
-# `path:`-based re-entry validator looks, and so a session's cwd already
-# contains the `.claude/worktrees/` substring the bg-job isolation check
-# short-circuits on (skipping a redundant EnterWorktree call). Pre-evaluate
-# .envrc via `direnv exec`
-# so Claude's non-interactive subprocess shells have node on PATH (direnv's
-# shell hook only fires for interactive shells; pre-evaluating populates
-# direnv's on-disk cache keyed by .envrc hash so subsequent direnv
-# invocations in subshells pick up the environment without re-running .envrc).
-# Reads JSON payload from stdin with one consumed field: .name (branch name
-# matching <issue-num>-<slug>). Prints the final worktree path to stdout for
-# Claude to switch into.
+# WorktreeCreate hook: two-lane worktree placement keyed on the branch-name
+# shape (tactic-graph-router-selector, unit 3; spec §3.4 in
+# intentions/tactic-graph-native-dispatch.md).
+#
+#   <issue-num>-<slug>  LEGACY lane (the draining gh queue): placed at
+#                       <git-common-dir>/.claude/worktrees/<branch>/ — anchored
+#                       at the shared common dir (not a per-worktree-nested
+#                       path) so it matches where Claude Code's own
+#                       `path:`-based re-entry validator looks, and so a
+#                       session's cwd already contains the `.claude/worktrees/`
+#                       substring the bg-job isolation check short-circuits on
+#                       (skipping a redundant EnterWorktree call). Keeps the gh
+#                       identity stub (CLAUDE.local.md) and the
+#                       tmp/dispatch-worktree marker. Retires with
+#                       tactic-legacy-router-removal.
+#
+#   <node-id>           GRAPH lane (uniform node-id keying, strategy
+#                       clarifications 12–13; substrate clarification 23): a
+#                       Claude Code NATIVE worktree at the harness default
+#                       location, <project-root>/.claude/worktrees/<node-id>,
+#                       where the project root is the worktree with `main`
+#                       checked out. No gh identity stub (node identity is the
+#                       graph node at intentions/<node-id>.md), no
+#                       tmp/dispatch-worktree marker (graph claiming is the
+#                       reservation ledger + node-id-named sessions), and no
+#                       git-common-dir anchoring — no graph-native path may
+#                       assume a bare-repo / git-common-dir-anchored layout.
+#                       (The repo is now a standard checkout: git-common-dir is
+#                       `.git` at the repo root. The former `.bare` bare-repo
+#                       layout was retired 2026-07-21.)
+#
+# Both lanes pre-evaluate .envrc via `direnv exec` so Claude's non-interactive
+# subprocess shells have node on PATH (direnv's shell hook only fires for
+# interactive shells; pre-evaluating populates direnv's on-disk cache keyed by
+# .envrc hash so subsequent direnv invocations in subshells pick up the
+# environment without re-running .envrc).
+#
+# Reads JSON payload from stdin with one consumed field: .name (the branch
+# name). Prints the final worktree path to stdout for Claude to switch into.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/../skills/dispatch-propagate/scripts/lib-graph-worktree.sh"
 
 WORKTREE_REGISTERED=0
 NEW_PATH=""
@@ -53,18 +82,44 @@ PAYLOAD=$(cat) || { echo "[worktree-create] ERROR: failed to read hook payload f
 BRANCH=$(printf '%s' "$PAYLOAD" | jq -r '.name // empty') \
   || { echo "[worktree-create] ERROR: failed to parse hook payload JSON from stdin: $PAYLOAD" >&2; exit 1; }
 [ -n "$BRANCH" ] || { echo "[worktree-create] ERROR: no .name in payload: $PAYLOAD" >&2; exit 1; }
-[[ "$BRANCH" =~ ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "[worktree-create] ERROR: invalid branch name '$BRANCH' (expected <issue-num>-<slug> where slug starts with a lowercase alphanumeric and contains only lowercase alphanumerics and single dashes)" >&2; exit 1; }
 
-# --git-common-dir is the same absolute path from any worktree of this repo
-# (classic .git or bare .bare layout alike), so anchoring there gives every
-# worktree a consistent, non-nested registry root.
-GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) \
-  || { echo "[worktree-create] ERROR: git rev-parse --git-common-dir failed" >&2; exit 1; }
+# Lane classification on the branch-name shape: a numeric prefix is the legacy
+# gh lane; a non-numeric lowercase slug is a graph node id. Anything else is
+# rejected.
+if [[ "$BRANCH" =~ ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  LANE=legacy
+elif [[ "$BRANCH" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  LANE=node
+else
+  echo "[worktree-create] ERROR: invalid branch name '$BRANCH' (expected <issue-num>-<slug> for the legacy gh lane or a lowercase <node-id> for the graph lane; both allow only lowercase alphanumerics and single dashes)" >&2
+  exit 1
+fi
 
-NEW_PATH="$GIT_COMMON_DIR/.claude/worktrees/$BRANCH"
+if [ "$LANE" = legacy ]; then
+  # --git-common-dir is the same absolute path from any worktree of this repo
+  # (now `.git` at the repo root; the former `.bare` bare-repo layout was
+  # retired 2026-07-21), so anchoring there gives every legacy worktree a
+  # consistent, non-nested registry root.
+  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) \
+    || { echo "[worktree-create] ERROR: git rev-parse --git-common-dir failed" >&2; exit 1; }
+  NEW_PATH="$GIT_COMMON_DIR/.claude/worktrees/$BRANCH"
+else
+  # Graph lane: the harness default location, <project-root>/.claude/worktrees/,
+  # where the project root is the worktree with `main` checked out (substrate
+  # clarification 23: `main` is checked out at the project root). Resolved from
+  # the worktree registry, never from the git common dir.
+  PROJECT_ROOT=$(resolve_main_worktree) || PROJECT_ROOT=""
+  [ -n "$PROJECT_ROOT" ] \
+    || { echo "[worktree-create] ERROR: no worktree with 'main' checked out; cannot resolve the project root for node-id worktree '$BRANCH'" >&2; exit 1; }
+  NEW_PATH="$PROJECT_ROOT/.claude/worktrees/$BRANCH"
+fi
 
 if [ -e "$NEW_PATH" ]; then
-  echo "[worktree-create] worktree $NEW_PATH already exists; refreshing identity stub" >&3
+  if [ "$LANE" = legacy ]; then
+    echo "[worktree-create] worktree $NEW_PATH already exists; refreshing identity stub" >&3
+  else
+    echo "[worktree-create] worktree $NEW_PATH already exists; reusing" >&3
+  fi
 else
   if git ls-remote --heads --exit-code origin "$BRANCH" >/dev/null 2>&1; then
     git fetch origin "$BRANCH" >&3 2>&1
@@ -81,7 +136,17 @@ else
   direnv exec "$NEW_PATH" true >&3 2>&1 || { echo "[worktree-create] ERROR: direnv exec failed for $NEW_PATH (non-zero exit from .envrc evaluation)" >&2; exit 1; }
 fi
 
-# Branch regex above guarantees a leading <issue-num>- prefix.
+# Graph lane: done. No gh identity stub (the node body at
+# intentions/<node-id>.md is the identity) and no tmp/dispatch-worktree marker
+# (legacy lock-reclaim machinery; graph claiming is the reservation ledger +
+# node-id-named sessions).
+if [ "$LANE" = node ]; then
+  echo "$NEW_PATH"
+  exit 0
+fi
+
+# Legacy lane from here down. The lane regex guarantees a leading
+# <issue-num>- prefix.
 ISSUE_NUM="${BRANCH%%-*}"
 # Write the static identity stub to CLAUDE.local.md — static identity only
 # (issue number, title, branch, pointer to dispatch-context-pack); no issue

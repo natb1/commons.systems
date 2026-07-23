@@ -6,6 +6,7 @@ import { blogPostsPlugin } from "@commons-systems/blog/vite-plugin-blog-posts";
 import { buildFeedXml } from "@commons-systems/blog/feed";
 import { FEED_REGISTRY } from "@commons-systems/blog/blog-roll/feed-registry";
 import appSeed from "./seeds/firestore.js";
+import { BLOG_ROLL_FEEDS_ARTIFACT } from "./scripts/blog-roll-feeds-artifact.js";
 
 const FUNCTIONS_PORT = process.env.VITE_FUNCTIONS_EMULATOR_PORT ?? "5001";
 const FIREBASE_PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID;
@@ -13,7 +14,10 @@ const FIREBASE_PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID;
 export default createAppConfig({
   plugins: [
     blogPostsPlugin({ seed: appSeed, postDir: resolve(__dirname, "post") }),
-    feedFetchPlugin(FEED_REGISTRY.map((f) => ({ id: f.id, url: f.feedUrl }))),
+    feedFetchPlugin(
+      FEED_REGISTRY.map((f) => ({ id: f.id, url: f.feedUrl })),
+      { emitPath: BLOG_ROLL_FEEDS_ARTIFACT },
+    ),
     feedXmlPlugin(() =>
       buildFeedXml({
         title: "fellspiral",

@@ -43,11 +43,15 @@ source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 # shellcheck source=./lib-worktree-reap.sh
 source "$SCRIPT_DIR/lib-worktree-reap.sh"
 
-# Resolve project root + worktrees root via resolve_project_root (lib.sh), which
-# returns the project root in both classic (.git) and bare (.bare) layouts.
+# Resolve project root via resolve_project_root (lib.sh); native worktrees live
+# under <repo>/.claude/worktrees/ (the standard Claude Code layout).
 PROJECT_ROOT=$(resolve_project_root) \
   || { echo "ERROR: not in a git repo" >&2; exit 2; }
-WORKTREES_ROOT="$PROJECT_ROOT/worktrees"
+WORKTREES_ROOT="$PROJECT_ROOT/.claude/worktrees"
+# Test seam: an explicit DISPATCH_SWEEP_WORKTREES_ROOT overrides the derived
+# container path (same convention as commit-merge-push's DISPATCH_WORKTREES_ROOT
+# and DISPATCH_LOCK_FILE / DISPATCH_CONFIG_DIR).
+[[ -n "${DISPATCH_SWEEP_WORKTREES_ROOT:-}" ]] && WORKTREES_ROOT="$DISPATCH_SWEEP_WORKTREES_ROOT"
 
 LOG_FILE="${DISPATCH_SWEEP_LOG_FILE:-$PROJECT_ROOT/tmp/dispatch-sweep.log}"
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
@@ -183,9 +187,9 @@ reap_or_skip_not_in_sync() {
 # Detached HEADs and bare worktrees have an empty WT_BRANCH — skip those
 # (no branch -> no PR lookup, nothing to reason about here).
 # The path-level filtering stays at this call site: restrict to direct children
-# of $WORKTREES_ROOT, excluding main. Nested worktrees registered under
-# worktrees/main/.claude/worktrees/... (or any other inner location) are out of
-# scope: this sweep targets the standard worktree-create layout only.
+# of $WORKTREES_ROOT (<repo>/.claude/worktrees/<name>), excluding main. The main
+# checkout is the repo root, not a child of $WORKTREES_ROOT, so it is already
+# excluded; any deeper-nested worktree is out of scope.
 WT_PATHS=()
 WT_BRANCHES=()
 WT_NUMS=()

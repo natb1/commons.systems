@@ -147,7 +147,14 @@ type Statement struct {
 
 // Transaction is a single transaction in the JSON output.
 type Transaction struct {
-	ID                    string  `json:"id"`
+	ID string `json:"id"`
+	// TransactionID is the stable bank-provided identifier (OFX FITID or CSV
+	// transaction ID) for real, non-virtual transactions. It is persisted so a
+	// future change to the doc-ID scheme can re-derive IDs from the snapshot
+	// alone, without re-parsing the original statement files. Empty for virtual
+	// transactions and for snapshots written before this field existed
+	// (omitempty; reading such snapshots stays valid, no version bump).
+	TransactionID         string  `json:"transactionId,omitempty"`
 	Institution           string  `json:"institution"`
 	Account               string  `json:"account"`
 	Description           string  `json:"description"`
@@ -402,10 +409,18 @@ func (o Output) Validate() error {
 			return fmt.Errorf("journalLegs[%d]: entryId %q does not reference any journal entry in journalEntries", i, l.EntryID)
 		}
 	}
+	seenTxnIDs := make(map[string]bool, len(o.Transactions))
 	for i, t := range o.Transactions {
 		if t.JournalEntryID != nil && !entryIDs[*t.JournalEntryID] {
 			return fmt.Errorf("transactions[%d]: journalEntryId %q does not reference any journal entry in journalEntries", i, *t.JournalEntryID)
 		}
+		// Doc IDs are Firestore document IDs; a collision silently overwrites one
+		// transaction's document with another on upload, dropping data. Reject a
+		// duplicate here so a future collision fails loudly at the write boundary.
+		if seenTxnIDs[t.ID] {
+			return fmt.Errorf("transactions[%d]: duplicate transaction doc id %q", i, t.ID)
+		}
+		seenTxnIDs[t.ID] = true
 	}
 	return nil
 }

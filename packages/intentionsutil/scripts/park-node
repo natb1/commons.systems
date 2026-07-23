@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# park-node — park one intention node to office hours via the graph write
+# (tactic-graph-router-selector, unit 4). The graph lane's replacement for the
+# legacy `dispatch:office-hours` label: mechanical failure dispositions
+# (provision-failed, an unroutable merge conflict, wrong-worktree) set the
+# node's first-class `office_hours` field and land it on main through the
+# `graph-commit` primitive. The router's eligibility gate (office_hours null)
+# then keeps the node unselectable until a human clears it.
+#
+# Content is written through store.ts's readNode → writeNode (the validated
+# writer — frontmatter serialized correctly, tactic bodies preserved); this
+# script authors no markdown. The commit/stamp/fast-forward mechanics are
+# graph-commit's. Ongoing phase/marker transition writes belong to
+# tactic-graph-router-transitions, not here — this primitive covers only the
+# park disposition.
+#
+# Fresh-origin/main invariant (tactic-park-node-fresh-main-clobber-fix): the
+# read-modify-write below operates on origin/main's CURRENT content, never the
+# possibly-stale local on-disk copy. This script fetches origin/main, overwrites
+# the local node file with origin/main's version, THEN reads/mutates/writes it,
+# and passes graph-commit a `--base` compare-and-swap token pinned to the blob
+# it read. If origin/main advances again before the land, graph-commit refuses
+# the write (park-node exits 1) rather than silently reverting the newer landed
+# content — the bug this guard closes was a stale PR-branch worktree's small
+# office_hours diff applying cleanly onto a since-advanced origin/main and
+# reverting unrelated body/frontmatter changes there. A refusal is a legitimate
+# failure the Stop-hook backstop treats as best-effort (markers left in place
+# for a retry).
+#
+# The park-recommendation contract: a mechanical park must carry recoverable
+# context — a reason AND a best-next-steps recommendation. `office_hours.
+# recommendation` is a first-class schema.ts field (landed by
+# tactic-office-hours-graph-entry); the caller passes the recommendation as the
+# optional 3rd arg below, written verbatim to that field — omitted → null. This
+# script never folds the recommendation into <reason> on the caller's behalf.
+#
+# Usage: park-node <node-id> <reason> [recommendation]
+#
+# Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed
+# (including a refused compare-and-swap because origin/main advanced, or an
+# unreachable/absent-node origin/main); 2 usage error.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
+
+NODE_ID="${1:-}"
+REASON="${2:-}"
+# Optional 3rd arg: the human-facing best-next-steps recommendation. Now that
+# `office_hours.recommendation` is a first-class schema field (schema.ts), the
+# caller passes it separately instead of folding it into <reason>; omitted → null.
+RECOMMENDATION="${3:-}"
+if [[ $# -lt 2 || $# -gt 3 || -z "$NODE_ID" || -z "$REASON" ]]; then
+  echo "usage: park-node <node-id> <reason> [recommendation]" >&2
+  exit 2
+fi
+
+# Refresh the LOCAL node file from origin/main BEFORE reading it, so the
+# office_hours mutation lands on top of the current landed content rather than a
+# stale worktree copy (the invocation may come from a far-behind PR-branch
+# worktree). An unreachable origin/main or a node absent from origin/main is
+# genuine environment breakage — fail with a clear error, never fall back to the
+# local copy (code-style.md).
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "park-node: could not fetch origin/main to refresh $NODE_ID before parking" >&2
+  exit 1
+fi
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "park-node: intentions/$NODE_ID.md does not exist on origin/main — cannot park a node that is not landed" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$INTENTIONS_DIR/$NODE_ID.md"; then
+  echo "park-node: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
+fi
+
+SINCE="$(date -u +%Y-%m-%d)"
+TMPTS="$(mktemp --suffix=.mts)" \
+  || { echo "park-node: could not create temp file for the parking write" >&2; exit 1; }
+trap 'rm -f "$TMPTS"' EXIT
+cat >"$TMPTS" <<'TS'
+// argv: <storeModule> <intentionsDir> <since> <reason> <recommendation> <id>
+const [storePath, intentionsDir, since, reason, recommendation, id] = process.argv.slice(2);
+const { readNode, writeNode } = await import(storePath);
+const node = readNode(intentionsDir, id);
+node.office_hours = { reason, since, recommendation: recommendation || null };
+writeNode(intentionsDir, node);
+process.stderr.write(`park-node: set office_hours on ${id} (since=${since})\n`);
+TS
+
+if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SINCE" "$REASON" "$RECOMMENDATION" "$NODE_ID" >&2); then
+  echo "park-node: failed to write the office_hours record for $NODE_ID" >&2
+  exit 1
+fi
+
+if ! "$SCRIPT_DIR/graph-commit" --base "$NODE_ID=$FRESH_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
+  echo "park-node: graph-commit failed for $NODE_ID; the office_hours write is on disk but not landed" >&2
+  exit 1
+fi
+
+exit 0

@@ -57,40 +57,61 @@ func parseStatementDir(dir string, disc parse.DiscoverOpts) (parsed []parsedFile
 	return parsed, totalTxns, skipped, nil
 }
 
-// dedupStatementData deduplicates a slice of StatementData by StatementID,
-// preserving first-seen order. When two entries share a StatementID but have
-// different Balance values, it returns an error naming both source files and
-// balances so the caller can surface a clear failure rather than emitting
-// conflicting records. Equal-balance duplicates are silently dropped.
-func dedupStatementData(stmts []budget.StatementData) ([]budget.StatementData, error) {
-	seen := make(map[string]budget.StatementData, len(stmts))
+// dedupStatementData collapses balance-anchor observations that share an
+// identical anchor ID (StatementID), preserving first-seen order. Anchor IDs
+// are keyed by as-of date (see budget.AnchorID), so observations of the same
+// account-month at different as-of dates carry distinct IDs and are all kept —
+// this is the keep-all-distinct-observations contract. Only a genuine same-key
+// collision is resolved here:
+//
+//   - Equal balance: the duplicate is dropped (first-seen wins).
+//   - Different balance: the two are observations of the same institution,
+//     account, and as-of date that disagree on the amount. The collision is
+//     resolved deterministically — the observation whose SourceFile sorts
+//     lexicographically later wins (a real observation's non-empty path beats
+//     an ETL-derived anchor's empty one) — and a single reconciliation line
+//     naming both source files, both balances, and the delta is logged (log
+//     output stays on the operator's machine, so amounts are fine there). The
+//     winner takes the earlier entry's output position, so first-seen order is
+//     preserved.
+//
+// There is no error path: cross-date disagreements are now distinct
+// observations, not collisions.
+func dedupStatementData(stmts []budget.StatementData) []budget.StatementData {
+	idx := make(map[string]int, len(stmts)) // StatementID -> index into out
 	out := make([]budget.StatementData, 0, len(stmts))
 	for _, s := range stmts {
-		prior, dup := seen[s.StatementID]
+		pos, dup := idx[s.StatementID]
 		if !dup {
-			seen[s.StatementID] = s
+			idx[s.StatementID] = len(out)
 			out = append(out, s)
 			continue
 		}
+		prior := out[pos]
 		if s.Balance == prior.Balance {
 			continue
 		}
-		srcA := prior.SourceFile
-		if srcA == "" {
-			srcA = "<derived>"
-		}
-		srcB := s.SourceFile
-		if srcB == "" {
-			srcB = "<derived>"
-		}
-		return nil, fmt.Errorf(
-			"statement %q: balance disagreement between %s ($%.2f) and %s ($%.2f)",
+		log.Printf(
+			"statement %q: reconciling overlapping balance anchors at the same as-of date — %s ($%.2f) vs %s ($%.2f), delta $%.2f; keeping the later-sorting source file",
 			s.StatementID,
-			srcA, budget.DollarAmount(prior.Balance),
-			srcB, budget.DollarAmount(s.Balance),
+			srcOrDerived(prior.SourceFile), budget.DollarAmount(prior.Balance),
+			srcOrDerived(s.SourceFile), budget.DollarAmount(s.Balance),
+			budget.DollarAmount(s.Balance-prior.Balance),
 		)
+		if s.SourceFile > prior.SourceFile {
+			out[pos] = s
+		}
 	}
-	return out, nil
+	return out
+}
+
+// srcOrDerived renders a StatementData.SourceFile for log messages,
+// substituting a placeholder for the empty path of an ETL-synthesized anchor.
+func srcOrDerived(src string) string {
+	if src == "" {
+		return "<derived>"
+	}
+	return src
 }
 
 // buildTransactions iterates parsed files and deduplicates transactions by
@@ -115,7 +136,7 @@ func buildTransactions(
 	allDocIDs = make([]string, 0, totalTxns)
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
-			docID := budget.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			docID := budget.TransactionDocID(pf.sf.Institution, pf.sf.Account, t.TransactionID)
 			if seen[docID] {
 				continue
 			}

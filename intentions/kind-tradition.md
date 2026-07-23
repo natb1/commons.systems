@@ -51,6 +51,40 @@ clarifications:
       delegated → codified one at a time as tactic-tradition-reading-program
       covers their texts; a still-delegated record's empty contradictions list
       means unverified, not clean.
+  - question: Does kind-tradition cover non-philosophical bodies of thought?
+    answer: "Yes — generalized in the 2026-07-07 /align-strategy interview
+      (strategy-complete-grounding): any examined body of thought — a research
+      field, an engineering practice, a literary or creative tradition — gets a
+      tradition record once examined; specific works live in texts. The capture
+      audit (imported vocabulary reshaping how problems are perceived) applies
+      identically to technical vocabulary. Recorded 2026-07-07 interview."
+  - question: How do nodes mark grounding or its absence, and how do unexamined
+      candidates enter?
+    answer: Grounded durable-layer nodes (virtue, strategy, kind, delegation) carry
+      attributes.traditions; ungrounded ones carry attributes.grounding — either
+      a circumstantial mark (why the node is particular to the author) or a
+      none-found mark (dated). A durable-layer node with neither is the gap
+      strategy-complete-grounding reports. Candidate traditions the author is
+      not yet deferred to enter curriculum-chunk-first
+      (attributes.curriculum.candidate on the chunk); a tradition record is
+      created only at the office-hours session that examines the candidate —
+      dismissal lands as a clarification on strategy-complete-grounding, not a
+      record. Recorded 2026-07-07 interview.
+  - question: How does an already-live deferral enter — must it go candidate-chunk-first?
+    answer: "No — the immediate-record path: when the author discovers a body of
+      thought is ALREADY load-bearing in the graph (doctrine it informed landed
+      before any record existed), waiting for the candidate-chunk-first route
+      would leave a live attachment invisible to the audit. The record is
+      created immediately at status: delegated with verification chunks queued
+      for its texts. Candidate-chunk-first (see the unexamined-candidates
+      clarification) remains the route for bodies of thought the author is not
+      yet deferred to. First instance: tradition-augustine (2026-07-08), whose
+      citation of this path predated this entry — the doctrine now has its home.
+      Recorded 2026-07-09 interview."
+  - question: What does a tradition node's markdown body carry?
+    answer: Reading notes — passages, verified excerpts, and chunk findings backing
+      the record's adopted/diverged/chosen_over detail, per kind-kind's
+      body-function rule. Recorded 2026-07-09 interview.
 tooling_goals: []
 success_signal: null
 attention: null
@@ -75,5 +109,11 @@ attributes:
       auditable"
     - "review_trigger: what prompts reassessment of this record"
     - "last_assessed: date of the last dialectic round that touched this record"
+  status_vocabulary:
+    delegated: the detail is held on trust from
+      delegation-philosophical-articulation — the decisions the record supports
+      are the author's, the scholarship is borrowed
+    codified: the author has personally verified the record's
+      adopted/diverged/chosen_over content against the cited texts
 ---
 # Tradition — an examined intellectual attachment; where philosophical alignment and divergence stay auditable

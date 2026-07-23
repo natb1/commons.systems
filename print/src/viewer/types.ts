@@ -3,6 +3,8 @@
  *
  * Invariant: matchStart >= 0, matchLength > 0, and matchStart + matchLength <= snippet.length.
  */
+import type { Annotation } from "../annotations.js";
+
 export interface SearchResult {
   /** Opaque location token understood by the renderer (page number string, EPUB CFI, etc.) */
   readonly location: string;
@@ -44,6 +46,25 @@ export interface OutlineEntry {
   readonly children: readonly OutlineEntry[];
 }
 
+/**
+ * The anchor a renderer derives from the live text selection, suitable for
+ * building an Annotation. `position` restores navigation (PDF: page-number
+ * string; EPUB: a CFI range); `quote` is the selected text. The
+ * `page`/`offset`/`length` fields locate the highlighted range in the page's
+ * reconstructed text (the offset space `offsetToItemRanges` consumes) — a PDF
+ * anchor carries all three, but they are OPTIONAL because an EPUB anchor
+ * (CFI-only) has no page coordinates, matching the optional PDF-anchor fields on
+ * {@link Annotation}. A renderer returns null when there is no usable selection
+ * inside a rendered text layer.
+ */
+export interface SelectionAnchor {
+  readonly position: string;
+  readonly quote: string;
+  readonly page?: number;
+  readonly offset?: number;
+  readonly length?: number;
+}
+
 export interface ContentRenderer {
   init(container: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void>;
   goToPage(page: number): Promise<void>;
@@ -80,6 +101,16 @@ export interface ContentRenderer {
   /** Renderers implementing getOutline must also implement goToOutlineEntry. */
   getOutline?(): Promise<OutlineEntry[]>;
   goToOutlineEntry?(entry: OutlineEntry): Promise<void>;
+  /**
+   * Optional annotation surface. `getSelectionAnchor` reads the live selection
+   * against the rendered text layer and returns an anchor for a new annotation
+   * (null when there is no usable selection). `setAnnotations` hands the
+   * renderer the full annotation list; the renderer re-applies persistent
+   * highlights whenever a covering page's text layer renders. A renderer
+   * without a text layer (image-archive) implements neither.
+   */
+  getSelectionAnchor?(): SelectionAnchor | null;
+  setAnnotations?(annotations: Annotation[]): void;
   destroy(): void;
 }
 

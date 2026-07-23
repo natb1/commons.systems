@@ -11,7 +11,9 @@ rationale: "Notes, documents, and personal knowledge held in vendor silos —
   domain (strategy-domain-selection): recovery is owned by
   strategy-recover-knowledge, entered through reading annotations in print. Axes
   below are still a first pass; the full two-axis assessment is part of the
-  recovery work."
+  recovery work. Scope boundary with delegation-cloud-backup is stated on that
+  record (2026-07-09): this record owns the corpus and its organizing structure;
+  cloud-backup owns backup transport of owned-data copies."
 reading: null
 gap: null
 serves: []
@@ -19,6 +21,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   delegatee: vendor document and knowledge silos (Google Docs/Drive, Notion)
   delegated: notes, documents, personal knowledge and its organizing structure
@@ -39,5 +49,11 @@ attributes:
   review_trigger: recovery progress under strategy-recover-knowledge; the full
     two-axis assessment is due as its first step
   last_assessed: 2026-07-02
+  household:
+    shared: false
+    basis: Scoped to the author's personal notes, documents, and their organizing
+      structure; not a household-shared corpus.
+    consent: []
+    preferences: []
 ---
 # Notes and documents delegated to vendor knowledge silos

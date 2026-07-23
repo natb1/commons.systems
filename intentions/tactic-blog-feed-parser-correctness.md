@@ -23,8 +23,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-blog-feed-parser-correctness
+  pr: 2819
+  attempts: {}
+  markers:
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

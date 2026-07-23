@@ -1,11 +1,17 @@
 import { describe, it, expect } from "vitest";
 
-import { produceSnapshot, WINDOW_SIZE, type ProduceDeps } from "./produce.js";
+import {
+  produceSnapshot,
+  produceProjectSignals,
+  WINDOW_SIZE,
+  type ProduceDeps,
+  type ProduceSignalsDeps,
+} from "./produce.js";
 import { createCaptureFirestore } from "./capture-firestore.js";
 import { serializeSnapshot } from "./snapshot.js";
 import type { OfficeHoursItem } from "../../functions/src/office-hours-sync-core.js";
 import type { ParkedIssue } from "../../functions/src/dispatch-queue-metrics-core.js";
-import type { GithubSignals } from "../../functions/src/project-signals-core.js";
+import type { GithubSignals } from "./project-signals-core.js";
 import type { UsageSample } from "../../office-hours/src/usage-samples.js";
 import type { IssueSample } from "../../office-hours/src/issue-samples.js";
 
@@ -96,6 +102,16 @@ const GITHUB: GithubSignals = {
   stars: 12,
   forks: 3,
   watchers: 7,
+  // forksDetail must survive produceSnapshot's parseProjectSignals round-trip.
+  forksDetail: [
+    {
+      owner: "forker",
+      repoUrl: "https://github.com/forker/commons.systems",
+      createdAt: "2026-01-01T00:00:00Z",
+      pushedAt: "2026-06-01T00:00:00Z",
+      stars: 2,
+    },
+  ],
 };
 
 /** A full set of deps with every external seam mocked. */
@@ -282,6 +298,84 @@ describe("produceSnapshot — scope=parked-only", () => {
     // chainHealth present, scope set
     expect(snap.chainHealth).toEqual({ liveSessions: 3 });
     expect(snap.scope).toBe("parked-only");
+  });
+});
+
+describe("produceProjectSignals — scope=analytics collector", () => {
+  function signalsDeps(overrides: Partial<ProduceSignalsDeps> = {}): ProduceSignalsDeps {
+    return {
+      namespace: "office-hours/test",
+      groupId: "g1",
+      memberEmails: ["nathan@natb1.com"],
+      fetchGithub: async () => GITHUB,
+      fetchGa4: async () => [
+        {
+          app: "commons",
+          pageViews: 100,
+          sessions: 40,
+          bounceRate: 0.5,
+          topReferralSources: [{ source: "google", sessions: 30 }],
+          topLandingPages: [{ page: "/", sessions: 30, views: 80 }],
+          webVitals: [],
+        },
+      ],
+      fetchGsc: async () => ({
+        site: "sc-domain:commons.systems",
+        topQueries: [{ query: "commons", clicks: 5, impressions: 50, ctr: 0.1, position: 3 }],
+        topPages: [{ page: "https://commons.systems/", clicks: 5, impressions: 50, ctr: 0.1, position: 3 }],
+        devices: [{ device: "MOBILE", clicks: 3, impressions: 30, ctr: 0.1, position: 3 }],
+      }),
+      fetchPsi: async () => [
+        {
+          url: "https://commons.systems",
+          strategy: "mobile" as const,
+          performance: 98,
+          seo: 100,
+          accessibility: 95,
+          bestPractices: 100,
+          lcp: "1.2 s",
+          cls: "0.01",
+          tbt: "10 ms",
+          fcp: "0.9 s",
+        },
+      ],
+      now: () => NOW,
+      ...overrides,
+    };
+  }
+
+  it("collects all four sources and parses them back through parseProjectSignals", async () => {
+    const signals = await produceProjectSignals(signalsDeps());
+    expect(signals.computedAt).toEqual(NOW);
+    expect(signals.groupId).toBe("g1");
+    expect(signals.memberEmails).toEqual(["nathan@natb1.com"]);
+    expect(signals.github).toEqual(GITHUB);
+    expect(signals.ga4?.[0].app).toBe("commons");
+    expect(signals.gsc?.site).toBe("sc-domain:commons.systems");
+    expect(signals.psi?.[0].performance).toBe(98);
+  });
+
+  it("keeps the core's omit-on-failure posture for a single failed source", async () => {
+    const signals = await produceProjectSignals(
+      signalsDeps({
+        fetchGa4: async () => {
+          throw new Error("GA4 down");
+        },
+      }),
+    );
+    expect(signals.ga4).toBeUndefined();
+    expect(signals.github).toEqual(GITHUB); // other sources still collected
+  });
+
+  it("throws when EVERY source fails (never folds an empty section)", async () => {
+    const fail = async (): Promise<never> => {
+      throw new Error("down");
+    };
+    await expect(
+      produceProjectSignals(
+        signalsDeps({ fetchGithub: fail, fetchGa4: fail, fetchGsc: fail, fetchPsi: fail }),
+      ),
+    ).rejects.toThrow(/every analytics source failed/);
   });
 });
 

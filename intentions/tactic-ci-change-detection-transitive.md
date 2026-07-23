@@ -22,8 +22,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-ci-change-detection-transitive
+  pr: 2837
+  attempts: {}
+  markers:
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

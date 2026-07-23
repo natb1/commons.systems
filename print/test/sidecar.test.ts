@@ -16,8 +16,10 @@ import {
   cacheMetadata,
   flushWrites,
   makeSidecarPositionStore,
+  makeSidecarAnnotationsStore,
 } from "../src/sidecar.js";
 import type { SidecarData } from "../src/sidecar.js";
+import type { Annotation } from "../src/annotations.js";
 
 // ---------------------------------------------------------------------------
 // Fake FileSystem directory/file infrastructure
@@ -138,33 +140,34 @@ describe("parseSidecar", () => {
       version: 1,
       metadata: { "book.pdf": { title: "My Book", pageCount: 42 } },
       positions: { "book.pdf": "7" },
+      annotations: {},
     };
     const result = parseSidecar(JSON.stringify(data));
     expect(result).toEqual(data);
   });
 
   it("returns empty model for missing/empty string", () => {
-    expect(parseSidecar("")).toEqual({ version: 1, metadata: {}, positions: {} });
+    expect(parseSidecar("")).toEqual({ version: 1, metadata: {}, positions: {}, annotations: {} });
   });
 
   it("returns empty model for corrupt JSON", () => {
-    expect(parseSidecar("{not json")).toEqual({ version: 1, metadata: {}, positions: {} });
+    expect(parseSidecar("{not json")).toEqual({ version: 1, metadata: {}, positions: {}, annotations: {} });
   });
 
   it("returns empty model for non-object top-level: number", () => {
-    expect(parseSidecar("42")).toEqual({ version: 1, metadata: {}, positions: {} });
+    expect(parseSidecar("42")).toEqual({ version: 1, metadata: {}, positions: {}, annotations: {} });
   });
 
   it("returns empty model for non-object top-level: null", () => {
-    expect(parseSidecar("null")).toEqual({ version: 1, metadata: {}, positions: {} });
+    expect(parseSidecar("null")).toEqual({ version: 1, metadata: {}, positions: {}, annotations: {} });
   });
 
   it("returns empty model for non-object top-level: string", () => {
-    expect(parseSidecar('"a string"')).toEqual({ version: 1, metadata: {}, positions: {} });
+    expect(parseSidecar('"a string"')).toEqual({ version: 1, metadata: {}, positions: {}, annotations: {} });
   });
 
   it("returns empty model for non-object top-level: array", () => {
-    expect(parseSidecar("[1,2,3]")).toEqual({ version: 1, metadata: {}, positions: {} });
+    expect(parseSidecar("[1,2,3]")).toEqual({ version: 1, metadata: {}, positions: {}, annotations: {} });
   });
 
   it("coerces missing metadata to {} while preserving valid positions", () => {
@@ -196,7 +199,7 @@ describe("parseSidecar", () => {
   });
 
   it("forces version to 1 regardless of input", () => {
-    const json = JSON.stringify({ version: 99, metadata: {}, positions: {} });
+    const json = JSON.stringify({ version: 99, metadata: {}, positions: {}, annotations: {} });
     expect(parseSidecar(json).version).toBe(1);
   });
 
@@ -218,6 +221,7 @@ describe("mergeSidecar", () => {
       version: 1,
       metadata: { "book.pdf": { title: "Book" }, "novel.epub": { title: "Novel" } },
       positions: { "book.pdf": "3", "novel.epub": "5" },
+      annotations: {},
     };
     const result = mergeSidecar(existing, { positions: { "book.pdf": "7" } });
 
@@ -236,6 +240,7 @@ describe("mergeSidecar", () => {
       version: 1,
       metadata: { "book.pdf": { title: "Old Title" } },
       positions: { "book.pdf": "2", "other.pdf": "9" },
+      annotations: {},
     };
     const result = mergeSidecar(existing, { metadata: { "book.pdf": { title: "New Title", pageCount: 10 } } });
 
@@ -249,6 +254,7 @@ describe("mergeSidecar", () => {
       version: 1,
       metadata: { "a.pdf": { title: "A" } },
       positions: { "a.pdf": "1" },
+      annotations: {},
     };
     const result = mergeSidecar(existing, {
       metadata: { "b.pdf": { title: "B" } },
@@ -266,6 +272,7 @@ describe("mergeSidecar", () => {
       version: 1,
       metadata: {},
       positions: { "x.pdf": "1" },
+      annotations: {},
     };
     const result = mergeSidecar(existing, { positions: { "x.pdf": "2" } });
 
@@ -287,18 +294,19 @@ describe("serializeSidecar + parseSidecar round-trip", () => {
         "novel.epub": { title: "Novel" },
       },
       positions: { "book.pdf": "42", "novel.epub": "cfi(/6/2)" },
+      annotations: {},
     };
     const serialized = serializeSidecar(data);
     expect(parseSidecar(serialized)).toEqual(data);
   });
 
   it("round-trips an empty model", () => {
-    const empty: SidecarData = { version: 1, metadata: {}, positions: {} };
+    const empty: SidecarData = { version: 1, metadata: {}, positions: {}, annotations: {} };
     expect(parseSidecar(serializeSidecar(empty))).toEqual(empty);
   });
 
   it("serializes to valid JSON (parseable by JSON.parse)", () => {
-    const data: SidecarData = { version: 1, metadata: { "a.pdf": { pageCount: 5 } }, positions: {} };
+    const data: SidecarData = { version: 1, metadata: { "a.pdf": { pageCount: 5 } }, positions: {}, annotations: {} };
     expect(() => JSON.parse(serializeSidecar(data))).not.toThrow();
   });
 });
@@ -313,6 +321,7 @@ describe("readSidecar", () => {
       version: 1,
       metadata: { "book.pdf": { title: "Found", pageCount: 10 } },
       positions: { "book.pdf": "3" },
+      annotations: {},
     };
     const { dir } = makePreloadedDir(serializeSidecar(data));
 
@@ -323,18 +332,18 @@ describe("readSidecar", () => {
   it("returns empty model when the .commons-print directory is absent (NotFoundError)", async () => {
     const dir = makeEmptyDir();
     const result = await readSidecar(dir);
-    expect(result).toEqual({ version: 1, metadata: {}, positions: {} });
+    expect(result).toEqual({ version: 1, metadata: {}, positions: {}, annotations: {} });
   });
 
   it("returns empty model when index.json is absent (NotFoundError)", async () => {
     const dir = makeDirWithMissingFile();
     const result = await readSidecar(dir);
-    expect(result).toEqual({ version: 1, metadata: {}, positions: {} });
+    expect(result).toEqual({ version: 1, metadata: {}, positions: {}, annotations: {} });
   });
 
   it("never throws even when the sidecar content is corrupt JSON", async () => {
     const { dir } = makePreloadedDir("{not json");
-    await expect(readSidecar(dir)).resolves.toEqual({ version: 1, metadata: {}, positions: {} });
+    await expect(readSidecar(dir)).resolves.toEqual({ version: 1, metadata: {}, positions: {}, annotations: {} });
   });
 });
 
@@ -345,6 +354,7 @@ describe("writeSidecar", () => {
       version: 1,
       metadata: { "book.pdf": { title: "Written" } },
       positions: { "book.pdf": "5" },
+      annotations: {},
     };
 
     await writeSidecar(dir, data);
@@ -368,7 +378,7 @@ describe("writeSidecar", () => {
     const subdir = makeFakeSubdir({ "index.json": fileHandle as any });
     const dir = makeFakeDir({ ".commons-print": subdir });
 
-    await expect(writeSidecar(dir, { version: 1, metadata: {}, positions: {} })).rejects.toThrow("disk full");
+    await expect(writeSidecar(dir, { version: 1, metadata: {}, positions: {}, annotations: {} })).rejects.toThrow("disk full");
     expect(abortSpy).toHaveBeenCalled();
   });
 
@@ -386,7 +396,7 @@ describe("writeSidecar", () => {
     const subdir = makeFakeSubdir({ "index.json": fileHandle as any });
     const dir = makeFakeDir({ ".commons-print": subdir });
 
-    await expect(writeSidecar(dir, { version: 1, metadata: {}, positions: {} })).rejects.toThrow("close error");
+    await expect(writeSidecar(dir, { version: 1, metadata: {}, positions: {}, annotations: {} })).rejects.toThrow("close error");
     expect(abortSpy).toHaveBeenCalled();
   });
 });
@@ -545,6 +555,7 @@ describe("sidecar — loads from pre-existing file", () => {
       version: 1,
       metadata: { "existing.pdf": { title: "Existing", pageCount: 20 } },
       positions: { "existing.pdf": "10" },
+      annotations: {},
     };
     const { dir } = makePreloadedDir(serializeSidecar(existingData));
     setLocalDirectory(dir, true);
@@ -554,5 +565,170 @@ describe("sidecar — loads from pre-existing file", () => {
 
     const store = makeSidecarPositionStore("existing.pdf");
     expect(await store.load()).toBe("10");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F. Annotations: coercion, no-clobber merge, and the sidecar-backed store
+// ---------------------------------------------------------------------------
+
+const sampleAnnotation: Annotation = {
+  id: "a1",
+  position: "5",
+  quote: "the quick brown fox",
+  note: "a note",
+  created: "2026-07-09T00:00:00Z",
+  page: 5,
+  offset: 4,
+  length: 15,
+};
+
+describe("parseSidecar — annotations", () => {
+  it("round-trips a per-file annotations map", () => {
+    const data: SidecarData = {
+      version: 1,
+      metadata: {},
+      positions: {},
+      annotations: { "book.pdf": [sampleAnnotation] },
+    };
+    expect(parseSidecar(JSON.stringify(data))).toEqual(data);
+  });
+
+  it("coerces missing annotations to {} while preserving positions", () => {
+    const json = JSON.stringify({ version: 1, positions: { "book.pdf": "3" } });
+    const result = parseSidecar(json);
+    expect(result.annotations).toEqual({});
+    expect(result.positions).toEqual({ "book.pdf": "3" });
+  });
+
+  it("coerces a wrong-typed annotations value to {} but preserves siblings", () => {
+    const json = JSON.stringify({ version: 1, annotations: "bad", positions: { "a.pdf": "1" } });
+    const result = parseSidecar(json);
+    expect(result.annotations).toEqual({});
+    expect(result.positions).toEqual({ "a.pdf": "1" });
+  });
+
+  it("drops malformed entries within a file's list, keeping well-formed ones", () => {
+    const json = JSON.stringify({
+      version: 1,
+      annotations: {
+        "book.pdf": [
+          sampleAnnotation,
+          { id: 7, position: "1", quote: "q", note: "", created: "2026-07-09T00:00:00Z" },
+          { position: "1", quote: "q", note: "", created: "2026-07-09T00:00:00Z" },
+        ],
+      },
+    });
+    const result = parseSidecar(json);
+    expect(result.annotations["book.pdf"]).toHaveLength(1);
+    expect(result.annotations["book.pdf"][0].id).toBe("a1");
+  });
+
+  it("keeps an annotation without PDF anchor fields (EPUB-shaped)", () => {
+    const json = JSON.stringify({
+      version: 1,
+      annotations: {
+        "book.epub": [
+          { id: "e1", position: "cfi(/6/2)", quote: "q", note: "n", created: "2026-07-09T00:00:00Z" },
+        ],
+      },
+    });
+    const result = parseSidecar(json);
+    expect(result.annotations["book.epub"]).toHaveLength(1);
+    expect(result.annotations["book.epub"][0].page).toBeUndefined();
+  });
+});
+
+describe("mergeSidecar — annotations no-clobber", () => {
+  it("patch annotations win per-file while untouched files are preserved", () => {
+    const existing: SidecarData = {
+      version: 1,
+      metadata: {},
+      positions: {},
+      annotations: {
+        "book.pdf": [sampleAnnotation],
+        "novel.epub": [{ id: "e1", position: "cfi", quote: "q", note: "", created: "2026-07-09T00:00:00Z" }],
+      },
+    };
+    const nextList: Annotation[] = [
+      { id: "a2", position: "6", quote: "new", note: "", created: "2026-07-10T00:00:00Z", page: 6, offset: 0, length: 3 },
+    ];
+    const result = mergeSidecar(existing, { annotations: { "book.pdf": nextList } });
+
+    // Updated file's list wins
+    expect(result.annotations["book.pdf"]).toEqual(nextList);
+    // Untouched sibling file's annotations are not dropped
+    expect(result.annotations["novel.epub"]).toEqual(existing.annotations["novel.epub"]);
+  });
+
+  it("an annotations-only patch preserves metadata and positions", () => {
+    const existing: SidecarData = {
+      version: 1,
+      metadata: { "book.pdf": { title: "Book" } },
+      positions: { "book.pdf": "3" },
+      annotations: {},
+    };
+    const result = mergeSidecar(existing, { annotations: { "book.pdf": [sampleAnnotation] } });
+
+    expect(result.metadata).toEqual(existing.metadata);
+    expect(result.positions).toEqual(existing.positions);
+    expect(result.annotations["book.pdf"]).toEqual([sampleAnnotation]);
+  });
+});
+
+describe("makeSidecarAnnotationsStore", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("save persists the full list to the fake dir; load returns it", async () => {
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+
+    const store = makeSidecarAnnotationsStore("book.pdf");
+    await store.save([sampleAnnotation]);
+    await flushWrites();
+
+    const readBack = await readSidecar(dir);
+    expect(readBack.annotations["book.pdf"]).toEqual([sampleAnnotation]);
+    expect(await store.load()).toEqual([sampleAnnotation]);
+  });
+
+  it("is keyed on the bare filename, never a local: id", async () => {
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+
+    const store = makeSidecarAnnotationsStore("book.pdf");
+    await store.save([sampleAnnotation]);
+    await flushWrites();
+
+    const readBack = await readSidecar(dir);
+    expect(readBack.annotations["book.pdf"]).toHaveLength(1);
+    expect(Object.keys(readBack.annotations).some((k) => k.startsWith("local:"))).toBe(false);
+  });
+
+  it("load() returns [] when no annotations have been saved", async () => {
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+
+    const store = makeSidecarAnnotationsStore("novel.epub");
+    expect(await store.load()).toEqual([]);
+  });
+
+  it("saving one file's annotations does not clobber a sibling file's positions", async () => {
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+
+    const posStore = makeSidecarPositionStore("book.pdf");
+    await posStore.save("42");
+    await flushWrites();
+
+    const annStore = makeSidecarAnnotationsStore("book.pdf");
+    await annStore.save([sampleAnnotation]);
+    await flushWrites();
+
+    const readBack = await readSidecar(dir);
+    expect(readBack.positions["book.pdf"]).toBe("42");
+    expect(readBack.annotations["book.pdf"]).toEqual([sampleAnnotation]);
   });
 });

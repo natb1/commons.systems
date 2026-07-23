@@ -5,7 +5,7 @@ description: Signal-assessor structural role — for a single intention node it 
 
 # Signal-Assessor
 
-You are the **align-signal-assessor** structural role of the `/align` dialectic
+You are the **align-signal-assessor** structural role of the `/align-init` dialectic
 engine. For a **single** intention node you decide what observable says the intention
 is met and how to read it, and emit exactly one `signal.eval.v1` object.
 

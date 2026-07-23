@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
-import { listNodes, readNode, writeNode } from "../src/store.js";
+import { assertNoBodyLoss, listNodes, readNode, writeNode } from "../src/store.js";
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "intentions-"));
@@ -182,7 +182,7 @@ describe("store round-trip", () => {
   });
 });
 
-describe("writeNode tactic body preservation", () => {
+describe("writeNode body preservation", () => {
   it("preserves an existing tactic file's exact prior body content on rewrite", () => {
     const dir = tempDir();
     const original: IntentionNode = {
@@ -238,7 +238,10 @@ describe("writeNode tactic body preservation", () => {
     expect(read.phase).toBe("qa");
   });
 
-  it("still regenerates the cosmetic body for a non-tactic kind (e.g. strategy)", () => {
+  it("preserves an existing non-tactic (strategy) body verbatim on rewrite", () => {
+    // Durable-body contract (tactic-nontactic-body-durability): a strategy body
+    // is authoritative, durable content — a rewrite driven by a statement change
+    // (reconcile-graph, read-sensors, park, transition) must NOT clobber it.
     const dir = tempDir();
     const strategy: IntentionNodeInput = {
       id: "strategy-1",
@@ -249,19 +252,76 @@ describe("writeNode tactic body preservation", () => {
     };
     writeNode(dir, strategy);
 
-    // Hand-author a body, then rewrite — for a non-tactic, this must be
-    // clobbered by the regenerated `# ${statement}` heading.
+    // Hand-author durable design notes onto the strategy body, then rewrite the
+    // frontmatter — the body must survive untouched.
     const filePath = join(dir, "strategy-1.md");
     const raw = readFileSync(filePath, "utf8");
     const closeIndex = raw.indexOf("\n---\n");
     const frontmatterAndFence = raw.slice(0, closeIndex + "\n---\n".length);
-    writeFileSync(filePath, frontmatterAndFence + "# Hand-authored body that should be replaced\n");
+    const handAuthoredBody =
+      "# Router mechanism\n\n## Calibration events\n\nDurable settled design notes.\n";
+    writeFileSync(filePath, frontmatterAndFence + handAuthoredBody);
 
     writeNode(dir, { ...strategy, statement: "Second statement." });
 
     const rewritten = readFileSync(filePath, "utf8");
-    expect(rewritten.endsWith("# Second statement.\n")).toBe(true);
-    expect(rewritten).not.toContain("Hand-authored body that should be replaced");
+    const rewrittenCloseIndex = rewritten.indexOf("\n---\n");
+    const rewrittenBody = rewritten.slice(rewrittenCloseIndex + "\n---\n".length);
+    expect(rewrittenBody).toBe(handAuthoredBody);
+
+    // Frontmatter itself did update.
+    expect(readNode(dir, "strategy-1").statement).toBe("Second statement.");
+  });
+
+  it("preserves a hand-authored body across a kind change (durable for all kinds)", () => {
+    // Under the durable-body contract, a body is authoritative content that
+    // survives reclassification — the former tactic→non-tactic loss guard is
+    // obsolete because non-tactic bodies are now durable too.
+    const dir = tempDir();
+    const tactic: IntentionNodeInput = {
+      id: "tactic-reclass",
+      kind: "tactic",
+      statement: "A tactic with a real plan.",
+      owner: "ai",
+      status: "codified",
+    };
+    writeNode(dir, tactic);
+
+    const filePath = join(dir, "tactic-reclass.md");
+    const raw = readFileSync(filePath, "utf8");
+    const closeIndex = raw.indexOf("\n---\n");
+    const frontmatterAndFence = raw.slice(0, closeIndex + "\n---\n".length);
+    const handAuthoredBody = "# A real plan\n\n## Unit 1\n\nDo the thing.\n";
+    writeFileSync(filePath, frontmatterAndFence + handAuthoredBody);
+
+    // Reclassify tactic → strategy: the body is preserved verbatim, not dropped.
+    writeNode(dir, { ...tactic, kind: "strategy" });
+
+    const rewritten = readFileSync(filePath, "utf8");
+    const rewrittenBody = rewritten.slice(rewritten.indexOf("\n---\n") + "\n---\n".length);
+    expect(rewrittenBody).toBe(handAuthoredBody);
+    expect(readNode(dir, "tactic-reclass").kind).toBe("strategy");
+  });
+
+  it("allows a kind change when the existing tactic body is still the generated placeholder", () => {
+    const dir = tempDir();
+    const tactic: IntentionNodeInput = {
+      id: "tactic-placeholder",
+      kind: "tactic",
+      statement: "A tactic never given a plan.",
+      owner: "ai",
+      status: "raw",
+    };
+    writeNode(dir, tactic);
+
+    // The body is still the generated `# ${statement}` placeholder — no plan
+    // content exists to lose, so reclassification proceeds.
+    writeNode(dir, { ...tactic, kind: "strategy" });
+
+    const read = readNode(dir, "tactic-placeholder");
+    expect(read.kind).toBe("strategy");
+    const raw = readFileSync(join(dir, "tactic-placeholder.md"), "utf8");
+    expect(raw.endsWith("# A tactic never given a plan.\n")).toBe(true);
   });
 
   it("generates a placeholder body for a brand-new tactic with no prior file", () => {
@@ -276,6 +336,89 @@ describe("writeNode tactic body preservation", () => {
 
     const raw = readFileSync(join(dir, "tactic-new.md"), "utf8");
     expect(raw.endsWith("# A fresh tactic.\n")).toBe(true);
+  });
+
+  it("does not false-positive when the preserved body equals the new statement's placeholder", () => {
+    // Regression for the guard's false positive: a human sets a strategy body to
+    // `# New statement.\n`, then the statement is changed to "New statement." The
+    // preserved on-disk body coincidentally equals the NEW statement's generated
+    // placeholder. writeNode preserves it byte-for-byte (lossless), so the rewrite
+    // must succeed — the old guard threw here, blocking a legitimate update.
+    const dir = tempDir();
+    const strategy: IntentionNodeInput = {
+      id: "strategy-coincidence",
+      kind: "strategy",
+      statement: "Old statement.",
+      owner: "human",
+      status: "refining",
+    };
+    writeNode(dir, strategy);
+
+    const filePath = join(dir, "strategy-coincidence.md");
+    const raw = readFileSync(filePath, "utf8");
+    const frontmatterAndFence = raw.slice(0, raw.indexOf("\n---\n") + "\n---\n".length);
+    const handAuthoredBody = "# New statement.\n";
+    writeFileSync(filePath, frontmatterAndFence + handAuthoredBody);
+
+    // Changing the statement to "New statement." makes the preserved body equal
+    // the NEW placeholder — the rewrite must not throw, and the body survives.
+    expect(() => writeNode(dir, { ...strategy, statement: "New statement." })).not.toThrow();
+    const rewritten = readFileSync(filePath, "utf8");
+    const rewrittenBody = rewritten.slice(rewritten.indexOf("\n---\n") + "\n---\n".length);
+    expect(rewrittenBody).toBe(handAuthoredBody);
+    expect(readNode(dir, "strategy-coincidence").statement).toBe("New statement.");
+  });
+});
+
+describe("assertNoBodyLoss guard", () => {
+  // The guard is a defensive backstop: writeNode always feeds it the preserved
+  // on-disk body, so its throw branch is unreachable through the public path.
+  // These tests exercise it directly to pin its contract — it trips only when a
+  // (future, buggy) caller supplies a body that differs from the durable on-disk
+  // body, and never on a byte-identical body.
+  function existingNode(dir: string, statement: string): IntentionNode {
+    writeNode(dir, {
+      id: "guarded",
+      kind: "strategy",
+      statement,
+      owner: "human",
+      status: "refining",
+    });
+    return readNode(dir, "guarded");
+  }
+
+  it("throws when the supplied body differs from the durable on-disk body", () => {
+    const dir = tempDir();
+    const node = existingNode(dir, "Statement.");
+    const filePath = join(dir, "guarded.md");
+    const raw = readFileSync(filePath, "utf8");
+    const frontmatterAndFence = raw.slice(0, raw.indexOf("\n---\n") + "\n---\n".length);
+    writeFileSync(filePath, frontmatterAndFence + "# Durable authored content.\n\nA plan.\n");
+
+    // A regenerated placeholder written over authored content — the regression
+    // the guard exists to catch.
+    expect(() => assertNoBodyLoss(filePath, node, `# ${node.statement}\n`)).toThrow(
+      /body-preservation regression/
+    );
+  });
+
+  it("does not throw when the supplied body is byte-identical to the on-disk body", () => {
+    const dir = tempDir();
+    const node = existingNode(dir, "Statement.");
+    const filePath = join(dir, "guarded.md");
+    const raw = readFileSync(filePath, "utf8");
+    const frontmatterAndFence = raw.slice(0, raw.indexOf("\n---\n") + "\n---\n".length);
+    const durableBody = "# Durable authored content.\n\nA plan.\n";
+    writeFileSync(filePath, frontmatterAndFence + durableBody);
+
+    expect(() => assertNoBodyLoss(filePath, node, durableBody)).not.toThrow();
+  });
+
+  it("returns early (no throw) when no file exists yet", () => {
+    const dir = tempDir();
+    const node = existingNode(dir, "Statement.");
+    const missing = join(dir, "does-not-exist.md");
+    expect(() => assertNoBodyLoss(missing, node, "# anything\n")).not.toThrow();
   });
 });
 
@@ -313,5 +456,35 @@ describe("listNodes", () => {
 
     const nodes = listNodes(dir);
     expect(nodes.map((n) => n.id)).toEqual(["leaf-1"]);
+  });
+});
+
+describe("id path safety", () => {
+  // Mirrors graph-commit's own id validation exactly (packages/intentionsutil/
+  // scripts/graph-commit, the `case "$id" in` block): every node id passes
+  // through store.ts's assertPathSafeId via write-node.ts BEFORE graph-commit
+  // ever sees it, so the two must agree on the accept/reject boundary or
+  // graph-commit's relaxed check is unreachable in practice.
+  function node(id: string): IntentionNodeInput {
+    return { id, kind: "tactic", statement: "id safety probe", owner: "ai", status: "raw" };
+  }
+
+  it("accepts an id with a '..' substring that isn't the exact id '..'", () => {
+    const dir = tempDir();
+    writeNode(dir, node("v1..v2-migration"));
+    expect(readNode(dir, "v1..v2-migration").id).toBe("v1..v2-migration");
+  });
+
+  it("rejects the exact ids '.' and '..'", () => {
+    const dir = tempDir();
+    expect(() => writeNode(dir, node("."))).toThrow();
+    expect(() => writeNode(dir, node(".."))).toThrow();
+  });
+
+  it("rejects ids containing a path separator, including a leading '../'", () => {
+    const dir = tempDir();
+    expect(() => writeNode(dir, node("../evil"))).toThrow();
+    expect(() => writeNode(dir, node("a/b"))).toThrow();
+    expect(() => writeNode(dir, node("a\\b"))).toThrow();
   });
 });

@@ -36,7 +36,18 @@ serves:
   - virtue-alignment-of-attachments
   - virtue-philosophical-mobility
 recovers: []
-clarifications: []
+clarifications:
+  - question: What does a review cycle mean for the signal, now that review_window
+      is retired?
+    answer: "Event-based, per kind-delegation 2026-07-09 review model: a cycle is a
+      portfolio-review sitting (strategy-exercise-recovery-paths owns the
+      review; the completeness pass closes it), not a calendar window. Dated
+      within a cycle of adoption is judged sitting-to-sitting, and a record
+      entry date is read mechanically from git history (the first commit adding
+      intentions/<id>.md) — the store carries no recorded-on field. Immaterial
+      to this round decomposition (the tactic set is the same either way);
+      recorded so the reading threshold interpretation is unambiguous. Recorded
+      2026-07-11 /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: live attachments discovered without a record at review, and how
@@ -46,6 +57,16 @@ success_signal:
   threshold: a review cycle passes with no unrecorded live attachment found, and
     every new attachment's record is dated within a cycle of adoption
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds:
+  count: 1
+  last_completed: 2026-07-13
 attributes:
   conditions:
     - the household attachment surface stays enumerable at individual scale — a

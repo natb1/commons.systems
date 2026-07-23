@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 )
 
 func TestParseCSV(t *testing.T) {
@@ -296,4 +298,70 @@ func TestParseCSV_AllDuplicateIDsPerformance(t *testing.T) {
 	if got := result.Transactions[rows-1].TransactionID; got != "X-50000" {
 		t.Errorf("txn[%d].TransactionID = %q, want %q", rows-1, got, "X-50000")
 	}
+}
+
+// TestParseCSVCrossFileDuplicateBaseIDCollapses pins the accepted limitation of
+// statement-independent transaction identity (clarification 3): within a single
+// file, duplicate bank IDs get deterministic X-2/X-3 suffixes, but the
+// synthesis is per-file. If a bank reuses one ID ("X") for two genuinely
+// distinct transactions and those two occurrences land in different overlapping
+// exports, each file sees "X" exactly once, no suffix is synthesized, and both
+// resolve to the SAME doc ID (institution, account, "X") — so the two distinct
+// transactions falsely collapse to one. Under the old statement-embedded scheme
+// they only collapsed when both exports inferred the same month; under
+// statement-independent identity they always collapse. This is the documented
+// trade-off for statement-independence, exercised here so a future change that
+// alters it fails loudly.
+func TestParseCSVCrossFileDuplicateBaseIDCollapses(t *testing.T) {
+	dir := t.TempDir()
+	// Two overlapping exports of the same account. Each carries ONE row that the
+	// bank labeled "X" — but they are genuinely distinct transactions (different
+	// amount, description). Because each file sees "X" only once, neither
+	// synthesizes a suffix.
+	fileA := filepath.Join(dir, "exportA.csv")
+	fileB := filepath.Join(dir, "exportB.csv")
+	if err := os.WriteFile(fileA, []byte(
+		"00000000001234567890,2025/06/01,2025/06/30,15000.00,12000.00\n"+
+			"2025/06/10,10.00,\"COFFEE SHOP\",,\"X\",\"DEBIT\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fileB, []byte(
+		"00000000001234567890,2025/06/01,2025/07/31,12000.00,10000.00\n"+
+			"2025/07/05,25.00,\"HARDWARE STORE\",,\"X\",\"DEBIT\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	resA, err := parseCSV(fileA)
+	if err != nil {
+		t.Fatalf("parseCSV(A): %v", err)
+	}
+	resB, err := parseCSV(fileB)
+	if err != nil {
+		t.Fatalf("parseCSV(B): %v", err)
+	}
+
+	// Neither file synthesized a suffix: both emit the bare reused ID.
+	if len(resA.Transactions) != 1 || resA.Transactions[0].TransactionID != "X" {
+		t.Fatalf("file A: got %d txns / id %q, want 1 / %q",
+			len(resA.Transactions), firstID(resA), "X")
+	}
+	if len(resB.Transactions) != 1 || resB.Transactions[0].TransactionID != "X" {
+		t.Fatalf("file B: got %d txns / id %q, want 1 / %q",
+			len(resB.Transactions), firstID(resB), "X")
+	}
+
+	// The two genuinely-distinct transactions collapse to one doc ID — the
+	// accepted false-merge under statement-independent identity.
+	idA := budget.TransactionDocID("test_bank", "1234", resA.Transactions[0].TransactionID)
+	idB := budget.TransactionDocID("test_bank", "1234", resB.Transactions[0].TransactionID)
+	if idA != idB {
+		t.Errorf("expected the reused base ID to collapse to one doc ID, got %q vs %q", idA, idB)
+	}
+}
+
+func firstID(r ParseResult) string {
+	if len(r.Transactions) == 0 {
+		return ""
+	}
+	return r.Transactions[0].TransactionID
 }

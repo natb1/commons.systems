@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+# dispatch-graph-execute — the graph lane's complete launch primitive (Shape B,
+# strategy-graph-native-dispatch clarification 24). The graph sibling of the
+# legacy issue-lane dispatch-launch-worker, keyed on `<id:kind:phase>` instead
+# of `<N> <worktree>`. The legacy scripts (dispatch-materialize-spawn →
+# dispatch-launch-worker) stay issue-lane-only and retire with the drain
+# (tactic-legacy-router-removal).
+#
+# Called by dispatch-tick on a `graph <count> <id:kind:phase>...` decision.
+# For each selected node it spawns the phase as its OWN top-level orchestrator
+# session that invokes the phase skill DIRECTLY — not a runner session that
+# invokes a workflow. This is the Shape-B fix: the top-level session already
+# holds the Workflow tool, so a phase skill that is itself a workflow
+# (/review-fix, /qa-fix) runs directly, instead of being fanned out as an
+# agent() subagent (which is NOT granted the Workflow tool and parked every
+# tick). The orchestrator runs on sonnet for every phase; opus is reintroduced
+# only inside each phase's own workflow (e.g. /review-fix's fix author,
+# /implement's per-unit /implement-unit).
+#
+# For each selected node it:
+#
+#   1. Validates the node id and maps the directive from the PERSISTED phase
+#      (phase derivation never runs for node targets — strategy clarification 1):
+#        strategy            → /align-tactics <node-id>
+#        tactic implement    → /implement,  fix → /fix-checks, qa → /qa-fix,
+#               review       → /review-fix, main-qa → /qa-main
+#   2. Resolves orchestrator effort from the persisted phase via
+#      dispatch-phase-effort (orthogonal to the model; implement → medium). The
+#      orchestrator model is a launch-layer concern hardcoded to sonnet here
+#      (ORCH_MODEL) — the shared per-phase SUBAGENT/worker model emitter is
+#      shared with the legacy dispatch-launch-worker lane (where /implement
+#      worktree sessions legitimately inherit Opus), so it is left untouched.
+#   3. Launches the phase:
+#        - Strategy lane: a strategy node has no PR/CI/merge gate and
+#          /align-tactics owns its own worktree claim/entry, so it is NOT
+#          pre-provisioned — spawn cwd=PROJECT_ROOT with prompt
+#          `/align-tactics <id>` and let the skill enter its own worktree.
+#        - Tactic lane: tactic phases derive their target from the worktree
+#          branch (BRANCH split in implement/review-fix/fix-checks/qa-fix/
+#          qa-main), so the cwd is load-bearing — pre-provision via
+#          provision-node-worktree and spawn with --cwd <worktree>, prompt
+#          `<skill> <id>`. Mechanical provision dispositions are handled here at
+#          zero token cost (no `claude` session), mirroring
+#          dispatch-launch-worker.
+#   4. Clears the node's reservation-ledger marker on a successful kick — the
+#      live node-id-named session carries the claim from there (mirrors
+#      dispatch-launch-worker's release-on-resolve). On a failed kick the marker
+#      is LEFT for the sweep, so the budget still counts the slot until
+#      reconciliation.
+#
+# Usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]
+#
+# Stdout: one line per node — one of:
+#   launched <id> <skill>   the phase session was kicked.
+#   waiting <id>            provision exit 10 (ci-waiting) — retry next tick.
+#   skipped <id>            provision exit 12 (stale-selection) — no graph write.
+#   scope-stale <id>        provision exit 13 — node demoted to implement.
+#                           Rare post-sweep safety net now (the pre-selection
+#                           dispatch-graph-scope-sweep enumerator handles the
+#                           common case before launch), not the routine path.
+#   parked <id>             a mechanical failure parked the node (office_hours
+#                           graph write, never a label).
+#   failed <id> <reason>    the node could neither launch nor cleanly dispose.
+#
+# Exit codes: 0 every node launched or cleanly disposed (launched/waiting/
+# skipped/scope-stale/parked are all RC-0 dispositions); 1 at least one node
+# could neither launch nor cleanly dispose (a spawn kick failed — no park is
+# attempted, the marker is left for the sweep — or a park-node/demote call
+# itself failed); 2 usage/configuration error.
+#
+# Requires `dangerouslyDisableSandbox: true` — provision-node-worktree runs git,
+# gh, and direnv, and dispatch-spawn-job spawns `claude --bg`.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
+
+if [[ $# -lt 1 ]]; then
+  echo "usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]" >&2
+  exit 2
+fi
+
+# Project root = the worktree with `main` checked out (substrate clarification
+# 23). resolve_main_worktree honors DISPATCH_GRAPH_MAIN_WORKTREE, the test
+# override.
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "dispatch-graph-execute: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  exit 2
+fi
+
+# The orchestrator session runs sonnet for every phase (Shape B). This is a
+# launch-layer rule, hardcoded here rather than routed through the shared
+# per-phase model emitter (which the legacy lane still depends on — see the
+# header). Opus is reintroduced only inside each phase's own workflow.
+ORCH_MODEL="sonnet"
+
+# park-node / demote-node-to-implement live under the intentionsutil package,
+# not beside this script. Resolve them from the project root.
+PARK_NODE="$PROJECT_ROOT/packages/intentionsutil/scripts/park-node"
+DEMOTE_NODE="$PROJECT_ROOT/packages/intentionsutil/scripts/demote-node-to-implement"
+
+FAILURES=0
+
+for spec in "$@"; do
+  IFS=: read -r id kind phase <<<"$spec"
+  if [[ -z "$id" || -z "$kind" || -z "$phase" ]]; then
+    echo "failed $spec malformed-spec"
+    FAILURES=$(( FAILURES + 1 ))
+    continue
+  fi
+
+  # Validate the node id — it flows into --name and the spawn prompt (mirror
+  # provision-node-worktree:52, dispatch-launch-worker id validation). The slug
+  # regex already excludes numeric-prefixed (legacy gh lane) names.
+  if [[ ! "$id" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+    echo "failed $id invalid-node-id"
+    FAILURES=$(( FAILURES + 1 ))
+    continue
+  fi
+
+  # Directive mapping from the persisted phase (never re-derived).
+  case "$kind:$phase" in
+    strategy:*)          SKILL="/align-tactics"; MODEL_PHASE="align-tactics" ;;
+    tactic:align-tactics) SKILL="/align-tactics"; MODEL_PHASE="align-tactics" ;;
+    tactic:implement)    SKILL="/implement";     MODEL_PHASE="implement" ;;
+    tactic:fix)          SKILL="/fix-checks";    MODEL_PHASE="fix-checks" ;;
+    tactic:qa)           SKILL="/qa-fix";        MODEL_PHASE="qa" ;;
+    tactic:review)       SKILL="/review-fix";    MODEL_PHASE="review" ;;
+    tactic:main-qa)      SKILL="/qa-main";       MODEL_PHASE="main-qa" ;;
+    *)
+      # An unmapped kind/phase is a selection-side defect; leave the
+      # reservation for the sweep and surface it.
+      echo "failed $id unmapped-kind-phase:$kind:$phase"
+      FAILURES=$(( FAILURES + 1 ))
+      continue
+      ;;
+  esac
+
+  # Orchestrator effort is orthogonal to the (hardcoded sonnet) model. Empty
+  # means "inherit the session default" — omit the flag entirely.
+  EFFORT=$("$SCRIPT_DIR/dispatch-phase-effort" "$MODEL_PHASE") || EFFORT=""
+  EFFORT_ARGS=()
+  [[ -n "$EFFORT" ]] && EFFORT_ARGS=(--effort "$EFFORT")
+
+  if [[ "$kind" == "strategy" || "$phase" == "align-tactics" ]]; then
+    # Strategy lane (and a frozen-tactic align target): no pre-provision —
+    # /align-tactics owns its own worktree claim/entry, keyed on the node id
+    # (a strategy's id, or a frozen tactic's id). Spawn cwd=PROJECT_ROOT and let
+    # the skill enter its worktree.
+    if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
+        --cwd "$PROJECT_ROOT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
+        "$SKILL $id" 1>&2; then
+      reservation_clear "$id" || true
+      echo "launched $id $SKILL"
+    else
+      echo "failed $id spawn-failed"
+      FAILURES=$(( FAILURES + 1 ))
+    fi
+    continue
+  fi
+
+  # Tactic lane: pre-provision the worktree (cwd is load-bearing — the phase
+  # skill derives its target from the branch). Route on the provision exit code;
+  # NO `claude` session spawns on any non-zero path (mirrors the retired graph
+  # tick workflow's per-node routing, moved up here at zero token cost).
+  WT=$("$SCRIPT_DIR/provision-node-worktree" "$id" "$phase")
+  prov_rc=$?
+  case "$prov_rc" in
+    0)
+      # WT is the worktree path provision printed on stdout.
+      if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
+          --cwd "$WT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
+          "$SKILL $id" 1>&2; then
+        reservation_clear "$id" || true
+        echo "launched $id $SKILL"
+      else
+        # Leave the reservation for the sweep — the budget keeps counting the
+        # slot until the ledger reconciles, and the next tick may retry.
+        echo "failed $id spawn-failed"
+        FAILURES=$(( FAILURES + 1 ))
+      fi
+      ;;
+    10)
+      # ci-waiting: a draft PR's checks are still in progress. Leave the
+      # reservation; the next tick re-selects once the CI verdict lands.
+      echo "waiting $id"
+      ;;
+    11)
+      # merge-conflict. /dispatch-conflict does NOT accept node targets
+      # (dispatch-conflict/SKILL.md exits on any non-`[0-9]*-*` branch), so a graph
+      # node's conflict parks rather than routing to /dispatch-conflict; routing is
+      # a future follow-up gated on node-target support.
+      if "$PARK_NODE" "$id" \
+          "origin/main does not merge clean into this tactic's branch (provision exit 11)" \
+          "Resolve the conflict by hand in the node worktree and re-run the phase, or route to /dispatch-conflict once it accepts node targets."; then
+        echo "parked $id"
+      else
+        echo "failed $id park-failed"
+        FAILURES=$(( FAILURES + 1 ))
+      fi
+      ;;
+    12)
+      # stale-selection: the directive changed after selection. Clear the claim
+      # and make NO graph write; the next tick re-selects from current state.
+      reservation_clear "$id" || true
+      echo "skipped $id"
+      ;;
+    13)
+      # scope-stale: the tactic's scope changed after the previous phase. The
+      # common path for this disposition now runs BEFORE selection, in the
+      # dispatch-graph-scope-sweep enumerator wired into dispatch-select-tick's
+      # Step 1d (landed in a prior unit of this same plan) — so a metadata-only
+      # scope-stale demote no longer routinely consumes a launch slot here. This
+      # launch-time path only fires as a post-sweep safety re-check for scope
+      # drift introduced between the sweep and this provision call (e.g. a
+      # concurrent author/session edit landing in that window); it should be
+      # rare. Demote to implement so its ladder re-runs against the merge-time
+      # scope, and clear the reservation (mirrors case 12 above) so the demoted
+      # node is freed for next-tick re-selection rather than staying counted
+      # against the budget.
+      reservation_clear "$id" || true
+      if "$DEMOTE_NODE" "$id"; then
+        echo "scope-stale $id"
+      else
+        echo "failed $id demote-failed"
+        FAILURES=$(( FAILURES + 1 ))
+      fi
+      ;;
+    *)
+      # 2 / any other: a mechanical error (bad node id, unresolvable project
+      # root, failed add/fetch). Park the node via the office_hours graph write.
+      if "$PARK_NODE" "$id" \
+          "provision-node-worktree failed for this tactic (exit $prov_rc)" \
+          "Inspect the provisioning failure (git fetch/worktree add, direnv) in the tick journal, fix the environment, and re-run the phase."; then
+        echo "parked $id"
+      else
+        echo "failed $id park-failed"
+        FAILURES=$(( FAILURES + 1 ))
+      fi
+      ;;
+  esac
+done
+
+(( FAILURES == 0 )) && exit 0 || exit 1

@@ -1,6 +1,7 @@
 import ePub, { type Book, type Rendition, type Location, type NavItem } from "epubjs";
-import type { OutlineEntry, SearchableRenderer, SearchResult, SearchResponse } from "./types.js";
+import type { OutlineEntry, SearchableRenderer, SearchResult, SearchResponse, SelectionAnchor } from "./types.js";
 import { MAX_SEARCH_RESULTS } from "./types.js";
+import type { Annotation } from "../annotations.js";
 
 // epubjs ships incomplete type declarations. These narrow shapes describe the
 // runtime members we use that are missing from the .d.ts, following the
@@ -24,6 +25,10 @@ interface EpubAnnotations {
 // matches the panel <mark> color (viewer.css:380); active is visually distinct.
 const BASE_STYLES = { fill: "#fde68a" };
 const ACTIVE_STYLES = { fill: "#f59e0b", "fill-opacity": "0.5" };
+// Persistent annotation highlights. A calmer, semi-transparent yellow mirrors
+// the PDF `.annotation-highlight` fill (viewer.css:141, rgba(255,235,59,0.4)) and
+// reads as distinct from search's fully-saturated base fill.
+const ANNOTATION_STYLES = { fill: "#ffeb3b", "fill-opacity": "0.4" };
 
 export function createEpubRenderer(
   onError?: (err: unknown) => void,
@@ -41,12 +46,26 @@ export function createEpubRenderer(
   let destroyed = false;
   let locationsReady: Promise<void> | null = null;
   const GENERATE_CHARS = 1024;
+  // Fallback timeout for waitForRelocated (next/prev/outline nav). epub.js emits
+  // 'relocated' right after next()/prev() resolve, so this only trips when the
+  // event genuinely never arrives — far below the old 30s so a missed event no
+  // longer freezes the UI for half a minute. Pending waits are tracked so
+  // destroy() can settle them: an un-cleared timer would run reportError long
+  // after teardown, and an un-resolved promise would leave a mid-flight
+  // next()/prev() hanging forever.
+  const RELOCATED_TIMEOUT_MS = 5000;
+  const pendingRelocations = new Set<{ timer: ReturnType<typeof setTimeout>; resolve: () => void }>();
   const outlineHrefMap = new WeakMap<OutlineEntry, string>();
 
   // Full-document search state.
   let _searchCfis: string[] = []; // all base-highlighted match cfis
   let _activeCfi: string | null = null; // currently-navigated match
   let _searchEpoch = 0; // monotonic guard against overlapping search() calls
+
+  // Persistent annotation state.
+  let _annotations: Annotation[] = []; // full list, pushed in by setAnnotations
+  let _annotationCfis: string[] = []; // annotation-highlight cfis currently registered
+  let _pendingAnchor: SelectionAnchor | null = null; // last live text selection, or null
 
   // Resolve a section's TOC label, falling back to a 1-based spine index.
   // Caller must `await book.loaded.navigation` once before invoking.
@@ -88,6 +107,67 @@ export function createEpubRenderer(
     _activeCfi = null;
   }
 
+  // Reconcile the epub.js annotation registry to the current `_annotations`
+  // list: remove every annotation highlight we previously registered, then
+  // re-register one per annotation. Search highlights are keyed by their own
+  // cfis (tracked separately in `_searchCfis`) and are never touched here, so
+  // search and annotation highlights coexist. epub.js re-injects registered
+  // annotations whenever a view (re)renders, so a highlight survives chapter
+  // navigation without an explicit `rendered`-event re-apply.
+  function reapplyAnnotationHighlights(): void {
+    if (!rendition) return;
+    const annotations = (rendition.annotations as unknown as EpubAnnotations); // type-safety-ok: epubjs ships incomplete annotations types; shape declared in EpubAnnotations
+    for (const cfi of _annotationCfis) {
+      annotations.remove(cfi, "highlight");
+    }
+    _annotationCfis = [];
+    for (const ann of _annotations) {
+      annotations.highlight(ann.position, {}, undefined, "annotation-highlight", ANNOTATION_STYLES);
+      _annotationCfis.push(ann.position);
+    }
+  }
+
+  // epub.js emits "selected" with a CFI range when the user completes a text
+  // selection inside the (iframe) content. The quote is read asynchronously via
+  // book.getRange, so this is a closure the "selected" handler awaits. The
+  // resolved anchor is stashed in `_pendingAnchor` and the shared useAnnotations
+  // hook is nudged to re-read it — the hook listens on the TOP document's
+  // selectionchange, which never fires for an iframe-internal selection, so we
+  // re-dispatch one. EPUB anchors carry only position (the CFI range) + quote;
+  // the PDF page/offset/length anchor fields are absent (optional in
+  // SelectionAnchor).
+  async function captureSelection(cfiRange: string): Promise<void> {
+    if (!book) return;
+    let quote = "";
+    try {
+      const range = await book.getRange(cfiRange);
+      quote = range ? range.toString() : "";
+    } catch (err) {
+      reportError(new Error("EPUB selection getRange failed", { cause: err }));
+      return;
+    }
+    if (destroyed) return;
+    _pendingAnchor = { position: cfiRange, quote };
+    document.dispatchEvent(new Event("selectionchange"));
+  }
+
+  // Clear the pending selection when the content's selection collapses (the user
+  // clicked away or deselected). epub.js only emits "selected" for a NON-empty
+  // selection, so this content-document listener covers the empty case, keeping
+  // the shared capture control from lingering with a stale anchor. Re-dispatches
+  // a top-document selectionchange so the hook re-reads getSelectionAnchor.
+  function registerSelectionClear(contents: { document: Document; window: Window }): void {
+    const doc = contents.document;
+    doc.addEventListener("selectionchange", () => {
+      const sel = contents.window.getSelection?.();
+      const collapsed = !sel || sel.isCollapsed || sel.toString().trim() === "";
+      if (collapsed && _pendingAnchor) {
+        _pendingAnchor = null;
+        document.dispatchEvent(new Event("selectionchange"));
+      }
+    });
+  }
+
   function mapNavItems(items: NavItem[]): OutlineEntry[] {
     return items.map((item) => {
       const children = item.subitems ? mapNavItems(item.subitems) : [];
@@ -98,14 +178,51 @@ export function createEpubRenderer(
   }
 
   // epub.js next()/prev() resolve before the relocated event fires.
-  // Callers await this to get updated position state. The 30s timeout
+  // Callers await this to get updated position state. The bounded timeout
   // prevents a permanent hang if epub.js fails to emit the event.
   function waitForRelocated(): Promise<void> {
     return new Promise<void>((resolve) => {
       if (!rendition) { resolve(); return; }
-      const timer = setTimeout(() => { reportError(new Error("waitForRelocated: timed out after 30s")); resolve(); }, 30000);
-      rendition.once("relocated", () => { clearTimeout(timer); resolve(); });
+      // `entry` is referenced inside the timer callback, which only runs after
+      // this line has assigned it — so no placeholder/cast is needed.
+      const timer = setTimeout(() => {
+        pendingRelocations.delete(entry);
+        // A timeout after destroy() is expected (teardown races the event), not
+        // a bug — only report a genuinely missed relocation on a live renderer.
+        if (!destroyed) reportError(new Error(`waitForRelocated: timed out after ${RELOCATED_TIMEOUT_MS}ms`));
+        resolve();
+      }, RELOCATED_TIMEOUT_MS);
+      const entry = { timer, resolve };
+      const settle = () => {
+        clearTimeout(entry.timer);
+        pendingRelocations.delete(entry);
+        resolve();
+      };
+      pendingRelocations.add(entry);
+      rendition.once("relocated", settle);
     });
+  }
+
+  // display(cfi) / display(percentage-cfi) does not reliably emit 'relocated'
+  // (see the note in goToPosition), so reading the settled location directly
+  // after display() resolves is the robust way to update position state — the
+  // pattern goToPosition proved. Shared by goToPosition / goToFraction /
+  // goToResult, all of which navigate via a cfi display() call. currentLocation()
+  // may return a Location or a Promise<Location> depending on epub.js
+  // version/load state — normalize with Promise.resolve. At runtime it returns a
+  // Location ({ start, atStart, atEnd }); the epubjs types declare a flat
+  // DisplayedLocation, so cast (mirroring the spine.length cast in init()).
+  async function syncLocationFromCurrent(): Promise<void> {
+    if (!rendition) return;
+    const loc = (await Promise.resolve(rendition.currentLocation())) as unknown as Location; // type-safety-ok: epubjs currentLocation() returns a Location at runtime; its types declare a flat DisplayedLocation (pre-existing cast moved from goToPosition)
+    if (loc?.start) {
+      _chapterIndex = loc.start.index;
+      _subPage = loc.start.displayed.page;
+      _subPageTotal = loc.start.displayed.total;
+      _atStart = loc.atStart;
+      _atEnd = loc.atEnd;
+      _currentCfi = loc.start.cfi;
+    }
   }
 
   // epub.js percent-based navigation requires a generated locations index,
@@ -193,6 +310,16 @@ export function createEpubRenderer(
         reportError(new Error("EPUB display error", { cause: err }));
       }));
 
+      // Capture text selections for annotation. epub.js forwards each content
+      // iframe's non-empty selection as a "selected" (cfiRange, contents) event.
+      rendition.on("selected", (cfiRange: string) => {
+        void captureSelection(cfiRange);
+      });
+      // Clear the pending anchor when a content selection collapses.
+      rendition.hooks.content.register((contents: { document: Document; window: Window }) => {
+        registerSelectionClear(contents);
+      });
+
       await rendition.display(initialPosition ?? undefined);
       if (!initialPosition) {
         _chapterIndex = 0;
@@ -211,22 +338,9 @@ export function createEpubRenderer(
       if (!rendition) return;
       await rendition.display(position);
       // epub.js does not reliably emit 'relocated' for display(cfi), so the
-      // persistent relocated handler may never update the position state.
-      // Read the current location directly after display() resolves.
-      // currentLocation() may return a Location or a Promise<Location>
-      // depending on epub.js version/load state — normalize with Promise.resolve.
-      // At runtime it returns a Location ({ start, atStart, atEnd }) — the same
-      // shape as the relocated event — but the epubjs types declare a flat
-      // DisplayedLocation, so cast (mirroring the spine.length cast above).
-      const loc = (await Promise.resolve(rendition.currentLocation())) as unknown as Location;
-      if (loc?.start) {
-        _chapterIndex = loc.start.index;
-        _subPage = loc.start.displayed.page;
-        _subPageTotal = loc.start.displayed.total;
-        _atStart = loc.atStart;
-        _atEnd = loc.atEnd;
-        _currentCfi = loc.start.cfi;
-      }
+      // persistent relocated handler may never update the position state. Read
+      // the settled location directly after display() resolves.
+      await syncLocationFromCurrent();
     },
 
     async goToFraction(fraction: number): Promise<void> {
@@ -235,9 +349,12 @@ export function createEpubRenderer(
       if (destroyed) return;
       const clamped = Math.max(0, Math.min(1, fraction));
       const cfi = book.locations.cfiFromPercentage(clamped);
-      const relocated = waitForRelocated();
       await rendition.display(cfi);
-      await relocated;
+      // display(cfi) does not reliably emit 'relocated'; read the settled
+      // location directly instead of awaiting the event, which would otherwise
+      // freeze "Calculating…" until the fallback timeout and then report a
+      // spurious error even though the goto succeeded.
+      await syncLocationFromCurrent();
     },
 
     async next(): Promise<void> {
@@ -367,9 +484,11 @@ export function createEpubRenderer(
         annotations.highlight(_activeCfi, {}, undefined, "viewer-search-hl", BASE_STYLES);
       }
 
-      const relocated = waitForRelocated();
       await rendition.display(result.location);
-      await relocated;
+      // display(cfi) does not reliably emit 'relocated'; sync position from the
+      // settled location instead of awaiting the event (avoids a "Calculating…"
+      // hang until the fallback timeout on the search-result nav path).
+      await syncLocationFromCurrent();
 
       // Promote the new match to the distinct active style.
       annotations.remove(result.location, "highlight");
@@ -390,12 +509,32 @@ export function createEpubRenderer(
       clearSearchHighlights();
     },
 
+    getSelectionAnchor(): SelectionAnchor | null {
+      return _pendingAnchor;
+    },
+
+    setAnnotations(next: Annotation[]): void {
+      _annotations = next;
+      reapplyAnnotationHighlights();
+    },
+
     destroy(): void {
       destroyed = true;
+      // Settle any pending waitForRelocated: clear its fallback timer (so it
+      // can't run reportError after teardown) and resolve its promise (so a
+      // mid-flight next()/prev()/goToOutlineEntry() doesn't hang forever).
+      for (const entry of pendingRelocations) {
+        clearTimeout(entry.timer);
+        entry.resolve();
+      }
+      pendingRelocations.clear();
       // rendition.destroy() tears down annotations, so just reset tracking.
       _searchCfis = [];
       _activeCfi = null;
       _searchEpoch = 0;
+      _annotations = [];
+      _annotationCfis = [];
+      _pendingAnchor = null;
       if (rendition) {
         rendition.destroy();
         rendition = null;

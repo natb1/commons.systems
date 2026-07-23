@@ -1,4 +1,9 @@
-import type { CSSProperties, ElementType, HTMLAttributes } from "react";
+import type {
+  CSSProperties,
+  ElementType,
+  HTMLAttributes,
+  KeyboardEventHandler,
+} from "react";
 
 export interface CardProps extends HTMLAttributes<HTMLElement> {
   as?: ElementType;
@@ -13,7 +18,12 @@ export function Card(props: CardProps) {
   // Accessibility/safety defaults applied to the rendered element, each only
   // when the consumer did not already supply it. Kept in a separate object
   // because `type` is not part of HTMLAttributes<HTMLElement>.
-  const extraProps: { type?: "button"; tabIndex?: number; role?: string } = {};
+  const extraProps: {
+    type?: "button";
+    tabIndex?: number;
+    role?: string;
+    onKeyDown?: KeyboardEventHandler<HTMLElement>;
+  } = {};
 
   // A bare <button> defaults to type="submit", which submits an enclosing
   // form on click. Default it to "button" unless the consumer set a type.
@@ -38,6 +48,18 @@ export function Card(props: CardProps) {
     }
     if (rest.role === undefined) {
       extraProps.role = "button";
+    }
+    // A div with role="button" + tabIndex does not activate on Enter/Space the
+    // way a native button does. Synthesize a keydown handler that dispatches a
+    // click so the onClick handler runs for keyboard users. Respect a
+    // consumer-supplied onKeyDown.
+    if (rest.onKeyDown === undefined) {
+      extraProps.onKeyDown = (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.currentTarget.click();
+        }
+      };
     }
   }
 

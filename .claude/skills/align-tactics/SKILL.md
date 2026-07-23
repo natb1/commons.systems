@@ -1,6 +1,6 @@
 ---
 name: align-tactics
-description: Autonomously break a recorded `strategy-*` intention node into PR-sized tactic subtrees carrying full clean-session plans — the graph-native successor to `/plan-issue` and `/file-issue`'s epic-structuring role. Two-sided drift review, decompose to the signal, plan each claude-eligible tactic into its node body, park the rest; lands via `graph-commit`. Never files a GitHub issue; never `AskUserQuestion` mid-run.
+description: Autonomously break a recorded `strategy-*` intention node into PR-sized tactic subtrees carrying full clean-session plans, or finalize/re-plan a single frozen `tactic-*` node directly — the graph-native successor to `/plan-issue` and `/file-issue`'s epic-structuring role. Two-sided drift review, decompose to the signal, plan each claude-eligible tactic into its node body, park the rest; lands via `graph-commit`. Never files a GitHub issue; never `AskUserQuestion` mid-run.
 user-invocable: true
 ---
 
@@ -38,9 +38,144 @@ It inherits along two axes, each with a part it deliberately does **not** take:
 
 ## Trigger and input
 
-On-demand or router-invoked. The sole argument is the id of the strategy to
-decompose: `/align-tactics strategy-<slug>`. With no argument, stop and report
-that a strategy id is required — this skill never selects its own target.
+On-demand or router-invoked. The sole argument is a node id, either:
+
+- `/align-tactics strategy-<slug>` — decompose a recorded strategy into its
+  executable tactic subtree (Steps 1–5 below), or
+- `/align-tactics tactic-<slug>` — finalize or re-plan a single **frozen**
+  tactic (draft/raw, or soft-frozen — the router selects exactly the tactics
+  its `frozenTacticSelectable` gate approves,
+  `packages/intentionsutil/src/router.ts:482`). This is the per-node target
+  path (see "Tactic target — per-node finalize or re-plan", below).
+
+With no argument, stop and report that a node id (`strategy-<slug>` or
+`tactic-<slug>`) is required — this skill never selects its own target.
+
+## Step 0 — Claim and isolate
+
+Before the first write, claim the target node id (strategy or tactic) and
+author in its worktree — the same uniform node-id reservation discipline the
+router's fan-out workers follow (`strategy-graph-native-dispatch`'s 2026-07-06
+concurrency-safety clarification). Never author in the shared `main`
+checkout: a concurrent session's dirty tracked file blocks this run's
+`graph-commit` rebase, and a stale read races live phase state.
+
+1. **Resolve the target node id** — the `strategy-<slug>` or `tactic-<slug>`
+   argument (this skill never selects its own target).
+2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
+   already exists with a live session — `worktree_has_live_session <path>
+   "$CLAUDE_CODE_SESSION_ID"`
+   (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
+   run with `dangerouslyDisableSandbox: true`) — the claim is held by
+   another session: stop and report the held claim, then end the run. Pass
+   this session's own id as the second (exclusion) argument so a
+   graph-launched orchestrator — the strategy-lane spawn in
+   `dispatch-graph-execute` uses `dispatch-spawn-job --name "$id"`, whose
+   name equals this worktree's basename — does not match its own
+   just-spawned session as a pre-existing claim; a genuinely different live
+   session in the same worktree still counts as a held claim and stops the
+   run. A held claim is **not** an `office_hours` park (it is not one of the
+   three autonomy-contract conditions below) and **not** a defect.
+3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+   or re-enter it, and do all authoring and the step-5 `graph-commit` from
+   there. The worktree **is** the claim: the same live-session ⇔ worktree
+   liveness rule the router uses, so no separate lock is needed. **Prefer
+   `provision-node-worktree`**
+   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`): it
+   fetches `origin/main` and cuts the worktree fresh from it, so no separate
+   freshness check is needed after it. If instead this run uses native
+   `EnterWorktree`, **or** re-enters an **already-existing** worktree by any
+   means **other than `provision-node-worktree`**, running
+   `.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh` is
+   **mandatory** as the very first action in that worktree — **before any
+   graph read** (before any `readNode` or drift grep below). A non-zero exit
+   means the checkout is stale **or** the `git fetch` itself failed; either
+   way, **STOP** and freshen (`git fetch origin main && git merge
+   origin/main`) before proceeding. Never treat a failed fetch as license to
+   proceed on unverified state.
+
+## Tactic target — per-node finalize or re-plan
+
+When the argument is a `tactic-<slug>` (not a `strategy-<slug>`), this session
+operates on **exactly one pre-existing tactic node** — the router queued it
+because its `frozenTacticSelectable` gate approved it as an `align-tactics`
+candidate (`packages/intentionsutil/src/router.ts:482`;
+`resolveFrozenDescendant` at line 453 is the strategy-side inverse the selector
+uses). There is **no** strategy decomposition, no draft sweep, and no `rounds`
+bump here — Steps 1–5 below are the strategy-target flow; this subsection is the
+parallel tactic-target flow, reusing pieces of them **by reference**. It runs
+the same Step 0 claim/worktree mechanics (keyed on the tactic id) and the same
+Autonomy contract (below).
+
+A frozen tactic target is **either** draft/raw or soft-frozen; read its
+frontmatter to tell which:
+
+- **Draft/raw** (`phase` absent — `phase: null`, never decomposed) →
+  **finalize** it. This is Step 3 ("Plan each claude-eligible tactic") applied
+  to exactly this **one** tactic: run the Explore/Plan fan-out (or, for a
+  trivial tactic, write the plan directly), landing it at `phase: implement`
+  with a full clean-session plan in its body per the Step-3 plan schema. Do
+  **NOT** sweep the serving strategy's other draft tactics — that draft
+  consume/split/merge/prune path is the strategy-target flow's job (Step 2 item
+  2). Do **NOT** bump the strategy's `rounds` counter — round accounting is
+  completion-time and prod-verified (see "Strategy round accounting" in Step 5).
+  **Whole-node reconcile** (clarification 32, per "Re-evaluation mode" item 2):
+  rewrite any stale draft narrative in `statement`, `rationale`,
+  `attention.rationale`, and the body so none of it contradicts the finalized
+  state — **while preserving the authored `attention.boost` value** (do not
+  reset or renumber it). Frontmatter on landing: `status: codified`,
+  `phase: implement`, `execution: null`, and `validates: []` unless this tactic
+  itself produces the strategy's signal reading (in which case
+  `validates: [<strategy-id>]`, the Step 2 item 5 convention).
+
+- **Soft-frozen** (`phase` already set to an in-flight value — `implement`,
+  `fix`, `qa` — but its `execution.strategy_fingerprint` entry for one serving
+  strategy is stale) → **re-plan** it. This is exactly "## Re-evaluation mode"
+  (below) applied to this **one** tactic instead of a strategy-wide open-child
+  sweep. Reconcile the whole node against the current serving-strategy substance
+  (the whole-node reconciliation bar, clarification 32, per Re-evaluation mode
+  item 2), re-stamp **only** the re-evaluated strategy's entry in
+  `execution.strategy_fingerprint` to the `{hash: strategyFingerprint(strategy),
+  sha: <origin/main sha>}` object form (Re-evaluation mode item 3) and leave
+  every other serving strategy's entry untouched (a tactic still at
+  `execution: null` has no map to re-stamp), and land via `graph-commit`.
+
+**Both cases land the single pre-existing node** via `graph-commit --base` —
+dump it first with `dump-node.ts`, the exact Step-5 "Capture a base manifest"
+mechanic, so a stale read of a live node is refused mechanically:
+
+```bash
+BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+  --out-dir "$TMPDIR/dump" <tactic-id>)
+packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
+```
+
+**Exception: a re-plan (or a Step-2 `split` disposition, at strategy scope)
+that discovers a genuine split.** If a soft-frozen re-plan, or a Step 2 item 2
+`split` disposition applied at strategy scope, finds the tactic must split
+into a new born-parked sibling, that sibling is genuinely new work — but it
+must never land via a separate later `graph-commit` call. Land the parent
+edit and the new sibling in the **same** `graph-commit --base "$BASE"
+<tactic-id> <new-sibling-id>` call; the `--base` manifest still covers only
+the pre-existing parent id, and the new sibling — having no `origin/main`
+blob — is simply absent from it. This closes the 2026-07-18 near-miss: a
+parent edit landed alone as `c037cec7`, the sibling-add `graph-commit` lost
+the push race five times and landed nothing, leaving `main` with a parent
+describing a split sibling that did not exist there — recovered same-day as
+`032768e5`.
+
+There is **no strategy edit** in either case — a per-node tactic-target session
+never touches the serving strategy's frontmatter (`rounds`, clarifications, or
+otherwise), in contrast to the strategy-target flow, which may. If a
+tactic-target session discovers the strategy's own record needs an edit, that is
+a record-completeness defect to name in a park (see the Autonomy contract's
+unrecorded-context framing), not something this session writes onto the
+strategy.
+
+**Autonomy contract binds unchanged.** A tactic target that hits requirement
+ambiguity, major scope deviation, or an unverifiable blocker parks the
+**tactic** node (never the strategy) via the same `office_hours` write mechanism
+in "Autonomy contract", below.
 
 ## Autonomy contract
 
@@ -74,6 +209,27 @@ interactive session's later commit touching the node clears the park
 (`intentions/tactic-graph-native-dispatch.md` §1.3). Do **not** call
 `AskUserQuestion` as the escalation mechanism — parking is the whole autonomy
 contract.
+
+**Park-time recommendation** (strategy clarification 30 / condition 6): every
+park writes recoverable context **at park time** — `reason` plus a best-next-
+steps recommendation for the human — because session attach/resume is not a
+supported recovery path; a park whose full context lives only in this
+session's transcript is itself a defect. This binds every park in this skill,
+escalation and born-parked (Step 4) alike. Transitional note: a first-class
+`office_hours.recommendation` field is planned (`tactic-office-hours-graph-entry`
+Unit 1 / `tactic-phase-skill-node-targets` Unit 2 — shared, skip whichever
+lands second) but is not yet in `schema.ts`, so `write-node.ts` rejects that
+key today. Until it validates, carry the recommendation **inside** the
+`reason` string as a labelled trailing sentence (e.g. `"...Recommend: <next
+step>."`) — never drop it — and switch to the dedicated field once it lands.
+
+**Unrecorded-context park framing.** When a decomposition or re-evaluation
+cannot proceed because needed context simply is not in the graph, name the
+gap in the park reason as a **record-completeness defect** (strategy
+clarification 31 / condition 7) of the `/align-strategy` round that produced
+the strategy — not something this session should guess at. The fix is an
+author `/align-strategy` pass to complete the record, and the park reason
+should say so explicitly.
 
 ## Idempotency
 
@@ -109,13 +265,13 @@ carry retained tactical context from `/align-strategy`).
 **Eligibility sanity check.** Confirm the strategy is actually decomposable
 this round (`intentions/tactic-graph-native-dispatch.md` §3.1): `office_hours`
 null, signal unvalidated (`gap` non-null or `reading` null), the fresh-reading
-gate holds (`rounds.count == 0`, or a reading exists newer than
-`rounds.last_completed` — a null `reading` never satisfies "newer than"), it
-has no non-draft child tactics already on its signal path (the
-fifth §3.1 criterion — see Idempotency, above, which reads those children), and
-`rounds.count < 2`. If `rounds.count` is already at the cap
-with no fresh reading, park the strategy (round history as the reason) instead
-of burning a third round.
+gate holds (`rounds.last_aligned` is null — never aligned — or a reading
+exists dated strictly newer than `rounds.last_aligned` — a null `reading`
+never satisfies "newer than"), it has no non-draft child tactics already on
+its signal path (the fifth §3.1 criterion — see Idempotency, above, which
+reads those children), and `rounds.count < 2`. If `rounds.count` is already at
+the cap with no fresh reading, park the strategy (round history as the reason)
+instead of burning a third round.
 
 Drift review is **two-sided** (strategy clarification 8):
 
@@ -137,9 +293,18 @@ Drift review is **two-sided** (strategy clarification 8):
     Land it as a dated `clarifications` entry on the strategy without
     interrupting, and continue the round.
 
-Every clarification `answer` ends with a provenance sentence in the existing
-convention, e.g. `"...Recorded 2026-07-05 /align-tactics round."` (date via
-`date -u +%Y-%m-%d`).
+Every clarification `answer` carries a dated provenance clause: an event verb
+(Recorded / Amended / Reviewed / clarified / adopted, etc.) plus an ISO date,
+placed wherever it reads best in the sentence — a front-loaded parenthetical
+is preferred, e.g. `"(Recorded 2026-07-05 /align-tactics round.) ..."`, but any
+placement is accepted. The newest ISO date anywhere in the answer is its
+effective date — the `readingDate()` contract
+(`packages/intentionsutil/src/router.ts`) extracts it verb-agnostically, and
+`coverage.ts`'s `lastReviewedOf` depends on it. An amendment adds a new dated
+clause rather than rewriting the old one. Get the date via
+`date -u +%Y-%m-%d`, never hand-guessed. `validateGraph` rule 17 mechanically
+enforces the date-presence half of this convention; the event verb is
+documented style, not linted.
 
 This absorbs the `/plan-issue` relevance/drift, convention-drift, and
 merged-work-overlap review (§4 coverage matrix) — unchanged in substance, with
@@ -159,12 +324,26 @@ a strategy.
    produce a fresh reading and the strategy dead-ends at the round cap.
 2. **Consume the draft tactics.** Each draft child (`phase` absent **and
    `office_hours` unset**, retained by `/align-strategy`) is **finalized,
-   split, merged, or pruned** — it is input, never left dangling. A
+   split (a split lands its parent edit and new sibling atomically in one
+   `graph-commit` call, never two — see Step 5 item 3), merged, or pruned**
+   — it is input, never left dangling. A
    `phase`-absent child *with* `office_hours` set is a born-parked tactic from a
    prior round, not a draft (see Idempotency): leave it alone, do not run it
-   through this path. Finalizing reuses the draft's retained body as
+   through this path. The sweep excludes one more derived set the same way:
+   compute which tactic ids appear as another tactic's `parent` anywhere in the
+   corpus, and skip any draft-shaped child in that set — a subtree-parent is
+   permanently `phase`-absent by design (it only completes when its last child
+   does) and is a container, not an undecomposed draft, per the same
+   derived-set exclusion `selectGraphTargets`'s frozen-tactic branch applies
+   (`packages/intentionsutil/src/router.ts`; tactic-router-subtree-parent-exclusion);
+   leave it in place rather than finalizing, splitting, merging, or pruning it.
+   Finalizing reuses the draft's retained body as
    the starting context for its plan (step 3); pruning drops a draft that the
-   round does not need (record why in the pruning commit message).
+   round does not need (record why in the pruning commit message). Before
+   finalizing, re-check the draft's content against kind-tactic's authoring
+   test (`intentions/kind-tactic.md`, 2026-07-21 clarification) — a draft that
+   is actually a standing requirement belongs on the strategy or kind as a
+   clarification, not promoted to `phase: implement` as a tactic.
 3. **Shape the subtree.** A leaf tactic is **exactly one PR**. Larger shapes
    become subtrees: child tactics carry `parent: <tactic-id>` (same-kind edge,
    `validateGraph` rule 6), and execution order is encoded with
@@ -181,19 +360,68 @@ a strategy.
    pruned or already completed — drop the edge; anything where the original
    intent is not recoverable from the graph — park (unverifiable blocker,
    Autonomy contract, above) rather than guessing.
-4. **Stamp the `validates` edge.** On each tactic that validates the signal —
+4. **Gate in-scope copy** (`strategy-author-approved-copy`). Any tactic this
+   round mints that *produces in-scope copy* must be `blocked_by` a born-parked
+   author-approval gate, so the author ratifies the wording *before*
+   implementation runs. This applies the gate `strategy-author-approved-copy`
+   standardizes mechanically, instead of re-deriving it from the strategy text
+   each round. For every decomposed tactic:
+   - **Classify** it as copy-touching or not, by judgment against the
+     strategy's scope — the planning agent already holds full scope in hand, so
+     this is a checklist step, not mechanized scope detection. In-scope copy:
+     the landing page, the about page, app heroes and onboarding text, the
+     README, and blog posts. Explicitly **excluded**: in-app UI strings,
+     practitioner reference docs (`SCHEMA.md`, package READMEs), and GitHub
+     issue/PR prose. Exempt: mechanical fixes (typos, broken links, factual
+     corrections with no reframing and no new claims) are ungated; any doubt
+     means gated.
+   - **Mint a sibling approval gate** in the born-parked shape (Step 4;
+     `intentions/tactic-readme-copy-approval.md` is the reference instance):
+     `owner: human`, `status: delegated`, `office_hours: {reason, since}` set at
+     creation, `serves: [<the-serving-strategy>]`, and — being born-parked — no
+     implement-phase body and `phase` omitted. The gate's `office_hours.reason`
+     names the specific copy to review and folds in the ratify-or-revise ask
+     (the born-parked reason convention). Chunk each gate to ≤30 author-minutes.
+   - **Set `blocked_by: [<gate-id>]`** on the copy-producing tactic, so the
+     router cannot select the copy work until the author completes the gate.
+   - **Carry the draft copy in the copy tactic's body** (its plan), so the
+     author has concrete wording to ratify or revise at office-hours and the
+     implementing session settles only the remaining wording, within the
+     approved copy.
+   The gate tactic *is* a born-parked tactic — Step 4's shape governs it; point
+   at Step 4 rather than restating the born-park mechanics here.
+5. **Stamp the `validates` edge.** On each tactic that validates the signal —
    produces its reading or meets its threshold — set
    `validates: [<strategy-id>]` (the factual edge; `validateGraph` rule 14
    requires the target resolve to a `kind: strategy` node). These are the
    terminals of the calculated-attention signal term (strategy clarification
    11). The instrument tactic that produces the reading is a validates-terminal.
-5. **Off-path work gets no flag.** Work worth recording but off the minimum
+6. **Off-path work gets no flag.** Work worth recording but off the minimum
    signal path lands as an ordinary tactic with **no** special marker.
    Off-path status is *derived* at read time from the absence of a
    `blocked_by`/`parent` chain to a validates-terminal — calculated attention
    demotes it (strategy clarifications 9, 11). Never defer such work by
    omission and never invent a flag for it — record it fully and let the
    derivation demote it.
+
+**Finalization: greenfield-relevance gate** (strategy clarification 26).
+Before finalizing any draft (item 2) or recording any newly-decomposed unit
+(item 3), run the greenfield-relevance gate: check the unit's subject against
+non-draft nodes elsewhere in the graph that delete or supersede it (a raw
+draft never obsoletes live work). Per-unit: drop a doomed unit from the plan,
+naming the superseding node in the drop; a tactic that is *fully* superseded
+demotes to draft instead of landing `phase: implement`; a tactic on doomed
+surface may be kept selectable only via an explicit interim-live-risk
+exception naming its expiry event (e.g. "until the gh-queue drains"). This is
+the same gate `/align-strategy`'s improvement pass runs across the whole
+corpus — here it runs against this round's specific decomposition.
+
+**Sole-tracker recording guidance** (strategy clarification 28). The graph
+is the source-of-truth issue tracker, bug tracker included: every defect
+worth fixing — surfaced during drift review, during decomposition, or found
+incidentally — lands as a tactic (or a unit of an existing one), never a
+side channel. Code `TODO`s stay pointer-only (`TODO(tactic-<id>)`), never
+carrying the substance themselves.
 
 ## Step 3 — Plan each claude-eligible tactic
 
@@ -202,21 +430,44 @@ write it into the tactic's node body. Reuse `/plan-issue`'s Explore/Plan
 subagent fan-out and its plan-quality bar verbatim — only the landing changes.
 
 **Explore/Plan fan-out.** This skill runs in the caller's thread, so it fans
-out the built-in `Explore` and `Plan` subagents directly (no orchestrator, no
-nesting), exactly as `/plan-issue` Steps 3–5:
+out the built-in `Explore` and `Plan` subagents directly (no intermediate
+orchestrator, no nesting), exactly as `/plan-issue` Steps 3–5:
 
-- Launch up to **3** `Explore` agents in parallel (usually 1), reuse-first:
-  have them hunt existing functions, utilities, and patterns to reuse rather
-  than propose new code. The built-in agents skip `CLAUDE.md` and git history,
-  so pass the tactic's scope and the strategy's intent inline; require a
-  compact `path:line`-anchored findings block, not whole-file dumps.
+**Model routing (strategy-token-economy clarification 10).** This
+`/align-tactics` session is the **Sonnet orchestrator** — the router launches
+it on Sonnet (`dispatch-graph-execute`'s `ORCH_MODEL="sonnet"`), and it stays
+Sonnet: it fans out subagents, threads their findings, and authors node bodies
+and frontmatter, but it does **not** itself decide plan substance. The
+decompose-to-signal judgment — the plan's units, their scope, sequencing, and
+recommended models — is the **`Plan` subagent's** work, and that subagent is
+launched with an explicit **`model: opus`** so its reasoning runs on Opus
+independent of this session's Sonnet model. The `Explore` reuse-hunt is a
+mechanical search and stays cost-demotable — launch it with `model: sonnet` (or
+`model: haiku` for a small, well-scoped hunt); never force it onto Opus.
+
+- Launch up to **3** `Explore` agents in parallel (usually 1), reuse-first,
+  each with an explicit `model: sonnet` (or `model: haiku` for a small hunt) —
+  demotable, never Opus. Have them hunt existing functions, utilities, and
+  patterns to reuse rather than propose new code. The built-in agents skip
+  `CLAUDE.md` and git history, so pass the tactic's scope and the strategy's
+  intent inline; require a compact `path:line`-anchored findings block, not
+  whole-file dumps.
 - Launch **1–3** `Plan` agents (usually 1; multiple only for large or
   architectural work, each a distinct framing per
   `.claude/rules/design-proposals.md` — lead with the ideal greenfield design,
-  add a brownfield migration path when warranted). Feed each the Explore
-  findings, the tactic scope, the plan schema below, and the `/implement-unit`
-  model-selection heuristic inline (the `Plan` agent will not read the skill
-  file). Synthesize multiple proposals into a single recommended approach.
+  add a brownfield migration path when warranted), each launched with an
+  explicit **`model: opus`** (the Agent/Task tool's `model` parameter) so the
+  decompose-to-signal reasoning runs on Opus regardless of this session's
+  Sonnet model — do **not** let the `Plan` subagent inherit the orchestrator's
+  Sonnet by omitting `model`. Feed each the Explore findings, the tactic scope,
+  the plan schema below, and the `/implement-unit` model-selection heuristic
+  inline (the `Plan` agent will not read the skill file) — when the unit
+  delivers a chart, dashboard, or other data-viz surface, first load the
+  `/dataviz` built-in skill (via the Skill tool), then feed its procedure
+  inline to the `Plan` agent, same reason. Synthesize multiple proposals into
+  a single recommended approach, then author the node body from that Opus
+  output — the Sonnet orchestrator transcribes and reconciles the plan into
+  the schema; it does not rewrite the plan's substance.
 - Trivial tactics (a typo, a one-line change, a simple rename) skip the
   fan-out — write the one-unit plan directly.
 
@@ -230,6 +481,15 @@ schema"):
   - **Scope** — files/behavior that change, what is out of scope, with
     `path:line` anchors so the build delegates each unit to `/implement-unit`
     without re-reading source.
+  - **Data-viz guidance (chart/dashboard units only)** — when the unit
+    delivers a chart, graph, plot, dashboard, or other data-viz surface: the
+    chosen form, the categorical palette (validated with `/dataviz`'s
+    validator script during planning, never eyeballed), and mark/interaction
+    specs, per `/dataviz`. Prose only — this per-unit field is not executed;
+    any auto-runnable palette check belongs in the plan's `## Verification`
+    section (the sole place ` ```verify ` blocks run), as a self-contained,
+    repo-runnable script that asserts the palette's thresholds directly with
+    no dependency on the bundled skill's install path.
   - **Recommended model** — `sonnet` or `opus`, per the model-selection
     heuristic at `.claude/skills/implement-unit/SKILL.md` (lines 31–39; the
     canonical home — do not restate the bullets here, same convention
@@ -261,11 +521,37 @@ Work that needs the author (not claude-executable) is authored **born-parked**:
 plan an implement-phase body for a born-parked tactic — it carries only its
 statement and the reason it needs a human.
 
+The copy-approval gate minted by Step 2 ("Gate in-scope copy") is an instance
+of this born-parked shape — this section's mechanics govern it.
+
 ## Step 5 — Record
 
 The write path mirrors `/align-strategy` Step 5 exactly — `write-node.ts` is
 the single validation gate; never hand-author YAML frontmatter, and
 `graph-commit` is the **only** landing path.
+
+**Capture a base manifest for every pre-existing node this round edits** —
+the serving strategy (a drift clarification, a `rounds` bump, a park) and any
+existing tactic finalized from a draft. Dump them through `dump-node.ts`
+*before* rewriting, then pass the manifest to `graph-commit --base` (item 3)
+so a stale read of a live node is refused mechanically rather than by rebase
+luck (the 2026-07-06 near-miss). Nodes this round **creates** have no
+origin/main blob and take no `--base` entry.
+
+```bash
+BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+  --out-dir "$TMPDIR/dump" <pre-existing-id> [<pre-existing-id> ...])
+```
+
+**Artifact-owner placement** (strategy clarification 27): `serves` names the
+strategy that actually owns the artifact the tactic changes. Normally that is
+the strategy under decomposition, but a byproduct that genuinely changes a
+different strategy's artifact (e.g. a finalized draft retained here that
+touches another strategy's surface) uses an honest multi-entry `serves`
+naming every owning strategy — never a force-fit onto the strategy being
+decomposed just because it is convenient. When no strategy owns the
+artifact, surface the gap (a park, or a note for the author) instead of
+assigning ownership by proximity.
 
 Per tactic:
 
@@ -298,13 +584,25 @@ Per tactic:
    finalizing a draft, this replaces the retained draft body with the plan.
 
 3. **Land via `graph-commit`.** One `graph-commit` per tactic, or a small
-   batch (e.g. a parent plus its immediate children, or the drift-clarified
-   strategy alongside the round's tactics) in one call:
+   batch (e.g. a parent plus its immediate children, the drift-clarified
+   strategy alongside the round's tactics, or a split-parent tactic alongside
+   its new born-parked sibling) in one call:
 
    ```bash
-   packages/intentionsutil/scripts/graph-commit <tactic-id> [<tactic-id> ...] [<strategy-id>]
+   packages/intentionsutil/scripts/graph-commit --base "$BASE" \
+     <tactic-id> [<tactic-id> ...] [<strategy-id>]
    ```
 
+   A split's parent edit and its new sibling must never land as two separate
+   `graph-commit` calls — the 2026-07-18 near-miss (`c037cec7` landed the
+   parent alone; the follow-up sibling-add call lost the push race five times
+   and landed nothing, recovered same-day as `032768e5`) is the concrete
+   failure this closes.
+
+   Pass `--base "$BASE"` (the manifest from `dump-node.ts` above) whenever the
+   call touches a pre-existing node; omit it for a round that only creates new
+   tactics. `--base` covers only the dumped pre-existing ids — newly created
+   ids in the same call are simply absent from the manifest and unchecked.
    `graph-commit` stages exactly `intentions/<id>.md` for each id (frontmatter
    and the body `Edit` both live there), commits, stamps the four required
    checks via the `graph/**` fast path, and fast-forwards onto `main` with a
@@ -322,27 +620,61 @@ Per tactic:
 
 **Strategy round accounting.** Ensure the serving strategy carries a `rounds`
 object (`validateGraph` rule 12 — strategies only). On the first round,
-initialize `rounds: {count: 0, last_completed: null}` if null. `count`
-increments and `last_completed` timestamps when the round's **final** tactic
-completes — a completion-time write behind prod verification
+initialize `rounds: {count: 0, last_completed: null, last_aligned: null}` if
+null. `count` increments and `last_completed` timestamps when the round's
+**final** tactic completes — a completion-time write behind prod verification
 (`intentions/tactic-graph-native-dispatch.md` §1.1; in the bootstrap interim
-with no live router, that stamp is made by hand at completion). Any strategy
+with no live router, that stamp is made by hand at completion). `last_aligned`
+is a **separate, landing-time** stamp: when a strategy round (this skill,
+invoked over the whole strategy — not the per-node finalize form below) lands
+its tactics for a strategy, this session also sets that strategy's
+`rounds.last_aligned` to the round's commit date (`date -u +%Y-%m-%d`) via
+`write-node.ts`, bundled into the **same** `graph-commit` as the round's
+tactics. `last_aligned` tracks when the strategy was last decomposed, distinct
+from `count`/`last_completed`, which stay keyed to tactic-completion time (per
+clarification 22) — its semantics are unchanged by this stamp. A **per-node
+finalize** invocation (`/align-tactics <tactic-id>`, i.e. passing a specific
+tactic id argument) does **not** stamp `last_aligned` — it is not a strategy
+round and never bumps `rounds` at all (per clarification 52). Any strategy
 frontmatter this session does change (a drift clarification, a park, the
-`rounds` init) lands via `graph-commit <strategy-id>`, bundled with the round's
-tactics when small.
+`rounds` init, the `last_aligned` stamp) lands via `graph-commit
+<strategy-id>`, bundled with the round's tactics when small.
 
-**Fingerprint honesty.** `execution.strategy_fingerprint` is where the router's
-soft-freeze trigger will record the serving strategy's substance hash
-(strategy clarification 10). In the bootstrap there is no `execution` object to
-seed and no fingerprint helper exists — so there is no fingerprint field to
-write yet (every node in `intentions/tactic-graph-native-dispatch.md` §5 that
-has not yet advanced carries `execution: null`, and every node's
-`strategy_fingerprint` is `null` — even those whose `execution` the router has
-since populated). When the hashing and router
-machinery lands, the router stamps `execution` — fingerprint included — at
-plan/launch time. Until then the freeze-on-mismatch rule is discharged by
-running re-evaluation in the **same session** as the strategy edit (below),
-exactly as every recorded round has.
+**Fingerprint honesty.** `execution.strategy_fingerprint` is a **per-strategy
+map** `{<strategy-id>: {hash, sha}}` — one entry per serving strategy — that
+the router's soft-freeze trigger compares against each serving strategy's
+current substance (strategy clarification 10). At mint time this session stamps
+only the **decomposed** strategy's entry: `{<decomposed-strategy-id>: {hash:
+<fingerprint>, sha: <origin/main sha>}}`, where the `hash` is the value printed
+by
+
+```bash
+npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <decomposed-strategy-id>
+```
+
+run against a fresh `origin/main` at stamp time — the single runnable callsite
+for `strategyFingerprint(strategy)` (`packages/intentionsutil/src/router.ts`);
+never hand-compute the hash, and never re-derive the recipe inline — always run
+this command. `sha` is the origin/main commit the hash was taken against,
+obtained with `git rev-parse origin/main` in the bootstrap-interim hand-stamp
+path (a live router passes it through `apply-node-transition.ts --strategy-sha`).
+A serving strategy absent from the map is never stale (per-strategy null), so an
+honest multi-serves tactic is not born frozen against its other serving
+strategies; those entries are filled by whichever session decomposes or
+re-evaluates each of them. Untouched sibling-strategy entries in the same map
+are left as-is — this session converts only the key it is re-stamping, never a
+key it is not touching (opportunistic conversion, not bulk migration). A tactic
+not yet advanced still carries
+`execution: null` (no map to stamp); the map is seeded the first time an
+`execution` object exists. The bare-string form is deprecated-legacy — never
+emit it. In the bootstrap interim with no live router, the mint-time stamp is
+made by hand at completion; the freeze-on-mismatch rule is otherwise discharged
+by running re-evaluation in the **same session** as the strategy edit (below).
+
+Dropping the bare-string form entirely, and making `validate-graph` **reject**
+it, is sequenced future work (migration step 4), not this change — bare strings
+remain valid deprecated-legacy, and only classification-touched keys convert to
+the `{hash, sha}` object form.
 
 ## Re-evaluation mode
 
@@ -351,19 +683,107 @@ When invoked after a mid-flight strategy edit — the router detects a stale
 re-evaluation session (strategy clarification 10) — the session does **not**
 decompose fresh. It:
 
-1. Reads the edited strategy and its open (non-draft, non-`done`) tactics.
-2. **Amends, prunes, or confirms** each open tactic against the edited
-   substance — revise a plan whose premise changed, prune a tactic the edit
-   made unnecessary, confirm one still valid — rather than authoring a new
-   round.
-3. Re-stamps each surviving tactic's `execution.strategy_fingerprint` to the
-   current substance (seeded `null` until the machinery lands), which unfreezes
-   the subtree.
+1. Reads the edited strategy and its open (non-draft, non-`done`) tactics —
+   **every** open child's body is read in full before disposition. Keyword
+   grep over the open tactics (e.g. to shortlist candidates touching an
+   edited term) is a shortlisting heuristic only; it never disposes of a
+   tactic — disposition of each open child requires the full-body re-read
+   (strategy clarification 32).
+2. **Amends, prunes, splits, or confirms** each open tactic against the
+   edited substance — revise a plan whose premise changed, prune a tactic the
+   edit made unnecessary, split one into a new born-parked sibling (landed
+   atomically with the parent edit per the Tactic target section's split
+   exception above), confirm one still valid — rather than authoring a new
+   round. **Amendment completeness** (clarification 32): an amendment is
+   complete only when the tactic's **whole node** — `statement`,
+   `rationale`, the `## Context` prose, every unit, and `## Verification` —
+   is reconciled against the full current strategy substance in this same
+   round. A one-bullet delta that leaves a sibling unit or a verification
+   step contradicting the amendment is an incomplete amendment — the same
+   defect class as an incomplete record (condition 7). This also applies
+   whenever this skill amends an already-landed tactic outside a formal
+   re-evaluation trigger (e.g. a drift-review Side A/B correction to an open
+   tactic): the whole-node reconciliation bar binds there too, not just at a
+   fingerprint-triggered re-evaluation.
+3. Re-stamps **only the re-evaluated strategy's entry** in each surviving
+   tactic's `execution.strategy_fingerprint` map — set
+   `map[<re-evaluated-strategy-id>] = {hash: <fingerprint>, sha: <origin/main
+   sha>}`, where `hash` is the value printed by
+
+   ```bash
+   npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <re-evaluated-strategy-id>
+   ```
+
+   (the single runnable callsite for `strategyFingerprint(strategy)`,
+   `packages/intentionsutil/src/router.ts`), and `sha` is obtained via `git
+   rev-parse origin/main` in the bootstrap-interim hand-stamp path, or
+   `apply-node-transition.ts --strategy-sha` under a live router — leaving every
+   other serving strategy's entry untouched, which unfreezes the subtree against
+   this strategy without disturbing the others. (A tactic still at `execution:
+   null` has no map to re-stamp until the machinery seeds one.)
 4. Lands the amendments via `graph-commit`.
+5. **Scope-inert re-stamp — protect each amended tactic's own scope custody.**
+   Step 2's amendment edits the **body** of open (non-`draft`, non-`done`)
+   tactics — precisely clarification 32's amendment-completeness scenario. A
+   body edit to an in-flight tactic trips that tactic's own chain-of-custody
+   scope gate: the worktree-local `.claude/worktrees/<id>.scope-fingerprint`
+   stamp no longer matches the tactic's current body fingerprint, and the gate
+   demotes the tactic back to `implement`, discarding its qa/review custody.
+   That is correct for a real plan-substance change, but an amendment mandated
+   solely by the completeness bar — a reconciliation note, a provenance
+   annotation, a drift-review correction — often leaves the plan substance
+   unchanged, and there the demotion is spurious (PR #2888 was falsely demoted
+   from review to implement this way).
+
+   Classify this round's own edit, **per tactic**, as **scope-inert** (plan
+   substance unchanged) versus **material or unsure**. The rule is fail-closed:
+   **only** a confident scope-inert verdict re-stamps; on **any** doubt — a
+   merely plausible substance change included — do nothing further here. Leave
+   the worktree-local stamp untouched and let custody demote the tactic exactly
+   as it does today; that demotion-on-doubt is the existing correct behavior,
+   not a failure mode to work around.
+
+   For each confidently scope-inert tactic, **after** its amendment has landed
+   via `graph-commit` in this **same** round (step 4, so it is on origin/main),
+   run:
+
+   ```bash
+   npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>
+   ```
+
+   It must run post-`graph-commit`: the script reads the tactic's current
+   on-disk body and the current `origin/main` sha to compute the stamp, so a
+   pre-landing run would stamp stale content. Record the scope-inert
+   classification and the re-stamped tactic ids in this round's record.
+
+   This is a **completely different** mechanism from item 3's re-stamp — do not
+   conflate the two. Item 3 re-stamps `execution.strategy_fingerprint`, a
+   **node-frontmatter** map keyed per serving strategy, computed via
+   `strategyFingerprint`, and landed as a node write in the round's
+   `graph-commit`; it tracks per-strategy substance drift across the subtree.
+   This item re-stamps the worktree-local
+   `.claude/worktrees/<id>.scope-fingerprint` **file**, computed via
+   `tacticScopeFingerprint` through the Unit-1 script; it is **never** a node
+   write and **never** a `graph-commit` of its own, and it tracks a single
+   tactic's own body-scope drift. Two unrelated stamps, two unrelated
+   mechanisms.
 
 Until a live router exists, re-evaluation runs **inline** in the same session
 that recorded the strategy edit — the way every round on
 `strategy-graph-native-dispatch` has executed it by hand.
+
+**Per-node re-evaluation.** Under `tactic-graph-frozen-tactic-dispatch`, the
+router may now queue re-evaluation as a **per-node** `/align-tactics
+<tactic-id>` session targeting exactly one soft-frozen tactic, rather than only
+the strategy-wide open-child sweep this section historically described. The
+disposition bar is identical — the same whole-node reconciliation (item 2) and
+single-strategy re-stamp (item 3) — applied to the one target. See "Tactic
+target — per-node finalize or re-plan", above, for that flow.
+
+A strategy-corpus census script is planned as an enumeration hook for the
+open-child sweep above (`tactic-align-tactics-mechanical-floor` Unit 2);
+until it lands, enumerate open children by hand per the Idempotency section's
+`grep -rl` recipe.
 
 ## Out of scope
 

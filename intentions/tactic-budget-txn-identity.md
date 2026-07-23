@@ -22,19 +22,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: null
 execution:
   branch: tactic-budget-txn-identity
-  pr: null
+  pr: 2832
   attempts: {}
-  markers: []
-  strategy_fingerprint: f9e4d3f90f15fbb0bb42ccc26d71a76467641cf7aede8d74815a537ff205d0a1
+  markers:
+    - reviewed
+  strategy_fingerprint: 3178ea5e04e119ed9cce5cb1e0b573e7e011aef2e70dbd39c0449a854a61a204
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  phase: main-qa
 ---
 # budget-etl: statement-independent transaction identity — (institution, account, FITID) doc IDs, with legacy-ID migration and edit remapping
 
@@ -197,3 +199,27 @@ intact.
 Implement each unit in a subagent with the unit's model (`sonnet` for Unit 1,
 `opus` for Unit 2); supply this Context and the unit's Scope; constrain to
 working-tree edits.
+
+## needs-main residue (qa 2026-07-10)
+
+The plan's manual verification step ("run the report + merge flow twice
+against the real statements dir and current snapshot on the operator's
+machine; confirm the first migrated run shrinks the transaction count by
+exactly the formerly-duplicated rows, the second run is a no-op on IDs, and
+the web app renders categories/notes intact") needs the operator's real
+encrypted `.benc` snapshot and bank statement files, unavailable in this
+sandboxed QA environment.
+
+Automated QA already covers the equivalent behavior at the unit level:
+`TestRunMergeMigrationIdempotent` (main_test.go) confirms a synthetic
+double-merge is a no-op on transaction IDs, and 3 independently-authored
+adversarial scratch tests (not committed) confirmed legacy-ID recognition,
+new-scheme idempotency, and unmapped-legacy-row survival against hand-built
+fixtures distinct from the implementer's own suite. All budget-etl tests and
+`go vet` pass clean on the merged PR.
+
+Verify in main-qa: after merge, run `budget-etl merge` twice against the real
+statements dir and snapshot; confirm the first run's transaction count drops
+by exactly the count of formerly cross-month-duplicated transactions, the
+second run changes no transaction IDs, and the budget web app still renders
+existing notes/reimbursements/categories correctly.

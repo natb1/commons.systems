@@ -32,6 +32,16 @@ export class SensorRegistry {
   }
 
   /**
+   * The set of names under which sensors are currently registered — a read-only
+   * snapshot; mutating it does not touch the registry. Lets a sensor that must
+   * know the registry's membership (the intention-store sensor) derive it from
+   * the registry itself rather than duplicating the registered-name list by hand.
+   */
+  names(): ReadonlySet<string> {
+    return new Set(this.sensors.keys());
+  }
+
+  /**
    * Resolve a sensor by name. Throws `IntentionSchemaError` naming the missing
    * sensor (and the registered names) on an unregistered name — no silent skip,
    * no fallback (per `.claude/rules/code-style.md`: clear errors over fallbacks).

@@ -50,7 +50,9 @@ clarifications:
       foundation-laying while the deepest captures stand open. Recorded
       2026-07-06 interview."
   - question: Why does a strategy for resolving capture carry no recovers edge?
-    answer: "Sequencing is not unwinding — the precedent is
+    answer: "Sequencing is not unwinding (kind-delegation's abstention doctrine,
+      2026-07-09, is the auditable home: a strategy that is not unwinding an
+      entered delegation is not a recovers target) — the precedent is
       strategy-realign-attachments, which abstains for the same reason. The
       recovers edges stay on the strategies performing the recovery:
       strategy-recover-attention, strategy-recover-finance,
@@ -69,6 +71,20 @@ clarifications:
       strategy owns nothing but the order they are worked in; the severity
       inputs it reads are maintained by exercise-recovery-paths' portfolio
       review. Recorded 2026-07-06 interview.
+  - question: Do context chunks violate the foundations clause while the deepest
+      captures stand open?
+    answer: "No — context reading is capture work, not comfortable
+      foundation-laying: a context chunk audits the delegatee's excerpt
+      selection for the record it deepens (selection bias is a
+      borrowed-articulation capture surface, observed live in the 2026-07-07
+      chunk-1 session). But it never preempts focused reading: reading priority
+      is ordered by distance from a critical-path node — focused chunks (verify
+      and candidate) are distance 0, context chunks carry distance of at least 1
+      — with ties broken by doctrine load, and only attention and blockers
+      override the ordering. Selection and drafting of context chunks is
+      unrestricted at any time; the gate is on reading priority, not on what may
+      enter the backlog (that admission is strategy-complete-grounding's).
+      Recorded 2026-07-08 interview."
 tooling_goals: []
 success_signal:
   observable: the next recovery work selected — a curriculum chunk or
@@ -83,7 +99,39 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "No claude-eligible PR-sized decomposition this round.
+    strategy-recovery-critical-path is eligible by the
+    tactic-graph-native-dispatch §3.1 gate (office_hours null, gap non-null,
+    rounds null → count 0, only a draft child), but its success_signal cannot be
+    validated by any tactic this round: the sensor is owner review at
+    office-hours and the threshold (\"selections match the path, or deviations
+    are recorded, across review cycles\") is inherently multi-cycle owner
+    judgment that accumulates over time — no single decomposition round can
+    produce it. The strategy owns nothing but the order; the recovery work is
+    performed by other strategies (recovers edges live there), and the
+    mechanisms this node depends on are already owned and built elsewhere: the
+    distance-based reading-priority ordering (attributes.curriculum.distance) is
+    owned and phase:done on tactic-context-chunk-selection and implemented in
+    packages/intentionsutil/src/grounding.ts, and the portfolio-review cadence
+    that drives the review cycles is owned by strategy-exercise-recovery-paths
+    (clarification 4). The one draft child, tactic-recovery-critical-path, is a
+    re-derivable owner-facing ranking snapshot (re-derived at each portfolio
+    review), not code to build. The gap (\"the 'across review cycles' clause is
+    unproven\") therefore closes only as the owner conducts further
+    portfolio-review cycles, so there is nothing for /align-tactics to build.
+    Recommend: advance this signal by conducting the next recovery-critical-path
+    review cycle at office-hours — re-derive the portfolio ranking off the
+    current delegation records, confirm the next selected recovery step
+    (curriculum chunk or recovery-strategy effort) is the earliest unblocked
+    step on the critical path to the highest-severity open deferral, record any
+    deviation, and refresh the tactic-recovery-critical-path snapshot — rather
+    than expecting a claude decomposition round; leave the strategy in
+    status:refining until a claude-buildable gap appears (an interactive
+    session's commit touching this node clears this park). Parked 2026-07-13
+    /align-tactics round."
+  since: 2026-07-13
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:
@@ -94,5 +142,8 @@ attributes:
     - recovery work's dependency structure is recorded in the graph (chunk
       order, blocked_by edges), so the critical path is computable from the
       records rather than remembered by the author
+    - distance-from-critical-path is recorded on chunk nodes
+      (attributes.curriculum.distance) so the reading order stays computable
+      from the graph, per this node's existing recorded-dependency condition
 ---
 # Sequence recovery work as a critical path to the deepest deferrals — capture sets the target, foundations come first

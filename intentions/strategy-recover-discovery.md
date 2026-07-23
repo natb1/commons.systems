@@ -21,9 +21,7 @@ rationale: >-
   tooling its current materialization.
 reading: null
 gap: null
-serves:
-  - virtue-progressive-detachment
-  - virtue-alignment-of-attachments
+serves: []
 recovers:
   - delegation-attention-services
 clarifications: []
@@ -36,6 +34,37 @@ success_signal:
   threshold: new material enters through owned ingestion by default; platform
     recommenders are deliberate exceptions
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours:
+  reason: "Cannot decompose this round: the minimum round to validate the signal
+    (share of new material entering via owned ingestion) is the full
+    owned-subscription + read/listen-later queue build, whose load-bearing
+    architecture is undecided and design-entangled — not a design-neutral
+    instrument a session can plan without inventing product design the author
+    has not specified. Concretely: blog-roll is build-time-only
+    (vite-plugin-feed-fetch.ts fetches a hardcoded 3-feed FEED_REGISTRY at
+    buildStart into a static widget), not a runtime subscription system; print
+    is a file-based PDF/EPUB reader (library.ts/bookmarks.ts, MediaItem) with no
+    web-article ingestion; audio is likewise file-based — so 'a
+    read/listen-later queue that print and audio drain' has multiple plausible
+    readings that change the whole decomposition. Next steps: author decides (1)
+    what a queue item is — URL bookmark vs server-side reader-mode extraction to
+    EPUB/PDF vs saved file; (2) where the queue lives — extend print's library,
+    a new surface/app, or a shared ingestion package reusing feed-proxy +
+    parse-feed.ts; (3) the drain/integration contract bridging a web feed item
+    into print's PDF/EPUB library and audio's player; (4) subscription
+    management replacing the hardcoded FEED_REGISTRY/ALLOWED_FEED_URLS
+    allowlist. Record these as strategy clarifications/conditions via
+    /align-strategy, then re-run /align-tactics; the existing draft
+    tactic-feed-ingestion is the input to that round."
+  since: 2026-07-07
+  recommendation: null
+pace_exempt: false
+rounds: null
 attributes:
   conditions:
     - sources the author cares about keep publishing feeds or direct-access
