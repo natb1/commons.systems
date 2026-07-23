@@ -26,23 +26,7 @@ blocked_by:
   - tactic-graph-router-transitions
   - tactic-dispatch-lifecycle-sensor
   - tactic-phase-skill-node-targets
-office_hours:
-  reason: 'implement phase needs a full interactive /implement session: the
-    headless graph-tick worker lacks the Agent/Task subagent-launch tool
-    required to build this ~4750-line live-dispatch deletion. Worktree recreated
-    fresh off origin/main 2026-07-22 — the prior provision-exit-11 "merge
-    conflict" was actually the old branch sitting on orphaned pre-rewrite
-    history (empty merge-base with current origin/main), now resolved.'
-  since: 2026-07-23
-  recommendation: "Run /implement tactic-legacy-router-removal in a full
-    interactive session (has Agent/Task): builds Units 1-3 via /implement-unit
-    (opus U1, sonnet U2-3), runs verify (npm test --prefix
-    packages/intentionsutil), opens the draft PR, transitions implement->qa via
-    transition-node --set-pr. NOTE Unit 3 does LIVE graph-commit --prune writes
-    outside the PR tree. Prior partial Unit 1 (2893-line legacy-surface
-    deletion) preserved at git tag legacy-router-removal-partial-5c753ba7 if
-    worth referencing. After the PR opens and the node transitions, MANUALLY
-    clear this office_hours park."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

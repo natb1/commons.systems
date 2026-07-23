@@ -7,7 +7,20 @@ statement: Fix the flaky select-tick primary-checkout-guard-halt wiring test in
 owner: ai
 status: codified
 parent: null
-rationale: null
+rationale: "Closed as a duplicate of tactic-flake-select-tick-guard-halt. Both
+  nodes track the identical flaky assertion — the `select-tick on-main but
+  primary checkout off-main -> guard halts (exit 2)` wiring test at
+  test-dispatch-scripts.sh:22026 — and were filed 3 minutes apart (18:51 and
+  18:54 on 2026-07-22) from two separate CI recurrences (this node from PR
+  #2939, the keeper from PR #2938) without either author noticing the other
+  existed. Their failure excerpts are byte-identical. The keeper
+  (tactic-flake-select-tick-guard-halt) carries the richer diagnosis
+  (cross-references to the adjacent select-tick flake nodes) and is the one held
+  open/parked for the human flake decision, so this node is closed and its
+  downstream suppression link (tactic-graph-write-recipes-base-cas.blocked_by)
+  was repointed onto the keeper in the same commit so no node is wrongly
+  unblocked while the flake is still live. No PR: closing a duplicate tracker,
+  not landing a code fix."
 reading: null
 gap: null
 serves:
@@ -17,7 +30,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution: null
 validates: []
 blocked_by: []

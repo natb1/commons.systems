@@ -75,7 +75,7 @@ execution:
     pushed_sha: null
 validates: []
 blocked_by:
-  - tactic-flake-select-tick-primary-checkout-guard-halt
+  - tactic-flake-select-tick-guard-halt
 office_hours: null
 pace_exempt: false
 rounds: null
