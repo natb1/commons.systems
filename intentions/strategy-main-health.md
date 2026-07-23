@@ -19,7 +19,7 @@ reading: "unreliable — signal under repair (hand-set 2026-07-23; the next
   read-sensors run overwrites this with readMainHealth()'s literal output).
   origin/main HEAD e2136ff9 carries eight check-runs, all concluding success,
   but ALL inherited from a Graph Fast Path run on a graph/** branch sharing the
-  sha; none of unit-tests.yml's sixteen merge-gating jobs is present, so this
+  sha; none of unit-tests.yml's fifteen merge-gating jobs is present, so this
   green is VACUOUS with respect to the trunk's own suite. Earlier the same day
   HEAD 1edf47ee read red on two inherited `guard: failure` runs from the benign
   fast-path race (tactic-graph-fastpath-guard-diff-base, PR 2898). Both readings
@@ -54,7 +54,7 @@ clarifications:
     answer: >-
       (Recorded 2026-07-23 interview, surfaced by the wezterm-pin round.) No —
       and is_proxy is corrected from false to true on this date. Verified
-      against origin/main: .github/workflows/unit-tests.yml carries sixteen jobs
+      against origin/main: .github/workflows/unit-tests.yml carries fifteen jobs
       (unit-tests, rules-test, lint, dead-code, storybook-smoke, typecheck,
       hook-tests, test-integrity, playwright-version-sync, type-safety-sensor,
       firestore-query-bounds-sensor, go-tests, darwin-build, nixos-build,
@@ -112,7 +112,7 @@ clarifications:
       none from the merge-gating suite.
 
 
-      So the signal is simultaneously fail-open (blind to sixteen jobs) and
+      So the signal is simultaneously fail-open (blind to fifteen jobs) and
       falsely fail-closed (inherits unrelated branches' failures), which is why
       is_proxy is corrected to true. Fix drafted at
       tactic-main-health-signal-attribution. Note the coupling this creates:

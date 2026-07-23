@@ -98,6 +98,10 @@ overwrite a published object satisfies the invariant.
 - Removing `nix/home/` from CI's built closure — that is
   `tactic-nix-instance-flake-extraction` (phase `implement`), which lands
   regardless and fixes the false CI red but not the workstation break.
-- The immediate unblock. This round recorded intent only; it wrote no code and
-  did not refresh the stale hash, so `nixos-build` is red on nix-touching
-  branches until either a refresh or this fix lands.
+- The immediate unblock. Applied 2026-07-23 as PR 2953: `windowsZipHash`
+  refreshed to `sha256-bTvVHVpB8Mh6g2lF2RB9Egs2IApanVb5Z1R2M9UCZZ8=` for the
+  unchanged build `20260716-195552-76b606ec`, with `version`/`rev`/`srcHash`/
+  `cargoHash` left alone. That is a holding action on the same mutable URL, so
+  it goes stale again on the next upstream repackage and does not reduce this
+  tactic's scope. The third such refresh is the signal that no refresh cadence
+  fixes a byte pin against an overwritable reference.

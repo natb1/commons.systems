@@ -7,7 +7,7 @@ owner: human
 status: raw
 parent: null
 rationale: "Retained from the 2026-07-23 /align-strategy round on the wezterm
-  pin. unit-tests.yml's sixteen jobs carry branches-ignore [main, graph/**], so
+  pin. unit-tests.yml's fifteen jobs carry branches-ignore [main, graph/**], so
   the trunk's merge-gating suite is validated pre-merge on the branch push and
   never post-merge on main. That is coherent for commit-caused breakage but
   blind to breakage whose cause is OUTSIDE the repo and arrives with no commit —
