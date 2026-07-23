@@ -14,13 +14,29 @@
 # script authors no markdown. The commit/stamp/fast-forward mechanics are
 # graph-commit's.
 #
-# If the node's office_hours is already null, this is a deliberate idempotent
-# no-op: print an informative note and exit 0 without calling graph-commit.
+# Fresh-origin/main invariant (mirrors park-node:60-77,
+# tactic-park-node-fresh-main-clobber-fix): the read-modify-write below
+# operates on origin/main's CURRENT content, never the possibly-stale local
+# on-disk copy — the invocation routinely comes from a far-behind PR-branch
+# worktree, and the drain lane calls this at the END of a long session, by
+# which time origin/main has usually advanced. So this script fetches
+# origin/main, overwrites the local node file with origin/main's version,
+# THEN reads/mutates/writes it, and passes graph-commit a `--base`
+# compare-and-swap token pinned to the blob it read. Without the guard a stale
+# copy's small office_hours diff applies cleanly onto a since-advanced
+# origin/main and silently reverts unrelated body/frontmatter changes landed
+# in between; with it, graph-commit refuses (exit 1) instead.
+#
+# If the node's office_hours is already null ON ORIGIN/MAIN (the refresh above
+# is what makes this check test landed truth rather than a stale local copy),
+# this is a deliberate idempotent no-op: print an informative note and exit 0
+# without calling graph-commit.
 #
 # Usage: clear-park <node-id> [note]
 #
 # Exit codes: 0 cleared and landed on main (or already-clear no-op); 1 the
-# write or graph-commit failed; 2 usage error.
+# write, the origin/main refresh, or graph-commit failed (including a refused
+# stale-base compare-and-swap); 2 usage error.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,6 +50,24 @@ NOTE="${2:-}"
 if [[ $# -lt 1 || $# -gt 2 || -z "$NODE_ID" ]]; then
   echo "usage: clear-park <node-id> [note]" >&2
   exit 2
+fi
+
+# Refresh the LOCAL node file from origin/main BEFORE reading it, so the
+# office_hours clear lands on top of the current landed content rather than a
+# stale worktree copy. An unreachable origin/main or a node absent from
+# origin/main is genuine environment breakage — fail with a clear error, never
+# fall back to the local copy (code-style.md).
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "clear-park: could not fetch origin/main to refresh $NODE_ID before clearing" >&2
+  exit 1
+fi
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "clear-park: intentions/$NODE_ID.md does not exist on origin/main — cannot clear a park on a node that is not landed" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$INTENTIONS_DIR/$NODE_ID.md"; then
+  echo "clear-park: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
 fi
 
 TMPTS="$(mktemp --suffix=.mts)" \
@@ -70,7 +104,7 @@ else
   MESSAGE="graph: clear office_hours park on $NODE_ID"
 fi
 
-if ! "$SCRIPT_DIR/graph-commit" -m "$MESSAGE" "$NODE_ID"; then
+if ! "$SCRIPT_DIR/graph-commit" --base "$NODE_ID=$FRESH_BLOB" -m "$MESSAGE" "$NODE_ID"; then
   echo "clear-park: graph-commit failed for $NODE_ID; the office_hours write is on disk but not landed" >&2
   exit 1
 fi
