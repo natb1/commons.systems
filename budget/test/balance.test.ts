@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, findOverrideInPeriod, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetStatsAndVariances, MATERIALITY_THRESHOLD } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, findOverrideInPeriod, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeProjectedRunway, computeDerivedBalances, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetStatsAndVariances, MATERIALITY_THRESHOLD } from "../src/balance";
 import type { BudgetDiff, PerBudgetStats } from "../src/balance";
 import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
@@ -944,6 +944,10 @@ describe("computeAggregateTrend avg12NetCredits", () => {
   });
 });
 
+// sid builds the branded StatementId from a plain string in test data.
+const sid = (s: string): Statement["statementId"] =>
+  s as unknown as Statement["statementId"]; // type-safety-ok: test-only branded StatementId construction
+
 function makeStmt(overrides: Partial<Statement> = {}): Statement {
   return {
     id: "stmt-1",
@@ -1039,6 +1043,23 @@ describe("computeNetWorth", () => {
     ];
     const result = computeNetWorth(txns, stmts, weeks);
     expect(result.divergences).toHaveLength(0);
+  });
+
+  it("handles two anchors in the same account-month (distinct as-of dates) without spurious divergence", () => {
+    // Date-keyed anchors: two observations of Bank/Checking in 2025-01 at
+    // different as-of dates. Mid-month says 500; a $20 spend on Jan-20 explains
+    // the month-end 480. Sorted by effective ms (balanceDate), the derivation
+    // flows 500 → 480 and matches, so no divergence is raised.
+    const stmts = [
+      makeStmt({ id: "s-mid", statementId: sid("Bank-Checking-2025-01-15"), period: "2025-01", balanceDate: "2025-01-15", balance: 500 }),
+      makeStmt({ id: "s-end", statementId: sid("Bank-Checking-2025-01-31"), period: "2025-01", balanceDate: "2025-01-31", balance: 480 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 20, timestamp: ts("2025-01-20"), budget: null }),
+    ];
+    const result = computeNetWorth(txns, stmts, weeks);
+    expect(result.divergences).toEqual([]);
+    expect(result.points).toHaveLength(3);
   });
 
   it("excludes non-primary normalized transactions", () => {
@@ -1206,6 +1227,35 @@ describe("computeCashFlow", () => {
     ];
     const result = computeCashFlow(points);
     expect(result[0].cashFlow).toBe(-200);
+  });
+});
+
+describe("computeProjectedRunway", () => {
+  it("divides latest net worth by trailing monthly spend", () => {
+    const points = [
+      { weekLabel: "1/5", weekMs: 1000, netWorth: 5000, isStatementAnchored: false },
+      { weekLabel: "1/12", weekMs: 2000, netWorth: 12000, isStatementAnchored: true },
+    ];
+    // avg weekly spend 100 -> monthly 100 * 52 / 12 ≈ 433.33 -> 12000 / 433.33 ≈ 27.69
+    const result = computeProjectedRunway(points, 100);
+    expect(result).not.toBeNull();
+    expect(result).toBeCloseTo(12000 / ((100 * 52) / 12), 6);
+  });
+
+  it("returns null for empty points (no data yields no metric)", () => {
+    expect(computeProjectedRunway([], 100)).toBeNull();
+  });
+
+  it("returns null for zero spending (no Infinity/NaN)", () => {
+    const points = [{ weekLabel: "1/5", weekMs: 1000, netWorth: 5000, isStatementAnchored: false }];
+    expect(computeProjectedRunway(points, 0)).toBeNull();
+  });
+
+  it("returns the raw negative quotient for negative net worth (no clamp)", () => {
+    const points = [{ weekLabel: "1/5", weekMs: 1000, netWorth: -2000, isStatementAnchored: false }];
+    const result = computeProjectedRunway(points, 100);
+    expect(result).toBeCloseTo(-2000 / ((100 * 52) / 12), 6);
+    expect(result).toBeLessThan(0);
   });
 });
 

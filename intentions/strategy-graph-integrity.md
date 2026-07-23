@@ -154,7 +154,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - the audit stays token-bounded — digest-first reading, full node bodies

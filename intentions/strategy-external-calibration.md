@@ -58,6 +58,21 @@ clarifications:
       what must be external, its roles being to guard the choice of liberator
       against the sophist and to offer compulsion toward a good not yet seen.
       Amended 2026-07-07 /reading-review chunk 1."
+  - question: What channel may this round's solicitation use while tiers 2 and 3 of
+      strategy-progressive-validation are not entered?
+    answer: "Ungated community participation only. strategy-progressive-validation's
+      tier-gate scope (recorded 2026-07-06/08 there) covers invitations and
+      obligations — onboarding CTAs, submissions, practitioner-channel campaigns
+      — while participation in existing communities under
+      strategy-join-existing-practice stays ungated. So the round's solicitation
+      tactic rides that participation channel (the author asking a zero-stake
+      practitioner for pushback in person or in community venues) and mints no
+      invitation-facing surface — no README/landing/blog call-for-challenges —
+      until a tier declaration opens one. The registration convention's home is
+      this node's markdown body, per kind-strategy's settled-mechanism body
+      rule. Immaterial to author-ratify now: the gating premise is already
+      author-ratified on strategy-progressive-validation; this entry records the
+      reliance. Recorded 2026-07-11 /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: external calibration events — a practitioner or peer challenge that
@@ -73,7 +88,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - a practitioner community can be cultivated at all — tier 3 of

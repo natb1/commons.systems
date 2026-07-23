@@ -27,7 +27,13 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-office-hours-snapshot-wire-contract
+  pr: 2805
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours:
@@ -58,7 +64,8 @@ office_hours:
   recommendation: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  bug_fix: true
 ---
 # office-hours snapshot: shared wire-contract + the three pipeline breaks
 

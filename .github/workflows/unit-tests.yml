@@ -38,6 +38,8 @@ jobs:
         with:
           node-version-file: .node-version
           cache: 'npm'
+      - name: Install zsh (needed by zsh-shebang regression tests)
+        run: sudo apt-get update && sudo apt-get install -y zsh
       - name: Run unit tests
         run: .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh
 
@@ -189,10 +191,18 @@ jobs:
         run: .claude/hooks/test-approve-workflow-commands.sh
       - name: Run dispatch script tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+      - name: Run dispatch-graph-execute tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh
+      - name: Run dispatch-daemon-liveness sensor tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-daemon-liveness.sh
+      - name: Run park-node CAS-guard tests
+        run: packages/intentionsutil/scripts/test-park-node.sh
       - name: Run budget-config-load tests
         run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests
         run: .claude/skills/dispatch-propagate/scripts/test-write-phase-log.sh
+      - name: Run flake stale-head guard tests
+        run: .claude/skills/dispatch-propagate/scripts/test-flake-stale-head-check.sh
       - name: Run stable-propagation gate tests
         run: .claude/skills/dispatch-propagate/scripts/test-run-smoke-tests.sh
       - name: Run prose-rule lint tests
@@ -209,6 +219,8 @@ jobs:
         run: .github/scripts/test-check-firestore-query-bounds.sh
       - name: Run test-integrity script tests
         run: .github/scripts/test-check-test-integrity.sh
+      - name: Run graph fast-path guard script tests
+        run: .github/scripts/test-check-graph-fast-path.sh
 
   test-integrity:
     runs-on: ubuntu-latest

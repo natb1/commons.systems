@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -29,6 +29,7 @@ office_hours:
   reason: passive observation of a future live review run whose diff happens to
     contain an unbounded Firestore scan
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -37,11 +38,12 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issue (closed, content preserved here): 2707 —
-needs-main residue from the runtime-cost finder (issue 2690, PR 2706). The
-review fan-out, including this finder, carries over unchanged into the
-graph-native review phase (`tactic-graph-native-dispatch` §2.4). One
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issue (closed, content
+preserved here): 2707 — needs-main residue from the runtime-cost finder
+(issue 2690, PR 2706). The review fan-out, including this finder, carries
+over unchanged into the graph-native review phase
+(`tactic-graph-native-dispatch` §2.4). One
 target-state translation: the non-blocking outcome lands as a draft tactic
 batched per component (strategy clarification 19), not a gh follow-up issue —
 verify the disposition class, not the legacy artifact.

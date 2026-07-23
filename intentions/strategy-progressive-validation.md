@@ -118,6 +118,16 @@ clarifications:
       README, About, and the graph are public today; what the tier gate covers
       is the invitations placed on them, per the gate-scope clarification above.
       Recorded 2026-07-08 interview."
+  - question: What is the previous tier for a tier-1 tooth — what validating signal
+      does the threshold demand before a base-tier tooth is accepted?
+    answer: "Proposed by the round, reserved to the author: tier-1 teeth validate
+      against the author's own demonstrated need — the daily-use evidence that
+      validates tier 1 itself — so the teeth census
+      (tactic-ratchet-teeth-census) proposes named author-need evidence as each
+      tier-1 tooth's validating signal and flags any tooth with none. Whether
+      that reading stands, and whether teeth accepted before the census read
+      retroactively, is the author's call at the first office-hours reading
+      (tactic-ratchet-teeth-reading). Recorded 2026-07-11 /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: each accepted ratchet tooth has a recorded prior-tier signal that
@@ -132,7 +142,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - external engagement arrives in tiers whose signals are observable before

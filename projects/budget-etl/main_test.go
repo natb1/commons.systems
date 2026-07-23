@@ -554,8 +554,8 @@ func TestRunMerge(t *testing.T) {
 	})
 
 	// Compute expected doc IDs for the dir transactions
-	docA := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-A")
-	docB := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-B")
+	docA := budget.TransactionDocID("test_bank", "1234", "TXN-A")
+	docB := budget.TransactionDocID("test_bank", "1234", "TXN-B")
 
 	// Create an input JSON with:
 	// - txn docA with a user note (overlaps with dir)
@@ -687,13 +687,14 @@ func TestRunMerge(t *testing.T) {
 		t.Errorf("expected 4 rules in output, got %d", len(out.Rules))
 	}
 
-	// Statements: one from dir (test_bank-1234-2025-01) with balance from CSV metadata
+	// Statements: one from dir, keyed by as-of date (test_bank-1234-2025-01-31,
+	// the CSV metadata toDate) with balance from CSV metadata
 	if len(out.Statements) != 1 {
 		t.Fatalf("expected 1 statement, got %d", len(out.Statements))
 	}
 	stmt := out.Statements[0]
-	if stmt.StatementID != "test_bank-1234-2025-01" {
-		t.Errorf("statement.statementId = %q, want %q", stmt.StatementID, "test_bank-1234-2025-01")
+	if stmt.StatementID != "test_bank-1234-2025-01-31" {
+		t.Errorf("statement.statementId = %q, want %q", stmt.StatementID, "test_bank-1234-2025-01-31")
 	}
 	if stmt.Balance != 50.00 {
 		t.Errorf("statement.balance = %v, want 50.00", stmt.Balance)
@@ -715,7 +716,7 @@ func TestRunMergeGroupNameOverride(t *testing.T) {
 		{"2025/01/10", "5.00", "TEST ITEM", "", "TXN-X", "DEBIT"},
 	})
 
-	docX := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-X")
+	docX := budget.TransactionDocID("test_bank", "1234", "TXN-X")
 	inputJSON := export.Output{
 		Version:   1,
 		GroupName: "original-group",
@@ -809,8 +810,8 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 		t.Fatalf("expected 2 transactions (deduped), got %d", len(out.Transactions))
 	}
 
-	docOverlap := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-OVERLAP")
-	docUnique := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-UNIQUE")
+	docOverlap := budget.TransactionDocID("test_bank", "1234", "TXN-OVERLAP")
+	docUnique := budget.TransactionDocID("test_bank", "1234", "TXN-UNIQUE")
 	ids := make(map[string]int)
 	for _, txn := range out.Transactions {
 		ids[txn.ID]++
@@ -822,12 +823,13 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 		t.Errorf("TXN-UNIQUE: expected 1 occurrence, got %d", ids[docUnique])
 	}
 
-	// Both overlapping CSV files share the same statementId; they must collapse
+	// Both overlapping CSV files carry the same as-of date (2025-01-31) and the
+	// same ending balance, so they share one date-keyed anchor ID and collapse
 	// to exactly one deduped statement record.
 	if len(out.Statements) != 1 {
 		t.Fatalf("expected 1 statement (deduped), got %d", len(out.Statements))
 	}
-	wantStmtID := "test_bank-1234-2025-01"
+	wantStmtID := "test_bank-1234-2025-01-31"
 	if out.Statements[0].StatementID != wantStmtID {
 		t.Errorf("statement.statementId = %q, want %q", out.Statements[0].StatementID, wantStmtID)
 	}
@@ -837,13 +839,15 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 	}
 }
 
-func TestRunMergeErrorsOnBalanceDisagreement(t *testing.T) {
+func TestRunMergeReconcilesBalanceDisagreementBySourceFile(t *testing.T) {
 	tmp := t.TempDir()
 
-	// Two overlapping CSV files for the same institution/account/period — same
-	// statementId — but with different ending balances. dedupStatementData must
-	// detect the balance disagreement and return an error.
-	stmtID := "test_bank-1234-2025-01"
+	// Two overlapping CSV files for the same institution/account, both with the
+	// same as-of date (2025-01-31) — hence the same date-keyed anchor ID — but
+	// with different ending balances. This is no longer an error: dedup resolves
+	// the collision deterministically by keeping the lexicographically-later
+	// SourceFile (download2.csv), whose balance is $75.00.
+	wantStmtID := "test_bank-1234-2025-01-31"
 	csv1 := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "download1.csv")
 	writeCSVFixtureBalance(t, csv1, "50.00", [][6]string{
 		{"2025/01/10", "5.00", "SHARED PURCHASE", "", "TXN-OVERLAP", "DEBIT"},
@@ -867,26 +871,41 @@ func TestRunMergeErrorsOnBalanceDisagreement(t *testing.T) {
 	}
 
 	outputPath := filepath.Join(tmp, "output.json")
-	err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath})
-	if err == nil {
-		t.Fatal("runMerge: expected error for balance disagreement, got nil")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: unexpected error (disagreement should reconcile, not error): %v", err)
 	}
-	if !strings.Contains(err.Error(), stmtID) {
-		t.Errorf("error %q does not mention statementId %q", err.Error(), stmtID)
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
 	}
-	if !strings.Contains(err.Error(), "balance disagreement") {
-		t.Errorf("error %q does not contain 'balance disagreement'", err.Error())
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	if len(out.Statements) != 1 {
+		t.Fatalf("expected 1 reconciled statement, got %d", len(out.Statements))
+	}
+	if out.Statements[0].StatementID != wantStmtID {
+		t.Errorf("statement.statementId = %q, want %q", out.Statements[0].StatementID, wantStmtID)
+	}
+	if out.Statements[0].Balance != 75.00 {
+		t.Errorf("statement.balance = %.2f, want 75.00 (later-sorting download2.csv wins)", out.Statements[0].Balance)
 	}
 }
 
 // TestRunMergeCrossStatementDuplicateJournalAggregatesAgree is the end-to-end
 // acceptance test for issue #1271. One real purchase appears in two overlapping
-// statements (same institution/account, same description/amount/date, but
-// different statement periods → different statementIDs). autoNormalize flags the
-// cross-statement pair (no normalization rule needed), marking one primary and
-// one non-primary duplicate. The journal must credit the bank account for the
-// purchase exactly once — not twice — and the budget aggregate must count it
-// once. The two computed numbers must agree.
+// statements (same institution/account, same FITID and description/amount/date,
+// but different statement periods → different statementIDs). Under
+// statement-independent transaction identity (clarification 3), both exports
+// resolve the shared bank transaction to the SAME doc ID
+// (institution, account, FITID), so buildTransactions collapses the pair to a
+// single row at the identity level — autoNormalize is no longer even reached for
+// this case. The journal must credit the bank account for the purchase exactly
+// once, and the budget aggregate must count it once; the two computed numbers
+// must agree.
 func TestRunMergeCrossStatementDuplicateJournalAggregatesAgree(t *testing.T) {
 	tmp := t.TempDir()
 
@@ -907,10 +926,9 @@ func TestRunMergeCrossStatementDuplicateJournalAggregatesAgree(t *testing.T) {
 
 	const purchaseAmount = 7.25
 
-	stmtJan := "test_bank-1234-2025-01"
-	stmtFeb := "test_bank-1234-2025-02"
-	docJan := budget.TransactionDocID(stmtJan, "TXN-DUP")
-	docFeb := budget.TransactionDocID(stmtFeb, "TXN-DUP")
+	// Statement-independent identity: both exports resolve TXN-DUP for
+	// (test_bank, 1234) to a single doc ID, regardless of inferred month.
+	docDup := budget.TransactionDocID("test_bank", "1234", "TXN-DUP")
 
 	// Empty NormalizationRules: auto-normalization of exact cross-statement
 	// duplicates needs no rule. A categorization + budget_assignment rule lands
@@ -948,29 +966,21 @@ func TestRunMergeCrossStatementDuplicateJournalAggregatesAgree(t *testing.T) {
 		t.Fatalf("parsing output: %v", err)
 	}
 
-	// Sanity: both transactions survive dedup (distinct statementIDs), and exactly
-	// one is the non-primary normalized duplicate.
-	if len(out.Transactions) != 2 {
-		t.Fatalf("expected 2 transactions (distinct statementIDs), got %d", len(out.Transactions))
+	// Sanity: the shared transaction collapses to a single row at the identity
+	// level (both exports minted the same doc ID), so there is no normalized
+	// pair — one primary transaction, no non-primary duplicate.
+	if len(out.Transactions) != 1 {
+		t.Fatalf("expected 1 transaction (identity-level collapse), got %d", len(out.Transactions))
 	}
-	txnByID := make(map[string]export.Transaction, len(out.Transactions))
-	for _, txn := range out.Transactions {
-		txnByID[txn.ID] = txn
+	txn := out.Transactions[0]
+	if txn.ID != docDup {
+		t.Fatalf("surviving transaction id = %q, want %q", txn.ID, docDup)
 	}
-	primaries, dups := 0, 0
-	for _, id := range []string{docJan, docFeb} {
-		txn, ok := txnByID[id]
-		if !ok {
-			t.Fatalf("expected transaction %q in output", id)
-		}
-		if txn.NormalizedID != nil && *txn.NormalizedID != "" && !txn.NormalizedPrimary {
-			dups++
-		} else if txn.NormalizedPrimary {
-			primaries++
-		}
+	if !txn.NormalizedPrimary {
+		t.Errorf("surviving transaction should be NormalizedPrimary")
 	}
-	if primaries != 1 || dups != 1 {
-		t.Fatalf("expected exactly 1 primary and 1 non-primary duplicate, got %d primary / %d duplicate", primaries, dups)
+	if txn.NormalizedID != nil && *txn.NormalizedID != "" {
+		t.Errorf("surviving transaction should carry no normalizedId (no pair), got %q", *txn.NormalizedID)
 	}
 
 	// Assertion 1: the journal credits the bank account for the purchase exactly
@@ -1210,27 +1220,32 @@ func TestDeriveMonthlyStatementsVirtual(t *testing.T) {
 }
 
 // TestMergeStatementsPreservesRealOverDerivedAnchor asserts the three-way merge
-// priority: real dir > real input > derived/virtual anchor.
+// priority: real dir > real input > derived/virtual anchor, with anchors keyed
+// by as-of date.
 //
-//  1. Core criterion: a real input statement is preserved when a derived
-//     (Virtual=true) dir anchor exists for the same StatementID.
-//  2. Gap-fill: a derived anchor IS emitted for a period that has no real
+//  1. Migration: a real input statement carrying an old month-keyed anchor ID is
+//     re-keyed to its as-of date ("testbank-acct-2026-01-28").
+//  2. Core criterion: the real input statement is preserved even though a
+//     derived (Virtual=true) dir anchor covers the same account-month.
+//  3. Gap-fill: a derived anchor IS emitted for an account-month with no real
 //     statement in either dir or input.
 func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
-	// Two derived dir anchors:
-	//   anchor-A: "testbank-acct-2026-01" (Virtual=true, balance=$10 estimate)
-	//   anchor-B: "testbank-acct-2026-02" (Virtual=true, balance=$20 estimate — gap month)
+	// Two derived dir anchors (date-keyed, as buildStatementData now produces):
+	//   anchor-A: "testbank-acct-2026-01-31" (Virtual, $10 estimate — Jan)
+	//   anchor-B: "testbank-acct-2026-02-28" (Virtual, $20 estimate — Feb gap)
 	//
-	// One real input statement:
-	//   real-A: "testbank-acct-2026-01" (Virtual=false, balance=$99 real value)
+	// One real input statement carrying the OLD month-keyed ID (as a prior
+	// snapshot would): "testbank-acct-2026-01" (Virtual=false, $99, DTASOF
+	// 2026-01-28). mergeStatements migrates it to "testbank-acct-2026-01-28".
 	//
-	// After merge, the result for "testbank-acct-2026-01" must be the $99 real
-	// input statement (not the $10 derived estimate), and "testbank-acct-2026-02"
-	// must still appear (gap-fill preserved).
+	// After merge, the real Jan input ($99) must win over the derived Jan anchor
+	// ($10) for that account-month, and the Feb derived anchor must still appear.
 
 	const (
-		stmtIDJanuary  = "testbank-acct-2026-01"
-		stmtIDFebruary = "testbank-acct-2026-02"
+		derivedJanID     = "testbank-acct-2026-01-31"
+		derivedFebID     = "testbank-acct-2026-02-28"
+		migratedJanID    = "testbank-acct-2026-01-28"
+		legacyInputJanID = "testbank-acct-2026-01"
 	)
 
 	bdJan := time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)
@@ -1238,7 +1253,7 @@ func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
 
 	dirStmts := []budget.StatementData{
 		{
-			StatementID: stmtIDJanuary,
+			StatementID: derivedJanID,
 			Institution: "testbank",
 			Account:     "acct",
 			Balance:     1000, // $10.00 — derived estimate
@@ -1247,7 +1262,7 @@ func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
 			Virtual:     true,
 		},
 		{
-			StatementID: stmtIDFebruary,
+			StatementID: derivedFebID,
 			Institution: "testbank",
 			Account:     "acct",
 			Balance:     2000, // $20.00 — derived estimate, gap month
@@ -1259,8 +1274,8 @@ func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
 
 	inputStmts := []export.Statement{
 		{
-			ID:          budget.StatementDocID(stmtIDJanuary),
-			StatementID: stmtIDJanuary,
+			ID:          budget.StatementDocID(legacyInputJanID),
+			StatementID: legacyInputJanID,
 			Institution: "testbank",
 			Account:     "acct",
 			Balance:     99.00, // $99.00 — real measured balance
@@ -1283,33 +1298,142 @@ func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
 		byStmtID[s.StatementID] = s
 	}
 
-	// 1. Core criterion: real input wins — $99 balance, Virtual=false.
-	jan, ok := byStmtID[stmtIDJanuary]
+	// 1 + 2. Migration + core criterion: the real input, re-keyed to its as-of
+	// date, wins over the derived Jan anchor — $99 balance, Virtual=false, and
+	// its doc ID is recomputed from the migrated anchor ID.
+	jan, ok := byStmtID[migratedJanID]
 	if !ok {
-		t.Fatalf("StatementID %q missing from merge result", stmtIDJanuary)
+		t.Fatalf("migrated StatementID %q missing from merge result", migratedJanID)
 	}
 	if jan.Virtual {
-		t.Errorf("result for %q has Virtual=true, want false (real input should win)", stmtIDJanuary)
+		t.Errorf("result for %q has Virtual=true, want false (real input should win)", migratedJanID)
 	}
 	if jan.Balance != 99.00 {
-		t.Errorf("result for %q has Balance=%.2f, want 99.00 (real input balance)", stmtIDJanuary, jan.Balance)
+		t.Errorf("result for %q has Balance=%.2f, want 99.00 (real input balance)", migratedJanID, jan.Balance)
+	}
+	if wantDoc := budget.StatementDocID(migratedJanID); jan.ID != wantDoc {
+		t.Errorf("result for %q has doc ID %q, want %q (recomputed from migrated anchor ID)", migratedJanID, jan.ID, wantDoc)
+	}
+	// The old month-keyed ID and the derived Jan anchor must NOT appear.
+	if _, present := byStmtID[legacyInputJanID]; present {
+		t.Errorf("legacy month-keyed ID %q leaked into result (should be migrated)", legacyInputJanID)
+	}
+	if _, present := byStmtID[derivedJanID]; present {
+		t.Errorf("derived Jan anchor %q leaked into result (real input covers that month)", derivedJanID)
 	}
 
-	// 2. Gap-fill preserved: derived anchor for February still appears.
-	feb, ok := byStmtID[stmtIDFebruary]
+	// 3. Gap-fill preserved: derived anchor for February still appears.
+	feb, ok := byStmtID[derivedFebID]
 	if !ok {
-		t.Fatalf("StatementID %q missing from merge result — gap-fill regressed", stmtIDFebruary)
+		t.Fatalf("StatementID %q missing from merge result — gap-fill regressed", derivedFebID)
 	}
 	if !feb.Virtual {
-		t.Errorf("result for %q has Virtual=false, want true (should be the derived anchor)", stmtIDFebruary)
+		t.Errorf("result for %q has Virtual=false, want true (should be the derived anchor)", derivedFebID)
 	}
 	if feb.Balance != 20.00 {
-		t.Errorf("result for %q has Balance=%.2f, want 20.00 (derived anchor balance)", stmtIDFebruary, feb.Balance)
+		t.Errorf("result for %q has Balance=%.2f, want 20.00 (derived anchor balance)", derivedFebID, feb.Balance)
 	}
 
-	// 3. Exactly the two expected statements — no extras.
+	// Exactly the two expected statements — no extras.
 	if len(result) != 2 {
 		t.Errorf("expected 2 statements in merge result, got %d", len(result))
+	}
+}
+
+// TestMergeStatementsMigrationNoDoubling covers the two migration collapse cases
+// that keep a re-parsed file from doubling a prior-snapshot monthly anchor:
+//
+//  1. A dated prior-snapshot doc whose DTASOF matches the re-parsed dir file
+//     migrates to the same date-keyed anchor ID and is dropped in favor of dir.
+//  2. A legacy prior-snapshot doc lacking a balanceDate migrates to the
+//     last-day-of-month fallback ID; even when that fallback ID does not match
+//     the dir observation's real as-of date, it is dropped because a real dir
+//     observation already covers that account-month.
+//
+// A legacy doc for a month the dir does NOT cover is retained (migrated by
+// fallback), so genuine history is not lost.
+func TestMergeStatementsMigrationNoDoubling(t *testing.T) {
+	bdMar20 := time.Date(2026, 3, 20, 0, 0, 0, 0, time.UTC)
+
+	// One real dir observation for March, as-of 2026-03-20.
+	dirStmts := []budget.StatementData{
+		{
+			StatementID: budget.AnchorID("bank", "acct", &bdMar20, "2026-03"),
+			Institution: "bank",
+			Account:     "acct",
+			Balance:     30000, // $300.00 — the re-parsed real value
+			Period:      "2026-03",
+			BalanceDate: &bdMar20,
+			SourceFile:  "bank/acct/2026-03/stmt.qfx",
+		},
+	}
+
+	inputStmts := []export.Statement{
+		// (1) dated prior-snapshot doc, same DTASOF as the dir re-parse.
+		{
+			ID:          budget.StatementDocID("bank-acct-2026-03"), // old month-keyed doc ID
+			StatementID: "bank-acct-2026-03",                        // old month-keyed anchor ID
+			Institution: "bank",
+			Account:     "acct",
+			Balance:     250.00, // stale value from the old snapshot
+			Period:      "2026-03",
+			BalanceDate: "2026-03-20",
+		},
+		// (2) legacy prior-snapshot doc for the same month, NO balanceDate.
+		{
+			ID:          budget.StatementDocID("bank-acct-2026-03-legacy"),
+			StatementID: "bank-acct-2026-03-legacy",
+			Institution: "bank",
+			Account:     "acct",
+			Balance:     123.00,
+			Period:      "2026-03",
+			BalanceDate: "", // legacy monthly representation, no as-of date
+		},
+		// (3) legacy doc for a month the dir does NOT cover — must be retained.
+		{
+			ID:          budget.StatementDocID("bank-acct-2026-02"),
+			StatementID: "bank-acct-2026-02",
+			Institution: "bank",
+			Account:     "acct",
+			Balance:     200.00,
+			Period:      "2026-02",
+			BalanceDate: "", // no as-of date → last-day fallback on migration
+		},
+	}
+
+	result := mergeStatements(dirStmts, inputStmts, map[string]*time.Time{}, nil)
+
+	byStmtID := make(map[string]export.Statement, len(result))
+	for _, s := range result {
+		byStmtID[s.StatementID] = s
+	}
+
+	// The dir March observation survives; both March input docs are dropped.
+	marID := budget.AnchorID("bank", "acct", &bdMar20, "2026-03") // bank-acct-2026-03-20
+	mar, ok := byStmtID[marID]
+	if !ok {
+		t.Fatalf("dir March anchor %q missing from result", marID)
+	}
+	if mar.Balance != 300.00 {
+		t.Errorf("March balance = %.2f, want 300.00 (re-parsed dir value, not the stale snapshot)", mar.Balance)
+	}
+	// The February legacy doc is migrated by fallback to the month's last day and retained.
+	febID := "bank-acct-2026-02-28"
+	feb, ok := byStmtID[febID]
+	if !ok {
+		t.Fatalf("legacy February doc missing — should be migrated to %q and retained", febID)
+	}
+	if feb.Balance != 200.00 {
+		t.Errorf("February balance = %.2f, want 200.00", feb.Balance)
+	}
+	if wantDoc := budget.StatementDocID(febID); feb.ID != wantDoc {
+		t.Errorf("February doc ID = %q, want %q (recomputed on migration)", feb.ID, wantDoc)
+	}
+
+	// Exactly two statements: the dir March anchor and the retained Feb doc — the
+	// two same-month March input docs collapsed away, no doubling.
+	if len(result) != 2 {
+		t.Fatalf("expected 2 statements (March dir + Feb legacy), got %d: %+v", len(result), result)
 	}
 }
 
@@ -1390,6 +1514,72 @@ func TestMergeStatementsPreservesDerivedInputAnchor(t *testing.T) {
 	}
 }
 
+// TestRunMergeDistinctDTASOFTwoAnchors is the end-to-end acceptance that two
+// overlapping exports of one account-month with DIFFERENT as-of dates export as
+// two separate balance anchors (no collapse), the core greenfield behavior of
+// date-keyed anchors.
+func TestRunMergeDistinctDTASOFTwoAnchors(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Two files, same institution/account, both in January but different toDates
+	// (2025/01/15 and 2025/01/31) → distinct as-of dates → distinct anchor IDs.
+	csvMid := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "mid.csv")
+	writeCSVFixtureMeta(t, csvMid, "0000000000,2025/01/01,2025/01/15,100.00,60.00", [][6]string{
+		{"2025/01/05", "5.00", "PURCHASE A", "", "TXN-A", "DEBIT"},
+	})
+	csvEnd := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "end.csv")
+	writeCSVFixtureMeta(t, csvEnd, "0000000000,2025/01/01,2025/01/31,100.00,40.00", [][6]string{
+		{"2025/01/05", "5.00", "PURCHASE A", "", "TXN-A", "DEBIT"},
+		{"2025/01/20", "15.00", "PURCHASE B", "", "TXN-B", "DEBIT"},
+	})
+
+	inputJSON := export.Output{
+		Version:      1,
+		GroupName:    "test-group",
+		Transactions: []export.Transaction{},
+		Rules: []export.Rule{
+			{ID: "cat-all", Type: "categorization", Pattern: "PURCHASE", Target: "Test:General", Priority: 10},
+		},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	byID := make(map[string]export.Statement, len(out.Statements))
+	for _, s := range out.Statements {
+		byID[s.StatementID] = s
+	}
+	mid, okMid := byID["test_bank-1234-2025-01-15"]
+	end, okEnd := byID["test_bank-1234-2025-01-31"]
+	if !okMid || !okEnd {
+		t.Fatalf("expected both distinct-DTASOF anchors present; got statements: %+v", out.Statements)
+	}
+	if mid.Balance != 60.00 {
+		t.Errorf("mid anchor balance = %.2f, want 60.00", mid.Balance)
+	}
+	if end.Balance != 40.00 {
+		t.Errorf("end anchor balance = %.2f, want 40.00", end.Balance)
+	}
+	if len(out.Statements) != 2 {
+		t.Errorf("expected exactly 2 anchors (one per as-of date), got %d", len(out.Statements))
+	}
+}
+
 // TestRunInputJSONPreservesDerivedAnchors is an end-to-end round-trip guard for
 // the runInputJSON path: runMerge generates derived virtual anchors from a
 // multi-month statement file, and feeding that output back through runInputJSON
@@ -1423,7 +1613,7 @@ func TestRunInputJSONPreservesDerivedAnchors(t *testing.T) {
 		GroupName: "test-group",
 		Transactions: []export.Transaction{
 			{
-				ID:                budget.TransactionDocID("test_bank-1234-2026-03", "TXN-JAN"),
+				ID:                budget.TransactionDocID("test_bank", "1234", "TXN-JAN"),
 				Institution:       "test_bank",
 				Account:           "1234",
 				Description:       "TEST PURCHASE JAN",
@@ -1520,7 +1710,7 @@ func TestRunInputJSONSeedsVirtualRulesOnNil(t *testing.T) {
 			GroupName: "test-group",
 			Transactions: []export.Transaction{
 				{
-					ID:          budget.TransactionDocID("pnc-5111-2025-02", "TXN-1"),
+					ID:          budget.TransactionDocID("pnc", "5111", "TXN-1"),
 					Institution: "pnc",
 					Account:     "5111",
 					Description: "Online Payment To SYNCHRONY BANK",
@@ -1529,7 +1719,7 @@ func TestRunInputJSONSeedsVirtualRulesOnNil(t *testing.T) {
 					StatementID: "pnc-5111-2025-02",
 				},
 				{
-					ID:          budget.TransactionDocID("pnc-5111-2025-03", "TXN-2"),
+					ID:          budget.TransactionDocID("pnc", "5111", "TXN-2"),
 					Institution: "pnc",
 					Account:     "5111",
 					Description: "Online Payment To SYNCHRONY BANK",
@@ -1934,8 +2124,8 @@ func TestGenerateVirtualTransactions(t *testing.T) {
 		for _, vt := range res.transactions {
 			txnIDSet[vt.TransactionID] = true
 		}
-		wantID1 := "virtual-" + budget.TransactionDocID(virtualRuleKey(synchronyRule), "doc-sync-1")
-		wantID2 := "virtual-" + budget.TransactionDocID(virtualRuleKey(synchronyRule), "doc-sync-2")
+		wantID1 := "virtual-" + budget.TransactionDocID(synchronyRule.TargetInstitution, synchronyRule.TargetAccount, virtualRuleKey(synchronyRule)+"\x00"+"doc-sync-1")
+		wantID2 := "virtual-" + budget.TransactionDocID(synchronyRule.TargetInstitution, synchronyRule.TargetAccount, virtualRuleKey(synchronyRule)+"\x00"+"doc-sync-2")
 		if !txnIDSet[wantID1] {
 			t.Errorf("expected TransactionID %q", wantID1)
 		}
@@ -2040,7 +2230,7 @@ func TestGenerateVirtualTransactions(t *testing.T) {
 		if !strings.HasPrefix(vt.StatementID, "amazonstore-virtual-") {
 			t.Errorf("StatementID %q does not have prefix %q", vt.StatementID, "amazonstore-virtual-")
 		}
-		wantID := "virtual-" + budget.TransactionDocID(virtualRuleKey(amazonRule), "doc-amz-1")
+		wantID := "virtual-" + budget.TransactionDocID(amazonRule.TargetInstitution, amazonRule.TargetAccount, virtualRuleKey(amazonRule)+"\x00"+"doc-amz-1")
 		if vt.TransactionID != wantID {
 			t.Errorf("TransactionID: got %q, want %q", vt.TransactionID, wantID)
 		}
@@ -2409,4 +2599,348 @@ func TestSourceFileFlowsThrough(t *testing.T) {
 	if derived[0].SourceFile != "" {
 		t.Errorf("derived export.Statement.SourceFile = %q, want empty", derived[0].SourceFile)
 	}
+}
+
+// --- Unit 2: legacy-ID migration, edit remapping, duplicate collapse ---------
+
+// readOutput reads and parses a runMerge output JSON file.
+func readOutput(t *testing.T, path string) export.Output {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+	return out
+}
+
+// TestRunMergeLegacyDuplicateCollapsePreservesEdits: a legacy snapshot holding
+// the pre-fix duplicate state — one bank transaction stored under two legacy doc
+// IDs (divergent inferred months) — migrates to a single row under the new
+// statement-independent ID, and the user edits from both legacy rows (a note on
+// one, a reimbursement on the other) are preserved onto the survivor.
+func TestRunMergeLegacyDuplicateCollapsePreservesEdits(t *testing.T) {
+	tmp := t.TempDir()
+	csvJan := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixtureMeta(t, csvJan, "0000000000,2025/01/01,2025/01/31,100.00,50.00", [][6]string{
+		{"2025/01/10", "7.25", "DUP PURCHASE", "", "TXN-DUP", "DEBIT"},
+	})
+	csvFeb := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-02", "stmt.csv")
+	writeCSVFixtureMeta(t, csvFeb, "0000000000,2025/02/01,2025/02/28,50.00,40.00", [][6]string{
+		{"2025/01/10", "7.25", "DUP PURCHASE", "", "TXN-DUP", "DEBIT"},
+	})
+
+	legacyJan := budget.LegacyTransactionDocID("test_bank-1234-2025-01", "TXN-DUP")
+	legacyFeb := budget.LegacyTransactionDocID("test_bank-1234-2025-02", "TXN-DUP")
+	newID := budget.TransactionDocID("test_bank", "1234", "TXN-DUP")
+
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{ID: legacyJan, Institution: "test_bank", Account: "1234", Description: "DUP PURCHASE", Amount: 7.25, Timestamp: "2025-01-10T00:00:00Z", StatementID: "test_bank-1234-2025-01", Note: "reviewed", NormalizedPrimary: true},
+			{ID: legacyFeb, Institution: "test_bank", Account: "1234", Description: "DUP PURCHASE", Amount: 7.25, Timestamp: "2025-01-10T00:00:00Z", StatementID: "test_bank-1234-2025-02", Reimbursement: 50, NormalizedPrimary: true},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-dup", Type: "categorization", Pattern: "DUP PURCHASE", Target: "Test:Dup", Priority: 10},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input: %v", err)
+	}
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+	out := readOutput(t, outputPath)
+
+	if len(out.Transactions) != 1 {
+		t.Fatalf("expected 1 transaction after legacy collapse, got %d", len(out.Transactions))
+	}
+	got := out.Transactions[0]
+	if got.ID != newID {
+		t.Errorf("id = %q, want new-scheme %q", got.ID, newID)
+	}
+	if got.ID == legacyJan || got.ID == legacyFeb {
+		t.Errorf("legacy id survived: %q", got.ID)
+	}
+	if got.Note != "reviewed" {
+		t.Errorf("note = %q, want %q (preserved from Jan legacy row)", got.Note, "reviewed")
+	}
+	if got.Reimbursement != 50 {
+		t.Errorf("reimbursement = %v, want 50 (preserved from Feb legacy row)", got.Reimbursement)
+	}
+	// Forward-durable FITID persisted (dir-covered).
+	if got.TransactionID != "TXN-DUP" {
+		t.Errorf("transactionId = %q, want %q", got.TransactionID, "TXN-DUP")
+	}
+}
+
+// TestRunMergeLegacyCollapseConflictLaterWins: when two collapsing legacy rows
+// carry conflicting non-empty values for the same edit field, the row appearing
+// later in the snapshot's Transactions array wins.
+func TestRunMergeLegacyCollapseConflictLaterWins(t *testing.T) {
+	tmp := t.TempDir()
+	csvJan := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixtureMeta(t, csvJan, "0000000000,2025/01/01,2025/01/31,100.00,50.00", [][6]string{
+		{"2025/01/10", "7.25", "DUP PURCHASE", "", "TXN-DUP", "DEBIT"},
+	})
+	csvFeb := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-02", "stmt.csv")
+	writeCSVFixtureMeta(t, csvFeb, "0000000000,2025/02/01,2025/02/28,50.00,40.00", [][6]string{
+		{"2025/01/10", "7.25", "DUP PURCHASE", "", "TXN-DUP", "DEBIT"},
+	})
+
+	legacyJan := budget.LegacyTransactionDocID("test_bank-1234-2025-01", "TXN-DUP")
+	legacyFeb := budget.LegacyTransactionDocID("test_bank-1234-2025-02", "TXN-DUP")
+
+	// Both rows carry a NOTE; the later array element ("second") must win.
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{ID: legacyJan, Institution: "test_bank", Account: "1234", Description: "DUP PURCHASE", Amount: 7.25, Timestamp: "2025-01-10T00:00:00Z", StatementID: "test_bank-1234-2025-01", Note: "first", NormalizedPrimary: true},
+			{ID: legacyFeb, Institution: "test_bank", Account: "1234", Description: "DUP PURCHASE", Amount: 7.25, Timestamp: "2025-01-10T00:00:00Z", StatementID: "test_bank-1234-2025-02", Note: "second", NormalizedPrimary: true},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-dup", Type: "categorization", Pattern: "DUP PURCHASE", Target: "Test:Dup", Priority: 10},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input: %v", err)
+	}
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+	out := readOutput(t, outputPath)
+	if len(out.Transactions) != 1 {
+		t.Fatalf("expected 1 transaction, got %d", len(out.Transactions))
+	}
+	if out.Transactions[0].Note != "second" {
+		t.Errorf("note = %q, want %q (later array row wins)", out.Transactions[0].Note, "second")
+	}
+}
+
+// TestRunMergeLegacyTransactionRuleRemapped: a transaction-specific rule whose
+// TransactionID targets a LEGACY doc ID is remapped to the new doc ID during
+// migration and still categorizes the transaction.
+func TestRunMergeLegacyTransactionRuleRemapped(t *testing.T) {
+	tmp := t.TempDir()
+	csv := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixture(t, csv, [][6]string{
+		{"2025/01/10", "9.99", "SPECIAL PURCHASE", "", "TXN-S", "DEBIT"},
+	})
+	legacyID := budget.LegacyTransactionDocID("test_bank-1234-2025-01", "TXN-S")
+	newID := budget.TransactionDocID("test_bank", "1234", "TXN-S")
+
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{ID: legacyID, Institution: "test_bank", Account: "1234", Description: "SPECIAL PURCHASE", Amount: 9.99, Timestamp: "2025-01-10T00:00:00Z", StatementID: "test_bank-1234-2025-01", NormalizedPrimary: true},
+		},
+		Rules: []export.Rule{
+			// General fallback would categorize as Test:General; the txn-specific
+			// rule (keyed to the legacy ID) must override to Test:Special.
+			{ID: "cat-general", Type: "categorization", Pattern: "PURCHASE", Target: "Test:General", Priority: 1},
+			{ID: "txn-special", Type: "categorization", Target: "Test:Special", TransactionID: legacyID},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input: %v", err)
+	}
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+	out := readOutput(t, outputPath)
+	if len(out.Transactions) != 1 {
+		t.Fatalf("expected 1 transaction, got %d", len(out.Transactions))
+	}
+	if out.Transactions[0].ID != newID {
+		t.Errorf("id = %q, want %q", out.Transactions[0].ID, newID)
+	}
+	if out.Transactions[0].Category != "Test:Special" {
+		t.Errorf("category = %q, want %q (legacy txn-specific rule remapped)", out.Transactions[0].Category, "Test:Special")
+	}
+	// The persisted rule's TransactionID must now be the new doc ID.
+	var found bool
+	for _, r := range out.Rules {
+		if r.ID == "txn-special" {
+			found = true
+			if r.TransactionID != newID {
+				t.Errorf("rule txn-special TransactionID = %q, want new %q", r.TransactionID, newID)
+			}
+		}
+	}
+	if !found {
+		t.Error("txn-special rule missing from output")
+	}
+}
+
+// TestRunMergeMigrationIdempotent: running merge twice (feeding the first output
+// back in) yields identical transaction ID sets — migration is a no-op on
+// already-migrated snapshots (remap miss = identity).
+func TestRunMergeMigrationIdempotent(t *testing.T) {
+	tmp := t.TempDir()
+	statements := filepath.Join(tmp, "statements")
+	csv := filepath.Join(statements, "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixture(t, csv, [][6]string{
+		{"2025/01/10", "5.00", "PURCHASE ALPHA", "", "TXN-A", "DEBIT"},
+		{"2025/01/15", "12.50", "PURCHASE BETA", "", "TXN-B", "DEBIT"},
+	})
+	legacyA := budget.LegacyTransactionDocID("test_bank-1234-2025-01", "TXN-A")
+
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{ID: legacyA, Institution: "test_bank", Account: "1234", Description: "PURCHASE ALPHA", Amount: 5.00, Timestamp: "2025-01-10T00:00:00Z", StatementID: "test_bank-1234-2025-01", NormalizedPrimary: true},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-all", Type: "categorization", Pattern: "PURCHASE", Target: "Test:General", Priority: 10},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input: %v", err)
+	}
+	out1Path := filepath.Join(tmp, "out1.json")
+	if err := runMerge(fileOpts{path: inputPath}, statements, "", parse.DiscoverOpts{}, fileOpts{path: out1Path}); err != nil {
+		t.Fatalf("runMerge #1: %v", err)
+	}
+	out2Path := filepath.Join(tmp, "out2.json")
+	if err := runMerge(fileOpts{path: out1Path}, statements, "", parse.DiscoverOpts{}, fileOpts{path: out2Path}); err != nil {
+		t.Fatalf("runMerge #2: %v", err)
+	}
+
+	ids := func(o export.Output) map[string]bool {
+		m := make(map[string]bool)
+		for _, tx := range o.Transactions {
+			m[tx.ID] = true
+		}
+		return m
+	}
+	set1, set2 := ids(readOutput(t, out1Path)), ids(readOutput(t, out2Path))
+	if len(set1) != len(set2) {
+		t.Fatalf("id count differs: run1=%d run2=%d", len(set1), len(set2))
+	}
+	for id := range set1 {
+		if !set2[id] {
+			t.Errorf("id %q present in run1 but not run2 (migration not idempotent)", id)
+		}
+	}
+	// And no legacy id survives.
+	if set2[legacyA] {
+		t.Errorf("legacy id %q survived after two runs", legacyA)
+	}
+}
+
+// TestRunMergeInputOnlyLegacyRowNoDirCoverageSurvives: a snapshot transaction
+// under a legacy ID whose source export is no longer in the dir cannot be
+// remapped (remap miss = identity), so it survives with its old ID.
+func TestRunMergeInputOnlyLegacyRowNoDirCoverageSurvives(t *testing.T) {
+	tmp := t.TempDir()
+	statements := filepath.Join(tmp, "statements")
+	// Dir covers only test_bank/1234 TXN-A. The snapshot also holds an
+	// other_bank/9999 row under a legacy ID with NO corresponding dir file.
+	csv := filepath.Join(statements, "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixture(t, csv, [][6]string{
+		{"2025/01/10", "5.00", "PURCHASE ALPHA", "", "TXN-A", "DEBIT"},
+	})
+	orphanLegacy := budget.LegacyTransactionDocID("other_bank-9999-2024-12", "OLD-1")
+
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{ID: orphanLegacy, Institution: "other_bank", Account: "9999", Description: "ORPHAN PURCHASE", Amount: 3.00, Timestamp: "2024-12-01T00:00:00Z", StatementID: "other_bank-9999-2024-12", Note: "kept", NormalizedPrimary: true},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-all", Type: "categorization", Pattern: "PURCHASE", Target: "Test:General", Priority: 10},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input: %v", err)
+	}
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, statements, "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+	out := readOutput(t, outputPath)
+
+	var orphan *export.Transaction
+	for i := range out.Transactions {
+		if out.Transactions[i].ID == orphanLegacy {
+			orphan = &out.Transactions[i]
+		}
+	}
+	if orphan == nil {
+		t.Fatalf("orphan input-only legacy row did not survive (id %q); ids present: %v", orphanLegacy, idsOf(out))
+	}
+	if orphan.Note != "kept" {
+		t.Errorf("orphan note = %q, want %q", orphan.Note, "kept")
+	}
+}
+
+// TestParseAndClassifyReportSkipsLegacyCoveredTransaction: a dir transaction
+// whose only snapshot presence is under a LEGACY doc ID must NOT be reported as
+// new — migration converts the legacy snapshot ID to the new scheme before
+// new-detection runs.
+func TestParseAndClassifyReportSkipsLegacyCoveredTransaction(t *testing.T) {
+	tmp := t.TempDir()
+	statements := filepath.Join(tmp, "statements")
+	csv := filepath.Join(statements, "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixture(t, csv, [][6]string{
+		{"2025/01/10", "5.00", "PURCHASE ALPHA", "", "TXN-A", "DEBIT"},
+	})
+	legacyA := budget.LegacyTransactionDocID("test_bank-1234-2025-01", "TXN-A")
+
+	inp := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{ID: legacyA, Institution: "test_bank", Account: "1234", Description: "PURCHASE ALPHA", Amount: 5.00, Timestamp: "2025-01-10T00:00:00Z", StatementID: "test_bank-1234-2025-01", NormalizedPrimary: true},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-all", Type: "categorization", Pattern: "PURCHASE", Target: "Test:General", Priority: 10},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+
+	_, _, summary, err := parseAndClassify(&inp, statements, parse.DiscoverOpts{})
+	if err != nil {
+		t.Fatalf("parseAndClassify: %v", err)
+	}
+	for _, nt := range summary.NewTransactions {
+		if nt.FITID == "TXN-A" {
+			t.Errorf("TXN-A reported as new despite legacy-covered snapshot presence (doc %q)", nt.DocID)
+		}
+	}
+	// And the snapshot's legacy ID was migrated in place to the new scheme.
+	newID := budget.TransactionDocID("test_bank", "1234", "TXN-A")
+	if inp.Transactions[0].ID != newID {
+		t.Errorf("snapshot id after migration = %q, want %q", inp.Transactions[0].ID, newID)
+	}
+}
+
+// idsOf returns the set of transaction IDs in an output, for diagnostics.
+func idsOf(o export.Output) []string {
+	var ids []string
+	for _, tx := range o.Transactions {
+		ids = append(ids, tx.ID)
+	}
+	return ids
 }

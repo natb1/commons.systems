@@ -140,6 +140,13 @@ function shapeKind(v: unknown): ShapeKind {
 // data and MUST NOT be diffed — only a representative value's shape is checked.
 const MAP_KEYS = new Set(["byTopic", "byType"]);
 
+// Snapshot-only keys the hosted Firestore producer never emits: the local
+// snapshot producer collects them, but parity compares against the RAW Firestore
+// doc, so their presence on the snapshot side would falsely report as an
+// extra-key. `forksDetail` (project-signals github sub-object) is one — it is a
+// local-only fork-and-derivative enrichment. Excluded from the extra-key check.
+const LOCAL_ONLY_KEYS = new Set(["forksDetail"]);
+
 /**
  * Recursively diffs the SHAPE of a snapshot value against its Firestore/parsed
  * reference, pushing divergences for `field`. SHAPE only — scalars are compared
@@ -218,6 +225,7 @@ function diffObject(
     }
   }
   for (const k of Object.keys(snap)) {
+    if (LOCAL_ONLY_KEYS.has(k)) continue; // snapshot-only field the hosted producer never emits.
     if (!(k in ref)) {
       out.push({
         field,

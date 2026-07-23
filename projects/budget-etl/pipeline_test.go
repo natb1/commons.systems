@@ -71,7 +71,41 @@ func TestBuildTransactions_Dedupes(t *testing.T) {
 	if len(allDocIDs) != 1 {
 		t.Errorf("len(allDocIDs): got %d, want 1", len(allDocIDs))
 	}
-	want := budget.TransactionDocID(sf.StatementID(), txn.TransactionID)
+	want := budget.TransactionDocID(sf.Institution, sf.Account, txn.TransactionID)
+	if allDocIDs[0] != want {
+		t.Errorf("allDocIDs[0]: got %q, want %q", allDocIDs[0], want)
+	}
+}
+
+// TestBuildTransactions_StatementIndependentIdentity is the core Unit-1
+// regression for clarification 3: the same (institution, account, FITID) carried
+// by two overlapping exports whose inferred periods diverge must collapse to a
+// single row. Under the old statement-embedded scheme these two files minted
+// distinct doc IDs and both survived; under statement-independent identity they
+// dedupe to one.
+func TestBuildTransactions_StatementIndependentIdentity(t *testing.T) {
+	txn := parse.Transaction{
+		TransactionID: "TXN-SHARED",
+		Date:          time.Date(2025, 1, 20, 0, 0, 0, 0, time.UTC),
+		Amount:        700,
+		Description:   "SHARED PURCHASE",
+	}
+	// Same institution/account, but the two exports inferred different periods
+	// (Jan vs Feb) — so their StatementID()s differ. Identity must ignore that.
+	sfJan := parse.StatementFile{Institution: "bank", Account: "1234", Period: "2025-01"}
+	sfFeb := parse.StatementFile{Institution: "bank", Account: "1234", Period: "2025-02"}
+	if sfJan.StatementID() == sfFeb.StatementID() {
+		t.Fatalf("test setup: statement IDs should differ across periods")
+	}
+	pfJan := parsedFile{sf: sfJan, result: parse.ParseResult{Transactions: []parse.Transaction{txn}}}
+	pfFeb := parsedFile{sf: sfFeb, result: parse.ParseResult{Transactions: []parse.Transaction{txn}}}
+
+	allTxns, allDocIDs := buildTransactions([]parsedFile{pfJan, pfFeb}, 0, nil)
+
+	if len(allTxns) != 1 {
+		t.Fatalf("len(allTxns): got %d, want 1 (statement-independent collapse)", len(allTxns))
+	}
+	want := budget.TransactionDocID("bank", "1234", "TXN-SHARED")
 	if allDocIDs[0] != want {
 		t.Errorf("allDocIDs[0]: got %q, want %q", allDocIDs[0], want)
 	}
@@ -216,18 +250,6 @@ func TestParseStatementDir_DiscoverError(t *testing.T) {
 	}
 }
 
-// asOf parses a YYYY-MM-DD date into a *time.Time for a StatementData
-// BalanceDate in the dedup table tests. Callers pass identical date strings to
-// get equal instants (reflect.DeepEqual on the *time.Time compares by value).
-func asOf(t *testing.T, date string) *time.Time {
-	t.Helper()
-	parsed, err := time.Parse("2006-01-02", date)
-	if err != nil {
-		t.Fatalf("asOf: parsing %q: %v", date, err)
-	}
-	return &parsed
-}
-
 func TestDedupStatementData(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -238,10 +260,6 @@ func TestDedupStatementData(t *testing.T) {
 		// wantOut, when non-nil, asserts out equals this exactly (per-entry,
 		// via reflect.DeepEqual so *time.Time fields compare by value).
 		wantOut []budget.StatementData
-		wantErr bool
-		// wantErrSubstrs must each appear in the error message. Required to be
-		// non-empty whenever wantErr is true.
-		wantErrSubstrs []string
 	}{
 		{
 			name:    "empty slice",
@@ -285,18 +303,55 @@ func TestDedupStatementData(t *testing.T) {
 			},
 		},
 		{
-			name: "two entries same StatementID different Balance",
+			// Two observations of one account-month at different as-of dates now
+			// carry distinct anchor IDs (see budget.AnchorID), so both are kept —
+			// the keep-all-distinct-observations contract.
+			name: "distinct as-of dates same account-month both kept",
+			input: []budget.StatementData{
+				{StatementID: "bank-acct-2025-01-15", Balance: 1000, SourceFile: "bank/acct/2025-01/mid.ofx"},
+				{StatementID: "bank-acct-2025-01-28", Balance: 1200, SourceFile: "bank/acct/2025-01/late.ofx"},
+			},
+			wantOut: []budget.StatementData{
+				{StatementID: "bank-acct-2025-01-15", Balance: 1000, SourceFile: "bank/acct/2025-01/mid.ofx"},
+				{StatementID: "bank-acct-2025-01-28", Balance: 1200, SourceFile: "bank/acct/2025-01/late.ofx"},
+			},
+		},
+		{
+			// Same anchor ID (same as-of date), disagreeing balances: the
+			// lexicographically-later SourceFile wins. Here b.ofx arrives second
+			// and sorts later, so it replaces a.ofx in place.
+			name: "same anchor different Balance — later SourceFile arrives second and wins",
 			input: []budget.StatementData{
 				{StatementID: "STMT-3", Balance: 1000, SourceFile: "bank/acct/2025-01/a.ofx"},
 				{StatementID: "STMT-3", Balance: 2000, SourceFile: "bank/acct/2025-01/b.ofx"},
 			},
-			wantErr: true,
-			wantErrSubstrs: []string{
-				"STMT-3",
-				"bank/acct/2025-01/a.ofx",
-				"bank/acct/2025-01/b.ofx",
-				"10.00",
-				"20.00",
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-3", Balance: 2000, SourceFile: "bank/acct/2025-01/b.ofx"},
+			},
+		},
+		{
+			// The later-sorting SourceFile arrives first: it is the survivor and
+			// the second (earlier-sorting) entry does not displace it.
+			name: "same anchor different Balance — later SourceFile arrives first and is kept",
+			input: []budget.StatementData{
+				{StatementID: "STMT-3", Balance: 2000, SourceFile: "bank/acct/2025-01/b.ofx"},
+				{StatementID: "STMT-3", Balance: 1000, SourceFile: "bank/acct/2025-01/a.ofx"},
+			},
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-3", Balance: 2000, SourceFile: "bank/acct/2025-01/b.ofx"},
+			},
+		},
+		{
+			// A real observation (non-empty SourceFile) beats an ETL-derived
+			// anchor (empty SourceFile) at the same anchor ID, regardless of
+			// arrival order, because any non-empty path sorts after "".
+			name: "same anchor — real observation beats derived anchor",
+			input: []budget.StatementData{
+				{StatementID: "STMT-D", Balance: 1000, SourceFile: ""},
+				{StatementID: "STMT-D", Balance: 2000, SourceFile: "bank/acct/2025-01/real.ofx"},
+			},
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-D", Balance: 2000, SourceFile: "bank/acct/2025-01/real.ofx"},
 			},
 		},
 		{
@@ -311,100 +366,16 @@ func TestDedupStatementData(t *testing.T) {
 			},
 		},
 		{
-			name: "three entries same StatementID entry3 disagrees",
-			input: []budget.StatementData{
-				{StatementID: "STMT-5", Balance: 3000},
-				{StatementID: "STMT-5", Balance: 3000},
-				{StatementID: "STMT-5", Balance: 9999, SourceFile: "bank/acct/2025-02/c.ofx"},
-			},
-			wantErr: true,
-			wantErrSubstrs: []string{
-				"STMT-5",
-				"<derived>",
-				"bank/acct/2025-02/c.ofx",
-				"30.00",
-				"99.99",
-			},
-		},
-		{
-			name: "disagree, later as-of arrives second — later observation replaces earlier in place",
-			input: []budget.StatementData{
-				{StatementID: "STMT-6", Balance: 1000, BalanceDate: asOf(t, "2025-01-15"), SourceFile: "bank/acct/2025-01/early.ofx"},
-				{StatementID: "STMT-6", Balance: 1200, BalanceDate: asOf(t, "2025-01-28"), SourceFile: "bank/acct/2025-01/late.ofx"},
-			},
-			wantOut: []budget.StatementData{
-				{StatementID: "STMT-6", Balance: 1200, BalanceDate: asOf(t, "2025-01-28"), SourceFile: "bank/acct/2025-01/late.ofx"},
-			},
-		},
-		{
-			name: "disagree, later as-of arrives first — earlier survivor kept",
-			input: []budget.StatementData{
-				{StatementID: "STMT-7", Balance: 1200, BalanceDate: asOf(t, "2025-01-28"), SourceFile: "bank/acct/2025-01/late.ofx"},
-				{StatementID: "STMT-7", Balance: 1000, BalanceDate: asOf(t, "2025-01-15"), SourceFile: "bank/acct/2025-01/early.ofx"},
-			},
-			wantOut: []budget.StatementData{
-				{StatementID: "STMT-7", Balance: 1200, BalanceDate: asOf(t, "2025-01-28"), SourceFile: "bank/acct/2025-01/late.ofx"},
-			},
-		},
-		{
-			name: "disagree, prior has nil BalanceDate — set as-of wins",
-			input: []budget.StatementData{
-				{StatementID: "STMT-8", Balance: 1000, SourceFile: "bank/acct/2025-01/undated.ofx"},
-				{StatementID: "STMT-8", Balance: 1300, BalanceDate: asOf(t, "2025-01-20"), SourceFile: "bank/acct/2025-01/dated.ofx"},
-			},
-			wantOut: []budget.StatementData{
-				{StatementID: "STMT-8", Balance: 1300, BalanceDate: asOf(t, "2025-01-20"), SourceFile: "bank/acct/2025-01/dated.ofx"},
-			},
-		},
-		{
-			name: "disagree, later entry has nil BalanceDate — set as-of survivor kept",
-			input: []budget.StatementData{
-				{StatementID: "STMT-9", Balance: 1300, BalanceDate: asOf(t, "2025-01-20"), SourceFile: "bank/acct/2025-01/dated.ofx"},
-				{StatementID: "STMT-9", Balance: 1000, SourceFile: "bank/acct/2025-01/undated.ofx"},
-			},
-			wantOut: []budget.StatementData{
-				{StatementID: "STMT-9", Balance: 1300, BalanceDate: asOf(t, "2025-01-20"), SourceFile: "bank/acct/2025-01/dated.ofx"},
-			},
-		},
-		{
-			name: "disagree, both BalanceDate nil — still an error",
-			input: []budget.StatementData{
-				{StatementID: "STMT-10", Balance: 1000, SourceFile: "bank/acct/2025-01/a.ofx"},
-				{StatementID: "STMT-10", Balance: 2000, SourceFile: "bank/acct/2025-01/b.ofx"},
-			},
-			wantErr: true,
-			wantErrSubstrs: []string{
-				"STMT-10",
-				"bank/acct/2025-01/a.ofx",
-				"bank/acct/2025-01/b.ofx",
-				"10.00",
-				"20.00",
-			},
-		},
-		{
-			name: "disagree, identical as-of instant — still an error",
-			input: []budget.StatementData{
-				{StatementID: "STMT-11", Balance: 1000, BalanceDate: asOf(t, "2025-01-31"), SourceFile: "bank/acct/2025-01/a.ofx"},
-				{StatementID: "STMT-11", Balance: 2000, BalanceDate: asOf(t, "2025-01-31"), SourceFile: "bank/acct/2025-01/b.ofx"},
-			},
-			wantErr: true,
-			wantErrSubstrs: []string{
-				"STMT-11",
-				"bank/acct/2025-01/a.ofx",
-				"bank/acct/2025-01/b.ofx",
-				"10.00",
-				"20.00",
-			},
-		},
-		{
+			// The tie-break winner takes the earlier entry's output position, so
+			// surrounding first-seen order is preserved.
 			name: "reconciled replacement preserves surrounding first-seen order",
 			input: []budget.StatementData{
-				{StatementID: "STMT-P", Balance: 1000, BalanceDate: asOf(t, "2025-01-10"), SourceFile: "bank/acct/2025-01/p-early.ofx"},
+				{StatementID: "STMT-P", Balance: 1000, SourceFile: "bank/acct/2025-01/p-early.ofx"},
 				{StatementID: "STMT-Q", Balance: 2000, SourceFile: "bank/acct/2025-01/q.ofx"},
-				{StatementID: "STMT-P", Balance: 1500, BalanceDate: asOf(t, "2025-01-25"), SourceFile: "bank/acct/2025-01/p-late.ofx"},
+				{StatementID: "STMT-P", Balance: 1500, SourceFile: "bank/acct/2025-01/p-late.ofx"},
 			},
 			wantOut: []budget.StatementData{
-				{StatementID: "STMT-P", Balance: 1500, BalanceDate: asOf(t, "2025-01-25"), SourceFile: "bank/acct/2025-01/p-late.ofx"},
+				{StatementID: "STMT-P", Balance: 1500, SourceFile: "bank/acct/2025-01/p-late.ofx"},
 				{StatementID: "STMT-Q", Balance: 2000, SourceFile: "bank/acct/2025-01/q.ofx"},
 			},
 		},
@@ -412,27 +383,7 @@ func TestDedupStatementData(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := dedupStatementData(tc.input)
-			if tc.wantErr {
-				if len(tc.wantErrSubstrs) == 0 {
-					t.Fatal("wantErr is true but wantErrSubstrs is empty — set non-empty substrings to verify the error message")
-				}
-				if err == nil {
-					t.Fatalf("dedupStatementData: got nil error, want error containing %q", tc.wantErrSubstrs)
-				}
-				for _, sub := range tc.wantErrSubstrs {
-					if !strings.Contains(err.Error(), sub) {
-						t.Errorf("error %q does not contain %q", err.Error(), sub)
-					}
-				}
-				if out != nil {
-					t.Errorf("out: got %v, want nil on error", out)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("dedupStatementData: unexpected error: %v", err)
-			}
+			out := dedupStatementData(tc.input)
 			if tc.wantOut != nil {
 				if len(out) != len(tc.wantOut) {
 					t.Fatalf("out: got %d entries, want %d", len(out), len(tc.wantOut))

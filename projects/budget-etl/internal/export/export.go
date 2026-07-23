@@ -147,7 +147,14 @@ type Statement struct {
 
 // Transaction is a single transaction in the JSON output.
 type Transaction struct {
-	ID                    string  `json:"id"`
+	ID string `json:"id"`
+	// TransactionID is the stable bank-provided identifier (OFX FITID or CSV
+	// transaction ID) for real, non-virtual transactions. It is persisted so a
+	// future change to the doc-ID scheme can re-derive IDs from the snapshot
+	// alone, without re-parsing the original statement files. Empty for virtual
+	// transactions and for snapshots written before this field existed
+	// (omitempty; reading such snapshots stays valid, no version bump).
+	TransactionID         string  `json:"transactionId,omitempty"`
 	Institution           string  `json:"institution"`
 	Account               string  `json:"account"`
 	Description           string  `json:"description"`

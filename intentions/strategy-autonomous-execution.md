@@ -139,6 +139,48 @@ clarifications:
       treat an ordinary stale checkout as a violation. Worktrees are exempt —
       they legitimately check out feature branches; the invariant is scoped to
       the primary checkout alone. Recorded 2026-07-08 interview.
+  - question: How is the backlog/escalation reading taken now that the GitHub issue
+      queue is retired?
+    answer: "GitHub issues were disabled on the repo once the gh dispatch queue
+      drained (observed 2026-07-11): the backlog is now the graph's open tactics
+      and escalations are office_hours parks on nodes. The office-hours
+      dashboard's gh-fed queue-metrics panels
+      (functions/src/dispatch-queue-metrics-core.ts producer) no longer measure
+      the live queue; graph-derived velocity/backlog series are in-flight at
+      tactic-attention-surface-velocity-pace (strategy-attention-surface owns
+      the app surface). Until those land, a signal reading counts backlog and
+      escalations directly from the graph (open phase-set tactics; nodes with
+      office_hours set) alongside the managed-daemon liveness check. Recorded
+      2026-07-11 /align-tactics round."
+  - question: When a CI guard fails because guarded content legitimately moved, is
+      restoring the moved literal an acceptable fix?
+    answer: "(Recorded 2026-07-21 interview.) No -- that is the
+      expedient-over-correct pattern, the dual of test-weakening: the guard
+      passes while ceasing to track the mechanism it exists to verify. Live
+      case: PR #2927's skill-thinning moved the 'model: opus' literal out of
+      review-fix/SKILL.md into references/, and the fix-checks worker's first
+      fix restored the literal to satisfy the prose grep; the correct fix
+      (adopted after author challenge) re-pointed the guard at the runtime
+      enforcement in .claude/workflows/review-fix.js. Doctrine: a fix worker
+      facing a failed proxy guard first asks what invariant the guard protects
+      and where that invariant is really enforced. Autonomous re-pointing is
+      permitted only with the safeguard pair: (a) the enforcing mechanism is
+      identified, and (b) the re-pointed guard is demonstrated load-bearing --
+      mutate the mechanism, watch the guard fail. Short of that confidence,
+      restore the guarded content but record the proxy-restore explicitly in the
+      PR comment/accumulator so a human sees it; silent restoration is the
+      failure mode, not restoration itself. Steelman resolved by divergence: the
+      rival minimal-intervention doctrine (autonomous workers never redesign
+      guards, always restore-and-escalate) was declined because every legitimate
+      content move would become a human interrupt in a chain whose point is
+      unattended drain; the demonstration safeguard carries the rival's safety
+      concern instead. Scope: this governs proxy guards -- content greps and
+      similar surface checks standing in for a mechanism enforced elsewhere;
+      ordinary failing tests stay wholly under the never-weaken doctrine. Adds a
+      control on delegation-anthropic-claude's self-audit loop without unwinding
+      it -- no recovers edge, mirroring strategy-verified-requirements' recorded
+      reasoning. Enforcement home: .claude/rules/test-integrity.md (drafted at
+      tactic-test-integrity-proxy-guard-rule)."
 tooling_goals:
   - kind: sensor
     statement: a managed dispatch daemon liveness sensor that reports whether the
@@ -164,7 +206,10 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - frontier-agent access remains economical at individual scale
@@ -172,7 +217,9 @@ attributes:
     - "the sandbox/approval-boundary coupling holds: agent-behavior config stays
       read-only to sessions while skill scripts are auto-approved by path"
     - "the chain cannot suppress its own failure signals: test integrity is
-      enforced — fix or escalate, never weaken"
+      enforced — fix or escalate, never weaken — and a failing check is fixed at
+      the level of the invariant it protects, never silently satisfied by
+      restoring a brittle proxy"
     - the dispatch daemon runs as a lingering systemd user service
       (users.users.n8.linger = true), persisting across logout — not a transient
       daemon tied to an interactive claude agents session

@@ -31,6 +31,30 @@ assert_eq() {
   fi
 }
 
+# Numeric-tolerance variant of assert_eq for float sums whose jq string
+# rendering is not stable across jq versions. Floating-point addition is not
+# associative, so summing already-divided terms left-to-right (a test's
+# EXPECTED_*) versus map-then-`add` (the aggregator) yields bit-distinct doubles
+# that jq renders with different trailing digits on different jq builds. Compare
+# the magnitudes within a tolerance instead of their string forms; correctness
+# to 1e-9 is preserved, formatting fragility is removed.
+assert_close() {
+  local label="$1" expected="$2" actual="$3" tol="${4:-1e-9}"
+  TOTAL=$((TOTAL + 1))
+  local within
+  within=$(jq -n --argjson e "$expected" --argjson a "$actual" --argjson t "$tol" \
+    '((($e - $a) | if . < 0 then -. else . end) < $t)')
+  if [[ "$within" == "true" ]]; then
+    PASS=$((PASS + 1))
+    echo "  PASS: $label"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: $label (not within $tol)"
+    echo "    expected: '$expected'"
+    echo "    actual:   '$actual'"
+  fi
+}
+
 report_results() {
   echo ""
   echo "================================"
@@ -90,14 +114,16 @@ setup() {
   printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
     >> "$worker_jsonl"
 
-  # line 2: assistant — plan-implement, opus, usage input=1000, cc=2000, cr=4000, out=500
+  # line 2: assistant — implement, opus, usage input=1000, cc=2000, cr=4000, out=500
   # Tool calls A,B (context-pack, gh issue). Usage/model unchanged; content added.
-  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_001","name":"Bash","input":{"command":".claude/skills/dispatch-propagate/scripts/dispatch-context-pack 999 --pr"}},{"type":"tool_use","id":"toolu_002","name":"Bash","input":{"command":"gh issue view 999 --json labels"}}],"usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
+  # lint-allow: gh-rest-porcelain fixture JSON simulates a transcript tool_use command string, not a real gh invocation
+  printf '%s\n' '{"type":"assistant","attributionSkill":"implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_001","name":"Bash","input":{"command":".claude/skills/dispatch-propagate/scripts/dispatch-context-pack 999 --pr"}},{"type":"tool_use","id":"toolu_002","name":"Bash","input":{"command":"gh issue view 999 --json labels"}}],"usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
     >> "$worker_jsonl"
 
   # line 3: assistant — same model/skill/branch, usage input=100, cc=200, cr=400, out=50
   # Tool calls A,B again → session document order A,B,A,B. Usage/model unchanged.
-  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_003","name":"Bash","input":{"command":".claude/skills/dispatch-propagate/scripts/dispatch-context-pack 999 --pr"}},{"type":"tool_use","id":"toolu_004","name":"Bash","input":{"command":"gh issue view 999 --json labels"}}],"usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":400,"output_tokens":50}}}' \
+  # lint-allow: gh-rest-porcelain fixture JSON simulates a transcript tool_use command string, not a real gh invocation
+  printf '%s\n' '{"type":"assistant","attributionSkill":"implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_003","name":"Bash","input":{"command":".claude/skills/dispatch-propagate/scripts/dispatch-context-pack 999 --pr"}},{"type":"tool_use","id":"toolu_004","name":"Bash","input":{"command":"gh issue view 999 --json labels"}}],"usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":400,"output_tokens":50}}}' \
     >> "$worker_jsonl"
 
   # line 4: assistant — zero-usage fixture line exercising cmd_prefix's env-var
@@ -106,7 +132,7 @@ setup() {
   # All-zero usage so every totals / price / baseline_context / session-count
   # assertion is untouched; only the worker tool_calls order gains a trailing
   # NPM token (A,B,A,B,NPM).
-  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_005","name":"Bash","input":{"command":"VITE_GITHUB_BRANCH=foo npm run build"}}],"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  printf '%s\n' '{"type":"assistant","attributionSkill":"implement","isSidechain":false,"gitBranch":"999-fixture","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_005","name":"Bash","input":{"command":"VITE_GITHUB_BRANCH=foo npm run build"}}],"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
     >> "$worker_jsonl"
 
   # line 5: tool-error user line — normalizes to "Exit code N"
@@ -310,16 +336,16 @@ assert_eq "totals.price_proxy_usd" "$EXPECTED_PRICE" "$(jq '.totals.price_proxy_
 # unlike the uniform Opus-rate price_proxy_usd. Single-component buckets are one
 # /1e6 division (exact); multi-component buckets sum the per-component terms.
 #
-# Worker (sess-worker): plan-implement / opus, summed usage
+# Worker (sess-worker): implement / opus, summed usage
 # (input=1100, cache_creation=2200, cache_read=4400, output=550) at opus rates
 # (5 / 6.25 / 0.50 / 25 per Mtok).
 EXPECTED_WORKER_COST=$(jq -n '(1100*5 + 2200*6.25 + 4400*0.50 + 550*25)/1e6')
 assert_eq "sessions[sess-worker].cost_usd" "$EXPECTED_WORKER_COST" \
   "$(jq '[.sessions[]|select(.id=="sess-worker")][0].cost_usd' <<<"$OUT")"
-assert_eq 'by_phase["plan-implement"].cost_usd' "$EXPECTED_WORKER_COST" \
-  "$(jq '.by_phase["plan-implement"].cost_usd' <<<"$OUT")"
-assert_eq 'by_phase_model["plan-implement\tclaude-opus-4-8"].cost_usd' "$EXPECTED_WORKER_COST" \
-  "$(jq '.by_phase_model["plan-implement\tclaude-opus-4-8"].cost_usd' <<<"$OUT")"
+assert_eq 'by_phase["implement"].cost_usd' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_phase["implement"].cost_usd' <<<"$OUT")"
+assert_eq 'by_phase_model["implement\tclaude-opus-4-8"].cost_usd' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_phase_model["implement\tclaude-opus-4-8"].cost_usd' <<<"$OUT")"
 
 # --- by_topic / by_type (#2503): issue 999 → dispatch + testing infrastructure + enhancement ---
 # All 9 topic keys and all 3 type keys are always present (seeded from zero_bucket).
@@ -403,8 +429,8 @@ assert_eq 'by_session_type["router-tick"].sessions' "1" \
 assert_eq "by_session_type.recovery.sessions" "1" \
   "$(jq '.by_session_type.recovery.sessions' <<<"$OUT")"
 
-assert_eq 'by_phase["plan-implement"].output' "550" \
-  "$(jq '.by_phase["plan-implement"].output' <<<"$OUT")"
+assert_eq 'by_phase["implement"].output' "550" \
+  "$(jq '.by_phase["implement"].output' <<<"$OUT")"
 
 # artifact join (#1861): the worker session's sidecar surfaces as
 # .sessions[].artifact = {repo,issue,pr,base_sha,branch}; sessions with no
@@ -502,8 +528,49 @@ assert_eq "lenses.baseline_context.peak_boot_tokens" "3000" \
   "$(jq '.lenses.baseline_context.peak_boot_tokens' <<<"$OUT")"
 assert_eq "lenses.baseline_context.median_boot_tokens" "3" \
   "$(jq '.lenses.baseline_context.median_boot_tokens' <<<"$OUT")"
-assert_eq "lenses.baseline_context.total_proxy_usd" "$EXPECTED_BASELINE_PROXY" \
+assert_close "lenses.baseline_context.total_proxy_usd" "$EXPECTED_BASELINE_PROXY" \
   "$(jq '.lenses.baseline_context.total_proxy_usd' <<<"$OUT")"
+
+# --- phase_standup lens (strategy-token-economy clarification 12) ----------
+# All five phase keys always present regardless of fixture coverage.
+assert_eq "lenses.phase_standup keys == 5 phase enum" \
+  '["fix","implement","main-qa","qa","review"]' \
+  "$(jq -c '.lenses.phase_standup | keys | sort' <<<"$OUT")"
+# skill_body_tokens comes from real SKILL.md files on disk (bytes/4 estimate) —
+# assert positive rather than an exact byte count, which would be fragile
+# against unrelated prose edits to those files.
+assert_eq "lenses.phase_standup.*.skill_body_tokens all positive" "true" \
+  "$(jq '[.lenses.phase_standup[] | .skill_body_tokens > 0] | all' <<<"$OUT")"
+assert_eq "lenses.phase_standup.*.skill_body_lines all positive" "true" \
+  "$(jq '[.lenses.phase_standup[] | .skill_body_lines > 0] | all' <<<"$OUT")"
+assert_eq "lenses.phase_standup.*.skill_body_bytes all positive" "true" \
+  "$(jq '[.lenses.phase_standup[] | .skill_body_bytes > 0] | all' <<<"$OUT")"
+# implement (mapped_skill implement): the worker session (sess-worker) is
+# the only qualifying session. Its opening bigram is the two dispatch-context-pack
+# / gh-issue Bash calls (both scriptable), a 3rd Bash tool_use continues the
+# scriptable run before the 4th — so the leading consecutive scriptable run is
+# 4 (calls 1-4: A,B,A,B). The 5th call (VITE_GITHUB_BRANCH=... npm run build)
+# matches no scriptable substring — env-var prefixing does not change the base
+# command — so it is classified judgment, giving 1 judgment call inside the
+# first $boot_window; the median over a single qualifying session is that
+# session's own values.
+assert_eq "phase_standup.implement.boot_preamble.sessions" "1" \
+  "$(jq '.lenses.phase_standup.implement.boot_preamble.sessions' <<<"$OUT")"
+assert_eq "phase_standup.implement.boot_preamble.scriptable_round_trips" "4" \
+  "$(jq '.lenses.phase_standup.implement.boot_preamble.scriptable_round_trips' <<<"$OUT")"
+assert_eq "phase_standup.implement.boot_preamble.judgment_calls" "1" \
+  "$(jq '.lenses.phase_standup.implement.boot_preamble.judgment_calls' <<<"$OUT")"
+assert_eq "phase_standup.implement.boot_preamble.ngrams[0].scriptable has 2 tokens" "2" \
+  "$(jq '.lenses.phase_standup.implement.boot_preamble.ngrams[0].scriptable | length' <<<"$OUT")"
+# main-qa (mapped_skill qa-main): the fixture has no qa-main-attributed session,
+# so this phase must degrade gracefully — zero qualifying sessions, zero-valued
+# medians, and an empty ngrams list, never a crash or a fabricated nonzero value.
+assert_eq "phase_standup.main-qa.boot_preamble.sessions (no qualifying sessions)" "0" \
+  "$(jq '.lenses.phase_standup["main-qa"].boot_preamble.sessions' <<<"$OUT")"
+assert_eq "phase_standup.main-qa.boot_preamble.scriptable_round_trips (empty median)" "0" \
+  "$(jq '.lenses.phase_standup["main-qa"].boot_preamble.scriptable_round_trips' <<<"$OUT")"
+assert_eq "phase_standup.main-qa.boot_preamble.ngrams empty" "[]" \
+  "$(jq -c '.lenses.phase_standup["main-qa"].boot_preamble.ngrams' <<<"$OUT")"
 
 # --- outcome-envelope assertions (#1860) ------------------------------------
 # by_phase_outcome.review pools non-subagent sessions carrying a review envelope

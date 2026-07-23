@@ -40,7 +40,13 @@ type StatementFile struct {
 	RelPath string
 }
 
-// StatementID returns a deterministic identifier for this statement: "{institution}-{account}-{period}".
+// StatementID returns a deterministic month-keyed identifier for this
+// statement: "{institution}-{account}-{period}" (period is "YYYY-MM"). This is
+// the seed for a transaction's statementId field and stays month-keyed so a
+// transaction keeps a stable identity regardless of which overlapping export it
+// came from. Balance anchors use budget.AnchorID instead, which keys by as-of
+// date so overlapping observations of one account-month export as separate
+// anchors — do not conflate the two.
 func (sf StatementFile) StatementID() string {
 	return sf.Institution + "-" + sf.Account + "-" + sf.Period
 }

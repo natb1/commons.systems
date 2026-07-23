@@ -1,8 +1,8 @@
 ---
 id: tactic-reading-chunk-7-liberality-schole
 kind: tactic
-statement: "Reading chunk 7: NE IV.1 (liberality) + X.7 (schole) + Politics I.2
-  — verify the gift, leisure, and joining clarifications"
+statement: "Reading chunk 7: NE IV.1 (liberality) + X.7-9 (schole, theoria) +
+  Politics I.2 — verify the gift, leisure, and joining clarifications"
 owner: human
 status: codified
 parent: tactic-tradition-reading-program
@@ -31,8 +31,9 @@ validates:
 blocked_by: []
 office_hours:
   reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
-    (verify-record). This chunk: NE IV.1, NE X.7, and Politics I.2 against
-    tradition-aristotle."
+    (verify-record). This chunk: NE IV.1, NE X.7-9, and Politics I.2 against
+    tradition-aristotle. 2026-07-18 chunk-5 forward flags extend X.7 to X.7-9
+    (the divine question, R20/R21) — see the body's deferral bullets."
   since: 2026-07-06
   recommendation: null
 pace_exempt: false
@@ -44,11 +45,11 @@ attributes:
       - work: Aristotle, Nicomachean Ethics
         range: IV.1
       - work: Aristotle, Nicomachean Ethics
-        range: X.7
+        range: X.7-9
       - work: Aristotle, Politics
         range: I.2
 ---
-# Reading chunk 7: NE IV.1 (liberality) + X.7 (schole) + Politics I.2 — verify the gift, leisure, and joining clarifications
+# Reading chunk 7: NE IV.1 (liberality) + X.7-9 (schole, theoria) + Politics I.2 — verify the gift, leisure, and joining clarifications
 
 One office-hours sitting, at most 30 author-minutes. Chunk 7 of
 `tactic-tradition-reading-program` (working-order position 7). These texts
@@ -58,7 +59,8 @@ the cited reading for joining-over-cultivating.
 ## Text
 
 Aristotle, *Nicomachean Ethics* IV.1 — liberality. Aristotle, *Nicomachean
-Ethics* X.7 — schole. Aristotle, *Politics* I.2 — the polis prior to the
+Ethics* X.7–9 — schole, with X.8–9 (theōria, the divine question) added
+2026-07-18 by the chunk-5 forward flags. Aristotle, *Politics* I.2 — the polis prior to the
 individual.
 
 ## Questions to re-open against the text
@@ -72,6 +74,25 @@ text; this chunk checks the account.
   off-mission leisure for a strategy graph?"*
 - `intentions/strategy-join-existing-practice.md` — *"Which tradition reads
   joining-over-cultivating?"* (Politics I.2).
+
+- Deferral from chunk 5 (2026-07-18): X.8–9 added — the divine question
+  (VI.7's cap: phronesis and politikē are not the most excellent knowledge
+  "unless man is the best thing in the cosmos", 1141a20–22 — what, then, is
+  divine, and where does the practical domain's ceiling sit?) and the R20/R21
+  resolution drafts: R20 — the graph does not re-root in sophia even on
+  Aristotle's terms (sophia sets no practical ends; the contemplative enters
+  as the provided-for, 1145a6–11, as medicine provides for health); R21 —
+  candidate contemplative root (understanding-for-its-own-sake): internal
+  root vs external anchor with provides-for edges; minting is the author's
+  alone. Both quarantined on tactic-dialog-review-aristotle-phronesis until
+  that sitting ratifies the drafts.
+- Deferral from chunk 5 (2026-07-18): X.9 — law as the legislator's standing
+  phronesis, the analogy claimed for graph function (a) (alignment over long
+  horizons); verify.
+- Deferral from chunk 5 (2026-07-18): Politics I.2 (already this chunk's
+  text) additionally grounds R14's transitive-desire reading — mounting a
+  delegatee mounts a desire-chain; the polis/household priority frame is the
+  test.
 
 Two standing rules from `intentions/strategy-philosophical-grounding.md`
 clarifications apply: the borrowed-articulation capture question (this loop is

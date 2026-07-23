@@ -1,4 +1,4 @@
-import type { Execution, IntentionNode, Rounds } from "./schema.js";
+import type { Execution, IntentionNode, Rounds, StrategyStampValue } from "./schema.js";
 import { servingStrategyIds } from "./router.js";
 
 // Graph router v2, second half: phase transitions, execution-state writes,
@@ -6,9 +6,9 @@ import { servingStrategyIds } from "./router.js";
 //
 // This module is the PURE decision layer that the transition-writer and
 // reconciler shell wrappers call. Same inputs in, same decision out — no gh,
-// no store I/O, no git. The environmental parts (reading origin/main, the CI
-// verdict / PR mergeability sensors, arming gh auto-merge, the stamp file, the
-// graph-commit call) live in the wrappers:
+// no store I/O, no git. The environmental parts (reading origin/main, the PR
+// mergeability sensor, arming gh auto-merge, the stamp file, the graph-commit
+// call) live in the wrappers:
 //   .claude/skills/dispatch-propagate/scripts/transition-node
 //   .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged
 //   packages/intentionsutil/scripts/demote-node-to-implement
@@ -22,8 +22,8 @@ import { servingStrategyIds } from "./router.js";
  * The graph-native completion markers a tactic accumulates in
  * `execution.markers`, successors to the legacy `dispatch:planned`,
  * `dispatch:qa-done`, and `dispatch:reviewed` labels. A marker records that a
- * ladder phase completed; the fix-interrupt resume logic reads them to find
- * where a tactic left off.
+ * ladder phase completed; the selector reads them (e.g. the re-review reset
+ * after a fix lands post-review).
  */
 export const PLANNED_MARKER = "planned";
 export const QA_DONE_MARKER = "qa-done";
@@ -52,28 +52,30 @@ export type CiVerdict = "passing" | "failing" | "unknown";
  * The linear success ladder (strategy clarification 22, spec §1.1),
  * closest-to-start first. `fix` is NOT on it — it is the CI-failure interrupt
  * (`fixInterrupt`), and `main-qa` is inserted only when needs-main residue is
- * present (`forwardPhase`). `main-qa` is a forward reference to the phase value
- * `tactic-main-qa-phase` adopts into the schema enum; until then no node can
- * carry it, so the residue branch is inert (same doctrine as
- * `router.ts`'s `PHASE_LADDER`).
+ * present (`forwardPhase`). `main-qa` is the phase value `tactic-main-qa-phase`
+ * adopted into the schema enum; a node carrying needs-main residue drains it
+ * before `done` (same doctrine as `router.ts`'s `PHASE_LADDER`). A CI-fix
+ * interrupt does NOT move a tactic off this ladder — it is carried orthogonally
+ * on `execution.fix` (the selector owns that routing), so `phase` stays put.
  */
 export const LADDER: readonly string[] = ["implement", "qa", "review", "done"];
 
 /**
- * The phase reached when a worker COMPLETES `phase` cleanly (CI-green). The
- * `fix` interrupt is decided separately by `fixInterrupt`; this is the
- * green-path forward edge only.
+ * The phase reached when a worker COMPLETES `phase` cleanly. This is the
+ * unconditional forward edge — `decideTransition` fires it CI-blind, never
+ * routing into `fix` (a CI-fix interrupt is decided by the selector from
+ * `execution.fix`, leaving `phase` in place).
  *
  *   implement → qa
  *   qa        → review
  *   review    → main-qa  (needs-main residue present) | done
  *   main-qa   → done
  *
- * Returns `null` for a phase with no forward edge (`done`, or `fix` which
- * resumes via `resumeAfterFix`, or an unknown phase). `review`'s clean
- * completion in practice arms auto-merge rather than writing `done` directly —
- * the reconciler sweep absorbs the out-of-band merge — but the ladder edge is
- * still defined here for the reconciler and for a merge-disabled fallback.
+ * Returns `null` for a phase with no forward edge (`done`, `fix`, or an unknown
+ * phase). `review`'s clean completion in practice arms auto-merge rather than
+ * writing `done` directly — the reconciler sweep absorbs the out-of-band merge —
+ * but the ladder edge is still defined here for the reconciler and for a
+ * merge-disabled fallback.
  */
 export function forwardPhase(phase: string, hasResidue: boolean): string | null {
   switch (phase) {
@@ -95,31 +97,20 @@ export function forwardPhase(phase: string, hasResidue: boolean): string | null 
 /** Ladder phases a `fix` interrupt can fire from (strategy clarification 18). */
 const FIX_INTERRUPTIBLE: ReadonlySet<string> = new Set(["implement", "qa", "review"]);
 
+/** Retry-cap parity with the legacy `dispatch:fix-checks-attempt-<n>` label lane (fix-checks SKILL.md Step 5, escalating at 3 attempts). */
+export const FIX_ATTEMPT_CAP = 3;
+
 /**
- * Whether a live CI verdict at `phase` should route the tactic into `fix`
- * (spec §1.1, clarification 18; legacy `dispatch-phase` parity: CI verdict is
- * checked before phase logic, so a tactic already past qa/review routes back to
- * the fixer on a CI regression). Only a `failing` verdict at an interruptible
- * ladder phase fires; `unknown`/`passing` never do, and a phase already `fix`
- * or `done` is never re-interrupted.
+ * Whether a live CI verdict at `phase` should set the orthogonal `execution.fix`
+ * interrupt (spec §1.1, clarification 18). Only a `failing` verdict at an
+ * interruptible ladder phase fires; `unknown`/`passing` never do, and a `done`
+ * phase is never interrupted. This predicate is the SELECTOR's routing input —
+ * `decideTransition` is CI-blind and never calls it. The interrupt no longer
+ * overwrites `phase`; `phase` stays at its real ladder position while
+ * `execution.fix` carries the in-flight fix state.
  */
 export function fixInterrupt(phase: string, ci: CiVerdict): boolean {
   return ci === "failing" && FIX_INTERRUPTIBLE.has(phase);
-}
-
-/**
- * Where a tactic resumes when it leaves `fix` with a green CI verdict: the next
- * ladder phase after the furthest completion marker it carries. A tactic that
- * had finished review before the regression resumes at `done` (or `main-qa`
- * with residue); one that had only finished qa resumes at `review`; one past
- * implement resumes at `qa`; a bare tactic resumes at `implement`.
- */
-export function resumeAfterFix(markers: readonly string[], hasResidue: boolean): string {
-  const has = (m: string): boolean => markers.includes(m);
-  if (has(REVIEWED_MARKER)) return hasResidue ? "main-qa" : "done";
-  if (has(QA_DONE_MARKER)) return "review";
-  if (has(PLANNED_MARKER)) return "qa";
-  return "implement";
 }
 
 // --- Whole forward-transition decision ---------------------------------------
@@ -145,18 +136,23 @@ export interface TransitionDecision {
 
 /**
  * Decide the transition at the end of a phase worker's run, given the tactic's
- * current phase, its completion markers, the live CI verdict, whether the node
- * carries needs-main residue, and the two freshness-gate results.
+ * current phase, whether the node carries needs-main residue, and the two
+ * freshness-gate results.
+ *
+ * This decision is CI-BLIND: the forward ladder edge fires unconditionally and
+ * is NEVER routed into `fix` here. A CI-fix interrupt is carried orthogonally on
+ * `execution.fix` and routed by the selector (`fixInterrupt`), leaving `phase`
+ * at its real ladder position — so there is nothing to resume and no marker to
+ * clear at transition time. The re-review reset (clearing qa-done/reviewed when
+ * a fix lands after review) likewise belongs to the selector, not here.
  *
  * Order of precedence (spec §1.1):
  *  1. Scope-fingerprint mismatch → demote to `implement` (the chain-of-custody
  *     backward transition; supersedes stay-at-phase).
  *  2. Strategy-fingerprint mismatch → hold at the current phase (soft-freeze;
  *     the selector queues the re-evaluation, a confirm re-stamps).
- *  3. CI failing at an interruptible phase → `fix`.
- *  4. Leaving `fix` with green CI → resume at the marker-implied phase.
- *  5. Clean `review` completion → arm auto-merge, no phase write.
- *  6. Otherwise → the forward ladder edge.
+ *  3. Clean `review` completion → arm auto-merge, no phase write.
+ *  4. Otherwise → the unconditional forward ladder edge.
  *
  * `scopeStale` and `strategyStale` are the caller's precomputed gate results
  * (the caller owns the origin/main reads and the stamp file). A missing stamp
@@ -166,13 +162,11 @@ export interface TransitionDecision {
  */
 export function decideTransition(args: {
   phase: string;
-  markers: readonly string[];
-  ci: CiVerdict;
   hasResidue: boolean;
   scopeStale: boolean;
   strategyStale: boolean;
 }): TransitionDecision {
-  const { phase, markers, ci, hasResidue, scopeStale, strategyStale } = args;
+  const { phase, hasResidue, scopeStale, strategyStale } = args;
 
   // 1. Scope-fingerprint demotion (pre-merge only; the caller must not invoke
   //    this on a merged tactic — post-merge staleness routes via main-qa).
@@ -185,26 +179,12 @@ export function decideTransition(args: {
     return { phase, armMerge: false, hold: true, demote: false };
   }
 
-  // 3. CI-failure interrupt.
-  if (fixInterrupt(phase, ci)) {
-    return { phase: "fix", armMerge: false, hold: false, demote: false };
-  }
-
-  // 4. Resume out of fix on green CI.
-  if (phase === "fix") {
-    if (ci === "passing") {
-      return { phase: resumeAfterFix(markers, hasResidue), armMerge: false, hold: false, demote: false };
-    }
-    // Still red — stay in fix.
-    return { phase: "fix", armMerge: false, hold: true, demote: false };
-  }
-
-  // 5. Clean review completion arms auto-merge; no graph-side phase write.
+  // 3. Clean review completion arms auto-merge; no graph-side phase write.
   if (phase === "review") {
     return { phase: "review", armMerge: true, hold: false, demote: false };
   }
 
-  // 6. Forward ladder edge.
+  // 4. Unconditional forward ladder edge (CI-blind).
   const next = forwardPhase(phase, hasResidue);
   if (next === null) {
     return { phase, armMerge: false, hold: true, demote: false };
@@ -271,10 +251,12 @@ export function hasNeedsMainResidue(body: string): boolean {
  * Stamp a completed round on a strategy when its last non-draft child prunes
  * (spec §1.1 line 134): `count += 1`, `last_completed := date`. Pure — the
  * caller decides WHEN (its last non-draft child reached `done` and is being
- * pruned in this same commit) and supplies the ISO date.
+ * pruned in this same commit) and supplies the ISO date. `last_aligned` is
+ * preserved unchanged — it is stamped elsewhere, at align-landing time, not
+ * on completion.
  */
 export function stampRound(rounds: Rounds | null, date: string): Rounds {
-  return { count: (rounds?.count ?? 0) + 1, last_completed: date };
+  return { count: (rounds?.count ?? 0) + 1, last_completed: date, last_aligned: rounds?.last_aligned ?? null };
 }
 
 // --- Completion pruning graph edits (Unit 2) --------------------------------
@@ -352,12 +334,57 @@ export function isScopeStale(stamp: ScopeStamp | null, currentFingerprint: strin
 }
 
 /**
- * The strategy-fingerprint gate result (soft-freeze, strategy clarification
- * 10): the serving strategy's current substance fingerprint differs from the
- * one stamped on `execution.strategy_fingerprint`. A null stamp is never
- * stale (stamping starts when the align machinery lands).
+ * Extract the comparable fingerprint hash from a stamp map entry. Each entry
+ * is either the legacy bare-string form (the hash itself) or the widened
+ * `{hash, sha}` object form (Unit 1, `StrategyStampValue`) that additionally
+ * carries the `origin/main` sha the stamp was taken at. This is the single
+ * home of that shape discrimination — callers compare hashes via this helper
+ * instead of duplicating the `string | {hash,sha}` branch inline.
  */
-export function isStrategyStale(execution: Execution | null, currentFingerprint: string): boolean {
-  if (execution === null || execution.strategy_fingerprint === null) return false;
-  return execution.strategy_fingerprint !== currentFingerprint;
+export function stampHash(value: StrategyStampValue): string {
+  return typeof value === "string" ? value : value.hash;
+}
+
+/**
+ * Per-strategy staleness against a raw stamp value (soft-freeze, strategy
+ * clarification 10). The stamp is one of:
+ *   - `null` — never stale (stamping starts when the align machinery lands).
+ *   - a `Record<strategy-id, StrategyStampValue>` map — stale iff the map
+ *     carries a key for `strategyId` AND its stamped hash differs from
+ *     `currentFingerprint`; a serving strategy ABSENT from the map is never
+ *     stale (per-strategy null). Each map value is either a bare-string hash
+ *     or the widened `{hash, sha}` object recording the `origin/main` sha the
+ *     stamp was taken at — `stampHash` extracts the comparable hash from
+ *     either shape.
+ *   - a bare string (deprecated-legacy) — stale iff it differs from
+ *     `currentFingerprint`, ignoring `strategyId`. This preserves the legacy
+ *     compare-against-every-serving-strategy semantics: one string cannot equal
+ *     two substance hashes, so a legacy multi-serves stamp stays frozen until a
+ *     re-stamp converts it to map form.
+ */
+export function isFingerprintStale(
+  stamp: string | Record<string, StrategyStampValue> | null,
+  strategyId: string,
+  currentFingerprint: string,
+): boolean {
+  if (stamp === null) return false;
+  if (typeof stamp === "string") return stamp !== currentFingerprint;
+  if (!Object.hasOwn(stamp, strategyId)) return false;
+  return stampHash(stamp[strategyId]) !== currentFingerprint;
+}
+
+/**
+ * The strategy-fingerprint gate result for a specific serving strategy: the
+ * strategy's current substance fingerprint differs from the entry stamped on
+ * `execution.strategy_fingerprint`. A null execution or null stamp is never
+ * stale. Delegates to `isFingerprintStale` — the single home of the per-strategy
+ * staleness rule.
+ */
+export function isStrategyStale(
+  execution: Execution | null,
+  strategyId: string,
+  currentFingerprint: string,
+): boolean {
+  if (execution === null) return false;
+  return isFingerprintStale(execution.strategy_fingerprint, strategyId, currentFingerprint);
 }

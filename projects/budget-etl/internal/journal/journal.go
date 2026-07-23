@@ -92,9 +92,10 @@ type tentative struct {
 //
 // docIDs, if non-nil, must be a parallel slice of pre-computed document IDs (one
 // per transaction). When provided, Build uses docIDs[i] directly instead of
-// calling budget.TransactionDocID(txn.StatementID, txn.TransactionID). This is
-// required when transactions are reconstructed from an existing budget.json, where
-// TransactionID already holds the hashed document ID rather than the original FITID.
+// calling budget.TransactionDocID(txn.Institution, txn.Account, txn.TransactionID).
+// This is required when transactions are reconstructed from an existing
+// budget.json, where TransactionID already holds the hashed document ID rather
+// than the original FITID.
 //
 // normMap, if non-nil, carries the normalization decisions for the batch keyed by
 // doc ID. A transaction that is a non-primary normalized duplicate (its
@@ -115,7 +116,7 @@ func Build(txns []budget.TransactionData, docIDs []string, normMap map[string]bu
 		if docIDs != nil {
 			docID = docIDs[i]
 		} else {
-			docID = budget.TransactionDocID(txn.StatementID, txn.TransactionID)
+			docID = budget.TransactionDocID(txn.Institution, txn.Account, txn.TransactionID)
 		}
 		// Skip non-primary normalized duplicates: they share a real transaction
 		// with their primary, so they must not get their own entry/legs and must

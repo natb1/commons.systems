@@ -20,8 +20,10 @@
 //   2. phase       — persisted phase equals <selected-phase>. exit 12
 //   3. not parked  — office_hours null.                       exit 12
 //   4. fingerprint — only when execution.strategy_fingerprint is non-null:
-//                    every serving strategy's current substance hash matches
-//                    the stamp (mirrors the selector's soft-freeze rule). exit 12
+//                    each serving strategy's current substance hash matches its
+//                    own entry in the per-strategy stamp map (mirrors the
+//                    selector's soft-freeze rule; a legacy bare-string stamp
+//                    still compares against every serving strategy).   exit 12
 //   5. scope chain — only with --stamp and a fix/qa/review phase: the stamped
 //                    scope fingerprint matches the current one.  exit 13
 //
@@ -40,8 +42,16 @@
 import { pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
 import { listNodes, readNode, readNodeBody } from "../src/store.js";
-import { servingStrategyIds, strategyFingerprint, tacticScopeFingerprint } from "../src/router.js";
-import type { IntentionNode } from "../src/schema.js";
+import {
+  frozenTacticSelectable,
+  servingStrategyIds,
+  strategyAlignSelectable,
+  strategyFingerprint,
+  tacticScopeFingerprint,
+} from "../src/router.js";
+import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
+import { isPlainObject } from "../src/schema.js";
+import type { FixState, IntentionNode, StrategyStampValue } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
 // --- Exit codes ------------------------------------------------------------
@@ -83,14 +93,81 @@ function readParked(node: IntentionNode): boolean {
   return squat !== null && squat !== undefined;
 }
 
-/** The stamped serving-strategy fingerprint, first-class or squatter, or null. */
-function readStrategyFingerprint(node: IntentionNode): string | null {
+/**
+ * The stamped serving-strategy fingerprint, first-class or squatter, or null.
+ * Returns the per-strategy map (each entry a bare hash string or a
+ * `{hash, sha}` object), a legacy bare string, or null — the caller compares
+ * per-strategy via `isFingerprintStale`.
+ */
+function readStrategyFingerprint(
+  node: IntentionNode,
+): string | Record<string, StrategyStampValue> | null {
   const firstClass = node.execution?.strategy_fingerprint ?? null;
   if (firstClass !== null) return firstClass;
   const squatExec = node.attributes.execution;
   if (squatExec !== null && typeof squatExec === "object" && "strategy_fingerprint" in squatExec) {
     const fp = (squatExec as { strategy_fingerprint?: unknown }).strategy_fingerprint;
-    return typeof fp === "string" ? fp : null;
+    if (typeof fp === "string") return fp;
+    if (isPlainObject(fp)) {
+      // Coerce the squatter map to Record<string,StrategyStampValue> by
+      // keeping well-formed entries — no cast, and malformed entries are
+      // dropped rather than mis-typed. A well-formed entry is either a bare
+      // hash string (legacy per-strategy form) or a `{hash, sha}` object
+      // (materiality-scoped form) with both fields present as strings.
+      const out: Record<string, StrategyStampValue> = {};
+      for (const [key, value] of Object.entries(fp)) {
+        if (typeof value === "string") {
+          out[key] = value;
+        } else if (
+          isPlainObject(value) &&
+          typeof value.hash === "string" &&
+          typeof value.sha === "string"
+        ) {
+          out[key] = { hash: value.hash, sha: value.sha };
+        }
+      }
+      return out;
+    }
+    return null;
+  }
+  return null;
+}
+
+/**
+ * The node's execution completion markers, first-class or squatter, else `[]`.
+ * Mirrors `readStrategyFingerprint`'s fall-back so the reviewed-marker guard
+ * honors the same squatter convention as the surrounding phase/park/fingerprint
+ * reads — a squatter node (attention-surface / token-economy subtree) carries
+ * `execution` under `attributes.execution`, where `node.execution` is null.
+ */
+function readMarkers(node: IntentionNode): string[] {
+  const firstClass = node.execution?.markers ?? null;
+  if (firstClass !== null) return firstClass;
+  const squatExec = node.attributes.execution;
+  if (squatExec !== null && typeof squatExec === "object" && "markers" in squatExec) {
+    const markers = (squatExec as { markers?: unknown }).markers;
+    if (Array.isArray(markers)) return markers.filter((m): m is string => typeof m === "string");
+  }
+  return [];
+}
+
+/**
+ * The node's active CI-fix interrupt (`execution.fix`), first-class or squatter,
+ * else null (tactic-fix-interrupt-orthogonal-state). The interrupt is
+ * graph-native-only and the squatter subtrees (attention-surface / token-economy)
+ * predate it, so in practice only the first-class read fires; the squatter
+ * fallback is kept for uniformity with `readMarkers` / `readStrategyFingerprint`.
+ */
+function readFixState(node: IntentionNode): FixState | null {
+  const firstClass = node.execution?.fix ?? null;
+  if (firstClass !== null) return firstClass;
+  const squatExec = node.attributes.execution;
+  if (squatExec !== null && typeof squatExec === "object" && "fix" in squatExec) {
+    const fix = (squatExec as { fix?: unknown }).fix;
+    if (isPlainObject(fix) && typeof fix.since === "string" && typeof fix.attempt === "number") {
+      const pushed = fix.pushed_sha;
+      return { since: fix.since, attempt: fix.attempt, pushed_sha: typeof pushed === "string" ? pushed : null };
+    }
   }
   return null;
 }
@@ -120,10 +197,65 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     throw err;
   }
 
-  // 2. phase — persisted phase must equal the selected phase (never re-derived).
+  // 2. phase — the selected phase must still match the node.
+  //
+  // A strategy is selected at the derived `align-tactics` rung, a string the
+  // selector emits on the candidate but never stores on the node (strategies
+  // carry `phase: null` natively). A literal `readPhase === selectedPhase`
+  // computes `null !== "align-tactics"` and exit-12s every strategy, blocking
+  // the whole align lane. For `align-tactics` the equality is replaced by a
+  // strategy-aware gate: the node must be a strategy still at its native null
+  // phase (an advance to any non-null phase — first-class or squatter — is a
+  // stale selection). The align-eligibility re-check is deferred to below the
+  // not-parked check so a parked strategy fails with the clearer not-parked
+  // message. All other phases keep the literal stored-phase equality (tactic
+  // phases are first-class and persisted, so equality is correct there).
+  //
+  // `fix` is likewise a directive the selector emits but never stores on the
+  // node: a CI-fix interrupt lives on `execution.fix` while `phase` stays at its
+  // real ladder position (implement/qa/review), so `phase` is never literally
+  // `"fix"`. A literal `readPhase === "fix"` would exit-12 every fix candidate.
+  // For `fix` the equality is replaced by an interrupt-presence gate: the
+  // interrupt must still be set (a null `execution.fix` means it was resolved
+  // between selection and execute-time — a stale selection).
   const phase = readPhase(node);
-  if (phase !== selectedPhase) {
+  if (selectedPhase === "fix") {
+    if (readFixState(node) === null) {
+      return fail(
+        EXIT_STALE_SELECTION,
+        "phase",
+        `selected fix but ${nodeId} carries no execution.fix interrupt (resolved since selection)`,
+      );
+    }
+  } else if (selectedPhase === "align-tactics") {
+    if (node.kind === "strategy") {
+      // A strategy is align-selected at its native null phase; any non-null
+      // stored phase (first-class or squatter) is a stale advance.
+      if (phase !== null) {
+        return fail(EXIT_STALE_SELECTION, "phase", `selected align-tactics but strategy ${nodeId} phase advanced to ${phase}`);
+      }
+    } else {
+      // A frozen tactic is align-selected either at draft (phase null) OR while
+      // carrying an in-flight phase if it is soft-frozen. That distinction is
+      // not cheaply recomputable here, so the phase-literal check is skipped for
+      // a tactic target: eligibility is decided wholesale by the 3b re-check
+      // below (frozenTacticSelectable, the single source of truth).
+    }
+  } else if (phase !== selectedPhase) {
     return fail(EXIT_STALE_SELECTION, "phase", `selected ${selectedPhase} but node is now ${phase ?? "draft/null"}`);
+  } else if (selectedPhase === "review" && readMarkers(node).includes(REVIEWED_MARKER)) {
+    // The pure selector (selectGraphTargets) already skips emitting a
+    // phase:review tactic once it carries the reviewed marker — the marker
+    // means the review pass already ran and the node is awaiting tick
+    // merge/fix, not a fresh review candidate. This is the execute-side
+    // mirror of that guard, catching a directive selected just before the
+    // marker landed (or a hand-run/explicit-dispatch invocation that bypassed
+    // the selector entirely).
+    return fail(
+      EXIT_STALE_SELECTION,
+      "phase",
+      `${nodeId} already carries the reviewed marker — awaiting tick merge/fix, not a review candidate`,
+    );
   }
 
   // 3. not parked — an author park landing after selection yields the worker.
@@ -131,15 +263,48 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     return fail(EXIT_STALE_SELECTION, "not-parked", `${nodeId} was parked to office_hours after selection`);
   }
 
+  // 3b. align-eligibility — for an align-tactics selection, the selector must
+  //     still emit the strategy as an align candidate (signal still unvalidated,
+  //     under the rounds cap, no non-draft on-path child, not soft-frozen out).
+  //     Deferred to here so the not-parked check above owns the parked verdict;
+  //     defers wholesale to the pure selector (single source of truth).
+  if (selectedPhase === "align-tactics") {
+    if (node.kind === "strategy") {
+      if (!strategyAlignSelectable(node, listNodes(dir))) {
+        return fail(
+          EXIT_STALE_SELECTION,
+          "phase",
+          `selected align-tactics but strategy ${nodeId} is no longer align-eligible ` +
+            `(signal validated, rounds cap, on-path child, or soft-frozen out)`,
+        );
+      }
+    } else if (!frozenTacticSelectable(node, listNodes(dir))) {
+      return fail(
+        EXIT_STALE_SELECTION,
+        "phase",
+        `selected align-tactics but tactic ${nodeId} is no longer frozen-eligible ` +
+          `(advanced past draft and not soft-frozen, parked, or resolved)`,
+      );
+    }
+  }
+
   // 4. fingerprint — a strategy substance edit after selection yields the
   //    worker. Only meaningful once stamping has started (null is never stale).
-  const stampedFp = readStrategyFingerprint(node);
+  //
+  //    Skipped entirely for an align-tactics selection. A strategy's stamp is
+  //    null anyway (nothing to compare). For a soft-frozen tactic — the exact
+  //    re-evaluation target an align-tactics session exists to handle — the
+  //    stale execution.strategy_fingerprint IS the selection reason, not a yield
+  //    reason: 3b (frozenTacticSelectable) already admitted it, so re-testing the
+  //    same staleness here would reject the node 3b just admitted and strand the
+  //    re-evaluation worker at exit 12.
+  const stampedFp = selectedPhase === "align-tactics" ? null : readStrategyFingerprint(node);
   if (stampedFp !== null) {
     const byId = new Map(listNodes(dir).map((n) => [n.id, n]));
     for (const sid of servingStrategyIds(node, byId)) {
       const strategy = byId.get(sid);
       if (strategy === undefined) continue; // a dangling serves edge is validateGraph's failure, not this gate's
-      if (strategyFingerprint(strategy) !== stampedFp) {
+      if (isFingerprintStale(stampedFp, sid, strategyFingerprint(strategy))) {
         return fail(
           EXIT_STALE_SELECTION,
           "fingerprint",

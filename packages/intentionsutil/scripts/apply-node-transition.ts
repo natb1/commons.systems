@@ -9,14 +9,29 @@
 //
 // This script authors NO markdown and makes NO git/gh calls — the wrapper
 // (`.claude/skills/dispatch-propagate/scripts/transition-node`) owns the
-// origin/main reads, the CI/mergeability sensors, and the graph-commit landing.
+// origin/main reads, the mergeability sensor, and the graph-commit landing.
 // Splitting the decision+mutation here keeps it exercised by the pure
-// `transitions` unit tests and store round-trip, not buried in bash.
+// `transitions` unit tests and store round-trip, not buried in bash. The
+// forward decision is CI-blind (a CI-fix interrupt is the selector's job via
+// `execution.fix`), so this script no longer takes a CI verdict.
 //
 // Usage:
 //   node --import tsx/esm apply-node-transition.ts <node-id> \
-//     [--ci passing|failing|unknown] [--scope-stale] [--strategy-stale] \
-//     [--set-pr <n>] [--strategy-fingerprint <fp>] [--dir <intentions-dir>]
+//     [--scope-stale] [--strategy-stale] \
+//     [--set-pr <n>] [--strategy-fingerprint <strategy-id>=<hash> ...] \
+//     [--strategy-sha <sha>] [--dir <intentions-dir>]
+//
+// `--strategy-fingerprint` is repeatable and takes a KEYED `<strategy-id>=<hash>`
+// value; each entry merges into the per-strategy stamp map, preserving other
+// keys. The bare hash form (no `=`) is rejected — it cannot say which serving
+// strategy the hash belongs to, and a single string freezes every other serving
+// strategy of a multi-serves tactic.
+//
+// `--strategy-sha <sha>` is required whenever `--strategy-fingerprint` is given
+// (an error is thrown otherwise): it is the origin/main commit the hash(es) were
+// computed against, and is shared across every `--strategy-fingerprint` entry in
+// the invocation. This script is pure of git/gh — the wrapper owns those reads
+// and passes the sha in explicitly rather than this script shelling it out.
 //
 // Stdout: one JSON object
 //   { "phase": "<new-phase>", "prevPhase": "<old>", "armMerge": bool,
@@ -25,13 +40,12 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readNode, readNodeBody, writeNode } from "../src/store.js";
-import type { Execution } from "../src/schema.js";
+import type { Execution, StrategyStampValue } from "../src/schema.js";
 import {
   PHASE_COMPLETION_MARKER,
   addMarker,
   decideTransition,
   hasNeedsMainResidue,
-  type CiVerdict,
 } from "../src/transitions.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -39,35 +53,27 @@ const repoRoot = dirname(dirname(dirname(scriptDir)));
 
 interface Args {
   id: string;
-  ci: CiVerdict;
   scopeStale: boolean;
   strategyStale: boolean;
   setPr: number | null;
-  strategyFingerprint: string | null;
+  strategyFingerprint: Record<string, { hash: string; sha: string }> | null;
   dir: string;
 }
 
-function parseArgs(argv: string[]): Args {
+export function parseArgs(argv: string[]): Args {
   const out: Args = {
     id: "",
-    ci: "unknown",
     scopeStale: false,
     strategyStale: false,
     setPr: null,
     strategyFingerprint: null,
     dir: join(repoRoot, "intentions"),
   };
+  let fingerprintHashes: Record<string, string> | null = null;
+  let strategySha: string | null = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     switch (a) {
-      case "--ci": {
-        const v = argv[++i];
-        if (v !== "passing" && v !== "failing" && v !== "unknown") {
-          throw new Error(`apply-node-transition: --ci must be passing|failing|unknown, got '${v}'`);
-        }
-        out.ci = v;
-        break;
-      }
       case "--scope-stale":
         out.scopeStale = true;
         break;
@@ -82,8 +88,22 @@ function parseArgs(argv: string[]): Args {
         out.setPr = v;
         break;
       }
-      case "--strategy-fingerprint":
-        out.strategyFingerprint = argv[++i];
+      case "--strategy-fingerprint": {
+        const entry = argv[++i];
+        const eq = entry === undefined ? -1 : entry.indexOf("=");
+        if (entry === undefined || eq <= 0 || eq === entry.length - 1) {
+          throw new Error(
+            `apply-node-transition: --strategy-fingerprint requires a '<strategy-id>=<hash>' value, got '${entry ?? ""}'` +
+              " (the bare-hash form is rejected: it cannot name the serving strategy the hash belongs to)",
+          );
+        }
+        const sid = entry.slice(0, eq);
+        const hash = entry.slice(eq + 1);
+        fingerprintHashes = { ...(fingerprintHashes ?? {}), [sid]: hash };
+        break;
+      }
+      case "--strategy-sha":
+        strategySha = argv[++i];
         break;
       case "--dir":
         out.dir = argv[++i];
@@ -95,6 +115,17 @@ function parseArgs(argv: string[]): Args {
     }
   }
   if (out.id === "") throw new Error("apply-node-transition: <node-id> is required");
+  if (fingerprintHashes !== null) {
+    if (!strategySha) {
+      throw new Error(
+        "apply-node-transition: --strategy-fingerprint requires --strategy-sha (the origin/main commit the hash was computed against)",
+      );
+    }
+    const sha = strategySha;
+    out.strategyFingerprint = Object.fromEntries(
+      Object.entries(fingerprintHashes).map(([sid, hash]) => [sid, { hash, sha }]),
+    );
+  }
   return out;
 }
 
@@ -132,25 +163,29 @@ export function applyNodeTransition(args: Args): ApplyResult {
   let execution = node.execution ?? defaultExecution(args.id);
   if (args.setPr !== null) execution = { ...execution, pr: args.setPr };
   if (args.strategyFingerprint !== null) {
-    execution = { ...execution, strategy_fingerprint: args.strategyFingerprint };
+    // Merge the keyed entries into the per-strategy map, preserving other keys.
+    // An existing legacy bare-string stamp carries no strategy id, so it is
+    // dropped here — the re-stamp converts the field to map form (natural churn).
+    const existing = execution.strategy_fingerprint;
+    const base: Record<string, StrategyStampValue> =
+      existing !== null && typeof existing === "object" ? { ...existing } : {};
+    execution = { ...execution, strategy_fingerprint: { ...base, ...args.strategyFingerprint } };
   }
 
   const decision = decideTransition({
     phase: prevPhase,
-    markers: execution.markers,
-    ci: args.ci,
     hasResidue,
     scopeStale: args.scopeStale,
     strategyStale: args.strategyStale,
   });
 
   // A ladder phase completes cleanly when the tactic advances off it (or, for
-  // review, arms the merge). On a fix interrupt, a hold, or a demotion the
-  // phase did not complete, so no marker is written.
+  // review, arms the merge). On a hold or a demotion the phase did not complete,
+  // so no marker is written. The decision is CI-blind and never routes into
+  // `fix`, so there is no fix-interrupt case to exclude here.
   const marker = PHASE_COMPLETION_MARKER[prevPhase];
   const advanced =
-    decision.armMerge ||
-    (!decision.hold && !decision.demote && decision.phase !== "fix" && decision.phase !== prevPhase);
+    decision.armMerge || (!decision.hold && !decision.demote && decision.phase !== prevPhase);
   if (marker !== undefined && advanced) execution = addMarker(execution, marker);
 
   // Apply the phase write. A demotion clears the completion markers so the

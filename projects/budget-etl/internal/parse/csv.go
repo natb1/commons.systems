@@ -17,6 +17,24 @@ import (
 //
 // Amount is always positive in the file. Type is "DEBIT" or "CREDIT".
 // Convention: DEBIT → positive (spending), CREDIT → negative (income).
+//
+// Transaction identity and re-exports: the bank-provided ID (column 4) feeds the
+// statement-independent doc ID (institution, account, transactionID). Within a
+// single file, duplicate IDs are disambiguated by synthesizing suffixes
+// (X-2, X-3, …) deterministically from file content (the suffix chosen depends
+// only on which IDs already appear in this file), so re-exporting the same rows
+// yields the same suffixed IDs — statement-independent identity holds across
+// overlapping exports.
+//
+// Accepted limitation: if a bank reuses one ID for two genuinely distinct
+// transactions and those two occurrences land in different overlapping exports,
+// each file sees the ID exactly once, no suffix is synthesized, and the two
+// distinct rows collapse to one doc ID (they are treated as the same
+// transaction). Under the previous statement-embedded scheme they only collapsed
+// when both exports happened to infer the same month; under statement-independent
+// identity they always collapse. This is rare (it needs a bank-side ID reuse
+// split across overlapping exports) and is pinned by
+// TestParseCSVCrossFileDuplicateBaseIDCollapses.
 func parseCSV(path string) (ParseResult, error) {
 	f, err := os.Open(path)
 	if err != nil {

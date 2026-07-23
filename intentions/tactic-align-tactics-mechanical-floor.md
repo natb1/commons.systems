@@ -1,9 +1,8 @@
 ---
 id: tactic-align-tactics-mechanical-floor
 kind: tactic
-statement: "mechanical floor for the align skills: plan-schema body lint and
-  clarification-provenance lint in the validate gate, plus child-tactic and
-  strategy-corpus census scripts"
+statement: "mechanical floor for the align skills: plan-schema body lint in the
+  validate gate, plus child-tactic and strategy-corpus census scripts"
 owner: ai
 status: codified
 parent: null
@@ -16,16 +15,60 @@ rationale: "Strategy clarification 32 (2026-07-06): the repeated re-refinement
   including a pure set-difference (unserved virtues), new-vs-edit overlap
   detection uses keyword grep as the disposition mechanism, and the
   clarification provenance-sentence convention is prose-only. This tactic backs
-  the amendment-completeness doctrine with machinery: plan-schema body and
-  provenance lints on the single validate gate, plus census scripts that make
-  child-tactic and strategy-corpus enumeration deterministic. Off-path (no
-  validates chain), so calculated attention demotes it below round tactics."
+  the amendment-completeness doctrine with machinery: a plan-schema body lint on
+  the single validate gate, plus census scripts that make child-tactic and
+  strategy-corpus enumeration deterministic. Off-path (no validates chain), so
+  calculated attention demotes it below round tactics. The provenance lint
+  originally scoped here split to tactic-align-provenance-lint-doctrine
+  (2026-07-18 re-plan, see clarifications) because enforcing it exposed a
+  doctrine-vs-corpus mismatch only the author can resolve."
 reading: null
 gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Unit 1 was parked 2026-07-09 because its combined body+provenance lint
+      was unimplementable as specified. How should it be re-spec'd?
+    answer: "(Recorded 2026-07-18 /align-tactics per-node re-plan round.) Split in
+      two. This node keeps only the plan-schema body lint, rescoped for corpus
+      reality found on re-investigation: (1) the marker checks are
+      format-tolerant — Context/Verification match by heading prefix so
+      'Verification checklist' still counts, and the Recommended-model check
+      matches 'recommended model' case-insensitively anywhere in the body, not
+      only the literal bold '**Recommended model:**' string, because the live
+      corpus already uses several accepted formats (e.g.
+      tactic-demo-saas-acceptance.md's '- **Recommended model**: sonnet',
+      tactic-node-toolchain-single-source.md's 'Recommended model: opus') that a
+      literal-bold match would false-flag. (2) A named exemption from the
+      Recommended-model check only (Context and Verification stay required) for
+      tactic ids matching tactic-mainqa-* — the 12 legacy main-qa follow-ups
+      carry a placeholder phase: implement (schema.ts's Phase enum already has
+      main-qa, packages/intentionsutil/src/schema.ts:31, but no live node uses
+      it yet) pending tactic-mainqa-first-class-phase's migration to a real
+      main-qa phase; until then their phase collides with this lint's
+      implement/fix/qa/review trigger set even though they are QA-observation
+      parks, not implement plans. (3) Left out of scope, undecided here: the
+      second, currently-unlinted main-qa representation (phase: null +
+      attributes.phase: main-qa, e.g. tactic-budget-txn-identity,
+      tactic-attention-surface-analytics-collector) — whether the body lint
+      should ever cover that representation is deferred to
+      tactic-mainqa-first-class-phase's phase migration, not decided in this
+      round. The provenance half of the original Unit 1 split to a new
+      born-parked sibling, tactic-align-provenance-lint-doctrine, rather than
+      being decided here: re-investigation confirmed the doctrine the align
+      skill docs assert (clarifications[].answer must END with a trailing
+      'Recorded YYYY-MM-DD' sentence — align-strategy/SKILL.md and
+      align-tactics/SKILL.md) does not match the corpus's actual convention or
+      the existing tooling's convention: router.ts's readingDate()
+      (packages/intentionsutil/src/router.ts:159-163) already extracts 'the
+      newest ISO date mentioned anywhere' in a clarification answer,
+      verb-agnostic, and coverage.ts's lastReviewedOf relies on exactly that
+      semantics (test fixtures 'Recorded 2026-05-01.' and 'Amended 2026-06-15.',
+      packages/intentionsutil/test/coverage.test.ts:223-239). Loosening the two
+      SKILL.md doctrine passages to match is an align-layer doctrine edit, not a
+      lint tweak an off-path autonomous session should make unilaterally — hence
+      the park on the sibling tactic rather than a decision here."
 tooling_goals: []
 success_signal: null
 attention:
@@ -38,60 +81,26 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-align-tactics-mechanical-floor
+  pr: 2896
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-22
+    attempt: 1
+    pushed_sha: 4cd2094fef128fbcacecb775da0b1927a52218b8
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Unit 1's provenance lint is unimplementable as specified by an
-    autonomous off-path worker, and it is one plan / one PR, so the whole node
-    parks. Plan spec: every clarifications[].answer must END with a trailing
-    \"Recorded YYYY-MM-DD\" sentence (explicitly \"trailing-sentence position,
-    not merely anywhere in the string\"), then sweep the live store fixing every
-    violation or recording a named exemption. Sweep result over intentions/: 27
-    violations, ALL author-owned goal-layer nodes (virtue/strategy/kind), ZERO
-    tactics; undated=0 — every answer already carries a dated provenance clause.
-    The corpus's actual established convention front-loads provenance as a
-    parenthetical with varied verbs (Recorded / Amended / clarified / Reviewed /
-    adopted) and ends each answer with its substantive conclusion, not a
-    trailing Recorded sentence; both the align SKILL.md doctrine and this plan
-    describe a trailing-Recorded convention the corpus never followed (a
-    doctrine-vs-corpus mismatch). Enforcing the spec literally means
-    autonomously rewriting 27 rich author-owned philosophical dialectic records
-    (e.g. virtue-respect-for-persons' Kant/Aristotle clarification,
-    strategy-philosophical-grounding's periagoge answers) to append redundant
-    trailing dates — out of an off-path worker's remit; loosening the rule to
-    \"a date present anywhere\" is an align-layer doctrine decision the plan
-    explicitly forbids, not a lint tweak to slip in because it makes the sweep
-    green. The Unit 1 body lint (Context + Recommended-model + Verification
-    markers) IS sound and tractable: 15 body violations — 13 are main-qa
-    follow-up tactics missing **Recommended model:** (a distinct
-    needs-main-verification category, a named-exemption candidate) and ~2 are
-    genuinely under-specified tactic plans (e.g. tactic-budget-txn-identity
-    missing ## Verification) the lint should legitimately catch and fix in-PR.
-    Units 2-5 (child-tactic + strategy-corpus census scripts and the two
-    SKILL.md census hooks) are unaffected by the defect. Next steps: run
-    /align-tactics on tactic-align-tactics-mechanical-floor (serving
-    strategy-graph-native-dispatch) to re-spec Unit 1's provenance lint before a
-    fresh worker re-implements the whole plan — decide among (a) scope the
-    provenance rule to tactic nodes only, (b) split provenance into its own
-    tactic so the tractable body lint + census scripts (Units 2-5) ship now, (c)
-    sweep goal-layer records only under explicit author review rather than
-    autonomously; also decide the body-lint main-qa named exemption vs requiring
-    model tags on those 13 follow-ups; and flag the trailing-Recorded
-    doctrine-vs-corpus mismatch for possible align-strategy attention. Gate and
-    dependency were clean and need no re-litigation: null
-    execution.strategy_fingerprint (a null stamp is never stale) and
-    blocked_by:[] is legitimate (tactic-align-skills-greenfield-gate #2789
-    merged and pruned, dropping the inbound edge). No partial work was committed
-    and no PR was opened — the node worktree is clean."
-  since: 2026-07-09
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# mechanical floor for the align skills: plan-schema and provenance lints in the validate gate, plus child-tactic and strategy-corpus census scripts
+# mechanical floor for the align skills: plan-schema body lint in the validate gate, plus child-tactic and strategy-corpus census scripts
 
 Off-path: no `validates` chain reaches this node, so calculated attention
 demotes it below round tactics at read time. One PR.
@@ -122,19 +131,22 @@ fixes:
   hand; its Step 1.2 new-vs-edit overlap detection and Step 3 delegation
   sweep use keyword grep as the disposition mechanism, the same
   enumeration-honesty defect clarification 32 named.
-- **Unlinted provenance convention.** Every `clarifications[].answer` must
-  end with a dated provenance sentence (`"...Recorded YYYY-MM-DD ..."`),
-  but `schema.ts` validates only the `{question, answer}` shape
-  (`validateClarifications`,
+- **Unlinted provenance convention.** Every `clarifications[].answer` is
+  meant to carry a dated provenance sentence, but `schema.ts` validates
+  only the `{question, answer}` shape (`validateClarifications`,
   `packages/intentionsutil/src/schema.ts:443`) — the convention is
-  prose-only.
+  prose-only. **2026-07-18 re-plan:** the first attempt at this tactic
+  (parked 2026-07-09) found that lint unimplementable as spec'd — see the
+  frontmatter `clarifications` entry above. That half split to a new
+  born-parked sibling, `tactic-align-provenance-lint-doctrine`, and is out
+  of scope for this node from here on.
 
 The skill-text encoding of the amendment-completeness doctrine itself
 (whole-node reconciliation, full-body re-read, the clarification-38
 widening to strategy edits) is homed in
 `tactic-align-skills-greenfield-gate` Units 1–2, not here.
 
-## Unit 1 — plan-schema body and provenance lints in the validate gate
+## Unit 1 — plan-schema body lint in the validate gate
 
 **Recommended model:** opus
 
@@ -145,10 +157,41 @@ Scope:
   failure style. For every `kind: "tactic"` node whose `phase` is
   `implement`, `fix`, `qa`, or `review` (the post-plan, pre-`done`
   lifecycle — `PHASES` at `packages/intentionsutil/src/schema.ts:33`), read
-  the node's raw markdown body and require three plan-schema markers: a
-  `## Context` heading, at least one `**Recommended model:**` line, and a
-  `## Verification` heading. Exempt `phase` null/`draft`/`align-tactics`
-  (not yet planned) and `done` (historical).
+  the node's raw markdown body and require three plan-schema markers:
+  - `## Context` — match `/^##\s+Context\b/im` (heading-prefix, not exact
+    string).
+  - At least one recommended-model line — match `/recommended model/i`
+    **anywhere in the body** (not a heading, not bold-required). The live
+    corpus already uses multiple accepted formats for this line — e.g.
+    `tactic-demo-saas-acceptance.md`'s `- **Recommended model**: sonnet`
+    and `tactic-node-toolchain-single-source.md`'s `Recommended model:
+    opus` alongside this node's own `**Recommended model:**` — a literal
+    bold-colon match would false-flag both variants; match the phrase
+    case-insensitively and leave formatting alone.
+  - `## Verification` — match `/^##\s+Verification\b/im` (heading-prefix,
+    so `## Verification checklist` — used by the migrated
+    `tactic-mainqa-*` nodes, e.g. `tactic-mainqa-budget-pipeline.md` —
+    still counts).
+  Exempt `phase` null/`draft`/`align-tactics` (not yet planned) and `done`
+  (historical).
+- **Named exemption — `tactic-mainqa-*` recommended-model check.** Tactic
+  ids matching `/^tactic-mainqa-/` are exempt from the recommended-model
+  check only (Context and Verification stay required). These 12 nodes are
+  legacy-migrated main-qa follow-ups carrying a placeholder `phase:
+  implement` — `main-qa` is already a valid `Phase` enum value
+  (`packages/intentionsutil/src/schema.ts:31`) but no live node uses it
+  yet; `tactic-mainqa-first-class-phase` (currently `phase: null`, `status:
+  raw` — itself unplanned) tracks migrating these 12 to a real `main-qa`
+  phase, at which point they fall outside this lint's
+  implement/fix/qa/review trigger set and the exemption becomes dead code
+  — leave a comment in `planlint.ts` pointing at that tactic so the
+  exemption is found and removed when it lands. Do **not** extend this
+  exemption, or this lint's phase filter, to the *other* live main-qa
+  representation (`phase: null` + `attributes.phase: "main-qa"`, e.g.
+  `tactic-budget-txn-identity`, `tactic-attention-surface-analytics-collector`)
+  — that representation is already outside the phase filter as specified
+  (phase is `null`), and whether to bring it into scope is deferred to
+  `tactic-mainqa-first-class-phase`, not decided here.
 - Body access: `readNode`/`listNodes` deliberately drop the body
   (`packages/intentionsutil/src/store.ts:72`); reuse the fence-splitting
   logic of `extractBody` (`packages/intentionsutil/src/store.ts:58`) —
@@ -158,27 +201,34 @@ Scope:
   after `validateGraph(nodes)`, so `graph-commit` and the `graph/**` CI
   fast path both enforce it. `schema.ts`'s frontmatter-only contract is
   unchanged — the lint lives beside it, taking the store dir.
-- Sweep the live store first: run the lint over `intentions/` and fix any
-  violating node in this PR (state follow-through) rather than weakening
-  the rule. If a violation is legitimately not a plan (e.g. a spec-carrier
-  tactic), bring it to a compliant shape or record the exemption as an
-  explicit named rule in `planlint.ts` — never a silent skip.
-- Provenance lint, same module and same gate: a second exported rule
-  requiring every `clarifications[].answer` on **any** node kind to end
-  with a provenance sentence matching `/Recorded \d{4}-\d{2}-\d{2}/`
-  (trailing-sentence position, not merely anywhere in the string). Sweep
-  the live store the same way — fix violating entries in this PR or record
-  an explicit named exemption in `planlint.ts`, never a silent skip.
+- Sweep the live store first: run the lint (with the format-tolerant
+  regexes and the `tactic-mainqa-*` exemption above) over `intentions/`
+  and fix any violating node in this PR (state follow-through) rather than
+  weakening the rule. If a violation is legitimately not a plan (e.g. a
+  spec-carrier tactic), bring it to a compliant shape or record the
+  exemption as an explicit named rule in `planlint.ts` — never a silent
+  skip. Confirmed still-live at spec time: `tactic-office-hours-graph-freshness-guard.md`
+  (`phase: review`) has no recommended-model line in any format and is
+  **not** a `tactic-mainqa-*` node, so it is a genuine violation — add an
+  appropriate `**Recommended model:**` line to it (read its scope and pick
+  sonnet/opus per the model-selection heuristic,
+  `.claude/skills/implement-unit/SKILL.md` lines 31–39) rather than
+  exempting it. Re-run the lint after wiring it in to catch any further
+  violations beyond this one instance — the count above was spot-checked,
+  not exhaustively enumerated at plan time.
 - Tests: new `packages/intentionsutil/test/planlint.test.ts` — accepts a
-  compliant body, rejects each missing marker (error names the node and
-  the marker), exempts each exempt phase; accepts a provenance-suffixed
-  clarification and rejects an unsuffixed one (error names the node and
-  the clarification index).
+  compliant body in each accepted format (bold-colon, bold-then-colon,
+  unbold), rejects each missing marker (error names the node and the
+  marker), exempts each exempt phase, exempts a `tactic-mainqa-*` id from
+  the recommended-model check while still requiring its Context/Verification
+  markers, and accepts a `## Verification checklist` heading.
 
 Out of scope: enforcing `office_hours.recommendation` presence on parks
-(condition 6) — that waits on the field landing in `schema.ts`
-(`tactic-office-hours-graph-entry` Unit 1 /
-`tactic-phase-skill-node-targets` Unit 2, shared skip-if-present).
+(condition 6) — that waits on the field landing in `schema.ts`. **2026-07-18
+correction:** that field landed already (`packages/intentionsutil/src/schema.ts:351`,
+`OfficeHours.recommendation: string | null`) — this remains out of scope by
+choice now, not by schema blocker, since enforcing it is a separate,
+unscoped decision about which parks must carry a recommendation.
 
 ## Unit 2 — child-tactic census script
 
@@ -310,9 +360,11 @@ npx tsx packages/intentionsutil/scripts/align-tactics-census.ts strategy-graph-n
 npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions | grep -q "strategy-graph-native-dispatch"
 ```
 
-Manual: in a scratch checkout, blank a planned tactic's body sections and
-confirm `validate-graph.ts` exits non-zero naming the node and the missing
-marker; strip a clarification's provenance sentence and confirm the same;
+Manual: in a scratch checkout, blank a planned tactic's body sections
+(Context, recommended-model line, Verification) and confirm
+`validate-graph.ts` exits non-zero naming the node and the missing marker;
+confirm a `tactic-mainqa-*` id with no recommended-model line still passes
+(exempted) but still fails if its Context or Verification marker is blanked;
 confirm the child-tactic census exits non-zero on an unknown strategy id;
 confirm the strategy census's unserved-virtues section lists exactly the
 virtue ids absent from every strategy's `serves`.

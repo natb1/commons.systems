@@ -21,17 +21,23 @@
 # rewrites this file atomically). Do not hand-edit the hashes.
 {
   # <date>-<time>-<shorthash> from the Windows zip's directory name.
-  version = "20260707-093716-fff02ca5";
+  version = "20260716-195552-76b606ec";
 
   # Full commit the above build corresponds to.
-  rev = "fff02ca501c3b457f99b467a86061d2b150c51f2";
+  rev = "76b606ec597a3c0263fa60321548637451c0a547";
 
   # NAR hash of the wezterm source tree (fetchSubmodules = true) at `rev`.
-  srcHash = "sha256-q351PUvUy9jbqcAgQfkZqgrEuc4X/Y/H9N8b9+60mjY=";
+  srcHash = "sha256-FLU1R78C1xLPsJ1udBk9bW0BbVry4lGiC0kvPfMI66c=";
 
   # Vendored cargo dependencies hash for the source at `rev`.
   cargoHash = "sha256-jY7lTOfbT74tAZ7he1xudCN7BUxZBzY+8+e1d2g2v4I=";
 
   # SHA-256 of WezTerm-windows-nightly.zip as published for this build.
-  windowsZipHash = "sha256-Beo9PtQ5UmqdmBbagYfVoS0hglseF/1F/uUMHtGxr1c=";
+  #
+  # NOTE: upstream re-uploads this asset for an UNCHANGED build — the zip bytes
+  # (and therefore this hash) can change while `version`/`rev` stay put. When CI
+  # reports a mismatch, first confirm the live zip still unpacks to
+  # WezTerm-windows-${version}; if it does, only this hash needs refreshing and
+  # the other four fields must be left alone.
+  windowsZipHash = "sha256-bTvVHVpB8Mh6g2lF2RB9Egs2IApanVb5Z1R2M9UCZZ8=";
 }

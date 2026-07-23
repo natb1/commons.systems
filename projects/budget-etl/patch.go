@@ -148,7 +148,7 @@ func validateAddRule(r export.Rule, idx int) error {
 		return nil
 	}
 	if !docIDPattern.MatchString(r.TransactionID) {
-		return fmt.Errorf("add[%d]: transactionId %q is not a valid doc ID (expected %d lowercase hex chars from budget.TransactionDocID)", idx, r.TransactionID, len(budget.TransactionDocID("x", "y")))
+		return fmt.Errorf("add[%d]: transactionId %q is not a valid doc ID (expected %d lowercase hex chars from budget.TransactionDocID)", idx, r.TransactionID, len(budget.TransactionDocID("x", "y", "z")))
 	}
 	return nil
 }

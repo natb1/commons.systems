@@ -35,6 +35,15 @@ rationale: >-
   raises exit cost, so a portfolio of well-aligned dependencies still drifts
   toward capture on the irreversibility axis. The two virtues are balanced,
   never traded off to zero.
+
+
+  The Aristotelian triple, made explicit at chunk 2 (NE II.6-7, 2026-07-13):
+  this virtue is itself a mean in its field, the divergence axis. Its deficiency
+  is unwatched imported virtues — the edge inverting undetected; its excess is
+  attachment-accumulation-because-managed — the portfolio of well-aligned
+  dependencies drifting toward capture on the irreversibility axis, the
+  sibling's field. That spillover is why the cross-guard on kind-virtue's
+  chunk-2 clarification exists; it is not this virtue's internal mean.
 reading: null
 gap: null
 serves: []
