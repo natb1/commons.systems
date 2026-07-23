@@ -139,6 +139,98 @@ describe("applyFixState store round-trip", () => {
       /not a tactic/,
     );
   });
+
+  it("--spend-attempt increments attempt by 1 and preserves since/pushed_sha", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    const set = applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir });
+    applyFixState({ id: "tactic-syn", mode: "record", pushedSha: "cafef00d", dir });
+    const r = applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir });
+    expect(r.mode).toBe("spend");
+    expect(r.attempt).toBe(2);
+    const fix = readNode(dir, "tactic-syn").execution?.fix;
+    expect(fix?.attempt).toBe(2);
+    expect(fix?.since).toBe(set.since);
+    expect(fix?.pushed_sha).toBe("cafef00d");
+  });
+
+  it("--spend-attempt with no active interrupt is an error", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    expect(() => applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir })).toThrow(
+      /execution\.fix is null/,
+    );
+  });
+
+  it("--park-if-capped at or below the cap makes no write and reports parked: false", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir }); // attempt 1
+    applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // attempt 2
+    applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // attempt 3 (== FIX_ATTEMPT_CAP)
+    const before = readNode(dir, "tactic-syn");
+    const r = applyFixState({ id: "tactic-syn", mode: "park-check", pushedSha: null, dir });
+    expect(r.mode).toBe("park-check");
+    expect(r.parked).toBe(false);
+    expect(r.wrote).toBe(false);
+    const after = readNode(dir, "tactic-syn");
+    expect(after).toEqual(before);
+    expect(after.execution?.fix?.attempt).toBe(3);
+    expect(after.office_hours).toBeNull();
+  });
+
+  it("--park-if-capped above the cap parks the node, resets attempt to 1, and writes office_hours", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir }); // attempt 1
+    applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // attempt 2
+    applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // attempt 3
+    applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // attempt 4 (over the cap of 3)
+    const r = applyFixState({ id: "tactic-syn", mode: "park-check", pushedSha: null, dir });
+    expect(r.mode).toBe("park-check");
+    expect(r.parked).toBe(true);
+    expect(r.wrote).toBe(true);
+    expect(r.attempt).toBe(3); // consumed attempts before the park
+    const node = readNode(dir, "tactic-syn");
+    expect(node.office_hours).not.toBeNull();
+    expect(node.office_hours?.reason).toMatch(/3 attempts/);
+    expect(node.office_hours?.since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(node.office_hours?.recommendation).not.toBeNull();
+    // Fresh budget: attempt reset to 1, since/pushed_sha untouched.
+    expect(node.execution?.fix?.attempt).toBe(1);
+    expect(node.phase).toBe("qa"); // ladder phase untouched by the park
+  });
+
+  it("--park-if-capped with no active interrupt is an error", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    expect(() =>
+      applyFixState({ id: "tactic-syn", mode: "park-check", pushedSha: null, dir }),
+    ).toThrow(/execution\.fix is null/);
+  });
+
+  it("end-to-end: set-fix, three spends, then park-if-capped parks, then a human clear-fix nulls fix entirely", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    const set = applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir });
+    expect(set.attempt).toBe(1);
+    applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // 2
+    applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // 3
+    const third = applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // 4
+    expect(third.attempt).toBe(4);
+    const park = applyFixState({ id: "tactic-syn", mode: "park-check", pushedSha: null, dir });
+    expect(park.parked).toBe(true);
+    const parked = readNode(dir, "tactic-syn");
+    expect(parked.office_hours).not.toBeNull();
+    expect(parked.execution?.fix?.attempt).toBe(1);
+    // Human clears office_hours (out of scope here); the counterpart --clear-fix
+    // still nulls execution.fix entirely, even with office_hours present.
+    const cleared = applyFixState({ id: "tactic-syn", mode: "clear", pushedSha: null, dir });
+    expect(cleared.mode).toBe("clear");
+    const final = readNode(dir, "tactic-syn");
+    expect(final.execution?.fix).toBeNull();
+    expect(final.office_hours).not.toBeNull(); // clear-fix does not touch office_hours
+  });
 });
 
 describe("apply-fix-state parseArgs", () => {
@@ -157,8 +249,30 @@ describe("apply-fix-state parseArgs", () => {
     expect(a).toMatchObject({ id: "tactic-syn", mode: "record", pushedSha: "abc123" });
   });
 
+  it("parses --spend-attempt", () => {
+    const a = parseArgs(["tactic-syn", "--spend-attempt"]);
+    expect(a).toMatchObject({ id: "tactic-syn", mode: "spend", pushedSha: null });
+  });
+
+  it("parses --park-if-capped", () => {
+    const a = parseArgs(["tactic-syn", "--park-if-capped"]);
+    expect(a).toMatchObject({ id: "tactic-syn", mode: "park-check", pushedSha: null });
+  });
+
   it("rejects combining two modes", () => {
     expect(() => parseArgs(["tactic-syn", "--set-fix", "--clear-fix"])).toThrow(/mutually exclusive/);
+  });
+
+  it("rejects combining --spend-attempt with --clear-fix", () => {
+    expect(() => parseArgs(["tactic-syn", "--spend-attempt", "--clear-fix"])).toThrow(
+      /mutually exclusive/,
+    );
+  });
+
+  it("rejects combining --park-if-capped with --set-fix", () => {
+    expect(() => parseArgs(["tactic-syn", "--park-if-capped", "--set-fix"])).toThrow(
+      /mutually exclusive/,
+    );
   });
 
   it("rejects --record-push with no sha", () => {
