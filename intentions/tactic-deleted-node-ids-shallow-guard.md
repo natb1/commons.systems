@@ -2,8 +2,8 @@
 id: tactic-deleted-node-ids-shallow-guard
 kind: tactic
 statement: Make deletedNodeIds fail loud on a shallow clone, so validate-graph
-  cannot report false prose-reference violations from a silently truncated
-  git history
+  cannot report false prose-reference violations from a silently truncated git
+  history
 owner: ai
 status: codified
 parent: null
@@ -17,8 +17,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-deleted-node-ids-shallow-guard
+  pr: 2949
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
