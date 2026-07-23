@@ -1,6 +1,6 @@
 ---
 name: dispatch-conflict
-description: Fix-conflicts phase — single pass that reproduces and resolves one origin/main merge conflict on a draft PR (issue-lane), or escalates an ambiguous conflict to office-hours
+description: Fix-conflicts phase — single pass that reproduces and resolves one conflict on two lanes (Lane 1, an origin/main merge conflict on an issue-branch draft PR; Lane 2, a graph-native intention-node conflict parked by graph-commit, invoked by node id), or escalates an ambiguous conflict to office-hours
 ---
 
 # Dispatch Conflict
@@ -20,9 +20,17 @@ This skill runs in the **caller's thread** — it has no `context:` key — so i
 launch the resolver subagent directly.
 
 This is a normal in-place phase skill: it derives the target from the current
-worktree's branch and writes the **standard** phase-completion marker. The Stop hook
+worktree's branch (or an explicit node id in `ARGUMENTS`) and writes the
+**standard** phase-completion marker. The Stop hook
 (`.claude/hooks/dispatch-stop.sh`) reads that marker to decide propagate vs. park —
 there are no sentinels and no `<N> <worktree>` handoff.
+
+The skill has **two lanes**, chosen by a shared preamble (see "## Steps"):
+**Lane 1** resolves an `origin/main` git merge conflict on an issue-branch draft
+PR (the original behavior); **Lane 2** resolves a graph-native intention-node
+conflict parked by `graph-commit`, invoked by explicit node id (never by a router
+yet). The two-lane split follows the node/issue convention the other phase skills
+adopted (`qa-main`, `office-hours`).
 
 Run **every** `gh` call here, and the scripts that invoke `gh`/`git` over the
 network, with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
@@ -33,23 +41,54 @@ carve-out; `git push` is HTTPS to github.com — both sandbox-safe per
 
 ## Steps
 
-### 1. Resolve the target in place
+`/dispatch-conflict` resolves one conflict on **two lanes**, selected by a shared
+preamble that reads `ARGUMENTS` and the worktree branch:
 
-`/dispatch-conflict` operates in place — the **current worktree dictates the target**.
-The router (`/dispatch-propagate`) enters the target worktree before invoking this
-skill; this skill never switches. The current branch is `<N>-…`, where `<N>` is the
-issue number:
+- **Lane 1 — issue-branch git conflict** (the original behavior): an
+  `origin/main` merge conflict on a `<N>-…` issue-branch draft PR.
+- **Lane 2 — graph-native node conflict**: an intention-graph node parked to
+  `office_hours` by `graph-commit` when its own mechanical merge could not
+  reconcile a concurrent-edit conflict. Lane 2 is invoked by an **explicit node
+  id** — a human, or a future router — never automatically. Its steps live in the
+  "## Lane 2 — graph-native node conflict" section below (added in a later unit).
+
+### Select the lane and resolve the target in place
+
+`/dispatch-conflict` operates in place — the **current worktree (or an explicit
+node id) dictates the target**. For Lane 1 the router (`/dispatch-propagate`)
+enters the `<N>-…` target worktree before invoking this skill; this skill never
+switches. Discriminate the lane first — the `ARGUMENTS`-first idiom parallels
+`/office-hours` (`.claude/skills/office-hours/SKILL.md`), the branch shape
+parallels `/qa-main` (`.claude/skills/qa-main/SKILL.md`):
 
 ```bash
 BRANCH=$(basename "$(git rev-parse --show-toplevel)")
-case "$BRANCH" in
-  [0-9]*-*) N="${BRANCH%%-*}" ;;
-  *)
-    echo "/dispatch-conflict: current branch '$BRANCH' is not a target worktree (expected '<N>-…')" >&2
+if [[ -n "$ARGUMENTS" ]]; then
+  if [[ "$ARGUMENTS" =~ ^[0-9]+$ ]]; then
+    echo "/dispatch-conflict: numeric ARGUMENTS '$ARGUMENTS' is not a supported target (Lane 1 is worktree-derived; Lane 2 takes a node id)" >&2
     exit 1
-    ;;
-esac
+  fi
+  # Rule 1 — explicit non-numeric node id (human or future router): Lane 2.
+  LANE=2
+  NODE_ID="$ARGUMENTS"
+elif [[ "$BRANCH" == [0-9]*-* ]]; then
+  # Rule 2 — no argument + an issue-branch worktree: Lane 1 (unchanged behavior).
+  LANE=1
+  N="${BRANCH%%-*}"
+else
+  # Rule 3 — no argument + a non-issue branch: Lane 2 over the node whose id is
+  # the worktree branch name (the qa-main node-worktree shape).
+  LANE=2
+  NODE_ID="$BRANCH"
+fi
 ```
+
+When `LANE=2`, skip the rest of Lane 1 and follow the "## Lane 2 — graph-native
+node conflict" section below. Otherwise `LANE=1` — continue with the Lane 1 steps.
+
+## Lane 1 — issue-branch git conflict
+
+### 1. Fetch live context for the issue and PR
 
 Fetch live context for the issue and PR in one call (`dangerouslyDisableSandbox: true`
 — calls `gh`):
