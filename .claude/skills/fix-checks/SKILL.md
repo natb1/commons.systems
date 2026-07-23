@@ -92,30 +92,52 @@ self-reduced scope.
 **Node-lane completion — the fix worker does NOT resolve the interrupt.** The
 selector, not this worker, owns clearing `execution.fix` (it decides when CI has
 gone green on the pushed sha, on a LATER tick). This worker's completion duty is
-only to RECORD what this iteration did and stop:
+to RECORD what this iteration did and stop: **every** outcome that reaches this
+seam SPENDS one attempt unit (`apply-fix-state --spend-attempt`), and push
+outcomes additionally record the pushed sha (`apply-fix-state --record-push`).
+The spend has to happen here, at the worker's completion seam, rather than on
+the selector: the selector cannot distinguish a still-running fix worker from a
+completed no-repro pass — both look identical from outside (no new sha, no
+marker) — so counting an attempt can only happen once, at the point a pass
+actually completes.
 
 - **If this iteration pushed a commit** (a real fix, or the Step 4
-  "main-already-fixed-it" merge-commit push): record the pushed sha onto the
-  active interrupt via `apply-fix-state --record-push`, then land that state-only
-  write on `origin/main` with `graph-commit`. Recording the sha arms the
-  selector's pending-CI guard, so a pending verdict on this exact sha is never
-  misread as a green resolution. Run this from the PR-branch worktree with the
-  reset-dance `graph-commit` needs there (same as `/implement`'s node-lane
-  completion did with `transition-node`):
+  "main-already-fixed-it" merge-commit push): spend the attempt, then record the
+  pushed sha onto the active interrupt via `apply-fix-state --record-push`, then
+  land both state-only writes on `origin/main` in **one** `graph-commit`.
+  Recording the sha arms the selector's pending-CI guard, so a pending verdict on
+  this exact sha is never misread as a green resolution. Run this from the
+  PR-branch worktree with the reset-dance `graph-commit` needs there (same as
+  `/implement`'s node-lane completion did with `transition-node`):
 
   ```bash
   HEAD_SHA=$(git rev-parse HEAD)
   node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
+    "$N" --spend-attempt
+  node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
     "$N" --record-push "$HEAD_SHA"
   .claude/skills/dispatch-propagate/scripts/graph-commit \
-    -m "graph: record fix push $HEAD_SHA on $N" "$N"
+    -m "graph: record fix attempt + push $HEAD_SHA on $N" "$N"
   ```
 
 - **If this iteration pushed NOTHING** (the generic-no-repro / flake outcomes
-  Step 4 documents as pushing nothing): make NO graph write. There is no new sha
-  to record and the interrupt stays exactly as it was; the selector re-launches
+  Step 4 documents as pushing nothing): this is no longer a no-write outcome —
+  spend the attempt and land it with `graph-commit`. There is no new sha to
+  record, but the pass still consumed one retry, so it must be counted or the
+  selector's 3-attempt cap can never trigger for the recurring generic-no-repro
+  / flake loops:
+
+  ```bash
+  node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
+    "$N" --spend-attempt
+  .claude/skills/dispatch-propagate/scripts/graph-commit \
+    -m "graph: record fix attempt (no push) on $N" "$N"
+  ```
+
+  The interrupt otherwise stays exactly as it was; the selector re-launches
   `/fix-checks` next tick (or the flake path files its own issue and the node is
-  no longer re-routed to fix — see Step 4).
+  no longer re-routed to fix — see Step 4), unless this spend now trips the
+  3-attempt cap, in which case the selector parks it instead.
 
 Do NOT call `transition-node` here: after the CI-blind redesign it no longer
 knows about `fix` and would force the ladder forward regardless of whether the
@@ -627,10 +649,11 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
 
    **Node lane** (`TARGET_KIND=node`): write NO `dispatch-mark-complete` marker
    (it is a gh-label vehicle, issue-only). The node lane's completion is the
-   `apply-fix-state --record-push` + `graph-commit` write from the completion
-   seam above (when this iteration pushed), or nothing (when it pushed nothing).
-   The Stop hook (`.claude/hooks/dispatch-stop.sh`) needs no marker from a clean
-   node pass — it only backstops the escalation park.
+   `apply-fix-state --spend-attempt` (+ `--record-push` when this iteration
+   pushed) + `graph-commit` write from the completion seam above — every
+   outcome that reaches Step 9 spends one attempt unit there. The Stop hook
+   (`.claude/hooks/dispatch-stop.sh`) needs no marker from a clean node pass —
+   it only backstops the escalation park.
 
    Then **stop**. The `/dispatch-propagate` background-job chain drives the
    next iteration — the selector observes the pushed sha's CI verdict on a later
