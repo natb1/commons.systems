@@ -43,26 +43,22 @@ execution:
 validates: []
 blocked_by: []
 office_hours:
-  reason: The blocking `test-integrity` check is red BY DESIGN and has no
-    exemption path for this class. The deletion is verified coverage-neutral
-    (see the node body's Evidence section), but Signals 2 and 3 are purely
-    syntactic and neither of the check's two exemptions applies, so no
-    autonomous fix can make it green. Per the tactic-test-integrity-waiver
-    design's park side, a worker that determines a firing is intentional and
-    legitimate parks rather than fix-loops on a red-by-design check.
+  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
+    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
   since: 2026-07-23
-  recommendation: "Approve one of: (a) author override-merge of PR #2786 on the
-    recorded evidence — the interim path the waiver design names, already used
-    for PR #2835; or (b) hold PR #2786 until tactic-test-integrity-waiver lands
-    and then attach the waiver object {pr: 2786, signal: 2, max_net: 22, paths:
-    [\"print/test/pages/Home.test.tsx\"], reason: \"byte-identical duplicate;
-    all 22 declarations survive verbatim in print/test/pages/home.test.tsx\"}
-    plus the same object for signal 3; or (c) close PR #2786 and accept the
-    collision. Recommendation: (a). The branch has been refreshed against
-    origin/main and every other check is green; the collision is the only one in
-    the repo and is unfixed on main today. Option (c) is not recommended — it
-    leaves a known-broken checkout on every case-insensitive filesystem,
-    including CI's own macos-14 darwin-build runner."
+  recommendation: >-
+    A concurrent writer landed an overlapping edit to this node while this
+    session's prune was in flight; the prune was NOT landed (a deletion has no
+    content snapshot). Recommended: the losing writer re-reads the current
+    origin/main content, decides whether the prune still applies, and re-runs
+    graph-commit (--prune, or a fresh edit) on the reconciled result — that same
+    commit clears this office_hours park. A third session encountering this park
+    while the loser is still working should wait rather than attempt its own
+    merge (the mailbox discipline).
+
+
+    Unresolved conflict on tactic-qa-fix-instrument-signoff-classify: prune vs.
+    concurrent edit
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -189,3 +185,48 @@ git ls-tree -r --name-only origin/main | tr 'A-Z' 'a-z' | sort | uniq -d
 A non-empty result means a case collision is tracked again. The
 human-observable confirmation is a fresh clone on macOS producing a clean
 `git status`.
+
+## Record — merge decision, 2026-07-23
+
+On 2026-07-23 the repo author reviewed the evidence recorded above and decided
+to merge PR #2786 on it. The PR was marked ready for review and squash-merged
+at 2026-07-23T16:15:34Z as merge commit `bfc45d05`
+(`bfc45d05854a2780f0dca281266a9255a9820612`).
+
+`test-integrity` was the only check not passing at merge time, and it is
+advisory rather than required. The `default branch` ruleset lists exactly four
+required status checks — `acceptance`, `preview-and-smoke`, `lint`,
+`unit-tests` — and all four were green, so the merge went through on the
+ordinary path. No admin override was used.
+
+The `test-integrity` red was a false positive. Its signals are grep counts over
+the PR diff, with no notion of a declaration surviving in a different file, so
+a case-only rename reads to the script as a mass deletion. The two exemptions
+in `.github/scripts/check-test-integrity.sh` correctly decline this case: the
+basename co-deletion exemption requires a non-test impl file of matching
+basename deleted in the same PR, and nothing else is deleted here; the
+import-based exemption requires every symbol the test file stopped importing to
+be absent from the post-PR source tree, and `loadMediaHtml`, `afterRenderHome`,
+`wireDownloadActions` and `Home` all still exist.
+
+Verification behind the decision:
+
+- Every `it(...)` and `describe(...)` title in the deleted
+  `print/test/pages/Home.test.tsx` appears verbatim in
+  `print/test/pages/home.test.tsx` — `comm -23` of the two sorted title sets is
+  empty.
+- `npx vitest run --project print --root .` passed.
+- The diff against `origin/main` at merge time was exactly
+  `D print/test/pages/Home.test.tsx` and nothing else.
+- The repo-wide collision probe
+  `git ls-tree -r --name-only origin/main | tr 'A-Z' 'a-z' | sort | uniq -d`
+  now returns empty — no case-colliding tracked path remains.
+
+No test was weakened, skipped, or deleted: the deleted file was a duplicate
+whose every declaration survives verbatim in the sibling path. No exemption was
+added to the `test-integrity` gate, and no check was disabled.
+
+Node state: `phase` is `review` and `office_hours` is null.
+`reconcile-graph-merged` absorbs a merged tactic carrying no `## needs-main`
+residue to `done` and prunes its node file in the same graph-commit. This
+record is permanent in the landing commit and in PR #2786's comment thread.

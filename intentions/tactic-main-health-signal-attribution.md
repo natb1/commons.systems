@@ -31,13 +31,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-main-health-signal-attribution
   pr: 2954
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
 validates: []
@@ -301,3 +300,11 @@ and confirm the sha prints. Then run
 check set" phrase (not a vacuous green) with `gap` non-null, and that the
 durable `repo-health` state file's `main_broken` latch was left unchanged by
 the indeterminate read.
+
+## needs-main residue
+
+- **id:** 6
+- **title:** Protocol design: leaving the durable main_broken latch untouched on an indeterminate reading is the correct auto-heal behavior
+- **url_path:** current
+- **expected_outcome:** The indeterminate-reading protocol is sound — no auto-heal deadlock, no way for a real red main to be masked long-term by the fail-closed path.
+- **finding:** Judgment call on whether "fail closed but leave the latch untouched" is the correct three-way protocol choice, and whether it can deadlock or mask a real red main over time. Flagged as a planned deferral (not assertable at merge time) — only observable in production over the latch's lifetime, e.g. by watching `dispatch-select-tick` / `dispatch-graph-main-red-sync` behavior across several ticks after this PR merges.

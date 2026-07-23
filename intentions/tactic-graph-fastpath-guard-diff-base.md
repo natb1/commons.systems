@@ -40,7 +40,23 @@ execution:
   fix: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
+    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
+  since: 2026-07-23
+  recommendation: >-
+    A concurrent writer landed an overlapping edit to this node while this
+    session's prune was in flight; the prune was NOT landed (a deletion has no
+    content snapshot). Recommended: the losing writer re-reads the current
+    origin/main content, decides whether the prune still applies, and re-runs
+    graph-commit (--prune, or a fresh edit) on the reconciled result — that same
+    commit clears this office_hours park. A third session encountering this park
+    while the loser is still working should wait rather than attempt its own
+    merge (the mailbox discipline).
+
+
+    Unresolved conflict on tactic-qa-fix-instrument-signoff-classify: prune vs.
+    concurrent edit
 pace_exempt: false
 rounds: null
 attributes:
