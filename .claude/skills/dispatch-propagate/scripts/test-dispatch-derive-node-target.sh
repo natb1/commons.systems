@@ -160,7 +160,9 @@ run_sut() {
   set +e
   OUT=$(PATH="$STUB_DIR:$PATH" GH_LOG="$GH_LOG" GH_PR_NUM="${GH_PR_NUM:-}" "$SUT" "$@" 2>&1)
   RC=$?
-  set -e 2>/dev/null || true
+  # The suite runs `set -uo pipefail` and never enables errexit; `set +e` above
+  # only guards this one command substitution. Do NOT force errexit on here —
+  # restoring the suite's actual (errexit-off) state means leaving it off.
   cd "$prev_dir"
 }
 

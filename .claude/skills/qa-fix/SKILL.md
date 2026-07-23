@@ -87,8 +87,8 @@ case "$BRANCH" in
     # but kept explicit). NODE-JSON is one compact line; NODE-BODY is raw markdown.
     PR_NUM=$(printf '%s\n' "$FRONT_DOOR" | sed -n 's/^PR: //p' | head -1)
     [ "$PR_NUM" = none ] && PR_NUM=""
-    NODE_JSON=$(printf '%s\n' "$FRONT_DOOR" | awk '/^=== NODE-JSON ===$/{f=1;next} /^=== NODE-BODY ===$/{f=0} f')
-    NODE_BODY=$(printf '%s\n' "$FRONT_DOOR" | awk '/^=== NODE-BODY ===$/{f=1;next} f')
+    NODE_JSON=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-JSON ===$/,/^=== NODE-BODY ===$/p' | sed '1d;$d')
+    NODE_BODY=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-BODY ===$/,$p' | sed '1d')
     # Parked-node re-entry guard. Parking sets office_hours without changing
     # phase, so a stale self-scheduled wakeup re-firing mid-session (bypassing the
     # selector's office_hours-null gate) must not re-run qa-fix against a node

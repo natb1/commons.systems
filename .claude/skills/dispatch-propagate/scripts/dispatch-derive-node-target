@@ -118,7 +118,13 @@ if [[ "$CUR_BRANCH" != "$NODE_ID" ]]; then
 fi
 
 # --- Step 3: snapshot intentions/<node-id>.md from origin/main --------------
-git fetch origin main --quiet
+# Fail loudly on a failed fetch: the whole point of the script is to gate on the
+# LATEST origin/main node state. A silent failure would proceed against a
+# possibly-stale local origin/main ref and make a wrong gate/PR decision.
+git fetch origin main --quiet || {
+  echo "dispatch-derive-node-target: git fetch origin main failed" >&2
+  exit 1
+}
 
 SNAP_DIR="$(mktemp -d)" || { echo "dispatch-derive-node-target: mktemp failed" >&2; exit 1; }
 trap 'rm -rf "$SNAP_DIR"' EXIT

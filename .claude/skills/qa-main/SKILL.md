@@ -78,8 +78,8 @@ case "$BRANCH" in
     # off. --pr-mode none never resolves a PR, so no PR_NUM is bound here (the
     # source PR is read from execution.pr via $NODE_JSON where needed). NODE-JSON
     # is one compact line; NODE-BODY is raw markdown.
-    NODE_JSON=$(printf '%s\n' "$FRONT_DOOR" | awk '/^=== NODE-JSON ===$/{f=1;next} /^=== NODE-BODY ===$/{f=0} f')
-    NODE_BODY=$(printf '%s\n' "$FRONT_DOOR" | awk '/^=== NODE-BODY ===$/{f=1;next} f')
+    NODE_JSON=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-JSON ===$/,/^=== NODE-BODY ===$/p' | sed '1d;$d')
+    NODE_BODY=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-BODY ===$/,$p' | sed '1d')
     ;;
 esac
 ```
