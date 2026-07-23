@@ -974,6 +974,17 @@ park_and_exit() {
 # the anomaly).
 assert_clean_outside_ids() {
   local dirty
+  # Reconcile the index's cached stat data with the working tree before reading
+  # status. A preceding `git reset --hard` (e.g. park_and_exit's re-fetch, or an
+  # earlier ensure_intentions_only_base) rewrites tracked files and the index in
+  # the same sub-second; under load that hits git's "racy clean" window, where
+  # `git status --porcelain` distrusts the equal mtimes and can momentarily
+  # report an unchanged file as ` M`. `--refresh` re-stats and clears those
+  # false positives (a genuinely different-content file still stays flagged and
+  # is reported below), so the guard trips only on real dirt, not on a racy
+  # stat. `|| true`: --refresh exits non-zero precisely when it leaves such a
+  # genuinely-modified file flagged, which is not an error here.
+  git update-index -q --refresh >/dev/null 2>&1 || true
   dirty="$(git status --porcelain)"
   [[ -z "$dirty" ]] && return 0
   local -A ours=()

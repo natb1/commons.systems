@@ -32,7 +32,13 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-office-hours-concurrency-dedup
+  pr: 2945
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -362,3 +368,31 @@ daemon spawn; run with `dangerouslyDisableSandbox: true` since `claude agents
   is removed and its branch deleted; repeat with a live session named
   `<node-id>` and confirm it is skipped; repeat with an uncommitted change and
   confirm it is held for grace rather than force-removed.
+
+## needs-main residue
+
+QA pass (2026-07-22, PR #2945): every script-verifiable acceptance item
+passed (grep-verified bare-node-id naming, the `held` directive emission and
+case arm, the untargeted skip-to-next-rank loop, the worktree provisioner,
+the `dispatch-sweep` reap arm; `bash -n` on both changed scripts; the
+`office-hours` vitest suite, 16/16). The three items below are the PR's own
+documented manual/end-to-end scenarios (stubbed `OFFICE_HOURS_CLAUDE_CMD`,
+live-daemon session state) that cannot be mechanically re-created in an
+autonomous QA pass — planned deferrals, not defects — so they carry forward
+for post-merge verification against deployed main.
+
+- **id:** 8
+  **title:** End-to-end `held` collision on a targeted live node (stubbed claude)
+  **url_path:** current
+  **expected_outcome:** Targeted launch on a live node errors with the `held <node-id> <job-id>` message and exits 1 without launching.
+  **finding:** PR test plan lists this stubbed-claude end-to-end scenario as an unchecked manual item; live-session dedup can't be safely re-created mechanically in this pass.
+- **id:** 9
+  **title:** End-to-end untargeted skip-to-next-rank with a stubbed live session
+  **url_path:** current
+  **expected_outcome:** Untargeted launch skips the live node (stderr note) and launches the next rank; with no live sessions it launches the top-ranked node.
+  **finding:** Depends on live daemon/session state the PR documents as manual-only; not mechanically re-verifiable here.
+- **id:** 10
+  **title:** End-to-end worktree provisioning (fresh off origin/main, cwd override)
+  **url_path:** current
+  **expected_outcome:** Provisioning creates/reuses the node-id worktree correctly, launches with bare name and cwd set to the provisioned path.
+  **finding:** Requires a real `git worktree add` / launch cycle with stubbed claude that the PR lists as an unchecked manual scenario.

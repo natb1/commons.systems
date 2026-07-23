@@ -45,11 +45,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-dispatch-conflict-greenfield
+  pr: 2951
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
-blocked_by:
-  - tactic-dispatch-conflict-rename
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

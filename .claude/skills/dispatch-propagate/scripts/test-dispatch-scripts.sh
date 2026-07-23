@@ -16422,24 +16422,28 @@ echo "Test: dispatch-phase-effort with an empty-string arg exits 2"
 if "$SCRIPT_DIR/dispatch-phase-effort" "" 2>/dev/null; then pe_rc=0; else pe_rc=$?; fi
 assert_eq "phase-effort: empty-string-arg → exit 2" "2" "$pe_rc"
 
-# --- review-fix/SKILL.md model-tiering content guards (#1172) -----------------
+# --- review-fix model-tiering content guards (#1172) --------------------------
 # The review-fix orchestrator runs on Sonnet; fix-authoring is delegated to an
 # Opus subagent. The review-fix.js `--fix` guard below is INTENTIONALLY
 # INVERTED from the original #1172 doctrine ("code-review is detection-only,
 # no --fix"): tactic-review-phase-trust-builtin-review deliberately reverses
 # this — code-review now runs `/code-review max --fix` and applies its own
 # fixes directly (Lane-A trust-the-built-in doctrine), with only its
-# un-auto-fixed residue dispositioned by the new residue phase. Per
-# .claude/rules/test-integrity.md, re-pointing a guard whose asserted doctrine
-# the author has deliberately reversed is not weakening a red test — the first
-# assertion below (Opus fix-authoring) is untouched because that invariant
-# still holds.
+# un-auto-fixed residue dispositioned by the new residue phase.
+#
+# The Opus fix-authoring guard below targets review-fix.js (the RUNTIME file
+# that actually enforces the pin at its fix fan-out `agent()` call), NOT the
+# SKILL.md prose. tactic-thin-oversized-skill-bodies moves fixed doctrine out
+# of the orchestrator body into references/*.md, so a grep against the thinned
+# SKILL.md body was a brittle proxy — a later thinning pass could relocate the
+# string again. Per .claude/rules/test-integrity.md, re-pointing this guard at
+# the mechanism that enforces the invariant strengthens it (the "Opus
+# fix-authoring" invariant still holds); it is not weakening a red test.
 REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
-RF_SKILL="$REPO_ROOT/.claude/skills/review-fix/SKILL.md"
 RF_WORKFLOW="$REPO_ROOT/.claude/workflows/review-fix.js"
 
-echo "Test: review-fix/SKILL.md pins fix-authoring to Opus (model: opus present)"
-if grep -q 'model: opus' "$RF_SKILL"; then rf_opus=yes; else rf_opus=no; fi
+echo "Test: review-fix.js pins fix-authoring to Opus (model: 'opus' present in the runtime)"
+if grep -q "model: 'opus'" "$RF_WORKFLOW"; then rf_opus=yes; else rf_opus=no; fi
 assert_eq "review-fix: Opus fix-authoring pinned" "yes" "$rf_opus"
 
 echo "Test: review-fix.js invokes /code-review with --fix (Lane-A trust-the-built-in doctrine, tactic-review-phase-trust-builtin-review)"
@@ -19986,7 +19990,11 @@ echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
 PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 
 # Map of chain-skill SKILL.md → allowed count of EnterWorktree+ExitWorktree
-# substring mentions (grep -oE counts each occurrence, not each line).
+# substring mentions (grep -oE counts each occurrence, not each line). The scan
+# covers each skill's SKILL.md AND any references/*.md it splits normative
+# doctrine into (tactic-thin-oversized-skill-bodies): a worktree-switch
+# instruction relocated out of the thinned SKILL.md body into a reference file
+# would otherwise evade this guard.
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch-propagate/SKILL.md"]=0
   # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
@@ -20011,8 +20019,17 @@ for relpath in "${!CHAIN_GUARD_EXPECTED[@]}"; do
     echo "  FAIL: chain-guard: file missing: $relpath"
     continue
   fi
-  actual=$({ grep -oE 'EnterWorktree|ExitWorktree' "$abspath" || true; } | wc -l | tr -d ' ')
-  assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count" \
+  # Scan the SKILL.md body plus any references/*.md the skill splits normative
+  # doctrine into, so relocated worktree-switch instructions cannot evade the guard.
+  guard_files=("$abspath")
+  refs_dir="$(dirname "$abspath")/references"
+  if [[ -d "$refs_dir" ]]; then
+    while IFS= read -r ref_md; do
+      guard_files+=("$ref_md")
+    done < <(find "$refs_dir" -type f -name '*.md' | sort)
+  fi
+  actual=$({ grep -hoE 'EnterWorktree|ExitWorktree' "${guard_files[@]}" || true; } | wc -l | tr -d ' ')
+  assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count (SKILL.md + references)" \
     "$expected" "$actual"
 done
 
@@ -21581,7 +21598,7 @@ run_sel_tick() {
 # --- empty queue → release + empty ------------------------------------------
 echo "Test: select-tick empty queue → empty, lock released"
 sel_tick_setup
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "empty: exit 0" "0" "$rc"
 assert_eq "empty: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "empty: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21624,7 +21641,7 @@ sel_tick_teardown
 echo "Test: select-tick graph selection → graph decision, node reserved, lock released, legacy skipped"
 sel_tick_setup
 export SEL_GRAPH_TARGET="node tactic-x tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "graph: decision line" "graph 1 tactic-x:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "graph: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21643,7 +21660,7 @@ echo "Test: select-tick graph multi-node selection → one decision line, both r
 sel_tick_setup
 export SEL_TARGET_N=3
 export SEL_GRAPH_TARGET=$'node tactic-a tactic review\nnode strategy-s strategy align-tactics'
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "graph multi: decision line" \
   "graph 2 tactic-a:tactic:review strategy-s:strategy:align-tactics" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21657,7 +21674,7 @@ sel_tick_setup
 # SEL_GRAPH_TARGET unset → the graph selector returns empty; no JIT reminder is
 # due and main is green, so the tick falls through to the `empty` decision. The
 # legacy gh selector (dispatch-select-target) that used to drain here is gone.
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "graph empty: graph selector consulted first" "1" \
   "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
 assert_eq "graph empty: decision line" "empty" \
@@ -21673,7 +21690,7 @@ echo "Test: select-tick at-cap graph pace-exempt probe → graph decision, legac
 sel_tick_setup
 export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
 export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "pace-exempt: decision line" "graph 1 tactic-p:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "pace-exempt: node reserved" "1" \
@@ -21690,7 +21707,7 @@ export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
 # Graph pace-exempt lane empty (SEL_GRAPH_PACE_EXEMPT unset) and main green
 # (SEL_MAIN_BROKEN_SHA unset) → no surviving at-cap bypass; hard cap. The legacy
 # --priority-only probe (dispatch-select-target) died with the legacy selector.
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "at-cap fallback: graph pace-exempt probe consulted" "1" \
   "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
 assert_eq "at-cap fallback: decision line" "concurrency-cap" \
@@ -21703,7 +21720,7 @@ echo "Test: select-tick at-cap exhausted → no graph pace-exempt probe (hard fl
 sel_tick_setup
 export SEL_TARGET_N=1 SEL_LIVE_COUNT=1 SEL_EXHAUSTED=exhausted
 export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "exhausted: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "exhausted: graph pace-exempt probe not consulted" "0" \
@@ -21717,7 +21734,7 @@ sel_tick_setup
 # reports a sha (Step 3b) → main-broken decision, spawned downstream as a
 # lock-free bg job so the lock is released.
 export SEL_MAIN_BROKEN_SHA=abc1234
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "main-broken: decision line" "main-broken abc1234" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "main-broken: lock released" "" \
@@ -21740,7 +21757,7 @@ sel_tick_setup
 # behavior: every consumer this tick gates on the tick's initial read, not a
 # post-completion re-read).
 export SEL_MAIN_RED_NODES="tactic-main-red-abc1234"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "main-red-sync green+open: sync invoked" "present" \
   "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo present || echo absent)"
 assert_eq "main-red-sync green+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21756,7 +21773,7 @@ sel_tick_setup
 # Step 3b main-broken emission and Step 1d auto-merge both stay suppressed.
 export SEL_MAIN_BROKEN_SHA=redsha1
 export SEL_MAIN_RED_NODES="tactic-main-red-redsha1"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "main-red-sync red+open: sync invoked" "present" \
   "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo present || echo absent)"
 assert_eq "main-red-sync red+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21770,7 +21787,7 @@ sel_tick_setup
 # SEL_MAIN_RED_NODES unset (default empty) → OPEN_MAIN_RED is empty this tick;
 # main is also healthy (SEL_MAIN_BROKEN_SHA unset), so Step 3b finds nothing to
 # emit either. The sync script still runs unconditionally every tick.
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "main-red-sync green+no-node: sync invoked" "present" \
   "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo present || echo absent)"
 assert_eq "main-red-sync green+no-node: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21784,7 +21801,7 @@ sel_tick_teardown
 echo "Test: select-tick auto-merge wiring (main healthy) → merge: line, auto-merge invoked"
 sel_tick_setup
 export SEL_AUTO_MERGE_OUT="merged #42"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 TOTAL=$((TOTAL + 1))
 if grep -q '^merge: merged #42$' <<<"$out"; then
   PASS=$((PASS + 1)); echo "  PASS: tick emits 'merge: merged #42'"
@@ -21809,7 +21826,7 @@ echo "Test: select-tick auto-merge suppressed while main is broken"
 sel_tick_setup
 export SEL_MAIN_RED_NODES="tactic-main-red-redsha1"
 export SEL_AUTO_MERGE_OUT="merged #42"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 TOTAL=$((TOTAL + 1))
 if ! grep -q 'merge:' <<<"$out"; then
   PASS=$((PASS + 1)); echo "  PASS: no 'merge:' line while main is broken"
@@ -21827,7 +21844,7 @@ sel_tick_teardown
 echo "Test: select-tick re-triage wiring → retriage: line, retriage script invoked"
 sel_tick_setup
 export SEL_RETRIAGE_OUT="retriaged #101 (source PR #1704 closed unmerged)"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 TOTAL=$((TOTAL + 1))
 if grep -q '^retriage: retriaged #101 (source PR #1704 closed unmerged)$' <<<"$out"; then
   PASS=$((PASS + 1)); echo "  PASS: tick emits 'retriage: retriaged #101 ...'"
@@ -21844,7 +21861,7 @@ echo "Test: select-tick failing merge under cap → sync-failed, counter bumped"
 sel_tick_setup
 export FAKE_GIT_MERGE_FAIL=1   # local main cannot ff-merge origin/main
 # Default sessions = UNKNOWN (fall through); no sync-broken latch; counter absent (=0).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "sync-failed: decision line" "sync-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "sync-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21861,7 +21878,7 @@ echo "Test: select-tick live sync-repair session → sync-repair-pending, merge 
 sel_tick_setup
 export SEL_SESSIONS_UNDER_RC=0
 export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tbusy\tsync-repair'
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "defer: decision line" "sync-repair-pending" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "defer: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21879,7 +21896,7 @@ sel_tick_setup
 export SEL_SESSIONS_UNDER_RC=0
 export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tstopped\tsync-repair'
 export FAKE_GIT_MERGE_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "stopped-defer: decision line" "sync-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "stopped-defer: merge attempted" "present" \
@@ -21892,7 +21909,7 @@ sel_tick_setup
 printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # already at the cap
 export FAKE_GIT_MERGE_FAIL=1
 # No sync-broken latch open yet → the cap branch escalates (find-or-create).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-escalate: decision line" "sync-broken" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-escalate: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21912,7 +21929,7 @@ sel_tick_setup
 printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # already at the cap
 export FAKE_GIT_FETCH_FAIL=1   # cannot reach origin/main (fetch fails, no merge)
 # No sync-broken latch open yet → the cap branch escalates (find-or-create).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-fetch-escalate: decision line" "sync-broken" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-fetch-escalate: escalate called" "present" \
@@ -21930,7 +21947,7 @@ sel_tick_setup
 # so the failing-merge branch returns sync-broken WITHOUT escalating or bumping.
 export SEL_SYNC_BROKEN_LATCHED=latched
 export FAKE_GIT_MERGE_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "latched: decision line" "sync-broken" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "latched: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21947,7 +21964,7 @@ printf '[{"number":77}]\n' > "$STUB_DIR/sync-broken-open.json"   # stale latch t
 printf '2\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # stale counter to reset
 # Merge succeeds (default, no FAKE_GIT_MERGE_FAIL) → fall through to select-target
 # (default `empty`).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "recover: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 # REST close (#2256): POST .../issues/77/comments (re-arm message) + PATCH
 # .../issues/77 (state=closed).
@@ -21965,7 +21982,7 @@ sel_tick_setup
 # Graph queue empty; dispatch-jit-scan (Step 3b) reports a due reminder → the
 # tick emits it and releases the lock (spawned downstream as a bg job).
 export SEL_JIT_SCAN="jit-reminder owner/repo 42 PVT_x ITEM_y"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "jit-reminder: decision line" "jit-reminder owner/repo 42 PVT_x ITEM_y" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "jit-reminder: lock released" "" \
@@ -21976,7 +21993,7 @@ sel_tick_teardown
 echo "Test: select-tick sync failure on main → sync-failed, lock released"
 sel_tick_setup
 export FAKE_GIT_FETCH_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "sync-failed: decision line" "sync-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "sync-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21987,7 +22004,7 @@ echo "Test: select-tick off main skips sync (fetch-fail ignored)"
 sel_tick_setup
 export FAKE_GIT_BRANCH="707-some-branch"
 export FAKE_GIT_FETCH_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "off-main: reaches selection (empty, not sync-failed)" "empty" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
@@ -22004,7 +22021,7 @@ sel_tick_teardown
 # case FAILS if a future change mis-wires the guard to halt healthy on-main ticks.
 echo "Test: select-tick on-main tick passes the primary-checkout guard (not halted)"
 sel_tick_setup
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "guard-pass: exit 0 (not guard's exit 2)" "0" "$rc"
 assert_eq "guard-pass: reaches selection (empty, guard did not halt)" "empty" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -22036,7 +22053,7 @@ export FAKE_GIT_PRIMARY_BRANCH="707-some-branch"
 # set -e kills the whole suite before the assertions below ever run (mirrors
 # test-primary-checkout-guard.sh's set +e / set -e bracketing).
 set +e
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 set -e
 assert_eq "guard-halt: exit 2 (the guard's exit)" "2" "$rc"
 # The guard short-circuits before selection: the tail stdout line is NOT a decision
@@ -22062,7 +22079,7 @@ echo "weekly-review: created #42"
 echo "standup: debounced"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-jit-engine"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "jit passthrough: created line prefixed" "1" \
   "$(printf '%s\n' "$out" | grep -cF 'jit: weekly-review: created #42')"
 assert_eq "jit passthrough: debounced line prefixed" "1" \
@@ -22081,7 +22098,7 @@ cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
 echo '[{"sessionId":"other-live-session","pid":2,"status":"busy","name":"x","cwd":""}]'
 FAKE
 chmod +x "$TMPDIR_TEST/fake-claude"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "busy: decision line" "busy" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "busy: foreign holder untouched (not released)" "other-live-session" \
   "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22147,7 +22164,7 @@ sel_tick_teardown
 echo "Test: select-tick TARGET_N=0 passes the guard (no exit 2)"
 sel_tick_setup
 export SEL_LIVE_COUNT=0 SEL_TARGET_N=0 SEL_EXHAUSTED=ok
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "TARGET_N=0: exit 0 (guard not tripped)" "0" "$rc"
 assert_eq "TARGET_N=0: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -22162,7 +22179,7 @@ sel_tick_teardown
 echo "Test: select-tick at cap, not exhausted, no priority item → concurrency-cap"
 sel_tick_setup
 export SEL_LIVE_COUNT=2 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "cap: reseed scheduled" "called" "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
@@ -22191,7 +22208,7 @@ export SEL_LIVE_COUNT=2 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
 printf '%s' "{\"check_runs\": $GREEN_ROLLUP}" > "$STUB_DIR/check-runs-sha42.json"
 printf '[{"number":42,"isDraft":true,"mergeable":"MERGEABLE","headRefOid":"sha42","labels":[{"name":"dispatch:reviewed"}]}]\n' \
   > "$STUB_DIR/reconcile-pr-list.json"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-reconcile: decision line still concurrency-cap" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-reconcile: ready: promoted line appears before decision" "1" \
@@ -22205,7 +22222,7 @@ echo "Test: select-tick under cap → gap = target − live on the decision line
 sel_tick_setup
 export SEL_LIVE_COUNT=1 SEL_TARGET_N=4
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "under-cap: decision line" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "under-cap: gap drives the graph fan-out width (4 − 1 = 3)" "--top 3" \
   "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
@@ -22216,7 +22233,7 @@ echo "Test: select-tick daemon UNKNOWN → fail open, gap=1"
 sel_tick_setup
 export SEL_LIVE_COUNT_FAIL=1 SEL_TARGET_N=4
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "fail-open: decision line" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "fail-open: gap=1 drives the graph fan-out width" "--top 1" \
   "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
@@ -22234,7 +22251,7 @@ printf 'session=resv-1\nissue=900\ntimestamp=2026-01-01T00:00:00Z\n' \
   > "$DISPATCH_RESERVATION_DIR/900-test"
 export SEL_AGENTS_TSV=$'resv-1\tbusy\tworkerX'
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "effective-live: decision line" "graph 1 t1:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "effective-live: gap = 4 − (1 busy + 1 reserved) = 2 drives graph --top" "--top 2" \
@@ -22251,7 +22268,7 @@ export SEL_LIVE_COUNT=1 SEL_TARGET_N=2
 printf 'session=resv-1\nissue=900\ntimestamp=2026-01-01T00:00:00Z\n' \
   > "$DISPATCH_RESERVATION_DIR/900-test"
 export SEL_AGENTS_TSV=$'resv-1\tbusy\tworkerX'
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "effective-cap: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "effective-cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22272,7 +22289,7 @@ echo "Test: select-tick empty ledger → gap unchanged from pre-ledger gate"
 sel_tick_setup
 export SEL_LIVE_COUNT=1 SEL_TARGET_N=4
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "empty-ledger: decision line" "graph 1 t1:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "empty-ledger: gap = 4 − 1 (RESV=0) drives graph --top" "--top 3" \
@@ -22290,20 +22307,25 @@ esac
 assert_eq "removed flag → unknown flag error, exit 2" "ok" "$status"
 sel_tick_teardown
 
-# --- --manual context-dependent fan-out (#1458) ------------------------------
+# --- --manual context-dependent fan-out (#1458, headroom overage) -----------
 # A bare human-typed /dispatch fans out enough workers to cover available graph
-# work eagerly while honoring the MAX_WORKERS ceiling. It OVERRIDES the
-# pace-curve throttle (a budget pause to TARGET_N=0 still fans out) but HONORS
-# the --exhausted floor and the ceiling:
+# work eagerly while honoring the MAX_WORKERS ceiling as its governing target
+# below the ceiling. It OVERRIDES the pace-curve throttle (a budget pause to
+# TARGET_N=0 still fans out) and, per human-dispatch-is-sovereign, always
+# launches its one highest-ranking-available node even at the ceiling — a
+# bounded, deliberate max_concurrent_workers + 1 overage. Only genuine
+# rate-limit token exhaustion (--exhausted) still blocks a manual dispatch
+# outright:
 #   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)
 #   GAP      = max(0, TARGET_N − LIVE_COUNT)
-#   SPAWN_N  = min(HEADROOM, max(GAP, 1))
+#   SPAWN_N  = max(1, min(max(GAP, 1), HEADROOM))
 # The legacy priority-LABELED bypass count (N_PRIO) died with the legacy
 # selector, so N_PRIO is permanently 0 and SPAWN_N is driven by the pace-curve
-# gap alone. SPAWN_N becomes the `--top` the graph selector fans out over: with a
-# node available (SEL_GRAPH_TARGET), the tick emits a `graph` decision and
-# graph-select-target is invoked `--top SPAWN_N` (logged to graph-select.log).
-# Defaults are LIVE=0, MAX=8.
+# gap alone, clamped by HEADROOM, with a floor of exactly one node re-asserting
+# itself past the ceiling when HEADROOM is 0. SPAWN_N becomes the `--top` the
+# graph selector fans out over: with a node available (SEL_GRAPH_TARGET), the
+# tick emits a `graph` decision and graph-select-target is invoked
+# `--top SPAWN_N` (logged to graph-select.log). Defaults are LIVE=0, MAX=8.
 
 # Case 1: gap0. GAP=0 → SPAWN_N=min(8,max(0,1))=1 → graph --top 1.
 echo "Test: select-tick --manual gap0 → graph fan-out --top 1"
@@ -22331,14 +22353,16 @@ out=$(run_sel_tick --manual)
 assert_eq "manual-gap-clamped: graph selector called --top 2 (headroom clamps gap)" "--top 2" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
 sel_tick_teardown
 
-# Case 4: at-max-live. LIVE=8 → HEADROOM=0 → concurrency-cap, lock released, NO
-# reseed (a manual run is one-shot).
-echo "Test: select-tick --manual at-max-live (HEADROOM=0) → concurrency-cap"
+# Case 4: at-max-live. LIVE=8 → HEADROOM=0 → per human-dispatch-is-sovereign the
+# floor-of-1 re-asserts past the ceiling → SPAWN_N=1 → graph fan-out --top 1
+# (one worker deliberately over the MAX_WORKERS ceiling), NO reseed (a manual
+# run is one-shot regardless of fan-out width).
+echo "Test: select-tick --manual at-max-live (HEADROOM=0) → graph --top 1 (one over ceiling)"
 sel_tick_setup
 export SEL_LIVE_COUNT=8 SEL_TARGET_N=1 SEL_GRAPH_TARGET="node t1 tactic implement"
 out=$(run_sel_tick --manual)
-assert_eq "manual-at-max-live: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "manual-at-max-live: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-at-max-live: graph decision" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-at-max-live: graph selector called --top 1 (floor over ceiling)" "--top 1" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
 assert_eq "manual-at-max-live: no reseed" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
@@ -22371,7 +22395,7 @@ sel_tick_teardown
 echo "Test: select-tick autonomous no-arg at cap, no priority item → concurrency-cap"
 sel_tick_setup
 export SEL_LIVE_COUNT=3 SEL_TARGET_N=0 SEL_EXHAUSTED=ok
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "autonomous-cap: decision line is concurrency-cap" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "autonomous-cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22392,7 +22416,7 @@ export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
 # (the at-cap main-broken bypass, Step 1b) → main-broken decision, spawned
 # lock-free downstream.
 export SEL_MAIN_BROKEN_SHA=deadbeef
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-mainbroken: decision line" "main-broken deadbeef" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-mainbroken: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22411,7 +22435,7 @@ export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=exhausted
 # Even with a graph pace-exempt node available, genuine token exhaustion is the
 # one hard floor: the tick short-circuits BEFORE the pace-exempt probe.
 export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-exhausted: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22432,6 +22456,77 @@ esac
 assert_eq "--manual + number → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
 
+# --- --manual + a node-id-shaped arg → exit 2 (usage error, before the lock) -
+# tactic-graph-explicit-node-dispatch Unit 2: a node-id-shaped positional is now
+# recognized (NODE_ARG), but --manual is the "no specific target" fan-out mode —
+# semantically incompatible with an explicit single-node target. Mirrors the
+# --manual + explicit-number usage-error test above.
+echo "Test: select-tick --manual + node-id-shaped arg → exit 2"
+sel_tick_setup
+err=$("$TMPDIR_TEST/dispatch-select-tick" --manual foo-bar 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"cannot be combined with --manual"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "--manual + node-id → usage error, exit 2" "ok" "$status"
+assert_eq "--manual + node-id: lock not left held" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- explicit node-id, not selectable → node-not-selectable, aux triggers skipped
+# tactic-graph-explicit-node-dispatch Unit 2: an explicit node-id arg calls
+# `graph-select-target --node <id>` instead of the ranked `--top` query. When
+# selection fails (the fake graph selector's default is `empty`, simulating a
+# node absent from candidates or gated out), the tick must emit
+# `node-not-selectable <id>` — NOT fall through to Step 3b's aux triggers
+# (JIT-reminder scan, main-broken check), which would silently substitute an
+# unrelated job for the node the human explicitly asked for.
+echo "Test: select-tick explicit node-id, not selectable → node-not-selectable, no aux triggers"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-jit-scan" <<'FAKE'
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/jit-scan-invoked.log"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-jit-scan"
+out=$(run_sel_tick zzz-nonexistent-node)
+assert_eq "node-not-selectable: decision line" "node-not-selectable zzz-nonexistent-node" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-not-selectable: graph selector called --node <id>" "--node zzz-nonexistent-node" \
+  "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+assert_eq "node-not-selectable: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "node-not-selectable: JIT-reminder scan NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/jit-scan-invoked.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- explicit node-id, exhausted → concurrency-cap, no headroom/pace-curve check
+# The one hard floor the explicit-node path still respects is genuine token
+# exhaustion (mirrors the --manual branch's own EXHAUSTED check). No headroom or
+# MAX_WORKERS ceiling check applies — those are exactly what this path bypasses.
+echo "Test: select-tick explicit node-id + exhausted → concurrency-cap"
+sel_tick_setup
+export SEL_EXHAUSTED=exhausted
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit exhausted: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-explicit exhausted: graph selector NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+assert_eq "node-explicit exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- explicit node-id, selectable → graph decision, pace/cap gate bypassed ---
+# Even with LIVE_COUNT at/over TARGET_N, an explicit node-id dispatch is NOT
+# throttled — the whole point of tactic-graph-explicit-node-dispatch is that a
+# human's explicit dispatch overrides the pace curve.
+echo "Test: select-tick explicit node-id + at-cap live count → still selects (gate bypassed)"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=5
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit at-cap: decision line" "graph 1 foo-bar:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-explicit at-cap: graph selector called --node <id> (not --top)" \
+  "--node foo-bar" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+sel_tick_teardown
+
 # --- AC3 non-fatal guarantee: unwritable log dir does NOT kill the tick -------
 # Point DISPATCH_DECISION_LOG_DIR at a path that cannot be created (a sub-path of
 # an existing regular file). The lib's mkdir -p will fail with ENOTDIR. The
@@ -22446,7 +22541,7 @@ sel_tick_setup
 # failure is the directory creation, not a missing decision_log_append function.
 touch "$TMPDIR_TEST/decisionlog-blocker"
 export DISPATCH_DECISION_LOG_DIR="$TMPDIR_TEST/decisionlog-blocker/sub"
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "AC3 nonfatal: tick exit 0 despite unwritable log dir" "0" "$rc"
 assert_eq "AC3 nonfatal: terminal token is still empty" "empty" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -23026,7 +23121,7 @@ tick_teardown
 echo "Test: dispatch-tick echoes select-tick passthrough + decision"
 tick_setup
 export TICK_DECISION="empty" TICK_SEL_PRE="jit: weekly-review: created #42"
-out=$(run_tick)
+out=$(run_tick) || true
 assert_eq "passthrough: jit line echoed" "1" \
   "$(printf '%s\n' "$out" | grep -cF 'jit: weekly-review: created #42')"
 assert_eq "passthrough: decision echoed" "1" \
@@ -23069,6 +23164,29 @@ esac
 assert_eq "positional arg → usage error, exit 2" "ok" "$status"
 assert_eq "positional arg: select-tick never invoked" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- node-id-shaped positional arg is forwarded to select-tick (raw, no flag) -
+# tactic-graph-explicit-node-dispatch Unit 2: a node-id-shaped positional is now
+# recognized as NODE_ARG and forwarded to dispatch-select-tick as a raw
+# positional (not a flag). Here the fake select-tick emits a
+# `node-not-selectable <id>` decision line (Unit 2's new disposition), and the
+# tick must exit non-zero (1), print a stderr message naming the node, and NOT
+# invoke dispatch-graph-execute.
+echo "Test: dispatch-tick node-id arg forwarded to select-tick; node-not-selectable → exit 1, no graph-execute"
+tick_setup
+export TICK_DECISION="node-not-selectable foo-bar"
+err=$("$TMPDIR_TEST/dispatch-tick" foo-bar 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "node-arg-fwd: select-tick received the raw node-id (no flag)" "foo-bar" \
+  "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
+assert_eq "node-not-selectable: exit 1" "1" "$rc"
+case "$err" in
+  *"foo-bar"*"not selectable"*) status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "node-not-selectable: stderr names the node" "ok" "$status"
+assert_eq "node-not-selectable: no graph-execute call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- headless tick (no CLAUDE_CODE_SESSION_ID) synthesizes a stable id --------
@@ -28591,13 +28709,13 @@ assert_eq "recover fix-checks: stdout is 'fix-checks'" "fix-checks" "$out"
 assert_eq "recover fix-checks: exit 0" "0" "$rc"
 drdp_teardown
 
-# --- Test 6: /fix-conflicts → "fix-conflicts", exit 0 ------------------------
-echo "Test: /fix-conflicts tag → stdout 'fix-conflicts', exit 0"
+# --- Test 6: /dispatch-conflict → "fix-conflicts", exit 0 --------------------
+echo "Test: /dispatch-conflict tag → stdout 'fix-conflicts', exit 0"
 drdp_setup
-_drdp_fixture "$TMPDIR_TEST/fcon.jsonl" "fix-conflicts"
+_drdp_fixture "$TMPDIR_TEST/fcon.jsonl" "dispatch-conflict"
 if out=$("$DRDP" "$TMPDIR_TEST/fcon.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "recover fix-conflicts: stdout is 'fix-conflicts'" "fix-conflicts" "$out"
-assert_eq "recover fix-conflicts: exit 0" "0" "$rc"
+assert_eq "recover dispatch-conflict: stdout is 'fix-conflicts'" "fix-conflicts" "$out"
+assert_eq "recover dispatch-conflict: exit 0" "0" "$rc"
 drdp_teardown
 
 # --- Test 7: /office-hours → empty stdout, non-zero exit ---------------------

@@ -205,6 +205,49 @@ clarifications:
       the /sync-reader artifact owner) for a later /align-tactics round.
       Recorded 2026-07-18 /reading-review chunk 5; author-ratified and descoped
       from the dialog agenda 2026-07-18 /align-strategy round."
+  - question: What did the 2026-07-23 /align-tactics round record, and why did it
+      mint nothing?
+    answer: "Mint-nothing landing plus deferred bookkeeping. (a) Round-1 completion
+      backstamp: rounds was carried at count 0 / last_completed null because the
+      2026-07-13 continuation clarification correctly held it there while the
+      round's final tactic (tactic-review-sitting-skill-generalization) was
+      still phase: implement. That tactic reached done and was pruned 2026-07-19
+      (commit df623fb5, 'graph: reconcile merged/closed tactics'), and the
+      coverage sensor and maintenance actuator
+      (tactic-review-curriculum-coverage-sensor,
+      tactic-align-curriculum-maintenance) were pruned 2026-07-23 — so all three
+      round-1 tooling_goal tactics are done. The completion stamp was owed from
+      2026-07-19 but never hand-made (the bootstrap-interim hand-stamp with no
+      live router); this round makes it: count 1, last_completed 2026-07-19. (b)
+      Coverage snapshot: packages/intentionsutil/scripts/review-coverage.ts run
+      2026-07-23 reports 93 durable nodes, 0 missing a review path — the
+      success_signal's first clause (zero durable-layer nodes without a review
+      path) holds at this snapshot; the frontier-maintenance machinery is
+      complete and there is no coverage hole to decompose against. The second
+      clause (one sitting per cycle re-affirming or amending settled content) is
+      unmet this cycle — no sitting has completed since the 2026-07-18 chunk-5
+      sitting — but that is gated on author office-hours capacity (condition 1,
+      ~30 author-minutes per sitting), not on any missing tactic: the three
+      born-parked dialog instances (tactic-dialog-review-plato-cave,
+      tactic-dialog-review-aristotle-hexis,
+      tactic-dialog-review-aristotle-phronesis) already sit on the frontier
+      awaiting the author, so no decomposition accelerates it. (c) Refreshing
+      the 2026-07-13 continuation clarification's held-out Mode-A
+      world-state/condition branch: its home question resolved 2026-07-23 —
+      tactic-align-audit-legacy-review Decision 3 ratified the /align-audit home
+      for tactic-condition-review-sweep on independent altitude/parsimony merits
+      with its premise corrected. But tactic-condition-review-sweep itself is
+      still status: raw, unbuilt, and serves strategy-explicit-intent, so it
+      stays raw awaiting its OWN /align-tactics finalize — the review-coverage
+      sensor already counts every strategy's standing-conditions review path as
+      covered (via non-empty attributes.conditions), independent of whether the
+      sweep tool is built, so nothing here is blocked on it. The Mode-A
+      world-state branch therefore remains not-yet-mintable on this strategy and
+      is deferred to a still-later round, minted once
+      tactic-condition-review-sweep's separate finalize lands the tool. This
+      round accordingly minted no tactic (frontier machinery complete, coverage
+      total, motion capacity-bound) and stamps last_aligned 2026-07-23. Recorded
+      2026-07-23 /align-tactics round."
 tooling_goals:
   - kind: sensor
     statement: "review-coverage table in the graph digest / align-audit report — per
@@ -246,8 +289,9 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds:
-  count: 0
-  last_completed: null
+  count: 1
+  last_completed: 2026-07-19
+  last_aligned: 2026-07-23
 attributes:
   conditions:
     - office-hours capacity bounds the cadence — ~30 author-minutes of

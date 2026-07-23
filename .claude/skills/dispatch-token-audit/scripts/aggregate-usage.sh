@@ -316,7 +316,7 @@ def cmd_prefix(c):
     # whose skill is one of the dispatch worker phase set (plus the graph-native
     # align family). This alternation must be updated when a new dispatch worker
     # phase skill is added.
-    elif ($firstuser_str | test("<command-name>/(plan-issue|implement|qa-fix|review-fix|fix-checks|fix-conflicts|qa-main|budget-parse-job|resolve-epic|office-hours|align-strategy|align-tactics|align-init)</command-name>")) then "worker"
+    elif ($firstuser_str | test("<command-name>/(plan-issue|implement|qa-fix|review-fix|fix-checks|fix-conflicts|dispatch-conflict|qa-main|budget-parse-job|resolve-epic|office-hours|align-strategy|align-tactics|align-init)</command-name>")) then "worker"
     else "other" end ) as $type
 
 # Peak context across assistant msgs.

@@ -7,7 +7,7 @@
 // object on stdout for the shell caller (`graph-select-target`, `/fix-checks`)
 // to act on and to land via `graph-commit`.
 //
-// The three modes are mutually exclusive:
+// The five modes are mutually exclusive:
 //
 //   --set-fix          Enter the interrupt. Writes
 //                      `execution.fix = { since: <today UTC>, attempt: 1,
@@ -35,25 +35,46 @@
 //                      verdict on the recorded sha is a fresh push awaiting CI,
 //                      not a green resolution). Errors if no interrupt is set.
 //
+//   --spend-attempt    Spend one attempt against the in-flight interrupt:
+//                      writes `execution.fix.attempt + 1`, preserving
+//                      `since`/`pushed_sha`. Called by `/fix-checks` each pass
+//                      it spends against the retry budget. Errors if no
+//                      interrupt is set.
+//
+//   --park-if-capped   Enforce the retry cap (`FIX_ATTEMPT_CAP`,
+//                      `src/transitions.ts`). If `execution.fix.attempt` exceeds
+//                      the cap, writes a first-class `office_hours` park record
+//                      (parity with the legacy `dispatch:fix-checks-attempt-<n>`
+//                      escalation) AND resets `execution.fix.attempt` to 1 in
+//                      the same write, giving a human-cleared node a fresh
+//                      budget. If the cap is not exceeded, makes NO write.
+//                      Called by `graph-select-target` before dispatching a
+//                      node back into the fix interrupt. Errors if no
+//                      interrupt is set.
+//
 // Usage:
 //   node --import tsx/esm apply-fix-state.ts <node-id> \
-//     (--set-fix | --clear-fix | --record-push <sha>) [--dir <intentions-dir>]
+//     (--set-fix | --clear-fix | --record-push <sha> | --spend-attempt | --park-if-capped) \
+//     [--dir <intentions-dir>]
 //
 // Stdout: one JSON object, shape per mode —
-//   set-fix:      { "mode": "set",    "id", "attempt": <n>, "since": <date>, "wrote": true }
-//   clear-fix:    { "mode": "clear",  "id", "phase": <resolved>, "reset": bool, "wrote": true }
-//   record-push:  { "mode": "record", "id", "pushed_sha": <sha>, "wrote": true }
+//   set-fix:        { "mode": "set",        "id", "attempt": <n>, "since": <date>, "wrote": true }
+//   clear-fix:      { "mode": "clear",      "id", "phase": <resolved>, "reset": bool, "wrote": true }
+//   record-push:    { "mode": "record",     "id", "pushed_sha": <sha>, "wrote": true }
+//   spend-attempt:  { "mode": "spend",      "id", "attempt": <n>, "wrote": true }
+//   park-if-capped: { "mode": "park-check", "id", "parked": true, "attempt": <consumed>, "wrote": true }
+//                or { "mode": "park-check", "id", "parked": false, "wrote": false }
 
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readNode, writeNode } from "../src/store.js";
 import type { Execution, FixState } from "../src/schema.js";
-import { REVIEWED_MARKER } from "../src/transitions.js";
+import { FIX_ATTEMPT_CAP, REVIEWED_MARKER } from "../src/transitions.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
 
-type Mode = "set" | "clear" | "record";
+type Mode = "set" | "clear" | "record" | "spend" | "park-check";
 
 interface Args {
   id: string;
@@ -74,7 +95,9 @@ export function parseArgs(argv: string[]): Args {
   let dir = join(repoRoot, "intentions");
   const setMode = (m: Mode): void => {
     if (mode !== null) {
-      throw new Error("apply-fix-state: --set-fix, --clear-fix, and --record-push are mutually exclusive");
+      throw new Error(
+        "apply-fix-state: --set-fix, --clear-fix, --record-push, --spend-attempt, and --park-if-capped are mutually exclusive",
+      );
     }
     mode = m;
   };
@@ -96,6 +119,12 @@ export function parseArgs(argv: string[]): Args {
         pushedSha = v;
         break;
       }
+      case "--spend-attempt":
+        setMode("spend");
+        break;
+      case "--park-if-capped":
+        setMode("park-check");
+        break;
       case "--dir": {
         const v = argv[++i];
         if (v === undefined || v === "") throw new Error("apply-fix-state: --dir requires a directory argument");
@@ -110,7 +139,9 @@ export function parseArgs(argv: string[]): Args {
   }
   if (id === "") throw new Error("apply-fix-state: <node-id> is required");
   if (mode === null) {
-    throw new Error("apply-fix-state: one of --set-fix | --clear-fix | --record-push <sha> is required");
+    throw new Error(
+      "apply-fix-state: one of --set-fix | --clear-fix | --record-push <sha> | --spend-attempt | --park-if-capped is required",
+    );
   }
   return { id, mode, pushedSha, dir };
 }
@@ -124,7 +155,7 @@ export interface FixStateResult {
   mode: Mode;
   id: string;
   wrote: boolean;
-  /** set: the attempt counter written. */
+  /** set/spend: the attempt counter written. park-check (parked): the count of attempts consumed before the park. */
   attempt?: number;
   /** set: the `since` date written. */
   since?: string;
@@ -134,7 +165,152 @@ export interface FixStateResult {
   reset?: boolean;
   /** record: the pushed sha written to `execution.fix.pushed_sha`. */
   pushed_sha?: string;
+  /** park-check: whether the retry cap was exceeded and office_hours was written. */
+  parked?: boolean;
 }
+
+/** The node shape `applyFixState` mutates: a tactic with an `execution` block. */
+type TacticNode = ReturnType<typeof readNode>;
+
+/**
+ * Null-interrupt guard shared by the four modes that require an in-flight
+ * interrupt (`clear`, `spend`, `park-check`, `record`). Mirroring one another,
+ * each mode is meaningless without a set `execution.fix`; refuse with a mode-
+ * specific message rather than proceed. Narrows `currentFix` to non-null.
+ */
+function requireFix(currentFix: FixState | null, id: string, whatFor: string): FixState {
+  if (currentFix === null) {
+    throw new Error(`apply-fix-state: ${whatFor} on ${id} but execution.fix is null (no interrupt in flight)`);
+  }
+  return currentFix;
+}
+
+/**
+ * `--set-fix`: enter the interrupt. Fresh when none is set; a defensive double-
+ * call bumps `attempt` and preserves `since`/`pushed_sha` so an in-flight count
+ * is not clobbered.
+ */
+function applySet(
+  args: Args,
+  node: TacticNode,
+  execution: Execution,
+  currentFix: FixState | null,
+): FixStateResult {
+  const fix: FixState =
+    currentFix === null
+      ? { since: todayUtc(), attempt: 1, pushed_sha: null }
+      : { ...currentFix, attempt: currentFix.attempt + 1 };
+  node.execution = { ...execution, fix };
+  writeNode(args.dir, node);
+  return { mode: "set", id: args.id, wrote: true, attempt: fix.attempt, since: fix.since };
+}
+
+/**
+ * `--clear-fix`: resolve the interrupt. Re-review reset: a fix landed after
+ * review must be re-reviewed, so return the node to `review` when it carries the
+ * reviewed marker — AND strip that marker, so the review pass actually re-runs
+ * (both the selector's phase:review+reviewed emit-guard and check-node-
+ * selection's reviewed-marker guard would otherwise treat the node as already-
+ * reviewed and skip/exit-12 it). `qa-done`/`planned` are kept: only review
+ * re-runs, not qa. When not past review, `phase` is preserved at its ladder
+ * position. The null-interrupt guard also prevents spuriously tripping this
+ * reset (and disarming a valid merge) on a `reviewed` node.
+ */
+function applyClear(
+  args: Args,
+  node: TacticNode,
+  execution: Execution,
+  currentFix: FixState | null,
+): FixStateResult {
+  requireFix(currentFix, args.id, "--clear-fix");
+  const reset = execution.markers.includes(REVIEWED_MARKER);
+  if (reset) node.phase = "review";
+  const markers = reset ? execution.markers.filter((m) => m !== REVIEWED_MARKER) : execution.markers;
+  node.execution = { ...execution, markers, fix: null };
+  writeNode(args.dir, node);
+  return { mode: "clear", id: args.id, wrote: true, phase: node.phase ?? "implement", reset };
+}
+
+/**
+ * `--spend-attempt`: spend one attempt against the in-flight interrupt (the
+ * fix-checks SKILL.md caller consumes this per pass), bumping `attempt` and
+ * preserving `since`/`pushed_sha`.
+ */
+function applySpend(
+  args: Args,
+  node: TacticNode,
+  execution: Execution,
+  currentFix: FixState | null,
+): FixStateResult {
+  const fix = requireFix(currentFix, args.id, "--spend-attempt");
+  const next: FixState = { ...fix, attempt: fix.attempt + 1 };
+  node.execution = { ...execution, fix: next };
+  writeNode(args.dir, node);
+  return { mode: "spend", id: args.id, wrote: true, attempt: next.attempt };
+}
+
+/**
+ * `--park-if-capped`: enforce the retry cap (graph-select-target's enforcement
+ * point). When `attempt` exceeds the cap, write a first-class `office_hours`
+ * park (parity with the legacy `dispatch:fix-checks-attempt-<n>` escalation) and
+ * reset `attempt` to 1 for a fresh human-cleared budget; otherwise make no
+ * write.
+ */
+function applyParkCheck(
+  args: Args,
+  node: TacticNode,
+  execution: Execution,
+  currentFix: FixState | null,
+): FixStateResult {
+  const fix = requireFix(currentFix, args.id, "--park-if-capped");
+  if (fix.attempt <= FIX_ATTEMPT_CAP) {
+    return { mode: "park-check", id: args.id, wrote: false, parked: false };
+  }
+  const consumed = fix.attempt - 1;
+  node.office_hours = {
+    reason:
+      `/fix-checks retry budget exhausted: ${consumed} attempts concluded with PR #${execution.pr ?? "?"} ` +
+      `still red (execution.fix.attempt=${fix.attempt}, since ${fix.since}) — restoring the legacy ` +
+      `dispatch:fix-checks-attempt-<n> escalation.`,
+    since: todayUtc(),
+    recommendation:
+      `Review the fix-checks accumulator (tmp/fix-checks-summary.md in the node's worktree, also posted in PR ` +
+      `comments) to diagnose why ${FIX_ATTEMPT_CAP} automated attempts did not resolve CI. Clear office_hours to ` +
+      `resume automated fix-checks with a fresh retry budget (attempt was reset to 1), or abandon/redesign the ` +
+      `tactic if the current approach cannot work.`,
+  };
+  node.execution = { ...execution, fix: { ...fix, attempt: 1 } };
+  writeNode(args.dir, node);
+  return { mode: "park-check", id: args.id, wrote: true, parked: true, attempt: consumed };
+}
+
+/** `--record-push`: stamp the pushed sha onto an already-set interrupt. */
+function applyRecord(
+  args: Args,
+  node: TacticNode,
+  execution: Execution,
+  currentFix: FixState | null,
+): FixStateResult {
+  const fix = requireFix(currentFix, args.id, "--record-push");
+  if (args.pushedSha === null) {
+    throw new Error("apply-fix-state: --record-push requires a sha (mode is 'record' but pushedSha is null)");
+  }
+  const sha = args.pushedSha;
+  node.execution = { ...execution, fix: { ...fix, pushed_sha: sha } };
+  writeNode(args.dir, node);
+  return { mode: "record", id: args.id, wrote: true, pushed_sha: sha };
+}
+
+const MODE_HANDLERS: Record<
+  Mode,
+  (args: Args, node: TacticNode, execution: Execution, currentFix: FixState | null) => FixStateResult
+> = {
+  set: applySet,
+  clear: applyClear,
+  spend: applySpend,
+  "park-check": applyParkCheck,
+  record: applyRecord,
+};
 
 /**
  * Read the tactic, apply the `execution.fix` mutation, write it back through the
@@ -149,59 +325,7 @@ export function applyFixState(args: Args): FixStateResult {
   }
   const execution: Execution = node.execution ?? defaultExecution(args.id);
   const currentFix: FixState | null = execution.fix ?? null;
-
-  if (args.mode === "set") {
-    // Enter the interrupt. Fresh when none is set; a defensive double-call bumps
-    // `attempt` and preserves `since`/`pushed_sha` so an in-flight count is not
-    // clobbered.
-    const fix: FixState =
-      currentFix === null
-        ? { since: todayUtc(), attempt: 1, pushed_sha: null }
-        : { ...currentFix, attempt: currentFix.attempt + 1 };
-    node.execution = { ...execution, fix };
-    writeNode(args.dir, node);
-    return { mode: "set", id: args.id, wrote: true, attempt: fix.attempt, since: fix.since };
-  }
-
-  if (args.mode === "clear") {
-    // Null-interrupt guard, mirroring `--record-push`: clearing a node that
-    // carries no active interrupt is meaningless, and — worse — would spuriously
-    // trip the re-review reset below on a `reviewed` node (resetting `phase` to
-    // `review` and stripping the marker, forcing a needless re-review and
-    // disarming a valid merge). Refuse rather than proceed unconditionally.
-    if (currentFix === null) {
-      throw new Error(
-        `apply-fix-state: --clear-fix on ${args.id} but execution.fix is null (no interrupt in flight to clear)`,
-      );
-    }
-    // Resolve the interrupt. Re-review reset: a fix landed after review must be
-    // re-reviewed, so return the node to `review` when it carries the reviewed
-    // marker — AND strip that marker, so the review pass actually re-runs (both
-    // the selector's phase:review+reviewed emit-guard and check-node-selection's
-    // reviewed-marker guard would otherwise treat the node as already-reviewed
-    // and skip/exit-12 it). `qa-done`/`planned` are kept: only review re-runs,
-    // not qa. When not past review, `phase` is preserved at its ladder position.
-    const reset = execution.markers.includes(REVIEWED_MARKER);
-    if (reset) node.phase = "review";
-    const markers = reset ? execution.markers.filter((m) => m !== REVIEWED_MARKER) : execution.markers;
-    node.execution = { ...execution, markers, fix: null };
-    writeNode(args.dir, node);
-    return { mode: "clear", id: args.id, wrote: true, phase: node.phase ?? "implement", reset };
-  }
-
-  // record: stamp the pushed sha onto an already-set interrupt.
-  if (currentFix === null) {
-    throw new Error(
-      `apply-fix-state: --record-push on ${args.id} but execution.fix is null (no interrupt in flight to record a push against)`,
-    );
-  }
-  if (args.pushedSha === null) {
-    throw new Error("apply-fix-state: --record-push requires a sha (mode is 'record' but pushedSha is null)");
-  }
-  const sha = args.pushedSha;
-  node.execution = { ...execution, fix: { ...currentFix, pushed_sha: sha } };
-  writeNode(args.dir, node);
-  return { mode: "record", id: args.id, wrote: true, pushed_sha: sha };
+  return MODE_HANDLERS[args.mode](args, node, execution, currentFix);
 }
 
 function main(argv: string[]): void {
