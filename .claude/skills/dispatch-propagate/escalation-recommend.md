@@ -34,7 +34,7 @@ hook applies the park label, and the Stop hook fires on the marker write.
 Use the Agent tool with `subagent_type: general-purpose` and `model: opus`. Pin
 it to Opus regardless of the host skill's own model tier, so recommendation
 quality does not depend on which phase is parking. Some phases run on Sonnet
-(qa-fix, review-fix, fix-checks, fix-conflicts, qa-main); others on Opus
+(qa-fix, review-fix, fix-checks, dispatch-conflict, qa-main); others on Opus
 (plan-issue, implement, resolve-epic, budget-parse-job). The pin makes the
 recommendation tier-independent.
 

@@ -17,10 +17,25 @@
 #
 # The store is read at origin/main ONLY (never a branch, never the working
 # tree): `git archive origin/main intentions` into a temp dir. Selection makes
-# NO graph writes — parks (e.g. a strategy at the rounds cap) are events in the
-# selection log for the transition writer, never writes from here.
+# NO graph writes for eligibility/ordering parks (e.g. a strategy at the rounds
+# cap) — those are events in the selection log for the transition writer.
 #
-# Usage: graph-select-target [--top <n>] [--pace-exempt-only]
+# The ONE exception is the CI-fix interrupt (tactic-fix-interrupt-orthogonal-state):
+# selection is the sole CI-routing authority. On a fix-interruptible ladder phase
+# (implement/qa/review) whose PR CI has CONCLUDED-RED and which carries no active
+# interrupt, the gate ENTERS the interrupt — `apply-fix-state --set-fix` +
+# `graph-commit` (a state-only commit on main, mirroring what transition-node
+# used to do at the transition seam) — and emits the candidate as `fix` the same
+# tick. On CONCLUDED-GREEN of an active interrupt it RESOLVES it — `apply-fix-state
+# --clear-fix` (+ the re-review reset when past review) + `graph-commit`, and
+# disarms auto-merge (`gh pr ready --undo`) — then emits the resolved ladder
+# phase. On a still-red retry that has exhausted the fix-attempt cap (a
+# persistently-red PR), the gate instead parks the node — `apply-fix-state
+# --park-if-capped` + `graph-commit` — writing office_hours and dropping the
+# node out of the eligible set, rather than re-arming another retry forever.
+# These graph-commit writes are the only writes selection makes.
+#
+# Usage: graph-select-target [--top <n>] [--pace-exempt-only] [--node <id>]
 #
 #   --top <n>            Print at most <n> selected nodes (default 1).
 #   --pace-exempt-only   The probe lane for a paced-to-zero worker target
@@ -31,6 +46,13 @@
 #                        nodes authored `pace_exempt: true`. The caller admits
 #                        at most one gate-exempt worker — the flag bypasses the
 #                        pace GATE, not the worker count or the rank order.
+#   --node <id>          Explicit single-node dispatch: bypass rank order and
+#                        --top truncation and consider ONLY the named node id.
+#                        Every existing environmental gate (claim-safety,
+#                        per-phase sensor_gate) still applies verbatim — this
+#                        is a selection-order override, not a gate bypass.
+#                        Mutually exclusive with --top and --pace-exempt-only
+#                        (usage error, exit 2, when combined).
 #
 # Stdout protocol:
 #   node <id> <kind> <phase>   zero to <top> lines, in selection order.
@@ -69,6 +91,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
 
 # The selection log reuses the decision-log appender with its own file: the lib
 # resolves its target from DISPATCH_DECISION_LOG_FILE at source time.
@@ -78,26 +102,38 @@ export DISPATCH_DECISION_LOG_FILE
 source "$SCRIPT_DIR/lib-decision-log.sh" 2>/dev/null || true
 
 TOP=1
+TOP_SET=""
 PACE_EXEMPT_ONLY=""
+NODE_TARGET=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --top)
       [[ $# -ge 2 && "${2:-}" =~ ^[1-9][0-9]*$ ]] \
         || { echo "graph-select-target: --top requires a positive integer" >&2; exit 2; }
-      TOP="$2"; shift 2 ;;
+      TOP="$2"; TOP_SET=1; shift 2 ;;
     --pace-exempt-only) PACE_EXEMPT_ONLY=1; shift ;;
+    --node)
+      [[ $# -ge 2 && -n "${2:-}" ]] \
+        || { echo "graph-select-target: --node requires a non-empty id" >&2; exit 2; }
+      NODE_TARGET="$2"; shift 2 ;;
     *)
       echo "graph-select-target: unknown argument '$1'" >&2
-      echo "usage: graph-select-target [--top <n>] [--pace-exempt-only]" >&2
+      echo "usage: graph-select-target [--top <n>] [--pace-exempt-only] [--node <id>]" >&2
       exit 2 ;;
   esac
 done
+
+if [[ -n "$NODE_TARGET" && ( -n "$TOP_SET" || -n "$PACE_EXEMPT_ONLY" ) ]]; then
+  echo "graph-select-target: --node is mutually exclusive with --top and --pace-exempt-only" >&2
+  echo "usage: graph-select-target [--top <n>] [--pace-exempt-only] [--node <id>]" >&2
+  exit 2
+fi
 
 # --- Selection-log emitter (best-effort, one record per invocation) ----------
 # Accumulators consumed by the EXIT trap. SKIPPED is a JSON array of
 # {id, reason} objects; SELECTED a JSON array of ids; EVENTS the pure
 # selector's freeze/cap/gate events (JSON array).
-MODE=$([[ -n "$PACE_EXEMPT_ONLY" ]] && echo "pace-exempt" || echo "normal")
+MODE=$([[ -n "$NODE_TARGET" ]] && echo "node" || { [[ -n "$PACE_EXEMPT_ONLY" ]] && echo "pace-exempt" || echo "normal"; })
 DISPOSITION=""
 SELECTED_JSON="[]"
 SKIPPED_JSON="[]"
@@ -176,8 +212,7 @@ done
 # main is checked out at the project root). worktree_has_live_session is
 # name-keyed on the basename, so the root resolution is presentational — the
 # basename (the node id) is what is matched against live session names.
-NATIVE_ROOT=$(git -C "$REPO_ROOT" worktree list --porcelain \
-  | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
+NATIVE_ROOT=$(resolve_main_worktree "$REPO_ROOT")
 NATIVE_ROOT="${NATIVE_ROOT:-$REPO_ROOT}"
 
 skip_note() { # <id> <reason>
@@ -185,17 +220,137 @@ skip_note() { # <id> <reason>
     <<<"$SKIPPED_JSON") || true
 }
 
-# sensor_gate <id> <phase> <pr> — the phase's environmental sensor (§3.1).
-#   0 = satisfied; 1 = not satisfied (reason on stdout); 2 = environment error.
+# --- CI-fix interrupt helpers (tactic-fix-interrupt-orthogonal-state) ---------
+# The store writes land in the MAIN checkout's working tree ($NATIVE_ROOT) and
+# are committed to origin/main via graph-commit — the same state-only-commit-on-
+# main convention transition-node/park-node use. NATIVE_ROOT is resolved below,
+# before the per-candidate loop that invokes these.
+
+# _apply_fix <id> <mode-flag...> — run apply-fix-state against the main store.
+# Its JSON result is on stdout for the caller to capture.
+_apply_fix() {
+  ( cd "$NATIVE_ROOT" \
+    && npx tsx packages/intentionsutil/scripts/apply-fix-state.ts "$@" --dir "$NATIVE_ROOT/intentions" )
+}
+
+# _graph_commit_fix <message> <id> — land the on-disk fix-state write on main.
+_graph_commit_fix() {
+  ( cd "$NATIVE_ROOT" \
+    && packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1
+}
+
+# _read_pr_ci <pr> — one gh_pr_view_rest + one CI verdict, into globals
+# _CI_MERGED / _CI_HEAD / _CI_VERDICT. rc 1 when the PR is unreadable.
+_read_pr_ci() {
+  local pr="$1" pv
+  _CI_MERGED=""; _CI_HEAD=""; _CI_VERDICT=""
+  pv=$(gh_pr_view_rest "$pr" 2>/dev/null) || return 1
+  _CI_MERGED=$(jq -r '.mergedAt // empty' <<<"$pv" 2>/dev/null)
+  _CI_HEAD=$(jq -r '.headRefOid // empty' <<<"$pv" 2>/dev/null)
+  [[ -n "$_CI_HEAD" ]] || return 1
+  _CI_VERDICT=$(dispatch_ci_verdict_rest "$_CI_HEAD" 2>/dev/null || echo pending)
+  return 0
+}
+
+# _gate_maybe_interrupt <id> <pr> — for a fix-interruptible ladder phase carrying
+# NO active interrupt: enter `fix` iff the PR's CI has CONCLUDED-RED. On entry it
+# writes execution.fix and lands it on main.
+#   rc 0 — interrupt entered (caller emits `fix` this tick).
+#   rc 1 — no interrupt (caller falls through to the phase's normal gate).
+#   rc 3 — interrupt was due but the write/commit failed (reason printed; skip).
+_gate_maybe_interrupt() {
+  local id="$1" pr="$2"
+  [[ "$pr" == "null" || -z "$pr" ]] && return 1
+  _read_pr_ci "$pr" || return 1               # unreadable PR → do not interrupt
+  [[ -n "$_CI_MERGED" ]] && return 1          # merged-awaiting-reconcile → not an interrupt
+  [[ "$_CI_VERDICT" == "failing" ]] || return 1
+  # CONCLUDED-RED at an interruptible phase, fix null (guaranteed: the router
+  # would have emitted phase `fix` otherwise). Enter the interrupt this tick.
+  if _apply_fix "$id" --set-fix >/dev/null 2>&1 \
+     && _graph_commit_fix "graph: enter fix-interrupt on $id" "$id"; then
+    return 0
+  fi
+  echo "fix-write-failed"
+  return 3
+}
+
+# _gate_fix_active <id> <pr> <pushed_sha> — the candidate already carries an
+# active interrupt (router emitted phase `fix`). Resolve on green, guard/retry
+# otherwise. Prints the phase to emit (rc 0), a skip reason (rc 1), or an env
+# error (rc 2).
+_gate_fix_active() {
+  local id="$1" pr="$2" pushed_sha="$3" out phase
+  if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
+  if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
+  if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+  case "$_CI_VERDICT" in
+    passing)
+      # Resolution: clear the interrupt (+ the re-review reset when past review),
+      # disarm any live auto-merge arm, and emit the resolved ladder phase.
+      out=$(_apply_fix "$id" --clear-fix 2>/dev/null) || { echo "fix-clear-failed"; return 1; }
+      if ! _graph_commit_fix "graph: resolve fix-interrupt on $id" "$id"; then
+        echo "fix-clear-commit-failed"; return 1
+      fi
+      gh pr ready --undo "$pr" >/dev/null 2>&1 || true
+      phase=$(jq -r '.phase // "implement"' <<<"$out" 2>/dev/null) || phase="implement"
+      echo "$phase"; return 0 ;;
+    pending)
+      # Pending-CI guard: the fix worker pushed and CI has not reported on that
+      # exact sha yet — not ready (never misread a pending pushed-sha as green).
+      if [[ -n "$pushed_sha" && "$pushed_sha" != "null" && "$pushed_sha" == "$_CI_HEAD" ]]; then
+        echo "pending-ci-guard"; return 1
+      fi
+      # CI (re)running but not on a recorded push → stay in fix, ready to launch
+      # /fix-checks.
+      echo "fix"; return 0 ;;
+    *)
+      # failing again (a fix attempt did not clear CI). Enforce the retry cap
+      # before re-arming: once FIX_ATTEMPT_CAP completed passes have concluded
+      # red, --park-if-capped writes office_hours (+ budget reset) and this
+      # node leaves the eligible set; otherwise stay in fix, ready to retry.
+      # Do NOT re-clear or re-set the interrupt itself.
+      out=$(_apply_fix "$id" --park-if-capped 2>/dev/null) \
+        || { echo "fix-cap-check-failed"; return 1; }
+      if [[ "$(jq -r '.parked' <<<"$out" 2>/dev/null)" == "true" ]]; then
+        if ! _graph_commit_fix "graph: park $id (fix-attempt cap exhausted)" "$id"; then
+          echo "fix-cap-park-commit-failed"; return 1
+        fi
+        echo "fix-attempt-cap-parked"; return 1
+      fi
+      echo "fix"; return 0 ;;
+  esac
+}
+
+# sensor_gate <id> <phase> <pr> <pushed_sha> — the phase's environmental sensor
+# and CI-routing authority (§3.1; tactic-fix-interrupt-orthogonal-state).
+#   0 = satisfied, the PHASE TO EMIT is on stdout (may differ from <phase>: a
+#       fresh interrupt emits `fix`; a resolved interrupt emits the ladder phase).
+#   1 = not satisfied (skip reason on stdout); 2 = environment error.
 sensor_gate() {
-  local id="$1" phase="$2" pr="$3" rc merged_at
+  local id="$1" phase="$2" pr="$3" pushed_sha="$4" rc merged_at
   case "$phase" in
-    implement|align-tactics)
-      return 0 ;;
-    fix|qa|review)
-      # CI verdict present before fix/qa/review. The node-id branch is the PR
-      # head (§3.4), so dispatch-ci-ready's branch form applies: `waiting`
-      # means a draft PR's checks have not concluded — no actionable verdict.
+    fix)
+      # An active interrupt (router override). Resolve/guard/retry.
+      _gate_fix_active "$id" "$pr" "$pushed_sha"; return $? ;;
+    align-tactics)
+      echo "align-tactics"; return 0 ;;
+    implement)
+      # Interruptible: a red PR at implement enters fix this tick; else ready
+      # (implement has no CI gate of its own).
+      _gate_maybe_interrupt "$id" "$pr"
+      case $? in
+        0) echo "fix"; return 0 ;;
+        3) return 1 ;;
+      esac
+      echo "implement"; return 0 ;;
+    qa|review)
+      # Interruptible: a red PR enters fix this tick; otherwise the existing
+      # CI-verdict-present gate.
+      _gate_maybe_interrupt "$id" "$pr"
+      case $? in
+        0) echo "fix"; return 0 ;;
+        3) return 1 ;;
+      esac
       if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
       # Defense in depth (tactic-graph-census-recurrence Unit 1): a merge that
       # lands between the tick's reconcile-graph-merged sweep and this selection
@@ -210,7 +365,7 @@ sensor_gate() {
       "$SCRIPT_DIR/dispatch-ci-ready" "$id" >/dev/null 2>&1
       rc=$?
       case "$rc" in
-        0) return 0 ;;
+        0) echo "$phase"; return 0 ;;
         1) echo "ci-pending"; return 1 ;;
         *) echo "graph-select-target: dispatch-ci-ready failed (exit $rc) for $id" >&2; return 2 ;;
       esac ;;
@@ -224,7 +379,7 @@ sensor_gate() {
       if ! merged_at=$(gh_pr_view_rest "$pr" 2>/dev/null | jq -r '.mergedAt // empty'); then
         echo "pr-state-unknown"; return 1
       fi
-      [[ -n "$merged_at" ]] && return 0
+      [[ -n "$merged_at" ]] && { echo "main-qa"; return 0; }
       echo "pr-not-merged"; return 1 ;;
     *)
       echo "unknown-phase"; return 1 ;;
@@ -233,10 +388,12 @@ sensor_gate() {
 
 SELECTED_COUNT=0
 SELECTED_LINES=""
-while IFS=$'\t' read -r id kind phase pr pace_exempt; do
+NODE_PRESENT=0
+while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha; do
   [[ -n "$id" ]] || continue
+  [[ -n "$NODE_TARGET" ]] && NODE_PRESENT=1
   ELIGIBLE_COUNT=$(( ELIGIBLE_COUNT + 1 ))
-  (( SELECTED_COUNT >= TOP )) && continue
+  [[ -z "$NODE_TARGET" ]] && { (( SELECTED_COUNT >= TOP )) && continue; }
 
   if [[ -n "$PACE_EXEMPT_ONLY" && "$pace_exempt" != "true" ]]; then
     continue
@@ -247,30 +404,43 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt; do
   # daemon-UNKNOWN into occupied (fail-safe: never double-book a node).
   if reservation_exists "$id"; then
     skip_note "$id" "reserved"
+    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: reserved" >&2
     continue
   fi
   if worktree_has_live_session "$NATIVE_ROOT/.claude/worktrees/$id"; then
     skip_note "$id" "live-session"
+    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: live-session" >&2
     continue
   fi
 
-  reason=$(sensor_gate "$id" "$phase" "$pr")
+  # sensor_gate returns the PHASE TO EMIT on stdout when satisfied — it may
+  # differ from the candidate's `phase` (a fresh CI-fix interrupt emits `fix`
+  # after writing execution.fix; a resolved interrupt emits the resolved ladder
+  # phase after clearing it). On not-satisfied the stdout is the skip reason.
+  emit_phase=$(sensor_gate "$id" "$phase" "$pr" "$pushed_sha")
   rc=$?
   if (( rc == 2 )); then
     exit 2
   elif (( rc == 1 )); then
-    skip_note "$id" "$reason"
+    skip_note "$id" "$emit_phase"
+    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: $emit_phase" >&2
     continue
   fi
 
-  SELECTED_LINES+="node $id $kind $phase"$'\n'
+  SELECTED_LINES+="node $id $kind $emit_phase"$'\n'
   SELECTED_JSON=$(jq -c --arg id "$id" '. + [$id]' <<<"$SELECTED_JSON") || true
   SELECTED_COUNT=$(( SELECTED_COUNT + 1 ))
-done < <(jq -r '.candidates[] | [.id, .kind, .phase, (.pr // "null"), (.pace_exempt | tostring)] | @tsv' \
+done < <(jq -r --arg target "$NODE_TARGET" \
+  '.candidates[] | (if $target != "" then select(.id == $target) else . end) | [.id, .kind, .phase, (.pr // "null"), (.pace_exempt | tostring), (.fix.pushed_sha // "null")] | @tsv' \
   <<<"$SELECTION")
 
 if (( SELECTED_COUNT == 0 )); then
-  DISPOSITION="empty"
+  if [[ -n "$NODE_TARGET" && "$NODE_PRESENT" == "0" ]]; then
+    echo "graph-select-target: node $NODE_TARGET is not selectable (not found, done, parked, blocked, or already reviewed — inspect intentions/$NODE_TARGET.md directly for the reason)" >&2
+    DISPOSITION="not-found"
+  else
+    DISPOSITION="empty"
+  fi
   echo "empty"
   exit 0
 fi

@@ -25,7 +25,10 @@
 #                       tmp/dispatch-worktree marker (graph claiming is the
 #                       reservation ledger + node-id-named sessions), and no
 #                       git-common-dir anchoring — no graph-native path may
-#                       assume the legacy `.bare` layout.
+#                       assume a bare-repo / git-common-dir-anchored layout.
+#                       (The repo is now a standard checkout: git-common-dir is
+#                       `.git` at the repo root. The former `.bare` bare-repo
+#                       layout was retired 2026-07-21.)
 #
 # Both lanes pre-evaluate .envrc via `direnv exec` so Claude's non-interactive
 # subprocess shells have node on PATH (direnv's shell hook only fires for
@@ -36,6 +39,10 @@
 # Reads JSON payload from stdin with one consumed field: .name (the branch
 # name). Prints the final worktree path to stdout for Claude to switch into.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/../skills/dispatch-propagate/scripts/lib-graph-worktree.sh"
 
 WORKTREE_REGISTERED=0
 NEW_PATH=""
@@ -90,8 +97,9 @@ fi
 
 if [ "$LANE" = legacy ]; then
   # --git-common-dir is the same absolute path from any worktree of this repo
-  # (classic .git or bare .bare layout alike), so anchoring there gives every
-  # legacy worktree a consistent, non-nested registry root.
+  # (now `.git` at the repo root; the former `.bare` bare-repo layout was
+  # retired 2026-07-21), so anchoring there gives every legacy worktree a
+  # consistent, non-nested registry root.
   GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) \
     || { echo "[worktree-create] ERROR: git rev-parse --git-common-dir failed" >&2; exit 1; }
   NEW_PATH="$GIT_COMMON_DIR/.claude/worktrees/$BRANCH"
@@ -100,8 +108,7 @@ else
   # where the project root is the worktree with `main` checked out (substrate
   # clarification 23: `main` is checked out at the project root). Resolved from
   # the worktree registry, never from the git common dir.
-  PROJECT_ROOT=$(git worktree list --porcelain \
-    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
+  PROJECT_ROOT=$(resolve_main_worktree) || PROJECT_ROOT=""
   [ -n "$PROJECT_ROOT" ] \
     || { echo "[worktree-create] ERROR: no worktree with 'main' checked out; cannot resolve the project root for node-id worktree '$BRANCH'" >&2; exit 1; }
   NEW_PATH="$PROJECT_ROOT/.claude/worktrees/$BRANCH"

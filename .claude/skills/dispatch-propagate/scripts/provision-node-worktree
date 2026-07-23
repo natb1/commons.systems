@@ -12,7 +12,7 @@
 #      remote branch, or a local branch named <node-id> when present).
 #   3. Merge origin/main into the branch — the merged-tree guarantee every
 #      phase runs under. A conflict is NOT resolved here (exit 11; the caller
-#      routes /fix-conflicts or parks).
+#      routes /dispatch-conflict or parks).
 #   4. CI-ready gate where a PR exists (dispatch-ci-ready, branch form): a
 #      draft PR whose checks have not concluded is not actionable (exit 10).
 #   5. direnv warm-up so the agent's non-interactive subshells have node on
@@ -25,7 +25,7 @@
 #   0   provisioned (or reused), merged clean, CI verdict actionable.
 #   10  ci-waiting: a draft PR's checks are still in progress. Retry next tick.
 #   11  merge-conflict: origin/main does not merge clean (merge aborted; the
-#       tree is left unmodified). The caller routes /fix-conflicts (a tactic
+#       tree is left unmodified). The caller routes /dispatch-conflict (a tactic
 #       with a PR) or parks the node.
 #   12  stale-selection: the node's directive changed after selection (pruned,
 #       phase advanced, parked, or a serving strategy's substance edited). The
@@ -42,6 +42,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
 
 NODE_ID="${1:-}"
 SELECTED_PHASE="${2:-}"
@@ -55,14 +57,9 @@ if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || [[ "$NODE_ID" =~ ^[0-9
 fi
 
 # Project root = the worktree with `main` checked out (substrate clarification
-# 23: `main` is checked out at the project root). DISPATCH_GRAPH_MAIN_WORKTREE
-# is the test override, authoritative when set.
-if [[ -n "${DISPATCH_GRAPH_MAIN_WORKTREE:-}" ]]; then
-  PROJECT_ROOT="$DISPATCH_GRAPH_MAIN_WORKTREE"
-else
-  PROJECT_ROOT=$(git worktree list --porcelain 2>/dev/null \
-    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
-fi
+# 23: `main` is checked out at the project root). resolve_main_worktree
+# honors DISPATCH_GRAPH_MAIN_WORKTREE, the test override, when set.
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
   echo "provision-node-worktree: cannot resolve the project root (no worktree with 'main' checked out)" >&2
   exit 2

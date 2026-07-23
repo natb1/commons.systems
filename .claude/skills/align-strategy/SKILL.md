@@ -2,9 +2,23 @@
 name: align-strategy
 description: Interview-driven recording of a `strategy-*` intention node — the graph-native successor to `/file-issue`'s requirements-definition role. Frames the input as a new strategy or an edit to an existing one, runs a Socratic dialectic to fix intent/placement/benefit/signal/conditions, advises on delegation capture, retains tactical byproducts as draft tactic nodes, and lands the record via `graph-commit`. On-demand only; never files a GitHub issue.
 user-invocable: true
+model: opus
 ---
 
 # Align Strategy
+
+**On the `model` field's enforcement (strategy-token-economy clarification 10,
+2026-07-16):** `/align-strategy` is `user-invocable: true` — it runs on the
+interactive main loop, not via a `context: fork` subagent launch. A `model:`
+field in frontmatter is confirmed honored for `context: fork` skills; for
+`user-invocable` main-loop skills like this one, honoring is unconfirmed. This
+skill stays whole-session Opus because its interview dialectic is
+non-delegable and it has no dispatch launch path to carry an explicit
+`model: opus` argument the way `/align-tactics`' Step 3 subagent launch does.
+If the harness does not honor this field on the interactive path, the default
+here is intended-not-guaranteed — backed by the token audit's by-node/by-phase
+attribution (`strategy-token-economy`'s sensor) reading after the fact whether
+the session actually ran on Opus.
 
 `/align-strategy [optional requirement text]` records or revises a
 `strategy-*` intention node under interview. It supersedes `/file-issue`'s
@@ -302,8 +316,8 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    boldness + accept-as-deferral, context delivered inside the tool). Record
    the resolution as a dated `clarifications` entry in the adopt/diverge
    shape — either the strategy adopts the rival framing, or it diverges
-   from it with the reason stated — ending with a provenance sentence in the
-   step-2.8 convention.
+   from it with the reason stated — carrying a dated provenance clause per
+   the step-2.8 convention.
 6. **Signal.** Draft a `success_signal` — `{observable, sensor, threshold,
    is_proxy}` — and confirm it names something a sensor can actually read.
    A strategy with no plausible sensor is a sign the intent is still too
@@ -314,19 +328,65 @@ recommendation on trust, never a quiet drop. When the author accepts one:
 8. **Edge cases and consequences.** For each of the above, surface at
    least one edge case or downstream consequence and resolve it with the
    author. Every resolution becomes a dated `clarifications` entry —
-   `{question, answer}` where `answer` ends with a provenance sentence in
-   the existing convention, e.g. `"...Recorded 2026-07-05 interview."`
-   (get the date via `date -u +%Y-%m-%d`, never hand-guessed).
+   `{question, answer}` where `answer` carries a dated provenance clause:
+   an event verb (Recorded / Amended / Reviewed / clarified / adopted,
+   etc.) plus an ISO date, placed wherever it reads best in the sentence —
+   a front-loaded parenthetical is preferred, e.g.
+   `"(Recorded 2026-07-05 interview.) ..."`, but any placement is accepted.
+   The newest ISO date anywhere in the answer is its effective date — the
+   `readingDate()` contract (`packages/intentionsutil/src/router.ts`)
+   extracts it verb-agnostically, and `coverage.ts`'s `lastReviewedOf`
+   depends on it. An amendment adds a new dated clause rather than rewriting
+   the old one, so the history of resolutions stays legible. Get the date
+   via `date -u +%Y-%m-%d`, never hand-guessed. `validateGraph` rule 17
+   mechanically enforces the date-presence half of this convention; the
+   event verb is documented style, not linted.
 9. **Design-canvas support (UI-design requirements only).** When a
    decision is about UI shape and text underspecifies it, supplement
    `AskUserQuestion` with visual aids: build mockup/variant artifacts on
    `@commons-systems/ds` and sync them to the claude.ai/design canvas via
    `DesignSync`, so the author disambiguates by pointing at a variant.
+   For a chart, dashboard, or data-viz requirement, first load the
+   `/dataviz` built-in skill — its procedure governs the recorded design:
+   form chosen by the data's job (including its "is it even a chart" test),
+   color assigned by role (categorical/sequential/diverging/status) never by
+   rank, the categorical palette run through `/dataviz`'s validator script
+   (never eyeballed), mark specs and spacers, a default hover layer, and an
+   accessibility pass (legend for ≥2 series, table view, a selected — not
+   auto-flipped — dark mode). `/dataviz` and the design canvas compose, not
+   compete: `/dataviz` supplies the design method and its computable checks;
+   the canvas still supplies the mockup/variant artifacts for author
+   disambiguation, now built to follow `/dataviz`.
    Canvas artifacts are interview aids, not deliverables — the resolution
    they produce is recorded as an ordinary dated clarification like any
    other. Caveat: a freshly synced component is absent from the canvas
    until the project is opened/refreshed — warn the author if this is
    their first look at a same-session sync.
+10. **Persistent-layer ownership gate.** Whenever this interview is about to
+    record standing structure — a node that owns a `success_signal` that is
+    read on an ongoing basis, a node carrying a standing `attention`
+    boost/override,
+    or any node that other machinery permanently references — the recorded
+    owner must be `kind: strategy` (or `virtue`), never a tactic. Tactics are
+    transient by definition: they complete and leave the selectable graph.
+    If a tactic is proposed as a standing owner, surface it as an interview
+    question, never record-and-fix-later: recommend the owning strategy, and
+    propose creating one if none exists (`strategy-main-health` is the worked
+    precedent, created 2026-07-13 for exactly this reason). Resolution lands
+    as a dated `clarifications` entry per the step-2.8 provenance convention.
+11. **Layer-placement gate.** Before recording any interview outcome, classify
+    its content against kind-tactic's authoring test (`intentions/kind-tactic.md`,
+    2026-07-21 clarification, "Where does an interview outcome land — strategy
+    layer or tactic layer?"): a standing requirement — one that must still hold
+    after every tactic currently serving the strategy completes and is pruned —
+    lands as a strategy or kind clarification; a completable change lands as a
+    draft tactic (Step 4); a split outcome lands as both, the invariant as a
+    clarification and its implementing fix as a tactic. Open-children
+    orthogonality and freeze/re-stamp cost are **never** placement inputs — they
+    govern only the materiality classification's blast radius (see
+    "Documentation completeness over commit size" and "Materiality-scoped
+    freeze", below), a separate, later decision. Cite kind-tactic's test; do
+    not restate its rationale here.
 
 **The `/file-issue` 8-category evaluation, folded into the steps above**
 (so nothing from the coverage matrix silently drops):
@@ -407,6 +467,12 @@ review-phase finding, not something this skill should ever produce.
 
 ## Step 5 — Record
 
+Before constructing the JSON to land, re-confirm that no node about to be
+recorded this round — as a `success_signal` owner or a standing `attention`
+boost/override carrier — is `kind: tactic`. This is the same gate as dialectic
+step 10, restated here as the final pre-write check so a resolution made earlier
+in a long interview is not silently dropped by the time the JSON is constructed.
+
 Write the full node through `write-node.ts` — never hand-edit the YAML
 frontmatter:
 
@@ -473,6 +539,82 @@ If `graph-commit` exits 1 having printed a parking message, the node
 landed with `office_hours` set instead of the intended content (a
 concurrent-edit conflict) — tell the author and stop; do not retry
 automatically.
+
+**Scope-inert re-stamp — protect a tactic's own scope custody.** If this
+round's edit touched the **body** (not just frontmatter) of an in-flight
+tactic — a node with a phase set, i.e. an open child (not `draft`, not
+`done`), the same population the Materiality-scoped-freeze section below
+discusses — then that body edit trips the tactic's own chain-of-custody
+scope gate: the worktree-local `.claude/worktrees/<id>.scope-fingerprint`
+stamp no longer matches the tactic's current body fingerprint, and the gate
+demotes the tactic back to `implement`, discarding its qa/review custody.
+That is correct for a real plan-substance change, but this interview
+sometimes must edit an open tactic's body for a **scope-inert** reason — a
+reconciliation note, a drift-review correction, a provenance annotation, or
+any other body edit clarification 38's amendment-completeness bar produces —
+where the plan substance is unchanged. For those, the demotion is spurious.
+
+Classify this round's own edit, per tactic, as **scope-inert** (plan
+substance unchanged — e.g. a provenance/reconciliation annotation) versus
+**material or unsure**. The rule is fail-closed: **only** a confident
+scope-inert verdict re-stamps; on **any** doubt — including a merely
+plausible substance change — do nothing further here. Leave the stamp
+untouched and let custody demote the tactic exactly as it does today. That
+demotion-on-doubt is the existing correct behavior, not a failure mode to
+work around.
+
+For each tactic whose edit is confidently scope-inert, **after** the body
+edit has landed via `graph-commit` in this **same** round (so it is on
+origin/main), run:
+
+```bash
+npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>
+```
+
+It must run post-`graph-commit`: the script reads the tactic's current
+on-disk body and the current `origin/main` sha to compute the stamp, so a
+pre-landing run would stamp stale content. It re-writes **only** the
+worktree-local `.scope-fingerprint` file — it is never a node write and
+never a `graph-commit` of its own.
+
+Record the classification in this round's own record/summary — the
+scope-inert verdict and the tactic ids re-stamped — as the audit trail the
+doctrine requires.
+
+This is a **separate** stamp from the Materiality-scoped-freeze section that
+follows, not an extension of it. That section's `execution.strategy_fingerprint`
+freeze protects open children broadly against **strategy**-substance drift;
+this step's worktree-local `.scope-fingerprint` re-stamp protects a single
+**tactic**'s own scope-custody gate from being tripped by a scope-inert edit
+to that tactic's own body. Two unrelated stamps, two unrelated mechanisms —
+do not conflate them.
+
+**Documentation completeness over commit size.** When an interview outcome is
+materially a property of the strategy under edit (an invariant of its
+contract, a resolved edge case, a doctrine correction), record it as a
+strategy clarification on that strategy — never relocate it to a draft tactic,
+or omit it, to keep the commit small or to avoid a re-stamp. Commit size is
+never a reason to put documentation in the wrong place; the materiality-scoped
+freeze below is what keeps a warranted clarification's *blast radius* small —
+it is not a reason to avoid recording the clarification itself. Whether the
+outcome belongs in the persistent layer at all is decided upstream, by
+dialectic step 11 (Layer-placement gate); this section governs only the blast
+radius of a placement already made there.
+
+**Measure freeze/re-stamp cost via the authoritative predicate, never a
+grep.** If a recording or materiality decision turns on how many open children
+a clarification would freeze, compute the actual set with `readNode`
+(`packages/intentionsutil/src/store.ts`, re-exported via the package index
+barrel) + `isFingerprintStale`
+(`packages/intentionsutil/src/transitions.ts`) — or
+`strategyFingerprint` (`packages/intentionsutil/src/router.ts`) plus the same
+per-child stamp read the router's selector uses — never a text `grep` over
+`strategy_fingerprint`. A `grep -c` (or similar) over that field counts the
+key line itself, so a null-valued stamp (`strategy_fingerprint: null` — not
+stale, per `isFingerprintStale`) is indistinguishable from a real one in the
+grep count and inflates the estimate. A cost estimate that drives a recording
+or materiality decision must come from the same predicate the router uses, not
+a text search.
 
 **Materiality-scoped freeze — classify each open child.** If this is an edit
 to a strategy that has open (non-draft, non-`done`) child tactics with an

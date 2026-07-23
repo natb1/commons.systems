@@ -118,6 +118,45 @@ describe("evaluateSelection", () => {
     expect(r.exitCode).toBe(0);
   });
 
+  it("passes a fix selection while execution.fix is set (ladder phase preserved)", () => {
+    const dir = tempDir();
+    seed(
+      dir,
+      anode({
+        id: "tactic-fx",
+        kind: "tactic",
+        phase: "qa", // real ladder phase preserved; the interrupt is orthogonal
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: null,
+          fix: { since: "2026-07-18", attempt: 1, pushed_sha: null },
+        },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-fx", selectedPhase: "fix", dir, stamp: null });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("exit 12 on a fix selection once execution.fix was cleared (interrupt resolved since selection)", () => {
+    const dir = tempDir();
+    seed(
+      dir,
+      anode({
+        id: "tactic-fx",
+        kind: "tactic",
+        phase: "qa",
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null, fix: null },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-fx", selectedPhase: "fix", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/selected fix but tactic-fx carries no execution\.fix interrupt/);
+  });
+
   it("exit 12 when parked first-class (office_hours set after selection)", () => {
     const dir = tempDir();
     seed(

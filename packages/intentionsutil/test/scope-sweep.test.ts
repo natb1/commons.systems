@@ -52,17 +52,17 @@ function stamp(stampDir: string, id: string, fingerprint: string, sha = "abc1234
 }
 
 describe("listScopeStaleTactics", () => {
-  it("returns a stale fix/qa/review node whose stamp no longer matches", () => {
+  it("returns a stale qa/review node whose stamp no longer matches", () => {
     const dir = tempDir("scope-sweep-store-");
     const stampDir = tempDir("scope-sweep-stamps-");
-    for (const phase of ["fix", "qa", "review"] as const) {
+    for (const phase of ["qa", "review"] as const) {
       const id = `tactic-${phase}`;
       seed(dir, anode({ id, kind: "tactic", phase }));
       // A deliberately-wrong stamp: the current scope has drifted from it.
       stamp(stampDir, id, "f".repeat(64));
     }
     const result = listScopeStaleTactics(listNodes(dir), dir, stampDir, new Set());
-    expect(result.sort()).toEqual(["tactic-fix", "tactic-qa", "tactic-review"]);
+    expect(result.sort()).toEqual(["tactic-qa", "tactic-review"]);
   });
 
   it("excludes a node whose stamp matches the current scope fingerprint", () => {
@@ -96,7 +96,7 @@ describe("listScopeStaleTactics", () => {
   it("excludes a stale node whose id is in the live set", () => {
     const dir = tempDir("scope-sweep-store-");
     const stampDir = tempDir("scope-sweep-stamps-");
-    seed(dir, anode({ id: "tactic-live", kind: "tactic", phase: "fix" }));
+    seed(dir, anode({ id: "tactic-live", kind: "tactic", phase: "qa" }));
     stamp(stampDir, "tactic-live", "f".repeat(64));
     expect(listScopeStaleTactics(listNodes(dir), dir, stampDir, new Set(["tactic-live"]))).toEqual([]);
   });

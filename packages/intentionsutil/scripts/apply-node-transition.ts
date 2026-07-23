@@ -9,13 +9,15 @@
 //
 // This script authors NO markdown and makes NO git/gh calls — the wrapper
 // (`.claude/skills/dispatch-propagate/scripts/transition-node`) owns the
-// origin/main reads, the CI/mergeability sensors, and the graph-commit landing.
+// origin/main reads, the mergeability sensor, and the graph-commit landing.
 // Splitting the decision+mutation here keeps it exercised by the pure
-// `transitions` unit tests and store round-trip, not buried in bash.
+// `transitions` unit tests and store round-trip, not buried in bash. The
+// forward decision is CI-blind (a CI-fix interrupt is the selector's job via
+// `execution.fix`), so this script no longer takes a CI verdict.
 //
 // Usage:
 //   node --import tsx/esm apply-node-transition.ts <node-id> \
-//     [--ci passing|failing|unknown] [--scope-stale] [--strategy-stale] \
+//     [--scope-stale] [--strategy-stale] \
 //     [--set-pr <n>] [--strategy-fingerprint <strategy-id>=<hash> ...] \
 //     [--strategy-sha <sha>] [--dir <intentions-dir>]
 //
@@ -44,7 +46,6 @@ import {
   addMarker,
   decideTransition,
   hasNeedsMainResidue,
-  type CiVerdict,
 } from "../src/transitions.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -52,7 +53,6 @@ const repoRoot = dirname(dirname(dirname(scriptDir)));
 
 interface Args {
   id: string;
-  ci: CiVerdict;
   scopeStale: boolean;
   strategyStale: boolean;
   setPr: number | null;
@@ -63,7 +63,6 @@ interface Args {
 export function parseArgs(argv: string[]): Args {
   const out: Args = {
     id: "",
-    ci: "unknown",
     scopeStale: false,
     strategyStale: false,
     setPr: null,
@@ -75,14 +74,6 @@ export function parseArgs(argv: string[]): Args {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     switch (a) {
-      case "--ci": {
-        const v = argv[++i];
-        if (v !== "passing" && v !== "failing" && v !== "unknown") {
-          throw new Error(`apply-node-transition: --ci must be passing|failing|unknown, got '${v}'`);
-        }
-        out.ci = v;
-        break;
-      }
       case "--scope-stale":
         out.scopeStale = true;
         break;
@@ -183,28 +174,19 @@ export function applyNodeTransition(args: Args): ApplyResult {
 
   const decision = decideTransition({
     phase: prevPhase,
-    markers: execution.markers,
-    ci: args.ci,
     hasResidue,
     scopeStale: args.scopeStale,
     strategyStale: args.strategyStale,
   });
 
   // A ladder phase completes cleanly when the tactic advances off it (or, for
-  // review, arms the merge). On a fix interrupt, a hold, or a demotion the
-  // phase did not complete, so no marker is written.
+  // review, arms the merge). On a hold or a demotion the phase did not complete,
+  // so no marker is written. The decision is CI-blind and never routes into
+  // `fix`, so there is no fix-interrupt case to exclude here.
   const marker = PHASE_COMPLETION_MARKER[prevPhase];
   const advanced =
-    decision.armMerge ||
-    (!decision.hold && !decision.demote && decision.phase !== "fix" && decision.phase !== prevPhase);
+    decision.armMerge || (!decision.hold && !decision.demote && decision.phase !== prevPhase);
   if (marker !== undefined && advanced) execution = addMarker(execution, marker);
-
-  // Strip any markers the decision cleared (the fix interrupt clears qa-done and
-  // reviewed so a resume out of fix re-runs qa and review). Runs for every
-  // decision carrying clearMarkers; a demotion below wholesale-clears anyway.
-  if (decision.clearMarkers.length > 0) {
-    execution = { ...execution, markers: execution.markers.filter((m) => !decision.clearMarkers.includes(m)) };
-  }
 
   // Apply the phase write. A demotion clears the completion markers so the
   // re-selected implement worker re-runs the ladder against the new scope.
