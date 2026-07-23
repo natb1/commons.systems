@@ -31,10 +31,10 @@ GUARD_TMPDIR="$WORK/tmp"
 mkdir -p "$GUARD_TMPDIR"
 
 run_guard() {
-  local primary="$1" subcmd="$2" label="$3"
+  local primary="$1" subcmd="$2" label="$3" session="${4:-test-session}"
   (
     cd "$CUR"
-    DISPATCH_GRAPH_MAIN_WORKTREE="$primary" TMPDIR="$GUARD_TMPDIR" "$GUARD" "$subcmd" "$label"
+    CLAUDE_CODE_SESSION_ID="$session" DISPATCH_GRAPH_MAIN_WORKTREE="$primary" TMPDIR="$GUARD_TMPDIR" "$GUARD" "$subcmd" "$label"
   )
 }
 
@@ -137,5 +137,49 @@ run_guard "$PRIMARY" check never-baselined5 >"$STDOUT5C" 2>"$STDERR5C"
 STATUS5C=$?
 set -e
 assert_eq "case5 check: exits 2 when baseline never ran" "2" "$STATUS5C"
+
+# ---- Case 6: check consumes the baseline (deleted after read) -------------
+# After a successful check, a SECOND check for the same label — with no
+# intervening baseline — must exit 2. This proves the snapshot is removed once
+# read, so a leftover cannot later be mistaken for a skipped run's baseline
+# (red-team-1).
+
+run_guard "$PRIMARY" baseline consume6 >/dev/null 2>&1
+set +e
+run_guard "$PRIMARY" check consume6 >/dev/null 2>&1
+STATUS6C1=$?
+run_guard "$PRIMARY" check consume6 >/dev/null 2>&1
+STATUS6C2=$?
+set -e
+assert_eq "case6 first check: exits 0 on clean primary checkout" "0" "$STATUS6C1"
+assert_eq "case6 second check: exits 2 — baseline was consumed, not stale-reused" "2" "$STATUS6C2"
+
+# ---- Case 7: baseline/check pair is session-scoped ------------------------
+# A baseline written under one session must not satisfy a check running under a
+# DIFFERENT session — otherwise a leftover snapshot from another session could
+# mask a run whose own baseline was skipped (red-team-1).
+
+run_guard "$PRIMARY" baseline crosssession7 "session-A" >/dev/null 2>&1
+set +e
+run_guard "$PRIMARY" check crosssession7 "session-B" >/dev/null 2>&1
+STATUS7C=$?
+set -e
+assert_eq "case7 check: exits 2 — a different session's baseline does not count" "2" "$STATUS7C"
+
+# ---- Case 8: missing CLAUDE_CODE_SESSION_ID fails loud --------------------
+# Without a session id the snapshot filename cannot be scoped to this run, so
+# the guard must refuse rather than degrade to a collidable filename.
+
+STDERR8="$WORK/stderr-8"
+set +e
+(
+  cd "$CUR"
+  CLAUDE_CODE_SESSION_ID="" DISPATCH_GRAPH_MAIN_WORKTREE="$PRIMARY" TMPDIR="$GUARD_TMPDIR" \
+    "$GUARD" baseline nosession8 2>"$STDERR8"
+)
+STATUS8=$?
+set -e
+assert_eq "case8 baseline: exits 2 when CLAUDE_CODE_SESSION_ID is unset" "2" "$STATUS8"
+assert_contains "case8 stderr: names CLAUDE_CODE_SESSION_ID" "CLAUDE_CODE_SESSION_ID" "$(cat "$STDERR8")"
 
 report_results

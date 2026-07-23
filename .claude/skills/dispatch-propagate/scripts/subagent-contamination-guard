@@ -43,7 +43,25 @@ if [[ -z "$LABEL" ]]; then
 fi
 
 CUR="$(git rev-parse --show-toplevel)"
-SNAP="$TMPDIR/contamination-$(git rev-parse --show-toplevel | tr '/' '_')-${LABEL}.baseline"
+
+# The baseline snapshot must be unique to THIS session's baseline/check pair.
+# CLAUDE_CODE_SESSION_ID is a stable UUID exported into every .claude session's
+# environment (the same guarantee dispatch-acquire-lock relies on): constant
+# across the separate Bash tool calls that run `baseline` then `check`, and
+# distinct per session. Scoping the filename by it means a leftover snapshot
+# from a DIFFERENT session can never satisfy `check`'s existence test for this
+# session, so a run whose `baseline` step was skipped correctly hits the
+# missing-baseline exit 2 (Case 5) instead of silently diffing against an
+# unrelated prior session's snapshot and masking real contamination
+# (red-team-1). Fail loud if it is unset rather than degrade to a collidable
+# filename.
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
+if [[ -z "$SESSION_ID" ]]; then
+  echo "subagent-contamination-guard: CLAUDE_CODE_SESSION_ID is unset — cannot scope the baseline snapshot to this session, so a stale snapshot from another run could mask contamination. Run inside a .claude session." >&2
+  exit 2
+fi
+
+SNAP="$TMPDIR/contamination-${SESSION_ID}-$(printf '%s' "$CUR" | tr '/' '_')-${LABEL}.baseline"
 
 if [[ "$SUBCOMMAND" == "baseline" ]]; then
   PRIMARY="$(resolve_main_worktree 2>/dev/null || true)"
@@ -66,15 +84,34 @@ if [[ ! -f "$SNAP" ]]; then
   exit 2
 fi
 
-FIRST_LINE="$(head -n1 "$SNAP" || true)"
-if [[ "$FIRST_LINE" == "SKIP" ]]; then
+# Consume the baseline: read its contents, then delete the file immediately so
+# it can never linger to be mistaken for a later run's baseline. Combined with
+# the session-scoped filename above, this guarantees a run whose `baseline` step
+# was skipped hits the missing-baseline exit 2 above rather than silently
+# diffing against a stale snapshot left by a prior run (red-team-1).
+BASELINE="$(cat "$SNAP")"
+rm -f "$SNAP"
+
+if [[ "$(head -n1 <<<"$BASELINE")" == "SKIP" ]]; then
   exit 0
 fi
 
 PRIMARY="$(resolve_main_worktree 2>/dev/null || true)"
 
+# The baseline reached this diffing path only because it snapshotted a real,
+# non-empty primary checkout (an empty/self primary writes SKIP and check
+# returns above). So the primary MUST still resolve now. If it does not, refuse
+# to pass: an empty PRIMARY here would make `git -C ""` fail inside the command
+# substitution (where set -e does not fire), leave AFTER empty, and silently
+# report "no contamination" — a false-negative in a guard whose whole job is
+# catching lost work. Fail loud instead of degrading to a clean pass.
+if [[ -z "$PRIMARY" || ! -d "$PRIMARY" ]]; then
+  echo "subagent-contamination-guard: the primary checkout could not be resolved at check time (resolve_main_worktree returned '$PRIMARY') though the baseline snapshotted a real one — cannot inspect it for contamination. Refusing to report a clean pass." >&2
+  exit 2
+fi
+
 AFTER="$(git -C "$PRIMARY" status --porcelain)"
-NEW="$(comm -13 <(sort "$SNAP") <(sort <<<"$AFTER"))"
+NEW="$(comm -13 <(sort <<<"$BASELINE") <(sort <<<"$AFTER"))"
 
 if [[ -z "$NEW" ]]; then
   exit 0
