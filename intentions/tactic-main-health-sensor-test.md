@@ -19,13 +19,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-main-health-sensor-test
   pr: 2943
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
 validates: []
@@ -166,3 +167,10 @@ and `scripts`, so `tsc --noEmit` typechecks both the extraction and the new
 test.)
 
 **Source PR:** #2919 (`tactic-graph-main-self-heal`).
+
+## needs-main residue
+
+### 6. Real mainHealthSensor.read() production output against the live repo-health binary
+- URL path: current
+- Expected outcome: The real-path sensor reading continues to appear correctly in strategy-main-health's recorded readings after this change lands, with no regression from the extraction.
+- Finding: the real `repo-health` binary's output depends on the live origin/main CI state and is only observable through the downstream read-sensors reading, not assertable in this tree; the extraction is verbatim (confirmed by grep against `read-sensors.ts`) so real behavior is preserved by construction, and correctness is confirmed by downstream sensor observation. Planned deferral — measured downstream, not at merge time.
