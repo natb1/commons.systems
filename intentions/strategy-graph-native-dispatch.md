@@ -1157,6 +1157,48 @@ clarifications:
       strategy_fingerprint was re-stamped in this same commit rather than left
       to freeze. It was classified on the substance of the delta, not on its
       rank."
+  - question: What does an office_hours park assert, and may graph hygiene (census)
+      ever park?
+    answer: "(Recorded 2026-07-23 /align-strategy interview.) An office_hours park
+      asserts: no autonomous path forward exists under current graph direction —
+      a human is required. Author-intention decisions and genuine escalations
+      (crash-loop sweep parks, true-conflict parks, provision failures) both
+      qualify; owed mechanical labor never does. Graph hygiene
+      (census/reconciliation) therefore never parks: direction exists, only
+      labor is owed — a hygiene hold is modeled as a blocked_by edge to a
+      tracked node (a fix-tactic for a mechanical hold; a question-scoped
+      born-parked review item when the hold is a genuine author-intention
+      question), never as a park on the hygiene node itself. Observable: the
+      office-hours queue contains no hygiene/census-labor parks (sensor:
+      office-hours-select --list with each park reason classified; threshold
+      zero). Motivating failure: the 2026-07-11 census node sat parked 12 days
+      while debt grew 52 to 62; its park was converted to three blocked_by edges
+      and cleared in this round's commit."
+  - question: What is the greenfield design for graph hygiene (census), and why does
+      it require no AI session?
+    answer: "(Recorded 2026-07-23 /align-strategy interview; author-directed.)
+      Greenfield: census is a scripted dispatch-tick step — not a node, not an
+      AI session. Every tick: enumerate done-but-present nodes; prune only those
+      whose completion verifies mechanically (recorded execution.pr with
+      mergedAt set, or a recorded graph-commit sha); edge repair (strip pruned
+      ids from live blocked_by) is scripted; one batched graph-commit. The
+      drain-time doctrine-home check is eliminated by construction:
+      kind-tactic's authoring-time layer-placement gate (2026-07-21) keeps
+      durable content out of transient tactic bodies, and git history retains
+      pruned bodies as backstop. Nodes failing verification (falsely-done,
+      unrecorded pr) are left in place and surfaced as an integrity-defect count
+      — they become ordinary selectable defect tactics, never parks, never
+      mid-tick AI. The census latch node disappears and dispatch-graph-census's
+      threshold-birth mechanism retires once the tick step is live: a cheap
+      continuous drain never accumulates debt, so no latch is needed. Migration:
+      (1) tighten execution.pr custody at park time
+      (tactic-office-hours-pr-custody); (2) implement the scripted tick step,
+      strict-verification-only (tactic-census-scripted-tick); (3) convert the
+      2026-07-11 census node's three holds to blocked_by edges (this round); (4)
+      retire the latch birth. Interview ground for no-AI: of the four drain
+      steps, completion verification, edge repair, and dependent satisfaction
+      are already mechanical; the only judgment step (doctrine-home) compensated
+      for authoring-time placement leaks the layer-placement gate now prevents."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
