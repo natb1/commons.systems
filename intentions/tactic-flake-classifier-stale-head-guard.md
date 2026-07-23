@@ -159,14 +159,20 @@ bash .claude/skills/dispatch-propagate/scripts/test-flake-stale-head-check.sh
 bash .claude/skills/dispatch-propagate/scripts/lint-prose-rules.sh
 ```
 
-Replay the real incident as the acceptance check (all six SHAs are still
-fetchable in this repo). Against a reproduce command of
+Replay the real incident as the acceptance check. Against a reproduce command of
 `bash .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`, the
 four failing heads `9bd0b2a6`, `9f01d16b`, `78fbbedd`, `51f190b9` must each
-print `STALE-HEAD`, and the two green heads `2d4a2ac3`, `dc387443` must print
-`CURRENT`. This is the regression test that the guard actually closes the hole
-it was written for; run it manually, since it depends on those SHAs remaining
-reachable and takes a few minutes per stale head.
+print `STALE-HEAD`. This is the regression test that the guard actually closes
+the hole it was written for; run it manually, since it depends on those SHAs
+remaining reachable and takes a few minutes per stale head. Verified during
+implementation for `78fbbedd` and `9f01d16b` — both `STALE-HEAD`.
+
+CORRECTION to this plan as originally written: it also required the green heads
+`2d4a2ac3` / `dc387443` to print `CURRENT`. That criterion is meaningless and has
+been dropped — those heads PASSED CI, so the flake classifier never runs on them
+and the guard is never asked. The meaningful `CURRENT` cases are tier 1 (head
+already contains main's tip) and tier 2 with a red main; both are covered by unit
+tests in Unit 2 rather than by SHA replay.
 
 Known residual, deliberately not addressed here: the two pruned nodes carried
 *different* fingerprints for the identical failure (one keyed on `file:line`,
