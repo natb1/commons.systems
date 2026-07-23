@@ -321,3 +321,44 @@ autonomously.
 One subagent per unit, launched with the unit's `Recommended model`; supply the
 unit's context and scope in the subagent prompt and constrain it to working-tree
 edits only.
+
+## Record — pre-landing verification, 2026-07-23
+
+Checks run at the 2026-07-23 office-hours sitting, before any of this node's
+units were implemented. Recorded as findings, not instructions.
+
+**The nix repoint was verified end-to-end.** `nix/packages/office-hours.nix`
+was edited to point `SCRIPT` at
+`packages/intentionsutil/scripts/office-hours-graph`, built with
+`nix build '.#office-hours'`, and the built wrapper was run from an active
+devShell. It resolved `$TOPLEVEL`, passed the `-x` guard, sourced the sanitize
+lib, and exec'd `office-hours-graph`, which selected the queue head and
+attempted a launch — behavior identical to invoking `office-hours-graph`
+directly. The probe edit was reverted; the change itself is unlanded. The
+launch was driven by a stubbed `claude` via `OFFICE_HOURS_CLAUDE_CMD`, so the
+run ended at the registration-verify step, which is the expected stub outcome.
+
+**`office-hours-graph` works as an entry point.** Run directly against the
+current graph with the same stub, `office-hours-select.ts` emitted
+`launch tactic-main-post-merge-validation <cwd>` and the script consumed that
+disposition correctly.
+
+**The wrapper keeps one reference into the legacy directory after the repoint.**
+`nix/packages/office-hours.nix:26` sources
+`$TOPLEVEL/.claude/skills/dispatch-propagate/scripts/lib-sanitize-launch-env.sh`.
+That file is not among this node's deletions (which cover
+`office-hours-select-target`, `office-hours`, and
+`dispatch-office-hours-strip.sh`), so the reference still resolves after the
+removal. This is a divergence from `office-hours-graph`'s header claim that it
+sources nothing from `.claude/skills/dispatch-propagate/` — the claim holds for
+the script, not for the nix wrapper that execs it.
+
+**The `blocked_by` edge on `tactic-graph-node-session-reap` is live.** PR #2922
+is open (draft, phase `qa`) and its changed-file list includes
+`.claude/skills/dispatch-propagate/scripts/office-hours` — the 333-line file
+this node deletes. The two therefore conflict directly.
+
+**No config-commit denial was observed at this sitting.** A separate
+`.claude/skills/**` commit landed here without one (`2bb01021`, PR #2955), so
+the denial anticipated in this node's plan is not currently reproducing. That
+is an observation from one session, not a general clearance.
