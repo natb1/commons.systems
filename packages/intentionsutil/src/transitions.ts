@@ -97,6 +97,9 @@ export function forwardPhase(phase: string, hasResidue: boolean): string | null 
 /** Ladder phases a `fix` interrupt can fire from (strategy clarification 18). */
 const FIX_INTERRUPTIBLE: ReadonlySet<string> = new Set(["implement", "qa", "review"]);
 
+/** Retry-cap parity with the legacy `dispatch:fix-checks-attempt-<n>` label lane (fix-checks SKILL.md Step 5, escalating at 3 attempts). */
+export const FIX_ATTEMPT_CAP = 3;
+
 /**
  * Whether a live CI verdict at `phase` should set the orthogonal `execution.fix`
  * interrupt (spec §1.1, clarification 18). Only a `failing` verdict at an
