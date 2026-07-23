@@ -212,12 +212,15 @@ describe("lintTacticBodies", () => {
       expect(() => loadPlanBodyBaseline(path)).toThrow(/expected a JSON array/);
     });
 
-    it("loads the repo baseline and grandfathers exactly its listed violations", () => {
-      // The committed baseline must parse and must NOT be empty (it exists to
-      // grandfather the pre-existing violators found when this lint landed).
+    it("loads the repo baseline (now empty — all grandfather entries retired)", () => {
+      // The committed baseline must parse. It is now empty: every original
+      // grandfather entry referenced a node that has since left the live store
+      // or had its body fixed, so the entries became dead weight and were
+      // removed. The baseline must not grow going forward (fix violating node
+      // bodies instead of adding entries), so an empty baseline is the target
+      // steady state.
       const set = loadPlanBodyBaseline();
-      expect(set.size).toBeGreaterThan(0);
-      expect(set.has("tactic-flake-hook-tests-select-tick|context")).toBe(true);
+      expect(set.size).toBe(0);
     });
   });
 });
