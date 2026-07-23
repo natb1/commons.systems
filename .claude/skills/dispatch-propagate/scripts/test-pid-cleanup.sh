@@ -179,7 +179,10 @@ echo "=== Test: cleanup_stale_worktree_processes kills stale, keeps active ==="
   source "$SCRIPT_DIR/lib.sh"
   REAL_WT="$(git rev-parse --show-toplevel)"
   # Stale path must be under this repo's worktree root so the repo-scoped
-  # pgrep in cleanup_stale_worktree_processes finds it
+  # pgrep in cleanup_stale_worktree_processes finds it. Native worktrees live
+  # under <repo>/.claude/worktrees (standard Claude Code layout, since the
+  # 2026-07-21 de-bare migration) — mirrors cleanup_stale_worktree_processes'
+  # own worktree_root derivation in lib.sh.
   STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/.claude/worktrees/deleted-$$"
 
   # Process from a real active worktree
