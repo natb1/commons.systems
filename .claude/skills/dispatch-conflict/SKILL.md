@@ -1,17 +1,18 @@
 ---
-name: fix-conflicts
-description: Fix-conflicts phase — single pass that reproduces and resolves one origin/main merge conflict on a draft PR, or escalates an ambiguous conflict to office-hours
+name: dispatch-conflict
+description: Fix-conflicts phase — single pass that reproduces and resolves one origin/main merge conflict on a draft PR (issue-lane), or escalates an ambiguous conflict to office-hours
 ---
 
-# Fix Conflicts
+# Dispatch Conflict
 
-The `fix-conflicts` phase of the issue workflow, dispatched by `/dispatch-propagate`
-when a draft PR's GitHub `mergeable` field reports `CONFLICTING`. This skill is
+The `dispatch-conflict` skill runs the `fix-conflicts` phase of the issue workflow,
+dispatched by `/dispatch-propagate` when a draft PR's GitHub `mergeable` field
+reports `CONFLICTING`. This skill is
 **single-pass — it has no internal loop**. It reproduces one `origin/main` merge
 conflict, resolves it (or escalates an ambiguous conflict), records the outcome via
 the standard phase marker, and stops. The `/dispatch-propagate` background-job chain
 drives iteration: each recurring conflict is a fresh `/dispatch-propagate` →
-`/fix-conflicts` invocation, counted by the `dispatch:fix-conflicts-attempt-<n>`
+`/dispatch-conflict` invocation, counted by the `dispatch:fix-conflicts-attempt-<n>`
 label (cap 3) so the phase cannot spin — at the cap the chain escalates to
 `dispatch:office-hours`.
 
@@ -34,7 +35,7 @@ carve-out; `git push` is HTTPS to github.com — both sandbox-safe per
 
 ### 1. Resolve the target in place
 
-`/fix-conflicts` operates in place — the **current worktree dictates the target**.
+`/dispatch-conflict` operates in place — the **current worktree dictates the target**.
 The router (`/dispatch-propagate`) enters the target worktree before invoking this
 skill; this skill never switches. The current branch is `<N>-…`, where `<N>` is the
 issue number:
@@ -44,7 +45,7 @@ BRANCH=$(basename "$(git rev-parse --show-toplevel)")
 case "$BRANCH" in
   [0-9]*-*) N="${BRANCH%%-*}" ;;
   *)
-    echo "/fix-conflicts: current branch '$BRANCH' is not a target worktree (expected '<N>-…')" >&2
+    echo "/dispatch-conflict: current branch '$BRANCH' is not a target worktree (expected '<N>-…')" >&2
     exit 1
     ;;
 esac
@@ -64,7 +65,7 @@ and the issue body via the `=== ISSUE #N ===` section. Read `PR_NUM` from the `P
 case (`dispatch-merge-main` exit 3 fires before any PR exists). **Detect no-PR by
 the `PR: none` line, not by exit code** — the pack exits 0 in both cases.
 
-`PR_NUM` **may be empty** — `/fix-conflicts` is also the provisioning conflict
+`PR_NUM` **may be empty** — `/dispatch-conflict` is also the provisioning conflict
 backstop (`dispatch-merge-main` exit 3) which can fire in the `implement` phase
 before any PR exists. Carry `PR_NUM` forward; every PR-scoped step below is guarded
 on it being non-empty. The PR labels, PR body, and issue body captured here are
@@ -206,7 +207,7 @@ sandboxed — HTTPS to github.com, see `.claude/rules/sandbox.md`):
 git push origin HEAD
 ```
 
-As a router phase, `/fix-conflicts` has no later phase to lean on, so it must push its
+As a router phase, `/dispatch-conflict` has no later phase to lean on, so it must push its
 own resolution; without the push GitHub's stale `CONFLICTING` keeps routing
 `/dispatch-propagate` back to `fix-conflicts` forever. When `PR_NUM` is **empty** (the
 `implement`-phase provisioning backstop), do **not** push — the local merge commit
@@ -244,7 +245,7 @@ git merge --abort
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
-  "/fix-conflicts: <reason>"
+  "/dispatch-conflict: <reason>"
 ```
 
 `dispatch-mark-deviation` writes the `office-hours-reason` marker (the same helper

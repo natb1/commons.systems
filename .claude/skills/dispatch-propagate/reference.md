@@ -84,7 +84,7 @@ the reseed.
 The pre-finalize stop paths — `notify target-blocked`, `drain worktree-conflict`,
 plus the internal `exit 2` error paths — release at the guard, unchanged. A
 merge conflict detected during materialize-spawn routes to
-`INVOKE /fix-conflicts` via `dispatch-route`; the worker invokes `/fix-conflicts`
+`INVOKE /dispatch-conflict` via `dispatch-route`; the worker invokes `/dispatch-conflict`
 as a normal in-place phase skill (no `<N> <worktree>` args), which writes the
 standard phase marker and owns its `dispatch:fix-conflicts-attempt-*` label;
 the lock is released before the worker is spawned. Crash safety: a router that dies mid-spawn holding the lock is
