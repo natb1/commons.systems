@@ -43,6 +43,7 @@ result
 /.claude/launch.json
 /.claude/routines
 /.claude/scheduled_tasks.lock
+/.claude/ancestry-context.md
 /.idea
 /.vscode
 
