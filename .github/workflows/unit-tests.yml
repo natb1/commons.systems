@@ -227,6 +227,8 @@ jobs:
         run: .github/scripts/test-check-firestore-query-bounds.sh
       - name: Run test-integrity script tests
         run: .github/scripts/test-check-test-integrity.sh
+      - name: Run graph fast-path guard script tests
+        run: .github/scripts/test-check-graph-fast-path.sh
 
   test-integrity:
     runs-on: ubuntu-latest

@@ -18,30 +18,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: Verify the push is intentions/-only
-        run: |
-          set -euo pipefail
-          CHANGED=$(git diff --name-only origin/main...HEAD)
-          if [ -z "$CHANGED" ]; then
-            echo "::error::No changes relative to origin/main — nothing to fast-path."
-            exit 1
-          fi
-          BAD=$(printf '%s\n' "$CHANGED" | grep -v '^intentions/' || true)
-          if [ -n "$BAD" ]; then
-            echo "::error::graph/** fast path only accepts intentions/-only pushes. Non-intentions/ paths changed:"
-            printf '%s\n' "$BAD"
-            exit 1
-          fi
-          # The name-only filter above says nothing about file TYPE: a committed
-          # symlink (mode 120000) or gitlink (mode 160000) at intentions/x.md
-          # passes the name check. Reject any changed intentions/ entry whose
-          # destination mode is not a regular blob, so validate-graph below only
-          # ever parses regular files.
-          NONREGULAR=$(git diff --raw origin/main...HEAD -- intentions/ | awk '$2 == "120000" || $2 == "160000"' || true)
-          if [ -n "$NONREGULAR" ]; then
-            echo "::error::graph/** fast path only accepts regular files under intentions/. Symlink/gitlink entries changed:"
-            printf '%s\n' "$NONREGULAR"
-            exit 1
-          fi
+        env:
+          PUSHED_COMMITS: ${{ toJSON(github.event.commits.*.id) }}
+        run: .github/scripts/check-graph-fast-path.sh
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version

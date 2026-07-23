@@ -27,26 +27,49 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-nix-instance-flake-extraction
+  pr: 2848
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
-blocked_by:
-  - tactic-nix-export-nixos-modules
+blocked_by: []
 office_hours:
-  reason: "Implementation complete on PR #2848 (darwin-build GREEN — Unit 2
-    lib.mkForce drop validated on macOS; both host configs eval to a .drv
-    locally, home.homeDirectory resolves /Users/operator and /home/operator).
-    Blocked ONLY by nixos-build red on a pre-existing upstream WezTerm nightly
-    hash drift: nix/home/wezterm-pin.nix windowsZipHash
-    sha256-Beo9PtQ5UmqdmBbagYfVoS0hglseF/1F/uUMHtGxr1c= is stale vs upstream
-    sha256-twQWc8bNnvKVPRj0Fi2gqv5HfK1WvLD0ZtN2DsZpl8I=, a rolling-nightly
-    fixed-output derivation this diff never touches (Linux/WSL-only, so
-    darwin-build is unaffected). It also breaks origin/main and every nix PR:
-    the last nix merge #2834 passed nixos-build ~14h ago, upstream re-published
-    the nightly asset in place since. Next steps: refresh the WezTerm Windows
-    nightly pin on main via nix/home/sync-wezterm.sh (its own concern, owned by
-    #2794 — do NOT couple the hash bump into this scoped instance-flake PR),
-    then unpark/re-tick this node so nixos-build reruns green; PR #2848 is
-    otherwise ready."
+  reason: "Re-audited 2026-07-23 against origin/main; the hash values in the
+    original park text were stale and are corrected below. Implementation is
+    COMPLETE on PR #2848 (draft, head 02f0df9c): darwin-build GREEN, so the Unit
+    2 lib.mkForce drop is validated on macOS. Only nixos-build is red, for
+    exactly one cause, and it is not this diff: hash mismatch in the
+    fixed-output derivation WezTerm-windows-nightly.zip (CI run 29141605543, job
+    86515720728) — specified
+    sha256-Beo9PtQ5UmqdmBbagYfVoS0hglseF/1F/uUMHtGxr1c=, got
+    sha256-twQWc8bNnvKVPRj0Fi2gqv5HfK1WvLD0ZtN2DsZpl8I=. That pin lives in
+    nix/home/wezterm-pin.nix, which this PR never touches (Linux/WSL-only, so
+    darwin-build is unaffected). CORRECTION: the Beo9 value is only what THIS
+    BRANCH still carries (pin version 20260707-093716); origin/main has since
+    moved the pin to version 20260716-195552 with windowsZipHash
+    sha256-QiVmQOEZToNMDnFfVLujiHPl4MrKYXyoLtvCfqzv5X8=, and that value is stale
+    upstream too. PR #2953 (branch wezterm-pin-refresh, open) bumps it to
+    sha256-bTvVHVpB8Mh6g2lF2RB9Egs2IApanVb5Z1R2M9UCZZ8= and its nixos-build
+    PASSES — that is the corrective change, and it has not landed yet. RELEVANCE
+    re-confirmed: this work is still needed. origin/main flake.nix lines 152-254
+    still hardcode n8, Nathan Buesgens, nathan@natb1.com, two real ssh-ed25519
+    pubkeys, instance.hostUser and the dispatch groupId; nothing landed by
+    another route. BRANCH VIABILITY re-confirmed: 952 commits behind
+    origin/main, but git merge-tree reports a CLEAN merge, and no commit on main
+    has touched flake.nix or examples/office-hours-nate/ since the merge-base
+    c1474b5d, so there is no content drift. origin/main was deliberately NOT
+    merged into this branch during the audit: it would only swap one stale
+    wezterm hash for another and cannot turn nixos-build green before #2953
+    lands. NEXT STEPS, in order: (1) land #2953; (2) merge origin/main into this
+    branch and re-run CI — this also re-validates the Unit 2 mkForce drop
+    against the three flake.lock bumps (nixpkgs, home-manager) that landed since
+    the branch point, which the 2026-07-11 darwin-build did not cover; (3) if
+    darwin-build and nixos-build are both green, unpark and re-tick. Do NOT
+    couple the wezterm hash bump into this scoped instance-flake PR."
   since: 2026-07-11
   recommendation: null
 pace_exempt: false
