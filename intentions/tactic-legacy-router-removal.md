@@ -24,7 +24,6 @@ validates:
   - strategy-graph-native-dispatch
 blocked_by:
   - tactic-graph-router-transitions
-  - tactic-dispatch-lifecycle-sensor
   - tactic-phase-skill-node-targets
 office_hours: null
 pace_exempt: false
