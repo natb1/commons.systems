@@ -17,13 +17,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-flake-classifier-stale-head-guard
-  pr: 2950
+  pr: 2948
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
 validates: []

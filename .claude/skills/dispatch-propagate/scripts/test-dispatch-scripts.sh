@@ -22307,20 +22307,25 @@ esac
 assert_eq "removed flag → unknown flag error, exit 2" "ok" "$status"
 sel_tick_teardown
 
-# --- --manual context-dependent fan-out (#1458) ------------------------------
+# --- --manual context-dependent fan-out (#1458, headroom overage) -----------
 # A bare human-typed /dispatch fans out enough workers to cover available graph
-# work eagerly while honoring the MAX_WORKERS ceiling. It OVERRIDES the
-# pace-curve throttle (a budget pause to TARGET_N=0 still fans out) but HONORS
-# the --exhausted floor and the ceiling:
+# work eagerly while honoring the MAX_WORKERS ceiling as its governing target
+# below the ceiling. It OVERRIDES the pace-curve throttle (a budget pause to
+# TARGET_N=0 still fans out) and, per human-dispatch-is-sovereign, always
+# launches its one highest-ranking-available node even at the ceiling — a
+# bounded, deliberate max_concurrent_workers + 1 overage. Only genuine
+# rate-limit token exhaustion (--exhausted) still blocks a manual dispatch
+# outright:
 #   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)
 #   GAP      = max(0, TARGET_N − LIVE_COUNT)
-#   SPAWN_N  = min(HEADROOM, max(GAP, 1))
+#   SPAWN_N  = max(1, min(max(GAP, 1), HEADROOM))
 # The legacy priority-LABELED bypass count (N_PRIO) died with the legacy
 # selector, so N_PRIO is permanently 0 and SPAWN_N is driven by the pace-curve
-# gap alone. SPAWN_N becomes the `--top` the graph selector fans out over: with a
-# node available (SEL_GRAPH_TARGET), the tick emits a `graph` decision and
-# graph-select-target is invoked `--top SPAWN_N` (logged to graph-select.log).
-# Defaults are LIVE=0, MAX=8.
+# gap alone, clamped by HEADROOM, with a floor of exactly one node re-asserting
+# itself past the ceiling when HEADROOM is 0. SPAWN_N becomes the `--top` the
+# graph selector fans out over: with a node available (SEL_GRAPH_TARGET), the
+# tick emits a `graph` decision and graph-select-target is invoked
+# `--top SPAWN_N` (logged to graph-select.log). Defaults are LIVE=0, MAX=8.
 
 # Case 1: gap0. GAP=0 → SPAWN_N=min(8,max(0,1))=1 → graph --top 1.
 echo "Test: select-tick --manual gap0 → graph fan-out --top 1"
@@ -22348,14 +22353,16 @@ out=$(run_sel_tick --manual)
 assert_eq "manual-gap-clamped: graph selector called --top 2 (headroom clamps gap)" "--top 2" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
 sel_tick_teardown
 
-# Case 4: at-max-live. LIVE=8 → HEADROOM=0 → concurrency-cap, lock released, NO
-# reseed (a manual run is one-shot).
-echo "Test: select-tick --manual at-max-live (HEADROOM=0) → concurrency-cap"
+# Case 4: at-max-live. LIVE=8 → HEADROOM=0 → per human-dispatch-is-sovereign the
+# floor-of-1 re-asserts past the ceiling → SPAWN_N=1 → graph fan-out --top 1
+# (one worker deliberately over the MAX_WORKERS ceiling), NO reseed (a manual
+# run is one-shot regardless of fan-out width).
+echo "Test: select-tick --manual at-max-live (HEADROOM=0) → graph --top 1 (one over ceiling)"
 sel_tick_setup
 export SEL_LIVE_COUNT=8 SEL_TARGET_N=1 SEL_GRAPH_TARGET="node t1 tactic implement"
 out=$(run_sel_tick --manual)
-assert_eq "manual-at-max-live: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "manual-at-max-live: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-at-max-live: graph decision" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-at-max-live: graph selector called --top 1 (floor over ceiling)" "--top 1" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
 assert_eq "manual-at-max-live: no reseed" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
