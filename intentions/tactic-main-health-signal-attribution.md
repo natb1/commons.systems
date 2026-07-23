@@ -31,12 +31,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-main-health-signal-attribution
   pr: 2954
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
   fix: null
 validates: []
