@@ -89,11 +89,43 @@ fi
 # --- Birth: write the born-parked census node, then land it as one graph-commit
 NODE_ID=$(jq -r '.node.id' <<<"$OUT")
 
+# Probe whether the deterministic-per-day NODE_ID already exists on origin/main
+# BEFORE mutating. This mirrors park-node's absent-node guard shape
+# (park-node:70-73) but INVERTED: there absence is a hard failure; here absence
+# is the EXPECTED born-fresh case, and presence is the rare same-day id-collision
+# race. The result selects the failure-path rollback (below): PRIOR_BLOB unset →
+# delete the freshly-written file; PRIOR_BLOB set → restore that prior blob.
+PRIOR_BLOB=""
+if git -C "$REPO_ROOT" rev-parse -q --verify "origin/main:intentions/$NODE_ID.md" >/dev/null 2>&1; then
+  PRIOR_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md")"
+fi
+
 NODE_JSON_FILE=$(mktemp) || { echo "dispatch-graph-census: mktemp failed" >&2; exit 1; }
-trap 'rm -f "$NODE_JSON_FILE"' EXIT
+# MUTATED gates the file rollback: only delete-or-restore intentions/$NODE_ID.md
+# if this script actually began writing it (armed right before write-node.ts
+# below). A pre-mutation failure must not touch a file this script never created.
+MUTATED=0
+# Bash traps REPLACE (not stack) on the same signal, so this single EXIT trap
+# owns both the temp-file cleanup AND the born-node write rollback. On a failing
+# exit after the mutation began, undo the on-disk write so a failed birth leaves
+# no dirty intentions/*.md to trip graph-commit's assert_clean_outside_ids guard
+# for every other node: delete a born-fresh file, or restore the prior blob in
+# the id-collision race.
+trap '
+  rc=$?
+  rm -f "$NODE_JSON_FILE"
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    if [[ -n "$PRIOR_BLOB" ]]; then
+      git -C "$REPO_ROOT" show "$PRIOR_BLOB" > "$REPO_ROOT/intentions/$NODE_ID.md"
+    else
+      rm -f "$REPO_ROOT/intentions/$NODE_ID.md"
+    fi
+  fi
+' EXIT
 jq -c '.node' <<<"$OUT" > "$NODE_JSON_FILE"
 
 # write-node.ts is the single validation gate; it lands frontmatter only.
+MUTATED=1
 if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$NODE_JSON_FILE") >/dev/null; then
   echo "dispatch-graph-census: write-node failed for $NODE_ID" >&2; exit 1
 fi
@@ -120,7 +152,8 @@ fi
 if ! (cd "$REPO_ROOT" && "$GRAPH_COMMIT" \
         -m "graph: born census $NODE_ID (reconciliation debt $TOTAL)" \
         "$NODE_ID"); then
-  echo "dispatch-graph-census: graph-commit failed for $NODE_ID (content on disk, not landed)" >&2
+  if [[ -n "$PRIOR_BLOB" ]]; then ROLLBACK_DESC="prior blob restored"; else ROLLBACK_DESC="file deleted"; fi
+  echo "dispatch-graph-census: graph-commit failed for $NODE_ID; the born-node write was rolled back ($ROLLBACK_DESC)" >&2
   exit 1
 fi
 

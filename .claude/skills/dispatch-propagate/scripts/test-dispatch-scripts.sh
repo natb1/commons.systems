@@ -980,6 +980,15 @@ case "$args" in
     if [[ -f "$STUB_DIR/main-run-list.json" ]]; then cat "$STUB_DIR/main-run-list.json"
     else echo '[]'; fi
     ;;
+  api\ repos/*/check-suites/*)
+    # main_broken_sha: branch-attribution lookup for a check-run's parent
+    # check-suite. Fixtures are keyed by suite id: main-check-suite-<id>.json.
+    # Default: unattributable (null head_branch), so an un-fixtured suite is
+    # conservatively dropped rather than misread as main's own.
+    suite_id=$(printf '%s' "$args" | sed -E 's#.*check-suites/([^/]+)$#\1#')
+    if [[ -f "$STUB_DIR/main-check-suite-${suite_id}.json" ]]; then cat "$STUB_DIR/main-check-suite-${suite_id}.json"
+    else echo '{"head_branch":null}'; fi
+    ;;
   issue\ list\ --repo\ *)
     # JIT scan: gh issue list --repo <repo> --label <label> --state <open|closed> --json ...
     # Fixtures are keyed by sanitized label + state; absent fixture → empty list.
@@ -5401,6 +5410,7 @@ rc=0
   unset PLAYWRIGHT_BROWSERS_PATH
   export NPX_EXIT=1
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
   export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
   export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-3"
@@ -5449,6 +5459,7 @@ rc=0
   source "$TMPDIR_TEST/lib.sh"
   unset PLAYWRIGHT_BROWSERS_PATH
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
   export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
   export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-4"
@@ -5499,6 +5510,7 @@ rc=0
   source "$TMPDIR_TEST/lib.sh"
   unset PLAYWRIGHT_BROWSERS_PATH
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
   export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
   export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-5"
@@ -5512,6 +5524,152 @@ assert_eq "timeout-stall → rc non-zero" "nonzero" "$rc_state"
 assert_eq "timeout-stall → npx args (timeout path)" \
   $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
   "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 6. Stall → whole tree killed before retry (PR #2946 root-cause fix).
+#    The npx stub backgrounds a REAL grandchild (/bin/sleep 30) and `wait`s on
+#    it, so the process tree stays alive until something kills it — mirroring
+#    the real apt-get/dpkg grandchildren that `timeout` alone leaves running.
+#    With PLAYWRIGHT_INSTALL_TIMEOUT=1 the watchdog's REAL 1s deadline fires,
+#    kill_tree kills the whole tree (npx + grandchild), attempt 1 is treated as
+#    failed, and attempt 2 runs — proving the retry is real AND the
+#    grandchildren actually die. The `sleep` stub is selective: real only for
+#    the 1s watchdog deadline, instant otherwise (kill_tree's 2s grace, the 5s
+#    retry backoff), keeping the test ~2s. Uses the REAL kill_tree (not stubbed).
+echo "Test: playwright_install_with_deps stall → tree killed before retry"
+setup
+# Capture the real `sleep` binary BEFORE the stub shadows it on PATH — its path
+# is system-specific (a nix-store path here, /bin/sleep elsewhere), so resolve
+# it dynamically and hand it to the stubs via $REAL_SLEEP.
+REAL_SLEEP="$(command -v sleep)"
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+"$REAL_SLEEP" 30 &                     # real grandchild: keeps the tree alive
+gc=$!
+[[ -n "${GRANDCHILD_PIDS:-}" ]] && echo "$gc" >> "$GRANDCHILD_PIDS"
+wait                                   # block until the tree is killed
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift                                  # drop the <timeout_s> duration arg
+exec "$@"                              # transparent passthrough → npx keeps PID
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+# Selective: real-sleep only the 1s watchdog deadline; instant otherwise.
+if [[ "$1" == "1" ]]; then exec "$REAL_SLEEP" 1; fi
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-6"
+GRANDCHILD_PIDS="$TMPDIR_TEST/grandchildren-6"
+: > "$GRANDCHILD_PIDS"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_TIMEOUT=1
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-6"
+  export GRANDCHILD_PIDS="$TMPDIR_TEST/grandchildren-6"
+  export REAL_SLEEP
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "stall → 2 npx calls (attempt 1 killed → retry is real)" "2" "$(cat "$NPX_COUNT_FILE")"
+assert_eq "stall → rc non-zero" "nonzero" "$rc_state"
+# Give the SIGKILL a beat to land, then assert every grandchild is dead — the
+# tree was actually killed, not just the npx/node child.
+"$REAL_SLEEP" 1
+gc_alive=0
+while IFS= read -r gcpid; do
+  [[ -z "$gcpid" ]] && continue
+  if kill -0 "$gcpid" 2>/dev/null; then gc_alive=$((gc_alive + 1)); fi
+done < "$GRANDCHILD_PIDS"
+assert_eq "stall → all grandchildren killed (whole tree died)" "0" "$gc_alive"
+teardown
+
+# ============================================================================
+# wait_for_dpkg_lock tests
+# ============================================================================
+echo ""
+echo "=== wait_for_dpkg_lock ==="
+
+# 1. Lock file present but free → rc 0, returns fast (real flock/sleep).
+echo "Test: wait_for_dpkg_lock free lock → rc 0"
+setup
+: > "$TMPDIR_TEST/free.lock"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/free.lock"
+  export DPKG_LOCK_WAIT_TIMEOUT=5
+  wait_for_dpkg_lock
+) || rc=$?
+[[ "$rc" -eq 0 ]] && rc_state="zero" || rc_state="nonzero"
+assert_eq "free lock → rc 0" "zero" "$rc_state"
+teardown
+
+# 2. Lock file absent → rc 0 via the -e guard (no wait, no flock needed).
+echo "Test: wait_for_dpkg_lock absent lock file → rc 0"
+setup
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/does-not-exist"
+  export DPKG_LOCK_WAIT_TIMEOUT=5
+  wait_for_dpkg_lock
+) || rc=$?
+[[ "$rc" -eq 0 ]] && rc_state="zero" || rc_state="nonzero"
+assert_eq "absent lock file → rc 0" "zero" "$rc_state"
+teardown
+
+# 3. flock unavailable → degrades to no-op, rc 0.
+echo "Test: wait_for_dpkg_lock flock unavailable → rc 0, no-op"
+setup
+: > "$TMPDIR_TEST/present.lock"
+mkdir -p "$TMPDIR_TEST/bin-noflock"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/present.lock"
+  export DPKG_LOCK_WAIT_TIMEOUT=5
+  export PATH="$TMPDIR_TEST/bin-noflock"
+  wait_for_dpkg_lock
+) || rc=$?
+[[ "$rc" -eq 0 ]] && rc_state="zero" || rc_state="nonzero"
+assert_eq "flock unavailable → rc 0" "zero" "$rc_state"
+teardown
+
+# 4. Lock held → bounded real wait, then rc 0 with the "still held" warning.
+echo "Test: wait_for_dpkg_lock held lock → bounded wait, rc 0, warns"
+setup
+: > "$TMPDIR_TEST/held.lock"
+flock -x "$TMPDIR_TEST/held.lock" -c 'sleep 2' &
+holder_pid=$!
+# Give the background holder a moment to actually acquire the lock before probing.
+sleep 0.2
+rc=0
+stderr_out=$(
+  (
+    source "$TMPDIR_TEST/lib.sh"
+    export DPKG_LOCK_FILE="$TMPDIR_TEST/held.lock"
+    export DPKG_LOCK_WAIT_TIMEOUT=1
+    wait_for_dpkg_lock
+  ) 2>&1 1>/dev/null
+) || rc=$?
+[[ "$rc" -eq 0 ]] && rc_state="zero" || rc_state="nonzero"
+assert_eq "held lock → rc 0" "zero" "$rc_state"
+assert_eq "held lock → still-held warning emitted" "warned" \
+  "$( [[ "$stderr_out" == *"still held after 1s"* ]] && echo warned || echo silent )"
+wait "$holder_pid" 2>/dev/null || true
 teardown
 
 # ============================================================================
@@ -31434,6 +31592,98 @@ awf_offline_out=$("$AWF_SCRIPT" "$AWF_OFFLINE" 2>/dev/null) && awf_offline_rc=0 
 assert_eq "assert-worktree-fresh: unreachable origin exits 1" "1" "$awf_offline_rc"
 
 rm -rf "$AWF_ROOT" "$AWF_BARE" "$AWF_CLONE" "$AWF_OFFLINE"
+
+# ============================================================================
+# repo-health --main-broken-sha branch-attribution tests
+# ============================================================================
+echo ""
+echo "=== repo-health --main-broken-sha branch attribution ==="
+
+# a. Empty set: no check-runs, no workflow runs → fail closed.
+echo "Test: repo-health --main-broken-sha — empty attributable set → NO_ATTRIBUTABLE_CHECKS, exit 3"
+setup
+export REPO_HEALTH_STATE_FILE="$TMPDIR_TEST/rh.json"
+echo '{"sha":"headsha1"}' > "$STUB_DIR/main-commit.json"
+echo '{"check_runs":[]}' > "$STUB_DIR/main-check-runs.json"
+echo '[]' > "$STUB_DIR/main-run-list.json"
+rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
+assert_eq "empty set → stdout token" "NO_ATTRIBUTABLE_CHECKS" "$out"
+assert_eq "empty set → exit 3" "3" "$rc"
+unset REPO_HEALTH_STATE_FILE
+teardown
+
+# b. All-misattributed: check-runs exist (incl. a failure) but their check-suite
+# resolves to a foreign branch (graph/foo), not main. Regression guard for the
+# real 2026-07-23 Graph Fast Path false-red (#main-health-signal-attribution):
+# a foreign-branch failure must never read as a confirmed red main.
+echo "Test: repo-health --main-broken-sha — all-misattributed (foreign-branch) failing checks → NO_ATTRIBUTABLE_CHECKS, exit 3"
+setup
+export REPO_HEALTH_STATE_FILE="$TMPDIR_TEST/rh.json"
+echo '{"sha":"headsha2"}' > "$STUB_DIR/main-commit.json"
+cat > "$STUB_DIR/main-check-runs.json" <<'JSON'
+{"check_runs":[
+  {"name":"guard","conclusion":"failure","check_suite":{"id":999}},
+  {"name":"other","conclusion":"success","check_suite":{"id":999}}
+]}
+JSON
+echo '{"head_branch":"graph/foo"}' > "$STUB_DIR/main-check-suite-999.json"
+echo '[]' > "$STUB_DIR/main-run-list.json"
+rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
+assert_eq "all-misattributed → stdout token" "NO_ATTRIBUTABLE_CHECKS" "$out"
+assert_eq "all-misattributed → exit 3" "3" "$rc"
+unset REPO_HEALTH_STATE_FILE
+teardown
+
+# c. Attributable green: check-runs attributed to main's own suite, all success.
+echo "Test: repo-health --main-broken-sha — attributable green → empty stdout, exit 0"
+setup
+export REPO_HEALTH_STATE_FILE="$TMPDIR_TEST/rh.json"
+echo '{"sha":"headsha3"}' > "$STUB_DIR/main-commit.json"
+cat > "$STUB_DIR/main-check-runs.json" <<'JSON'
+{"check_runs":[
+  {"name":"codeql","conclusion":"success","check_suite":{"id":111}}
+]}
+JSON
+echo '{"head_branch":"main"}' > "$STUB_DIR/main-check-suite-111.json"
+echo '[]' > "$STUB_DIR/main-run-list.json"
+rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
+assert_eq "attributable green → empty stdout" "" "$out"
+assert_eq "attributable green → exit 0" "0" "$rc"
+unset REPO_HEALTH_STATE_FILE
+teardown
+
+# d. Attributable red: check-runs attributed to main's own suite, one failing.
+echo "Test: repo-health --main-broken-sha — attributable red → prints sha, exit 0"
+setup
+export REPO_HEALTH_STATE_FILE="$TMPDIR_TEST/rh.json"
+echo '{"sha":"headsha4"}' > "$STUB_DIR/main-commit.json"
+cat > "$STUB_DIR/main-check-runs.json" <<'JSON'
+{"check_runs":[
+  {"name":"codeql","conclusion":"failure","check_suite":{"id":111}}
+]}
+JSON
+echo '{"head_branch":"main"}' > "$STUB_DIR/main-check-suite-111.json"
+echo '[]' > "$STUB_DIR/main-run-list.json"
+rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
+assert_eq "attributable red → stdout is the broken sha" "headsha4" "$out"
+assert_eq "attributable red → exit 0" "0" "$rc"
+unset REPO_HEALTH_STATE_FILE
+teardown
+
+# e. Workflow-run red: empty check-run set, but a workflow run on main is
+# failing. Workflow runs are already correctly attributed by `gh run list
+# --branch main`, so this half must still trip red on its own.
+echo "Test: repo-health --main-broken-sha — workflow-run red (empty check-run set) → prints sha, exit 0"
+setup
+export REPO_HEALTH_STATE_FILE="$TMPDIR_TEST/rh.json"
+echo '{"sha":"headsha5"}' > "$STUB_DIR/main-commit.json"
+echo '{"check_runs":[]}' > "$STUB_DIR/main-check-runs.json"
+echo '[{"headSha":"headsha5","conclusion":"failure"}]' > "$STUB_DIR/main-run-list.json"
+rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
+assert_eq "workflow-run red → stdout is the broken sha" "headsha5" "$out"
+assert_eq "workflow-run red → exit 0" "0" "$rc"
+unset REPO_HEALTH_STATE_FILE
+teardown
 
 # ============================================================================
 # summary
