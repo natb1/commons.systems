@@ -60,9 +60,37 @@ else
   echo "demote-node-to-implement: no phase-start stamp at $STAMP_FILE — omitting the scope-edit range (the current node body is authoritative regardless)" >&2
 fi
 
+# --- Pre-mutation capture ----------------------------------------------------
+# Capture origin/main's current blob for the node before mutating, so a
+# post-mutation failure (the write below, or the graph-commit landing it) can
+# restore the file instead of leaking a dirty intentions/*.md that trips
+# graph-commit's assert_clean_outside_ids guard for every later unrelated
+# call. Unlike park-node, this script has no prior fetch step — best-effort
+# capture against whatever origin/main ref is already known locally is fine —
+# but a node absent from origin/main is a hard pre-condition failure: there is
+# no landed content to roll back to, so refuse before mutating at all.
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)" || [[ -z "$FRESH_BLOB" ]]; then
+  echo "demote-node-to-implement: intentions/$NODE_ID.md does not exist on origin/main — cannot demote a node with no landed content to roll back to" >&2
+  exit 1
+fi
+
 # --- Apply the demotion write ------------------------------------------------
 # apply-node-transition's --scope-stale path sets phase=implement and clears
 # markers regardless of the (unused here) CI verdict.
+#
+# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md from
+# origin/main if this script actually wrote to it. Set right before the first
+# mutating call so a pre-mutation failure never triggers a restore of a file
+# this script never touched.
+MUTATED=0
+trap '
+  rc=$?
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$REPO_ROOT/intentions/$NODE_ID.md"
+  fi
+' EXIT
+
+MUTATED=1
 if ! RESULT="$(cd "$REPO_ROOT" && node --import tsx/esm "$APPLY" "$NODE_ID" --scope-stale)"; then
   echo "demote-node-to-implement: failed to write the demotion for $NODE_ID" >&2
   exit 1
@@ -75,7 +103,7 @@ if [[ -n "$PROVENANCE" ]]; then
   MSG="$MSG"$'\n\n'"$PROVENANCE"
 fi
 if ! "$SCRIPT_DIR/graph-commit" -m "$MSG" "$NODE_ID"; then
-  echo "demote-node-to-implement: graph-commit failed for $NODE_ID; the demotion write is on disk but not landed" >&2
+  echo "demote-node-to-implement: graph-commit failed for $NODE_ID; the demotion write was rolled back" >&2
   exit 1
 fi
 
