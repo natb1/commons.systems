@@ -43,8 +43,7 @@ execution:
     attempt: 1
     pushed_sha: null
 validates: []
-blocked_by:
-  - tactic-flake-park-node-case2-dirty-tree-guard
+blocked_by: []
 office_hours:
   reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
     concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
