@@ -125,13 +125,14 @@ function main(): void {
 
   let sessionType: SessionType | undefined;
   if (typeIdx !== -1) {
-    if (typeValue === undefined || !SESSION_TYPES.includes(typeValue as SessionType)) {
+    const found = SESSION_TYPES.find((t) => t === typeValue);
+    if (found === undefined) {
       process.stderr.write(
         `office-hours-select: unknown --type "${typeValue}" (expected: ${SESSION_TYPES.join(", ")})\n`,
       );
       process.exit(2);
     }
-    sessionType = typeValue as SessionType;
+    sessionType = found;
   }
 
   const nodes = listNodes(intentionsDir);
