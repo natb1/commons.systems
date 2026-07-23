@@ -53,13 +53,9 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-22
-    attempt: 1
-    pushed_sha: 78fbbedd9e9c459bf85b13bd9723f8af09cea684
+  fix: null
 validates: []
-blocked_by:
-  - tactic-flake-pid-cleanup-stale-worktree
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

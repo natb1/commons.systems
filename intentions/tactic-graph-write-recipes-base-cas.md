@@ -69,9 +69,13 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix: null
+  fix:
+    since: 2026-07-22
+    attempt: 1
+    pushed_sha: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-select-tick-guard-halt
 office_hours: null
 pace_exempt: false
 rounds: null

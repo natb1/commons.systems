@@ -28,18 +28,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-live-session-check-path-clobber
   pr: 2917
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-22
-    attempt: 1
-    pushed_sha: 7d67a8c15b27124933414afd26f446cfe667bc01
+  fix: null
 validates: []
 blocked_by:
   - tactic-flake-park-node-concurrent-write-refusal
