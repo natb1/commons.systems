@@ -5,8 +5,11 @@ Investigation of the `nixos-build` job shared by `.github/workflows/unit-tests.y
 unconditional on nix-touching pushes to main). Both run
 `.github/scripts/build-nixos-config.sh`, i.e.
 `nix build <repo>#nixosConfigurations.nixos.config.system.build.toplevel --no-link --print-build-logs`,
-under a `timeout-minutes: 30` guard, and both configure the substituter
-`https://claude-code.cachix.org` with the pinned trusted public key.
+and both configure the substituter `https://claude-code.cachix.org` with the
+pinned trusted public key. The pre-merge job keeps the inherited
+`timeout-minutes: 30`; the post-merge job carries `timeout-minutes: 120`,
+sized against the cold from-source build these findings describe (a too-tight
+cap on main reddens origin/main rather than just blocking a PR).
 
 Date: 2026-07-23. Nix 2.24.11. All numbers below are a **LOCAL data point** from
 this sandboxed session's machine and store state — **not** a CI baseline. CI runs
@@ -136,25 +139,36 @@ invocation). Nothing stood out as safe to change without a real CI baseline:
   *tidy-up* (they currently do nothing for this build), but they are harmless and
   become useful the moment a `cachix push` lands — removing them now would just
   have to be re-added. Left in place intentionally.
-- The 30-minute `timeout-minutes` guard should not be changed yet — there is no
-  CI timing to size it against (see below).
+- The pre-merge `timeout-minutes: 30` guard in `unit-tests.yml` is left
+  unchanged — there is no CI timing to size it against, and a pre-merge timeout
+  only blocks a PR (see below).
 
-## Timeout guard — needs real CI data (unchanged)
+## Timeout guard — needs real CI data
 
-Both `nixos-build` jobs (unit-tests.yml and main-nix-validate.yml) and the
-`darwin-build` job share the same rationale comment: the Build step has 0 logged
-CI executions, 30 min is a conservative runaway guard, tighten to ~2× observed
-p95 once 3–5 real warm-cache runs accumulate (`#2636`; darwin cites `#1932`).
+`unit-tests.yml`'s `nixos-build` and `darwin-build` jobs carry the inherited
+rationale comment: the Build step has 0 logged CI executions, 30 min is a
+conservative runaway guard, tighten to ~2× observed p95 once 3–5 real runs
+accumulate (`#2636`; darwin cites `#1932`).
+
+The post-merge job deviates: it uses **120 min**. The reason is the asymmetry
+in what a timeout failure costs. Pre-merge, a timeout just blocks a PR. On
+`origin/main` it turns the branch red, and `repo-health`'s workflow-agnostic
+`gh run list --branch main` pickup then feeds the automated red-main diagnosis
+path — so a cap the *normal* build can exceed produces recurring diagnosis toil
+on every nix-touching merge. Since this is a documented cold, 0%-cache-hit,
+from-source Rust compile (above), 30 min is not a safe cap for it; 120 min still
+bounds a runaway well under GitHub's 6h default.
 
 I have **no access to trigger or read GitHub Actions runs** from this session, so
 no CI number exists yet. **Action for a human:** once the new post-merge
-`main-nix-validate.yml` workflow accumulates **3–5 real warm-cache runs on
-origin/main**, read the `nixos-build` job durations from the Actions UI and
-tighten `timeout-minutes` in both workflows to roughly **2× the observed p95**.
-Do this *after* the `cachix push` decision above, because a warmed cache changes
-the p95 dramatically (a warm run substitutes wezterm instead of compiling it),
-and the timeout should be sized against the steady-state warm-cache duration, not
-the current cold-rebuild-every-time behavior.
+`main-nix-validate.yml` workflow accumulates **3–5 real runs on origin/main**,
+read the `nixos-build` job durations from the Actions UI and size
+`timeout-minutes` to roughly **2× the observed p95**. Do this *after* the
+`cachix push` decision above, because a warmed cache changes the p95
+dramatically (a warm run substitutes wezterm instead of compiling it), and the
+steady-state warm-cache duration — not today's cold-rebuild-every-time
+behavior — is what the tightened value should track. Note that until a push step
+lands, warm-cache runs cannot accumulate at all: nothing warms the cache.
 
 ## Summary
 
@@ -168,6 +182,11 @@ the current cold-rebuild-every-time behavior.
   `cache.nixos.org` because the `src` is overridden to a non-nixpkgs commit.
 - **Recommended next step:** a human provisions a cachix write token + secret and
   adds a `cachix push` step (best on the post-merge job) so wezterm's closure is
-  cached; then, after 3–5 warm runs, tighten the 30-min timeout to ~2× p95.
-- **Landed this session:** no code change (the one high-value change needs a
-  secret; nothing else was a safe, justified win).
+  cached; then, after 3–5 warm runs, tighten the post-merge timeout to ~2× p95.
+- **Landed alongside these findings:** the post-merge
+  `.github/workflows/main-nix-validate.yml` workflow (the tactic's Unit A
+  deliverable), carrying `timeout-minutes: 120` sized against the cold
+  from-source build documented here. The investigation itself (Unit B) landed no
+  build-performance change: the one high-value change — `cachix push` — needs a
+  human-provisioned write token, and nothing else was a safe, justified win
+  without a real CI baseline.
