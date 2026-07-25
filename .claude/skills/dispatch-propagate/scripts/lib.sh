@@ -1086,7 +1086,10 @@ gh_commit_is_ancestor_rest() {
 #     (same value the porcelain `headRefName` carries).
 #   - headRefOid: the PR's head commit oid, remapped from REST's `head.sha`
 #     (same value the porcelain `headRefOid` carries).
-#   - mergeCommitSha: the base commit the PR landed as (REST merge_commit_sha; null until merged)
+#   - mergeCommitSha: REST `merge_commit_sha`. NOT a merge signal on its own —
+#     GitHub populates it with the ephemeral test-merge sha on OPEN PRs and
+#     leaves a stale value on closed-unmerged PRs. Only trust it as the commit
+#     the PR landed as when `mergedAt` is also non-null.
 #   - labels: narrowed to the porcelain-visible key (`name`) rather than passing
 #     the full REST label objects through (same as gh_issue_view_rest's labels).
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no

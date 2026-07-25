@@ -163,8 +163,20 @@ describe("reconcileGraph", () => {
       kind: "strategy",
       rounds: { count: 0, last_completed: null, last_aligned: null },
     });
-    node(dir, { id: "tactic-a", kind: "tactic", phase: "review", serves: ["strategy-s"] });
-    node(dir, { id: "tactic-b", kind: "tactic", phase: "review", serves: ["strategy-s"] });
+    node(dir, {
+      id: "tactic-a",
+      kind: "tactic",
+      phase: "review",
+      serves: ["strategy-s"],
+      execution: { branch: "a", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
+    node(dir, {
+      id: "tactic-b",
+      kind: "tactic",
+      phase: "review",
+      serves: ["strategy-s"],
+      execution: { branch: "b", pr: 2, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
 
     const plan = reconcileGraph({
       dir,
@@ -190,7 +202,13 @@ describe("reconcileGraph", () => {
       kind: "strategy",
       rounds: { count: 0, last_completed: null, last_aligned: null },
     });
-    node(dir, { id: "tactic-a", kind: "tactic", phase: "review", serves: ["strategy-s"] });
+    node(dir, {
+      id: "tactic-a",
+      kind: "tactic",
+      phase: "review",
+      serves: ["strategy-s"],
+      execution: { branch: "a", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
     node(dir, { id: "tactic-b", kind: "tactic", phase: "qa", serves: ["strategy-s"] });
 
     const plan = reconcileGraph({
@@ -219,7 +237,13 @@ describe("reconcileGraph", () => {
     // in this sweep's pr-states. Without the `phase !== "done"` filter fix it
     // would be miscounted as a live remaining child and block the stamp forever.
     node(dir, { id: "tactic-prior", kind: "tactic", phase: "done", serves: ["strategy-s"] });
-    node(dir, { id: "tactic-now", kind: "tactic", phase: "review", serves: ["strategy-s"] });
+    node(dir, {
+      id: "tactic-now",
+      kind: "tactic",
+      phase: "review",
+      serves: ["strategy-s"],
+      execution: { branch: "now", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
 
     const plan = reconcileGraph({
       dir,
@@ -233,6 +257,48 @@ describe("reconcileGraph", () => {
       last_completed: "2026-07-10",
       last_aligned: null,
     });
+  });
+
+  it("normalizes empty-string merge evidence to null rather than recording a blank sha", () => {
+    // The bash wrapper builds the entry with `jq -r '.mergeCommitSha // empty'`,
+    // so an absent/null GitHub field arrives as "". optionalString preserves ""
+    // verbatim, so an un-normalized "" would land as evidence satisfying the
+    // Completion JSDoc's "both non-null" merge proof while proving nothing.
+    const dir = tempDir();
+    node(dir, { id: "kind-tactic", kind: "kind" });
+    node(dir, {
+      id: "tactic-blank",
+      kind: "tactic",
+      phase: "review",
+      execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
+    reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, {
+        "tactic-blank": { state: "merged", mergedAt: "2026-07-11T12:00:00Z", mergeCommitSha: "" },
+      }),
+      date: "2026-07-10",
+    });
+    expect(readNode(dir, "tactic-blank").execution?.completion).toEqual({
+      mergedAt: "2026-07-11T12:00:00Z",
+      mergeCommitSha: null,
+      graphCommitSha: null,
+    });
+  });
+
+  it("errors instead of silently writing an empty completion when a merged tactic has no execution", () => {
+    const dir = tempDir();
+    node(dir, { id: "kind-tactic", kind: "kind" });
+    node(dir, { id: "tactic-noexec", kind: "tactic", phase: "review" });
+    expect(() =>
+      reconcileGraph({
+        dir,
+        prStatesFile: prStates(dir, {
+          "tactic-noexec": { state: "merged", mergedAt: "2026-07-11T12:00:00Z", mergeCommitSha: "sha" },
+        }),
+        date: "2026-07-10",
+      }),
+    ).toThrow(/no execution object/);
   });
 
   it("ignores tactics whose PR is not terminal or that are draft/done", () => {

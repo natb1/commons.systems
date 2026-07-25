@@ -113,11 +113,20 @@ interface PrState {
   mergeCommitSha?: string;
 }
 
-/** The completion evidence recorded for a genuinely-merged tactic. */
+/**
+ * The completion evidence recorded for a genuinely-merged tactic.
+ *
+ * Normalizes EMPTY strings to null, not just absent keys: the bash wrapper
+ * builds the entry with `jq -r '.mergedAt // empty'` / `'.mergeCommitSha //
+ * empty'`, so a null/absent GitHub field arrives here as `""`. `optionalString`
+ * (schema.ts) preserves `""` verbatim, so without this an empty sha would land
+ * as `mergeCommitSha: ""` and satisfy the Completion JSDoc's "mergedAt +
+ * mergeCommitSha both non-null" merge proof while carrying no evidence at all.
+ */
 function mergeCompletion(entry: PrState): { mergedAt: string | null; mergeCommitSha: string | null; graphCommitSha: null } {
   return {
-    mergedAt: entry.mergedAt ?? null,
-    mergeCommitSha: entry.mergeCommitSha ?? null,
+    mergedAt: entry.mergedAt || null,
+    mergeCommitSha: entry.mergeCommitSha || null,
     graphCommitSha: null,
   };
 }
@@ -162,7 +171,15 @@ export function reconcileGraph(args: Args): Plan {
   for (const { id, entry } of mainQaTargets) {
     const node = readNode(args.dir, id);
     node.phase = "main-qa" as typeof node.phase;
-    if (node.execution) node.execution.completion = mergeCompletion(entry);
+    // The enumeration that produces --pr-states only yields tactics carrying a
+    // non-null execution.pr, so `execution` is guaranteed here. Silently
+    // skipping the write would record the all-null completion that means
+    // "abandoned or unverifiable" on genuinely-merged work — a clear error
+    // beats that fallback (.claude/rules/code-style.md).
+    if (node.execution == null) {
+      throw new Error(`reconcile-graph: ${id} has a terminal merged PR but no execution object`);
+    }
+    node.execution.completion = mergeCompletion(entry);
     if (!args.noApply) writeNode(args.dir, node);
     editSet.add(id);
     plan.reconciled.push({ id, target: "main-qa" });
@@ -186,7 +203,13 @@ export function reconcileGraph(args: Args): Plan {
     node.phase = "done" as typeof node.phase;
     // Merged → record evidence; closed-not-merged → leave completion untouched
     // (null for a never-merged tactic), the deliberate census-flaggable case.
-    if (entry.state === "merged" && node.execution) {
+    // On the merged path `execution` is guaranteed non-null (the enumeration
+    // only yields tactics carrying execution.pr); erroring beats silently
+    // writing the all-null completion that means "unverifiable".
+    if (entry.state === "merged") {
+      if (node.execution == null) {
+        throw new Error(`reconcile-graph: ${id} has a terminal merged PR but no execution object`);
+      }
       node.execution.completion = mergeCompletion(entry);
     }
     if (!args.noApply) writeNode(args.dir, node);

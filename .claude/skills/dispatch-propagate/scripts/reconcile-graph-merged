@@ -90,9 +90,15 @@ while IFS=$'\t' read -r id pr; do
   STATE=$(jq -r '.state' <<<"$PR_JSON")
   MERGED_AT=$(jq -r '.mergedAt // empty' <<<"$PR_JSON")
   MERGE_SHA=$(jq -r '.mergeCommitSha // empty' <<<"$PR_JSON")
+  # Enumerate the states explicitly. REST reports a merged PR as CLOSED (never
+  # MERGED — see the byte-compat test in test-dispatch-scripts.sh), so the
+  # merged/closed discriminator inside the terminal arm is `mergedAt` presence,
+  # NOT the state string. An unrecognized state must NOT fall through to the
+  # terminal arm: that would drive a `done` transition on a live in-flight
+  # tactic. Fail loudly instead (clear error over a silent, destructive default).
   case "$STATE" in
     OPEN) : ;;  # nothing to reconcile
-    *)          # terminal (REST reports merged PRs as CLOSED, never MERGED)
+    CLOSED|MERGED)
       if [[ -n "$MERGED_AT" ]]; then
         AGE=$(( NOW - $(date -u -d "$MERGED_AT" +%s) ))
         [[ "$AGE" -ge "$GRACE" ]] || continue   # still settling — next sweep
@@ -101,6 +107,9 @@ while IFS=$'\t' read -r id pr; do
       else
         STATES=$(jq -c --arg id "$id" '. + {($id): {state:"closed"}}' <<<"$STATES")
       fi ;;
+    *)
+      echo "reconcile-graph-merged: unexpected PR state '$STATE' for $id (#$pr) — not reconciled" >&2
+      HARD_ERROR=1 ;;
   esac
 done <<<"$OPEN_TACTICS"
 
@@ -112,14 +121,14 @@ fi
 
 # --- Decide + apply the store mutations --------------------------------------
 # Plan-then-apply for a rollback path: a --no-apply run yields the plan's exact
-# edit∪prune id set WITHOUT touching disk; we snapshot each of those ids from
+# edit id set WITHOUT touching disk; we snapshot each of those ids from
 # origin/main, THEN run the real apply. Both runs read the same unmutated
 # intentions/ dir (nothing else writes it between them), so the plan is
-# deterministic — the snapshotted ids match the ids the apply run mutates. On
-# any failure of the apply run or the graph-commit, RESTORE_ON_FAILURE dumps
-# each snapshot blob back over its file (rewriting edits and recreating pruned
-# deletions), leaving intentions/ clean rather than tripping graph-commit's
-# assert_clean_outside_ids guard for every other node.
+# deterministic — the snapshotted ids match the ids the apply run mutates. The
+# plan is edit-only (nothing is pruned here anymore), so on any failure of the
+# apply run or the graph-commit, RESTORE_ON_FAILURE simply dumps each snapshot
+# blob back over its file, leaving intentions/ clean rather than tripping
+# graph-commit's assert_clean_outside_ids guard for every other node.
 STATES_FILE="$(mktemp)" || { echo "reconcile-graph-merged: mktemp failed" >&2; exit 1; }
 declare -A SNAPSHOT=()
 RESTORE_ON_FAILURE=0
@@ -139,8 +148,8 @@ printf '%s' "$STATES" > "$STATES_FILE"
 PLAN_ONLY="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/reconcile-graph.ts" --pr-states "$STATES_FILE" --no-apply) )" || {
   echo "reconcile-graph-merged: reconcile-graph.ts --no-apply failed" >&2; exit 1; }
 
-# Step 2: snapshot every planned id (edit ∪ prune) from origin/main. All planned
-# ids are landed nodes present on origin/main; a rev-parse miss is a hard error —
+# Step 2: snapshot every planned edit id from origin/main. All planned ids are
+# landed nodes present on origin/main; a rev-parse miss is a hard error —
 # that id can't be safely mutated without a rollback path.
 while IFS= read -r sid; do
   [[ -n "$sid" ]] || continue
