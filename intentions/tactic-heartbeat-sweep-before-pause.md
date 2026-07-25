@@ -32,7 +32,13 @@ attention:
     90 composes below 100, tripping no guard, while topping the ~11-max normal
     field."
 phase: implement
-execution: null
+execution:
+  branch: tactic-heartbeat-sweep-before-pause
+  pr: 2966
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -114,3 +120,17 @@ scheduling (pause honored) and (b) the stale marker is reaped.
 stale-marker plant/assert pattern.
 
 **Dependencies:** Unit 1.
+
+## needs-main residue
+
+### 8. Real timer-environment sweep effectiveness across live pause/resume cycles
+
+- URL path: current
+- Expected outcome: over real pause cycles the reservation ledger stays
+  bounded (dead-session markers reclaimed) and no live worker's reservation
+  is wrongly reclaimed.
+- Finding: planned-deferral — effectiveness depends on the live
+  systemd-timer environment's ability to read the Claude session registry
+  (`claude agents --json`), which a scratch scaffold cannot reproduce;
+  verify by observing reservation-ledger size and worker health over the
+  next few live pause/resume cycles.
