@@ -187,6 +187,9 @@ gh pr ready --undo "$PR_NUM"   # idempotent no-op when the PR was not merge-arme
 
 Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
 `office-hours-recommendation`) for the Stop hook's `park-node`, never a gh label.
+Also write the already-bound `PR_NUM` to `$CLAUDE_JOB_DIR/office-hours-pr` (same
+atomic tempfile+`mv` write) so the park records `execution.pr`
+(tactic-office-hours-pr-custody).
 **On the node lane no gh issue is ever read or written.**
 
 1. **Resolve the draft PR.** Run the context pack (`dangerouslyDisableSandbox:
