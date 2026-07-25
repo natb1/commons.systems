@@ -246,6 +246,18 @@ describe("strategy eligibility", () => {
     expect(candidateIds(nodes)).toEqual(["tactic-child"]);
   });
 
+  it("a persisted done child on the path re-enables the strategy's next align round", () => {
+    // reconcile-graph writes `phase: "done"` and LEAVES the tactic on disk, so a
+    // completed child stays on the signal path (computeSignalPath does not filter
+    // by phase). It must not disqualify the strategy, or every strategy that
+    // completes one tactic would drop out of the queue permanently.
+    const nodes = [
+      strategy({ id: "strategy-s" }),
+      tactic({ id: "tactic-child", serves: ["strategy-s"], validates: ["strategy-s"], phase: "done" }),
+    ];
+    expect(candidateIds(nodes)).toContain("strategy-s");
+  });
+
   it("draft children do not block a strategy's fresh round (drafts are input)", () => {
     const nodes = [
       strategy({ id: "strategy-s" }),

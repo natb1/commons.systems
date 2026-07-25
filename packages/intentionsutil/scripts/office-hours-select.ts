@@ -19,7 +19,18 @@
 //
 // stdout disposition contract (exactly one line, except --list):
 //   launch <node-id> <cwd>     — launch here; cwd is the node's worktree if it
-//                                exists, else the repo root
+//                                exists, else the repo root. `office-hours-graph`
+//                                consumes this value only for a NON-tactic node
+//                                (a strategy/delegation/virtue/tradition park
+//                                gets no worktree — engagement there is a graph
+//                                edit); for a tactic node it provisions or reuses
+//                                `.claude/worktrees/<node-id>` itself and
+//                                overrides this value with that path. No other
+//                                caller reads it: `--list` emits its own
+//                                `rank\tnodeId\tsince` rows and never this line,
+//                                and the `/office-hours` skill's single-item
+//                                readiness relay reads only the stderr `NOTE —`
+//                                advisory.
 //   empty                      — nothing parked (queue-head mode)
 //   empty not-parked <node-id> — the named node is absent or not parked
 // stderr is advisory-only: a `NOTE — <node-id> is blocked by open tactic(s): …`

@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# clear-park — clear one intention node's office_hours park via the graph
+# write (strategy-graph-native-dispatch, clarification 65). The scripted
+# inverse of park-node: a future drain-lane skill
+# (tactic-office-hours-self-modification-skill) invokes this as its mandatory
+# terminal park disposition on green CI, since park-node currently has no
+# scripted inverse — a park is cleared today only by an incidental commit
+# side-effect or a hand-rolled inline sequence, which is unreliable for the
+# drain lane whose fix commit lands on the PR branch and never touches the
+# node frontmatter.
+#
+# Content is written through store.ts's readNode → writeNode (the validated
+# writer — frontmatter serialized correctly, tactic bodies preserved); this
+# script authors no markdown. The commit/stamp/fast-forward mechanics are
+# graph-commit's.
+#
+# Fresh-origin/main invariant (mirrors park-node:60-77,
+# tactic-park-node-fresh-main-clobber-fix): the read-modify-write below
+# operates on origin/main's CURRENT content, never the possibly-stale local
+# on-disk copy — the invocation routinely comes from a far-behind PR-branch
+# worktree, and the drain lane calls this at the END of a long session, by
+# which time origin/main has usually advanced. So this script fetches
+# origin/main, overwrites the local node file with origin/main's version,
+# THEN reads/mutates/writes it, and passes graph-commit a `--base`
+# compare-and-swap token pinned to the blob it read. Without the guard a stale
+# copy's small office_hours diff applies cleanly onto a since-advanced
+# origin/main and silently reverts unrelated body/frontmatter changes landed
+# in between; with it, graph-commit refuses (exit 1) instead.
+#
+# If the node's office_hours is already null ON ORIGIN/MAIN (the refresh above
+# is what makes this check test landed truth rather than a stale local copy),
+# this is a deliberate idempotent no-op: print an informative note and exit 0
+# without calling graph-commit. Because the refresh itself rewrites the local
+# node file, that no-op path restores the pre-refresh copy before exiting (see
+# the rollback below) — an idempotent invocation must not leave the tree dirty.
+#
+# Write-failure rollback (mirrors park-node:82-101, the invariant asserted by
+# .claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh): every
+# exit path that does NOT land a commit restores intentions/<node-id>.md to the
+# state this script found it in — from the pre-refresh copy captured below, so
+# the restore is exact even in the far-behind worktree this script normally runs
+# from (a FRESH_BLOB restore would leave origin/main's content behind as a
+# modification there). A leaked dirty node file would trip graph-commit's
+# assert_clean_outside_ids guard for every other unrelated node in that
+# worktree.
+#
+# Usage: clear-park <node-id> [note]
+#
+# Exit codes: 0 cleared and landed on main (or already-clear no-op); 1 the
+# write, the origin/main refresh, or graph-commit failed (including a refused
+# stale-base compare-and-swap); 2 usage error.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
+
+NODE_ID="${1:-}"
+# Optional 2nd arg: free-text note folded into the commit message.
+NOTE="${2:-}"
+if [[ $# -lt 1 || $# -gt 2 || -z "$NODE_ID" ]]; then
+  echo "usage: clear-park <node-id> [note]" >&2
+  exit 2
+fi
+
+TMPTS="$(mktemp --suffix=.mts)" \
+  || { echo "clear-park: could not create temp file for the clearing write" >&2; exit 1; }
+# TMPORIG holds the node file exactly as this script found it, captured BEFORE
+# the origin/main refresh below overwrites it. Every non-landing exit path
+# restores from it (restore_node), so a failed or idempotent invocation leaves
+# `git status --porcelain intentions/` as it was.
+TMPORIG="$(mktemp)" \
+  || { echo "clear-park: could not create temp file for the pre-refresh node copy" >&2; exit 1; }
+ORIG_EXISTED=0
+if [[ -f "$INTENTIONS_DIR/$NODE_ID.md" ]]; then
+  if ! cp "$INTENTIONS_DIR/$NODE_ID.md" "$TMPORIG"; then
+    echo "clear-park: could not capture the pre-refresh copy of intentions/$NODE_ID.md" >&2
+    rm -f "$TMPTS" "$TMPORIG"
+    exit 1
+  fi
+  ORIG_EXISTED=1
+fi
+
+# restore_node — put intentions/$NODE_ID.md back to its pre-refresh state.
+# Copies to a temp sibling and mv's into place only on success, so a failed copy
+# never truncates the node file to zero bytes. When the file did not exist
+# before (a worktree branch predating the node), the restore is a delete.
+restore_node() {
+  if [[ "$ORIG_EXISTED" == 1 ]]; then
+    if cp "$TMPORIG" "$INTENTIONS_DIR/$NODE_ID.md.rollback"; then
+      mv "$INTENTIONS_DIR/$NODE_ID.md.rollback" "$INTENTIONS_DIR/$NODE_ID.md"
+    else
+      rm -f "$INTENTIONS_DIR/$NODE_ID.md.rollback"
+    fi
+  else
+    rm -f "$INTENTIONS_DIR/$NODE_ID.md"
+  fi
+}
+
+# MUTATED gates the rollback: only restore if this script actually wrote to the
+# node file (the refresh below is the first such write). A pre-mutation failure
+# — the fetch or the origin/main blob lookup — must not restore a file this
+# script never touched.
+MUTATED=0
+trap '
+  rc=$?
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    restore_node
+  fi
+  rm -f "$TMPTS" "$TMPORIG"
+' EXIT
+
+# Refresh the LOCAL node file from origin/main BEFORE reading it, so the
+# office_hours clear lands on top of the current landed content rather than a
+# stale worktree copy. An unreachable origin/main or a node absent from
+# origin/main is genuine environment breakage — fail with a clear error, never
+# fall back to the local copy (code-style.md).
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "clear-park: could not fetch origin/main to refresh $NODE_ID before clearing" >&2
+  exit 1
+fi
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "clear-park: intentions/$NODE_ID.md does not exist on origin/main — cannot clear a park on a node that is not landed" >&2
+  exit 1
+fi
+MUTATED=1
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$INTENTIONS_DIR/$NODE_ID.md"; then
+  echo "clear-park: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
+fi
+
+cat >"$TMPTS" <<'TS'
+// argv: <storeModule> <intentionsDir> <id>
+const [storePath, intentionsDir, id] = process.argv.slice(2);
+const { readNode, writeNode } = await import(storePath);
+const node = readNode(intentionsDir, id);
+if (node.office_hours == null) {
+  process.stderr.write(`clear-park: ${id} is not parked (office_hours already null)\n`);
+  process.exit(3);
+}
+node.office_hours = null;
+writeNode(intentionsDir, node);
+process.stderr.write(`clear-park: cleared office_hours on ${id}\n`);
+TS
+
+npx_status=0
+(cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$NODE_ID" >&2) || npx_status=$?
+
+if [[ $npx_status -eq 3 ]]; then
+  # Idempotent no-op: nothing lands, so undo the refresh's overwrite before
+  # exiting 0. The EXIT trap only restores on a non-zero rc, so restore here
+  # explicitly and clear MUTATED so it is not attempted twice.
+  restore_node
+  MUTATED=0
+  echo "clear-park: $NODE_ID is not parked (office_hours already null); nothing to do" >&2
+  exit 0
+elif [[ $npx_status -ne 0 ]]; then
+  echo "clear-park: failed to clear the office_hours record for $NODE_ID" >&2
+  exit 1
+fi
+
+if [[ -n "$NOTE" ]]; then
+  MESSAGE="graph: clear office_hours park on $NODE_ID ($NOTE)"
+else
+  MESSAGE="graph: clear office_hours park on $NODE_ID"
+fi
+
+if ! "$SCRIPT_DIR/graph-commit" --base "$NODE_ID=$FRESH_BLOB" -m "$MESSAGE" "$NODE_ID"; then
+  echo "clear-park: graph-commit failed for $NODE_ID; the office_hours write was rolled back" >&2
+  exit 1
+fi
+
+exit 0

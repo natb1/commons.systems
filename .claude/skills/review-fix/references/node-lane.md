@@ -28,7 +28,10 @@ Every step runs unchanged except these re-keyed seams:
 - **Escalation.** Instead of `dispatch:office-hours`, write the reason to
   `$CLAUDE_JOB_DIR/office-hours-reason` (and best-next-steps to
   `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook parks the node via
-  `park-node`. See `.claude/hooks/dispatch-stop.sh`.
+  `park-node`. See `.claude/hooks/dispatch-stop.sh`. Also write the
+  already-bound `PR_NUM` to `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic
+  tempfile+`mv` write) so the park records `execution.pr`
+  (tactic-office-hours-pr-custody).
 
 ## Node-lane re-entry marker check
 

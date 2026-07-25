@@ -138,6 +138,37 @@ clarifications:
       same class, and cannot express filter-by-type selection — the type
       dimension is adopted for both ranking and selection. Implementation is
       drafted in tactic-office-hours-session-type."
+  - question: Do the two deferrable session-type classes cover every whole class of
+      sitting the author wants to defer, or is a third needed?
+    answer: "(Recorded 2026-07-25, author direction at the close of an
+      office-hours drain sweep. Amends the 2026-07-23 entry above by WIDENING its
+      closed enum; the ranking and selection doctrine is unchanged.) A third class
+      is needed: strategy-review. The enum becomes {requirement-discovery,
+      curriculum-review, strategy-review, other}, still closed, still defaulting
+      to other when absent. Its defining shape is that THE INPUT IS METRICS, NOT
+      A QUESTION — the author reads numbers (budget figures, pace/velocity,
+      attention distribution) and the output is a direction for strategy. That
+      distinguishes it from requirement-discovery, where the blocker is an
+      unanswered requirement question, and from curriculum-review, where the
+      blocker is reading/comprehension work. It joins the PENALIZED group with
+      the other two, sharing the same single named constant rather than
+      introducing a second: it is author-scheduled, recurs, and should not
+      compete at full attention rank with blocked execution work at every tick.
+      Motivating case: strategy-recover-finance has carried reading: null and
+      gap: null since it was codified — the owned budget pipeline was built and
+      repeatedly fixed, but the numbers it produces have never been read back
+      against the strategy that justified building it, and that reading is a
+      distinct sitting from operating the pipeline. Born parked the same day as
+      tactic-budget-strategy-review-reading, the first node in the class.
+      Implementation note: the enum member is NOT yet on main —
+      tactic-office-hours-session-type (PR #2961) introduces the field and is
+      itself parked at its qa-fix attempt cap, so the widening is filed
+      separately at tactic-office-hours-session-type-strategy-review, blocked_by
+      it, which also backfills the parks labelled for this class in prose.
+      Until then the class is recorded in park prose only, deliberately:
+      validateOfficeHours reconstructs a park from exactly {reason, since,
+      recommendation}, so a session_type key written today is silently dropped
+      rather than rejected, which would make a structured label a false record."
 tooling_goals:
   - kind: actuator
     statement: status page — one attention-ranked queue of typed signals, each type

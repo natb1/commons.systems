@@ -1962,7 +1962,7 @@ assert_eq "pr: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // e
 # Raw REST pull with no merged_at → mergedAt key present with value null
 # (open/closed-unmerged signal; consumers test `mergedAt != null`).
 assert_eq "pr: mergedAt null when merged_at absent" "null" "$(jq -r '.mergedAt' <<<"$pv")"
-assert_eq "pr: top-level key set" "body headRefName headRefOid labels mergeStateStatus mergeable mergedAt number state title" \
+assert_eq "pr: top-level key set" "body headRefName headRefOid labels mergeCommitSha mergeStateStatus mergeable mergedAt number state title" \
   "$(jq -r 'keys | join(" ")' <<<"$pv")"
 teardown
 
@@ -1983,6 +1983,7 @@ assert_eq "pr: mergeable boolean false → CONFLICTING" "CONFLICTING" "$(jq -r '
 assert_eq "pr: mergeStateStatus dirty → DIRTY" "DIRTY" "$(jq -r '.mergeStateStatus' <<<"$pv2")"
 assert_eq "pr: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$pv2")"
 assert_eq "pr: closed-unmerged mergedAt null" "null" "$(jq -r '.mergedAt' <<<"$pv2")"
+assert_eq "pr: closed-unmerged mergeCommitSha null" "null" "$(jq -r '.mergeCommitSha' <<<"$pv2")"
 assert_eq "pr: headRefName from head.ref (9002)" "conflicting-branch" "$(jq -r '.headRefName' <<<"$pv2")"
 assert_eq "pr: single label narrowed" "bug" "$(jq -r '.labels[0].name' <<<"$pv2")"
 teardown
@@ -1998,6 +1999,7 @@ printf '%s\n' '{
   "body": "",
   "state": "closed",
   "merged_at": "2026-07-11T12:00:00Z",
+  "merge_commit_sha": "feedface0004",
   "mergeable": null,
   "head": {"ref": "merged-branch", "sha": "feedface0004"},
   "labels": []
@@ -2005,6 +2007,7 @@ printf '%s\n' '{
 pv4=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9004)
 assert_eq "pr: merged PR still reports state CLOSED (not MERGED)" "CLOSED" "$(jq -r '.state' <<<"$pv4")"
 assert_eq "pr: merged PR mergedAt passthrough" "2026-07-11T12:00:00Z" "$(jq -r '.mergedAt' <<<"$pv4")"
+assert_eq "pr: merged PR mergeCommitSha passthrough" "feedface0004" "$(jq -r '.mergeCommitSha' <<<"$pv4")"
 teardown
 
 echo "Test: gh_pr_view_rest -- mergeable=null → UNKNOWN; absent mergeable_state → empty"
@@ -5596,6 +5599,95 @@ done < "$GRANDCHILD_PIDS"
 assert_eq "stall → all grandchildren killed (whole tree died)" "0" "$gc_alive"
 teardown
 
+# 7. Fast success → the watchdog's inner sleep is cancelled, not orphaned.
+#    On a fast success the main body cancels the still-idle watchdog with
+#    `kill "$watchdog_pid"`. Before the fix that SIGTERM missed the watchdog's
+#    forked `sleep`, leaking an orphan that idled for the rest of timeout_s.
+#    Selective sleep stub (mirrors test 6): real-sleep AND record the PID only
+#    for the 25s watchdog deadline, so a leaked orphan would still be alive at
+#    assert time; instant for everything else. timeout is a transparent
+#    passthrough so npx exits 0 immediately (well before the 25s deadline).
+echo "Test: playwright_install_with_deps fast success → watchdog sleep not orphaned"
+setup
+REAL_SLEEP="$(command -v sleep)"
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift                                  # drop the <timeout_s> duration arg
+exec "$@"                              # transparent passthrough → npx exits 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+# Selective: real-sleep + record PID only for the 25s watchdog deadline (so a
+# leaked orphan is observably alive at assert time); instant otherwise. The
+# recorded $$ equals the watchdog's captured $! because exec preserves the PID.
+if [[ "$1" == "25" ]]; then
+  [[ -n "${WATCHDOG_SLEEP_PID:-}" ]] && echo "$$" >> "$WATCHDOG_SLEEP_PID"
+  exec "$REAL_SLEEP" 25
+fi
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-7"
+WATCHDOG_SLEEP_PID="$TMPDIR_TEST/watchdog-sleep-7"
+: > "$WATCHDOG_SLEEP_PID"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_TIMEOUT=25
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=1
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-7"
+  export WATCHDOG_SLEEP_PID="$TMPDIR_TEST/watchdog-sleep-7"
+  export REAL_SLEEP
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+assert_eq "fast success → rc 0" "0" "$rc"
+assert_eq "fast success → 1 npx call" "1" "$(cat "$NPX_COUNT_FILE")"
+# Assert the watchdog's inner sleep is gone — the fast-path cancel actually
+# reached it, no orphan leaked to init. Signal delivery, the subshell's trap
+# dispatch and process reaping are all scheduler-dependent, so poll for the
+# PID to disappear (bounded at ~5s) instead of assuming a fixed grace: a loaded
+# runner costs latency, not a false red. A genuinely orphaned sleep idles for
+# the full 25s deadline, so it still fails after the bound. REAL_SLEEP: a bare
+# `sleep` here would hit the still-on-PATH instant stub.
+sleep_pids=()
+while IFS= read -r spid; do
+  [[ -z "$spid" ]] && continue
+  sleep_pids+=("$spid")
+done < "$WATCHDOG_SLEEP_PID"
+recorded="${#sleep_pids[@]}"
+sleep_alive=0
+for _ in $(seq 1 50); do
+  sleep_alive=0
+  if [[ "$recorded" -gt 0 ]]; then
+    for spid in "${sleep_pids[@]}"; do
+      if kill -0 "$spid" 2>/dev/null; then sleep_alive=$((sleep_alive + 1)); fi
+    done
+  fi
+  [[ "$sleep_alive" -eq 0 ]] && break
+  "$REAL_SLEEP" 0.1
+done
+assert_eq "fast success → watchdog sleep was recorded (side channel worked)" "1" "$recorded"
+assert_eq "fast success → watchdog sleep not orphaned (killed)" "0" "$sleep_alive"
+# On a failing assert the leak is real: the orphan has already reparented to
+# init, so nothing reaps it and it would idle out the remaining ~25s alongside
+# the rest of the suite. Reap it here — teardown only removes the temp dir.
+if [[ "$sleep_alive" -gt 0 ]]; then
+  for spid in "${sleep_pids[@]}"; do
+    kill -9 "$spid" 2>/dev/null || true
+  done
+fi
+teardown
+
 # ============================================================================
 # wait_for_dpkg_lock tests
 # ============================================================================
@@ -7064,6 +7156,29 @@ case "$args" in
   "worktree list --porcelain")
     cat "$STUB_DIR/worktree-list.txt"
     ;;
+  "rev-parse --verify --quiet refs/remotes/origin/main")
+    # NODE-arm completion gate: origin/main must be readable. SWEEP_NO_ORIGIN_MAIN
+    # simulates an absent / never-fetched remote ref.
+    [[ -n "${SWEEP_NO_ORIGIN_MAIN:-}" ]] && exit 1
+    echo "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    ;;
+  "show origin/main:intentions/"*)
+    # NODE-arm completion gate: the node's frontmatter as recorded on origin/main.
+    # node-<id>.md absent → the real git failure mode (path not in the tree).
+    nid="${args#show origin/main:intentions/}"
+    nid="${nid%.md}"
+    f="$STUB_DIR/node-${nid}.md"
+    if [[ -f "$f" ]]; then cat "$f"; else exit 1; fi
+    ;;
+  "log -1 --format=%H origin/main -- intentions/"*)
+    # NODE-arm pruned-node probe: non-empty output = the path HAS history on
+    # origin/main (the node existed and was pruned); empty = never a node.
+    nid="${args#log -1 --format=%H origin/main -- intentions/}"
+    nid="${nid%.md}"
+    f="$STUB_DIR/nodehist-${nid}.txt"
+    [[ -f "$f" ]] && cat "$f"
+    exit 0
+    ;;
   "worktree remove --force "*)
     path="${args#worktree remove --force }"
     echo "worktree-remove-force:$path" >> "$STUB_DIR/calls"
@@ -7130,6 +7245,8 @@ sweep_teardown() {
   unset DISPATCH_CONFIG_DIR DISPATCH_SWEEP_WORKTREES_ROOT
   # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
   unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
+  # NODE-arm seams (minimum age, origin/main availability) — same no-leak rule.
+  unset DISPATCH_SWEEP_NODE_MIN_AGE_S SWEEP_NO_ORIGIN_MAIN
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -7145,6 +7262,37 @@ sweep_register_wt() {
 # used by the git -C shim.
 sweep_path_key() {
   echo "$1" | tr '/' '_'
+}
+
+# Helper: write the origin/main intention-node fixture the NODE arm's completion
+# gate reads (`git show origin/main:intentions/<id>.md`).
+#   <phase>  literal frontmatter phase value (e.g. done / implement / null)
+#   <park>   "parked" writes a non-null office_hours block; anything else writes
+#            `office_hours: null`.
+sweep_register_node() {
+  local node_id="$1" phase="$2" park="${3:-unparked}"
+  {
+    printf -- '---\n'
+    printf 'id: %s\n' "$node_id"
+    printf 'kind: tactic\n'
+    printf 'phase: %s\n' "$phase"
+    if [[ "$park" == "parked" ]]; then
+      printf 'office_hours:\n  reason: "parked by fixture"\n  since: 2026-01-01\n'
+    else
+      printf 'office_hours: null\n'
+    fi
+    printf -- '---\n\n# body\n'
+  } > "$STUB_DIR/node-${node_id}.md"
+}
+
+# Helper: stamp a fixture worktree's creation age. The NODE arm reads the mtime of
+# `<worktree>/.git` (the gitdir pointer file `git worktree add` writes once) via
+# `stat -c %Y` — a REAL stat, not the git shim — so the file must exist on disk
+# with the wanted mtime for the minimum-age gate to be exercised.
+sweep_stamp_wt_age() {
+  local wt_path="$1" mtime="$2"
+  printf 'gitdir: %s/.git-fake\n' "$wt_path" > "$wt_path/.git"
+  touch -d "@$mtime" "$wt_path/.git"
 }
 
 # Helper: install a fake `claude` whose `agents --json` invocation (NO --cwd)
@@ -8439,6 +8587,247 @@ if grep -q "SWEEP_CONFIG_ERROR" "$DISPATCH_SWEEP_LOG_FILE"; then
   PASS=$((PASS + 1)); echo "  PASS: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- NODE arm: reap requires POSITIVE completion evidence --------------------
+# A bare node-id worktree (no PR, no issue-number prefix) has no merged PR and no
+# closed issue to prove the work is finished. The arm therefore reaps only on:
+# a completion signal read from origin/main (phase done + unparked, or a pruned
+# node), a minimum worktree age, name- AND cwd-keyed liveness, and in-sync — and
+# it NEVER quarantines/force-reaps not-in-sync work. These tests pin each gate.
+
+# --- Test N7a: done + unparked + old + clean + sessionless → REMOVE_NODE ------
+echo "Test: N7a node worktree at phase done (unparked, aged, clean) is reaped"
+sweep_setup
+WT_BASE="tactic-node-done"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000   # age 99000 >= default 3600
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7a sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH" \
+   && echo "$calls" | grep -qx "branch-D:$WT_BASE" \
+   && grep -q "REMOVE_NODE: '$WT_PATH' branch=$WT_BASE state=done" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7a done node worktree removed + branch deleted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7a done node worktree removed + branch deleted"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7b: office_hours-parked node is NEVER reaped ----------------------
+# The office-hours lane provisions exactly these worktrees for a human to engage
+# in, and writes no reservation marker. A park must survive every sweep.
+echo "Test: N7b office_hours-parked node worktree is never reaped"
+sweep_setup
+WT_BASE="tactic-node-parked"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "parked"   # done BUT parked → keep
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7b sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && ! echo "$calls" | grep -q "branch-D" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=parked" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7b parked node worktree kept (state=parked)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7b parked node worktree kept (state=parked)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7c: an active-phase node worktree is never reaped -----------------
+echo "Test: N7c node worktree at an active phase is never reaped"
+sweep_setup
+WT_BASE="tactic-node-implement"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "implement" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7c sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=active-phase" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7c in-flight node worktree kept (state=active-phase)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7c in-flight node worktree kept (state=active-phase)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7d: a branch that was never a graph node is never reaped ----------
+# No intentions/<branch>.md on origin/main AND no history for that path → a
+# manually created worktree, not a pruned node. Absence of evidence is not
+# evidence of completion.
+echo "Test: N7d non-node worktree (no node file, no history) is never reaped"
+sweep_setup
+WT_BASE="scratch-manual-wt"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7d sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=not-a-node" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7d non-node worktree kept (state=not-a-node)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7d non-node worktree kept (state=not-a-node)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# Positive control: the SAME branch with path history on origin/main is a pruned
+# node and IS reaped.
+sweep_teardown
+echo "Test: N7d' pruned node (no file, but path history) is reaped"
+sweep_setup
+WT_BASE="tactic-node-pruned"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "cafebabecafebabecafebabecafebabecafebabe" > "$STUB_DIR/nodehist-${WT_BASE}.txt"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7d' sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH" \
+   && grep -q "REMOVE_NODE: '$WT_PATH' branch=$WT_BASE state=pruned" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7d' pruned node worktree removed (state=pruned)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7d' pruned node worktree removed (state=pruned)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7e: a just-provisioned node worktree is never reaped --------------
+# The provisioning window: office-hours-graph adds the worktree, and the daemon
+# registers its session only afterwards. A sweep landing inside that window must
+# not reap even a `done`-looking node.
+echo "Test: N7e freshly created node worktree is skipped by the minimum-age gate"
+sweep_setup
+WT_BASE="tactic-node-fresh"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 100000
+export DISPATCH_SWEEP_NOW_EPOCH=100002   # age 2s, well under the 3600 default
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7e sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_TOO_YOUNG: '$WT_PATH' branch=$WT_BASE state=done age_seconds=2 min_age_seconds=3600" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7e fresh node worktree kept (age gate)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7e fresh node worktree kept (age gate)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7f: a live session resident under ANOTHER name blocks the reap ----
+# worktree_has_live_session is NAME-keyed, so an interactive session that entered
+# the worktree under a different name is invisible to it; the cwd-keyed check is
+# what protects that workspace.
+echo "Test: N7f live session with a non-matching name blocks the node reap (cwd-keyed)"
+sweep_setup
+WT_BASE="tactic-node-occupied"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+sweep_fake_claude_sessions_by_name "some-human-session=sid-human"
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7f sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_LIVE_SESSION_CWD: '$WT_PATH' branch=$WT_BASE" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7f cwd-resident session blocked the reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7f cwd-resident session blocked the reap"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7g: a not-in-sync node worktree is NEVER quarantined/force-reaped -
+# The MERGED/CLOSED arms force-reap after the grace because a merged PR / closed
+# issue proves the work is finished. Nothing proves that here, so uncommitted work
+# in a node worktree is skipped indefinitely — no marker, no quarantine, no force.
+echo "Test: N7g not-in-sync node worktree is skipped, never quarantined"
+sweep_setup
+WT_BASE="tactic-node-dirty"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=1
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7g sweep#1 exits 0" "0" "$rc"
+export DISPATCH_SWEEP_NOW_EPOCH=900000   # far past any grace
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7g sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && [[ ! -e "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE" ]] \
+   && [[ ! -d "$TMPDIR_TEST/project/tmp/dispatch-sweep-quarantine" ]] \
+   && grep -q "SKIP_NODE_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7g dirty node worktree skipped with no marker/quarantine/force-reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7g dirty node worktree skipped with no marker/quarantine/force-reap"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7h: unreadable origin/main fails safe (no reap) -------------------
+echo "Test: N7h unresolvable origin/main keeps every node worktree"
+sweep_setup
+WT_BASE="tactic-node-noorigin"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export SWEEP_NO_ORIGIN_MAIN=1
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7h sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=unknown-origin-main" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7h unreadable origin/main kept the node worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7h unreadable origin/main kept the node worktree"
+  echo "    calls: $calls"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
@@ -22995,6 +23384,12 @@ tick_setup() {
   mkdir -p "$TMPDIR_TEST/logs"
   cp "$SCRIPT_DIR/dispatch-tick" "$TMPDIR_TEST/dispatch-tick"
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
+  # Copied (not chmod +x — these are sourced, not executed) so dispatch-tick's
+  # SCRIPT_DIR-relative `source "$SCRIPT_DIR/lib-claude-agents.sh"` /
+  # `lib-reservation-ledger.sh` calls resolve inside the copied tmpdir and the
+  # paused-branch reservation_sweep genuinely runs instead of source-failing.
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
   chmod +x "$TMPDIR_TEST/dispatch-tick"
   # Pin the canonical main worktree so the advisory diagnose-main / jit-reminder
   # spawns get a deterministic --cwd independent of the host repo layout and the
@@ -23010,6 +23405,21 @@ tick_setup() {
   # the default $HOME/.local/share/commons-dispatch/paused. A pause test creates
   # this file explicitly to exercise the guard.
   export DISPATCH_PAUSE_FLAG="$TMPDIR_TEST/paused"
+  # Isolate the two inputs the paused-branch reservation_sweep reads, mirroring
+  # the global setup() and sel_tick_setup. Without these the sweep falls back to
+  # the REAL shared ledger under the host repo's tmp/dispatch-reservations and to
+  # the real `claude` binary — and since a sandboxed `claude agents --json` returns
+  # an empty array with exit 0 (a DEFINITE empty live set, not UNKNOWN), a tick
+  # test would reclaim live production markers as dead-session-stranded,
+  # under-counting effective_live for the next real tick.
+  #  - ledger: an empty scratch dir → the sweep finds no markers and no-ops.
+  #  - liveness: a non-existent binary → `claude agents --json` exits non-zero →
+  #    UNKNOWN, so the sweep declines to reclaim anything.
+  # A sweep test opts in by planting a marker here and overwriting
+  # CLAUDE_AGENTS_CMD with a fake whose registry omits the marker's session.
+  export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
+  mkdir -p "$TMPDIR_TEST/reservations"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -23078,7 +23488,8 @@ tick_teardown() {
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_SEL_RC TICK_GRAPH_EXEC_RC \
     TICK_SEL_PRE TICK_GRAPH_EXEC_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
-    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG
+    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG \
+    DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_SWEEP_NOW_EPOCH
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -23104,6 +23515,27 @@ echo "Test: dispatch-tick paused (flag present, autonomous) → exit 0, no selec
 tick_setup
 : > "$TMPDIR_TEST/paused"
 export TICK_DECISION="empty"
+# Plant a stale/dead-session reservation marker BEFORE the tick runs (in the
+# scratch ledger tick_setup already isolated), and overwrite the default
+# UNKNOWN `claude` stub with a fake whose live-session registry does NOT include
+# the marker's recorded session — so the marker is dead-session-stranded and
+# reclaimable by reservation_sweep. This exercises the sweep dispatch-tick runs
+# on the paused branch before its `exit 0`.
+printf 'session=dead-sess\nissue=910\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/910-slug"
+# Pin the sweep's "now" so the marker's age is host-clock-independent: the
+# stamped timestamp's epoch is 1767225600, so 1767225631 is 31s later — past the
+# 30s boot grace, hence reclaimable (same pinning the rl-sweep-aged test uses).
+# Without this the assertion silently inverts on a host clock at or before
+# 2026-01-01T00:00:30Z, where the marker is still in-flight and correctly kept.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=1767225631
+cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
+#!/usr/bin/env bash
+echo '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "paused: exit 0" "0" "$rc"
 assert_eq "paused: stdout announces pause" "1" \
@@ -23116,6 +23548,8 @@ assert_eq "paused: no graph-execute" "0" \
   "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
 assert_eq "paused: no spawn-job" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+assert_eq "paused: paused-path sweep still reclaimed the dead-session marker" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/910-slug" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- pause sentinel: --manual overrides the flag → the tick runs normally ------
@@ -24448,6 +24882,24 @@ assert_eq "qa-fix partition: already_satisfied element keys" '["id","kind","rati
 # `function partitionDispositions(allDispositions)` definition — both contain the
 # call substring, so the `= ` prefix isolates the invocation to exactly one line.
 assert_eq "qa-fix partition: call site present in qa-fix.js" "1" "$(grep -c '= partitionDispositions(allDispositions)' "$REPO_ROOT/.claude/workflows/qa-fix.js" || true)"
+
+# ============================================================================
+# === align-tactics tempref (resolveTempRefs) ===
+# ============================================================================
+# CI vector: run-unit-tests.sh has no mapping for .claude/workflows/*, so a PR
+# touching only align-tactics.js triggers no vitest suite. The hook-tests job
+# (this script) is the only test that runs on every PR, so coverage for
+# resolveTempRefs must live here. The probe slices the pure function out of
+# align-tactics.js between sentinel comments and evals just that slice, then runs
+# valid-resolution / dangling-ref (rule 13) / cycle (rule 15) assertions.
+
+echo "Test: align-tactics tempref (resolveTempRefs)"
+
+out_at=$(node "$SCRIPT_DIR/align-tactics-tempref-probe.mjs")
+
+# The probe runs its own assertions and prints "ALL PASS" on the final line only
+# when every vector passed (and exits non-zero otherwise). Assert on that token.
+assert_eq "align-tactics tempref: all probe vectors pass" "align-tactics-tempref-probe: ALL PASS" "$(printf '%s' "$out_at" | tail -n1)"
 
 # planned-deferral branch (issue #1891) — three separate input objects to avoid
 # disturbing the f1..f7 order assertion above.

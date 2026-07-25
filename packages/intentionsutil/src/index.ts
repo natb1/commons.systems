@@ -45,6 +45,8 @@ export {
 } from "./transitions.js";
 export type { CiVerdict, TransitionDecision, ScopeStamp } from "./transitions.js";
 export { IntentionSchemaError } from "./errors.js";
+export { lintTacticBodies, loadPlanBodyBaseline } from "./planlint.js";
+export type { PlanBodyMarker, PlanBodyBaselineEntry } from "./planlint.js";
 export { writeNode, readNode, readNodeBody, listNodes } from "./store.js";
 export { listScopeStaleTactics } from "./scope-sweep.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";
