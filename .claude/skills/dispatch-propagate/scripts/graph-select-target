@@ -151,7 +151,7 @@ done
 
 if [[ -n "$NODE_TARGET" && ( -n "$TOP_SET" || -n "$PACE_EXEMPT_ONLY" ) ]]; then
   echo "graph-select-target: --node is mutually exclusive with --top and --pace-exempt-only" >&2
-  echo "usage: graph-select-target [--top <n>] [--pace-exempt-only] [--node <id>]" >&2
+  echo "usage: graph-select-target [--top <n>] [--pace-exempt-only] [--standalone] [--node <id>]" >&2
   exit 2
 fi
 
