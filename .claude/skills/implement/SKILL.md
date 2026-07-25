@@ -128,7 +128,11 @@ On the node lane the four issue-keyed seams below are re-keyed to the graph
   human-facing reason to `$CLAUDE_JOB_DIR/office-hours-reason` (and the
   best-next-steps to `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook
   parks the node via `park-node` (`office_hours` graph write) — see
-  `.claude/hooks/dispatch-stop.sh`.
+  `.claude/hooks/dispatch-stop.sh`. Also write the already-bound `PR_NUM` to
+  `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic tempfile+`mv` write as the
+  reason/recommendation files) so the park records `execution.pr`
+  (tactic-office-hours-pr-custody); skip this write when `PR_NUM` is empty
+  (e.g. escalating before Step 4 has opened a PR yet).
 
 Then fetch any prior PR/phase-log context (use `dangerouslyDisableSandbox:
 true` — the context pack hits `gh`).

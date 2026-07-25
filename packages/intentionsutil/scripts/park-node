@@ -34,7 +34,13 @@
 # optional 3rd arg below, written verbatim to that field — omitted → null. This
 # script never folds the recommendation into <reason> on the caller's behalf.
 #
-# Usage: park-node <node-id> <reason> [recommendation]
+# Usage: park-node [--pr <n>] <node-id> <reason> [recommendation]
+#
+# --pr <n>: optional PR number to record into the node's `execution.pr` at
+# park time (the session's already-resolved PR — this script stays gh-free,
+# so the number must be passed in, never resolved here). <n> must be a
+# non-negative integer. Merged into `execution` via spread, so it never
+# clobbers `execution.branch`/`attempts`/`markers`/`strategy_fingerprint`/`fix`.
 #
 # Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed
 # (including a refused compare-and-swap because origin/main advanced, or an
@@ -46,6 +52,26 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 INTENTIONS_DIR="$REPO_ROOT/intentions"
 STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
 
+PR_ARG=""
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pr)
+      PR_ARG="${2:-}"
+      if [[ -z "$PR_ARG" || ! "$PR_ARG" =~ ^[0-9]+$ ]]; then
+        echo "usage: park-node [--pr <n>] <node-id> <reason> [recommendation] (--pr must be a non-negative integer)" >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    *)
+      POSITIONAL+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${POSITIONAL[@]}"
+
 NODE_ID="${1:-}"
 REASON="${2:-}"
 # Optional 3rd arg: the human-facing best-next-steps recommendation. Now that
@@ -53,7 +79,7 @@ REASON="${2:-}"
 # caller passes it separately instead of folding it into <reason>; omitted → null.
 RECOMMENDATION="${3:-}"
 if [[ $# -lt 2 || $# -gt 3 || -z "$NODE_ID" || -z "$REASON" ]]; then
-  echo "usage: park-node <node-id> <reason> [recommendation]" >&2
+  echo "usage: park-node [--pr <n>] <node-id> <reason> [recommendation]" >&2
   exit 2
 fi
 
@@ -100,22 +126,31 @@ trap '
   fi
 ' EXIT
 cat >"$TMPTS" <<'TS'
-// argv: <storeModule> <intentionsDir> <since> <reason> <recommendation> <id>
-const [storePath, intentionsDir, since, reason, recommendation, id] = process.argv.slice(2);
+// argv: <storeModule> <intentionsDir> <since> <reason> <recommendation> <id> <pr>
+const [storePath, intentionsDir, since, reason, recommendation, id, pr] = process.argv.slice(2);
 const { readNode, writeNode } = await import(storePath);
 const node = readNode(intentionsDir, id);
 node.office_hours = { reason, since, recommendation: recommendation || null };
+// Spread-merge so an existing execution.branch/attempts/markers/strategy_fingerprint/fix
+// is never clobbered; only `pr` changes, and only when --pr was passed (pr !== "").
+// Mirrors apply-node-transition.ts's defaultExecution fallback for a node with no
+// execution record yet (schema requires branch/attempts/markers to be present).
+if (pr !== "") {
+  const defaultExecution = { branch: id, pr: null, attempts: {}, markers: [], strategy_fingerprint: null };
+  const execution = node.execution ?? defaultExecution;
+  node.execution = { ...execution, pr: Number(pr) };
+}
 writeNode(intentionsDir, node);
 process.stderr.write(`park-node: set office_hours on ${id} (since=${since})\n`);
 TS
 
 MUTATED=1
-if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SINCE" "$REASON" "$RECOMMENDATION" "$NODE_ID" >&2); then
+if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SINCE" "$REASON" "$RECOMMENDATION" "$NODE_ID" "$PR_ARG" >&2); then
   echo "park-node: failed to write the office_hours record for $NODE_ID" >&2
   exit 1
 fi
 
-if ! "$SCRIPT_DIR/graph-commit" --base "$NODE_ID=$FRESH_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
   echo "park-node: graph-commit failed for $NODE_ID; the office_hours write was rolled back" >&2
   exit 1
 fi

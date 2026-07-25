@@ -28,13 +28,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Author sign-off on public-facing copy: review the draft headline
-    ('commons.systems: A data structure for managing intentions and alignment'),
-    the use-it-with subline, and the spec + reference-implementation identity
-    sentence in tactic-readme-data-structure-first's body; ratify or revise. Not
-    claude-decidable — the headline is the project's public identity."
-  since: 2026-07-07
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

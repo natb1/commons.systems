@@ -29,7 +29,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-main-post-merge-validation
   pr: 2962
@@ -37,8 +37,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:22:05Z
+    mergeCommitSha: 432bfe82662dca4c49eaf3c98d52856b4a165b56
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

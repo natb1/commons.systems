@@ -74,6 +74,29 @@
 #      with the prune-specific sentinel note
 #  24. an unrelated dirty tracked file outside the node set: clear pre-flight
 #      error naming the file, no rebase/CI attempted, main untouched
+#  25. -C targeting from an unrelated cwd: the graph-commit script FILE lives
+#      inside one clone (w16) but is invoked with `-C` pointing at a DIFFERENT
+#      clone (w17), from a cwd that is neither — the exact scenario that used
+#      to silently break (REPO_ROOT derived from the script's own on-disk
+#      location, landing in whatever checkout the script FILE happened to sit
+#      in, regardless of caller intent or -C). Asserts the edit lands via w17,
+#      not w16 or the cwd.
+#      (cwd-derivation with no `-C` — the default path — is already exercised
+#      as a regression guard by nearly every other case via run_gc(), which
+#      always `cd`s into the target clone and passes no `-C`; no separate case
+#      needed.)
+#  26. no-repo error: invoked with no `-C` from a cwd that is not inside any
+#      git repository at all (a plain `mktemp -d`, never `git init`'d) — a
+#      clear non-zero exit naming "not inside a git repository", never a
+#      silent fall-back to the script's own checkout.
+#  27. fail-loud guard, differing blob: a clone that never edited a given id
+#      (nothing staged) while origin/main has since advanced with a DIFFERENT
+#      edit to that same id (a stale clone) — dies loudly naming "mis-pointed
+#      -C/--repo", never reaches the "landed" success message, main untouched.
+#  28. fail-loud guard, benign equal-blob: a clone synced exactly to
+#      origin/main's tip (nothing staged, and the local blob for the id
+#      equals origin/main's blob) proceeds benignly — exit 0, the same
+#      "no new changes to stage" message, no die.
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -122,7 +145,8 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
 }
 for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2-migration \
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
-          t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight; do
+          t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
+          t-cwd-target t-fail-loud-diff t-fail-loud-benign; do
   seed_node "$id"
 done
 
@@ -938,6 +962,95 @@ if [[ $rc -eq 1 ]] \
   ok "unrelated dirty tracked file: clear pre-flight error names the file, no rebase/CI attempted, main untouched"
 else
   no "unrelated dirty tracked file pre-flight (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 25: -C targeting from an unrelated cwd --------------------------------
+# The graph-commit script FILE lives inside w16's checkout, but the invocation
+# passes `-C` pointing at a DIFFERENT clone (w17), from a cwd that is neither.
+# Pre-fix, REPO_ROOT was derived from the script's own on-disk location
+# (SCRIPT_DIR-climbing), so this would have silently landed in w16 regardless
+# of -C or cwd. Post-fix, REPO_ROOT is resolved from -C, so the edit must land
+# via w17's tree.
+set_mode green
+W16="$WORK/w16"; make_clone "$W16" writer-16   # only the script FILE's location
+W17="$WORK/w17"; make_clone "$W17" writer-17   # the actual -C target
+edit_line "$W17" t-cwd-target 1 target-edit-via-C
+UNRELATED_DIR="$WORK/unrelated-cwd"
+mkdir -p "$UNRELATED_DIR"
+out="$(
+  cd "$UNRELATED_DIR" || exit 99
+  export PATH="$WORK/bin:$PATH"
+  export GC_GH_MODE_FILE="$MODE_FILE" GC_GH_CALL_LOG="$CALL_LOG" GC_FIXTURE_DIR="$FIXTURE_DIR"
+  export GRAPH_COMMIT_CHECK_POLL_SECONDS=0 GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5 GRAPH_COMMIT_MAX_ATTEMPTS=5
+  bash "$W16/packages/intentionsutil/scripts/graph-commit" -C "$W17" -m 'test: -C from unrelated cwd' t-cwd-target 2>&1
+)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-cwd-target | grep -q 'line1: target-edit-via-C'; then
+  ok "-C targeting: script physically inside w16, targeting w17 via -C from an unrelated cwd, lands in w17's repo"
+else
+  no "-C targeting from unrelated cwd (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 26: no-repo error -------------------------------------------------------
+# No `-C` given, invoked from a cwd that is not inside any git repository at
+# all (a plain mktemp -d, never `git init`'d). Must die loudly naming the
+# problem — never silently fall back to the script's own on-disk checkout.
+NOREPO_DIR="$WORK/no-repo-dir"
+mkdir -p "$NOREPO_DIR"
+out="$(
+  cd "$NOREPO_DIR" || exit 99
+  export PATH="$WORK/bin:$PATH"
+  export GC_GH_MODE_FILE="$MODE_FILE" GC_GH_CALL_LOG="$CALL_LOG" GC_FIXTURE_DIR="$FIXTURE_DIR"
+  export GRAPH_COMMIT_CHECK_POLL_SECONDS=0 GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5 GRAPH_COMMIT_MAX_ATTEMPTS=5
+  bash "$A/packages/intentionsutil/scripts/graph-commit" -m 'test: no repo' t-happy 2>&1
+)"; rc=$?
+if [[ $rc -ne 0 ]] && grep -q 'not inside a git repository' <<<"$out"; then
+  ok "no-repo error: cwd outside any git repository dies with a clear message, no silent fallback"
+else
+  no "no-repo error (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 27: fail-loud guard, differing blob -------------------------------------
+# A clone that never edited t-fail-loud-diff (nothing staged for it) while
+# origin/main has since advanced with a DIFFERENT edit to that same id (a
+# stale clone/checkout). Under caller-derived repo resolution this can only
+# mean the wrong checkout is targeted, so graph-commit must die loudly rather
+# than emit the false "landed" success the old script-location-derived
+# resolution risked.
+set_mode green
+W13="$WORK/w13"; make_clone "$W13" writer-13   # stays at the seed tip — never synced
+OTHER4="$WORK/other4"; make_clone "$OTHER4" other4
+edit_line "$OTHER4" t-fail-loud-diff 1 concurrent-landed
+git -C "$OTHER4" commit -qam 'concurrent edit lands on origin, unrelated to w13'
+git -C "$OTHER4" push -q origin main
+before_sha="$(origin_sha)"
+out="$(run_gc "$W13" t-fail-loud-diff 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -ne 0 ]] \
+   && grep -q 'mis-pointed -C/--repo' <<<"$out" \
+   && ! grep -q 'landed t-fail-loud-diff on main' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "fail-loud guard: differing blob vs origin/main with nothing staged dies loudly, never lands"
+else
+  no "fail-loud guard differing-blob (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 28: fail-loud guard, benign equal-blob ----------------------------------
+# A clone synced exactly to origin/main's current tip: nothing staged, and the
+# local blob for the id already EQUALS origin/main's blob (the already-landed
+# / already-at-HEAD case). This must proceed benignly — same "no new changes
+# to stage" message as case 2, no die.
+W15="$WORK/w15"; make_clone "$W15" writer-15
+sync_clone "$W15"   # now bit-for-bit at origin/main's tip
+before_sha="$(origin_sha)"
+out="$(run_gc "$W15" t-happy 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'no new changes to stage' <<<"$out" \
+   && ! grep -q 'mis-pointed' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "fail-loud guard: benign equal-blob (already at origin/main's tip) proceeds without error"
+else
+  no "fail-loud guard benign-equal-blob (rc=$rc)"; printf '%s\n' "$out"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

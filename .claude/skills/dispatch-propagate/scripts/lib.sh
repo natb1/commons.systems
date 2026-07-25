@@ -1086,6 +1086,10 @@ gh_commit_is_ancestor_rest() {
 #     (same value the porcelain `headRefName` carries).
 #   - headRefOid: the PR's head commit oid, remapped from REST's `head.sha`
 #     (same value the porcelain `headRefOid` carries).
+#   - mergeCommitSha: REST `merge_commit_sha`. NOT a merge signal on its own —
+#     GitHub populates it with the ephemeral test-merge sha on OPEN PRs and
+#     leaves a stale value on closed-unmerged PRs. Only trust it as the commit
+#     the PR landed as when `mergedAt` is also non-null.
 #   - labels: narrowed to the porcelain-visible key (`name`) rather than passing
 #     the full REST label objects through (same as gh_issue_view_rest's labels).
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
@@ -1129,6 +1133,7 @@ gh_pr_view_rest() {
     body: (.body // ""),
     state: (.state | ascii_upcase),
     mergedAt: .merged_at,
+    mergeCommitSha: .merge_commit_sha,
     mergeable: (
       if .mergeable == true then "MERGEABLE"
       elif .mergeable == false then "CONFLICTING"
@@ -1709,7 +1714,36 @@ playwright_install_with_deps() {
     # makes this inert when `sleep` is stubbed instant (unit tests): no real
     # time passed => not a stall.
     (
-      sleep "$timeout_s"
+      # Background our own sleep (known PID) instead of running it as a plain
+      # non-final child: bash forks a non-final `sleep` into a real child that
+      # `kill "$watchdog_pid"` (the fast-path cancel below) can't reach — it
+      # would orphan to init and idle for the rest of timeout_s. A TERM trap
+      # relays that cancel straight to the sleep so it dies immediately.
+      #
+      # Install the trap BEFORE the fork: in the window between `sleep &` and
+      # the trap the subshell still has TERM's default disposition, so a cancel
+      # landing there would kill the watchdog outright and orphan the sleep —
+      # the exact leak this guards against. The trap only records the cancel
+      # (and relays it when the pid is already known); the post-fork check
+      # closes the remaining sliver where the trap ran after the fork but
+      # before `sleep_pid` was assigned. The trap must NOT exit on its own: a
+      # TERM arriving once the watchdog is already inside kill_tree would abort
+      # the SIGTERM->grace->SIGKILL escalation the block below relies on.
+      cancelled=
+      trap 'cancelled=1; kill "${sleep_pid:-}" 2>/dev/null || true' TERM
+      sleep "$timeout_s" &
+      sleep_pid=$!
+      if [ -n "$cancelled" ]; then
+        kill "$sleep_pid" 2>/dev/null || true
+        exit 0
+      fi
+      # `|| true` + the explicit cancelled check: on cancel `wait` returns 143,
+      # and without them the fall-through into the kill decision below would be
+      # stopped only by the caller happening to run with errexit.
+      wait "$sleep_pid" || true
+      if [ -n "$cancelled" ]; then
+        exit 0
+      fi
       now=$(date +%s)
       if [ "$((now - start_ts))" -ge "$timeout_s" ] && kill -0 "$install_pid" 2>/dev/null; then
         kill_tree "$install_pid"

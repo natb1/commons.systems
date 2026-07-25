@@ -19,7 +19,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-playwright-watchdog-orphan-sleep
   pr: 2967
@@ -27,8 +27,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:22:49Z
+    mergeCommitSha: 505754f0cba321baed94b6ff4398508b4b85c57d
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

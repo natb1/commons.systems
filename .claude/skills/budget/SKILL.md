@@ -242,6 +242,48 @@ spec you applied. Name the new snapshot path
 `current` was overwritten in place with a fresh mtime — that fresh mtime is what
 triggers the hosted app to re-read the snapshot.
 
+### Stamp the strategy reading
+
+`strategy-recover-finance`'s success signal is "statements merged and
+categorized monthly", sensed by this snapshot history. After a successful
+publish (Step 4 exit 0, a fresh snapshot on `current`), record the sync on the
+strategy node so its `reading` stays current. Do this once per successful
+`/budget`, and only when a fresh snapshot actually landed.
+
+1. Dump the strategy node to JSON, capturing the compare-and-swap base:
+
+   ```bash
+   node --import tsx/esm packages/intentionsutil/scripts/dump-node.ts \
+     --out-dir "$TMPDIR" strategy-recover-finance
+   ```
+
+   This writes `$TMPDIR/strategy-recover-finance.json` (the shape `write-node.ts`
+   consumes) and `$TMPDIR/base-manifest.txt`.
+
+2. In that JSON, set `reading` to
+   `"<YYYY-MM> statements merged and categorized; snapshot <filename>"`, where
+   `<YYYY-MM>` is the merged statement month and `<filename>` is the basename of
+   the just-published snapshot (`budget-<ts>.enc.json`, echoed by
+   `budget-apply`). Set `gap` to `null` when the merged month is the most recent
+   complete month; otherwise name the shortfall (e.g. the months still unmerged).
+   Change nothing else.
+
+3. Write it back through the validation gate, then land it:
+
+   ```bash
+   node --import tsx/esm packages/intentionsutil/scripts/write-node.ts \
+     --file "$TMPDIR/strategy-recover-finance.json"
+   packages/intentionsutil/scripts/graph-commit \
+     --base "$TMPDIR/base-manifest.txt" strategy-recover-finance
+   ```
+
+`reading` and `gap` are sensor-writable state fields, excluded from the strategy
+substance fingerprint, so this stamp never triggers a soft freeze on the
+strategy. The snapshot filename carries a timestamp only — no transaction data —
+so it is safe for the public graph. The privacy invariant above otherwise
+applies unchanged: never put transaction contents, descriptions, amounts, or
+account identifiers into the stamped `reading`.
+
 ## Wrong-password handling
 
 A decryption failure when reading an existing `current` snapshot is a

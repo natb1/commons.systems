@@ -26,7 +26,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-graph-commit-cwd-repo-resolution
   pr: 2938
@@ -36,14 +36,13 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:21:13Z
+    mergeCommitSha: 6d55ba28328baf95e5d8e1c2c09fcbaf581b484d
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-23
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /dispatch-conflict once it accepts node targets.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
