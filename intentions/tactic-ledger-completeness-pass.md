@@ -29,7 +29,6 @@ execution: null
 validates:
   - strategy-complete-ledger
 blocked_by:
-  - tactic-ledger-census
   - tactic-delegation-food-supply-record
 office_hours:
   reason: "Human sensor: at an office-hours sitting, run the ledger census and

@@ -57,7 +57,11 @@ describe("reconcileGraph", () => {
     const dir = tempDir();
     node(dir, { id: "kind-strategy", kind: "kind" });
     node(dir, { id: "kind-tactic", kind: "kind" });
-    node(dir, { id: "strategy-s", kind: "strategy", rounds: { count: 0, last_completed: null } });
+    node(dir, {
+      id: "strategy-s",
+      kind: "strategy",
+      rounds: { count: 0, last_completed: null, last_aligned: null },
+    });
     node(dir, { id: "tactic-done", kind: "tactic", phase: "review", serves: ["strategy-s"] });
     node(dir, { id: "tactic-next", kind: "tactic", phase: "draft", serves: ["strategy-s"], blocked_by: ["tactic-done"] });
 
@@ -70,7 +74,7 @@ describe("reconcileGraph", () => {
     expect(readNode(dir, "tactic-next").blocked_by).toEqual([]);
     // Round stamped (only a draft child remains).
     const s = readNode(dir, "strategy-s");
-    expect(s.rounds).toEqual({ count: 1, last_completed: "2026-07-10" });
+    expect(s.rounds).toEqual({ count: 1, last_completed: "2026-07-10", last_aligned: null });
     expect(plan.edit).toContain("strategy-s");
     expect(plan.edit).toContain("tactic-next");
   });
@@ -83,21 +87,29 @@ describe("reconcileGraph", () => {
     expect(plan.prune).toEqual(["tactic-abandoned"]);
   });
 
-  it("defers a merged residue-bearing tactic (main-qa not yet in schema)", () => {
+  it("routes a merged residue-bearing tactic to main-qa (schema now carries the phase)", () => {
     const dir = tempDir();
     node(dir, { id: "kind-tactic", kind: "kind" });
     node(dir, { id: "tactic-residue", kind: "tactic", phase: "review" }, "# body\n\n## needs-main\n\nverify prod\n");
     const plan = reconcileGraph({ dir, prStatesFile: prStates(dir, { "tactic-residue": "merged" }), date: "2026-07-10" });
     expect(plan.prune).toEqual([]);
-    expect(plan.deferred).toEqual([{ id: "tactic-residue", reason: "main-qa phase not yet in schema (tactic-main-qa-phase)" }]);
+    expect(plan.deferred).toEqual([]);
+    expect(plan.reconciled).toContainEqual({ id: "tactic-residue", target: "main-qa" });
+    expect(plan.edit).toContain("tactic-residue");
+    // Not pruned — the node persists into its main-qa phase for post-merge verification.
     expect(existsSync(join(dir, "tactic-residue.md"))).toBe(true);
+    expect(readNode(dir, "tactic-residue").phase).toBe("main-qa");
   });
 
   it("stamps a strategy once when two sibling children are pruned in the same sweep", () => {
     const dir = tempDir();
     node(dir, { id: "kind-strategy", kind: "kind" });
     node(dir, { id: "kind-tactic", kind: "kind" });
-    node(dir, { id: "strategy-s", kind: "strategy", rounds: { count: 0, last_completed: null } });
+    node(dir, {
+      id: "strategy-s",
+      kind: "strategy",
+      rounds: { count: 0, last_completed: null, last_aligned: null },
+    });
     node(dir, { id: "tactic-a", kind: "tactic", phase: "review", serves: ["strategy-s"] });
     node(dir, { id: "tactic-b", kind: "tactic", phase: "review", serves: ["strategy-s"] });
 
@@ -108,20 +120,32 @@ describe("reconcileGraph", () => {
     });
 
     expect(plan.prune.sort()).toEqual(["tactic-a", "tactic-b"]);
-    expect(readNode(dir, "strategy-s").rounds).toEqual({ count: 1, last_completed: "2026-07-10" });
+    expect(readNode(dir, "strategy-s").rounds).toEqual({
+      count: 1,
+      last_completed: "2026-07-10",
+      last_aligned: null,
+    });
   });
 
   it("does not stamp while a non-draft sibling survives the sweep", () => {
     const dir = tempDir();
     node(dir, { id: "kind-strategy", kind: "kind" });
     node(dir, { id: "kind-tactic", kind: "kind" });
-    node(dir, { id: "strategy-s", kind: "strategy", rounds: { count: 0, last_completed: null } });
+    node(dir, {
+      id: "strategy-s",
+      kind: "strategy",
+      rounds: { count: 0, last_completed: null, last_aligned: null },
+    });
     node(dir, { id: "tactic-a", kind: "tactic", phase: "review", serves: ["strategy-s"] });
     node(dir, { id: "tactic-b", kind: "tactic", phase: "qa", serves: ["strategy-s"] });
 
     const plan = reconcileGraph({ dir, prStatesFile: prStates(dir, { "tactic-a": "merged" }), date: "2026-07-10" });
     expect(plan.prune).toEqual(["tactic-a"]);
-    expect(readNode(dir, "strategy-s").rounds).toEqual({ count: 0, last_completed: null });
+    expect(readNode(dir, "strategy-s").rounds).toEqual({
+      count: 0,
+      last_completed: null,
+      last_aligned: null,
+    });
   });
 
   it("ignores tactics whose PR is not terminal or that are draft/done", () => {

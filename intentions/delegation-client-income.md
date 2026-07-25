@@ -23,6 +23,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   delegatee: a small set of consulting clients
   delegated: the income stream and, through it, a share of attention allocation
@@ -43,5 +51,11 @@ attributes:
   review_trigger: recovery progress under strategy-diversify-income; client
     concentration rising as the pipeline refills
   last_assessed: 2026-07-02
+  household:
+    shared: false
+    basis: The record explicitly scopes this to the author's own income stream
+      through consulting clients; not a household-shared attachment.
+    consent: []
+    preferences: []
 ---
 # Income concentrated in a small set of consulting clients

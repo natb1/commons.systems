@@ -31,7 +31,6 @@ execution: null
 validates:
   - strategy-household-shared-attachments
 blocked_by:
-  - tactic-household-consent-instrument
   - tactic-household-consent-offering
 office_hours:
   reason: "Owner reading (about 30 minutes), runs after

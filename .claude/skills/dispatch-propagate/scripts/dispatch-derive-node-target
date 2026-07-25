@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# dispatch-derive-node-target — shared front-door target-derivation script for
+# the graph-native tactic phase skills (tactic-dispatch-skill-input-contract
+# Unit 1). Replaces each phase skill's hand-rolled branch-name parsing +
+# sed/git-archive dance with one scripted call: validate the node id, confirm
+# the current worktree branch matches it, snapshot the node from origin/main,
+# read it via the intentionsutil store primitives, gate on the expected phase,
+# and (optionally) resolve the open PR.
+#
+# Usage: dispatch-derive-node-target <node-id> (--expect-phase <phase> | --expect-fix-active) [--pr-mode none|optional|required]
+#
+#   <node-id>        The node id this session is operating on. Must match the
+#                     node-id slug regex AND the current checked-out branch
+#                     name (tactic phase worktrees are branch==node-id, mirrors
+#                     dispatch-graph-execute's provisioning contract).
+#   --expect-phase    The phase the caller expects the node to be persisted at.
+#                     Mismatch is a stale-selection signal (exit 3), not a usage
+#                     error — the caller decides how to react. Exactly one of
+#                     --expect-phase / --expect-fix-active must be given.
+#   --expect-fix-active
+#                     Gate on an active CI-fix interrupt instead of a ladder
+#                     phase: require the node's `execution.fix` to be non-null
+#                     (the /fix-checks lane's real gate — `phase` stays at its
+#                     ladder position and is never the literal "fix"). Null
+#                     `execution.fix` is exit 3 (no active interrupt). Exactly
+#                     one of --expect-phase / --expect-fix-active must be given.
+#   --pr-mode         none (default): skip PR resolution, never calls gh.
+#                     optional: resolve the open PR if one exists; empty is
+#                     NOT an error.
+#                     required: resolve the open PR; empty PR IS an error
+#                     (exit 4).
+#
+# Stdout (success only):
+#   === NODE <node-id> ===
+#   PHASE: <phase>
+#   PR: <num>|none
+#   === NODE-JSON ===
+#   <compact single-line JSON — the full readNode() frontmatter object>
+#   === NODE-BODY ===
+#   <raw markdown body, verbatim>
+#
+# Exit codes:
+#   0  success
+#   1  node-not-found / read-failure (absent from origin/main, or the store
+#      primitives failed to read it)
+#   2  usage error (bad node-id, missing/duplicated gate flag) or branch mismatch
+#   3  gate mismatch: --expect-phase does not match the node's persisted phase,
+#      or --expect-fix-active and the node's execution.fix is null
+#   4  --pr-mode required and no open PR was found
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+usage() {
+  echo "usage: dispatch-derive-node-target <node-id> (--expect-phase <phase> | --expect-fix-active) [--pr-mode none|optional|required]" >&2
+}
+
+NODE_ID="${1:-}"
+if [[ -z "$NODE_ID" ]]; then
+  usage
+  exit 2
+fi
+shift || true
+
+if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  echo "dispatch-derive-node-target: invalid node id '$NODE_ID' (must match ^[a-z][a-z0-9]*(-[a-z0-9]+)*\$)" >&2
+  exit 2
+fi
+
+EXPECT_PHASE=""
+EXPECT_FIX_ACTIVE=0
+PR_MODE="none"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --expect-phase)
+      EXPECT_PHASE="${2:-}"
+      shift 2 ;;
+    --expect-fix-active)
+      EXPECT_FIX_ACTIVE=1
+      shift ;;
+    --pr-mode)
+      PR_MODE="${2:-}"
+      shift 2 ;;
+    *)
+      echo "dispatch-derive-node-target: unexpected argument '$1'" >&2
+      usage
+      exit 2 ;;
+  esac
+done
+
+# Exactly one gate mode must be selected.
+if [[ -n "$EXPECT_PHASE" && "$EXPECT_FIX_ACTIVE" -eq 1 ]]; then
+  echo "dispatch-derive-node-target: --expect-phase and --expect-fix-active are mutually exclusive" >&2
+  usage
+  exit 2
+fi
+if [[ -z "$EXPECT_PHASE" && "$EXPECT_FIX_ACTIVE" -eq 0 ]]; then
+  echo "dispatch-derive-node-target: exactly one of --expect-phase <phase> or --expect-fix-active is required" >&2
+  usage
+  exit 2
+fi
+
+case "$PR_MODE" in
+  none|optional|required) ;;
+  *)
+    echo "dispatch-derive-node-target: --pr-mode must be one of none|optional|required, got '$PR_MODE'" >&2
+    usage
+    exit 2 ;;
+esac
+
+# --- Step 2: branch consistency check ----------------------------------------
+CUR_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$CUR_BRANCH" != "$NODE_ID" ]]; then
+  echo "dispatch-derive-node-target: current branch '$CUR_BRANCH' does not match node id '$NODE_ID'" >&2
+  exit 2
+fi
+
+# --- Step 3: snapshot intentions/<node-id>.md from origin/main --------------
+# Fail loudly on a failed fetch: the whole point of the script is to gate on the
+# LATEST origin/main node state. A silent failure would proceed against a
+# possibly-stale local origin/main ref and make a wrong gate/PR decision.
+git fetch origin main --quiet || {
+  echo "dispatch-derive-node-target: git fetch origin main failed" >&2
+  exit 1
+}
+
+SNAP_DIR="$(mktemp -d)" || { echo "dispatch-derive-node-target: mktemp failed" >&2; exit 1; }
+trap 'rm -rf "$SNAP_DIR"' EXIT
+
+if ! git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -x -C "$SNAP_DIR"; then
+  echo "dispatch-derive-node-target: node '$NODE_ID' not found at origin/main (intentions/$NODE_ID.md)" >&2
+  exit 1
+fi
+
+# --- Step 4: read the node via the intentionsutil store primitives ----------
+COMBINED_JSON="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+  const { readNode, readNodeBody } = await import("./packages/intentionsutil/src/store.js");
+  const id = process.argv[1];
+  process.stdout.write(JSON.stringify({ node: readNode(process.argv[2], id), body: readNodeBody(process.argv[2], id) }));
+' "$NODE_ID" "$SNAP_DIR/intentions") )"
+if [[ $? -ne 0 || -z "$COMBINED_JSON" ]]; then
+  echo "dispatch-derive-node-target: could not read node '$NODE_ID' from the origin/main snapshot" >&2
+  exit 1
+fi
+
+# --- Step 5: gate --------------------------------------------------------
+# ACTUAL_PHASE is read regardless of gate mode — it is emitted informationally
+# on the PHASE: line (step 7). It is the gate criterion only under --expect-phase.
+ACTUAL_PHASE="$(jq -r '.node.phase' <<<"$COMBINED_JSON")"
+if [[ "$EXPECT_FIX_ACTIVE" -eq 1 ]]; then
+  ACTUAL_FIX="$(jq -r '.node.execution.fix // "null"' <<<"$COMBINED_JSON")"
+  if [[ "$ACTUAL_FIX" == "null" ]]; then
+    echo "dispatch-derive-node-target: node '$NODE_ID' has no active CI-fix interrupt (execution.fix is null)" >&2
+    exit 3
+  fi
+else
+  if [[ "$ACTUAL_PHASE" != "$EXPECT_PHASE" ]]; then
+    echo "dispatch-derive-node-target: node '$NODE_ID' is at phase '$ACTUAL_PHASE', expected '$EXPECT_PHASE'" >&2
+    exit 3
+  fi
+fi
+
+# --- Step 6: PR resolution ------------------------------------------------
+PR_NUM=""
+if [[ "$PR_MODE" == "optional" || "$PR_MODE" == "required" ]]; then
+  PR_JSON="$(gh_pr_list_rest --state open --head "$NODE_ID" --limit 1)" || {
+    echo "dispatch-derive-node-target: gh_pr_list_rest --head '$NODE_ID' failed" >&2
+    exit 1
+  }
+  PR_NUM="$(jq -r '.[0].number // empty' <<<"$PR_JSON")"
+  if [[ "$PR_MODE" == "required" && -z "$PR_NUM" ]]; then
+    echo "dispatch-derive-node-target: --pr-mode required but no open PR was found for '$NODE_ID'" >&2
+    exit 4
+  fi
+fi
+
+# --- Step 7: emit -----------------------------------------------------------
+printf '=== NODE %s ===\n' "$NODE_ID"
+printf 'PHASE: %s\n' "$ACTUAL_PHASE"
+if [[ -n "$PR_NUM" ]]; then
+  printf 'PR: %s\n' "$PR_NUM"
+else
+  printf 'PR: none\n'
+fi
+printf '=== NODE-JSON ===\n'
+jq -c '.node' <<<"$COMBINED_JSON"
+printf '=== NODE-BODY ===\n'
+jq -r '.body' <<<"$COMBINED_JSON"
+
+exit 0

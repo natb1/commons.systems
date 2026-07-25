@@ -58,6 +58,23 @@ clarifications:
       preserved in that tactic's body. Restoration is gated on the tier-2 entry
       declaration on strategy-progressive-validation. Recorded 2026-07-06
       interview.
+  - question: What did the 2026-07-13 /align-tactics round decompose, and does the
+      print hero still match the 2026-07-06 removal scope?
+    answer: "The round finalized tactic-quiet-app-heroes to phase: implement (the
+      ungated quiet-state work: replace the print and budget app heroes with the
+      landing-style ds Hero, no demo cards, shown only over public demo data).
+      tactic-restore-onboarding-chips and tactic-budget-migration-guide were
+      born-parked on the tier-2 entry gate (tier 2 is not yet declared on
+      strategy-progressive-validation), not planned. Drift note:
+      print/src/pages/Hero.tsx has since evolved to three easy/medium/hard chips
+      (upload/format/host, two carrying fork links) plus an FAQ, rather than the
+      'two fork chips' the 2026-07-06 interview described; because the
+      quiet-state work replaces the entire hero with the landing hero, full-hero
+      replacement subsumes the drift and no re-scope is needed. The signal stays
+      unvalidated this round by design: onboarding completions cannot be sensed
+      while surfaces are correctly quiet, so no instrument tactic is bought and
+      no tactic carries a validates edge; the pre-tier-2 job is to establish and
+      hold the quiet state. Recorded 2026-07-13 /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: non-author users complete an onboarding path end-to-end and a report
@@ -74,7 +91,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - tier-2 (user) entry is declared on strategy-progressive-validation

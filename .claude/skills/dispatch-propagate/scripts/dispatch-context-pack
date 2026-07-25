@@ -4,15 +4,32 @@
 # call live-state preamble into a single scripted call.
 #
 # Usage:
-#   dispatch-context-pack <N> [--issue] [--relations] [--pr] [--phase-log] [--diff]
+#   dispatch-context-pack <N> [--issue] [--relations] [--pr] [--phase-log] [--diff] [--pr-is-number]
 #
-#   <N>            Issue number (digits only, positive).
-#   --issue        Issue title, state, body, and comments.
+#   <N>            Issue number (digits only, positive) — or, with
+#                  --pr-is-number, a PR number instead (graph-native node-lane
+#                  callers key everything off `execution.pr`, which has no
+#                  associated issue).
+#   --issue        Issue title, state, body, and comments. Requires <N> to be
+#                  an issue number — incompatible with --pr-is-number.
 #   --relations    Blockers / sub-issues / parent / siblings as
-#                  titles + state + URL only (never full bodies).
+#                  titles + state + URL only (never full bodies). Requires <N>
+#                  to be an issue number — incompatible with --pr-is-number.
 #   --pr           PR number, labels, CI rollup, and body.
 #   --phase-log    The <!-- dispatch:phase-log --> handoff-note comment body, or `phase-log: none`.
+#                  Reads via the GitHub issue-comments endpoint, which also
+#                  covers PRs (a PR IS an issue in GitHub's data model) — safe
+#                  with --pr-is-number.
 #   --diff         merge-base, --stat, changed-file list, and capped hunks.
+#                  Pure git, ignores <N> entirely — safe with --pr-is-number.
+#   --pr-is-number Treat <N> as a PR number directly: the --pr slice fetches
+#                  it via gh_pr_view_rest without the dispatch-find-pr
+#                  issue→PR branch-prefix lookup (which would misresolve a PR
+#                  number treated as an issue number). For the node-target
+#                  lane, where the caller already has the PR number from the
+#                  node's `execution.pr` and there is no issue to correlate
+#                  from. Only affects --pr; --issue/--relations reject it
+#                  (they have no PR-number equivalent).
 #
 # At least one section flag is required. Sections are emitted in a fixed
 # canonical order — issue → relations → pr → phase-log → diff — regardless of
@@ -48,16 +65,18 @@ WANT_RELATIONS=0
 WANT_PR=0
 WANT_PHASELOG=0
 WANT_DIFF=0
+PR_IS_NUMBER=0
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
-    --issue)     WANT_ISSUE=1 ;;
-    --relations) WANT_RELATIONS=1 ;;
-    --pr)        WANT_PR=1 ;;
-    --phase-log) WANT_PHASELOG=1 ;;
-    --diff)      WANT_DIFF=1 ;;
+    --issue)         WANT_ISSUE=1 ;;
+    --relations)     WANT_RELATIONS=1 ;;
+    --pr)            WANT_PR=1 ;;
+    --phase-log)     WANT_PHASELOG=1 ;;
+    --diff)          WANT_DIFF=1 ;;
+    --pr-is-number)  PR_IS_NUMBER=1 ;;
     *)
-      echo "error: unknown flag '$1' — expected --issue, --relations, --pr, --phase-log, or --diff" >&2
+      echo "error: unknown flag '$1' — expected --issue, --relations, --pr, --phase-log, --diff, or --pr-is-number" >&2
       exit 2
       ;;
   esac
@@ -68,6 +87,14 @@ done
 # masks a caller bug (input validation at the edge, per .claude/rules/code-style.md).
 if (( WANT_ISSUE + WANT_RELATIONS + WANT_PR + WANT_PHASELOG + WANT_DIFF == 0 )); then
   echo "error: no section selected — pass at least one of --issue, --relations, --pr, --phase-log, --diff" >&2
+  exit 2
+fi
+
+# --pr-is-number has no meaning for --issue/--relations (both require a real
+# issue number to correlate against; there is no PR-number equivalent), and is
+# a caller bug otherwise silently ignored — reject it explicitly.
+if [[ "$PR_IS_NUMBER" == 1 ]] && (( WANT_ISSUE + WANT_RELATIONS > 0 )); then
+  echo "error: --pr-is-number is incompatible with --issue/--relations (<N> cannot be both a PR number and an issue number)" >&2
   exit 2
 fi
 
@@ -152,10 +179,24 @@ build_relations_section() {
 # plan-phase case). A non-zero dispatch-find-pr exit is a real failure → return 1.
 # Inside the helper, all command substitutions use the two-line form to avoid
 # masking failures under `local`.
+#
+# pr_is_number=1 (the --pr-is-number caller mode): <N> IS the PR number
+# already — skip dispatch-find-pr's issue→PR branch-prefix lookup entirely
+# (which would otherwise treat <N> as an issue number and almost always
+# resolve to "no PR", or worse, coincidentally match an unrelated PR whose
+# branch happens to start with that same numeral). gh_pr_view_rest takes a
+# PR number directly, so a missing PR surfaces as its own gh 404 failure
+# (return 1) rather than the legitimate "PR: none" the issue-keyed path uses
+# — the node-target lane always calls this once `execution.pr` is non-null,
+# so a 404 there is a real error, never the "no PR yet" case.
 build_pr_section() {
-  local n="$1"
+  local n="$1" pr_is_number="${2:-0}"
   local pr_num
-  pr_num=$("$SCRIPT_DIR/dispatch-find-pr" "$n") || return 1
+  if [[ "$pr_is_number" == 1 ]]; then
+    pr_num="$n"
+  else
+    pr_num=$("$SCRIPT_DIR/dispatch-find-pr" "$n") || return 1
+  fi
 
   if [[ -z "$pr_num" ]]; then
     printf 'PR: none\n'
@@ -313,7 +354,7 @@ if [[ "$WANT_PR" == 1 ]]; then
   # --pr slice (dispatch-find-pr → gh pr view --json number,labels,
   # statusCheckRollup,body → jq-rendered markdown). "PR: none" exit 0 when no
   # PR exists yet (plan phase). Header line, blank line, then prose.
-  PR_BODY=$(build_pr_section "$N") || { echo "error: --pr: failed to build PR section for #$N" >&2; exit 1; }
+  PR_BODY=$(build_pr_section "$N" "$PR_IS_NUMBER") || { echo "error: --pr: failed to build PR section for #$N" >&2; exit 1; }
   PR_OUT="=== PR ===
 $PR_BODY"
 fi

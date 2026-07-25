@@ -26,7 +26,7 @@ attention: null
 phase: implement
 execution:
   branch: tactic-mount-schema
-  pr: null
+  pr: 2856
   attempts: {}
   markers: []
   strategy_fingerprint: 04aa02adec88a3145460aa90242ca47578f633087667aba014c921593e28d1b3
@@ -193,3 +193,14 @@ Manual: none — rendering and mounted content land in the sibling tactics.
 Three units, one PR; each unit in a subagent with its Recommended model;
 supply this Context and the unit's Scope; constrain each subagent to
 working-tree edits only.
+
+## Re-scope (dispatch tick +6, 2026-07-11)
+
+Demoted qa→implement and blocked on `tactic-nontactic-body-durability`. Unit 2 authored durable "body
+sections" onto `kind: kind` mount-anchor nodes (kind-delegation / kind-tradition /
+kind-duty), but `store.ts` `writeNode` regenerates non-tactic bodies from
+`statement`, so those sections are not durable under the current store. Re-implement
+the mount-anchor-content approach against whichever body-durability contract the
+decision tactic settles (durable bodies → keep as-is once the store ships; cosmetic
+bodies → move the sections to frontmatter or another body-safe home). PR #2856
+branch is resume input; markers cleared.

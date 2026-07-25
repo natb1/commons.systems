@@ -7,21 +7,21 @@
 # origin/main through graph-commit.
 #
 # Spec: intentions/tactic-graph-native-dispatch.md §1.1, §2.4; strategy
-# clarifications 10, 18, 22. The DECISION (ladder edge, fix interrupt + resume,
+# clarifications 10, 18, 22. The DECISION (unconditional forward ladder edge,
 # residue→main-qa, freshness holds) lives in the pure `transitions` module,
 # applied via apply-node-transition.ts; this wrapper owns only the environmental
-# parts: the origin/main snapshot, the CI verdict sensor, the fingerprint gates,
-# arming gh auto-merge, and refreshing the phase-start stamp.
+# parts: the origin/main snapshot, the fingerprint gates, arming gh auto-merge,
+# and refreshing the phase-start stamp.
+#
+# The forward transition is CI-BLIND: it never reads a CI verdict and never
+# routes a tactic into `fix`. A CI-fix interrupt is carried orthogonally on
+# `execution.fix` and routed by the selector, leaving `phase` at its real ladder
+# position — so this wrapper has no CI sensor.
 #
 # Doctrine: the transition is a STATE-ONLY commit on main, never on the work PR
 # branch (strategy clarification 15). Run this from a main-based checkout; from
 # a PR-branch worktree the caller applies the reset-dance graph-commit needs
 # (same constraint as park-node).
-#
-# Sensor: CI verdict via dispatch_ci_verdict_rest on the PR head sha
-# (passing/failing/pending; pending maps to the pure layer's `unknown` = not
-# a fix interrupt). No PR yet → unknown (a pre-PR implement completion advances
-# to qa without a CI gate).
 #
 # Freshness gates (compute-freshness.ts over the origin/main snapshot):
 #   - scope-stale → delegate to demote-node-to-implement (the backward
@@ -45,6 +45,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+# The scope-fingerprint stamp lives at the MAIN checkout root (provision-node-worktree
+# writes it there). REPO_ROOT resolves to the current worktree — wrong when we run from a
+# nested PR-branch worktree — so resolve the shared main root for the stamp path only.
+MAIN_ROOT="$(resolve_project_root)" || { echo "transition-node: could not resolve the main project root" >&2; exit 2; }
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
 GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
 
@@ -79,7 +83,7 @@ read_node_json() {
 # Refresh the phase-start stamp to the post-write scope fingerprint + the new
 # origin/main sha, so machinery body appends do not later trip the custody gate.
 refresh_stamp() {
-  local stamp_file="$REPO_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
+  local stamp_file="$MAIN_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
   local sha fp
   sha="$( (cd "$REPO_ROOT" && git rev-parse origin/main 2>/dev/null) )" || return 0
   fp="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
@@ -99,26 +103,32 @@ PHASE="$(jq -r '.phase // "implement"' <<<"$NODE_JSON")"
 PR="$SET_PR"
 [[ -z "$PR" ]] && PR="$(jq -r '.execution.pr // empty' <<<"$NODE_JSON")"
 
-# --- CI verdict sensor -------------------------------------------------------
-CI="unknown"
-if [[ -n "$PR" ]]; then
-  HEAD_SHA="$(gh_pr_view_rest "$PR" 2>/dev/null | jq -r '.headRefOid // empty')" || true
-  if [[ -n "$HEAD_SHA" ]]; then
-    case "$(dispatch_ci_verdict_rest "$HEAD_SHA" 2>/dev/null || echo pending)" in
-      failing) CI="failing" ;;
-      passing) CI="passing" ;;
-      *) CI="unknown" ;;
-    esac
-  fi
-fi
-
 # --- Freshness gates over an origin/main snapshot ----------------------------
 SNAP_DIR="$(mktemp -d)" || { echo "transition-node: mktemp failed" >&2; exit 2; }
-trap 'rm -rf "$SNAP_DIR"' EXIT
+# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md from
+# origin/main if this script actually wrote to it (the apply-node-transition.ts
+# call further down). A pre-mutation failure (freshness gate computation, node
+# read, etc.) must not trigger a restore of a file this script never touched.
+MUTATED=0
+trap '
+  rc=$?
+  rm -rf "$SNAP_DIR"
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    # Restore from the immutable blob SHA captured before the mutation, not the
+    # moving origin/main ref (a concurrent fetch may have pruned/relocated the
+    # node). Write to a temp file and mv into place only on success, so a failed
+    # git-show never truncates the node file to zero bytes.
+    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$REPO_ROOT/intentions/$NODE_ID.md.rollback"; then
+      mv "$REPO_ROOT/intentions/$NODE_ID.md.rollback" "$REPO_ROOT/intentions/$NODE_ID.md"
+    else
+      rm -f "$REPO_ROOT/intentions/$NODE_ID.md.rollback"
+    fi
+  fi
+' EXIT
 if ! (cd "$REPO_ROOT" && git archive origin/main intentions 2>/dev/null | tar -x -C "$SNAP_DIR"); then
   mkdir -p "$SNAP_DIR/intentions"
 fi
-STAMP_FILE="$REPO_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
+STAMP_FILE="$MAIN_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
 FRESH="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/compute-freshness.ts" \
   "$NODE_ID" --snapshot "$SNAP_DIR/intentions" --stamp "$STAMP_FILE") )" || {
   echo "transition-node: freshness gate computation failed for $NODE_ID" >&2; exit 2; }
@@ -127,7 +137,11 @@ STRATEGY_STALE="$(jq -r '.strategyStale' <<<"$FRESH")"
 STAMP_MISSING="$(jq -r '.stampMissing' <<<"$FRESH")"
 
 # --- Scope-stale → delegate to the demotion primitive ------------------------
-if [[ "$SCOPE_STALE" == "true" ]]; then
+# main-qa is post-merge by definition (check-node-selection.ts:242), so scope
+# chaining excludes it (SCOPE_CHAINED_PHASES = {fix,qa,review}, check-node-selection.ts:61;
+# decideTransition's scope-stale branch is pre-merge only, transitions.ts:176-179). Don't
+# demote a scope-stale main-qa node — fall through to the normal transition below.
+if [[ "$SCOPE_STALE" == "true" && "$PHASE" != "main-qa" ]]; then
   if "$UTIL_SCRIPTS/demote-node-to-implement" "$NODE_ID"; then
     echo "demoted $NODE_ID -> implement (scope drift)"
     exit 0
@@ -136,10 +150,15 @@ if [[ "$SCOPE_STALE" == "true" ]]; then
   exit 1
 fi
 
-# --- Apply the forward/hold/fix decision to the local store ------------------
-APPLY_FLAGS=("$NODE_ID" "--ci" "$CI")
+# --- Apply the forward/hold decision to the local store ----------------------
+APPLY_FLAGS=("$NODE_ID")
 [[ "$STRATEGY_STALE" == "true" ]] && APPLY_FLAGS+=("--strategy-stale")
 [[ -n "$SET_PR" ]] && APPLY_FLAGS+=("--set-pr" "$SET_PR")
+FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)" || {
+  echo "transition-node: intentions/$NODE_ID.md does not exist on origin/main — cannot transition a node that is not landed" >&2
+  exit 1
+}
+MUTATED=1
 if ! RESULT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/apply-node-transition.ts" "${APPLY_FLAGS[@]}") )"; then
   echo "transition-node: apply-node-transition failed for $NODE_ID" >&2
   exit 1

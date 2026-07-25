@@ -23,6 +23,16 @@ export interface GithubSignals {
   stars: number;
   forks: number;
   watchers: number;
+  // Per-fork identity + activity for the fork-and-derivative review. Optional in
+  // the same style as `traffic`: absent when the producer could not enumerate
+  // forks. `pushedAt > createdAt` is the drive-by-vs-active discriminator.
+  forksDetail?: Array<{
+    owner: string;
+    repoUrl: string;
+    createdAt: string;
+    pushedAt: string;
+    stars: number;
+  }>;
   traffic?: {
     clonesCount: number;
     clonesUniques: number;
@@ -88,6 +98,24 @@ function parseGithubSignals(raw: unknown): GithubSignals | undefined {
   const watchers = typeof d.watchers === "number" && Number.isFinite(d.watchers) ? d.watchers : null;
   if (repo === null || stars === null || forks === null || watchers === null) return undefined;
 
+  let forksDetail: GithubSignals["forksDetail"] | undefined;
+  if (Array.isArray(d.forksDetail)) {
+    const entries = (d.forksDetail as unknown[]).flatMap((f) => { // type-safety-ok: Array.isArray narrows to any[]; cast to unknown[] avoids implicit any
+      if (typeof f !== "object" || f === null) return [];
+      const fi = f as Record<string, unknown>; // type-safety-ok: lenient parse
+      const owner = typeof fi.owner === "string" ? fi.owner : null;
+      const repoUrl = typeof fi.repoUrl === "string" ? fi.repoUrl : null;
+      const createdAt = typeof fi.createdAt === "string" ? fi.createdAt : null;
+      const pushedAt = typeof fi.pushedAt === "string" ? fi.pushedAt : null;
+      const stars = typeof fi.stars === "number" && Number.isFinite(fi.stars) ? fi.stars : null;
+      if (owner === null || repoUrl === null || createdAt === null || pushedAt === null || stars === null) return [];
+      return [{ owner, repoUrl, createdAt, pushedAt, stars }];
+    });
+    // Omit the key entirely when no valid entries survive (mirrors traffic's
+    // all-or-nothing omission); a partial list of valid forks is kept.
+    if (entries.length > 0) forksDetail = entries;
+  }
+
   let traffic: GithubSignals["traffic"] | undefined;
   const t = d.traffic;
   if (typeof t === "object" && t !== null) {
@@ -112,7 +140,7 @@ function parseGithubSignals(raw: unknown): GithubSignals | undefined {
     }
   }
 
-  return { repo, stars, forks, watchers, ...(traffic ? { traffic } : {}) };
+  return { repo, stars, forks, watchers, ...(forksDetail ? { forksDetail } : {}), ...(traffic ? { traffic } : {}) };
 }
 
 function parseGa4Signals(raw: unknown): Ga4AppSignals[] | undefined {

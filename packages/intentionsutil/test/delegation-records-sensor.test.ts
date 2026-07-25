@@ -10,7 +10,7 @@ import {
   buildDefaultRegistry,
   readDelegationRecords,
   readDelegationRecordsReading,
-  readFrontierSensors,
+  readStoreSensors,
   renderDelegationRecordsReport,
 } from "../scripts/read-sensors.js";
 
@@ -208,7 +208,7 @@ describe("buildDefaultRegistry", () => {
   });
 });
 
-describe("readFrontierSensors end-to-end", () => {
+describe("readStoreSensors end-to-end", () => {
   it("writes reading and a non-null gap onto a strategy naming this sensor", () => {
     const dir = tempStore();
     writeNode(dir, delegationNode("delegation-a", { lastExercised: null }));
@@ -222,7 +222,7 @@ describe("readFrontierSensors end-to-end", () => {
       read: () => readDelegationRecordsReading(dir, new Date("2026-07-11T00:00:00Z")),
     });
 
-    const summary = readFrontierSensors(dir, registry);
+    const summary = readStoreSensors(dir, registry);
     expect(summary.read).toBe(1);
     expect(summary.unregistered).toHaveLength(0);
 

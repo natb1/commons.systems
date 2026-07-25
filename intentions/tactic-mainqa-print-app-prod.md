@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -29,6 +29,7 @@ office_hours:
   reason: needs production Firestore data volume, deployed indexes, and browser
     DevTools observation with real usage
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -37,15 +38,15 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issues (closed, content preserved here): 2724,
-2723, 2762, 2589 — needs-main residue from the media-list pagination work
-(issue 2709, PR 2715), the exhausted-stream read reduction (issue 2754, PR
-2761), and bounded PDF enrichment (issue 2497, PR 2586). The print
-shared-media app is a product surface unaffected by the dispatch-architecture
-migration. QA seeds cap at 3 public items, so pagination needs production
-data volume (>24 public items); the read-reduction and boundedness checks
-need DevTools/network observation.
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issues (closed, content
+preserved here): 2724, 2723, 2762, 2589 — needs-main residue from the
+media-list pagination work (issue 2709, PR 2715), the exhausted-stream read
+reduction (issue 2754, PR 2761), and bounded PDF enrichment (issue 2497, PR
+2586). The print shared-media app is a product surface unaffected by the
+dispatch-architecture migration. QA seeds cap at 3 public items, so
+pagination needs production data volume (>24 public items); the
+read-reduction and boundedness checks need DevTools/network observation.
 
 ## Verification checklist
 

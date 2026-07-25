@@ -24,8 +24,7 @@ phase: null
 execution: null
 validates:
   - strategy-explicit-intent
-blocked_by:
-  - tactic-decision-trace-instrument
+blocked_by: []
 office_hours:
   reason: "Office-hours reading sitting (~15 author-minutes): run the
     decision-trace digest (npx tsx

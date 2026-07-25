@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
 blocked_by: []
@@ -30,6 +30,7 @@ office_hours:
     password, systemd) — live production verification migrated from the legacy
     main-qa queue
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -38,11 +39,12 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issues (closed, content preserved here): 2698,
-2696, 2700, 2699, 2727, 2721, 2720, 2704 — all needs-main residue from the
-office-hours snapshot work (issues 2658, 2660, 2661, 2668; PRs 2677, 2718,
-2722, 2695). The local-first encrypted snapshot pipeline is exactly what
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issues (closed, content
+preserved here): 2698, 2696, 2700, 2699, 2727, 2721, 2720, 2704 — all
+needs-main residue from the office-hours snapshot work (issues 2658, 2660,
+2661, 2668; PRs 2677, 2718, 2722, 2695). The local-first encrypted snapshot
+pipeline is exactly what
 `strategy-attention-surface` consumes, so this verification survives the
 legacy-router drain. Dropped as obsolete: live parity against the Firestore
 producer docs (legacy issue 2697) — the hosted Firestore owner tier retires

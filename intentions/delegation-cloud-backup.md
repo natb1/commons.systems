@@ -60,5 +60,12 @@ attributes:
   review_trigger: strategy-durable-owned-data's redundancy design keeping or
     replacing Drive; Google account or storage policy shifts
   last_assessed: 2026-07-09
+  household:
+    shared: true
+    basis: The off-machine backup holds the household budget archive and bank
+      statements on a shared Drive; a transport migration touches the
+      household's financial backup copies.
+    consent: []
+    preferences: []
 ---
 # Off-machine backup copies delegated to Google Drive

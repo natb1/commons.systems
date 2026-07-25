@@ -65,8 +65,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds:
-  count: 0
-  last_completed: null
+  count: 1
+  last_completed: 2026-07-13
 attributes:
   conditions:
     - the household attachment surface stays enumerable at individual scale — a

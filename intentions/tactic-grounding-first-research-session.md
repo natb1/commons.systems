@@ -25,9 +25,7 @@ phase: null
 execution: null
 validates:
   - strategy-complete-grounding
-blocked_by:
-  - tactic-grounding-gap-analysis
-  - tactic-grounding-research-skill
+blocked_by: []
 office_hours:
   reason: "First author grounding-research session over the initial ranked gap
     report: not claude-executable — attributes.grounding / attributes.traditions

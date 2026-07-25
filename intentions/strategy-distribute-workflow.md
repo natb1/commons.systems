@@ -102,6 +102,121 @@ clarifications:
       migration clarification above), now carrying explicit blocked_by edges to
       the gate, rather than being finalized against a design still in flux.
       Recorded 2026-07-11 /align-tactics round."
+  - question: How is the CI/nix Playwright chromium browser-version drift kept from
+      recurring, and how does it relate to the node-toolchain single-source
+      axis?
+    answer: "(Recorded 2026-07-22 interview.) The Playwright browser mismatch is a
+      second, independent toolchain-drift axis, distinct from and orthogonal to
+      the node-version axis the 2026-07-07 clarification single-sources. It is
+      the npm-pinned @playwright/test chromium revision drifting from the
+      chromium that the nix-provided pkgs.playwright-driver ships, driven by an
+      automated nixpkgs bump moving playwright-driver forward — not by
+      node-version drift (the 2026-07-07 clarification's attribution of the
+      mismatch to node drift was imprecise; the node axis is
+      tactic-node-toolchain-single-source, this browser axis is its own tactic).
+      It recurred 2026-07-21: flake bump a12b1779 took playwright-driver to
+      1.61.1 (chromium 1228) while @playwright/test stayed 1.60.0 (chromium
+      1223); the npm pin was hand-bumped to 1.61.1 in PR #2930.
+      check-playwright-version-sync.sh detects the drift but cannot prevent it —
+      every nixpkgs bump re-opens the gap. Greenfield (endorsed 2026-07-22
+      interview): nix is authoritative — nixpkgs decides which chromium exists —
+      and the npm pin follows by construction; the invariant is @playwright/test
+      == pkgs.playwright-driver.version (verified 2026-07-22: nix eval reports
+      1.61.1, matching the npm pin). Couple them at the mover: wrap `nix flake
+      update` so it reads playwright-driver.version, rewrites the
+      @playwright/test pin in root and audio package.json, runs npm install, and
+      stages all together in one commit, so a flake bump can never land drift;
+      check-playwright-version-sync.sh stays as the backstop. Fix drafted at
+      tactic-playwright-nix-browser-single-source. Rejected alternatives:
+      overlay-pin playwright-driver in nix (inverts the source of truth to npm
+      but adds an overlay you hand-bump anyway and fights nixpkgs updates); drop
+      nix browsers for npx playwright install (loses nix's offline/reproducible
+      guarantee and reintroduces a CI network download)."
+  - question: What keeps an externally-published build artifact from going stale in
+      the pin — the third toolchain-pin axis after node-version and Playwright
+      chromium?
+    answer: >-
+      (Recorded 2026-07-23 interview.) A third pin axis, structurally distinct
+      from both prior ones: not two internal pins drifting from each other, but
+      a single EXTERNAL reference whose target the publisher can overwrite in
+      place. nix/home/wezterm-windows.nix:30 content-pins
+      WezTerm-windows-nightly.zip — a rolling upstream URL — by sha256 in
+      nix/home/wezterm-pin.nix.
+
+
+      Diagnosis (endorsed 2026-07-23): pkgs.fetchurl's sha256 pins BYTE
+      identity, but the requirement is BUILD identity — the Windows GUI and the
+      WSL wezterm-mux-server must be the same wezterm build or the mux PDU
+      handshake fails (nix/home/wezterm-windows.nix header). The mechanism
+      therefore pins a STRONGER property than the requirement needs, and
+      upstream does not maintain that stronger property: it republishes the same
+      build with different bytes. Verified 2026-07-23: the zip published 04:50Z
+      still unpacks to WezTerm-windows-20260716-195552-76b606ec — the exact
+      build the pin names — but hashes 6d3bd51d..., not the 42256640... that PR
+      2921 pinned on 2026-07-22. Two repackages of one build in eight days; the
+      2026-07-22 fix had a lifetime under 24 hours, and nixos-build went red
+      again with no commit involved. Every such repackage is a FALSE failure:
+      the property the project actually cares about is unchanged.
+
+
+      This retires the graph's prior treatment of the refresh as a routine
+      mechanical chore (tactic-wezterm-windows-install-lock-resilient's
+      2026-07-11 rationale bundled it as a one-off). No refresh cadence
+      reachable through the PR cycle can keep a byte pin valid against an
+      artifact that churns on upstream's schedule.
+
+
+      Greenfield (endorsed 2026-07-23): own the artifact you depend on.
+      nix/home/sync-wezterm.sh fetches the upstream zip once, ASSERTS it unpacks
+      to WezTerm-windows-${version} (the real invariant — the script already
+      derives version from that directory name), republishes those exact bytes
+      as a release asset the project owns, and fetchurl pins the mirror. The
+      mirror is immutable by policy, so the hash is stable forever and a forker
+      gets identical bytes. Fix drafted at tactic-wezterm-owned-asset-mirror.
+
+
+      Rejected alternatives: cross-build the Windows GUI from source at rev —
+      the IDEAL greenfield per .claude/rules/design-proposals.md, invariant true
+      by construction, and the exact shape the 2026-07-22 Playwright
+      clarification endorsed (one side authoritative, the other follows by
+      construction) — named as the target but not this round's plan, because
+      cross-compiling WezTerm's Rust/DirectWrite/Direct3D stack under nix is
+      large and unscoped. Drop the byte hash and assert build identity at
+      activation time — encodes the real invariant and can never go stale, but
+      leaves nix purity: no store reproducibility, and a forker may get
+      different bytes than the author. Take the zip out of CI's closure alone
+      (tactic-nix-instance-flake-extraction, phase implement) — necessary and
+      landing regardless, since a shared repo's CI has no business building one
+      operator's personal Windows terminal, but it fixes the false CI red only
+      and leaves home-manager switch broken on the author's own machine at every
+      repackage.
+
+
+      Scope of the invariant, verified 2026-07-23: this is the ONLY
+      mutable-reference pin in the tree. nix/home/claude-code.nix:43 pins an npm
+      registry tarball at a fixed version (immutable by registry policy, which
+      forbids republishing a version) and nix/home/wezterm-package.nix pins a
+      git rev (content-addressed). The general requirement recorded here: a
+      content-hash pin is sound only against a reference the publisher cannot
+      overwrite — an immutable upstream id, a content-addressed rev, or a mirror
+      the project owns. A forkable-in-practice workflow fails this test loudly:
+      a forker cloning today cannot build, because the pinned hash no longer
+      matches what upstream serves.
+  - question: Does owning the WezTerm asset mirror deepen the GitHub delegation, and
+      should this strategy carry a recovers edge for it?
+    answer: "(Recorded 2026-07-23 interview.) No recovers edge. Hosting the mirror
+      as a release asset on the project's own GitHub repo adds one artifact to
+      delegation-github, whose divergence level is low and whose recovery path
+      was drilled 2026-07-16 (hours-to-about-a-day, dominated by CI porting; see
+      ops/recovery-drills/github-drill-report.md). The added capture is
+      negligible, and the mirror's own recovery cost is near zero: the artifact
+      is a frozen cache of a public upstream build, not owned data, so losing it
+      is a deliberate-upgrade event (re-mirror, re-pin to fresh bytes), never
+      data loss — which is why this does not draw a strategy-durable-owned-data
+      obligation either. The mirror host is deliberately NOT fixed to GitHub by
+      this record: any store that will not overwrite a published object
+      satisfies the invariant, so a later move off GitHub releases needs no
+      amendment here."
 tooling_goals: []
 success_signal:
   observable: practitioners encountering and forking the workflow — entry-point
@@ -120,6 +235,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - a practitioner audience for autonomy tooling exists and is reachable

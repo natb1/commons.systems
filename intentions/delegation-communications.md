@@ -62,5 +62,11 @@ attributes:
   review_trigger: re-alignment per strategy-realign-attachments, or selection as a
     recovery domain (strategy-domain-selection)
   last_assessed: 2026-07-09
+  household:
+    shared: true
+    basis: Household email, messaging, contacts, and calendars; moving the provider
+      changes family members' correspondence and shared scheduling.
+    consent: []
+    preferences: []
 ---
 # Communications delegated to ad-funded and platform providers

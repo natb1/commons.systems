@@ -31,11 +31,14 @@ execution:
   pr: null
   attempts: {}
   markers: []
-  strategy_fingerprint: d998d5c0754b51cfc489ee784db11b77d9b40eb91777ee0215076b0ad1a6bb69
+  strategy_fingerprint:
+    strategy-graph-drives-dispatch:
+      hash: 99227b632204950956b9eb8f36c3837b121261ccba95dd830e863947c12a3802
+      sha: c64859d398cbebfdabfa69c97e527b27f3ed71be
+  fix: null
 validates:
   - strategy-graph-drives-dispatch
-blocked_by:
-  - tactic-intention-store-sensor
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

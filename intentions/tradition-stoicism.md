@@ -22,7 +22,27 @@ reading: null
 gap: null
 serves: []
 recovers: []
-clarifications: []
+clarifications:
+  - question: Does the delegated → codified flip require a curriculum chunk for
+      Marcus Aurelius, Meditations (cited under attributes.texts as 'apatheia in
+      practice')?
+    answer: "No — excluded by record (2026-07-11
+      tactic-reading-program-text-coverage coverage-completion round). The Stoic
+      doctrine the graph engages is grounded in the covered chunk 8
+      (tactic-reading-chunk-8-stoicism-drills: Epictetus, Enchiridion 1 — the
+      dichotomy of control; Seneca, Letters 18, 91 — premeditatio malorum): that
+      chunk carries both what is kept (the recovery drills and the boundary
+      question) and the systematic statement of what is declined (sufficiency of
+      virtue, apatheia, detachment-as-telos). Meditations is cited as
+      illustration — 'apatheia in practice' — and no adopted or diverged entry
+      leans on it beyond that illustration; the apatheia divergence is grounded
+      in the systematic Stoic statement (Epictetus, Seneca), not in Marcus
+      Aurelius's journal. The delegated → codified flip therefore covers
+      Stoicism's load-bearing texts via chunk 8 and excludes Meditations by
+      record. Recorded so the flip criterion ('all cited texts covered') stays
+      honest: Meditations remains in attributes.texts as a genuine source of the
+      tradition; it is excluded from the coverage requirement, not from the
+      record."
 tooling_goals: []
 success_signal: null
 attention: null

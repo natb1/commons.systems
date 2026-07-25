@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # dispatch-tick — the headless /dispatch-propagate tick: a thin bash sequencer
-# over dispatch-select-tick → dispatch-materialize-spawn, with NO model session.
+# over dispatch-select-tick → dispatch-graph-execute (+ aux bg jobs), with NO
+# model session.
 #
-# Usage: dispatch-tick [--manual] [<issue-or-PR-number>]
+# Usage: dispatch-tick [--manual] [<node-id>]
 #
 # This is the scripted equivalent of the routing the dispatch-propagate SKILL.md
 # (Tables 1 and 2) used to describe for a model router session. Replacing that
@@ -27,67 +28,60 @@
 # terminal bash), not for the autonomous tick.
 #
 # Manual `dispatch` cap semantics & selection lock:
-#   `dispatch <N>` (explicit target): the tick skips the concurrency gate and
-#   processes that one target (gap=1). A human forcing a specific target is never
-#   paced by the autonomous budget.
-#
 #   `dispatch` (bare, no argument): skips the pace-curve throttle (a budget pause
 #   to TARGET_N=0 still fans out) but honors the `MAX_WORKERS` ceiling and the
 #   `--exhausted` hard floor; spawns SPAWN_N = min(HEADROOM, max(N_PRIO, GAP, 1))
-#   workers, rank-first (the highest-rank queue targets; the `priority` label is
-#   the pace-curve/cap bypass, not an ordering signal). Emits
+#   workers, rank-first (the highest-rank queue targets; the graph `pace_exempt`
+#   flag is the pace-curve/cap bypass, not an ordering signal). Emits
 #   `concurrency-cap` when SPAWN_N=0 (at the ceiling or exhausted).
 #
 #   Exhaustion hard floor (both autonomous and manual paths): when the 5-hour or
 #   weekly rate-limit window is at/near 100% used with `resets_at` still in the
 #   future, `dispatch-target-workers --exhausted` reports `exhausted`. On BOTH the
 #   autonomous and manual paths the tick emits `concurrency-cap` and spawns nothing
-#   — even a waiting `priority` or `dispatch:main-broken` item. This is a hard stop
+#   — even a waiting pace-exempt or main-broken item. This is a hard stop
 #   on genuine token exhaustion, not the self-imposed pacing throttle that the
-#   priority bypass is meant to override. The reseed-at-reset arm (scheduling a
+#   pace-exempt bypass is meant to override. The reseed-at-reset arm (scheduling a
 #   #725 reseed when the window resets) is autonomous-only: a manual run is a
 #   one-shot and does not arm a reseed.
 #
-#   Priority/main-broken bypass (autonomous path, at-cap, not exhausted): when
-#   `LIVE_COUNT >= TARGET_N` but `--exhausted` reports `ok`, the tick does NOT
-#   immediately emit `concurrency-cap`. Instead it runs
-#   `dispatch-select-target --priority-only`, which checks the main-broken health
-#   gate first, then scans only priority-LABELED items (the label's one surviving
-#   meaning — the cap/pacing bypass, not ordering). If a
-#   `priority`-labeled PR or help-wanted issue (including any `dispatch:main-broken`
-#   issue) is found, the tick holds the lock and spawns exactly ONE gate-exempt
-#   worker (`GAP=1`) — the same treatment as an explicit `dispatch <N>`. This also closes
-#   the gap where a main that breaks while at the worker cap was previously
-#   suppressed: the old pre-selection gate exited before the main-broken health
-#   check ran; the bypass now runs that check first, so `main-broken <sha>` can
-#   surface and spawn the diagnose job even at cap. Priority/main-broken workers
-#   still count toward `LIVE_COUNT` and suppress non-priority fan-out on later
-#   ticks. If `--priority-only` returns `empty`, the tick falls back to the normal
-#   `concurrency-cap` disposition and reseed.
+#   Pace-exempt/main-broken bypass (autonomous path, at-cap, not exhausted): when
+#   `LIVE_COUNT >= TARGET_N` but `--exhausted` reports `ok`, dispatch-select-tick
+#   does NOT immediately emit `concurrency-cap`. It first probes
+#   `graph-select-target --pace-exempt-only` (the authored `pace_exempt` flag is
+#   the graph home of the legacy `priority` label); a hit holds the lock and
+#   spawns exactly ONE gate-exempt worker (`GAP=1`). If that lane is empty, it
+#   checks `repo-health --main-broken-sha` — a main that breaks while at the
+#   worker cap still surfaces and spawns the diagnose job even at cap. Either
+#   bypass still counts toward `LIVE_COUNT` and suppresses non-pace-exempt fan-out
+#   on later ticks: it bypasses the GATE, not the COUNT. If both are empty, the
+#   tick falls back to the normal `concurrency-cap` disposition and reseed. (The
+#   `dispatch-select-target --priority-only` probe this bypass used to run was
+#   deleted with the rest of the gh-issue lane in tactic-dispatch-legacy-rewire
+#   Unit 3 — the graph selector and repo-health now own it entirely.)
 #
 #   Selection lock: the selection lock (`dispatch-acquire-lock`, acquired inside
 #   `dispatch-select-tick`) is shared with the autonomous chain, so a manual run
 #   cannot select the same target as an in-flight tick. Merge conflicts are handled
-#   by the `/fix-conflicts` phase routed through the worker.
+#   by the `/dispatch-conflict` phase routed through the worker.
 #
 # Behavior:
-#   1. Run dispatch-select-tick [<N>], echoing all of its stdout through (the
+#   1. Run dispatch-select-tick, echoing all of its stdout through (the
 #      jit:/calendar: passthrough lines AND the decision line) so journald and a
 #      live relay both see the narrative. The decision is its LAST stdout line.
-#   2. Route on the decision line (mirrors SKILL.md Table 1):
-#        busy / resolver-failed / concurrency-cap /
-#        sync-repair-pending / sync-broken
+#   2. Route on the decision line:
+#        busy / concurrency-cap / sync-repair-pending / sync-broken
 #                          → log a one-line note; exit 0. (select-tick already
 #                            released the lock / scheduled any reseed.)
 #        empty             → log a one-line note; exit 0. On the autonomous
 #                            path additionally invokes dispatch-tick-recover
 #                            (the #1445 continuation backstop, autonomous-only).
-#        NOTE: on the autonomous no-arg path, `concurrency-cap` is emitted by
-#        select-tick only after the priority/main-broken bypass runs (see above):
+#        NOTE: on the autonomous path, `concurrency-cap` is emitted by
+#        select-tick only after the pace-exempt bypass runs (see above):
 #        at-cap + exhausted → concurrency-cap immediately;
-#        at-cap + not exhausted + no priority/main-broken item → concurrency-cap;
-#        at-cap + not exhausted + priority/main-broken item found → pr/issue/main-broken
-#        decision instead, spawned as one gate-exempt worker (GAP=1).
+#        at-cap + not exhausted + no pace-exempt/main-broken item → concurrency-cap;
+#        at-cap + not exhausted + graph pace-exempt node → graph decision;
+#        at-cap + not exhausted + newly-red main → main-broken decision.
 #        main-broken <sha> → spawn /dispatch-diagnose-main <sha> as a bg job via
 #                            dispatch-spawn-job (--name diagnose-main); exit 0.
 #        sync-failed       → spawn /commit-merge-push as a bg job via
@@ -95,31 +89,18 @@
 #                            worktree to auto-repair the wedged local main; exit 0.
 #        jit-reminder ...  → spawn /dispatch-jit-reminder ... as a bg job via
 #                            dispatch-spawn-job (--name jit-reminder-<num>); exit 0.
-#        explicit <num> <gap>            → dispatch-materialize-spawn <num> explicit --gap <gap>
-#        pr <num> <branch> <phase> <gap> → N=${branch%%-*}; dispatch-materialize-spawn <N> queue --gap <gap>
-#        issue <num> <gap>               → dispatch-materialize-spawn <num> queue --gap <gap>
-#                            then route the terminal token (step 3).
 #        graph <count> <id:kind:phase>... → dispatch-graph-execute <spec>...
 #                            (tactic-graph-router-selector: the graph lane's
-#                            workflow-native execute path — the legacy launch
-#                            chain stays issue-lane-only). The lock is already
-#                            released; the per-node reservations are the claim.
-#                            On the autonomous path a successful execute arms
-#                            the same convergence reseed as `propagate`.
+#                            workflow-native execute path — the ONLY queue lane
+#                            now). The lock is already released; the per-node
+#                            reservations are the claim. On the autonomous path a
+#                            successful execute arms a convergence reseed.
 #        anything else     → diagnostic to stderr; exit 2.
-#   3. Route the materialize-spawn terminal token (its LAST stdout line). Every
-#      recognized token — `propagate`, `notify <reason>`, `drain <reason>`,
-#      `drain`, and (for now) `resolve merge-conflict` — is a log-and-exit-0
-#      disposition: the token was already echoed via the stdout passthrough, so
-#      the journal IS the disposition record; there is no self-close. A non-zero
-#      materialize-spawn exit → exit 2.
 #
-#      NOTE on `resolve merge-conflict`: dispatch-materialize-spawn no longer
-#      emits this token — its merge-conflict path now routes to the
-#      /fix-conflicts phase via dispatch-route and emits `propagate` instead. The branch
-#      is retained as a defensive no-op (log the token, exit 0) so a future path
-#      that surfaces it again can never wedge the headless tick;
-#      test-dispatch-scripts.sh asserts it stays a safe exit-0 disposition.
+# The legacy gh-issue lane (explicit/pr/issue decisions →
+# dispatch-materialize-spawn → dispatch-launch-worker, and the recoverable-death
+# scan) was deleted in tactic-dispatch-legacy-rewire Unit 3; graph work runs
+# through dispatch-graph-execute and its own per-node lifecycle.
 #
 # Requires `dangerouslyDisableSandbox: true` — the sub-scripts call `gh`, query
 # the local Claude daemon over a Unix socket, and write tmp state (see
@@ -129,8 +110,7 @@
 # Manual inspection of the autonomous tick's journal (once systemd drives it):
 #   journalctl --user -u dispatch-tick
 #
-# Exit codes: 0 on a routed disposition (any select-tick decision or
-# materialize-spawn terminal token); 2 on an internal/usage error surfaced on
+# Exit codes: 0 on a routed disposition; 2 on an internal/usage error surfaced on
 # stderr.
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch scripts).
@@ -141,7 +121,7 @@ source "$SCRIPT_DIR/lib.sh"
 
 # --- Single cleanup trap for this tick (sentinel + workspace) (#1068, #1452) --
 # Bash `trap` OVERWRITES per signal — it does not stack. The headless-liveness
-# sentinel (#1068) and the per-tick snapshot/trace-cache workspace (#1452) both
+# sentinel (#1068) and the per-tick snapshot workspace (#1452) both
 # need removal on exit, so ONE cleanup function handles both and ONE trap installs
 # it. A second `trap ... EXIT` anywhere below would silently drop one of these.
 # SENTINEL is declared empty here and set later only on the headless path; the
@@ -157,9 +137,9 @@ _dispatch_tick_cleanup() {
 }
 trap '_dispatch_tick_cleanup' EXIT INT TERM
 
-# Tick-scoped workspace holding the agents snapshot and the trace cache (#1452).
-# Created unconditionally (autonomous, --manual, and explicit <N> paths all run
-# the selection/fan-out that consumes the snapshot), independent of the headless
+# Tick-scoped workspace holding the agents snapshot (#1452). Created
+# unconditionally (both the autonomous and --manual paths run the
+# selection/fan-out that consumes the snapshot), independent of the headless
 # sentinel dir. The cleanup trap above removes it on every exit.
 DISPATCH_TICK_WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/dispatch-tick.XXXXXX")
 
@@ -179,7 +159,7 @@ if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
 else
   PROJECT_ROOT=$(resolve_project_root) \
     || { echo "dispatch-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
-  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+  MAIN_WORKTREE="$PROJECT_ROOT"   # de-bare: the project root IS the main checkout
 fi
 
 # --- Topic-usage daily producer (#2505) -------------------------------------
@@ -227,31 +207,63 @@ if [[ "${DISPATCH_TOPIC_USAGE_ENABLED:-}" == "1" ]]; then
   fi
 fi
 
-# --- Step 0: parse the single optional positional <N> ------------------------
-ARG=""
+# --- Step 0: parse flags -----------------------------------------------------
+# Explicit issue/PR targeting (`dispatch-tick <N>`) was the legacy issue lane's
+# entry point; that lane is gone and the graph selector owns target selection
+# (dispatch-select-tick rejects any positional arg itself). Reject one here too,
+# before any setup below runs.
 MANUAL=""
+NODE_ARG=""
 for a in "$@"; do
   case "$a" in
     --manual) MANUAL=1 ;;
     --*)
       echo "dispatch-tick: unknown flag '$a'" >&2
-      echo "usage: dispatch-tick [--manual] [<issue-or-PR-number>]" >&2
+      echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
       exit 2
       ;;
     *)
-      if [[ -n "$ARG" ]]; then
-        echo "dispatch-tick: unexpected extra arguments after <number>" >&2
-        echo "usage: dispatch-tick [--manual] [<issue-or-PR-number>]" >&2
+      # A positional arg shaped like a graph node id
+      # (tactic-graph-explicit-node-dispatch Unit 2) is the explicit
+      # single-node targeting entry point; the graph selector owns everything
+      # else. Reuse provision-node-worktree's node-id slug regex verbatim.
+      if [[ "$a" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+        NODE_ARG="$a"
+      else
+        echo "dispatch-tick: explicit issue/PR targeting ('${a#\#}') was removed with the legacy issue lane; the graph selector owns target selection" >&2
+        echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
         exit 2
       fi
-      ARG="${a#\#}"
       ;;
   esac
 done
-if [[ -n "$MANUAL" && -n "$ARG" ]]; then
-  echo "dispatch-tick: --manual cannot be combined with an explicit <number>" >&2
-  echo "usage: dispatch-tick [--manual] [<issue-or-PR-number>]" >&2
+
+# --manual (the "no specific target" fan-out mode) and an explicit single-node
+# target are semantically incompatible. Reject the combination HERE — the if/elif
+# dispatch below would otherwise silently take the --manual branch and drop the
+# named node. dispatch-select-tick guards the same combination and exits 2, but
+# it never sees both (the elif forwards only one), so mirror the guard at this
+# entry point rather than leaving it unreachable.
+if [[ -n "$MANUAL" && -n "$NODE_ARG" ]]; then
+  echo "dispatch-tick: a node-id argument cannot be combined with --manual" >&2
+  echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
   exit 2
+fi
+
+# --- Pause sentinel: stop autonomous scheduling, do not interfere with running work ---
+# When the pause flag file exists, an AUTONOMOUS tick (heartbeat timer, reseed
+# timer) does nothing: it exits here — before dispatch-select-tick, any spawn,
+# and any reseed-arming — so no new workers are scheduled and the tick arms no
+# follow-up reseed. Already-running workers are separate sessions and are left
+# untouched, so they run to completion. This is the durable, non-interfering
+# pause: unlike stopping/masking the systemd timers (which ensure_heartbeat_units
+# recreates on the next tick), a firing timer here becomes a harmless no-op.
+# A manual `dispatch --manual` run OVERRIDES the pause (deliberate human action).
+# Resume by removing the flag file. The path is overridable for tests.
+DISPATCH_PAUSE_FLAG="${DISPATCH_PAUSE_FLAG:-${XDG_DATA_HOME:-$HOME/.local/share}/commons-dispatch/paused}"
+if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
+  echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick"
+  exit 0
 fi
 
 # --- Synthesize a session identity for the headless tick ---------------------
@@ -347,17 +359,15 @@ if ! "$SCRIPT_DIR/dispatch-sample-usage"; then
 fi
 
 # --- Snapshot the live-session registry once per tick (#1452) -----------------
-# The selection phase below — dispatch-select-tick's concurrency gate and the
-# dispatch-materialize-spawn fan-out (sibling subprocesses) — makes many
-# machine-wide `claude agents --json` calls (the gate's busy-worker count and
-# every worktree_has_live_session probe during the trace). Capture ONE snapshot
-# here and export its path so both subprocesses' lib-claude-agents.sh reads reuse
-# it (DISPATCH_AGENTS_SNAPSHOT) — one daemon query per tick instead of hundreds.
+# The selection phase below — dispatch-select-tick's concurrency gate — makes
+# many machine-wide `claude agents --json` calls (the gate's busy-worker count
+# and every worktree_has_live_session probe). Capture ONE snapshot here and
+# export its path so dispatch-select-tick's lib-claude-agents.sh reads reuse it
+# (DISPATCH_AGENTS_SNAPSHOT) — one daemon query per tick instead of hundreds.
 # dispatch-tick already runs the whole headless chain with the sandbox disabled
 # (.claude/rules/sandbox.md), so this is the one place the Unix-socket-backed
-# `claude agents` call is made. Also create a tick-scoped trace cache dir
-# (DISPATCH_TRACE_CACHE_DIR, consumed by dispatch-trace-leaf). Both live under the
-# mktemp -d workspace the EXIT/INT/TERM trap removes.
+# `claude agents` call is made. The snapshot lives under the mktemp -d workspace
+# the EXIT/INT/TERM trap removes.
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 _SNAPSHOT_FILE="$DISPATCH_TICK_WORKSPACE/agents-snapshot.json"
@@ -371,16 +381,14 @@ else
   rm -f "$_SNAPSHOT_FILE"
   echo "dispatch-tick: claude agents snapshot capture failed; selection will use live per-call reads (#1452)" >&2
 fi
-export DISPATCH_TRACE_CACHE_DIR="$DISPATCH_TICK_WORKSPACE/trace-cache"
-mkdir -p "$DISPATCH_TRACE_CACHE_DIR"
 
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:
 # passthrough AND the decision line) so journald and a live relay see it all.
 if [[ -n "$MANUAL" ]]; then
   SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" --manual)
-elif [[ -n "$ARG" ]]; then
-  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$ARG")
+elif [[ -n "$NODE_ARG" ]]; then
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$NODE_ARG")
 else
   SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick")
 fi
@@ -395,95 +403,7 @@ fi
 
 DECISION=$(printf '%s\n' "$SEL_OUT" | tail -n 1)
 
-# Recoverable-death scan (#2454): the harness does NOT fire the Stop hook on an
-# API/stream error, so dispatch-stop.sh Branch A's transient-death self-heal never
-# runs for those deaths — the worker strands `failed`, its worktree held. Run the
-# tick-time scan here, near the top of every AUTONOMOUS tick, so a recoverable
-# death is recovered even while the queue is otherwise active (it is NOT a
-# chain-continuation backstop like dispatch-tick-recover, so it does not belong on
-# the drain arm). Autonomous-only: an explicit `dispatch <N>` (ARG) or a bare
-# manual `dispatch` (MANUAL) is a single-target spawn that must not drive
-# fleet-wide recovery. Best-effort: the script's own exit-0 contract plus this `||`
-# guard both ensure a scan failure never aborts the tick.
-if [[ -z "$MANUAL" && -z "$ARG" ]]; then
-  "$SCRIPT_DIR/dispatch-scan-recoverable-deaths" \
-    || echo "dispatch-tick: recoverable-death scan failed (best-effort)" >&2
-fi
-
-# --- Step 2: route the decision line (SKILL.md Table 1) ----------------------
-# Run materialize-spawn for a real target, then route its terminal token.
-# Echoes the materialize-spawn stdout through (supporting detail + token) and
-# routes on the LAST line (step 3 helper).
-run_materialize() {
-  local mat_out mat_rc token
-  mat_out=$("$SCRIPT_DIR/dispatch-materialize-spawn" "$@")
-  mat_rc=$?
-  if [[ -n "$mat_out" ]]; then
-    printf '%s\n' "$mat_out"
-  fi
-  if (( mat_rc != 0 )); then
-    echo "dispatch-tick: dispatch-materialize-spawn exited $mat_rc" >&2
-    exit 2
-  fi
-  token=$(printf '%s\n' "$mat_out" | tail -n 1)
-  # Every recognized terminal token is a log-and-exit-0 disposition for a headless
-  # tick: the token is already in the journal via the passthrough above, and there
-  # is no managed job to self-close. A no-spawn `drain` additionally triggers the
-  # dispatch-tick-recover continuation backstop before exiting 0 (see that arm,
-  # #1445). `resolve merge-conflict` is a defensive no-op — materialize-spawn now
-  # spawns a resolver bg job and emits `propagate`, so the token no longer reaches
-  # here, but the branch keeps it a safe exit-0 disposition.
-  case "$token" in
-    propagate|resolve\ merge-conflict)
-      # A worker/resolver was spawned — its Stop-hook carries the chain. Bare
-      # exit; calling recover here would wrongly increment its failure counter.
-      #
-      # Convergence safety net (#1453): on a `propagate` token from an AUTONOMOUS
-      # tick, arm a short-delay convergence reseed. The called script re-counts
-      # effective-live workers (busy + reservations) and arms a no-arg dispatch-tick
-      # ONLY when the fleet is still below target and not gated (it self-suppresses
-      # on converged / pace-gate-closed / exhausted). Placing the call here — on the
-      # token taken when the tick had a normal materialize decision — makes the
-      # trigger a FRESH recount rather than the stale `spawned < GAP` signal,
-      # catching both the partial-fill case and a drain-during-tick.
-      #
-      # Autonomous-only: an explicit `dispatch <N>` (ARG set) and a bare manual
-      # `dispatch` (MANUAL set) are gate-exempt single-target spawns that must NOT
-      # drive fleet convergence. `resolve merge-conflict` is excluded by the
-      # `propagate`-only test below. Best-effort: a failed arm logs ONE note and the
-      # tick still exits 0 — never wedge the tick on a convergence arm.
-      if [[ "$token" == propagate && -z "$MANUAL" && -z "$ARG" ]]; then
-        "$SCRIPT_DIR/dispatch-schedule-convergence-reseed" \
-          || echo "dispatch-tick: convergence reseed arm failed (best-effort)" >&2
-      fi
-      exit 0
-      ;;
-    notify\ *)
-      # Explicit-dispatch user-facing path: a one-shot named target, not the
-      # autonomous heartbeat — no continuation backstop needed.
-      exit 0
-      ;;
-    drain|drain\ *)
-      # #1445 backstop: a no-spawn drain (target-done / worktree-conflict /
-      # fan-out-all-done) spawns no worker and the headless tick never calls
-      # dispatch-self-close, so nothing else guarantees a continuation. Trigger
-      # the continuation-guarantor directly, flagging it BENIGN (#2445): a
-      # no-spawn drain is a clean no-work decision, not a tick failure, so recover
-      # must guarantee a continuation (heartbeat/reseed) without counting toward
-      # the stall cap. Its OnFailure= handler is not wired on this direct call,
-      # which is fine: recover almost never fails and any real failure is logged
-      # below.
-      DISPATCH_TICK_RECOVER_BENIGN="$token" "$SCRIPT_DIR/dispatch-tick-recover" || \
-        echo "dispatch-tick: dispatch-tick-recover failed on '$token' (continuation not guaranteed)" >&2
-      exit 0
-      ;;
-    *)
-      echo "dispatch-tick: dispatch-materialize-spawn emitted unexpected token '$token'" >&2
-      exit 2
-      ;;
-  esac
-}
-
+# --- Step 2: route the decision line -----------------------------------------
 # shellcheck disable=SC2086  # decision fields are intentionally word-split
 set -f  # word-split only — disable glob expansion so a field containing *, ?, or
         # [ ] (e.g. a jit `project`/`repo` config value) is not expanded against cwd
@@ -493,6 +413,11 @@ case "${1:-}" in
   busy)
     echo "dispatch-tick: another tick holds the lock (busy); nothing to do" >&2
     exit 0
+    ;;
+  node-not-selectable)
+    node="${2:-}"
+    echo "dispatch-tick: node '$node' is not selectable — nothing dispatched" >&2
+    exit 1
     ;;
   empty)
     # #1557: an autonomous `empty` tick (work queued, but every reachable open
@@ -507,16 +432,16 @@ case "${1:-}" in
     # positive: COUNT climbed unbounded (every benign cycle finds no reseed timer)
     # and filed a `dispatch:chain-stalled` latch while the chain was alive.
     # Autonomous-only (mirror the #1453 convergence-reseed guard above): a
-    # `--manual` empty is a one-shot human probe (an explicit <N> never
-    # resolves to empty), so it must NOT be forced through the backstop.
+    # `--manual` empty is a one-shot human probe, so it must NOT be forced
+    # through the backstop.
     echo "dispatch-tick: select-tick disposition 'empty'; nothing spawned" >&2
-    if [[ -z "$MANUAL" && -z "$ARG" ]]; then
+    if [[ -z "$MANUAL" ]]; then
       DISPATCH_TICK_RECOVER_BENIGN=empty "$SCRIPT_DIR/dispatch-tick-recover" || \
         echo "dispatch-tick: dispatch-tick-recover failed on 'empty' (continuation not guaranteed)" >&2
     fi
     exit 0
     ;;
-  resolver-failed|concurrency-cap|sync-repair-pending|sync-broken)
+  concurrency-cap|sync-repair-pending|sync-broken)
     echo "dispatch-tick: select-tick disposition '$1'; nothing spawned" >&2
     exit 0
     ;;
@@ -528,7 +453,7 @@ case "${1:-}" in
     # would inherit the session default (Opus). The force-opus config at the
     # dispatch-spawn-job chokepoint still overrides this from above.
     "$SCRIPT_DIR/dispatch-spawn-job" --name sync-repair --cwd "$MAIN_WORKTREE" \
-      --model claude-sonnet-4-6 "/commit-merge-push" \
+      --model sonnet "/commit-merge-push" \
       || echo "dispatch-tick: WARNING: dispatch-spawn-job (sync-repair) failed; repair job lost" >&2
     exit 0
     ;;
@@ -539,7 +464,7 @@ case "${1:-}" in
       exit 2
     fi
     "$SCRIPT_DIR/dispatch-spawn-job" --name diagnose-main --cwd "$MAIN_WORKTREE" \
-      --model claude-sonnet-4-6 "/dispatch-diagnose-main $sha" \
+      --model sonnet "/dispatch-diagnose-main $sha" \
       || echo "dispatch-tick: WARNING: dispatch-spawn-job (diagnose-main) failed; diagnose job lost" >&2
     exit 0
     ;;
@@ -550,36 +475,9 @@ case "${1:-}" in
       exit 2
     fi
     "$SCRIPT_DIR/dispatch-spawn-job" --name "jit-reminder-$num" --cwd "$MAIN_WORKTREE" \
-      --model claude-sonnet-4-6 "/dispatch-jit-reminder $repo $num $project $item" \
+      --model sonnet "/dispatch-jit-reminder $repo $num $project $item" \
       || echo "dispatch-tick: WARNING: dispatch-spawn-job (jit-reminder-$num) failed; reminder job lost" >&2
     exit 0
-    ;;
-  explicit)
-    num="${2:-}" gap="${3:-}"
-    if [[ -z "$num" || -z "$gap" ]]; then
-      echo "dispatch-tick: explicit decision missing <num>/<gap>" >&2
-      exit 2
-    fi
-    run_materialize "$num" explicit --gap "$gap"
-    ;;
-  pr)
-    # decision line shape: `pr <pr_num> <branch> <phase> <gap>` — fields $2..$5.
-    branch="${3:-}" gap="${5:-}"
-    if [[ -z "$branch" || -z "$gap" ]]; then
-      echo "dispatch-tick: pr decision missing <branch>/<gap>" >&2
-      exit 2
-    fi
-    # N is the issue the PR closes — the branch prefix, NEVER the PR number ($2).
-    N="${branch%%-*}"
-    run_materialize "$N" queue --gap "$gap"
-    ;;
-  issue)
-    num="${2:-}" gap="${3:-}"
-    if [[ -z "$num" || -z "$gap" ]]; then
-      echo "dispatch-tick: issue decision missing <num>/<gap>" >&2
-      exit 2
-    fi
-    run_materialize "$num" queue --gap "$gap"
     ;;
   graph)
     # Graph-lane execute (tactic-graph-router-selector): decision shape is
@@ -606,7 +504,7 @@ case "${1:-}" in
     # Mirror the `propagate` arm's convergence safety net (#1453) on the
     # autonomous path: re-count effective-live and arm a short-delay reseed if
     # the fleet is still below target. Best-effort — never wedge the tick.
-    if [[ -z "$MANUAL" && -z "$ARG" ]]; then
+    if [[ -z "$MANUAL" ]]; then
       "$SCRIPT_DIR/dispatch-schedule-convergence-reseed" \
         || echo "dispatch-tick: convergence reseed arm failed (best-effort)" >&2
     fi
