@@ -40,8 +40,8 @@ execution:
   strategy_fingerprint: null
   fix:
     since: 2026-07-22
-    attempt: 1
-    pushed_sha: null
+    attempt: 2
+    pushed_sha: a9c39a818e6e6d3c7d08130aa789bda8290ea735
 validates: []
 blocked_by: []
 office_hours: null
