@@ -4,8 +4,9 @@
 // CI-vector probe for partitionDispositions in .claude/workflows/qa-fix.js.
 // run-unit-tests.sh has no mapping for .claude/workflows/*, so a PR touching
 // only qa-fix.js triggers no vitest suite. The only test that runs on every PR
-// is the hook-tests job, which invokes test-dispatch-scripts.sh directly. So
-// this probe is driven from that script.
+// is the unit-tests job's run-unit-tests.sh, whose glob auto-discovers every
+// test-*.sh file in this directory — including test-qa-fix-partition.sh, which
+// invokes this probe directly.
 //
 // qa-fix.js is a Workflow-tool script (top-level await + injected globals), so
 // it CANNOT be imported/executed by node. Instead this probe SLICES the pure
