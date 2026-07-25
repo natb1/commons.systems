@@ -596,3 +596,16 @@ Manual / judgment checks:
   with `curriculum-review`/`requirement-discovery` rows showing the halved
   (penalized) rank. Sanity-check `--type curriculum-review --list` lists only
   curriculum parks, and `--type other --list` excludes them.
+
+## needs-main residue
+
+- **id:** item-6
+  **title:** Soft-penalty constant (0.5) tuning
+  **url_path:** `packages/intentionsutil/src/officeHours.ts`
+  **expected_outcome:** The office-hours queue head consistently offers the
+    session the author would have picked themselves; `SESSION_TYPE_PENALTY =
+    0.5` neither starves nor under-penalizes `requirement-discovery` /
+    `curriculum-review` parks.
+  **finding:** Planned deferral — only observable across repeated real
+    `/office-hours` sessions against a live queue; nothing at merge time can
+    decide whether 0.5 is the right weight.
