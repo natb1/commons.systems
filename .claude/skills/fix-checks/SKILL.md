@@ -165,14 +165,17 @@ actually completes.
   The interrupt otherwise stays exactly as it was; the selector re-launches
   `/fix-checks` next tick (or the flake path files its own issue and the node is
   no longer re-routed to fix — see Step 4), unless this spend now trips the
-  3-attempt cap, in which case the selector parks it instead.
+  3-attempt cap, in which case the selector lands a tracked hold instead (a
+  born-parked hold tactic plus a `blocked_by` edge on this node, via
+  `packages/intentionsutil/scripts/hold-node` — this node's own `office_hours`
+  is never written).
 
 Do NOT call `transition-node` here: after the CI-blind redesign it no longer
 knows about `fix` and would force the ladder forward regardless of whether the
 fix actually worked. Do NOT clear `execution.fix`, reset `phase`, or write any
 completion marker — those are the selector's on a later green tick. The Stop hook
 (`.claude/hooks/dispatch-stop.sh`) needs nothing from this seam for a clean pass
-(it only backstops the escalation park); chain continuation is carried by the
+(it only backstops the escalation hold); chain continuation is carried by the
 systemd heartbeat and the tick's convergence reseed.
 
 **Disarm auto-merge on every push.** Whenever this worker pushes ANY commit (a
