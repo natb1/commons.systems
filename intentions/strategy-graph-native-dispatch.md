@@ -1434,6 +1434,75 @@ clarifications:
       unchanged and does the transitional work on its own: existing open PRs
       keep their current titles (most predate the convention and do not
       conform), and the guard binds only at open time going forward."
+  - question: Section Fingerprint & Freeze rests the scope-inert-edit resolution on
+      "the transition writer's machinery refresh" and rules that phase workers,
+      qa/review sessions, and the tick never re-stamp. Does that machinery
+      refresh actually hold, and what is the target design for machinery-written
+      body sections?
+    answer: "(Recorded 2026-07-25 /align-strategy round.) It does not hold — the
+      premise was false when it was recorded on 2026-07-18. transition-node
+      calls refresh_stamp AFTER graph-commit (transition-node:178-183), and
+      graph-commit's cleanup does `git reset --hard $ORIG_HEAD` to restore the
+      far-ahead PR-branch tip it moved off to land an intentions/-only SHA
+      (graph-commit:301-303). So refresh_stamp hashes the REVERTED worktree body
+      and stamps the pre-edit fingerprint. This fires on every node-lane phase
+      worker — all of which run from a far-ahead PR-branch worktree — and is
+      inert only in the main checkout, where no HEAD restore happens. Measured
+      consequence: /qa-fix's own Step 3.6 `## needs-main residue` body append
+      lands in the SAME graph-commit as the qa to review transition, so the next
+      dispatch-graph-scope-sweep reads stamp != origin/main as scope drift and
+      demotes the node to implement, wiping execution.markers (qa-done AND
+      planned) and discarding completed QA custody; the implement re-entry is a
+      no-op that returns the node to qa within minutes. Evidence gathered this
+      round: 33 of 37 demotions since 2026-07-05 hit nodes that had already
+      reached qa or review; of 30 post-QA demotions, 26 were on nodes whose QA
+      pass had appended a residue section, against 6 of 54 never-demoted nodes.
+      Adopted greenfield target: tacticScopeFingerprint hashes PLAN SUBSTANCE
+      only, excluding machinery-appended body sections, so no machinery writer
+      can trip the custody gate by construction — carrier
+      tactic-scope-fingerprint-plan-substance. Adopted migration/immediate
+      carrier: repair refresh_stamp to hash what actually landed on origin/main
+      rather than the post-reset worktree copy — carrier
+      tactic-transition-node-stamp-landed-body. Both are recorded per the
+      design-proposals rule (greenfield and migration proposed separately,
+      migration cost informing how to get there and not what to aim for). This
+      is DISTINCT from tactic-transition-node-scope-stale-test-coverage, which
+      covers the stamp's PATH resolution (MAIN_ROOT vs the invoking worktree),
+      not the stamp's CONTENT SOURCE. Grounds: the refresh_stamp defect is
+      verified in code and in the graph's own commit history and is
+      author-independent; the substance-scoped-fingerprint SHAPE is
+      Claude-proposed and held on trust — enrolled for ratification at
+      tactic-review-sitting-fingerprint-custody-2026-07-25."
+  - question: A false or genuine demotion wipes execution.markers, but the qa
+      phase-log entry and the QA PR comment survive it. What makes a re-entry
+      session's reading of that surviving evidence sound?
+    answer: "(Recorded 2026-07-25 /align-strategy round.) Phase-completion evidence
+      is FINGERPRINT-BOUND: a phase-log entry, a qa-done marker, and a QA PR
+      comment are valid only for the scope fingerprint they were produced under.
+      A re-entry that finds completion evidence stamped at a different
+      fingerprint must RE-RUN the phase, never ratify it — and that binds
+      mechanically, not by session judgment. Without the binding, this section's
+      own recorded net guarantee (\"merge still requires an unbroken implement
+      to qa to review chain against the merge-time scope fingerprint\") is
+      REPORTED satisfied while actually broken: the surviving phase-log reads to
+      a re-entry session as \"a prior session died before the terminal
+      transition\", which licenses a transition-only pass over QA that session
+      never ran. Observed live: after a false demotion had wiped qa-done, the
+      re-entry on PR #2958 transitioned with no re-verification at all, and the
+      re-entry on PR #2965 re-verified only partially. The misdiagnosis is
+      itself evidence the binding is absent — both sessions concluded the prior
+      transition \"never ran\" when it HAD landed and was reverted by the sweep.
+      Carrier: tactic-phase-evidence-fingerprint-bound. Rejected rivals: (a)
+      have the demotion strike or clear the phase-log so re-entry cannot see it
+      — destroys the audit trail the phase-log exists for, and covers only the
+      demotion producer rather than any path that supersedes completed-phase
+      evidence; (b) document the rule in /qa-fix's re-entry preamble without a
+      mechanism — that is precisely what failed, since nothing in the skill
+      governs the shortcut today and the two observed sessions diverged sharply
+      in how much they re-verified. Grounds: the wording is Claude-proposed, but
+      it is a direct expression of this section's own recorded net guarantee
+      rather than a new commitment; held on trust pending author ratification —
+      enrolled at tactic-review-sitting-fingerprint-custody-2026-07-25."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1770,6 +1839,29 @@ custody demotes as recorded, and phase workers, qa/review sessions, and the tick
 re-stamp. The net guarantee is unchanged: merge still requires an unbroken
 implement → qa → review chain against the merge-time scope fingerprint — a re-stamp
 asserts, under author presence, that the post-edit fingerprint IS that same scope.
+
+**Correction (2026-07-25, entries 102–103): the machinery refresh this rule mirrors
+is itself defective, and the net guarantee above is not currently enforced.**
+`transition-node` calls `refresh_stamp` AFTER `graph-commit` (transition-node:178-183),
+and `graph-commit`'s cleanup does `git reset --hard $ORIG_HEAD` (graph-commit:301-303)
+to restore the far-ahead PR-branch tip it moved off to land an intentions/-only SHA —
+so `refresh_stamp` hashes the REVERTED worktree body and stamps the pre-edit
+fingerprint. It fires on every node-lane phase worker and is inert only in the main
+checkout. The rule above ("phase workers, qa/review sessions, and the tick never
+re-stamp") still stands as written; what is falsified is the premise that the machinery
+refresh made that safe. Two consequences follow. First, /qa-fix's own `## needs-main
+residue` body append lands in the same graph-commit as the qa → review transition, so
+the next scope sweep reads stamp ≠ origin/main as drift and demotes the node, wiping
+`execution.markers` and discarding completed QA custody — 33 of 37 demotions since
+2026-07-05 hit nodes already at qa or review. Second, the surviving phase-log makes a
+re-entry session read the wipe as "a prior session died before the terminal transition"
+and ratify QA it never ran, so the chain is REPORTED unbroken while actually broken.
+Carriers: tactic-transition-node-stamp-landed-body (repair the refresh),
+tactic-scope-fingerprint-plan-substance (greenfield — fingerprint plan substance only,
+so no machinery write can trip custody by construction), and
+tactic-phase-evidence-fingerprint-bound (bind completion evidence to the fingerprint it
+was produced under, which is what makes a GENUINE drift safe). Until those land, treat
+the net guarantee as an intent, not an enforced invariant.
 
 Migration is backwards-incompatible for stamp readers and sequenced (schema accepts
 `string | {hash, sha}` → new stamps write the map form → bare-hash stamps migrate
