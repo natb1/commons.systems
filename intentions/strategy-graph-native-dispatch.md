@@ -1199,6 +1199,173 @@ clarifications:
       steps, completion verification, edge repair, and dependent satisfaction
       are already mechanical; the only judgment step (doctrine-home) compensated
       for authoring-time placement leaks the layer-placement gate now prevents."
+  - question: "The reservation-ledger reaper (reservation_sweep) is wired only into
+      dispatch paths that reach the selection stage: the pause sentinel
+      short-circuits the autonomous heartbeat before it, and the --manual
+      fan-out path deliberately skips it. In the standing paused-scheduling +
+      manual-only operating mode nothing reaps the ledger, so it drifts stale
+      (dead-session orphans inflate live=N and throttle manual fan-out). What is
+      the cross-mode ledger-validity requirement, and the design that meets it?"
+    answer: "(Recorded 2026-07-23 interview.) Invariant: the reservation ledger must
+      read as VALID in every operating mode — (a) cron/timer-scheduled
+      autonomous execution, (b) paused-scheduling with manual-only dispatch, and
+      (c) paused-scheduling with no dispatch — not only when an autonomous tick
+      reaches selection. The pause sentinel
+      ($XDG_DATA_HOME/commons-dispatch/paused, dispatch-tick) gates worker
+      SPAWNING, never ledger BOOKKEEPING: pausing scheduling must never pause
+      reconciliation. Greenfield design (ideal, led per design-proposals): (1)
+      sweep-on-read — fold reservation_sweep into the ledger's count/read API
+      (reservation_count) so every consumer is reconciled by construction and no
+      call site can read stale; this reconcile-at-consumption framing also
+      covers manual reads during pause (the 30s boot-grace still protects
+      brand-new markers); (2) reaping decoupled from the pause sentinel — a
+      lightweight ledger sweep on the timer-driven heartbeat runs BEFORE the
+      pause short-circuit, bounding orphan accumulation during long pauses with
+      no manual ticks (kept out of the gh-heavy, throttled dispatch-sweep
+      worktree-GC pass, which solves a different problem); (3) reap-on-exit
+      (tactic-graph-node-session-reap, PR #2922) as the write-side complement so
+      the happy path never strands a marker, leaving the sweep as the crash-only
+      backstop. Steelman refinement: the rival 'reconcile only at
+      scheduling-resume' is insufficient because manual dispatch consumes the
+      ledger DURING pause; sweep-on-read is that rival's valid core (no
+      pointless background reaper when nobody reads) reconciled with the
+      requirement. Brownfield migration path (greenfield is multi-PR and
+      reverses a recorded aside): (i) parity fix — reservation_sweep in the
+      --manual block before reservation_count
+      (tactic-manual-path-reservation-sweep); (ii) pause-independent reaper —
+      reservation_sweep in dispatch-tick before the pause short-circuit
+      (tactic-heartbeat-sweep-before-pause); (iii) land PR #2922 reap-on-exit;
+      (iv) converge — sweep-on-read in the ledger count API, removing the
+      now-redundant per-path sweep calls: the autonomous call, the explicit-node
+      call (PR #2952), and (i) (tactic-ledger-sweep-on-read). This REVERSES the
+      aside in tactic-explicit-node-reservation-sweep-policy (PR #2952) that
+      '--manual need not sweep — its non-sweep only affects fan-out pacing,
+      never a hard refusal, so the paths need not move in lockstep': that
+      reasoning holds for the explicit-node hard-refusal it addressed, but did
+      not consider the paused+manual mode, where manual non-sweep is not a
+      pacing optimization but total reaper dormancy — the ledger's only live
+      consumer running with no reconciler. PR #2952's own deliverable (the
+      NODE_ARG branch sweep) is unchanged; only its broader 'manual is safe'
+      aside is superseded. Boost note: the two parity-fix tactics are boosted to
+      the top of NORMAL work but below the strategy-main-health emergency
+      ceiling (boost 100), which the 2026-07-13 guard keeps dominant — the
+      ledger fix is important but is not a red-main emergency."
+  - question: Does the greenfield design enforce serialization of work on the
+      dispatch queue, the office-hours queue, and between the queues?
+    answer: "(Recorded 2026-07-25 review.) No, in three distinct places. (a)
+      DISPATCH QUEUE — serialized only through its front door. The selection
+      lock and reservation ledger are honored by dispatch-select-tick, but
+      graph-select-target acquires nothing itself, so any other invocation
+      (manual, emulated, subagent) runs reservation_exists with no lock held and
+      never writes a marker: a check-then-act race. The tracked fix is the
+      --standalone flag on PR #2918, which folds lock acquisition, headroom, and
+      the ledger claim into the selector so the critical section is
+      self-contained. (b) OFFICE-HOURS QUEUE — the drain lane holds no claim at
+      all. It writes no reservation marker, and its occupancy check keys on the
+      session name office-hours-<node-id>, which exists only for sessions
+      launched through office-hours-graph; a drain launched by subagent fan-out
+      or interactively is invisible to dedup and races the fleet. Observed live
+      this round: while the author held an unexecuted grant for one resolution
+      of tactic-graph-router-live-worker-visibility, a concurrent fleet actor
+      landed the opposite resolution and cleared the park, so a real design
+      question was settled by push timing rather than by the author's answer.
+      tactic-office-hours-concurrency-dedup covers only the office-hours-graph
+      launch path; the residual is tactic-office-hours-drain-claim. A granted
+      disposition is also not compare-and-swap-guarded against branch-tip
+      movement during the human interview window, where non-fast-forward push
+      rejection is the only and latest-possible detector;
+      tactic-clear-park-primitive supplies CAS at land time but reads its base
+      immediately before landing, leaving the interview window open
+      (tactic-drain-disposition-diagnosis-cas). (c) BETWEEN THE QUEUES —
+      clearing a park makes a node router-eligible instantly while the clearing
+      session may still be pushing residual work, and the clearer holds no
+      claim, which is gap (b) again; and every queue's state writes contend on
+      the single main ref at CI-stamp prices, already diagnosed and
+      author-ratified in the graph-commit rebase-retry-exhaustion clarification.
+      tactic-graph-ref-split is that greenfield, and it shrinks every race
+      window named here, which raises its priority beyond its own
+      landing-exhaustion motivation. TWO REVIEW CLAIMS WERE CORRECTED BY THE
+      GRAPH SWEEP and must not be re-derived: the reservation ledger's fail-open
+      versus fail-closed asymmetry is NOT an untracked gap, because
+      claimed_issue_nums has no production call site and the live concern is
+      already tracked and already boosted as
+      tactic-graph-router-live-worker-read-robust; and the legacy issue-number
+      derivation in reserved_claimed_nums is real but inert, tracked as
+      tactic-reservation-ledger-issue-num-residue. Per the design-proposals rule
+      the greenfield is recorded here and the migration sequencing lives in the
+      tactic bodies."
+  - question: Mechanical retry holds — provision exit 11 merge conflicts,
+      fix-attempt-cap exhaustion — are written as office_hours parks. Should the
+      park record gain a taxonomy to separate them from human parks?
+    answer: "(Recorded 2026-07-25 interview, author-selected.) No, and no schema
+      change. The defect is in the PRODUCERS, not the record. A park asserts
+      that no autonomous path forward exists and a human is required; a merge
+      conflict against a moving main frequently self-resolves, which makes it a
+      retry state, not a human state. The terminal-disposition doctrine already
+      prescribes the correct handling — a mechanical hold converts to blocked_by
+      edges against a tracked fix tactic and clears in the same graph-commit —
+      so the work is to make the producers follow it: the provision-exit-11 park
+      path and the fix-attempt-cap park inside graph-select-target must stop
+      writing office_hours for retry states. Evidence at recording time: roughly
+      five of the most recent commits on main were provision-exit-11 parks,
+      burying the genuinely author-required parks beneath them, and stale ones
+      were cleared by hand in this round and the prior one. Adjacent
+      consequence: tactic-router-failure-fuses, which proposes routing new
+      mechanical no-progress and systemic-breaker failures into the same
+      office_hours queue, is re-scoped by this clarification and must not add
+      mechanical parks. Rejected alternative: extending the office_hours record
+      with a park-kind field on the tactic-office-hours-session-type precedent,
+      which would add a second taxonomy to the same record in order to describe
+      states doctrine says should not be parks at all. Tracked as
+      tactic-mechanical-park-producers."
+  - question: The office-hours selector reads only the local intentions store, so it
+      can list a node whose park was already cleared on origin/main. Does moving
+      the origin/main freshness read into the selector violate its recorded
+      no-gh/no-daemon/no-network contract?
+    answer: "(Recorded 2026-07-25 interview, author-ratified on a corrected
+      premise.) No. The author corrected the premise itself: the real contract
+      is not module purity but avoiding Claude sequencing system or network
+      commands that a script could do with fewer round trips and fewer tokens —
+      recorded the same day as a companion clarification on
+      strategy-token-economy, which owns that principle. Under the real contract
+      a local `git show origin/main:...` read inside the selector is not merely
+      permitted but preferred, because performing it once inside the script is
+      strictly fewer round trips than each caller re-deriving it, which is what
+      the current split forces. Today the guard lives only in the bash wrapper
+      office-hours-graph (park_live_on_main), so every other consumer must
+      reimplement it: this round's subagent sweep had to be instructed in prose
+      to re-check origin/main, and a stale-worktree false positive has been
+      observed live. graph-select-target already sets the precedent by
+      snapshotting origin/main itself via git archive, and
+      office-hours-select.ts already performs fs reads, so it was never pure in
+      the sense its annotation implied. This AMENDS the design decision recorded
+      in tactic-office-hours-concurrency-dedup — 'zero changes to
+      office-hours-select.ts, because daemon/network checks would violate its
+      contract' — to the extent that decision rests on the purity premise; that
+      tactic's bash-side liveness dedup is untouched, since bash is equally a
+      script. Tracked as tactic-office-hours-select-fresh-main."
+  - question: Where does a priority boost for the queue-concurrency work belong,
+      given the persistent-layer ownership gate reserves standing attention
+      boosts for strategies and virtues, never tactics?
+    answer: "(Recorded 2026-07-25 interview, author-selected.) On the tactics, at
+      authored boost 90 — parity with
+      tactic-graph-router-live-worker-read-robust, the author-set boost already
+      live on exactly this defect class. The level is deliberately below
+      strategy-main-health's standing 100 (composed rank 101), whose dominance
+      this graph records as intentional: the queue-concurrency work becomes the
+      top of the WORK queue without displacing the main-health signal, and no
+      boost at or above 100 is claimed. Rejected: boosting
+      strategy-graph-native-dispatch itself, which would lift all of its roughly
+      twenty open tactics indiscriminately and therefore would not prioritize
+      this work relative to its siblings. Noted tension, NOT resolved by the
+      author this round: the persistent-layer ownership gate reserves STANDING
+      boosts for the strategy layer, and live practice already diverges from it,
+      since read-robust carries an authored 90 on a tactic. The reading applied
+      here is that these are transient sequencing boosts that expire when the
+      tactics complete and are pruned, rather than standing ownership of a
+      signal — flagged explicitly as Claude's reading rather than
+      author-ratified doctrine, and left available for the review curriculum to
+      revisit."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1348,7 +1515,14 @@ attributes:
       escalations still surface via the office-hours PARKED panel). Auto-close
       remains the doctrinal default for the two clean terminal states, and the
       session is never router substrate
+    - paused-scheduling with manual-only dispatch is a supported STANDING
+      operating mode, not a degraded or temporary state — the pause sentinel
+      gates worker spawning only, never reservation-ledger reconciliation — so
+      every ledger-consuming invariant (e.g. the selection-time busy+reserved
+      count) must hold in it without relying on the autonomous heartbeat's
+      reaper
 ---
+
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
 
 ## Router Mechanism
