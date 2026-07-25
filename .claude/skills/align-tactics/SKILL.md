@@ -131,13 +131,22 @@ the unrecorded-context park framing.
 ## Idempotency
 
 `/align-tactics` decomposes one strategy into N tactics, so idempotency is
-per-tactic, not a single strategy-level marker: before planning, read the
-strategy's existing non-draft children and skip any already at
-`phase: implement` with a landed plan; a partial prior run resumes by
-planning only what's missing. See `references/idempotency.md` for the grep
-recipes and how to tell an `/align-strategy`-retained draft from a
-born-parked child (both are `phase`-absent, but only the latter carries
-`office_hours`).
+per-tactic, not a single strategy-level marker: before planning, enumerate the
+strategy's existing children with the census script
+
+```
+npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> intentions
+```
+
+and skip any already at `phase: implement` with a landed plan; a partial prior
+run resumes by planning only what's missing. The census reports each child's
+`classification` (`draft` / `born-parked` / `open` / `done`), `phase`,
+`statement`, body headings, and — for a born-parked child — the first line of
+its `office_hours.reason`; read the classification off its output
+rather than re-deriving it from a raw `phase`/`office_hours` read. See
+`references/idempotency.md` for the census output contract and how to tell an
+`/align-strategy`-retained draft from a born-parked child (both are
+`phase`-absent, but only the latter carries `office_hours`).
 
 ## Step 1 — Build `args` and invoke the Workflow
 
@@ -156,9 +165,9 @@ small `tsx` one-liner, or just read the file — only the frontmatter is
 authoritative): `statement`, `rationale`, `success_signal`, `reading`, `gap`,
 `clarifications`, `attributes.conditions`, and `rounds`. Read its draft child
 tactics (their bodies carry retained tactical context from `/align-strategy`)
-and its existing non-draft children — the Idempotency section's `grep -rl`
-recipe finds both, and tells a draft (`phase` absent **and** `office_hours`
-unset) from a born-parked child (`phase` absent **with** `office_hours` set,
+and its existing non-draft children — the Idempotency section's census script
+finds both, and its `classification` field tells a draft (`phase` absent **and**
+`office_hours` unset) from a born-parked child (`phase` absent **with** `office_hours` set,
 which is decided human-owned work, **not** a draft — leave it out of the input).
 
 **Build `args`.**
