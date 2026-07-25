@@ -58,7 +58,48 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: '/qa-main: none of the 3 needs-main residue items on
+    tactic-office-hours-concurrency-dedup (ids 8, 9, 10) are browser-verifiable.
+    Each is a stubbed-claude CLI/bash end-to-end scenario against
+    office-hours-graph and dispatch-sweep (the `held` collision message + exit
+    code, the untargeted skip-to-next-rank stderr note, and worktree
+    provisioning/cwd override) — all gated on live daemon session state (`claude
+    agents --json`) and `git worktree` mechanics, not on anything observable via
+    a deployed web page. None carries a real `url_path` (all three say
+    "current"), and none names a browser-observable expected outcome.
+    Claude-in-Chrome has no way to drive or observe these.'
+  since: 2026-07-25
+  recommendation: >-
+    Re-run the PR's own documented manual test plan by hand (or in an
+    interactive session), since it needs a live daemon and stubbed `claude`
+    command, neither of which a browser-driven qa-main pass can provide:
+
+
+    1. Stub `OFFICE_HOURS_CLAUDE_CMD` per
+    `packages/intentionsutil/scripts/office-hours-graph`'s header (around line
+    37-38) to record `--bg`/`agents` calls without a real daemon spawn.
+
+    2. Item 8 (held collision): with the stub reporting a live session named
+    exactly `<node-id>`, run `office-hours-graph <node-id>` targeted and confirm
+    it prints the `held <node-id> <job-id>` message and exits non-zero without
+    launching.
+
+    3. Item 9 (skip-to-next-rank): with two parked nodes A (higher rank) and B,
+    stub a live session named `A`; run untargeted `office-hours-graph` and
+    confirm it emits a stderr skip note for A and launches B instead. Repeat
+    with no live sessions and confirm A launches.
+
+    4. Item 10 (worktree provisioning): run `office-hours-graph <node-id>` for a
+    parked node with no existing worktree and confirm
+    `.claude/worktrees/<node-id>` is created fresh off `origin/main`, the `--bg`
+    launch uses `--name "<node-id>"` (bare), and cwd is set to the provisioned
+    worktree path.
+
+
+    This requires `dangerouslyDisableSandbox: true` since `claude agents --json`
+    reaches the daemon over a Unix socket the sandbox blocks. Once confirmed,
+    close out these 3 residue items and let the node advance main-qa -> done.
 pace_exempt: false
 rounds: null
 attributes: {}
