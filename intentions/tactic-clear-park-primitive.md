@@ -34,12 +34,13 @@ attention:
     tactic-graph-router-live-worker-read-robust, the existing author-set boost
     on this same defect class, and deliberately below strategy-main-health's
     standing 100 so the main-health signal keeps its recorded dominance."
-phase: implement
+phase: qa
 execution:
   branch: tactic-clear-park-primitive
   pr: 2947
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
   fix: null
 validates: []
