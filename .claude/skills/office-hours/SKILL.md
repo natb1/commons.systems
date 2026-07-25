@@ -379,7 +379,14 @@ report where to engage, and stop. No graph write, no label, no phase action.
 
    Un-parking is an explicit human graph edit — clear `office_hours` via
    `write-node` + `graph-commit`. There is no strip hook in this lane, and this
-   skill never un-parks.
+   skill never un-parks. When the item has a PR, name the disposition command
+   the human can run once they decide (tactic-office-hours-pr-custody):
+   `packages/intentionsutil/scripts/resolve-park <node-id> --ratify` (promote
+   the PR out of draft and un-park) or `... --reject [note]` (close the PR and
+   un-park). This skill stays **read-only** — it names the command, never runs
+   it; the human runs it themselves at a terminal (or asks this session to run
+   it on their behalf, which then needs `dangerouslyDisableSandbox: true` for
+   its `gh` calls, consistent with the `gh pr diff` call above).
 
 6. **Stop.** No phase transition, no un-park, no fix, no label, no graph write.
 
