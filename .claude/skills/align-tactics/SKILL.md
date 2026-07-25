@@ -229,7 +229,10 @@ on this thread. In brief, so a fresh reader still knows *what* happens:
   `blocked_by` (rules 13, 15), gate in-scope copy behind a born-parked approval
   gate (`strategy-author-approved-copy`; the gate rides in `result.gates`, its id
   wired into the copy tactic's `blocked_by`, the draft copy carried in the copy
-  tactic's body), the greenfield-relevance gate (clarification 26),
+  tactic's body), the greenfield-relevance gate (clarification 26), the
+  layer-placement gate before finalizing a draft (kind-tactic's authoring test,
+  `intentions/kind-tactic.md` 2026-07-21 clarification — a draft that is really a
+  standing requirement stays a draft and parks),
   `validates: [<strategy-id>]` on each signal-validating tactic (rule 14;
   clarification 11), off-path work carries **no** flag (clarifications 9, 11), and
   sole-tracker recording (clarification 28 — every defect lands as a tactic,
@@ -238,6 +241,9 @@ on this thread. In brief, so a fresh reader still knows *what* happens:
   plan body per `/plan-issue`'s schema and quality bar (Context, units of work
   each with Scope / Recommended model / Dependencies, Reuse, Verification),
   authored on Opus so a fresh session with only the node body can execute it.
+  A unit delivering a chart, dashboard, or other data-viz surface loads
+  `/dataviz` (the mandated guidance source) and carries its chosen form,
+  validated palette, and mark/interaction specs.
 
 This session records the outcome regardless of `disposition` — a decomposition,
 a set of parks, or both. `result.deviation` is LIVE: true when any park exists or

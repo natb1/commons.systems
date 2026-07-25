@@ -60,13 +60,16 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-21
-    attempt: 1
-    pushed_sha: null
+  fix: null
 validates: []
-blocked_by: []
-office_hours: null
+blocked_by:
+  - tactic-flake-unit-tests-select-tick
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-23
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /dispatch-conflict once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}

@@ -1641,6 +1641,36 @@ ensure_deps() {
   fi
 }
 
+# ---- wait_for_dpkg_lock — best-effort wait for the dpkg/apt lock to free ----
+# On real CI a timed-out `apt-get` (see playwright_install_with_deps below)
+# leaves its apt-get/dpkg grandchildren running in the background holding
+# /var/lib/dpkg/lock-frontend, so an immediate retry fails fast on
+# "E: Could not get lock" instead of actually retrying. This polls the lock
+# with a non-blocking `flock -s` (shared probe: succeeds once no writer holds
+# it) for up to DPKG_LOCK_WAIT_TIMEOUT seconds before giving up. Best-effort:
+# degrades to a no-op when the lock file is absent or `flock` isn't installed
+# (mirrors the lib-decision-log.sh `command -v flock` guard), and always
+# returns 0 so it never fails the caller.
+# Tunables (env): DPKG_LOCK_FILE (default /var/lib/dpkg/lock-frontend),
+# DPKG_LOCK_WAIT_TIMEOUT (default 30 seconds).
+wait_for_dpkg_lock() {
+  local lockfile="${DPKG_LOCK_FILE:-/var/lib/dpkg/lock-frontend}"
+  local deadline="${DPKG_LOCK_WAIT_TIMEOUT:-30}"
+  [ -e "$lockfile" ] || return 0
+  command -v flock >/dev/null 2>&1 || return 0
+
+  local waited=0
+  while [ "$waited" -lt "$deadline" ]; do
+    if flock -s -n "$lockfile" true 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "wait_for_dpkg_lock: ${lockfile} still held after ${deadline}s; retrying anyway" >&2
+  return 0
+}
+
 # ---- playwright_install_with_deps — bounded, timed Playwright browser install -
 # Wraps `npx playwright install --with-deps chromium` (which shells out to apt-get
 # and can stall indefinitely on a flaky archive mirror — #1899) in a per-attempt
@@ -1662,10 +1692,52 @@ playwright_install_with_deps() {
     if [ "$attempt" -gt 1 ]; then
       echo "playwright_install_with_deps: attempt $attempt/$attempts" >&2
     fi
-    if timeout --kill-after=30 "$timeout_s" npx playwright install --with-deps chromium; then
+
+    # Background the bounded install so we can capture its PID and, on a stall,
+    # kill the WHOLE tree — `timeout` alone only signals npx/node, leaving the
+    # sudo/apt-get/dpkg grandchildren alive to hold the dpkg lock (PR #2946).
+    # The outer `timeout` bound is looser than our own deadline so OUR watchdog
+    # fires first, while node's apt-get child is still a live descendant
+    # (before node's death reparents it to init, out of kill_tree's reach).
+    timeout --kill-after=30 "$((timeout_s + 60))" \
+      npx playwright install --with-deps chromium &
+    local install_pid=$!
+    local start_ts; start_ts=$(date +%s)
+
+    # Watchdog: after timeout_s of REAL wall-clock, if the install is still
+    # running it has stalled — kill its whole tree. The elapsed-time guard
+    # makes this inert when `sleep` is stubbed instant (unit tests): no real
+    # time passed => not a stall.
+    (
+      sleep "$timeout_s"
+      now=$(date +%s)
+      if [ "$((now - start_ts))" -ge "$timeout_s" ] && kill -0 "$install_pid" 2>/dev/null; then
+        kill_tree "$install_pid"
+      fi
+    ) &
+    local watchdog_pid=$!
+
+    local rc=0
+    wait "$install_pid" || rc=$?
+    # If the watchdog already fired (real elapsed >= deadline, i.e. a stall) it
+    # is mid kill_tree — let it finish the SIGTERM->grace->SIGKILL escalation
+    # instead of aborting it in the grace window (which would leave SIGTERM-
+    # ignoring grandchildren alive). Only cancel the watchdog when it is still
+    # idle in its initial sleep (fast success/failure, elapsed < deadline).
+    if [ "$(( $(date +%s) - start_ts ))" -ge "$timeout_s" ]; then
+      wait "$watchdog_pid" 2>/dev/null || true
+    else
+      kill "$watchdog_pid" 2>/dev/null || true
+      wait "$watchdog_pid" 2>/dev/null || true
+    fi
+
+    if [ "$rc" -eq 0 ]; then
       return 0
     fi
+
     echo "playwright_install_with_deps: attempt $attempt/$attempts failed or timed out after ${timeout_s}s" >&2
+    kill_tree "$install_pid" 2>/dev/null || true   # sweep survivors on non-stall failures too
+    wait_for_dpkg_lock
     attempt=$((attempt + 1))
     if [ "$attempt" -le "$attempts" ]; then
       sleep 5
@@ -2270,8 +2342,9 @@ cleanup_stale_worktree_processes() {
     echo "WARNING: git rev-parse --git-common-dir failed; skipping stale cleanup" >&2
     return 0
   }
-  # Resolve to absolute path; worktrees live as siblings of the git common dir
-  worktree_root="$(cd "$git_common_dir/.." && pwd)/worktrees"
+  # Resolve to absolute path; native worktrees live under <repo>/.claude/worktrees
+  # (standard Claude Code layout — the git common dir's parent is the repo root).
+  worktree_root="$(cd "$git_common_dir/.." && pwd)/.claude/worktrees"
 
   # Prune stale admin entries so the list below reflects on-disk worktrees only.
   git worktree prune 2>/dev/null || true

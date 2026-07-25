@@ -14,6 +14,19 @@
 # tactic-graph-router-transitions, not here — this primitive covers only the
 # park disposition.
 #
+# Fresh-origin/main invariant (tactic-park-node-fresh-main-clobber-fix): the
+# read-modify-write below operates on origin/main's CURRENT content, never the
+# possibly-stale local on-disk copy. This script fetches origin/main, overwrites
+# the local node file with origin/main's version, THEN reads/mutates/writes it,
+# and passes graph-commit a `--base` compare-and-swap token pinned to the blob
+# it read. If origin/main advances again before the land, graph-commit refuses
+# the write (park-node exits 1) rather than silently reverting the newer landed
+# content — the bug this guard closes was a stale PR-branch worktree's small
+# office_hours diff applying cleanly onto a since-advanced origin/main and
+# reverting unrelated body/frontmatter changes there. A refusal is a legitimate
+# failure the Stop-hook backstop treats as best-effort (markers left in place
+# for a retry).
+#
 # The park-recommendation contract: a mechanical park must carry recoverable
 # context — a reason AND a best-next-steps recommendation. `office_hours.
 # recommendation` is a first-class schema.ts field (landed by
@@ -23,8 +36,9 @@
 #
 # Usage: park-node <node-id> <reason> [recommendation]
 #
-# Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed;
-# 2 usage error.
+# Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed
+# (including a refused compare-and-swap because origin/main advanced, or an
+# unreachable/absent-node origin/main); 2 usage error.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -43,10 +57,48 @@ if [[ $# -lt 2 || $# -gt 3 || -z "$NODE_ID" || -z "$REASON" ]]; then
   exit 2
 fi
 
+# Refresh the LOCAL node file from origin/main BEFORE reading it, so the
+# office_hours mutation lands on top of the current landed content rather than a
+# stale worktree copy (the invocation may come from a far-behind PR-branch
+# worktree). An unreachable origin/main or a node absent from origin/main is
+# genuine environment breakage — fail with a clear error, never fall back to the
+# local copy (code-style.md).
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "park-node: could not fetch origin/main to refresh $NODE_ID before parking" >&2
+  exit 1
+fi
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "park-node: intentions/$NODE_ID.md does not exist on origin/main — cannot park a node that is not landed" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$INTENTIONS_DIR/$NODE_ID.md"; then
+  echo "park-node: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
+fi
+
 SINCE="$(date -u +%Y-%m-%d)"
 TMPTS="$(mktemp --suffix=.mts)" \
   || { echo "park-node: could not create temp file for the parking write" >&2; exit 1; }
-trap 'rm -f "$TMPTS"' EXIT
+# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md from
+# origin/main if this script actually wrote to it (the write at the npx tsx
+# call further down). A pre-mutation failure (the fetch/refresh above) must
+# not trigger a restore of a file this script never touched.
+MUTATED=0
+trap '
+  rc=$?
+  rm -f "$TMPTS"
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    # Restore from the immutable blob SHA captured before the mutation, not the
+    # moving origin/main ref (a concurrent fetch may have pruned/relocated the
+    # node). Write to a temp file and mv into place only on success, so a failed
+    # git-show never truncates the node file to zero bytes.
+    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$INTENTIONS_DIR/$NODE_ID.md.rollback"; then
+      mv "$INTENTIONS_DIR/$NODE_ID.md.rollback" "$INTENTIONS_DIR/$NODE_ID.md"
+    else
+      rm -f "$INTENTIONS_DIR/$NODE_ID.md.rollback"
+    fi
+  fi
+' EXIT
 cat >"$TMPTS" <<'TS'
 // argv: <storeModule> <intentionsDir> <since> <reason> <recommendation> <id>
 const [storePath, intentionsDir, since, reason, recommendation, id] = process.argv.slice(2);
@@ -57,13 +109,14 @@ writeNode(intentionsDir, node);
 process.stderr.write(`park-node: set office_hours on ${id} (since=${since})\n`);
 TS
 
+MUTATED=1
 if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SINCE" "$REASON" "$RECOMMENDATION" "$NODE_ID" >&2); then
   echo "park-node: failed to write the office_hours record for $NODE_ID" >&2
   exit 1
 fi
 
-if ! "$SCRIPT_DIR/graph-commit" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
-  echo "park-node: graph-commit failed for $NODE_ID; the office_hours write is on disk but not landed" >&2
+if ! "$SCRIPT_DIR/graph-commit" --base "$NODE_ID=$FRESH_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
+  echo "park-node: graph-commit failed for $NODE_ID; the office_hours write was rolled back" >&2
   exit 1
 fi
 

@@ -101,8 +101,11 @@ unset 'DIRTY_APPS[packages/rules-test]'
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 
-# Install all dependencies once at the workspace root (skip when only running nix/rules/ci-scripts checks)
-if [ ${#APP_DIRS[@]} -gt 0 ]; then
+# Install all dependencies once at the workspace root (skip when only running
+# nix/rules/ci-scripts checks). dispatch-derive-node-target's test suite shells
+# out to `node --import tsx/esm`, so the PR-scripts path now needs node_modules
+# too, not just a dirty app dir.
+if [ ${#APP_DIRS[@]} -gt 0 ] || [ "$RUN_PR_SCRIPTS" = true ]; then
   ensure_deps
 fi
 

@@ -27,35 +27,16 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-office-hours-snapshot-wire-contract
+  pr: 2805
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: 'origin/main advanced by PR #2783 (attention-surface
-    analytics-collector), which added analytics functionality directly into
-    office-hours-snapshot/src/snapshot.ts, semantically conflicting with this
-    node PR #2805 that extracts that same file into the new shared module
-    office-hours/src/snapshot-wire.ts (provision exit 11; run.ts + snapshot.ts
-    conflict), and the graph-native model has no autonomous fix-conflicts lane
-    for an implement-phase node. Next steps: run /fix-conflicts against PR #2805
-    (office-hours is read-only, so a human triggers it). PRESERVE BOTH SIDES, do
-    not pick one: choosing HEAD silently drops #2783 just-merged analytics
-    feature, choosing origin/main drops this PR wire-contract extraction.
-    Resolution is to PORT #2783 analytics additions into the new shared module
-    office-hours/src/snapshot-wire.ts (keeping snapshot.ts as the thin re-export
-    shim): add "analytics" to SnapshotScope, export serializeProjectSignals, add
-    foldProjectSignals, and add the --scope=analytics fold path to
-    office-hours-snapshot/src/run.ts; the run.ts other hunk is a JSDoc-only
-    block and is trivial. PR #2805 CI is currently all-green on its own head;
-    execution.pr is null and no implement->qa transition was ever written, so
-    after the conflict is resolved the node resumes at phase=implement and the
-    next implement worker re-verifies CI and writes the transition. Ordering
-    note: this node rationale said it should land before or alongside the
-    analytics-collector rebuild, but #2783 merged first, so this conflict is
-    predictable ordering fallout, not a mystery, and needs only a fix-conflicts
-    pass, not re-planning the tactic.'
-  since: 2026-07-10
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
@@ -117,3 +98,51 @@ Scope:
 - The round-trip test passes; a real (non-mock) producer run writes a `.benc`
   the dashboard decodes with populated CAPACITY/PACE/HISTORY/BACKLOG panels.
   This also unblocks the queued main-qa verifications (#2704, #2698).
+
+## Conflict resolution — 2026-07-23
+
+The office-hours park (opened 2026-07-10, provision exit 11) is cleared. The
+`origin/main` merge into PR #2805 conflicted in exactly two files against
+PR #2783's analytics-collector work, which had landed `foldProjectSignals`
+directly into `office-hours-snapshot/src/snapshot.ts` — the same file this
+tactic replaces with a re-export shim over the new shared module. Both sides
+are preserved; neither was dropped.
+
+**Author decision (2026-07-23):** shown the placement options, the author chose
+to fold `foldProjectSignals` into `office-hours/src/snapshot-wire.ts` — the
+fold constructs an `OfficeHoursSnapshot`, so it belongs beside the type the
+wire module owns. The park's own recipe additionally suggested exporting
+`serializeProjectSignals`; the author rejected that as redundant. Both callers
+(`serializeSnapshot` and `foldProjectSignals`) now live in the same module, so
+it stays module-private.
+
+What landed (merge commit `b30ad4b2`, follow-up `b44c48fd`; branch pushed, PR
+left open for the normal lane):
+
+- `office-hours-snapshot/src/snapshot.ts` — kept this branch's re-export shim.
+- `office-hours/src/snapshot-wire.ts` — `SnapshotScope` gains `"analytics"`;
+  `foldProjectSignals` ported in; `serializeProjectSignals` stays private.
+- The ported no-prior-snapshot skeleton gains `version: 1`. #2783's skeleton
+  predates the field; under the wire contract the type requires it, and it is
+  also a genuine correctness fix — `decodeSnapshot` hard-rejects
+  `raw.version !== 1`, so a version-less analytics skeleton would be written to
+  disk and then refused by the reader. Called out on the PR as an intended
+  behavior change rather than left to pass silently.
+- `office-hours-snapshot/src/run.ts` — the conflicted hunk took `origin/main`'s
+  `defaultReadPriorSnapshot` doc. Separately, the AUTO-MERGED (non-conflicted)
+  `defaultReadPriorHistory` doc still claimed the serialized snapshot
+  "intentionally drops" `memberEmails`, which this tactic makes false; the
+  corrected wording was folded in there too. Resolving only the conflicted hunk
+  would have landed a factually wrong comment.
+- `office-hours-snapshot/src/parity.test.ts` — merge residue, not a conflict:
+  #2861 added a second `SnapshotInput` literal while this branch made
+  `memberEmails` a required field. Stamped `MEMBERS` on it.
+
+Verification on the merged head: `tsc --noEmit` clean for both `office-hours`
+and `office-hours-snapshot`; `run-unit-tests.sh` green (54 files / 542 tests,
+plus the office-hours production build); `run-lint.sh` green.
+
+Phase stays `implement`: PR #2805 is still an open DRAFT carrying no
+`dispatch:*` label, and no implement→qa transition was ever written. The next
+implement worker re-verifies CI on the merged head and writes the transition —
+exactly what the park's own next-steps note anticipated.
