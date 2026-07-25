@@ -30,38 +30,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-23
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /dispatch-conflict once it accepts node targets.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # Fix the flaky dispatch-select-tick lock-fixture test in test-dispatch-scripts.sh causing the unit-tests CI job's pr-scripts suite to intermittently fail
-
-## Context
-
-The `dispatch-select-tick` lock-fixture section of
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` fails
-intermittently: an unguarded `run_sel_tick`/`run_tick` call site crashes the
-suite under `set -e` before any PASS/FAIL is emitted, tripping the `unit-tests`
-CI job's `pr-scripts` loop (and the hook-tests job, which runs the same file).
-Guard the call sites so a non-zero exit is captured rather than aborting the
-harness, restoring a deterministic pass. Sibling PR #2933
-(`tactic-flake-hook-tests-select-tick`) carries the same fix as a strict
-superset; land it or re-derive the 44-site guard here.
-
-**Recommended model:** sonnet — the fix is rote wiring: wrap the identified
-`run_sel_tick`/`run_tick` call sites so `set -e` no longer aborts on their exit
-code. The diff shape is mechanical and the affected sites are already
-enumerated by the sibling tactic.
 
 Fingerprint: unit-tests — .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh:21476
 
@@ -95,12 +73,6 @@ recurred on PR #2931 / run https://github.com/natb1/commons.systems/actions/runs
 
 Reset `phase: done` → `implement` by the 2026-07-23 /align-strategy round (census hold 2): the node was falsely done — no merged work anywhere; claimed substitute PR #2933 is an open draft and the guard is absent from main. Same remedy and precedent as tactic-main-red-sync-completion-test's reset. PR #2933 remains the candidate carrier: land it or re-derive; do not prune this node while the flake guard is absent from main.
 
-## Verification
+## Terminal disposition (2026-07-23)
 
-Run the reproduce command above —
-`.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh --pr-scripts` —
-and confirm the `dispatch-select-tick` section of test-dispatch-scripts.sh now
-emits its PASS lines and the `pr-scripts` suite reports `0 failed` rather than
-crashing before any PASS/FAIL output. Run it several times (the failure is
-timing-sensitive) to confirm the guard removed the non-determinism; the section
-must pass on every run.
+Transitioned `phase: implement` → `done` and cleared the office_hours conflict park. Satisfied by merged PR #2933 (sibling tactic-flake-hook-tests-select-tick), whose set -e guard on the shared `test-dispatch-scripts.sh` run_sel_tick/run_tick call sites is now on origin/main and covers this tactic's scope. The guard's presence was verified on origin/main before this transition; no PR of this node's own was opened. This supersedes the 2026-07-23 integrity reset, whose precondition (guard absent from main) no longer holds.
