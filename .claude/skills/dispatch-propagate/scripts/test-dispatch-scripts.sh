@@ -5649,19 +5649,40 @@ rc=0
 ) || rc=$?
 assert_eq "fast success → rc 0" "0" "$rc"
 assert_eq "fast success → 1 npx call" "1" "$(cat "$NPX_COUNT_FILE")"
-# Give the trap's SIGTERM a beat to land (REAL_SLEEP: a bare `sleep` here would
-# hit the still-on-PATH instant stub), then assert the watchdog's inner sleep is
-# gone — the fast-path cancel actually reached it, no orphan leaked to init.
-"$REAL_SLEEP" 0.5
-sleep_alive=0
-recorded=0
+# Assert the watchdog's inner sleep is gone — the fast-path cancel actually
+# reached it, no orphan leaked to init. Signal delivery, the subshell's trap
+# dispatch and process reaping are all scheduler-dependent, so poll for the
+# PID to disappear (bounded at ~5s) instead of assuming a fixed grace: a loaded
+# runner costs latency, not a false red. A genuinely orphaned sleep idles for
+# the full 25s deadline, so it still fails after the bound. REAL_SLEEP: a bare
+# `sleep` here would hit the still-on-PATH instant stub.
+sleep_pids=()
 while IFS= read -r spid; do
   [[ -z "$spid" ]] && continue
-  recorded=$((recorded + 1))
-  if kill -0 "$spid" 2>/dev/null; then sleep_alive=$((sleep_alive + 1)); fi
+  sleep_pids+=("$spid")
 done < "$WATCHDOG_SLEEP_PID"
+recorded="${#sleep_pids[@]}"
+sleep_alive=0
+for _ in $(seq 1 50); do
+  sleep_alive=0
+  if [[ "$recorded" -gt 0 ]]; then
+    for spid in "${sleep_pids[@]}"; do
+      if kill -0 "$spid" 2>/dev/null; then sleep_alive=$((sleep_alive + 1)); fi
+    done
+  fi
+  [[ "$sleep_alive" -eq 0 ]] && break
+  "$REAL_SLEEP" 0.1
+done
 assert_eq "fast success → watchdog sleep was recorded (side channel worked)" "1" "$recorded"
 assert_eq "fast success → watchdog sleep not orphaned (killed)" "0" "$sleep_alive"
+# On a failing assert the leak is real: the orphan has already reparented to
+# init, so nothing reaps it and it would idle out the remaining ~25s alongside
+# the rest of the suite. Reap it here — teardown only removes the temp dir.
+if [[ "$sleep_alive" -gt 0 ]]; then
+  for spid in "${sleep_pids[@]}"; do
+    kill -9 "$spid" 2>/dev/null || true
+  done
+fi
 teardown
 
 # ============================================================================
