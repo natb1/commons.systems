@@ -62,8 +62,7 @@ execution:
   strategy_fingerprint: null
   fix: null
 validates: []
-blocked_by:
-  - tactic-flake-unit-tests-select-tick
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
