@@ -1709,7 +1709,15 @@ playwright_install_with_deps() {
     # makes this inert when `sleep` is stubbed instant (unit tests): no real
     # time passed => not a stall.
     (
-      sleep "$timeout_s"
+      # Background our own sleep (known PID) instead of running it as a plain
+      # non-final child: bash forks a non-final `sleep` into a real child that
+      # `kill "$watchdog_pid"` (the fast-path cancel below) can't reach — it
+      # would orphan to init and idle for the rest of timeout_s. A TERM trap
+      # relays that cancel straight to the sleep so it dies immediately.
+      sleep "$timeout_s" &
+      sleep_pid=$!
+      trap 'kill "$sleep_pid" 2>/dev/null || true' TERM
+      wait "$sleep_pid"
       now=$(date +%s)
       if [ "$((now - start_ts))" -ge "$timeout_s" ] && kill -0 "$install_pid" 2>/dev/null; then
         kill_tree "$install_pid"
