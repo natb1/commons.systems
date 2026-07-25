@@ -19,8 +19,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-playwright-watchdog-orphan-sleep
+  pr: 2967
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
