@@ -371,10 +371,10 @@ a strategy.
      this is a checklist step, not mechanized scope detection. In-scope copy:
      the landing page, the about page, app heroes and onboarding text, the
      README, and blog posts. Explicitly **excluded**: in-app UI strings,
-     practitioner reference docs (`SCHEMA.md`, package READMEs), and GitHub
-     issue/PR prose. Exempt: mechanical fixes (typos, broken links, factual
-     corrections with no reframing and no new claims) are ungated; any doubt
-     means gated.
+     practitioner reference docs (`intentions/kind-kind.md`, package READMEs),
+     and GitHub issue/PR prose. Exempt: mechanical fixes (typos, broken links,
+     factual corrections with no reframing and no new claims) are ungated; any
+     doubt means gated.
    - **Mint a sibling approval gate** in the born-parked shape (Step 4;
      `intentions/tactic-readme-copy-approval.md` is the reference instance):
      `owner: human`, `status: delegated`, `office_hours: {reason, since}` set at
