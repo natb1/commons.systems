@@ -67,7 +67,13 @@
 #          "mechanical-unresolved" and office_hours.recommendation holds a
 #          per-diverged-field breakdown; a park with no captured field detail
 #          keeps the plain "concurrent-edit conflict — manual merge needed"
-#          reason and no recommendation.
+#          reason and no recommendation. A delete/modify divergence (a
+#          concurrent writer's already-landed change deleted the node while
+#          this session's edit was in flight) re-materializes the deleted node
+#          onto origin/main with the park attached, so the deletion appears
+#          reverted until a human resolves the park by either keeping the
+#          re-materialized edit or re-issuing the prune (see the
+#          `deletedSet`-branch recommendation text for the exact two options).
 #   2  usage error.
 #
 # Conventions: mirrors the bounded-retry shape/logging of `gh_retry` in
@@ -909,17 +915,19 @@ for (let i = 0; i < nodes.length; i++) {
     ? `This is a delete/modify divergence: a concurrent writer's already-landed ` +
       `change DELETED this node from origin/main while this session's edit was ` +
       `in flight. On the fresh origin/main the node was absent, so it was ` +
-      `re-materialized from this session's in-flight edit and its authored body ` +
-      `preserved. This session's unlanded content is preserved at ` +
+      `re-materialized from this session's in-flight edit with its authored ` +
+      `body preserved. This session's unlanded content is also preserved at ` +
       `${snapDir}/${id}.md (this machine only — may not survive past this ` +
-      `session). Recommended: the human decides between two intents. To KEEP ` +
-      `the re-materialized node (this session's edit is intentional and should ` +
-      `override the deletion), confirm the content and re-run graph-commit on ` +
-      `it. To CONFIRM the other writer's deletion (the edit is obsolete), ` +
-      `re-issue graph-commit --prune ${id}. Either action clears this ` +
-      `office_hours park. A third session encountering this park while the ` +
-      `loser is still working should wait rather than attempt its own merge ` +
-      `(the mailbox discipline).`
+      `session).\n` +
+      `Recommended: the human picks ONE of two intents.\n` +
+      `(1) KEEP the re-materialized node (this session's edit is intentional ` +
+      `and should override the deletion): confirm the content, then re-run ` +
+      `\`graph-commit ${id}\`.\n` +
+      `(2) CONFIRM the other writer's deletion (this session's edit is ` +
+      `obsolete): re-issue \`graph-commit --prune ${id}\`.\n` +
+      `Either action clears this office_hours park. A third session ` +
+      `encountering this park while the loser is still working should wait ` +
+      `rather than attempt its own merge (the mailbox discipline).`
     : `A concurrent writer landed an overlapping edit to this node while this ` +
       `session's edit was in flight; this writer's content was NOT landed. ` +
       `This session's unlanded content is preserved at ${snapDir}/${id}.md ` +

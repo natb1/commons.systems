@@ -405,7 +405,11 @@ case "$(basename "$2")" in
       if [[ ",$prune_csv," == *",$id,"* ]]; then
         rec="prune, no content snapshot, mailbox discipline"
       elif [[ ",$deleted_csv," == *",$id,"* ]]; then
-        rec="delete/modify divergence: other writer deleted this node while this session's edit was in flight; re-materialized from ${snap_dir}/${id}.md; keep and re-run graph-commit or confirm deletion via graph-commit --prune ${id}; mailbox discipline"
+        rec="delete/modify divergence: other writer deleted this node while this session's edit was in flight; re-materialized from ${snap_dir}/${id}.md with authored body preserved.
+Recommended: pick ONE of two intents.
+(1) KEEP the re-materialized node: re-run graph-commit ${id}.
+(2) CONFIRM the other writer's deletion: re-issue graph-commit --prune ${id}.
+Either action clears this park; mailbox discipline."
       else
         rec="unlanded content preserved at ${snap_dir}/${id}.md; mailbox discipline"
       fi
