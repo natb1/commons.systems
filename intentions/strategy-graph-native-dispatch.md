@@ -1072,6 +1072,184 @@ clarifications:
       committed. No new `recovers` edge is warranted (no delegation node covers
       the Claude Code harness); existing `recovers: delegation-github` is
       unchanged — gh issues retired, gh PRs remain by design."
+  - question: A graph-write primitive that mutates the node file in the shared
+      checkout and then fails to land leaves the mutation on disk, where it
+      blocks every subsequent graph-commit for every other node. Is "a failed
+      graph write leaves no residue" a standing invariant of this strategy, and
+      what is the target design?
+    answer: "(Recorded 2026-07-23 interview, from the 2026-07-23 manual tick
+      failure.) A standing invariant, binding the CLASS of graph-write
+      primitives rather than only the two scripts that exhibited it: a graph
+      write that fails to land leaves NO residue in the shared checkout. Target
+      design (greenfield): a primitive never uses the shared checkout as scratch
+      space -- it cuts scratch from origin/main, does the read-modify-write
+      there, and graph-commits from there, so a failure leaves the primary
+      checkout untouched by construction. This is the rule /align-strategy Step
+      0 already binds interactive sessions to (\"never author strategy edits in
+      the shared main checkout: a second concurrent session's dirty tracked file
+      blocks your graph-commit rebase\"); the primitives simply do not follow
+      it. Brownfield first step, shippable in one PR: snapshot the node blob
+      before mutating and restore it on every failure path. The incident:
+      park-node:98 and demote-node-to-implement:78 both mutate
+      intentions/<id>.md in the primary checkout, call graph-commit, and on
+      failure print \"the ... write is on disk but not landed\" and exit 1,
+      leaving it there; graph-commit's assert_clean_outside_ids then refuses
+      every subsequent call for every OTHER node, so one node's failed park
+      bricks the whole tick and the error names a file unrelated to the node
+      being worked. dispatch-graph-scope-sweep:122 calls the demote primitive in
+      a loop that explicitly continues past failures, so one stray write
+      cascades into every later demote in that sweep. Same family as the
+      2026-07-21 cwd-resolution invariant (a worktree invocation can never
+      silently commit the primary checkout) and placed at this layer for the
+      same reason: the requirement outlives its implementing tactic
+      (tactic-graph-write-failure-rollback, drafted this round). Freeze cost
+      measured with the authoritative predicate (readNode + isFingerprintStale),
+      never a grep: all 29 open children carry a null strategy_fingerprint,
+      which isFingerprintStale treats as not-stale, so this clarification
+      freezes nothing and required no re-stamps."
+  - question: "Steelman: should a failed graph write deliberately LEAVE its mutation
+      on disk as forensic evidence and a cheap retry point, rather than rolling
+      back?"
+    answer: "(Recorded 2026-07-23 interview.) Diverged from, with the reason
+      recorded. The rival framing is real: leaving the write means a human can
+      inspect exactly what the primitive intended and re-run graph-commit
+      without recomputing it, and a rollback discards that. It is rejected
+      because the residue lives in a SHARED resource -- its forensic value
+      accrues to the one node that failed, while its cost is borne by every
+      other node in the tick, none of which can land any graph write until a
+      human clears a file they never touched. The asymmetry is structural, not
+      incidental: the 2026-07-23 tick lost two legitimate scope-stale demotions
+      to a stray park write left by a third, unrelated node. Durable evidence
+      belongs in the tick journal and in the park's own
+      office_hours.recommendation -- this strategy's existing
+      park-recommendation condition already requires that recoverable context be
+      written into the NODE at park time -- never in the working tree of a
+      checkout other sessions depend on. Recomputing a failed write is cheap;
+      unblocking a shared checkout by hand is not."
+  - question: dispatch-graph-main-red-sync's graph-commit runs inside a `( ... ) ||
+      true` subshell in a loop, so a failed graph write produces no error at
+      all. Is "a graph write never fails silently" a standing invariant distinct
+      from the no-residue rule?
+    answer: "(Recorded 2026-07-23 interview, extending the same-day no-residue
+      clarification.) Yes, and it is a distinct standing invariant, not the same
+      rule restated: every graph write that fails to land surfaces a diagnostic
+      naming the node and the failure, and no call site may swallow the error.
+      The two are complementary -- no-residue governs what a failed write leaves
+      BEHIND (shared-checkout state), this governs whether the failure is
+      OBSERVABLE at all. Either can be satisfied while the other is violated: a
+      rollback that exits silently leaves a clean tree and no signal, and a loud
+      failure can still leave residue. Found while auditing the call-site census
+      for tactic-graph-write-failure-rollback: dispatch-graph-main-red-sync:104
+      runs its graph-commit inside `( ... ) 1>&2 || true` within a `while read`
+      loop, so a failure is swallowed entirely -- nothing logged, residue left,
+      and the loop proceeds to the next node, potentially adding another dirty
+      file per iteration. Operationally silence is the worse half of the pair:
+      residue at least announces itself at the next graph-commit, whereas a
+      swallowed failure leaves the graph quietly not saying what the router
+      believes it says. Recorded at this layer for the same reason as the
+      no-residue rule -- nothing today prevents a seventh call site from adding
+      another `|| true`, and the requirement outlives
+      tactic-graph-write-failure-rollback (unit 3), which implements it. Freeze
+      classification for this round: the strategy's one stamped open child,
+      tactic-qa-fix-instrument-signoff-classify (review), is ORTHOGONAL -- it
+      narrows qa-fix's classify prompt for non-user-facing audit-instrument
+      sign-off and depends on nothing recorded here -- so its
+      strategy_fingerprint was re-stamped in this same commit rather than left
+      to freeze. It was classified on the substance of the delta, not on its
+      rank."
+  - question: What does an office_hours park assert, and may graph hygiene (census)
+      ever park?
+    answer: "(Recorded 2026-07-23 /align-strategy interview.) An office_hours park
+      asserts: no autonomous path forward exists under current graph direction —
+      a human is required. Author-intention decisions and genuine escalations
+      (crash-loop sweep parks, true-conflict parks, provision failures) both
+      qualify; owed mechanical labor never does. Graph hygiene
+      (census/reconciliation) therefore never parks: direction exists, only
+      labor is owed — a hygiene hold is modeled as a blocked_by edge to a
+      tracked node (a fix-tactic for a mechanical hold; a question-scoped
+      born-parked review item when the hold is a genuine author-intention
+      question), never as a park on the hygiene node itself. Observable: the
+      office-hours queue contains no hygiene/census-labor parks (sensor:
+      office-hours-select --list with each park reason classified; threshold
+      zero). Motivating failure: the 2026-07-11 census node sat parked 12 days
+      while debt grew 52 to 62; its park was converted to three blocked_by edges
+      and cleared in this round's commit."
+  - question: What is the greenfield design for graph hygiene (census), and why does
+      it require no AI session?
+    answer: "(Recorded 2026-07-23 /align-strategy interview; author-directed.)
+      Greenfield: census is a scripted dispatch-tick step — not a node, not an
+      AI session. Every tick: enumerate done-but-present nodes; prune only those
+      whose completion verifies mechanically (recorded execution.pr with
+      mergedAt set, or a recorded graph-commit sha); edge repair (strip pruned
+      ids from live blocked_by) is scripted; one batched graph-commit. The
+      drain-time doctrine-home check is eliminated by construction:
+      kind-tactic's authoring-time layer-placement gate (2026-07-21) keeps
+      durable content out of transient tactic bodies, and git history retains
+      pruned bodies as backstop. Nodes failing verification (falsely-done,
+      unrecorded pr) are left in place and surfaced as an integrity-defect count
+      — they become ordinary selectable defect tactics, never parks, never
+      mid-tick AI. The census latch node disappears and dispatch-graph-census's
+      threshold-birth mechanism retires once the tick step is live: a cheap
+      continuous drain never accumulates debt, so no latch is needed. Migration:
+      (1) tighten execution.pr custody at park time
+      (tactic-office-hours-pr-custody); (2) implement the scripted tick step,
+      strict-verification-only (tactic-census-scripted-tick); (3) convert the
+      2026-07-11 census node's three holds to blocked_by edges (this round); (4)
+      retire the latch birth. Interview ground for no-AI: of the four drain
+      steps, completion verification, edge repair, and dependent satisfaction
+      are already mechanical; the only judgment step (doctrine-home) compensated
+      for authoring-time placement leaks the layer-placement gate now prevents."
+  - question: "The reservation-ledger reaper (reservation_sweep) is wired only into
+      dispatch paths that reach the selection stage: the pause sentinel
+      short-circuits the autonomous heartbeat before it, and the --manual
+      fan-out path deliberately skips it. In the standing paused-scheduling +
+      manual-only operating mode nothing reaps the ledger, so it drifts stale
+      (dead-session orphans inflate live=N and throttle manual fan-out). What is
+      the cross-mode ledger-validity requirement, and the design that meets it?"
+    answer: "(Recorded 2026-07-23 interview.) Invariant: the reservation ledger must
+      read as VALID in every operating mode — (a) cron/timer-scheduled
+      autonomous execution, (b) paused-scheduling with manual-only dispatch, and
+      (c) paused-scheduling with no dispatch — not only when an autonomous tick
+      reaches selection. The pause sentinel
+      ($XDG_DATA_HOME/commons-dispatch/paused, dispatch-tick) gates worker
+      SPAWNING, never ledger BOOKKEEPING: pausing scheduling must never pause
+      reconciliation. Greenfield design (ideal, led per design-proposals): (1)
+      sweep-on-read — fold reservation_sweep into the ledger's count/read API
+      (reservation_count) so every consumer is reconciled by construction and no
+      call site can read stale; this reconcile-at-consumption framing also
+      covers manual reads during pause (the 30s boot-grace still protects
+      brand-new markers); (2) reaping decoupled from the pause sentinel — a
+      lightweight ledger sweep on the timer-driven heartbeat runs BEFORE the
+      pause short-circuit, bounding orphan accumulation during long pauses with
+      no manual ticks (kept out of the gh-heavy, throttled dispatch-sweep
+      worktree-GC pass, which solves a different problem); (3) reap-on-exit
+      (tactic-graph-node-session-reap, PR #2922) as the write-side complement so
+      the happy path never strands a marker, leaving the sweep as the crash-only
+      backstop. Steelman refinement: the rival 'reconcile only at
+      scheduling-resume' is insufficient because manual dispatch consumes the
+      ledger DURING pause; sweep-on-read is that rival's valid core (no
+      pointless background reaper when nobody reads) reconciled with the
+      requirement. Brownfield migration path (greenfield is multi-PR and
+      reverses a recorded aside): (i) parity fix — reservation_sweep in the
+      --manual block before reservation_count
+      (tactic-manual-path-reservation-sweep); (ii) pause-independent reaper —
+      reservation_sweep in dispatch-tick before the pause short-circuit
+      (tactic-heartbeat-sweep-before-pause); (iii) land PR #2922 reap-on-exit;
+      (iv) converge — sweep-on-read in the ledger count API, removing the
+      now-redundant per-path sweep calls: the autonomous call, the explicit-node
+      call (PR #2952), and (i) (tactic-ledger-sweep-on-read). This REVERSES the
+      aside in tactic-explicit-node-reservation-sweep-policy (PR #2952) that
+      '--manual need not sweep — its non-sweep only affects fan-out pacing,
+      never a hard refusal, so the paths need not move in lockstep': that
+      reasoning holds for the explicit-node hard-refusal it addressed, but did
+      not consider the paused+manual mode, where manual non-sweep is not a
+      pacing optimization but total reaper dormancy — the ledger's only live
+      consumer running with no reconciler. PR #2952's own deliverable (the
+      NODE_ARG branch sweep) is unchanged; only its broader 'manual is safe'
+      aside is superseded. Boost note: the two parity-fix tactics are boosted to
+      the top of NORMAL work but below the strategy-main-health emergency
+      ceiling (boost 100), which the 2026-07-13 guard keeps dominant — the
+      ledger fix is important but is not a red-main emergency."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1221,7 +1399,14 @@ attributes:
       escalations still surface via the office-hours PARKED panel). Auto-close
       remains the doctrinal default for the two clean terminal states, and the
       session is never router substrate
+    - paused-scheduling with manual-only dispatch is a supported STANDING
+      operating mode, not a degraded or temporary state — the pause sentinel
+      gates worker spawning only, never reservation-ledger reconciliation — so
+      every ledger-consuming invariant (e.g. the selection-time busy+reserved
+      count) must hold in it without relying on the autonomous heartbeat's
+      reaper
 ---
+
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
 
 ## Router Mechanism

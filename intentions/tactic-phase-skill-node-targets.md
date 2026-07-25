@@ -32,9 +32,9 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: null
+  fix: null
 validates: []
-blocked_by:
-  - tactic-graph-router-transitions
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

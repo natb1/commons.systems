@@ -26,34 +26,60 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-nix-instance-flake-extraction
+  pr: 2848
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
-blocked_by:
-  - tactic-nix-export-nixos-modules
-office_hours:
-  reason: "Implementation complete on PR #2848 (darwin-build GREEN — Unit 2
-    lib.mkForce drop validated on macOS; both host configs eval to a .drv
-    locally, home.homeDirectory resolves /Users/operator and /home/operator).
-    Blocked ONLY by nixos-build red on a pre-existing upstream WezTerm nightly
-    hash drift: nix/home/wezterm-pin.nix windowsZipHash
-    sha256-Beo9PtQ5UmqdmBbagYfVoS0hglseF/1F/uUMHtGxr1c= is stale vs upstream
-    sha256-twQWc8bNnvKVPRj0Fi2gqv5HfK1WvLD0ZtN2DsZpl8I=, a rolling-nightly
-    fixed-output derivation this diff never touches (Linux/WSL-only, so
-    darwin-build is unaffected). It also breaks origin/main and every nix PR:
-    the last nix merge #2834 passed nixos-build ~14h ago, upstream re-published
-    the nightly asset in place since. Next steps: refresh the WezTerm Windows
-    nightly pin on main via nix/home/sync-wezterm.sh (its own concern, owned by
-    #2794 — do NOT couple the hash bump into this scoped instance-flake PR),
-    then unpark/re-tick this node so nixos-build reruns green; PR #2848 is
-    otherwise ready."
-  since: 2026-07-11
-  recommendation: null
+blocked_by: []
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # Move the personal instance config (host configs, identity, ssh pubkeys, group id, host user) out of the framework flake.nix — commons.systems carries zero personal values and CI builds placeholder instance configs
+
+## Park history — resolved 2026-07-23
+
+This node was parked 2026-07-11 (re-audited 2026-07-23) on a single external
+blocker: CI `nixos-build` was red because of a stale hash on the fixed-output
+derivation `WezTerm-windows-nightly.zip`, pinned in `nix/home/wezterm-pin.nix`
+— a file this tactic never touches. The park was never about this diff.
+
+That blocker is gone. PR #2953 (branch `wezterm-pin-refresh`) merged
+2026-07-23T15:32:11Z as merge commit `0f51056b9`, moving `windowsZipHash` on
+`main` to `sha256-bTvVHVpB8Mh6g2lF2RB9Egs2IApanVb5Z1R2M9UCZZ8=`, and its own
+`nixos-build` passed.
+
+On 2026-07-23 the repo author directed the unpark (verbatim: "Unpark 2848
+since 2953 is now merged"). `origin/main` was merged into branch
+`tactic-nix-instance-flake-extraction` the same day as `7a9cdfd7`, so the PR
+picks up the corrected pin, and CI run 30024309981 came back green across all
+15 jobs — including `nixos-build` and `darwin-build`. `office_hours` was
+cleared to `null` in the same pass.
+
+The hash values quoted in the old park text — `sha256-Beo9...`,
+`sha256-QiVmQOEZ...`, and pin version `20260707-093716` — are historical.
+They were already stale when written and describe no current state; the live
+values are in `nix/home/wezterm-pin.nix` on the current `origin/main` and on
+the current PR head.
+
+What a park rests on, as a matter of practice: a live blocker, verified
+first-hand and dated at the time of parking. A park re-derived from a node's
+own history is a stale-premise park — a sibling node in this repo had a human
+ratification at `0066efb3` overridden exactly that way.
+
+Branch viability at unpark: `git merge origin/main` into the branch was clean
+(no conflicts); no commit on `main` had touched `flake.nix` or
+`examples/office-hours-nate/` since the merge-base, so there was no content
+drift. The plan's three absence greps all pass on the merged head, and
+`mkDarwinConfiguration` / `mkNixosConfiguration` are exported with a
+placeholder `operator` instance wired to both CI outputs.
 
 ## Context
 

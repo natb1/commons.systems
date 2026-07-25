@@ -115,6 +115,29 @@ clarifications:
       export drop exists. Recorded 2026-07-03 /align-tactics round 1 — author
       correction pruning the round's born-parked analytics-drop tactic in favor
       of tactic-attention-surface-analytics-collector.
+  - question: How is the office-hours parked queue ordered when the author wants to
+      defer whole classes of sittings — is pure attention rank sufficient?
+    answer: "(Recorded 2026-07-23 /align-strategy interview.) No. Office-hours
+      parked nodes carry a session-type label — office_hours.session_type, a
+      closed schema-validated enum {requirement-discovery, curriculum-review,
+      other}, defaulting to other when absent — and the office-hours selector
+      (office-hours-select.ts / officeHours.ts) ranks type-aware with a soft
+      penalty: requirement-discovery and curriculum-review parks rank at
+      attention x 0.5 (one shared named, author-tunable constant), so they sink
+      below other office-hours work while a sufficiently boosted node can still
+      surface — a soft penalty, deliberately not a hard tier floor. This amends
+      the pure attention-rank-descending ordering of the parked queue to
+      attention-ranked-with-type-modifier; the STATUS page's signal queue is
+      untouched. The label also enables selection BY type (requirement-discovery
+      / curriculum-review / other sittings on demand). Motivating case:
+      strategy-recover-attention re-surfaced at every tick demanding a direction
+      decision the author wants held for a dedicated future session. Steelman
+      considered and diverged from (2026-07-23): hand-authored per-node
+      attention deboosts could sink individual recurring nodes with zero schema,
+      but are hand-maintained hygiene, do not generalize to new parks of the
+      same class, and cannot express filter-by-type selection — the type
+      dimension is adopted for both ranking and selection. Implementation is
+      drafted in tactic-office-hours-session-type."
 tooling_goals:
   - kind: actuator
     statement: status page — one attention-ranked queue of typed signals, each type
@@ -156,6 +179,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - the local clone the surface reads stays fresh enough that attention and
@@ -168,5 +192,11 @@ attributes:
       need no GitHub queries
     - the File System Access API, or an equivalent local read path, remains
       available in the author's browser
+    - The office-hours session-type soft-penalty factor stays a named,
+      author-tunable constant in the selector; changing its value is config, not
+      doctrine.
+    - Type-aware office-hours ranking holds while parked-node selection is
+      driven by office-hours-select.ts / officeHours.ts; if selection moves to
+      another surface, the session-type ranking moves with it.
 ---
 # Office hours runs on the graph — one local-first surface (status signals and goals exploration) allocates the author's strategic attention

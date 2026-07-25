@@ -81,22 +81,24 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: qa
+phase: review
 execution:
   branch: tactic-align-tactics-mechanical-floor
   pr: 2896
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-22
-    attempt: 1
-    pushed_sha: null
+  fix: null
 validates: []
-blocked_by:
-  - tactic-flake-park-node-concurrent-write-refusal
-office_hours: null
+blocked_by: []
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-23
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /dispatch-conflict once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}
