@@ -36,13 +36,15 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: qa
+phase: review
 execution:
   branch: tactic-clear-park-primitive
   pr: 2947
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
 validates: []
