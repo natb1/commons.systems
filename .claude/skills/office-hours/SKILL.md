@@ -316,9 +316,14 @@ Read-only and kind-aware: surface the node's parked context, review-and-recommen
 report where to engage, and stop. No graph write, no label, no phase action.
 
 For a tactic node, `office-hours-graph` provisions (reuse-then-create) the
-node-id worktree itself before launch — fresh off `origin/main` when it must
-create one — and launches the session named after the bare node id (not
-`office-hours-<node-id>`), the same name convention worker/phase sessions use.
+node-id worktree itself before launch and launches the session named after the
+bare node id (not `office-hours-<node-id>`), the same name convention
+worker/phase sessions use. Provisioning does **not** guarantee freshness: it
+reuses an existing worktree as-is, else checks out the remote `<node-id>` branch
+at its own head, and only falls back to a fresh branch off `origin/main` when
+neither exists. The first two arms can be arbitrarily far behind main — a park
+reason of merge conflict or stale scope makes that the likely case — so the
+freshness check in step 5 applies to every session, freshly launched or not.
 This makes the session visible to liveness detection: an untargeted
 `/office-hours` launch skips a parked node that already has a live session
 (office-hours or worker) and selects the next-ranking parked node instead, and
@@ -376,17 +381,20 @@ an explicit `/office-hours <node-id>` naming an already-live node errors (the
 5. **Report where to engage (kind-aware).**
 
    - **Strategy node** — no worktree, no PR. Engage by refining the node itself:
-     `/align-strategy` or `/align-tactics` on `<node-id>`.
+     `/align-strategy` or `/align-tactics` on `<node-id>`. `office-hours-graph`
+     provisions no worktree for a strategy node (nor for any other non-tactic
+     kind) and launches it at the repo root — only the bare node-id session name
+     is shared with the tactic lane.
    - **Tactic node** — name the item's worktree `.claude/worktrees/<node-id>`
      ("engage here" when the current session's cwd is already it) and
      `execution.pr` when non-null. `office-hours-graph` provisions/reuses this
-     worktree itself before launch, fetching and branching off `origin/main`
-     when it creates one — so a *freshly launched* session already starts
-     current, and no human freshening step is needed for it. The staleness risk
-     is narrower now: only a worktree that has since sat idle after the
-     session launched (parked mid-review, main moved on in the meantime) can go
-     stale. Before resuming analysis in that case, advise the human to run
-     `assert-worktree-fresh`
+     worktree before launch, but that is **not** a freshness guarantee — it
+     reuses an existing worktree as-is and otherwise prefers the remote
+     `<node-id>` branch at its own head; only the last fallback branches off
+     `origin/main`. A parked worktree is therefore stale by default (parked on a
+     merge conflict or stale scope, or idle while main moved on). Before
+     resuming analysis there — always, freshly launched or not — advise the
+     human to run `assert-worktree-fresh`
      (`.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh`) or
      freshen via `git fetch origin main && git merge origin/main` — a non-zero
      exit (stale checkout **or** failed fetch) means freshen first. This is

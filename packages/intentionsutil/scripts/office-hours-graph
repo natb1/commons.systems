@@ -16,6 +16,14 @@
 #   office-hours-graph            # launch the queue head
 #   office-hours-graph <node-id>  # launch a specific parked node
 #
+# Environment overrides:
+#   OFFICE_HOURS_CLAUDE_CMD    the `claude` binary (smoke-test stub hook).
+#   OFFICE_HOURS_ATTACH_HELD=1 when an explicitly-targeted node is already held
+#                              by a live session, attach that job instead of
+#                              erroring. Opt-in only: the default surfaces the
+#                              collision (with the attach and read-only review
+#                              commands) rather than falling through implicitly.
+#
 # Selector stdout dispositions this script acts on (stderr is advisory-only —
 # a `NOTE —` open-blocker line passes straight through to the terminal; do NOT
 # redirect or suppress it):
@@ -25,6 +33,12 @@
 #   held <node-id> <job-id>    → the explicitly-targeted node already has a live
 #                                session (job <job-id>) — a collision to surface,
 #                                never a silent fall-through or duplicate launch
+#
+# Two further dispositions are this script's own extensions (resolve_directive),
+# not selector output:
+#   cleared <node-id>          → the node's park is already cleared on origin/main
+#   all-held <count>           → the queue is NOT empty; every remaining parked
+#                                node is claimed by a live session
 #
 # Sandbox: `claude agents --json` reaches the local daemon over a Unix socket;
 # a sandboxed call returns `[]` indistinguishable from "no sessions" (see
@@ -42,17 +56,78 @@ CLAUDE_CMD="${OFFICE_HOURS_CLAUDE_CMD:-claude}"
 
 TARGET="${1:-}"
 
-# job_id_for_name <name> — echo the daemon job id of the LIVE (non-stopped)
-# background job named <name>, or empty. --all so a just-spawned session is
-# visible regardless of its momentary state; a `stopped` row with the target
-# name must not count (mirrors verify_agent_registered_under). A direct pipe
-# (no captured-var echo) keeps zsh's echo out of the jq input.
+# Rollback bookkeeping for the provisioning block in the `launch` arm below,
+# mirroring the WorktreeCreate hook's EXIT-trap invariant
+# (.claude/hooks/worktree-create.sh:64-79): if THIS run registered a worktree and
+# then exits non-zero before handing it to a session, remove it — a
+# half-provisioned path must never be left behind for the reuse arm of a later
+# run to pick up. Gating on WORKTREE_REGISTERED (not a specific line) keeps steps
+# inserted after `git worktree add` from silently skipping the rollback. The
+# flag is disarmed once a session is about to take up residence, so a booting
+# session's worktree is never removed out from under it.
+WORKTREE_REGISTERED=0
+NEW_PATH=""
+
+cleanup_worktree() {
+  [[ -n "$NEW_PATH" ]] || return 0
+  git -C "$SCRIPT_DIR" worktree remove --force "$NEW_PATH" >&2 \
+    || echo "office-hours: cleanup of the half-provisioned worktree $NEW_PATH failed. REMEDIATION: run 'git -C $SCRIPT_DIR worktree remove --force $NEW_PATH' manually." >&2
+}
+
+trap '
+  STATUS=$?
+  if [[ "$WORKTREE_REGISTERED" == 1 && $STATUS -ne 0 ]]; then
+    cleanup_worktree
+  fi
+' EXIT
+
+# job_id_for_name <name> — echo the daemon job id of the ACTIVE background job
+# named <name>, or empty when the daemon DEFINITIVELY reports no such live
+# session.
+#
+# Fails safe, never open. Every call site reads an empty result as "this node is
+# free" — the queue walk launches it, the explicit-target arm launches it, the
+# pre-launch TOCTOU gate clears it. So a swallowed daemon failure would not just
+# defeat the dedup contract this script exists to provide; now that the launch
+# path also provisions the node-id worktree, it would drop a second session into
+# the SAME worktree a live one occupies. An unqueryable daemon is therefore a
+# hard error naming the remediation, not an empty answer — the same
+# fail-to-occupied posture `worktree_has_live_session` takes
+# (lib-claude-agents.sh:527-531), and the clear-error-over-fallback rule in
+# .claude/rules/code-style.md. (The sandbox case documented in the header is a
+# separate hazard: a sandboxed `claude agents --json` returns a well-formed empty
+# array, which no exit-status or shape check can distinguish from "no sessions" —
+# hence the standing "run this script with dangerouslyDisableSandbox" note.)
+#
+# `--all` so a just-spawned session is visible regardless of its momentary state;
+# but `--all` deliberately also surfaces FINISHED sessions (`state: "done"`,
+# hidden from the active-only default — see lib-claude-agents.sh:50), and a
+# finished-but-not-`stopped` row must NOT count. Office-hours sessions are named
+# with the bare node id, so counting a completed session's leftover identity as
+# live would block that node forever: the queue would silently skip it and report
+# an empty queue for parked work that by definition needs human attention. Gate
+# on BOTH the coarse `status` and the granular `state` (the discriminator the
+# office-hours lane keys on), so only genuinely active sessions match. The
+# captured payload reaches jq via a here-string, never `echo`
+# (.claude/rules/shell-json.md).
 job_id_for_name() {
-  "$CLAUDE_CMD" agents --json --all 2>/dev/null \
-    | jq -r --arg n "$1" '
-        if type == "array"
-        then (first(.[] | select(.name == $n and .status != "stopped") | .id) // empty)
-        else empty end' 2>/dev/null || true
+  local raw rc=0
+  raw=$("$CLAUDE_CMD" agents --json --all 2>/dev/null) || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "office-hours: '$CLAUDE_CMD agents --json --all' failed (exit $rc) — the daemon is unqueryable, so live-session dedup cannot be evaluated and launching now could put a duplicate session in an occupied worktree. REMEDIATION: the daemon is reached over a Unix socket, so run this script with dangerouslyDisableSandbox (see .claude/rules/sandbox.md), confirm 'claude agents --all' responds, then re-run." >&2
+    exit 1
+  fi
+  if ! jq -e 'type == "array"' <<<"$raw" >/dev/null 2>&1; then
+    echo "office-hours: '$CLAUDE_CMD agents --json --all' returned output that is not a JSON array — the daemon is unqueryable, so live-session dedup cannot be evaluated. REMEDIATION: run 'claude agents --json --all' directly (with dangerouslyDisableSandbox) and confirm it emits a JSON array, then re-run." >&2
+    exit 1
+  fi
+  jq -r --arg n "$1" '
+        first(.[]
+          | select(.name == $n
+                   and .status != "stopped"
+                   and .state != "done"
+                   and .state != "stopped")
+          | .id) // empty' <<<"$raw"
 }
 
 # park_live_on_main <node-id> — success iff origin/main authoritatively shows a
@@ -80,6 +155,35 @@ park_live_on_main() {
     return 1
   fi
   return 0
+}
+
+# node_kind_on_main <node-id> — echo the node's `kind` as recorded on origin/main
+# (`tactic`, `strategy`, `delegation`, `virtue`, `tradition`). Only a TACTIC node
+# has a worktree: `execution.branch` is non-null on tactic nodes and on no other
+# kind, and `.claude/skills/office-hours/SKILL.md` step 5 states outright that a
+# strategy node has "no worktree, no PR" — engagement there is a graph edit
+# (`/align-strategy`, `/align-tactics`), not a checkout. The launch arm gates
+# provisioning on this so a non-tactic park never mints a branch and worktree the
+# documentation says does not exist (and which dispatch-sweep's NODE arm could
+# never reap: those kinds carry `phase: null`, never `phase: done`).
+#
+# Frontmatter-scoped and column-0-anchored, exactly as park_live_on_main is, so a
+# `kind:` line in the markdown body cannot be misread as schema state. A node
+# whose file or `kind` cannot be read is a hard error, not a default: guessing
+# would silently launch a tactic session at the repo root with no worktree.
+node_kind_on_main() {
+  local nid="$1" body frontmatter kind
+  body=$(git -C "$SCRIPT_DIR" show "origin/main:intentions/${nid}.md" 2>/dev/null) || {
+    echo "office-hours: cannot read intentions/${nid}.md on origin/main to determine the node kind; refusing to guess whether it needs a worktree." >&2
+    exit 1
+  }
+  frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$body")
+  kind=$(sed -n 's/^kind:[[:space:]]*\([A-Za-z][A-Za-z0-9_-]*\)[[:space:]]*$/\1/p' <<<"$frontmatter" | head -1)
+  if [[ -z "$kind" ]]; then
+    echo "office-hours: intentions/${nid}.md on origin/main has no parseable column-0 'kind:' field; refusing to guess whether it needs a worktree." >&2
+    exit 1
+  fi
+  printf '%s\n' "$kind"
 }
 
 # resolve_directive — emit exactly one directive line for the first LIVE head (or
@@ -134,6 +238,11 @@ resolve_directive() {
   fi
   local score nid date
   local nid_job
+  # Count nodes skipped because a live session holds them, so the caller can
+  # distinguish a genuinely empty queue from "parked work exists but every
+  # candidate is claimed" — reporting the latter as `empty` would be a false
+  # statement about work that needs human attention.
+  local held_count=0
   while IFS=$'\t' read -r score nid date; do
     [[ -z "$nid" ]] && continue
     if ! park_live_on_main "$nid"; then
@@ -146,12 +255,17 @@ resolve_directive() {
     nid_job=$(job_id_for_name "$nid")
     if [[ -n "$nid_job" ]]; then
       echo "office-hours: skipping $nid — a live session (job $nid_job) is already in progress." >&2
+      held_count=$((held_count + 1))
       continue
     fi
     npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$nid"
     return 0
   done <<<"$listing"
-  echo "empty"
+  if [[ "$held_count" -gt 0 ]]; then
+    echo "all-held $held_count"
+  else
+    echo "empty"
+  fi
 }
 
 # Sync the authoritative park state before selecting. A fetch failure is
@@ -170,14 +284,29 @@ case "$verb" in
     exit 0
     ;;
   held)
-    echo "office-hours: a live session named $a already exists (job $b) — attach it with 'claude attach $b' rather than launching a duplicate on an explicitly-targeted, occupied node." >&2
+    # An explicitly-targeted node claimed by a live session is a collision, not
+    # a dead end: offer the holding job, an opt-in attach, and a read-only
+    # review path that needs no worktree and no session name — so oversight of a
+    # parked node is never blocked by whatever holds its name.
+    if [[ "${OFFICE_HOURS_ATTACH_HELD:-}" == "1" ]]; then
+      echo "office-hours: node $a is held by live job $b; OFFICE_HOURS_ATTACH_HELD=1 — attaching that session instead of launching a duplicate." >&2
+      exec "$CLAUDE_CMD" attach "$b"
+    fi
+    echo "office-hours: node $a is already claimed by a live session (job $b) — not launching a duplicate. Options:" >&2
+    echo "  continue that review   : claude attach $b   (or re-run with OFFICE_HOURS_ATTACH_HELD=1)" >&2
+    echo "  review read-only now   : claude \"/office-hours $a\"   (run from the repo root; takes no worktree and claims no session name)" >&2
+    echo "  inspect the holder     : claude agents --all" >&2
     exit 1
+    ;;
+  all-held)
+    echo "office-hours: the queue is NOT empty — $a parked node(s) are ranked but each is already claimed by a live session, so there is nothing new to launch. Run 'claude agents --all' and attach the holding job to continue that review, or re-run once it finishes."
+    exit 0
     ;;
   empty)
     if [[ "$a" == "not-parked" ]]; then
       echo "office-hours: node $b is not parked — nothing to launch for it."
     else
-      echo "office-hours: queue is empty — nothing to launch."
+      echo "office-hours: queue is empty — no parked node is waiting (nothing was skipped as held)."
     fi
     exit 0
     ;;
@@ -185,55 +314,114 @@ case "$verb" in
     node_id="$a"
     name="$node_id"
 
-    # Provision (or reuse) the node-id worktree so the launched session runs
-    # resident in it under the bare node-id name that liveness-detection
-    # (job_id_for_name / worktree_has_live_session) actually recognizes. This
-    # translates the node lane of .claude/hooks/worktree-create.sh (which is a
-    # WorktreeCreate hook, fired only through the EnterWorktree tool inside an
-    # already-running session — not callable from this pre-session script), and
-    # deliberately avoids `provision-node-worktree` (that primitive does
-    # CI-ready/PR gating, merge-conflict and scope-staleness handling — all
-    # worker/phase machinery wrong for a read-only, no-commit, no-PR session).
-    # Git is scoped via `git -C "$SCRIPT_DIR"`, matching this script's
-    # cwd-independence convention (see park_live_on_main).
-    #
-    # Project root = the worktree with `main` checked out, resolved from the
-    # worktree registry exactly as graph-select-target does.
-    PROJECT_ROOT=$(git -C "$SCRIPT_DIR" worktree list --porcelain \
-      | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
-    if [[ -z "$PROJECT_ROOT" ]]; then
-      echo "office-hours: no worktree with 'main' checked out; cannot resolve the project root for node-id worktree '$node_id'." >&2
-      exit 1
-    fi
-    NEW_PATH="$PROJECT_ROOT/.claude/worktrees/$node_id"
-
-    # Reuse-then-create, mirroring the hook's node lane: reuse an existing
-    # worktree as-is; else prefer a remote branch, then a local branch, then a
-    # fresh branch off origin/main.
-    if [[ -e "$NEW_PATH" ]]; then
-      : # reuse the existing worktree as-is
-    elif git -C "$SCRIPT_DIR" ls-remote --heads --exit-code origin "$node_id" >/dev/null 2>&1; then
-      git -C "$SCRIPT_DIR" fetch origin "$node_id" >/dev/null 2>&1
-      git -C "$SCRIPT_DIR" worktree add "$NEW_PATH" "$node_id" >/dev/null 2>&1
-    elif git -C "$SCRIPT_DIR" rev-parse --verify --quiet "$node_id" >/dev/null 2>&1; then
-      git -C "$SCRIPT_DIR" worktree add "$NEW_PATH" "$node_id" >/dev/null 2>&1
+    # Worktree provisioning is TACTIC-ONLY. A tactic node is the only kind that
+    # has a branch at all (`execution.branch` is non-null on tactic nodes and on
+    # no other kind), and SKILL.md step 5 states outright that a strategy node has
+    # "no worktree, no PR" — engagement there is a graph edit, not a checkout.
+    # Provisioning for a strategy/delegation/virtue/tradition park would mint a
+    # branch and a `.claude/worktrees/<node-id>` checkout the documentation denies
+    # exists, and dispatch-sweep's NODE arm could never reap it (those kinds carry
+    # `phase: null`, never `phase: done`, so its completion gate reads
+    # `active-phase` forever). Non-tactic parks launch at the selector-emitted cwd
+    # instead. The session NAME is the bare node id for EVERY kind — that is what
+    # liveness dedup keys on, and it is unaffected by this gate.
+    node_kind=$(node_kind_on_main "$node_id")
+    if [[ "$node_kind" != "tactic" ]]; then
+      cwd="$b"
+      echo "office-hours: node $node_id is a $node_kind node — no worktree (engagement is a graph edit; see SKILL.md step 5). Launching in $cwd under the bare node-id session name." >&2
     else
-      git -C "$SCRIPT_DIR" fetch origin main >/dev/null 2>&1
-      git -C "$SCRIPT_DIR" worktree add -b "$node_id" "$NEW_PATH" origin/main >/dev/null 2>&1
-    fi
+      # Provision (or reuse) the node-id worktree so the launched session runs
+      # resident in it under the bare node-id name that liveness-detection
+      # (job_id_for_name / worktree_has_live_session) actually recognizes. This
+      # translates the node lane of .claude/hooks/worktree-create.sh (which is a
+      # WorktreeCreate hook, fired only through the EnterWorktree tool inside an
+      # already-running session — not callable from this pre-session script), and
+      # deliberately avoids `provision-node-worktree` (that primitive does
+      # CI-ready/PR gating, merge-conflict and scope-staleness handling — all
+      # worker/phase machinery wrong for a read-only, no-commit, no-PR session).
+      # Git is scoped via `git -C "$SCRIPT_DIR"`, matching this script's
+      # cwd-independence convention (see park_live_on_main).
+      #
+      # Project root = the worktree with `main` checked out, resolved from the
+      # worktree registry exactly as graph-select-target does.
+      PROJECT_ROOT=$(git -C "$SCRIPT_DIR" worktree list --porcelain \
+        | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
+      if [[ -z "$PROJECT_ROOT" ]]; then
+        echo "office-hours: no worktree with 'main' checked out; cannot resolve the project root for node-id worktree '$node_id'." >&2
+        exit 1
+      fi
+      # The node id becomes both a git branch name and a path component below, so
+      # validate its shape at this edge with the same regex the hook's node lane
+      # accepts (.claude/hooks/worktree-create.sh:92). A clear error here beats an
+      # opaque git failure — or a path escape — downstream.
+      if [[ ! "$node_id" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+        echo "office-hours: invalid node id '$node_id' (expected a lowercase slug of alphanumerics and single dashes); refusing to provision a worktree for it." >&2
+        exit 1
+      fi
 
-    # Best-effort direnv warm-up mirroring the hook, but NEVER fatal —
-    # office-hours is read-only, so a direnv blip must not block a human review
-    # session. Log a warning to stderr and continue.
-    if ! direnv allow "$NEW_PATH" >/dev/null 2>&1 \
-        || ! direnv exec "$NEW_PATH" true >/dev/null 2>&1; then
-      echo "office-hours: warning — direnv warm-up for $NEW_PATH failed; continuing (read-only session)." >&2
-    fi
+      NEW_PATH="$PROJECT_ROOT/.claude/worktrees/$node_id"
 
-    # The launched session runs resident in the node-id worktree, overriding
-    # whatever cwd office-hours-select.ts emitted ($b) — resolveSessionCwd stays
-    # advisory-only for the non-provisioning callers.
-    cwd="$NEW_PATH"
+      # provision_fail <operation> <captured-stderr> — every git call below is
+      # checked and its stderr captured into the diagnostic. Under `set -euo
+      # pipefail` an unchecked, output-suppressed failure would abort office-hours
+      # with git's exit code and NO message at all, leaving a provisioning failure
+      # (a stale registration for the same node id, a transient fetch failure, a
+      # branch already checked out elsewhere) indistinguishable from an empty
+      # queue — the silent-failure pattern .claude/rules/code-style.md forbids.
+      provision_fail() {
+        echo "office-hours: failed to $1 for node '$node_id': ${2:-(no stderr)}" >&2
+        exit 1
+      }
+
+      # Reuse-then-create, mirroring the hook's node lane: reuse an existing
+      # worktree as-is; else prefer a remote branch, then a local branch, then a
+      # fresh branch off origin/main.
+      if [[ -e "$NEW_PATH" ]]; then
+        : # reuse the existing worktree as-is
+      else
+        # `ls-remote --exit-code`: 0 = the branch exists on origin, 2 = no such
+        # ref (an ordinary "fall through to the next arm", not an error). Any
+        # other status is a real failure (network, auth, refspec) that must
+        # surface rather than silently downgrade to the fresh-branch arm.
+        remote_rc=0
+        git_err=$(git -C "$SCRIPT_DIR" ls-remote --heads --exit-code origin "$node_id" 2>&1 >/dev/null) || remote_rc=$?
+        if [[ "$remote_rc" -ne 0 && "$remote_rc" -ne 2 ]]; then
+          provision_fail "query origin for branch '$node_id' (git ls-remote exit $remote_rc)" "$git_err"
+        fi
+
+        if [[ "$remote_rc" -eq 0 ]]; then
+          git_err=$(git -C "$SCRIPT_DIR" fetch origin "$node_id" 2>&1 >/dev/null) \
+            || provision_fail "fetch remote branch '$node_id'" "$git_err"
+          git_err=$(git -C "$SCRIPT_DIR" worktree add "$NEW_PATH" "$node_id" 2>&1 >/dev/null) \
+            || provision_fail "add worktree $NEW_PATH on remote branch '$node_id'" "$git_err"
+        elif git -C "$SCRIPT_DIR" rev-parse --verify --quiet "refs/heads/$node_id" >/dev/null 2>&1; then
+          # Predicate only (0 = the local branch exists, non-zero = it does not);
+          # nothing to diagnose, so its output stays suppressed.
+          git_err=$(git -C "$SCRIPT_DIR" worktree add "$NEW_PATH" "$node_id" 2>&1 >/dev/null) \
+            || provision_fail "add worktree $NEW_PATH on local branch '$node_id'" "$git_err"
+        else
+          git_err=$(git -C "$SCRIPT_DIR" fetch origin main 2>&1 >/dev/null) \
+            || provision_fail "fetch origin main before branching '$node_id'" "$git_err"
+          git_err=$(git -C "$SCRIPT_DIR" worktree add -b "$node_id" "$NEW_PATH" origin/main 2>&1 >/dev/null) \
+            || provision_fail "add worktree $NEW_PATH on a new branch '$node_id' off origin/main" "$git_err"
+        fi
+        # Registered by THIS run: arm the EXIT rollback so any later non-zero exit
+        # removes the half-provisioned path (a reused worktree is never removed).
+        WORKTREE_REGISTERED=1
+      fi
+
+      # Best-effort direnv warm-up mirroring the hook, but NEVER fatal —
+      # office-hours is read-only, so a direnv blip must not block a human review
+      # session. Log a warning to stderr and continue.
+      if ! direnv allow "$NEW_PATH" >/dev/null 2>&1 \
+          || ! direnv exec "$NEW_PATH" true >/dev/null 2>&1; then
+        echo "office-hours: warning — direnv warm-up for $NEW_PATH failed; continuing (read-only session)." >&2
+      fi
+
+      # The launched session runs resident in the node-id worktree, overriding
+      # whatever cwd office-hours-select.ts emitted ($b).
+      cwd="$NEW_PATH"
+    fi
 
     # Always-fresh launch: a live session already named <node-id> means a
     # duplicate name (this entry never implicitly attaches). A clear error
@@ -245,6 +433,13 @@ case "$verb" in
       echo "office-hours: a live session named $name already exists (job $existing) — attach it with 'claude attach $existing' rather than launching a duplicate." >&2
       exit 1
     fi
+
+    # A session is about to take up residence in the worktree — disarm the
+    # rollback here so no later failure (a kick that fails after the session
+    # partially booted, a registration timeout, a failed `exec attach`) can
+    # remove a directory a live session is running in. Everything between
+    # `worktree add` and this point stays covered.
+    WORKTREE_REGISTERED=0
 
     # Kick a non-resume --bg job rooted at <cwd> via a subshell cd so
     # SessionStart-derived attributes key on the right directory. The positional

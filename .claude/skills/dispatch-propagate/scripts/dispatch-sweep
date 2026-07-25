@@ -15,6 +15,10 @@
 #      (no PR) -> fall through to the issue path.
 #   3. No-PR + issue-number branch: query the issue state. CLOSED -> remove;
 #      OPEN -> keep; anything else is logged and skipped.
+#   4. No-PR + no issue-number prefix: a bare node-id worktree (a graph
+#      intention node, e.g. an office-hours review workspace). There is no PR
+#      or issue to read, so this arm requires POSITIVE evidence of completion
+#      rather than the absence of a signal — see the NODE-arm gates below.
 #   A worktree is removed only when it is reservation-free, has no live session,
 #      and is in sync (clean tree + zero unpushed commits). A per-worktree gh
 #      failure is logged and isolated, never fatal (#1313).
@@ -22,6 +26,11 @@
 # Environment overrides for testability:
 #   DISPATCH_SWEEP_LOG_FILE   Override log path. Default: <root>/tmp/dispatch-sweep.log.
 #   DISPATCH_SWEEP_NOW        Override UTC timestamp source (deterministic tests).
+#   DISPATCH_SWEEP_NODE_MIN_AGE_S
+#                             Minimum age (seconds) a bare node-id worktree must
+#                             reach before the NODE arm may reap it. Precedence:
+#                             sweep config nodeMinAgeSeconds -> this env override
+#                             -> baked default (3600).
 #
 # Exit codes:
 #   0  normal sweep completed (merged worktrees removed where possible).
@@ -104,6 +113,28 @@ else
   fi
 fi
 
+# ---- NODE-arm minimum age ----------------------------------------------------
+# The bare node-id arm (no PR, no issue-number prefix) reaps a worktree that
+# carries no reservation marker of its own, so a worktree provisioned seconds ago
+# — e.g. by `office-hours-graph`, which does `git worktree add` and only THEN
+# launches the session the daemon registers asynchronously — must never be
+# reapable inside that registration window. Resolve the floor the same way the
+# not-in-sync grace is resolved: sweep config `nodeMinAgeSeconds` → env override →
+# baked default, each integer-guarded (a non-integer in an arithmetic comparison
+# would error and reap every node worktree immediately). CONFIG_OUT is reused from
+# the block above; when the loader failed it holds a diagnostic, which jq rejects
+# and the integer guard discards — falling through to env/default.
+NODE_MIN_AGE_S=3600
+node_val=""
+if [[ -n "${CONFIG_OUT:-}" && "$CONFIG_OUT" != "no-config" ]]; then
+  node_val=$(jq -r '.nodeMinAgeSeconds // empty' <<<"$CONFIG_OUT" 2>/dev/null)
+fi
+if [[ "$node_val" =~ ^[0-9]+$ ]]; then
+  NODE_MIN_AGE_S="$node_val"
+elif [[ "${DISPATCH_SWEEP_NODE_MIN_AGE_S:-}" =~ ^[0-9]+$ ]]; then
+  NODE_MIN_AGE_S="$DISPATCH_SWEEP_NODE_MIN_AGE_S"
+fi
+
 # "now" in epoch seconds for marker age math. Distinct from DISPATCH_SWEEP_NOW
 # (the ISO-8601 string used only for log() timestamps). reap_marker_record reads
 # the same override internally so the stamp and the age math share one clock.
@@ -178,6 +209,112 @@ reap_or_skip_not_in_sync() {
     log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
   fi
   return 0
+}
+
+# ---- NODE-arm gates: completion signal, age, cwd-keyed liveness -------------
+# Every other removal path in this script keys off positive remote evidence that
+# the work is finished (a MERGED PR, a CLOSED issue). A bare node-id worktree has
+# neither, so the NODE arm must NOT reap on the mere absence of a signal — that
+# would delete in-flight pre-PR node work and human office-hours review
+# workspaces. These helpers supply the positive evidence instead.
+
+# origin/main must be readable for the completion signal to mean anything. Resolve
+# it ONCE: a missing/unfetchable remote ref makes every node reap fail safe (skip).
+ORIGIN_MAIN_OK=0
+if git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null 2>&1; then
+  ORIGIN_MAIN_OK=1
+fi
+
+# node_completion_state <node-id>
+# Print a one-token state for the branch's intention node AS RECORDED ON
+# origin/main, and return 0 ONLY when the node is provably finished:
+#   done   — intentions/<node-id>.md exists at `phase: done` with `office_hours: null`
+#   pruned — no such file on origin/main, but the path HAS history there (the node
+#            existed and was pruned from the graph)
+# Return 1 (never reap) with one of:
+#   active-phase / parked        — the node is still in flight or parked for the
+#                                  author (an office-hours workspace to preserve)
+#   not-a-node                   — no file and no history: this branch was never a
+#                                  graph node (a manually created worktree)
+#   unknown-origin-main / unsafe-id / unparseable-frontmatter — cannot tell
+# Frontmatter is matched at column 0 so nested keys never satisfy the gate, and
+# anything other than the exact `null` / `done` literals is read as "not finished".
+node_completion_state() {
+  local node_id="$1"
+  if [[ "$ORIGIN_MAIN_OK" != "1" ]]; then
+    printf 'unknown-origin-main\n'
+    return 1
+  fi
+  # The id becomes a path component in the `git show` pathspec — guard it the same
+  # way the reservation ledger guards marker basenames.
+  case "$node_id" in
+    *..*|*/*|*[[:cntrl:]]*)
+      printf 'unsafe-id\n'
+      return 1
+      ;;
+  esac
+
+  local body fm
+  if body=$(git show "origin/main:intentions/$node_id.md" 2>/dev/null); then
+    fm=$(awk 'NR == 1 && $0 == "---" { infm = 1; next } infm && $0 == "---" { exit } infm { print }' <<<"$body")
+    if [[ -z "$fm" ]]; then
+      printf 'unparseable-frontmatter\n'
+      return 1
+    fi
+    if ! grep -qE '^office_hours:[[:space:]]*null[[:space:]]*$' <<<"$fm"; then
+      # Non-null office_hours = an author park. The office-hours lane provisions
+      # exactly these node worktrees for the human to engage in — never reap one.
+      printf 'parked\n'
+      return 1
+    fi
+    if ! grep -qE '^phase:[[:space:]]*done[[:space:]]*$' <<<"$fm"; then
+      printf 'active-phase\n'
+      return 1
+    fi
+    printf 'done\n'
+    return 0
+  fi
+
+  # No node file on origin/main. Only a node that once existed there and was
+  # pruned is reapable; an absent file with NO history means the branch was never
+  # a graph node at all (a scratch/manual worktree), which this arm must not touch.
+  local hist
+  hist=$(git log -1 --format=%H origin/main -- "intentions/$node_id.md" 2>/dev/null)
+  if [[ -n "$hist" ]]; then
+    printf 'pruned\n'
+    return 0
+  fi
+  printf 'not-a-node\n'
+  return 1
+}
+
+# node_worktree_age_s <wt-path>
+# Print the worktree's age in seconds, or return 1 when it cannot be determined.
+# `<worktree>/.git` is the gitdir pointer file written once by `git worktree add`,
+# so its mtime is a stable creation stamp — unlike the admin dir under
+# .git/worktrees/<name>, which routine git operations rewrite.
+node_worktree_age_s() {
+  local pth="$1" mtime
+  mtime=$(stat -c %Y "$pth/.git" 2>/dev/null) || return 1
+  [[ "$mtime" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$(( NOW_EPOCH - mtime ))"
+  return 0
+}
+
+# node_cwd_has_live_session <wt-path>
+# cwd-keyed liveness, complementing the NAME-keyed worktree_has_live_session. A
+# session resident in the worktree under some other name — an interactive session
+# that entered it via EnterWorktree, or a manually created node worktree — is
+# invisible to the name-keyed check, so ask the daemon by cwd as well.
+#   return 0 — a live session runs under <wt-path>, OR the daemon is unqueryable
+#              (UNKNOWN, claude_sessions_under rc 1) → treat as occupied.
+#   return 1 — a definite empty result: no session resident there.
+node_cwd_has_live_session() {
+  local pth="$1" out
+  if ! out=$(claude_sessions_under "$pth"); then
+    return 0
+  fi
+  [[ -n "${out//[[:space:]]/}" ]]
 }
 
 # ---- Step 1: enumerate registered worktrees ---------------------------------
@@ -287,10 +424,33 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
     else
       # No PR and no issue-number prefix -> a bare node-id worktree (branch =
       # tactic id or similar, never had a PR, e.g. an office-hours session's
-      # worktree). No issue to query; reap purely on local git + liveness
-      # state, reusing the CLOSED-issue arm's two guards verbatim.
-      if worktree_has_live_session "$wt_path"; then
+      # worktree). There is no PR or issue whose closure proves the work is
+      # finished, so this arm reaps ONLY on positive evidence, in this order:
+      #   1. completion signal — the node is `phase: done` + unparked on
+      #      origin/main, or was pruned from the graph. An active phase, an
+      #      author park (office_hours non-null), a branch that was never a node,
+      #      or an unreadable origin/main all SKIP.
+      #   2. minimum age — a just-provisioned worktree is never reaped inside the
+      #      session-registration window (office-hours-graph adds the worktree
+      #      before the daemon registers its session).
+      #   3. liveness — name-keyed AND cwd-keyed, so a live session working in the
+      #      worktree under any other name still blocks the reap.
+      #   4. in sync. A not-in-sync node worktree is only ever SKIPPED: the
+      #      quarantine/force-reap path deliberately does NOT apply here, because
+      #      nothing proves the unpushed work in it is complete.
+      if ! node_state=$(node_completion_state "$wt_branch"); then
+        log "SKIP_NODE_NOT_COMPLETE: '$wt_path' branch=$wt_branch state=$node_state"
+        continue
+      fi
+      node_age=$(node_worktree_age_s "$wt_path") || node_age=""
+      if [[ ! "$node_age" =~ ^[0-9]+$ ]]; then
+        log "SKIP_NODE_AGE_UNKNOWN: '$wt_path' branch=$wt_branch state=$node_state (no readable creation stamp)"
+      elif [[ "$node_age" -lt "$NODE_MIN_AGE_S" ]]; then
+        log "SKIP_NODE_TOO_YOUNG: '$wt_path' branch=$wt_branch state=$node_state age_seconds=$node_age min_age_seconds=$NODE_MIN_AGE_S"
+      elif worktree_has_live_session "$wt_path"; then
         log "SKIP_NODE_LIVE_SESSION: '$wt_path' branch=$wt_branch"
+      elif node_cwd_has_live_session "$wt_path"; then
+        log "SKIP_NODE_LIVE_SESSION_CWD: '$wt_path' branch=$wt_branch"
       elif worktree_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
         if git worktree remove "$wt_path" 2>>"$LOG_FILE"; then
           git worktree prune 2>/dev/null || true
@@ -300,12 +460,15 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
           # Clear any not-in-sync marker so a future same-named worktree never
           # inherits a stale grace timestamp.
           reap_marker_clear "$PROJECT_ROOT" "$(basename "$wt_path")" || true
-          log "REMOVE_NODE: '$wt_path' branch=$wt_branch"
+          log "REMOVE_NODE: '$wt_path' branch=$wt_branch state=$node_state age_seconds=$node_age"
         else
           log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
         fi
       else
-        reap_or_skip_not_in_sync NODE "$wt_path" "$wt_branch" "$(basename "$wt_path")" "node=$wt_branch"
+        # NOT quarantined/force-reaped (unlike the MERGED/CLOSED arms): a merged
+        # PR or closed issue proves that work is finished, and nothing here does.
+        # Unpushed work in a node worktree is left alone for a human to inspect.
+        log "SKIP_NODE_NOT_IN_SYNC: '$wt_path' branch=$wt_branch node=$wt_branch (no completion evidence for unpushed work; not quarantined)"
       fi
     fi
     continue
