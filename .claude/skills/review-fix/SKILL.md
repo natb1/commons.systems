@@ -152,7 +152,9 @@ On the node lane every step runs unchanged except three re-keyed seams:
   tactic nodes**, not gh issues.
 - **Escalation** — write the reason to `$CLAUDE_JOB_DIR/office-hours-reason`
   (and best-next-steps to `.../office-hours-recommendation`); the Stop hook parks
-  via `park-node`.
+  via `park-node`. Also write the already-bound `PR_NUM` to
+  `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic tempfile+`mv` write) so the
+  park records `execution.pr` (tactic-office-hours-pr-custody).
 
 **See `references/node-lane.md`** for the full re-keyed seams and the scoped
 node-lane re-entry marker check.
