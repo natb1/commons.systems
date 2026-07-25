@@ -248,28 +248,53 @@ if [[ -n "$STANDALONE" ]]; then
   # breaching the MAX_WORKERS ceiling by one; breaching it for unattended callers
   # would reintroduce the milder over-subscription this whole tactic exists to
   # prevent. The divergence is confined to HEADROOM==0 — below the ceiling the two
-  # agree exactly. LIVE_COUNT = busy workers + reservations; EXHAUSTED fails open
-  # to `ok` on missing telemetry. daemon UNKNOWN (busy-worker read failed) → skip
-  # the headroom computation and fail open to TOP=1 (the standalone analogue of
-  # dispatch-select-tick's "GAP stays 1"), never leaving TOP unclamped when
-  # live-worker count is unknown.
+  # agree exactly. LIVE_COUNT = busy workers + reservations. All three
+  # environmental reads fail OPEN, each to its own safe default: EXHAUSTED → `ok`
+  # on missing telemetry; MAX_WORKERS → headroom UNKNOWN on an unreadable or
+  # non-numeric ceiling; daemon UNKNOWN (busy-worker read failed) → skip the
+  # headroom computation outright. UNKNOWN on either count-side read converges on
+  # the same fail-open floor, TOP=1 (the standalone analogue of
+  # dispatch-select-tick's "GAP stays 1"), never leaving TOP unclamped when the
+  # live-worker count or the ceiling is unknown.
   if BUSY=$(claude_agents_count_busy_workers); then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
-    MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max)
+    MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max 2>/dev/null) || MAX_WORKERS=""
     EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
-    HEADROOM=$(( MAX_WORKERS - LIVE_COUNT ))
-    (( HEADROOM < 0 )) && HEADROOM=0
-    if [[ "$EXHAUSTED" == exhausted ]] || (( HEADROOM == 0 )); then
+    # HEADROOM="" is UNKNOWN — the --max read failed or returned a non-numeric
+    # ceiling (dispatch config missing, unreadable, or carrying a garbled
+    # max_concurrent_workers). Guarding it is what makes this read fail open like
+    # its two siblings: unguarded, an EMPTY value makes
+    # `$(( MAX_WORKERS - LIVE_COUNT ))` negative, the floor below clamps it to 0,
+    # and the run degrades to the concurrency-cap disposition — reporting "fleet
+    # saturated" when the truth is "ceiling unreadable", with nothing on stderr to
+    # tell the two apart. A word-shaped value is worse: under `set -u` the
+    # arithmetic aborts the script mid-run, holding the dispatch lock until the
+    # EXIT trap unwinds.
+    if [[ "$MAX_WORKERS" =~ ^[0-9]+$ ]]; then
+      HEADROOM=$(( MAX_WORKERS - LIVE_COUNT ))
+      (( HEADROOM < 0 )) && HEADROOM=0
+    else
+      echo "graph-select-target: dispatch-target-workers --max returned a non-numeric ceiling ('$MAX_WORKERS'); headroom unknown, failing open to --top 1" >&2
+      HEADROOM=""
+    fi
+    if [[ "$EXHAUSTED" == exhausted ]] || [[ "$HEADROOM" == 0 ]]; then
       # Concurrency-cap disposition (mirror dispatch-select-tick's): nothing to
-      # select. The lock is released by the _cleanup EXIT trap.
+      # select. The lock is released by the _cleanup EXIT trap. A string compare,
+      # not `(( HEADROOM == 0 ))`, so UNKNOWN ("") falls through to the fail-open
+      # clamp below instead of being read as zero headroom.
       DISPOSITION="concurrency-cap"
       echo "empty"
       exit 0
     fi
 
-    # (c) Clamp the effective --top to the headroom ceiling.
-    (( TOP > HEADROOM )) && TOP=$HEADROOM
+    # (c) Clamp the effective --top to the headroom ceiling; with the ceiling
+    # UNKNOWN, clamp to the same floor of 1 the busy-read UNKNOWN branch uses.
+    if [[ -n "$HEADROOM" ]]; then
+      (( TOP > HEADROOM )) && TOP=$HEADROOM
+    else
+      (( TOP > 1 )) && TOP=1
+    fi
   else
     (( TOP > 1 )) && TOP=1
   fi

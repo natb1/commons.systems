@@ -31658,6 +31658,142 @@ else
 fi
 gsc_standalone_teardown
 
+# --- Case 8: non-numeric --max ceiling -> fail open to TOP=1, not empty ------
+# The third environmental read in the --standalone headroom block. Unguarded,
+# a word-shaped ceiling makes `$(( MAX_WORKERS - LIVE_COUNT ))` abort the whole
+# script under `set -u`; an EMPTY one silently evaluates to a negative headroom
+# that the floor clamps to 0, producing the concurrency-cap `empty` disposition
+# — "fleet saturated" reported when the truth is "ceiling unreadable". Both must
+# instead fail OPEN to the same TOP=1 floor the busy-read UNKNOWN branch uses
+# (Case 6), with a distinguishing stderr diagnostic.
+#
+# Observability mirrors Case 6 exactly: two candidates + `--top 3`, so a
+# working clamp yields exactly ONE selection line and ONE reservation marker,
+# while a REGRESSION to the old behaviour yields `empty` and zero markers —
+# the two failure shapes are distinct, so this case cannot pass vacuously.
+echo "Test: graph-select-target --standalone with a non-numeric --max ceiling fails open to TOP 1 instead of reporting concurrency-cap"
+gsc_standalone_setup
+cat > "$GSCS_ROOT/bin/npx" <<'GSCS8NPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSCS8NPX
+chmod +x "$GSCS_ROOT/bin/npx"
+gsc8_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-8" SEL_MAX_WORKERS="notanumber" \
+  "$GSCS_GST" --standalone --top 3 2>"$GSCS_ROOT/gsc8.err")
+assert_eq "graph-select-target --standalone: non-numeric --max still selects, clamped to TOP 1" \
+  "node tactic-standalone-fixture tactic implement" "$gsc8_out"
+assert_eq "graph-select-target --standalone: non-numeric --max claims the first candidate" \
+  "1" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: non-numeric --max claims NO second candidate" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture-2" ] && echo 1 || echo 0)"
+# The operator-facing half: a diagnostic naming the offending value, so an
+# unreadable ceiling is never mistaken for a saturated fleet.
+assert_eq "graph-select-target --standalone: non-numeric --max writes a distinguishing stderr diagnostic" \
+  "1" "$(grep -q "dispatch-target-workers --max returned a non-numeric ceiling ('notanumber')" "$GSCS_ROOT/gsc8.err" && echo 1 || echo 0)"
+gsc8_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc8_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (non-numeric --max) releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (non-numeric --max) releases the lock (file emptied)"
+  echo "    lock file: '$gsc8_lock'"
+fi
+gsc_standalone_teardown
+
+# --- Case 9: --max read FAILS outright -> same fail-open ---------------------
+# Case 8's sibling on the other failure shape: the ceiling read exits non-zero
+# with no output (dispatch-target-workers absent, non-executable, or erroring),
+# so MAX_WORKERS is EMPTY rather than word-shaped. The `|| MAX_WORKERS=""`
+# capture plus the numeric guard must land it on the identical TOP=1 fail-open.
+# Rewriting the fixture's own dispatch-target-workers per case is the existing
+# convention (Cases 2/3 rewrite claude-payload.json, 6/7 rewrite the fake npx);
+# the no-arg SEL_TARGET_N branch is preserved so nothing else in the run shifts.
+echo "Test: graph-select-target --standalone with a failing --max read fails open to TOP 1 instead of reporting concurrency-cap"
+gsc_standalone_setup
+cat > "$GSCS_SCRIPTS/dispatch-target-workers" <<'GSCS9DTW'
+#!/usr/bin/env bash
+if [[ "$1" == "--exhausted" ]]; then
+  echo "${SEL_EXHAUSTED:-ok}"
+  exit 0
+fi
+if [[ "$1" == "--max" ]]; then
+  echo "dispatch-target-workers: config unreadable" >&2
+  exit 1
+fi
+echo "${SEL_TARGET_N:-1}"
+GSCS9DTW
+chmod +x "$GSCS_SCRIPTS/dispatch-target-workers"
+cat > "$GSCS_ROOT/bin/npx" <<'GSCS9NPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSCS9NPX
+chmod +x "$GSCS_ROOT/bin/npx"
+gsc9_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-9" \
+  "$GSCS_GST" --standalone --top 3 2>"$GSCS_ROOT/gsc9.err")
+assert_eq "graph-select-target --standalone: failing --max read still selects, clamped to TOP 1" \
+  "node tactic-standalone-fixture tactic implement" "$gsc9_out"
+assert_eq "graph-select-target --standalone: failing --max read claims the first candidate" \
+  "1" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: failing --max read claims NO second candidate" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture-2" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: failing --max read writes a distinguishing stderr diagnostic" \
+  "1" "$(grep -q "headroom unknown, failing open to --top 1" "$GSCS_ROOT/gsc9.err" && echo 1 || echo 0)"
+gsc9_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc9_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (failing --max read) releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (failing --max read) releases the lock (file emptied)"
+  echo "    lock file: '$gsc9_lock'"
+fi
+gsc_standalone_teardown
+
+# --- Case 10: EXHAUSTED still wins while the ceiling is UNKNOWN --------------
+# The fail-open above must not swallow the rate-limit term of the degrade
+# condition. Same failing --max read as Case 9, but SEL_EXHAUSTED=exhausted:
+# genuine token exhaustion is a hard stop regardless of whether the concurrency
+# ceiling could be read, so this must still degrade to `empty` with no claim.
+echo "Test: graph-select-target --standalone with an UNKNOWN ceiling AND an exhausted window still degrades to empty"
+gsc_standalone_setup
+cat > "$GSCS_SCRIPTS/dispatch-target-workers" <<'GSCS10DTW'
+#!/usr/bin/env bash
+if [[ "$1" == "--exhausted" ]]; then
+  echo "${SEL_EXHAUSTED:-ok}"
+  exit 0
+fi
+if [[ "$1" == "--max" ]]; then
+  exit 1
+fi
+echo "${SEL_TARGET_N:-1}"
+GSCS10DTW
+chmod +x "$GSCS_SCRIPTS/dispatch-target-workers"
+gsc10_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-10" SEL_EXHAUSTED=exhausted \
+  "$GSCS_GST" --standalone --top 1 2>/dev/null)
+assert_eq "graph-select-target --standalone: UNKNOWN ceiling + exhausted window prints empty" \
+  "empty" "$gsc10_out"
+assert_eq "graph-select-target --standalone: UNKNOWN ceiling + exhausted window writes no reservation marker" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+gsc10_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc10_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (UNKNOWN ceiling + exhausted) releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (UNKNOWN ceiling + exhausted) releases the lock (file emptied)"
+  echo "    lock file: '$gsc10_lock'"
+fi
+gsc_standalone_teardown
+
 # ============================================================================
 # Test: assert-worktree-fresh — non-skippable pre-analysis freshness guard
 # (tactic-align-skills-latest-graph-guard Unit 2)
