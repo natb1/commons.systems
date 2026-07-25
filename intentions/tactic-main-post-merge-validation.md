@@ -29,14 +29,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: qa
 execution:
   branch: tactic-main-post-merge-validation
   pr: 2962
   attempts: {}
   markers:
     - planned
-    - qa-done
   strategy_fingerprint: null
   fix: null
 validates: []

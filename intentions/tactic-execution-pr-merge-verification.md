@@ -21,14 +21,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: qa
 execution:
   branch: tactic-execution-pr-merge-verification
   pr: 2965
   attempts: {}
   markers:
     - planned
-    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
