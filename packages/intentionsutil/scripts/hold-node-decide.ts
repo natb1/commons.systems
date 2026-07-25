@@ -33,7 +33,8 @@ import { listNodes } from "../src/store.js";
 import type { IntentionNode } from "../src/schema.js";
 
 /**
- * Hold-kind vocabulary: the producer kind -> the slug that lands in the hold id.
+ * Hold-kind vocabulary: HOLD_KINDS is the source of truth for the producer
+ * kinds this tool implements; KIND_SLUGS and HoldKind both derive from it.
  *
  * Reserved slugs (the id scheme is deliberately extensible; a slug reserved here
  * is documentation of the namespace, not an implemented producer):
@@ -49,14 +50,19 @@ import type { IntentionNode } from "../src/schema.js";
  *                    scheme (`tactic-hold-no-progress-<source>`) is documented
  *                    and cannot be claimed for something else.
  */
-const KIND_SLUGS = {
+export const HOLD_KINDS = ["provision-conflict", "fix-attempt-cap"] as const;
+
+export type HoldKind = (typeof HOLD_KINDS)[number];
+
+const KIND_SLUGS: Record<HoldKind, string> = {
   "provision-conflict": "conflict",
   "fix-attempt-cap": "fix-cap",
-} as const;
+};
 
-export type HoldKind = keyof typeof KIND_SLUGS;
-
-export const HOLD_KINDS: readonly HoldKind[] = Object.keys(KIND_SLUGS) as HoldKind[];
+/** Type guard narrowing a raw CLI string to `HoldKind`. */
+function isHoldKind(k: string): k is HoldKind {
+  return k === "provision-conflict" || k === "fix-attempt-cap";
+}
 
 /** Reserved-but-unimplemented kind slugs (see KIND_SLUGS' doc comment). */
 export const RESERVED_KIND_SLUGS: readonly string[] = ["no-progress"];
@@ -283,7 +289,7 @@ function parseArgs(argv: string[]): Args {
 
   if (sourceId === null || sourceId === "") fail("--source <node-id> is required");
   if (kind === null) fail("--kind <provision-conflict|fix-attempt-cap> is required");
-  if (!HOLD_KINDS.includes(kind as HoldKind)) {
+  if (!isHoldKind(kind)) {
     fail(`--kind must be one of ${HOLD_KINDS.join("|")}, got "${kind}"`);
   }
   if (reasonFile === null) fail("--reason-file <file> is required");
@@ -297,7 +303,7 @@ function parseArgs(argv: string[]): Args {
   return {
     intentionsDir,
     sourceId,
-    kind: kind as HoldKind,
+    kind,
     // Trimmed: these are multi-line diagnostic files, and a trailing newline
     // would land verbatim in the node's YAML `office_hours.reason`.
     reason: readFileSync(reasonFile, "utf8").trim(),
