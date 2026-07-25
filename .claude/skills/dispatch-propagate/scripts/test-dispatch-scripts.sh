@@ -23292,6 +23292,12 @@ tick_setup() {
   mkdir -p "$TMPDIR_TEST/logs"
   cp "$SCRIPT_DIR/dispatch-tick" "$TMPDIR_TEST/dispatch-tick"
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
+  # Copied (not chmod +x — these are sourced, not executed) so dispatch-tick's
+  # SCRIPT_DIR-relative `source "$SCRIPT_DIR/lib-claude-agents.sh"` /
+  # `lib-reservation-ledger.sh` calls resolve inside the copied tmpdir and the
+  # paused-branch reservation_sweep genuinely runs instead of source-failing.
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
   chmod +x "$TMPDIR_TEST/dispatch-tick"
   # Pin the canonical main worktree so the advisory diagnose-main / jit-reminder
   # spawns get a deterministic --cwd independent of the host repo layout and the
@@ -23307,6 +23313,21 @@ tick_setup() {
   # the default $HOME/.local/share/commons-dispatch/paused. A pause test creates
   # this file explicitly to exercise the guard.
   export DISPATCH_PAUSE_FLAG="$TMPDIR_TEST/paused"
+  # Isolate the two inputs the paused-branch reservation_sweep reads, mirroring
+  # the global setup() and sel_tick_setup. Without these the sweep falls back to
+  # the REAL shared ledger under the host repo's tmp/dispatch-reservations and to
+  # the real `claude` binary — and since a sandboxed `claude agents --json` returns
+  # an empty array with exit 0 (a DEFINITE empty live set, not UNKNOWN), a tick
+  # test would reclaim live production markers as dead-session-stranded,
+  # under-counting effective_live for the next real tick.
+  #  - ledger: an empty scratch dir → the sweep finds no markers and no-ops.
+  #  - liveness: a non-existent binary → `claude agents --json` exits non-zero →
+  #    UNKNOWN, so the sweep declines to reclaim anything.
+  # A sweep test opts in by planting a marker here and overwriting
+  # CLAUDE_AGENTS_CMD with a fake whose registry omits the marker's session.
+  export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
+  mkdir -p "$TMPDIR_TEST/reservations"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -23375,7 +23396,8 @@ tick_teardown() {
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_SEL_RC TICK_GRAPH_EXEC_RC \
     TICK_SEL_PRE TICK_GRAPH_EXEC_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
-    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG
+    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG \
+    DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_SWEEP_NOW_EPOCH
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -23401,6 +23423,27 @@ echo "Test: dispatch-tick paused (flag present, autonomous) → exit 0, no selec
 tick_setup
 : > "$TMPDIR_TEST/paused"
 export TICK_DECISION="empty"
+# Plant a stale/dead-session reservation marker BEFORE the tick runs (in the
+# scratch ledger tick_setup already isolated), and overwrite the default
+# UNKNOWN `claude` stub with a fake whose live-session registry does NOT include
+# the marker's recorded session — so the marker is dead-session-stranded and
+# reclaimable by reservation_sweep. This exercises the sweep dispatch-tick runs
+# on the paused branch before its `exit 0`.
+printf 'session=dead-sess\nissue=910\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/910-slug"
+# Pin the sweep's "now" so the marker's age is host-clock-independent: the
+# stamped timestamp's epoch is 1767225600, so 1767225631 is 31s later — past the
+# 30s boot grace, hence reclaimable (same pinning the rl-sweep-aged test uses).
+# Without this the assertion silently inverts on a host clock at or before
+# 2026-01-01T00:00:30Z, where the marker is still in-flight and correctly kept.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=1767225631
+cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
+#!/usr/bin/env bash
+echo '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "paused: exit 0" "0" "$rc"
 assert_eq "paused: stdout announces pause" "1" \
@@ -23413,6 +23456,8 @@ assert_eq "paused: no graph-execute" "0" \
   "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
 assert_eq "paused: no spawn-job" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+assert_eq "paused: paused-path sweep still reclaimed the dead-session marker" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/910-slug" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- pause sentinel: --manual overrides the flag → the tick runs normally ------
