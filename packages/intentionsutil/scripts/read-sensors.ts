@@ -143,11 +143,20 @@ const ghExecOpts = {
  * neutral/skipped). Empty stdout maps to the exact `strategy-main-health`
  * `success_signal.threshold` string verbatim (though `deriveGap` compares
  * case/whitespace-insensitively, `sensors.ts:98-112`); non-empty stdout maps to
- * a fixed `red: <sha> ...` phrase — never raw log content. A `repo-health`
- * invocation failure (non-zero exit) must not throw (total-sensor contract
- * above) and reads as `"unknown"`, which can never equal the threshold string,
- * so `gap` stays non-null and the sensor fails safe rather than reporting a
- * false green.
+ * a fixed `red: <sha> ...` phrase — never raw log content. That green literal
+ * stays the frozen threshold-matching case — no `strategy-main-health` edit is
+ * needed by this unit.
+ *
+ * `repo-health --main-broken-sha` also exits non-zero (3) with the literal
+ * stdout token `NO_ATTRIBUTABLE_CHECKS` when the attributable check-run/
+ * workflow-run set for origin/main HEAD is empty or entirely misattributed to
+ * another branch (fail-closed: cannot confirm green, but it's not a confirmed
+ * red SHA either). That case reads as a distinct fixed `"unknown: ..."`
+ * phrase, not the plain `"unknown"` used for any other invocation failure.
+ * Either way, a `repo-health` invocation failure (non-zero exit) must not
+ * throw (total-sensor contract above); both unknown readings can never equal
+ * the threshold string, so `gap` stays non-null and the sensor fails safe
+ * rather than reporting a false green.
  *
  * SIDE EFFECT: unlike the other sensors in this file, reading this one is not
  * pure. `repo-health --main-broken-sha` reconciles the durable `main_broken`
@@ -159,23 +168,39 @@ const ghExecOpts = {
  * sensor breaks the file header's "no side-effect" promise in addition to its
  * "no network" one.
  */
+/**
+ * Standalone probe body, extracted so tests can exercise all three branches
+ * (green/red/unknown) against a fake `binaryPath` without shelling to the
+ * real `repo-health` script. `mainHealthSensor.read()` below is a thin
+ * wrapper that supplies the real default path. Exported for unit tests
+ * (mirrors `readWeeklyUtilization`, `readTacticVelocity`, etc. above).
+ */
+export function readMainHealth(binaryPath: string): string {
+  let sha: string;
+  try {
+    sha = execFileSync(binaryPath, ["--main-broken-sha"], ghExecOpts).trim();
+  } catch (err: unknown) {
+    if (
+      isPlainObject(err) &&
+      typeof err.stdout === "string" &&
+      err.stdout.trim() === "NO_ATTRIBUTABLE_CHECKS"
+    ) {
+      return "unknown: no check on the current origin/main HEAD is attributable to main's own workflow (empty or misattributed check set) — cannot confirm green";
+    }
+    return "unknown";
+  }
+  if (sha === "") {
+    return "green: every check on the current origin/main HEAD concludes success (or neutral/skipped)";
+  }
+  return `red: ${sha} has one or more failing checks`;
+}
+
 const mainHealthSensor: Sensor = {
   name: MAIN_HEALTH_SENSOR_NAME,
   read(): string {
-    let sha: string;
-    try {
-      sha = execFileSync(
-        join(repoRoot, ".claude", "skills", "dispatch-propagate", "scripts", "repo-health"),
-        ["--main-broken-sha"],
-        ghExecOpts,
-      ).trim();
-    } catch {
-      return "unknown";
-    }
-    if (sha === "") {
-      return "green: every check on the current origin/main HEAD concludes success (or neutral/skipped)";
-    }
-    return `red: ${sha} has one or more failing checks`;
+    return readMainHealth(
+      join(repoRoot, ".claude", "skills", "dispatch-propagate", "scripts", "repo-health"),
+    );
   },
 };
 

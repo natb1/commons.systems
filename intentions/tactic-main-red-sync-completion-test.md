@@ -30,8 +30,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: done
-execution: null
+phase: implement
+execution:
+  branch: tactic-main-red-sync-completion-test
+  pr: 2941
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -56,6 +62,19 @@ mechanically auto-completed this node mid-decomposition, racing the
 finalize's own `graph-commit` and forcing a park/recovery. Fixed same-day in
 PR #2941 by anchoring the match to the exact 8-hex-shortsha shape; case (f)
 below is the regression test for it.
+
+**2026-07-23 queue audit — reset to `implement`.** The same live bug fired a
+SECOND time and auto-completed this node to `phase: done` (commit `c9dcb954`,
+a bare `phase: implement -> done` flip with no work delivered), leaving it on
+neither the dispatch nor the office-hours queue while its PR sat open and
+unmerged. The audit reset `phase` to `implement` and pointed `execution` at
+branch `tactic-main-red-sync-completion-test` / PR #2941. **The anchor fix is
+already committed on that branch** (`51f190b9`), so the "Edit ONLY
+`test-dispatch-scripts.sh`" scope below applies to the REMAINING work: the
+test section, including case (f). Do not re-apply the script fix. The branch
+was 120 commits behind `main` and CI was red on 4 pre-existing `guard-halt`
+fixture failures fixed on main by #2916 (`72d12dac`); `origin/main` was
+merged in (`3183f5be`) and the full suite passes locally (3022/3022).
 
 ## Context
 
