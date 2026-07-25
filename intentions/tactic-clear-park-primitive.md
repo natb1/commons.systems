@@ -25,7 +25,15 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 90
+  override: null
+  rationale: "Author-directed 2026-07-25: the queue-serialization work
+    (dispatch-queue claim integrity, office-hours drain claiming, and the
+    cross-queue landing path) is the current focus — boosted to parity with
+    tactic-graph-router-live-worker-read-robust, the existing author-set boost
+    on this same defect class, and deliberately below strategy-main-health's
+    standing 100 so the main-health signal keeps its recorded dominance."
 phase: implement
 execution:
   branch: tactic-clear-park-primitive
