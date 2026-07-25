@@ -5,7 +5,16 @@ description: RETIRED — superseded by /align-tactics. Plan phase — autonomous
 
 # Plan Issue (RETIRED)
 
-This skill is retired. It is no longer invoked by dispatch or any other caller.
+This skill is retired: no live code path reaches it. `dispatch-select-tick`'s
+legacy gh-issue-queue selection path, along with the `dispatch-select-target`
+and `dispatch-route` scripts, were deleted from `origin/main` by a
+separately-landed tactic (`intentions/tactic-legacy-router-removal.md`, "What
+actually landed"), so no legacy issue target is selected and no phase skill is
+routed to `/plan-issue`. GitHub Issues are also disabled repo-wide (strategy
+clarification dated 2026-07-16, cited in
+`intentions/tactic-graph-native-dispatch.md` §4). The remaining `/plan-issue`
+mentions elsewhere in `.claude/skills/` are descriptive references in
+legacy-issue-lane docs, not live invocations.
 
 `/plan-issue` was the legacy gh-issue-lane planning skill: it autonomously
 planned a no-PR issue into an ordered unit breakdown via the built-in
