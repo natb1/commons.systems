@@ -53,8 +53,9 @@
 # effective_live = busy_workers + outstanding_reservations — a reservation counts
 # against the budget the instant it is written, with no wait for worker
 # registration — and the tick sweeps stranded reservations before counting.
-# A `--manual` run (the bare human-typed `/dispatch` shim) QUERIES the live-count
-# and computes a context-dependent SPAWN_N = max(1, min(max(N_PRIO, GAP, 1), HEADROOM));
+# A `--manual` run (the bare human-typed `/dispatch` shim) also reconciles the
+# ledger before counting, then QUERIES the live-count and computes a
+# context-dependent SPAWN_N = max(1, min(max(N_PRIO, GAP, 1), HEADROOM));
 # it overrides the pace-curve throttle and, per human-dispatch-is-sovereign, always
 # launches its one highest-ranking-available node even at the MAX_WORKERS ceiling
 # (a bounded, deliberate max_concurrent_workers + 1 overage) — only the `--exhausted`
@@ -671,13 +672,22 @@ elif [[ -n "$MANUAL" ]]; then
   # dispatch-materialize-spawn's existing --gap N machinery (the highest rank level
   # is globally exhausted first; the `priority` label is the cap bypass, not an
   # ordering signal). LIVE_COUNT mirrors the
-  # autonomous block's effective-live count (busy workers + reservations); the
-  # manual path now reconciles the ledger first (per strategy-graph-native-dispatch,
-  # 2026-07-23): in the standing paused+manual-only operating mode, the pause
-  # sentinel makes the autonomous heartbeat exit before it ever calls
-  # reservation_sweep, so the manual tick is the ONLY live consumer of the
-  # reservation ledger and must sweep it itself, or dead-session orphan markers
-  # accumulate unboundedly and inflate live=N with phantom workers.
+  # autonomous block's effective-live count (busy workers + reservations). The
+  # manual path reconciles the ledger (reservation_sweep) before it reads
+  # reservation_count, for the same reason the autonomous gate does at line
+  # ~583 above: while the pause sentinel is set, the autonomous heartbeat
+  # exits before Step 1b and never calls reservation_sweep, so in the
+  # standing paused+manual-only operating mode, the manual tick is the ONLY
+  # live consumer of the reservation ledger. Skip this sweep and dead-session
+  # orphan markers pile up without bound, inflating live=N with phantom
+  # workers — this is what caused the 2026-07-23 phantom-worker incident. A
+  # stale count here is NOT merely "more conservative and therefore safe":
+  # once orphans reach the ceiling, HEADROOM hits 0 and manual fan-out gets
+  # throttled or zeroed outright, which is a failure, not caution. Do not
+  # remove this call as a redundant optimization — it is required by
+  # strategy-graph-native-dispatch's 2026-07-23 cross-mode ledger-validity
+  # clarification. Like the autonomous site, the call is best-effort
+  # (`|| true`): a failed sweep must not block a deliberate human dispatch.
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   # shellcheck source=/dev/null
