@@ -59,6 +59,10 @@ read those first, they are authoritative over anything below.
   `types: [opened, synchronize, reopened]` and already holds several
   small sensor jobs — the natural host for a title guard.
 - No `.github/dependabot.yml` exists today.
+- The legacy gh-issue lane is fully drained: `has_issues` is `false` on the
+  repository, no open PR sits on an issue-numbered branch, and all 33 open PRs
+  have head branches that resolve to a real node in `intentions/`. The guard
+  therefore starts life with nothing to exempt.
 
 ## Byproduct units (unrefined)
 
@@ -76,16 +80,18 @@ read those first, they are authoritative over anything below.
    does not resolve to a file in `intentions/`. The resolution half is the
    adopted half of this round's steelman: a shape-only check would pass a
    typo'd or invented id. Add `edited` to the workflow's `pull_request` types so
-   a post-open retitle is re-checked. Exempt only the draining legacy
-   gh-issue lane; bot-authored PRs are not exempt.
-
-3. **Legacy-lane exemption with a named expiry.** Encode the gh-issue-lane
-   carve-out so it is mechanically identifiable and removable when the queue
-   drains — coordinate with `tactic-legacy-router-removal` rather than
-   inventing a parallel switch.
+   a post-open retitle is re-checked. The guard is **unconditional** — there are
+   no exemptions to encode (see below).
 
 ## Explicitly out of scope
 
-- Retitling existing open PRs. The condition binds at open time going forward.
+- **Any exemption or carve-out logic.** A third unit encoding an interim
+  legacy-gh-issue-lane exemption with a named expiry was dropped when the
+  condition was amended on 2026-07-25: the gh queue is drained, `has_issues` is
+  `false` on the repository, and every open PR's head branch already resolves to
+  a node — so the carve-out would have been built only to be deleted. Do not
+  reintroduce it, and do not add a bot-PR exemption either.
+- Retitling existing open PRs. The condition binds at open time going forward,
+  and most open PRs predate the convention.
 - The `graph: <verb> <node-id> (...)` subject convention on direct-push
   `intentions/` commits — a different surface, untouched.

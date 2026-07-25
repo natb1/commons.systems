@@ -1418,7 +1418,22 @@ clarifications:
       touches more than one node, dispatch's one-node-per-PR model
       (`execution.pr`) still holds: the title carries the primary node id and
       any additional nodes are named in the PR body. Implementation is retained
-      as draft tactic tactic-pr-title-node-id-convention."
+      as draft tactic tactic-pr-title-node-id-convention. (Amended 2026-07-25,
+      same day, author direction: the legacy gh-issue queue is fully drained, so
+      the interim exemption is REMOVED and the convention now binds with no
+      exemptions at all.) Verified at amendment time: the repository reports
+      `has_issues: false` — GitHub issues are disabled, which this node's
+      standing monotonicity condition forbids any dispatch surface from
+      reversing, so no new gh-issue-lane work can enter; no open PR sits on an
+      issue-numbered branch; and all 33 open PRs already have head branches that
+      resolve to a real node in `intentions/`, so the exemption was covering
+      nothing at the moment it was removed. Consequences: the guard is
+      unconditional and needs no carve-out logic, no expiry event, and no
+      coordination with tactic-legacy-router-removal — the exemption is never
+      built rather than built-and-later-deleted. The non-retroactive rule is
+      unchanged and does the transitional work on its own: existing open PRs
+      keep their current titles (most predate the convention and do not
+      conform), and the guard binds only at open time going forward."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1579,9 +1594,10 @@ attributes:
       its head branch resolves to a real node in `intentions/`; the prefix is
       constructed by the opener from the node rather than hand-authored, and a
       CI guard rejects a title that is non-conforming or whose id does not
-      resolve. The sole exemption is the draining legacy gh-issue lane, expiring
-      when that queue drains (tactic-legacy-router-removal); bot-authored PRs
-      are not exempt. A new PR with no backing node is a defect, not an
+      resolve. There are no exemptions: the interim legacy gh-issue-lane
+      carve-out was removed the day it was recorded (2026-07-25) once that queue
+      drained and GitHub issues were confirmed disabled, and bot-authored PRs
+      were never exempt. A new PR with no backing node is a defect, not an
       exception — this is the execution-surface expression of the
       sole-issue-tracker condition, and it binds at open time going forward,
       never retroactively"
