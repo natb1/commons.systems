@@ -30,26 +30,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
-    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
-  since: 2026-07-25
-  recommendation: >-
-    A concurrent writer landed an overlapping edit to this node while this
-    session's edit was in flight; this writer's content was NOT landed. This
-    session's unlanded content is preserved at
-    /tmp/tmp.5q83lp7pJ1/tactic-router-failure-fuses.md (this machine only — may
-    not survive past this session). Recommended: the losing writer re-reads the
-    current origin/main content, manually merges in its intended edit, and
-    re-runs graph-commit on the merged result — that same commit clears this
-    office_hours park. A third session encountering this park while the loser is
-    still working should wait rather than attempt its own merge (the mailbox
-    discipline).
-
-
-    Diverged field 'attention' on tactic-mechanical-park-producers:
-      this session's value: null
-      origin/main's value: {"boost":85,"override":null,"rationale":"Author-directed 2026-07-25: the queue-serialization work (dispatch-queue claim integrity, office-hours drain claiming, and the cross-queue landing path) is the current focus. Own boost 85 composes with the +5 inherited from strategy-graph-native-dispatch to an authored 90 — exact parity with tactic-graph-router-live-worker-read-robust, the existing author-set boost on this same defect class — and deliberately below strategy-main-health's standing 100 so the main-health signal keeps its recorded dominance."}
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -104,14 +85,25 @@ Per-node fuse (node-local gate):
   `attempts.no_progress`) — frontmatter state, written via graph-commit,
   never entering the tactic-scope hash (parity with attempts/markers/park
   writes).
-- Cap 2 (legacy CAP=2 parity): the second consecutive strike parks that
-  node to `office_hours` with the failure history (dispositions,
-  timestamps) as reason plus a next-steps recommendation (condition 6
-  contract). Any successful transition resets the counter to 0.
+- Cap 2 (legacy CAP=2 parity): the second consecutive strike converts to a
+  tracked hold, not a park. `hold-node <id> --kind no-progress` mints (or
+  reopens) that node's hold tactic — carrying the failure history
+  (dispositions, timestamps) as reason plus a next-steps recommendation
+  (condition 6 contract) — and appends `blocked_by: [<hold-id>]` to the
+  struck node in the same graph-commit. The struck node's own `office_hours`
+  stays null: per the 2026-07-25 park-taxonomy clarification
+  (`tactic-mechanical-park-producers`), a mechanical hold is a `blocked_by`
+  edge against a tracked fix tactic, never a park on the work item; the
+  born-parked hold tactic is what enters the office-hours queue. Any
+  successful transition resets the counter to 0.
 - Non-strikes: the start-gate `skipped` disposition (correct yield to a
   freeze/park/phase change) and a worker that parked its own node.
-- Scope: a tripped node fuse blocks only that node — blocked on
-  office-hours like any parked node; selection elsewhere proceeds.
+- Scope: a tripped node fuse blocks only that node — held on a `blocked_by`
+  edge against its hold tactic, exactly like any node with an unresolved
+  blocker; selection elsewhere proceeds. Resolving the hold tactic (phase →
+  done, then prune, which repairs the inbound edge) re-admits the node on
+  the very next tick with no write on the node itself (`blockersComplete`,
+  `packages/intentionsutil/src/router.ts`).
 
 Systemic breaker (the only global gate):
 
