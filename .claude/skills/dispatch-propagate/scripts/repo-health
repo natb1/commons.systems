@@ -57,14 +57,27 @@
 # ---- Modes
 #
 #   --main-broken-sha
-#       Probe origin/main's HEAD CI (the two-source aggregation lifted verbatim
-#       from dispatch-select-target's main_broken_sha) and print the broken HEAD
-#       SHA, or nothing when main is green. AS A SIDE EFFECT it reconciles the
-#       durable main_broken latch: red → set/refresh (records the sha), green →
-#       clear. This is the live probe (needs `gh`) and the durable writer in one;
-#       it is the drop-in replacement for `dispatch-select-target --main-broken-sha`.
-#       Exits non-zero (empty stdout) if the CI probe itself fails — the caller
-#       treats that as UNKNOWN and must not read it as "green".
+#       Probe origin/main's HEAD CI (a two-source aggregation, now with per-check
+#       branch attribution — see the main_broken_sha comment) and print the broken
+#       HEAD SHA, or nothing when main is confirmed green. AS A SIDE EFFECT it
+#       reconciles the durable main_broken latch: red → set/refresh (records the
+#       sha), green → clear. This is the live probe (needs `gh`) and the durable
+#       writer in one; it is the drop-in replacement for
+#       `dispatch-select-target --main-broken-sha`.
+#
+#       Stdout / exit contract:
+#         - confirmed green (attributable checks present, none failing):
+#             (empty stdout), exit 0
+#         - confirmed red (>=1 attributable failing check):
+#             `<sha>`, exit 0
+#         - empty / all-misattributed attributable set (fail closed — the probe
+#           cannot confirm health, so it must NOT read as green):
+#             `NO_ATTRIBUTABLE_CHECKS`, exit 3, and the durable latch is left
+#             UNTOUCHED (neither set nor cleared).
+#         - probe error (a `gh` call failed):
+#             (empty stdout), exit 1, latch untouched.
+#       The caller treats exit 1 and exit 3 alike as UNKNOWN and must not read
+#       either as "green".
 #
 #   --main-broken-latched
 #       READ-ONLY, no `gh`, no network. Print `latched` when the durable record
@@ -94,6 +107,10 @@
 #   1   an operation failed (CI probe error, malformed record, unresolvable state
 #       path) — surfaced on stderr, clear error, no fallback.
 #   2   usage error.
+#   3   (--main-broken-sha only) the attributable check set is empty or entirely
+#       misattributed — the probe cannot confirm main's health, so it fails closed
+#       rather than reading as green. Stdout carries the NO_ATTRIBUTABLE_CHECKS
+#       token; the durable latch is left untouched.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -101,6 +118,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # (the shared project-root resolver the state-file path is anchored to).
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib.sh"
+
+# Token printed on stdout (with exit 3) by --main-broken-sha when the attributable
+# check set is empty / all-misattributed — the fail-closed signal a downstream
+# reader (e.g. read-sensors.ts) maps to "cannot confirm main health", distinct
+# from an empty-stdout green. Defined once here rather than repeated as a literal.
+NO_ATTRIBUTABLE_CHECKS="NO_ATTRIBUTABLE_CHECKS"
 
 # ---- Durable latch record ---------------------------------------------------
 
@@ -166,38 +189,95 @@ latch_status() {
   fi
 }
 
-# ---- main-broken CI probe (two-source aggregation) --------------------------
-# Lifted verbatim from dispatch-select-target's main_broken_sha: origin/main's CI
-# state spans two sources that must both be aggregated —
+# ---- main-broken CI probe (two-source aggregation, branch-attributed) --------
+# origin/main's CI state spans two sources that must both be aggregated —
 #   - check-runs    (CodeQL default-setup analyses)      — /commits/{sha}/check-runs
 #   - workflow runs (Production Deploy, Firestore rules) — gh run list --branch main
 # The legacy combined-status API is intentionally not used (it reports "pending"
-# for commits with no classic statuses). Prints origin/main's HEAD SHA when a
-# check has failed; prints nothing when main is healthy or only has in-progress
-# checks. gh calls route through gh_retry (transient-failure retry).
+# for commits with no classic statuses).
+#
+# CHECK-RUN ATTRIBUTION (the /commits/{sha}/check-runs defect this corrects):
+# that endpoint returns EVERY check-run posted against a sha regardless of which
+# branch triggered it. graph-commit fast-forwards graph/** scratch shas onto main,
+# so a sha reachable from main can also carry foreign Graph Fast Path check-runs
+# that were triggered on a graph/** branch (verified false-red: 18 foreign
+# check-runs, 2 "guard: failure", falsely reported main as red). To attribute each
+# check-run to its triggering branch we resolve its parent check-suite: extract the
+# distinct .check_suite.id values, and for each fetch
+# /check-suites/{id} and read .head_branch. A suite is KEPT only when
+# head_branch == "main"; CodeQL default-setup analyses carry head_branch:main
+# (kept, correct), Graph Fast Path suites carry head_branch:graph/... (dropped,
+# correct), and a null/other branch is dropped (conservative — unknown attribution
+# never counts as main's own). Only check-runs whose suite is kept are counted.
+#
+# The workflow-runs source is already correctly attributed by `gh run list
+# --branch main`, so no round-trip is needed there.
+#
+# Return contract (fail-closed): prints origin/main's HEAD SHA and returns 0 when
+# an attributable check has failed (red); prints nothing and returns 0 when main
+# is confirmed green (attributable checks present, none failing — in-progress-only
+# still reads green); returns 3 with no stdout when the attributable set is empty
+# (empty / all-misattributed → the probe cannot confirm health). gh calls route
+# through gh_retry (transient-failure retry); a gh failure aborts under set -e.
 main_broken_sha() {
-  local sha cr_fail wf_fail
+  local sha cr_fail cr_items wf_fail wf_items check_runs kept_suites
   # CI conclusions that count as a failing check; both gh sources report
   # conclusions in lowercase.
   local fail='["failure","timed_out","cancelled","action_required","startup_failure","stale"]'
   sha=$(gh_retry gh api "repos/{owner}/{repo}/commits/main" | jq -r '.sha')
 
-  cr_fail=$(gh_retry gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
-    | jq --argjson fail "$fail" \
-        '[.check_runs[] | select(.conclusion as $c | $fail | index($c))] | length')
+  check_runs=$(gh_retry gh api "repos/{owner}/{repo}/commits/$sha/check-runs")
+
+  # Resolve each distinct check-suite to its triggering branch and keep only the
+  # suites whose head_branch is "main". kept_suites is a JSON array of suite ids.
+  kept_suites='[]'
+  local suite_id head_branch
+  while IFS= read -r suite_id; do
+    [[ -z "$suite_id" ]] && continue
+    head_branch=$(gh_retry gh api "repos/{owner}/{repo}/check-suites/$suite_id" \
+      | jq -r '.head_branch // ""')
+    if [[ "$head_branch" == "main" ]]; then
+      kept_suites=$(jq --argjson id "$suite_id" '. + [$id]' <<<"$kept_suites")
+    fi
+  done < <(jq -r '[.check_runs[].check_suite.id] | unique | .[]' <<<"$check_runs")
+
+  # Count only check-runs whose suite was kept (attributed to main). cr_fail =
+  # attributable failing; cr_items = attributable of any conclusion (preserves the
+  # in-progress-only → green contract for attributable in-progress checks).
+  cr_fail=$(jq --argjson fail "$fail" --argjson kept "$kept_suites" \
+      '[.check_runs[]
+        | select(.check_suite.id as $id | $kept | index($id))
+        | select(.conclusion as $c | $fail | index($c))] | length' \
+      <<<"$check_runs")
+  cr_items=$(jq --argjson kept "$kept_suites" \
+      '[.check_runs[]
+        | select(.check_suite.id as $id | $kept | index($id))] | length' \
+      <<<"$check_runs")
 
   # --commit scopes the query to main's HEAD (the default 20-run window could
   # otherwise miss it); the headSha filter is a defense-in-depth guard so a
   # stale run can never trip the gate.
-  wf_fail=$(gh_retry gh run list --branch main --commit "$sha" \
-    --json headSha,conclusion \
-    | jq --arg sha "$sha" --argjson fail "$fail" \
-        '[.[] | select(.headSha == $sha)
-              | select(.conclusion as $c | $fail | index($c))] | length')
+  local wf_runs
+  wf_runs=$(gh_retry gh run list --branch main --commit "$sha" \
+    --json headSha,conclusion)
+  wf_fail=$(jq --arg sha "$sha" --argjson fail "$fail" \
+      '[.[] | select(.headSha == $sha)
+            | select(.conclusion as $c | $fail | index($c))] | length' \
+      <<<"$wf_runs")
+  wf_items=$(jq --arg sha "$sha" \
+      '[.[] | select(.headSha == $sha)] | length' <<<"$wf_runs")
 
   if [[ "$cr_fail" -gt 0 || "$wf_fail" -gt 0 ]]; then
     printf '%s\n' "$sha"
+    return 0
   fi
+  if [[ $((cr_items + wf_items)) -eq 0 ]]; then
+    # Empty / all-misattributed attributable set: fail closed. No stdout, distinct
+    # exit — the caller must not read this as green.
+    return 3
+  fi
+  # Confirmed green: attributable checks present, none failing.
+  return 0
 }
 
 # ---- Mode dispatch ----------------------------------------------------------
@@ -232,10 +312,24 @@ fi
 
 case "$MODE" in
   --main-broken-sha)
-    # Live CI probe. Reconcile the durable main_broken latch as a side effect,
-    # then print the broken SHA (empty when green). A probe failure aborts under
-    # set -e BEFORE the latch write, so an errored probe never mutates the latch.
-    SHA=$(main_broken_sha)
+    # Live CI probe. main_broken_sha's exit code disambiguates green/red from
+    # fail-closed: 0 = confirmed (SHA non-empty → red, empty → green), 3 = empty /
+    # all-misattributed attributable set, any other non-zero = probe error. Capture
+    # the rc explicitly so `set -e` does not swallow the 3.
+    SHA=$(main_broken_sha) && rc=0 || rc=$?
+    if [[ "$rc" -eq 3 ]]; then
+      # Fail closed: cannot confirm main's health. Emit the token and exit 3
+      # WITHOUT touching the latch (neither set nor cleared on this path).
+      printf '%s\n' "$NO_ATTRIBUTABLE_CHECKS"
+      exit 3
+    fi
+    if [[ "$rc" -ne 0 ]]; then
+      # Probe error (a gh call failed). Latch untouched — existing probe-error
+      # contract, matching the prior implicit set -e abort behavior.
+      exit 1
+    fi
+    # rc == 0: confirmed result. Reconcile the durable main_broken latch, then
+    # print the broken SHA (empty when green).
     NOW=$(date -u +%FT%TZ)
     if [[ -n "$SHA" ]]; then
       NEW=$(read_state | jq --arg s "$SHA" --arg ts "$NOW" \

@@ -38,16 +38,35 @@
 #      the real graph-commit whose check_base_freshness sees origin has moved
 #      past FRESH_BLOB.
 #   3. A node absent from origin/main is refused before any write (exit 1).
+#   4. park-node byte-identical restore-on-failure (tactic-graph-write-failure-
+#      rollback Unit 1): when graph-commit fails AFTER the office_hours write
+#      lands on disk, the trap restores intentions/<id>.md from origin/main —
+#      asserted via `git diff` against the clone's HEAD being empty (byte
+#      identical), not just "file exists".
+#   5. demote-node-to-implement byte-identical restore-on-failure (same Unit):
+#      identical shape, but demote-node-to-implement's mutation runs through
+#      the REAL apply-node-transition.ts (node --import tsx/esm), so this case
+#      needs the harness's REAL packages/intentionsutil/src alongside the
+#      graph-commit-fails wrapper trick — reaching MUTATED=1 is only possible
+#      by actually executing the real store/schema/transitions code, not a
+#      shim.
 #
-# No network and no real gh/node needed; requires only bash + git + jq.
+# No network needed. Cases 1-3 need only bash + git + jq. Cases 4-5 need a real
+# `node`/`npx tsx` too (case 5's apply-node-transition.ts is real TypeScript,
+# resolved against a node_modules SYMLINK to this repo's own — read-only,
+# never written by the test).
 
 set -uo pipefail
 
 HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REAL_REPO_ROOT="$(cd "$HARNESS_DIR/../../.." && pwd)"
 PN_SCRIPT="$HARNESS_DIR/park-node"
 GC_SCRIPT="$HARNESS_DIR/graph-commit"
+DEMOTE_SCRIPT="$HARNESS_DIR/demote-node-to-implement"
+APPLY_TS="$HARNESS_DIR/apply-node-transition.ts"
 [[ -f "$PN_SCRIPT" ]] || { echo "error: park-node not found at $PN_SCRIPT" >&2; exit 1; }
 [[ -f "$GC_SCRIPT" ]] || { echo "error: graph-commit not found at $GC_SCRIPT" >&2; exit 1; }
+[[ -f "$DEMOTE_SCRIPT" ]] || { echo "error: demote-node-to-implement not found at $DEMOTE_SCRIPT" >&2; exit 1; }
 command -v jq >/dev/null || { echo "error: jq not found (required by the gh shim)" >&2; exit 1; }
 
 WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
@@ -74,10 +93,24 @@ mkdir -p "$SEED/intentions" \
          "$SEED/packages/intentionsutil/src"
 cp "$PN_SCRIPT" "$SEED/packages/intentionsutil/scripts/park-node"
 cp "$GC_SCRIPT" "$SEED/packages/intentionsutil/scripts/graph-commit"
+cp "$DEMOTE_SCRIPT" "$SEED/packages/intentionsutil/scripts/demote-node-to-implement"
+cp "$APPLY_TS" "$SEED/packages/intentionsutil/scripts/apply-node-transition.ts"
 chmod +x "$SEED/packages/intentionsutil/scripts/park-node" \
-         "$SEED/packages/intentionsutil/scripts/graph-commit"
-# The path must exist for STORE_MODULE resolution; the npx shim never loads it.
-: >"$SEED/packages/intentionsutil/src/store.js"
+         "$SEED/packages/intentionsutil/scripts/graph-commit" \
+         "$SEED/packages/intentionsutil/scripts/demote-node-to-implement"
+# Cases 1-3 (npx-shimmed) never load a real store module, so a stub `store.js`
+# would suffice for them — but case 5 runs the REAL apply-node-transition.ts,
+# which imports "./store.js" (tsx resolves the .ts source at that specifier).
+# Copy the repo's real `src/` wholesale: every file under it is a same-package
+# relative import (verified: no cross-package deps beyond the npm "yaml"
+# package, resolved via the node_modules symlink each clone gets below), so a
+# blanket copy is simpler and safer than cherry-picking individual files.
+cp -r "$REAL_REPO_ROOT/packages/intentionsutil/src/." "$SEED/packages/intentionsutil/src/"
+# The real package.json sets "type": "module" — without it, Node finds no
+# package.json anywhere above the scratch tree and defaults .ts/.js resolution
+# to CommonJS, which breaks tsx's ESM loader (ERR_REQUIRE_CYCLE_MODULE) on
+# case 5's real apply-node-transition.ts execution.
+cp "$REAL_REPO_ROOT/packages/intentionsutil/package.json" "$SEED/packages/intentionsutil/package.json"
 
 seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
   local i
@@ -89,6 +122,29 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
 for id in t-stale t-concurrent; do
   seed_node "$id"
 done
+# t-demote: a schema-VALID node (only id/kind/statement/owner/status are
+# required — packages/intentionsutil/src/schema.ts — everything else defaults)
+# for case 5, which runs the real readNode/writeNode round-trip through
+# apply-node-transition.ts's --scope-stale path, not the synthetic
+# line-numbered content the npx-shimmed cases use.
+cat >"$SEED/intentions/t-demote.md" <<'NODE'
+---
+id: t-demote
+kind: tactic
+statement: harness node for demote-node-to-implement rollback test
+owner: ai
+status: codified
+phase: qa
+execution:
+  branch: t-demote-branch
+  pr: null
+  attempts: {}
+  markers: ["qa-complete"]
+  fix: null
+  strategy_fingerprint: {}
+---
+# harness node for demote-node-to-implement rollback test
+NODE
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
 git -C "$SEED" push -q origin main
@@ -98,6 +154,13 @@ make_clone() { # <dst> <identity>
   git clone -q "$ORIGIN" "$1"
   git -C "$1" config user.email "$2@test"
   git -C "$1" config user.name "$2"
+  # node_modules SYMLINK (never copied, never committed — untracked, so
+  # graph-commit's assert_clean_outside_ids guard skips it via its '??' exemption,
+  # same as the graph-commit wrapper swap below). Needed only by case 5's real
+  # `node --import tsx/esm apply-node-transition.ts`, which resolves the "yaml"
+  # package and the tsx loader itself by walking up from the clone's own root —
+  # this repo's real node_modules, read-only, is never written by the test.
+  ln -s "$REAL_REPO_ROOT/node_modules" "$1/node_modules"
 }
 
 # --- gh / npx PATH shims ------------------------------------------------------
@@ -323,6 +386,73 @@ if [[ $rc -eq 1 ]] \
   ok "absent node: park-node refuses a node not on origin/main (exit 1), main unchanged"
 else
   no "absent node refusal (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 4: park-node byte-identical restore-on-failure
+# (tactic-graph-write-failure-rollback Unit 1).
+# ---------------------------------------------------------------------------
+# graph-commit is swapped for a wrapper that unconditionally fails AFTER the
+# real office_hours write already landed on disk (park-node's own npx-tsx
+# write runs for real; only the downstream graph-commit call is faked). The
+# trap this guards restores intentions/t-restore-pn.md from origin/main on any
+# non-zero exit once MUTATED=1 — assert byte-identical restore via `git diff`
+# against the clone's own HEAD (which still holds the pre-mutation seed
+# content) being EMPTY, not merely "the file exists".
+D="$WORK/d"
+make_clone "$D" writer-d
+mv "$D/packages/intentionsutil/scripts/graph-commit" \
+   "$D/packages/intentionsutil/scripts/graph-commit.real"
+cat >"$D/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+echo "graph-commit wrapper: simulated post-mutation failure" >&2
+exit 1
+SH
+chmod +x "$D/packages/intentionsutil/scripts/graph-commit"
+# graph-commit is UNTRACKED in this clone's index (never committed) — exempt
+# from assert_clean_outside_ids by its '??' skip, so no commit is needed here
+# (unlike case 2, which routes through the REAL graph-commit.real and so must
+# keep that pre-flight guard happy for the tracked path).
+
+out="$(run_pn "$D" t-stale 'simulated post-mutation failure' 2>&1)"; rc=$?
+diff_after="$(git -C "$D" diff -- intentions/t-stale.md)"
+if [[ $rc -ne 0 ]] && grep -q 'office_hours write was rolled back' <<<"$out" \
+   && [[ -z "$diff_after" ]]; then
+  ok "park-node byte-identical restore: graph-commit failure rolls back the office_hours write (git diff empty)"
+else
+  no "park-node byte-identical restore (rc=$rc)"
+  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 5: demote-node-to-implement byte-identical restore-on-failure (same
+# Unit). Identical shape to case 4, but the mutation runs through the REAL
+# apply-node-transition.ts (node --import tsx/esm) against the schema-valid
+# t-demote node, so MUTATED=1 is only reachable by actually executing the real
+# store/schema/transitions code — not a shim.
+# ---------------------------------------------------------------------------
+G="$WORK/g"
+make_clone "$G" writer-g
+mv "$G/packages/intentionsutil/scripts/graph-commit" \
+   "$G/packages/intentionsutil/scripts/graph-commit.real"
+cat >"$G/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+echo "graph-commit wrapper: simulated post-mutation failure" >&2
+exit 1
+SH
+chmod +x "$G/packages/intentionsutil/scripts/graph-commit"
+
+out="$(
+  cd "$G" || exit 99
+  bash packages/intentionsutil/scripts/demote-node-to-implement t-demote 2>&1
+)"; rc=$?
+diff_after="$(git -C "$G" diff -- intentions/t-demote.md)"
+if [[ $rc -ne 0 ]] && grep -q 'demotion write was rolled back' <<<"$out" \
+   && [[ -z "$diff_after" ]]; then
+  ok "demote-node-to-implement byte-identical restore: real apply-node-transition.ts mutation is rolled back on graph-commit failure (git diff empty)"
+else
+  no "demote-node-to-implement byte-identical restore (rc=$rc)"
+  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
 fi
 
 echo

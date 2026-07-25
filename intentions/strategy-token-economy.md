@@ -360,6 +360,23 @@ clarifications:
       discipline. Off the success-signal path (no validates edge), measured
       after the fact by the token-economy sensor's by-node/by-phase attribution.
       Recorded 2026-07-18 interview."
+  - question: What does a 'no gh, no daemon, no network' annotation on a script
+      actually protect — that module's purity, or something else?
+    answer: "(Recorded 2026-07-25 interview, author-dictated.) Something else. The
+      real contract is to avoid Claude sequencing system or network commands
+      that could be done by a script with fewer round trips and fewer tokens.
+      The purity of any given module is not the governing concern and may be
+      amended when the two conflict; what may not be amended is pushing a
+      multi-step system or network sequence back onto Claude's turn loop, where
+      every step costs a round trip and its tokens. Applied the same day: the
+      office-hours selector should perform its own local `git show origin/main`
+      freshness read rather than leaving each caller to re-derive it — see the
+      companion clarification on strategy-graph-native-dispatch, recorded
+      against the tactic-office-hours-concurrency-dedup design decision that had
+      rested on the purity premise. General form for future placement decisions:
+      prefer the site that performs a check once inside a script over the site
+      that forces callers to repeat it, even when that means widening a module's
+      declared dependencies."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -400,6 +417,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - the plan stays prepaid with a weekly allowance (Max 20x); metered

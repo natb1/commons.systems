@@ -105,7 +105,26 @@ PR="$SET_PR"
 
 # --- Freshness gates over an origin/main snapshot ----------------------------
 SNAP_DIR="$(mktemp -d)" || { echo "transition-node: mktemp failed" >&2; exit 2; }
-trap 'rm -rf "$SNAP_DIR"' EXIT
+# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md from
+# origin/main if this script actually wrote to it (the apply-node-transition.ts
+# call further down). A pre-mutation failure (freshness gate computation, node
+# read, etc.) must not trigger a restore of a file this script never touched.
+MUTATED=0
+trap '
+  rc=$?
+  rm -rf "$SNAP_DIR"
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    # Restore from the immutable blob SHA captured before the mutation, not the
+    # moving origin/main ref (a concurrent fetch may have pruned/relocated the
+    # node). Write to a temp file and mv into place only on success, so a failed
+    # git-show never truncates the node file to zero bytes.
+    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$REPO_ROOT/intentions/$NODE_ID.md.rollback"; then
+      mv "$REPO_ROOT/intentions/$NODE_ID.md.rollback" "$REPO_ROOT/intentions/$NODE_ID.md"
+    else
+      rm -f "$REPO_ROOT/intentions/$NODE_ID.md.rollback"
+    fi
+  fi
+' EXIT
 if ! (cd "$REPO_ROOT" && git archive origin/main intentions 2>/dev/null | tar -x -C "$SNAP_DIR"); then
   mkdir -p "$SNAP_DIR/intentions"
 fi
@@ -135,6 +154,11 @@ fi
 APPLY_FLAGS=("$NODE_ID")
 [[ "$STRATEGY_STALE" == "true" ]] && APPLY_FLAGS+=("--strategy-stale")
 [[ -n "$SET_PR" ]] && APPLY_FLAGS+=("--set-pr" "$SET_PR")
+FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)" || {
+  echo "transition-node: intentions/$NODE_ID.md does not exist on origin/main — cannot transition a node that is not landed" >&2
+  exit 1
+}
+MUTATED=1
 if ! RESULT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/apply-node-transition.ts" "${APPLY_FLAGS[@]}") )"; then
   echo "transition-node: apply-node-transition failed for $NODE_ID" >&2
   exit 1
