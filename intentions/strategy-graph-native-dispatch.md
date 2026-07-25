@@ -1366,6 +1366,143 @@ clarifications:
       signal — flagged explicitly as Claude's reading rather than
       author-ratified doctrine, and left available for the review curriculum to
       revisit."
+  - question: How must a new pull request be titled, and what must exist behind it?
+    answer: "(Recorded 2026-07-25 interview, author-selected.) Every new pull
+      request opens with the title `<node id>: <short description>` — the
+      literal, copy-pasteable node id verbatim, kind prefix included, then a
+      colon-space separator, then a short description (e.g.
+      `tactic-office-hours-pr-custody: escalation parks keep custody of their
+      PR`). Scope is every new PR, not merely the ones the dispatch chain opens:
+      no node, no PR. This adds no new doctrine — it makes this node's standing
+      \"the graph is the sole issue tracker, bug tracker included, with no
+      side-channel work records\" condition visible on the execution surface,
+      closing a real observed gap (PR #2953 `wezterm-pin-refresh` opened with no
+      backing node), so out-of-band and personal-infrastructure work now mints a
+      tactic node before its PR. The sole exemption is an interim one with a
+      named expiry: PRs on the draining legacy gh-issue lane keep their current
+      form until that queue drains (tactic-legacy-router-removal). Bot-authored
+      PRs (dependabot-class dependency and security bumps) are explicitly NOT
+      exempt — such a PR is re-homed under a node rather than waved through,
+      consistent with this repo's existing practice of tracking security
+      advisories as work items; the repo carries no `.github/dependabot.yml`
+      today, so the strictness costs nothing at present. Format is the full
+      literal id, not the kind-prefix-stripped short form and not a trailing
+      parenthetical: the prefix must resolve directly against `intentions/` with
+      no reconstruction step, and a trailing id is the first thing truncated in
+      narrow GitHub views. Enforcement is by construction plus a guard —
+      `dispatch-open-pr` (and every graph-lane opener) derives the prefix from
+      the node itself so conforming titles are true by construction, and a CI
+      guard on `pull_request` covers hand-opened PRs. That construction is also
+      what answers the parsimony objection this round tested (raised against
+      strategy-graph-self-description's derived-never-stored doctrine and
+      strategy-graph-integrity's parsimony bar, since the branch name already
+      carries the node id): a prefix rendered from the node is derived state
+      displayed, not a second authored copy. Steelman resolution, on the rival
+      conception that \"node-existence is the substance and the title is
+      cosmetic, so build only a PR-open node-existence precondition and drop the
+      title convention\": ADOPTED in its substantive half — the guard checks
+      that the branch resolves to a real node in `intentions/`, not merely that
+      the title matches a shape, so a typo'd or invented id fails; DIVERGED on
+      \"the title is decoration\" — the repository is squash-only with
+      `squash_merge_commit_title=PR_TITLE` (verified this round), so PR titles
+      become `main`'s commit subjects verbatim, and per delegation-github's
+      recorded recovery_path git is portable while PR/issue relationship data
+      survives an exit only via API export. The title is therefore the sole
+      carrier that puts the intent link into the permanent, GitHub-independent
+      record, which a PR-open gate cannot do; the convention accordingly
+      strengthens rather than deepens the delegation-github attachment. The
+      convention binds at open time going forward and is not retroactive —
+      existing open PRs are not retitled. The `graph: <verb> <node-id> (...)`
+      subject convention used by direct-push `intentions/` commits is a distinct
+      surface and is untouched, since those are not PRs. Where a PR genuinely
+      touches more than one node, dispatch's one-node-per-PR model
+      (`execution.pr`) still holds: the title carries the primary node id and
+      any additional nodes are named in the PR body. Implementation is retained
+      as draft tactic tactic-pr-title-node-id-convention. (Amended 2026-07-25,
+      same day, author direction: the legacy gh-issue queue is fully drained, so
+      the interim exemption is REMOVED and the convention now binds with no
+      exemptions at all.) Verified at amendment time: the repository reports
+      `has_issues: false` — GitHub issues are disabled, which this node's
+      standing monotonicity condition forbids any dispatch surface from
+      reversing, so no new gh-issue-lane work can enter; no open PR sits on an
+      issue-numbered branch; and all 33 open PRs already have head branches that
+      resolve to a real node in `intentions/`, so the exemption was covering
+      nothing at the moment it was removed. Consequences: the guard is
+      unconditional and needs no carve-out logic, no expiry event, and no
+      coordination with tactic-legacy-router-removal — the exemption is never
+      built rather than built-and-later-deleted. The non-retroactive rule is
+      unchanged and does the transitional work on its own: existing open PRs
+      keep their current titles (most predate the convention and do not
+      conform), and the guard binds only at open time going forward."
+  - question: Section Fingerprint & Freeze rests the scope-inert-edit resolution on
+      "the transition writer's machinery refresh" and rules that phase workers,
+      qa/review sessions, and the tick never re-stamp. Does that machinery
+      refresh actually hold, and what is the target design for machinery-written
+      body sections?
+    answer: "(Recorded 2026-07-25 /align-strategy round.) It does not hold — the
+      premise was false when it was recorded on 2026-07-18. transition-node
+      calls refresh_stamp AFTER graph-commit (transition-node:178-183), and
+      graph-commit's cleanup does `git reset --hard $ORIG_HEAD` to restore the
+      far-ahead PR-branch tip it moved off to land an intentions/-only SHA
+      (graph-commit:301-303). So refresh_stamp hashes the REVERTED worktree body
+      and stamps the pre-edit fingerprint. This fires on every node-lane phase
+      worker — all of which run from a far-ahead PR-branch worktree — and is
+      inert only in the main checkout, where no HEAD restore happens. Measured
+      consequence: /qa-fix's own Step 3.6 `## needs-main residue` body append
+      lands in the SAME graph-commit as the qa to review transition, so the next
+      dispatch-graph-scope-sweep reads stamp != origin/main as scope drift and
+      demotes the node to implement, wiping execution.markers (qa-done AND
+      planned) and discarding completed QA custody; the implement re-entry is a
+      no-op that returns the node to qa within minutes. Evidence gathered this
+      round: 33 of 37 demotions since 2026-07-05 hit nodes that had already
+      reached qa or review; of 30 post-QA demotions, 26 were on nodes whose QA
+      pass had appended a residue section, against 6 of 54 never-demoted nodes.
+      Adopted greenfield target: tacticScopeFingerprint hashes PLAN SUBSTANCE
+      only, excluding machinery-appended body sections, so no machinery writer
+      can trip the custody gate by construction — carrier
+      tactic-scope-fingerprint-plan-substance. Adopted migration/immediate
+      carrier: repair refresh_stamp to hash what actually landed on origin/main
+      rather than the post-reset worktree copy — carrier
+      tactic-transition-node-stamp-landed-body. Both are recorded per the
+      design-proposals rule (greenfield and migration proposed separately,
+      migration cost informing how to get there and not what to aim for). This
+      is DISTINCT from tactic-transition-node-scope-stale-test-coverage, which
+      covers the stamp's PATH resolution (MAIN_ROOT vs the invoking worktree),
+      not the stamp's CONTENT SOURCE. Grounds: the refresh_stamp defect is
+      verified in code and in the graph's own commit history and is
+      author-independent; the substance-scoped-fingerprint SHAPE is
+      Claude-proposed and held on trust — enrolled for ratification at
+      tactic-review-sitting-fingerprint-custody-2026-07-25."
+  - question: A false or genuine demotion wipes execution.markers, but the qa
+      phase-log entry and the QA PR comment survive it. What makes a re-entry
+      session's reading of that surviving evidence sound?
+    answer: "(Recorded 2026-07-25 /align-strategy round.) Phase-completion evidence
+      is FINGERPRINT-BOUND: a phase-log entry, a qa-done marker, and a QA PR
+      comment are valid only for the scope fingerprint they were produced under.
+      A re-entry that finds completion evidence stamped at a different
+      fingerprint must RE-RUN the phase, never ratify it — and that binds
+      mechanically, not by session judgment. Without the binding, this section's
+      own recorded net guarantee (\"merge still requires an unbroken implement
+      to qa to review chain against the merge-time scope fingerprint\") is
+      REPORTED satisfied while actually broken: the surviving phase-log reads to
+      a re-entry session as \"a prior session died before the terminal
+      transition\", which licenses a transition-only pass over QA that session
+      never ran. Observed live: after a false demotion had wiped qa-done, the
+      re-entry on PR #2958 transitioned with no re-verification at all, and the
+      re-entry on PR #2965 re-verified only partially. The misdiagnosis is
+      itself evidence the binding is absent — both sessions concluded the prior
+      transition \"never ran\" when it HAD landed and was reverted by the sweep.
+      Carrier: tactic-phase-evidence-fingerprint-bound. Rejected rivals: (a)
+      have the demotion strike or clear the phase-log so re-entry cannot see it
+      — destroys the audit trail the phase-log exists for, and covers only the
+      demotion producer rather than any path that supersedes completed-phase
+      evidence; (b) document the rule in /qa-fix's re-entry preamble without a
+      mechanism — that is precisely what failed, since nothing in the skill
+      governs the shortcut today and the two observed sessions diverged sharply
+      in how much they re-verified. Grounds: the wording is Claude-proposed, but
+      it is a direct expression of this section's own recorded net guarantee
+      rather than a new commitment; held on trust pending author ratification —
+      enrolled at tactic-review-sitting-fingerprint-custody-2026-07-25."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1521,6 +1658,18 @@ attributes:
       every ledger-consuming invariant (e.g. the selection-time busy+reserved
       count) must hold in it without relying on the autonomous heartbeat's
       reaper
+    - "every new pull request opens with the title `<node id>: <short
+      description>` — the literal node id verbatim, kind prefix included — and
+      its head branch resolves to a real node in `intentions/`; the prefix is
+      constructed by the opener from the node rather than hand-authored, and a
+      CI guard rejects a title that is non-conforming or whose id does not
+      resolve. There are no exemptions: the interim legacy gh-issue-lane
+      carve-out was removed the day it was recorded (2026-07-25) once that queue
+      drained and GitHub issues were confirmed disabled, and bot-authored PRs
+      were never exempt. A new PR with no backing node is a defect, not an
+      exception — this is the execution-surface expression of the
+      sole-issue-tracker condition, and it binds at open time going forward,
+      never retroactively"
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
@@ -1690,6 +1839,29 @@ custody demotes as recorded, and phase workers, qa/review sessions, and the tick
 re-stamp. The net guarantee is unchanged: merge still requires an unbroken
 implement → qa → review chain against the merge-time scope fingerprint — a re-stamp
 asserts, under author presence, that the post-edit fingerprint IS that same scope.
+
+**Correction (2026-07-25, entries 102–103): the machinery refresh this rule mirrors
+is itself defective, and the net guarantee above is not currently enforced.**
+`transition-node` calls `refresh_stamp` AFTER `graph-commit` (transition-node:178-183),
+and `graph-commit`'s cleanup does `git reset --hard $ORIG_HEAD` (graph-commit:301-303)
+to restore the far-ahead PR-branch tip it moved off to land an intentions/-only SHA —
+so `refresh_stamp` hashes the REVERTED worktree body and stamps the pre-edit
+fingerprint. It fires on every node-lane phase worker and is inert only in the main
+checkout. The rule above ("phase workers, qa/review sessions, and the tick never
+re-stamp") still stands as written; what is falsified is the premise that the machinery
+refresh made that safe. Two consequences follow. First, /qa-fix's own `## needs-main
+residue` body append lands in the same graph-commit as the qa → review transition, so
+the next scope sweep reads stamp ≠ origin/main as drift and demotes the node, wiping
+`execution.markers` and discarding completed QA custody — 33 of 37 demotions since
+2026-07-05 hit nodes already at qa or review. Second, the surviving phase-log makes a
+re-entry session read the wipe as "a prior session died before the terminal transition"
+and ratify QA it never ran, so the chain is REPORTED unbroken while actually broken.
+Carriers: tactic-transition-node-stamp-landed-body (repair the refresh),
+tactic-scope-fingerprint-plan-substance (greenfield — fingerprint plan substance only,
+so no machinery write can trip custody by construction), and
+tactic-phase-evidence-fingerprint-bound (bind completion evidence to the fingerprint it
+was produced under, which is what makes a GENUINE drift safe). Until those land, treat
+the net guarantee as an intent, not an enforced invariant.
 
 Migration is backwards-incompatible for stamp readers and sequenced (schema accepts
 `string | {hash, sha}` → new stamps write the map form → bare-hash stamps migrate

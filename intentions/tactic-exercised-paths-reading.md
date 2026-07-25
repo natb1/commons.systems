@@ -22,22 +22,22 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution:
   branch: tactic-exercised-paths-reading
   pr: 2857
   attempts: {}
   markers: []
   strategy_fingerprint: 4ee635b8acf77f2cb701ca3625baa5edf2209e23bf04d30e72650eb7b94f36fa
+  fix: null
+  completion:
+    mergedAt: 2026-07-25T17:28:31Z
+    mergeCommitSha: f8a73f134fc8ccb00db3e37aa99577471ebaed01
+    graphCommitSha: null
 validates:
   - strategy-exercise-recovery-paths
 blocked_by: []
-office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-16
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /fix-conflicts once it accepts node targets.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
