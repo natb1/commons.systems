@@ -52,6 +52,27 @@ export const PHASES: readonly Phase[] = [
   "done",
 ];
 
+/**
+ * What kind of office-hours attention a parked node needs, keyed to the
+ * criterion actually used to backfill this field:
+ *
+ * - `"requirement-discovery"`: the park needs the author to decide or
+ *   clarify a requirement/intent before work can proceed (e.g.
+ *   `strategy-recover-attention`).
+ * - `"curriculum-review"`: the park is a reading/dialog demonstration
+ *   sitting the author runs with the text in hand (e.g. the
+ *   `tactic-reading-chunk-*` / `tactic-dialog-review-*` parks, which
+ *   `/reading-review` drives).
+ * - `"other"`: the default for every park with no natural type —
+ *   including machine-authored parks such as `apply-fix-state.ts`'s
+ *   `applyParkCheck` retry-budget park — and the value `validateOfficeHours`
+ *   substitutes when `session_type` is absent, which keeps the field
+ *   additive over the existing store.
+ *
+ * `"requirement-discovery"` and `"curriculum-review"` are the two types
+ * soft-penalized in `officeHours.ts` (`SESSION_TYPE_PENALTY`), so
+ * classifying a park as typed lowers its default rank versus `"other"`.
+ */
 export type SessionType = "requirement-discovery" | "curriculum-review" | "other";
 export const SESSION_TYPES: readonly SessionType[] = [
   "requirement-discovery",
