@@ -31523,6 +31523,31 @@ assert_eq "graph-select-target (no --standalone): no reservation marker is writt
   "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
 gsc_standalone_teardown
 
+# --- Case 5: EXHAUSTED == exhausted -> degrades to empty even with ample -----
+# headroom (isolates the rate-limit-window term of the degrade condition from
+# the HEADROOM==0 term Case 2 already covers). Default empty `[]` registry ->
+# BUSY=0, RESV=0; SEL_MAX_WORKERS=8 -> HEADROOM=8-0=8, a healthy non-zero
+# headroom, so only `[[ "$EXHAUSTED" == exhausted ]]` can trigger the degrade.
+echo "Test: graph-select-target --standalone with EXHAUSTED == exhausted degrades to empty despite ample headroom"
+gsc_standalone_setup
+gsc5_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-5" SEL_MAX_WORKERS=8 SEL_EXHAUSTED=exhausted \
+  "$GSCS_GST" --standalone --top 1 2>/dev/null)
+assert_eq "graph-select-target --standalone: EXHAUSTED == exhausted prints empty" "empty" "$gsc5_out"
+assert_eq "graph-select-target --standalone: EXHAUSTED == exhausted writes no reservation marker" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+gsc5_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc5_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (EXHAUSTED) releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (EXHAUSTED) releases the lock (file emptied)"
+  echo "    lock file: '$gsc5_lock'"
+fi
+gsc_standalone_teardown
+
 # ============================================================================
 # Test: assert-worktree-fresh — non-skippable pre-analysis freshness guard
 # (tactic-align-skills-latest-graph-guard Unit 2)
