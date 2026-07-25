@@ -99,7 +99,7 @@ The router reads the graph at `origin/main` and schedules eligible tactics
 autonomously; the align skill family (`/align-init`, `/align-strategy`,
 `/align-tactics`) is the human interface that populates it. Keep the
 orientation to one screen — the schema reference is
-`packages/intentionsutil/SCHEMA.md` for anyone who wants depth.
+`intentions/kind-kind.md` for anyone who wants depth.
 
 ## Step 2 — Validate deployment
 
