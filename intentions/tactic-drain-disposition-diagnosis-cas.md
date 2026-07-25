@@ -40,8 +40,15 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-drain-disposition-diagnosis-cas
+  pr: 2969
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null
