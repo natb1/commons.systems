@@ -7,12 +7,32 @@
 # For every open graph-native tactic (phase set, neither draft nor done) that
 # carries an execution.pr, it reads the PR state via gh and hands the terminal
 # ones to reconcile-graph.ts, which decides and applies the store mutations:
-#   - merged, needs-main residue on the node → `main-qa` (deferred until
-#     tactic-main-qa-phase adopts the phase value; inert now).
-#   - merged without residue, or closed-not-merged → `done`, which PRUNES the
-#     node and its edges (inbound blocked_by repaired) in the same commit, and
-#     stamps the serving strategy's round when its last non-draft child prunes.
-# The whole plan (prune + edits) lands as ONE graph-commit.
+#   - merged, needs-main residue on the node → `main-qa` (verified post-merge),
+#     recording the merge evidence (mergedAt + mergeCommitSha) on the node.
+#   - merged without residue, or closed-not-merged → `done`. The node is NO
+#     LONGER pruned at the done-transition: it is left present on disk with its
+#     phase set to `done` and completion evidence recorded — for a genuine merge,
+#     execution.completion.{mergedAt, mergeCommitSha}; for a closed-not-merged
+#     PR, NO evidence at all (all three completion fields stay null). A separate
+#     future scripted census/cleanup pass verifies the evidence, repairs inbound
+#     blocked_by edges, and prunes the node — deletion and edge repair have moved
+#     out of this reconciler. The all-null completion of a closed-unmerged
+#     transition is a deliberate integrity-defect signal the census step can act
+#     on, distinct from silent deletion.
+#   - The serving strategy's round is still stamped here, at the done-transition,
+#     when its last non-draft child reaches `done`.
+# The whole plan (edits only) lands as ONE graph-commit.
+#
+# Manual completion backfill (office-hours workflow, no script): when a tactic's
+# PR is closed-unmerged but its content genuinely landed on `main` out-of-band,
+# this reconciler transitions the node to `phase: "done"` with
+# execution.completion === null. A human/AI session that judges the work complete
+# backfills evidence by hand: discover the sha of the out-of-band commit that
+# landed the content (via `git log`/`gh`), set execution.completion.graphCommitSha
+# to it, write the node back via packages/intentionsutil/scripts/write-node.ts,
+# then `graph-commit`. graphCommitSha is recorded by the authoring session (which
+# knows the sha firsthand) — it is never derived automatically, since graph-commit
+# prints no sha to stdout on success.
 #
 # GRACE window: a just-merged PR is not reconciled until it has aged past the
 # grace window, so the sweep never races a merge that is still settling.
@@ -68,17 +88,28 @@ while IFS=$'\t' read -r id pr; do
     continue
   fi
   STATE=$(jq -r '.state' <<<"$PR_JSON")
+  MERGED_AT=$(jq -r '.mergedAt // empty' <<<"$PR_JSON")
+  MERGE_SHA=$(jq -r '.mergeCommitSha // empty' <<<"$PR_JSON")
+  # Enumerate the states explicitly. REST reports a merged PR as CLOSED (never
+  # MERGED — see the byte-compat test in test-dispatch-scripts.sh), so the
+  # merged/closed discriminator inside the terminal arm is `mergedAt` presence,
+  # NOT the state string. An unrecognized state must NOT fall through to the
+  # terminal arm: that would drive a `done` transition on a live in-flight
+  # tactic. Fail loudly instead (clear error over a silent, destructive default).
   case "$STATE" in
-    MERGED)
-      MERGED_AT=$(jq -r '.mergedAt // empty' <<<"$PR_JSON")
+    OPEN) : ;;  # nothing to reconcile
+    CLOSED|MERGED)
       if [[ -n "$MERGED_AT" ]]; then
         AGE=$(( NOW - $(date -u -d "$MERGED_AT" +%s) ))
         [[ "$AGE" -ge "$GRACE" ]] || continue   # still settling — next sweep
-      fi
-      STATES=$(jq -c --arg id "$id" '. + {($id): "merged"}' <<<"$STATES") ;;
-    CLOSED)
-      STATES=$(jq -c --arg id "$id" '. + {($id): "closed"}' <<<"$STATES") ;;
-    *) : ;;  # OPEN — nothing to reconcile
+        STATES=$(jq -c --arg id "$id" --arg ma "$MERGED_AT" --arg sha "$MERGE_SHA" \
+          '. + {($id): {state:"merged", mergedAt:$ma, mergeCommitSha:$sha}}' <<<"$STATES")
+      else
+        STATES=$(jq -c --arg id "$id" '. + {($id): {state:"closed"}}' <<<"$STATES")
+      fi ;;
+    *)
+      echo "reconcile-graph-merged: unexpected PR state '$STATE' for $id (#$pr) — not reconciled" >&2
+      HARD_ERROR=1 ;;
   esac
 done <<<"$OPEN_TACTICS"
 
@@ -90,14 +121,14 @@ fi
 
 # --- Decide + apply the store mutations --------------------------------------
 # Plan-then-apply for a rollback path: a --no-apply run yields the plan's exact
-# edit∪prune id set WITHOUT touching disk; we snapshot each of those ids from
+# edit id set WITHOUT touching disk; we snapshot each of those ids from
 # origin/main, THEN run the real apply. Both runs read the same unmutated
 # intentions/ dir (nothing else writes it between them), so the plan is
-# deterministic — the snapshotted ids match the ids the apply run mutates. On
-# any failure of the apply run or the graph-commit, RESTORE_ON_FAILURE dumps
-# each snapshot blob back over its file (rewriting edits and recreating pruned
-# deletions), leaving intentions/ clean rather than tripping graph-commit's
-# assert_clean_outside_ids guard for every other node.
+# deterministic — the snapshotted ids match the ids the apply run mutates. The
+# plan is edit-only (nothing is pruned here anymore), so on any failure of the
+# apply run or the graph-commit, RESTORE_ON_FAILURE simply dumps each snapshot
+# blob back over its file, leaving intentions/ clean rather than tripping
+# graph-commit's assert_clean_outside_ids guard for every other node.
 STATES_FILE="$(mktemp)" || { echo "reconcile-graph-merged: mktemp failed" >&2; exit 1; }
 declare -A SNAPSHOT=()
 RESTORE_ON_FAILURE=0
@@ -117,15 +148,15 @@ printf '%s' "$STATES" > "$STATES_FILE"
 PLAN_ONLY="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/reconcile-graph.ts" --pr-states "$STATES_FILE" --no-apply) )" || {
   echo "reconcile-graph-merged: reconcile-graph.ts --no-apply failed" >&2; exit 1; }
 
-# Step 2: snapshot every planned id (edit ∪ prune) from origin/main. All planned
-# ids are landed nodes present on origin/main; a rev-parse miss is a hard error —
+# Step 2: snapshot every planned edit id from origin/main. All planned ids are
+# landed nodes present on origin/main; a rev-parse miss is a hard error —
 # that id can't be safely mutated without a rollback path.
 while IFS= read -r sid; do
   [[ -n "$sid" ]] || continue
   blob=$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$sid.md" 2>/dev/null) || {
     echo "reconcile-graph-merged: cannot snapshot $sid from origin/main (no rollback path)" >&2; exit 1; }
   SNAPSHOT[$sid]="$blob"
-done < <(jq -r '(.edit[]?, .prune[]?)' <<<"$PLAN_ONLY")
+done < <(jq -r '.edit[]?' <<<"$PLAN_ONLY")
 
 # Step 3: real apply run — mutates disk; its stdout drives the rest of the
 # script. Arm the rollback: any failure from here through graph-commit restores.
@@ -141,15 +172,13 @@ while IFS= read -r d; do
 done < <(jq -c '.deferred[]?' <<<"$PLAN")
 
 # --- Land the plan as one graph-commit ---------------------------------------
-mapfile -t PRUNE < <(jq -r '.prune[]?' <<<"$PLAN")
 mapfile -t EDIT < <(jq -r '.edit[]?' <<<"$PLAN")
-if [[ "${#PRUNE[@]}" -eq 0 && "${#EDIT[@]}" -eq 0 ]]; then
+if [[ "${#EDIT[@]}" -eq 0 ]]; then
   [[ "$HARD_ERROR" -ne 0 ]] && exit 1
   exit 0
 fi
 
-GC_ARGS=(-C "$REPO_ROOT" -m "graph: reconcile merged/closed tactics")
-for id in "${PRUNE[@]}"; do GC_ARGS+=(--prune "$id"); done
+GC_ARGS=(-C "$REPO_ROOT" -m "graph: reconcile terminal tactics (record completion)")
 for id in "${EDIT[@]}"; do GC_ARGS+=("$id"); done
 
 if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
