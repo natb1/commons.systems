@@ -1366,6 +1366,59 @@ clarifications:
       signal — flagged explicitly as Claude's reading rather than
       author-ratified doctrine, and left available for the review curriculum to
       revisit."
+  - question: How must a new pull request be titled, and what must exist behind it?
+    answer: "(Recorded 2026-07-25 interview, author-selected.) Every new pull
+      request opens with the title `<node id>: <short description>` — the
+      literal, copy-pasteable node id verbatim, kind prefix included, then a
+      colon-space separator, then a short description (e.g.
+      `tactic-office-hours-pr-custody: escalation parks keep custody of their
+      PR`). Scope is every new PR, not merely the ones the dispatch chain opens:
+      no node, no PR. This adds no new doctrine — it makes this node's standing
+      \"the graph is the sole issue tracker, bug tracker included, with no
+      side-channel work records\" condition visible on the execution surface,
+      closing a real observed gap (PR #2953 `wezterm-pin-refresh` opened with no
+      backing node), so out-of-band and personal-infrastructure work now mints a
+      tactic node before its PR. The sole exemption is an interim one with a
+      named expiry: PRs on the draining legacy gh-issue lane keep their current
+      form until that queue drains (tactic-legacy-router-removal). Bot-authored
+      PRs (dependabot-class dependency and security bumps) are explicitly NOT
+      exempt — such a PR is re-homed under a node rather than waved through,
+      consistent with this repo's existing practice of tracking security
+      advisories as work items; the repo carries no `.github/dependabot.yml`
+      today, so the strictness costs nothing at present. Format is the full
+      literal id, not the kind-prefix-stripped short form and not a trailing
+      parenthetical: the prefix must resolve directly against `intentions/` with
+      no reconstruction step, and a trailing id is the first thing truncated in
+      narrow GitHub views. Enforcement is by construction plus a guard —
+      `dispatch-open-pr` (and every graph-lane opener) derives the prefix from
+      the node itself so conforming titles are true by construction, and a CI
+      guard on `pull_request` covers hand-opened PRs. That construction is also
+      what answers the parsimony objection this round tested (raised against
+      strategy-graph-self-description's derived-never-stored doctrine and
+      strategy-graph-integrity's parsimony bar, since the branch name already
+      carries the node id): a prefix rendered from the node is derived state
+      displayed, not a second authored copy. Steelman resolution, on the rival
+      conception that \"node-existence is the substance and the title is
+      cosmetic, so build only a PR-open node-existence precondition and drop the
+      title convention\": ADOPTED in its substantive half — the guard checks
+      that the branch resolves to a real node in `intentions/`, not merely that
+      the title matches a shape, so a typo'd or invented id fails; DIVERGED on
+      \"the title is decoration\" — the repository is squash-only with
+      `squash_merge_commit_title=PR_TITLE` (verified this round), so PR titles
+      become `main`'s commit subjects verbatim, and per delegation-github's
+      recorded recovery_path git is portable while PR/issue relationship data
+      survives an exit only via API export. The title is therefore the sole
+      carrier that puts the intent link into the permanent, GitHub-independent
+      record, which a PR-open gate cannot do; the convention accordingly
+      strengthens rather than deepens the delegation-github attachment. The
+      convention binds at open time going forward and is not retroactive —
+      existing open PRs are not retitled. The `graph: <verb> <node-id> (...)`
+      subject convention used by direct-push `intentions/` commits is a distinct
+      surface and is untouched, since those are not PRs. Where a PR genuinely
+      touches more than one node, dispatch's one-node-per-PR model
+      (`execution.pr`) still holds: the title carries the primary node id and
+      any additional nodes are named in the PR body. Implementation is retained
+      as draft tactic tactic-pr-title-node-id-convention."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1521,6 +1574,17 @@ attributes:
       every ledger-consuming invariant (e.g. the selection-time busy+reserved
       count) must hold in it without relying on the autonomous heartbeat's
       reaper
+    - "every new pull request opens with the title `<node id>: <short
+      description>` — the literal node id verbatim, kind prefix included — and
+      its head branch resolves to a real node in `intentions/`; the prefix is
+      constructed by the opener from the node rather than hand-authored, and a
+      CI guard rejects a title that is non-conforming or whose id does not
+      resolve. The sole exemption is the draining legacy gh-issue lane, expiring
+      when that queue drains (tactic-legacy-router-removal); bot-authored PRs
+      are not exempt. A new PR with no backing node is a defect, not an
+      exception — this is the execution-surface expression of the
+      sole-issue-tracker condition, and it binds at open time going forward,
+      never retroactively"
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
