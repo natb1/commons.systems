@@ -217,6 +217,29 @@ case "$args" in
   "worktree list --porcelain")
     cat "$STUB_DIR/worktree-list.txt"
     ;;
+  "rev-parse --verify --quiet refs/remotes/origin/main")
+    # NODE-arm completion gate: origin/main must be readable. SWEEP_NO_ORIGIN_MAIN
+    # simulates an absent / never-fetched remote ref.
+    [[ -n "${SWEEP_NO_ORIGIN_MAIN:-}" ]] && exit 1
+    echo "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    ;;
+  "show origin/main:intentions/"*)
+    # NODE-arm completion gate: the node's frontmatter as recorded on origin/main.
+    # node-<id>.md absent → the real git failure mode (path not in the tree).
+    nid="${args#show origin/main:intentions/}"
+    nid="${nid%.md}"
+    f="$STUB_DIR/node-${nid}.md"
+    if [[ -f "$f" ]]; then cat "$f"; else exit 1; fi
+    ;;
+  "log -1 --format=%H origin/main -- intentions/"*)
+    # NODE-arm pruned-node probe: non-empty output = the path HAS history on
+    # origin/main (the node existed and was pruned); empty = never a node.
+    nid="${args#log -1 --format=%H origin/main -- intentions/}"
+    nid="${nid%.md}"
+    f="$STUB_DIR/nodehist-${nid}.txt"
+    [[ -f "$f" ]] && cat "$f"
+    exit 0
+    ;;
   "worktree remove --force "*)
     path="${args#worktree remove --force }"
     echo "worktree-remove-force:$path" >> "$STUB_DIR/calls"
@@ -283,6 +306,8 @@ sweep_teardown() {
   unset DISPATCH_CONFIG_DIR DISPATCH_SWEEP_WORKTREES_ROOT
   # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
   unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
+  # NODE-arm seams (minimum age, origin/main availability) — same no-leak rule.
+  unset DISPATCH_SWEEP_NODE_MIN_AGE_S SWEEP_NO_ORIGIN_MAIN
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -298,6 +323,37 @@ sweep_register_wt() {
 # used by the git -C shim.
 sweep_path_key() {
   echo "$1" | tr '/' '_'
+}
+
+# Helper: write the origin/main intention-node fixture the NODE arm's completion
+# gate reads (`git show origin/main:intentions/<id>.md`).
+#   <phase>  literal frontmatter phase value (e.g. done / implement / null)
+#   <park>   "parked" writes a non-null office_hours block; anything else writes
+#            `office_hours: null`.
+sweep_register_node() {
+  local node_id="$1" phase="$2" park="${3:-unparked}"
+  {
+    printf -- '---\n'
+    printf 'id: %s\n' "$node_id"
+    printf 'kind: tactic\n'
+    printf 'phase: %s\n' "$phase"
+    if [[ "$park" == "parked" ]]; then
+      printf 'office_hours:\n  reason: "parked by fixture"\n  since: 2026-01-01\n'
+    else
+      printf 'office_hours: null\n'
+    fi
+    printf -- '---\n\n# body\n'
+  } > "$STUB_DIR/node-${node_id}.md"
+}
+
+# Helper: stamp a fixture worktree's creation age. The NODE arm reads the mtime of
+# `<worktree>/.git` (the gitdir pointer file `git worktree add` writes once) via
+# `stat -c %Y` — a REAL stat, not the git shim — so the file must exist on disk
+# with the wanted mtime for the minimum-age gate to be exercised.
+sweep_stamp_wt_age() {
+  local wt_path="$1" mtime="$2"
+  printf 'gitdir: %s/.git-fake\n' "$wt_path" > "$wt_path/.git"
+  touch -d "@$mtime" "$wt_path/.git"
 }
 
 # Helper: install a fake `claude` whose `agents --json` invocation (NO --cwd)
@@ -1592,6 +1648,247 @@ if grep -q "SWEEP_CONFIG_ERROR" "$DISPATCH_SWEEP_LOG_FILE"; then
   PASS=$((PASS + 1)); echo "  PASS: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- NODE arm: reap requires POSITIVE completion evidence --------------------
+# A bare node-id worktree (no PR, no issue-number prefix) has no merged PR and no
+# closed issue to prove the work is finished. The arm therefore reaps only on:
+# a completion signal read from origin/main (phase done + unparked, or a pruned
+# node), a minimum worktree age, name- AND cwd-keyed liveness, and in-sync — and
+# it NEVER quarantines/force-reaps not-in-sync work. These tests pin each gate.
+
+# --- Test N7a: done + unparked + old + clean + sessionless → REMOVE_NODE ------
+echo "Test: N7a node worktree at phase done (unparked, aged, clean) is reaped"
+sweep_setup
+WT_BASE="tactic-node-done"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000   # age 99000 >= default 3600
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7a sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH" \
+   && echo "$calls" | grep -qx "branch-D:$WT_BASE" \
+   && grep -q "REMOVE_NODE: '$WT_PATH' branch=$WT_BASE state=done" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7a done node worktree removed + branch deleted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7a done node worktree removed + branch deleted"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7b: office_hours-parked node is NEVER reaped ----------------------
+# The office-hours lane provisions exactly these worktrees for a human to engage
+# in, and writes no reservation marker. A park must survive every sweep.
+echo "Test: N7b office_hours-parked node worktree is never reaped"
+sweep_setup
+WT_BASE="tactic-node-parked"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "parked"   # done BUT parked → keep
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7b sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && ! echo "$calls" | grep -q "branch-D" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=parked" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7b parked node worktree kept (state=parked)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7b parked node worktree kept (state=parked)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7c: an active-phase node worktree is never reaped -----------------
+echo "Test: N7c node worktree at an active phase is never reaped"
+sweep_setup
+WT_BASE="tactic-node-implement"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "implement" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7c sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=active-phase" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7c in-flight node worktree kept (state=active-phase)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7c in-flight node worktree kept (state=active-phase)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7d: a branch that was never a graph node is never reaped ----------
+# No intentions/<branch>.md on origin/main AND no history for that path → a
+# manually created worktree, not a pruned node. Absence of evidence is not
+# evidence of completion.
+echo "Test: N7d non-node worktree (no node file, no history) is never reaped"
+sweep_setup
+WT_BASE="scratch-manual-wt"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7d sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=not-a-node" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7d non-node worktree kept (state=not-a-node)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7d non-node worktree kept (state=not-a-node)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# Positive control: the SAME branch with path history on origin/main is a pruned
+# node and IS reaped.
+sweep_teardown
+echo "Test: N7d' pruned node (no file, but path history) is reaped"
+sweep_setup
+WT_BASE="tactic-node-pruned"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "cafebabecafebabecafebabecafebabecafebabe" > "$STUB_DIR/nodehist-${WT_BASE}.txt"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7d' sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH" \
+   && grep -q "REMOVE_NODE: '$WT_PATH' branch=$WT_BASE state=pruned" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7d' pruned node worktree removed (state=pruned)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7d' pruned node worktree removed (state=pruned)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7e: a just-provisioned node worktree is never reaped --------------
+# The provisioning window: office-hours-graph adds the worktree, and the daemon
+# registers its session only afterwards. A sweep landing inside that window must
+# not reap even a `done`-looking node.
+echo "Test: N7e freshly created node worktree is skipped by the minimum-age gate"
+sweep_setup
+WT_BASE="tactic-node-fresh"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 100000
+export DISPATCH_SWEEP_NOW_EPOCH=100002   # age 2s, well under the 3600 default
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7e sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_TOO_YOUNG: '$WT_PATH' branch=$WT_BASE state=done age_seconds=2 min_age_seconds=3600" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7e fresh node worktree kept (age gate)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7e fresh node worktree kept (age gate)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7f: a live session resident under ANOTHER name blocks the reap ----
+# worktree_has_live_session is NAME-keyed, so an interactive session that entered
+# the worktree under a different name is invisible to it; the cwd-keyed check is
+# what protects that workspace.
+echo "Test: N7f live session with a non-matching name blocks the node reap (cwd-keyed)"
+sweep_setup
+WT_BASE="tactic-node-occupied"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+sweep_fake_claude_sessions_by_name "some-human-session=sid-human"
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7f sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_LIVE_SESSION_CWD: '$WT_PATH' branch=$WT_BASE" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7f cwd-resident session blocked the reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7f cwd-resident session blocked the reap"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7g: a not-in-sync node worktree is NEVER quarantined/force-reaped -
+# The MERGED/CLOSED arms force-reap after the grace because a merged PR / closed
+# issue proves the work is finished. Nothing proves that here, so uncommitted work
+# in a node worktree is skipped indefinitely — no marker, no quarantine, no force.
+echo "Test: N7g not-in-sync node worktree is skipped, never quarantined"
+sweep_setup
+WT_BASE="tactic-node-dirty"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=1
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7g sweep#1 exits 0" "0" "$rc"
+export DISPATCH_SWEEP_NOW_EPOCH=900000   # far past any grace
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7g sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && [[ ! -e "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE" ]] \
+   && [[ ! -d "$TMPDIR_TEST/project/tmp/dispatch-sweep-quarantine" ]] \
+   && grep -q "SKIP_NODE_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7g dirty node worktree skipped with no marker/quarantine/force-reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7g dirty node worktree skipped with no marker/quarantine/force-reap"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7h: unreadable origin/main fails safe (no reap) -------------------
+echo "Test: N7h unresolvable origin/main keeps every node worktree"
+sweep_setup
+WT_BASE="tactic-node-noorigin"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export SWEEP_NO_ORIGIN_MAIN=1
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7h sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=unknown-origin-main" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7h unreadable origin/main kept the node worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7h unreadable origin/main kept the node worktree"
+  echo "    calls: $calls"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
