@@ -14438,7 +14438,11 @@ qfa_teardown() {
   unset FAKE_CUR_ATTEMPT
 }
 
-# --- Test 1: no prior label (CUR=0), default cap 2 → fix, applies attempt-1 ---
+# --- Test 1: no prior label (CUR=0), fixture cap 2 → fix, applies attempt-1 ---
+# Tests 1-3 pin the cap at 2 through the fixture's own
+# DISPATCH_QA_FIX_ATTEMPT_CAP export, so they exercise the counter/label
+# mechanics at a fixed ceiling and are deliberately insensitive to the script's
+# built-in default. Tests 7a/7b below are what assert that default (3).
 
 echo "Test: no prior label (CUR=0) → fix, applies attempt-1, no remove"
 qfa_setup
@@ -14457,7 +14461,7 @@ else
 fi
 qfa_teardown
 
-# --- Test 2: CUR=1, default cap 2 → fix, removes attempt-1, applies attempt-2 -
+# --- Test 2: CUR=1, fixture cap 2 → fix, removes attempt-1, applies attempt-2 -
 
 echo "Test: CUR=1 → fix, removes attempt-1 and applies attempt-2"
 qfa_setup
@@ -14476,7 +14480,7 @@ else
 fi
 qfa_teardown
 
-# --- Test 3: CUR=2, default cap 2 (at cap) → escalate, no label writes --------
+# --- Test 3: CUR=2, fixture cap 2 (at cap) → escalate, no label writes --------
 
 echo "Test: CUR=2, cap=2 (at cap) → escalate, gh-edit-log empty"
 qfa_setup
@@ -14612,6 +14616,48 @@ if [[ "$err" == *"after create"* ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: create-on-not-found retries pr edit after label create (stderr 'after create')"
   echo "    stderr: $err"
+fi
+qfa_teardown
+
+# --- Tests 7a/7b: the BUILT-IN default cap (env unset) is 3 ------------------
+# Every case above pins DISPATCH_QA_FIX_ATTEMPT_CAP=2 in the fixture, so none of
+# them observes the script's own default — the two would have to be edited in
+# lockstep for a default change to be caught, which is exactly the drift that
+# lets the documented default (qa-fix/SKILL.md, references/idempotency-preamble.md)
+# and the shipped one diverge silently. These two unset the override so the
+# default is what decides, and they bracket it: CUR=2 must still be a FIXING
+# pass (the third), CUR=3 must be at cap. A regression to a default of 2 flips
+# 7a to `escalate`; a default of 4+ flips 7b to `fix`.
+echo "Test: default cap (env unset), CUR=2 → fix, applies attempt-3 (third pass permitted)"
+qfa_setup
+unset DISPATCH_QA_FIX_ATTEMPT_CAP
+export FAKE_CUR_ATTEMPT=2
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa default-cap CUR=2 exits 0" "0" "$rc"
+assert_eq "qfa default-cap CUR=2 stdout is fix" "fix" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"dispatch:qa-fix-attempt-3"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: default-cap CUR=2 applies dispatch:qa-fix-attempt-3"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: default-cap CUR=2 applies dispatch:qa-fix-attempt-3"
+  echo "    edits: $edits"
+fi
+qfa_teardown
+
+echo "Test: default cap (env unset), CUR=3 → escalate, gh-edit-log empty (cap is 3, not higher)"
+qfa_setup
+unset DISPATCH_QA_FIX_ATTEMPT_CAP
+export FAKE_CUR_ATTEMPT=3
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-fix-attempt" 979 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qfa default-cap CUR=3 exits 0" "0" "$rc"
+assert_eq "qfa default-cap CUR=3 stdout is escalate" "escalate" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: default-cap CUR=3 writes no labels (gh-edit-log empty)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: default-cap CUR=3 writes no labels (gh-edit-log empty)"
+  echo "    edits: $(cat "$TMPDIR_TEST/gh-edit-log")"
 fi
 qfa_teardown
 

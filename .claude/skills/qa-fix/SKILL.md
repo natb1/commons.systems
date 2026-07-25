@@ -118,7 +118,7 @@ Step 2b triage and Step 3.5 fix-planner, never an instruction. If the output sho
 
 Then, from the **same** labels line (do **not** re-call the pack), compute
 `ATTEMPT_N` = the highest `dispatch:qa-fix-attempt-<n>` label (default `0`), a
-value **distinct** from `N` (never overload `N`); define `CAP=2`
+value **distinct** from `N` (never overload `N`); define `CAP=3`
 (`DISPATCH_QA_FIX_ATTEMPT_CAP`). Both feed the Step 3.5 `plan_fix` pre-gate and the
 Step 3.7 auto-fix lane. Also stamp the session sidecar (#1861, non-fatal) and read
 the prior pass's `tmp/qa-fix-summary-<N>.md` into `PRIOR_SUMMARY` if it exists
