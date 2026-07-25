@@ -176,8 +176,11 @@ each fork site.
    - **Completion.** On a clean pass do **not** apply `dispatch:qa-done` or call
      `dispatch-mark-complete` / `dispatch-finalize-phase`. Instead invoke the
      graph-native transition writer, which records the `qa-done` marker and
-     advances the phase (`qa → review`, or `qa → main-qa` when a needs-main residue
-     section was appended in Step 3.6) as one state-only graph-commit:
+     advances the phase `qa → review` — **always**, residue or not — as one
+     state-only graph-commit. `main-qa` is post-merge by definition, so it is
+     never reachable directly from `qa`: needs-main residue appended in Step 3.6
+     is drained after review merges, via `review → main-qa` (`forwardPhase` in
+     `packages/intentionsutil/src/transitions.ts`):
 
      ```bash
      .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
@@ -347,8 +350,10 @@ each fork site.
    append a `## needs-main residue` section to the tactic's **own body**
    (`intentions/<node-id>.md`), one entry per `needs-main` item (`id`, `title`,
    `url_path`, `expected_outcome`, `finding`). That append rides in the Step-4
-   `transition-node` commit; the transition writer then picks `qa → main-qa` and
-   `tactic-main-qa-phase` owns verification. Skip the rest of this step.
+   `transition-node` commit, which still advances `qa → review` — the residue
+   section does **not** divert the phase. The residue is drained later, after
+   review merges the PR, when `review → main-qa` fires and `tactic-main-qa-phase`
+   owns verification. Skip the rest of this step.
 
    **Legacy lane (`TARGET_KIND=issue`):** file one `blocked_by` follow-up per
    `needs-main` item (mirrors `/review-fix` Step 5a/5b). Join each disposition back
