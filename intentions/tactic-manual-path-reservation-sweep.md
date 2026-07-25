@@ -133,3 +133,11 @@ fake-agents wiring; the `rl_setup` group's dead-session-sweep test as the
 reclaimable-marker reference.
 
 **Dependencies:** Unit 1.
+
+## needs-main residue
+
+- **id:** 16
+  **title:** Real-world confirmation that phantom `live=N` no longer inflates on the manual path
+  **URL path:** current
+  **Expected outcome:** `live=N` on manual ticks matches observed live workers over a multi-day window of live paused+manual-only operation; no recurrence of the `SPAWN_N=1 ... live=10` phantom-worker shape diagnosed 2026-07-23.
+  **Finding:** Planned deferral — only observable over a multi-day window of live paused+manual-only operation, not assertable at merge time from the test harness (which can only plant a synthetic marker). Only repeated observation of the live router output confirms the incident class is fully closed.

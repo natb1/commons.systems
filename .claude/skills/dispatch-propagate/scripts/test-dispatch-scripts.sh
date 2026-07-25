@@ -22567,6 +22567,55 @@ assert_eq "manual-sweep: stale reservation marker was reclaimed (deleted)" "0" \
   "$([ -e "$DISPATCH_RESERVATION_DIR/900-test" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
+# --- --manual sweeps an orphan-SATURATED ledger at/over the ceiling (2026-07-23 incident) ---
+# The adjacent manual-sweep test above plants a SINGLE stale marker well below
+# the worker ceiling — it proves the sweep runs, but a weak assertion there
+# would still pass even if the sweep were deleted: SPAWN_N has a floor of 1
+# that re-asserts itself past the ceiling regardless of RESV, so "non-zero
+# fan-out" alone proves nothing. This case is distinct: it plants SEVEN
+# dead-session markers — enough to saturate the ledger AT the MAX_WORKERS
+# ceiling (7 >= MAX_WORKERS − BUSY = 8 − 1) — reproducing the shape of the
+# 2026-07-23 phantom-worker incident (`router: manual fan-out: SPAWN_N=1 ...
+# live=10` with no live workers actually running). Only with the sweep
+# reclaiming all 7 markers does LIVE_COUNT stay at 1 (BUSY only, RESV=0),
+# HEADROOM=7, GAP=6−1=5, SPAWN_N=5 → graph --top 5. If reservation_sweep were
+# removed (the regression this test must catch), the 7 dead markers would
+# count toward LIVE_COUNT (1+7=8), HEADROOM would clamp to 0, and the SPAWN_N
+# floor-of-1 would re-assert past the ceiling → --top 1. So `--top 5` vs
+# `--top 1` is the discriminator that makes this a real regression test
+# rather than a restatement of manual-sweep.
+#
+# The single-line SEL_GRAPH_TARGET fake always reports exactly one selectable
+# node regardless of --top's width, so the `graph <count> ...` decision line's
+# count is fixed at 1 (specs array length) in both worlds — it does not carry
+# the discriminator; --top does. The graph selection also
+# reservation_writes a fresh marker for the selected node id (t1) via
+# emit_graph_selection, so the ledger is never truly empty after a successful
+# selection: with the sweep it holds exactly that one fresh marker (the 7 dead
+# ones reclaimed); without it, the 7 dead markers would remain alongside it
+# (8 total) — so the marker-count assertion below targets 1, not 0.
+echo "Test: select-tick --manual sweeps an orphan-saturated ledger at the ceiling before counting"
+sel_tick_setup
+export SEL_MAX_WORKERS=8 SEL_LIVE_COUNT=1 SEL_TARGET_N=6
+export SEL_GRAPH_TARGET="node t1 tactic implement"
+# SEL_AGENTS_TSV is left unset: claude_agents_list_all returns rc 0 with an
+# empty live-session set, so every marker planted below is dead-session (no
+# live session claims it).
+for n in 901 902 903 904 905 906 907; do
+  printf 'session=resv-dead-%s\nissue=%s\ntimestamp=2026-01-01T00:00:00Z\n' "$n" "$n" \
+    > "$DISPATCH_RESERVATION_DIR/$n-test"
+done
+out=$(run_sel_tick --manual)
+assert_eq "manual-orphan-saturated: graph decision" "graph 1 t1:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-orphan-saturated: gap = 6 − 1 (7 dead markers swept, not counted)" "--top 5" \
+  "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+assert_eq "manual-orphan-saturated: only the fresh t1 marker remains (7 dead markers reclaimed)" "1" \
+  "$(find "$DISPATCH_RESERVATION_DIR" -type f | wc -l | tr -d ' ')"
+assert_eq "manual-orphan-saturated: router line reports live=1, not live=8 (incident signature inverse)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'router: manual fan-out:.*live=1,')"
+sel_tick_teardown
+
 # --- autonomous no-arg at cap, not exhausted, no priority item → concurrency-cap ---
 # The exemption is --manual only. An autonomous no-arg tick at the budget with no
 # priority/main-broken item waiting still emits concurrency-cap — unchanged hard
