@@ -284,6 +284,16 @@ describe("selectOfficeHours", () => {
       nodeId: "tactic-ghost",
     });
   });
+
+  it("throws when both target and sessionType are supplied", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-t", kind: "tactic", office_hours: parked() }),
+    ];
+    expect(() => selectOfficeHours(nodes, "tactic-t", "curriculum-review")).toThrow(
+      /mutually exclusive/,
+    );
+  });
 });
 
 describe("resolveSessionCwd", () => {
@@ -368,6 +378,20 @@ describe("parseSelectorArgs", () => {
     const result = parseSelectorArgs(["--type", "bogus"]);
     expect(result.kind).toBe("error");
     expect(result.kind === "error" && result.message).toMatch(/unknown --type/);
+  });
+
+  it("errors with a missing-value message when --type is the last token", () => {
+    const result = parseSelectorArgs(["--type"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/missing value for --type/);
+    // The unknown-value branch would interpolate the literal string "undefined".
+    expect(result.kind === "error" && result.message).not.toMatch(/undefined/);
+  });
+
+  it("errors with a missing-value message when --type is followed by another flag", () => {
+    const result = parseSelectorArgs(["--type", "--list"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/missing value for --type/);
   });
 });
 

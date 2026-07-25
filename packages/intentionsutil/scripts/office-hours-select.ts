@@ -146,6 +146,16 @@ export function parseSelectorArgs(args: string[]): SelectorArgs {
 
   let sessionType: SessionType | undefined;
   if (typeIdx !== -1) {
+    // `--type` with nothing after it, or with the next flag after it, is a
+    // missing value — distinct from a value that was supplied but unrecognized.
+    // Without this the unknown-value message below interpolates the literal
+    // string "undefined" (or the following flag) as if the user had typed it.
+    if (typeValue === undefined || typeValue.startsWith("--")) {
+      return {
+        kind: "error",
+        message: `office-hours-select: missing value for --type (expected: ${SESSION_TYPES.join(", ")})`,
+      };
+    }
     const found = SESSION_TYPES.find((t) => t === typeValue);
     if (found === undefined) {
       return {

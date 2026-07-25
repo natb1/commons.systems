@@ -101,27 +101,29 @@ export type OfficeHoursSelection =
  * `not-parked` when it is absent or its `office_hours` is null.
  *
  * `sessionType` applies ONLY to the no-target (queue-head) branch, where it is
- * threaded into `officeHoursQueue` as a filter. On the `target` branch,
- * selection is by id alone and `sessionType` is deliberately not consulted —
- * a targeted node is launched even if its `office_hours.session_type` differs
- * from the requested one, because naming a node is itself the author's choice
- * of session. This is not an oversight: it is scoped this way intentionally.
+ * threaded into `officeHoursQueue` as a filter. Targeting is by id and session
+ * type is a queue-ordering concern, so the two are mutually exclusive: passing
+ * both throws. Silently ignoring one of two explicitly-supplied arguments would
+ * hide a caller mistake behind a plausible-looking result, and this function is
+ * exported from the package index — see `.claude/rules/code-style.md` on
+ * validating input at public API boundaries.
  *
- * In practice the combination is unreachable via the CLI
- * (`packages/intentionsutil/scripts/office-hours-select.ts`), which rejects
- * `--type` together with a positional node-id at the argument-parsing stage.
- * A non-CLI caller that passes both `target` and `sessionType` directly to
- * this function gets id-based selection by design, with the type silently
- * ignored.
+ * The CLI (`packages/intentionsutil/scripts/office-hours-select.ts`) already
+ * rejects `--type` together with a positional node-id at the argument-parsing
+ * stage, so the throw is reachable only from a non-CLI caller.
  */
 export function selectOfficeHours(
   nodes: IntentionNode[],
   target?: string,
   sessionType?: SessionType,
 ): OfficeHoursSelection {
+  if (target !== undefined && sessionType !== undefined) {
+    throw new Error(
+      `selectOfficeHours: target ("${target}") and sessionType ("${sessionType}") are mutually exclusive — ` +
+        "targeting selects by id, session type filters the queue head",
+    );
+  }
   if (target !== undefined) {
-    // `sessionType` is intentionally not consulted here — targeting by id
-    // bypasses the session-type filter (see JSDoc above).
     const node = nodes.find((n) => n.id === target);
     if (node === undefined || node.office_hours === null) {
       return { kind: "not-parked", nodeId: target };
