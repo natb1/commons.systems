@@ -50,11 +50,33 @@
 #      graph-commit-fails wrapper trick — reaching MUTATED=1 is only possible
 #      by actually executing the real store/schema/transitions code, not a
 #      shim.
+#   6. A matching `--base` pin is transparent to the normal park flow: capture
+#      the current origin/main blob sha for t-pinned, pass it back via --base,
+#      and the park lands exactly as it would with no --base at all (exit 0,
+#      office_hours set).
+#   7. A stale `--base` pin (captured before a park that has since advanced
+#      origin/main) refuses BEFORE any mutation: exit 3, a `stale-diagnosis`
+#      marker on stderr, origin/main byte-unchanged, and no local working-tree
+#      diff left behind for the trap to roll back — the pin check in park-node
+#      runs before the local file is even overwritten from origin/main.
+#   8. The manifest-file form of `--base` selects the line matching this
+#      node's id out of a multi-node manifest (dump-node.ts's base-manifest.txt
+#      format): a stale entry for t-pinned still refuses with exit 3, and a
+#      manifest that omits t-pinned entirely (covers only an unrelated node)
+#      is a caller usage error — exit 2, not exit 3 — since the pin can't even
+#      be resolved. Neither sub-case touches origin/main.
+#   9. Flag-parsing regressions on the new leading-flags-only parse loop:
+#      `--base` with no following value, an unrecognized leading flag, and a
+#      non-40-hex `--base` value all exit 2 before any network call. A bare
+#      positional invocation (no --base at all) whose <reason>/<recommendation>
+#      free-text arguments start with `-` and contain embedded spaces still
+#      parks successfully (exit 0) — proving the "first non-flag argument ends
+#      flag parsing" rule isn't fooled by dash-prefixed positionals.
 #
-# No network needed. Cases 1-3 need only bash + git + jq. Cases 4-5 need a real
-# `node`/`npx tsx` too (case 5's apply-node-transition.ts is real TypeScript,
-# resolved against a node_modules SYMLINK to this repo's own — read-only,
-# never written by the test).
+# No network needed. Cases 1-3, 6-9 need only bash + git + jq. Cases 4-5 need a
+# real `node`/`npx tsx` too (case 5's apply-node-transition.ts is real
+# TypeScript, resolved against a node_modules SYMLINK to this repo's own —
+# read-only, never written by the test).
 
 set -uo pipefail
 
@@ -119,7 +141,7 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
     for i in $(seq 1 12); do echo "line$i: base"; done
   } >"$SEED/intentions/$1.md"
 }
-for id in t-stale t-concurrent; do
+for id in t-stale t-concurrent t-pinned; do
   seed_node "$id"
 done
 # t-demote: a schema-VALID node (only id/kind/statement/owner/status are
@@ -451,6 +473,119 @@ if [[ $rc -ne 0 ]] && grep -q 'demotion write was rolled back' <<<"$out" \
 else
   no "demote-node-to-implement byte-identical restore (rc=$rc)"
   printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 6: a matching --base pin is transparent to the normal park flow.
+# ---------------------------------------------------------------------------
+# Capture the CURRENT origin/main blob for t-pinned, then pass it straight
+# back as --base. Since it matches FRESH_BLOB at execution time, the pin check
+# is a no-op and the park proceeds exactly as an unpinned park would.
+H="$WORK/h"
+make_clone "$H" writer-h
+pin="$(git -C "$ORIGIN" rev-parse main:intentions/t-pinned.md)"
+
+out="$(run_pn "$H" --base "$pin" t-pinned 'diagnosed reason' 2>&1)"; rc=$?
+content="$(origin_show t-pinned)"
+if [[ $rc -eq 0 ]] && grep -q 'office_hours' <<<"$content"; then
+  ok "matching --base pin: park proceeds normally (exit 0, office_hours set)"
+else
+  no "matching --base pin (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 7: a stale --base pin refuses with exit 3, zero side effects.
+# ---------------------------------------------------------------------------
+# Reuse clone H: case 6's own park just advanced origin/main for t-pinned, so
+# the $pin captured before case 6 is now stale relative to the new FRESH_BLOB.
+# The pin check runs before any mutation, so this must refuse cleanly: exit 3,
+# a stale-diagnosis marker on stderr, origin/main byte-unchanged, and no local
+# working-tree diff left over for the trap to roll back.
+before_sha="$(origin_sha)"
+out="$(run_pn "$H" --base "$pin" t-pinned 'second reason' 2>&1)"; rc=$?
+diff_after="$(git -C "$H" diff -- intentions/t-pinned.md)"
+if [[ $rc -eq 3 ]] \
+   && grep -q 'stale-diagnosis' <<<"$out" \
+   && [[ "$(origin_sha)" == "$before_sha" ]] \
+   && [[ -z "$diff_after" ]]; then
+  ok "stale --base pin: refuses before any mutation (exit 3, stale-diagnosis, main unchanged, no local diff)"
+else
+  no "stale --base pin (rc=$rc before_sha=$before_sha)"
+  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 8: manifest-file form of --base, plus a manifest that doesn't cover the
+# requested node.
+# ---------------------------------------------------------------------------
+# A manifest holding entries for multiple nodes (dump-node.ts's
+# base-manifest.txt format, one `<id>=<sha>` line per node) proves park-node
+# selects the line matching THIS invocation's node id: a stale entry for
+# t-pinned (the pre-case-6 $pin, now stale) still refuses with exit 3 even
+# though an unrelated t-stale line is also present. Then, with the t-pinned
+# line removed entirely, the manifest can't even be resolved to a pin for this
+# node — that's a caller usage error (exit 2), distinct from staleness (exit
+# 3). Neither sub-case touches origin/main.
+I="$WORK/i"
+make_clone "$I" writer-i
+stale_blob_for_tstale="$(git -C "$ORIGIN" rev-parse main:intentions/t-stale.md)"
+manifest="$WORK/manifest8.txt"
+cat >"$manifest" <<EOF
+t-pinned=$pin
+t-stale=$stale_blob_for_tstale
+EOF
+
+before_sha="$(origin_sha)"
+out1="$(run_pn "$I" --base "$manifest" t-pinned 'reason' 2>&1)"; rc1=$?
+
+cat >"$manifest" <<EOF
+t-stale=$stale_blob_for_tstale
+EOF
+out2="$(run_pn "$I" --base "$manifest" t-pinned 'reason' 2>&1)"; rc2=$?
+after_sha="$(origin_sha)"
+
+if [[ $rc1 -eq 3 ]] && grep -q 'stale-diagnosis' <<<"$out1" \
+   && [[ $rc2 -eq 2 ]] \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "manifest --base: stale multi-node manifest refuses (exit 3), manifest missing this node's entry is a usage error (exit 2), main unchanged"
+else
+  no "manifest --base (rc1=$rc1 rc2=$rc2 before_sha=$before_sha after_sha=$after_sha)"
+  printf 'out1: %s\n' "$out1"; printf 'out2: %s\n' "$out2"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 9: flag-parsing regressions on the new leading-flags-only parse loop.
+# ---------------------------------------------------------------------------
+# --base with no following value, an unrecognized leading flag, and a
+# non-40-hex --base value must all exit 2 before any network call — none of
+# these mutate origin/main, so they share one clone. A separate, bare
+# positional invocation (no --base at all) with <reason>/<recommendation>
+# arguments that start with `-` and contain embedded spaces must still park
+# successfully (exit 0), proving the "first non-flag argument ends flag
+# parsing, everything after is verbatim positional" rule isn't fooled by
+# dash-prefixed free text. That last sub-case actually lands a park, so it
+# gets its own dedicated fresh clone.
+J="$WORK/j"
+make_clone "$J" writer-j
+
+out_missing="$(run_pn "$J" --base 2>&1)"; rc_missing=$?
+out_unknown="$(run_pn "$J" --nope t-pinned 'reason' 2>&1)"; rc_unknown=$?
+out_badsha="$(run_pn "$J" --base not-a-real-sha t-pinned 'reason' 2>&1)"; rc_badsha=$?
+
+K="$WORK/k"
+make_clone "$K" writer-k
+out_dash="$(run_pn "$K" t-stale '-weird reason with spaces' '--not-a-flag recommendation' 2>&1)"; rc_dash=$?
+content_dash="$(origin_show t-stale)"
+
+if [[ $rc_missing -eq 2 ]] && [[ $rc_unknown -eq 2 ]] && [[ $rc_badsha -eq 2 ]] \
+   && [[ $rc_dash -eq 0 ]] && grep -q 'office_hours' <<<"$content_dash"; then
+  ok "flag-parsing regressions: missing --base value / unknown flag / non-hex --base all exit 2; dash-prefixed free-text positionals still park (exit 0)"
+else
+  no "flag-parsing regressions (rc_missing=$rc_missing rc_unknown=$rc_unknown rc_badsha=$rc_badsha rc_dash=$rc_dash)"
+  printf 'missing: %s\n' "$out_missing"
+  printf 'unknown: %s\n' "$out_unknown"
+  printf 'badsha: %s\n' "$out_badsha"
+  printf 'dash: %s\n' "$out_dash"
 fi
 
 echo
