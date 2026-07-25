@@ -31548,6 +31548,116 @@ else
 fi
 gsc_standalone_teardown
 
+# --- Case 6: busy-read UNKNOWN -> headroom skipped, TOP clamped to 1 ---------
+# The `else` branch of the --standalone headroom block: when
+# claude_agents_count_busy_workers returns non-zero (daemon UNKNOWN), the
+# headroom computation is skipped entirely and the selector fails OPEN with
+# `(( TOP > 1 )) && TOP=1` — the standalone analogue of dispatch-select-tick's
+# "GAP stays 1". A regression dropping that clamp would let a manual tick fan
+# out unbounded while the live-worker count is unknown, which is exactly the
+# double-dispatch race the --standalone wrapping exists to prevent.
+#
+# Why an appended function override instead of a corrupt claude-payload.json:
+# claude_agents_count_busy_workers and claude_agents_list_all both read the
+# SAME _claude_agents_raw query in lib-claude-agents.sh, and
+# worktree_has_live_session folds an UNKNOWN list_all into "occupied" as a
+# fail-safe. A corrupt payload therefore makes EVERY candidate skip as
+# `live-session` and the run print `empty`, so the TOP clamp becomes
+# unobservable. Splitting the fake `claude` on its args does not help either —
+# neither call passes --cwd. Instead, since the fixture already works on
+# physical COPIES of the libs inside $GSCS_SCRIPTS, append a redefinition to
+# the COPY of lib-claude-agents.sh AFTER its terminating `fi` (the whole
+# library body sits inside a source-once guard whose `fi` is the last line, so
+# an appended definition executes on every source and wins over the original).
+# That makes only the busy-read UNKNOWN, leaving claude_agents_list_all /
+# worktree_has_live_session healthy against the default `[]` registry so
+# candidates stay selectable. Do NOT "simplify" this back into a payload edit.
+#
+# Making the clamp observable: the default fake npx emits ONE candidate, so
+# TOP=1 and TOP=3 look identical. Case 6 rewrites the fake npx with TWO
+# candidates (rewriting fixture files per case is the existing convention —
+# Cases 2 and 3 rewrite claude-payload.json) and asks for --top 3 with ample
+# SEL_MAX_WORKERS=8. TOP is enforced in the selection loop
+# (`(( SELECTED_COUNT >= TOP )) && continue`), so a working clamp yields
+# exactly ONE `node ...` line and exactly ONE reservation marker.
+echo "Test: graph-select-target --standalone with an UNKNOWN busy-worker read skips the headroom check and clamps TOP to 1"
+gsc_standalone_setup
+cat >> "$GSCS_SCRIPTS/lib-claude-agents.sh" <<'GSCS6LIB'
+
+# Test override (appended after the source-once guard's terminating `fi`):
+# force the busy-worker read to report UNKNOWN while leaving every other
+# helper — notably claude_agents_list_all / worktree_has_live_session — intact.
+claude_agents_count_busy_workers() { return 1; }
+GSCS6LIB
+cat > "$GSCS_ROOT/bin/npx" <<'GSCS6NPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSCS6NPX
+chmod +x "$GSCS_ROOT/bin/npx"
+gsc6_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-6" SEL_MAX_WORKERS=8 \
+  "$GSCS_GST" --standalone --top 3 2>/dev/null)
+# Exactly one selection line, and it is the first candidate in the fake npx
+# order (candidate order IS selection order — the selector emits pre-ordered
+# candidates and only environmental gates remain).
+assert_eq "graph-select-target --standalone: UNKNOWN busy read clamps TOP to 1 (one selection line)" \
+  "node tactic-standalone-fixture tactic implement" "$gsc6_out"
+# The reservation ledger is the load-bearing half of the assertion: a marker
+# for the second candidate would mean the clamp did not hold and the stdout
+# above was merely truncated.
+assert_eq "graph-select-target --standalone: UNKNOWN busy read claims the first candidate" \
+  "1" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: UNKNOWN busy read claims NO second candidate" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture-2" ] && echo 1 || echo 0)"
+gsc6_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc6_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (UNKNOWN busy read) releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (UNKNOWN busy read) releases the lock (file emptied)"
+  echo "    lock file: '$gsc6_lock'"
+fi
+gsc_standalone_teardown
+
+# --- Case 7: control for Case 6 — same two candidates, HEALTHY busy read -----
+# Without this control, Case 6 would pass even if the fixture could only ever
+# return a single node for some unrelated reason. Identical two-candidate npx,
+# identical SEL_MAX_WORKERS=8 / --top 3, but NO count_busy_workers override:
+# BUSY=0, RESV=0 -> HEADROOM=8, TOP stays 3, so BOTH candidates are selected
+# and claimed. That makes the Case 6 clamp provably load-bearing.
+echo "Test: graph-select-target --standalone with a healthy busy-worker read and ample headroom selects both candidates (Case 6 control)"
+gsc_standalone_setup
+cat > "$GSCS_ROOT/bin/npx" <<'GSCS7NPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSCS7NPX
+chmod +x "$GSCS_ROOT/bin/npx"
+gsc7_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-7" SEL_MAX_WORKERS=8 \
+  "$GSCS_GST" --standalone --top 3 2>/dev/null)
+assert_eq "graph-select-target --standalone: healthy busy read leaves TOP unclamped (both selection lines)" \
+  "node tactic-standalone-fixture tactic implement
+node tactic-standalone-fixture-2 tactic implement" "$gsc7_out"
+assert_eq "graph-select-target --standalone: healthy busy read claims the first candidate" \
+  "1" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: healthy busy read ALSO claims the second candidate" \
+  "1" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture-2" ] && echo 1 || echo 0)"
+gsc7_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc7_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (healthy busy read) releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (healthy busy read) releases the lock (file emptied)"
+  echo "    lock file: '$gsc7_lock'"
+fi
+gsc_standalone_teardown
+
 # ============================================================================
 # Test: assert-worktree-fresh — non-skippable pre-analysis freshness guard
 # (tactic-align-skills-latest-graph-guard Unit 2)
