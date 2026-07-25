@@ -260,7 +260,16 @@ one `target_node` per call — does not express. It is the bootstrap-interim
 / author-invoked path; only the router-queued per-node form routes through
 the Workflow.
 
-A strategy-corpus census script is planned as an enumeration hook for the
-open-child sweep above (`tactic-align-tactics-mechanical-floor` Unit 2);
-until it lands, enumerate open children by hand per the Idempotency
-section's `grep -rl` recipe (`references/idempotency.md`).
+Enumerate the open children of the sweep above with the census script
+(`tactic-align-tactics-mechanical-floor` Unit 2), which landed as the
+enumeration hook for this sweep:
+
+```bash
+npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> intentions
+```
+
+Sweep the children it classifies `open` (and the `draft` ones the decompose
+path consumes); skip `done` and `born-parked`. See
+`references/idempotency.md` for the output contract and the classification
+taxonomy. The census enumerates only — every disposition still requires the
+full-body re-read that item 1 mandates.
