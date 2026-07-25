@@ -37,7 +37,26 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
+    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
+  since: 2026-07-25
+  recommendation: >-
+    A concurrent writer landed an overlapping edit to this node while this
+    session's edit was in flight; this writer's content was NOT landed. This
+    session's unlanded content is preserved at
+    /tmp/tmp.5q83lp7pJ1/tactic-mechanical-park-producers.md (this machine only —
+    may not survive past this session). Recommended: the losing writer re-reads
+    the current origin/main content, manually merges in its intended edit, and
+    re-runs graph-commit on the merged result — that same commit clears this
+    office_hours park. A third session encountering this park while the loser is
+    still working should wait rather than attempt its own merge (the mailbox
+    discipline).
+
+
+    Diverged field 'attention' on tactic-mechanical-park-producers:
+      this session's value: null
+      origin/main's value: {"boost":85,"override":null,"rationale":"Author-directed 2026-07-25: the queue-serialization work (dispatch-queue claim integrity, office-hours drain claiming, and the cross-queue landing path) is the current focus. Own boost 85 composes with the +5 inherited from strategy-graph-native-dispatch to an authored 90 — exact parity with tactic-graph-router-live-worker-read-robust, the existing author-set boost on this same defect class — and deliberately below strategy-main-health's standing 100 so the main-health signal keeps its recorded dominance."}
 pace_exempt: false
 rounds: null
 attributes: {}
