@@ -46,7 +46,127 @@ execution:
   fix: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: opus-fixable residue (PR #2964 Verification section states a
+    stale test-suite total: 3042/3042, tree reports 3046/3046) found, but the
+    qa-fix attempt cap was already reached (ATTEMPT_N=2, CAP=2) by the attempt-1
+    fixing pass; escalating to office-hours for a manual PR-description
+    correction"
+  since: 2026-07-25
+  recommendation: >-
+    ## Recommended next steps — `tactic-manual-path-reservation-sweep` (PR
+    #2964)
+
+
+    **Bottom line: one administrative edit to the PR description unblocks this.
+    No code change, no re-QA.**
+
+
+    ### 1. The fix (one line, in the PR body — not the tree)
+
+
+    PR #2964's `## Verification` section (line 35 of the body) currently reads:
+
+
+    ```
+
+    - `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` —
+    3042/3042 passed.
+
+    ```
+
+
+    It must read:
+
+
+    ```
+
+    - `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` —
+    3046/3046 passed.
+
+    ```
+
+
+    The count went stale when the attempt-1 qa-fix pass landed the
+    `manual-orphan-saturated` regression test in
+    `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` — 4 new
+    assertions, 3042 → 3046 — without refreshing the PR body. Apply with `gh pr
+    edit 2964 --body-file <file>` (fetch the current body first via `gh pr view
+    2964 --json body --jq .body`, edit only that one number, write it back). Per
+    the sandbox rule, run every `gh` call with `dangerouslyDisableSandbox:
+    true`.
+
+
+    Optional 30-second confirmation before editing: run
+    `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` and
+    read the trailing total. It should print `3046/3046 passed`. If it prints
+    anything else, the number to write is whatever the suite actually reports —
+    do not hand-copy 3046.
+
+
+    ### 2. This is administrative only
+
+
+    There is no code defect. The suite is genuinely green at 3046/3046; only the
+    *stated* total in the PR description drifted. Nothing in
+    `dispatch-select-tick` or `test-dispatch-scripts.sh` needs to change, and no
+    re-QA is required beyond confirming the corrected number matches a real
+    suite run. Do not re-run the full QA pass for this.
+
+
+    ### 3. The rest of the qa-fix chain is clean for this node
+
+
+    - **Item 11** (proportionality of the ~30 lines of comments across the two
+    overlapping sweep tests, and whether the saturated-ledger test subsumes the
+    single-marker test) was triaged in attempt 2 and resolved as
+    **already-satisfied** — the two tests assert genuinely distinct
+    discriminators, and comment density matches the file's house style (~18%
+    comment lines file-wide). No action.
+
+    - **Attempts 0 and 1** were re-verified intact in attempt 2, including a
+    live mutation test (deleting the `--manual` block's `reservation_sweep` call
+    made both sweep-regression tests fail, then restored cleanly). No action.
+
+    - **Item 16** (the `## needs-main residue` section on the node body —
+    multi-day real-world confirmation that phantom `live=N` no longer inflates
+    on the manual path) is a **planned deferral**, already correctly recorded
+    and well-formed. It routes the merged tactic to `main-qa` post-merge. It is
+    **not** what this park is about and must not be treated as blocking; leave
+    the section untouched.
+
+
+    So once the description number is corrected, this node has no outstanding qa
+    residue.
+
+
+    ### 4. Why qa-fix can't do this itself — and how to resume
+
+
+    `ATTEMPT_N` is at `CAP=2` for the qa-fix auto-fix budget. Both attempts were
+    spent on *different* items (attempt 0: the `--manual` block rationale
+    comment; attempt 1: the `manual-orphan-saturated` coverage gap). The budget
+    is exhausted, so qa-fix will not auto-run a third fixing pass for this
+    trivially mechanical item — hence the park. It will not resolve itself; a
+    human or office-hours session must act.
+
+
+    Resume sequence:
+
+
+    1. Edit the PR body as in step 1 above.
+
+    2. Clear the `office_hours` park on `tactic-manual-path-reservation-sweep`.
+    Do this from a worktree whose `HEAD == origin/main` —
+    `park-node`/`transition-node` read the local checkout, and a stale worktree
+    will silently revert the park state or clobber newer `origin/main` content.
+
+    3. Let the chain proceed `qa` → `review` → merge. Post-merge it lands in
+    `main-qa` on item 16, as already planned.
+
+
+    Nothing here requires a new commit to the branch, so no CI re-run is
+    triggered by the fix itself.
 pace_exempt: false
 rounds: null
 attributes: {}
