@@ -51,6 +51,7 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null

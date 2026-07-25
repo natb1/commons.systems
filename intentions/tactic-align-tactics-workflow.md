@@ -52,7 +52,7 @@ attention:
     (tactic-align-family-opus-default, PR #2886, now reviewed and in
     merge-ready-hold), the intended critical-path prioritization (the blocker
     must merge first to unblock this node); no unrelated node is distorted."
-phase: qa
+phase: done
 execution:
   branch: tactic-align-tactics-workflow
   pr: 2931
@@ -61,6 +61,10 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:20:09Z
+    mergeCommitSha: bc3eed343c6bacc9915c37aba1b9872d704b40f0
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

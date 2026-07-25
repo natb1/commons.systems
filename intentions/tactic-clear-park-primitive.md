@@ -36,7 +36,7 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-clear-park-primitive
   pr: 2947
@@ -47,6 +47,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:21:49Z
+    mergeCommitSha: dee357ae4d77018525a3a6a07a0adf0c71fa3cca
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
