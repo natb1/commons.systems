@@ -28,7 +28,7 @@ attention:
   rationale: "Author-directed 2026-07-23 /align-strategy round: the top-3 systemic
     gaps (PR custody, scripted census, playwright retry) rank ahead of the
     low-urgency tracked gaps once finalized."
-phase: qa
+phase: done
 execution:
   branch: tactic-office-hours-pr-custody
   pr: 2963
@@ -37,6 +37,10 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T17:29:00Z
+    mergeCommitSha: 46221307083f40ce812e1b7880c0c8e07f59fc5e
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

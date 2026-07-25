@@ -31,7 +31,7 @@ attention:
     (boost 100), which the 2026-07-13 write-path guard keeps dominant. Own-boost
     90 composes below 100, tripping no guard, while topping the ~11-max normal
     field."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-heartbeat-sweep-before-pause
   pr: 2966
@@ -42,6 +42,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:22:30Z
+    mergeCommitSha: 35f6e3f54d8aeff373138bd32b039cd61fd25a76
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

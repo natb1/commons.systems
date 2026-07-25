@@ -41,7 +41,7 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-office-hours-concurrency-dedup
   pr: 2945
@@ -52,6 +52,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:21:29Z
+    mergeCommitSha: 68845d04dae5c425303f017937f5534b5673fe57
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
