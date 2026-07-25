@@ -102,37 +102,66 @@ export function formatDisposition(
   }
 }
 
-// --- Main ------------------------------------------------------------------
+// --- Argv parsing (pure, exported for tests) --------------------------------
 
-function main(): void {
-  const args = process.argv.slice(2);
+export type SelectorArgs =
+  | { kind: "ok"; wantList: boolean; sessionType?: SessionType; target?: string }
+  | { kind: "error"; message: string };
+
+/**
+ * Parse CLI argv (already stripped of `node`/script path, i.e.
+ * `process.argv.slice(2)`) into a structured result. Pure and side-effect-free
+ * — no I/O, no `process.exit` — so `main()` remains the only place that
+ * writes to stderr or exits.
+ */
+export function parseSelectorArgs(args: string[]): SelectorArgs {
   const wantList = args.includes("--list");
 
   const typeIdx = args.indexOf("--type");
   const typeValue = typeIdx !== -1 ? args[typeIdx + 1] : undefined;
+  // Only exclude the token right after --type when --type was actually found;
+  // otherwise typeIdx is -1 and typeIdx + 1 === 0 would wrongly drop argv[0].
+  const typeValueIdx = typeIdx === -1 ? -1 : typeIdx + 1;
 
-  const positionals = args.filter((a, i) => !a.startsWith("--") && i !== typeIdx + 1);
+  const positionals = args.filter((a, i) => !a.startsWith("--") && i !== typeValueIdx);
 
   if (wantList && positionals.length > 0) {
-    process.stderr.write("office-hours-select: --list is mutually exclusive with a node-id\n");
-    process.exit(2);
+    return { kind: "error", message: "office-hours-select: --list is mutually exclusive with a node-id" };
   }
 
   if (typeIdx !== -1 && positionals.length > 0) {
-    process.stderr.write("office-hours-select: --type is mutually exclusive with a node-id\n");
-    process.exit(2);
+    return { kind: "error", message: "office-hours-select: --type is mutually exclusive with a node-id" };
   }
 
   let sessionType: SessionType | undefined;
   if (typeIdx !== -1) {
     const found = SESSION_TYPES.find((t) => t === typeValue);
     if (found === undefined) {
-      process.stderr.write(
-        `office-hours-select: unknown --type "${typeValue}" (expected: ${SESSION_TYPES.join(", ")})\n`,
-      );
-      process.exit(2);
+      return {
+        kind: "error",
+        message: `office-hours-select: unknown --type "${typeValue}" (expected: ${SESSION_TYPES.join(", ")})`,
+      };
     }
     sessionType = found;
+  }
+
+  return { kind: "ok", wantList, sessionType, target: positionals[0] };
+}
+
+// --- Main ------------------------------------------------------------------
+
+function main(): void {
+  const parsed = parseSelectorArgs(process.argv.slice(2));
+  if (parsed.kind === "error") {
+    process.stderr.write(`${parsed.message}\n`);
+    process.exit(2);
+  }
+
+  const { wantList, sessionType, target } = parsed;
+
+  if (target !== undefined && !isPathSafeId(target)) {
+    process.stderr.write(`office-hours-select: unsafe node id: "${target}"\n`);
+    process.exit(2);
   }
 
   const nodes = listNodes(intentionsDir);
@@ -142,12 +171,6 @@ function main(): void {
       process.stdout.write(`${m.rank}\t${m.sessionType}\t${m.nodeId}\t${m.since}\n`);
     }
     return;
-  }
-
-  const target = positionals[0];
-  if (target !== undefined && !isPathSafeId(target)) {
-    process.stderr.write(`office-hours-select: unsafe node id: "${target}"\n`);
-    process.exit(2);
   }
 
   const disposition = selectOfficeHours(nodes, target, sessionType);

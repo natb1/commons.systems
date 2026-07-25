@@ -11,7 +11,11 @@ import {
   type OfficeHoursSelection,
 } from "../src/officeHours.js";
 import type { SessionType } from "../src/schema.js";
-import { formatDisposition, resolveSessionCwd } from "../scripts/office-hours-select.js";
+import {
+  formatDisposition,
+  parseSelectorArgs,
+  resolveSessionCwd,
+} from "../scripts/office-hours-select.js";
 
 /** Build a full IntentionNode fixture, filling required/default fields. */
 function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
@@ -299,6 +303,71 @@ describe("resolveSessionCwd", () => {
   it("rejects a path-unsafe id without touching the fs", () => {
     const root = mkdtempSync(join(tmpdir(), "oh-cwd-"));
     expect(() => resolveSessionCwd(root, "../escape")).toThrow(/unsafe node id/);
+  });
+});
+
+describe("parseSelectorArgs", () => {
+  it("treats a single positional as the target (the regression case)", () => {
+    expect(parseSelectorArgs(["tactic-some-id"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: undefined,
+      target: "tactic-some-id",
+    });
+  });
+
+  it("returns no target for empty args", () => {
+    expect(parseSelectorArgs([])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: undefined,
+      target: undefined,
+    });
+  });
+
+  it("sets wantList for --list with no target", () => {
+    expect(parseSelectorArgs(["--list"])).toEqual({
+      kind: "ok",
+      wantList: true,
+      sessionType: undefined,
+      target: undefined,
+    });
+  });
+
+  it("sets sessionType for --type <t> with no target", () => {
+    expect(parseSelectorArgs(["--type", "curriculum-review"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: "curriculum-review",
+      target: undefined,
+    });
+  });
+
+  it("combines --type and --list, excluding the type value from positionals", () => {
+    expect(parseSelectorArgs(["--type", "curriculum-review", "--list"])).toEqual({
+      kind: "ok",
+      wantList: true,
+      sessionType: "curriculum-review",
+      target: undefined,
+    });
+  });
+
+  it("errors when --type is combined with a node-id positional", () => {
+    const result = parseSelectorArgs(["--type", "curriculum-review", "tactic-x"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--type is mutually exclusive/);
+  });
+
+  it("errors when --list is combined with a node-id positional", () => {
+    const result = parseSelectorArgs(["--list", "tactic-x"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--list is mutually exclusive/);
+  });
+
+  it("errors on an unknown --type value", () => {
+    const result = parseSelectorArgs(["--type", "bogus"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/unknown --type/);
   });
 });
 
