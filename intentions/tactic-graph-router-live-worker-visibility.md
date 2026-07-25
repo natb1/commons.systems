@@ -53,7 +53,180 @@ execution:
   fix: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: attempt cap reached on opus-fixable residue — item 8
+    (dispatch-target-workers --max read has no failure guard, unlike its
+    --exhausted and busy-worker-read siblings, in graph-select-target's new
+    --standalone mode) is genuinely opus-fixable, but this PR already carries
+    dispatch:qa-fix-attempt-1 and dispatch:qa-fix-attempt-2 (two prior fixing
+    passes), equal to CAP=2, so no further automated fixing pass is permitted.
+    Escalating to office-hours for a human fix; no new attempt label applied.
+    Item 9 (manual-tick launcher --standalone adoption) is unrelated to this
+    park — already tracked as needs-main residue id 6 on the node body,
+    confirmed intact at origin/main."
+  since: 2026-07-25
+  recommendation: >-
+    # Recommendation — PR #2918 (`tactic-graph-router-live-worker-visibility`),
+    qa park
+
+
+    ## Why you're seeing this
+
+
+    Not ambiguity. The third qa-fix pass found one real, small code defect, but
+    the PR is already at the automated fix cap (2 fixing passes landed), so the
+    chain is forbidden from applying a third one itself. This is a "just fix it"
+    park. All 7 script-verifiable QA checks passed on this pass, including the
+    full suite at 3063/3063.
+
+
+    ## The one thing to fix
+
+
+    **File:** `.claude/skills/dispatch-propagate/scripts/graph-select-target`
+
+    **Line:** 259, inside the `--standalone` live-worker-headroom block (lines
+    220–276).
+
+
+    ```bash
+
+    MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max)
+
+    ```
+
+
+    Its two sibling telemetry reads in the same block both guard themselves:
+
+
+    - line 256 — `if BUSY=$(claude_agents_count_busy_workers); then … else ((
+    TOP > 1 )) && TOP=1; fi` (line 274): read failure skips the headroom math
+    and fails open by clamping `TOP` to 1.
+
+    - line 260 — `EXHAUSTED=$(… --exhausted 2>/dev/null) || EXHAUSTED="ok"`:
+    fails open to `ok`.
+
+
+    `MAX_WORKERS` has no guard. The script runs under `set -uo pipefail` (line
+    104, no `-e`), so both failure shapes are real:
+
+
+    - **Empty output** (the read fails before printing): `HEADROOM=$((
+    MAX_WORKERS - LIVE_COUNT ))` treats the empty operand as 0, giving
+    `-LIVE_COUNT`, clamped to 0, which silently takes the `concurrency-cap`
+    branch and prints `empty`. From the operator's seat this is
+    indistinguishable from a genuinely saturated fleet — no stderr, and the
+    selection-log `disposition` field records `concurrency-cap`, so the
+    telemetry lies too.
+
+    - **Non-numeric output**: bash arithmetic treats the word as a variable
+    name, `set -u` makes that fatal, and the script dies mid-run with a cryptic
+    unbound-variable error. The EXIT trap still releases the lock, so nothing
+    leaks — but the diagnosis is useless.
+
+
+    ## The fix, and the settled precedent for it
+
+
+    There is no posture question to resolve first. The block's own comment says
+    it mirrors `dispatch-select-tick`'s `--manual` branch — and that branch
+    **already guards this exact read**:
+
+
+    `.claude/skills/dispatch-propagate/scripts/dispatch-select-tick`, around
+    lines 685–692:
+
+
+    ```bash
+
+    MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max)
+
+    if [[ ! "$TARGET_N" =~ ^[0-9]+$ ]] || [[ ! "$MAX_WORKERS" =~ ^[0-9]+$ ]];
+    then
+      release_lock
+      DLOG_DISPOSITION="internal-error"
+      DLOG_SKIP_REASON="non-numeric-target"
+      echo "dispatch-select-tick: dispatch-target-workers returned non-numeric value (target '$TARGET_N', max '$MAX_WORKERS')" >&2
+      exit 2
+    fi
+
+    ```
+
+
+    So the omission is an oversight in mirroring, not a considered choice. Add
+    the same numeric check after line 259, but land it in `--standalone`'s
+    degrade convention rather than the tick's `exit 2` — `--standalone` degrades
+    selector failure to `empty` exit 0, and its own busy-read failure fails open
+    to `TOP=1`. Concretely:
+
+
+    ```bash
+
+    MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max)
+
+    if [[ ! "$MAX_WORKERS" =~ ^[0-9]+$ ]]; then
+      echo "graph-select-target: dispatch-target-workers --max returned non-numeric value ('$MAX_WORKERS'); headroom unknown, failing open to TOP=1" >&2
+      DISPOSITION="max-read-failed"
+      (( TOP > 1 )) && TOP=1
+    else
+      … existing EXHAUSTED / HEADROOM / clamp body …
+    fi
+
+    ```
+
+
+    Two properties matter and neither is negotiable given the siblings: (1) a
+    failed `--max` read must never be silently reported as `concurrency-cap`,
+    and (2) `TOP` must never be left unclamped when the ceiling is unknown. A
+    distinct `DISPOSITION` value is worth setting alongside the stderr line —
+    the selection log is the only durable record of why a standalone run came
+    back empty.
+
+
+    The `--max` read is a local config-only read (`dispatch-target-workers`
+    short-circuits before any telemetry load), so failure is unlikely in
+    practice — but "unlikely" is the same argument that would have removed the
+    `--exhausted` guard, which is also a local read. Match the siblings.
+
+
+    Also update the block comment (which currently enumerates the fail-open
+    posture for the busy read and `EXHAUSTED` and says nothing about `--max`).
+    One clause covering the third read closes the documentation gap that made
+    this look deliberate.
+
+
+    ## Regression test
+
+
+    `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`, the
+    `--standalone` cases (`gsc_standalone_setup` fixture). The fixture already
+    stubs `dispatch-target-workers` with a `SEL_MAX_WORKERS` knob, so a new case
+    is a few lines: run with `SEL_MAX_WORKERS=notanumber`, assert stdout is not
+    a silent `concurrency-cap`-shaped empty, assert the stderr diagnostic
+    appears, and assert the lock is released (the same lock assertion the
+    neighboring cases use).
+
+
+    ## Scope
+
+
+    This is a guard clause plus a comment clause plus one test case — hours, not
+    a redesign, and it does not need a new plan. Apply it directly on the branch
+    and push for a re-QA.
+
+
+    **Do not re-review anything else on this PR.** The lock/headroom/claim
+    wrapping, the non-standalone regression guard, the `--node` + `--standalone`
+    interaction, the bounded lock-wait, the lock-release-on-exit trap, and
+    usage-string/comment parity were all verified clean this pass.
+
+
+    **Item 9 is not part of this park.** The manual-tick launcher not yet
+    passing `--standalone` is already tracked as `## needs-main residue` (id 6)
+    on the node body at
+    `intentions/tactic-graph-router-live-worker-visibility.md` on `origin/main`,
+    confirmed intact. Leave it alone — it resolves post-merge when a launcher
+    change adopts the flag.
 pace_exempt: false
 rounds: null
 attributes: {}
