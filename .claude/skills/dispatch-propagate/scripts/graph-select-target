@@ -40,9 +40,13 @@
 #   --top <n>            Print at most <n> selected nodes (default 1).
 #   --standalone         Self-contained concurrency safety for manual/emulated
 #                        invocation: acquire the shared dispatch lock, apply the
-#                        same live-worker headroom cap dispatch-select-tick's
-#                        --manual branch uses, claim each selected node in the
-#                        reservation ledger, and release the lock — folding in
+#                        live-worker headroom cap dispatch-select-tick's --manual
+#                        branch uses — minus that branch's human-sovereignty
+#                        floor-of-1 at HEADROOM==0, so an unattended caller
+#                        degrades to `empty` rather than breaching the ceiling
+#                        (rationale at the (b) block below) — claim each selected
+#                        node in the reservation ledger, and release the lock —
+#                        folding in
 #                        the lock+headroom+claim cycle dispatch-select-tick
 #                        otherwise wraps around this selector. NESTING: this flag
 #                        acquires AND unconditionally releases the lock in one
@@ -231,13 +235,24 @@ if [[ -n "$STANDALONE" ]]; then
   fi
   STANDALONE_LOCKED=1
 
-  # (b) Live-worker headroom cap — EXACTLY dispatch-select-tick's --manual
-  # branch formula ("manual context-dependent fan-out"), including its
-  # busy-read failure guard. LIVE_COUNT = busy workers + reservations;
-  # EXHAUSTED fails open to `ok` on missing telemetry. daemon UNKNOWN
-  # (busy-worker read failed) → skip the headroom computation and fail open
-  # to TOP=1 (the standalone analogue of dispatch-select-tick's "GAP stays 1"),
-  # never leaving TOP unclamped when live-worker count is unknown.
+  # (b) Live-worker headroom cap. Mirrors dispatch-select-tick's --manual branch
+  # ("manual context-dependent fan-out") for the LIVE_COUNT / MAX_WORKERS /
+  # EXHAUSTED headroom computation and its busy-read failure guard, but
+  # DELIBERATELY omits that branch's SPAWN_N floor-of-1 clamp
+  # (dispatch-select-tick lines ~720-728, comment "Floor re-asserts past the
+  # ceiling clamp: HEADROOM=0 must still yield one deliberate node"). That floor
+  # is the human-dispatch-is-sovereign override — it exists so a literal human
+  # keystroke always launches its one node. An automated/emulated --standalone
+  # caller (a script, an emulated tick) is NOT sovereign, so at HEADROOM==0
+  # --standalone degrades to the concurrency-cap/empty disposition instead of
+  # breaching the MAX_WORKERS ceiling by one; breaching it for unattended callers
+  # would reintroduce the milder over-subscription this whole tactic exists to
+  # prevent. The divergence is confined to HEADROOM==0 — below the ceiling the two
+  # agree exactly. LIVE_COUNT = busy workers + reservations; EXHAUSTED fails open
+  # to `ok` on missing telemetry. daemon UNKNOWN (busy-worker read failed) → skip
+  # the headroom computation and fail open to TOP=1 (the standalone analogue of
+  # dispatch-select-tick's "GAP stays 1"), never leaving TOP unclamped when
+  # live-worker count is unknown.
   if BUSY=$(claude_agents_count_busy_workers); then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
@@ -510,7 +525,11 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha; do
   # --standalone: claim the node in the reservation ledger (uniform node-id
   # claiming) so a concurrent tick sees it reserved. Same call shape (incl. the
   # 1>&2 redirect) dispatch-select-tick's emit_graph_selection uses; a failed
-  # ledger write is a budget undercount, not a selection abort.
+  # ledger write is a budget undercount, not a selection abort. The fail-open is
+  # the intended operator contract: a transient ledger write failure must not
+  # block manual dispatch, and the cost is bounded to a budget UNDERCOUNT for
+  # this one slot (a concurrent tick may not see the node reserved) — matching
+  # the failure posture of dispatch-select-tick's own emit_graph_selection call.
   if [[ -n "$STANDALONE" ]]; then
     reservation_write "$id" "$id" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2 \
       || echo "graph-select-target: reservation_write failed for $id; proceeding without a ledger entry (budget may undercount this slot)" >&2
