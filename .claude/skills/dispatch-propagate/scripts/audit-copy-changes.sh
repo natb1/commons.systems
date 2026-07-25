@@ -62,8 +62,8 @@ done
 # Grounded in strategy-author-approved-copy's scope clarification: in-scope
 # copy is landing, the about page, app heroes and onboarding text, the README,
 # and blog posts. Explicitly EXCLUDED (and therefore absent below): in-app UI
-# strings, practitioner reference docs (SCHEMA.md, package READMEs), and
-# GitHub issue/PR prose.
+# strings, practitioner reference docs (intentions/kind-kind.md, package
+# READMEs), and GitHub issue/PR prose.
 #
 # When a later strategy clarification widens in-scope copy, edit this one
 # block — nothing else in the script encodes scope.
