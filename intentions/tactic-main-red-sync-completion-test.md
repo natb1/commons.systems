@@ -399,3 +399,21 @@ Manual/judgment verification: if the `npx tsx` invocations inside the new
 section hit a sandbox `EPERM` (tsx's IPC pipe under `/tmp/claude-*`), rerun
 with `dangerouslyDisableSandbox: true` per `.claude/rules/sandbox.md` rather
 than treating it as a real test failure.
+
+## Verification
+
+Run the full bash harness the `unit-tests` CI job runs:
+
+```verify
+.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+```
+
+The new `dispatch-graph-main-red-sync` completion-internals section must emit
+its `main-red-sync(a)` through `main-red-sync(f)` assertions, and the harness
+must report `0 failed` overall (`report_results` exits non-zero on any FAIL).
+Confirm case (a) proves stdout purity (only the node id, no completion
+chatter), cases (b)/(c)/(d) prove the non-null / red / probe-fail skips, and
+case (f) proves the anchored-regex fix ignores the non-shortsha lookalike id.
+If the section's `npx tsx` calls hit a sandbox `EPERM`, rerun with
+`dangerouslyDisableSandbox: true` per `.claude/rules/sandbox.md` rather than
+treating it as a real failure.

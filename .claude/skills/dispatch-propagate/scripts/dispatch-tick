@@ -260,8 +260,39 @@ fi
 # recreates on the next tick), a firing timer here becomes a harmless no-op.
 # A manual `dispatch --manual` run OVERRIDES the pause (deliberate human action).
 # Resume by removing the flag file. The path is overridable for tests.
+#
+# The sentinel gates worker SPAWNING only, never ledger bookkeeping — the paused
+# branch below reaps the reservation ledger before it exits.
 DISPATCH_PAUSE_FLAG="${DISPATCH_PAUSE_FLAG:-${XDG_DATA_HOME:-$HOME/.local/share}/commons-dispatch/paused}"
 if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
+  # A dead session's reservation marker must still be reaped even on a paused
+  # heartbeat, or it lingers stranded until dispatch resumes. This `exit 0` is the
+  # ONLY autonomous tick path that never reaches dispatch-select-tick's own
+  # reservation_sweep (dispatch-select-tick:583), so the reap belongs HERE and
+  # only here. Sweeping unconditionally ahead of this branch would both duplicate
+  # that sweep on every non-paused tick and cost one extra LIVE
+  # `claude agents --json` round-trip per heartbeat, because the per-tick registry
+  # snapshot that makes select-tick's sweep free (#1452) is not captured until
+  # further below.
+  if ! declare -f reservation_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-claude-agents.sh"
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+  fi
+  # Verify the load explicitly rather than absorbing failures with `|| true`.
+  # reservation_sweep's contract is "return 0 — always", so a non-zero status
+  # here could only mean the sources above failed (file missing, unreadable,
+  # truncated) and the function is an undefined command. This script does not
+  # use `set -e`, so a swallowed exit 127 would silently disable ledger
+  # reconciliation for the whole pause — indistinguishable from a healthy quiet
+  # ledger to dispatch-reclaim-audit, which mines the tick journal for reclaim
+  # notes. Fail loud and greppable instead (see .claude/rules/code-style.md).
+  if declare -f reservation_sweep >/dev/null 2>&1; then
+    reservation_sweep 1>&2
+  else
+    echo "dispatch-tick: lib-reservation-ledger.sh failed to load; reservation ledger NOT swept this tick" >&2
+  fi
   echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick"
   exit 0
 fi

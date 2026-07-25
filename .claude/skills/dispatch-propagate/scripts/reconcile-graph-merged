@@ -178,7 +178,7 @@ if [[ "${#EDIT[@]}" -eq 0 ]]; then
   exit 0
 fi
 
-GC_ARGS=(-m "graph: reconcile terminal tactics (record completion)")
+GC_ARGS=(-C "$REPO_ROOT" -m "graph: reconcile terminal tactics (record completion)")
 for id in "${EDIT[@]}"; do GC_ARGS+=("$id"); done
 
 if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then

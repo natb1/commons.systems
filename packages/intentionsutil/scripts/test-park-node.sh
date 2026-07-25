@@ -411,13 +411,15 @@ fi
 exec "$SD/graph-commit.real" "$@"
 SH
 chmod +x "$C/packages/intentionsutil/scripts/graph-commit"
-# Commit the wrapper swap locally so graph-commit.real's own
-# assert_clean_outside_ids pre-flight guard (which refuses to start on any
-# unrelated dirty TRACKED file) doesn't trip on the tracked graph-commit path
-# this swap modifies. graph-commit.real is untracked and already exempt (the
-# guard skips '??' entries).
-git -C "$C" add packages/intentionsutil/scripts/graph-commit
-git -C "$C" commit -qm 'test: install graph-commit wrapper for concurrent-write simulation'
+# Commit the wrapper swap so the clone's working tree is clean before park-node
+# runs graph-commit: graph-commit's own assert_clean_outside_ids() pre-flight
+# guard refuses to start on ANY dirty tracked file outside this call's node
+# set, and an uncommitted mv+overwrite of the tracked graph-commit script would
+# otherwise trip that guard with an unrelated-dirty-file error, masking the
+# concurrent-write refusal this case means to exercise.
+git -C "$C" add packages/intentionsutil/scripts/graph-commit \
+                packages/intentionsutil/scripts/graph-commit.real
+git -C "$C" commit -qm 'test: install concurrent-write wrapper'
 
 before_sha="$(origin_sha)"
 out="$(
