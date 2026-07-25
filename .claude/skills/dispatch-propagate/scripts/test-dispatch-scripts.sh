@@ -5596,6 +5596,74 @@ done < "$GRANDCHILD_PIDS"
 assert_eq "stall → all grandchildren killed (whole tree died)" "0" "$gc_alive"
 teardown
 
+# 7. Fast success → the watchdog's inner sleep is cancelled, not orphaned.
+#    On a fast success the main body cancels the still-idle watchdog with
+#    `kill "$watchdog_pid"`. Before the fix that SIGTERM missed the watchdog's
+#    forked `sleep`, leaking an orphan that idled for the rest of timeout_s.
+#    Selective sleep stub (mirrors test 6): real-sleep AND record the PID only
+#    for the 25s watchdog deadline, so a leaked orphan would still be alive at
+#    assert time; instant for everything else. timeout is a transparent
+#    passthrough so npx exits 0 immediately (well before the 25s deadline).
+echo "Test: playwright_install_with_deps fast success → watchdog sleep not orphaned"
+setup
+REAL_SLEEP="$(command -v sleep)"
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift                                  # drop the <timeout_s> duration arg
+exec "$@"                              # transparent passthrough → npx exits 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+# Selective: real-sleep + record PID only for the 25s watchdog deadline (so a
+# leaked orphan is observably alive at assert time); instant otherwise. The
+# recorded $$ equals the watchdog's captured $! because exec preserves the PID.
+if [[ "$1" == "25" ]]; then
+  [[ -n "${WATCHDOG_SLEEP_PID:-}" ]] && echo "$$" >> "$WATCHDOG_SLEEP_PID"
+  exec "$REAL_SLEEP" 25
+fi
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-7"
+WATCHDOG_SLEEP_PID="$TMPDIR_TEST/watchdog-sleep-7"
+: > "$WATCHDOG_SLEEP_PID"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_TIMEOUT=25
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=1
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-7"
+  export WATCHDOG_SLEEP_PID="$TMPDIR_TEST/watchdog-sleep-7"
+  export REAL_SLEEP
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+assert_eq "fast success → rc 0" "0" "$rc"
+assert_eq "fast success → 1 npx call" "1" "$(cat "$NPX_COUNT_FILE")"
+# Give the trap's SIGTERM a beat to land (REAL_SLEEP: a bare `sleep` here would
+# hit the still-on-PATH instant stub), then assert the watchdog's inner sleep is
+# gone — the fast-path cancel actually reached it, no orphan leaked to init.
+"$REAL_SLEEP" 0.5
+sleep_alive=0
+recorded=0
+while IFS= read -r spid; do
+  [[ -z "$spid" ]] && continue
+  recorded=$((recorded + 1))
+  if kill -0 "$spid" 2>/dev/null; then sleep_alive=$((sleep_alive + 1)); fi
+done < "$WATCHDOG_SLEEP_PID"
+assert_eq "fast success → watchdog sleep was recorded (side channel worked)" "1" "$recorded"
+assert_eq "fast success → watchdog sleep not orphaned (killed)" "0" "$sleep_alive"
+teardown
+
 # ============================================================================
 # wait_for_dpkg_lock tests
 # ============================================================================
