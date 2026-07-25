@@ -336,8 +336,10 @@ line-count target and no logic change.
 - **Node-id reservation / claim** —
   `.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`
   (`worktree_has_live_session`, run `dangerouslyDisableSandbox`), `provision-node-worktree`.
-- **Plan schema + model heuristic** — `.claude/skills/align-tactics/SKILL.md` ("Step 3 —
-  Plan each claude-eligible tactic" and "Plan schema (node body)"),
+- **Plan schema + model heuristic** — `.claude/workflows/align-tactics.js`
+  (`buildPlanPrompt`, the inlined `PLAN BODY SCHEMA` block), summarized in
+  `.claude/skills/align-tactics/SKILL.md` under the "Plan each claude-eligible
+  tactic" bullet of "Step 1 — Build `args` and invoke the Workflow";
   `.claude/skills/implement-unit/SKILL.md:31-39` (canonical model-selection home — cite,
   do not restate).
 - **Outcome-envelope contract** — `.claude/docs/outcome-envelope.md`.
