@@ -35,8 +35,15 @@ attention:
     (boost 100), which the 2026-07-13 write-path guard keeps dominant. Own-boost
     90 composes below 100, tripping no guard, while topping the ~11-max normal
     field."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-manual-path-reservation-sweep
+  pr: 2964
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
 office_hours: null

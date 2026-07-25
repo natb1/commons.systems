@@ -21,8 +21,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-execution-pr-merge-verification
+  pr: 2965
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -243,3 +252,11 @@ Guard that the dead-code prune path is gone from the driver:
 1. Build a scratch dir with: (a) a `phase:"review"` tactic carrying `execution.pr`, serving a strategy; (b) a survivor draft tactic listing (a) in `blocked_by`. Write a pr-states file `{ "<a>": { "state":"merged", "mergedAt":"2026-07-11T12:00:00Z", "mergeCommitSha":"deadbeef" } }` and run `node --import tsx/esm packages/intentionsutil/scripts/reconcile-graph.ts --pr-states <file> --dir <scratch> --date 2026-07-11`. Confirm: (a)'s file is **still present**, its `phase` is `"done"`, its `execution.completion` = `{mergedAt, mergeCommitSha:"deadbeef", graphCommitSha:null}`; the survivor's `blocked_by` still lists (a) (no edge repair); the strategy's round is stamped; the printed plan has no `prune` key and lists (a) + the strategy under `edit`.
 2. Repeat with `{ "<a>": { "state":"closed" } }`. Confirm (a) → `phase:"done"` with `execution.completion === null`, file present.
 3. Dry-run `reconcile-graph-merged` end-to-end (or inspect its `GC_ARGS` construction under `set -x`) against a scratch checkout to confirm it now issues `graph-commit` with edit ids only (no `--prune`), and that `graph-commit`/`validate-graph.ts` accepts a present `phase:"done"` node that still has an inbound `blocked_by` edge — proving the not-deleting change does not trip graph validation.
+
+## needs-main residue
+
+- **id:** 12
+- **title:** No regression in live `reconcile-graph-merged` runs over subsequent dispatch ticks
+- **url_path:** `.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged`
+- **expected_outcome:** Real dispatch ticks reconcile terminal tactics correctly with `execution.completion` evidence recorded (merged case) or left null (closed-unmerged case); no round-stamp stall as done nodes persist across sweeps; no unbounded graph growth from never-deleted done nodes.
+- **finding:** Cannot be asserted at merge time — this behavior is only observable against `main` across subsequent real dispatch ticks (a planned deferral, per the PR's own QA plan item 12).

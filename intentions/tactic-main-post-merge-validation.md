@@ -29,13 +29,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-main-post-merge-validation
   pr: 2962
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
 validates: []
@@ -322,3 +323,37 @@ Manual / observe-in-production (prose, not auto-runnable):
   and against the `timeout-minutes` guard. Capture all numbers, the
   cache-warmth conclusion, and any landed cheap win (or the reasoned decision
   not to) in the tactic's completion record.
+
+## needs-main residue
+
+`/qa-fix` ran all 11 script-verifiable checks in the QA plan (YAML validity,
+trigger shape, action-sha parity with `nixos-build`, no `if:` conditional,
+build-script invocation, permissions) — all PASS. The remaining 3 plan items
+are documented planned deferrals (this tactic's own Verification section
+already says so) that require observing `origin/main` post-merge; they are
+not fixable now and are handed to `tactic-main-qa-phase`:
+
+- **id 12 — Self-inclusion smoke test: workflow fires on its own merge commit**
+  - URL path: N/A
+  - Expected outcome: the first real `main-nix-validate` run is the merge
+    commit that introduces the workflow (the workflow self-includes its own
+    path in the `paths:` filter).
+  - Finding: cannot be confirmed pre-merge; verify via the Actions tab on
+    `origin/main` after this PR merges.
+
+- **id 13 — Build step actually executes (not skipped) on a real run**
+  - URL path: N/A
+  - Expected outcome: the `Build nixosConfigurations.nixos` step runs to
+    completion (not skipped) on that first run, establishing a real timing
+    baseline (0 logged executions today).
+  - Finding: cannot be confirmed pre-merge; verify by reading that run's job
+    log on `origin/main`.
+
+- **id 14 — Red-main pickup path works end-to-end on a future nix-touching push**
+  - URL path: N/A
+  - Expected outcome: a genuine main breakage (the wezterm-pin class of
+    incident) is detected by this workflow and flows into
+    `strategy-main-health`'s existing, workflow-agnostic `main_broken_sha()`
+    sensor with no extra wiring.
+  - Finding: requires a future failing nix build on `origin/main` to exercise
+    end-to-end; not assertable at merge time.
