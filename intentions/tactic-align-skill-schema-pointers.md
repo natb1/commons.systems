@@ -22,26 +22,16 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: null
-execution: null
+execution:
+  branch: tactic-align-skill-schema-pointers
+  pr: 2968
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Self-modification lane: auto-mode blocks agent commits to
-    .claude/skills, so three SCHEMA.md references there need an author commit —
-    .claude/skills/align-init/SKILL.md:88 (points readers at
-    packages/intentionsutil/SCHEMA.md for depth),
-    .claude/skills/align-tactics/SKILL.md:242 (names SCHEMA.md as a
-    practitioner-doc example in the copy-gate exclusion list), and
-    .claude/skills/dispatch-propagate/scripts/audit-copy-changes.sh:65 (a
-    comment mirroring that exclusion list). Repoint all three to
-    intentions/kind-kind.md. tactic-schema-md-deprecation (SCHEMA.md content
-    move + deletion) is blocked_by this gate."
-  since: 2026-07-11
-  recommendation: "Edit the three lines to reference intentions/kind-kind.md
-    (align-init: point depth-seekers at intentions/kind-kind.md; the two
-    exclusion lists: 'practitioner reference docs (intentions/kind-kind.md,
-    package READMEs)'), commit — that completes this tactic and unblocks the
-    deletion tactic. About 10 author-minutes."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
