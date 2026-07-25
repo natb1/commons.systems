@@ -1742,3 +1742,17 @@ assert_not_contains_local() {
   fi
 }
 # <<< END MOVED <<<
+
+# --- Unit 2 addition (tactic-dispatch-test-monolith-split) -------------------
+# REPO_ROOT is not a "moved" line — it is a new shared definition added when
+# splitting the monolith into per-SUT files. In the monolith it was computed
+# once (originally by the dispatch-complete-phase section) and then relied on
+# implicitly by far-later sections in the same process (e.g. qa-fix-partition's
+# call-site grep against "$REPO_ROOT/.claude/workflows/qa-fix.js"). Once split
+# into separate files/processes, that implicit carry-over breaks. The
+# derivation is pure and deterministic (SCRIPT_DIR is always
+# .claude/skills/dispatch-propagate/scripts, four levels below the repo root),
+# so centralizing it here is safe and equivalent for every consumer, including
+# the few files that also recompute it locally (harmless redundant
+# reassignment to the same value).
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
