@@ -41,9 +41,29 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
+    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
+  since: 2026-07-25
+  recommendation: >-
+    A concurrent writer landed an overlapping edit to this node while this
+    session's edit was in flight; this writer's content was NOT landed. This
+    session's unlanded content is preserved at
+    /tmp/tmp.XR0SBBay1z/tactic-dispatch-test-monolith-split.md (this machine
+    only — may not survive past this session). Recommended: the losing writer
+    re-reads the current origin/main content, manually merges in its intended
+    edit, and re-runs graph-commit on the merged result — that same commit
+    clears this office_hours park. A third session encountering this park while
+    the loser is still working should wait rather than attempt its own merge
+    (the mailbox discipline).
+
+
+    Diverged field 'execution' on tactic-dispatch-test-monolith-split:
+      this session's value: {"branch":"tactic-dispatch-test-monolith-split","pr":null,"attempts":{},"markers":[],"strategy_fingerprint":null,"fix":{"since":"2026-07-25","attempt":1,"pushed_sha":null},"completion":null}
+      origin/main's value: {"branch":"tactic-dispatch-test-monolith-split","pr":2971,"attempts":{},"markers":["planned"],"strategy_fingerprint":null,"fix":null,"completion":null}
 pace_exempt: false
 rounds: null
 attributes: {}
