@@ -175,7 +175,7 @@ if [[ "$ARM_MERGE" == "true" && "$STAMP_MISSING" == "true" ]]; then
 fi
 
 # --- Land the state-only write on main ---------------------------------------
-if ! "$GRAPH_COMMIT" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
+if ! "$GRAPH_COMMIT" -C "$REPO_ROOT" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
   echo "transition-node: graph-commit failed for $NODE_ID" >&2
   exit 1
 fi
