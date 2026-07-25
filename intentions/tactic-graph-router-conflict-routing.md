@@ -42,8 +42,7 @@ attention: null
 phase: implement
 execution: null
 validates: []
-blocked_by:
-  - tactic-dispatch-conflict-greenfield
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
