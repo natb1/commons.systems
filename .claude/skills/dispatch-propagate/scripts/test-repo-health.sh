@@ -98,6 +98,8 @@ rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
 assert_eq "workflow-run red → stdout is the broken sha" "headsha5" "$out"
 assert_eq "workflow-run red → exit 0" "0" "$rc"
 unset REPO_HEALTH_STATE_FILE
+teardown
+
 # <<< END MOVED <<<
 
 report_results

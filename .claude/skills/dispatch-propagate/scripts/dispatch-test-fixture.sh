@@ -6,10 +6,10 @@
 # one test file needs them. Sourced, not executed directly.
 set -euo pipefail
 
-# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Block A: original test-dispatch-scripts.sh lines 7-1325 (shared harness:
 # SCRIPT_DIR/HOOK_SCRIPT_DIR, assert_eq/report_results, setup/teardown,
 # PR/rollup builders and constants).
+# >>> MOVED FROM test-dispatch-scripts.sh >>>
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -1331,10 +1331,10 @@ NO_LABELS='[]'
 
 # <<< END MOVED <<<
 
-# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Promoted from the dispatch-resolve-arg / office-hours-select-target section
 # (original lines 3675-3858): select_target_fake_claude, office_hours_fake_claude,
 # office_hours_fresh_fake_claude, office_hours_state_fake_claude.
+# >>> MOVED FROM test-dispatch-scripts.sh >>>
 
 # Install a fake `claude` for the worktree-liveness checks in
 # dispatch-resolve-worktree and the office-hours selector. Each argument is a
@@ -1521,18 +1521,18 @@ FAKE
 
 # <<< END MOVED <<<
 
-# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Promoted from the dispatch-apply-office-hours section (original lines
 # 5791-5794): log_state.
+# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Reports whether the gh stub recorded a given call log (present/absent).
 log_state() {
   [[ -f "$STUB_DIR/$1" ]] && echo "present" || echo "absent"
 }
 # <<< END MOVED <<<
 
-# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Promoted from the dispatch-acquire-lock section (original lines 8460-8482):
 # lock_setup, lock_teardown.
+# >>> MOVED FROM test-dispatch-scripts.sh >>>
 lock_setup() {
   TMPDIR_TEST=$(mktemp -d)
   STUB_DIR="$TMPDIR_TEST/stub"
@@ -1558,9 +1558,9 @@ lock_teardown() {
 }
 # <<< END MOVED <<<
 
-# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Promoted from the dispatch-target-workers section (original lines
 # 11944-11956): TW_NOW, tw_resets_for_x.
+# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Helper: epoch math for placing x. WEEK_SECONDS=604800.
 TW_NOW=1000000
 # remaining for a target x: (1 - x) * WEEK_SECONDS.
@@ -1576,10 +1576,10 @@ tw_resets_for_x() {
 
 # <<< END MOVED <<<
 
-# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Promoted from the dispatch-project-status-read / dispatch-spawn-tick
 # section (original lines 15172-15271): write_fake_spawn_router_claude and its
 # SPAWN_ROUTER_* variable conventions. Reused by the dispatch-self-close tests.
+# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # ============================================================================
 # write_fake_spawn_router_claude — retained fake-`claude` writer
 # ============================================================================
@@ -1682,9 +1682,9 @@ FAKE
 
 # <<< END MOVED <<<
 
-# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Promoted from the dispatch-merge-main section (original lines 21130-21155):
 # merge_main_setup, merge_main_teardown.
+# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Helper: create an isolated git test environment.
 # Sets MERGE_MAIN_TMPDIR, ORIGIN_REPO, WORKTREE_REPO.
 merge_main_setup() {
@@ -1713,9 +1713,9 @@ merge_main_teardown() {
 }
 # <<< END MOVED <<<
 
-# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Promoted from the drift-scan section (original lines 24840-24864):
 # assert_contains_local, assert_not_contains_local.
+# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # Local contains / not-contains helpers for the drift-scan section. (The suite
 # has only assert_eq; these mirror the inline contains-pattern used elsewhere.)
 assert_contains_local() {
