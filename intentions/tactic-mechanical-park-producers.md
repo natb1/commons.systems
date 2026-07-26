@@ -56,7 +56,115 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA found two opus-fixable residue items that the disposition
+    workflow's fix-planner refused with a scope-deviation — both are
+    author-confirmation judgment calls (whether CONFLICT_STRIKE_CAP=5 is the
+    right interim tuning value; whether the brownfield/greenfield scope split
+    for the exit-11 producer is correctly bounded) that the plan already
+    documents but that need the author's explicit sign-off, not a code fix.
+    Escalating to office-hours."
+  since: 2026-07-26
+  recommendation: >-
+    # Best next steps — PR #2970 (`tactic-mechanical-park-producers`)
+
+
+    Two author decisions. Everything script-verifiable already passed this pass;
+    nothing below is a bug fix.
+
+
+    ## Decision 1 — Ratify or retune `CONFLICT_STRIKE_CAP=5`
+
+
+    `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:123`
+    (rationale comment at lines 115–122; used at 220 and 246–251).
+
+
+    What the number actually buys: a node whose branch fails to merge
+    `origin/main` gets 4 free, graph-write-free retries (sidecar counter at
+    `.claude/worktrees/<id>.conflict-strikes`, reset to zero on any clean
+    provision at line 199), and the 5th consecutive failure pays for a tracked
+    hold tactic plus a `blocked_by` edge. The counter is consecutive-only and
+    fail-open — a daemon restart or reaped worktree silently grants more
+    retries. So 5 is a ceiling on a run of bad luck, not a lifetime budget.
+
+
+    - **Accept 5** — no code change. Do it if you read the failure mode as
+    "moving main transiently blocks a merge for a few ticks," where 5
+    consecutive failures is strong evidence the conflict is real and needs
+    hands.
+
+    - **Change it** — one-line edit at `:123`, plus three test sites in
+    `test-dispatch-graph-execute.sh`: Case 5 (lines 184–197, asserts the literal
+    string `strike 1/5`), Case 5b (199–219, loops strikes 1–4 asserting `strike
+    n/5` then expects `held` on the 5th), and Case 10 (270–279, seeds the
+    sidecar with `4` = cap−1 to reach the hold branch in one run). The cap is
+    not a `dispatch.config` tunable and the PR argues it shouldn't be — if you
+    want it configurable, that is a *different* change, and probably not worth
+    it given decision 2.
+
+
+    Guidance on which way: the honest tuning signal here is queue noise (how
+    many tracked holds per week vs. today's ~5 exit-11 parks/week), and that
+    signal is already deferred to the `## needs-main` residue on the node body
+    for observation on deployed main. Retuning now would be guessing ahead of
+    that data. Accepting 5 and letting the main observation move it is the
+    cheaper path; only override that if you have a prior that 5 ticks is
+    obviously too many or too few in wall-clock terms for how fast the chain
+    currently turns.
+
+
+    ## Decision 2 — Ratify the brownfield/greenfield split, and judge the
+    convergence note
+
+
+    The branch at `dispatch-graph-execute:215–276` ships a strike-counter retry
+    tier plus `hold-node` on exhaustion, instead of the ideal design (an
+    orthogonal `execution.conflict` interrupt dispatching `/dispatch-conflict`
+    against the source's worktree). The stated reason is not "greenfield is too
+    expensive" — it's that greenfield is already specced and in-flight as
+    `tactic-graph-router-conflict-routing`, gated on
+    `tactic-dispatch-conflict-greenfield`, and building it twice would collide.
+    There is also a hard blocker recorded at lines 231–235: `/dispatch-conflict`
+    currently exits on any non-`[0-9]*-*` branch, so it cannot accept a node
+    target at all today. That makes the greenfield path unbuildable in this PR
+    regardless of appetite.
+
+
+    - **Ratify the split (recommended default)** — no code change. The gating
+    chain is real, the routing target doesn't exist yet, and this PR's
+    `hold-node` primitive is the piece greenfield will reuse.
+
+    - **Pull greenfield in now** — means unblocking
+    `tactic-dispatch-conflict-greenfield` and teaching `/dispatch-conflict` node
+    targets first; that is a scope change to two other tactics, not an edit to
+    this PR. If you want that, close this decision by re-sequencing those
+    tactics, not by widening #2970.
+
+    - **Narrow the bridge** — the only meaningful narrowing available is
+    dropping the hold tier and leaving exit 11 as an unbounded free retry. That
+    regresses to conflicts never surfacing, which is the problem the PR exists
+    to fix. Don't.
+
+
+    Then the smaller call: read the convergence note at lines 224–229 and decide
+    if it survives a future reader. It says the branch is "expected to be
+    replaced wholesale at that point, not extended" and names the replacing
+    tactic — which is the right content. The gap is that the note lives only
+    inside case 11, while the constant's own comment at lines 115–122 argues for
+    the value on its own terms with no hint the whole mechanism is temporary.
+    Cheapest hardening: add one line to the `:115–122` comment pointing at the
+    case-11 convergence note, so someone tuning the constant learns the branch
+    is slated for deletion before they invest in tuning it. That is a
+    comment-only edit, no test churn.
+
+
+    ## If you accept both as-is
+
+
+    No edits. The PR is verification-clean; move it to its next phase and let
+    the `## needs-main` queue-noise observation drive any later retune of the
+    cap.
 pace_exempt: false
 rounds: null
 attributes: {}
