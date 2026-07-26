@@ -19,7 +19,8 @@
 //   node --import tsx/esm apply-node-transition.ts <node-id> \
 //     [--scope-stale] [--strategy-stale] \
 //     [--set-pr <n>] [--strategy-fingerprint <strategy-id>=<hash> ...] \
-//     [--strategy-sha <sha>] [--dir <intentions-dir>]
+//     [--strategy-sha <sha>] [--evidence-fingerprint <hash>] \
+//     [--evidence-sha <sha>] [--dir <intentions-dir>]
 //
 // `--strategy-fingerprint` is repeatable and takes a KEYED `<strategy-id>=<hash>`
 // value; each entry merges into the per-strategy stamp map, preserving other
@@ -32,6 +33,17 @@
 // computed against, and is shared across every `--strategy-fingerprint` entry in
 // the invocation. This script is pure of git/gh — the wrapper owns those reads
 // and passes the sha in explicitly rather than this script shelling it out.
+//
+// `--evidence-fingerprint <hash>` / `--evidence-sha <sha>` (tactic-phase-
+// evidence-fingerprint-bound Unit 2) bind a newly-written completion marker to
+// the scope fingerprint it was produced under, via `addMarker`'s optional
+// `binding` argument (`transitions.ts`). Unlike `--strategy-fingerprint` this
+// is NOT keyed by strategy id — it is one flat scope fingerprint for the node
+// (the tactic's own phase-start stamp), not a per-strategy map.
+// `--evidence-fingerprint` REQUIRES `--evidence-sha` (an error is thrown
+// otherwise), mirroring the `--strategy-fingerprint`/`--strategy-sha` pairing
+// rule verbatim. When neither flag is given, the marker is written unbound
+// (bare-string form) — the grandfather path used when no stamp exists.
 //
 // Stdout: one JSON object
 //   { "phase": "<new-phase>", "prevPhase": "<old>", "armMerge": bool,
@@ -57,6 +69,7 @@ interface Args {
   strategyStale: boolean;
   setPr: number | null;
   strategyFingerprint: Record<string, { hash: string; sha: string }> | null;
+  evidenceBinding: { fingerprint: string; sha: string } | null;
   dir: string;
 }
 
@@ -67,10 +80,13 @@ export function parseArgs(argv: string[]): Args {
     strategyStale: false,
     setPr: null,
     strategyFingerprint: null,
+    evidenceBinding: null,
     dir: join(repoRoot, "intentions"),
   };
   let fingerprintHashes: Record<string, string> | null = null;
   let strategySha: string | null = null;
+  let evidenceFingerprint: string | null = null;
+  let evidenceSha: string | null = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     switch (a) {
@@ -105,6 +121,12 @@ export function parseArgs(argv: string[]): Args {
       case "--strategy-sha":
         strategySha = argv[++i];
         break;
+      case "--evidence-fingerprint":
+        evidenceFingerprint = argv[++i] ?? null;
+        break;
+      case "--evidence-sha":
+        evidenceSha = argv[++i] ?? null;
+        break;
       case "--dir":
         out.dir = argv[++i];
         break;
@@ -125,6 +147,14 @@ export function parseArgs(argv: string[]): Args {
     out.strategyFingerprint = Object.fromEntries(
       Object.entries(fingerprintHashes).map(([sid, hash]) => [sid, { hash, sha }]),
     );
+  }
+  if (evidenceFingerprint !== null) {
+    if (!evidenceSha) {
+      throw new Error(
+        "apply-node-transition: --evidence-fingerprint requires --evidence-sha (the origin/main commit the fingerprint was computed against)",
+      );
+    }
+    out.evidenceBinding = { fingerprint: evidenceFingerprint, sha: evidenceSha };
   }
   return out;
 }
@@ -186,7 +216,9 @@ export function applyNodeTransition(args: Args): ApplyResult {
   const marker = PHASE_COMPLETION_MARKER[prevPhase];
   const advanced =
     decision.armMerge || (!decision.hold && !decision.demote && decision.phase !== prevPhase);
-  if (marker !== undefined && advanced) execution = addMarker(execution, marker);
+  if (marker !== undefined && advanced) {
+    execution = addMarker(execution, marker, args.evidenceBinding ?? undefined);
+  }
 
   // Apply the phase write. A demotion clears the completion markers so the
   // re-selected implement worker re-runs the ladder against the new scope.

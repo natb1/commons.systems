@@ -135,6 +135,8 @@ FRESH="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/compute-fresh
 SCOPE_STALE="$(jq -r '.scopeStale' <<<"$FRESH")"
 STRATEGY_STALE="$(jq -r '.strategyStale' <<<"$FRESH")"
 STAMP_MISSING="$(jq -r '.stampMissing' <<<"$FRESH")"
+STAMPED_FP="$(jq -r '.stampedFingerprint // empty' <<<"$FRESH")"
+STAMPED_SHA="$(jq -r '.stampedSha // empty' <<<"$FRESH")"
 
 # --- Scope-stale → delegate to the demotion primitive ------------------------
 # main-qa is post-merge by definition (check-node-selection.ts:242), so scope
@@ -154,6 +156,20 @@ fi
 APPLY_FLAGS=("$NODE_ID")
 [[ "$STRATEGY_STALE" == "true" ]] && APPLY_FLAGS+=("--strategy-stale")
 [[ -n "$SET_PR" ]] && APPLY_FLAGS+=("--set-pr" "$SET_PR")
+# Bind a newly-written completion marker to the STAMP's fingerprint, not a
+# fresh recompute — the stamp is the scope the phase worker actually ran
+# against. The forward path below is only reached when SCOPE_STALE is false
+# (the scope-stale branch above delegates to demote-node-to-implement and
+# exits), so on a clean forward transition the stamp and a fresh recompute
+# agree; where they could differ (e.g. a machinery body append after the
+# worker started but before this write), the stamp is the honest value — it
+# is what the worker verified against, not what is true right now. Bind
+# nothing when the stamp is missing (STAMPED_FP/STAMPED_SHA empty): the
+# worker's actual verified scope is unknown, and inventing the current
+# fingerprint would record a falsehood.
+if [[ -n "$STAMPED_FP" && -n "$STAMPED_SHA" ]]; then
+  APPLY_FLAGS+=("--evidence-fingerprint" "$STAMPED_FP" "--evidence-sha" "$STAMPED_SHA")
+fi
 FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)" || {
   echo "transition-node: intentions/$NODE_ID.md does not exist on origin/main — cannot transition a node that is not landed" >&2
   exit 1

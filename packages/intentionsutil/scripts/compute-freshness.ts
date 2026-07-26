@@ -25,7 +25,20 @@
 //
 // Stdout: one JSON object
 //   { "scopeStale": bool, "strategyStale": bool, "stampMissing": bool,
-//     "nodeOnMain": bool }
+//     "nodeOnMain": bool, "stampedFingerprint": string|null,
+//     "stampedSha": string|null, "currentFingerprint": string|null }
+//
+// The three added fields let the wrapper thread the phase-start scope
+// fingerprint through to `apply-node-transition.ts`'s `--evidence-fingerprint`
+// / `--evidence-sha` flags (tactic-phase-evidence-fingerprint-bound Unit 2), so
+// a newly-written completion marker binds to the scope it was actually
+// produced under:
+//   - `stampedFingerprint` / `stampedSha` — the phase-start stamp's own
+//     fingerprint+sha (`null` when the stamp is missing/malformed, i.e.
+//     `stampMissing` is true).
+//   - `currentFingerprint` — the tactic's current scope fingerprint
+//     (`scopeFp`), `null` only when the node is not on origin/main
+//     (`nodeOnMain` is false).
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -69,6 +82,9 @@ export interface FreshnessResult {
   strategyStale: boolean;
   stampMissing: boolean;
   nodeOnMain: boolean;
+  stampedFingerprint: string | null;
+  stampedSha: string | null;
+  currentFingerprint: string | null;
 }
 
 export function computeFreshness(args: Args): FreshnessResult {
@@ -76,7 +92,15 @@ export function computeFreshness(args: Args): FreshnessResult {
   // yet landed (fresh implement PR before its state-only landing) has nothing
   // to compare against — neither gate fires.
   if (!existsSync(join(args.snapshot, `${args.id}.md`))) {
-    return { scopeStale: false, strategyStale: false, stampMissing: true, nodeOnMain: false };
+    return {
+      scopeStale: false,
+      strategyStale: false,
+      stampMissing: true,
+      nodeOnMain: false,
+      stampedFingerprint: null,
+      stampedSha: null,
+      currentFingerprint: null,
+    };
   }
 
   const nodes = listNodes(args.snapshot);
@@ -104,7 +128,15 @@ export function computeFreshness(args: Args): FreshnessResult {
     }
   }
 
-  return { scopeStale, strategyStale, stampMissing: stamp === null, nodeOnMain: true };
+  return {
+    scopeStale,
+    strategyStale,
+    stampMissing: stamp === null,
+    nodeOnMain: true,
+    stampedFingerprint: stamp?.fingerprint ?? null,
+    stampedSha: stamp?.sha ?? null,
+    currentFingerprint: scopeFp,
+  };
 }
 
 function main(argv: string[]): void {
