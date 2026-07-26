@@ -29,7 +29,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: main-qa
+phase: done
 execution:
   branch: tactic-main-post-merge-validation
   pr: 2962
