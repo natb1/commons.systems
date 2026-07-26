@@ -130,7 +130,7 @@ stale-marker plant/assert pattern.
 
 ## needs-main residue
 
-### 8. Real timer-environment sweep effectiveness across live pause/resume cycles
+### 8. Real timer-environment sweep effectiveness across live pause/resume cycles — SKIPPED
 
 - URL path: current
 - Expected outcome: over real pause cycles the reservation ledger stays
@@ -141,3 +141,7 @@ stale-marker plant/assert pattern.
   (`claude agents --json`), which a scratch scaffold cannot reproduce;
   verify by observing reservation-ledger size and worker health over the
   next few live pause/resume cycles.
+- Disposition: skipped by author direction 2026-07-25 — not browser-verifiable
+  (no real `url_path`, effectiveness only observable over live pause/resume
+  cycles on the systemd timer), so `/qa-main` cleared it without a browser
+  check rather than parking to office-hours. Node advanced main-qa -> done.
