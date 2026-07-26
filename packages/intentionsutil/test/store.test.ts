@@ -92,6 +92,54 @@ describe("store round-trip", () => {
     expect(read).toEqual(node);
   });
 
+  it("round-trips fingerprint-bound execution markers through YAML", () => {
+    const dir = tempDir();
+    const node: IntentionNode = {
+      id: "bound-markers-1",
+      kind: "tactic",
+      statement: "A tactic whose completion evidence is fingerprint-bound.",
+      owner: "ai",
+      status: "codified",
+      parent: null,
+      serves: [],
+      recovers: [],
+      rationale: null,
+      reading: null,
+      gap: null,
+      clarifications: [],
+      tooling_goals: [],
+      success_signal: null,
+      attention: null,
+      phase: "review",
+      execution: {
+        branch: "bound-markers-1",
+        pr: 42,
+        attempts: {},
+        markers: [
+          "planned",
+          { marker: "qa-done", fingerprint: "fp-abc", sha: "0123456789abcdef" },
+        ],
+        strategy_fingerprint: null,
+        fix: null,
+        completion: null,
+      },
+      validates: [],
+      blocked_by: [],
+      office_hours: null,
+      pace_exempt: false,
+      rounds: null,
+      attributes: {},
+    };
+
+    writeNode(dir, node);
+    const read = readNode(dir, node.id);
+    expect(read.execution?.markers).toEqual([
+      "planned",
+      { marker: "qa-done", fingerprint: "fp-abc", sha: "0123456789abcdef" },
+    ]);
+    expect(read).toEqual(node);
+  });
+
   it("is lossless for a node with multi-line string fields", () => {
     const dir = tempDir();
     const node: IntentionNode = {

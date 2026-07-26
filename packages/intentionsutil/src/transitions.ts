@@ -1,4 +1,4 @@
-import type { Execution, IntentionNode, Rounds, StrategyStampValue } from "./schema.js";
+import type { Execution, IntentionNode, MarkerEntry, Rounds, StrategyStampValue } from "./schema.js";
 import { servingStrategyIds } from "./router.js";
 
 // Graph router v2, second half: phase transitions, execution-state writes,
@@ -35,6 +35,96 @@ export const PHASE_COMPLETION_MARKER: Record<string, string> = {
   qa: QA_DONE_MARKER,
   review: REVIEWED_MARKER,
 };
+
+/**
+ * The marker name of an entry. An entry is either the legacy bare-string form
+ * (the name itself) or the widened `{marker, fingerprint, sha}` object form
+ * (`MarkerEntry`) that additionally binds the evidence to the scope fingerprint
+ * it was produced under. This is the single home of that shape discrimination —
+ * callers compare names via this helper instead of duplicating the
+ * `string | {marker,...}` branch inline (mirrors `stampHash`).
+ */
+export function markerName(entry: MarkerEntry): string {
+  return typeof entry === "string" ? entry : entry.marker;
+}
+
+/**
+ * The scope binding an entry carries, or `null` for the legacy bare-string
+ * (unbound) form — that entry records only that a phase completed, not the
+ * scope it completed against.
+ */
+export function markerBinding(entry: MarkerEntry): { fingerprint: string; sha: string } | null {
+  if (typeof entry === "string") return null;
+  return { fingerprint: entry.fingerprint, sha: entry.sha };
+}
+
+/** Whether `markers` carries an entry named `name`, in either shape. */
+export function hasMarker(markers: readonly MarkerEntry[], name: string): boolean {
+  return markers.some((m) => markerName(m) === name);
+}
+
+/** The first entry named `name`, in either shape, else `undefined`. */
+export function findMarker(markers: readonly MarkerEntry[], name: string): MarkerEntry | undefined {
+  return markers.find((m) => markerName(m) === name);
+}
+
+/**
+ * Whether the completion evidence recorded for `name` was produced under a
+ * scope other than `currentFingerprint` — i.e. the ratification it stands for
+ * no longer covers the scope now in force.
+ *
+ * Three cases:
+ *  - marker ABSENT — `false`. There is no evidence to ratify; the phase gate
+ *    that wants the marker present owns that check, not this one.
+ *  - marker present but UNBOUND (bare string) — `false`. Legacy grandfather:
+ *    no fingerprint was recorded, so staleness is unknowable and the entry
+ *    fails OPEN, mirroring `isScopeStale`'s null-stamp policy below.
+ *  - marker present WITH a binding — `true` iff the bound fingerprint differs
+ *    from `currentFingerprint`.
+ *
+ * The unbound fail-open is a bootstrap policy, not the end state: it flips to
+ * fail-CLOSED once every marker writer binds a fingerprint at write time and
+ * the pre-existing unbound entries have churned out of the store. Until then
+ * absence of a binding is not yet provably broken evidence (same shape of
+ * deferral as `check-node-selection.ts`'s missing-scope-stamp warning).
+ */
+export function markerEvidenceStale(
+  markers: readonly MarkerEntry[],
+  name: string,
+  currentFingerprint: string,
+): boolean {
+  const entry = findMarker(markers, name);
+  if (entry === undefined) return false;
+  const binding = markerBinding(entry);
+  if (binding === null) return false;
+  return binding.fingerprint !== currentFingerprint;
+}
+
+/** The ladder phases whose completion evidence the merge-time chain check covers. */
+const CHAIN_PHASES = ["implement", "qa"];
+
+/**
+ * The merge-time chain check: the names of the completion markers whose bound
+ * evidence was produced under a scope other than `currentFingerprint`. For each
+ * phase in `phases` (default implement + qa) its completion marker is looked up
+ * in `PHASE_COMPLETION_MARKER` and included when `markerEvidenceStale` holds.
+ *
+ * Returns `[]` when the chain is intact — and also when it is wholly unbound
+ * (legacy markers grandfather open, per `markerEvidenceStale`).
+ */
+export function staleChainMarkers(
+  markers: readonly MarkerEntry[],
+  currentFingerprint: string,
+  phases: readonly string[] = CHAIN_PHASES,
+): string[] {
+  const out: string[] = [];
+  for (const phase of phases) {
+    const name = PHASE_COMPLETION_MARKER[phase];
+    if (name === undefined) continue;
+    if (markerEvidenceStale(markers, name, currentFingerprint)) out.push(name);
+  }
+  return out;
+}
 
 // --- CI sensor verdict -------------------------------------------------------
 
@@ -195,13 +285,24 @@ export function decideTransition(args: {
 // --- Execution-state mutation helpers ---------------------------------------
 
 /**
- * Return a new `Execution` with one added marker (idempotent — an already
- * present marker is a no-op), preserving every other field. Markers are kept in
- * insertion order without duplicates.
+ * Return a new `Execution` with one added marker, preserving every other field.
+ * Markers are kept in insertion order without duplicates.
+ *
+ * Idempotency is keyed on the marker NAME (`markerName`): an already-present
+ * name is a no-op regardless of the entry shape, so re-adding a bare marker
+ * that is already recorded in bound form (or vice versa) neither duplicates nor
+ * rewrites the existing entry. With a `binding` the bound
+ * `{marker, fingerprint, sha}` form is appended; without one, the bare string.
  */
-export function addMarker(execution: Execution, marker: string): Execution {
-  if (execution.markers.includes(marker)) return execution;
-  return { ...execution, markers: [...execution.markers, marker] };
+export function addMarker(
+  execution: Execution,
+  marker: string,
+  binding?: { fingerprint: string; sha: string },
+): Execution {
+  if (hasMarker(execution.markers, marker)) return execution;
+  const entry: MarkerEntry =
+    binding === undefined ? marker : { marker, fingerprint: binding.fingerprint, sha: binding.sha };
+  return { ...execution, markers: [...execution.markers, entry] };
 }
 
 /**

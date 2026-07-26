@@ -69,7 +69,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readNode, writeNode } from "../src/store.js";
 import type { Execution, FixState } from "../src/schema.js";
-import { FIX_ATTEMPT_CAP, REVIEWED_MARKER } from "../src/transitions.js";
+import { FIX_ATTEMPT_CAP, hasMarker, markerName, REVIEWED_MARKER } from "../src/transitions.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
@@ -223,9 +223,11 @@ function applyClear(
   currentFix: FixState | null,
 ): FixStateResult {
   requireFix(currentFix, args.id, "--clear-fix");
-  const reset = execution.markers.includes(REVIEWED_MARKER);
+  const reset = hasMarker(execution.markers, REVIEWED_MARKER);
   if (reset) node.phase = "review";
-  const markers = reset ? execution.markers.filter((m) => m !== REVIEWED_MARKER) : execution.markers;
+  const markers = reset
+    ? execution.markers.filter((m) => markerName(m) !== REVIEWED_MARKER)
+    : execution.markers;
   node.execution = { ...execution, markers, fix: null };
   writeNode(args.dir, node);
   return { mode: "clear", id: args.id, wrote: true, phase: node.phase ?? "implement", reset };

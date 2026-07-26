@@ -49,9 +49,9 @@ import {
   strategyFingerprint,
   tacticScopeFingerprint,
 } from "../src/router.js";
-import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
+import { hasMarker, isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
 import { isPlainObject } from "../src/schema.js";
-import type { FixState, IntentionNode, StrategyStampValue } from "../src/schema.js";
+import type { FixState, IntentionNode, MarkerEntry, StrategyStampValue } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
 // --- Exit codes ------------------------------------------------------------
@@ -140,13 +140,20 @@ function readStrategyFingerprint(
  * reads — a squatter node (attention-surface / token-economy subtree) carries
  * `execution` under `attributes.execution`, where `node.execution` is null.
  */
-function readMarkers(node: IntentionNode): string[] {
+function readMarkers(node: IntentionNode): MarkerEntry[] {
   const firstClass = node.execution?.markers ?? null;
   if (firstClass !== null) return firstClass;
   const squatExec = node.attributes.execution;
   if (squatExec !== null && typeof squatExec === "object" && "markers" in squatExec) {
     const markers = (squatExec as { markers?: unknown }).markers;
-    if (Array.isArray(markers)) return markers.filter((m): m is string => typeof m === "string");
+    // Squatter markers are unvalidated attributes: keep both entry shapes (bare
+    // name, and the bound object carrying a string `marker`) and drop anything
+    // malformed rather than crashing on it.
+    if (Array.isArray(markers)) {
+      return markers.filter((m): m is MarkerEntry =>
+        typeof m === "string" || (isPlainObject(m) && typeof m.marker === "string"),
+      );
+    }
   }
   return [];
 }
@@ -243,7 +250,7 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     }
   } else if (phase !== selectedPhase) {
     return fail(EXIT_STALE_SELECTION, "phase", `selected ${selectedPhase} but node is now ${phase ?? "draft/null"}`);
-  } else if (selectedPhase === "review" && readMarkers(node).includes(REVIEWED_MARKER)) {
+  } else if (selectedPhase === "review" && hasMarker(readMarkers(node), REVIEWED_MARKER)) {
     // The pure selector (selectGraphTargets) already skips emitting a
     // phase:review tactic once it carries the reviewed marker — the marker
     // means the review pass already ran and the node is awaiting tick
