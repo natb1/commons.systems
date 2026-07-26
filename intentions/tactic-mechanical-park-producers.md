@@ -44,12 +44,14 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: implement
+phase: review
 execution:
   branch: tactic-mechanical-park-producers
   pr: 2970
   attempts: {}
-  markers: []
+  markers:
+    - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -590,3 +592,20 @@ Manual and observational checks:
   whether `CONFLICT_STRIKE_CAP=5` is tuned too tight.
 - **Strike-file hygiene.** Confirm the sidecar is deleted on a successful
   provision and does not accumulate for reaped worktrees.
+
+## needs-main residue
+
+QA (PR #2970, attempt 1) found one item that is not assertable at merge time
+and is deferred to `/qa-main` observation on deployed main:
+
+- **id:** 15
+- **title:** Queue-noise reduction: fewer tracked holds than today's exit-11 park rate
+- **url_path:** current
+- **expected_outcome:** Materially fewer `tactic-hold-conflict-*` / `tactic-hold-fix-cap-*`
+  records than the baseline of roughly 5 exit-11 parks per week, observed on
+  main over the following week (the plan's own Verification section names
+  this as a planned deferral, not gatable pre-merge).
+- **finding:** This is an observe-on-main-over-time signal. Check the rate at
+  which `tactic-hold-*` nodes are created on `origin/main` over the week
+  following merge, and confirm holds that do land correspond to genuinely
+  stuck conflicts/fix-cap exhaustions rather than routine noise.

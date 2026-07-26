@@ -3,8 +3,11 @@ id: tactic-graph-node-session-reap
 kind: tactic
 statement: Node-worker sessions are reaped from the agents list on terminal exit
   — extend the node-lane Stop-hook branch to call the foreground-safe self-close
-  primitive on both clean-advance and escalation-park, and reap mid-phase-dead
-  jobs via the tick/sweep ledger pass
+  primitive on both clean-advance and escalation-park. The originally-planned
+  dispatch-sweep mid-phase-dead-job reap (reap_job_for_branch) was dropped from
+  scope — origin/main independently landed a broader NODE-arm worktree-reap
+  subsystem covering the same ground, and it conflicted directly with this
+  addition
 owner: ai
 status: codified
 parent: null
@@ -18,7 +21,16 @@ rationale: "Surfaced 2026-07-16 /align-strategy interview: the legacy gh
   terminal exit. /align-tactics 2026-07-18: finalized into a 2-unit plan —
   Stop-hook self-close (dispatch-self-close, reused unmodified) and a
   dispatch-sweep extension (new claude_job_id_for_name_all in
-  lib-claude-agents.sh) for mid-phase-dead orphaned jobs."
+  lib-claude-agents.sh) for mid-phase-dead orphaned jobs. 2026-07-2X
+  office-hours drain (provision exit 11): origin/main independently landed a
+  broader NODE-arm worktree-reap subsystem (node_completion_state,
+  node_worktree_age_s, node_cwd_has_live_session, and a bare node-id removal arm
+  in dispatch-sweep) that deletes this tactic's reap_job_for_branch function and
+  its 3 call sites outright — a real conflict, not a stale one. Human decision:
+  drop reap_job_for_branch from scope entirely as redundant with main's NODE-arm
+  reap; keep the new shared claude_job_id_for_name_all lib function and the
+  office-hours job_id_for_name dedup (2a/2d), since both stand alone and merged
+  clean with no conflict."
 reading: null
 gap: null
 serves:
@@ -40,17 +52,12 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-25
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /dispatch-conflict once it accepts node targets.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Node-worker sessions are reaped from the agents list on terminal exit — extend the node-lane Stop-hook branch to call the foreground-safe self-close primitive on both clean-advance and escalation-park, and reap mid-phase-dead jobs via the tick/sweep ledger pass
+# Node-worker sessions are reaped from the agents list on terminal exit — extend the node-lane Stop-hook branch to call the foreground-safe self-close primitive on both clean-advance and escalation-park (mid-phase-dead-job reap dropped, redundant with main's NODE-arm)
 
 ## Context
 
@@ -66,6 +73,20 @@ for every future liveness query. This PR closes both leaks by reusing two
 scripts that already do the right thing for other callers: `dispatch-self-close`
 (self-deletion, already interactive-safe and router-aware) and `dispatch-sweep`
 (the existing worktree-GC pass, already gated on confirmed-dead liveness).
+
+**Scope note (2026-07-2X office-hours drain):** the mid-phase-dead-job reap
+originally planned as Unit 2's `dispatch-sweep` addition (`reap_job_for_branch`,
+3 call sites) was dropped. While this PR sat in office-hours, origin/main
+independently landed a broader NODE-arm worktree-reap subsystem in
+`dispatch-sweep` (`node_completion_state`, `node_worktree_age_s`,
+`node_cwd_has_live_session`, and a bare node-id removal arm) that reaps exactly
+this class of orphaned worktree/job — and its merge deleted this tactic's
+`reap_job_for_branch` function and call sites outright. Per human decision,
+`reap_job_for_branch` is dropped from scope as redundant; main's NODE-arm is
+the sole reap mechanism for mid-phase-dead node workers going forward. Unit 2
+is narrowed to the parts that stood alone and merged clean: the shared
+`claude_job_id_for_name_all` lookup in `lib-claude-agents.sh` and the
+`office-hours` `job_id_for_name()` dedup that consumes it (2a/2d below).
 
 ## Units of work
 
@@ -136,16 +157,23 @@ new architecture or judgment calls.
 
 **Dependencies:** none.
 
-### Unit 2: Sweep-pass job reap for mid-phase-dead orphaned jobs
+### Unit 2: Shared job-lookup helper + office-hours dedup
 
-**Scope**
+**DROPPED FROM SCOPE:** the `dispatch-sweep` mid-phase-dead-job reap
+(`reap_job_for_branch`, one new helper + 3 call sites in `dispatch-sweep`) —
+redundant with main's independently-landed NODE-arm worktree-reap subsystem,
+which reaps orphaned bare node-id worktrees (and, transitively, their owning
+job entries are left to that subsystem's own future reap, not this tactic's
+concern). Per human decision on this office-hours drain: main's NODE arm is
+the sole reap mechanism for mid-phase-dead node workers; this tactic does not
+reintroduce `reap_job_for_branch` or its call sites.
+
+**Scope (as narrowed)**
 
 Files:
 1. `.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh` (607
    lines today) — add one new sourced function.
-2. `.claude/skills/dispatch-propagate/scripts/dispatch-sweep` (335 lines
-   today) — add one local helper and 3 call sites.
-3. `.claude/skills/dispatch-propagate/scripts/office-hours` — small dedup
+2. `.claude/skills/dispatch-propagate/scripts/office-hours` — small dedup
    refactor of its existing `job_id_for_name()` (lines 160-169) to delegate to
    the new shared lib function, eliminating the duplicate jq pattern.
 
@@ -166,9 +194,10 @@ new guard needed):
   # dispatch-self-close derives from $CLAUDE_JOB_DIR, NOT `.sessionId`) of the
   # live/done background job whose `.name` exactly equals <name>, or empty if
   # none. --all so a job in a terminal state (done/stopped/etc — hidden from the
-  # default active-only listing) is still resolvable: the mid-phase-dead-worker
-  # reap this backs needs exactly that visibility. Consolidates office-hours'
-  # inline job_id_for_name() jq pattern into one shared implementation.
+  # default active-only listing) is still resolvable: office-hours' attach path
+  # needs to find a job by name even after it has finished. Consolidates
+  # office-hours' inline job_id_for_name() jq pattern into one shared
+  # implementation.
   #     return 0 — daemon queried successfully. Stdout is the job id, or empty if
   #               no name match. Empty stdout + return 0 is a definite "no such job".
   #     return 1 — UNKNOWN. `claude` missing, non-zero exit, or non-array output.
@@ -201,78 +230,13 @@ new guard needed):
 Also add `claude_job_id_for_name_all <name>` to the file's top-of-file usage
 list (the block starting at line 10-18) alongside the other listed functions.
 
-**2b. `dispatch-sweep`: new helper `reap_job_for_branch`**
+**2b/2c (DROPPED): `dispatch-sweep` helper `reap_job_for_branch` + 3 call
+sites.** Not implemented — see "DROPPED FROM SCOPE" above. Main's NODE-arm
+(`node_completion_state`, `node_worktree_age_s`, `node_cwd_has_live_session`,
+and the bare node-id removal arm in `dispatch-sweep`) covers mid-phase-dead
+node-worker worktree reap; this tactic does not duplicate it.
 
-Insert a new function directly after `reap_or_skip_not_in_sync()` closes
-(currently line 177) and before the `# ---- Step 1` comment (currently line
-179):
-
-```bash
-# reap_job_for_branch <wt_branch> — best-effort: if a live/done background job is
-# registered under a name exactly matching <wt_branch>, delete it via `claude rm`.
-# For a graph-native node worker, the worktree's branch name IS the node id AND
-# the worktree basename IS the node id (both equal wt_branch — the same identity
-# worktree_has_live_session already keys its name-match on), so a name match here
-# means the worktree's owning job entry is orphaned (its worktree is being reaped,
-# so its job is confirmed dead by worktree_has_live_session having already
-# returned false at every call site that reaches here — see call-site comments).
-# A legacy issue-numbered branch (e.g. `42-feature`) never matches a job by this
-# name, so this is a harmless no-op there. Never aborts the sweep: every failure
-# is logged and this always returns 0.
-reap_job_for_branch() {
-  local wt_branch="$1"
-  local job_id
-  if ! job_id=$(claude_job_id_for_name_all "$wt_branch"); then
-    log "REAP_JOB_LOOKUP_UNKNOWN: branch=$wt_branch (daemon unqueryable; any orphaned job entry left in place)"
-    return 0
-  fi
-  if [[ -z "$job_id" ]]; then
-    return 0
-  fi
-  if "${DISPATCH_SWEEP_CLAUDE_CMD:-claude}" rm "$job_id" >/dev/null 2>&1; then
-    log "REAP_JOB: branch=$wt_branch job_id=$job_id"
-  else
-    log "REAP_JOB_FAILED: branch=$wt_branch job_id=$job_id"
-  fi
-  return 0
-}
-```
-
-Add `DISPATCH_SWEEP_CLAUDE_CMD` to the script's env-override header comment
-block (currently lines 22-24, "Environment overrides for testability")
-alongside `DISPATCH_SWEEP_LOG_FILE` / `DISPATCH_SWEEP_NOW`, documented as
-"The `claude` command used for the mid-phase-dead job reap's `claude rm` call.
-Default: `claude`." `lib-claude-agents.sh` is already sourced by
-`dispatch-sweep` (line 40), so `claude_job_id_for_name_all` is available with
-no new `source` line.
-
-**2c. `dispatch-sweep`: 3 call sites**, each immediately after the worktree
-removal + branch-delete + marker-clear steps succeed, right before that
-block's own terminal `log` line:
-
-- Site 1, inside `reap_or_skip_not_in_sync()`, after
-  `reap_marker_clear "$PROJECT_ROOT" "$wt_basename" || true` (currently line
-  171) and before `log "REAP_${suffix}_NOT_IN_SYNC: ..."` (currently line
-  172): add `reap_job_for_branch "$wt_branch"`.
-- Site 2, the CLOSED-issue removal path, after
-  `reap_marker_clear "$PROJECT_ROOT" "$(basename "$wt_path")" || true`
-  (currently line 267) and before `log "REMOVE_CLOSED_ISSUE: ..."` (currently
-  line 268): add `reap_job_for_branch "$wt_branch"`.
-- Site 3, the MERGED removal path, after
-  `reap_marker_clear "$PROJECT_ROOT" "$(basename "$wt_path")" || true`
-  (currently line 304) and before `log "REMOVE_MERGED: ..."` (currently line
-  305): add `reap_job_for_branch "$wt_branch"`.
-
-All 3 sites already have `wt_branch` in scope at that point. At every one of
-these 3 sites, `worktree_has_live_session "$wt_path"` has already returned
-false earlier in the same code path (line 257 for the CLOSED branch feeding
-site 2, and site 1's own `reap_or_skip_not_in_sync` calls at lines 273/310 are
-themselves only reached from the `elif`/`else` arms after that same
-line-257/288 liveness check) — so the "confirmed dead" precondition already
-holds at all 3 sites by construction; no new liveness check needs to be
-added.
-
-**2d. `office-hours` dedup (small, low-risk cleanup within this unit)**
+**2d. `office-hours` dedup (small, low-risk cleanup, retained)**
 
 Replace the body of `job_id_for_name()` (currently lines 163-169) with a thin
 delegate to the new shared function:
@@ -292,22 +256,20 @@ test fixture that sets one also sets the other (verified by grep across
 `test-dispatch-scripts.sh`). Re-run the full suite (below) to catch any case
 this misses.
 
-Out of scope for Unit 2: any change to the not-in-sync grace/quarantine
-logic, the PR/issue-state precedence logic, or `worktree_has_live_session`
-itself — Unit 2 only adds a reap call after removal already happens through
-the existing gates.
+Out of scope for Unit 2 (as narrowed): any change to `dispatch-sweep` at all
+— the mid-phase-dead-job reap it would have hosted is dropped (see above); any
+change to the not-in-sync grace/quarantine logic, the PR/issue-state
+precedence logic, or `worktree_has_live_session`.
 
-**Recommended model:** sonnet. Both the new lib function and the sweep call
-sites are mechanical extensions of an existing, extremely well-documented
-pattern (`claude_sessions_with_name_all` for the lib function's shape;
-`reap_marker_clear` for the "extra cleanup step tucked into an already-
-successful removal branch" shape) — no new architecture, just following what
-is already there 3 times.
+**Recommended model:** sonnet. The new lib function and the office-hours dedup
+are mechanical extensions of an existing, extremely well-documented pattern
+(`claude_sessions_with_name_all` for the lib function's shape) — no new
+architecture.
 
 **Dependencies:** none on Unit 1 — Unit 1 touches only `dispatch-stop.sh`
-(and its test block); Unit 2 touches only `lib-claude-agents.sh`,
-`dispatch-sweep`, and `office-hours` (and their test blocks). Fully disjoint
-files, independently testable and mergeable within this one PR.
+(and its test block); Unit 2 (as narrowed) touches only
+`lib-claude-agents.sh` and `office-hours` (and their test blocks). Fully
+disjoint files, independently testable and mergeable within this one PR.
 
 ## Reuse
 
@@ -337,11 +299,6 @@ files, independently testable and mergeable within this one PR.
   `claude_job_id_for_name_all` follows this convention exactly and lives
   inside the same `_LIB_CLAUDE_AGENTS_LOADED` idempotent-load guard block as
   every sibling function.
-- `worktree_has_live_session`'s already-established liveness gating
-  (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh`, line
-  497) — Unit 2 adds no new liveness check; it piggybacks on the fact that
-  all 3 `dispatch-sweep` removal call sites are already downstream of a
-  `worktree_has_live_session` check returning false.
 
 ## Verification
 
@@ -416,120 +373,26 @@ currently lines 19133-19248, in
   `$ROOT/self-close-exit`, run the hook, assert `rc == 0` and that
   `self-close-calls.log` shows exactly one attempt.
 
-**Unit 2 test additions** (inside the existing `dispatch-sweep` test block,
-currently starting at line 6704):
+**Unit 2 test additions (as narrowed):** the dropped `dispatch-sweep`
+mid-phase-dead-job reap (`reap_job_for_branch`, the
+`sweep_fake_claude_sessions_by_name_with_id` fixture, and test cases J1-J5)
+is not implemented and carries no tests here — main's own NODE-arm reap
+subsystem in `dispatch-sweep` has its own independent test coverage on
+origin/main, out of this tactic's scope.
 
-- Add a new fake-claude helper, modeled on `sweep_fake_claude_sessions_by_name`
-  (currently around lines 6994-7014) but (a) including a `.id` field distinct
-  from `.sessionId`/`.name` per entry (mirroring the `office_hours_fake_claude`
-  convention already used elsewhere in this file, e.g. around lines 3696-3720,
-  where `id` is `"j-$name"` vs `sessionId` `"s-$name"`), (b) handling a
-  `rm <id>` invocation by logging it to `$STUB_DIR/claude-rm-calls.log` and
-  exiting 0 (existing sweep fakes only ever serve `agents --json` and ignore
-  all other args), and (c) — **load-bearing, verified against the real
-  `worktree_has_live_session`/`claude_agents_list_all`/`_claude_agents_raw`
-  chain in `lib-claude-agents.sh`** — the fake MUST discriminate `agents
-  --json --all` from plain `agents --json`, serving the registered entries
-  ONLY for `--all` and an empty `[]` for the plain form. `_claude_agents_raw`
-  (called by `claude_agents_list_all`, which `worktree_has_live_session`
-  uses for its liveness gate) issues plain `agents --json` with **no**
-  `--all` flag; `claude_job_id_for_name_all` (the new reap-lookup function)
-  issues `agents --json --all` directly. If the fake served the same payload
-  for both, `worktree_has_live_session` would see the registered "done" job
-  and report the worktree OCCUPIED — the sweep would skip removal entirely,
-  the reap call would never run, and `claude-rm-calls.log` would stay empty,
-  failing every test case below. The discrimination is what makes the fixture
-  correctly simulate "a job in a terminal state, invisible to the plain
-  active-only listing, but visible to `--all`" — exactly the mid-phase-dead
-  scenario Unit 2 exists to reap:
-  ```bash
-  sweep_fake_claude_sessions_by_name_with_id() {
-    local fake="$TMPDIR_TEST/fake/claude"
-    local all_payload="[" entry name rest sid jid first=1
-    for entry in "$@"; do
-      # entry form: name=sid:jid
-      name="${entry%%=*}"; rest="${entry#*=}"; sid="${rest%%:*}"; jid="${rest#*:}"
-      if (( first )); then first=0; else all_payload+=","; fi
-      all_payload+="{\"sessionId\":\"$sid\",\"id\":\"$jid\",\"pid\":1,\"status\":\"done\",\"name\":\"$name\",\"cwd\":\"\"}"
-    done
-    all_payload+="]"
-    printf '%s' "$all_payload" > "$TMPDIR_TEST/fake/all-payload.json"
-    cat > "$fake" <<'FAKE'
-  #!/usr/bin/env bash
-  STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
-  FAKE_DIR="$(cd "$(dirname "$0")" && pwd)"
-  if [[ "${1:-}" == "rm" ]]; then
-    echo "$2" >> "$STUB_DIR/claude-rm-calls.log"
-    exit 0
-  fi
-  if [[ "${1:-}" == "agents" && "${2:-}" == "--json" && "${3:-}" == "--all" ]]; then
-    cat "$FAKE_DIR/all-payload.json"
-    exit 0
-  fi
-  # Plain `agents --json` (no --all) — the worktree_has_live_session query
-  # path. The registered entries are DONE jobs, not live sessions, so this
-  # must stay empty or the liveness gate would report the worktree occupied.
-  echo '[]'
-  exit 0
-  FAKE
-    chmod +x "$fake"
-    export CLAUDE_AGENTS_CMD="$fake"
-    export DISPATCH_SWEEP_CLAUDE_CMD="$fake"
-  }
-  ```
-- Add new test cases (adapting existing fixture patterns from the surrounding
-  merged/closed/not-in-sync tests in this block):
-  1. MERGED site: register worktree with branch `42-feature`, call
-     `sweep_fake_claude_sessions_by_name_with_id "42-feature=sess-1:job-1"`
-     before running the sweep, assert `$STUB_DIR/claude-rm-calls.log`
-     contains exactly `job-1`.
-  2. CLOSED-issue site: same shape, driving the issue-state fixture instead
-     of the PR fixture.
-  3. Not-in-sync force-reap site (site 1): pre-age a reap marker past
-     `NOT_IN_SYNC_GRACE_S` (following the existing not-in-sync-grace test
-     pattern elsewhere in this block) so `reap_or_skip_not_in_sync` reaches
-     the force-remove branch, and assert the same `claude-rm-calls.log`
-     entry.
-  4. Negative case: a legacy issue-numbered worktree (e.g. `42-feature`) with
-     NO fake job registered under that name (default `sweep_setup` fake,
-     which returns `[]`) — assert the sweep still removes the
-     worktree/branch normally and `claude-rm-calls.log` is empty or absent
-     (harmless no-op, confirming the unconditional call at all 3 sites
-     doesn't regress the legacy-issue path).
-  5. UNKNOWN-daemon case for the reap lookup specifically — **must isolate
-     the reap lookup's UNKNOWN from the liveness gate's own UNKNOWN
-     handling**, which is a distinct, already-covered failure mode (an
-     UNKNOWN liveness read fails safe toward "occupied" and skips removal
-     entirely — see `worktree_has_live_session`'s doc comment — so if this
-     test naively points `CLAUDE_AGENTS_CMD` at a nonexistent binary with no
-     other override, the worktree is never removed in the first place and
-     the reap-lookup path under test never runs). `worktree_has_live_session`
-     → `claude_agents_list_all` → `_claude_agents_raw` prefers
-     `$DISPATCH_AGENTS_SNAPSHOT` when set and readable, falling back to
-     `${CLAUDE_AGENTS_CMD:-claude} agents --json` only when the snapshot is
-     absent/unreadable; `claude_job_id_for_name_all` (the new function) never
-     reads the snapshot — it always calls
-     `${CLAUDE_AGENTS_CMD:-claude} agents --json --all` directly. So: write a
-     valid snapshot file containing `[]` and export
-     `DISPATCH_AGENTS_SNAPSHOT` to it (satisfying the liveness gate — the
-     worktree is free, removal proceeds), while separately pointing
-     `CLAUDE_AGENTS_CMD` at a nonexistent binary (the pattern already used
-     elsewhere in this file, e.g. around line 187) so only the reap lookup
-     fails. Assert the sweep still completes successfully (worktree/branch
-     still removed, a `REAP_JOB_LOOKUP_UNKNOWN` log line present, but no
-     fatal abort, and `claude-rm-calls.log` empty or absent) — proving the
-     job-reap lookup failure is isolated per the "best-effort,
-     log-and-continue, never abort the sweep" contract.
-- The `office-hours` `job_id_for_name()` refactor (2d) needs no new
-  office-hours-specific test (the delegation is behavior-preserving given
-  both env vars default identically in production and every existing test
-  fixture sets both together) — the full-suite run above is the check that
-  proves it.
+The retained surface — `claude_job_id_for_name_all` (2a) and the
+`office-hours` `job_id_for_name()` dedup (2d) — needs no new dedicated test:
+the delegation is behavior-preserving (both `OFFICE_HOURS_CLAUDE_CMD` and
+`CLAUDE_AGENTS_CMD` default identically to plain `claude` in production, and
+every existing test fixture that sets one sets the other), and `office-hours`
+`attach_session_by_name` already exercises `job_id_for_name()` indirectly in
+the existing `office-hours` test block. The full-suite run above (3076/3076
+passed on the merged, redacted state) is the check that proves both hold.
 
 **Manual/judgment verification** (not exercised by the shell-fixture tests,
 which fake `claude` entirely via `CLAUDE_AGENTS_CMD` /
-`DISPATCH_SWEEP_CLAUDE_CMD` / `DISPATCH_SELF_CLOSE_CLAUDE_CMD` PATH/env
-overrides and never invoke a real daemon):
+`DISPATCH_SELF_CLOSE_CLAUDE_CMD` PATH/env overrides and never invoke a real
+daemon):
 
 - A real `claude agents --json --all` / `claude rm <id>` / `claude attach
   <id>` call against the live local daemon requires
@@ -539,8 +402,7 @@ overrides and never invoke a real daemon):
   ordinary background-job/hook/cron processes with normal daemon-socket
   access; this only matters to whoever manually re-verifies post-merge
   behavior by running `claude agents --json --all` before/after a real
-  node-worker session's Stop hook fires, or before/after a `dispatch-sweep`
-  run against a worktree whose owning job actually died mid-phase.
+  node-worker session's Stop hook fires.
 - After a node worker completes a phase and its Stop fires, `claude agents
   --json` shows no lingering job for that node id, and the node's persisted
   phase advanced on origin/main.
@@ -548,13 +410,15 @@ overrides and never invoke a real daemon):
   `office_hours` is set (durable before the reap).
 - An interactive `/align` or `/office-hours` session is never auto-reaped
   (`CLAUDE_JOB_DIR` gate).
-- A mid-phase-dead worker's orphaned job is removed by the sweep pass, not
-  left indefinitely.
+- A mid-phase-dead worker's orphaned job/worktree is removed — NOT by this
+  tactic (the `dispatch-sweep` reap it would have added is dropped), but by
+  main's independently-landed NODE-arm worktree-reap subsystem. Verifying
+  that is out of this tactic's scope.
 
 ## needs-main residue
 
 - **id:** 10
-- **title:** Real-daemon reap and interactive-session safety observed in production
+- **title:** Real-daemon self-close and interactive-session safety observed in production
 - **url_path:** current
-- **expected outcome:** Terminal node-worker exits (clean, parked, and mid-phase-dead) leave no registry entry, phase/office_hours state is durable, and interactive sessions are preserved.
-- **finding:** Requires live `claude agents --json` / `claude rm` calls against the local daemon (which the shell fixtures fake entirely) and observation of real session lifecycle; only verifiable downstream in production, not at PR-merge time in this sandboxed session. Planned deferral: the acceptance criteria for real-daemon reap/self-close and interactive-session safety are documented as non-assertable at merge time — verify by observing `claude agents --json` before/after a real node-worker Stop-hook fire and a real `dispatch-sweep` pass against a worktree whose owning job died mid-phase.
+- **expected outcome:** Terminal node-worker exits (clean and parked) leave no registry entry via the Stop-hook self-close, phase/office_hours state is durable, and interactive sessions are preserved. (Mid-phase-dead-worker reap is no longer this tactic's concern — see the scope note above; main's own NODE-arm subsystem owns that verification on its own PR.)
+- **finding:** Requires live `claude agents --json` / `claude rm` calls against the local daemon (which the shell fixtures fake entirely) and observation of real session lifecycle; only verifiable downstream in production, not at PR-merge time in this sandboxed session. Planned deferral: the acceptance criteria for real-daemon self-close and interactive-session safety are documented as non-assertable at merge time — verify by observing `claude agents --json` before/after a real node-worker Stop-hook fire.
