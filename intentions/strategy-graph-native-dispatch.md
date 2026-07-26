@@ -1249,7 +1249,13 @@ clarifications:
       aside is superseded. Boost note: the two parity-fix tactics are boosted to
       the top of NORMAL work but below the strategy-main-health emergency
       ceiling (boost 100), which the 2026-07-13 guard keeps dominant — the
-      ledger fix is important but is not a red-main emergency."
+      ledger fix is important but is not a red-main emergency. (Amended
+      2026-07-26: the \"$XDG_DATA_HOME/commons-dispatch/paused\" sentinel named
+      here is superseded by a dispatch.config/*.json boolean field — see the
+      pause-field clarification of that date. The mechanism this clarification
+      protects is unchanged: pause gates worker SPAWNING only and never ledger
+      BOOKKEEPING, and the pre-short-circuit ledger sweep still runs on a paused
+      tick.)"
   - question: Does the greenfield design enforce serialization of work on the
       dispatch queue, the office-hours queue, and between the queues?
     answer: "(Recorded 2026-07-25 review.) No, in three distinct places. (a)
@@ -1570,6 +1576,90 @@ clarifications:
       mechanical defect for a future tactic to carry, not a change of direction;
       the two tactics boosted to 95 on 2026-07-25 sit below the ceiling and
       satisfy the guard as implemented."
+  - question: The requirement "dispatch workflow configuration is stored using XDG
+      standards" — how does it resolve against dispatch.config/'s project-root,
+      instance-repo-symlink location?
+    answer: "(Recorded 2026-07-26 interview.) Diverge from the literal XDG Base
+      Directory Specification, and record it as a deliberate divergence rather
+      than claim compliance. dispatch.config/ stays project-root-resolved
+      (dispatch-config-load resolves <project-root>/dispatch.config via
+      resolve_project_root in lib.sh), carrying the instance-repo symlink
+      convention tactic-dispatch-config-template is implementing; it does NOT
+      move to $XDG_CONFIG_HOME. \"XDG standards\" resolves to its intent — ONE
+      conventional, discoverable, non-ad-hoc config home shared across every
+      worktree, with a single documented override point (DISPATCH_CONFIG_DIR) —
+      which that convention already satisfies. The reason to diverge: the
+      symlink into a private instance repo gives pace-curve pins and auto-merge
+      gating reviewable git history, which $XDG_CONFIG_HOME does not provide.
+      Honest accounting of the net effect, surfaced in the interview and
+      accepted deliberately: this round LOWERS the repo's literal XDG usage
+      rather than raising it, because the one dispatch parameter that was
+      XDG-compliant (the pause flag at $XDG_DATA_HOME/commons-dispatch/paused)
+      moves into the non-XDG dispatch.config/ — see the pause-field
+      clarification of the same date. Unrelated XDG uses elsewhere (topic-usage
+      state under $XDG_STATE_HOME, systemd user units under $XDG_CONFIG_HOME,
+      the budget skill's own config) are untouched and out of scope."
+  - question: Should "dispatch scheduling paused" (default false) stay a filesystem
+      sentinel at $XDG_DATA_HOME/commons-dispatch/paused, or become a
+      dispatch.config/*.json field like the other operator-facing dispatch
+      parameters?
+    answer: "(Recorded 2026-07-26 interview.) It becomes a dispatch.config/*.json
+      boolean field, and that field is the SOLE mechanism — the sentinel is
+      deleted, not retained as a second path or a compatibility shim. Default
+      false (not paused), matching today's absent-sentinel default. Rationale:
+      uniformity with the other operator-facing parameters
+      (max_concurrent_workers, weekly_pace_floor_pct, and the worker auto-close
+      toggle), all of which already resolve through dispatch-config-load; plus
+      this strategy's own standing-mode condition, which makes pause durable
+      operator configuration rather than transient runtime state. Edge cases
+      resolved this round: (a) FAIL CLOSED — pause evaluation must treat ANY
+      config resolve/read/parse failure as PAUSED, never as not-paused. This is
+      a new failure mode the sentinel did not have: the old check was a bare
+      filesystem existence test, whereas dispatch-config-load exits 2 outside a
+      git repo, exits 1 on invalid JSON, and prints no-config (exit 0) when the
+      file is absent; combined with the instance-repo symlink, a dangling
+      symlink or an unmounted instance checkout would otherwise silently RESUME
+      the fleet. Fail-closed follows .claude/rules/code-style.md and matches
+      dispatch-tick's existing stance of failing loud when
+      lib-reservation-ledger.sh fails to load rather than swallowing it. (b)
+      SEMANTICS PRESERVED VERBATIM — the field gates worker SPAWNING only and
+      never reservation-ledger bookkeeping; an explicit manual dispatch run
+      still OVERRIDES the pause; and the ledger reap on the paused branch, ahead
+      of the short-circuit, is unchanged. (c) The state-to-configuration
+      reclassification is deliberate, made on the strength of the standing-mode
+      condition, not an accidental misfiling of runtime state into a config
+      surface. Implementation retained as draft
+      tactic-dispatch-pause-config-field, which also owns migrating the two
+      in-repo references to the sentinel path: dispatch-tick's
+      DISPATCH_PAUSE_FLAG resolution, and the body citation in
+      tactic-manual-path-reservation-sweep — the latter is at phase qa and must
+      NOT be body-edited from this round, because editing an open tactic's body
+      would trip its own scope-fingerprint custody gate and demote it."
+  - question: "Steelman-alternative test: should dispatch scheduling pause be a
+      configurable knob at all, given the graph's own anti-config precedent and
+      the fact that pausing is already expressible as a pace-curve pin?"
+    answer: "(Recorded 2026-07-26 interview; adopt/diverge test per the
+      align-strategy alternatives gate.) DIVERGE from the rival framing. The
+      rival — that this strategy's intent is \"dispatch behaves correctly
+      without operator intervention\", making every added knob a design failure
+      — is real and has in-graph precedent: tactic-census-scripted-tick's design
+      decision 1 records \"No config. The design wants an unconditional,
+      always-on step once live — not a threshold-gated birth... has no on/off
+      toggle.\" Its sharpest form is that pausing is ALREADY expressible by
+      pinning the pace curve to target 0, so minting a pause field adds a
+      representation rather than removing one. The divergence rests on a
+      verified lifetime difference: dispatch-target-workers computes the weekly
+      curve from used_weekly + resets_at_weekly + now, so a pin that yields
+      target 0 AUTO-RELEASES when the weekly window rolls over. A pause must not
+      silently lift at week-roll — this strategy's own condition holds
+      paused-scheduling to be a STANDING operating mode, not a degraded or
+      temporary state. A self-clearing throttle and a standing mode are
+      therefore distinct concepts, not duplicate representations of one thing.
+      Representation count is a wash rather than a regression: pace-pin plus
+      sentinel (two) becomes pace-pin plus config field (two), since the
+      sentinel is deleted. The anti-config precedent is not overturned — it
+      governs birth-gating a mechanism that ought to be unconditional, which is
+      not what an operator pause is."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1719,12 +1809,17 @@ attributes:
       escalations still surface via the office-hours PARKED panel). Auto-close
       remains the doctrinal default for the two clean terminal states, and the
       session is never router substrate
-    - paused-scheduling with manual-only dispatch is a supported STANDING
+    - "paused-scheduling with manual-only dispatch is a supported STANDING
       operating mode, not a degraded or temporary state — the pause sentinel
       gates worker spawning only, never reservation-ledger reconciliation — so
       every ledger-consuming invariant (e.g. the selection-time busy+reserved
       count) must hold in it without relying on the autonomous heartbeat's
-      reaper
+      reaper (Amended 2026-07-26: the pause SENTINEL named in this condition is
+      replaced by a dispatch.config/*.json boolean field as the sole mechanism —
+      see the pause-field clarification of that date. Every clause of this
+      condition carries over to the field unchanged, and pause evaluation
+      additionally fails CLOSED: any config resolve/read/parse failure is
+      treated as paused, never as not-paused.)"
     - "every new pull request opens with the title `<node id>: <short
       description>` — the literal node id verbatim, kind prefix included — and
       its head branch resolves to a real node in `intentions/`; the prefix is
