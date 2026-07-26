@@ -26,6 +26,13 @@
 # Freshness gates (compute-freshness.ts over the origin/main snapshot):
 #   - scope-stale → delegate to demote-node-to-implement (the backward
 #     transition owns its own provenance commit + PR comment).
+#   - broken evidence chain (review only) → delegate to
+#     demote-node-to-implement. At the review→merge seam an earlier phase's
+#     completion marker may be BOUND to a scope the tactic has since moved off
+#     (tactic-phase-evidence-fingerprint-bound Unit 3); that evidence no longer
+#     certifies the scope about to merge. A demote, not a hold, because it is
+#     self-clearing: the re-selected implement worker re-establishes custody,
+#     where a hold would stall forever with nothing able to refresh the binding.
 #   - strategy-stale → hold at the completed phase (the selector queues the
 #     re-evaluation; a confirm re-stamps and the next tick advances).
 #   - missing stamp at the review→merge ARMING point → fail closed: hold, do
@@ -37,6 +44,7 @@
 #   transitioned <id> <prev> -> <new>
 #   armed-merge <id> (review complete)
 #   demoted <id> -> implement (scope drift)
+#   demoted <id> -> implement (broken evidence chain: <names>)
 #   held <id> at <phase> (<reason>)
 #
 # Exit codes: 0 landed; 1 write/graph-commit failure; 2 usage/environment error.
@@ -149,6 +157,31 @@ if [[ "$SCOPE_STALE" == "true" && "$PHASE" != "main-qa" ]]; then
     exit 0
   fi
   echo "transition-node: demotion of $NODE_ID failed" >&2
+  exit 1
+fi
+
+# --- Broken evidence chain at the review seam → demote -----------------------
+# A `review` completion is the ratification point: the earlier phases' markers
+# are about to be treated as standing evidence for the scope that merges. When
+# one of them is BOUND to a different scope fingerprint than the tactic now
+# carries, that evidence certifies a scope that no longer exists, so the chain
+# is broken and the ladder must re-run.
+#
+# Gated on PHASE == review (the phase being completed), NOT on the post-apply
+# ARM_MERGE variable, deliberately: this check must sit strictly BEFORE the
+# apply-node-transition.ts mutation below, so it can never involve the rollback
+# trap. Nothing has been written when it fires.
+#
+# Demote rather than hold: a hold has no clearing event (no worker re-binds a
+# marker at a held phase) and would stall the node forever, while the demotion
+# clears markers and the re-selected implement worker re-establishes custody.
+STALE_CHAIN="$(jq -r '(.staleChainMarkers // []) | join(", ")' <<<"$FRESH")"
+if [[ "$PHASE" == "review" && -n "$STALE_CHAIN" ]]; then
+  if "$UTIL_SCRIPTS/demote-node-to-implement" "$NODE_ID"; then
+    echo "demoted $NODE_ID -> implement (broken evidence chain: $STALE_CHAIN)"
+    exit 0
+  fi
+  echo "transition-node: demotion of $NODE_ID (broken evidence chain: $STALE_CHAIN) failed" >&2
   exit 1
 fi
 

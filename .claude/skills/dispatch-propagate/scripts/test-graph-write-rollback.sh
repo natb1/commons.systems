@@ -42,6 +42,11 @@
 #   6. transition-node evidence binding, no-stamp case: with NO stamp file
 #      present, the same transition still succeeds but the landed marker stays
 #      the legacy bare-string (unbound) form — the no-regression check.
+#   7. transition-node broken evidence chain (tactic-phase-evidence-fingerprint-
+#      bound Unit 3): a phase:review node carrying a `qa-done` marker BOUND to a
+#      fingerprint that no longer matches its body demotes to implement instead
+#      of transitioning — the outcome line names the broken chain, graph-commit
+#      is never called for a transition, and the tree is left clean.
 #
 # No network needed; requires bash + git + jq + a real node/npx tsx (resolved
 # against a read-only node_modules symlink to this repo's own — never written).
@@ -484,6 +489,84 @@ if [[ $rc -eq 0 ]] \
 else
   no "transition-node no-stamp no-regression (rc=$rc)"
   printf '%s\n' "$out"; printf 'markers: %s\n' "$marker_shape"
+fi
+
+# ===========================================================================
+# Case 7: transition-node refuses to ratify a BROKEN EVIDENCE CHAIN at the
+# review seam (tactic-phase-evidence-fingerprint-bound Unit 3). The node sits at
+# phase:review carrying a `qa-done` marker bound to a fingerprint that does NOT
+# match its current statement+body — the qa evidence certifies a scope the
+# tactic has since moved off. transition-node must delegate to
+# demote-node-to-implement (stubbed here, recording its argv) BEFORE any
+# mutation, print the broken-evidence-chain outcome line, never invoke
+# graph-commit for a transition, and leave the tree clean.
+# ===========================================================================
+T7="$WORK/t7-seed"
+build_seed_repo "$T7"
+cp "$HARNESS_DIR/transition-node" "$T7/.claude/skills/dispatch-propagate/scripts/transition-node"
+chmod +x "$T7/.claude/skills/dispatch-propagate/scripts/transition-node"
+cat >"$T7/intentions/t-broken-chain.md" <<'NODE'
+---
+id: t-broken-chain
+kind: tactic
+statement: harness node for the broken evidence chain test
+owner: ai
+status: codified
+phase: review
+serves: []
+execution:
+  branch: t-broken-chain
+  pr: null
+  attempts: {}
+  markers:
+    - marker: qa-done
+      fingerprint: "0000000000000000000000000000000000000000000000000000000000000000"
+      sha: cafe1234
+  strategy_fingerprint: null
+---
+# harness node for the broken evidence chain test
+NODE
+new_origin t7
+init_and_push "$T7"
+
+C7="$WORK/t7-clone"
+clone_with_node_modules "$C7"
+# graph-commit is stubbed to RECORD any invocation: the assertion is that the
+# demote path short-circuits before transition-node ever lands a transition.
+cat >"$C7/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$WORK/t7-graph-commit.log"
+exit 0
+SH
+chmod +x "$C7/packages/intentionsutil/scripts/graph-commit"
+# demote-node-to-implement is stubbed (the real one commits and comments on a
+# PR); it records the node id it was handed.
+cat >"$C7/packages/intentionsutil/scripts/demote-node-to-implement" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$1" >>"$WORK/t7-demote.log"
+exit 0
+SH
+chmod +x "$C7/packages/intentionsutil/scripts/demote-node-to-implement"
+
+out="$(
+  cd "$C7" || exit 99
+  bash .claude/skills/dispatch-propagate/scripts/transition-node t-broken-chain 2>&1
+)"; rc=$?
+demote_log="$(cat "$WORK/t7-demote.log" 2>/dev/null)"
+commit_log="$(cat "$WORK/t7-graph-commit.log" 2>/dev/null)"
+status_after="$(git -C "$C7" status --porcelain intentions/)"
+if [[ $rc -eq 0 ]] \
+   && grep -q "^demoted t-broken-chain -> implement (broken evidence chain: qa-done)$" <<<"$out" \
+   && [[ "$demote_log" == "t-broken-chain" ]] \
+   && [[ -z "$commit_log" ]] \
+   && [[ -z "$status_after" ]]; then
+  ok "transition-node broken evidence chain: a review-phase node whose qa-done marker is bound to a superseded scope demotes to implement without any transition write"
+else
+  no "transition-node broken evidence chain (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'demote-log: %s\n' "$demote_log"
+  printf 'graph-commit-log: %s\n' "$commit_log"
+  printf 'status: %s\n' "$status_after"
 fi
 
 echo

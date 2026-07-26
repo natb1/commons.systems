@@ -26,7 +26,14 @@
 // Stdout: one JSON object
 //   { "scopeStale": bool, "strategyStale": bool, "stampMissing": bool,
 //     "nodeOnMain": bool, "stampedFingerprint": string|null,
-//     "stampedSha": string|null, "currentFingerprint": string|null }
+//     "stampedSha": string|null, "currentFingerprint": string|null,
+//     "staleChainMarkers": string[] }
+//
+// `staleChainMarkers` is the merge-time chain check
+// (tactic-phase-evidence-fingerprint-bound Unit 3): the names of the earlier
+// ladder phases' completion markers whose BOUND evidence was produced under a
+// scope other than the current one. The wrapper demotes to implement rather
+// than ratifying such a chain at the review→merge point.
 //
 // The three added fields let the wrapper thread the phase-start scope
 // fingerprint through to `apply-node-transition.ts`'s `--evidence-fingerprint`
@@ -45,7 +52,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes, readNode, readNodeBody } from "../src/store.js";
 import { servingStrategyIds, strategyFingerprint, tacticScopeFingerprint } from "../src/router.js";
-import { isScopeStale, isStrategyStale, parseScopeStamp } from "../src/transitions.js";
+import {
+  isScopeStale,
+  isStrategyStale,
+  parseScopeStamp,
+  staleChainMarkers,
+} from "../src/transitions.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
@@ -85,6 +97,14 @@ export interface FreshnessResult {
   stampedFingerprint: string | null;
   stampedSha: string | null;
   currentFingerprint: string | null;
+  /**
+   * The merge-time chain check (tactic-phase-evidence-fingerprint-bound Unit 3):
+   * the names of the tactic's earlier-phase completion markers whose bound
+   * evidence was produced under a scope other than the current one. Empty when
+   * the chain is intact, when it is wholly legacy-unbound, and when the node is
+   * not on origin/main.
+   */
+  staleChainMarkers: string[];
 }
 
 export function computeFreshness(args: Args): FreshnessResult {
@@ -100,6 +120,7 @@ export function computeFreshness(args: Args): FreshnessResult {
       stampedFingerprint: null,
       stampedSha: null,
       currentFingerprint: null,
+      staleChainMarkers: [],
     };
   }
 
@@ -136,6 +157,10 @@ export function computeFreshness(args: Args): FreshnessResult {
     stampedFingerprint: stamp?.fingerprint ?? null,
     stampedSha: stamp?.sha ?? null,
     currentFingerprint: scopeFp,
+    // Chain-of-custody over the EVIDENCE, not the stamp: an earlier phase's
+    // completion marker bound to a scope the tactic has since moved off is no
+    // longer valid evidence for the phase it certifies.
+    staleChainMarkers: staleChainMarkers(tactic.execution?.markers ?? [], scopeFp),
   };
 }
 
