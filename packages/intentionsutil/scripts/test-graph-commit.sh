@@ -889,10 +889,10 @@ fi
 # Case 21: layer 3 (--base stale re-read) auto-resolves a stale --base whose
 # delta touches a DIFFERENT field than the concurrently-landed write.
 set_mode green
-W8="$WORK/w8"
-make_clone "$W8" writer-8
-base_ok_sha="$(git -C "$W8" hash-object intentions/t-field-base-ok.md)"
-edit_field "$W8" t-field-base-ok fieldA writer8-edit
+W21="$WORK/w21"
+make_clone "$W21" writer-21
+base_ok_sha="$(git -C "$W21" hash-object intentions/t-field-base-ok.md)"
+edit_field "$W21" t-field-base-ok fieldA writer8-edit
 
 OTHER2="$WORK/other2"
 make_clone "$OTHER2" other2
@@ -900,7 +900,7 @@ edit_field "$OTHER2" t-field-base-ok fieldB concurrent-edit
 git -C "$OTHER2" commit -qam 'concurrent field edit'
 git -C "$OTHER2" push -q origin main
 
-out="$(run_gc "$W8" -m 'test: base field resolve' --base "t-field-base-ok=$base_ok_sha" t-field-base-ok 2>&1)"; rc=$?
+out="$(run_gc "$W21" -m 'test: base field resolve' --base "t-field-base-ok=$base_ok_sha" t-field-base-ok 2>&1)"; rc=$?
 content="$(origin_show t-field-base-ok 2>/dev/null)"
 if [[ $rc -eq 0 ]] \
    && grep -q 'fieldA: writer8-edit' <<<"$content" \
@@ -914,10 +914,10 @@ fi
 # mechanical-unresolved: exit 1, office_hours.reason carries
 # "mechanical-unresolved", both values are named in the recommendation.
 set_mode green
-W9="$WORK/w9"
-make_clone "$W9" writer-9
-base_bad_sha="$(git -C "$W9" hash-object intentions/t-field-base-bad.md)"
-edit_field "$W9" t-field-base-bad sentinel writer9-value
+W22="$WORK/w22"
+make_clone "$W22" writer-22
+base_bad_sha="$(git -C "$W22" hash-object intentions/t-field-base-bad.md)"
+edit_field "$W22" t-field-base-bad sentinel writer9-value
 
 OTHER3="$WORK/other3"
 make_clone "$OTHER3" other3
@@ -925,7 +925,7 @@ edit_field "$OTHER3" t-field-base-bad sentinel concurrent-value
 git -C "$OTHER3" commit -qam 'concurrent same-field edit'
 git -C "$OTHER3" push -q origin main
 
-out="$(run_gc "$W9" -m 'test: base field conflict' --base "t-field-base-bad=$base_bad_sha" t-field-base-bad 2>&1)"; rc=$?
+out="$(run_gc "$W22" -m 'test: base field conflict' --base "t-field-base-bad=$base_bad_sha" t-field-base-bad 2>&1)"; rc=$?
 content="$(origin_show t-field-base-bad 2>/dev/null)"
 calls="$(gh_calls)"
 snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
@@ -1076,14 +1076,14 @@ fi
 
 # --- Case 29: contention is now cheap, not exhausting -----------------------
 set_mode blocked-green
-W8="$WORK/w8"; W9="$WORK/w9"
-make_clone "$W8" writer-8
-make_clone "$W9" writer-9
-edit_line "$W8" t-lock-contend 1 A-top
-edit_line "$W9" t-lock-contend 12 B-bottom
+W18="$WORK/w18"; W19="$WORK/w19"
+make_clone "$W18" writer-18
+make_clone "$W19" writer-19
+edit_line "$W18" t-lock-contend 1 A-top
+edit_line "$W19" t-lock-contend 12 B-bottom
 SENTINEL="$WORK/lock-sentinel-29"; rm -f "$SENTINEL"
 outA="$WORK/out-29-a.log"; outB="$WORK/out-29-b.log"
-( GC_SENTINEL="$SENTINEL" run_gc "$W8" -m 'test: lock contend A' t-lock-contend >"$outA" 2>&1; echo $? >"$WORK/rc-29-a" ) &
+( GC_SENTINEL="$SENTINEL" run_gc "$W18" -m 'test: lock contend A' t-lock-contend >"$outA" 2>&1; echo $? >"$WORK/rc-29-a" ) &
 pidA=$!
 # Wait (bounded poll) for A to have made its gh call (now blocked inside the
 # shim on the sentinel) — this guarantees A already holds the lock and is
@@ -1099,7 +1099,7 @@ if [[ "$claimed" -ne 1 ]]; then
   rm -f "$SENTINEL"; wait "$pidA" 2>/dev/null
 else
   : >"$CALL_LOG"   # from here, CALL_LOG counts only B's calls
-  ( GC_LOCK_POLL=1 GC_SENTINEL="$SENTINEL" run_gc "$W9" -m 'test: lock contend B' t-lock-contend >"$outB" 2>&1; echo $? >"$WORK/rc-29-b" ) &
+  ( GC_LOCK_POLL=1 GC_SENTINEL="$SENTINEL" run_gc "$W19" -m 'test: lock contend B' t-lock-contend >"$outB" 2>&1; echo $? >"$WORK/rc-29-b" ) &
   pidB=$!
   sleep 1   # give B a moment to attempt (and fail) to claim the held lock
   callsB_while_blocked="$(gh_calls)"
@@ -1129,11 +1129,11 @@ plant_lock() { # <expiry_unix_ts> <holder>
 set_mode green
 past_expiry=$(( $(date +%s) - 60 ))
 plant_lock "$past_expiry" dead-holder-test
-W10="$WORK/w10"
-make_clone "$W10" writer-10
-edit_line "$W10" t-lock-steal 1 steal-lands
+W20="$WORK/w20"
+make_clone "$W20" writer-20
+edit_line "$W20" t-lock-steal 1 steal-lands
 start_ts=$(date +%s)
-out="$(GC_LOCK_POLL=1 run_gc "$W10" -m 'test: dead-holder steal' t-lock-steal 2>&1)"; rc=$?
+out="$(GC_LOCK_POLL=1 run_gc "$W20" -m 'test: dead-holder steal' t-lock-steal 2>&1)"; rc=$?
 elapsed=$(( $(date +%s) - start_ts ))
 if [[ $rc -eq 0 ]] && origin_show t-lock-steal | grep -q 'line1: steal-lands' && [[ "$elapsed" -le 10 ]]; then
   ok "dead-holder steal: expired foreign lock is stolen and lands promptly (${elapsed}s)"
