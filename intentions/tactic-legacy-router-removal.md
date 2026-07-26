@@ -18,7 +18,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-legacy-router-removal
   pr: 2960
@@ -29,7 +29,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-26T01:10:18Z
+    mergeCommitSha: d63484e034e272484400338206447328a94d2f08
+    graphCommitSha: null
 validates:
   - strategy-graph-native-dispatch
 blocked_by:
