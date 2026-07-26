@@ -90,12 +90,22 @@ read_node_json() {
 # worktree back to the PR-branch tip after landing, so REPO_ROOT's
 # intentions/<id>.md is the PRE-transition body by the time we get here.
 #
-# Best-effort by design: every failure is swallowed (`|| return 0`). The
-# primitive itself fails LOUD; the fail-open policy lives here, at the caller.
+# Best-effort by design: the transition always continues (the caller never
+# aborts or changes exit code on a restamp failure) — but fail-open is not
+# fail-silent. The primitive itself fails LOUD with a `restamp-scope-
+# fingerprint: <message>` stderr line; on a non-zero exit we forward that
+# message here (prefixed) so a silently-missing/stale stamp — the exact
+# demotion bug this seam exists to prevent — is diagnosable in worker logs.
 refresh_stamp() {
-  (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/restamp-scope-fingerprint.ts" \
+  local err rc
+  err="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/restamp-scope-fingerprint.ts" \
     --repo-root "$REPO_ROOT" --main-root "$MAIN_ROOT" --from-rev origin/main \
-    "$NODE_ID") >/dev/null 2>&1 || return 0
+    "$NODE_ID") 2>&1 >/dev/null )"
+  rc=$?
+  if [[ $rc -ne 0 ]]; then
+    echo "transition-node: refresh_stamp failed for $NODE_ID (best-effort, continuing): ${err:-no diagnostic}" >&2
+  fi
+  return 0
 }
 
 # --- Read the current phase + PR --------------------------------------------
