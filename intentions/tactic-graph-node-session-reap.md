@@ -5,7 +5,7 @@ statement: Node-worker sessions are reaped from the agents list on terminal exit
   — extend the node-lane Stop-hook branch to call the foreground-safe self-close
   primitive on both clean-advance and escalation-park. The originally-planned
   dispatch-sweep mid-phase-dead-job reap (reap_job_for_branch) was dropped from
-  scope: origin/main independently landed a broader NODE-arm worktree-reap
+  scope — origin/main independently landed a broader NODE-arm worktree-reap
   subsystem covering the same ground, and it conflicted directly with this
   addition
 owner: ai
