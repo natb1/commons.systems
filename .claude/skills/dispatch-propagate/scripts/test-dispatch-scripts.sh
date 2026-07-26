@@ -19865,21 +19865,38 @@ stopnc_setup() {
   ROOT="$TMPDIR_TEST/root"
   JOB_DIR="$TMPDIR_TEST/job"
   mkdir -p "$ROOT/.claude/hooks" "$ROOT/intentions" \
-    "$ROOT/packages/intentionsutil/scripts" "$JOB_DIR"
+    "$ROOT/packages/intentionsutil/scripts" \
+    "$ROOT/.claude/skills/dispatch-propagate/scripts" "$JOB_DIR"
   cp "$HOOK_SCRIPT_DIR/dispatch-stop.sh" "$ROOT/.claude/hooks/dispatch-stop.sh"
   chmod +x "$ROOT/.claude/hooks/dispatch-stop.sh"
   # Fake park-node: append every invocation's argv (one line per call) to
   # park-calls.log at $ROOT, and honor an optional park-exit override so a test
-  # can drive the best-effort failure branch.
+  # can drive the best-effort failure branch. Also appends "park" to the shared
+  # order.log so ordering relative to dispatch-self-close is observable.
   cat > "$ROOT/packages/intentionsutil/scripts/park-node" <<'FAKE'
 #!/usr/bin/env bash
 _root="$(cd "$(dirname "$0")/../../.." && pwd)"
 printf '%s\n' "$*" >> "$_root/park-calls.log"
+echo "park" >> "$_root/order.log"
 if [[ -f "$_root/park-exit" ]]; then exit "$(cat "$_root/park-exit")"; fi
 exit 0
 FAKE
   chmod +x "$ROOT/packages/intentionsutil/scripts/park-node"
   : > "$ROOT/park-calls.log"
+  # Fake dispatch-self-close: records each attempt to self-close-calls.log and
+  # appends "self-close" to the shared order.log, honoring an optional
+  # self-close-exit override so a test can drive the best-effort failure branch.
+  cat > "$ROOT/.claude/skills/dispatch-propagate/scripts/dispatch-self-close" <<'FAKE'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/../../../.." && pwd)"
+echo "self-close" >> "$_root/order.log"
+echo "called" >> "$_root/self-close-calls.log"
+if [[ -f "$_root/self-close-exit" ]]; then exit "$(cat "$_root/self-close-exit")"; fi
+exit 0
+FAKE
+  chmod +x "$ROOT/.claude/skills/dispatch-propagate/scripts/dispatch-self-close"
+  : > "$ROOT/order.log"
+  : > "$ROOT/self-close-calls.log"
 }
 
 stopnc_teardown() {
@@ -19904,6 +19921,7 @@ rc=0
 ( unset CLAUDE_JOB_DIR; "$ROOT/.claude/hooks/dispatch-stop.sh" </dev/null ) || rc=$?
 assert_eq "stop: no CLAUDE_JOB_DIR → exit 0" "0" "$rc"
 assert_eq "stop: no CLAUDE_JOB_DIR → park-node not called" "0" "$(wc -l < "$ROOT/park-calls.log")"
+assert_eq "stop: no CLAUDE_JOB_DIR → self-close not called" "0" "$(wc -l < "$ROOT/self-close-calls.log")"
 stopnc_teardown
 
 # --- state.json absent → no-op ----------------------------------------------
@@ -19912,6 +19930,7 @@ stopnc_setup
 rc=$(stopnc_run)   # JOB_DIR has no state.json
 assert_eq "stop: no state.json → exit 0" "0" "$rc"
 assert_eq "stop: no state.json → park-node not called" "0" "$(wc -l < "$ROOT/park-calls.log")"
+assert_eq "stop: no state.json → self-close not called" "0" "$(wc -l < "$ROOT/self-close-calls.log")"
 stopnc_teardown
 
 # --- router name (no intention node) → no-op --------------------------------
@@ -19922,16 +19941,18 @@ printf 'stalled somewhere\n' > "$JOB_DIR/office-hours-reason"
 rc=$(stopnc_run)
 assert_eq "stop: router name → exit 0" "0" "$rc"
 assert_eq "stop: router name → park-node not called" "0" "$(wc -l < "$ROOT/park-calls.log")"
+assert_eq "stop: router name → self-close not called" "0" "$(wc -l < "$ROOT/self-close-calls.log")"
 stopnc_teardown
 
 # --- node worker + no office-hours-reason → no-op ----------------------------
-echo "Test: dispatch-stop node worker with no office-hours-reason → no park"
+echo "Test: dispatch-stop node worker with no office-hours-reason → no park, self-close called"
 stopnc_setup
 stopnc_state "tactic-some-node"
 : > "$ROOT/intentions/tactic-some-node.md"
 rc=$(stopnc_run)   # no office-hours-reason marker written
 assert_eq "stop: node clean exit → exit 0" "0" "$rc"
 assert_eq "stop: node clean exit → park-node not called" "0" "$(wc -l < "$ROOT/park-calls.log")"
+assert_eq "stop: node clean exit → self-close called once" "1" "$(wc -l < "$ROOT/self-close-calls.log")"
 stopnc_teardown
 
 # --- node worker + office-hours-reason (no recommendation) → park ------------
@@ -19945,6 +19966,9 @@ assert_eq "stop: node park → exit 0" "0" "$rc"
 assert_eq "stop: node park → park-node called once" "1" "$(wc -l < "$ROOT/park-calls.log")"
 assert_eq "stop: node park → argv is <id> <reason>" \
   "tactic-some-node needs a human decision" "$(cat "$ROOT/park-calls.log")"
+assert_eq "stop: node park → self-close called once" "1" "$(wc -l < "$ROOT/self-close-calls.log")"
+assert_eq "stop: node park → self-close runs after park-node" \
+  "$(printf 'park\nself-close')" "$(cat "$ROOT/order.log")"
 stopnc_teardown
 
 # --- node worker + reason + recommendation → park with 3rd arg ---------------
@@ -19970,6 +19994,18 @@ printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
 rc=$(stopnc_run)
 assert_eq "stop: park-node failure → hook still exits 0" "0" "$rc"
 assert_eq "stop: park-node failure → park-node was still attempted once" "1" "$(wc -l < "$ROOT/park-calls.log")"
+assert_eq "stop: park-node failure → self-close still ran" "1" "$(wc -l < "$ROOT/self-close-calls.log")"
+stopnc_teardown
+
+# --- best-effort: dispatch-self-close failure still exits 0 -----------------
+echo "Test: dispatch-stop self-close failure is non-fatal (hook still exits 0)"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf '1' > "$ROOT/self-close-exit"   # make the fake dispatch-self-close exit non-zero
+rc=$(stopnc_run)   # no office-hours-reason marker written
+assert_eq "stop: self-close failure → hook still exits 0" "0" "$rc"
+assert_eq "stop: self-close failure → self-close was still attempted once" "1" "$(wc -l < "$ROOT/self-close-calls.log")"
 stopnc_teardown
 
 # --- marker consumed after successful park (reason-only) --------------------
