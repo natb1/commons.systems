@@ -93,6 +93,16 @@ function readExistingBody(filePath: string, node: IntentionNode): string | null 
 // module (imported above) so the fs-free digest can share one implementation.
 
 /**
+ * Parse and validate already-read node text, fs-free. `readNode` delegates to
+ * this after its path-safety check and file read; callers that already have
+ * raw node text in hand (e.g. from `git show`) can parse it directly without
+ * touching disk.
+ */
+export function parseNodeRaw(raw: string, id: string): IntentionNode {
+  return validateNode(parse(extractFrontmatter(raw, id)));
+}
+
+/**
  * Read and validate the node stored at `<dir>/<id>.md`.
  *
  * Only the YAML frontmatter (between the first two `---` fences) is authoritative;
@@ -101,7 +111,7 @@ function readExistingBody(filePath: string, node: IntentionNode): string | null 
 export function readNode(dir: string, id: string): IntentionNode {
   assertPathSafeId(id);
   const raw = readFileSync(join(dir, `${id}.md`), "utf8");
-  return validateNode(parse(extractFrontmatter(raw, id)));
+  return parseNodeRaw(raw, id);
 }
 
 /**

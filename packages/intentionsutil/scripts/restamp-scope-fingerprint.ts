@@ -1,44 +1,49 @@
-// restamp-scope-fingerprint — re-stamp a tactic's worktree-local
-// scope-custody stamp after an author-present align round classifies its own
-// tactic-body edit as scope-inert (tactic-scope-inert-restamp-primitive
-// Unit 1).
+// restamp-scope-fingerprint — the single home of the scope-custody
+// stamp-write recipe, with two content sources.
 //
 // The chain-of-custody gate demotes an in-flight tactic to phase `implement`
 // whenever its worktree-local `.scope-fingerprint` stamp no longer matches
-// the current `tacticScopeFingerprint(statement, body)`. When an align round
-// edits a tactic's body in a way that does NOT change its scope (a
-// scope-inert edit — e.g. wording, formatting, a residue note that does not
-// alter what the tactic commits to), it needs a way to re-stamp so the next
-// freshness check does not demote the tactic for an edit a human already
-// classified as harmless. This script performs exactly that mechanical
-// re-stamp, once told to.
+// the current `tacticScopeFingerprint(statement, body)`. This script
+// re-stamps it, from either of two content sources:
 //
-// This is a standalone TypeScript PORT of transition-node's `refresh_stamp()`
-// bash recipe (`.claude/skills/dispatch-propagate/scripts/transition-node:85-98`),
-// NOT a shared helper — the two have different failure-mode contracts:
-// `refresh_stamp()` is a best-effort background refresh that fails OPEN (every
-// step is guarded by `|| return 0`, so a failure silently no-ops); this script
-// fails LOUD, because it IS the re-stamp action following a human
-// classification decision — a silent failure here would leave the align round
-// believing the stamp was refreshed when it was not. This unit does not
-// modify `transition-node` or its `refresh_stamp()` function in any way; that
-// script keeps working exactly as it does today.
+//   - disk mode (`restampScope`): reads `intentionsDir`'s on-disk
+//     `<id>.md` and the current `origin/main` sha — the original
+//     author-present align-round use case (an align round classifies its own
+//     tactic-body edit as scope-inert and needs to re-stamp so the next
+//     freshness check does not demote the tactic for an edit a human already
+//     classified as harmless).
+//   - git-rev mode (`restampScopeFromRev`): reads the node's committed text
+//     at a specific git rev via `git show <sha>:<path>`, not the working
+//     tree — needed by callers that stamp AFTER a `git reset --hard` cycle
+//     (e.g. `graph-commit`'s land-then-restore), where the worktree no
+//     longer reflects what actually landed on `origin/main`.
+//
+// The fail-open vs fail-loud distinction belongs to CALLERS, not to this
+// script: every function here always fails LOUD (every error propagates,
+// nothing is swallowed). The align re-stamp caller lets that surface
+// directly, since it follows an explicit human classification decision and a
+// silent failure there would leave the align round believing the stamp was
+// refreshed when it was not. `transition-node`'s `refresh_stamp()` caller (a
+// later unit) instead wraps the call in its own best-effort contract
+// (`|| return 0`), matching its existing background-refresh semantics.
 //
 // Usage:
 //   npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts \
-//     [--repo-root <dir>] [--main-root <dir>] <id>
+//     [--repo-root <dir>] [--main-root <dir>] [--from-rev <rev>] <id>
 //
 // Writes `<mainRoot>/.claude/worktrees/<id>.scope-fingerprint` with content
 // `<fingerprint> <sha>\n` (matching `parseScopeStamp` in
 // packages/intentionsutil/src/transitions.ts, which splits on whitespace and
-// expects exactly two fields), and prints the same line to stdout.
+// expects exactly two fields), and prints the same line to stdout — in both
+// modes.
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tacticScopeFingerprint } from "../src/router.js";
-import { readNode, readNodeBody } from "../src/store.js";
+import { readNode, readNodeBody, parseNodeRaw } from "../src/store.js";
+import { extractBody } from "../src/frontmatter.js";
 
 // --- Paths -------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/restamp-scope-fingerprint.ts`,
@@ -48,20 +53,45 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = dirname(dirname(dirname(scriptDir)));
 
 const USAGE =
-  "usage: restamp-scope-fingerprint.ts [--repo-root <dir>] [--main-root <dir>] <id>\n" +
+  "usage: restamp-scope-fingerprint.ts [--repo-root <dir>] [--main-root <dir>] [--from-rev <rev>] <id>\n" +
   "  Re-stamps <main-root>/.claude/worktrees/<id>.scope-fingerprint with the\n" +
-  "  current tacticScopeFingerprint(statement, body) and the current\n" +
-  "  origin/main sha. Prints '<fingerprint> <sha>' to stdout on success.\n";
+  "  current tacticScopeFingerprint(statement, body) and a resolved sha.\n" +
+  "  By default reads the node from disk (intentionsDir) and stamps against\n" +
+  "  origin/main. With --from-rev <rev>, reads the node's committed text at\n" +
+  "  <rev> via 'git show' instead, and stamps against <rev>'s resolved sha.\n" +
+  "  Prints '<fingerprint> <sha>' to stdout on success.\n";
 
-// --- Core helper (exported for tests) -----------------------------------
+// --- Core helpers (exported for tests) -----------------------------------
+
+/**
+ * Compute `tacticScopeFingerprint(statement, body)` and write
+ * `<mainRoot>/.claude/worktrees/<id>.scope-fingerprint` as
+ * `<fingerprint> <sha>\n`. Shared by both content sources (`restampScope`
+ * and `restampScopeFromRev`) — this is the write half of the recipe; the two
+ * callers differ only in how they obtain `statement`/`body`/`sha`.
+ */
+export function writeScopeStamp(
+  mainRoot: string,
+  id: string,
+  statement: string,
+  body: string,
+  sha: string,
+): { fingerprint: string; sha: string } {
+  const fingerprint = tacticScopeFingerprint(statement, body);
+
+  const stampPath = join(mainRoot, ".claude", "worktrees", `${id}.scope-fingerprint`);
+  mkdirSync(dirname(stampPath), { recursive: true });
+  writeFileSync(stampPath, `${fingerprint} ${sha}\n`);
+
+  return { fingerprint, sha };
+}
 
 /**
  * Re-stamp the worktree-local scope-custody stamp for tactic `id`.
  *
- * Reads the node's current statement/body from `intentionsDir`, recomputes
- * `tacticScopeFingerprint`, resolves the current `origin/main` sha from
- * `repoRoot`, and writes `<mainRoot>/.claude/worktrees/<id>.scope-fingerprint`
- * as `<fingerprint> <sha>\n`.
+ * Reads the node's current statement/body from `intentionsDir`, resolves the
+ * current `origin/main` sha from `repoRoot`, and writes the stamp via
+ * `writeScopeStamp`.
  *
  * Unlike transition-node's `refresh_stamp()`, this function propagates every
  * failure (a nonexistent node id, a git failure, a write failure) as a
@@ -76,17 +106,55 @@ export function restampScope(
 ): { fingerprint: string; sha: string } {
   const statement = readNode(intentionsDir, id).statement;
   const body = readNodeBody(intentionsDir, id);
-  const fingerprint = tacticScopeFingerprint(statement, body);
   const sha = execFileSync("git", ["rev-parse", "origin/main"], {
     cwd: repoRoot,
     encoding: "utf8",
   }).trim();
 
-  const stampPath = join(mainRoot, ".claude", "worktrees", `${id}.scope-fingerprint`);
-  mkdirSync(dirname(stampPath), { recursive: true });
-  writeFileSync(stampPath, `${fingerprint} ${sha}\n`);
+  return writeScopeStamp(mainRoot, id, statement, body, sha);
+}
 
-  return { fingerprint, sha };
+/**
+ * Re-stamp the worktree-local scope-custody stamp for tactic `id` from its
+ * COMMITTED text at `rev`, not the working tree.
+ *
+ * Resolves `rev` to a sha once, then reads the node's text at that exact sha
+ * via `git show <sha>:<path>` — avoiding a TOCTOU where the resolved sha and
+ * the read content could diverge across a concurrent `origin/main` advance.
+ * This is the content source `transition-node` needs after a `graph-commit`
+ * land-then-restore cycle, where the worktree has already been reset back to
+ * the pre-transition branch tip and so no longer reflects what actually
+ * landed.
+ *
+ * Fails LOUD on every error (nonexistent rev, nonexistent path at that rev,
+ * parse failure, write failure) — same contract as `restampScope`.
+ */
+export function restampScopeFromRev(
+  repoRoot: string,
+  mainRoot: string,
+  id: string,
+  rev: string,
+  intentionsDir?: string,
+): { fingerprint: string; sha: string } {
+  const sha = execFileSync("git", ["rev-parse", rev], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  }).trim();
+
+  const relPath = relative(repoRoot, intentionsDir ?? join(repoRoot, "intentions"));
+  const normalizedRelPath = relPath.split(sep).join("/");
+  const gitPath = `${normalizedRelPath}/${id}.md`;
+
+  const raw = execFileSync("git", ["show", `${sha}:${gitPath}`], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+  });
+
+  const statement = parseNodeRaw(raw, id).statement;
+  const body = extractBody(raw, id);
+
+  return writeScopeStamp(mainRoot, id, statement, body, sha);
 }
 
 // --- Main ----------------------------------------------------------------
@@ -134,6 +202,17 @@ function run(): void {
     mainRootValue = v;
   }
 
+  const fromRevIdx = args.indexOf("--from-rev");
+  let fromRevValue: string | null = null;
+  if (fromRevIdx !== -1) {
+    const v = args[fromRevIdx + 1];
+    if (!v) {
+      process.stderr.write("restamp-scope-fingerprint: --from-rev requires a rev argument\n" + USAGE);
+      process.exit(1);
+    }
+    fromRevValue = v;
+  }
+
   const intentionsDir = join(repoRoot, "intentions");
 
   // Indices consumed by recognized flags and their values. Anything left that
@@ -147,6 +226,10 @@ function run(): void {
   if (mainRootIdx !== -1) {
     consumed.add(mainRootIdx);
     consumed.add(mainRootIdx + 1);
+  }
+  if (fromRevIdx !== -1) {
+    consumed.add(fromRevIdx);
+    consumed.add(fromRevIdx + 1);
   }
   const positional: string[] = [];
   for (let i = 0; i < args.length; i++) {
@@ -166,7 +249,9 @@ function run(): void {
 
   try {
     const mainRoot = mainRootValue ?? resolveMainRoot(repoRoot);
-    const { fingerprint, sha } = restampScope(intentionsDir, repoRoot, mainRoot, id);
+    const { fingerprint, sha } = fromRevValue
+      ? restampScopeFromRev(repoRoot, mainRoot, id, fromRevValue, intentionsDir)
+      : restampScope(intentionsDir, repoRoot, mainRoot, id);
     process.stdout.write(`${fingerprint} ${sha}\n`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
