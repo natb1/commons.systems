@@ -1,15 +1,30 @@
 ---
 id: tactic-graph-separability-audit
 kind: tactic
-statement: Audit separability — enumerate what breaks when the intention-graph
-  data structure is used without the harness, and track each gap as work
+statement: "the intention graph's separability gaps are tracked as work, not just
+  documented: SEPARABILITY.md's five gaps each become a decomposable tactic under
+  strategy-data-structure-first, so the README's honest-direction copy points at
+  real tracked work"
 owner: ai
-status: codified
+status: raw
 parent: null
-rationale: "Surfaced in the 2026-07-07 interview: 'use it with your own project
-  management and agentic workflows' was recorded as a direction stated honestly,
-  not a current-capability claim, with known separability gaps to become draft
-  tactics under the strategy. This audit is where those gaps get enumerated."
+rationale: "Re-filed 2026-07-25 by author direction at an office-hours sitting.
+  strategy-data-structure-first's 2026-07-07 clarification ('Is use it with your
+  own project management and agentic workflows a current-capability claim?' —
+  'Direction, stated honestly') names this node as the retainer of the
+  separability audit, and tactic-readme-data-structure-first cites it twice as
+  where the honesty caveat is tracked. But the node was absent from the graph:
+  it was pruned by the 2026-07-11 census (it appears in
+  tactic-graph-census-2026-07-11's lists), leaving both citations dangling and
+  the 'gaps become draft tactics under this strategy' promise with no live
+  tracker. The audit WORK PRODUCT does exist —
+  packages/intentionsutil/SEPARABILITY.md documents five concrete gaps — so what
+  is owed is not the audit but the decomposition of its findings into tracked
+  work. This matters more after the same sitting: the author ratified the README
+  subline's imperative phrasing ('Use it with your own project management and
+  agentic workflows') over the honest-direction wording, which makes the claim
+  lean harder on the gaps actually being tracked. Filed as a draft awaiting an
+  /align-tactics round to decompose the five gaps."
 reading: null
 gap: null
 serves:
@@ -19,15 +34,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: done
-execution:
-  branch: tactic-graph-separability-audit
-  pr: 2828
-  attempts: {}
-  markers:
-    - qa-done
-    - reviewed
-  strategy_fingerprint: null
+phase: null
+execution: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -35,94 +43,69 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Audit separability — enumerate what breaks when the intention-graph data structure is used without the harness, and track each gap as work
+# The intention graph's separability gaps are tracked as work, not just documented
 
 ## Context
 
-strategy-data-structure-first positions the intention graph as a data
-structure a reader can adopt with their own project management and agentic
-workflows. The interview recorded "use it with your own workflows" as a
-**direction stated honestly**, not a current-capability claim: the tooling
-assumes this repo's layout and the skills assume the harness, so there are real
-separability gaps between the claim and the code. This audit makes the honesty
-operational — it enumerates, with evidence, what breaks when the graph data
-structure and its tooling (`packages/intentionsutil`) are used **without** the
-dispatch harness, so the README (tactic-readme-data-structure-first) can state
-standalone use as direction rather than capability, and so each confirmed gap
-is tracked rather than denied in copy.
+`strategy-data-structure-first` claims the intention graph is the product and
+this repo is its reference implementation. The README copy the author approved
+on 2026-07-25 tells readers to "use it with your own project management and
+agentic workflows."
 
-This is **off the minimum signal path** for the strategy's round: it does not
-produce the strategy's reading (owner review of the README does). It carries no
-`validates` edge. It runs as ordinary tracked work; calculated attention
-demotes it relative to the on-path README rewrite.
+That claim is only honest if the gaps between it and reality are tracked as
+work. The audit itself is done — `packages/intentionsutil/SEPARABILITY.md`
+enumerates five gaps — but no graph node decomposes them, so the strategy's
+recorded promise that "known separability gaps become draft tactics under this
+strategy" is currently unfulfilled.
 
-## Unit 1 — Enumerate the separability gaps into an audit document
+## The five documented gaps
 
-**Recommended model:** opus. The audit requires reading across
-`packages/intentionsutil` (source, scripts, `SCHEMA.md`), the `graph-commit`
-tooling, and the align skill family, and judging what constitutes a genuine
-separability gap for a standalone adopter versus a harness-only concern. That
-is cross-cutting architectural judgment, not a mechanical sweep.
+From `packages/intentionsutil/SEPARABILITY.md`:
 
-**Scope — deliverable:** a new markdown audit document at
-`packages/intentionsutil/SEPARABILITY.md` (the package is the standalone-
-consumable unit, so the audit lives with it). The document enumerates each
-confirmed gap with:
+1. **Gap 1** (`:39`) — CLI wrapper scripts hardcode the
+   `<repo-root>/intentions/` + `packages/intentionsutil/` layout.
+2. **Gap 2** (`:80`) — the package is not consumable as a normal npm dependency.
+3. **Gap 3** (`:111`) — `graph-commit` is tightly coupled to this repo's GitHub
+   host, CI fast-path, and branch protection.
+4. **Gap 4** (`:151`) — the align skill family assumes worktrees, dispatch state
+   fields, and router semantics.
+5. **Gap 5** (`:181`) — the schema carries harness-only fields, and `SCHEMA.md`
+   documents neither them nor standalone use.
 
-- a short name and a one-line statement of what breaks;
-- `path:line` evidence anchoring the coupling in the code;
-- the standalone adopter's expectation it violates;
-- a severity/blocker note (does this **prevent** standalone use, or merely
-  degrade it?).
+Gap 5 partially overlaps `tactic-schema-md-deprecation`, which is moving
+`SCHEMA.md`'s content into the `intentions/kind-*.md` nodes and deleting it. A
+decomposition round should check whether Gap 5 reduces to "document the
+harness-only fields in the kind nodes" once that lands, rather than filing
+duplicate work.
 
-**Scope — areas to investigate (candidate gaps surfaced in the interview,
-each to be confirmed or dismissed with evidence):**
+## What this node is for
 
-- **`packages/intentionsutil` layout assumptions** — the store and scripts
-  resolve the `intentions/` directory relative to the package/script location
-  (e.g. `write-node.ts` computes `repoRoot` as three dirs up from the script
-  and joins `intentions/`). Enumerate every assumption that the graph lives at
-  `<repo-root>/intentions/` and that the package sits at
-  `packages/intentionsutil/`, and what a consumer with a different layout must
-  override.
-- **`graph-commit` CI coupling** — `graph-commit` stamps the repo's `graph/**`
-  branch-protection fast path and expects this repo's required checks. A
-  consumer repo has neither the ruleset nor the workflow. Enumerate what
-  `graph-commit` assumes about the hosting repo's CI/branch protection.
-- **align skill family harness assumptions** — the align skills assume
-  worktrees, `phase`/`execution` fields, and router semantics. Separate what a
-  standalone adopter actually needs (schema + `validate-graph` + `write-node` +
-  an interview pattern) from what only the dispatch harness needs.
-- **Documentation sufficiency** — assess whether
-  `packages/intentionsutil/SCHEMA.md` alone lets an adopter author a valid
-  graph with no harness context, or what it is missing.
+Two things, neither of which is redoing the audit:
 
-**Scope — out of scope (important):**
-
-- **No code changes.** This tactic only *enumerates* gaps; it does not fix any
-  coupling, refactor `intentionsutil`, or decouple anything.
-- **No graph-node authoring.** The interview's "each confirmed gap becomes its
-  own tactic" is a **future `/align-tactics` round** on
-  strategy-data-structure-first, driven by reading this audit — it is **not**
-  part of this tactic's implement phase. Do not create `tactic-*.md` nodes
-  here; the deliverable is the audit document only.
-- No changes to README, landing, or brand surfaces.
-
-**Reuse:** `packages/intentionsutil/SCHEMA.md` (the existing schema doc — the
-audit assesses its sufficiency and cites it), `packages/intentionsutil/src/`
-and `packages/intentionsutil/scripts/` (the code whose coupling is being
-audited; cite by `path:line`). No new dependencies.
+- **Keep the citations live.** `strategy-data-structure-first`'s 2026-07-07
+  clarification and `tactic-readme-data-structure-first` (`:108`, `:184`) both
+  name this node. With it absent those were dangling references to a promise
+  with no tracker.
+- **Decompose the five gaps into tracked tactics** under
+  `strategy-data-structure-first`, sized per gap, so a reader who takes the
+  README at its word can see which parts of standalone use are known-incomplete
+  and being worked.
 
 ## Verification
 
-Prose — the deliverable is an enumeration, not runnable behavior:
+```verify
+test -f packages/intentionsutil/SEPARABILITY.md
+```
 
-- `packages/intentionsutil/SEPARABILITY.md` exists and lists each confirmed gap
-  with `path:line` evidence and a blocker/degrade severity note.
-- Every candidate area above is either confirmed as a gap (with evidence) or
-  explicitly dismissed (with the reason it is not a standalone blocker).
-- No source file under `packages/intentionsutil/src` or `scripts` is modified
-  (audit makes no code changes); no `intentions/*.md` node is created.
+Judgment, for the decomposition round:
 
-Acceptance is a documentation review — there is no automated signal for the
-audit's completeness.
+- Each of the five gaps either has a tactic under
+  `strategy-data-structure-first` or a recorded reason it needs none.
+- No filed tactic duplicates `tactic-schema-md-deprecation`'s Unit 2 scope.
+- The README's honest-direction claim can point at this node and find real
+  tracked work behind it.
+
+## Dependencies
+
+None hard. Sequencing note: running the decomposition after
+`tactic-schema-md-deprecation` lands avoids double-filing Gap 5.

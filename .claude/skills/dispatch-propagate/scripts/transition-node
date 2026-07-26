@@ -127,7 +127,26 @@ PR="$SET_PR"
 
 # --- Freshness gates over an origin/main snapshot ----------------------------
 SNAP_DIR="$(mktemp -d)" || { echo "transition-node: mktemp failed" >&2; exit 2; }
-trap 'rm -rf "$SNAP_DIR"' EXIT
+# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md from
+# origin/main if this script actually wrote to it (the apply-node-transition.ts
+# call further down). A pre-mutation failure (freshness gate computation, node
+# read, etc.) must not trigger a restore of a file this script never touched.
+MUTATED=0
+trap '
+  rc=$?
+  rm -rf "$SNAP_DIR"
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    # Restore from the immutable blob SHA captured before the mutation, not the
+    # moving origin/main ref (a concurrent fetch may have pruned/relocated the
+    # node). Write to a temp file and mv into place only on success, so a failed
+    # git-show never truncates the node file to zero bytes.
+    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$REPO_ROOT/intentions/$NODE_ID.md.rollback"; then
+      mv "$REPO_ROOT/intentions/$NODE_ID.md.rollback" "$REPO_ROOT/intentions/$NODE_ID.md"
+    else
+      rm -f "$REPO_ROOT/intentions/$NODE_ID.md.rollback"
+    fi
+  fi
+' EXIT
 if ! (cd "$REPO_ROOT" && git archive origin/main intentions 2>/dev/null | tar -x -C "$SNAP_DIR"); then
   mkdir -p "$SNAP_DIR/intentions"
 fi
@@ -157,6 +176,11 @@ fi
 APPLY_FLAGS=("$NODE_ID")
 [[ "$STRATEGY_STALE" == "true" ]] && APPLY_FLAGS+=("--strategy-stale")
 [[ -n "$SET_PR" ]] && APPLY_FLAGS+=("--set-pr" "$SET_PR")
+# FRESH_BLOB was already captured by the refresh-before-read block above (same
+# fetch, same blob) -- reused here rather than re-resolved, so the rollback
+# target and the --base CAS token below are pinned to the exact same
+# origin/main snapshot the read-modify-write below started from.
+MUTATED=1
 if ! RESULT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/apply-node-transition.ts" "${APPLY_FLAGS[@]}") )"; then
   echo "transition-node: apply-node-transition failed for $NODE_ID" >&2
   exit 1
@@ -173,7 +197,12 @@ if [[ "$ARM_MERGE" == "true" && "$STAMP_MISSING" == "true" ]]; then
 fi
 
 # --- Land the state-only write on main ---------------------------------------
-if ! "$GRAPH_COMMIT" --base "$NODE_ID=$FRESH_BLOB" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
+# --base pins the land to the FRESH_BLOB read above: if origin/main's copy of
+# this node advanced again between the refresh and this call (a concurrent
+# writer), graph-commit refuses rather than silently clobbering the advance.
+# -C resolves the target repo from this worktree (tactic-graph-commit-cwd-repo-resolution)
+# rather than the script's own on-disk location.
+if ! "$GRAPH_COMMIT" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
   echo "transition-node: graph-commit failed for $NODE_ID" >&2
   exit 1
 fi

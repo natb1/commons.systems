@@ -31,7 +31,17 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 85
+  override: null
+  rationale: "Author-directed 2026-07-25: the queue-serialization work
+    (dispatch-queue claim integrity, office-hours drain claiming, and the
+    cross-queue landing path) is the current focus. Own boost 85 composes with
+    the +5 inherited from strategy-graph-native-dispatch to an authored 90 —
+    exact parity with tactic-graph-router-live-worker-read-robust, the existing
+    author-set boost on this same defect class — and deliberately below
+    strategy-main-health's standing 100 so the main-health signal keeps its
+    recorded dominance."
 phase: qa
 execution:
   branch: tactic-graph-commit-landing-lock
@@ -41,46 +51,34 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "/qa-fix: QA found one needs-main residue item whose disposition
-    (\"planned-deferral\", verifiable only via sustained observation of
-    graph-commit invocation logs across concurrent real-world usage, not a
-    point-in-time check) routes to human review — no deployed public URL or
-    Claude-in-Chrome-checkable surface exists for it, so the conservative
-    \"uncertain -> human\" default applies rather than transitioning to main-qa.
-    Escalating to office-hours; the tactic itself (Units 1-3) is otherwise fully
-    verified: test-graph-commit.sh passes 31/31 including all 4 new landing-lock
-    cases, and the one script-verifiable QA-plan FAIL (a naive substring-grep
-    false positive on this PR's own branch name colliding with \"landing-lock\")
-    was reclassified already-satisfied since the precise ref-namespace check and
-    the suite's own lock-hygiene cases both confirm the real property holds."
-  since: 2026-07-21
-  recommendation: >-
-    Recommended next steps:
-
-    1. Confirm the code itself is done:
-    `packages/intentionsutil/scripts/test-graph-commit.sh` passes 31/31
-    (verified this pass), including the 4 new landing-lock functional cases
-    (contention-is-cheap, dead-holder steal, live-holder wait, lock-ref
-    hygiene).
-
-    2. Decide how to track the one deferred item: after this PR merges and is in
-    active use, watch real `graph-commit` invocation logs during a period of
-    concurrent dispatch activity for absence of "could not land on main after N
-    attempts" exhaustion events (the regression this tactic exists to fix), and
-    confirm the new "could not claim the landing lock within ...s" log line — if
-    it ever appears — stays rare relative to successful claims. This is
-    inherently a downstream/monitoring check, not something verifiable at merge
-    time.
-
-    3. If desired, this observation could itself become a lightweight follow-up
-    tactic/reminder (e.g. a JIT check after some days of use) rather than a
-    one-off manual glance — that's a judgment call for the human reviewer.
-
-    4. No code changes are recommended from this QA pass — the implementation
-    appears complete and correct.
+  reason: "Original park reason (origin/main does not merge clean, provision exit
+    11) is confirmed STALE and fixed: git merge-tree now reports clean, a merge
+    commit resolving the drift was pushed to the tactic branch, all 43
+    test-graph-commit.sh cases pass, and draft PR #2915 was marked ready.
+    However, clearing this park is currently blocked by a reproducible
+    graph-commit tooling bug on THIS node: three separate clear-park invocations
+    (one background, two foreground, from fresh worktrees off origin/main)
+    either had their office_hours:null write silently reverted back to the stale
+    parked value during a rebase retry, or reported 'graph-commit: landed ... on
+    main' / exit 0 while leaving the office_hours:null edit uncommitted and
+    un-pushed on disk (git status showed a real uncommitted diff, git log showed
+    no new commit). No unresolved-conflict/park output was ever printed by
+    graph-commit in the no-op cases, so this is not the layer-2/3
+    same-field-conflict path;
+    id_files_dirty()/check_base_freshness()/ensure_intentions_only_base() need
+    investigation for why a genuinely dirty office_hours edit is being treated
+    as clean under concurrent main activity."
+  since: 2026-07-26
+  recommendation: "A human (or a follow-up session with someone able to inspect
+    graph-commit's staging logic live) should investigate why id_files_dirty() /
+    check_base_freshness() sometimes fails to detect or preserves a real
+    working-tree diff on this node under concurrent origin/main activity, then
+    retry clearing this park. The underlying merge conflict fix itself (PR
+    #2915) is done and ready; only the park-clearing mechanism is blocked."
 pace_exempt: false
 rounds: null
 attributes: {}

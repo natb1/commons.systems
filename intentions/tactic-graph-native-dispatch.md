@@ -27,38 +27,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/align-tactics tactic-graph-native-dispatch invoked as a per-node
-    finalize/re-plan target, but this node does not fit either category the
-    skill defines: it is neither an undecomposed draft nor soft-frozen — it is a
-    subtree-parent, self-documented in its own rationale as 'Not directly
-    executable (no phase); it completes when its last child completes.' It was
-    already decomposed 2026-07-03 and currently parents 8 children
-    (tactic-fix-interrupt-orthogonal-state: qa,
-    tactic-fix-checks-graph-native-flake-tracking: implement,
-    tactic-legacy-router-removal: implement, tactic-pending-merge-phase: draft,
-    plus 4 done). There is no plan to write and no valid way to land phase:
-    implement on it — its body is the subtree's shared spec, not a PR-sized
-    unit. Root cause: selectGraphTargets's frozen-tactic loop
-    (packages/intentionsutil/src/router.ts, isDraft at ~L125-127, frozen-tactic
-    candidates at ~L317-329) treats any tactic with phase===null as
-    draft-selectable for /align-tactics, with no exclusion for a tactic that is
-    itself another tactic's `parent` (i.e. a permanent, by-design non-executable
-    container). This is not an isolated case: tactic-firebase-demo-saas-app
-    matches the identical shape (status: codified, phase: null, 6 real children
-    via `parent`), so both nodes will keep re-surfacing as align-tactics
-    candidates every tick."
-  since: 2026-07-19
-  recommendation: "Router-code defect, now tracked:
-    tactic-router-subtree-parent-exclusion (drafted 2026-07-19 /align-strategy
-    round on strategy-graph-native-dispatch) records the fix — exclude any
-    tactic named as another tactic's `parent` from the isDraft-selectable set in
-    selectGraphTargets (packages/intentionsutil/src/router.ts), or introduce a
-    first-class marker distinguishing a genuine undecomposed draft from a
-    permanent subtree-parent. This park stands so the router stops re-selecting
-    this node every tick; clear it when that tactic lands its router fix
-    (clearing this park is named in that tactic's draft body as part of its
-    completion)."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -593,8 +562,20 @@ the node via the `office_hours` graph write. Scoped in
 ## 4. Coverage matrix
 
 Every legacy behavior maps to a home in the new family; nothing silently
-drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
-`.claude/skills/plan-issue/SKILL.md`.)
+drops.
+
+Behavior inventory anchors: both SKILL.md bodies were replaced by retirement
+stubs under `tactic-legacy-router-removal` Unit 2, so the inventories this
+matrix was derived from are no longer in the working tree. Read them at the
+pre-retirement blobs (`8e693b5d` is an ancestor of `origin/main`):
+
+```
+git show 8e693b5d:.claude/skills/file-issue/SKILL.md   # 616 lines
+git show 8e693b5d:.claude/skills/plan-issue/SKILL.md   # 691 lines
+```
+
+Any future audit of this matrix's completeness must diff against those blobs,
+not against the stubs.
 
 ### `/file-issue` → `/align-strategy` + `/align-tactics`
 
