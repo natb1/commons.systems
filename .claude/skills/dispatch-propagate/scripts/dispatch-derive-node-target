@@ -34,10 +34,19 @@
 #   === NODE <node-id> ===
 #   PHASE: <phase>
 #   PR: <num>|none
+#   SCOPE-FINGERPRINT: <sha256 hex>
 #   === NODE-JSON ===
 #   <compact single-line JSON — the full readNode() frontmatter object>
 #   === NODE-BODY ===
 #   <raw markdown body, verbatim>
+#
+# SCOPE-FINGERPRINT is `tacticScopeFingerprint(statement, body)` over the SAME
+# origin/main snapshot the rest of this output is derived from — the node's
+# CURRENT scope fingerprint. It is the comparand every phase skill checks its
+# durable evidence (completion markers, the qa-summary comment, the phase-log
+# entry) against: evidence bound to a different fingerprint was produced under a
+# superseded scope and must not be trusted (tactic-phase-evidence-fingerprint-bound).
+# Emitting it here means the phase skills never recompute it themselves.
 #
 # Exit codes:
 #   0  success
@@ -137,8 +146,16 @@ fi
 # --- Step 4: read the node via the intentionsutil store primitives ----------
 COMBINED_JSON="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const { readNode, readNodeBody } = await import("./packages/intentionsutil/src/store.js");
+  const { tacticScopeFingerprint } = await import("./packages/intentionsutil/src/router.js");
   const id = process.argv[1];
-  process.stdout.write(JSON.stringify({ node: readNode(process.argv[2], id), body: readNodeBody(process.argv[2], id) }));
+  const dir = process.argv[2];
+  const node = readNode(dir, id);
+  const body = readNodeBody(dir, id);
+  process.stdout.write(JSON.stringify({
+    node,
+    body,
+    fingerprint: tacticScopeFingerprint(node.statement, body),
+  }));
 ' "$NODE_ID" "$SNAP_DIR/intentions") )"
 if [[ $? -ne 0 || -z "$COMBINED_JSON" ]]; then
   echo "dispatch-derive-node-target: could not read node '$NODE_ID' from the origin/main snapshot" >&2
@@ -184,6 +201,7 @@ if [[ -n "$PR_NUM" ]]; then
 else
   printf 'PR: none\n'
 fi
+printf 'SCOPE-FINGERPRINT: %s\n' "$(jq -r '.fingerprint' <<<"$COMBINED_JSON")"
 printf '=== NODE-JSON ===\n'
 jq -c '.node' <<<"$COMBINED_JSON"
 printf '=== NODE-BODY ===\n'

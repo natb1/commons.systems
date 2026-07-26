@@ -89,6 +89,11 @@ case "$BRANCH" in
     [ "$PR_NUM" = none ] && PR_NUM=""
     NODE_JSON=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-JSON ===$/,/^=== NODE-BODY ===$/p' | sed '1d;$d')
     NODE_BODY=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-BODY ===$/,$p' | sed '1d')
+    # The node's CURRENT scope fingerprint, emitted once by the front door. It is
+    # the comparand for every piece of durable evidence this session may inherit:
+    # the `qa-done` marker (re-entry gate below), the `<!-- dispatch:qa-summary -->`
+    # comment, and the phase-log entry (tactic-phase-evidence-fingerprint-bound).
+    SCOPE_FINGERPRINT=$(printf '%s\n' "$FRONT_DOOR" | sed -n 's/^SCOPE-FINGERPRINT: //p' | head -1)
     # Parked-node re-entry guard. Parking sets office_hours without changing
     # phase, so a stale self-scheduled wakeup re-firing mid-session (bypassing the
     # selector's office_hours-null gate) must not re-run qa-fix against a node
@@ -104,6 +109,25 @@ case "$BRANCH" in
       echo "/qa-fix: node '$NODE_ID' is already office_hours-parked at origin/main — nothing to do" >&2
       exit 0
     fi
+    # Node-lane qa-done re-entry gate (the parallel of the issue lane's
+    # `dispatch:qa-done` label check — the node lane has no such label; this
+    # skill's terminal action there is the `qa-done` marker `transition-node`
+    # writes into `execution.markers`). Query the TYPED `.execution.markers` path
+    # over the front door's NODE_JSON — never text-scrape PR-body or node-body
+    # prose, the same discipline review-fix's node lane applies to its `reviewed`
+    # marker. The marker counts as terminal evidence only when it is valid for
+    # the CURRENT scope.
+    QA_DONE_VALID=""
+    if jq -e --arg fp "$SCOPE_FINGERPRINT" '
+          [ (.execution.markers // [])[]
+            | if type == "string" then { marker: ., fingerprint: null } else . end ]
+          | any(.marker == "qa-done" and (.fingerprint == null or .fingerprint == $fp))
+        ' <<<"$NODE_JSON" >/dev/null; then
+      QA_DONE_VALID=1
+    fi
+    # Non-empty => valid terminal evidence for the CURRENT scope: re-entry is a
+    # no-op. A qa-done marker bound to a DIFFERENT fingerprint leaves this empty,
+    # so the phase re-runs in full instead of being ratified.
     .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --phase-log --pr-is-number
     ;;
 esac
@@ -132,6 +156,20 @@ line includes `dispatch:qa-done` (an interrupted prior run), **skip Steps 0.5–
 entirely** and return — the label is this skill's terminal action, so re-entry is a
 true no-op. Otherwise run all steps in order.
 
+On the **node lane** the parallel re-entry gate is `QA_DONE_VALID` (bound in the
+preamble above): when it is non-empty, **skip Steps 0.5–6 entirely** and return —
+the `qa-done` marker is this lane's terminal action and it is valid for the scope
+now in force, so re-entry is a true no-op. When it is empty the phase runs in
+full, including the case where a `qa-done` marker IS present but bound to a
+different fingerprint: that evidence was produced under a superseded scope and
+ratifies nothing about the current one. An **unbound** (bare-string) `qa-done`
+marker is grandfathered as valid — legacy entries predate fingerprint binding, so
+their staleness is unknowable and they fail OPEN. That fail-open is a bootstrap
+policy, not the end state: it flips to fail-CLOSED once every marker writer binds
+a fingerprint and the unbound entries have churned out of the store (the same
+deferral `markerEvidenceStale` records in
+`packages/intentionsutil/src/transitions.ts`).
+
 ## Steps
 
 **Track a `SKILL_SUBAGENTS` tally** (agent-maintained, not a shell variable):
@@ -158,8 +196,9 @@ each fork site.
    - **Legacy lane** (branch `<N>-…`): `N` = issue number, `TARGET_KIND=issue`.
    - **Node lane** (branch is the node id): the front door already gated on phase
      `qa`, applied the **parked re-entry guard** (`exit 0` when the node is
-     already parked), and bound `N=NODE_ID`, `TARGET_KIND=node`, `PR_NUM`,
-     `NODE_JSON`, and `NODE_BODY` from its structured output. **See
+     already parked), evaluated the **`qa-done` re-entry gate** (`QA_DONE_VALID`),
+     and bound `N=NODE_ID`, `TARGET_KIND=node`, `PR_NUM`, `NODE_JSON`,
+     `NODE_BODY`, and `SCOPE_FINGERPRINT` from its structured output. **See
      [`references/target-resolution.md`](references/target-resolution.md)** for the
      front door's contract, its exit-code routing, and the parked-guard rationale.
 
@@ -265,7 +304,11 @@ each fork site.
    comment (via `post-pr-comment.sh`, then `gh api … -X PATCH` to edit in place),
    then update each item's verdict as it resolves through Step 3's lanes — a dead
    session must leave the plan and resolved verdicts on the PR (distinct from the
-   machine `<!-- dispatch:qa-residue -->` marker). See
+   machine `<!-- dispatch:qa-residue -->` marker). The line **immediately after**
+   the marker binds the comment to the scope it was produced under:
+   `<!-- dispatch:scope-fingerprint <SCOPE_FINGERPRINT> -->` (the value bound in
+   the preamble), so a later session can tell current evidence from superseded
+   evidence. See
    [`references/triage-subagent.md`](references/triage-subagent.md) § Flush.
 
 3. **Execute the triage plan across three lanes.**
@@ -423,8 +466,9 @@ each fork site.
 4. **Post the PR-comment summary.**
 
    Reuse `PR_NUM`. Write a markdown summary to `tmp/qa-fix-summary-<n>.md` with a
-   first line of `<!-- dispatch:qa-summary -->` — the same marker the Step-2 flush
-   uses, so this **finalizes that comment in place** (via `dispatch_marker_comment_id`:
+   first line of `<!-- dispatch:qa-summary -->` and a second line of
+   `<!-- dispatch:scope-fingerprint <SCOPE_FINGERPRINT> -->` — the same marker and
+   binding the Step-2 flush uses, so this **finalizes that comment in place** (via `dispatch_marker_comment_id`:
    edit if present, else `post-pr-comment.sh`; `dangerouslyDisableSandbox: true`). It
    includes items executed, PASS/FAIL/SKIP counts, items **deferred to office-hours**
    (only `needs-human`-class), bugs found, the walkthrough GIF, a **disposition
@@ -435,7 +479,12 @@ each fork site.
    full composition, the verify-source join rules, and the finalize bash.
 
    Then **write the qa phase-log entry** — compose `tmp/phase-log-entry-<n>.md` (a
-   one-line-per-finding digest; a clean pass writes `failed: none`) and run (use
+   one-line-per-finding digest; a clean pass writes `failed: none`), whose **first
+   line** is the scope binding `<!-- dispatch:scope-fingerprint <SCOPE_FINGERPRINT> -->`
+   so a later session reading this entry back as `PRIOR_PHASE_LOG` can tell whether
+   it describes the scope now in force. (`dispatch-write-phase-log` stays
+   content-agnostic on stdin — the binding is composed here, not by the script.)
+   Then run (use
    `dangerouslyDisableSandbox: true` — `gh`):
 
    ```bash
