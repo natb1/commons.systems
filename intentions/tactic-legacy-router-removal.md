@@ -26,8 +26,10 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
+  completion: null
 validates:
   - strategy-graph-native-dispatch
 blocked_by:
