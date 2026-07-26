@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
 import { isStrategyStale, REVIEWED_MARKER } from "./transitions.js";
+import { planSubstance } from "./body-substance.js";
 import { PHASES } from "./schema.js";
 import type { FixState, IntentionNode, Phase } from "./schema.js";
 
@@ -91,13 +92,21 @@ export function strategyFingerprint(strategy: IntentionNode): string {
 
 /**
  * A tactic's SCOPE fingerprint (chain-of-custody, 2026-07-06): sha256 over the
- * node's `statement` plus its markdown body — the plan content a phase worker
- * executes against — and NOTHING from the frontmatter state fields
- * (`phase`/`execution`/`attempts`/`markers`/`office_hours`/`attention`), so a
- * transition or park write never changes it. Residue sections appended to the
- * body ARE scope and DO change it; the transition writer refreshes the stamp
- * after such an append so machinery appends do not trip the chain-of-custody
- * gate (see `tactic-graph-router-transitions`).
+ * node's `statement` plus the PLAN SUBSTANCE of its markdown body — the plan
+ * content a phase worker executes against — and NOTHING from the frontmatter
+ * state fields (`phase`/`execution`/`attempts`/`markers`/`office_hours`/
+ * `attention`), so a transition or park write never changes it.
+ *
+ * Machinery sections (today `## needs-main residue`, written by /qa-fix) sit at
+ * or below the machinery boundary and are excluded BY CONSTRUCTION
+ * (`planSubstance`, body-substance.ts): appending one cannot change this hash,
+ * so no writer has to remember to refresh a phase-start stamp afterwards, and a
+ * machinery append can never demote a tactic out of its completed custody.
+ *
+ * The exclusion happens HERE, not in the store: `readNodeBody` still returns the
+ * body verbatim (the machinery sections are real content every other reader —
+ * the reconciler's residue routing, dispatch-derive-node-target's worker
+ * handoff — must still see).
  *
  * Takes `(statement, body)` rather than a node because `readNode` intentionally
  * drops the body (only frontmatter is authoritative on read); the caller reads
@@ -107,7 +116,44 @@ export function strategyFingerprint(strategy: IntentionNode): string {
  * a different statement/body split).
  */
 export function tacticScopeFingerprint(statement: string, body: string): string {
+  return createHash("sha256").update(JSON.stringify({ statement, body: planSubstance(body) })).digest("hex");
+}
+
+/**
+ * The pre-rescope definition: sha256 over the statement and the WHOLE body.
+ * Module-private and TRANSITIONAL — see `acceptableScopeFingerprints`.
+ */
+function legacyWholeBodyFingerprint(statement: string, body: string): string {
   return createHash("sha256").update(JSON.stringify({ statement, body })).digest("hex");
+}
+
+/**
+ * The fingerprints a stamp comparison accepts for a tactic: the current
+ * plan-substance fingerprint, plus — TRANSITIONALLY — the legacy whole-body one.
+ *
+ * The legacy entry exists only so stamps taken BEFORE this change's merge keep
+ * matching. Without it, the 19 residue-carrying nodes (and any body whose
+ * trailing newline run is not exactly one `\n`) would all read as scope-stale on
+ * the first sweep after merge and be demoted for nothing.
+ *
+ * DELETION CONDITION: stamps rotate on every worker provision and every
+ * transition, so the legacy entry stops mattering as soon as no
+ * `.claude/worktrees/*.scope-fingerprint` file predates this change's merge. At
+ * that point: drop the legacy entry, inline `tacticScopeFingerprint` into
+ * `scopeStampMatches`, and delete `legacyWholeBodyFingerprint`.
+ */
+export function acceptableScopeFingerprints(statement: string, body: string): readonly string[] {
+  return [tacticScopeFingerprint(statement, body), legacyWholeBodyFingerprint(statement, body)];
+}
+
+/**
+ * Whether a stamped scope fingerprint still matches the tactic — the single
+ * comparison every chain-of-custody site routes through (scope-sweep,
+ * check-node-selection's check 5, compute-freshness), so the transitional
+ * legacy acceptance is applied identically everywhere and removed in one place.
+ */
+export function scopeStampMatches(stamped: string, statement: string, body: string): boolean {
+  return acceptableScopeFingerprints(statement, body).includes(stamped);
 }
 
 // --- Helpers -------------------------------------------------------------------

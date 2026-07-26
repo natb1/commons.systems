@@ -7,9 +7,10 @@
 //   - strategy fingerprint: the serving strategy's current substance
 //     (`strategyFingerprint`) vs `execution.strategy_fingerprint` on the tactic
 //     — the soft-freeze trigger (strategy clarification 10).
-//   - scope fingerprint: the tactic's current statement+body
-//     (`tacticScopeFingerprint`) vs the fingerprint stamped at phase start
-//     (chain-of-custody, 2026-07-06).
+//   - scope fingerprint: the tactic's current statement plus the PLAN SUBSTANCE
+//     of its body (`acceptableScopeFingerprints`) vs the fingerprint stamped at
+//     phase start (chain-of-custody, 2026-07-06). Machinery sections appended
+//     below the boundary are excluded, so they are never scope drift.
 //
 // The snapshot is origin/main (never a branch): the wrapper extracts
 // `intentions/` from origin/main into a temp dir. This script reads only that
@@ -31,7 +32,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes, readNode, readNodeBody } from "../src/store.js";
-import { servingStrategyIds, strategyFingerprint, tacticScopeFingerprint } from "../src/router.js";
+import { acceptableScopeFingerprints, servingStrategyIds, strategyFingerprint } from "../src/router.js";
 import { isScopeStale, isStrategyStale, parseScopeStamp } from "../src/transitions.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -84,11 +85,12 @@ export function computeFreshness(args: Args): FreshnessResult {
   const tactic = readNode(args.snapshot, args.id);
   const body = readNodeBody(args.snapshot, args.id);
 
-  // Scope fingerprint gate.
-  const scopeFp = tacticScopeFingerprint(tactic.statement, body);
+  // Scope fingerprint gate. The stamp is compared against the ACCEPTED set (the
+  // plan-substance fingerprint plus the transitional legacy whole-body one), so
+  // a machinery section appended below the boundary is never scope drift.
   const stampContent = args.stamp !== null && existsSync(args.stamp) ? readFileSync(args.stamp, "utf8") : "";
   const stamp = parseScopeStamp(stampContent);
-  const scopeStale = isScopeStale(stamp, scopeFp);
+  const scopeStale = isScopeStale(stamp, acceptableScopeFingerprints(tactic.statement, body));
 
   // Strategy fingerprint gate: check each serving strategy against its OWN entry
   // in the per-strategy stamp map — a mismatch on any one freezes the subtree.

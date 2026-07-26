@@ -1,5 +1,6 @@
 import type { Execution, IntentionNode, Rounds, StrategyStampValue } from "./schema.js";
 import { servingStrategyIds } from "./router.js";
+import { isNeedsMainHeadingText } from "./body-substance.js";
 
 // Graph router v2, second half: phase transitions, execution-state writes,
 // the reconciler sweep, and completion pruning (tactic-graph-router-transitions).
@@ -238,11 +239,17 @@ export function reconcileClosedPhase(): "done" {
  * `## Needs-main residue`, `## Needs-main QA`. This is the single detector the
  * reconciler and the transition writer share so the residue branch (merged →
  * `main-qa`, review → `main-qa`) is decided identically everywhere.
+ *
+ * Scans the RAW body deliberately: the residue section is machinery output
+ * excluded from the scope fingerprint (`planSubstance`), but the reconciler's
+ * qa → main-qa routing depends on SEEING it, so this must not read the
+ * substance region. The heading predicate itself is the shared
+ * `isNeedsMainHeadingText`, which the boundary rule also uses.
  */
 export function hasNeedsMainResidue(body: string): boolean {
   for (const line of body.split("\n")) {
     const m = line.match(/^##\s+(.*)$/);
-    if (m !== null && /^needs-main(?:\s|$)/i.test(m[1].trim())) return true;
+    if (m !== null && isNeedsMainHeadingText(m[1])) return true;
   }
   return false;
 }
@@ -323,14 +330,20 @@ export function parseScopeStamp(content: string): ScopeStamp | null {
 }
 
 /**
- * The scope-fingerprint gate result: the current `origin/main` scope
- * fingerprint differs from the phase-start stamp the worker-start gate saved.
- * A `null` stamp (missing/malformed) is NOT stale here — the caller owns the
- * bootstrap fail-open / post-launch fail-closed policy.
+ * The scope-fingerprint gate result: the phase-start stamp the worker-start gate
+ * saved is not among the fingerprints the tactic's current `origin/main` scope
+ * accepts. A `null` stamp (missing/malformed) is NOT stale here — the caller
+ * owns the bootstrap fail-open / post-launch fail-closed policy.
+ *
+ * `current` is a SET of accepted fingerprints (`acceptableScopeFingerprints`,
+ * router.ts) because the rescope to plan substance transitionally also accepts
+ * the legacy whole-body fingerprint. A bare string is treated as a one-element
+ * set.
  */
-export function isScopeStale(stamp: ScopeStamp | null, currentFingerprint: string): boolean {
+export function isScopeStale(stamp: ScopeStamp | null, current: string | readonly string[]): boolean {
   if (stamp === null) return false;
-  return stamp.fingerprint !== currentFingerprint;
+  const accepted = typeof current === "string" ? [current] : current;
+  return !accepted.includes(stamp.fingerprint);
 }
 
 /**

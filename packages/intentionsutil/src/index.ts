@@ -17,10 +17,19 @@ export {
   selectGraphTargets,
   strategyFingerprint,
   tacticScopeFingerprint,
+  acceptableScopeFingerprints,
+  scopeStampMatches,
   servingStrategyIds,
   readingDate,
 } from "./router.js";
 export type { GraphCandidate, GraphSelection, SelectionEvent } from "./router.js";
+export {
+  MACHINERY_SENTINEL,
+  isMachinerySentinelLine,
+  isNeedsMainHeadingText,
+  planSubstance,
+  appendMachinerySection,
+} from "./body-substance.js";
 export {
   PLANNED_MARKER,
   QA_DONE_MARKER,
