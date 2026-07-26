@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-execution-pr-merge-verification
   pr: 2965
@@ -29,12 +29,21 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-25T19:24:10Z
+    mergeCommitSha: d33e35838f49d22fba0c9f5ea25176b6c665b3a1
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-26
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /dispatch-conflict once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}

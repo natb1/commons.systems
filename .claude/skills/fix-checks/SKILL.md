@@ -144,7 +144,7 @@ actually completes.
     "$N" --spend-attempt
   node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
     "$N" --record-push "$HEAD_SHA"
-  .claude/skills/dispatch-propagate/scripts/graph-commit \
+  packages/intentionsutil/scripts/graph-commit \
     -m "graph: record fix attempt + push $HEAD_SHA on $N" "$N"
   ```
 
@@ -158,7 +158,7 @@ actually completes.
   ```bash
   node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
     "$N" --spend-attempt
-  .claude/skills/dispatch-propagate/scripts/graph-commit \
+  packages/intentionsutil/scripts/graph-commit \
     -m "graph: record fix attempt (no push) on $N" "$N"
   ```
 

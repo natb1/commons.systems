@@ -374,6 +374,31 @@ export interface FixState {
   pushed_sha: string | null;
 }
 
+/**
+ * Merge-verification evidence recorded on `Execution` at the done-transition,
+ * so a merge-verification gate need not trust `execution.pr` alone. There are
+ * two independent sufficient proofs:
+ *
+ * - A real PR merge: `mergedAt` + `mergeCommitSha` both non-null. GitHub REST
+ *   never reports a PR state of "MERGED" (only "open"/"closed"), so a
+ *   non-null `merged_at` is the merge signal, and `mergeCommitSha` is the
+ *   `merge_commit_sha` GitHub reports (the sha landed on the base branch).
+ * - An out-of-band landing: `graphCommitSha` non-null, backfilled manually by
+ *   an authoring or office-hours session when content reached `main` via
+ *   commits rather than the recorded PR. The session knows the sha firsthand;
+ *   it is never derived mechanically from `graph-commit`, which prints no sha
+ *   to stdout.
+ *
+ * All three fields null means a node was reconciled to `done` with no
+ * evidence recorded (e.g. abandoned or otherwise unverifiable) — a later
+ * census step flags this case rather than silently pruning it.
+ */
+export interface Completion {
+  mergedAt: string | null; // GitHub PR merged_at, FULL ISO-8601 w/ time
+  mergeCommitSha: string | null; // GitHub merge_commit_sha (the sha on the base)
+  graphCommitSha: string | null; // manually-backfilled out-of-band landing sha
+}
+
 export interface Execution {
   branch: string;
   pr: number | null;
@@ -387,6 +412,7 @@ export interface Execution {
    * it (to a validated object or `null`) on any value it returns.
    */
   fix?: FixState | null;
+  completion?: Completion | null;
 }
 
 /** A first-class parking record: why a node is in office hours and since when. */
@@ -508,6 +534,25 @@ function validateFixState(value: unknown, field: string): FixState | null {
   };
 }
 
+/**
+ * Nullable `Completion` object: nullable strings `mergedAt`, `mergeCommitSha`,
+ * `graphCommitSha`. Deliberately uses `optionalString` (not
+ * `optionalDateString`) for `mergedAt` — GitHub's `merged_at` is a full
+ * ISO-8601 timestamp (e.g. "2026-07-11T12:00:00Z"), not the strict
+ * `YYYY-MM-DD` shape `requireDateString`/`optionalDateString` enforce.
+ */
+function validateCompletion(value: unknown, field: string): Completion | null {
+  if (value == null) return null;
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object or null for ${field}, got ${typeof value}`);
+  }
+  return {
+    mergedAt: optionalString(value.mergedAt, `${field}.mergedAt`),
+    mergeCommitSha: optionalString(value.mergeCommitSha, `${field}.mergeCommitSha`),
+    graphCommitSha: optionalString(value.graphCommitSha, `${field}.graphCommitSha`),
+  };
+}
+
 function validateExecution(value: unknown, field: string): Execution {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
@@ -519,6 +564,7 @@ function validateExecution(value: unknown, field: string): Execution {
     markers: validateIdArray(value.markers, `${field}.markers`),
     strategy_fingerprint: validateStrategyFingerprint(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
     fix: validateFixState(value.fix, `${field}.fix`),
+    completion: validateCompletion(value.completion, `${field}.completion`),
   };
 }
 

@@ -31,7 +31,7 @@ attention:
     (boost 100), which the 2026-07-13 write-path guard keeps dominant. Own-boost
     90 composes below 100, tripping no guard, while topping the ~11-max normal
     field."
-phase: review
+phase: done
 execution:
   branch: tactic-heartbeat-sweep-before-pause
   pr: 2966
@@ -39,8 +39,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:22:30Z
+    mergeCommitSha: 35f6e3f54d8aeff373138bd32b039cd61fd25a76
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -125,7 +130,7 @@ stale-marker plant/assert pattern.
 
 ## needs-main residue
 
-### 8. Real timer-environment sweep effectiveness across live pause/resume cycles
+### 8. Real timer-environment sweep effectiveness across live pause/resume cycles — SKIPPED
 
 - URL path: current
 - Expected outcome: over real pause cycles the reservation ledger stays
@@ -136,3 +141,7 @@ stale-marker plant/assert pattern.
   (`claude agents --json`), which a scratch scaffold cannot reproduce;
   verify by observing reservation-ledger size and worker health over the
   next few live pause/resume cycles.
+- Disposition: skipped by author direction 2026-07-25 — not browser-verifiable
+  (no real `url_path`, effectiveness only observable over live pause/resume
+  cycles on the systemd timer), so `/qa-main` cleared it without a browser
+  check rather than parking to office-hours. Node advanced main-qa -> done.
