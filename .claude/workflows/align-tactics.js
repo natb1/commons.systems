@@ -309,7 +309,7 @@ const DECOMPOSE_SCHEMA = {
 };
 
 // PLAN_SCHEMA — the per-tactic plan-authoring output (SKILL.md Step 3). The full
-// clean-session plan body (markdown, the /plan-issue plan schema), any premises
+// clean-session plan body (markdown, per buildPlanPrompt's PLAN BODY SCHEMA), any premises
 // the planner surfaced that the drift phase did not record, and a park slot for
 // a tactic the planner cannot plan autonomously.
 const PLAN_SCHEMA = {
@@ -615,8 +615,8 @@ function buildDecomposePrompt(strategy, drafts, gather, drift) {
   return [
     'You are the decompose-to-signal agent for an /align-tactics round. Design the',
     'MINIMUM tactic set that validates the strategy\'s success_signal THIS round —',
-    'not everything the strategy could eventually need. This is the /plan-issue',
-    'decomposition gate (leaf = one PR) applied to a strategy. Author no graph',
+    'not everything the strategy could eventually need. Apply the',
+    'decomposition gate (leaf = one PR) to the strategy. Author no graph',
     'writes; emit the DECOMPOSE_SCHEMA structure the caller lands.',
     '',
     UNTRUSTED_GUARD,
@@ -705,9 +705,9 @@ function buildDecomposePrompt(strategy, drafts, gather, drift) {
 function buildPlanPrompt(strategy, tactic, gather) {
   return [
     'You are the plan-authoring agent for a single claude-eligible tactic. Produce',
-    'a FULL clean-session plan and return it as body_markdown. Inherit /plan-issue\'s',
-    'plan-quality bar verbatim: a fresh session with ONLY this node body must be',
-    'able to execute the plan. Reuse-first and design-proposals discipline apply',
+    'a FULL clean-session plan and return it as body_markdown. The quality bar:',
+    'a fresh session with ONLY this node body must be able to execute the plan.',
+    'Reuse-first and design-proposals discipline apply',
     '(lead with the ideal greenfield design; add a brownfield migration path when',
     'warranted). Author no graph writes.',
     '',
@@ -718,7 +718,7 @@ function buildPlanPrompt(strategy, tactic, gather) {
     '',
     UNTRUSTED_GUARD,
     '',
-    'PLAN BODY SCHEMA (markdown, the same schema /plan-issue persists):',
+    'PLAN BODY SCHEMA (markdown) — this block is the schema; follow it exactly:',
     '- ## Context — why this change is being made: the problem, what prompted it,',
     '  the intended outcome.',
     '- An ordered list of UNITS OF WORK, each with:',

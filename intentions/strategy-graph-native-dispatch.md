@@ -1503,6 +1503,73 @@ clarifications:
       it is a direct expression of this section's own recorded net guarantee
       rather than a new commitment; held on trust pending author ratification —
       enrolled at tactic-review-sitting-fingerprint-custody-2026-07-25."
+  - question: Does the fingerprint-bound phase-evidence invariant (2026-07-25)
+      invalidate completion evidence that carries no bound fingerprint at all —
+      every marker, phase-log entry, and QA PR comment written before the
+      binding lands?
+    answer: "(Recorded 2026-07-25 /align-tactics round on
+      tactic-phase-evidence-fingerprint-bound.) Does the fingerprint-bound
+      phase-evidence invariant invalidate completion evidence that carries no
+      bound fingerprint at all? No — the binding is PROSPECTIVE. The invariant
+      fires on evidence stamped at a DIFFERENT fingerprint; evidence with NO
+      stamp (every marker, phase-log entry, and QA PR comment written before the
+      binding lands) reads as unbound, not as mismatched, and stays ratifiable
+      on re-entry. Grounds: the recorded wording of the same-day
+      fingerprint-bound-evidence clarification and the carrier tactic's own
+      statement both scope the re-run trigger to a different fingerprint, and
+      the corpus's dominant precedent for an absent stamp is fail-open
+      (isScopeStale's null-stamp-is-not-stale,
+      packages/intentionsutil/src/transitions.ts:331, and the same missing-stamp
+      fail-open in packages/intentionsutil/src/scope-sweep.ts); the one opposite
+      precedent, the missing-stamp fail-CLOSED hold at
+      .claude/skills/dispatch-propagate/scripts/transition-node:171-175, is
+      scoped to arming auto-merge at review completion and is not widened here.
+      Consequence, accepted rather than hidden: the Fingerprint & Freeze net
+      guarantee is restored only for evidence produced after the binding lands,
+      so the window closes as the currently in-flight tactics cycle rather than
+      by a corpus-wide forced re-run of QA. A future round wanting the stricter
+      reading — an unbound qa-done forces a re-run — should record it as an
+      author decision, since its cost is a forced re-QA of every in-flight
+      node."
+  - question: How does the fingerprint-bound phase-evidence invariant (2026-07-25)
+      sit with the standing phase-progress condition that a re-selected worker
+      treats pre-existing worktree and PR state as resume input rather than
+      redoing the phase?
+    answer: (Recorded 2026-07-25 /align-tactics round.) How does the
+      fingerprint-bound phase-evidence invariant sit with the standing
+      phase-progress condition, which says a re-selected worker treats
+      pre-existing worktree and PR state as resume input rather than redoing the
+      phase? The condition governs IN-PROGRESS residue — worktree commits,
+      per-unit fix commits, a partially-written PR comment — and is unchanged.
+      The same-day invariant governs COMPLETED-phase evidence — a phase-log
+      entry, a qa-done marker, a finalized QA PR comment — and narrows the
+      condition only there, and only when that evidence's bound fingerprint
+      differs from the current one. Resume-as-input stays the default; re-run is
+      the exception a fingerprint mismatch forces. The condition text itself was
+      not reconciled when the invariant was recorded, so this note records the
+      boundary rather than editing a human-decided condition; a future /align
+      interview may fold it into the condition if the author prefers it homed
+      there.
+  - question: Is strategy-main-health's dominant-boost write-path enforcement
+      (condition 14) actually implemented mechanically, given this round's
+      clause-coverage evidence reported it as unenforced?
+    answer: "(Verified 2026-07-25 /align-tactics round.) The standing condition that
+      strategy-main-health's dominant boost is enforced at the write path IS
+      implemented — a clause-coverage pass this round reported it as unenforced,
+      and that finding is wrong and must not be re-derived. The guard is
+      validateGraph rule 18 (checkAttentionDominance,
+      packages/intentionsutil/src/schema.ts:876-908, documented at 995-1003): it
+      reads strategy-main-health's live attention.boost as the threshold,
+      rejects any other node whose attention.boost or attention.override matches
+      or exceeds it, and honors the literal substring 'ACK:
+      main-health-dominance' in attention.rationale as the author override. Two
+      limits recorded honestly: the condition's other half — refusing a commit
+      that REDUCES the dominant boost — has no implementation, and the guard is
+      inert when strategy-main-health's own attention.boost is null, so a commit
+      that nulls or lowers it silently disarms the ceiling. That residual is a
+      mechanical defect for a future tactic to carry, not a change of direction;
+      the two tactics boosted to 95 on 2026-07-25 sit below the ceiling and
+      satisfy the guard as implemented."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
