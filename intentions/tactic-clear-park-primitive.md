@@ -53,19 +53,7 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "graph-commit: concurrent-edit conflict — manual merge needed"
-  since: 2026-07-26
-  recommendation: "A concurrent writer landed an overlapping edit to this node
-    while this session's edit was in flight; this writer's content was NOT
-    landed. This session's unlanded content is preserved at
-    /tmp/tmp.Aw7mheRXYx/tactic-clear-park-primitive.md (this machine only — may
-    not survive past this session). Recommended: the losing writer re-reads the
-    current origin/main content, manually merges in its intended edit, and
-    re-runs graph-commit on the merged result — that same commit clears this
-    office_hours park. A third session encountering this park while the loser is
-    still working should wait rather than attempt its own merge (the mailbox
-    discipline)."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -208,6 +196,13 @@ verification requires a live `git fetch origin/main` and a real `graph-commit`
 landing on `main`, both out of scope for an automated non-mutating check — so they
 are deferred here for post-merge verification against deployed main:
 
+`/qa-main` (2026-07-26): neither item is browser-verifiable — both are
+clear-park CLI scenarios gated on a live `git fetch origin/main` and an actual
+`graph-commit` landing on main, not on anything observable via a deployed web
+page (both carry `url_path: current`, not a real path). Author-directed
+2026-07-26: skip rather than park for a human main-qa glance — mark both
+skipped and progress the node to `done`.
+
 - **id 4** — Idempotent no-op exit 0 when the node is already unparked on
   origin/main
   - url_path: current (CLI script, no URL)
@@ -219,6 +214,8 @@ are deferred here for post-merge verification against deployed main:
     network/mutating side effects out of scope for an automated non-mutating
     shell check in this sandbox; verify by running `clear-park` against a real
     already-unparked scratch node on main.
+  - status: skipped — not browser-verifiable; author-directed 2026-07-26 to
+    skip rather than escalate to office-hours.
 
 - **id 5** — Full clear-and-land round-trip, `--base` compare-and-swap, and
   stale-base refusal
@@ -232,3 +229,5 @@ are deferred here for post-merge verification against deployed main:
     requires network and repository-mutating side effects out of scope for an
     automated non-mutating check; verify by running `clear-park` against a real
     parked scratch node on main, and by testing the stale-base refusal directly.
+  - status: skipped — not browser-verifiable; author-directed 2026-07-26 to
+    skip rather than escalate to office-hours.
