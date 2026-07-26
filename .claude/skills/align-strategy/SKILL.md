@@ -77,13 +77,7 @@ blocks your `graph-commit` rebase, and a stale read races live phase state
    before the first write. A brand-new strategy has no id until step 5
    constructs it; author it in the worktree and claim its id as soon as the
    id is fixed.
-2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
-   already exists with a live session — `worktree_has_live_session <path>`
-   (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
-   run with `dangerouslyDisableSandbox: true`) — the claim is held by
-   another session: stop and report the held claim to the author. Do
-   **not** park the node — a held claim is not a defect.
-3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+2. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
    or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
    liveness rule the router uses, so no separate lock is needed. **Prefer
