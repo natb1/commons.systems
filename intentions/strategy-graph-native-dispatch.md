@@ -37,19 +37,26 @@ recovers:
 clarifications:
   - question: Where does a tactic's execution state live — derived from PR/CI ground
       truth as today, or persisted in the node?
-    answer: >-
-      Where does a tactic's execution state live — derived from PR/CI ground truth as today, or persisted in the node? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-03 interview.
+    answer: Where does a tactic's execution state live — derived from PR/CI ground
+      truth as today, or persisted in the node? — See body §Phase Transitions &
+      Fix State for the full mechanism. Recorded 2026-07-03 interview.
   - question: How do concurrent sessions record graph edits safely, given a record
       must land on origin/main before it is schedulable?
-    answer: "How do concurrent sessions record graph edits safely, given a record must land on origin/main before it is schedulable? — See body §Serialization & Commit. Recorded 2026-07-03 interview."
+    answer: How do concurrent sessions record graph edits safely, given a record
+      must land on origin/main before it is schedulable? — See body
+      §Serialization & Commit. Recorded 2026-07-03 interview.
   - question: A strategy's tactics all complete but its signal is still unvalidated
       — what stops /align-tactics from burning rounds forever?
-    answer: >-
-      A strategy's tactics all complete but its signal is still unvalidated — what stops /align-tactics from burning rounds forever? — See body §Phase Transitions & Fix State. Recorded 2026-07-03 interview.
+    answer: A strategy's tactics all complete but its signal is still unvalidated —
+      what stops /align-tactics from burning rounds forever? — See body §Phase
+      Transitions & Fix State. Recorded 2026-07-03 interview.
   - question: What replaces the dispatch:office-hours label?
-    answer: What replaces the dispatch:office-hours label? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-03 interview.
+    answer: What replaces the dispatch:office-hours label? — See body §Recovery &
+      Session Lifecycle for the full mechanism. Recorded 2026-07-03 interview.
   - question: Where does a tactic's execution plan live, given node bodies are cosmetic?
-    answer: "Where does a tactic's execution plan live, given node bodies are cosmetic? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-03."
+    answer: Where does a tactic's execution plan live, given node bodies are
+      cosmetic? — See body §Other Settled Mechanism for the full mechanism.
+      Recorded 2026-07-03.
   - question: Where does tactical content naturally produced during strategy work live?
     answer: "In the graph, as draft tactic nodes — never in ad-hoc design docs
       outside intentions/. /align-strategy's contract is retain, not refine:
@@ -89,73 +96,102 @@ clarifications:
       4). Recorded 2026-07-03 interview."
   - question: Round 1 deferred the /align-init entrypoint by omission — how do
       deferrals stay visible without competing with signal work?
-    answer: "Round 1 deferred the /align-init entrypoint by omission — how do deferrals stay visible without competing with signal work? — See body §Pace, Backlog & Attention. Recorded 2026-07-03 interview."
+    answer: Round 1 deferred the /align-init entrypoint by omission — how do
+      deferrals stay visible without competing with signal work? — See body
+      §Pace, Backlog & Attention. Recorded 2026-07-03 interview.
   - question: What happens when a strategy's substance is edited while it has open
       tactics?
-    answer: >-
-      What happens when a strategy's substance is edited while it has open tactics? — See body §Fingerprint & Freeze. Recorded 2026-07-03 interview.
+    answer: What happens when a strategy's substance is edited while it has open
+      tactics? — See body §Fingerprint & Freeze. Recorded 2026-07-03 interview.
   - question: Does the backlog band scale — and does it self-correct when the graph
       changes?
-    answer: "Does the backlog band scale — and does it self-correct when the graph changes? — See body §Pace, Backlog & Attention for the full mechanism. Recorded 2026-07-03 interview."
+    answer: Does the backlog band scale — and does it self-correct when the graph
+      changes? — See body §Pace, Backlog & Attention for the full mechanism.
+      Recorded 2026-07-03 interview.
   - question: Does per-issue worktree isolation carry over — where does a
       graph-native tactic's worker execute?
-    answer: "Does per-issue worktree isolation carry over — where does a
-      graph-native tactic's worker execute? — See body §Worktree Claiming &
-      Liveness. Recorded 2026-07-03."
+    answer: Does per-issue worktree isolation carry over — where does a graph-native
+      tactic's worker execute? — See body §Worktree Claiming & Liveness.
+      Recorded 2026-07-03.
   - question: Can workers execute nodes concurrently — and what stops two workers
       claiming the same node?
-    answer: "Can workers execute nodes concurrently — and what stops two workers
+    answer: Can workers execute nodes concurrently — and what stops two workers
       claiming the same node? — See body §Worktree Claiming & Liveness for the
-      full mechanism. Recorded 2026-07-03."
+      full mechanism. Recorded 2026-07-03.
   - question: Does the graph-native router keep the legacy pace function — and where
       does its priority override live?
-    answer: "Does the graph-native router keep the legacy pace function — and where does its priority override live? — See body §Pace, Backlog & Attention for the full mechanism. Recorded 2026-07-03 interview."
+    answer: Does the graph-native router keep the legacy pace function — and where
+      does its priority override live? — See body §Pace, Backlog & Attention for
+      the full mechanism. Recorded 2026-07-03 interview.
   - question: Before the transitions tactic lands, who advances a graph-native
       tactic's phase on main — how do QA, review, CI-gated fix, and merge
       workers get scheduled?
-    answer: >-
-      Before the transitions tactic lands, who advances a graph-native tactic's phase on main — how do QA, review, CI-gated fix, and merge workers get scheduled? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-03 from author review.
+    answer: Before the transitions tactic lands, who advances a graph-native
+      tactic's phase on main — how do QA, review, CI-gated fix, and merge
+      workers get scheduled? — See body §Phase Transitions & Fix State for the
+      full mechanism. Recorded 2026-07-03 from author review.
   - question: What did the author's branch-protection review find, and what
       mechanism lets intentions/-only commits land on main without a PR?
-    answer: "What did the author's branch-protection review find, and what mechanism lets intentions/-only commits land on main without a PR? — See body §Serialization & Commit for the full mechanism. Recorded 2026-07-03."
+    answer: What did the author's branch-protection review find, and what mechanism
+      lets intentions/-only commits land on main without a PR? — See body
+      §Serialization & Commit for the full mechanism. Recorded 2026-07-03.
   - question: Beyond the pace curve (clarification 14), does the legacy router's
       token-optimization machinery carry over to the graph-native router?
-    answer: "Beyond the pace curve (clarification 14), does the legacy router's token-optimization machinery carry over to the graph-native router? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-04 interview."
+    answer: Beyond the pace curve (clarification 14), does the legacy router's
+      token-optimization machinery carry over to the graph-native router? — See
+      body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-04
+      interview.
   - question: Is the fix phase a linear step between implement and qa?
-    answer: >-
-      Is the fix phase a linear step between implement and qa? — See body §Phase Transitions & Fix State. Recorded 2026-07-04 from author direction.
+    answer: Is the fix phase a linear step between implement and qa? — See body
+      §Phase Transitions & Fix State. Recorded 2026-07-04 from author direction.
   - question: Review findings beyond the tactic's plan — which are fixed in scope,
       which defer, which are ignored, and how do deferrals schedule?
-    answer: Review findings beyond the tactic's plan — which are fixed in scope, which defer, which are ignored, and how do deferrals schedule? — See body §Review & QA Disposition for the full mechanism. Recorded 2026-07-04 interview.
+    answer: Review findings beyond the tactic's plan — which are fixed in scope,
+      which defer, which are ignored, and how do deferrals schedule? — See body
+      §Review & QA Disposition for the full mechanism. Recorded 2026-07-04
+      interview.
   - question: Is the qa phase a re-run of the automated checks — and what does a
       bootstrap-emulating session owe it?
-    answer: Is the qa phase a re-run of the automated checks — and what does a bootstrap-emulating session owe it? — See body §Review & QA Disposition for the full mechanism. Recorded 2026-07-04 from author direction.
+    answer: Is the qa phase a re-run of the automated checks — and what does a
+      bootstrap-emulating session owe it? — See body §Review & QA Disposition
+      for the full mechanism. Recorded 2026-07-04 from author direction.
   - question: Does review-phase parity bind like qa parity — what does an emulating
       session owe the review phase?
-    answer: Does review-phase parity bind like qa parity — what does an emulating session owe the review phase? — See body §Review & QA Disposition for the full mechanism. Recorded 2026-07-04 interview.
+    answer: Does review-phase parity bind like qa parity — what does an emulating
+      session owe the review phase? — See body §Review & QA Disposition for the
+      full mechanism. Recorded 2026-07-04 interview.
   - question: Where does a graph-native tactic's qa needs-main residue — post-merge
       verify-against-prod work — live?
-    answer: >-
-      Where does a graph-native tactic's qa needs-main residue — post-merge verify-against-prod work — live? — See body §Phase Transitions & Fix State. Recorded 2026-07-04 interview.
+    answer: Where does a graph-native tactic's qa needs-main residue — post-merge
+      verify-against-prod work — live? — See body §Phase Transitions & Fix
+      State. Recorded 2026-07-04 interview.
   - question: The repo was re-anchored — main checked out at the project root with
       Claude Code managing worktrees natively; do the worktree commitments still
       target the legacy .bare + sibling worktrees/ layout?
-    answer: "The repo was re-anchored — main checked out at the project root
-      with Claude Code managing worktrees natively; do the worktree commitments
-      still target the legacy .bare + sibling worktrees/ layout? — See body
-      §Worktree Claiming & Liveness for the full mechanism. Recorded
-      2026-07-05."
+    answer: The repo was re-anchored — main checked out at the project root with
+      Claude Code managing worktrees natively; do the worktree commitments still
+      target the legacy .bare + sibling worktrees/ layout? — See body §Worktree
+      Claiming & Liveness for the full mechanism. Recorded 2026-07-05.
   - question: The first emulated router tick ran as a Workflow-tool script — is the
       Workflow primitive a better tick-execution substrate than the legacy shell
       spawn chain?
-    answer: "The first emulated router tick ran as a Workflow-tool script — is the Workflow primitive a better tick-execution substrate than the legacy shell spawn chain? — See body §Execution Substrate for the full mechanism. Recorded 2026-07-06 interview."
+    answer: The first emulated router tick ran as a Workflow-tool script — is the
+      Workflow primitive a better tick-execution substrate than the legacy shell
+      spawn chain? — See body §Execution Substrate for the full mechanism.
+      Recorded 2026-07-06 interview.
   - question: What keeps the Workflow executor — proprietary, session-bound harness
       machinery — from making the router itself a rented runtime, against
       strategy-owned-orchestration?
-    answer: "What keeps the Workflow executor — proprietary, session-bound harness machinery — from making the router itself a rented runtime, against strategy-owned-orchestration? — See body §Execution Substrate for the full mechanism. Recorded 2026-07-06 interview."
+    answer: What keeps the Workflow executor — proprietary, session-bound harness
+      machinery — from making the router itself a rented runtime, against
+      strategy-owned-orchestration? — See body §Execution Substrate for the full
+      mechanism. Recorded 2026-07-06 interview.
   - question: What keeps the graph's tactics aligned with the greenfield target —
       what prevents accumulating work on code the critical path deletes?
-    answer: "What keeps the graph's tactics aligned with the greenfield target — what prevents accumulating work on code the critical path deletes? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-06 interview."
+    answer: What keeps the graph's tactics aligned with the greenfield target — what
+      prevents accumulating work on code the critical path deletes? — See body
+      §Other Settled Mechanism for the full mechanism. Recorded 2026-07-06
+      interview.
   - question: Which strategy does a bug or improvement tactic serve — and are
       'nearest fit' placements acceptable?
     answer: "serves names the strategy that owns the changed artifact — never a
@@ -185,16 +221,21 @@ clarifications:
   - question: Two human-invoked align sessions ran concurrently in the shared
       checkout during the 2026-07-06 doctrine round — is the target router safe
       for this concurrency, and what closes the gaps?
-    answer: "Two human-invoked align sessions ran concurrently in the shared
-      checkout during the 2026-07-06 doctrine round — is the target router safe
-      for this concurrency, and what closes the gaps? — See body §Worktree
-      Claiming & Liveness for the full mechanism. Recorded 2026-07-06."
+    answer: Two human-invoked align sessions ran concurrently in the shared checkout
+      during the 2026-07-06 doctrine round — is the target router safe for this
+      concurrency, and what closes the gaps? — See body §Worktree Claiming &
+      Liveness for the full mechanism. Recorded 2026-07-06.
   - question: Does the legacy office-hours entry's attach-to-parking-session
       behavior carry over — how does a human engage a parked node?
-    answer: Does the legacy office-hours entry's attach-to-parking-session behavior carry over — how does a human engage a parked node? — See body §Recovery & Session Lifecycle. Recorded 2026-07-06 interview.
+    answer: Does the legacy office-hours entry's attach-to-parking-session behavior
+      carry over — how does a human engage a parked node? — See body §Recovery &
+      Session Lifecycle. Recorded 2026-07-06 interview.
   - question: Bootstrap rounds run /align-tactics in the same session as the
       /align-strategy edit — is that same-session context load-bearing?
-    answer: Bootstrap rounds run /align-tactics in the same session as the /align-strategy edit — is that same-session context load-bearing? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-06 from author direction.
+    answer: Bootstrap rounds run /align-tactics in the same session as the
+      /align-strategy edit — is that same-session context load-bearing? — See
+      body §Recovery & Session Lifecycle for the full mechanism. Recorded
+      2026-07-06 from author direction.
   - question: Repeated /align-tactics rounds kept re-refining the same
       doctrine-encoding tactic (tactic-align-skills-greenfield-gate, four
       touches on 2026-07-06) — one-off or process defect, and what is the
@@ -218,23 +259,35 @@ clarifications:
       direction."
   - question: Is 'select all eligible, cap concurrent per workflow' safe under
       overlapping ticks — and where does the concurrency cap bind?
-    answer: "Is 'select all eligible, cap concurrent per workflow' safe under overlapping ticks — and where does the concurrency cap bind? — See body §Pace, Backlog & Attention. Recorded 2026-07-06."
+    answer: Is 'select all eligible, cap concurrent per workflow' safe under
+      overlapping ticks — and where does the concurrency cap bind? — See body
+      §Pace, Backlog & Attention. Recorded 2026-07-06.
   - question: A selected node’s scope or state changes after selection — before its
       worker starts, or while it runs. What closes the window?
-    answer: >-
-      A selected node’s scope or state changes after selection — before its worker starts, or while it runs. What closes the window? — See body §Fingerprint & Freeze. Recorded 2026-07-06 interview.
+    answer: A selected node’s scope or state changes after selection — before its
+      worker starts, or while it runs. What closes the window? — See body
+      §Fingerprint & Freeze. Recorded 2026-07-06 interview.
   - question: Does long-horizon graph work keep a workflow or session alive?
-    answer: "Does long-horizon graph work keep a workflow or session alive? — See body §Execution Substrate for the full mechanism. Recorded 2026-07-06 interview."
+    answer: Does long-horizon graph work keep a workflow or session alive? — See
+      body §Execution Substrate for the full mechanism. Recorded 2026-07-06
+      interview.
   - question: A tactic-only scope edit lands mid-review, or between review-pass and
       merge — the mid-flight-edit rule lets the transition write stand, so the
       PR merges against pre-edit scope. Is that window acceptable?
-    answer: >-
-      A tactic-only scope edit lands mid-review, or between review-pass and merge — the mid-flight-edit rule lets the transition write stand, so the PR merges against pre-edit scope. Is that window acceptable? — See body §Fingerprint & Freeze. Recorded 2026-07-06 interview.
+    answer: A tactic-only scope edit lands mid-review, or between review-pass and
+      merge — the mid-flight-edit rule lets the transition write stand, so the
+      PR merges against pre-edit scope. Is that window acceptable? — See body
+      §Fingerprint & Freeze. Recorded 2026-07-06 interview.
   - question: A worker session dies mid-phase (API error, session limit, system
       failure) while graph state and worktree survive — is the session state
       worth recovering, by workflow-session resume or by transcript
       reconstruction (the legacy recover-api-error pattern)?
-    answer: A worker session dies mid-phase (API error, session limit, system failure) while graph state and worktree survive — is the session state worth recovering, by workflow-session resume or by transcript reconstruction (the legacy recover-api-error pattern)? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-06 interview.
+    answer: A worker session dies mid-phase (API error, session limit, system
+      failure) while graph state and worktree survive — is the session state
+      worth recovering, by workflow-session resume or by transcript
+      reconstruction (the legacy recover-api-error pattern)? — See body
+      §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-06
+      interview.
   - question: Clarification 32's amendment-completeness bar names re-evaluation
       amendments of tactics. Does the same bar bind /align-strategy edits to
       strategy nodes?
@@ -255,24 +308,42 @@ clarifications:
       scope edit (direct, or via a cascading strategy re-evaluation) force all
       three of implement/qa/review to execute with the latest scope — and when a
       phase routes back, is it clear from graph state what changed?
-    answer: >-
-      The scope-fingerprint gate re-runs only the phase that was in flight — implement and qa completed against pre-edit scope never re-run. Does a scope edit (direct, or via a cascading strategy re-evaluation) force all three of implement/qa/review to execute with the latest scope — and when a phase routes back, is it clear from graph state what changed? — See body §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-06 interview.
+    answer: The scope-fingerprint gate re-runs only the phase that was in flight —
+      implement and qa completed against pre-edit scope never re-run. Does a
+      scope edit (direct, or via a cascading strategy re-evaluation) force all
+      three of implement/qa/review to execute with the latest scope — and when a
+      phase routes back, is it clear from graph state what changed? — See body
+      §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-06
+      interview.
   - question: What guards the router against failure loops — a worker that
       repeatedly fails to make progress or park on a node, and a systemic
       executor failure (a daemon crash-loop) that would otherwise false-trip a
       per-node fuse across every selectable node?
-    answer: What guards the router against failure loops — a worker that repeatedly fails to make progress or park on a node, and a systemic executor failure (a daemon crash-loop) that would otherwise false-trip a per-node fuse across every selectable node? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-07 interview.
+    answer: What guards the router against failure loops — a worker that repeatedly
+      fails to make progress or park on a node, and a systemic executor failure
+      (a daemon crash-loop) that would otherwise false-trip a per-node fuse
+      across every selectable node? — See body §Recovery & Session Lifecycle for
+      the full mechanism. Recorded 2026-07-07 interview.
   - question: Self-modifying tactics — scope touching agent-behavior config
       (.claude/skills/**, .claude/hooks/**, settings) — cannot be committed by
       auto-mode workers. Is self-modification a supported greenfield use case,
       and how does it flow?
-    answer: "Self-modifying tactics — scope touching agent-behavior config (.claude/skills/**, .claude/hooks/**, settings) — cannot be committed by auto-mode workers. Is self-modification a supported greenfield use case, and how does it flow? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-07 interview."
+    answer: Self-modifying tactics — scope touching agent-behavior config
+      (.claude/skills/**, .claude/hooks/**, settings) — cannot be committed by
+      auto-mode workers. Is self-modification a supported greenfield use case,
+      and how does it flow? — See body §Other Settled Mechanism for the full
+      mechanism. Recorded 2026-07-07 interview.
   - question: The interactive align skills read the graph before acting — what
       guarantees they read the latest graph, not a stale local checkout?
-    answer: "The interactive align skills read the graph before acting — what guarantees they read the latest graph, not a stale local checkout? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-08 interview."
+    answer: The interactive align skills read the graph before acting — what
+      guarantees they read the latest graph, not a stale local checkout? — See
+      body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-08
+      interview.
   - question: Do node-assigned sessions receive the node's ancestry — the decision
       context above it — or only the node itself?
-    answer: "Do node-assigned sessions receive the node's ancestry — the decision context above it — or only the node itself? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-08 interview."
+    answer: Do node-assigned sessions receive the node's ancestry — the decision
+      context above it — or only the node itself? — See body §Other Settled
+      Mechanism for the full mechanism. Recorded 2026-07-08 interview.
   - question: Chart, dashboard, and data-visualization requirements under-specify in
       prose the same way general UI does (clarification 7) — is the
       design-canvas dialectic enough, or do they need their own design-guidance
@@ -311,42 +382,66 @@ clarifications:
       interview."
   - question: What is the single interactive entry point to the persistent layer —
       and what happens to /align-strategy and /align-init?
-    answer: "What is the single interactive entry point to the persistent layer — and what happens to /align-strategy and /align-init? — See body §Other Settled Mechanism. Recorded 2026-07-09 interview."
+    answer: What is the single interactive entry point to the persistent layer — and
+      what happens to /align-strategy and /align-init? — See body §Other Settled
+      Mechanism. Recorded 2026-07-09 interview.
   - question: A mechanical integrity gate (test-integrity) fires on a legitimate
       removal — the check is red by design and can never go green, so the node
       can neither clear fix nor reach merge. What is the supported workflow?
-    answer: "A mechanical integrity gate (test-integrity) fires on a legitimate removal — the check is red by design and can never go green, so the node can neither clear fix nor reach merge. What is the supported workflow? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-10 interview."
+    answer: A mechanical integrity gate (test-integrity) fires on a legitimate
+      removal — the check is red by design and can never go green, so the node
+      can neither clear fix nor reach merge. What is the supported workflow? —
+      See body §Other Settled Mechanism for the full mechanism. Recorded
+      2026-07-10 interview.
   - question: Auto-merge arming is human-authorized, yet a tick +3 Workflow launch
       was denied by the auto-mode classifier — what does the launch layer owe
       arming instructions in worker prompts?
-    answer: "Auto-merge arming is human-authorized, yet a tick +3 Workflow launch was denied by the auto-mode classifier — what does the launch layer owe arming instructions in worker prompts? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-10 interview."
+    answer: Auto-merge arming is human-authorized, yet a tick +3 Workflow launch was
+      denied by the auto-mode classifier — what does the launch layer owe arming
+      instructions in worker prompts? — See body §Other Settled Mechanism for
+      the full mechanism. Recorded 2026-07-10 interview.
   - question: Emulated implement→qa transitions repeatedly land phase:qa with
       execution.pr null while an open draft PR exists — is the PR stamp at the
       implement→qa write load-bearing?
-    answer: >-
-      Emulated implement→qa transitions repeatedly land phase:qa with execution.pr null while an open draft PR exists — is the PR stamp at the implement→qa write load-bearing? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-10 interview.
+    answer: Emulated implement→qa transitions repeatedly land phase:qa with
+      execution.pr null while an open draft PR exists — is the PR stamp at the
+      implement→qa write load-bearing? — See body §Phase Transitions & Fix State
+      for the full mechanism. Recorded 2026-07-10 interview.
   - question: Does explicit human dispatch of a single node override the pace curve,
       and does the graph lane have an entrypoint for it?
-    answer: "Does explicit human dispatch of a single node override the pace curve, and does the graph lane have an entrypoint for it? — See body §Pace, Backlog & Attention. Recorded 2026-07-11 interview."
+    answer: Does explicit human dispatch of a single node override the pace curve,
+      and does the graph lane have an entrypoint for it? — See body §Pace,
+      Backlog & Attention. Recorded 2026-07-11 interview.
   - question: A phase whose own logic is a workflow (/review-fix, /qa-fix) cannot
       run as the tick's nested agent() — how does the router launch such a
       phase?
-    answer: "A phase whose own logic is a workflow (/review-fix, /qa-fix) cannot run as the tick's nested agent() — how does the router launch such a phase? — See body §Execution Substrate for the full mechanism. Recorded 2026-07-11 interview."
+    answer: A phase whose own logic is a workflow (/review-fix, /qa-fix) cannot run
+      as the tick's nested agent() — how does the router launch such a phase? —
+      See body §Execution Substrate for the full mechanism. Recorded 2026-07-11
+      interview.
   - question: Does the review phase re-wrap /code-review as a findings-only finder,
       or trust the review skills' own built-in review-and-fix?
-    answer: Does the review phase re-wrap /code-review as a findings-only finder, or trust the review skills' own built-in review-and-fix? — See body §Review & QA Disposition for the full mechanism. Recorded 2026-07-11 interview.
+    answer: Does the review phase re-wrap /code-review as a findings-only finder, or
+      trust the review skills' own built-in review-and-fix? — See body §Review &
+      QA Disposition for the full mechanism. Recorded 2026-07-11 interview.
   - question: Frozen (undecomposed or soft-frozen) tactics carry a ranking — are
       they selectable, and what runs when the dispatch script picks one?
-    answer: >-
-      Frozen (undecomposed or soft-frozen) tactics carry a ranking — are they selectable, and what runs when the dispatch script picks one? — See body §Phase Transitions & Fix State. Recorded 2026-07-11 interview.
+    answer: Frozen (undecomposed or soft-frozen) tactics carry a ranking — are they
+      selectable, and what runs when the dispatch script picks one? — See body
+      §Phase Transitions & Fix State. Recorded 2026-07-11 interview.
   - question: After a phase completes cleanly (no variance/escalation), who
       validates CI and who advances the node — and does the post-review merge
       need author intervention?
-    answer: >-
-      After a phase completes cleanly (no variance/escalation), who validates CI and who advances the node — and does the post-review merge need author intervention? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-11 interview.
+    answer: After a phase completes cleanly (no variance/escalation), who validates
+      CI and who advances the node — and does the post-review merge need author
+      intervention? — See body §Phase Transitions & Fix State for the full
+      mechanism. Recorded 2026-07-11 interview.
   - question: What replaces the dispatch:main-broken gh-issue latch when origin/main
       goes red — and does the announcement surface stay gh-based?
-    answer: "What replaces the dispatch:main-broken gh-issue latch when origin/main goes red — and does the announcement surface stay gh-based? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-12 interview."
+    answer: What replaces the dispatch:main-broken gh-issue latch when origin/main
+      goes red — and does the announcement surface stay gh-based? — See body
+      §Other Settled Mechanism for the full mechanism. Recorded 2026-07-12
+      interview.
   - question: "The 2026-07-12 red-main episode: dispatch-diagnose-main found repo
       issues disabled and re-enabled has_issues to satisfy its own gh-issue spec
       — what does it teach?"
@@ -360,7 +455,9 @@ clarifications:
       Recorded 2026-07-12 interview.
   - question: How is resolution work for a failing signal ranked — does each signal
       carry ranking configuration?
-    answer: "How is resolution work for a failing signal ranked — does each signal carry ranking configuration? — See body §Pace, Backlog & Attention for the full mechanism. Recorded 2026-07-13 interview (author-dictated)."
+    answer: How is resolution work for a failing signal ranked — does each signal
+      carry ranking configuration? — See body §Pace, Backlog & Attention for the
+      full mechanism. Recorded 2026-07-13 interview (author-dictated).
   - question: May standing graph structure — a signal owner, a standing boost
       carrier — live on a tactic?
     answer: "No. Tactics are transient by definition; persistent structure lives on
@@ -374,39 +471,63 @@ clarifications:
       (author-dictated)."
   - question: When two sessions contend on the same node, must the author serialize
       the edits manually?
-    answer: "When two sessions contend on the same node, must the author serialize the edits manually? — See body §Serialization & Commit for the full mechanism. Recorded 2026-07-13 interview."
+    answer: When two sessions contend on the same node, must the author serialize
+      the edits manually? — See body §Serialization & Commit for the full
+      mechanism. Recorded 2026-07-13 interview.
   - question: Clarification 19 disposes review findings by verification × contract
       alone — every confirmed out-of-contract finding defers to a draft tactic.
       Does the cost of the fix versus the cost of deferring it also bear on the
       disposition?
-    answer: Clarification 19 disposes review findings by verification × contract alone — every confirmed out-of-contract finding defers to a draft tactic. Does the cost of the fix versus the cost of deferring it also bear on the disposition? — See body §Review & QA Disposition for the full mechanism. Recorded 2026-07-13 interview.
+    answer: Clarification 19 disposes review findings by verification × contract
+      alone — every confirmed out-of-contract finding defers to a draft tactic.
+      Does the cost of the fix versus the cost of deferring it also bear on the
+      disposition? — See body §Review & QA Disposition for the full mechanism.
+      Recorded 2026-07-13 interview.
   - question: After a node worker terminates, is its session removed from the agents
       list — and does an escalation-parked session stay for the author to
       engage?
-    answer: After a node worker terminates, is its session removed from the agents list — and does an escalation-parked session stay for the author to engage? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-16 interview.
+    answer: After a node worker terminates, is its session removed from the agents
+      list — and does an escalation-parked session stay for the author to
+      engage? — See body §Recovery & Session Lifecycle for the full mechanism.
+      Recorded 2026-07-16 interview.
   - question: "A strategy whose signal is validated only by human work (sensor:
       owner review at office-hours) is re-selected for /align-tactics every tick
       — its rounds produce off-path tooling plus born-parked on-path reading
       chunks, never a claude-executable on-path tactic, so the coverage gate
       never trips and clarification 3's fresh-reading gate never fires. Why, and
       what is the fix?"
-    answer: >-
-      A strategy whose signal is validated only by human work (sensor: owner review at office-hours) is re-selected for /align-tactics every tick — its rounds produce off-path tooling plus born-parked on-path reading chunks, never a claude-executable on-path tactic, so the coverage gate never trips and clarification 3's fresh-reading gate never fires. Why, and what is the fix? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-16 interview.
+    answer: "A strategy whose signal is validated only by human work (sensor: owner
+      review at office-hours) is re-selected for /align-tactics every tick — its
+      rounds produce off-path tooling plus born-parked on-path reading chunks,
+      never a claude-executable on-path tactic, so the coverage gate never trips
+      and clarification 3's fresh-reading gate never fires. Why, and what is the
+      fix? — See body §Phase Transitions & Fix State for the full mechanism.
+      Recorded 2026-07-16 interview."
   - question: A tick performs scriptable non-worker work (e.g. a scope-stale demote)
       and then ends having launched no worker — a SPAWN_N slot spent on a
       metadata write. What is a tick's completion contract when scriptable work
       and worker spawning would compete?
-    answer: "A tick performs scriptable non-worker work (e.g. a scope-stale demote) and then ends having launched no worker — a SPAWN_N slot spent on a metadata write. What is a tick's completion contract when scriptable work and worker spawning would compete? — See body §Execution Substrate for the full mechanism. Recorded 2026-07-16 interview."
+    answer: A tick performs scriptable non-worker work (e.g. a scope-stale demote)
+      and then ends having launched no worker — a SPAWN_N slot spent on a
+      metadata write. What is a tick's completion contract when scriptable work
+      and worker spawning would compete? — See body §Execution Substrate for the
+      full mechanism. Recorded 2026-07-16 interview.
   - question: "Now that GitHub Issues are disabled repo-wide (has_issues: false),
       how does fix-checks track a CI flake and gate the source tactic on the
       fix, on the node lane?"
-    answer: "\"Now that GitHub Issues are disabled repo-wide (has_issues: false), how does fix-checks track a CI flake and gate the source tactic on the fix, on the node lane?\" — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-16 interview."
+    answer: '"Now that GitHub Issues are disabled repo-wide (has_issues: false), how
+      does fix-checks track a CI flake and gate the source tactic on the fix, on
+      the node lane?" — See body §Other Settled Mechanism for the full
+      mechanism. Recorded 2026-07-16 interview.'
   - question: "A node's `reviewed` marker is written but its PR is not yet merged
       (it sits at `phase: review` awaiting the tick's merge) — does the selector
       keep dispatching a review worker to it, and what is its remaining
       lifecycle?"
-    answer: >-
-      A node's `reviewed` marker is written but its PR is not yet merged (it sits at `phase: review` awaiting the tick's merge) — does the selector keep dispatching a review worker to it, and what is its remaining lifecycle? — See body §Phase Transitions & Fix State. Recorded 2026-07-18 interview.
+    answer: "A node's `reviewed` marker is written but its PR is not yet merged (it
+      sits at `phase: review` awaiting the tick's merge) — does the selector
+      keep dispatching a review worker to it, and what is its remaining
+      lifecycle? — See body §Phase Transitions & Fix State. Recorded 2026-07-18
+      interview."
   - question: An office-hours drain session fixed a parked node and pushed the fix,
       but the office_hours park was left set — the node was even re-parked
       before a later session finally cleared it
@@ -414,22 +535,39 @@ clarifications:
       clears as a side effect of "any interactive-session commit touching the
       node." Why didn't that fire for the drain lane, and what must a drain
       session do at termination?
-    answer: An office-hours drain session fixed a parked node and pushed the fix, but the office_hours park was left set — the node was even re-parked before a later session finally cleared it (tactic-phase-standup-audit-lens, 2026-07). Clarification 4 says a park clears as a side effect of "any interactive-session commit touching the node." Why didn't that fire for the drain lane, and what must a drain session do at termination? — See body §Recovery & Session Lifecycle for the full mechanism. Recorded 2026-07-18 interview.
+    answer: An office-hours drain session fixed a parked node and pushed the fix,
+      but the office_hours park was left set — the node was even re-parked
+      before a later session finally cleared it
+      (tactic-phase-standup-audit-lens, 2026-07). Clarification 4 says a park
+      clears as a side effect of "any interactive-session commit touching the
+      node." Why didn't that fire for the drain lane, and what must a drain
+      session do at termination? — See body §Recovery & Session Lifecycle for
+      the full mechanism. Recorded 2026-07-18 interview.
   - question: How is the CI-fix interrupt modeled — as a `phase` enum value or as
       orthogonal execution state — and what is the migration off the phase-value
       encoding?
-    answer: >-
-      How is the CI-fix interrupt modeled — as a `phase` enum value or as orthogonal execution state — and what is the migration off the phase-value encoding? — See body §Phase Transitions & Fix State for the full mechanism. Recorded 2026-07-18 /align-strategy interview.
+    answer: How is the CI-fix interrupt modeled — as a `phase` enum value or as
+      orthogonal execution state — and what is the migration off the phase-value
+      encoding? — See body §Phase Transitions & Fix State for the full
+      mechanism. Recorded 2026-07-18 /align-strategy interview.
   - question: The dispatch phase-worker skills carry ad-hoc names (/align-tactics,
       /implement, /fix-checks, /qa-fix, /review-fix, /qa-main, /fix-conflicts) —
       what naming convention should they take, and how does renaming
       /align-tactics reconcile with its align-family membership (clarification
       45)?
-    answer: "The dispatch phase-worker skills carry ad-hoc names (/align-tactics, /implement, /fix-checks, /qa-fix, /review-fix, /qa-main, /fix-conflicts) — what naming convention should they take, and how does renaming /align-tactics reconcile with its align-family membership (clarification 45)? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-18 interview."
+    answer: The dispatch phase-worker skills carry ad-hoc names (/align-tactics,
+      /implement, /fix-checks, /qa-fix, /review-fix, /qa-main, /fix-conflicts) —
+      what naming convention should they take, and how does renaming
+      /align-tactics reconcile with its align-family membership (clarification
+      45)? — See body §Other Settled Mechanism for the full mechanism. Recorded
+      2026-07-18 interview.
   - question: How do the dispatch phase skills receive their input — today they
       infer the target from the worktree branch name, and only /align-tactics
       takes an explicit node-id argument?
-    answer: "How do the dispatch phase skills receive their input — today they infer the target from the worktree branch name, and only /align-tactics takes an explicit node-id argument? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-18 interview."
+    answer: How do the dispatch phase skills receive their input — today they infer
+      the target from the worktree branch name, and only /align-tactics takes an
+      explicit node-id argument? — See body §Other Settled Mechanism for the
+      full mechanism. Recorded 2026-07-18 interview.
   - question: These naming and interface requirements are legitimate but low
       priority — how does the graph record such a greenfield requirement at low
       rank so it never interferes with higher-ranked work, and is a structural
@@ -458,26 +596,36 @@ clarifications:
       round stales every stamped in-flight child) — should the freeze decision
       incorporate a rank comparison, and how does a stale child recover WHAT
       changed when the stamp is a bare hash?
-    answer: >-
-      A strategy edit soft-freezes every stamped open child regardless of relevance or rank (a low-rank edit such as the 2026-07-18 skill-rename round stales every stamped in-flight child) — should the freeze decision incorporate a rank comparison, and how does a stale child recover WHAT changed when the stamp is a bare hash? — See body §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-18 /align-strategy interview.
+    answer: A strategy edit soft-freezes every stamped open child regardless of
+      relevance or rank (a low-rank edit such as the 2026-07-18 skill-rename
+      round stales every stamped in-flight child) — should the freeze decision
+      incorporate a rank comparison, and how does a stale child recover WHAT
+      changed when the stamp is a bare hash? — See body §Fingerprint & Freeze
+      for the full mechanism. Recorded 2026-07-18 /align-strategy interview.
   - question: Does the graph need first-class structure for sequencing brownfield
       migrations of backwards-incompatible changes, and how do in-flight tactics
       link to a migration that must land before their work?
-    answer: "Does the graph need first-class structure for sequencing brownfield migrations of backwards-incompatible changes, and how do in-flight tactics link to a migration that must land before their work? — See body §Other Settled Mechanism for the full mechanism. Recorded 2026-07-18 interview."
+    answer: Does the graph need first-class structure for sequencing brownfield
+      migrations of backwards-incompatible changes, and how do in-flight tactics
+      link to a migration that must land before their work? — See body §Other
+      Settled Mechanism for the full mechanism. Recorded 2026-07-18 interview.
   - question: Does dispatch's concurrency dedup key on live sessions or worktree
       existence, and does the office-hours lane share the mechanism
       (office-hours sessions safe for concurrent selection)?
-    answer: "Does dispatch's concurrency dedup key on live sessions or worktree
+    answer: Does dispatch's concurrency dedup key on live sessions or worktree
       existence, and does the office-hours lane share the mechanism
       (office-hours sessions safe for concurrent selection)? — See body
-      §Worktree Claiming & Liveness for the full mechanism. Recorded
-      2026-07-18."
+      §Worktree Claiming & Liveness for the full mechanism. Recorded 2026-07-18.
   - question: A scope-inert align annotation on an in-flight tactic's body — the
       reconciliation notes amendment-completeness mandates — trips the tactic
       scope-custody gate and demotes the whole ladder. Does materiality-scoping
       extend to the scope-custody stamp, and by what mechanism?
-    answer: >-
-      A scope-inert align annotation on an in-flight tactic's body — the reconciliation notes amendment-completeness mandates — trips the tactic scope-custody gate and demotes the whole ladder. Does materiality-scoping extend to the scope-custody stamp, and by what mechanism? — See body §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-18 interview.
+    answer: A scope-inert align annotation on an in-flight tactic's body — the
+      reconciliation notes amendment-completeness mandates — trips the tactic
+      scope-custody gate and demotes the whole ladder. Does materiality-scoping
+      extend to the scope-custody stamp, and by what mechanism? — See body
+      §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-18
+      interview.
   - question: What provenance convention binds clarifications[].answer — the
       trailing Recorded-sentence the align SKILL.md docs prescribe, or the
       dated-clause convention the corpus and readingDate() implement?
@@ -508,28 +656,40 @@ clarifications:
   - question: Why did the 2026-07-18 selector ticks dispatch /align-tactics
       re-evaluation onto subtree children with no planning work to do, and do
       the recorded freeze-improvement requirements fix it?
-    answer: >-
-      Why did the 2026-07-18 selector ticks dispatch /align-tactics re-evaluation onto subtree children with no planning work to do, and do the recorded freeze-improvement requirements fix it? — See body §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-18 /align-strategy interview.
+    answer: Why did the 2026-07-18 selector ticks dispatch /align-tactics
+      re-evaluation onto subtree children with no planning work to do, and do
+      the recorded freeze-improvement requirements fix it? — See body
+      §Fingerprint & Freeze for the full mechanism. Recorded 2026-07-18
+      /align-strategy interview.
   - question: Does a deliberate human dispatch — the bare /dispatch fan-out picking
       the highest-ranking available node, or an explicit dispatch <node-id> —
       bypass the absolute max_concurrent_workers ceiling, or only the pace
       curve?
-    answer: "Does a deliberate human dispatch — the bare /dispatch fan-out picking the highest-ranking available node, or an explicit dispatch <node-id> — bypass the absolute max_concurrent_workers ceiling, or only the pace curve? — See body §Pace, Backlog & Attention for the full mechanism. Recorded 2026-07-18 interview."
+    answer: Does a deliberate human dispatch — the bare /dispatch fan-out picking
+      the highest-ranking available node, or an explicit dispatch <node-id> —
+      bypass the absolute max_concurrent_workers ceiling, or only the pace
+      curve? — See body §Pace, Backlog & Attention for the full mechanism.
+      Recorded 2026-07-18 interview.
   - question: When a phase skill delegates a unit to a subagent (the main thread
       never edits files), what guarantees the subagent's writes land in the
       launching worktree rather than the primary checkout?
-    answer: "When a phase skill delegates a unit to a subagent (the main thread
-      never edits files), what guarantees the subagent's writes land in the
-      launching worktree rather than the primary checkout? — See body
-      §Worktree Claiming & Liveness for the full mechanism. Recorded
-      2026-07-19."
+    answer: When a phase skill delegates a unit to a subagent (the main thread never
+      edits files), what guarantees the subagent's writes land in the launching
+      worktree rather than the primary checkout? — See body §Worktree Claiming &
+      Liveness for the full mechanism. Recorded 2026-07-19.
   - question: Clarification 58 (2026-07-13) retained its 5-layer resolution ladder
       in tactic-graph-commit-auto-serialization as an in-script graph-commit
       upgrade, and clarification 67 (2026-07-18) retained
       tactic-dispatch-conflict-greenfield as a model-driven skill for the same
       conflict upgrade without referencing the earlier draft — which vehicle
       owns which ladder layer?
-    answer: "Clarification 58 (2026-07-13) retained its 5-layer resolution ladder in tactic-graph-commit-auto-serialization as an in-script graph-commit upgrade, and clarification 67 (2026-07-18) retained tactic-dispatch-conflict-greenfield as a model-driven skill for the same conflict upgrade without referencing the earlier draft — which vehicle owns which ladder layer? — See body §Serialization & Commit for the full mechanism. Recorded 2026-07-19 /align-strategy round."
+    answer: Clarification 58 (2026-07-13) retained its 5-layer resolution ladder in
+      tactic-graph-commit-auto-serialization as an in-script graph-commit
+      upgrade, and clarification 67 (2026-07-18) retained
+      tactic-dispatch-conflict-greenfield as a model-driven skill for the same
+      conflict upgrade without referencing the earlier draft — which vehicle
+      owns which ladder layer? — See body §Serialization & Commit for the full
+      mechanism. Recorded 2026-07-19 /align-strategy round.
   - question: Should auto-close of a completed worker session be configurable, given
       the 2026-07-16 reaping clarification reaps on every terminal exit and
       diverged from the session-as-observability rival?
@@ -834,6 +994,582 @@ clarifications:
       read in read-sensors.ts. Delegation: this rides on delegation-github (the
       PR/merge substrate) but adds no unwinding of that reliance, so
       strategy-graph-native-dispatch takes no new recovers edge.
+  - question: Is graph-commit's target-repo resolution a standing invariant of this
+      strategy, or only an implementation detail of its fix tactic?
+    answer: "(Recorded 2026-07-21 interview, correcting a same-day placement
+      decision.) A standing invariant: graph-commit resolves its target repo
+      from the caller's cwd (or an explicit -C/--repo argument), never from the
+      invoked script's own checkout location, so a worktree invocation can never
+      silently commit the primary checkout — and a run with nothing to land
+      distinguishes 'node content already on origin/main (benign)' from 'wrong
+      checkout resolved (defect)' rather than printing a false success. The
+      requirement outlives its implementing tactic
+      (tactic-graph-commit-cwd-repo-resolution, drafted the same day), which is
+      what places it here by kind-tactic's 2026-07-21 layer-placement
+      clarification. It was initially withheld from this layer by an
+      orthogonality-of-open-children heuristic, now superseded; the freeze-cost
+      premise behind that heuristic was also a measurement error — the
+      authoritative predicate (isFingerprintStale over non-null stamps) shows
+      this strategy has zero stamped open children at recording time, so this
+      clarification freezes nothing and required no re-stamps."
+  - question: The residual `.bare` bare-repo layout is kept as backward-compat for
+      the draining gh lane (clarification 23) — is it merely descoped from
+      graph-native machinery, or does the greenfield physically retire it? And
+      does the body's claim that graph worktrees sit at 'the harness default
+      location, entered via EnterWorktree' hold today?
+    answer: "(Amended 2026-07-21 interview.) The greenfield physically retires the
+      `.bare` bare-repo-with-worktrees layout: main becomes the standard git
+      working root with `.git` inside it, and Claude Code native worktrees under
+      `<repo>/.claude/worktrees/` are the only worktree surface — no `.bare`
+      common dir, no sibling `worktrees/` container. The body's 'harness default
+      location, entered via EnterWorktree' claim was aspirational and has
+      diverged from reality (the graph-lagging-reality hazard, the inverse of
+      strategy-explicit-intent's content-staleness): the harness keys the
+      project on the git-common-dir (`.bare`), so its actual managed worktree
+      root is `<.bare>/.claude/worktrees/`, while graph worktrees are
+      provisioned at `<main-checkout>/.claude/worktrees/`. The two diverge, so
+      `EnterWorktree(path=…)` into any graph worktree is rejected as 'outside
+      .claude/worktrees/' and prompts for a permission-root relocation (harmless
+      — approval relocates correctly). Descoping `.bare` from scripts
+      (clarification 23's 'no machinery references `.bare`') does NOT fix this —
+      only physically de-baring makes the harness key on the main checkout and
+      aligns with the Claude Code default where `<repo>/.claude/worktrees/`
+      re-entry is prompt-free. This widens clarification 23's retirement target
+      from the legacy-lane hook conventions to the physical layout itself."
+  - question: Is the legacy gh drain gate — 'no new work enters via gh' — satisfied,
+      and what does that unblock?
+    answer: "(Reviewed 2026-07-21.) Yes: GitHub issues are structurally disabled on
+      the repo (`hasIssuesEnabled: false`), so the drain is complete and the
+      monotonic-drain condition holds by construction — issues cannot re-enter.
+      `tactic-legacy-router-removal`'s gate (gh queue drained) is therefore met
+      and it is unblocked. gh pull requests still flow as the code-review/merge
+      substrate for graph-native tactics; that is not gh-issue orchestration and
+      is out of scope for this retirement."
+  - question: How is the `.bare` retirement executed — a dispatched /align-tactics
+      tactic run by the fleet, a re-anchoring of graph worktrees to `.bare` to
+      match the validator, or something else?
+    answer: "(Recorded 2026-07-21 interview.) The author elected a direct-to-main
+      in-session hotfix, bypassing the dispatch workflow, executed only after
+      all active sessions are drained and scheduling is disabled (manual fleet
+      quiesce). Rejected alternatives: (i) re-anchoring graph worktrees to
+      `<.bare>/.claude/worktrees/` to match the validator — it stops the prompt
+      but preserves the legacy layout and violates the standing 'no graph-native
+      path may assume the legacy `.bare` layout' rule (clarification 23), so it
+      was diverged from; (ii) leaving the prompt in place as harmless — rejected
+      because relying on Claude Code harness defaults over legacy implementation
+      constraints is the intent. A draft tactic (`tactic-retire-bare-layout`)
+      records the migration scope in the graph as the sole tracker; its
+      execution is the hotfix, not a fleet dispatch."
+  - question: Does physically de-baring to rely on Claude Code native worktrees
+      deepen coupling to proprietary harness machinery, against
+      strategy-owned-orchestration?
+    answer: "(Reviewed 2026-07-21 interview.) It stays within the coupling
+      clarification 23 already accepted: native worktrees are the execution
+      substrate, while router/selection/transition/provisioning logic remains
+      owned, offline-testable code (Shape B, clarification 24). De-baring
+      changes the repo topology to the harness default but adds no new
+      dependence on harness machinery beyond the worktree layer already
+      committed. No new `recovers` edge is warranted (no delegation node covers
+      the Claude Code harness); existing `recovers: delegation-github` is
+      unchanged — gh issues retired, gh PRs remain by design."
+  - question: A graph-write primitive that mutates the node file in the shared
+      checkout and then fails to land leaves the mutation on disk, where it
+      blocks every subsequent graph-commit for every other node. Is "a failed
+      graph write leaves no residue" a standing invariant of this strategy, and
+      what is the target design?
+    answer: "(Recorded 2026-07-23 interview, from the 2026-07-23 manual tick
+      failure.) A standing invariant, binding the CLASS of graph-write
+      primitives rather than only the two scripts that exhibited it: a graph
+      write that fails to land leaves NO residue in the shared checkout. Target
+      design (greenfield): a primitive never uses the shared checkout as scratch
+      space -- it cuts scratch from origin/main, does the read-modify-write
+      there, and graph-commits from there, so a failure leaves the primary
+      checkout untouched by construction. This is the rule /align-strategy Step
+      0 already binds interactive sessions to (\"never author strategy edits in
+      the shared main checkout: a second concurrent session's dirty tracked file
+      blocks your graph-commit rebase\"); the primitives simply do not follow
+      it. Brownfield first step, shippable in one PR: snapshot the node blob
+      before mutating and restore it on every failure path. The incident:
+      park-node:98 and demote-node-to-implement:78 both mutate
+      intentions/<id>.md in the primary checkout, call graph-commit, and on
+      failure print \"the ... write is on disk but not landed\" and exit 1,
+      leaving it there; graph-commit's assert_clean_outside_ids then refuses
+      every subsequent call for every OTHER node, so one node's failed park
+      bricks the whole tick and the error names a file unrelated to the node
+      being worked. dispatch-graph-scope-sweep:122 calls the demote primitive in
+      a loop that explicitly continues past failures, so one stray write
+      cascades into every later demote in that sweep. Same family as the
+      2026-07-21 cwd-resolution invariant (a worktree invocation can never
+      silently commit the primary checkout) and placed at this layer for the
+      same reason: the requirement outlives its implementing tactic
+      (tactic-graph-write-failure-rollback, drafted this round). Freeze cost
+      measured with the authoritative predicate (readNode + isFingerprintStale),
+      never a grep: all 29 open children carry a null strategy_fingerprint,
+      which isFingerprintStale treats as not-stale, so this clarification
+      freezes nothing and required no re-stamps."
+  - question: "Steelman: should a failed graph write deliberately LEAVE its mutation
+      on disk as forensic evidence and a cheap retry point, rather than rolling
+      back?"
+    answer: "(Recorded 2026-07-23 interview.) Diverged from, with the reason
+      recorded. The rival framing is real: leaving the write means a human can
+      inspect exactly what the primitive intended and re-run graph-commit
+      without recomputing it, and a rollback discards that. It is rejected
+      because the residue lives in a SHARED resource -- its forensic value
+      accrues to the one node that failed, while its cost is borne by every
+      other node in the tick, none of which can land any graph write until a
+      human clears a file they never touched. The asymmetry is structural, not
+      incidental: the 2026-07-23 tick lost two legitimate scope-stale demotions
+      to a stray park write left by a third, unrelated node. Durable evidence
+      belongs in the tick journal and in the park's own
+      office_hours.recommendation -- this strategy's existing
+      park-recommendation condition already requires that recoverable context be
+      written into the NODE at park time -- never in the working tree of a
+      checkout other sessions depend on. Recomputing a failed write is cheap;
+      unblocking a shared checkout by hand is not."
+  - question: dispatch-graph-main-red-sync's graph-commit runs inside a `( ... ) ||
+      true` subshell in a loop, so a failed graph write produces no error at
+      all. Is "a graph write never fails silently" a standing invariant distinct
+      from the no-residue rule?
+    answer: "(Recorded 2026-07-23 interview, extending the same-day no-residue
+      clarification.) Yes, and it is a distinct standing invariant, not the same
+      rule restated: every graph write that fails to land surfaces a diagnostic
+      naming the node and the failure, and no call site may swallow the error.
+      The two are complementary -- no-residue governs what a failed write leaves
+      BEHIND (shared-checkout state), this governs whether the failure is
+      OBSERVABLE at all. Either can be satisfied while the other is violated: a
+      rollback that exits silently leaves a clean tree and no signal, and a loud
+      failure can still leave residue. Found while auditing the call-site census
+      for tactic-graph-write-failure-rollback: dispatch-graph-main-red-sync:104
+      runs its graph-commit inside `( ... ) 1>&2 || true` within a `while read`
+      loop, so a failure is swallowed entirely -- nothing logged, residue left,
+      and the loop proceeds to the next node, potentially adding another dirty
+      file per iteration. Operationally silence is the worse half of the pair:
+      residue at least announces itself at the next graph-commit, whereas a
+      swallowed failure leaves the graph quietly not saying what the router
+      believes it says. Recorded at this layer for the same reason as the
+      no-residue rule -- nothing today prevents a seventh call site from adding
+      another `|| true`, and the requirement outlives
+      tactic-graph-write-failure-rollback (unit 3), which implements it. Freeze
+      classification for this round: the strategy's one stamped open child,
+      tactic-qa-fix-instrument-signoff-classify (review), is ORTHOGONAL -- it
+      narrows qa-fix's classify prompt for non-user-facing audit-instrument
+      sign-off and depends on nothing recorded here -- so its
+      strategy_fingerprint was re-stamped in this same commit rather than left
+      to freeze. It was classified on the substance of the delta, not on its
+      rank."
+  - question: What does an office_hours park assert, and may graph hygiene (census)
+      ever park?
+    answer: "(Recorded 2026-07-23 /align-strategy interview.) An office_hours park
+      asserts: no autonomous path forward exists under current graph direction —
+      a human is required. Author-intention decisions and genuine escalations
+      (crash-loop sweep parks, true-conflict parks, provision failures) both
+      qualify; owed mechanical labor never does. Graph hygiene
+      (census/reconciliation) therefore never parks: direction exists, only
+      labor is owed — a hygiene hold is modeled as a blocked_by edge to a
+      tracked node (a fix-tactic for a mechanical hold; a question-scoped
+      born-parked review item when the hold is a genuine author-intention
+      question), never as a park on the hygiene node itself. Observable: the
+      office-hours queue contains no hygiene/census-labor parks (sensor:
+      office-hours-select --list with each park reason classified; threshold
+      zero). Motivating failure: the 2026-07-11 census node sat parked 12 days
+      while debt grew 52 to 62; its park was converted to three blocked_by edges
+      and cleared in this round's commit."
+  - question: What is the greenfield design for graph hygiene (census), and why does
+      it require no AI session?
+    answer: "(Recorded 2026-07-23 /align-strategy interview; author-directed.)
+      Greenfield: census is a scripted dispatch-tick step — not a node, not an
+      AI session. Every tick: enumerate done-but-present nodes; prune only those
+      whose completion verifies mechanically (recorded execution.pr with
+      mergedAt set, or a recorded graph-commit sha); edge repair (strip pruned
+      ids from live blocked_by) is scripted; one batched graph-commit. The
+      drain-time doctrine-home check is eliminated by construction:
+      kind-tactic's authoring-time layer-placement gate (2026-07-21) keeps
+      durable content out of transient tactic bodies, and git history retains
+      pruned bodies as backstop. Nodes failing verification (falsely-done,
+      unrecorded pr) are left in place and surfaced as an integrity-defect count
+      — they become ordinary selectable defect tactics, never parks, never
+      mid-tick AI. The census latch node disappears and dispatch-graph-census's
+      threshold-birth mechanism retires once the tick step is live: a cheap
+      continuous drain never accumulates debt, so no latch is needed. Migration:
+      (1) tighten execution.pr custody at park time
+      (tactic-office-hours-pr-custody); (2) implement the scripted tick step,
+      strict-verification-only (tactic-census-scripted-tick); (3) convert the
+      2026-07-11 census node's three holds to blocked_by edges (this round); (4)
+      retire the latch birth. Interview ground for no-AI: of the four drain
+      steps, completion verification, edge repair, and dependent satisfaction
+      are already mechanical; the only judgment step (doctrine-home) compensated
+      for authoring-time placement leaks the layer-placement gate now prevents."
+  - question: "The reservation-ledger reaper (reservation_sweep) is wired only into
+      dispatch paths that reach the selection stage: the pause sentinel
+      short-circuits the autonomous heartbeat before it, and the --manual
+      fan-out path deliberately skips it. In the standing paused-scheduling +
+      manual-only operating mode nothing reaps the ledger, so it drifts stale
+      (dead-session orphans inflate live=N and throttle manual fan-out). What is
+      the cross-mode ledger-validity requirement, and the design that meets it?"
+    answer: "(Recorded 2026-07-23 interview.) Invariant: the reservation ledger must
+      read as VALID in every operating mode — (a) cron/timer-scheduled
+      autonomous execution, (b) paused-scheduling with manual-only dispatch, and
+      (c) paused-scheduling with no dispatch — not only when an autonomous tick
+      reaches selection. The pause sentinel
+      ($XDG_DATA_HOME/commons-dispatch/paused, dispatch-tick) gates worker
+      SPAWNING, never ledger BOOKKEEPING: pausing scheduling must never pause
+      reconciliation. Greenfield design (ideal, led per design-proposals): (1)
+      sweep-on-read — fold reservation_sweep into the ledger's count/read API
+      (reservation_count) so every consumer is reconciled by construction and no
+      call site can read stale; this reconcile-at-consumption framing also
+      covers manual reads during pause (the 30s boot-grace still protects
+      brand-new markers); (2) reaping decoupled from the pause sentinel — a
+      lightweight ledger sweep on the timer-driven heartbeat runs BEFORE the
+      pause short-circuit, bounding orphan accumulation during long pauses with
+      no manual ticks (kept out of the gh-heavy, throttled dispatch-sweep
+      worktree-GC pass, which solves a different problem); (3) reap-on-exit
+      (tactic-graph-node-session-reap, PR #2922) as the write-side complement so
+      the happy path never strands a marker, leaving the sweep as the crash-only
+      backstop. Steelman refinement: the rival 'reconcile only at
+      scheduling-resume' is insufficient because manual dispatch consumes the
+      ledger DURING pause; sweep-on-read is that rival's valid core (no
+      pointless background reaper when nobody reads) reconciled with the
+      requirement. Brownfield migration path (greenfield is multi-PR and
+      reverses a recorded aside): (i) parity fix — reservation_sweep in the
+      --manual block before reservation_count
+      (tactic-manual-path-reservation-sweep); (ii) pause-independent reaper —
+      reservation_sweep in dispatch-tick before the pause short-circuit
+      (tactic-heartbeat-sweep-before-pause); (iii) land PR #2922 reap-on-exit;
+      (iv) converge — sweep-on-read in the ledger count API, removing the
+      now-redundant per-path sweep calls: the autonomous call, the explicit-node
+      call (PR #2952), and (i) (tactic-ledger-sweep-on-read). This REVERSES the
+      aside in tactic-explicit-node-reservation-sweep-policy (PR #2952) that
+      '--manual need not sweep — its non-sweep only affects fan-out pacing,
+      never a hard refusal, so the paths need not move in lockstep': that
+      reasoning holds for the explicit-node hard-refusal it addressed, but did
+      not consider the paused+manual mode, where manual non-sweep is not a
+      pacing optimization but total reaper dormancy — the ledger's only live
+      consumer running with no reconciler. PR #2952's own deliverable (the
+      NODE_ARG branch sweep) is unchanged; only its broader 'manual is safe'
+      aside is superseded. Boost note: the two parity-fix tactics are boosted to
+      the top of NORMAL work but below the strategy-main-health emergency
+      ceiling (boost 100), which the 2026-07-13 guard keeps dominant — the
+      ledger fix is important but is not a red-main emergency."
+  - question: Does the greenfield design enforce serialization of work on the
+      dispatch queue, the office-hours queue, and between the queues?
+    answer: "(Recorded 2026-07-25 review.) No, in three distinct places. (a)
+      DISPATCH QUEUE — serialized only through its front door. The selection
+      lock and reservation ledger are honored by dispatch-select-tick, but
+      graph-select-target acquires nothing itself, so any other invocation
+      (manual, emulated, subagent) runs reservation_exists with no lock held and
+      never writes a marker: a check-then-act race. The tracked fix is the
+      --standalone flag on PR #2918, which folds lock acquisition, headroom, and
+      the ledger claim into the selector so the critical section is
+      self-contained. (b) OFFICE-HOURS QUEUE — the drain lane holds no claim at
+      all. It writes no reservation marker, and its occupancy check keys on the
+      session name office-hours-<node-id>, which exists only for sessions
+      launched through office-hours-graph; a drain launched by subagent fan-out
+      or interactively is invisible to dedup and races the fleet. Observed live
+      this round: while the author held an unexecuted grant for one resolution
+      of tactic-graph-router-live-worker-visibility, a concurrent fleet actor
+      landed the opposite resolution and cleared the park, so a real design
+      question was settled by push timing rather than by the author's answer.
+      tactic-office-hours-concurrency-dedup covers only the office-hours-graph
+      launch path; the residual is tactic-office-hours-drain-claim. A granted
+      disposition is also not compare-and-swap-guarded against branch-tip
+      movement during the human interview window, where non-fast-forward push
+      rejection is the only and latest-possible detector;
+      tactic-clear-park-primitive supplies CAS at land time but reads its base
+      immediately before landing, leaving the interview window open
+      (tactic-drain-disposition-diagnosis-cas). (c) BETWEEN THE QUEUES —
+      clearing a park makes a node router-eligible instantly while the clearing
+      session may still be pushing residual work, and the clearer holds no
+      claim, which is gap (b) again; and every queue's state writes contend on
+      the single main ref at CI-stamp prices, already diagnosed and
+      author-ratified in the graph-commit rebase-retry-exhaustion clarification.
+      tactic-graph-ref-split is that greenfield, and it shrinks every race
+      window named here, which raises its priority beyond its own
+      landing-exhaustion motivation. TWO REVIEW CLAIMS WERE CORRECTED BY THE
+      GRAPH SWEEP and must not be re-derived: the reservation ledger's fail-open
+      versus fail-closed asymmetry is NOT an untracked gap, because
+      claimed_issue_nums has no production call site and the live concern is
+      already tracked and already boosted as
+      tactic-graph-router-live-worker-read-robust; and the legacy issue-number
+      derivation in reserved_claimed_nums is real but inert, tracked as
+      tactic-reservation-ledger-issue-num-residue. Per the design-proposals rule
+      the greenfield is recorded here and the migration sequencing lives in the
+      tactic bodies."
+  - question: Mechanical retry holds — provision exit 11 merge conflicts,
+      fix-attempt-cap exhaustion — are written as office_hours parks. Should the
+      park record gain a taxonomy to separate them from human parks?
+    answer: "(Recorded 2026-07-25 interview, author-selected.) No, and no schema
+      change. The defect is in the PRODUCERS, not the record. A park asserts
+      that no autonomous path forward exists and a human is required; a merge
+      conflict against a moving main frequently self-resolves, which makes it a
+      retry state, not a human state. The terminal-disposition doctrine already
+      prescribes the correct handling — a mechanical hold converts to blocked_by
+      edges against a tracked fix tactic and clears in the same graph-commit —
+      so the work is to make the producers follow it: the provision-exit-11 park
+      path and the fix-attempt-cap park inside graph-select-target must stop
+      writing office_hours for retry states. Evidence at recording time: roughly
+      five of the most recent commits on main were provision-exit-11 parks,
+      burying the genuinely author-required parks beneath them, and stale ones
+      were cleared by hand in this round and the prior one. Adjacent
+      consequence: tactic-router-failure-fuses, which proposes routing new
+      mechanical no-progress and systemic-breaker failures into the same
+      office_hours queue, is re-scoped by this clarification and must not add
+      mechanical parks. Rejected alternative: extending the office_hours record
+      with a park-kind field on the tactic-office-hours-session-type precedent,
+      which would add a second taxonomy to the same record in order to describe
+      states doctrine says should not be parks at all. Tracked as
+      tactic-mechanical-park-producers."
+  - question: The office-hours selector reads only the local intentions store, so it
+      can list a node whose park was already cleared on origin/main. Does moving
+      the origin/main freshness read into the selector violate its recorded
+      no-gh/no-daemon/no-network contract?
+    answer: "(Recorded 2026-07-25 interview, author-ratified on a corrected
+      premise.) No. The author corrected the premise itself: the real contract
+      is not module purity but avoiding Claude sequencing system or network
+      commands that a script could do with fewer round trips and fewer tokens —
+      recorded the same day as a companion clarification on
+      strategy-token-economy, which owns that principle. Under the real contract
+      a local `git show origin/main:...` read inside the selector is not merely
+      permitted but preferred, because performing it once inside the script is
+      strictly fewer round trips than each caller re-deriving it, which is what
+      the current split forces. Today the guard lives only in the bash wrapper
+      office-hours-graph (park_live_on_main), so every other consumer must
+      reimplement it: this round's subagent sweep had to be instructed in prose
+      to re-check origin/main, and a stale-worktree false positive has been
+      observed live. graph-select-target already sets the precedent by
+      snapshotting origin/main itself via git archive, and
+      office-hours-select.ts already performs fs reads, so it was never pure in
+      the sense its annotation implied. This AMENDS the design decision recorded
+      in tactic-office-hours-concurrency-dedup — 'zero changes to
+      office-hours-select.ts, because daemon/network checks would violate its
+      contract' — to the extent that decision rests on the purity premise; that
+      tactic's bash-side liveness dedup is untouched, since bash is equally a
+      script. Tracked as tactic-office-hours-select-fresh-main."
+  - question: Where does a priority boost for the queue-concurrency work belong,
+      given the persistent-layer ownership gate reserves standing attention
+      boosts for strategies and virtues, never tactics?
+    answer: "(Recorded 2026-07-25 interview, author-selected.) On the tactics, at
+      authored boost 90 — parity with
+      tactic-graph-router-live-worker-read-robust, the author-set boost already
+      live on exactly this defect class. The level is deliberately below
+      strategy-main-health's standing 100 (composed rank 101), whose dominance
+      this graph records as intentional: the queue-concurrency work becomes the
+      top of the WORK queue without displacing the main-health signal, and no
+      boost at or above 100 is claimed. Rejected: boosting
+      strategy-graph-native-dispatch itself, which would lift all of its roughly
+      twenty open tactics indiscriminately and therefore would not prioritize
+      this work relative to its siblings. Noted tension, NOT resolved by the
+      author this round: the persistent-layer ownership gate reserves STANDING
+      boosts for the strategy layer, and live practice already diverges from it,
+      since read-robust carries an authored 90 on a tactic. The reading applied
+      here is that these are transient sequencing boosts that expire when the
+      tactics complete and are pruned, rather than standing ownership of a
+      signal — flagged explicitly as Claude's reading rather than
+      author-ratified doctrine, and left available for the review curriculum to
+      revisit."
+  - question: How must a new pull request be titled, and what must exist behind it?
+    answer: "(Recorded 2026-07-25 interview, author-selected.) Every new pull
+      request opens with the title `<node id>: <short description>` — the
+      literal, copy-pasteable node id verbatim, kind prefix included, then a
+      colon-space separator, then a short description (e.g.
+      `tactic-office-hours-pr-custody: escalation parks keep custody of their
+      PR`). Scope is every new PR, not merely the ones the dispatch chain opens:
+      no node, no PR. This adds no new doctrine — it makes this node's standing
+      \"the graph is the sole issue tracker, bug tracker included, with no
+      side-channel work records\" condition visible on the execution surface,
+      closing a real observed gap (PR #2953 `wezterm-pin-refresh` opened with no
+      backing node), so out-of-band and personal-infrastructure work now mints a
+      tactic node before its PR. The sole exemption is an interim one with a
+      named expiry: PRs on the draining legacy gh-issue lane keep their current
+      form until that queue drains (tactic-legacy-router-removal). Bot-authored
+      PRs (dependabot-class dependency and security bumps) are explicitly NOT
+      exempt — such a PR is re-homed under a node rather than waved through,
+      consistent with this repo's existing practice of tracking security
+      advisories as work items; the repo carries no `.github/dependabot.yml`
+      today, so the strictness costs nothing at present. Format is the full
+      literal id, not the kind-prefix-stripped short form and not a trailing
+      parenthetical: the prefix must resolve directly against `intentions/` with
+      no reconstruction step, and a trailing id is the first thing truncated in
+      narrow GitHub views. Enforcement is by construction plus a guard —
+      `dispatch-open-pr` (and every graph-lane opener) derives the prefix from
+      the node itself so conforming titles are true by construction, and a CI
+      guard on `pull_request` covers hand-opened PRs. That construction is also
+      what answers the parsimony objection this round tested (raised against
+      strategy-graph-self-description's derived-never-stored doctrine and
+      strategy-graph-integrity's parsimony bar, since the branch name already
+      carries the node id): a prefix rendered from the node is derived state
+      displayed, not a second authored copy. Steelman resolution, on the rival
+      conception that \"node-existence is the substance and the title is
+      cosmetic, so build only a PR-open node-existence precondition and drop the
+      title convention\": ADOPTED in its substantive half — the guard checks
+      that the branch resolves to a real node in `intentions/`, not merely that
+      the title matches a shape, so a typo'd or invented id fails; DIVERGED on
+      \"the title is decoration\" — the repository is squash-only with
+      `squash_merge_commit_title=PR_TITLE` (verified this round), so PR titles
+      become `main`'s commit subjects verbatim, and per delegation-github's
+      recorded recovery_path git is portable while PR/issue relationship data
+      survives an exit only via API export. The title is therefore the sole
+      carrier that puts the intent link into the permanent, GitHub-independent
+      record, which a PR-open gate cannot do; the convention accordingly
+      strengthens rather than deepens the delegation-github attachment. The
+      convention binds at open time going forward and is not retroactive —
+      existing open PRs are not retitled. The `graph: <verb> <node-id> (...)`
+      subject convention used by direct-push `intentions/` commits is a distinct
+      surface and is untouched, since those are not PRs. Where a PR genuinely
+      touches more than one node, dispatch's one-node-per-PR model
+      (`execution.pr`) still holds: the title carries the primary node id and
+      any additional nodes are named in the PR body. Implementation is retained
+      as draft tactic tactic-pr-title-node-id-convention. (Amended 2026-07-25,
+      same day, author direction: the legacy gh-issue queue is fully drained, so
+      the interim exemption is REMOVED and the convention now binds with no
+      exemptions at all.) Verified at amendment time: the repository reports
+      `has_issues: false` — GitHub issues are disabled, which this node's
+      standing monotonicity condition forbids any dispatch surface from
+      reversing, so no new gh-issue-lane work can enter; no open PR sits on an
+      issue-numbered branch; and all 33 open PRs already have head branches that
+      resolve to a real node in `intentions/`, so the exemption was covering
+      nothing at the moment it was removed. Consequences: the guard is
+      unconditional and needs no carve-out logic, no expiry event, and no
+      coordination with tactic-legacy-router-removal — the exemption is never
+      built rather than built-and-later-deleted. The non-retroactive rule is
+      unchanged and does the transitional work on its own: existing open PRs
+      keep their current titles (most predate the convention and do not
+      conform), and the guard binds only at open time going forward."
+  - question: Section Fingerprint & Freeze rests the scope-inert-edit resolution on
+      "the transition writer's machinery refresh" and rules that phase workers,
+      qa/review sessions, and the tick never re-stamp. Does that machinery
+      refresh actually hold, and what is the target design for machinery-written
+      body sections?
+    answer: "(Recorded 2026-07-25 /align-strategy round.) It does not hold — the
+      premise was false when it was recorded on 2026-07-18. transition-node
+      calls refresh_stamp AFTER graph-commit (transition-node:178-183), and
+      graph-commit's cleanup does `git reset --hard $ORIG_HEAD` to restore the
+      far-ahead PR-branch tip it moved off to land an intentions/-only SHA
+      (graph-commit:301-303). So refresh_stamp hashes the REVERTED worktree body
+      and stamps the pre-edit fingerprint. This fires on every node-lane phase
+      worker — all of which run from a far-ahead PR-branch worktree — and is
+      inert only in the main checkout, where no HEAD restore happens. Measured
+      consequence: /qa-fix's own Step 3.6 `## needs-main residue` body append
+      lands in the SAME graph-commit as the qa to review transition, so the next
+      dispatch-graph-scope-sweep reads stamp != origin/main as scope drift and
+      demotes the node to implement, wiping execution.markers (qa-done AND
+      planned) and discarding completed QA custody; the implement re-entry is a
+      no-op that returns the node to qa within minutes. Evidence gathered this
+      round: 33 of 37 demotions since 2026-07-05 hit nodes that had already
+      reached qa or review; of 30 post-QA demotions, 26 were on nodes whose QA
+      pass had appended a residue section, against 6 of 54 never-demoted nodes.
+      Adopted greenfield target: tacticScopeFingerprint hashes PLAN SUBSTANCE
+      only, excluding machinery-appended body sections, so no machinery writer
+      can trip the custody gate by construction — carrier
+      tactic-scope-fingerprint-plan-substance. Adopted migration/immediate
+      carrier: repair refresh_stamp to hash what actually landed on origin/main
+      rather than the post-reset worktree copy — carrier
+      tactic-transition-node-stamp-landed-body. Both are recorded per the
+      design-proposals rule (greenfield and migration proposed separately,
+      migration cost informing how to get there and not what to aim for). This
+      is DISTINCT from tactic-transition-node-scope-stale-test-coverage, which
+      covers the stamp's PATH resolution (MAIN_ROOT vs the invoking worktree),
+      not the stamp's CONTENT SOURCE. Grounds: the refresh_stamp defect is
+      verified in code and in the graph's own commit history and is
+      author-independent; the substance-scoped-fingerprint SHAPE is
+      Claude-proposed and held on trust — enrolled for ratification at
+      tactic-review-sitting-fingerprint-custody-2026-07-25."
+  - question: A false or genuine demotion wipes execution.markers, but the qa
+      phase-log entry and the QA PR comment survive it. What makes a re-entry
+      session's reading of that surviving evidence sound?
+    answer: "(Recorded 2026-07-25 /align-strategy round.) Phase-completion evidence
+      is FINGERPRINT-BOUND: a phase-log entry, a qa-done marker, and a QA PR
+      comment are valid only for the scope fingerprint they were produced under.
+      A re-entry that finds completion evidence stamped at a different
+      fingerprint must RE-RUN the phase, never ratify it — and that binds
+      mechanically, not by session judgment. Without the binding, this section's
+      own recorded net guarantee (\"merge still requires an unbroken implement
+      to qa to review chain against the merge-time scope fingerprint\") is
+      REPORTED satisfied while actually broken: the surviving phase-log reads to
+      a re-entry session as \"a prior session died before the terminal
+      transition\", which licenses a transition-only pass over QA that session
+      never ran. Observed live: after a false demotion had wiped qa-done, the
+      re-entry on PR #2958 transitioned with no re-verification at all, and the
+      re-entry on PR #2965 re-verified only partially. The misdiagnosis is
+      itself evidence the binding is absent — both sessions concluded the prior
+      transition \"never ran\" when it HAD landed and was reverted by the sweep.
+      Carrier: tactic-phase-evidence-fingerprint-bound. Rejected rivals: (a)
+      have the demotion strike or clear the phase-log so re-entry cannot see it
+      — destroys the audit trail the phase-log exists for, and covers only the
+      demotion producer rather than any path that supersedes completed-phase
+      evidence; (b) document the rule in /qa-fix's re-entry preamble without a
+      mechanism — that is precisely what failed, since nothing in the skill
+      governs the shortcut today and the two observed sessions diverged sharply
+      in how much they re-verified. Grounds: the wording is Claude-proposed, but
+      it is a direct expression of this section's own recorded net guarantee
+      rather than a new commitment; held on trust pending author ratification —
+      enrolled at tactic-review-sitting-fingerprint-custody-2026-07-25."
+  - question: Does the fingerprint-bound phase-evidence invariant (2026-07-25)
+      invalidate completion evidence that carries no bound fingerprint at all —
+      every marker, phase-log entry, and QA PR comment written before the
+      binding lands?
+    answer: "(Recorded 2026-07-25 /align-tactics round on
+      tactic-phase-evidence-fingerprint-bound.) Does the fingerprint-bound
+      phase-evidence invariant invalidate completion evidence that carries no
+      bound fingerprint at all? No — the binding is PROSPECTIVE. The invariant
+      fires on evidence stamped at a DIFFERENT fingerprint; evidence with NO
+      stamp (every marker, phase-log entry, and QA PR comment written before the
+      binding lands) reads as unbound, not as mismatched, and stays ratifiable
+      on re-entry. Grounds: the recorded wording of the same-day
+      fingerprint-bound-evidence clarification and the carrier tactic's own
+      statement both scope the re-run trigger to a different fingerprint, and
+      the corpus's dominant precedent for an absent stamp is fail-open
+      (isScopeStale's null-stamp-is-not-stale,
+      packages/intentionsutil/src/transitions.ts:331, and the same missing-stamp
+      fail-open in packages/intentionsutil/src/scope-sweep.ts); the one opposite
+      precedent, the missing-stamp fail-CLOSED hold at
+      .claude/skills/dispatch-propagate/scripts/transition-node:171-175, is
+      scoped to arming auto-merge at review completion and is not widened here.
+      Consequence, accepted rather than hidden: the Fingerprint & Freeze net
+      guarantee is restored only for evidence produced after the binding lands,
+      so the window closes as the currently in-flight tactics cycle rather than
+      by a corpus-wide forced re-run of QA. A future round wanting the stricter
+      reading — an unbound qa-done forces a re-run — should record it as an
+      author decision, since its cost is a forced re-QA of every in-flight
+      node."
+  - question: How does the fingerprint-bound phase-evidence invariant (2026-07-25)
+      sit with the standing phase-progress condition that a re-selected worker
+      treats pre-existing worktree and PR state as resume input rather than
+      redoing the phase?
+    answer: (Recorded 2026-07-25 /align-tactics round.) How does the
+      fingerprint-bound phase-evidence invariant sit with the standing
+      phase-progress condition, which says a re-selected worker treats
+      pre-existing worktree and PR state as resume input rather than redoing the
+      phase? The condition governs IN-PROGRESS residue — worktree commits,
+      per-unit fix commits, a partially-written PR comment — and is unchanged.
+      The same-day invariant governs COMPLETED-phase evidence — a phase-log
+      entry, a qa-done marker, a finalized QA PR comment — and narrows the
+      condition only there, and only when that evidence's bound fingerprint
+      differs from the current one. Resume-as-input stays the default; re-run is
+      the exception a fingerprint mismatch forces. The condition text itself was
+      not reconciled when the invariant was recorded, so this note records the
+      boundary rather than editing a human-decided condition; a future /align
+      interview may fold it into the condition if the author prefers it homed
+      there.
+  - question: Is strategy-main-health's dominant-boost write-path enforcement
+      (condition 14) actually implemented mechanically, given this round's
+      clause-coverage evidence reported it as unenforced?
+    answer: "(Verified 2026-07-25 /align-tactics round.) The standing condition that
+      strategy-main-health's dominant boost is enforced at the write path IS
+      implemented — a clause-coverage pass this round reported it as unenforced,
+      and that finding is wrong and must not be re-derived. The guard is
+      validateGraph rule 18 (checkAttentionDominance,
+      packages/intentionsutil/src/schema.ts:876-908, documented at 995-1003): it
+      reads strategy-main-health's live attention.boost as the threshold,
+      rejects any other node whose attention.boost or attention.override matches
+      or exceeds it, and honors the literal substring 'ACK:
+      main-health-dominance' in attention.rationale as the author override. Two
+      limits recorded honestly: the condition's other half — refusing a commit
+      that REDUCES the dominant boost — has no implementation, and the guard is
+      inert when strategy-main-health's own attention.boost is null, so a commit
+      that nulls or lowers it silently disarms the ceiling. That residual is a
+      mechanical defect for a future tactic to carry, not a change of direction;
+      the two tactics boosted to 95 on 2026-07-25 sit below the ceiling and
+      satisfy the guard as implemented."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -983,7 +1719,26 @@ attributes:
       escalations still surface via the office-hours PARKED panel). Auto-close
       remains the doctrinal default for the two clean terminal states, and the
       session is never router substrate
+    - paused-scheduling with manual-only dispatch is a supported STANDING
+      operating mode, not a degraded or temporary state — the pause sentinel
+      gates worker spawning only, never reservation-ledger reconciliation — so
+      every ledger-consuming invariant (e.g. the selection-time busy+reserved
+      count) must hold in it without relying on the autonomous heartbeat's
+      reaper
+    - "every new pull request opens with the title `<node id>: <short
+      description>` — the literal node id verbatim, kind prefix included — and
+      its head branch resolves to a real node in `intentions/`; the prefix is
+      constructed by the opener from the node rather than hand-authored, and a
+      CI guard rejects a title that is non-conforming or whose id does not
+      resolve. There are no exemptions: the interim legacy gh-issue-lane
+      carve-out was removed the day it was recorded (2026-07-25) once that queue
+      drained and GitHub issues were confirmed disabled, and bot-authored PRs
+      were never exempt. A new PR with no backing node is a defect, not an
+      exception — this is the execution-surface expression of the
+      sole-issue-tracker condition, and it binds at open time going forward,
+      never retroactively"
 ---
+
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
 
 ## Router Mechanism
@@ -1152,6 +1907,29 @@ re-stamp. The net guarantee is unchanged: merge still requires an unbroken
 implement → qa → review chain against the merge-time scope fingerprint — a re-stamp
 asserts, under author presence, that the post-edit fingerprint IS that same scope.
 
+**Correction (2026-07-25, entries 102–103): the machinery refresh this rule mirrors
+is itself defective, and the net guarantee above is not currently enforced.**
+`transition-node` calls `refresh_stamp` AFTER `graph-commit` (transition-node:178-183),
+and `graph-commit`'s cleanup does `git reset --hard $ORIG_HEAD` (graph-commit:301-303)
+to restore the far-ahead PR-branch tip it moved off to land an intentions/-only SHA —
+so `refresh_stamp` hashes the REVERTED worktree body and stamps the pre-edit
+fingerprint. It fires on every node-lane phase worker and is inert only in the main
+checkout. The rule above ("phase workers, qa/review sessions, and the tick never
+re-stamp") still stands as written; what is falsified is the premise that the machinery
+refresh made that safe. Two consequences follow. First, /qa-fix's own `## needs-main
+residue` body append lands in the same graph-commit as the qa → review transition, so
+the next scope sweep reads stamp ≠ origin/main as drift and demotes the node, wiping
+`execution.markers` and discarding completed QA custody — 33 of 37 demotions since
+2026-07-05 hit nodes already at qa or review. Second, the surviving phase-log makes a
+re-entry session read the wipe as "a prior session died before the terminal transition"
+and ratify QA it never ran, so the chain is REPORTED unbroken while actually broken.
+Carriers: tactic-transition-node-stamp-landed-body (repair the refresh),
+tactic-scope-fingerprint-plan-substance (greenfield — fingerprint plan substance only,
+so no machinery write can trip custody by construction), and
+tactic-phase-evidence-fingerprint-bound (bind completion evidence to the fingerprint it
+was produced under, which is what makes a GENUINE drift safe). Until those land, treat
+the net guarantee as an intent, not an enforced invariant.
+
 Migration is backwards-incompatible for stamp readers and sequenced (schema accepts
 `string | {hash, sha}` → new stamps write the map form → bare-hash stamps migrate
 opportunistically at each re-stamp → drop the bare-string form); the executable units
@@ -1246,6 +2024,26 @@ History: entry 12 (2026-07-03) originally committed this one-worktree-per-tactic
 isolation to the legacy `worktree-create.sh` hook and node-id naming under the
 `.bare` + sibling `worktrees/` layout; entry 23 (2026-07-05) retired that
 mechanism in favor of native worktrees while keeping the isolation rule itself.
+
+**Physical `.bare` retirement — the harness-default claim corrected (amended
+2026-07-21).** The "harness default location, entered via `EnterWorktree`" claim
+above was aspirational: it holds only after the repo is de-bared. Under the
+current bare-repo layout the harness keys the project on the git-common-dir
+(`.bare`), so its actual managed worktree root is `<.bare>/.claude/worktrees/`,
+while graph worktrees are provisioned at `<main-checkout>/.claude/worktrees/`.
+The two diverge, so `EnterWorktree(path=…)` into a graph worktree is rejected as
+"outside .claude/worktrees/" and prompts for a permission-root relocation
+(harmless — approval relocates correctly). Descoping `.bare` from scripts does
+not fix this. The greenfield therefore physically retires the bare-repo layout:
+main becomes the standard git working root with `.git` inside it, and Claude
+Code native worktrees under `<repo>/.claude/worktrees/` are the only worktree
+surface — no `.bare` common dir, no sibling `worktrees/`. This widens
+`tactic-legacy-router-removal`'s target (the legacy-lane hook conventions) to
+include the physical layout itself, tracked as `tactic-retire-bare-layout`. gh
+issues are now structurally disabled (`hasIssuesEnabled: false`), so the drain
+gate is satisfied; gh pull requests remain the code-review/merge substrate by
+design. Executed as a direct-to-main in-session hotfix under a manual fleet
+quiesce, bypassing dispatch (see the 2026-07-21 clarifications).
 
 **Uniform node-id claiming ledger covers both tactic and strategy sessions.**
 (Entry 13, 2026-07-03 interview.) Concurrency is a first-class requirement, not

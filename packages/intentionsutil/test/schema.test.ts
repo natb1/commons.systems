@@ -79,6 +79,7 @@ describe("validateNode", () => {
       markers: ["dispatch:qa"],
       strategy_fingerprint: "abc123",
       fix: null,
+      completion: null,
     });
     expect(result.validates).toEqual(["strategy-1"]);
     expect(result.blocked_by).toEqual(["tactic-2"]);
@@ -111,6 +112,61 @@ describe("validateNode", () => {
       markers: [],
       strategy_fingerprint: null,
       fix: null,
+      completion: null,
+    });
+  });
+
+  it("round-trips a completion object with a full ISO-8601 mergedAt timestamp", () => {
+    const result = validateNode({
+      id: "n1-completion-pr",
+      kind: "tactic",
+      statement: "Execution with a real PR-merge completion.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: 42,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        completion: {
+          mergedAt: "2026-07-11T12:00:00Z",
+          mergeCommitSha: "feedface",
+          graphCommitSha: null,
+        },
+      },
+    });
+    expect(result.execution?.completion).toEqual({
+      mergedAt: "2026-07-11T12:00:00Z",
+      mergeCommitSha: "feedface",
+      graphCommitSha: null,
+    });
+  });
+
+  it("round-trips a completion object for the manual/out-of-band graphCommitSha path", () => {
+    const result = validateNode({
+      id: "n1-completion-oob",
+      kind: "tactic",
+      statement: "Execution with an out-of-band completion.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        completion: {
+          mergedAt: null,
+          mergeCommitSha: null,
+          graphCommitSha: "abc123",
+        },
+      },
+    });
+    expect(result.execution?.completion).toEqual({
+      mergedAt: null,
+      mergeCommitSha: null,
+      graphCommitSha: "abc123",
     });
   });
 
@@ -1430,6 +1486,89 @@ describe("validateGraph", () => {
     if (!(caught instanceof Error)) throw new Error("unreachable");
     expect(caught.message).toMatch(/tactic-1: clarifications\[0\]\.answer carries no dated provenance clause/);
     expect(caught.message).toMatch(/virtue-1: clarifications\[0\]\.answer carries no dated provenance clause/);
+  });
+
+  // Rule 18: strategy-main-health dominant-attention guard.
+  type Attn = { boost: number | null; override: number | null; rationale: string };
+
+  /**
+   * Build a minimal goal-layer node set with a dominant `strategy-main-health`
+   * (default attention.boost 100) and a sibling `strategy-other` carrying
+   * `siblingAttention`. Pass `mainHealthAttention: null` to null out
+   * strategy-main-health's attention (exercises the inert path).
+   */
+  function mainHealthNodes(
+    siblingAttention: Attn | null,
+    opts: { mainHealthAttention?: Attn | null } = {},
+  ): IntentionNode[] {
+    const mhAttention: Attn | null =
+      "mainHealthAttention" in opts
+        ? (opts.mainHealthAttention ?? null)
+        : { boost: 100, override: null, rationale: "Author-directed: dominant." };
+    return [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
+      }),
+      gnode({ id: "strategy-main-health", kind: "strategy", attention: mhAttention }),
+      gnode({ id: "strategy-other", kind: "strategy", attention: siblingAttention }),
+    ];
+  }
+
+  it("Rule 18: throws when another node's attention.boost matches the dominant boost", () => {
+    const nodes = mainHealthNodes({ boost: 100, override: null, rationale: "trying to tie" });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-other: attention\.boost \(100\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
+    );
+  });
+
+  it("Rule 18: throws when another node's attention.boost exceeds the dominant boost", () => {
+    const nodes = mainHealthNodes({ boost: 101, override: null, rationale: "trying to beat" });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-other: attention\.boost \(101\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
+    );
+  });
+
+  it("Rule 18: throws when another node's attention.override matches or exceeds the dominant boost", () => {
+    const nodes = mainHealthNodes({ boost: null, override: 100, rationale: "override tie" });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-other: attention\.override \(100\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
+    );
+  });
+
+  it("Rule 18: passes when the node opts out with ACK: main-health-dominance in its rationale", () => {
+    const nodes = mainHealthNodes({
+      boost: 100,
+      override: null,
+      rationale: "Deliberately co-dominant. ACK: main-health-dominance",
+    });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 18: passes for a sibling boost strictly below the dominant boost", () => {
+    const nodes = mainHealthNodes({ boost: 99, override: null, rationale: "below" });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 18: is inert when strategy-main-health's attention is null (no dominance to protect)", () => {
+    const nodes = mainHealthNodes(
+      { boost: 100, override: null, rationale: "would-be violation" },
+      { mainHealthAttention: null },
+    );
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 18: does not constrain strategy-main-health's own attention.boost", () => {
+    // The guard excludes the node itself: strategy-main-health carrying a boost
+    // equal to its own threshold must not self-trip.
+    const nodes = mainHealthNodes(null);
+    expect(() => validateGraph(nodes)).not.toThrow();
   });
 });
 

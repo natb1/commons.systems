@@ -280,6 +280,15 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
 
   const candidates: GraphCandidate[] = [];
 
+  // Subtree-parent ids: a tactic named as another tactic's `parent` is a
+  // permanent container that completes only when its last child completes.
+  // It is always phase-null by design, so it must not re-surface as an
+  // undecomposed draft align-tactics candidate below.
+  const subtreeParentIds = new Set<string>();
+  for (const t of tactics) {
+    if (t.parent !== null) subtreeParentIds.add(t.parent);
+  }
+
   // --- Tactic candidates -------------------------------------------------------
   for (const t of tactics) {
     if (t.office_hours !== null) continue;
@@ -315,6 +324,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     if (t.office_hours !== null) continue;
     if (!blockersComplete(t, byId)) continue;
     if (isDraft(t)) {
+      if (subtreeParentIds.has(t.id)) continue; // permanent container, not an undecomposed draft
       candidates.push({
         id: t.id,
         kind: "tactic",
@@ -354,9 +364,14 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
       reevaluation,
     });
 
-    // No non-draft child tactics on the strategy's signal path.
+    // No OPEN (non-draft, non-done) child tactics on the strategy's signal path.
+    // Excluding `done` is load-bearing: reconciled tactics PERSIST on disk
+    // (reconcile-graph writes `phase: "done"` and no longer prunes), and
+    // computeSignalPath does not filter by phase — so a completed child would
+    // otherwise sit on the signal path forever and permanently disqualify its
+    // serving strategy from every future align round.
     const children = childrenOf.get(s.id) ?? [];
-    if (children.some((t) => !isDraft(t) && onPath.has(t.id))) continue;
+    if (children.some((t) => isOpenTactic(t) && onPath.has(t.id))) continue;
 
     // Signal unvalidated.
     if (!isSignalUnvalidated(s)) continue;

@@ -115,6 +115,60 @@ clarifications:
       export drop exists. Recorded 2026-07-03 /align-tactics round 1 — author
       correction pruning the round's born-parked analytics-drop tactic in favor
       of tactic-attention-surface-analytics-collector.
+  - question: How is the office-hours parked queue ordered when the author wants to
+      defer whole classes of sittings — is pure attention rank sufficient?
+    answer: "(Recorded 2026-07-23 /align-strategy interview.) No. Office-hours
+      parked nodes carry a session-type label — office_hours.session_type, a
+      closed schema-validated enum {requirement-discovery, curriculum-review,
+      other}, defaulting to other when absent — and the office-hours selector
+      (office-hours-select.ts / officeHours.ts) ranks type-aware with a soft
+      penalty: requirement-discovery and curriculum-review parks rank at
+      attention x 0.5 (one shared named, author-tunable constant), so they sink
+      below other office-hours work while a sufficiently boosted node can still
+      surface — a soft penalty, deliberately not a hard tier floor. This amends
+      the pure attention-rank-descending ordering of the parked queue to
+      attention-ranked-with-type-modifier; the STATUS page's signal queue is
+      untouched. The label also enables selection BY type (requirement-discovery
+      / curriculum-review / other sittings on demand). Motivating case:
+      strategy-recover-attention re-surfaced at every tick demanding a direction
+      decision the author wants held for a dedicated future session. Steelman
+      considered and diverged from (2026-07-23): hand-authored per-node
+      attention deboosts could sink individual recurring nodes with zero schema,
+      but are hand-maintained hygiene, do not generalize to new parks of the
+      same class, and cannot express filter-by-type selection — the type
+      dimension is adopted for both ranking and selection. Implementation is
+      drafted in tactic-office-hours-session-type."
+  - question: Do the two deferrable session-type classes cover every whole class of
+      sitting the author wants to defer, or is a third needed?
+    answer: "(Recorded 2026-07-25, author direction at the close of an
+      office-hours drain sweep. Amends the 2026-07-23 entry above by WIDENING its
+      closed enum; the ranking and selection doctrine is unchanged.) A third class
+      is needed: strategy-review. The enum becomes {requirement-discovery,
+      curriculum-review, strategy-review, other}, still closed, still defaulting
+      to other when absent. Its defining shape is that THE INPUT IS METRICS, NOT
+      A QUESTION — the author reads numbers (budget figures, pace/velocity,
+      attention distribution) and the output is a direction for strategy. That
+      distinguishes it from requirement-discovery, where the blocker is an
+      unanswered requirement question, and from curriculum-review, where the
+      blocker is reading/comprehension work. It joins the PENALIZED group with
+      the other two, sharing the same single named constant rather than
+      introducing a second: it is author-scheduled, recurs, and should not
+      compete at full attention rank with blocked execution work at every tick.
+      Motivating case: strategy-recover-finance has carried reading: null and
+      gap: null since it was codified — the owned budget pipeline was built and
+      repeatedly fixed, but the numbers it produces have never been read back
+      against the strategy that justified building it, and that reading is a
+      distinct sitting from operating the pipeline. Born parked the same day as
+      tactic-budget-strategy-review-reading, the first node in the class.
+      Implementation note: the enum member is NOT yet on main —
+      tactic-office-hours-session-type (PR #2961) introduces the field and is
+      itself parked at its qa-fix attempt cap, so the widening is filed
+      separately at tactic-office-hours-session-type-strategy-review, blocked_by
+      it, which also backfills the parks labelled for this class in prose.
+      Until then the class is recorded in park prose only, deliberately:
+      validateOfficeHours reconstructs a park from exactly {reason, since,
+      recommendation}, so a session_type key written today is silently dropped
+      rather than rejected, which would make a structured label a false record."
 tooling_goals:
   - kind: actuator
     statement: status page — one attention-ranked queue of typed signals, each type
@@ -156,6 +210,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - the local clone the surface reads stays fresh enough that attention and
@@ -168,5 +223,11 @@ attributes:
       need no GitHub queries
     - the File System Access API, or an equivalent local read path, remains
       available in the author's browser
+    - The office-hours session-type soft-penalty factor stays a named,
+      author-tunable constant in the selector; changing its value is config, not
+      doctrine.
+    - Type-aware office-hours ranking holds while parked-node selection is
+      driven by office-hours-select.ts / officeHours.ts; if selection moves to
+      another surface, the session-type ranking moves with it.
 ---
 # Office hours runs on the graph — one local-first surface (status signals and goals exploration) allocates the author's strategic attention

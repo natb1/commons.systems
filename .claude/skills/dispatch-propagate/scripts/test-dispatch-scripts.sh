@@ -980,6 +980,15 @@ case "$args" in
     if [[ -f "$STUB_DIR/main-run-list.json" ]]; then cat "$STUB_DIR/main-run-list.json"
     else echo '[]'; fi
     ;;
+  api\ repos/*/check-suites/*)
+    # main_broken_sha: branch-attribution lookup for a check-run's parent
+    # check-suite. Fixtures are keyed by suite id: main-check-suite-<id>.json.
+    # Default: unattributable (null head_branch), so an un-fixtured suite is
+    # conservatively dropped rather than misread as main's own.
+    suite_id=$(printf '%s' "$args" | sed -E 's#.*check-suites/([^/]+)$#\1#')
+    if [[ -f "$STUB_DIR/main-check-suite-${suite_id}.json" ]]; then cat "$STUB_DIR/main-check-suite-${suite_id}.json"
+    else echo '{"head_branch":null}'; fi
+    ;;
   issue\ list\ --repo\ *)
     # JIT scan: gh issue list --repo <repo> --label <label> --state <open|closed> --json ...
     # Fixtures are keyed by sanitized label + state; absent fixture → empty list.
@@ -1953,7 +1962,7 @@ assert_eq "pr: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // e
 # Raw REST pull with no merged_at → mergedAt key present with value null
 # (open/closed-unmerged signal; consumers test `mergedAt != null`).
 assert_eq "pr: mergedAt null when merged_at absent" "null" "$(jq -r '.mergedAt' <<<"$pv")"
-assert_eq "pr: top-level key set" "body headRefName headRefOid labels mergeStateStatus mergeable mergedAt number state title" \
+assert_eq "pr: top-level key set" "body headRefName headRefOid labels mergeCommitSha mergeStateStatus mergeable mergedAt number state title" \
   "$(jq -r 'keys | join(" ")' <<<"$pv")"
 teardown
 
@@ -1974,6 +1983,7 @@ assert_eq "pr: mergeable boolean false → CONFLICTING" "CONFLICTING" "$(jq -r '
 assert_eq "pr: mergeStateStatus dirty → DIRTY" "DIRTY" "$(jq -r '.mergeStateStatus' <<<"$pv2")"
 assert_eq "pr: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$pv2")"
 assert_eq "pr: closed-unmerged mergedAt null" "null" "$(jq -r '.mergedAt' <<<"$pv2")"
+assert_eq "pr: closed-unmerged mergeCommitSha null" "null" "$(jq -r '.mergeCommitSha' <<<"$pv2")"
 assert_eq "pr: headRefName from head.ref (9002)" "conflicting-branch" "$(jq -r '.headRefName' <<<"$pv2")"
 assert_eq "pr: single label narrowed" "bug" "$(jq -r '.labels[0].name' <<<"$pv2")"
 teardown
@@ -1989,6 +1999,7 @@ printf '%s\n' '{
   "body": "",
   "state": "closed",
   "merged_at": "2026-07-11T12:00:00Z",
+  "merge_commit_sha": "feedface0004",
   "mergeable": null,
   "head": {"ref": "merged-branch", "sha": "feedface0004"},
   "labels": []
@@ -1996,6 +2007,7 @@ printf '%s\n' '{
 pv4=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9004)
 assert_eq "pr: merged PR still reports state CLOSED (not MERGED)" "CLOSED" "$(jq -r '.state' <<<"$pv4")"
 assert_eq "pr: merged PR mergedAt passthrough" "2026-07-11T12:00:00Z" "$(jq -r '.mergedAt' <<<"$pv4")"
+assert_eq "pr: merged PR mergeCommitSha passthrough" "feedface0004" "$(jq -r '.mergeCommitSha' <<<"$pv4")"
 teardown
 
 echo "Test: gh_pr_view_rest -- mergeable=null → UNKNOWN; absent mergeable_state → empty"
@@ -5401,6 +5413,7 @@ rc=0
   unset PLAYWRIGHT_BROWSERS_PATH
   export NPX_EXIT=1
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
   export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
   export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-3"
@@ -5449,6 +5462,7 @@ rc=0
   source "$TMPDIR_TEST/lib.sh"
   unset PLAYWRIGHT_BROWSERS_PATH
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
   export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
   export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-4"
@@ -5499,6 +5513,7 @@ rc=0
   source "$TMPDIR_TEST/lib.sh"
   unset PLAYWRIGHT_BROWSERS_PATH
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
   export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
   export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-5"
@@ -5512,6 +5527,241 @@ assert_eq "timeout-stall → rc non-zero" "nonzero" "$rc_state"
 assert_eq "timeout-stall → npx args (timeout path)" \
   $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
   "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 6. Stall → whole tree killed before retry (PR #2946 root-cause fix).
+#    The npx stub backgrounds a REAL grandchild (/bin/sleep 30) and `wait`s on
+#    it, so the process tree stays alive until something kills it — mirroring
+#    the real apt-get/dpkg grandchildren that `timeout` alone leaves running.
+#    With PLAYWRIGHT_INSTALL_TIMEOUT=1 the watchdog's REAL 1s deadline fires,
+#    kill_tree kills the whole tree (npx + grandchild), attempt 1 is treated as
+#    failed, and attempt 2 runs — proving the retry is real AND the
+#    grandchildren actually die. The `sleep` stub is selective: real only for
+#    the 1s watchdog deadline, instant otherwise (kill_tree's 2s grace, the 5s
+#    retry backoff), keeping the test ~2s. Uses the REAL kill_tree (not stubbed).
+echo "Test: playwright_install_with_deps stall → tree killed before retry"
+setup
+# Capture the real `sleep` binary BEFORE the stub shadows it on PATH — its path
+# is system-specific (a nix-store path here, /bin/sleep elsewhere), so resolve
+# it dynamically and hand it to the stubs via $REAL_SLEEP.
+REAL_SLEEP="$(command -v sleep)"
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+"$REAL_SLEEP" 30 &                     # real grandchild: keeps the tree alive
+gc=$!
+[[ -n "${GRANDCHILD_PIDS:-}" ]] && echo "$gc" >> "$GRANDCHILD_PIDS"
+wait                                   # block until the tree is killed
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift                                  # drop the <timeout_s> duration arg
+exec "$@"                              # transparent passthrough → npx keeps PID
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+# Selective: real-sleep only the 1s watchdog deadline; instant otherwise.
+if [[ "$1" == "1" ]]; then exec "$REAL_SLEEP" 1; fi
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-6"
+GRANDCHILD_PIDS="$TMPDIR_TEST/grandchildren-6"
+: > "$GRANDCHILD_PIDS"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_TIMEOUT=1
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/no-dpkg-lock"
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-6"
+  export GRANDCHILD_PIDS="$TMPDIR_TEST/grandchildren-6"
+  export REAL_SLEEP
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "stall → 2 npx calls (attempt 1 killed → retry is real)" "2" "$(cat "$NPX_COUNT_FILE")"
+assert_eq "stall → rc non-zero" "nonzero" "$rc_state"
+# Give the SIGKILL a beat to land, then assert every grandchild is dead — the
+# tree was actually killed, not just the npx/node child.
+"$REAL_SLEEP" 1
+gc_alive=0
+while IFS= read -r gcpid; do
+  [[ -z "$gcpid" ]] && continue
+  if kill -0 "$gcpid" 2>/dev/null; then gc_alive=$((gc_alive + 1)); fi
+done < "$GRANDCHILD_PIDS"
+assert_eq "stall → all grandchildren killed (whole tree died)" "0" "$gc_alive"
+teardown
+
+# 7. Fast success → the watchdog's inner sleep is cancelled, not orphaned.
+#    On a fast success the main body cancels the still-idle watchdog with
+#    `kill "$watchdog_pid"`. Before the fix that SIGTERM missed the watchdog's
+#    forked `sleep`, leaking an orphan that idled for the rest of timeout_s.
+#    Selective sleep stub (mirrors test 6): real-sleep AND record the PID only
+#    for the 25s watchdog deadline, so a leaked orphan would still be alive at
+#    assert time; instant for everything else. timeout is a transparent
+#    passthrough so npx exits 0 immediately (well before the 25s deadline).
+echo "Test: playwright_install_with_deps fast success → watchdog sleep not orphaned"
+setup
+REAL_SLEEP="$(command -v sleep)"
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift                                  # drop the <timeout_s> duration arg
+exec "$@"                              # transparent passthrough → npx exits 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+# Selective: real-sleep + record PID only for the 25s watchdog deadline (so a
+# leaked orphan is observably alive at assert time); instant otherwise. The
+# recorded $$ equals the watchdog's captured $! because exec preserves the PID.
+if [[ "$1" == "25" ]]; then
+  [[ -n "${WATCHDOG_SLEEP_PID:-}" ]] && echo "$$" >> "$WATCHDOG_SLEEP_PID"
+  exec "$REAL_SLEEP" 25
+fi
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-7"
+WATCHDOG_SLEEP_PID="$TMPDIR_TEST/watchdog-sleep-7"
+: > "$WATCHDOG_SLEEP_PID"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_TIMEOUT=25
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=1
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-7"
+  export WATCHDOG_SLEEP_PID="$TMPDIR_TEST/watchdog-sleep-7"
+  export REAL_SLEEP
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+assert_eq "fast success → rc 0" "0" "$rc"
+assert_eq "fast success → 1 npx call" "1" "$(cat "$NPX_COUNT_FILE")"
+# Assert the watchdog's inner sleep is gone — the fast-path cancel actually
+# reached it, no orphan leaked to init. Signal delivery, the subshell's trap
+# dispatch and process reaping are all scheduler-dependent, so poll for the
+# PID to disappear (bounded at ~5s) instead of assuming a fixed grace: a loaded
+# runner costs latency, not a false red. A genuinely orphaned sleep idles for
+# the full 25s deadline, so it still fails after the bound. REAL_SLEEP: a bare
+# `sleep` here would hit the still-on-PATH instant stub.
+sleep_pids=()
+while IFS= read -r spid; do
+  [[ -z "$spid" ]] && continue
+  sleep_pids+=("$spid")
+done < "$WATCHDOG_SLEEP_PID"
+recorded="${#sleep_pids[@]}"
+sleep_alive=0
+for _ in $(seq 1 50); do
+  sleep_alive=0
+  if [[ "$recorded" -gt 0 ]]; then
+    for spid in "${sleep_pids[@]}"; do
+      if kill -0 "$spid" 2>/dev/null; then sleep_alive=$((sleep_alive + 1)); fi
+    done
+  fi
+  [[ "$sleep_alive" -eq 0 ]] && break
+  "$REAL_SLEEP" 0.1
+done
+assert_eq "fast success → watchdog sleep was recorded (side channel worked)" "1" "$recorded"
+assert_eq "fast success → watchdog sleep not orphaned (killed)" "0" "$sleep_alive"
+# On a failing assert the leak is real: the orphan has already reparented to
+# init, so nothing reaps it and it would idle out the remaining ~25s alongside
+# the rest of the suite. Reap it here — teardown only removes the temp dir.
+if [[ "$sleep_alive" -gt 0 ]]; then
+  for spid in "${sleep_pids[@]}"; do
+    kill -9 "$spid" 2>/dev/null || true
+  done
+fi
+teardown
+
+# ============================================================================
+# wait_for_dpkg_lock tests
+# ============================================================================
+echo ""
+echo "=== wait_for_dpkg_lock ==="
+
+# 1. Lock file present but free → rc 0, returns fast (real flock/sleep).
+echo "Test: wait_for_dpkg_lock free lock → rc 0"
+setup
+: > "$TMPDIR_TEST/free.lock"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/free.lock"
+  export DPKG_LOCK_WAIT_TIMEOUT=5
+  wait_for_dpkg_lock
+) || rc=$?
+[[ "$rc" -eq 0 ]] && rc_state="zero" || rc_state="nonzero"
+assert_eq "free lock → rc 0" "zero" "$rc_state"
+teardown
+
+# 2. Lock file absent → rc 0 via the -e guard (no wait, no flock needed).
+echo "Test: wait_for_dpkg_lock absent lock file → rc 0"
+setup
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/does-not-exist"
+  export DPKG_LOCK_WAIT_TIMEOUT=5
+  wait_for_dpkg_lock
+) || rc=$?
+[[ "$rc" -eq 0 ]] && rc_state="zero" || rc_state="nonzero"
+assert_eq "absent lock file → rc 0" "zero" "$rc_state"
+teardown
+
+# 3. flock unavailable → degrades to no-op, rc 0.
+echo "Test: wait_for_dpkg_lock flock unavailable → rc 0, no-op"
+setup
+: > "$TMPDIR_TEST/present.lock"
+mkdir -p "$TMPDIR_TEST/bin-noflock"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export DPKG_LOCK_FILE="$TMPDIR_TEST/present.lock"
+  export DPKG_LOCK_WAIT_TIMEOUT=5
+  export PATH="$TMPDIR_TEST/bin-noflock"
+  wait_for_dpkg_lock
+) || rc=$?
+[[ "$rc" -eq 0 ]] && rc_state="zero" || rc_state="nonzero"
+assert_eq "flock unavailable → rc 0" "zero" "$rc_state"
+teardown
+
+# 4. Lock held → bounded real wait, then rc 0 with the "still held" warning.
+echo "Test: wait_for_dpkg_lock held lock → bounded wait, rc 0, warns"
+setup
+: > "$TMPDIR_TEST/held.lock"
+flock -x "$TMPDIR_TEST/held.lock" -c 'sleep 2' &
+holder_pid=$!
+# Give the background holder a moment to actually acquire the lock before probing.
+sleep 0.2
+rc=0
+stderr_out=$(
+  (
+    source "$TMPDIR_TEST/lib.sh"
+    export DPKG_LOCK_FILE="$TMPDIR_TEST/held.lock"
+    export DPKG_LOCK_WAIT_TIMEOUT=1
+    wait_for_dpkg_lock
+  ) 2>&1 1>/dev/null
+) || rc=$?
+[[ "$rc" -eq 0 ]] && rc_state="zero" || rc_state="nonzero"
+assert_eq "held lock → rc 0" "zero" "$rc_state"
+assert_eq "held lock → still-held warning emitted" "warned" \
+  "$( [[ "$stderr_out" == *"still held after 1s"* ]] && echo warned || echo silent )"
+wait "$holder_pid" 2>/dev/null || true
 teardown
 
 # ============================================================================
@@ -6736,6 +6986,12 @@ sweep_setup() {
   mkdir -p "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/scripts" \
            "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees" \
            "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
+  # dispatch-sweep now defaults WORKTREES_ROOT to <project>/.claude/worktrees
+  # (standard layout). This fixture keeps the worktrees under project/worktrees;
+  # inject that path via the test seam so the sweep logic is exercised regardless
+  # of the default. Re-modeling the fixture to .claude/worktrees is tracked on
+  # tactic-retire-bare-layout (deferred fixture-purge scope).
+  export DISPATCH_SWEEP_WORKTREES_ROOT="$TMPDIR_TEST/project/worktrees"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   # dispatch-sweep sources lib.sh via its SCRIPT_DIR (the scripts/ copy) — so
@@ -6900,6 +7156,29 @@ case "$args" in
   "worktree list --porcelain")
     cat "$STUB_DIR/worktree-list.txt"
     ;;
+  "rev-parse --verify --quiet refs/remotes/origin/main")
+    # NODE-arm completion gate: origin/main must be readable. SWEEP_NO_ORIGIN_MAIN
+    # simulates an absent / never-fetched remote ref.
+    [[ -n "${SWEEP_NO_ORIGIN_MAIN:-}" ]] && exit 1
+    echo "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    ;;
+  "show origin/main:intentions/"*)
+    # NODE-arm completion gate: the node's frontmatter as recorded on origin/main.
+    # node-<id>.md absent → the real git failure mode (path not in the tree).
+    nid="${args#show origin/main:intentions/}"
+    nid="${nid%.md}"
+    f="$STUB_DIR/node-${nid}.md"
+    if [[ -f "$f" ]]; then cat "$f"; else exit 1; fi
+    ;;
+  "log -1 --format=%H origin/main -- intentions/"*)
+    # NODE-arm pruned-node probe: non-empty output = the path HAS history on
+    # origin/main (the node existed and was pruned); empty = never a node.
+    nid="${args#log -1 --format=%H origin/main -- intentions/}"
+    nid="${nid%.md}"
+    f="$STUB_DIR/nodehist-${nid}.txt"
+    [[ -f "$f" ]] && cat "$f"
+    exit 0
+    ;;
   "worktree remove --force "*)
     path="${args#worktree remove --force }"
     echo "worktree-remove-force:$path" >> "$STUB_DIR/calls"
@@ -6961,10 +7240,13 @@ sweep_teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
-  # DISPATCH_CONFIG_DIR is sweep-local — never leak it into later non-sweep tests.
-  unset DISPATCH_CONFIG_DIR
+  # DISPATCH_CONFIG_DIR / DISPATCH_SWEEP_WORKTREES_ROOT are sweep-local — never
+  # leak them into later non-sweep tests.
+  unset DISPATCH_CONFIG_DIR DISPATCH_SWEEP_WORKTREES_ROOT
   # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
   unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
+  # NODE-arm seams (minimum age, origin/main availability) — same no-leak rule.
+  unset DISPATCH_SWEEP_NODE_MIN_AGE_S SWEEP_NO_ORIGIN_MAIN
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -6980,6 +7262,37 @@ sweep_register_wt() {
 # used by the git -C shim.
 sweep_path_key() {
   echo "$1" | tr '/' '_'
+}
+
+# Helper: write the origin/main intention-node fixture the NODE arm's completion
+# gate reads (`git show origin/main:intentions/<id>.md`).
+#   <phase>  literal frontmatter phase value (e.g. done / implement / null)
+#   <park>   "parked" writes a non-null office_hours block; anything else writes
+#            `office_hours: null`.
+sweep_register_node() {
+  local node_id="$1" phase="$2" park="${3:-unparked}"
+  {
+    printf -- '---\n'
+    printf 'id: %s\n' "$node_id"
+    printf 'kind: tactic\n'
+    printf 'phase: %s\n' "$phase"
+    if [[ "$park" == "parked" ]]; then
+      printf 'office_hours:\n  reason: "parked by fixture"\n  since: 2026-01-01\n'
+    else
+      printf 'office_hours: null\n'
+    fi
+    printf -- '---\n\n# body\n'
+  } > "$STUB_DIR/node-${node_id}.md"
+}
+
+# Helper: stamp a fixture worktree's creation age. The NODE arm reads the mtime of
+# `<worktree>/.git` (the gitdir pointer file `git worktree add` writes once) via
+# `stat -c %Y` — a REAL stat, not the git shim — so the file must exist on disk
+# with the wanted mtime for the minimum-age gate to be exercised.
+sweep_stamp_wt_age() {
+  local wt_path="$1" mtime="$2"
+  printf 'gitdir: %s/.git-fake\n' "$wt_path" > "$wt_path/.git"
+  touch -d "@$mtime" "$wt_path/.git"
 }
 
 # Helper: install a fake `claude` whose `agents --json` invocation (NO --cwd)
@@ -8274,6 +8587,247 @@ if grep -q "SWEEP_CONFIG_ERROR" "$DISPATCH_SWEEP_LOG_FILE"; then
   PASS=$((PASS + 1)); echo "  PASS: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- NODE arm: reap requires POSITIVE completion evidence --------------------
+# A bare node-id worktree (no PR, no issue-number prefix) has no merged PR and no
+# closed issue to prove the work is finished. The arm therefore reaps only on:
+# a completion signal read from origin/main (phase done + unparked, or a pruned
+# node), a minimum worktree age, name- AND cwd-keyed liveness, and in-sync — and
+# it NEVER quarantines/force-reaps not-in-sync work. These tests pin each gate.
+
+# --- Test N7a: done + unparked + old + clean + sessionless → REMOVE_NODE ------
+echo "Test: N7a node worktree at phase done (unparked, aged, clean) is reaped"
+sweep_setup
+WT_BASE="tactic-node-done"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000   # age 99000 >= default 3600
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7a sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH" \
+   && echo "$calls" | grep -qx "branch-D:$WT_BASE" \
+   && grep -q "REMOVE_NODE: '$WT_PATH' branch=$WT_BASE state=done" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7a done node worktree removed + branch deleted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7a done node worktree removed + branch deleted"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7b: office_hours-parked node is NEVER reaped ----------------------
+# The office-hours lane provisions exactly these worktrees for a human to engage
+# in, and writes no reservation marker. A park must survive every sweep.
+echo "Test: N7b office_hours-parked node worktree is never reaped"
+sweep_setup
+WT_BASE="tactic-node-parked"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "parked"   # done BUT parked → keep
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7b sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && ! echo "$calls" | grep -q "branch-D" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=parked" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7b parked node worktree kept (state=parked)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7b parked node worktree kept (state=parked)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7c: an active-phase node worktree is never reaped -----------------
+echo "Test: N7c node worktree at an active phase is never reaped"
+sweep_setup
+WT_BASE="tactic-node-implement"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "implement" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7c sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=active-phase" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7c in-flight node worktree kept (state=active-phase)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7c in-flight node worktree kept (state=active-phase)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7d: a branch that was never a graph node is never reaped ----------
+# No intentions/<branch>.md on origin/main AND no history for that path → a
+# manually created worktree, not a pruned node. Absence of evidence is not
+# evidence of completion.
+echo "Test: N7d non-node worktree (no node file, no history) is never reaped"
+sweep_setup
+WT_BASE="scratch-manual-wt"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7d sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=not-a-node" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7d non-node worktree kept (state=not-a-node)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7d non-node worktree kept (state=not-a-node)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# Positive control: the SAME branch with path history on origin/main is a pruned
+# node and IS reaped.
+sweep_teardown
+echo "Test: N7d' pruned node (no file, but path history) is reaped"
+sweep_setup
+WT_BASE="tactic-node-pruned"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "cafebabecafebabecafebabecafebabecafebabe" > "$STUB_DIR/nodehist-${WT_BASE}.txt"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7d' sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH" \
+   && grep -q "REMOVE_NODE: '$WT_PATH' branch=$WT_BASE state=pruned" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7d' pruned node worktree removed (state=pruned)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7d' pruned node worktree removed (state=pruned)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7e: a just-provisioned node worktree is never reaped --------------
+# The provisioning window: office-hours-graph adds the worktree, and the daemon
+# registers its session only afterwards. A sweep landing inside that window must
+# not reap even a `done`-looking node.
+echo "Test: N7e freshly created node worktree is skipped by the minimum-age gate"
+sweep_setup
+WT_BASE="tactic-node-fresh"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 100000
+export DISPATCH_SWEEP_NOW_EPOCH=100002   # age 2s, well under the 3600 default
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7e sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_TOO_YOUNG: '$WT_PATH' branch=$WT_BASE state=done age_seconds=2 min_age_seconds=3600" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7e fresh node worktree kept (age gate)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7e fresh node worktree kept (age gate)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7f: a live session resident under ANOTHER name blocks the reap ----
+# worktree_has_live_session is NAME-keyed, so an interactive session that entered
+# the worktree under a different name is invisible to it; the cwd-keyed check is
+# what protects that workspace.
+echo "Test: N7f live session with a non-matching name blocks the node reap (cwd-keyed)"
+sweep_setup
+WT_BASE="tactic-node-occupied"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+sweep_fake_claude_sessions_by_name "some-human-session=sid-human"
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7f sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_LIVE_SESSION_CWD: '$WT_PATH' branch=$WT_BASE" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7f cwd-resident session blocked the reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7f cwd-resident session blocked the reap"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7g: a not-in-sync node worktree is NEVER quarantined/force-reaped -
+# The MERGED/CLOSED arms force-reap after the grace because a merged PR / closed
+# issue proves the work is finished. Nothing proves that here, so uncommitted work
+# in a node worktree is skipped indefinitely — no marker, no quarantine, no force.
+echo "Test: N7g not-in-sync node worktree is skipped, never quarantined"
+sweep_setup
+WT_BASE="tactic-node-dirty"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=1
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7g sweep#1 exits 0" "0" "$rc"
+export DISPATCH_SWEEP_NOW_EPOCH=900000   # far past any grace
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7g sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && [[ ! -e "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE" ]] \
+   && [[ ! -d "$TMPDIR_TEST/project/tmp/dispatch-sweep-quarantine" ]] \
+   && grep -q "SKIP_NODE_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7g dirty node worktree skipped with no marker/quarantine/force-reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7g dirty node worktree skipped with no marker/quarantine/force-reap"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N7h: unreadable origin/main fails safe (no reap) -------------------
+echo "Test: N7h unresolvable origin/main keeps every node worktree"
+sweep_setup
+WT_BASE="tactic-node-noorigin"
+WT_PATH="$TMPDIR_TEST/project/worktrees/$WT_BASE"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+sweep_register_node "$WT_BASE" "done" "unparked"
+sweep_stamp_wt_age "$WT_PATH" 1000
+export SWEEP_NO_ORIGIN_MAIN=1
+export DISPATCH_SWEEP_NOW_EPOCH=100000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N7h sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_NODE_NOT_COMPLETE: '$WT_PATH' branch=$WT_BASE state=unknown-origin-main" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N7h unreadable origin/main kept the node worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N7h unreadable origin/main kept the node worktree"
+  echo "    calls: $calls"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
@@ -16415,24 +16969,28 @@ echo "Test: dispatch-phase-effort with an empty-string arg exits 2"
 if "$SCRIPT_DIR/dispatch-phase-effort" "" 2>/dev/null; then pe_rc=0; else pe_rc=$?; fi
 assert_eq "phase-effort: empty-string-arg → exit 2" "2" "$pe_rc"
 
-# --- review-fix/SKILL.md model-tiering content guards (#1172) -----------------
+# --- review-fix model-tiering content guards (#1172) --------------------------
 # The review-fix orchestrator runs on Sonnet; fix-authoring is delegated to an
 # Opus subagent. The review-fix.js `--fix` guard below is INTENTIONALLY
 # INVERTED from the original #1172 doctrine ("code-review is detection-only,
 # no --fix"): tactic-review-phase-trust-builtin-review deliberately reverses
 # this — code-review now runs `/code-review max --fix` and applies its own
 # fixes directly (Lane-A trust-the-built-in doctrine), with only its
-# un-auto-fixed residue dispositioned by the new residue phase. Per
-# .claude/rules/test-integrity.md, re-pointing a guard whose asserted doctrine
-# the author has deliberately reversed is not weakening a red test — the first
-# assertion below (Opus fix-authoring) is untouched because that invariant
-# still holds.
+# un-auto-fixed residue dispositioned by the new residue phase.
+#
+# The Opus fix-authoring guard below targets review-fix.js (the RUNTIME file
+# that actually enforces the pin at its fix fan-out `agent()` call), NOT the
+# SKILL.md prose. tactic-thin-oversized-skill-bodies moves fixed doctrine out
+# of the orchestrator body into references/*.md, so a grep against the thinned
+# SKILL.md body was a brittle proxy — a later thinning pass could relocate the
+# string again. Per .claude/rules/test-integrity.md, re-pointing this guard at
+# the mechanism that enforces the invariant strengthens it (the "Opus
+# fix-authoring" invariant still holds); it is not weakening a red test.
 REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
-RF_SKILL="$REPO_ROOT/.claude/skills/review-fix/SKILL.md"
 RF_WORKFLOW="$REPO_ROOT/.claude/workflows/review-fix.js"
 
-echo "Test: review-fix/SKILL.md pins fix-authoring to Opus (model: opus present)"
-if grep -q 'model: opus' "$RF_SKILL"; then rf_opus=yes; else rf_opus=no; fi
+echo "Test: review-fix.js pins fix-authoring to Opus (model: 'opus' present in the runtime)"
+if grep -q "model: 'opus'" "$RF_WORKFLOW"; then rf_opus=yes; else rf_opus=no; fi
 assert_eq "review-fix: Opus fix-authoring pinned" "yes" "$rf_opus"
 
 echo "Test: review-fix.js invokes /code-review with --fix (Lane-A trust-the-built-in doctrine, tactic-review-phase-trust-builtin-review)"
@@ -19312,6 +19870,74 @@ assert_eq "stop: park-node failure → hook still exits 0" "0" "$rc"
 assert_eq "stop: park-node failure → park-node was still attempted once" "1" "$(wc -l < "$ROOT/park-calls.log")"
 stopnc_teardown
 
+# --- marker consumed after successful park (reason-only) --------------------
+echo "Test: dispatch-stop successful park consumes the reason marker"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)
+assert_eq "stop: park success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park success → reason marker deleted" "0" "$?"
+stopnc_teardown
+
+# --- consumed marker prevents re-park on a later Stop event ------------------
+echo "Test: dispatch-stop does not re-park on a second Stop event after marker consumed"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)
+rc2=$(stopnc_run)   # marker already consumed by the first run
+assert_eq "stop: second run → exit 0" "0" "$rc2"
+assert_eq "stop: second run → park-node still called only once total" "1" "$(wc -l < "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- marker survives a failed park (reason-only) so a later retry can fire ---
+echo "Test: dispatch-stop failed park leaves the reason marker in place"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
+rc=$(stopnc_run)
+assert_eq "stop: park failure → exit 0" "0" "$rc"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park failure → reason marker survives" "0" "$?"
+stopnc_teardown
+
+# --- marker consumed after successful park (reason + recommendation) --------
+echo "Test: dispatch-stop successful park consumes both markers when a recommendation is present"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+rc=$(stopnc_run)
+assert_eq "stop: park+reco success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park+reco success → reason marker deleted" "0" "$?"
+[ ! -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: park+reco success → recommendation marker deleted" "0" "$?"
+stopnc_teardown
+
+# --- both markers survive a failed park (reason + recommendation) -----------
+echo "Test: dispatch-stop failed park leaves both markers in place when a recommendation is present"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
+rc=$(stopnc_run)
+assert_eq "stop: park+reco failure → exit 0" "0" "$rc"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: park+reco failure → reason marker survives" "0" "$?"
+[ -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: park+reco failure → recommendation marker survives" "0" "$?"
+stopnc_teardown
+
 # ============================================================================
 # dispatch-finalize-phase tests (#2243)
 # ============================================================================
@@ -19911,7 +20537,11 @@ echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
 PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 
 # Map of chain-skill SKILL.md → allowed count of EnterWorktree+ExitWorktree
-# substring mentions (grep -oE counts each occurrence, not each line).
+# substring mentions (grep -oE counts each occurrence, not each line). The scan
+# covers each skill's SKILL.md AND any references/*.md it splits normative
+# doctrine into (tactic-thin-oversized-skill-bodies): a worktree-switch
+# instruction relocated out of the thinned SKILL.md body into a reference file
+# would otherwise evade this guard.
 declare -A CHAIN_GUARD_EXPECTED=(
   [".claude/skills/dispatch-propagate/SKILL.md"]=0
   # Phase skills do not call EnterWorktree/ExitWorktree (#868): they write the
@@ -19936,8 +20566,17 @@ for relpath in "${!CHAIN_GUARD_EXPECTED[@]}"; do
     echo "  FAIL: chain-guard: file missing: $relpath"
     continue
   fi
-  actual=$({ grep -oE 'EnterWorktree|ExitWorktree' "$abspath" || true; } | wc -l | tr -d ' ')
-  assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count" \
+  # Scan the SKILL.md body plus any references/*.md the skill splits normative
+  # doctrine into, so relocated worktree-switch instructions cannot evade the guard.
+  guard_files=("$abspath")
+  refs_dir="$(dirname "$abspath")/references"
+  if [[ -d "$refs_dir" ]]; then
+    while IFS= read -r ref_md; do
+      guard_files+=("$ref_md")
+    done < <(find "$refs_dir" -type f -name '*.md' | sort)
+  fi
+  actual=$({ grep -hoE 'EnterWorktree|ExitWorktree' "${guard_files[@]}" || true; } | wc -l | tr -d ' ')
+  assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count (SKILL.md + references)" \
     "$expected" "$actual"
 done
 
@@ -21215,6 +21854,17 @@ esac
 exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/repo-health"
+  # Fake graph-native main-red-node sync (tactic-graph-main-self-heal): prints
+  # SEL_MAIN_RED_NODES (default empty → no open latch node, i.e. main healthy)
+  # one id per line, so a test can drive the OPEN_MAIN_RED gate. Logs its
+  # invocation so a wiring test can assert it ran.
+  cat > "$TMPDIR_TEST/dispatch-graph-main-red-sync" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/graph-main-red-sync.log"
+[[ -n "\${SEL_MAIN_RED_NODES:-}" ]] && printf '%s\n' "\${SEL_MAIN_RED_NODES}"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-graph-main-red-sync"
   # Fake dispatch-jit-scan (Step 3b aux trigger — the JIT-reminder lane the
   # deleted legacy selector used to emit from its default mode). Emits
   # SEL_JIT_SCAN (default empty → no reminder due) so a test can drive the
@@ -21346,13 +21996,39 @@ FAKE
            "$TMPDIR_TEST/dispatch-escalate-sync-broken"
 
   # PATH-shimmed git: branch defaults to main; fetch/merge succeed unless a
-  # FAKE_GIT_*_FAIL env var is set.
+  # FAKE_GIT_*_FAIL env var is set. The single `-C <path> symbolic-ref --short
+  # HEAD` arm below backs lib.sh's assert_primary_checkout_on_main
+  # (b8a1ba75), which dispatch-select-tick's Step 1 main-sync now calls before
+  # the ff-only merge — precedence SEL_PRIMARY_CHECKOUT_BRANCH >
+  # FAKE_GIT_PRIMARY_BRANCH > FAKE_GIT_BRANCH > "main", so every
+  # pre-existing test's main-sync path is unaffected and either knob can drive
+  # the drift invariant. (There were previously two case arms matching this
+  # same command shape — bash `case` takes the first match, so the earlier
+  # SEL_PRIMARY_CHECKOUT_BRANCH arm silently shadowed the older
+  # FAKE_GIT_PRIMARY_BRANCH knob; collapsed into one arm here.)
   cat > "$TMPDIR_TEST/bin/git" <<'STUB'
 #!/usr/bin/env bash
 case "$*" in
   "rev-parse --abbrev-ref HEAD") echo "${FAKE_GIT_BRANCH:-main}" ;;
   "fetch origin main") [[ -n "${FAKE_GIT_FETCH_FAIL:-}" ]] && exit 1 ; exit 0 ;;
   "merge --ff-only origin/main") echo merge >> "${SEL_GIT_MERGE_LOG:-/dev/null}" ; [[ -n "${FAKE_GIT_MERGE_FAIL:-}" ]] && exit 1 ; exit 0 ;;
+  # resolve_project_root (lib.sh) + assert_primary_checkout_on_main (added by
+  # PR #2925) run before the main-sync: return a non-empty git-common-dir so the
+  # project-root dirname succeeds, and report the primary checkout's branch via
+  # `-C <path> symbolic-ref --short HEAD`. A prior origin/main merge left TWO
+  # competing knobs for this target in two separate, mutually shadowing case
+  # arms — the newer SEL_PRIMARY_CHECKOUT_BRANCH and the older
+  # FAKE_GIT_PRIMARY_BRANCH — where bash `case` takes the first match, so one
+  # arm always silently shadowed the other's knob. Unified into ONE arm
+  # honoring both: SEL_PRIMARY_CHECKOUT_BRANCH, then FAKE_GIT_PRIMARY_BRANCH,
+  # then FAKE_GIT_BRANCH (the tick's OWN branch check above, gating whether the
+  # main-sync block runs at all), then "main". No test sets more than one of
+  # these knobs at once, so this precedence order is behavior-preserving for
+  # every existing test; guard-pass tests set none (-> main, guard passes),
+  # each drift test sets exactly one (-> that branch, guard halts exit 2). No
+  # knob is dropped and no test is weakened.
+  "rev-parse --path-format=absolute --git-common-dir") echo "$TMPDIR_TEST/.bare" ;;
+  "-C "*" symbolic-ref --short HEAD") echo "${SEL_PRIMARY_CHECKOUT_BRANCH:-${FAKE_GIT_PRIMARY_BRANCH:-${FAKE_GIT_BRANCH:-main}}}" ;;
   *) exit 0 ;;
 esac
 STUB
@@ -21444,7 +22120,7 @@ sel_tick_teardown() {
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     DISPATCH_LOCK_WAIT_TIMEOUT DISPATCH_LOCK_WAIT_INTERVAL \
-    FAKE_GIT_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
+    FAKE_GIT_BRANCH FAKE_GIT_PRIMARY_BRANCH FAKE_GIT_FETCH_FAIL FAKE_GIT_MERGE_FAIL \
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
     SEL_EXHAUSTED SEL_PRIORITY_ONLY \
     SEL_MAX_WORKERS SEL_NPRIO_AVAIL SEL_DEFAULT_TARGET \
@@ -21454,9 +22130,10 @@ sel_tick_teardown() {
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
     SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT \
-    SEL_MAIN_BROKEN_SHA SEL_SYNC_BROKEN_LATCHED SEL_JIT_SCAN \
+    SEL_MAIN_BROKEN_SHA SEL_MAIN_RED_NODES SEL_SYNC_BROKEN_LATCHED SEL_JIT_SCAN \
     SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_CENSUS_OUT \
     SEL_CALENDAR_OUT SEL_STATEMENTS_OUT \
+    SEL_PRIMARY_CHECKOUT_BRANCH \
     DISPATCH_DECISION_LOG_DIR
 }
 
@@ -21468,7 +22145,7 @@ run_sel_tick() {
 # --- empty queue → release + empty ------------------------------------------
 echo "Test: select-tick empty queue → empty, lock released"
 sel_tick_setup
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "empty: exit 0" "0" "$rc"
 assert_eq "empty: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "empty: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21483,6 +22160,26 @@ assert_eq "empty: decision log last record .site" "select-tick" \
   "$(tail -n1 "$DLOG_FILE" | jq -r '.site')"
 sel_tick_teardown
 
+# --- primary checkout drifted off main → internal-error, exit 2 -------------
+# lib.sh's assert_primary_checkout_on_main (b8a1ba75) guards the Step 1
+# main-sync: a primary checkout not on `main` (the 2026-07-21 direct-to-main
+# incident, PR #2925) must fail loudly rather than let the ff-only merge run
+# against the wrong branch. dispatch-select-tick surfaces this as exit 2 with
+# no decision line, WITHOUT releasing the lock (the invariant violation is not
+# a normal terminal disposition the lock-release contract covers).
+echo "Test: select-tick primary checkout drifted off main → internal-error, exit 2"
+sel_tick_setup
+export SEL_PRIMARY_CHECKOUT_BRANCH="some-other-branch"
+rc=0; out=$(run_sel_tick) || rc=$?
+assert_eq "drift: exit 2" "2" "$rc"
+assert_eq "drift: no decision line" "" "$out"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "drift: decision log last record .disposition" "internal-error" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "drift: decision log last record .skip_reason" "primary-checkout-not-on-main" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+sel_tick_teardown
+
 # --- graph selection → reserved under the node id, lock RELEASED --------------
 # tactic-graph-router-selector: the tick consults the graph selector FIRST; a
 # selection writes one reservation-ledger marker per node under its NODE ID
@@ -21491,7 +22188,7 @@ sel_tick_teardown
 echo "Test: select-tick graph selection → graph decision, node reserved, lock released, legacy skipped"
 sel_tick_setup
 export SEL_GRAPH_TARGET="node tactic-x tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "graph: decision line" "graph 1 tactic-x:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "graph: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21510,7 +22207,7 @@ echo "Test: select-tick graph multi-node selection → one decision line, both r
 sel_tick_setup
 export SEL_TARGET_N=3
 export SEL_GRAPH_TARGET=$'node tactic-a tactic review\nnode strategy-s strategy align-tactics'
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "graph multi: decision line" \
   "graph 2 tactic-a:tactic:review strategy-s:strategy:align-tactics" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21524,7 +22221,7 @@ sel_tick_setup
 # SEL_GRAPH_TARGET unset → the graph selector returns empty; no JIT reminder is
 # due and main is green, so the tick falls through to the `empty` decision. The
 # legacy gh selector (dispatch-select-target) that used to drain here is gone.
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "graph empty: graph selector consulted first" "1" \
   "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
 assert_eq "graph empty: decision line" "empty" \
@@ -21540,7 +22237,7 @@ echo "Test: select-tick at-cap graph pace-exempt probe → graph decision, legac
 sel_tick_setup
 export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
 export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "pace-exempt: decision line" "graph 1 tactic-p:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "pace-exempt: node reserved" "1" \
@@ -21557,7 +22254,7 @@ export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
 # Graph pace-exempt lane empty (SEL_GRAPH_PACE_EXEMPT unset) and main green
 # (SEL_MAIN_BROKEN_SHA unset) → no surviving at-cap bypass; hard cap. The legacy
 # --priority-only probe (dispatch-select-target) died with the legacy selector.
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "at-cap fallback: graph pace-exempt probe consulted" "1" \
   "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
 assert_eq "at-cap fallback: decision line" "concurrency-cap" \
@@ -21570,7 +22267,7 @@ echo "Test: select-tick at-cap exhausted → no graph pace-exempt probe (hard fl
 sel_tick_setup
 export SEL_TARGET_N=1 SEL_LIVE_COUNT=1 SEL_EXHAUSTED=exhausted
 export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "exhausted: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "exhausted: graph pace-exempt probe not consulted" "0" \
@@ -21584,61 +22281,74 @@ sel_tick_setup
 # reports a sha (Step 3b) → main-broken decision, spawned downstream as a
 # lock-free bg job so the lock is released.
 export SEL_MAIN_BROKEN_SHA=abc1234
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "main-broken: decision line" "main-broken abc1234" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "main-broken: lock released" "" \
   "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
-# --- Step 1c latch re-arm: green main + open latch issue → close (#1085) ------
-echo "Test: select-tick re-arm closes open latch issue when main is green"
+# --- Step 1c main-red-node sync wiring: main healthy + node still open (tactic-graph-main-self-heal) ---
+# The graph-native successor to the old gh-issue-based latch re-arm (#1085):
+# the open-node read and the green-main recovery-completion write now both
+# live inside dispatch-graph-main-red-sync, its own script wholesale-faked by
+# sel_tick_setup (see the fake above). These sel_tick_* tests therefore
+# exercise ONLY dispatch-select-tick's own gating on that script's stdout —
+# never the completion write's internals (dump-node/write-node/graph-commit),
+# which are out of scope here.
+echo "Test: select-tick main-red-node sync wiring — main healthy, node still open → empty, no merge"
 sel_tick_setup
-# repo-health --main-broken-sha reports green (SEL_MAIN_BROKEN_SHA unset → empty),
-# so Step 1c closes the open latch issue.
-printf '99\n' > "$STUB_DIR/main-broken-open.txt"
-out=$(run_sel_tick)
-assert_eq "re-arm green+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
-# REST close (#2256): the latch close is now a POST .../issues/99/comments
-# carrying the re-arm message + a PATCH .../issues/99 (state=closed).
-assert_eq "re-arm green+open: latch issue PATCH-closed" "present" \
-  "$(grep -q 'PATCH.*issues/99' "$STUB_DIR/gh-issue-close-rest-calls.log" 2>/dev/null && echo present || echo absent)"
-assert_eq "re-arm green+open: latch close carries the re-arm comment" "present" \
-  "$(grep -q 'issues/99/comments -f body=origin/main is green again; closing the main-broken latch (re-arming the gate).' "$STUB_DIR/gh-issue-comment-rest-calls.log" 2>/dev/null && echo present || echo absent)"
+# SEL_MAIN_BROKEN_SHA unset → repo-health reports green. SEL_MAIN_RED_NODES set
+# → the fake sync script reports one open node, so OPEN_MAIN_RED is non-empty
+# this tick regardless of main's own health (mirrors the pre-extraction inline
+# behavior: every consumer this tick gates on the tick's initial read, not a
+# post-completion re-read).
+export SEL_MAIN_RED_NODES="tactic-main-red-abc1234"
+out=$(run_sel_tick) || true
+assert_eq "main-red-sync green+open: sync invoked" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo present || echo absent)"
+assert_eq "main-red-sync green+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "main-red-sync green+open: no merge activity while a node is open" "0" \
+  "$(grep -c '^merge:' <<<"$out")"
 sel_tick_teardown
 
-# --- Step 1c latch re-arm: red main + open latch issue → NOT closed -----------
-echo "Test: select-tick re-arm leaves open latch issue while main is still red"
+# --- Step 1c main-red-node sync wiring: main red + node open ------------------
+echo "Test: select-tick main-red-node sync wiring — main red, node open → empty, no merge"
 sel_tick_setup
-# repo-health --main-broken-sha reports a sha (main still red), so Step 1c must
-# NOT close the open latch issue.
+# repo-health --main-broken-sha reports a sha (main still red) AND the sync
+# fake reports an open node; OPEN_MAIN_RED is non-empty either way, so the
+# Step 3b main-broken emission and Step 1d auto-merge both stay suppressed.
 export SEL_MAIN_BROKEN_SHA=redsha1
-printf '99\n' > "$STUB_DIR/main-broken-open.txt"
-out=$(run_sel_tick)
-assert_eq "re-arm red+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "re-arm red+open: latch issue NOT closed" "absent" \
-  "$([[ -e "$STUB_DIR/gh-issue-close-rest-calls.log" || -e "$STUB_DIR/gh-issue-comment-rest-calls.log" ]] && echo present || echo absent)"
+export SEL_MAIN_RED_NODES="tactic-main-red-redsha1"
+out=$(run_sel_tick) || true
+assert_eq "main-red-sync red+open: sync invoked" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo present || echo absent)"
+assert_eq "main-red-sync red+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "main-red-sync red+open: no merge activity" "0" \
+  "$(grep -c '^merge:' <<<"$out")"
 sel_tick_teardown
 
-# --- Step 1c latch re-arm: green main + NO open latch issue → no-op -----------
-echo "Test: select-tick re-arm is a no-op when no latch issue is open"
+# --- Step 1c main-red-node sync wiring: main healthy + no open node -----------
+echo "Test: select-tick main-red-node sync wiring — main healthy, no open node → empty (no bypass needed)"
 sel_tick_setup
-# No main-broken-open.txt fixture means the open-latch query returns empty, so
-# the re-arm short-circuits before the repo-health CI read.
-out=$(run_sel_tick)
-assert_eq "re-arm green+no-issue: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "re-arm green+no-issue: no close attempted" "absent" \
-  "$([[ -e "$STUB_DIR/gh-issue-close-rest-calls.log" || -e "$STUB_DIR/gh-issue-comment-rest-calls.log" ]] && echo present || echo absent)"
+# SEL_MAIN_RED_NODES unset (default empty) → OPEN_MAIN_RED is empty this tick;
+# main is also healthy (SEL_MAIN_BROKEN_SHA unset), so Step 3b finds nothing to
+# emit either. The sync script still runs unconditionally every tick.
+out=$(run_sel_tick) || true
+assert_eq "main-red-sync green+no-node: sync invoked" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo present || echo absent)"
+assert_eq "main-red-sync green+no-node: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 sel_tick_teardown
 
 # --- Step 1d (cont.): auto-merge wiring, main healthy → invoked (#1540) -------
-# main is healthy (no main-broken-open.txt → OPEN_MB empty), so Step 1d (cont.)
-# runs dispatch-auto-merge and prefixes each of its `merged #N` lines with
-# `merge: `. The fake emits SEL_AUTO_MERGE_OUT.
+# main is healthy and no tactic-main-red-* node is open (SEL_MAIN_RED_NODES
+# unset → OPEN_MAIN_RED empty), so Step 1d (cont.) runs dispatch-auto-merge and
+# prefixes each of its `merged #N` lines with `merge: `. The fake emits
+# SEL_AUTO_MERGE_OUT.
 echo "Test: select-tick auto-merge wiring (main healthy) → merge: line, auto-merge invoked"
 sel_tick_setup
 export SEL_AUTO_MERGE_OUT="merged #42"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 TOTAL=$((TOTAL + 1))
 if grep -q '^merge: merged #42$' <<<"$out"; then
   PASS=$((PASS + 1)); echo "  PASS: tick emits 'merge: merged #42'"
@@ -21651,17 +22361,19 @@ assert_eq "auto-merge wiring: dispatch-auto-merge invoked" "present" \
 sel_tick_teardown
 
 # --- Step 1d (cont.): auto-merge suppressed while main is broken (#1540) ------
-# An open main-broken latch (OPEN_MB non-empty) suppresses Step 1d (cont.):
-# dispatch-auto-merge is NOT invoked and no `merge:` line is emitted, even though
-# the fake would emit one if called. repo-health --main-broken-sha returns a sha
-# so the latch persists (main is still red), mirroring the red+open re-arm test
-# above.
+# An open tactic-main-red-* node (OPEN_MAIN_RED non-empty, driven by
+# SEL_MAIN_RED_NODES — the graph-native successor to the old
+# main-broken-open.txt gh-issue fixture) suppresses Step 1d (cont.):
+# dispatch-auto-merge is NOT invoked and no `merge:` line is emitted, even
+# though the fake would emit one if called. OPEN_MAIN_RED is now the SOLE gate
+# for auto-merge; SEL_MAIN_BROKEN_SHA is a separate, second-order probe only
+# consulted once OPEN_MAIN_RED is already empty (Step 3b / the at-cap bypass),
+# so it plays no role in this test.
 echo "Test: select-tick auto-merge suppressed while main is broken"
 sel_tick_setup
-export SEL_MAIN_BROKEN_SHA=redsha1
-printf '99\n' > "$STUB_DIR/main-broken-open.txt"
+export SEL_MAIN_RED_NODES="tactic-main-red-redsha1"
 export SEL_AUTO_MERGE_OUT="merged #42"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 TOTAL=$((TOTAL + 1))
 if ! grep -q 'merge:' <<<"$out"; then
   PASS=$((PASS + 1)); echo "  PASS: no 'merge:' line while main is broken"
@@ -21679,7 +22391,7 @@ sel_tick_teardown
 echo "Test: select-tick re-triage wiring → retriage: line, retriage script invoked"
 sel_tick_setup
 export SEL_RETRIAGE_OUT="retriaged #101 (source PR #1704 closed unmerged)"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 TOTAL=$((TOTAL + 1))
 if grep -q '^retriage: retriaged #101 (source PR #1704 closed unmerged)$' <<<"$out"; then
   PASS=$((PASS + 1)); echo "  PASS: tick emits 'retriage: retriaged #101 ...'"
@@ -21696,7 +22408,7 @@ echo "Test: select-tick failing merge under cap → sync-failed, counter bumped"
 sel_tick_setup
 export FAKE_GIT_MERGE_FAIL=1   # local main cannot ff-merge origin/main
 # Default sessions = UNKNOWN (fall through); no sync-broken latch; counter absent (=0).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "sync-failed: decision line" "sync-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "sync-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21713,7 +22425,7 @@ echo "Test: select-tick live sync-repair session → sync-repair-pending, merge 
 sel_tick_setup
 export SEL_SESSIONS_UNDER_RC=0
 export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tbusy\tsync-repair'
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "defer: decision line" "sync-repair-pending" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "defer: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21731,7 +22443,7 @@ sel_tick_setup
 export SEL_SESSIONS_UNDER_RC=0
 export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tstopped\tsync-repair'
 export FAKE_GIT_MERGE_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "stopped-defer: decision line" "sync-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "stopped-defer: merge attempted" "present" \
@@ -21744,7 +22456,7 @@ sel_tick_setup
 printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # already at the cap
 export FAKE_GIT_MERGE_FAIL=1
 # No sync-broken latch open yet → the cap branch escalates (find-or-create).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-escalate: decision line" "sync-broken" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-escalate: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21764,7 +22476,7 @@ sel_tick_setup
 printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # already at the cap
 export FAKE_GIT_FETCH_FAIL=1   # cannot reach origin/main (fetch fails, no merge)
 # No sync-broken latch open yet → the cap branch escalates (find-or-create).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-fetch-escalate: decision line" "sync-broken" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-fetch-escalate: escalate called" "present" \
@@ -21782,7 +22494,7 @@ sel_tick_setup
 # so the failing-merge branch returns sync-broken WITHOUT escalating or bumping.
 export SEL_SYNC_BROKEN_LATCHED=latched
 export FAKE_GIT_MERGE_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "latched: decision line" "sync-broken" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "latched: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21799,7 +22511,7 @@ printf '[{"number":77}]\n' > "$STUB_DIR/sync-broken-open.json"   # stale latch t
 printf '2\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # stale counter to reset
 # Merge succeeds (default, no FAKE_GIT_MERGE_FAIL) → fall through to select-target
 # (default `empty`).
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "recover: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 # REST close (#2256): POST .../issues/77/comments (re-arm message) + PATCH
 # .../issues/77 (state=closed).
@@ -21817,7 +22529,7 @@ sel_tick_setup
 # Graph queue empty; dispatch-jit-scan (Step 3b) reports a due reminder → the
 # tick emits it and releases the lock (spawned downstream as a bg job).
 export SEL_JIT_SCAN="jit-reminder owner/repo 42 PVT_x ITEM_y"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "jit-reminder: decision line" "jit-reminder owner/repo 42 PVT_x ITEM_y" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "jit-reminder: lock released" "" \
@@ -21828,7 +22540,7 @@ sel_tick_teardown
 echo "Test: select-tick sync failure on main → sync-failed, lock released"
 sel_tick_setup
 export FAKE_GIT_FETCH_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "sync-failed: decision line" "sync-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "sync-failed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21839,9 +22551,70 @@ echo "Test: select-tick off main skips sync (fetch-fail ignored)"
 sel_tick_setup
 export FAKE_GIT_BRANCH="707-some-branch"
 export FAKE_GIT_FETCH_FAIL=1
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "off-main: reaches selection (empty, not sync-failed)" "empty" \
   "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- on-main: a healthy tick passes the primary-checkout guard (QA finding 7) --
+# The main-sync block runs assert_primary_checkout_on_main "$MAIN_WORKTREE" before
+# the ff-only merge; a violation short-circuits the tick to `exit 2` with
+# disposition=internal-error / skip_reason=primary-checkout-not-on-main and emits
+# NO stdout decision line. This pins the guard's NO-FALSE-HALT property at the
+# WIRING level (the isolated helper is already covered by
+# test-primary-checkout-guard.sh): a default on-main tick (FAKE_GIT_BRANCH unset →
+# BRANCH=main AND the guard target resolves to 'main', so the guard passes
+# silently) must clear the guard and reach normal selection, NOT be halted. This
+# case FAILS if a future change mis-wires the guard to halt healthy on-main ticks.
+echo "Test: select-tick on-main tick passes the primary-checkout guard (not halted)"
+sel_tick_setup
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
+assert_eq "guard-pass: exit 0 (not guard's exit 2)" "0" "$rc"
+assert_eq "guard-pass: reaches selection (empty, guard did not halt)" "empty" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+# Structured decision-log: the guard-fired path would stamp disposition
+# internal-error + skip_reason primary-checkout-not-on-main. A clean pass is
+# disposition=empty / skip_reason empty (same jq pattern as the empty-queue test).
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "guard-pass: disposition not internal-error" "empty" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "guard-pass: skip_reason not primary-checkout-not-on-main" "" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+sel_tick_teardown
+
+# --- on-main but primary checkout off-main: the guard HALTS the tick ----------
+# Inverse of the guard-PASS case above: this pins the guard's ACTUAL-HALT property
+# at the wiring level. FAKE_GIT_BRANCH is left unset so BRANCH=main and the
+# main-sync block IS entered, but the dedicated FAKE_GIT_PRIMARY_BRANCH knob drives
+# the guard's target (MAIN_WORKTREE, checked via `-C <path> symbolic-ref --short
+# HEAD`) off `main` — impossible with the old single knob, which coupled BRANCH and
+# the guard target. assert_primary_checkout_on_main must fire: exit 2, NO normal
+# selection decision line on stdout, and a decision-log record stamped
+# disposition=internal-error / skip_reason=primary-checkout-not-on-main. This case
+# FAILS if a future change mis-wires the guard to no-op on a drifted primary checkout.
+echo "Test: select-tick on-main but primary checkout off-main → guard halts (exit 2)"
+sel_tick_setup
+export FAKE_GIT_PRIMARY_BRANCH="707-some-branch"
+# The script runs under `set -e`; this is the first sel-tick case where the
+# tick legitimately exits non-zero, so the substitution must be shielded or
+# set -e kills the whole suite before the assertions below ever run (mirrors
+# test-primary-checkout-guard.sh's set +e / set -e bracketing).
+set +e
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
+set -e
+assert_eq "guard-halt: exit 2 (the guard's exit)" "2" "$rc"
+# The guard short-circuits before selection: the tail stdout line is NOT a decision
+# line (in particular NOT the on-main `empty` the guard-pass case asserts) — it is
+# empty, same tail pattern as that case but inverted.
+assert_eq "guard-halt: no selection decision line (tail not 'empty')" "" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+# Structured decision-log: last record carries the guard's disposition + reason
+# (same jq pattern as the guard-pass case, opposite values).
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "guard-halt: disposition internal-error" "internal-error" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "guard-halt: skip_reason primary-checkout-not-on-main" "primary-checkout-not-on-main" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
 sel_tick_teardown
 
 # --- JIT created lines are passed through, prefixed --------------------------
@@ -21853,7 +22626,7 @@ echo "weekly-review: created #42"
 echo "standup: debounced"
 FAKE
 chmod +x "$TMPDIR_TEST/dispatch-jit-engine"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "jit passthrough: created line prefixed" "1" \
   "$(printf '%s\n' "$out" | grep -cF 'jit: weekly-review: created #42')"
 assert_eq "jit passthrough: debounced line prefixed" "1" \
@@ -21872,7 +22645,7 @@ cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
 echo '[{"sessionId":"other-live-session","pid":2,"status":"busy","name":"x","cwd":""}]'
 FAKE
 chmod +x "$TMPDIR_TEST/fake-claude"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "busy: decision line" "busy" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "busy: foreign holder untouched (not released)" "other-live-session" \
   "$(cat "$DISPATCH_LOCK_FILE")"
@@ -21938,7 +22711,7 @@ sel_tick_teardown
 echo "Test: select-tick TARGET_N=0 passes the guard (no exit 2)"
 sel_tick_setup
 export SEL_LIVE_COUNT=0 SEL_TARGET_N=0 SEL_EXHAUSTED=ok
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "TARGET_N=0: exit 0 (guard not tripped)" "0" "$rc"
 assert_eq "TARGET_N=0: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -21953,7 +22726,7 @@ sel_tick_teardown
 echo "Test: select-tick at cap, not exhausted, no priority item → concurrency-cap"
 sel_tick_setup
 export SEL_LIVE_COUNT=2 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "cap: reseed scheduled" "called" "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
@@ -21982,7 +22755,7 @@ export SEL_LIVE_COUNT=2 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
 printf '%s' "{\"check_runs\": $GREEN_ROLLUP}" > "$STUB_DIR/check-runs-sha42.json"
 printf '[{"number":42,"isDraft":true,"mergeable":"MERGEABLE","headRefOid":"sha42","labels":[{"name":"dispatch:reviewed"}]}]\n' \
   > "$STUB_DIR/reconcile-pr-list.json"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-reconcile: decision line still concurrency-cap" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-reconcile: ready: promoted line appears before decision" "1" \
@@ -21996,7 +22769,7 @@ echo "Test: select-tick under cap → gap = target − live on the decision line
 sel_tick_setup
 export SEL_LIVE_COUNT=1 SEL_TARGET_N=4
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "under-cap: decision line" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "under-cap: gap drives the graph fan-out width (4 − 1 = 3)" "--top 3" \
   "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
@@ -22007,7 +22780,7 @@ echo "Test: select-tick daemon UNKNOWN → fail open, gap=1"
 sel_tick_setup
 export SEL_LIVE_COUNT_FAIL=1 SEL_TARGET_N=4
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "fail-open: decision line" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "fail-open: gap=1 drives the graph fan-out width" "--top 1" \
   "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
@@ -22025,7 +22798,7 @@ printf 'session=resv-1\nissue=900\ntimestamp=2026-01-01T00:00:00Z\n' \
   > "$DISPATCH_RESERVATION_DIR/900-test"
 export SEL_AGENTS_TSV=$'resv-1\tbusy\tworkerX'
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "effective-live: decision line" "graph 1 t1:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "effective-live: gap = 4 − (1 busy + 1 reserved) = 2 drives graph --top" "--top 2" \
@@ -22042,7 +22815,7 @@ export SEL_LIVE_COUNT=1 SEL_TARGET_N=2
 printf 'session=resv-1\nissue=900\ntimestamp=2026-01-01T00:00:00Z\n' \
   > "$DISPATCH_RESERVATION_DIR/900-test"
 export SEL_AGENTS_TSV=$'resv-1\tbusy\tworkerX'
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "effective-cap: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "effective-cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22063,7 +22836,7 @@ echo "Test: select-tick empty ledger → gap unchanged from pre-ledger gate"
 sel_tick_setup
 export SEL_LIVE_COUNT=1 SEL_TARGET_N=4
 export SEL_GRAPH_TARGET="node t1 tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "empty-ledger: decision line" "graph 1 t1:tactic:implement" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "empty-ledger: gap = 4 − 1 (RESV=0) drives graph --top" "--top 3" \
@@ -22081,20 +22854,25 @@ esac
 assert_eq "removed flag → unknown flag error, exit 2" "ok" "$status"
 sel_tick_teardown
 
-# --- --manual context-dependent fan-out (#1458) ------------------------------
+# --- --manual context-dependent fan-out (#1458, headroom overage) -----------
 # A bare human-typed /dispatch fans out enough workers to cover available graph
-# work eagerly while honoring the MAX_WORKERS ceiling. It OVERRIDES the
-# pace-curve throttle (a budget pause to TARGET_N=0 still fans out) but HONORS
-# the --exhausted floor and the ceiling:
+# work eagerly while honoring the MAX_WORKERS ceiling as its governing target
+# below the ceiling. It OVERRIDES the pace-curve throttle (a budget pause to
+# TARGET_N=0 still fans out) and, per human-dispatch-is-sovereign, always
+# launches its one highest-ranking-available node even at the ceiling — a
+# bounded, deliberate max_concurrent_workers + 1 overage. Only genuine
+# rate-limit token exhaustion (--exhausted) still blocks a manual dispatch
+# outright:
 #   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)
 #   GAP      = max(0, TARGET_N − LIVE_COUNT)
-#   SPAWN_N  = min(HEADROOM, max(GAP, 1))
+#   SPAWN_N  = max(1, min(max(GAP, 1), HEADROOM))
 # The legacy priority-LABELED bypass count (N_PRIO) died with the legacy
 # selector, so N_PRIO is permanently 0 and SPAWN_N is driven by the pace-curve
-# gap alone. SPAWN_N becomes the `--top` the graph selector fans out over: with a
-# node available (SEL_GRAPH_TARGET), the tick emits a `graph` decision and
-# graph-select-target is invoked `--top SPAWN_N` (logged to graph-select.log).
-# Defaults are LIVE=0, MAX=8.
+# gap alone, clamped by HEADROOM, with a floor of exactly one node re-asserting
+# itself past the ceiling when HEADROOM is 0. SPAWN_N becomes the `--top` the
+# graph selector fans out over: with a node available (SEL_GRAPH_TARGET), the
+# tick emits a `graph` decision and graph-select-target is invoked
+# `--top SPAWN_N` (logged to graph-select.log). Defaults are LIVE=0, MAX=8.
 
 # Case 1: gap0. GAP=0 → SPAWN_N=min(8,max(0,1))=1 → graph --top 1.
 echo "Test: select-tick --manual gap0 → graph fan-out --top 1"
@@ -22122,14 +22900,16 @@ out=$(run_sel_tick --manual)
 assert_eq "manual-gap-clamped: graph selector called --top 2 (headroom clamps gap)" "--top 2" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
 sel_tick_teardown
 
-# Case 4: at-max-live. LIVE=8 → HEADROOM=0 → concurrency-cap, lock released, NO
-# reseed (a manual run is one-shot).
-echo "Test: select-tick --manual at-max-live (HEADROOM=0) → concurrency-cap"
+# Case 4: at-max-live. LIVE=8 → HEADROOM=0 → per human-dispatch-is-sovereign the
+# floor-of-1 re-asserts past the ceiling → SPAWN_N=1 → graph fan-out --top 1
+# (one worker deliberately over the MAX_WORKERS ceiling), NO reseed (a manual
+# run is one-shot regardless of fan-out width).
+echo "Test: select-tick --manual at-max-live (HEADROOM=0) → graph --top 1 (one over ceiling)"
 sel_tick_setup
 export SEL_LIVE_COUNT=8 SEL_TARGET_N=1 SEL_GRAPH_TARGET="node t1 tactic implement"
 out=$(run_sel_tick --manual)
-assert_eq "manual-at-max-live: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "manual-at-max-live: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-at-max-live: graph decision" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-at-max-live: graph selector called --top 1 (floor over ceiling)" "--top 1" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
 assert_eq "manual-at-max-live: no reseed" "0" \
   "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
@@ -22162,7 +22942,7 @@ sel_tick_teardown
 echo "Test: select-tick autonomous no-arg at cap, no priority item → concurrency-cap"
 sel_tick_setup
 export SEL_LIVE_COUNT=3 SEL_TARGET_N=0 SEL_EXHAUSTED=ok
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "autonomous-cap: decision line is concurrency-cap" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "autonomous-cap: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22183,7 +22963,7 @@ export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=ok
 # (the at-cap main-broken bypass, Step 1b) → main-broken decision, spawned
 # lock-free downstream.
 export SEL_MAIN_BROKEN_SHA=deadbeef
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-mainbroken: decision line" "main-broken deadbeef" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-mainbroken: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22202,7 +22982,7 @@ export SEL_LIVE_COUNT=3 SEL_TARGET_N=1 SEL_EXHAUSTED=exhausted
 # Even with a graph pace-exempt node available, genuine token exhaustion is the
 # one hard floor: the tick short-circuits BEFORE the pace-exempt probe.
 export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
-out=$(run_sel_tick)
+out=$(run_sel_tick) || true
 assert_eq "cap-exhausted: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "cap-exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
@@ -22223,6 +23003,77 @@ esac
 assert_eq "--manual + number → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
 
+# --- --manual + a node-id-shaped arg → exit 2 (usage error, before the lock) -
+# tactic-graph-explicit-node-dispatch Unit 2: a node-id-shaped positional is now
+# recognized (NODE_ARG), but --manual is the "no specific target" fan-out mode —
+# semantically incompatible with an explicit single-node target. Mirrors the
+# --manual + explicit-number usage-error test above.
+echo "Test: select-tick --manual + node-id-shaped arg → exit 2"
+sel_tick_setup
+err=$("$TMPDIR_TEST/dispatch-select-tick" --manual foo-bar 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err" in
+  *"cannot be combined with --manual"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "--manual + node-id → usage error, exit 2" "ok" "$status"
+assert_eq "--manual + node-id: lock not left held" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- explicit node-id, not selectable → node-not-selectable, aux triggers skipped
+# tactic-graph-explicit-node-dispatch Unit 2: an explicit node-id arg calls
+# `graph-select-target --node <id>` instead of the ranked `--top` query. When
+# selection fails (the fake graph selector's default is `empty`, simulating a
+# node absent from candidates or gated out), the tick must emit
+# `node-not-selectable <id>` — NOT fall through to Step 3b's aux triggers
+# (JIT-reminder scan, main-broken check), which would silently substitute an
+# unrelated job for the node the human explicitly asked for.
+echo "Test: select-tick explicit node-id, not selectable → node-not-selectable, no aux triggers"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-jit-scan" <<'FAKE'
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/jit-scan-invoked.log"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-jit-scan"
+out=$(run_sel_tick zzz-nonexistent-node)
+assert_eq "node-not-selectable: decision line" "node-not-selectable zzz-nonexistent-node" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-not-selectable: graph selector called --node <id>" "--node zzz-nonexistent-node" \
+  "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+assert_eq "node-not-selectable: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "node-not-selectable: JIT-reminder scan NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/jit-scan-invoked.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- explicit node-id, exhausted → concurrency-cap, no headroom/pace-curve check
+# The one hard floor the explicit-node path still respects is genuine token
+# exhaustion (mirrors the --manual branch's own EXHAUSTED check). No headroom or
+# MAX_WORKERS ceiling check applies — those are exactly what this path bypasses.
+echo "Test: select-tick explicit node-id + exhausted → concurrency-cap"
+sel_tick_setup
+export SEL_EXHAUSTED=exhausted
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit exhausted: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-explicit exhausted: graph selector NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+assert_eq "node-explicit exhausted: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- explicit node-id, selectable → graph decision, pace/cap gate bypassed ---
+# Even with LIVE_COUNT at/over TARGET_N, an explicit node-id dispatch is NOT
+# throttled — the whole point of tactic-graph-explicit-node-dispatch is that a
+# human's explicit dispatch overrides the pace curve.
+echo "Test: select-tick explicit node-id + at-cap live count → still selects (gate bypassed)"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=5
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit at-cap: decision line" "graph 1 foo-bar:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-explicit at-cap: graph selector called --node <id> (not --top)" \
+  "--node foo-bar" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+sel_tick_teardown
+
 # --- AC3 non-fatal guarantee: unwritable log dir does NOT kill the tick -------
 # Point DISPATCH_DECISION_LOG_DIR at a path that cannot be created (a sub-path of
 # an existing regular file). The lib's mkdir -p will fail with ENOTDIR. The
@@ -22237,7 +23088,7 @@ sel_tick_setup
 # failure is the directory creation, not a missing decision_log_append function.
 touch "$TMPDIR_TEST/decisionlog-blocker"
 export DISPATCH_DECISION_LOG_DIR="$TMPDIR_TEST/decisionlog-blocker/sub"
-out=$(run_sel_tick) ; rc=$?
+if out=$(run_sel_tick); then rc=0; else rc=$?; fi
 assert_eq "AC3 nonfatal: tick exit 0 despite unwritable log dir" "0" "$rc"
 assert_eq "AC3 nonfatal: terminal token is still empty" "empty" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -22533,6 +23384,12 @@ tick_setup() {
   mkdir -p "$TMPDIR_TEST/logs"
   cp "$SCRIPT_DIR/dispatch-tick" "$TMPDIR_TEST/dispatch-tick"
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
+  # Copied (not chmod +x — these are sourced, not executed) so dispatch-tick's
+  # SCRIPT_DIR-relative `source "$SCRIPT_DIR/lib-claude-agents.sh"` /
+  # `lib-reservation-ledger.sh` calls resolve inside the copied tmpdir and the
+  # paused-branch reservation_sweep genuinely runs instead of source-failing.
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
+  cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
   chmod +x "$TMPDIR_TEST/dispatch-tick"
   # Pin the canonical main worktree so the advisory diagnose-main / jit-reminder
   # spawns get a deterministic --cwd independent of the host repo layout and the
@@ -22543,6 +23400,26 @@ tick_setup() {
   # (#1068) the tick writes resolves through dispatch_lock_file to a path inside
   # the test tree (not the host repo's tmp/).
   export DISPATCH_LOCK_FILE="$TMPDIR_TEST/dispatch.lock"
+  # Pin the pause sentinel to a path INSIDE the test tree that does not exist by
+  # default, so the tick's pause guard never fires from a real host flag file at
+  # the default $HOME/.local/share/commons-dispatch/paused. A pause test creates
+  # this file explicitly to exercise the guard.
+  export DISPATCH_PAUSE_FLAG="$TMPDIR_TEST/paused"
+  # Isolate the two inputs the paused-branch reservation_sweep reads, mirroring
+  # the global setup() and sel_tick_setup. Without these the sweep falls back to
+  # the REAL shared ledger under the host repo's tmp/dispatch-reservations and to
+  # the real `claude` binary — and since a sandboxed `claude agents --json` returns
+  # an empty array with exit 0 (a DEFINITE empty live set, not UNKNOWN), a tick
+  # test would reclaim live production markers as dead-session-stranded,
+  # under-counting effective_live for the next real tick.
+  #  - ledger: an empty scratch dir → the sweep finds no markers and no-ops.
+  #  - liveness: a non-existent binary → `claude agents --json` exits non-zero →
+  #    UNKNOWN, so the sweep declines to reclaim anything.
+  # A sweep test opts in by planting a marker here and overwriting
+  # CLAUDE_AGENTS_CMD with a fake whose registry omits the marker's session.
+  export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
+  mkdir -p "$TMPDIR_TEST/reservations"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -22611,7 +23488,8 @@ tick_teardown() {
   TMPDIR_TEST=""
   unset TICK_DECISION TICK_SEL_RC TICK_GRAPH_EXEC_RC \
     TICK_SEL_PRE TICK_GRAPH_EXEC_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
-    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC
+    DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG \
+    DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_SWEEP_NOW_EPOCH
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -22626,6 +23504,65 @@ assert_eq "busy: no graph-execute call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
 assert_eq "busy: no spawn-job call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- pause sentinel: autonomous tick with flag present → no-op before select ---
+# The pause flag makes an AUTONOMOUS tick exit before dispatch-select-tick and
+# before dispatch-refresh-rate-limits, so it spawns nothing and arms no reseed.
+# Already-running workers are separate sessions the tick never signals, so this
+# pause does not interfere with in-flight work.
+echo "Test: dispatch-tick paused (flag present, autonomous) → exit 0, no select-tick/refresh/spawn"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+# Plant a stale/dead-session reservation marker BEFORE the tick runs (in the
+# scratch ledger tick_setup already isolated), and overwrite the default
+# UNKNOWN `claude` stub with a fake whose live-session registry does NOT include
+# the marker's recorded session — so the marker is dead-session-stranded and
+# reclaimable by reservation_sweep. This exercises the sweep dispatch-tick runs
+# on the paused branch before its `exit 0`.
+printf 'session=dead-sess\nissue=910\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/910-slug"
+# Pin the sweep's "now" so the marker's age is host-clock-independent: the
+# stamped timestamp's epoch is 1767225600, so 1767225631 is 31s later — past the
+# 30s boot grace, hence reclaimable (same pinning the rl-sweep-aged test uses).
+# Without this the assertion silently inverts on a host clock at or before
+# 2026-01-01T00:00:30Z, where the marker is still in-flight and correctly kept.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=1767225631
+cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
+#!/usr/bin/env bash
+echo '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused: exit 0" "0" "$rc"
+assert_eq "paused: stdout announces pause" "1" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
+assert_eq "paused: select-tick NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "paused: refresh-rate-limits NOT run (guard exits before it)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/order.log" ] && echo 1 || echo 0)"
+assert_eq "paused: no graph-execute" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
+assert_eq "paused: no spawn-job" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+assert_eq "paused: paused-path sweep still reclaimed the dead-session marker" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/910-slug" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- pause sentinel: --manual overrides the flag → the tick runs normally ------
+echo "Test: dispatch-tick --manual with flag present → overrides pause, runs select-tick"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="busy"
+out=$(run_tick --manual) && rc=0 || rc=$?
+assert_eq "manual-override: exit 0" "0" "$rc"
+assert_eq "manual-override: select-tick WAS called" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "manual-override: not announced as paused" "0" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
 tick_teardown
 
 # --- concurrency-cap / sync-repair-pending / sync-broken ---------------------
@@ -22776,7 +23713,7 @@ tick_teardown
 echo "Test: dispatch-tick echoes select-tick passthrough + decision"
 tick_setup
 export TICK_DECISION="empty" TICK_SEL_PRE="jit: weekly-review: created #42"
-out=$(run_tick)
+out=$(run_tick) || true
 assert_eq "passthrough: jit line echoed" "1" \
   "$(printf '%s\n' "$out" | grep -cF 'jit: weekly-review: created #42')"
 assert_eq "passthrough: decision echoed" "1" \
@@ -22819,6 +23756,29 @@ esac
 assert_eq "positional arg → usage error, exit 2" "ok" "$status"
 assert_eq "positional arg: select-tick never invoked" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- node-id-shaped positional arg is forwarded to select-tick (raw, no flag) -
+# tactic-graph-explicit-node-dispatch Unit 2: a node-id-shaped positional is now
+# recognized as NODE_ARG and forwarded to dispatch-select-tick as a raw
+# positional (not a flag). Here the fake select-tick emits a
+# `node-not-selectable <id>` decision line (Unit 2's new disposition), and the
+# tick must exit non-zero (1), print a stderr message naming the node, and NOT
+# invoke dispatch-graph-execute.
+echo "Test: dispatch-tick node-id arg forwarded to select-tick; node-not-selectable → exit 1, no graph-execute"
+tick_setup
+export TICK_DECISION="node-not-selectable foo-bar"
+err=$("$TMPDIR_TEST/dispatch-tick" foo-bar 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "node-arg-fwd: select-tick received the raw node-id (no flag)" "foo-bar" \
+  "$(cat "$TMPDIR_TEST/logs/select-tick.log")"
+assert_eq "node-not-selectable: exit 1" "1" "$rc"
+case "$err" in
+  *"foo-bar"*"not selectable"*) status="ok" ;;
+  *) status="bad: $err" ;;
+esac
+assert_eq "node-not-selectable: stderr names the node" "ok" "$status"
+assert_eq "node-not-selectable: no graph-execute call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-execute.log" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- headless tick (no CLAUDE_CODE_SESSION_ID) synthesizes a stable id --------
@@ -23922,6 +24882,24 @@ assert_eq "qa-fix partition: already_satisfied element keys" '["id","kind","rati
 # `function partitionDispositions(allDispositions)` definition — both contain the
 # call substring, so the `= ` prefix isolates the invocation to exactly one line.
 assert_eq "qa-fix partition: call site present in qa-fix.js" "1" "$(grep -c '= partitionDispositions(allDispositions)' "$REPO_ROOT/.claude/workflows/qa-fix.js" || true)"
+
+# ============================================================================
+# === align-tactics tempref (resolveTempRefs) ===
+# ============================================================================
+# CI vector: run-unit-tests.sh has no mapping for .claude/workflows/*, so a PR
+# touching only align-tactics.js triggers no vitest suite. The hook-tests job
+# (this script) is the only test that runs on every PR, so coverage for
+# resolveTempRefs must live here. The probe slices the pure function out of
+# align-tactics.js between sentinel comments and evals just that slice, then runs
+# valid-resolution / dangling-ref (rule 13) / cycle (rule 15) assertions.
+
+echo "Test: align-tactics tempref (resolveTempRefs)"
+
+out_at=$(node "$SCRIPT_DIR/align-tactics-tempref-probe.mjs")
+
+# The probe runs its own assertions and prints "ALL PASS" on the final line only
+# when every vector passed (and exits non-zero otherwise). Assert on that token.
+assert_eq "align-tactics tempref: all probe vectors pass" "align-tactics-tempref-probe: ALL PASS" "$(printf '%s' "$out_at" | tail -n1)"
 
 # planned-deferral branch (issue #1891) — three separate input objects to avoid
 # disturbing the f1..f7 order assertion above.
@@ -28341,13 +29319,13 @@ assert_eq "recover fix-checks: stdout is 'fix-checks'" "fix-checks" "$out"
 assert_eq "recover fix-checks: exit 0" "0" "$rc"
 drdp_teardown
 
-# --- Test 6: /fix-conflicts → "fix-conflicts", exit 0 ------------------------
-echo "Test: /fix-conflicts tag → stdout 'fix-conflicts', exit 0"
+# --- Test 6: /dispatch-conflict → "fix-conflicts", exit 0 --------------------
+echo "Test: /dispatch-conflict tag → stdout 'fix-conflicts', exit 0"
 drdp_setup
-_drdp_fixture "$TMPDIR_TEST/fcon.jsonl" "fix-conflicts"
+_drdp_fixture "$TMPDIR_TEST/fcon.jsonl" "dispatch-conflict"
 if out=$("$DRDP" "$TMPDIR_TEST/fcon.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "recover fix-conflicts: stdout is 'fix-conflicts'" "fix-conflicts" "$out"
-assert_eq "recover fix-conflicts: exit 0" "0" "$rc"
+assert_eq "recover dispatch-conflict: stdout is 'fix-conflicts'" "fix-conflicts" "$out"
+assert_eq "recover dispatch-conflict: exit 0" "0" "$rc"
 drdp_teardown
 
 # --- Test 7: /office-hours → empty stdout, non-zero exit ---------------------
@@ -30889,6 +31867,98 @@ awf_offline_out=$("$AWF_SCRIPT" "$AWF_OFFLINE" 2>/dev/null) && awf_offline_rc=0 
 assert_eq "assert-worktree-fresh: unreachable origin exits 1" "1" "$awf_offline_rc"
 
 rm -rf "$AWF_ROOT" "$AWF_BARE" "$AWF_CLONE" "$AWF_OFFLINE"
+
+# ============================================================================
+# repo-health --main-broken-sha branch-attribution tests
+# ============================================================================
+echo ""
+echo "=== repo-health --main-broken-sha branch attribution ==="
+
+# a. Empty set: no check-runs, no workflow runs → fail closed.
+echo "Test: repo-health --main-broken-sha — empty attributable set → NO_ATTRIBUTABLE_CHECKS, exit 3"
+setup
+export REPO_HEALTH_STATE_FILE="$TMPDIR_TEST/rh.json"
+echo '{"sha":"headsha1"}' > "$STUB_DIR/main-commit.json"
+echo '{"check_runs":[]}' > "$STUB_DIR/main-check-runs.json"
+echo '[]' > "$STUB_DIR/main-run-list.json"
+rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
+assert_eq "empty set → stdout token" "NO_ATTRIBUTABLE_CHECKS" "$out"
+assert_eq "empty set → exit 3" "3" "$rc"
+unset REPO_HEALTH_STATE_FILE
+teardown
+
+# b. All-misattributed: check-runs exist (incl. a failure) but their check-suite
+# resolves to a foreign branch (graph/foo), not main. Regression guard for the
+# real 2026-07-23 Graph Fast Path false-red (#main-health-signal-attribution):
+# a foreign-branch failure must never read as a confirmed red main.
+echo "Test: repo-health --main-broken-sha — all-misattributed (foreign-branch) failing checks → NO_ATTRIBUTABLE_CHECKS, exit 3"
+setup
+export REPO_HEALTH_STATE_FILE="$TMPDIR_TEST/rh.json"
+echo '{"sha":"headsha2"}' > "$STUB_DIR/main-commit.json"
+cat > "$STUB_DIR/main-check-runs.json" <<'JSON'
+{"check_runs":[
+  {"name":"guard","conclusion":"failure","check_suite":{"id":999}},
+  {"name":"other","conclusion":"success","check_suite":{"id":999}}
+]}
+JSON
+echo '{"head_branch":"graph/foo"}' > "$STUB_DIR/main-check-suite-999.json"
+echo '[]' > "$STUB_DIR/main-run-list.json"
+rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
+assert_eq "all-misattributed → stdout token" "NO_ATTRIBUTABLE_CHECKS" "$out"
+assert_eq "all-misattributed → exit 3" "3" "$rc"
+unset REPO_HEALTH_STATE_FILE
+teardown
+
+# c. Attributable green: check-runs attributed to main's own suite, all success.
+echo "Test: repo-health --main-broken-sha — attributable green → empty stdout, exit 0"
+setup
+export REPO_HEALTH_STATE_FILE="$TMPDIR_TEST/rh.json"
+echo '{"sha":"headsha3"}' > "$STUB_DIR/main-commit.json"
+cat > "$STUB_DIR/main-check-runs.json" <<'JSON'
+{"check_runs":[
+  {"name":"codeql","conclusion":"success","check_suite":{"id":111}}
+]}
+JSON
+echo '{"head_branch":"main"}' > "$STUB_DIR/main-check-suite-111.json"
+echo '[]' > "$STUB_DIR/main-run-list.json"
+rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
+assert_eq "attributable green → empty stdout" "" "$out"
+assert_eq "attributable green → exit 0" "0" "$rc"
+unset REPO_HEALTH_STATE_FILE
+teardown
+
+# d. Attributable red: check-runs attributed to main's own suite, one failing.
+echo "Test: repo-health --main-broken-sha — attributable red → prints sha, exit 0"
+setup
+export REPO_HEALTH_STATE_FILE="$TMPDIR_TEST/rh.json"
+echo '{"sha":"headsha4"}' > "$STUB_DIR/main-commit.json"
+cat > "$STUB_DIR/main-check-runs.json" <<'JSON'
+{"check_runs":[
+  {"name":"codeql","conclusion":"failure","check_suite":{"id":111}}
+]}
+JSON
+echo '{"head_branch":"main"}' > "$STUB_DIR/main-check-suite-111.json"
+echo '[]' > "$STUB_DIR/main-run-list.json"
+rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
+assert_eq "attributable red → stdout is the broken sha" "headsha4" "$out"
+assert_eq "attributable red → exit 0" "0" "$rc"
+unset REPO_HEALTH_STATE_FILE
+teardown
+
+# e. Workflow-run red: empty check-run set, but a workflow run on main is
+# failing. Workflow runs are already correctly attributed by `gh run list
+# --branch main`, so this half must still trip red on its own.
+echo "Test: repo-health --main-broken-sha — workflow-run red (empty check-run set) → prints sha, exit 0"
+setup
+export REPO_HEALTH_STATE_FILE="$TMPDIR_TEST/rh.json"
+echo '{"sha":"headsha5"}' > "$STUB_DIR/main-commit.json"
+echo '{"check_runs":[]}' > "$STUB_DIR/main-check-runs.json"
+echo '[{"headSha":"headsha5","conclusion":"failure"}]' > "$STUB_DIR/main-run-list.json"
+rc=0; out=$("$SCRIPT_DIR/repo-health" --main-broken-sha 2>/dev/null) || rc=$?
+assert_eq "workflow-run red → stdout is the broken sha" "headsha5" "$out"
+assert_eq "workflow-run red → exit 0" "0" "$rc"
+unset REPO_HEALTH_STATE_FILE
+teardown
 
 # ============================================================================
 # summary

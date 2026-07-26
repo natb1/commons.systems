@@ -3,7 +3,7 @@
 # over dispatch-select-tick → dispatch-graph-execute (+ aux bg jobs), with NO
 # model session.
 #
-# Usage: dispatch-tick [--manual]
+# Usage: dispatch-tick [--manual] [<node-id>]
 #
 # This is the scripted equivalent of the routing the dispatch-propagate SKILL.md
 # (Tables 1 and 2) used to describe for a model router session. Replacing that
@@ -63,7 +63,7 @@
 #   Selection lock: the selection lock (`dispatch-acquire-lock`, acquired inside
 #   `dispatch-select-tick`) is shared with the autonomous chain, so a manual run
 #   cannot select the same target as an in-flight tick. Merge conflicts are handled
-#   by the `/fix-conflicts` phase routed through the worker.
+#   by the `/dispatch-conflict` phase routed through the worker.
 #
 # Behavior:
 #   1. Run dispatch-select-tick, echoing all of its stdout through (the
@@ -159,7 +159,7 @@ if [[ -n "${DISPATCH_TICK_MAIN_WORKTREE:-}" ]]; then
 else
   PROJECT_ROOT=$(resolve_project_root) \
     || { echo "dispatch-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
-  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+  MAIN_WORKTREE="$PROJECT_ROOT"   # de-bare: the project root IS the main checkout
 fi
 
 # --- Topic-usage daily producer (#2505) -------------------------------------
@@ -213,21 +213,89 @@ fi
 # (dispatch-select-tick rejects any positional arg itself). Reject one here too,
 # before any setup below runs.
 MANUAL=""
+NODE_ARG=""
 for a in "$@"; do
   case "$a" in
     --manual) MANUAL=1 ;;
     --*)
       echo "dispatch-tick: unknown flag '$a'" >&2
-      echo "usage: dispatch-tick [--manual]" >&2
+      echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
       exit 2
       ;;
     *)
-      echo "dispatch-tick: explicit issue/PR targeting ('${a#\#}') was removed with the legacy issue lane; the graph selector owns target selection" >&2
-      echo "usage: dispatch-tick [--manual]" >&2
-      exit 2
+      # A positional arg shaped like a graph node id
+      # (tactic-graph-explicit-node-dispatch Unit 2) is the explicit
+      # single-node targeting entry point; the graph selector owns everything
+      # else. Reuse provision-node-worktree's node-id slug regex verbatim.
+      if [[ "$a" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+        NODE_ARG="$a"
+      else
+        echo "dispatch-tick: explicit issue/PR targeting ('${a#\#}') was removed with the legacy issue lane; the graph selector owns target selection" >&2
+        echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
+        exit 2
+      fi
       ;;
   esac
 done
+
+# --manual (the "no specific target" fan-out mode) and an explicit single-node
+# target are semantically incompatible. Reject the combination HERE — the if/elif
+# dispatch below would otherwise silently take the --manual branch and drop the
+# named node. dispatch-select-tick guards the same combination and exits 2, but
+# it never sees both (the elif forwards only one), so mirror the guard at this
+# entry point rather than leaving it unreachable.
+if [[ -n "$MANUAL" && -n "$NODE_ARG" ]]; then
+  echo "dispatch-tick: a node-id argument cannot be combined with --manual" >&2
+  echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
+  exit 2
+fi
+
+# --- Pause sentinel: stop autonomous scheduling, do not interfere with running work ---
+# When the pause flag file exists, an AUTONOMOUS tick (heartbeat timer, reseed
+# timer) does nothing: it exits here — before dispatch-select-tick, any spawn,
+# and any reseed-arming — so no new workers are scheduled and the tick arms no
+# follow-up reseed. Already-running workers are separate sessions and are left
+# untouched, so they run to completion. This is the durable, non-interfering
+# pause: unlike stopping/masking the systemd timers (which ensure_heartbeat_units
+# recreates on the next tick), a firing timer here becomes a harmless no-op.
+# A manual `dispatch --manual` run OVERRIDES the pause (deliberate human action).
+# Resume by removing the flag file. The path is overridable for tests.
+#
+# The sentinel gates worker SPAWNING only, never ledger bookkeeping — the paused
+# branch below reaps the reservation ledger before it exits.
+DISPATCH_PAUSE_FLAG="${DISPATCH_PAUSE_FLAG:-${XDG_DATA_HOME:-$HOME/.local/share}/commons-dispatch/paused}"
+if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
+  # A dead session's reservation marker must still be reaped even on a paused
+  # heartbeat, or it lingers stranded until dispatch resumes. This `exit 0` is the
+  # ONLY autonomous tick path that never reaches dispatch-select-tick's own
+  # reservation_sweep (dispatch-select-tick:583), so the reap belongs HERE and
+  # only here. Sweeping unconditionally ahead of this branch would both duplicate
+  # that sweep on every non-paused tick and cost one extra LIVE
+  # `claude agents --json` round-trip per heartbeat, because the per-tick registry
+  # snapshot that makes select-tick's sweep free (#1452) is not captured until
+  # further below.
+  if ! declare -f reservation_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-claude-agents.sh"
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+  fi
+  # Verify the load explicitly rather than absorbing failures with `|| true`.
+  # reservation_sweep's contract is "return 0 — always", so a non-zero status
+  # here could only mean the sources above failed (file missing, unreadable,
+  # truncated) and the function is an undefined command. This script does not
+  # use `set -e`, so a swallowed exit 127 would silently disable ledger
+  # reconciliation for the whole pause — indistinguishable from a healthy quiet
+  # ledger to dispatch-reclaim-audit, which mines the tick journal for reclaim
+  # notes. Fail loud and greppable instead (see .claude/rules/code-style.md).
+  if declare -f reservation_sweep >/dev/null 2>&1; then
+    reservation_sweep 1>&2
+  else
+    echo "dispatch-tick: lib-reservation-ledger.sh failed to load; reservation ledger NOT swept this tick" >&2
+  fi
+  echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick"
+  exit 0
+fi
 
 # --- Synthesize a session identity for the headless tick ---------------------
 # The terminal `dispatch` command may or may not run inside a .claude session:
@@ -350,6 +418,8 @@ fi
 # passthrough AND the decision line) so journald and a live relay see it all.
 if [[ -n "$MANUAL" ]]; then
   SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" --manual)
+elif [[ -n "$NODE_ARG" ]]; then
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$NODE_ARG")
 else
   SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick")
 fi
@@ -374,6 +444,11 @@ case "${1:-}" in
   busy)
     echo "dispatch-tick: another tick holds the lock (busy); nothing to do" >&2
     exit 0
+    ;;
+  node-not-selectable)
+    node="${2:-}"
+    echo "dispatch-tick: node '$node' is not selectable — nothing dispatched" >&2
+    exit 1
     ;;
   empty)
     # #1557: an autonomous `empty` tick (work queued, but every reachable open

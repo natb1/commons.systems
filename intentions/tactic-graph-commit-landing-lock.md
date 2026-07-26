@@ -31,7 +31,17 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 85
+  override: null
+  rationale: "Author-directed 2026-07-25: the queue-serialization work
+    (dispatch-queue claim integrity, office-hours drain claiming, and the
+    cross-queue landing path) is the current focus. Own boost 85 composes with
+    the +5 inherited from strategy-graph-native-dispatch to an authored 90 —
+    exact parity with tactic-graph-router-live-worker-read-robust, the existing
+    author-set boost on this same defect class — and deliberately below
+    strategy-main-health's standing 100 so the main-health signal keeps its
+    recorded dominance."
 phase: qa
 execution:
   branch: tactic-graph-commit-landing-lock
@@ -41,9 +51,15 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-25
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /dispatch-conflict once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}

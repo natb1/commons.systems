@@ -164,6 +164,64 @@ clarifications:
       tactic-attention-tier-ranking for a later author call, not marked. Marks
       are inert until the tier implementation lands. Recorded 2026-07-18
       interview."
+  - question: Is 'boost a node to top rank' a scripted operation, and what
+      discipline governs it?
+    answer: "(Recorded 2026-07-21 interview.) Yes — 'boost to top rank' is a
+      first-class scripted operation a session runs on author request,
+      superseding the hand-edit practice this strategy records ('escalating any
+      issue means authoring a boost on its tactic node'). It is a CONSIDERED
+      boost, not a mechanical race-to-top: the script computes the MINIMAL boost
+      that tops the node's current tier (grounded in the resolved ranks the
+      selector reads), shows the current ranking for the author, and REQUIRES an
+      author rationale — the attention field already mandates `rationale`. This
+      adopts the considered-boost framing and diverges from the mechanical
+      max+epsilon rival to preserve the honest-ties and
+      terms-and-weights-never-erode discipline recorded here: the script assists
+      the considered act, it does not replace the judgment. 'Top rank' is always
+      top-of-current-tier; it never silently changes the node's tier to reach
+      top-overall — mechanically it cannot, since tier is the outer
+      lexicographic axis and a boost only ever orders within a tier (see the
+      tier-scoped-boost clarification). Pre-tier (before
+      tactic-attention-tier-ranking lands) the single ranking scale is the one
+      tier, so the script operates on the resolved-rank scale directly; the
+      tier-aware default is future work gated on that tactic."
+  - question: Do boost values carry across a tier change, and how is that governed?
+    answer: "(Recorded 2026-07-21 interview, author-directed.) No — boost values are
+      TIER-SCOPED via a per-tier boost namespace. A boost magnitude is
+      meaningful only within the tier it was chosen for: because tier is the
+      outer axis a node's boost ranks it only against same-tier peers, and
+      different tiers can be on entirely different boost scales — a value chosen
+      mid-way in tier 1 could wrongly dominate tier 2 if carried in (the
+      author's failure scenario). So changing a node's tier does NOT carry its
+      boost: the target tier's boost is absent until a fresh value is explicitly
+      selected for that tier. This is a MECHANICAL guarantee (a per-tier
+      namespace enforced by the schema / validate-graph), not merely a scripting
+      convention, so the failure scenario is structurally impossible rather than
+      tooling-dependent. This AMENDS the 2026-07-18 tier-model assumption that a
+      single scalar `attention.boost` composes tier-orthogonally (see 'How do
+      defects and production incidents outrank feature work — what is the tier
+      model?'): under the namespace, boost is stored/interpreted per tier. Open
+      design consideration retained for tactic-attention-tier-ranking, not
+      resolved here: how a per-tier boost composes with the recorded downward
+      flow of authored boosts along parent/serves (the 2026-07-07/13 flow
+      clarifications). The exact storage shape (a map keyed by tier vs a
+      tier-tagged value) and the validate-graph shape check are tactical,
+      retained in tactic-attention-tier-ranking. Gated on that tactic landing —
+      tiers are not yet built."
+  - question: Is changing a node's tier the same operation as boosting it to top rank?
+    answer: (Recorded 2026-07-21 interview.) No — a tier change is a DISTINCT
+      scripted operation, run only on an explicit author request for a tier
+      change; it is never inferred from a 'boost to top rank' request, which
+      always stays within the node's current tier. A tier change sets the node's
+      tier (attributes.tier, or the semantic bug_fix/security marks that imply
+      tier >= 2 — see 'How is a node marked as a bug fix or security issue, and
+      how is tier expressed?') and, because of the per-tier boost namespace,
+      selects a fresh boost value for the target tier as part of the same
+      operation (the old tier's value is not carried). Both scripts' tier-aware
+      behavior is gated on tactic-attention-tier-ranking landing;
+      strategy-main-health's boost-100 -> tier-3 migration (the must-land-first
+      change in that tactic) is the canonical precedent for a tier change that
+      drops a large boost rather than carrying it forward.
 tooling_goals:
   - kind: actuator
     statement: resolveAttention (outer tier from bug_fix/security/tier marks with

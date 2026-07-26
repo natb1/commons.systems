@@ -23,7 +23,10 @@
 # dispatch-tick arms on a graph execute — NOT by a Stop-hook tick-spawn. This hook
 # only guarantees the park: if the escalating session left an office-hours-reason
 # marker, park the node via the graph write (park-node → office_hours), never a gh
-# label.
+# label. When the session also left an office-hours-pr marker, that PR number is
+# threaded through to park-node's own --pr flag so the park records
+# execution.pr (tactic-office-hours-pr-custody) — still gh-free: this hook only
+# reads a file the session already wrote, no network call.
 #
 # Best-effort by contract: every failure logs to stderr and the hook exits 0 — it
 # must never block session teardown.
@@ -55,18 +58,31 @@ if [[ -n "$JOB_NAME" && -n "$_HOOK_ROOT" && -f "$_HOOK_ROOT/intentions/$JOB_NAME
     if [ -s "$CLAUDE_JOB_DIR/office-hours-recommendation" ]; then
       _OH_RECO="$(cat "$CLAUDE_JOB_DIR/office-hours-recommendation" 2>/dev/null || true)"
     fi
+    _OH_PR=""
+    if [ -s "$CLAUDE_JOB_DIR/office-hours-pr" ]; then
+      _OH_PR_RAW="$(cat "$CLAUDE_JOB_DIR/office-hours-pr" 2>/dev/null || true)"
+      if [[ "$_OH_PR_RAW" =~ ^[0-9]+$ ]]; then
+        _OH_PR="$_OH_PR_RAW"
+      fi
+    fi
     _PARK="$_HOOK_ROOT/packages/intentionsutil/scripts/park-node"
     if [ -n "$_OH_REASON" ] && [ -x "$_PARK" ]; then
       # Backstop park via the graph-commit primitive. Best-effort: a failure
       # (e.g. graph-commit's PR-branch fast-path guard — the worker's own
       # in-session park applies the reset-dance; this backstop does not) is
       # non-fatal, matching this hook's best-effort philosophy.
+      _PARK_ARGS=("$JOB_NAME")
+      if [ -n "$_OH_PR" ]; then
+        _PARK_ARGS=("--pr" "$_OH_PR" "$JOB_NAME")
+      fi
+      _PARK_ARGS+=("$_OH_REASON")
       if [ -n "$_OH_RECO" ]; then
-        "$_PARK" "$JOB_NAME" "$_OH_REASON" "$_OH_RECO" >/dev/null 2>&1 \
-          || echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' failed (non-fatal)" >&2
+        _PARK_ARGS+=("$_OH_RECO")
+      fi
+      if "$_PARK" "${_PARK_ARGS[@]}" >/dev/null 2>&1; then
+        rm -f "$_OH_REASON_FILE" "$CLAUDE_JOB_DIR/office-hours-recommendation" "$CLAUDE_JOB_DIR/office-hours-pr"
       else
-        "$_PARK" "$JOB_NAME" "$_OH_REASON" >/dev/null 2>&1 \
-          || echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' failed (non-fatal)" >&2
+        echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' failed (non-fatal)" >&2
       fi
     fi
   fi
