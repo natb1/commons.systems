@@ -17,6 +17,13 @@ launch subagents and invoke `/implement-unit`.
 Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
 [Accumulator](#accumulator) below), not in conversation context.
 
+## Parameters
+
+| Parameter | Meaning |
+|---|---|
+| `node_id` | The graph-native node id this run targets (node lane) — equals the worktree branch name. On the legacy issue lane there is no node id; the target is the `<N>-…` issue-prefixed branch instead. |
+| `pr_num` | The open draft PR number. Required — fix-checks never runs without an open PR. Resolved by the front door (Target resolution below) via `--pr-mode required`, not passed in by the caller. |
+
 ## Steps
 
 **Resume from durable state (condition 9).** This is a single-pass phase, so its
@@ -31,13 +38,16 @@ than restarting the pass.
 
 **Target resolution — keyspace split.** The current worktree dictates the
 target. Split on its name before Step 1: `[0-9]*-*` is a legacy issue worktree
-(unchanged); anything else is a graph-native node id, and
-`intentions/<id>.md` must exist at `origin/main` under an active CI-fix interrupt
-— `execution.fix != null` (else exit 1). Note `phase` is NOT `fix`: a CI-fix
-interrupt is carried orthogonally on `execution.fix`, leaving `phase` at its real
-ladder position (implement/qa/review), so the gate reads `execution.fix`, never
-`phase`. Nested YAML is fragile to `sed`-scrape, so read the node through
-`readNode` and test `.execution.fix` with `jq`.
+(unchanged); anything else is a graph-native node id. On the node lane the
+shared front-door script `dispatch-derive-node-target` does the whole
+derivation: it snapshots `intentions/<id>.md` from `origin/main`, reads it via
+the store primitives, gates on an **active CI-fix interrupt** with
+`--expect-fix-active` (require `execution.fix != null`), and resolves the open
+PR with `--pr-mode required`. Note `phase` is NOT `fix`: a CI-fix interrupt is
+carried orthogonally on `execution.fix`, leaving `phase` at its real ladder
+position (implement/qa/review), which is exactly why the gate is
+`--expect-fix-active` (reads `execution.fix`) and never `--expect-phase fix`
+(no node is ever persisted at phase `fix`).
 
 ```bash
 BRANCH=$(basename "$(git rev-parse --show-toplevel)")
@@ -46,37 +56,66 @@ case "$BRANCH" in
     N="${BRANCH%%-*}"; TARGET_KIND=issue ;;
   *)
     NODE_ID="$BRANCH"
-    git fetch origin main --quiet
-    # Extract the node from origin/main into a temp store and read it via
-    # readNode (the single validation gate), rather than sed-scraping frontmatter.
-    NODE_TMP=$(mktemp -d)
-    if ! git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -x -C "$NODE_TMP" 2>/dev/null; then
-      echo "/fix-checks: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
-      exit 1
+    # Shared front door: derive + gate + resolve PR in one call. The branch IS
+    # the node id on this lane. --expect-fix-active gates on execution.fix != null
+    # (the CI-fix interrupt marker); --pr-mode required resolves the open PR.
+    # Capture the status on its own line: `if ! cmd; then rc=$?` would read the
+    # negated condition status (always 0), collapsing every branch of the case
+    # below onto the `*)` arm and making the exit-4 escalation unreachable.
+    DERIVE_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-derive-node-target \
+      "$NODE_ID" --expect-fix-active --pr-mode required 2>&1)
+    DERIVE_RC=$?
+    if [ "$DERIVE_RC" -ne 0 ]; then
+      case "$DERIVE_RC" in
+        4)
+          # --pr-mode required found no open PR. fix-checks never runs without an
+          # open PR, so this is real — but it is NOT a plain error like the
+          # others: it routes to office-hours (never dispatch-mark-deviation,
+          # which is issue-only). Print a distinct sentinel and stop this bash;
+          # the model then performs the escalation described right below the code
+          # block (recommend step + $CLAUDE_JOB_DIR/office-hours-reason write).
+          echo "ESCALATE-NO-PR: /fix-checks node '$NODE_ID' has no open PR — escalate to office-hours" >&2
+          exit 1 ;;
+        *)
+          # exit 1 (node not found / read failure), exit 2 (branch mismatch /
+          # bad node id), exit 3 (no active CI-fix interrupt — execution.fix is
+          # null): all real errors for this lane. Stop with a clear message.
+          echo "/fix-checks: '$BRANCH' is not an actionable fix-checks node target: $DERIVE_OUT" >&2
+          exit 1 ;;
+      esac
     fi
-    NODE_JSON=$(node --import tsx/esm -e '
-      const { readNode } = await import("./packages/intentionsutil/src/store.js");
-      process.stdout.write(JSON.stringify(readNode(process.argv[1], process.argv[2])));
-    ' "$NODE_TMP/intentions" "$NODE_ID") || {
-      echo "/fix-checks: could not read node '$NODE_ID' from origin/main" >&2; exit 1; }
-    rm -rf "$NODE_TMP"
-    if [ "$(jq -r '.execution.fix // "null"' <<<"$NODE_JSON")" = "null" ]; then
-      echo "/fix-checks: node '$NODE_ID' is not under a CI-fix interrupt (execution.fix is null) at origin/main" >&2
-      exit 1
-    fi
+    # Parse the front door's stdout. PR: line (`none` -> empty PR_NUM), the
+    # NODE-JSON section, and the NODE-BODY section.
+    PR_NUM=$(printf '%s\n' "$DERIVE_OUT" | sed -n 's/^PR: //p'); [ "$PR_NUM" = none ] && PR_NUM=""
+    NODE_JSON=$(printf '%s\n' "$DERIVE_OUT" | sed -n '/^=== NODE-JSON ===$/{n;p}')
+    NODE_BODY=$(printf '%s\n' "$DERIVE_OUT" | sed -n '/^=== NODE-BODY ===$/,$p' | tail -n +2)
     N="$NODE_ID"; TARGET_KIND=node ;;
 esac
 ```
 
-**Node-target lane (`TARGET_KIND=node`).** Every step runs unchanged except:
-the PR number is resolved by branch head — `gh pr list --head "$BRANCH" --state
-open --json number --jq '.[0].number // empty'` (the branch IS the node id, not
-an issue-prefixed name, so the issue-keyed branch-prefix lookup `dispatch-find-pr`
-performs does not apply — use `dispatch-context-pack`'s `--pr-is-number` flag
-instead, see Step 1 below. fix-checks never runs without an open PR, so an
-empty result here is a real error — write `$CLAUDE_JOB_DIR/office-hours-reason`
-per the Escalation note below and stop, never `dispatch-mark-deviation`, which
-is issue-only) — never pass `--issue`.
+**Exit-4 escalation (no open PR).** When the front door prints the
+`ESCALATE-NO-PR` sentinel and exits, do **not** proceed to Step 1 and do **not**
+treat it as the generic hard error the other exit codes take. fix-checks never
+runs without an open PR, so this is a deliberate office-hours park. Perform the
+in-session recommend step first — see
+`.claude/skills/dispatch-propagate/escalation-recommend.md`, writing the
+best-next-steps markdown to `$CLAUDE_JOB_DIR/office-hours-recommendation` (node
+lane — no gh issue, so no `dispatch-write-recommendation` comment) — then write
+the park reason to `$CLAUDE_JOB_DIR/office-hours-reason` and **stop**. The Stop
+hook (`.claude/hooks/dispatch-stop.sh`) reads those files and parks the node via
+`park-node`. Never call `dispatch-mark-deviation` here (issue-only) and never
+write a gh label; on the node lane no gh issue is ever read or written. This is
+the same `office-hours-reason` seam the Escalation note below documents.
+
+**Node-target lane (`TARGET_KIND=node`).** Every step runs unchanged except
+that `PR_NUM` is already bound by the front door above (its `--pr-mode required`
+resolution of the open PR) — no separate branch-head lookup happens. Because the
+branch IS the node id, not an issue-prefixed name, the issue-keyed
+branch-prefix lookup `dispatch-find-pr` performs does not apply — use
+`dispatch-context-pack`'s `--pr-is-number` flag with the already-bound `PR_NUM`
+instead (see Step 1 below), and never pass `--issue`. The front door's
+`--pr-mode required` already guaranteed a non-empty `PR_NUM`; had none existed,
+the exit-4 escalation above would have parked the node on office-hours.
 
 If `.claude/ancestry-context.md` is present in the worktree, read it before
 resolving any plan-under-determined judgment call — it is the bounded ancestry
@@ -116,7 +155,7 @@ actually completes.
     "$N" --spend-attempt
   node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
     "$N" --record-push "$HEAD_SHA"
-  .claude/skills/dispatch-propagate/scripts/graph-commit \
+  packages/intentionsutil/scripts/graph-commit \
     -m "graph: record fix attempt + push $HEAD_SHA on $N" "$N"
   ```
 
@@ -130,7 +169,7 @@ actually completes.
   ```bash
   node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
     "$N" --spend-attempt
-  .claude/skills/dispatch-propagate/scripts/graph-commit \
+  packages/intentionsutil/scripts/graph-commit \
     -m "graph: record fix attempt (no push) on $N" "$N"
   ```
 
@@ -159,6 +198,9 @@ gh pr ready --undo "$PR_NUM"   # idempotent no-op when the PR was not merge-arme
 
 Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
 `office-hours-recommendation`) for the Stop hook's `park-node`, never a gh label.
+Also write the already-bound `PR_NUM` to `$CLAUDE_JOB_DIR/office-hours-pr` (same
+atomic tempfile+`mv` write) so the park records `execution.pr`
+(tactic-office-hours-pr-custody).
 **On the node lane no gh issue is ever read or written.**
 
 1. **Resolve the draft PR.** Run the context pack (`dangerouslyDisableSandbox:
@@ -168,9 +210,10 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
    .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr
    ```
 
-   **Node lane** (`TARGET_KIND=node`): resolve `PR_NUM` via the branch-head
-   lookup from the Target-resolution section above, then fetch it directly
-   (never pass `--issue`):
+   **Node lane** (`TARGET_KIND=node`): `PR_NUM` is already bound by the front
+   door (Target resolution above resolved it via `--pr-mode required`) — no
+   separate branch-head lookup is needed. Go straight to fetching the PR by that
+   already-bound number (never pass `--issue`):
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --pr-is-number

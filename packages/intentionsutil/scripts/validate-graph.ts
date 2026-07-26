@@ -33,6 +33,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listNodes, readNodeBody } from "../src/store.js";
 import { validateGraph, validateGraphProseRefs } from "../src/schema.js";
+import { lintTacticBodies, loadPlanBodyBaseline } from "../src/planlint.js";
 import { deletedNodeIds } from "./lib-deleted-node-ids.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -65,6 +66,14 @@ function main(): void {
   const nodes = listNodes(intentionsDir);
 
   validateGraph(nodes);
+
+  // Frontmatter integrity (validateGraph) is not enough for tactics: for a
+  // planned/execution-phase tactic the markdown body IS the authoritative plan,
+  // so also lint each such body for the required plan-schema markers. The
+  // baseline grandfathers pre-existing violations so landing this lint does not
+  // retroactively break main (same rollout pattern as the prose-ref baseline
+  // below).
+  lintTacticBodies(intentionsDir, nodes, loadPlanBodyBaseline());
 
   const bodies = new Map<string, string>();
   for (const node of nodes) {

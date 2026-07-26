@@ -256,9 +256,20 @@
 #                           value (86400 = 24 h) is baked into dispatch-sweep,
 #                           not here. Absent → dispatch-sweep uses its default.
 #
+#   nodeMinAgeSeconds       number (optional, must be >= 0) — how old a bare
+#                           node-id worktree (no PR, no issue-number prefix) must
+#                           be before dispatch-sweep's NODE arm may reap it, so a
+#                           worktree provisioned seconds ago (e.g. by
+#                           office-hours-graph, whose session registers with the
+#                           daemon only afterwards) is never reaped inside that
+#                           window. 0 disables the floor. The default value
+#                           (3600 = 1 h) is baked into dispatch-sweep, not here.
+#                           Absent → dispatch-sweep uses its default.
+#
 # Example (see sweep.example.json):
 #   {
-#     "notInSyncGraceSeconds": 86400
+#     "notInSyncGraceSeconds": 86400,
+#     "nodeMinAgeSeconds": 3600
 #   }
 #
 # ---- Schema: selection-lock.json -------------------------------------------
@@ -675,6 +686,22 @@ case "$CONFIG_TYPE" in
           # integer comparison, raise an arithmetic error, and fall through to
           # the reap branch — immediately force-reaping every not-in-sync worktree.
           "notInSyncGraceSeconds must be a whole number (integer), got \($cfg.notInSyncGraceSeconds)"
+        else
+          empty
+        end),
+        # nodeMinAgeSeconds: optional non-negative integer (0 disables the floor).
+        (if ($cfg | has("nodeMinAgeSeconds")) | not then
+          empty
+        elif ($cfg.nodeMinAgeSeconds | type) != "number" then
+          "nodeMinAgeSeconds must be a number if present, got \($cfg.nodeMinAgeSeconds | type)"
+        elif $cfg.nodeMinAgeSeconds < 0 then
+          "nodeMinAgeSeconds must be >= 0 if present, got \($cfg.nodeMinAgeSeconds)"
+        elif ($cfg.nodeMinAgeSeconds | tostring | test("^[0-9]+$") | not) then
+          # Same whole-number contract as notInSyncGraceSeconds and the env
+          # override (^[0-9]+$): a fraction or scientific-notation value would
+          # reach the dispatch-sweep bash `[[ "$node_age" -lt "$NODE_MIN_AGE_S" ]]`
+          # integer comparison and raise an arithmetic error.
+          "nodeMinAgeSeconds must be a whole number (integer), got \($cfg.nodeMinAgeSeconds)"
         else
           empty
         end)

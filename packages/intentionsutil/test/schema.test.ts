@@ -79,6 +79,7 @@ describe("validateNode", () => {
       markers: ["dispatch:qa"],
       strategy_fingerprint: "abc123",
       fix: null,
+      completion: null,
     });
     expect(result.validates).toEqual(["strategy-1"]);
     expect(result.blocked_by).toEqual(["tactic-2"]);
@@ -111,6 +112,61 @@ describe("validateNode", () => {
       markers: [],
       strategy_fingerprint: null,
       fix: null,
+      completion: null,
+    });
+  });
+
+  it("round-trips a completion object with a full ISO-8601 mergedAt timestamp", () => {
+    const result = validateNode({
+      id: "n1-completion-pr",
+      kind: "tactic",
+      statement: "Execution with a real PR-merge completion.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: 42,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        completion: {
+          mergedAt: "2026-07-11T12:00:00Z",
+          mergeCommitSha: "feedface",
+          graphCommitSha: null,
+        },
+      },
+    });
+    expect(result.execution?.completion).toEqual({
+      mergedAt: "2026-07-11T12:00:00Z",
+      mergeCommitSha: "feedface",
+      graphCommitSha: null,
+    });
+  });
+
+  it("round-trips a completion object for the manual/out-of-band graphCommitSha path", () => {
+    const result = validateNode({
+      id: "n1-completion-oob",
+      kind: "tactic",
+      statement: "Execution with an out-of-band completion.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        completion: {
+          mergedAt: null,
+          mergeCommitSha: null,
+          graphCommitSha: "abc123",
+        },
+      },
+    });
+    expect(result.execution?.completion).toEqual({
+      mergedAt: null,
+      mergeCommitSha: null,
+      graphCommitSha: "abc123",
     });
   });
 
