@@ -75,21 +75,7 @@ checkout: a concurrent session's dirty tracked file blocks this run's
 
 1. **Resolve the target node id** — the `strategy-<slug>` or `tactic-<slug>`
    argument (this skill never selects its own target).
-2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
-   already exists with a live session — `worktree_has_live_session <path>
-   "$CLAUDE_CODE_SESSION_ID"`
-   (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
-   run with `dangerouslyDisableSandbox: true`) — the claim is held by
-   another session: stop and report the held claim, then end the run. Pass
-   this session's own id as the second (exclusion) argument so a
-   graph-launched orchestrator — the strategy-lane spawn in
-   `dispatch-graph-execute` uses `dispatch-spawn-job --name "$id"`, whose
-   name equals this worktree's basename — does not match its own
-   just-spawned session as a pre-existing claim; a genuinely different live
-   session in the same worktree still counts as a held claim and stops the
-   run. A held claim is **not** an `office_hours` park (it is not one of the
-   three autonomy-contract conditions below) and **not** a defect.
-3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+2. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
    or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
    liveness rule the router uses, so no separate lock is needed. **Prefer
