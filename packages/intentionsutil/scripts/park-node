@@ -34,6 +34,12 @@
 # optional 3rd arg below, written verbatim to that field — omitted → null. This
 # script never folds the recommendation into <reason> on the caller's behalf.
 #
+# --pr <n>: optional PR number to record into the node's `execution.pr` at
+# park time (the session's already-resolved PR — this script stays gh-free,
+# so the number must be passed in, never resolved here). <n> must be a
+# non-negative integer. Merged into `execution` via spread, so it never
+# clobbers `execution.branch`/`attempts`/`markers`/`strategy_fingerprint`/`fix`.
+#
 # Diagnosis-time pin (tactic-drain-disposition-diagnosis-cas): a batched
 # office-hours drain diagnoses several parked nodes and interviews the human
 # about each proposed disposition before executing any of them — minutes can
@@ -54,16 +60,17 @@
 # be wrong and must route back to re-diagnosis, never to a park. See
 # .claude/skills/ref-diagnosis-time-cas/SKILL.md for the full caller loop.
 #
-# Usage: park-node [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> <reason> [recommendation]
+# Usage: park-node [--pr <n>] [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> <reason> [recommendation]
 #
 # Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed
 # (including a refused compare-and-swap because origin/main advanced, or an
 # unreachable/absent-node origin/main — absent-node stays exit 1 even when
 # --base is supplied, since a node missing from origin/main is a hard
 # cannot-park state, not a staleness condition); 2 usage error (including a
-# malformed or unresolvable --base); 3 the supplied --base no longer matches
-# origin/main (`stale-diagnosis` — the node changed between diagnosis and
-# execution; re-diagnose and retry, nothing was written).
+# malformed or unresolvable --base, or a non-integer --pr); 3 the supplied
+# --base no longer matches origin/main (`stale-diagnosis` — the node changed
+# between diagnosis and execution; re-diagnose and retry, nothing was
+# written).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -71,16 +78,30 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 INTENTIONS_DIR="$REPO_ROOT/intentions"
 STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
 
-USAGE="usage: park-node [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> <reason> [recommendation]"
+USAGE="usage: park-node [--pr <n>] [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> <reason> [recommendation]"
 
 # Leading-flags-only parse: consume flags while the current arg starts with
 # `--`; the first non-flag argument ends flag parsing and every remaining
 # argument is positional VERBATIM (no re-scan for flags — <reason> and
 # <recommendation> are free text that may start with `-`).
+PR_ARG=""
 BASE_ARG=""
 ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --pr)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "$USAGE" >&2
+        exit 2
+      fi
+      PR_ARG="$1"
+      if [[ ! "$PR_ARG" =~ ^[0-9]+$ ]]; then
+        echo "$USAGE (--pr must be a non-negative integer)" >&2
+        exit 2
+      fi
+      shift
+      ;;
     --base)
       shift
       if [[ $# -eq 0 ]]; then
@@ -209,22 +230,31 @@ trap '
   fi
 ' EXIT
 cat >"$TMPTS" <<'TS'
-// argv: <storeModule> <intentionsDir> <since> <reason> <recommendation> <id>
-const [storePath, intentionsDir, since, reason, recommendation, id] = process.argv.slice(2);
+// argv: <storeModule> <intentionsDir> <since> <reason> <recommendation> <id> <pr>
+const [storePath, intentionsDir, since, reason, recommendation, id, pr] = process.argv.slice(2);
 const { readNode, writeNode } = await import(storePath);
 const node = readNode(intentionsDir, id);
 node.office_hours = { reason, since, recommendation: recommendation || null };
+// Spread-merge so an existing execution.branch/attempts/markers/strategy_fingerprint/fix
+// is never clobbered; only `pr` changes, and only when --pr was passed (pr !== "").
+// Mirrors apply-node-transition.ts's defaultExecution fallback for a node with no
+// execution record yet (schema requires branch/attempts/markers to be present).
+if (pr !== "") {
+  const defaultExecution = { branch: id, pr: null, attempts: {}, markers: [], strategy_fingerprint: null };
+  const execution = node.execution ?? defaultExecution;
+  node.execution = { ...execution, pr: Number(pr) };
+}
 writeNode(intentionsDir, node);
 process.stderr.write(`park-node: set office_hours on ${id} (since=${since})\n`);
 TS
 
 MUTATED=1
-if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SINCE" "$REASON" "$RECOMMENDATION" "$NODE_ID" >&2); then
+if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SINCE" "$REASON" "$RECOMMENDATION" "$NODE_ID" "$PR_ARG" >&2); then
   echo "park-node: failed to write the office_hours record for $NODE_ID" >&2
   exit 1
 fi
 
-if ! "$SCRIPT_DIR/graph-commit" --base "$NODE_ID=$FRESH_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
   echo "park-node: graph-commit failed for $NODE_ID; the office_hours write was rolled back" >&2
   exit 1
 fi

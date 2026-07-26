@@ -91,6 +91,30 @@ clarifications:
       (strategy-autonomous-execution, strategy-owned-orchestration,
       strategy-progressive-validation, strategy-distribute-workflow) cite this
       entry rather than restating the claim. Recorded 2026-07-09 interview."
+  - question: What copy did the author approve for the README front page?
+    answer: "Approved at the 2026-07-25 office-hours sitting, completing
+      tactic-readme-copy-approval and unblocking
+      tactic-readme-data-structure-first. HEADLINE (revised): 'commons.systems: A
+      data structure for managing requirements, goals and alignment' — the author
+      replaced 'intentions and alignment' with 'requirements, goals and
+      alignment'. SUBLINE (ratified as drafted, deliberately): 'Use it with your
+      own project management and agentic workflows, or use it with the provided
+      long horizon agentic coding harness.' The author was shown that this
+      imperative reads as a present-capability claim and so sits in tension with
+      the 2026-07-07 'Direction, stated honestly' entry above, and chose to keep
+      it — that entry is therefore narrowed on wording, not overturned on
+      substance: the imperative stands in the README subline while the known
+      separability gaps remain genuinely tracked as work (see
+      tactic-graph-separability-audit, filed the same day for exactly this
+      reason). IDENTITY SENTENCE (revised from the review candidate): 'Owned and
+      self-managed, local-first, built to be forked: the open source artifacts are
+      the schema — node kinds, attention and signal semantics — and this repo is
+      their reference implementation, harness included. Not a platform.' The
+      author replaced 'the adoptable thing' with 'the open source artifacts' and
+      cut everything after 'Not a platform', so the 'not a library' clause is
+      dropped entirely rather than softened — the spec-plus-reference-
+      implementation entry is satisfied by omission on that point. The
+      implementing session may settle wording only inside this approved copy."
 tooling_goals: []
 success_signal:
   observable: public tier-3 surfaces lead with the data-structure framing — a

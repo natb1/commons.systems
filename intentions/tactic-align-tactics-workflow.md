@@ -52,7 +52,7 @@ attention:
     (tactic-align-family-opus-default, PR #2886, now reviewed and in
     merge-ready-hold), the intended critical-path prioritization (the blocker
     must merge first to unblock this node); no unrelated node is distorted."
-phase: qa
+phase: done
 execution:
   branch: tactic-align-tactics-workflow
   pr: 2931
@@ -61,15 +61,13 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:20:09Z
+    mergeCommitSha: bc3eed343c6bacc9915c37aba1b9872d704b40f0
+    graphCommitSha: null
 validates: []
-blocked_by:
-  - tactic-flake-unit-tests-select-tick
-office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-23
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /dispatch-conflict once it accepts node targets.
+blocked_by: []
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -338,7 +336,10 @@ line-count target and no logic change.
 - **Node-id reservation / claim** —
   `.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`
   (`worktree_has_live_session`, run `dangerouslyDisableSandbox`), `provision-node-worktree`.
-- **Plan schema + model heuristic** — `.claude/skills/plan-issue/SKILL.md` (Steps 3–5),
+- **Plan schema + model heuristic** — `.claude/workflows/align-tactics.js`
+  (`buildPlanPrompt`, the inlined `PLAN BODY SCHEMA` block), summarized in
+  `.claude/skills/align-tactics/SKILL.md` under the "Plan each claude-eligible
+  tactic" bullet of "Step 1 — Build `args` and invoke the Workflow";
   `.claude/skills/implement-unit/SKILL.md:31-39` (canonical model-selection home — cite,
   do not restate).
 - **Outcome-envelope contract** — `.claude/docs/outcome-envelope.md`.

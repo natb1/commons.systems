@@ -40,18 +40,25 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: qa
+phase: review
 execution:
   branch: tactic-drain-disposition-diagnosis-cas
   pr: 2969
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
+  completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: origin/main does not merge clean into this tactic's branch (provision
+    exit 11)
+  since: 2026-07-25
+  recommendation: Resolve the conflict by hand in the node worktree and re-run the
+    phase, or route to /dispatch-conflict once it accepts node targets.
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -540,3 +547,17 @@ Supersedes the prose-only mitigation currently carried as session memory
 ("re-verify before executing a granted disposition"), converting session
 discipline into mechanism — the same upgrade the 2026-07-06 base-version
 clarification made for read-freshness generally.
+
+## needs-main residue
+
+- **id:** 10
+  **title:** `clear-park --base` — sibling half of the pin
+  **url_path:** `packages/intentionsutil/scripts/clear-park` (does not exist on `origin/main` yet)
+  **expected_outcome:** `clear-park` mirrors `park-node`'s `--base` pin (same
+  three value forms, same `stale-diagnosis` exit 3, ordered before the
+  already-cleared no-op guard) once the sibling tactic
+  `tactic-clear-park-primitive` (PR #2947) merges.
+  **finding:** `clear-park` is not yet on `origin/main` (PR #2947 is still in
+  phase `qa`). This PR's own body and Unit 3 of this tactic explicitly scope
+  the mirrored pin out as blocked pending that merge — a documented planned
+  deferral, not a defect in this PR. Verify once #2947 merges.
