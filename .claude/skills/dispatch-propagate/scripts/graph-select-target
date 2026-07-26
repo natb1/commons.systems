@@ -42,13 +42,39 @@
 #                        invocation: acquire the shared dispatch lock, apply the
 #                        live-worker headroom cap dispatch-select-tick's --manual
 #                        branch uses — minus that branch's human-sovereignty
-#                        floor-of-1 at HEADROOM==0, so an unattended caller
-#                        degrades to `empty` rather than breaching the ceiling
-#                        (rationale at the (b) block below) — claim each selected
+#                        floor-of-1 at HEADROOM==0 and minus its pace-curve
+#                        override, so an unattended caller degrades to `empty`
+#                        rather than breaching the ceiling OR the pace throttle
+#                        (rationale at the (b) block below; --pace-exempt-only
+#                        remains the only pace-bypass lane) — claim each selected
 #                        node in the reservation ledger, and release the lock —
 #                        folding in
 #                        the lock+headroom+claim cycle dispatch-select-tick
-#                        otherwise wraps around this selector. NESTING: this flag
+#                        otherwise wraps around this selector. CLAIM OBLIGATION:
+#                        each claim is a budget-consuming marker. A caller that
+#                        launches its selections hands the marker to
+#                        dispatch-graph-execute (which clears it on spawn); a
+#                        caller that does NOT launch MUST `reservation_clear <id>`
+#                        for every emitted node. Markers written by this flag carry
+#                        `origin=standalone` so reservation_sweep reclaims them
+#                        once they age past DISPATCH_RESERVATION_STANDALONE_TTL_S
+#                        (default 600s) with no live worker of that name — a
+#                        crashed or discard-the-output caller can therefore leak a
+#                        slot only for that TTL, not forever. A run that aborts
+#                        BEFORE printing its selection (e.g. sensor_gate's exit 2)
+#                        rolls back the claims it already wrote, so the obligation
+#                        only ever covers nodes the caller was actually handed.
+#                        EXPLICIT-NODE DIVERGENCE: --standalone is compatible with
+#                        --node, and the headroom/pace ceilings above apply to that
+#                        combination too — so `--standalone --node <id>` prints
+#                        `empty` (disposition concurrency-cap) at the cap. This is
+#                        deliberately UNLIKE dispatch-select-tick's `<node-id>`
+#                        lane, which skips the pace curve and the MAX_WORKERS
+#                        ceiling outright because a human naming a node is
+#                        sovereign; a --standalone caller is unattended, so it is
+#                        ceiling-gated like every other --standalone selection.
+#                        Human explicit dispatch belongs on dispatch-select-tick
+#                        <node-id>, not here. NESTING: this flag
 #                        acquires AND unconditionally releases the lock in one
 #                        invocation, and its terminal --release is a strict
 #                        self-release keyed on CLAUDE_CODE_SESSION_ID. Acquire is
@@ -72,7 +98,9 @@
 #                        per-phase sensor_gate) still applies verbatim — this
 #                        is a selection-order override, not a gate bypass.
 #                        Mutually exclusive with --top and --pace-exempt-only
-#                        (usage error, exit 2, when combined).
+#                        (usage error, exit 2, when combined). Combining it with
+#                        --standalone is allowed but IS ceiling-gated — see the
+#                        EXPLICIT-NODE DIVERGENCE note under --standalone.
 #
 # Stdout protocol:
 #   node <id> <kind> <phase>   zero to <top> lines, in selection order.
@@ -129,6 +157,16 @@ STANDALONE=""
 # once --standalone has actually acquired the lock (step below), so the trap
 # never releases a lock this invocation does not hold.
 STANDALONE_LOCKED=""
+# STANDALONE_CLAIMED / STANDALONE_EMITTED gate the _cleanup EXIT trap's claim
+# ROLLBACK. Claims are written per-candidate inside the selection loop, but a
+# LATER candidate can abort the whole run before any selection reaches stdout
+# (sensor_gate rc==2 — a dispatch-ci-ready environment failure — exits 2 with no
+# output). Without rollback those already-written markers are handed to nobody:
+# the caller launches nothing, so no dispatch-graph-execute ever clears them, and
+# reservation_sweep keeps them until the standalone TTL expires. The trap clears
+# every claim this invocation wrote unless the selection was actually emitted.
+STANDALONE_CLAIMED=()
+STANDALONE_EMITTED=""
 NODE_TARGET=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -192,6 +230,19 @@ SNAPSHOT_DIR=""
 _cleanup() {
   _selection_log_emit
   [[ -n "$SNAPSHOT_DIR" ]] && rm -rf "$SNAPSHOT_DIR"
+  # Standalone claim rollback, BEFORE the lock release so the ledger is restored
+  # while this invocation still holds the lock. Fires only when the run ended
+  # without printing its selection (any non-`selected` exit: the sensor_gate
+  # rc==2 abort, a signal, or any later-added early exit past the first claim).
+  # On the success path STANDALONE_EMITTED is set just before the selection is
+  # printed, so the caller's claims are left intact for it to hand to
+  # dispatch-graph-execute (or release itself — see the CLAIM OBLIGATION note).
+  if [[ -z "$STANDALONE_EMITTED" ]] && (( ${#STANDALONE_CLAIMED[@]} > 0 )); then
+    local _cid
+    for _cid in "${STANDALONE_CLAIMED[@]}"; do
+      reservation_clear "$_cid" >/dev/null 2>&1 || true
+    done
+  fi
   # Standalone lock release (guarded so it fires only once --standalone actually
   # acquired the lock). Living in the EXIT trap covers EVERY exit path between
   # the standalone acquire and the final claim/release — the no-store early exit,
@@ -247,12 +298,15 @@ if [[ -n "$STANDALONE" ]]; then
   # --standalone degrades to the concurrency-cap/empty disposition instead of
   # breaching the MAX_WORKERS ceiling by one; breaching it for unattended callers
   # would reintroduce the milder over-subscription this whole tactic exists to
-  # prevent. The divergence is confined to HEADROOM==0 — below the ceiling the two
-  # agree exactly. LIVE_COUNT = busy workers + reservations. All three
+  # prevent. It likewise does NOT inherit that branch's pace-curve OVERRIDE: the
+  # pace-curve gap (TARGET_N - LIVE_COUNT) is applied as a second ceiling below,
+  # for the same non-sovereignty reason. LIVE_COUNT = busy workers + reservations.
+  # All four
   # environmental reads fail OPEN, each to its own safe default: EXHAUSTED → `ok`
   # on missing telemetry; MAX_WORKERS → headroom UNKNOWN on an unreadable or
-  # non-numeric ceiling; daemon UNKNOWN (busy-worker read failed) → skip the
-  # headroom computation outright. UNKNOWN on either count-side read converges on
+  # non-numeric ceiling; TARGET_N → pace budget UNKNOWN on the same; daemon UNKNOWN
+  # (busy-worker read failed) → skip the
+  # headroom computation outright. UNKNOWN on any of those reads converges on
   # the same fail-open floor, TOP=1 (the standalone analogue of
   # dispatch-select-tick's "GAP stays 1"), never leaving TOP unclamped when the
   # live-worker count or the ceiling is unknown.
@@ -260,6 +314,7 @@ if [[ -n "$STANDALONE" ]]; then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
     MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max 2>/dev/null) || MAX_WORKERS=""
+    TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers" 2>/dev/null) || TARGET_N=""
     EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
     # HEADROOM="" is UNKNOWN — the --max read failed or returned a non-numeric
     # ceiling (dispatch config missing, unreadable, or carrying a garbled
@@ -278,20 +333,43 @@ if [[ -n "$STANDALONE" ]]; then
       echo "graph-select-target: dispatch-target-workers --max returned a non-numeric ceiling ('$MAX_WORKERS'); headroom unknown, failing open to --top 1" >&2
       HEADROOM=""
     fi
-    if [[ "$EXHAUSTED" == exhausted ]] || [[ "$HEADROOM" == 0 ]]; then
+    # PACE-CURVE gap budget, the second ceiling. The MAX_WORKERS headroom above is
+    # the ABSOLUTE ceiling; the pace curve (bare `dispatch-target-workers`, i.e.
+    # TARGET_N) is the throttle the autonomous branch of dispatch-select-tick bounds
+    # its fan-out by (`GAP = TARGET_N - LIVE_COUNT`). The --manual branch overrides
+    # the pace curve because a human keystroke is sovereign; an unattended
+    # --standalone caller is NOT (the same reason the floor-of-1 is dropped above),
+    # so it must honor the throttle too — otherwise the documented way to pause the
+    # queue (pin the pace curve so TARGET_N drops to 0) would be bypassed by any
+    # cron job / emulated tick, spending the very token budget the pause protects.
+    # Callers that genuinely need the pace bypass go through --pace-exempt-only.
+    # GAP_BUDGET="" is UNKNOWN (read failed or non-numeric), handled like an
+    # UNKNOWN ceiling: fail open to the TOP=1 floor, never to unbounded fan-out.
+    if [[ "$TARGET_N" =~ ^[0-9]+$ ]]; then
+      GAP_BUDGET=$(( TARGET_N - LIVE_COUNT ))
+      (( GAP_BUDGET < 0 )) && GAP_BUDGET=0
+    else
+      echo "graph-select-target: dispatch-target-workers returned a non-numeric pace target ('$TARGET_N'); pace budget unknown, failing open to --top 1" >&2
+      GAP_BUDGET=""
+    fi
+    if [[ "$EXHAUSTED" == exhausted ]] || [[ "$HEADROOM" == 0 ]] || [[ "$GAP_BUDGET" == 0 ]]; then
       # Concurrency-cap disposition (mirror dispatch-select-tick's): nothing to
-      # select. The lock is released by the _cleanup EXIT trap. A string compare,
+      # select. The lock is released by the _cleanup EXIT trap. String compares,
       # not `(( HEADROOM == 0 ))`, so UNKNOWN ("") falls through to the fail-open
-      # clamp below instead of being read as zero headroom.
+      # clamp below instead of being read as zero headroom / zero pace budget.
+      [[ "$GAP_BUDGET" == 0 ]] && echo "graph-select-target: pace-curve budget exhausted (target $TARGET_N <= $LIVE_COUNT live); standalone selection is paced to zero" >&2
       DISPOSITION="concurrency-cap"
       echo "empty"
       exit 0
     fi
 
-    # (c) Clamp the effective --top to the headroom ceiling; with the ceiling
+    # (c) Clamp the effective --top to the TIGHTER of the two ceilings — the
+    # MAX_WORKERS headroom and the pace-curve gap budget. With EITHER of them
     # UNKNOWN, clamp to the same floor of 1 the busy-read UNKNOWN branch uses.
-    if [[ -n "$HEADROOM" ]]; then
-      (( TOP > HEADROOM )) && TOP=$HEADROOM
+    if [[ -n "$HEADROOM" && -n "$GAP_BUDGET" ]]; then
+      CLAMP=$HEADROOM
+      (( GAP_BUDGET < CLAMP )) && CLAMP=$GAP_BUDGET
+      (( TOP > CLAMP )) && TOP=$CLAMP
     else
       (( TOP > 1 )) && TOP=1
     fi
@@ -555,9 +633,27 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha; do
   # block manual dispatch, and the cost is bounded to a budget UNDERCOUNT for
   # this one slot (a concurrent tick may not see the node reserved) — matching
   # the failure posture of dispatch-select-tick's own emit_graph_selection call.
+  #
+  # The `standalone` ORIGIN stamp (4th arg) bounds the claim's lifetime. Unlike a
+  # tick claim — handed straight to dispatch-graph-execute, which clears it on
+  # spawn — a standalone claim has no guaranteed consumer: a caller that discards
+  # the output, crashes, or is interrupted between selection and launch leaves the
+  # marker behind, and reservation_sweep's dead-session rule never reclaims it while
+  # the (long-lived) calling session stays alive. Markers stamped `origin=standalone`
+  # are instead reclaimed by the sweep's TTL rule once they age past
+  # DISPATCH_RESERVATION_STANDALONE_TTL_S with no live worker of that name, so a
+  # leak costs a slot for one TTL rather than stalling the fleet indefinitely.
+  # Callers that do not launch should still `reservation_clear <id>` promptly.
+  # Each successful claim is recorded in STANDALONE_CLAIMED so the EXIT trap can
+  # roll it back if a LATER candidate aborts the run before the selection is
+  # printed (see the trap). A FAILED write is not recorded — there is nothing to
+  # roll back.
   if [[ -n "$STANDALONE" ]]; then
-    reservation_write "$id" "$id" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2 \
-      || echo "graph-select-target: reservation_write failed for $id; proceeding without a ledger entry (budget may undercount this slot)" >&2
+    if reservation_write "$id" "$id" "${CLAUDE_CODE_SESSION_ID:-}" standalone 1>&2; then
+      STANDALONE_CLAIMED+=("$id")
+    else
+      echo "graph-select-target: reservation_write failed for $id; proceeding without a ledger entry (budget may undercount this slot)" >&2
+    fi
   fi
 
   SELECTED_LINES+="node $id $kind $emit_phase"$'\n'
@@ -579,5 +675,8 @@ if (( SELECTED_COUNT == 0 )); then
 fi
 
 DISPOSITION="selected"
+# Past this point the selection IS the caller's: suppress the EXIT trap's claim
+# rollback so the emitted nodes stay claimed for the caller to launch.
+STANDALONE_EMITTED=1
 printf '%s' "$SELECTED_LINES"
 exit 0

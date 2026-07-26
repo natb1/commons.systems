@@ -10464,7 +10464,8 @@ rl_teardown() {
   RL_DIR=""
   RL_FAKE=""
   unset DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_NOW \
-    DISPATCH_RESERVATION_SWEEP_NOW_EPOCH DISPATCH_RESERVATION_BOOT_GRACE_S
+    DISPATCH_RESERVATION_SWEEP_NOW_EPOCH DISPATCH_RESERVATION_BOOT_GRACE_S \
+    DISPATCH_RESERVATION_STANDALONE_TTL_S
 }
 
 # rl_write_fake_claude <json-array> — install a fake `claude` that prints the
@@ -10584,6 +10585,61 @@ if printf '%s' "$err" | grep -q 'inspect tmp/dispatch-launch'; then
 else
   PASS=$((PASS + 1)); echo "  PASS: rl-sweep-redundant: benign reclaim stays silent (no launch-log diagnostic)"
 fi
+rl_teardown
+
+# --- Test 5b: sweep TTL-reclaims an aged `origin=standalone` marker -----------
+# `graph-select-target --standalone` claims have no guaranteed consumer: a caller
+# that discards the selection, crashes, or is interrupted before launching leaves
+# the marker behind, and while its (long-lived) session stays ALIVE neither the
+# live-worker rule (a) nor the dead-session rule (c) ever fires — the marker is
+# immortal and a few such calls pin LIVE_COUNT at the ceiling, stalling the fleet.
+# Rule (c-ttl) bounds that: past DISPATCH_RESERVATION_STANDALONE_TTL_S with no
+# live worker of that name, the marker is reclaimed regardless of session
+# liveness. Marker stamped at 2026-01-01T00:00:00Z (epoch 1767225600); sweep
+# "now" is 601s later against a 600s TTL.
+echo "Test: reservation_sweep TTL-reclaims an aged origin=standalone marker even though its reserving session is still live"
+rl_setup
+reservation_write "931-slug" "931" "live-sess" "standalone"
+rl_write_fake_claude '[{"sessionId":"live-sess","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_STANDALONE_TTL_S=600
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 601))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+assert_eq "rl-sweep-standalone-ttl: aged standalone marker reclaimed (count 0)" "0" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'standalone-ttl-expired'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-standalone-ttl: note mentions standalone-ttl-expired"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-standalone-ttl: note mentions standalone-ttl-expired"
+  echo "    stderr: $err"
+fi
+rl_teardown
+
+# --- Test 5c: the TTL is scoped — young standalone / aged tick markers KEPT ---
+# Two controls for Test 5b, so the TTL rule cannot over-reclaim: (i) a standalone
+# marker still INSIDE the TTL is in-flight and kept; (ii) an ordinary tick claim
+# (no `origin=` line) of the SAME age is kept, because dispatch-graph-execute owns
+# its lifecycle and its reserving session is live.
+echo "Test: reservation_sweep keeps a young standalone marker and an aged tick marker with a live reserving session"
+rl_setup
+reservation_write "932-slug" "932" "live-sess" "standalone"
+reservation_write "933-slug" "933" "live-sess"
+rl_write_fake_claude '[{"sessionId":"live-sess","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_STANDALONE_TTL_S=600
+# 599s after the stamp: inside the TTL for the standalone marker; the tick marker
+# has no TTL at all, so it is kept at ANY age while its session is live.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 599))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-standalone-ttl-young: young standalone marker kept" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/932-slug" ] && echo 1 || echo 0)"
+# Re-sweep well past the TTL: only the standalone marker goes; the tick claim
+# stays (its session is live), proving the rule keys on `origin=standalone`.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 5000))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-standalone-ttl-scope: aged standalone marker reclaimed" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/932-slug" ] && echo 1 || echo 0)"
+assert_eq "rl-sweep-standalone-ttl-scope: aged tick marker (no origin) kept" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/933-slug" ] && echo 1 || echo 0)"
 rl_teardown
 
 # --- Test 6: sweep reclaims NOTHING when the daemon is UNKNOWN ----------------
@@ -32126,6 +32182,10 @@ gsc_standalone_teardown
 # identical SEL_MAX_WORKERS=8 / --top 3, but NO count_busy_workers override:
 # BUSY=0, RESV=0 -> HEADROOM=8, TOP stays 3, so BOTH candidates are selected
 # and claimed. That makes the Case 6 clamp provably load-bearing.
+# SEL_TARGET_N=8 as well: the pace-curve gap (TARGET_N - LIVE_COUNT) is the
+# SECOND ceiling --standalone honors, so "ample headroom" now means ample on both
+# axes — the fixture's default SEL_TARGET_N=1 would otherwise clamp TOP to 1 for
+# the pace reason and mask the ceiling behavior this control isolates.
 echo "Test: graph-select-target --standalone with a healthy busy-worker read and ample headroom selects both candidates (Case 6 control)"
 gsc_standalone_setup
 cat > "$GSCS_ROOT/bin/npx" <<'GSCS7NPX'
@@ -32137,7 +32197,7 @@ chmod +x "$GSCS_ROOT/bin/npx"
 gsc7_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
   CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
   DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
-  CLAUDE_CODE_SESSION_ID="gsc-standalone-7" SEL_MAX_WORKERS=8 \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-7" SEL_MAX_WORKERS=8 SEL_TARGET_N=8 \
   "$GSCS_GST" --standalone --top 3 2>/dev/null)
 assert_eq "graph-select-target --standalone: healthy busy read leaves TOP unclamped (both selection lines)" \
   "node tactic-standalone-fixture tactic implement
@@ -32290,6 +32350,111 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (UNKNOWN ceiling + exhausted) releases the lock (file emptied)"
   echo "    lock file: '$gsc10_lock'"
 fi
+gsc_standalone_teardown
+
+# --- Case 11: pace curve pinned to zero -> degrades to empty, no claim -------
+# The documented way to pause the queue is to pin the pace curve so TARGET_N
+# drops to 0. --standalone is NOT sovereign (same reason it drops the --manual
+# floor-of-1), so it must honor that throttle: with ample MAX_WORKERS headroom
+# and a healthy window, SEL_TARGET_N=0 alone must degrade to `empty` with no
+# reservation marker. A regression here means any cron job / emulated tick can
+# spend the token budget the pause exists to protect.
+echo "Test: graph-select-target --standalone with the pace curve pinned to 0 degrades to empty despite ample MAX_WORKERS headroom"
+gsc_standalone_setup
+gsc11_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-11" SEL_MAX_WORKERS=8 SEL_TARGET_N=0 \
+  "$GSCS_GST" --standalone --top 1 2>"$GSCS_ROOT/gsc11.err")
+assert_eq "graph-select-target --standalone: TARGET_N == 0 prints empty" "empty" "$gsc11_out"
+assert_eq "graph-select-target --standalone: TARGET_N == 0 writes no reservation marker" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: TARGET_N == 0 writes a pace-budget diagnostic" \
+  "1" "$(grep -q "pace-curve budget exhausted" "$GSCS_ROOT/gsc11.err" && echo 1 || echo 0)"
+gsc11_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc11_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (pace 0) releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (pace 0) releases the lock (file emptied)"
+  echo "    lock file: '$gsc11_lock'"
+fi
+gsc_standalone_teardown
+
+# --- Case 12: pace gap TIGHTER than the ceiling clamps TOP to the gap --------
+# The clamp takes the MINIMUM of the two ceilings. Ample SEL_MAX_WORKERS=8 with
+# SEL_TARGET_N=1 and two candidates at --top 3 must yield exactly ONE selection
+# and ONE marker (Case 7 is the mirror control: both ceilings ample -> both).
+echo "Test: graph-select-target --standalone clamps TOP to the pace-curve gap when it is tighter than the MAX_WORKERS headroom"
+gsc_standalone_setup
+cat > "$GSCS_ROOT/bin/npx" <<'GSCS12NPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSCS12NPX
+chmod +x "$GSCS_ROOT/bin/npx"
+gsc12_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-12" SEL_MAX_WORKERS=8 SEL_TARGET_N=1 \
+  "$GSCS_GST" --standalone --top 3 2>/dev/null)
+assert_eq "graph-select-target --standalone: pace gap 1 clamps to one selection line" \
+  "node tactic-standalone-fixture tactic implement" "$gsc12_out"
+assert_eq "graph-select-target --standalone: pace gap 1 claims the first candidate" \
+  "1" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: pace gap 1 claims NO second candidate" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture-2" ] && echo 1 || echo 0)"
+# The claim must be stamped `origin=standalone` so reservation_sweep's TTL rule
+# can reclaim it if this caller never launches the node (the unbounded-claim
+# leak: a live session's markers are otherwise immortal).
+assert_eq "graph-select-target --standalone: the claim marker is stamped origin=standalone" \
+  "1" "$(grep -qx 'origin=standalone' "$GSCS_ROOT/reservations/tactic-standalone-fixture" && echo 1 || echo 0)"
+gsc_standalone_teardown
+
+# --- Case 13: an abort AFTER a claim rolls the claim back --------------------
+# Claims are written per-candidate INSIDE the selection loop, but a later
+# candidate can abort the whole run: sensor_gate returns 2 on a dispatch-ci-ready
+# environment failure and the script exits 2 with no stdout. The caller launches
+# nothing, so nothing ever hands those already-written markers to
+# dispatch-graph-execute — without the EXIT trap's rollback they sit in the
+# ledger consuming budget until the standalone TTL expires (and are invisible to
+# the sweep's dead-session rule while the calling session stays alive).
+#
+# Fixture: candidate 1 is a plain implement-phase node (claimed), candidate 2 is
+# a qa-phase node WITH a pr, whose gate reaches `dispatch-ci-ready` — absent from
+# this fixture's scripts dir, so it exits 127 and the gate returns 2. `gh` is
+# stubbed to fail so the gate's PR reads stay hermetic and offline.
+echo "Test: graph-select-target --standalone rolls back claims written before a mid-loop abort (sensor_gate exit 2)"
+gsc_standalone_setup
+cat > "$GSCS_ROOT/bin/npx" <<'GSCS13NPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-abort","kind":"tactic","phase":"qa","pr":"777","pace_exempt":false}],"events":[]}'
+exit 0
+GSCS13NPX
+chmod +x "$GSCS_ROOT/bin/npx"
+cat > "$GSCS_ROOT/bin/gh" <<'GSCS13GH'
+#!/usr/bin/env bash
+exit 1
+GSCS13GH
+chmod +x "$GSCS_ROOT/bin/gh"
+gsc13_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-13" SEL_MAX_WORKERS=8 SEL_TARGET_N=8 \
+  "$GSCS_GST" --standalone --top 2 2>/dev/null) || gsc13_rc=$?
+assert_eq "graph-select-target --standalone: mid-loop abort exits 2" "2" "${gsc13_rc:-0}"
+assert_eq "graph-select-target --standalone: mid-loop abort prints no selection" "" "$gsc13_out"
+assert_eq "graph-select-target --standalone: the pre-abort claim is rolled back" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+gsc13_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc13_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (mid-loop abort) releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (mid-loop abort) releases the lock (file emptied)"
+  echo "    lock file: '$gsc13_lock'"
+fi
+unset gsc13_rc
 gsc_standalone_teardown
 
 # ============================================================================

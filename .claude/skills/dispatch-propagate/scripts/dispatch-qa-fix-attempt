@@ -108,10 +108,13 @@ fi
 # passes spent on cosmetic residue (a stale comment, a usage string) used to
 # exhaust the budget before the first behavioural defect surfaced — turning a
 # fixable bug into an office-hours park. A third pass buys one substantive fix
-# after that kind of shallow start. Raising it is safe because the cap is not the
-# only bound on the lane: dispatch-qa-noprogress independently escalates an
-# attempt that resolves NONE of the ids the prior attempt was failing on, so a
-# genuinely stuck lane still stops at the second pass regardless of this ceiling.
+# after that kind of shallow start — that is the whole justification for the
+# raise. The secondary bound below is a partial backstop, not a second guarantee:
+# dispatch-qa-noprogress escalates only an attempt that resolves NONE of the ids
+# the prior attempt was failing on, and it is deliberately fail-open (any gh/jq
+# error, or an unresolvable author id, returns `progress`). It therefore bounds
+# the pathological loop that fixes nothing, but a lane resolving one trivial id
+# per pass is never flagged and runs to this ceiling.
 CAP="${DISPATCH_QA_FIX_ATTEMPT_CAP:-3}"
 if [[ ! "$CAP" =~ ^[0-9]+$ ]] || (( CAP < 1 )); then
   echo "error: dispatch-qa-fix-attempt: CAP must be a positive integer, got '$CAP'; aborting" >&2

@@ -31,9 +31,12 @@ defaulting to `0` when none is present (the same `max // 0` capture idiom as
 Define `CAP=3`, env-overridable via `DISPATCH_QA_FIX_ATTEMPT_CAP` (matching
 `dispatch-qa-fix-attempt`'s default and override). Three, not two: the cap counts
 fixing **passes**, not finding severity, so two passes spent on cosmetic residue
-used to exhaust the budget before the first behavioural defect surfaced. The
-content-based `dispatch-qa-noprogress` guard still bounds a genuinely stuck lane
-at the second pass, independently of this ceiling. `ATTEMPT_N` is a **distinct**
+used to exhaust the budget before the first behavioural defect surfaced — that is
+the justification for the raise. The content-based `dispatch-qa-noprogress` guard
+is a partial backstop, not a second guarantee: it escalates only an attempt that
+resolves **none** of the ids the prior attempt was failing on, and it fails open
+to `progress` on any `gh`/`jq` error. A lane resolving one trivial id per pass is
+never flagged and runs to this ceiling. `ATTEMPT_N` is a **distinct**
 value from `N` (the issue number / node id) — keep it under the separate name and
 never overload `N`. `ATTEMPT_N` and `CAP` feed the Step 3.5 `plan_fix` pre-gate and
 the Step 3.7 auto-fix lane.
