@@ -81,7 +81,15 @@ read_node_json() {
 }
 
 # Refresh the phase-start stamp to the post-write scope fingerprint + the new
-# origin/main sha, so machinery body appends do not later trip the custody gate.
+# origin/main sha. Since tactic-scope-fingerprint-plan-substance, machinery
+# body appends (e.g. qa-fix's needs-main residue) are excluded from the scope
+# fingerprint by construction and no longer need this refresh to avoid
+# tripping the custody gate; this function survives as the post-transition
+# stamp/sha refresh for genuine author-edit cases. Its content-source is a
+# known bug — it hashes the post-`git reset --hard` worktree copy, not what
+# actually landed — tracked separately by tactic-transition-node-stamp-landed-body,
+# not fixed here. Its fail-open contract (`|| return 0` throughout) is
+# deliberately distinct from restamp-scope-fingerprint.ts's fail-loud one.
 refresh_stamp() {
   local stamp_file="$MAIN_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
   local sha fp

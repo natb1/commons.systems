@@ -224,6 +224,22 @@ re-evaluation session (strategy clarification 10) — the session does
    a pre-landing run would stamp stale content. Record the scope-inert
    classification and the re-stamped tactic ids in this round's record.
 
+   **Write amendments above the machinery sentinel.** Since
+   `tactic-scope-fingerprint-plan-substance`, a tactic's scope fingerprint
+   hashes only the "plan substance" above the machinery boundary — a
+   `<!-- machinery: ... -->` sentinel line (or a legacy `## needs-main…`
+   heading, kept as defense-in-depth), below which `qa-fix`-appended
+   sections like `## needs-main residue` live and are excluded from the
+   fingerprint by construction. An author or align-round body amendment
+   must always land **above** that sentinel: text placed below it is
+   invisible to the scope fingerprint, so a substantive plan edit landed
+   there would silently bypass the chain-of-custody gate instead of
+   tripping it. This does not change the scope-inert classification or the
+   `restamp-scope-fingerprint.ts` discipline above — that machinery still
+   governs every author edit exactly as described; it simply no longer also
+   has to account for machinery appends, since those are now excluded from
+   the fingerprint by construction rather than by classification.
+
    This is a **completely different** mechanism from item 3's re-stamp — do
    not conflate the two. Item 3 re-stamps `execution.strategy_fingerprint`,
    a **node-frontmatter** map keyed per serving strategy, computed via

@@ -348,9 +348,22 @@ each fork site.
 
    **Node-target lane (`TARGET_KIND=node`):** files **nothing anywhere**. Instead
    append a `## needs-main residue` section to the tactic's **own body**
-   (`intentions/<node-id>.md`), one entry per `needs-main` item (`id`, `title`,
-   `url_path`, `expected_outcome`, `finding`). That append rides in the Step-4
-   `transition-node` commit; the transition writer then picks `qa → main-qa` and
+   (`intentions/<node-id>.md`) by running:
+
+   ```
+   npx tsx packages/intentionsutil/scripts/append-machinery-section.ts <node-id> --section-file <path-to-composed-section>
+   ```
+
+   (or pipe the composed markdown via stdin — `--section-file -` is the
+   default), never by hand-editing the node file directly. The composed
+   section is the same `## needs-main residue` heading with one entry per
+   `needs-main` item (`id`, `title`, `url_path`, `expected_outcome`,
+   `finding`). This CLI is the only supported way to append a machinery
+   section: it inserts the section below the machinery sentinel (inserting
+   the sentinel on first use), which is what keeps the append outside the
+   tactic's scope fingerprint — so this append can never trigger a false
+   scope-drift demotion. That append rides in the Step-4 `transition-node`
+   commit; the transition writer then picks `qa → main-qa` and
    `tactic-main-qa-phase` owns verification. Skip the rest of this step.
 
    **Legacy lane (`TARGET_KIND=issue`):** file one `blocked_by` follow-up per

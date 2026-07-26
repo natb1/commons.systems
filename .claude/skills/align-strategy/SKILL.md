@@ -593,6 +593,22 @@ Record the classification in this round's own record/summary — the
 scope-inert verdict and the tactic ids re-stamped — as the audit trail the
 doctrine requires.
 
+**Write amendments above the machinery sentinel.** Since
+`tactic-scope-fingerprint-plan-substance`, a tactic's scope fingerprint hashes
+only the "plan substance" above the machinery boundary — a
+`<!-- machinery: ... -->` sentinel line (or a legacy `## needs-main…` heading,
+kept as defense-in-depth), below which `qa-fix`-appended sections like `##
+needs-main residue` live and are excluded from the fingerprint by
+construction. An author or align-round body amendment must always land
+**above** that sentinel: text placed below it is invisible to the scope
+fingerprint, so a substantive plan edit landed there would silently bypass
+the chain-of-custody gate instead of tripping it. This does not change the
+scope-inert classification or the `restamp-scope-fingerprint.ts` discipline
+above — that machinery still governs every author edit exactly as described;
+it simply no longer also has to account for machinery appends, since those
+are now excluded from the fingerprint by construction rather than by
+classification.
+
 This is a **separate** stamp from the Materiality-scoped-freeze section that
 follows, not an extension of it. That section's `execution.strategy_fingerprint`
 freeze protects open children broadly against **strategy**-substance drift;
