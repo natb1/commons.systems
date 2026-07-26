@@ -80,21 +80,22 @@ read_node_json() {
   ' "$NODE_ID")
 }
 
-# Refresh the phase-start stamp to the post-write scope fingerprint + the new
-# origin/main sha, so machinery body appends do not later trip the custody gate.
+# Refresh the phase-start stamp to the fingerprint of what ACTUALLY LANDED on
+# origin/main, plus that same sha — so machinery body appends made during the
+# phase (e.g. /qa-fix Step 3.6's `## needs-main residue`) do not later read as
+# scope drift and trip dispatch-graph-scope-sweep's demotion.
+#
+# The content MUST come from git, never from the local worktree: graph-commit's
+# cleanup() (packages/intentionsutil/scripts/graph-commit:311-321) resets this
+# worktree back to the PR-branch tip after landing, so REPO_ROOT's
+# intentions/<id>.md is the PRE-transition body by the time we get here.
+#
+# Best-effort by design: every failure is swallowed (`|| return 0`). The
+# primitive itself fails LOUD; the fail-open policy lives here, at the caller.
 refresh_stamp() {
-  local stamp_file="$MAIN_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
-  local sha fp
-  sha="$( (cd "$REPO_ROOT" && git rev-parse origin/main 2>/dev/null) )" || return 0
-  fp="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
-    const { readNode, readNodeBody } = await import("./packages/intentionsutil/src/store.js");
-    const { tacticScopeFingerprint } = await import("./packages/intentionsutil/src/router.js");
-    const id = process.argv[1];
-    process.stdout.write(tacticScopeFingerprint(readNode("./intentions", id).statement, readNodeBody("./intentions", id)));
-  ' "$NODE_ID" 2>/dev/null) )" || return 0
-  [[ -n "$fp" && -n "$sha" ]] || return 0
-  mkdir -p "$(dirname "$stamp_file")" 2>/dev/null || true
-  printf '%s %s\n' "$fp" "$sha" > "$stamp_file" 2>/dev/null || true
+  (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/restamp-scope-fingerprint.ts" \
+    --repo-root "$REPO_ROOT" --main-root "$MAIN_ROOT" --from-rev origin/main \
+    "$NODE_ID") >/dev/null 2>&1 || return 0
 }
 
 # --- Read the current phase + PR --------------------------------------------
