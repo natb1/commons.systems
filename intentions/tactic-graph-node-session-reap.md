@@ -40,7 +40,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution:
   branch: tactic-graph-node-session-reap
   pr: 2922
@@ -48,7 +48,10 @@ execution:
   markers: []
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-26T05:51:57Z
+    mergeCommitSha: 464b1f81fc5e125bbd5fbfe168bb904ff29598bc
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
