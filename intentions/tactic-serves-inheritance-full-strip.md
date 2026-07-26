@@ -37,9 +37,9 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint: ba2a6baf40da43d7217194977f7ecd4dbba424a343251236340d524b05479917
+  fix: null
 validates: []
-blocked_by:
-  - tactic-graph-digest-tooling
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

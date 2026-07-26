@@ -54,10 +54,12 @@
 # against the budget the instant it is written, with no wait for worker
 # registration — and the tick sweeps stranded reservations before counting.
 # A `--manual` run (the bare human-typed `/dispatch` shim) QUERIES the live-count
-# and computes a context-dependent SPAWN_N = min(HEADROOM, max(GAP, 1));
-# it overrides the pace-curve throttle but honors the `--exhausted` floor
-# (SPAWN_N=0 → emits `concurrency-cap`) and the MAX_WORKERS ceiling, and emits
-# <gap> = SPAWN_N.
+# and computes a context-dependent SPAWN_N = max(1, min(max(N_PRIO, GAP, 1), HEADROOM));
+# it overrides the pace-curve throttle and, per human-dispatch-is-sovereign, always
+# launches its one highest-ranking-available node even at the MAX_WORKERS ceiling
+# (a bounded, deliberate max_concurrent_workers + 1 overage) — only the `--exhausted`
+# floor (genuine rate-limit token exhaustion) still blocks it outright
+# (SPAWN_N=0 → emits `concurrency-cap`), and emits <gap> = SPAWN_N.
 # The autonomous no-arg queue path keeps the full gate, but with a pace-exempt
 # bypass at cap (see the gate narrative below): a graph pace_exempt node, or a
 # newly-red main, is still surfaced even at/over the worker budget. The only hard
@@ -668,15 +670,20 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
 elif [[ -n "$MANUAL" ]]; then
   # --- manual context-dependent fan-out (#1458) ------------------------------
   # A bare human-typed `/dispatch` spawns enough workers to cover available
-  # priority work eagerly while honoring the absolute MAX_WORKERS ceiling. It
-  # OVERRIDES the pace-curve throttle (a budget pause to TARGET_N=0 still fans
-  # out) but HONORS the genuine rate-limit floor (--exhausted) and the ceiling:
-  #   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)   absolute ceiling
+  # priority work eagerly while honoring the absolute MAX_WORKERS ceiling as its
+  # governing target below the ceiling. It OVERRIDES the pace-curve throttle (a
+  # budget pause to TARGET_N=0 still fans out) and, per human-dispatch-is-sovereign,
+  # a deliberate human `/dispatch` always launches its one highest-ranking-available
+  # node even at the ceiling — a bounded, deliberate max_concurrent_workers + 1
+  # overage. Only genuine rate-limit token exhaustion (--exhausted) still blocks a
+  # manual dispatch outright:
+  #   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)   ceiling below which HEADROOM governs
   #   GAP      = max(0, TARGET_N − LIVE_COUNT)      pace-curve budget gap
   #   N_PRIO   = count of selectable priority-LABELED (bypass) targets, capped at HEADROOM
-  #   SPAWN_N  = min(HEADROOM, max(N_PRIO, GAP, 1))
-  # The priority bypass and gap combine as a max (union), not additive buckets, so
-  # the total is capped at MAX_WORKERS. The fan-out itself runs rank-first through
+  #   SPAWN_N  = max(1, min(max(N_PRIO, GAP, 1), HEADROOM))
+  # The priority bypass and gap combine as a max (union), then are clamped by the
+  # ceiling — except a floor of exactly one node re-asserts itself past the ceiling
+  # when HEADROOM is 0, never wider. The fan-out itself runs rank-first through
   # dispatch-materialize-spawn's existing --gap N machinery (the highest rank level
   # is globally exhausted first; the `priority` label is the cap bypass, not an
   # ordering signal). LIVE_COUNT mirrors the
@@ -702,20 +709,18 @@ elif [[ -n "$MANUAL" ]]; then
     EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
     HEADROOM=$(( MAX_WORKERS - LIVE_COUNT ))
     (( HEADROOM < 0 )) && HEADROOM=0
-    if [[ "$EXHAUSTED" == exhausted ]] || (( HEADROOM == 0 )); then
-      # Genuine token exhaustion (the one hard floor priority cannot override),
-      # or no headroom under the ceiling → spawn nothing. Mirror the autonomous
-      # at-cap disposition: release the lock and emit concurrency-cap. No reseed
-      # — a manual run is a one-shot; the autonomous chain owns reseeds.
+    if [[ "$EXHAUSTED" == exhausted ]]; then
+      # Genuine token exhaustion is the one hard floor priority cannot override
+      # — spawn nothing. Mirror the autonomous at-cap disposition: release the
+      # lock and emit concurrency-cap. No reseed — a manual run is a one-shot;
+      # the autonomous chain owns reseeds. No headroom under the ceiling no
+      # longer short-circuits here: per human-dispatch-is-sovereign a deliberate
+      # human `/dispatch` still launches its one highest-ranking-available node
+      # at HEADROOM=0 (see the SPAWN_N floor-of-1 clamp below).
       release_lock
       DLOG_DISPOSITION="concurrency-cap"
-      if [[ "$EXHAUSTED" == exhausted ]]; then
-        DLOG_SKIP_REASON="manual-rate-limit-exhausted"
-        echo "router: manual fan-out: rate-limit window exhausted; nothing spawned"
-      else
-        DLOG_SKIP_REASON="manual-no-headroom"
-        echo "router: manual fan-out: $LIVE_COUNT live >= MAX_WORKERS $MAX_WORKERS; nothing spawned"
-      fi
+      DLOG_SKIP_REASON="manual-rate-limit-exhausted"
+      echo "router: manual fan-out: rate-limit window exhausted; nothing spawned"
       echo "concurrency-cap"
       exit 0
     fi
@@ -724,14 +729,18 @@ elif [[ -n "$MANUAL" ]]; then
     # N_PRIO: the legacy priority-LABELED bypass count is gone with the legacy
     # selector; the graph pace-exempt lane owns pace-bypass now, and the graph
     # fan-out (graph-select-target --top GAP) is rank-first. Manual fan-out width
-    # is therefore driven by the pace-curve gap alone: SPAWN_N = min(HEADROOM,
-    # max(GAP_BUDGET, 1)).
+    # below the ceiling is therefore driven by the pace-curve gap alone; at the
+    # ceiling a floor of exactly one node re-asserts itself: SPAWN_N = max(1,
+    # min(max(N_PRIO, GAP_BUDGET, 1), HEADROOM)).
     N_PRIO=0
-    # SPAWN_N = min(HEADROOM, max(N_PRIO, GAP_BUDGET, 1))
+    # SPAWN_N = max(1, min(max(N_PRIO, GAP_BUDGET, 1), HEADROOM))
     SPAWN_N=$N_PRIO
     (( GAP_BUDGET > SPAWN_N )) && SPAWN_N=$GAP_BUDGET
     (( SPAWN_N < 1 )) && SPAWN_N=1
     (( SPAWN_N > HEADROOM )) && SPAWN_N=$HEADROOM
+    # Floor re-asserts past the ceiling clamp: HEADROOM=0 must still yield one
+    # deliberate node (human-dispatch-is-sovereign), never zero.
+    (( SPAWN_N < 1 )) && SPAWN_N=1
     echo "router: manual fan-out: SPAWN_N=$SPAWN_N (headroom=$HEADROOM, n_prio=$N_PRIO, gap=$GAP_BUDGET, live=$LIVE_COUNT, max=$MAX_WORKERS)"
     GAP=$SPAWN_N
   fi

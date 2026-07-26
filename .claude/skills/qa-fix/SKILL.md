@@ -36,6 +36,18 @@ The QA pass covers **public data only** — documents present in both the QA ser
 - **Never** run the QA server or any seed step with `SEED_TEST_ONLY=true`, and never re-seed `testOnly` collections by other means — that breaks QA/prod parity, letting QA pass against data absent from production. `testOnly` data exists for the Playwright acceptance tests, which CI's `acceptance` job already runs.
 - **Auth-gated and private-data flows are out of scope** for the automated walkthrough. When a change's behavior is only reachable via `testOnly` or private data, note in the QA plan that the walkthrough is limited to public data and defer that coverage to the automated acceptance tests.
 
+## Parameters
+
+On the graph-native node lane the dispatcher supplies:
+
+| Parameter | Meaning |
+|---|---|
+| `node_id` | The intention node id this session is operating on — equal to the current worktree branch name. The Idempotency preamble derives it (`NODE_ID="$BRANCH"`) and hands it to the shared front door (`dispatch-derive-node-target`). |
+| `pr_num` | The open PR the front door resolves for `node_id` (`--pr-mode required`). qa-fix never runs without an open PR, so a missing PR is a hard error, not the plan-phase `PR: none` case. Bound as `PR_NUM`. |
+
+The legacy issue lane takes no such parameters — it infers the issue number `N`
+from the `<N>-…` branch name.
+
 ## Idempotency preamble
 
 Before running any step, resolve the PR number and its labels via
@@ -46,19 +58,51 @@ This runs before Step 0, so it performs the same keyspace split itself:
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 case "$BRANCH" in
   [0-9]*-*)
-    N="${BRANCH%%-*}"
+    N="${BRANCH%%-*}"; TARGET_KIND=issue
     .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log
     ;;
   *)
-    # Graph-native node lane: the branch IS the node id. Resolve the PR by branch
-    # head (dispatch-find-pr's issue→PR prefix lookup does not apply), then fetch
-    # it via --pr-is-number. qa never runs without an open PR — a miss is a real
-    # error, not the legitimate "PR: none" plan-phase case.
-    N="$BRANCH"
-    PR_NUM=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
-    if [ -z "$PR_NUM" ]; then
-      echo "/qa-fix: node '$BRANCH' has no open PR — qa-fix requires one" >&2
+    # Graph-native node lane: the branch IS the node id, not an issue-prefixed
+    # name. Derive the target through the shared front door — it validates the
+    # id, confirms the branch matches, snapshots the node from origin/main, gates
+    # on phase == qa, and resolves the open PR (--pr-mode required: qa never runs
+    # without one, so a miss is a real error, not the legitimate "PR: none"
+    # plan-phase case).
+    NODE_ID="$BRANCH"
+    FRONT_DOOR=$(.claude/skills/dispatch-propagate/scripts/dispatch-derive-node-target \
+      "$NODE_ID" --expect-phase qa --pr-mode required)
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      case "$rc" in
+        1) echo "/qa-fix: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2 ;;
+        3) echo "/qa-fix: node '$NODE_ID' phase is not 'qa' at origin/main (front door exit 3)" >&2 ;;
+        4) echo "/qa-fix: node '$BRANCH' has no open PR — qa-fix requires one" >&2 ;;
+        *) echo "/qa-fix: dispatch-derive-node-target failed for '$NODE_ID' (exit $rc)" >&2 ;;
+      esac
       exit 1
+    fi
+    N="$NODE_ID"; TARGET_KIND=node
+    # Parse the front door's structured stdout into the seams the rest of the
+    # skill keys off. PR: 'none' → empty (never reached under --pr-mode required,
+    # but kept explicit). NODE-JSON is one compact line; NODE-BODY is raw markdown.
+    PR_NUM=$(printf '%s\n' "$FRONT_DOOR" | sed -n 's/^PR: //p' | head -1)
+    [ "$PR_NUM" = none ] && PR_NUM=""
+    NODE_JSON=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-JSON ===$/,/^=== NODE-BODY ===$/p' | sed '1d;$d')
+    NODE_BODY=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-BODY ===$/,$p' | sed '1d')
+    # Parked-node re-entry guard. Parking sets office_hours without changing
+    # phase, so a stale self-scheduled wakeup re-firing mid-session (bypassing the
+    # selector's office_hours-null gate) must not re-run qa-fix against a node
+    # already handed to a human. Mirror the canonical selection gate `readParked`
+    # (packages/intentionsutil/scripts/check-node-selection.ts:90-93): a node is
+    # parked iff the first-class `office_hours` is non-null OR a populated
+    # `attributes.office_hours` squatter block is present (the squatter convention
+    # is live until tactic-schema-migration-backfill lands). The front door's
+    # structured NODE-JSON makes this a two-part jq OR instead of a frontmatter
+    # scrape.
+    PARKED=$(jq -r 'if (.office_hours != null) or ((.attributes.office_hours // null) != null) then "1" else "" end' <<<"$NODE_JSON")
+    if [ -n "$PARKED" ]; then
+      echo "/qa-fix: node '$NODE_ID' is already office_hours-parked at origin/main — nothing to do" >&2
+      exit 0
     fi
     .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --phase-log --pr-is-number
     ;;
@@ -100,25 +144,24 @@ each fork site.
 
 0. **Target resolution.**
 
-   `/qa-fix` operates in place — the **current worktree dictates the target** (the
-   router enters it; this skill never switches). Resolve from the branch name:
+   `/qa-fix` operates in place — the **current worktree dictates the target**.
+   The session must be in a target worktree: the current branch is `<N>-…` (issue
+   number `<N>`) on the legacy lane, or the intention node id on the node lane.
+   The router (`/dispatch-propagate`) is responsible for entering a target
+   worktree; this skill never switches.
 
-   ```bash
-   BRANCH=$(basename "$(git rev-parse --show-toplevel)")
-   case "$BRANCH" in
-     [0-9]*-*) N="${BRANCH%%-*}"; TARGET_KIND=issue ;;   # legacy issue lane
-     *)        : ;;   # graph-native node lane — see references/target-resolution.md
-   esac
-   ```
+   Target resolution already happened in the **Idempotency preamble** above (the
+   shared front door + the parked-node re-entry guard) — see `## Parameters`. By
+   the time this step runs, the lane's bindings are in hand; this step re-derives
+   nothing.
 
    - **Legacy lane** (branch `<N>-…`): `N` = issue number, `TARGET_KIND=issue`.
-   - **Node lane** (branch is the node id): fetch `intentions/<NODE_ID>.md` at
-     `origin/main`, require its `phase` to be `qa` (else error), and apply the
-     **parked re-entry guard** — if the node is already parked (first-class
-     `office_hours` non-null, OR a non-null `attributes.office_hours` squatter
-     block), `exit 0`. Then set `N=NODE_ID`, `TARGET_KIND=node`. **See
+   - **Node lane** (branch is the node id): the front door already gated on phase
+     `qa`, applied the **parked re-entry guard** (`exit 0` when the node is
+     already parked), and bound `N=NODE_ID`, `TARGET_KIND=node`, `PR_NUM`,
+     `NODE_JSON`, and `NODE_BODY` from its structured output. **See
      [`references/target-resolution.md`](references/target-resolution.md)** for the
-     full `case` block with the frontmatter-parsing bash.
+     front door's contract, its exit-code routing, and the parked-guard rationale.
 
    `$N` keys the remaining steps' `tmp/` filenames. `$TARGET_KIND` selects the lane
    at the seams that differ — see **Node-target lane** below. **On the node lane no
@@ -143,7 +186,10 @@ each fork site.
    - **Escalation.** Instead of `dispatch:office-hours`, write the reason to
      `$CLAUDE_JOB_DIR/office-hours-reason` (and best-next-steps to
      `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook parks the node
-     via `park-node` (see `.claude/hooks/dispatch-stop.sh`).
+     via `park-node` (see `.claude/hooks/dispatch-stop.sh`). Also write the
+     already-bound `PR_NUM` to `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic
+     tempfile+`mv` write) so the park records `execution.pr`
+     (tactic-office-hours-pr-custody).
    - **Merge (Step 0.5).** Skip the in-session `origin/main` merge entirely — the
      graph launcher (`provision-node-worktree`) already merged `origin/main` into
      this worktree before this session started, and an unresolvable conflict would
@@ -198,7 +244,8 @@ each fork site.
       .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --issue --pr --diff
       ```
       **Node lane** (`TARGET_KIND=node`) — never pass `--issue`; reuse `$PR_NUM` with
-      `--pr-is-number`, and paste `$NODE_MD` (from Step 0) in place of `=== ISSUE ===`:
+      `--pr-is-number`, and paste `$NODE_BODY` (the node body, bound by the front
+      door in the Idempotency preamble) in place of `=== ISSUE ===`:
       ```bash
       .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --diff --pr-is-number
       ```

@@ -373,9 +373,14 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
       reevaluation,
     });
 
-    // No non-draft child tactics on the strategy's signal path.
+    // No OPEN (non-draft, non-done) child tactics on the strategy's signal path.
+    // Excluding `done` is load-bearing: reconciled tactics PERSIST on disk
+    // (reconcile-graph writes `phase: "done"` and no longer prunes), and
+    // computeSignalPath does not filter by phase — so a completed child would
+    // otherwise sit on the signal path forever and permanently disqualify its
+    // serving strategy from every future align round.
     const children = childrenOf.get(s.id) ?? [];
-    if (children.some((t) => !isDraft(t) && onPath.has(t.id))) continue;
+    if (children.some((t) => isOpenTactic(t) && onPath.has(t.id))) continue;
 
     // Signal unvalidated.
     if (!isSignalUnvalidated(s)) continue;
