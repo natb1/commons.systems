@@ -351,9 +351,10 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # dispatch-self-close derives from $CLAUDE_JOB_DIR, NOT `.sessionId`) of the
   # live/done background job whose `.name` exactly equals <name>, or empty if
   # none. --all so a job in a terminal state (done/stopped/etc — hidden from the
-  # default active-only listing) is still resolvable: the mid-phase-dead-worker
-  # reap this backs needs exactly that visibility. Consolidates office-hours'
-  # inline job_id_for_name() jq pattern into one shared implementation.
+  # default active-only listing) is still resolvable: office-hours' attach path
+  # needs to find a job by name even after it has finished. Consolidates
+  # office-hours' inline job_id_for_name() jq pattern into one shared
+  # implementation.
   #     return 0 — daemon queried successfully. Stdout is the job id, or empty if
   #               no name match. Empty stdout + return 0 is a definite "no such job".
   #     return 1 — UNKNOWN. `claude` missing, non-zero exit, or non-array output.

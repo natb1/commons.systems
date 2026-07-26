@@ -20,38 +20,70 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-budget-monthly-sync-reading
   pr: 2842
   attempts: {}
   markers: []
   strategy_fingerprint: 3178ea5e04e119ed9cce5cb1e0b573e7e011aef2e70dbd39c0449a854a61a204
+  fix: null
+  completion:
+    mergedAt: 2026-07-25T18:19:39Z
+    mergeCommitSha: a046867bee1d1f9c02fc95d98543b5211d751e47
+    graphCommitSha: null
 validates:
   - strategy-recover-finance
-blocked_by:
-  - tactic-budget-overlap-anchor-merge
+blocked_by: []
 office_hours:
-  reason: 'qa 2026-07-11: Unit 1 (PR #2842, the /budget skill reading-stamp
-    sub-step) verified end-to-end -- dump-node.ts -> edit reading/gap ->
-    write-node.ts -> graph-commit --base round-trip exercised against
-    strategy-recover-finance in the QA worktree (change reverted, not
-    committed): dump-node.ts writes the exact JSON shape write-node.ts consumes
-    plus base-manifest.txt; write-node.ts touches only reading/gap; graph-commit
-    supports --base <manifest-file>; budget-apply echoes "new snapshot: $OUT"
-    confirming the "echoed by budget-apply" claim; the existing Privacy
-    invariant section is unchanged. Unit 2 (finish the interrupted 2026-06 sync)
-    is explicitly operational and needs the human operator: BUDGET_ETL_PASSWORD
-    (pass/GPG-sourced per strategy clarification 4), the mounted cloud statement
-    archive, and the preserved categorization patch spec at
-    ~/.config/commons-systems/budget-patch-2026-06.json (merchant patterns,
-    never committed) -- no automated worker can supply these. Next steps: run
-    /budget locally to apply the preserved patch spec via budget-apply, publish
-    the fresh snapshot, confirm strategy-recover-finance reading names 2026-06
-    with gap null (Unit 1 stamp sub-step fires automatically as the last step of
-    that run); once confirmed this tactic transitions qa to review then done.'
-  since: 2026-07-11
-  recommendation: null
+  reason: "Author-only operational run (park re-confirmed and corrected 2026-07-25
+    at an office-hours drain sitting). Unit 1 is DONE: PR #2842 merged
+    2026-07-25, so the /budget skill's reading-stamp sub-step is now on main and
+    will fire automatically as the last step of the next run. What remains is
+    Unit 2, which needs the author: BUDGET_ETL_PASSWORD is a pass/GPG secret
+    with no non-interactive pinentry, plus the mounted statement archive and
+    real financial data. Four corrections to the prior reason, which would
+    otherwise mislead the next session: (1) the preserved categorization spec
+    was NOT lost — it is at '/mnt/g/My Drive/budget-patch-2026-06.json'
+    (author-confirmed 2026-07-25) and has been staged to
+    ~/.config/commons-systems/budget-patch-2026-06.json where the plan expects
+    it; it is valid JSON with 'remove' and 'add' keys. (2) The backlog is larger
+    than 2026-06: the last published snapshot is
+    budget-2026-06-05T16-57-15.enc.json (current mtime Jun 5) and statements
+    downloaded through 2026-07-05 are staged in '/mnt/g/Shared drives/budget'.
+    Author decision 2026-07-25: catch all the way up through 2026-07 rather than
+    2026-06 only, and let the stamp name the later month. (3) The prior ordering
+    caveat is resolved — #2842 is merged, so no config grant is pending and the
+    stamp needs no manual write. (4) Author decision 2026-07-25: pair this
+    sitting with tactic-mainqa-budget-pipeline, parked since 2026-07-05 on the
+    identical credentials/mount blocker, since the environment will already be
+    warm. The blocking defect from the prior round is fixed and then some:
+    tactic-budget-overlap-anchor-merge is done and pruned, and f5238deb
+    (overlapping same-month anchors), 6254afac (date-keyed anchors) and fb572eed
+    (statement-independent txn identity) are all on main."
+  since: 2026-07-25
+  recommendation: "One author sitting, environment already prepared. Preconditions
+    verified 2026-07-25: statement archive mounted at '/mnt/g/Shared
+    drives/budget'; patch spec staged at
+    ~/.config/commons-systems/budget-patch-2026-06.json; PR #2842 merged so the
+    stamp sub-step is present. Remaining: warm the GPG agent in an interactive
+    host shell first (pass show the BUDGET_ETL_PASSWORD entry, entering the
+    passphrase at the pinentry prompt), since Claude's non-interactive shell
+    cannot prompt and the run fails with 'gpg: decryption failed: No pinentry'
+    on a cold cache. Then run /budget, applying the preserved 2026-06 patch spec
+    via budget-apply and continuing through the 2026-07 statements in the same
+    pass; publish the fresh snapshot. Verify by hand afterwards, per the node's
+    Verification block: a new snapshot exists in the configured directory and
+    'current' has a fresh mtime; the hosted budget app loads it; and the one
+    account with a known small same-month residual appears in the app's
+    divergence surface rather than failing the merge — adjudicate it there, not
+    in the merge. Confirm strategy-recover-finance's reading names the month
+    reached with gap null; the stamp writes this automatically now, so its
+    absence is a defect worth reporting rather than a manual step. Then pair
+    straight into tactic-mainqa-budget-pipeline's live checklist while the mount
+    and password cache are warm. On a clean pass this node transitions qa to
+    review to done. If /mnt/g reads 'No such device' mid-sitting, recover with
+    'sudo systemctl restart mount-gdrive'."
 pace_exempt: false
 rounds: null
 attributes: {}

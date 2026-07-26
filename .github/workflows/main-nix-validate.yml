@@ -1,0 +1,60 @@
+name: Main Nix Validate
+
+# Post-merge guard: unit-tests.yml's nixos-build job only runs pre-merge on
+# branch pushes (branches-ignore: [main, 'graph/**']), so origin/main itself
+# is never rebuilt there. This workflow closes that gap by rebuilding on
+# every nix-touching push to main. Deliberately a paths-filtered push
+# trigger, not a cron schedule.
+#
+# Scope is the nixos-build half only. unit-tests.yml's darwin-build job sits
+# behind the same branches-ignore trigger and is likewise never run on main;
+# that post-merge gap is knowingly left open here (macos-14 runner cost), so
+# do not read this workflow as covering darwin.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/main-nix-validate.yml"
+      # Self-include the script this job runs, matching the convention in
+      # detect-changes.sh (which self-includes check-playwright-version-sync.sh
+      # and run-storybook-smoke.sh): an edit to the script must re-run the
+      # check it drives, or a change that neuters the build lands unexercised.
+      - ".github/scripts/build-nixos-config.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nixos-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # No CI runtime baseline yet: this build has never run to completion in CI.
+    # Gating here is the workflow-level `paths:` filter above — there is no
+    # step-level `if:` in this file, so when the workflow fires the build always
+    # runs. This is NOT a warm-cache build: nothing pushes to
+    # claude-code.cachix.org (0/9 sampled repo outputs present), and
+    # nix/home/wezterm-package.nix overrides src/cargoDeps to a non-nixpkgs
+    # commit, so wezterm is a full from-source Rust compile that cache.nixos.org
+    # cannot serve either. 120 min is a runaway guard sized against that cold
+    # compile (vs GitHub's 6h default), not a performance target: a cap that the
+    # normal cold build can exceed would redden origin/main and feed the
+    # red-main diagnosis machinery on every nix-touching merge. Tighten to ~2x
+    # the observed p95 once real durations for this job exist, and re-size if a
+    # cachix push step ever warms the cache. Full investigation:
+    # ops/nixos-build-findings.md. (#2636)
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+        with:
+          extra-conf: |
+            extra-substituters = https://claude-code.cachix.org
+            extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk=
+      - name: Build nixosConfigurations.nixos
+        run: .github/scripts/build-nixos-config.sh

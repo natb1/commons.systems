@@ -1,0 +1,718 @@
+---
+id: tactic-mechanical-park-producers
+kind: tactic
+statement: "Mechanical retry holds stop being office_hours parks: the
+  provision-exit-11 path and the fix-attempt-cap park emit blocked_by edges
+  against a tracked fix tactic instead, and tactic-router-failure-fuses is
+  re-scoped to match"
+owner: ai
+status: codified
+parent: null
+rationale: "Byproduct of the 2026-07-25 concurrency/serialization review,
+  implementing the park-taxonomy clarification recorded the same day. A park
+  asserts that no autonomous path forward exists and a human is required, but a
+  merge conflict against a moving main frequently self-resolves. At recording
+  time roughly five of the most recent commits on main were provision-exit-11
+  parks, burying the genuinely author-required parks. Finalized 2026-07-25
+  /align-tactics (per-node finalize): the plan converts both named producers to
+  a shared hold-node primitive (find-or-create a born-parked incident tactic +
+  blocked_by edge on the source, never office_hours on the source itself),
+  reusing the graph-census-debt.ts decision/land split and park-node's
+  fresh-main/rollback mechanics. Producer 1's ideal greenfield (an orthogonal
+  execution.conflict interrupt routed to /dispatch-conflict) is already specced
+  and in-flight as tactic-graph-router-conflict-routing (blocked_by
+  tactic-dispatch-conflict-greenfield) — this tactic ships the interim
+  brownfield bridge (a free local-retry tier, then a tracked hold) rather than
+  duplicating that design; Unit 3's comments record the convergence so the
+  strike/hold branch is deleted when that tactic lands."
+reading: null
+gap: null
+serves:
+  - strategy-graph-native-dispatch
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention:
+  boost: 85
+  override: null
+  rationale: "Author-directed 2026-07-25: the queue-serialization work
+    (dispatch-queue claim integrity, office-hours drain claiming, and the
+    cross-queue landing path) is the current focus. Own boost 85 composes with
+    the +5 inherited from strategy-graph-native-dispatch to an authored 90 —
+    exact parity with tactic-graph-router-live-worker-read-robust, the existing
+    author-set boost on this same defect class — and deliberately below
+    strategy-main-health's standing 100 so the main-health signal keeps its
+    recorded dominance."
+phase: qa
+execution:
+  branch: tactic-mechanical-park-producers
+  pr: 2970
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
+validates: []
+blocked_by: []
+office_hours:
+  reason: "/qa-fix: QA found two opus-fixable residue items that the disposition
+    workflow's fix-planner refused with a scope-deviation — both are
+    author-confirmation judgment calls (whether CONFLICT_STRIKE_CAP=5 is the
+    right interim tuning value; whether the brownfield/greenfield scope split
+    for the exit-11 producer is correctly bounded) that the plan already
+    documents but that need the author's explicit sign-off, not a code fix.
+    Escalating to office-hours."
+  since: 2026-07-26
+  recommendation: >-
+    # Best next steps — PR #2970 (`tactic-mechanical-park-producers`)
+
+
+    Two author decisions. Everything script-verifiable already passed this pass;
+    nothing below is a bug fix.
+
+
+    ## Decision 1 — Ratify or retune `CONFLICT_STRIKE_CAP=5`
+
+
+    `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:123`
+    (rationale comment at lines 115–122; used at 220 and 246–251).
+
+
+    What the number actually buys: a node whose branch fails to merge
+    `origin/main` gets 4 free, graph-write-free retries (sidecar counter at
+    `.claude/worktrees/<id>.conflict-strikes`, reset to zero on any clean
+    provision at line 199), and the 5th consecutive failure pays for a tracked
+    hold tactic plus a `blocked_by` edge. The counter is consecutive-only and
+    fail-open — a daemon restart or reaped worktree silently grants more
+    retries. So 5 is a ceiling on a run of bad luck, not a lifetime budget.
+
+
+    - **Accept 5** — no code change. Do it if you read the failure mode as
+    "moving main transiently blocks a merge for a few ticks," where 5
+    consecutive failures is strong evidence the conflict is real and needs
+    hands.
+
+    - **Change it** — one-line edit at `:123`, plus three test sites in
+    `test-dispatch-graph-execute.sh`: Case 5 (lines 184–197, asserts the literal
+    string `strike 1/5`), Case 5b (199–219, loops strikes 1–4 asserting `strike
+    n/5` then expects `held` on the 5th), and Case 10 (270–279, seeds the
+    sidecar with `4` = cap−1 to reach the hold branch in one run). The cap is
+    not a `dispatch.config` tunable and the PR argues it shouldn't be — if you
+    want it configurable, that is a *different* change, and probably not worth
+    it given decision 2.
+
+
+    Guidance on which way: the honest tuning signal here is queue noise (how
+    many tracked holds per week vs. today's ~5 exit-11 parks/week), and that
+    signal is already deferred to the `## needs-main` residue on the node body
+    for observation on deployed main. Retuning now would be guessing ahead of
+    that data. Accepting 5 and letting the main observation move it is the
+    cheaper path; only override that if you have a prior that 5 ticks is
+    obviously too many or too few in wall-clock terms for how fast the chain
+    currently turns.
+
+
+    ## Decision 2 — Ratify the brownfield/greenfield split, and judge the
+    convergence note
+
+
+    The branch at `dispatch-graph-execute:215–276` ships a strike-counter retry
+    tier plus `hold-node` on exhaustion, instead of the ideal design (an
+    orthogonal `execution.conflict` interrupt dispatching `/dispatch-conflict`
+    against the source's worktree). The stated reason is not "greenfield is too
+    expensive" — it's that greenfield is already specced and in-flight as
+    `tactic-graph-router-conflict-routing`, gated on
+    `tactic-dispatch-conflict-greenfield`, and building it twice would collide.
+    There is also a hard blocker recorded at lines 231–235: `/dispatch-conflict`
+    currently exits on any non-`[0-9]*-*` branch, so it cannot accept a node
+    target at all today. That makes the greenfield path unbuildable in this PR
+    regardless of appetite.
+
+
+    - **Ratify the split (recommended default)** — no code change. The gating
+    chain is real, the routing target doesn't exist yet, and this PR's
+    `hold-node` primitive is the piece greenfield will reuse.
+
+    - **Pull greenfield in now** — means unblocking
+    `tactic-dispatch-conflict-greenfield` and teaching `/dispatch-conflict` node
+    targets first; that is a scope change to two other tactics, not an edit to
+    this PR. If you want that, close this decision by re-sequencing those
+    tactics, not by widening #2970.
+
+    - **Narrow the bridge** — the only meaningful narrowing available is
+    dropping the hold tier and leaving exit 11 as an unbounded free retry. That
+    regresses to conflicts never surfacing, which is the problem the PR exists
+    to fix. Don't.
+
+
+    Then the smaller call: read the convergence note at lines 224–229 and decide
+    if it survives a future reader. It says the branch is "expected to be
+    replaced wholesale at that point, not extended" and names the replacing
+    tactic — which is the right content. The gap is that the note lives only
+    inside case 11, while the constant's own comment at lines 115–122 argues for
+    the value on its own terms with no hint the whole mechanism is temporary.
+    Cheapest hardening: add one line to the `:115–122` comment pointing at the
+    case-11 convergence note, so someone tuning the constant learns the branch
+    is slated for deletion before they invest in tuning it. That is a
+    comment-only edit, no test churn.
+
+
+    ## If you accept both as-is
+
+
+    No edits. The PR is verification-clean; move it to its next phase and let
+    the `## needs-main` queue-noise observation drive any later retune of the
+    cap.
+pace_exempt: false
+rounds: null
+attributes: {}
+---
+# Mechanical retry holds stop being office_hours parks: the provision-exit-11 path and the fix-attempt-cap park emit blocked_by edges against a tracked fix tactic instead, and tactic-router-failure-fuses is re-scoped to match
+
+## Context
+
+A park (`office_hours` on a node) asserts that **no autonomous path forward
+exists and a human is required**. Two producers violate that assertion by
+writing parks for *mechanical retry states*, and both park the **work item
+itself** rather than an incident:
+
+1. **provision-exit-11** — `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:197-204`
+   calls `park-node` when `provision-node-worktree` (`:118-123`) cannot merge
+   `origin/main` into the tactic's own persistent worktree branch. A conflict
+   against a moving main frequently self-resolves within a tick or two. At
+   recording time roughly five of the most recent commits on main were
+   exit-11 parks, burying genuinely author-required parks beneath them.
+2. **fix-attempt-cap** — `packages/intentionsutil/scripts/apply-fix-state.ts:259-285`
+   (`applyParkCheck`, mode `--park-if-capped`), called from
+   `.claude/skills/dispatch-propagate/scripts/graph-select-target:306-320`,
+   writes `node.office_hours` directly onto the source tactic when
+   `execution.fix.attempt` exceeds `FIX_ATTEMPT_CAP`
+   (`packages/intentionsutil/src/transitions.ts:101`, = 3).
+
+The park-taxonomy clarification (`intentions/strategy-graph-native-dispatch.md`,
+2026-07-25 interview, author-ratified) rejects a park-kind schema field and
+prescribes the terminal-disposition doctrine instead: *a mechanical hold
+converts to `blocked_by` edges against a tracked fix tactic and clears in the
+same `graph-commit`*. This plan makes both producers follow it.
+
+**The mechanism — the "tracked hold".** A mechanical hold is expressed as two
+things landed in one `graph-commit`:
+
+- a **hold tactic** — a small, self-contained incident node (`kind: tactic`,
+  deterministic id `tactic-hold-<kind-slug>-<source-slug>`,
+  `attributes.hold_for: <source-id>`, `attributes.hold_kind: <kind>`, `serves`
+  copied verbatim from the source), **born `office_hours`-parked**, carrying
+  the diagnosis and a resolution recommendation;
+- a **`blocked_by` edge** appended idempotently to the SOURCE tactic naming
+  that hold tactic.
+
+The source tactic's own `office_hours` is **never** written. It becomes
+unselectable by *edge*, not by *park* — `blockersComplete`
+(`packages/intentionsutil/src/router.ts:162-168`, gated at `:297,325`)
+re-admits it on the very next tick once the hold tactic reaches `phase: done`
+or is pruned, with **zero writes on the source node**.
+
+### Ideal greenfield vs. what this PR does (Producer 1)
+
+Per `.claude/rules/design-proposals.md`, the ideal design first, independent
+of migration cost: provision exit 11 is not a park and not a new node — it is
+an **orthogonal interrupt on the source node**, `execution.conflict`, at exact
+parity with `execution.fix`. The router emits phase `conflict`; the tick
+dispatches `/dispatch-conflict <node-id>` against the source node's own
+worktree, where the conflict actually lives. The interrupt is attempt-capped,
+and only cap exhaustion produces a tracked hold. No new node, no `blocked_by`,
+no park, in the common case.
+
+That greenfield is **already designed and already in flight as two separate
+tactics** — verified on `origin/main`: `intentions/tactic-graph-router-conflict-routing.md`
+(`phase: implement`, `blocked_by: [tactic-dispatch-conflict-greenfield]`)
+specifies exactly this (a mergeable sensor, an `apply-conflict-state.ts`
+primitive, `execution.conflict.attempt` capping, and the dispatch call site),
+gated on `intentions/tactic-dispatch-conflict-greenfield.md` (`phase: review`)
+which is what makes `/dispatch-conflict` accept a node-id target at all —
+precisely the gate the `case 11` comment at `dispatch-graph-execute:198-201`
+already names. **Reaching the greenfield is not this tactic's PR, and
+attempting it here would duplicate work already in flight.** So this PR ships
+the interim brownfield step: a free local-retry tier, then a tracked hold on
+persistent exhaustion. The `hold-node` primitive built here is the durable
+piece — when `tactic-graph-router-conflict-routing` lands, its
+`execution.conflict.attempt` cap calls this same `hold-node` instead of
+parking, and Unit 3's strike/hold branch is deleted. Unit 3's comments must
+record this convergence note.
+
+### The crux decision: the hold tactic is born-`office_hours`-parked, not `phase: implement`
+
+Applies to both producers. Justification:
+
+1. **The cap is an *earned* assertion, not an assumed one.** The doctrine's
+   objection is that a park *assumes* no autonomous path exists before trying.
+   After N free autonomous retries have demonstrably failed, the assertion is
+   true by observation. The queue-noise reduction comes from the retry tier
+   producing **no record at all**, not from changing the terminal record's
+   phase.
+2. **Cross-branch ladder mismatch is decisive (Producer 1).** Remediation must
+   land on the SOURCE node's own branch. A `phase: implement` node is
+   provisioned its own worktree/branch named after itself
+   (`provision-node-worktree:104-110`) and the ladder expects a PR on that
+   branch — a branch with no diff for a *new* node. No autonomous ladder can
+   execute cross-branch remediation today; minting a `phase: implement` hold
+   node would feed the router work it structurally cannot complete.
+3. **Doctrine fidelity.** The clarification prescribes the *edge shape*
+   ("blocked_by edges against a tracked fix tactic"), not the fix tactic's
+   phase. Its complaint is parking the *work item* for a mechanical state.
+   Born-parked incident tactics are established precedent:
+   `packages/intentionsutil/scripts/graph-census-debt.ts:164-172` (born-parked
+   census) and the systemic breaker in `tactic-router-failure-fuses.md:97-116`.
+4. **Strictly better resume semantics.** Resolving the incident (`phase:
+   done` → pruned, repairing the inbound `blocked_by` edge in the same
+   commit) auto-resumes the source with no write on it — versus today, where a
+   human must clear `office_hours` on the source, entangling the incident's
+   resolution with the work item's own state.
+5. **Producer 2 specifically:** `phase: implement` on the hold tactic would be
+   a retry loop laundered through a new node id — "make PR #N green" is
+   exactly what `/fix-checks` just failed at three times, with nothing
+   changed about why.
+
+**Load-bearing consequence every hold recommendation must state:**
+`blockersComplete` clears only on `phase === "done"` or absence. A human who
+merely clears the hold tactic's `office_hours` without setting `phase: done`
+leaves the source blocked forever. Every hold recommendation text must say:
+*resolve the hold tactic to `phase: done` (then prune) — clearing
+`office_hours` alone does not unblock the source.*
+
+**Explicitly out of scope (verified, not this tactic's job):**
+
+- `dispatch-graph-execute`'s default catch-all case (any `provision-node-worktree`
+  exit other than 0/10/11/12/13 — bad node id, unresolvable project root,
+  failed git fetch/worktree-add) stays an `office_hours` park. It is a genuine
+  environment/infra failure, not a self-resolving retry state, and the
+  doctrine names only the merge-conflict case (11).
+- `packages/intentionsutil/scripts/graph-commit`'s own concurrent-edit-conflict
+  park (`graph-commit:900`) and `.claude/skills/dispatch-conflict/SKILL.md`'s
+  Lane 2 (which already autonomously resolves and clears most of these via an
+  opus subagent, staying parked only on genuine ambiguity) stay untouched —
+  architecturally already-autonomous, and not named by the doctrine.
+- `packages/intentionsutil/scripts/graph-census-debt.ts`'s census-tactic park
+  stays untouched — a genuine backlog/housekeeping notice, not a retry state.
+
+## Units of work
+
+### Unit 1 — `hold-node-decide.ts`: the pure decision + construction half
+
+**Scope.** New file `packages/intentionsutil/scripts/hold-node-decide.ts`.
+Modeled directly on `packages/intentionsutil/scripts/graph-census-debt.ts`
+(the network-free, testable DECISION half; the bash caller owns the LANDING
+half — the same split as `reconcile-graph.ts` ↔ `reconcile-graph-merged`).
+
+CLI: `node --import tsx/esm hold-node-decide.ts --source <id> --kind
+<provision-conflict|fix-attempt-cap> --reason-file <f> --recommendation-file
+<f> [--body-file <f>] [--now <YYYY-MM-DD>] [--intentions <dir>]`.
+Reason/recommendation come from **files**, not argv (both carry multi-line
+diagnostic text).
+
+Behavior — reads the store via `listNodes`/`readNode`
+(`packages/intentionsutil/src/store.ts`), writes **nothing**, calls no
+git/gh, prints one JSON object:
+
+- Derive `hold_id = "tactic-hold-" + kindSlug + "-" + sourceId.replace(/^tactic-/,
+  "")`, where `kindSlug` is `conflict` for `provision-conflict` and `fix-cap`
+  for `fix-attempt-cap`. Assert the result matches the node-id regex used at
+  `provision-node-worktree:56` (`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`); fail loud if
+  not. Deterministic ids make find-or-create idempotent by existence — the
+  find key here is *structural* ("is there already an unresolved hold for
+  this exact source"), not content-derived, so no fingerprint is needed.
+- Reserve a third `kindSlug`, `no-progress`, in the kind vocabulary's doc
+  comment for `tactic-router-failure-fuses`' per-node fuse; do **not**
+  implement a producer for it here.
+- Dispositions:
+  - `NONE` — no node at `hold_id`. Emit a fully-constructed born-parked `node`
+    object and `node_body` markdown.
+  - `EXISTING` — node at `hold_id` with `phase !== "done"`. Emit
+    `node_body_append` (a dated occurrence stanza) only; do **not** refresh
+    `office_hours.since` (its age is signal), do **not** touch `phase`.
+  - `REOPENED` — node at `hold_id` with `phase === "done"` (resolved but not
+    yet pruned). Emit a fresh `office_hours` record, `phase: null` (back to
+    the born-parked latch state), and `node_body_append`.
+- Also emit `source_blocked_by`: the source's current `blocked_by` array with
+  `hold_id` appended **only if absent** (idempotent), plus a boolean
+  `source_edge_needed`.
+- Constructed node fields: `kind: "tactic"`, `owner: "ai"`, `status:
+  "codified"`, `parent: null`, `serves` **copied verbatim** from the source
+  node's own `serves` array (never forced onto a strategy — `align-tactics`
+  clarification 27), `execution: null`, `validates: []`, `blocked_by: []`,
+  `phase` omitted (null), `office_hours: { reason, since: now, recommendation
+  }`, `attributes: { hold_for: <source-id>, hold_kind: <kind> }`.
+- The generated `node_body` must state the source id, the kind, the diagnosis
+  (`--body-file` contents when given), and a **How to resolve** section
+  ending with the mandatory sentence from Context above. Mirror
+  `graph-census-debt.ts:180-205`'s body-construction style.
+
+New test file `packages/intentionsutil/test/hold-node-decide.test.ts`,
+modeled on `packages/intentionsutil/test/graph-census-debt.test.ts`. Cases:
+id derivation for both kinds; id-regex rejection of a pathological source id;
+`NONE`/`EXISTING`/`REOPENED` dispositions; `serves` copied verbatim including
+a multi-entry source; `source_edge_needed` false when the edge already
+exists (idempotent re-entry); constructed node passes `validateNode`
+(`packages/intentionsutil/src/schema.ts`); body contains the mandatory
+resolution sentence.
+
+Out of scope: any file write, any git call, any `office_hours` write on the
+source.
+
+**Recommended model:** opus — new module that fixes the id/attribute
+conventions and the doctrine-carrying recommendation text the rest of the
+plan (and `tactic-router-failure-fuses`) consume.
+
+**Dependencies:** none.
+
+### Unit 2 — `hold-node`: the landing half (the `park-node` sibling)
+
+**Scope.** New bash script `packages/intentionsutil/scripts/hold-node`, a
+direct structural sibling of `packages/intentionsutil/scripts/park-node` and
+the landing counterpart of Unit 1, modeled on
+`.claude/skills/dispatch-propagate/scripts/dispatch-graph-census` (the
+census landing half).
+
+Usage: `hold-node <source-node-id> --kind <provision-conflict|fix-attempt-cap>
+--reason-file <f> --recommendation-file <f> [--body-file <f>]
+[--reset-fix-attempt]`. Exit codes mirroring `park-node:41-43`: `0` held and
+landed; `1` write/`graph-commit` failed (including a refused
+compare-and-swap); `2` usage error. Stdout: one line, `held <hold-id>
+(<disposition>)`.
+
+Sequence:
+
+1. Fetch `origin/main` and apply **park-node's fresh-main invariant**
+   (`park-node:60-80`): overwrite the local `intentions/<source>.md` from
+   `origin/main` before reading it, capturing `SOURCE_BLOB` for `--base`.
+   Same for the hold node's file when it already exists (capture
+   `HOLD_BLOB`); when it does not, apply `dispatch-graph-census`'s inverted
+   probe (`dispatch-graph-census:96-101`) — absence is the expected
+   born-fresh case.
+2. Run Unit 1's decision script; parse `disposition`, `hold_id`, `node`,
+   `node_body`/`node_body_append`, `source_blocked_by`, `source_edge_needed`.
+3. Write the hold node's frontmatter through `write-node.ts` (the single
+   validation gate). For `NONE`, replace the generated placeholder body
+   wholesale using `dispatch-graph-census:130-150`'s exact recipe
+   (`writeNode` emits a `# <statement>` placeholder for a new node; appending
+   would produce a malformed two-H1 body). For `EXISTING`/`REOPENED`,
+   **append** `node_body_append` to the existing body — never replace.
+4. When `source_edge_needed`, write the source's updated `blocked_by` through
+   `write-node.ts`. **Via `write-node.ts` + `graph-commit`, never
+   `transition-node`** — `transition-node` only handles `phase`/`--set-pr`
+   and has no `blocked_by` handling (the same deliberate deviation
+   `.claude/skills/fix-checks/SKILL.md`'s node lane documents for the flake
+   edge).
+5. When `--reset-fix-attempt`, invoke `apply-fix-state.ts <source>
+   --reset-attempt` (Unit 4's new mode) **after** the fresh-main refresh, so
+   the reset is not clobbered by step 1. This is the one narrow, documented
+   producer-specific flag on an otherwise generic primitive; comment why the
+   reset cannot happen in the caller (it would be overwritten by the
+   refresh).
+6. Land **both files in one commit**: `graph-commit --base
+   "<source>=$SOURCE_BLOB" [--base "<hold>=$HOLD_BLOB"] -m "graph: hold
+   <source> on <hold-id> (<kind>)" <source> <hold-id>`. Multi-id and
+   repeatable `--base` are supported (`graph-commit:32,37-41`). This
+   satisfies the doctrine's "clears in the same graph-commit".
+7. `EXIT` trap rollback covering both files, combining `park-node:78-100`
+   (restore from the captured blob) and `dispatch-graph-census:104-125`
+   (delete a born-fresh file, restore a pre-existing one), gated on a
+   `MUTATED` flag so a pre-mutation failure never touches a file the script
+   did not write. A failed land must leave no dirty `intentions/*.md` — else
+   `graph-commit`'s `assert_clean_outside_ids` guard trips for every other
+   node.
+
+New test `packages/intentionsutil/scripts/test-hold-node.sh`, modeled on
+`packages/intentionsutil/scripts/test-park-node.sh` (stub `graph-commit`,
+assert argv). Cases: born-fresh hold + edge in one commit with both ids
+passed; idempotent re-entry (edge already present → no duplicate entry);
+`EXISTING` body-append does not replace; `REOPENED` resets phase to null and
+re-parks; source's `office_hours` stays `null` in **every** disposition (the
+load-bearing assertion); `graph-commit` failure rolls both files back;
+`--base` tokens present for pre-existing files only.
+
+Out of scope: any change to `park-node` itself, to `graph-commit`'s own
+conflict park (`graph-commit:900`), or to `graph-census-debt.ts`.
+
+**Recommended model:** opus — git compare-and-swap, two-file atomic landing,
+and a rollback trap covering a create-and-an-edit; a subtle bug here is
+expensive.
+
+**Dependencies:** Unit 1.
+
+### Unit 3 — Producer 1: free-retry tier, then a tracked hold, in `dispatch-graph-execute`
+
+**Scope.** `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute`,
+`case 11` at `:197-204` and `case 0` at `:172-186`.
+
+Replace the `$PARK_NODE` call at `:199-204` with a two-tier disposition:
+
+- Define a baked-in `CONFLICT_STRIKE_CAP=5` near the top of the script,
+  alongside a comment explaining it is a constant, not a `dispatch.config`
+  tunable (parity with `FIX_ATTEMPT_CAP` at `transitions.ts:101`). 5, not 3:
+  ticks are frequent, and the point is to spend cheap ticks rather than
+  records.
+- **Strike counter with no graph write.** Sidecar file
+  `$PROJECT_ROOT/.claude/worktrees/$id.conflict-strikes` holding an integer,
+  following the existing worktree-adjacent sidecar convention
+  (`provision-node-worktree:81-83`'s `.scope-fingerprint`: outside every
+  checkout, so it never dirties a tree). A retry costs **zero graph writes
+  and zero commits** — this is the change that actually removes the queue
+  noise. The state is deliberately local and fail-open: a lost counter
+  (daemon restart, reaped worktree) just grants more free retries, which is
+  harmless.
+- `case 11` with `strikes < CAP`: increment the sidecar, `reservation_clear
+  "$id"`, emit `conflict-retry $id (strike N/CAP)`, make **no** graph write.
+  Mirror `case 12`'s clear-and-yield shape (`:207-211`).
+- `case 11` with `strikes >= CAP`: call `hold-node "$id" --kind
+  provision-conflict --reason-file … --recommendation-file …`. Reason:
+  `origin/main has not merged clean into this tactic's branch for N
+  consecutive ticks (provision exit 11)`. Recommendation: resolve the
+  conflict by hand in `.claude/worktrees/<source-id>`, push the branch, then
+  resolve **this hold tactic** to `phase: done` and prune it — plus the
+  mandatory "clearing `office_hours` alone does not unblock the source"
+  sentence. On success emit `held $id`; on failure emit `failed $id
+  hold-failed` and bump `FAILURES` (identical shape to today's `park-failed`
+  branch at `:203-206`). Reset the strike file after a successful hold.
+- `case 0`: delete the strike sidecar on a successful provision (the
+  conflict self-resolved). This reset is what makes the counter mean
+  "consecutive".
+- Update the `case 11` comment block at `:198-201` to record the convergence
+  note: this strike/hold branch is the interim step and is **replaced** by
+  the `execution.conflict` interrupt when `tactic-graph-router-conflict-routing`
+  lands, at which point that cap calls the same `hold-node` primitive.
+- Update `provision-node-worktree`'s header prose where it asserts the
+  caller's disposition — `:26-29` ("The caller routes /dispatch-conflict …
+  or parks the node") and `:13-14`. Doc-only; **do not change any exit code
+  or behavior in that script.**
+
+Extend `.claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh`
+(stubs `park-node`/`demote-node-to-implement` under `$PKG_DIR` at `:79-91`,
+drives `PROV_RC`/`PARK_RC` at `:18`). Add a `hold-node` stub with a
+`HOLD_LOG`/`HOLD_RC` alongside them. Rewrite Case 5 (`:177-184`) and Case 10
+(`:227-232`), and add: exit 11 below cap emits `conflict-retry` with an
+**empty** `PARK_LOG` and **empty** `HOLD_LOG`; strikes accumulate across
+repeated exit-11 runs; the cap-th run calls `hold-node` with `--kind
+provision-conflict`; `HOLD_RC=1` yields `failed <id> hold-failed` and exit 1;
+exit 0 clears the strike file. Case 8 (`:209-216`, the default catch-all park
+at `:224-230`) must remain **unchanged and still asserting `park-node`** —
+the environment/infra park is explicitly out of scope.
+
+**Out of scope, do not touch:** the default catch-all case; `graph-commit`'s
+concurrent-edit park (`graph-commit:900`) and `/dispatch-conflict` Lane 2;
+`graph-census-debt.ts`'s census park.
+
+**Recommended model:** sonnet — mechanical wiring into an existing,
+well-stubbed test harness, with the design decisions already fixed by Units
+1-2 and this plan.
+
+**Dependencies:** Unit 2.
+
+### Unit 4 — Producer 2a: split `--park-if-capped` into a pure check and a write-only reset
+
+**Scope.** `packages/intentionsutil/scripts/apply-fix-state.ts`. Delete
+`applyParkCheck` (`:259-285`) and the `--park-if-capped` mode, replacing it
+with two modes, and update the header mode table at `:44-53` and the usage
+string at `:56-58`.
+
+- `--check-cap` — **pure, writes nothing.** Returns `{ mode: "check-cap", id,
+  capped: boolean, consumed: number, attempt: number }` where `consumed =
+  fix.attempt - 1`. Errors when no interrupt is set (parity with today's
+  `requireFix` behavior at `:264`).
+- `--reset-attempt` — **write-only.** Sets `execution.fix.attempt = 1`,
+  preserving `since`/`pushed_sha` and the ladder `phase`. Returns `{ mode:
+  "reset-attempt", id, wrote: true, attempt: 1 }`. Errors when no interrupt
+  is set.
+
+This split exists because `apply-fix-state.ts` is documented as pure of
+git/gh (`:1-9`) — it may not call `graph-commit`, so it cannot land a hold.
+The decision must be readable without a write (the caller decides), and the
+reset must be applicable *after* `hold-node`'s fresh-main refresh (Unit 2
+step 5) or it would be clobbered. Keep the `office_hours` reason and
+recommendation prose from `:271-282` — do not delete it; **move it** into
+Unit 2's caller-supplied reason/recommendation files in Unit 5, adapted so
+it names the hold tactic's resolution procedure instead of "clear
+office_hours on this node".
+
+Update `packages/intentionsutil/test/apply-fix-state.test.ts`: rewrite
+`:165-181` (at/below cap) and `:182-203` (above cap) against `--check-cap`,
+asserting the crucial new invariant — **`node.office_hours` stays `null` and
+the node file is not written at all**. Rewrite the end-to-end test at
+`:212-233` as set-fix → three spends → `--check-cap` reports `capped: true,
+consumed: 3` with no write → `--reset-attempt` sets `attempt: 1` and still
+leaves `office_hours` null. Update the `parseArgs` cases at `:257-274` for
+the two new flags and their mutual exclusion with the other modes.
+
+**Recommended model:** sonnet — a well-specified mode split with explicitly
+enumerated test cases.
+
+**Dependencies:** none (parallel with Units 1-3; but Unit 5 needs both this
+and Unit 2).
+
+### Unit 5 — Producer 2b: wire `graph-select-target` to `hold-node`
+
+**Scope.** `.claude/skills/dispatch-propagate/scripts/graph-select-target`,
+the failing-again branch of `_gate_fix_active` at `:306-320`, plus the
+header comment at `:32`.
+
+Replace the `--park-if-capped` + `_graph_commit_fix` sequence with:
+
+1. `out=$(_apply_fix "$id" --check-cap)`; on `capped != true`, `echo "fix";
+   return 0` (unchanged retry path).
+2. On `capped == true`, build the reason and recommendation files
+   (multi-line, so files not argv), carrying the diagnosis text moved from
+   `apply-fix-state.ts:271-282`: attempts consumed, PR number from
+   `execution.pr`, `execution.fix.since`, `FIX_ATTEMPT_CAP`. The
+   recommendation names the hold tactic's resolution procedure (`phase:
+   done` + prune), **not** "clear office_hours on this node".
+3. **Reuse the existing accumulator as the hold body rather than re-deriving
+   a diagnosis.** `/fix-checks` writes `tmp/fix-checks-summary.md` in the
+   node's worktree as its only cross-iteration memory
+   (`.claude/skills/fix-checks/SKILL.md:17,31,716`) and posts it as PR
+   comments (`:285,686`). `graph-select-target` runs from the main checkout,
+   so the path is `$PROJECT_ROOT/.claude/worktrees/<id>/tmp/fix-checks-summary.md`.
+   Pass it as `--body-file` **when it exists**; when it does not (worktree
+   reaped), omit the flag and let Unit 1's constructed body stand alone. Do
+   not fabricate a fallback file.
+4. `hold-node "$id" --kind fix-attempt-cap --reason-file …
+   --recommendation-file … [--body-file …] --reset-fix-attempt`. On success
+   `echo "fix-attempt-cap-held"; return 1`; on failure `echo
+   "fix-cap-hold-failed"; return 1` (same shape as the existing `:315-318`
+   failure branch).
+5. Update `:32`'s header prose and the inline comment at `:307-311`, which
+   currently states "`--park-if-capped` writes office_hours (+ budget reset)
+   and this node leaves the eligible set". It now leaves the eligible set via
+   a `blocked_by` edge.
+
+Also sweep for stale prose asserting these two paths park: `park-node`'s
+header line naming "an unroutable merge conflict" among its use cases
+(`park-node:4-6`), and any `/fix-checks` or office-hours SKILL prose
+describing the cap escalation as a park on the source node. Prose only — no
+behavior change to `park-node`.
+
+**Recommended model:** sonnet — rote wiring in bash against an interface
+Units 2 and 4 fully define.
+
+**Dependencies:** Units 2 and 4.
+
+## Reuse
+
+- **The flake pattern's scripts are NOT directly reusable, and this plan
+  deliberately does not extend them.**
+  `.claude/skills/dispatch-propagate/scripts/dispatch-flake-dedup-node`
+  dedups by a **content fingerprint** (a literal `Fingerprint: <fp>` grep
+  over `intentions/tactic-*.md`) and is a search-only tool whose actual node
+  writes are performed by an LLM executing `.claude/skills/fix-checks/SKILL.md`'s
+  node lane. Both producers here are non-LLM code paths inside the tick
+  (bash and TypeScript), and their find key is *structural*
+  (`hold_for = <source-id>`, expressible as a deterministic id), not
+  content-derived. What IS reused from that pattern is its **shape and write
+  mechanics**, verbatim: find-or-create with `NONE`/`EXISTING`/`REOPENED`
+  dispositions; `serves` copied verbatim from the source; the tracked node is
+  the *blocker* and the source is the *blocked* one; base capture +
+  `write-node.ts` + `graph-commit --base`; **never `transition-node`**; no
+  `office_hours` on the source anywhere in the flow.
+- **`packages/intentionsutil/scripts/graph-census-debt.ts` +
+  `.claude/skills/dispatch-propagate/scripts/dispatch-graph-census`** — the
+  decision/land split, born-parked node construction (`:164-172`), body
+  construction style (`:180-205`), placeholder-body replacement recipe
+  (`dispatch-graph-census:130-150`), and inverted absent-node probe +
+  rollback trap (`:96-125`). Unit 1-2's primary template.
+- **`packages/intentionsutil/scripts/park-node`** — the fresh-`origin/main`
+  refresh invariant, `--base` compare-and-swap capture, and blob-pinned
+  rollback trap (`:60-100`). Reused wholesale by `hold-node`; `park-node`
+  itself is left untouched, still serving the three out-of-scope park
+  producers.
+- **`packages/intentionsutil/scripts/graph-commit`** — multi-id landing and
+  repeatable `--base` (`:32,37-41`), which is what makes "clears in the same
+  graph-commit" literally true. Prune-time inbound-`blocked_by` repair is
+  what cleans the source's array when a resolved hold is pruned.
+- **`packages/intentionsutil/src/router.ts:162-168`** (`blockersComplete`) —
+  the unblock mechanism. No new router code: the source is re-admitted
+  automatically once the hold reaches `done` or is pruned.
+- **`packages/intentionsutil/src/officeHours.ts`** — the office-hours
+  selector already lists any node with `office_hours !== null` regardless of
+  `phase`. Born-parked hold tactics surface in the queue with no selector
+  change.
+- **`packages/intentionsutil/scripts/write-node.ts`** — the single
+  validation gate; every hold node passes through it.
+- **`tmp/fix-checks-summary.md`** — Producer 2's diagnosis body, reused
+  rather than re-derived.
+- **Test harnesses reused rather than recreated:**
+  `packages/intentionsutil/test/graph-census-debt.test.ts` (Unit 1's model),
+  `packages/intentionsutil/scripts/test-park-node.sh` (Unit 2's model), and
+  `.claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh`'s
+  existing stub/`*_RC` harness (Unit 3).
+- **`hold-node` is the one new shared primitive**, shared three ways: both
+  producers here, plus `tactic-router-failure-fuses`' per-node fuse
+  (`--kind no-progress`, vocabulary reserved in Unit 1).
+
+## Verification
+
+```verify
+npx vitest run --project packages/intentionsutil --root .
+npx tsc --noEmit -p packages/intentionsutil
+bash packages/intentionsutil/scripts/test-hold-node.sh
+bash packages/intentionsutil/scripts/test-park-node.sh
+bash .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh
+npx tsx packages/intentionsutil/scripts/validate-graph.ts
+```
+
+```verify
+# Doctrine regression guard: no producer converted by this tactic may still
+# write office_hours. Each grep must find NOTHING.
+! grep -n 'PARK_NODE' .claude/skills/dispatch-propagate/scripts/dispatch-graph-execute | grep -n '11)'
+! grep -n 'office_hours' packages/intentionsutil/scripts/apply-fix-state.ts
+! grep -n 'park-if-capped\|park-node' .claude/skills/dispatch-propagate/scripts/graph-select-target
+# The three out-of-scope park producers must still park:
+grep -q 'PARK_NODE' .claude/skills/dispatch-propagate/scripts/dispatch-graph-execute
+grep -q 'office_hours' packages/intentionsutil/scripts/graph-census-debt.ts
+grep -q 'office_hours' packages/intentionsutil/scripts/graph-commit
+```
+
+Manual and observational checks:
+
+- **End-to-end hold, on a scratch clone only.** Seed a synthetic source
+  tactic and run `hold-node <source> --kind provision-conflict …`. Inspect
+  the resulting commit: it must touch exactly two files, the source's
+  `office_hours` must still be `null`, its `blocked_by` must contain the
+  hold id exactly once, and the hold node must be born-parked with `serves`
+  byte-identical to the source's. Re-run the identical command and confirm
+  the second run appends an occurrence stanza without duplicating the
+  `blocked_by` entry.
+- **Unblock semantics.** With the hold in place, confirm `graph-select-target`
+  does not select the source. Set the hold tactic to `phase: done` and
+  confirm the source is selected on the very next tick with no write having
+  been made to the source node. This is the doctrine's central claim and the
+  one behavior no unit test covers end to end.
+- **The stuck-state trap.** Confirm that clearing the hold tactic's
+  `office_hours` *without* setting `phase: done` leaves the source blocked —
+  and that the hold node's own recommendation text says so explicitly.
+- **Queue-noise outcome (observe on main over the following week).** The
+  success signal for this tactic is that transient exit-11 conflicts produce
+  **no graph record at all** — zero `tactic-hold-conflict-*` entries in a
+  week where main is moving normally, versus ~5 exit-11 parks per equivalent
+  window at recording time. A `tactic-hold-conflict-*` node appearing is the
+  intended signal for a genuine structural conflict, and warrants checking
+  whether `CONFLICT_STRIKE_CAP=5` is tuned too tight.
+- **Strike-file hygiene.** Confirm the sidecar is deleted on a successful
+  provision and does not accumulate for reaped worktrees.
+
+## needs-main residue
+
+QA (PR #2970, attempt 1) found one item that is not assertable at merge time
+and is deferred to `/qa-main` observation on deployed main:
+
+- **id:** 15
+- **title:** Queue-noise reduction: fewer tracked holds than today's exit-11 park rate
+- **url_path:** current
+- **expected_outcome:** Materially fewer `tactic-hold-conflict-*` / `tactic-hold-fix-cap-*`
+  records than the baseline of roughly 5 exit-11 parks per week, observed on
+  main over the following week (the plan's own Verification section names
+  this as a planned deferral, not gatable pre-merge).
+- **finding:** This is an observe-on-main-over-time signal. Check the rate at
+  which `tactic-hold-*` nodes are created on `origin/main` over the week
+  following merge, and confirm holds that do land correspond to genuinely
+  stuck conflicts/fix-cap exhaustions rather than routine noise.

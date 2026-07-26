@@ -14,7 +14,7 @@ function tempDir(): string {
 }
 
 /** Write a fixture `repo-health`-standin script and return its path. */
-function fakeBinary(behavior: "green" | "red" | "unknown"): string {
+function fakeBinary(behavior: "green" | "red" | "unknown" | "empty"): string {
   const dir = tempDir();
   const path = join(dir, "repo-health");
   const body =
@@ -22,7 +22,9 @@ function fakeBinary(behavior: "green" | "red" | "unknown"): string {
       ? "#!/bin/sh\nexit 0\n"
       : behavior === "red"
         ? `#!/bin/sh\necho ${FAKE_SHA}\nexit 0\n`
-        : "#!/bin/sh\nexit 1\n";
+        : behavior === "empty"
+          ? "#!/bin/sh\necho NO_ATTRIBUTABLE_CHECKS\nexit 3\n"
+          : "#!/bin/sh\nexit 1\n";
   writeFileSync(path, body);
   chmodSync(path, 0o755);
   return path;
@@ -56,6 +58,16 @@ describe("readMainHealth", () => {
     const failBin = fakeBinary("unknown");
     expect(readMainHealth(failBin)).toBe("unknown");
     rmSync(join(failBin, ".."), { recursive: true, force: true });
+  });
+
+  it("reads a distinct unknown phrase when no check is attributable to main's own workflow", () => {
+    const emptyBin = fakeBinary("empty");
+    const reading = readMainHealth(emptyBin);
+    expect(reading).toBe(
+      "unknown: no check on the current origin/main HEAD is attributable to main's own workflow (empty or misattributed check set) — cannot confirm green",
+    );
+    expect(reading).not.toBe(GREEN_READING);
+    rmSync(join(emptyBin, ".."), { recursive: true, force: true });
   });
 });
 
