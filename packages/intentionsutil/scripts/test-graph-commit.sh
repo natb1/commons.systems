@@ -132,6 +132,13 @@ no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
 ORIGIN="$WORK/origin.git"
 git init -q --bare "$ORIGIN"
 git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
+# plant_lock (cases 30/31) runs `git commit-tree` directly in this bare repo,
+# which needs an author identity. CI runners have no global git identity, so
+# without this commit-tree fails, plant_lock yields an empty sha, and the lock
+# is never planted — case 31 lands immediately instead of waiting out the
+# expiry, and case 30 passes vacuously with nothing to steal.
+git -C "$ORIGIN" config user.email harness@test
+git -C "$ORIGIN" config user.name harness
 
 SEED="$WORK/seed"
 mkdir -p "$SEED"
@@ -1122,6 +1129,12 @@ plant_lock() { # <expiry_unix_ts> <holder>
   local expiry="$1" holder="$2" sha
   sha="$(git -C "$ORIGIN" commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 \
     -m "graph-commit-lock v1" -m "holder=$holder expiry=$expiry")"
+  # Fail loudly: an empty sha here means no lock gets planted, which silently
+  # turns the steal/wait cases into vacuous passes rather than failures.
+  if [[ -z "$sha" ]]; then
+    echo "plant_lock: commit-tree produced no sha in $ORIGIN" >&2
+    exit 1
+  fi
   git -C "$ORIGIN" update-ref refs/graph/landing-lock "$sha"
 }
 
