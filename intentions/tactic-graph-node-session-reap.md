@@ -21,13 +21,13 @@ rationale: "Surfaced 2026-07-16 /align-strategy interview: the legacy gh
   terminal exit. /align-tactics 2026-07-18: finalized into a 2-unit plan —
   Stop-hook self-close (dispatch-self-close, reused unmodified) and a
   dispatch-sweep extension (new claude_job_id_for_name_all in
-  lib-claude-agents.sh) for mid-phase-dead orphaned jobs. 2026-07-2X office-hours
-  drain (provision exit 11): origin/main independently landed a broader NODE-arm
-  worktree-reap subsystem (node_completion_state, node_worktree_age_s,
-  node_cwd_has_live_session, and a bare node-id removal arm in dispatch-sweep)
-  that deletes this tactic's reap_job_for_branch function and its 3 call sites
-  outright — a real conflict, not a stale one. Human decision: drop
-  reap_job_for_branch from scope entirely as redundant with main's NODE-arm
+  lib-claude-agents.sh) for mid-phase-dead orphaned jobs. 2026-07-2X
+  office-hours drain (provision exit 11): origin/main independently landed a
+  broader NODE-arm worktree-reap subsystem (node_completion_state,
+  node_worktree_age_s, node_cwd_has_live_session, and a bare node-id removal arm
+  in dispatch-sweep) that deletes this tactic's reap_job_for_branch function and
+  its 3 call sites outright — a real conflict, not a stale one. Human decision:
+  drop reap_job_for_branch from scope entirely as redundant with main's NODE-arm
   reap; keep the new shared claude_job_id_for_name_all lib function and the
   office-hours job_id_for_name dedup (2a/2d), since both stand alone and merged
   clean with no conflict."
@@ -52,12 +52,7 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-25
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /dispatch-conflict once it accepts node targets.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
