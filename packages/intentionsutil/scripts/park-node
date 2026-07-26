@@ -2,10 +2,16 @@
 # park-node — park one intention node to office hours via the graph write
 # (tactic-graph-router-selector, unit 4). The graph lane's replacement for the
 # legacy `dispatch:office-hours` label: mechanical failure dispositions
-# (provision-failed, an unroutable merge conflict, wrong-worktree) set the
-# node's first-class `office_hours` field and land it on main through the
-# `graph-commit` primitive. The router's eligibility gate (office_hours null)
-# then keeps the node unselectable until a human clears it.
+# (provision-failed, wrong-worktree, or any other environment error a node's
+# provisioning/dispatch can hit) set the node's first-class `office_hours`
+# field and land it on main through the `graph-commit` primitive. The
+# router's eligibility gate (office_hours null) then keeps the node
+# unselectable until a human clears it. A retryable mechanical state — an
+# unroutable merge conflict, fix-attempt-cap exhaustion — is NOT parked
+# directly on the source node; those route through
+# `packages/intentionsutil/scripts/hold-node` instead (a tracked hold: a
+# born-parked hold tactic plus a `blocked_by` edge on the source), so this
+# script no longer sees them (tactic-mechanical-park-producers).
 #
 # Content is written through store.ts's readNode → writeNode (the validated
 # writer — frontmatter serialized correctly, tactic bodies preserved); this

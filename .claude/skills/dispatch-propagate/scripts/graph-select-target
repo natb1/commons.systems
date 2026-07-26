@@ -30,10 +30,15 @@
 # --clear-fix` (+ the re-review reset when past review) + `graph-commit`, and
 # disarms auto-merge (`gh pr ready --undo`) — then emits the resolved ladder
 # phase. On a still-red retry that has exhausted the fix-attempt cap (a
-# persistently-red PR), the gate instead parks the node — `apply-fix-state
-# --park-if-capped` + `graph-commit` — writing office_hours and dropping the
-# node out of the eligible set, rather than re-arming another retry forever.
-# These graph-commit writes are the only writes selection makes.
+# persistently-red PR), the gate instead lands a tracked hold via
+# `packages/intentionsutil/scripts/hold-node` (never a park on the source
+# node itself: `apply-fix-state --check-cap` reads the cap pure, then
+# `hold-node --kind fix-attempt-cap --reset-fix-attempt` writes a born-parked
+# hold tactic plus a `blocked_by` edge on the source, in one graph-commit) —
+# dropping the node out of the eligible set via that edge rather than
+# re-arming another retry forever. These graph-commit writes (this script's
+# own via `_graph_commit_fix`, and hold-node's own internal commit) are the
+# only writes selection makes.
 #
 # Usage: graph-select-target [--top <n>] [--pace-exempt-only] [--standalone] [--node <id>]
 #
@@ -421,8 +426,8 @@ skip_note() { # <id> <reason>
 # --- CI-fix interrupt helpers (tactic-fix-interrupt-orthogonal-state) ---------
 # The store writes land in the MAIN checkout's working tree ($NATIVE_ROOT) and
 # are committed to origin/main via graph-commit — the same state-only-commit-on-
-# main convention transition-node/park-node use. NATIVE_ROOT is resolved below,
-# before the per-candidate loop that invokes these.
+# main convention transition-node and hold-node use. NATIVE_ROOT is resolved
+# below, before the per-candidate loop that invokes these.
 
 # _apply_fix <id> <mode-flag...> — run apply-fix-state against the main store.
 # Its JSON result is on stdout for the caller to capture.
@@ -435,6 +440,57 @@ _apply_fix() {
 _graph_commit_fix() {
   ( cd "$NATIVE_ROOT" \
     && packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1
+}
+
+# FIX_ATTEMPT_CAP mirrors packages/intentionsutil/src/transitions.ts's constant
+# of the same name (currently 3) — used only for the hold reason's diagnostic
+# prose below, never for the capped decision itself (that stays
+# apply-fix-state.ts's `--check-cap`, the single source of truth for the
+# comparison). Keep this literal in sync if the source constant changes.
+FIX_ATTEMPT_CAP=3
+
+# _hold_node_fix_cap <id> <pr> <consumed> <attempt> <since> — build the
+# reason/recommendation files hold-node requires and land a fix-attempt-cap
+# hold (+ blocked_by edge on <id>, + a fix-attempt reset), reusing
+# tmp/fix-checks-summary.md in <id>'s own worktree (its /fix-checks
+# cross-iteration accumulator) as the hold body when it exists — this script
+# runs from the MAIN checkout, so that worktree's tmp/ lives at
+# $NATIVE_ROOT/.claude/worktrees/<id>/tmp/fix-checks-summary.md, not under
+# $NATIVE_ROOT itself. Prints hold-node's stdout line on success; rc mirrors
+# hold-node's own exit code.
+_hold_node_fix_cap() {
+  local id="$1" pr="$2" consumed="$3" attempt="$4" since="$5"
+  local tmpdir reason_file rec_file body_file rc
+  tmpdir=$(mktemp -d) || return 1
+  reason_file="$tmpdir/reason.txt"
+  rec_file="$tmpdir/recommendation.txt"
+  {
+    printf '/fix-checks retry budget exhausted: %s attempts concluded with PR #%s ' \
+      "$consumed" "$pr"
+    printf 'still red (execution.fix.attempt=%s, since %s) — the %s-attempt cap is exhausted.\n' \
+      "$attempt" "$since" "$FIX_ATTEMPT_CAP"
+  } > "$reason_file"
+  {
+    printf 'Review the fix-checks accumulator (tmp/fix-checks-summary.md in the '
+    printf "node's worktree, also posted in PR comments; folded into this hold's "
+    printf 'body when present) to diagnose why %s automated attempts did not resolve CI. ' \
+      "$FIX_ATTEMPT_CAP"
+    printf 'Resolve THIS HOLD TACTIC (phase: done, then prune) to unblock %s with a fresh ' "$id"
+    printf 'retry budget (attempt was reset to 1), or abandon/redesign the tactic if the '
+    printf 'current approach cannot work.\n'
+  } > "$rec_file"
+
+  body_file="$NATIVE_ROOT/.claude/worktrees/$id/tmp/fix-checks-summary.md"
+  local hold_args=("$id" --kind fix-attempt-cap
+    --reason-file "$reason_file" --recommendation-file "$rec_file")
+  [[ -f "$body_file" ]] && hold_args+=(--body-file "$body_file")
+  hold_args+=(--reset-fix-attempt)
+
+  ( cd "$NATIVE_ROOT" && packages/intentionsutil/scripts/hold-node "${hold_args[@]}" ) \
+    >/dev/null 2>&1
+  rc=$?
+  rm -rf "$tmpdir"
+  return $rc
 }
 
 # _read_pr_ci <pr> — one gh_pr_view_rest + one CI verdict, into globals
@@ -472,12 +528,12 @@ _gate_maybe_interrupt() {
   return 3
 }
 
-# _gate_fix_active <id> <pr> <pushed_sha> — the candidate already carries an
-# active interrupt (router emitted phase `fix`). Resolve on green, guard/retry
-# otherwise. Prints the phase to emit (rc 0), a skip reason (rc 1), or an env
-# error (rc 2).
+# _gate_fix_active <id> <pr> <pushed_sha> <fix_since> — the candidate already
+# carries an active interrupt (router emitted phase `fix`). Resolve on green,
+# guard/retry otherwise. Prints the phase to emit (rc 0), a skip reason
+# (rc 1), or an env error (rc 2).
 _gate_fix_active() {
-  local id="$1" pr="$2" pushed_sha="$3" out phase
+  local id="$1" pr="$2" pushed_sha="$3" fix_since="$4" out phase
   if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
   if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
   if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
@@ -504,16 +560,21 @@ _gate_fix_active() {
     *)
       # failing again (a fix attempt did not clear CI). Enforce the retry cap
       # before re-arming: once FIX_ATTEMPT_CAP completed passes have concluded
-      # red, --park-if-capped writes office_hours (+ budget reset) and this
-      # node leaves the eligible set; otherwise stay in fix, ready to retry.
-      # Do NOT re-clear or re-set the interrupt itself.
-      out=$(_apply_fix "$id" --park-if-capped 2>/dev/null) \
+      # red, land a tracked hold via hold-node (a born-parked hold tactic plus
+      # a blocked_by edge on this node, NOT an office_hours park on the source
+      # itself) and this node leaves the eligible set via that edge;
+      # otherwise stay in fix, ready to retry. Do NOT re-clear or re-set the
+      # interrupt itself — --check-cap is a pure read, no write.
+      out=$(_apply_fix "$id" --check-cap 2>/dev/null) \
         || { echo "fix-cap-check-failed"; return 1; }
-      if [[ "$(jq -r '.parked' <<<"$out" 2>/dev/null)" == "true" ]]; then
-        if ! _graph_commit_fix "graph: park $id (fix-attempt cap exhausted)" "$id"; then
-          echo "fix-cap-park-commit-failed"; return 1
+      if [[ "$(jq -r '.capped' <<<"$out" 2>/dev/null)" == "true" ]]; then
+        local consumed attempt
+        consumed=$(jq -r '.consumed' <<<"$out" 2>/dev/null)
+        attempt=$(jq -r '.attempt' <<<"$out" 2>/dev/null)
+        if ! _hold_node_fix_cap "$id" "$pr" "$consumed" "$attempt" "$fix_since"; then
+          echo "fix-cap-hold-failed"; return 1
         fi
-        echo "fix-attempt-cap-parked"; return 1
+        echo "fix-attempt-cap-held"; return 1
       fi
       echo "fix"; return 0 ;;
   esac
@@ -525,11 +586,11 @@ _gate_fix_active() {
 #       fresh interrupt emits `fix`; a resolved interrupt emits the ladder phase).
 #   1 = not satisfied (skip reason on stdout); 2 = environment error.
 sensor_gate() {
-  local id="$1" phase="$2" pr="$3" pushed_sha="$4" rc merged_at
+  local id="$1" phase="$2" pr="$3" pushed_sha="$4" fix_since="$5" rc merged_at
   case "$phase" in
     fix)
       # An active interrupt (router override). Resolve/guard/retry.
-      _gate_fix_active "$id" "$pr" "$pushed_sha"; return $? ;;
+      _gate_fix_active "$id" "$pr" "$pushed_sha" "$fix_since"; return $? ;;
     align-tactics)
       echo "align-tactics"; return 0 ;;
     implement)
@@ -587,7 +648,7 @@ sensor_gate() {
 SELECTED_COUNT=0
 SELECTED_LINES=""
 NODE_PRESENT=0
-while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha; do
+while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha fix_since; do
   [[ -n "$id" ]] || continue
   [[ -n "$NODE_TARGET" ]] && NODE_PRESENT=1
   ELIGIBLE_COUNT=$(( ELIGIBLE_COUNT + 1 ))
@@ -615,7 +676,7 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha; do
   # differ from the candidate's `phase` (a fresh CI-fix interrupt emits `fix`
   # after writing execution.fix; a resolved interrupt emits the resolved ladder
   # phase after clearing it). On not-satisfied the stdout is the skip reason.
-  emit_phase=$(sensor_gate "$id" "$phase" "$pr" "$pushed_sha")
+  emit_phase=$(sensor_gate "$id" "$phase" "$pr" "$pushed_sha" "$fix_since")
   rc=$?
   if (( rc == 2 )); then
     exit 2
@@ -660,7 +721,7 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha; do
   SELECTED_JSON=$(jq -c --arg id "$id" '. + [$id]' <<<"$SELECTED_JSON") || true
   SELECTED_COUNT=$(( SELECTED_COUNT + 1 ))
 done < <(jq -r --arg target "$NODE_TARGET" \
-  '.candidates[] | (if $target != "" then select(.id == $target) else . end) | [.id, .kind, .phase, (.pr // "null"), (.pace_exempt | tostring), (.fix.pushed_sha // "null")] | @tsv' \
+  '.candidates[] | (if $target != "" then select(.id == $target) else . end) | [.id, .kind, .phase, (.pr // "null"), (.pace_exempt | tostring), (.fix.pushed_sha // "null"), (.fix.since // "null")] | @tsv' \
   <<<"$SELECTION")
 
 if (( SELECTED_COUNT == 0 )); then
