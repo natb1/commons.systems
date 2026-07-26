@@ -40,7 +40,7 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-drain-disposition-diagnosis-cas
   pr: 2969
@@ -50,7 +50,10 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-26T05:06:48Z
+    mergeCommitSha: be70f133fdfbccb1bc5ac037d8bd3e2c275952d9
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

@@ -44,7 +44,7 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-mechanical-park-producers
   pr: 2970
@@ -54,7 +54,10 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-26T05:07:00Z
+    mergeCommitSha: 3e3bcca64eace2931d8fc69d4c293abfaa9ba4de
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
