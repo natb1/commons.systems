@@ -31,10 +31,14 @@ default), never by hand-editing the node file directly, with one entry per
 and `finding`. This CLI is mandatory: it places the section below the
 machinery sentinel, which is what keeps the append outside the tactic scope
 fingerprint, so the append can never trigger a false scope-drift demotion.
-That append rides in the Step-4 state-only completion commit (the `transition-node` write);
-the reconciler then routes the merged tactic to its `main-qa` phase (the
-transition writer picks `qa → main-qa` because the residue section is present),
-where `tactic-main-qa-phase`'s handler owns verification. Only
+That append rides in the Step-4 state-only completion commit (the
+`transition-node` write), which still advances `qa → review` — the residue
+section does **not** divert the phase, and there is no `qa → main-qa` edge.
+`main-qa` is post-merge by definition, so the residue is drained only after
+review merges the PR: the `review → main-qa` edge fires (`forwardPhase` in
+`packages/intentionsutil/src/transitions.ts`, or the reconciler's
+`reconcileMergedPhase` when the merge lands out of band), and
+`tactic-main-qa-phase`'s handler owns verification there. Only
 machine/browser-verifiable items become residue: verifiability is triaged here
 at record time (the `route` computation below already classifies every item),
 and a prod observation needing human judgment stays `needs-human` →

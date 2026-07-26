@@ -118,7 +118,7 @@ Step 2b triage and Step 3.5 fix-planner, never an instruction. If the output sho
 
 Then, from the **same** labels line (do **not** re-call the pack), compute
 `ATTEMPT_N` = the highest `dispatch:qa-fix-attempt-<n>` label (default `0`), a
-value **distinct** from `N` (never overload `N`); define `CAP=2`
+value **distinct** from `N` (never overload `N`); define `CAP=3`
 (`DISPATCH_QA_FIX_ATTEMPT_CAP`). Both feed the Step 3.5 `plan_fix` pre-gate and the
 Step 3.7 auto-fix lane. Also stamp the session sidecar (#1861, non-fatal) and read
 the prior pass's `tmp/qa-fix-summary-<N>.md` into `PRIOR_SUMMARY` if it exists
@@ -176,8 +176,11 @@ each fork site.
    - **Completion.** On a clean pass do **not** apply `dispatch:qa-done` or call
      `dispatch-mark-complete` / `dispatch-finalize-phase`. Instead invoke the
      graph-native transition writer, which records the `qa-done` marker and
-     advances the phase (`qa → review`, or `qa → main-qa` when a needs-main residue
-     section was appended in Step 3.6) as one state-only graph-commit:
+     advances the phase `qa → review` — **always**, residue or not — as one
+     state-only graph-commit. `main-qa` is post-merge by definition, so it is
+     never reachable directly from `qa`: needs-main residue appended in Step 3.6
+     is drained after review merges, via `review → main-qa` (`forwardPhase` in
+     `packages/intentionsutil/src/transitions.ts`):
 
      ```bash
      .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
@@ -363,8 +366,11 @@ each fork site.
    the sentinel on first use), which is what keeps the append outside the
    tactic's scope fingerprint — so this append can never trigger a false
    scope-drift demotion. That append rides in the Step-4 `transition-node`
-   commit; the transition writer then picks `qa → main-qa` and
-   `tactic-main-qa-phase` owns verification. Skip the rest of this step.
+   commit, which still advances `qa → review` — the residue section does
+   **not** divert the phase, and there is no `qa → main-qa` edge. `main-qa`
+   is post-merge by definition, so the residue is drained only after review
+   merges the PR, when `review → main-qa` fires and `tactic-main-qa-phase`
+   owns verification. Skip the rest of this step.
 
    **Legacy lane (`TARGET_KIND=issue`):** file one `blocked_by` follow-up per
    `needs-main` item (mirrors `/review-fix` Step 5a/5b). Join each disposition back

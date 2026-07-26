@@ -34,15 +34,30 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 85
+  boost: 96
   override: null
-  rationale: "Recorded 2026-07-25 /align-strategy round: the greenfield target
-    design for the machinery-write custody hazard. Placed in the standing 85
-    band rather than the round's two author-boosted carriers (95) — it is the
-    sequenced target rather than the immediate repair, and the author's boost
-    directive named the false-demotion bug and the correctness hole, not this."
-phase: implement
-execution: null
+  rationale: "Author-directed 2026-07-26: boost to top ranking. Re-boosted from
+    the 85 band after the machinery-write custody hazard this tactic removes by
+    construction fired live during /qa-fix on tactic-mechanical-park-producers
+    (PR #2970): the Step 3.6 `## needs-main residue` append this node names as
+    the sole current machinery writer tripped the scope-custody gate against its
+    own expected output, demoting a qa-complete node to implement. The hazard is
+    no longer prospective, so the sequenced-target framing that justified the 85
+    placement no longer holds. Sized at 96 (own claim) so that composed with the
+    +5 inherited from strategy-graph-native-dispatch it reaches an authored 101,
+    above the current live selectable composed max of 100.33, while staying
+    strictly below strategy-main-health's standing 100 boost value so no schema
+    rule 18 dominance ACK is required."
+phase: qa
+execution:
+  branch: tactic-scope-fingerprint-plan-substance
+  pr: 2974
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null

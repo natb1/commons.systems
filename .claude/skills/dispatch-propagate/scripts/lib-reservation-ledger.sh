@@ -15,14 +15,16 @@
 # (`<project-root>/tmp/dispatch-reservations/`), project-root-shared like the
 # selection lock (`tmp/dispatch.lock`) so concurrent ticks in different
 # worktrees contend on one ledger. Each marker file is named exactly by the
-# reserved worktree basename (`<N>-slug`) and carries three lines:
+# reserved worktree basename (`<N>-slug`) and carries three lines, plus an
+# optional fourth written only when the caller names a claim origin:
 #   session=<reserving session-id>
 #   issue=<issue-N>
+#   origin=<claim origin>          (optional)
 #   timestamp=<UTC ISO-8601>
 #
 # Usage: source this file, then call:
 #   reservation_dir
-#   reservation_write   <worktree-basename> <issue-N> <session-id>
+#   reservation_write   <worktree-basename> <issue-N> <session-id> [origin]
 #   reservation_clear   <worktree-basename>
 #   reservation_exists  <worktree-basename>
 #   reservation_count
@@ -38,10 +40,16 @@
 #     return 1 — no override and not in a git repo (resolve_project_root failed);
 #               nothing printed.
 #
-# reservation_write <worktree-basename> <issue-N> <session-id>
+# reservation_write <worktree-basename> <issue-N> <session-id> [origin]
 #   Claim a slot: atomically write the marker file named exactly
-#   <worktree-basename> in the ledger dir, with the three documented lines. All
-#   three arguments are required and must be non-empty (an empty arg prints a
+#   <worktree-basename> in the ledger dir, with the three documented lines (plus
+#   an `origin=` line when the optional 4th argument is given — a bare
+#   [A-Za-z0-9_-] token; anything else prints a diagnostic and returns 1). The
+#   origin names the claim's writer so the sweep can bound its lifetime:
+#   `standalone` marks a claim written by `graph-select-target --standalone`,
+#   which has no guaranteed consumer and is therefore TTL-reclaimable (see
+#   reservation_sweep rule (c-ttl)). All
+#   three positional arguments are required and must be non-empty (an empty arg prints a
 #   diagnostic to stderr and returns 1, matching the arg-validation style of the
 #   sibling lib-claude-agents.sh primitives). The basename must also be free of
 #   path separators, `..` components, and control characters — an unsafe name
@@ -107,6 +115,19 @@
 #        spawned worker is still booting and has not yet registered. A marker
 #        with an unparseable/absent timestamp has no age protection — it falls
 #        through to the session rules below (fail-safe to the pre-grace behavior).
+#     (c-ttl) else the marker carries `origin=standalone` AND has aged past
+#        DISPATCH_RESERVATION_STANDALONE_TTL_S (default 600s) → reclaim
+#        (standalone-ttl-expired), REGARDLESS of whether the reserving session is
+#        still live. A `graph-select-target --standalone` claim is written by a
+#        caller with no guaranteed consumer: if it discards the selection, crashes,
+#        or is interrupted before launching, rule (a) never fires (no worker of
+#        that name ever goes live) and rule (c) never fires either while the
+#        (typically long-lived) calling session stays alive — so without this rule
+#        the marker is immortal and a handful of such calls can pin LIVE_COUNT at
+#        the ceiling and stall the whole fleet. A standalone claim that DOES launch
+#        is cleared far sooner (dispatch-graph-execute clears it on spawn, and rule
+#        (a) is an age-independent backstop), so the TTL only ever reclaims a leak.
+#        Rule (a) still precedes it, so a live worker is never disturbed.
 #     c. else reserving session id ∉ live-session-ids AND the marker has aged
 #        past the grace → reserving session is DEAD and never converted; reclaim
 #        (stranded).
@@ -131,6 +152,12 @@
 #                             marker younger than this is kept as in-flight
 #                             regardless of the reserving session's liveness. A
 #                             non-numeric value falls back to 30.
+#   DISPATCH_RESERVATION_STANDALONE_TTL_S
+#                             The TTL (seconds, default 600) after which the sweep
+#                             reclaims an `origin=standalone` marker with no live
+#                             worker of that name, regardless of the reserving
+#                             session's liveness. A non-numeric value falls back
+#                             to 600.
 #   DISPATCH_RESERVATION_SWEEP_NOW_EPOCH
 #                             Override the sweep's "now" epoch (deterministic
 #                             grace-boundary tests). Default: `date -u +%s`. A
@@ -176,9 +203,15 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
   # reservation_write <worktree-basename> <issue-N> <session-id> — claim a slot.
   # See the header comment for the return-code contract.
   reservation_write() {
-    local wt_name="${1:-}" issue="${2:-}" session="${3:-}"
+    local wt_name="${1:-}" issue="${2:-}" session="${3:-}" origin="${4:-}"
     if [[ -z "$wt_name" || -z "$issue" || -z "$session" ]]; then
       printf 'lib-reservation-ledger: reservation_write requires <worktree-basename> <issue-N> <session-id>\n' >&2
+      return 1
+    fi
+    # Optional origin token (see the header): constrained to a bare word so it can
+    # never inject an extra marker line the sweep would then misparse.
+    if [[ -n "$origin" && ! "$origin" =~ ^[A-Za-z0-9_-]+$ ]]; then
+      printf 'lib-reservation-ledger: reservation_write: unsafe origin %q\n' "$origin" >&2
       return 1
     fi
     # Defense-in-depth path guard: the marker is named exactly by the worktree
@@ -210,9 +243,14 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     # the dot/.tmp name is excluded by count/sweep so the tempfile is never seen
     # as an outstanding reservation.
     local tmpfile="$dir/.${wt_name}.$$.tmp"
+    # `origin=` is written BETWEEN issue and timestamp deliberately: the group's
+    # exit status is its LAST command's, so a trailing conditional would report
+    # failure whenever no origin was passed. A 3-arg call still produces exactly
+    # the three documented lines in the documented order.
     {
       printf 'session=%s\n' "$session"
       printf 'issue=%s\n' "$issue"
+      if [[ -n "$origin" ]]; then printf 'origin=%s\n' "$origin"; fi
       printf 'timestamp=%s\n' "$ts"
     } >"$tmpfile" || { rm -f "$tmpfile" 2>/dev/null; return 1; }
 
@@ -400,11 +438,14 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     fi
     local grace="${DISPATCH_RESERVATION_BOOT_GRACE_S:-30}"
     [[ "$grace" =~ ^[0-9]+$ ]] || grace=30
+    # TTL for `origin=standalone` claims (rule (c-ttl) in the header).
+    local standalone_ttl="${DISPATCH_RESERVATION_STANDALONE_TTL_S:-600}"
+    [[ "$standalone_ttl" =~ ^[0-9]+$ ]] || standalone_ttl=600
 
     local had_nullglob=0
     shopt -q nullglob && had_nullglob=1
     shopt -s nullglob
-    local f bn marker_sid marker_ts marker_epoch
+    local f bn marker_sid marker_ts marker_epoch marker_origin
     for f in "$dir"/*; do
       [[ -f "$f" ]] || continue
       bn=$(basename "$f")
@@ -417,6 +458,9 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
       # timestamp, in which case the marker gets no age protection (fail-safe).
       marker_ts=$(sed -n 's/^timestamp=//p' "$f" 2>/dev/null | head -n1)
       marker_epoch=$(date -d "$marker_ts" +%s 2>/dev/null)
+      # Optional `origin=` line (absent on markers written before this field
+      # existed, and on every 3-arg tick claim).
+      marker_origin=$(sed -n 's/^origin=//p' "$f" 2>/dev/null | head -n1)
 
       if [[ -n "${live_names[$bn]:-}" ]]; then
         # (a) A live worker already owns this worktree (its session name equals
@@ -439,6 +483,17 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
         # future-stamped marker (now - epoch < 0) is < grace, so it is kept too
         # (the safe direction). KEEP — fall through to nothing.
         :
+      elif [[ "$marker_origin" == "standalone" ]] \
+           && [[ "$marker_epoch" =~ ^[0-9]+$ ]] \
+           && (( now - marker_epoch >= standalone_ttl )); then
+        # (c-ttl) A `graph-select-target --standalone` claim that aged past the TTL
+        # without a live worker of its name ever appearing. Reclaimed regardless of
+        # the reserving session's liveness: a standalone caller has no guaranteed
+        # consumer for the claim, so an unlaunched/discarded/crashed selection would
+        # otherwise hold a budget slot forever while its (long-lived) session stays
+        # alive — enough repeats pin LIVE_COUNT at the ceiling and stall the fleet.
+        reservation_clear "$bn"
+        printf 'lib-reservation-ledger: reclaimed reservation %s (standalone-ttl-expired after %ss with no live worker)\n' "$bn" "$standalone_ttl" >&2
       elif [[ -z "${live_ids[$marker_sid]:-}" ]]; then
         # (c) The reserving session is not live, the marker has aged past the
         # grace, and it never converted — stranded.

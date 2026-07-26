@@ -42,7 +42,7 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: qa
+phase: done
 execution:
   branch: tactic-graph-commit-landing-lock
   pr: 2915
@@ -51,15 +51,37 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-26T05:28:10Z
+    mergeCommitSha: ba1b713080df6cd7f7ed9dfd78e9582c3d933386
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-25
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /dispatch-conflict once it accepts node targets.
+  reason: "Original park reason (origin/main does not merge clean, provision exit
+    11) is confirmed STALE and fixed: git merge-tree now reports clean, a merge
+    commit resolving the drift was pushed to the tactic branch, all 43
+    test-graph-commit.sh cases pass, and draft PR #2915 was marked ready.
+    However, clearing this park is currently blocked by a reproducible
+    graph-commit tooling bug on THIS node: three separate clear-park invocations
+    (one background, two foreground, from fresh worktrees off origin/main)
+    either had their office_hours:null write silently reverted back to the stale
+    parked value during a rebase retry, or reported 'graph-commit: landed ... on
+    main' / exit 0 while leaving the office_hours:null edit uncommitted and
+    un-pushed on disk (git status showed a real uncommitted diff, git log showed
+    no new commit). No unresolved-conflict/park output was ever printed by
+    graph-commit in the no-op cases, so this is not the layer-2/3
+    same-field-conflict path;
+    id_files_dirty()/check_base_freshness()/ensure_intentions_only_base() need
+    investigation for why a genuinely dirty office_hours edit is being treated
+    as clean under concurrent main activity."
+  since: 2026-07-26
+  recommendation: "A human (or a follow-up session with someone able to inspect
+    graph-commit's staging logic live) should investigate why id_files_dirty() /
+    check_base_freshness() sometimes fails to detect or preserves a real
+    working-tree diff on this node under concurrent origin/main activity, then
+    retry clearing this park. The underlying merge conflict fix itself (PR
+    #2915) is done and ready; only the park-clearing mechanism is blocked."
 pace_exempt: false
 rounds: null
 attributes: {}
