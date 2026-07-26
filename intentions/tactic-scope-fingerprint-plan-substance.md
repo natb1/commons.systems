@@ -41,8 +41,16 @@ attention:
     band rather than the round's two author-boosted carriers (95) — it is the
     sequenced target rather than the immediate repair, and the author's boost
     directive named the false-demotion bug and the correctness hole, not this."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-scope-fingerprint-plan-substance
+  pr: 2974
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
