@@ -52,7 +52,8 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-scope-fingerprint-plan-substance
 office_hours: null
 pace_exempt: false
 rounds: null

@@ -68,7 +68,8 @@ attention:
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-phase-evidence-fingerprint-bound
 office_hours: null
 pace_exempt: false
 rounds: null
