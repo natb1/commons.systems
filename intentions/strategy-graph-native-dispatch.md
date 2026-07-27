@@ -1716,6 +1716,105 @@ clarifications:
       left untouched rather than pay a review→implement scope-custody demotion
       for a documentation-only defect, and it becomes historical when the node
       reaches done. Tracked as tactic-phase-routing-table-generated."
+  - question: A Workflow launched by scriptPath dies unrecoverably when a background
+      session forks at a turn boundary. How must a skill launch a repo Workflow,
+      and where does that contract live?
+    answer: "(Recorded 2026-07-27 /align-strategy interview.) Standing requirement:
+      every skill-driven Workflow launch passes the registry `name` (or, for an
+      ad-hoc script, inline `script`) — never a caller-authored `scriptPath`.
+      `args` may be an object or a JSON string (align-tactics.js:778 parses
+      either; the three completed tactic-mode runs of 2026-07-25 all passed a
+      string, at 17KB, 22KB, and 116KB, so payload size was never the
+      constraint). `scriptPath` is permitted ONLY against the path the harness
+      itself returned for an already-launched run — the
+      iterate-on-a-persisted-script loop the Workflow tool documents — and never
+      from a skill. MECHANISM: at each turn boundary a background session
+      checkpoints its in-flight tasks into an adopt.json and a fork re-adopts
+      them. A `name` or inline-`script` launch persists a harness-owned copy
+      under <project>/<session>/workflows/scripts/<meta.name>-<runId>.js and
+      adopts cleanly; a `scriptPath` launch persists nothing — verified three
+      ways: session 88a4c17d used both forms and persisted only its `name`
+      launch, session e79be2b7's inline `script` launch persisted, and the
+      scriptPath-only sessions (8ccbaf32 and this one) have no workflows/scripts
+      directory at all. The fork then emits `[adopt] workflow <id> skipped:
+      scriptPath rejected`, kills every agent mid-flight, and the run cannot be
+      recovered because `resumeFromRunId` carries the same rejected path.
+      RECOVERY RULE: on that message, relaunch by `name` — never retry the same
+      form, and never treat the harness's own `To resume manually:
+      Workflow({scriptPath, resumeFromRunId})` hint as applicable, since it
+      belongs to the sibling fork-failed-to-spawn branch. This is not a
+      CLI-version regression (both strings are present in 2.1.204, 2.1.216,
+      2.1.217 and 2.1.220 alike), and it contradicts the Workflow tool's own
+      contract text, which claims every invocation automatically persists its
+      script. PROVENANCE OF THE DEFECT: tactic-align-tactics-workflow (phase
+      done) specified the broken directive deliberately — its Unit 2 scope text
+      prescribes the prose directive \"Invoke the Workflow tool on
+      `.claude/workflows/align-tactics.js`, passing args\" with the explicit
+      parenthetical \"no `name:`, no inline `script`\" — and it propagated to
+      five sites: .claude/skills/align-tactics/SKILL.md:210 and
+      references/tactic-target.md:100, .claude/skills/review-fix/SKILL.md:284,
+      and .claude/skills/qa-fix/SKILL.md:324 and
+      references/disposition-workflow.md:69. That node's body is history and is
+      deliberately left untouched. Measured cost: one /align-tactics tactic-mode
+      round (tactic-demote-node-stale-local-read, 2026-07-27) spent four
+      launches and five killed subagents before the cause was isolated. Tracked
+      as tactic-workflow-launch-contract-home and
+      tactic-workflow-launch-prose-lint."
+  - question: Clarification 111 puts phase-routing prose under a generated single
+      home with a CI drift check. The Workflow launch contract is the same
+      defect class — a prose restatement drifting undetected — but has no code
+      home to generate from. What is its mechanical floor?
+    answer: "(Recorded 2026-07-27 /align-strategy interview; adopt/diverge per the
+      align-strategy alternatives gate.) A lint over the authored prose, not a
+      guard at the call site. The launch is a model-level tool call, so unlike
+      forwardPhase there is no owned, offline-testable home to generate the
+      restatements from — clarification 111's mechanism does not transfer, and
+      this contract's home is itself prose: one rule file that the five skill
+      sites point at, with none of them restating the mechanics. The floor is
+      therefore a lint-prose-rules.sh rule (already CI-wired through
+      run-lint.sh; precedent, the shell-json echo-into-jq rule) rejecting
+      net-new skill or plan text that phrases a Workflow launch as a file path,
+      widened from that linter's current shell-script scope to markdown. DIVERGE
+      from the rival design — a PreToolUse hook denying a non-store scriptPath
+      at the Workflow call — on two grounds the author raised at interview. (1)
+      Ad-hoc safety: 18 of this project's 160 recorded sessions launched by
+      scriptPath, nearly all of them ad-hoc dispatch-tick emulation (tick.mjs,
+      tick-fanout.mjs, runB.mjs, graph-tick-producers.js), several written to a
+      file precisely because the script was too large to emit inline; a
+      deny-hook would have blocked every one, and the supported substitute
+      charges the whole script text to model output. (2) Maintenance: the hook
+      would have to recognize
+      <project>/<session>/workflows/scripts/<name>-<runId>.js, a layout derived
+      by inspecting disk rather than from any published contract — a CLI version
+      that moves it makes the hook fail closed on legitimate launches,
+      presenting as a harness bug. The decisive asymmetry is where the error is
+      made: this defect entered as authored prose in a plan body, which a text
+      lint catches at its origin, whereas the call site is only where the
+      symptom surfaces. The ad-hoc launch path is left to human judgment rather
+      than gated."
+  - question: The launch contract permits scriptPath against the harness-persisted
+      path — a workflow-resume mechanism. Does that conflict with the recorded
+      condition that session recovery (workflow resume, transcript
+      reconstruction) is never router substrate?
+    answer: "(Recorded 2026-07-27 /align-strategy interview; doctrinal-consistency
+      gate run against origin/main.) No — the carve-out is bounded to
+      human-driven iteration and widens no condition. The permitted use is an
+      interactive author editing an already-persisted script and resuming it
+      while developing a workflow, and it is verified to work: session ff12b541
+      (2026-07-25) launched align-tactics by name, edited
+      <session>/workflows/scripts/align-tactics-wf_154c862a-ca3.js, relaunched
+      with that path plus resumeFromRunId, and that run completed. No router or
+      phase path may depend on it. A phase skill launches by name, and if its
+      run dies the phase re-runs from durable state under the existing
+      conditions — phase progress whose only home is the worker session is a
+      defect, and session recovery is never router substrate. Both halves stand:
+      resume is a development convenience, never orchestration substrate.
+      Recorded limit of this session's evidence: the rejection mechanism is
+      inferred, not isolated — whether the adopter rejects on the path's
+      location or on the absence of a persisted copy was not determined. The
+      operational rule holds under either reading, since both forbid a
+      caller-authored path; a future mechanism-dependent design (the rejected
+      hook above being the obvious one) would have to isolate it first."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
