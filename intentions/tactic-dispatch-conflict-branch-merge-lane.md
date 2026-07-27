@@ -46,7 +46,21 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 96
+  override: null
+  rationale: "Author-directed 2026-07-26: boost to top rank, to unblock the
+    provision exit-11 class that stalled the fleet on 2026-07-25/26 (28 exit-11
+    events since 07-15, 9 on 07-25 alone; five of the drain sweep's top-ranked
+    parks were this one hold, four of which needed no author judgment at all).
+    Sized at 96 -- the graph's top AUTHORED band, matching the two other
+    2026-07-26 top-rank directives -- so that composed with the +5 authored term
+    it clears the 90/95 bands. Strict composed #1 is 387.33
+    (tactic-scope-fingerprint-plan-substance), but that figure is a blocked_by
+    compounding artifact of a four-node serialized chain rather than an authored
+    rank, and matching it would need a raw boost of ~383, which schema rule 18
+    rejects without the literal ACK string. That ACK was not sought, so the
+    boost is capped at the authored band. Recorded 2026-07-27."
 phase: implement
 execution: null
 validates: []
