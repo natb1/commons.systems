@@ -1660,6 +1660,62 @@ clarifications:
       sentinel is deleted. The anti-config precedent is not overturned — it
       governs birth-gating a mechanism that ought to be unconditional, which is
       not what an operator pause is."
+  - question: Two tactics independently rewrote the same paragraph of a shared skill
+      reference while both branches sat unmerged for hours, and nothing detected
+      the overlap until provision-time exit 11. Is a tactic's write set part of
+      the recorded graph, and what checks it?
+    answer: "(Recorded 2026-07-27 /align-strategy interview.) Yes — standing
+      requirement: a tactic's write set is declared in the graph,
+      machine-readable, and checked at two seams. Today it is neither declared
+      nor checked. The node schema carries only prose path:line anchors in the
+      plan body; worktree isolation keys on node id (see body §Worktree Claiming
+      & Liveness), so two tactics writing the same file are not in conflict as
+      far as the router is concerned; and §Fingerprint & Freeze's two stamps
+      cover the strategy frontmatter and the tactic body but never the code
+      diff. Unmerged branches are therefore an invisible write set: origin/main
+      is the only surface on which two in-flight tactics can see each other, so
+      a tactic holding its branch for hours is undetectable to every other
+      tactic for that whole window. Live instance: PR #2918 held a rewrite of
+      .claude/skills/qa-fix/references/needs-main-followups.md for about 9.5h
+      while main took 41 commits, colliding with a second tactic that corrected
+      the same paragraph in the opposite direction — a semantic conflict, not
+      merely a textual one. Greenfield: a declared scope.files on the node,
+      authored at /align-tactics time, gated hard at selection (the selector
+      refuses to co-dispatch candidates whose declared write sets intersect and
+      defers the loser to a later tick) and checked against the actual git diff
+      --name-only origin/main...HEAD before a phase transition. Tracked as
+      tactic-node-scope-files-overlap-gate and tactic-code-diff-scope-custody,
+      the latter blocked_by the former since a diff gate needs a declared scope
+      to compare against. The author chose the hard selection gate over an
+      advisory/rank-penalty variant: detection at provision time is exactly the
+      exit-11 hold this exists to prevent, so prevention has to bind at
+      selection."
+  - question: A phase edge that exists in no code — qa → main-qa — lived in skill
+      prose for 15 days and has since regenerated in a tactic's plan body. Where
+      does phase-routing doctrine live, and how do prose restatements stay true
+      to it?
+    answer: "(Recorded 2026-07-27 /align-strategy interview.) forwardPhase and
+      reconcileMergedPhase (packages/intentionsutil/src/transitions.ts) are the
+      single home of phase routing; every prose restatement of the ladder in a
+      skill doc is generated from that home between sentinels and drift-checked
+      in CI, never hand-authored. This is a standing requirement, not a one-time
+      correction: hand-written ladder prose has now drifted from the code four
+      separate times. A qa → main-qa edge that forwardPhase has never
+      implemented (forwardPhase('qa', …) returns 'review' unconditionally;
+      main-qa is reachable only via review → main-qa on needs-main residue,
+      because main-qa is post-merge by definition) was introduced to qa-fix
+      prose on 2026-07-11 (ae63fb30, #2844) and survived 15 days. It then acted
+      as an attractor: two independent tactics wrote opposite corrections to
+      that same paragraph, which is what made their merge conflict semantic.
+      qa-fix/SKILL.md and its references on origin/main are now correct, but the
+      phantom has already regenerated — tactic-transition-node-stamp-landed-body
+      (phase review, PR #2973) asserts in its plan body that a residue at qa
+      routes qa → main-qa and expects stdout 'transitioned t-stamp qa ->
+      main-qa'. The implementer silently wrote the correct 'qa -> review', so
+      shipped code is unaffected; that node's stale plan text is deliberately
+      left untouched rather than pay a review→implement scope-custody demotion
+      for a documentation-only defect, and it becomes historical when the node
+      reaches done. Tracked as tactic-phase-routing-table-generated."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
