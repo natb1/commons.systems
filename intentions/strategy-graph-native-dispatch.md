@@ -1815,6 +1815,67 @@ clarifications:
       operational rule holds under either reading, since both forbid a
       caller-authored path; a future mechanism-dependent design (the rejected
       hook above being the obvious one) would have to isolate it first."
+  - question: Keeping a node's documentation true costs a phase demotion when the
+      node is scope-chained. Does the record's truth ever yield to preserving a
+      node's phase, and what does an expensive true update imply about the
+      tooling?
+    answer: >-
+      (Recorded 2026-07-27 /align-strategy interview.) Standing author
+      preference, ratified: the graph always reflects target state. Correcting a
+      node's record to match reality is never traded away to preserve that
+      node's phase, and a round that declines a true update because the update
+      is expensive has misread its job — the expense is a defect in the TOOLING,
+      to be filed, not a reason to leave the record false. Demotion is a
+      legitimate price only where the edit genuinely changes scope; where it
+      does not, the tools must make the true update cheap.
+
+
+      This amends, and corrects the premise of, entry 111 (2026-07-27), which
+      recorded a deliberate decision to leave
+      tactic-transition-node-stamp-landed-body's stale `qa -> main-qa` plan text
+      untouched rather than pay a review -> implement demotion, and likewise
+      deferred tactic-mechanical-park-producers' stale greenfield prose. That
+      premise was wrong on both counts, verified against origin/main:
+
+
+      (a) main-qa is NOT scope-chained at either gate — SCOPE_CHAINED_PHASES is
+      {qa, review} in packages/intentionsutil/src/scope-sweep.ts:31 and {fix,
+      qa, review} in packages/intentionsutil/scripts/check-node-selection.ts:61
+      — because, as §Fingerprint & Freeze already states, main-qa is post-merge
+      and validates against current intent by design. A body edit to a main-qa
+      node cannot demote it. The deferral protected nothing.
+
+
+      (b) For the scope-chained review node, the authorized hatch already
+      existed: the scope-inert re-stamp of entry 73 (2026-07-18), shipped as
+      packages/intentionsutil/scripts/restamp-scope-fingerprint.ts, which names
+      an author-present /align-strategy round as an authorized re-stamper and is
+      fail-closed. Its stated limit was also misread: it resolves its target
+      from `git rev-parse --git-common-dir` and writes
+      <main-root>/.claude/worktrees/<id>.scope-fingerprint, so it needs no
+      worker worktree for the node. Ordering is the real constraint — the
+      re-stamp must run AFTER graph-commit from a tree synced to the landed
+      commit, or it hashes a stale body, which is exactly the defect of entries
+      102-103.
+
+
+      Both sites were corrected in this round's commit, the review node
+      re-stamped per entry 73.
+
+
+      The round also surfaced a structural gap this preference condemns: the
+      scope-custody stamp is gitignored machine-local state (.gitignore:1
+      `worktrees/`; 0 of 60 live stamps tracked in git). The gate deciding
+      whether the graph's phase state is trustworthy therefore lives entirely
+      OUTSIDE the graph — a fresh clone or a second machine has no stamps,
+      isScopeStale fail-opens on a null stamp
+      (packages/intentionsutil/src/transitions.ts:331), and no node is ever
+      stale. That is the sharpest standing counterexample to 'the graph reflects
+      target state'. tactic-scope-fingerprint-plan-substance does not cover it:
+      that tactic narrows the fingerprint to exclude machinery-appended
+      sections, which leaves author documentation edits tripping the gate and
+      leaves the stamp out-of-graph either way. Carrier: draft
+      tactic-scope-stamp-in-graph, filed this round.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
