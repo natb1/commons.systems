@@ -77,7 +77,37 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Signal-validating /align-tactics round blocked on an author pacing
+    decision that is not in the graph. success_signal (adoption with migration
+    freedom) has reading: null, so a round would have to mint an instrument +
+    first-reading terminal — but the strategy's own clarification records that
+    any signal recorded now is a \"fake proxy\", deliberately deferred until the
+    outward tiers open, and strategy-progressive-validation (which owns tier
+    pacing and the tier-entry record) states that as of 2026-07-06 only tier 1
+    (author) is entered while tiers 2 (users), 3 (practitioners), 4
+    (collaborators) are NOT entered. The threshold is \"at each pursued tier,
+    the tier's signal is present\"; with no outward tier declared/pursued there
+    is no active tier to measure and no non-fake reading is possible this round.
+    Which tier to enter (and when) is an explicit dated author declaration on
+    strategy-progressive-validation, not resolvable from the graph (unverifiable
+    blocker + requirement ambiguity). Two further scope decisions are
+    unrecorded: the fork/derivative half of this strategy's sensor overlaps the
+    in-flight tactic-fork-derivative-sensor (PR #2861, serving
+    strategy-distribute-workflow) — share its fork reading or take a separate
+    one? — and the \"user-migration / no-lock-in\" half of the sensor has no
+    recorded instrument or definition. Retained draft
+    tactic-analytics-preinit-vitals is left untouched as input for the next
+    round (its mechanism choice, beacon vs accept-and-bound, is itself entangled
+    with the deferred signal-scope decision). Recommend: in an /align-strategy
+    (or progressive-validation) session, decide whether to enter an outward tier
+    now — recording the dated tier-entry on strategy-progressive-validation — or
+    keep the reading deferred; if entering a tier, define the
+    user-migration/no-lock-in check and whether this strategy shares
+    tactic-fork-derivative-sensor's fork reading or takes its own, then re-run
+    /align-tactics."
+  since: 2026-07-13
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:

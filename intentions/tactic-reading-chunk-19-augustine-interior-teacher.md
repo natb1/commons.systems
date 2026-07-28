@@ -30,13 +30,17 @@ phase: null
 execution: null
 validates:
   - strategy-philosophical-grounding
-blocked_by: []
+blocked_by:
+  - tactic-dialog-review-plato-cave
+  - tactic-dialog-review-aristotle-hexis
+  - tactic-dialog-review-aristotle-phronesis
 office_hours:
   reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
     (verify-record). This chunk: De Magistro 11.36-14.46 against
     tradition-augustine."
   since: 2026-07-08
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

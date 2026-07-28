@@ -63,6 +63,20 @@ The skill takes optional arguments. Detect the trigger from them:
 
 ## Step 1 — Orient
 
+**First, verify the checkout is fresh.** This flow reads at `origin/main` and
+diffs against it without fetching first, so a stale local `origin/main` would
+mislead the orientation. Before anything else, run:
+
+```bash
+.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh
+```
+
+A non-zero exit means the checkout is stale **or** the `git fetch` itself
+failed; either way, stop and freshen (`git fetch origin main && git merge
+origin/main`) before continuing. This applies only to the **on-demand** trigger
+flow (Steps 1–4); the scheduled/jit trigger runs on a router-provisioned
+worktree already freshened via a different path.
+
 Give the practitioner a one-screen description of what they have deployed: a
 harness for long-horizon autonomous workflows built around the **intention
 graph** — the versioned store under `intentions/` whose node kinds are
@@ -85,7 +99,7 @@ The router reads the graph at `origin/main` and schedules eligible tactics
 autonomously; the align skill family (`/align-init`, `/align-strategy`,
 `/align-tactics`) is the human interface that populates it. Keep the
 orientation to one screen — the schema reference is
-`packages/intentionsutil/SCHEMA.md` for anyone who wants depth.
+`intentions/kind-kind.md` for anyone who wants depth.
 
 ## Step 2 — Validate deployment
 

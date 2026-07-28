@@ -23,6 +23,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes: {}
 ---
 # Build graph-native dispatch — subtree parent: schema, graph-commit, align skills, router v2, instrument, legacy removal
@@ -113,7 +120,7 @@ rounds:
   and delegations, but is authoritative content for tactics — draft context
   before finalization, the full clean-session plan after. Store change
   required: `writeNode` must preserve tactic bodies (until it ships, bodies
-  are hand-maintained; no automated writer touches tactic bodies).
+  are hand-maintained; no automated writer touches tactic bodies). (Correction, tick +6 2026-07-11: tactic-body preservation HAS shipped (`readExistingTacticBody` in store.ts), but NON-tactic bodies — strategy, kind, delegation, virtue — are REGENERATED from `statement` on every `writeNode`, so they are cosmetic and cannot durably hold content: reconcile-graph, read-sensors, park, and transition writes all clobber them. `writeNode` does NOT unconditionally preserve a node body — only a tactic's. The kind-strategy body-function rule (2026-07-09) and its consumers conflict with this; the contract is under decision at `tactic-nontactic-body-durability`, on which calibration-event-registry, mount-schema, and graph-native-dispatch-fold are blocked.) (Resolution, office hours 2026-07-18: the author RATIFIED the greenfield contract at `tactic-nontactic-body-durability` — ALL node bodies (virtues, strategies, delegations, kinds, tactics) are now durable, authoritative content, NOT a cosmetic render. `store.ts` drops the kind gate (`readExistingTacticBody` → `readExistingBody`, `assertNoTacticBodyLoss` → a kind-agnostic `assertNoBodyLoss`), so `writeNode` preserves every kind's body verbatim on rewrite and regenerates the `# ${statement}` placeholder only for a brand-new file — reconcile-graph, read-sensors, park, and transition writes no longer clobber a non-tactic body. This supersedes the "cosmetic render for virtues, strategies, and delegations" clause above. Shipped on PR #2890 (phase review); the three blocked consumers unblock on merge.)
 - **Blocking** stays the tactic-layer subtree mechanism recorded on
   `strategy-graph-drives-dispatch`: `blocked_by: [<tactic-id>...]`; nothing
   in a blocked subtree starts until the blocking subtree completes; the
@@ -337,16 +344,46 @@ A **strategy** is eligible for an `/align-tactics` session iff:
   newer than `rounds.last_completed`, and
 - `rounds.count < 2` (at the cap, the router parks it instead).
 
-A **tactic** is eligible for its phase skill iff `office_hours` is null,
-`phase` is neither `draft` nor `done`, its `blocked_by` set is fully
-complete, and its phase's sensor gate is satisfied.
+A **tactic** is eligible for its **phase skill** (e.g. `/implement`,
+`/fix-checks`, `/qa-fix`) iff `office_hours` is null, `phase` is neither
+`draft` nor `done`, its `blocked_by` set is fully complete, and its
+phase's sensor gate is satisfied. A frozen tactic — draft/raw (`phase`
+absent), or soft-frozen per the gate below — is ineligible for its phase
+skill by this same test, but is separately eligible for an
+`/align-tactics` session per the next paragraph.
+
+A **frozen tactic** (draft/raw, `phase` absent; or soft-frozen, per the
+soft-freeze gate below) is eligible for its own `/align-tactics` session
+iff `office_hours` is null and its `blocked_by` set is fully complete —
+parallel to how a strategy is eligible for its own `/align-tactics`
+session above. This is the first-class-selectability behavior implemented
+by `selectGraphTargets` in `packages/intentionsutil/src/router.ts`.
+
+A strategy with one or more eligible frozen descendants resolves, as the
+`/align-tactics` candidate, to its highest-ranked frozen descendant (by
+the same resolved-attention rank and ordering used everywhere else) —
+not to the strategy node itself; a strategy with no tactic children (a
+zero-tactic strategy) resolves to itself. The implementing primitive is
+`resolveFrozenDescendant` in `packages/intentionsutil/src/router.ts`.
+
+Within one attention-rank level, candidates now sort by a **progression
+ordinal** over the full schema `PHASES` order — `draft < align-tactics <
+implement < fix < qa < review < main-qa < done` — more-progressed first.
+This generalizes and replaces the old closest-to-done `PHASE_LADDER`
+(see §3.2, which also needs the corresponding update). It reorders `fix`
+and `qa`: under the progression ordinal, `qa` (further along the
+pipeline) now sorts before `fix`, the opposite of the old ladder's `fix`
+before `qa`.
 
 **Soft-freeze gate** (clarification 10): before selecting within a
 subtree, the router recomputes the serving strategy's substance
 fingerprint; any open tactic stamped with a stale
 `execution.strategy_fingerprint` freezes the subtree — no new selections,
-in-flight phases finish, one re-evaluation `/align-tactics` session is
-queued, the freeze is logged to the selection log. State writes
+in-flight phases finish, one re-evaluation `/align-tactics <tactic-id>`
+session is queued **per frozen tactic** in the subtree (not a single
+strategy-level session) — each frozen tactic re-surfaces individually as
+an `align-tactics` candidate at its own node id, per `selectGraphTargets`
+— the freeze is logged to the selection log. State writes
 (`reading`/`gap`/`rounds`/`office_hours`) never change the fingerprint.
 
 ### 3.2 Selection
@@ -358,9 +395,14 @@ weighted sum of read-time-derived terms — explicit author attention (an
 `override` pins), signal satisfaction (structural reachability to
 `validates`-terminals of unvalidated signals), capture resolution (from
 `recovers`-edge delegation axes) — with new conditions added as terms,
-never bands; clarification 11) → 4. within a rank level, phase ladder
-closest-to-done first: `main-qa → review → fix → qa → implement →
-align-tactics(strategy)`. Topic categories retire — topical priority is
+never bands; clarification 11) → 4. within a rank level, the progression
+ordinal over the full schema `PHASES` order (`draft < align-tactics <
+implement < fix < qa < review < main-qa < done`) sorts more-progressed
+first, i.e. closest-to-done first: `main-qa → review → qa → fix →
+implement → align-tactics`. This reorders `fix`/`qa` relative to the old
+closest-to-done ladder (which had `fix` before `qa`); `align-tactics` now
+covers both a strategy candidate and a frozen-tactic candidate at that
+same directive rung. Topic categories retire — topical priority is
 authored attention on the owning strategy.
 
 Claimed-set, reservation ledger, concurrency pacing
@@ -502,8 +544,9 @@ worktrees where they are) and their conventions retire with
 hands the node-id set to a thin tick workflow script (the Workflow
 primitive) that fans out one `agent()` per selected node — never to the
 legacy launch scripts, which stay issue-lane-only and retire with the
-drain. The directive per node is `/align-tactics <id>` for a strategy,
-the tactic's persisted `phase` mapped to its phase skill otherwise;
+drain. The directive per node is `/align-tactics <id>` for a strategy or a
+frozen tactic (draft/raw, or soft-frozen), the tactic's persisted `phase`
+mapped to its phase skill for a non-frozen open tactic;
 `dispatch-route`'s label/PR-derived phase derivation does not apply to
 node targets (phase is persisted, clarification 1). Mechanics stay owned
 and deterministic per the thin-script condition: agents invoke a
@@ -519,8 +562,20 @@ the node via the `office_hours` graph write. Scoped in
 ## 4. Coverage matrix
 
 Every legacy behavior maps to a home in the new family; nothing silently
-drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
-`.claude/skills/plan-issue/SKILL.md`.)
+drops.
+
+Behavior inventory anchors: both SKILL.md bodies were replaced by retirement
+stubs under `tactic-legacy-router-removal` Unit 2, so the inventories this
+matrix was derived from are no longer in the working tree. Read them at the
+pre-retirement blobs (`8e693b5d` is an ancestor of `origin/main`):
+
+```
+git show 8e693b5d:.claude/skills/file-issue/SKILL.md   # 616 lines
+git show 8e693b5d:.claude/skills/plan-issue/SKILL.md   # 691 lines
+```
+
+Any future audit of this matrix's completeness must diff against those blobs,
+not against the stubs.
 
 ### `/file-issue` → `/align-strategy` + `/align-tactics`
 
@@ -537,6 +592,7 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 | Review-phase deferred filings (`/review-fix` follow-up issues) | Draft tactics batched per component, finalized by a later `/align-tactics` round (strategy clarification 19); refuted/below-threshold findings live only in the PR review comment |
 | QA needs-main follow-up filing (`qa-fix` Step 3.6 → main-qa issues) | Retired as an artifact — needs-main residue rides the source tactic into its `main-qa` phase; the qa-main handler verifies against prod (strategy clarification 22, §1.1) |
 | Finalize (assign, `help wanted`) | Retired — presence on `origin/main` with `phase` set *is* schedulability |
+| `fix-checks`'s Flake sub-path (find-or-file a flake-tracking issue, `blocked_by` the PR's tracked issue) — an indirect `/file-issue` caller, missed by the direct-caller rows above; dead on the node lane since GitHub Issues are disabled repo-wide (strategy clarification, 2026-07-16) | Find-or-create a fingerprint-keyed **tactic node** (fingerprint/reproduce-command/diagnosis in the body) and set `blocked_by` on the **source tactic** directly — no office-hours escalation; the router's existing `blocked_by`-completeness gate (`blockersComplete` in `packages/intentionsutil/src/router.ts`) already re-surfaces the source tactic once the flake-fix tactic reaches `phase: done`. Tracked by `tactic-fix-checks-graph-native-flake-tracking` |
 
 ### `/plan-issue` → `/align-tactics`
 

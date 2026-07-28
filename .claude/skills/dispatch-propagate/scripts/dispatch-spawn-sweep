@@ -110,8 +110,9 @@
 #                                         `systemd-run`.
 #   DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE    The main worktree path. When set, the
 #                                         script does NOT require a git repo.
-#                                         Default: <project-root>/worktrees/main,
-#                                         via resolve_project_root (lib.sh).
+#                                         Default: the project root itself (the
+#                                         primary main checkout), via
+#                                         resolve_project_root (lib.sh).
 #   DISPATCH_SPAWN_SWEEP_THROTTLE_FILE    The throttle stamp file. Default:
 #                                         <main-worktree>/tmp/dispatch-sweep-last.
 #   DISPATCH_SWEEP_THROTTLE_S             Throttle window in seconds. Default:
@@ -142,13 +143,14 @@ source "$SCRIPT_DIR/lib.sh"
 # The sweep runs from the main worktree (where every autonomous pass is rooted).
 # An explicit DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE is authoritative and bypasses
 # the git lookup — tests rely on this. Otherwise resolve_project_root (lib.sh)
-# returns the project root in both classic (.git) and bare (.bare) layouts.
+# returns the project root (parent of git --git-common-dir), which under the
+# standard layout IS the primary main checkout.
 if [[ -n "${DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE:-}" ]]; then
   MAIN_WORKTREE="$DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE"
 else
   PROJECT_ROOT=$(resolve_project_root) \
     || { echo "dispatch-spawn-sweep: not in a git repo and DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE is unset" >&2; exit 2; }
-  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+  MAIN_WORKTREE="$PROJECT_ROOT"   # de-bare: the project root IS the main checkout
 fi
 
 # ---- Step 2: throttle (rate control — distinct from the dedup below) --------

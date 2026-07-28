@@ -22,6 +22,17 @@ fork `/commit-merge-push` and run subagents inline.
 Every `gh`/network call in this skill carries `dangerouslyDisableSandbox: true` —
 `gh` needs network and the sandbox blocks it. See `.claude/rules/sandbox.md`.
 
+## Parameters
+
+On the graph-native node lane the front door (below) derives these structured
+inputs from the node-id argument this skill is invoked with
+(`/implement <node-id>`):
+
+| Parameter | Meaning |
+|---|---|
+| `node_id` | The intention node id this session implements — the `/implement <node-id>` argument, which also names the current worktree branch. |
+| `pr_num` | The open draft PR's number, or **empty**. Unlike the other graph-native phase skills, `implement` tolerates an empty `pr_num`: a missing PR here is the legitimate "first run" case (no PR opened yet), not an error. |
+
 ## Idempotency preamble
 
 This skill's terminal artifact is the **draft PR** — there is no owned label.
@@ -35,19 +46,119 @@ worktree; this skill never switches.
 ```bash
 BRANCH=$(basename "$(git rev-parse --show-toplevel)")
 case "$BRANCH" in
-  [0-9]*-*) N="${BRANCH%%-*}" ;;
+  [0-9]*-*)
+    # Legacy issue lane: worktree named `<N>-…`.
+    N="${BRANCH%%-*}"
+    TARGET_KIND=issue
+    ;;
   *)
-    echo "/implement: current branch '$BRANCH' is not a target worktree (expected '<N>-…')" >&2
-    exit 1
+    # Graph-native node lane: worktree named after the intention node id. The
+    # shared front door validates the id, confirms it matches the current
+    # worktree branch (the consistency check this skill's own preamble text
+    # above already asserts), snapshots the node from origin/main, gates on
+    # phase, and — with `--pr-mode optional` — resolves the open PR if one
+    # exists (a missing PR is the first-run case, never an error, so this
+    # skill needs no exit-4 handling).
+    NODE_ID="$BRANCH"
+    if DERIVED=$(.claude/skills/dispatch-propagate/scripts/dispatch-derive-node-target \
+        "$NODE_ID" --expect-phase implement --pr-mode optional); then
+      rc=0
+    else
+      rc=$?
+    fi
+    if [ "$rc" -ne 0 ]; then
+      case "$rc" in
+        1) echo "/implement: node '$NODE_ID' not found at origin/main (intentions/$NODE_ID.md)" >&2 ;;
+        2) echo "/implement: '$NODE_ID' is not a valid node id, or does not match the current worktree branch" >&2 ;;
+        3) echo "/implement: node '$NODE_ID' is not at phase 'implement' at origin/main" >&2 ;;
+        *) echo "/implement: dispatch-derive-node-target failed (exit $rc)" >&2 ;;
+      esac
+      exit 1
+    fi
+    # Parse the front door's stdout: PR line (<num>|none), NODE-JSON section
+    # (compact single-line frontmatter JSON), NODE-BODY section (raw markdown).
+    PR_NUM=$(printf '%s\n' "$DERIVED" | sed -n 's/^PR: //p' | head -1)
+    [ "$PR_NUM" = none ] && PR_NUM=""
+    NODE_JSON=$(printf '%s\n' "$DERIVED" | sed -n '/^=== NODE-JSON ===$/,/^=== NODE-BODY ===$/p' | sed '1d;$d')
+    NODE_BODY=$(printf '%s\n' "$DERIVED" | sed -n '/^=== NODE-BODY ===$/,$p' | sed '1d')
+    N="$NODE_ID"
+    TARGET_KIND=node
     ;;
 esac
 ```
 
-`<N>` is the issue number used by the remaining steps for their `tmp/` filenames.
+`$N` keys the remaining steps' `tmp/` filenames (the issue number on the legacy
+lane, the node id on the node lane). `$TARGET_KIND` selects the lane at every
+seam below that differs between issue and node targets — context source, plan
+source, and completion. **On the node lane no gh issue is ever read or written.**
 
-Then resolve whether a draft PR already exists by running the context pack (use
-`dangerouslyDisableSandbox: true` — it calls `gh`). Add `--phase-log` so the same
-call also returns any prior cross-phase handoff note:
+### Node-target lane (`TARGET_KIND=node`)
+
+On the node lane the four issue-keyed seams below are re-keyed to the graph
+(`tactic-phase-skill-node-targets`); every other step runs byte-identically.
+
+- **Context / PR.** Skip the issue-comment slices entirely; never pass `--issue`.
+  The node's `execution.pr` is null until this phase's completion writes it (see
+  Completion below), so it is NOT a reliable resume-detection signal — a crash
+  between opening the PR (Step 4) and the completion transition-node write
+  (Step 5) leaves `execution.pr` null even though a PR now exists. The front
+  door resolves the PR instead — `dispatch-derive-node-target --pr-mode
+  optional` runs the same `gh pr list --head "$BRANCH" --state open` lookup
+  `dispatch-sweep` and `/office-hours` use, and binds the result to `PR_NUM`
+  (empty on a first run, never an error).
+- **Plan source.** The plan is the **node body** of `intentions/<node-id>.md`
+  at `origin/main` (already bound by the front door as `$NODE_BODY`), not a
+  `<!-- dispatch:plan -->` issue comment. Its ordered `## Unit N` sections with
+  their `Recommended model:` tags ARE the unit breakdown Step 2 builds.
+- **Completion.** Do not call `dispatch-complete-phase` / `dispatch-mark-complete`
+  / `dispatch-finalize-phase` — those edit issue/PR labels. After the draft PR is
+  open, invoke the graph-native transition writer instead (it consults the CI
+  verdict + freshness gates and lands the `implement → qa` advance, or the
+  `implement → fix` interrupt on red CI, plus `execution.pr`, as one state-only
+  graph-commit on `origin/main`):
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
+  ```
+
+  The graph-tick worker runs this with the reset-dance a PR-branch worktree needs
+  (same constraint as `park-node`); the skill hands it the node id and never
+  writes the graph directly.
+- **Escalation.** Instead of applying `dispatch:office-hours`, write the
+  human-facing reason to `$CLAUDE_JOB_DIR/office-hours-reason` (and the
+  best-next-steps to `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook
+  parks the node via `park-node` (`office_hours` graph write) — see
+  `.claude/hooks/dispatch-stop.sh`. Also write the already-bound `PR_NUM` to
+  `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic tempfile+`mv` write as the
+  reason/recommendation files) so the park records `execution.pr`
+  (tactic-office-hours-pr-custody); skip this write when `PR_NUM` is empty
+  (e.g. escalating before Step 4 has opened a PR yet).
+
+Then fetch any prior PR/phase-log context (use `dangerouslyDisableSandbox:
+true` — the context pack hits `gh`).
+
+**Node lane (`TARGET_KIND=node`):** the legacy `<N>-…` branch-prefix PR lookup
+below does not apply — the branch IS the node id, not an issue-prefixed name.
+`PR_NUM` is already bound by the front door (the derivation script's
+`--pr-mode optional` ran the `gh pr list --head "$N"` lookup); do not
+re-resolve it here.
+
+Empty `PR_NUM` means no PR exists yet (first run) — skip the context-pack call
+below entirely (there is nothing to read: no PR, and no phase-log home without
+one) and run all steps. A non-empty `PR_NUM` is the re-entry branch — fetch its
+PR/phase-log via the pack's PR-number mode:
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --phase-log --pr-is-number
+```
+
+Read the `=== PR ===` and `=== PHASE-LOG #$PR_NUM ===` sections as described
+below (the re-entry / `PRIOR_PHASE_LOG` handling is identical to the legacy
+lane once `PR_NUM` is known).
+
+**Legacy lane (`TARGET_KIND=issue`):** run the context pack directly with the
+issue number. Add `--phase-log` so the same call also returns any prior
+cross-phase handoff note:
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log
@@ -216,8 +327,12 @@ Route on the exit code:
 - **exit 1** — a ```verify block failed; the runner reports the failing block
   index on its output. Enter the bounded fix lane: using the failing output, fix
   the defect with one corrective `/implement-unit` (via the Skill tool), then
-  re-run the runner above. Cap at **2** fix attempts (mirroring `qa-fix`'s
-  `CAP=2`). If the runner still exits 1 after the cap, do **not** open the PR:
+  re-run the runner above. Cap at **2** fix attempts. This cap bounds an
+  **in-session** retry loop — the runner re-run has no other termination
+  condition — and is deliberately unrelated to `qa-fix`'s `CAP`, which counts
+  durable, re-selected qa **passes** via the `dispatch:qa-fix-attempt-<n>` PR
+  label. Different loops, different scopes; do not couple the two numbers.
+  If the runner still exits 1 after the cap, do **not** open the PR:
   call `dispatch-mark-deviation` naming the failing check, then **stop** — skip
   the Step 5 completion marker.
 

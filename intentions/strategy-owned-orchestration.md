@@ -79,6 +79,29 @@ clarifications:
       locates the copies via a host symlink of <project-root>/dispatch.config to
       the instance checkout, so dispatch-config-load and its DISPATCH_CONFIG_DIR
       test seam are unchanged. Recorded 2026-07-11 /align-tactics round."
+  - question: The wrapper-to-matcher doctrine addresses the static allowedTools
+      prefix matcher — what about the auto-mode permission classifier, a
+      separate gate that false-denies even sanctioned commands?
+    answer: "(Recorded 2026-07-21 interview, extending the 2026-07-07 wrapper
+      doctrine.) The static allowedTools prefix matcher and the auto-mode
+      permission classifier are two distinct gates, and shaping invocations to
+      the matcher (git -C over cd &&, no inline VAR= prefixes) is necessary but
+      not sufficient. The sanctioned graph-write path
+      (packages/intentionsutil/scripts/graph-commit) still hit the classifier: a
+      `cd <wt> && ./…graph-commit` compound was firmly denied ('Blocked by
+      classifier'), and even the bare invocation drew transient 'Stage 2
+      classifier error' denials that cleared only on retry. Doctrine: a
+      sanctioned, frequently-invoked write tool is (a) given a directory flag
+      (-C <path>) so no cd-compound is ever needed — the same git-C-over-cd&&
+      shape extended to graph-commit — and (b) added to the static
+      permissions.allow allowlist, which bypasses the classifier entirely for
+      that command, so the only path that lands graph edits on main is never
+      blocked or round-tripped by a probabilistic gate. Accepted tradeoff:
+      static-allowing graph-commit removes per-call classifier gating on the
+      sole main-landing path; this is deliberate, since the sanctioned write
+      path's safety comes from graph-commit's own CAS/rebase machinery
+      (compare-and-swap --base, bounded rebase-retry), not from per-call
+      approval. Drafted at tactic-graph-commit-invocation-classifier-bypass."
 tooling_goals: []
 success_signal:
   observable: forks, derivative projects, practitioners adapting the workflow
@@ -97,6 +120,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - frontier coding agents remain accessible and economical at individual scale

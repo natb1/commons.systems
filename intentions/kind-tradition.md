@@ -111,6 +111,12 @@ attributes:
       auditable"
     - "review_trigger: what prompts reassessment of this record"
     - "last_assessed: date of the last dialectic round that touched this record"
+  status_vocabulary:
+    delegated: the detail is held on trust from
+      delegation-philosophical-articulation — the decisions the record supports
+      are the author's, the scholarship is borrowed
+    codified: the author has personally verified the record's
+      adopted/diverged/chosen_over content against the cited texts
   mount_anchor: true
 ---
 # Tradition — an examined intellectual attachment; where philosophical alignment and divergence stay auditable

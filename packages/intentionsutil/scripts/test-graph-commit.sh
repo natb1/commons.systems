@@ -24,28 +24,98 @@
 #      3 consecutive polls
 #   7. pending timeout (shim reports "0 0"): still transient — burns all
 #      attempts and exits with the busy-main error
-#   8. id validation: `v1..v2-migration` lands end-to-end; `/`, `\`, and the
+#   8. desynced check-run status (one required check's status is stuck
+#      in_progress even though its conclusion already reports success — a
+#      known GitHub check-runs desync, #2457): the fixed --jq filter keys off
+#      .conclusion alone, so this still counts as the fourth success and
+#      lands immediately instead of spinning to the busy-main timeout
+#   9. id validation: `v1..v2-migration` lands end-to-end; `/`, `\`, and the
 #      exact ids `.` / `..` are rejected with exit 2
-#   9. --prune: an ordinary edit id and a prune id land in ONE commit
-#  10. --prune guard: a prune id whose file is still present on disk is
+#  10. --prune: an ordinary edit id and a prune id land in ONE commit
+#  11. --prune guard: a prune id whose file is still present on disk is
 #      rejected (no commit lands)
-#  11. --base fresh: a --base entry matching origin/main's current blob lands
-#  12. --base stale: a --base entry pointing at a blob origin/main no longer
-#      has is refused (no commit lands, no rebase-retry burned)
-#  13. --prune alone (no positional id, IDS empty): a pure deletion lands on
+#  12. --base fresh: a --base entry matching origin/main's current blob lands
+#  13. --base stale, disjoint appended lines (bare line-based fixture): now
+#      that layer 3 attempts an automatic merge before refusing, two disjoint
+#      appended lines (this writer's line13, the concurrent writer's line14)
+#      auto-resolve — exit 0, both lines land, no park. (Pre-Unit-3 this was a
+#      hard `die`; cases 21-22 below cover the field-level resolve/unresolved
+#      split this case can no longer distinguish on its own.)
+#  14. --prune alone (no positional id, IDS empty): a pure deletion lands on
 #      main and the scratch branch is cleaned up — this is the owed-prune
 #      backlog's actual shape (a done node with no accompanying edit), not
-#      exercised by case 9's mixed edit+prune
-#  14. --base manifest-file form: a file of <id>=<blobsha> lines (as opposed
-#      to the inline form used by cases 11-12) lands
+#      exercised by case 10's mixed edit+prune
+#  15. --base manifest-file form: a file of <id>=<blobsha> lines (as opposed
+#      to the inline form used by cases 12-13) lands
+#  16. far-ahead worktree (PR branch with a non-intentions code commit): the
+#      edit is rebuilt on origin/main, ONLY the intentions/ change lands (the
+#      code commit is excluded), exit 0, and the worktree HEAD is restored to
+#      the PR tip
+#  17. overlapping edit vs prune conflict: park recommendation omits a
+#      snapshot path (no content to preserve) and states the
+#      prune-reconciliation instruction instead
+#  18. far-ahead worktree + --prune: a deletion issued from a far-ahead PR
+#      branch lands on main (the node is removed) without landing the code
+#      commit, HEAD restored
+#  19. layer 2 (rebase-conflict field merge) resolves a textual conflict whose
+#      two sides touch DIFFERENT fields: exit 0, the "auto-resolved" log
+#      suffix appears, both writers' field edits land
+#  20. layer 2 leaves a textual conflict whose two sides touch the SAME field
+#      mechanical-unresolved: exit 1, office_hours.reason carries
+#      "mechanical-unresolved", and the recommendation names both values
+#  21. layer 3 (--base stale re-read) auto-resolves a field-level fixture
+#      whose disjoint fields diverged: exit 0, no die, no park, both fields land
+#  22. layer 3 leaves a stale-`--base` SAME-field divergence
+#      mechanical-unresolved: exit 1, office_hours.reason carries
+#      "mechanical-unresolved", both values are named in the recommendation
+#  23. a --prune id racing a concurrent edit to the same node is excluded from
+#      the layer-2 merge attempt entirely (a deletion has nothing to
+#      structurally merge against) — no false "auto-resolved" claim, parks
+#      with the prune-specific sentinel note
+#  24. an unrelated dirty tracked file outside the node set: clear pre-flight
+#      error naming the file, no rebase/CI attempted, main untouched
+#  25. -C targeting from an unrelated cwd: the graph-commit script FILE lives
+#      inside one clone (w16) but is invoked with `-C` pointing at a DIFFERENT
+#      clone (w17), from a cwd that is neither — the exact scenario that used
+#      to silently break (REPO_ROOT derived from the script's own on-disk
+#      location, landing in whatever checkout the script FILE happened to sit
+#      in, regardless of caller intent or -C). Asserts the edit lands via w17,
+#      not w16 or the cwd.
+#      (cwd-derivation with no `-C` — the default path — is already exercised
+#      as a regression guard by nearly every other case via run_gc(), which
+#      always `cd`s into the target clone and passes no `-C`; no separate case
+#      needed.)
+#  26. no-repo error: invoked with no `-C` from a cwd that is not inside any
+#      git repository at all (a plain `mktemp -d`, never `git init`'d) — a
+#      clear non-zero exit naming "not inside a git repository", never a
+#      silent fall-back to the script's own checkout.
+#  27. fail-loud guard, differing blob: a clone that never edited a given id
+#      (nothing staged) while origin/main has since advanced with a DIFFERENT
+#      edit to that same id (a stale clone) — dies loudly naming "mis-pointed
+#      -C/--repo", never reaches the "landed" success message, main untouched.
+#  28. fail-loud guard, benign equal-blob: a clone synced exactly to
+#      origin/main's tip (nothing staged, and the local blob for the id
+#      equals origin/main's blob) proceeds benignly — exit 0, the same
+#      "no new changes to stage" message, no die.
+#  29. lock contention is cheap: a waiting writer makes zero gh polls while
+#      blocked on the landing lock, then exactly one poll cycle once it
+#      acquires the lock and lands (not a re-poll-from-scratch retry burn)
+#  30. dead-holder steal: an expired foreign lock claim is stolen promptly,
+#      not held to the full lock-wait timeout
+#  31. live-holder wait: a live foreign lock is not stolen prematurely; the
+#      writer waits for the planted expiry before proceeding
+#  32. lock-ref hygiene: refs/graph/landing-lock is absent after a normal
+#      landing and never appears under refs/heads/graph/** (disjoint from
+#      the scratch-branch namespace graph-fast-path.yml triggers on)
 #
-# No network and no real gh/node needed; requires only bash + git.
+# No network and no real gh/node needed; requires only bash + git + jq.
 
 set -uo pipefail
 
 HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GC_SCRIPT="$HARNESS_DIR/graph-commit"
 [[ -f "$GC_SCRIPT" ]] || { echo "error: graph-commit not found at $GC_SCRIPT" >&2; exit 1; }
+command -v jq >/dev/null || { echo "error: jq not found (required by the gh shim)" >&2; exit 1; }
 
 WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
 declare -a SNAP_DIRS_TO_CLEAN=()
@@ -62,6 +132,13 @@ no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
 ORIGIN="$WORK/origin.git"
 git init -q --bare "$ORIGIN"
 git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
+# plant_lock (cases 30/31) runs `git commit-tree` directly in this bare repo,
+# which needs an author identity. CI runners have no global git identity, so
+# without this commit-tree fails, plant_lock yields an empty sha, and the lock
+# is never planted — case 31 lands immediately instead of waiting out the
+# expiry, and case 30 passes vacuously with nothing to steal.
+git -C "$ORIGIN" config user.email harness@test
+git -C "$ORIGIN" config user.name harness
 
 SEED="$WORK/seed"
 mkdir -p "$SEED"
@@ -83,10 +160,42 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
     for i in $(seq 1 12); do echo "line$i: base"; done
   } >"$SEED/intentions/$1.md"
 }
-for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending v1..v2-migration \
-          t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest; do
+for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2-migration \
+          t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
+          t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
+          t-cwd-target t-fail-loud-diff t-fail-loud-benign \
+          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene; do
   seed_node "$id"
 done
+
+# seed_field_node writes a real ---fenced IntentionNode (id, kind: tactic,
+# statement, owner: ai, status: raw — the minimum validateNode requires; see
+# packages/intentionsutil/src/schema.ts) plus caller-supplied extra frontmatter
+# lines, for the layer-2/3 field-merge cases (17-21) below. Unlike seed_node's
+# bare line-based format (kept untouched for cases 1-16, which only exercise
+# textual rebase mechanics), this is real enough for a human reader to
+# recognize as node content, though the npx merge-node.ts shim below never
+# actually parses it as YAML — it only greps `key: value` lines.
+seed_field_node() { # <id> <extra-yaml-lines...>
+  local id="$1"; shift
+  {
+    echo "---"
+    echo "id: $id"
+    echo "kind: tactic"
+    echo "statement: base statement for $id"
+    echo "owner: ai"
+    echo "status: raw"
+    local line
+    for line in "$@"; do echo "$line"; done
+    echo "---"
+    echo "Placeholder body for $id."
+  } >"$SEED/intentions/$id.md"
+}
+seed_field_node t-field-merge "fieldA: base" "fieldB: base"
+seed_field_node t-field-conflict "sentinel: base"
+seed_field_node t-field-base-ok "fieldA: base" "fieldB: base"
+seed_field_node t-field-base-bad "sentinel: base"
+
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
 git -C "$SEED" push -q origin main
@@ -102,40 +211,224 @@ make_clone "$A" writer-a
 make_clone "$B" writer-b
 
 # --- gh / npx PATH shims ------------------------------------------------------
-mkdir -p "$WORK/bin"
+mkdir -p "$WORK/bin" "$WORK/fixtures"
 MODE_FILE="$WORK/gh-mode"
 CALL_LOG="$WORK/gh-calls"
+FIXTURE_DIR="$WORK/fixtures"
+
+# Fixture JSON per mode: {status,conclusion}-shaped check_runs entries for the
+# four required names, run through graph-commit's REAL --jq filter below (not
+# a hardcoded count) so the filter itself is exercised end-to-end.
+cat >"$FIXTURE_DIR/green.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
+  {"name": "lint", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "status": "completed", "conclusion": "success"}
+]}
+JSON
+
+cat >"$FIXTURE_DIR/pending.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "status": "in_progress", "conclusion": null},
+  {"name": "preview-and-smoke", "status": "in_progress", "conclusion": null},
+  {"name": "lint", "status": "in_progress", "conclusion": null},
+  {"name": "unit-tests", "status": "in_progress", "conclusion": null}
+]}
+JSON
+
+cat >"$FIXTURE_DIR/concluded-fail.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
+  {"name": "lint", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "status": "completed", "conclusion": "failure"}
+]}
+JSON
+
+# Desynced-success: one required check's status is still in_progress even
+# though its conclusion already reports success (the GitHub check-runs desync
+# the fixed --jq filter tolerates by keying off .conclusion alone) — #2457.
+cat >"$FIXTURE_DIR/desynced-success.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
+  {"name": "lint", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "status": "in_progress", "conclusion": "success"}
+]}
+JSON
 
 cat >"$WORK/bin/gh" <<'SH'
 #!/usr/bin/env bash
 # gh shim: behavior selected by $GC_GH_MODE_FILE; every invocation appends one
 # fixed marker line to $GC_GH_CALL_LOG so tests can assert poll counts (the
 # real args contain a multi-line --jq program, so they must not be logged raw).
+# For modes that reach the check-runs endpoint, this runs graph-commit's REAL
+# --jq program (extracted from "$@") against a mode-specific fixture file, so
+# the filter itself is exercised rather than a hardcoded count string.
 echo "gh-invocation" >>"$GC_GH_CALL_LOG"
-case "$(cat "$GC_GH_MODE_FILE")" in
-  green)          echo "4 0" ;;
-  pending)        echo "0 0" ;;
-  concluded-fail) echo "3 1" ;;
-  hard-fail)      echo "gh: HTTP 403: API rate limit exceeded (harness shim)" >&2; exit 1 ;;
-  *)              echo "gh shim: unknown mode" >&2; exit 99 ;;
-esac
+mode="$(cat "$GC_GH_MODE_FILE")"
+if [[ "$mode" == "hard-fail" ]]; then
+  echo "gh: HTTP 403: API rate limit exceeded (harness shim)" >&2
+  exit 1
+fi
+if [[ "$mode" == "blocked-green" ]]; then
+  while [[ ! -e "$GC_GH_SENTINEL_FILE" ]]; do sleep 0.2; done
+  mode=green
+fi
+jq_program=""
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--jq" ]]; then jq_program="$2"; break; fi
+  shift
+done
+fixture="$GC_FIXTURE_DIR/$mode.json"
+[[ -f "$fixture" ]] || { echo "gh shim: no fixture for mode $mode" >&2; exit 99; }
+jq -r "$jq_program" "$fixture"
 SH
 
 cat >"$WORK/bin/npx" <<'SH'
 #!/usr/bin/env bash
-# npx shim: emulates `npx tsx <helper> <storeModule> <intentionsDir> <since>
-# <reason> <id...>` (graph-commit's park_write) without node. Mirrors the real
-# helper's two-pass shape: verify every id is readable first, then write all.
+# npx shim: dispatches on the script path passed right after `tsx` (argv[2] to
+# this shim) so it can emulate TWO distinct real tsx invocations without node:
+#
+#   merge-node.ts  — graph-commit's run_merge_node() layer-2/3 CLI. This branch
+#     does NOT reimplement the real three-way YAML field merge (that primitive,
+#     mergeIntentionNodes, is Unit 1's job and its correctness is covered by
+#     packages/intentionsutil/test/node-merge.test.ts — the source of truth).
+#     This shim only proves graph-commit invokes merge-node.ts at the right
+#     point and branches correctly on its resolved/unresolved verdict. It does
+#     so with a SIMPLIFIED three-way merge over bare `key: value` lines (works
+#     against both seed_node's line1..line12 format and seed_field_node's real
+#     frontmatter, since both are just newline-delimited `key: value` pairs):
+#     for each key appearing in ours and/or theirs, if both sides agree (or
+#     only one side touched it), that value wins; if both sides changed it
+#     away from base to DIFFERENT values (or there is no base to compare
+#     against and the two sides disagree), it is an unresolved conflict.
+#   anything else (park_write's throwaway tsx module) — emulates `npx tsx
+#     <helper> <storeModule> <intentionsDir> <since> <reason> <snapDir>
+#     <pruneCsv> <id...>` without node. Mirrors the real helper's two-pass
+#     shape: verify every id is readable first, then write all. Composes
+#     office_hours.recommendation additively like the real helper: a per-id BASE
+#     recovery string distinguishing a pruned id (no snapshot) from an ordinary
+#     edit id (snapshot path included), then APPENDS the out-of-band field
+#     breakdown from $GRAPH_COMMIT_RECOMMENDATION_FILE (the mechanical-unresolved
+#     text — see graph-commit's park_write) when it is set, so tests can assert
+#     on both the prune-vs-edit distinction and the field detail reaching the
+#     landed node.
 [[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
-shift 3   # tsx, helper script path, store module path
-dir="$1"; since="$2"; reason="$3"; shift 3
-for id in "$@"; do
-  [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
-done
-for id in "$@"; do
-  printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
-  echo "graph-commit: set office_hours on $id (since=$since)" >&2
-done
+
+case "$(basename "$2")" in
+  merge-node.ts)
+    shift 2
+    base=""; ours=""; theirs=""; out=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --base) base="$2"; shift 2 ;;
+        --ours) ours="$2"; shift 2 ;;
+        --theirs) theirs="$2"; shift 2 ;;
+        --out) out="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+
+    # theirs genuinely absent (the id no longer exists on the landed side):
+    # ours is the only content, so ours wins outright (mirrors merge-node.ts's
+    # real documented behavior for an empty --theirs).
+    if [[ -z "$theirs" ]]; then
+      [[ -n "$out" && -n "$ours" ]] && cp -- "$ours" "$out"
+      printf '{"resolved":true,"conflicts":[]}\n'
+      exit 0
+    fi
+
+    declare -A BASE_V=() OURS_V=() THEIRS_V=()
+    declare -a ALL_KEYS=()
+    if [[ -n "$base" && -f "$base" ]]; then
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" == *:* ]] || continue
+        k="${line%%:*}"; v="${line#*: }"
+        [[ -n "${BASE_V[$k]+x}" ]] || BASE_V["$k"]="$v"
+      done <"$base"
+    fi
+    if [[ -n "$ours" && -f "$ours" ]]; then
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" == *:* ]] || continue
+        k="${line%%:*}"; v="${line#*: }"
+        if [[ -z "${OURS_V[$k]+x}" ]]; then OURS_V["$k"]="$v"; ALL_KEYS+=("$k"); fi
+      done <"$ours"
+    fi
+    if [[ -n "$theirs" && -f "$theirs" ]]; then
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" == *:* ]] || continue
+        k="${line%%:*}"; v="${line#*: }"
+        [[ -n "${THEIRS_V[$k]+x}" ]] || THEIRS_V["$k"]="$v"
+        seen=0
+        for existing in "${ALL_KEYS[@]:-}"; do [[ "$existing" == "$k" ]] && { seen=1; break; }; done
+        [[ $seen -eq 1 ]] || ALL_KEYS+=("$k")
+      done <"$theirs"
+    fi
+
+    conflicts_json="[]"
+    resolved=true
+    merged_lines=()
+    for k in "${ALL_KEYS[@]}"; do
+      have_b=0; [[ -n "${BASE_V[$k]+x}" ]] && have_b=1
+      have_o=0; [[ -n "${OURS_V[$k]+x}" ]] && have_o=1
+      have_t=0; [[ -n "${THEIRS_V[$k]+x}" ]] && have_t=1
+      bv="${BASE_V[$k]-}"; ov="${OURS_V[$k]-}"; tv="${THEIRS_V[$k]-}"
+      final=""
+      if [[ $have_o -eq 1 && $have_t -eq 1 && "$ov" == "$tv" ]]; then
+        final="$ov"
+      elif [[ $have_b -eq 1 && $have_o -eq 1 && "$ov" == "$bv" && $have_t -eq 1 ]]; then
+        final="$tv"
+      elif [[ $have_b -eq 1 && $have_t -eq 1 && "$tv" == "$bv" && $have_o -eq 1 ]]; then
+        final="$ov"
+      elif [[ $have_o -eq 1 && $have_t -eq 0 ]]; then
+        final="$ov"
+      elif [[ $have_t -eq 1 && $have_o -eq 0 ]]; then
+        final="$tv"
+      else
+        resolved=false
+        conflicts_json="$(jq -c --arg field "$k" --arg ours "$ov" --arg theirs "$tv" \
+          '. + [{field:$field, ours:$ours, theirs:$theirs}]' <<<"$conflicts_json")"
+        continue
+      fi
+      merged_lines+=("$k: $final")
+    done
+
+    if [[ "$resolved" == true ]]; then
+      if [[ -n "$out" ]]; then
+        printf '%s\n' "${merged_lines[@]}" >"$out"
+      fi
+      printf '{"resolved":true,"conflicts":[]}\n'
+    else
+      printf '{"resolved":false,"conflicts":%s}\n' "$conflicts_json"
+    fi
+    exit 0
+    ;;
+  *)
+    shift 3   # tsx, helper script path, store module path
+    dir="$1"; since="$2"; reason="$3"; snap_dir="$4"; prune_csv="$5"; shift 5
+    for id in "$@"; do
+      [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
+    done
+    # The out-of-band field breakdown (mechanical-unresolved detail), appended
+    # after each node's base recovery text — mirrors the real helper.
+    field_breakdown=""
+    if [[ -n "${GRAPH_COMMIT_RECOMMENDATION_FILE:-}" && -f "$GRAPH_COMMIT_RECOMMENDATION_FILE" ]]; then
+      field_breakdown="$(cat "$GRAPH_COMMIT_RECOMMENDATION_FILE")"
+    fi
+    for id in "$@"; do
+      if [[ ",$prune_csv," == *",$id,"* ]]; then
+        rec="prune, no content snapshot, mailbox discipline"
+      else
+        rec="unlanded content preserved at ${snap_dir}/${id}.md; mailbox discipline"
+      fi
+      [[ -n "$field_breakdown" ]] && rec="$rec"$'\n\n'"$field_breakdown"
+      printf 'office_hours: {reason: "%s", since: %s, recommendation: "%s"}\n' "$reason" "$since" "$rec" >>"$dir/$id.md"
+      echo "graph-commit: set office_hours on $id (since=$since)" >&2
+    done
+    ;;
+esac
 SH
 chmod +x "$WORK/bin/gh" "$WORK/bin/npx"
 
@@ -148,17 +441,26 @@ sync_clone() { git -C "$1" fetch -q origin main && git -C "$1" reset -q --hard F
 edit_line() { # <clone> <id> <n> <text>
   sed -i "s/^line$3: .*/line$3: $4/" "$1/intentions/$2.md"
 }
+edit_field() { # <clone> <id> <field> <value> — for seed_field_node fixtures
+  sed -i "s/^$3: .*/$3: $4/" "$1/intentions/$2.md"
+}
 scratch_refs() { git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**'; }
+lock_ref_exists() { git -C "$ORIGIN" show-ref --verify --quiet refs/graph/landing-lock; }
 
 run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMPTS
+           # GC_LOCK_TTL GC_LOCK_POLL GC_LOCK_WAIT GC_SENTINEL
   local clone="$1"; shift
   (
     cd "$clone" || exit 99
     export PATH="$WORK/bin:$PATH"
-    export GC_GH_MODE_FILE="$MODE_FILE" GC_GH_CALL_LOG="$CALL_LOG"
+    export GC_GH_MODE_FILE="$MODE_FILE" GC_GH_CALL_LOG="$CALL_LOG" GC_FIXTURE_DIR="$FIXTURE_DIR"
     export GRAPH_COMMIT_CHECK_POLL_SECONDS="${GC_POLL:-0}"
     export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS="${GC_TIMEOUT:-5}"
     export GRAPH_COMMIT_MAX_ATTEMPTS="${GC_ATTEMPTS:-5}"
+    export GRAPH_COMMIT_LOCK_TTL_SECONDS="${GC_LOCK_TTL:-}"
+    export GRAPH_COMMIT_LOCK_POLL_SECONDS="${GC_LOCK_POLL:-}"
+    export GRAPH_COMMIT_LOCK_WAIT_SECONDS="${GC_LOCK_WAIT:-}"
+    export GC_GH_SENTINEL_FILE="${GC_SENTINEL:-}"
     bash packages/intentionsutil/scripts/graph-commit "$@"
   )
 }
@@ -216,7 +518,7 @@ snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
 if [[ $rc -eq 1 ]] \
    && grep -q 'concurrent-edit conflict' <<<"$out" \
    && grep -q 'line1: A-wins' <<<"$content" \
-   && ! grep -q 'B-loses' <<<"$content" \
+   && ! grep -q '^line1: B-loses' <<<"$content" \
    && grep -q 'office_hours' <<<"$content"; then
   ok "overlap: exit 1, other writer survives on main, office_hours park landed"
 else
@@ -226,6 +528,13 @@ if [[ -n "$snap" && -f "$snap/t-conflict.md" ]] && grep -q 'B-loses' "$snap/t-co
   ok "overlap: losing writer's content preserved in the kept snapshot dir"
 else
   no "overlap snapshot preservation (snap='$snap')"
+fi
+if [[ -n "$snap" ]] && grep -q 'recommendation' <<<"$content" \
+   && grep -q "$snap/t-conflict.md" <<<"$content" \
+   && grep -q 'mailbox discipline' <<<"$content"; then
+  ok "overlap: office_hours recommendation carries the snapshot path and mailbox instruction"
+else
+  no "overlap: recommendation missing snapshot path or mailbox instruction"; printf '%s\n' "$content"
 fi
 
 # --- Case 5: concluded check failure — immediate die, no retry burn -------------
@@ -267,14 +576,32 @@ edit_line "$A" t-pending 1 stuck
 out="$(export GC_POLL=1 GC_TIMEOUT=1 GC_ATTEMPTS=2; run_gc "$A" t-pending 2>&1)"; rc=$?
 if [[ $rc -eq 1 ]] \
    && grep -q 'attempt 2/2' <<<"$out" \
-   && grep -q 'could not land on main after 2 attempts' <<<"$out"; then
+   && grep -q 'could not land on main after 2/2 attempts' <<<"$out"; then
   ok "pending timeout stays transient: burns attempts, exits busy-main"
 else
   no "pending timeout retry path (rc=$rc)"; printf '%s\n' "$out"
 fi
 sync_clone "$A"
 
-# --- Case 8: id validation -------------------------------------------------------
+# --- Case 8: desynced check-run status — fixed filter counts it as concluded ----
+# GitHub sometimes leaves a check-run's status stuck at in_progress even after
+# its conclusion is already populated (a known check-runs desync, #2457). The
+# fixed --jq filter keys off .conclusion alone, so this fixture's fourth entry
+# (status=in_progress, conclusion=success) still counts toward nsucc==4 and
+# lands immediately instead of spinning to the busy-main timeout the
+# pre-fix status=="completed"-gated filter would hit.
+set_mode desynced-success
+sync_clone "$A"
+edit_line "$A" t-desync 1 desync-lands
+out="$(run_gc "$A" t-desync 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-desync | grep -q 'line1: desync-lands'; then
+  ok "desynced check-run (status stuck in_progress, conclusion success) still lands"
+else
+  no "desynced check-run handling (rc=$rc)"; printf '%s\n' "$out"
+fi
+sync_clone "$A"
+
+# --- Case 9: id validation -------------------------------------------------------
 set_mode green
 sync_clone "$A"
 edit_line "$A" v1..v2-migration 1 dotdot-ok
@@ -294,11 +621,11 @@ for bad in 'a/b' 'a\b' '.' '..'; do
 done
 
 # ---------------------------------------------------------------------------
-# Cases 9-10: --prune
+# Cases 10-11: --prune
 # ---------------------------------------------------------------------------
 set_mode green
 
-# Case 9: an ordinary edit id and a prune id land in ONE commit.
+# Case 10: an ordinary edit id and a prune id land in ONE commit.
 W1="$WORK/w1"
 make_clone "$W1" writer-1
 echo "line13: edited" >>"$W1/intentions/t-prune-edit.md"
@@ -323,7 +650,7 @@ else
   no "prune: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
 fi
 
-# Case 10: a prune id whose file is still present on disk is rejected.
+# Case 11: a prune id whose file is still present on disk is rejected.
 W2="$WORK/w2"
 make_clone "$W2" writer-2
 before_sha="$(origin_sha)"
@@ -338,9 +665,9 @@ else
   fi
 fi
 
-# Case 13: --prune alone (no positional id) — a pure deletion-only commit.
+# Case 14: --prune alone (no positional id) — a pure deletion-only commit.
 # This is the owed-prune backlog's actual shape (a `phase: done` node with no
-# accompanying edit), distinct from case 9's mixed edit+prune: IDS is empty
+# accompanying edit), distinct from case 10's mixed edit+prune: IDS is empty
 # here, so ALL_IDS[0] resolves entirely from PRUNE_IDS, exercising the
 # scratch-branch ref-name path and id_files_dirty()/commit_files() with no
 # ordinary ids at all.
@@ -365,10 +692,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Cases 11-12: --base compare-and-swap
+# Cases 12-13: --base compare-and-swap
 # ---------------------------------------------------------------------------
 
-# Case 11: --base fresh — a blob matching origin/main's current content lands.
+# Case 12: --base fresh — a blob matching origin/main's current content lands.
 W3="$WORK/w3"
 make_clone "$W3" writer-3
 fresh_sha="$(git -C "$W3" hash-object intentions/t-base.md)"
@@ -384,37 +711,50 @@ else
   no "base fresh: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
 fi
 
-# Case 12: --base stale — a blob origin/main no longer has is refused.
+# Case 13: --base stale, disjoint appended lines (bare line-based fixture) —
+# now auto-resolves via layer 3 instead of dying. Pre-Unit-3 this was a hard
+# `die "stale base for ..."`. Since Unit 3, check_base_freshness() attempts an
+# automatic structural merge (run_merge_node()) before refusing; against this
+# harness's npx merge-node.ts shim (a simplified key:value three-way merge —
+# see the shim's own comment), two writers appending DIFFERENT new lines
+# (line13 vs line14, neither present in the other's base or landed content) is
+# exactly the disjoint case the shim resolves cleanly, so this now lands
+# (exit 0) rather than refusing. Cases 19-20 below cover the resolve/unresolved
+# split on real seed_field_node fixtures that this bare-line fixture can no
+# longer distinguish (a genuine same-line divergence is exercised by case 4,
+# and a same-FIELD divergence specifically by cases 18/20).
 W4="$WORK/w4"
 make_clone "$W4" writer-4
 stale_sha="$(git -C "$W4" hash-object intentions/t-base.md)"
-before_sha="$(origin_sha)"
 
 # Simulate a concurrent writer landing an unrelated change to the SAME node
 # on origin/main, bypassing graph-commit (representing "another session
 # already committed" for fast test setup — the mechanism under test is the
 # blob comparison, not how the concurrent write itself lands).
+# NOTE: case 11 (above) already landed a "line13" key onto this same t-base
+# node — the appended keys here must be fresh (line15/line16) or the harness's
+# simplified key:value merge shim (first-occurrence-wins per file) would treat
+# "line13" as an already-known key colliding with a stale duplicate rather
+# than the genuinely disjoint new key this case means to exercise.
 OTHER="$WORK/other"
 make_clone "$OTHER" other
-echo "line14: concurrent edit" >>"$OTHER/intentions/t-base.md"
+echo "line16: concurrent edit" >>"$OTHER/intentions/t-base.md"
 git -C "$OTHER" commit -qam 'concurrent edit'
 git -C "$OTHER" push -q origin main
 
-echo "line13: writer4 edit (based on a stale read)" >>"$W4/intentions/t-base.md"
-if out="$(run_gc "$W4" -m 'test: base stale' --base "t-base=$stale_sha" t-base 2>&1)"; then
-  no "base stale: expected refusal, got exit 0"
+echo "line15: writer4 edit (based on a stale read)" >>"$W4/intentions/t-base.md"
+out="$(run_gc "$W4" -m 'test: base stale, disjoint fields' --base "t-base=$stale_sha" t-base 2>&1)"; rc=$?
+content="$(origin_show t-base 2>/dev/null)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'line15: writer4 edit (based on a stale read)' <<<"$content" \
+   && grep -q 'line16: concurrent edit' <<<"$content"; then
+  ok "base stale, disjoint lines: layer 3 auto-resolves rather than dying, both edits land"
 else
-  after_sha="$(origin_sha)"
-  concurrent_sha="$(git -C "$OTHER" rev-parse HEAD)"
-  if grep -q "stale base" <<<"$out" && [[ "$after_sha" == "$concurrent_sha" ]]; then
-    ok "base stale: refuses a --base whose blob no longer matches origin/main, writer4 content NOT landed"
-  else
-    no "base stale: refused but wrong error or main moved unexpectedly"; printf '%s\n' "$out"
-  fi
+  no "base stale disjoint-lines resolve (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
-# Case 14: --base manifest-file form — a file of <id>=<blobsha> lines (as
-# opposed to cases 11-12's inline <id>=<blobsha> argument).
+# Case 15: --base manifest-file form — a file of <id>=<blobsha> lines (as
+# opposed to cases 12-13's inline <id>=<blobsha> argument).
 W6="$WORK/w6"
 make_clone "$W6" writer-6
 manifest_sha="$(git -C "$W6" hash-object intentions/t-base-manifest.md)"
@@ -430,6 +770,433 @@ if out="$(run_gc "$W6" -m 'test: base manifest' --base "$manifest_file" t-base-m
   fi
 else
   no "base manifest-file form: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
+fi
+
+# --- Case 16: far-ahead worktree (PR branch) — rebuild on origin/main -----------
+# A PR-branch checkout whose HEAD carries a non-intentions code commit. A commit
+# made on top of it is NOT intentions/-only, so the pre-fix graph-commit's
+# scratch push would fail the fast-path guard and never land. The fix rebuilds
+# the edit on origin/main: only the intentions/ change lands (never the code
+# commit), and the worktree HEAD is restored to the PR tip.
+set_mode green
+W7="$WORK/w7"
+make_clone "$W7" writer-7
+mkdir -p "$W7/src"
+echo "console.log('pr feature code')" >"$W7/src/feature.js"
+git -C "$W7" add src/feature.js
+git -C "$W7" commit -qm 'pr: non-intentions code change (simulated PR branch)'
+far_tip="$(git -C "$W7" rev-parse HEAD)"
+edit_line "$W7" t-farahead 1 farahead-edit
+out="$(run_gc "$W7" -m 'test: far-ahead edit' t-farahead 2>&1)"; rc=$?
+landed="$(origin_show t-farahead 2>/dev/null || true)"
+main_tree="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+restored="$(git -C "$W7" rev-parse HEAD)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'line1: farahead-edit' <<<"$landed" \
+   && ! grep -q 'src/feature.js' <<<"$main_tree" \
+   && [[ "$restored" == "$far_tip" ]]; then
+  ok "far-ahead worktree: intentions edit lands, code commit excluded, HEAD restored to PR tip"
+else
+  no "far-ahead worktree (rc=$rc restored=$restored far_tip=$far_tip code-on-main=$(grep -c 'src/feature.js' <<<"$main_tree"))"; printf '%s\n' "$out"
+fi
+
+# --- Case 17: overlapping edit vs prune conflict — park recommendation covers the prune branch ---
+# A rebase CONFLICT where the losing writer's commit is a --prune (delete)
+# racing another writer's edit to the SAME node exercises park_write()'s
+# prune-vs-edit recommendation branch (Unit 1): a pruned id has no on-disk
+# snapshot, so its recommendation must say so instead of pointing at a
+# (nonexistent) SNAP_DIR/<id>.md.
+set_mode green
+W8="$WORK/w8"; W9="$WORK/w9"
+make_clone "$W8" writer-8
+make_clone "$W9" writer-9
+sync_clone "$W8"; sync_clone "$W9"
+edit_line "$W8" t-prune-conflict 1 W8-edit
+run_gc "$W8" t-prune-conflict >/dev/null 2>&1
+rm -f "$W9/intentions/t-prune-conflict.md"
+out="$(run_gc "$W9" --prune t-prune-conflict 2>&1)"; rc=$?
+content="$(origin_show t-prune-conflict)"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'concurrent-edit conflict' <<<"$out" \
+   && grep -q 'line1: W8-edit' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 'recommendation' <<<"$content" \
+   && ! grep -q 'preserved at' <<<"$content"; then
+  ok "prune-vs-edit conflict: park recommendation omits a snapshot path for a pruned id"
+else
+  no "prune-vs-edit conflict handling (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 18: far-ahead worktree + --prune --------------------------------------
+# A prune issued from the same far-ahead PR branch: the node is removed from
+# main, the code commit is still excluded, and HEAD is restored.
+set_mode green
+git -C "$W7" fetch -q origin main
+rm -f "$W7/intentions/t-farahead-prune.md"
+far_tip2="$(git -C "$W7" rev-parse HEAD)"   # still the code-commit tip
+out="$(run_gc "$W7" -m 'test: far-ahead prune' --prune t-farahead-prune 2>&1)"; rc=$?
+restored2="$(git -C "$W7" rev-parse HEAD)"
+main_tree2="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+if [[ $rc -eq 0 ]] \
+   && ! grep -q 'intentions/t-farahead-prune.md' <<<"$main_tree2" \
+   && ! grep -q 'src/feature.js' <<<"$main_tree2" \
+   && [[ "$restored2" == "$far_tip2" ]]; then
+  ok "far-ahead worktree + --prune: node removed from main, code commit excluded, HEAD restored"
+else
+  no "far-ahead prune (rc=$rc restored2=$restored2 far_tip2=$far_tip2)"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Cases 19-23: layer 2 (rebase-conflict field merge) and layer 3 (stale --base
+# re-read) auto-merge, using seed_field_node's real-frontmatter fixtures.
+# ---------------------------------------------------------------------------
+
+# Case 19: layer 2 resolves a textual rebase conflict whose two sides touch
+# DIFFERENT fields. fieldA and fieldB are adjacent lines in the seeded
+# frontmatter, so editing each independently still produces a textual git
+# CONFLICT (the diff hunks' contexts overlap) even though the fields
+# themselves never collide — exactly the case run_merge_node() should resolve.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_field "$A" t-field-merge fieldA A-edit
+run_gc "$A" t-field-merge >/dev/null 2>&1
+edit_field "$B" t-field-merge fieldB B-edit
+out="$(run_gc "$B" t-field-merge 2>&1)"; rc=$?
+content="$(origin_show t-field-merge)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'layer 2/3 auto-resolved a concurrent-edit divergence' <<<"$out" \
+   && grep -q 'fieldA: A-edit' <<<"$content" \
+   && grep -q 'fieldB: B-edit' <<<"$content"; then
+  ok "layer 2: non-overlapping field-level conflict auto-merges, both writers' edits land"
+else
+  no "layer 2 field-merge (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# Case 20: layer 2 leaves a textual conflict whose two sides touch the SAME
+# field mechanical-unresolved: exit 1, office_hours.reason carries the stable
+# "mechanical-unresolved" marker, and the recommendation names both values.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_field "$A" t-field-conflict sentinel A-value
+run_gc "$A" t-field-conflict >/dev/null 2>&1
+edit_field "$B" t-field-conflict sentinel B-value
+out="$(run_gc "$B" t-field-conflict 2>&1)"; rc=$?
+content="$(origin_show t-field-conflict)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'A-value' <<<"$content" \
+   && grep -q 'B-value' <<<"$content"; then
+  ok "layer 2: same-field divergence stays mechanical-unresolved, both values named in the recommendation"
+else
+  no "layer 2 field-conflict (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# Case 21: layer 3 (--base stale re-read) auto-resolves a stale --base whose
+# delta touches a DIFFERENT field than the concurrently-landed write.
+set_mode green
+W21="$WORK/w21"
+make_clone "$W21" writer-21
+base_ok_sha="$(git -C "$W21" hash-object intentions/t-field-base-ok.md)"
+edit_field "$W21" t-field-base-ok fieldA writer8-edit
+
+OTHER2="$WORK/other2"
+make_clone "$OTHER2" other2
+edit_field "$OTHER2" t-field-base-ok fieldB concurrent-edit
+git -C "$OTHER2" commit -qam 'concurrent field edit'
+git -C "$OTHER2" push -q origin main
+
+out="$(run_gc "$W21" -m 'test: base field resolve' --base "t-field-base-ok=$base_ok_sha" t-field-base-ok 2>&1)"; rc=$?
+content="$(origin_show t-field-base-ok 2>/dev/null)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'fieldA: writer8-edit' <<<"$content" \
+   && grep -q 'fieldB: concurrent-edit' <<<"$content"; then
+  ok "layer 3: stale --base auto-resolves a disjoint-field divergence, both edits land"
+else
+  no "layer 3 base resolve (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# Case 22: layer 3 leaves a stale --base SAME-field divergence
+# mechanical-unresolved: exit 1, office_hours.reason carries
+# "mechanical-unresolved", both values are named in the recommendation.
+set_mode green
+W22="$WORK/w22"
+make_clone "$W22" writer-22
+base_bad_sha="$(git -C "$W22" hash-object intentions/t-field-base-bad.md)"
+edit_field "$W22" t-field-base-bad sentinel writer9-value
+
+OTHER3="$WORK/other3"
+make_clone "$OTHER3" other3
+edit_field "$OTHER3" t-field-base-bad sentinel concurrent-value
+git -C "$OTHER3" commit -qam 'concurrent same-field edit'
+git -C "$OTHER3" push -q origin main
+
+out="$(run_gc "$W22" -m 'test: base field conflict' --base "t-field-base-bad=$base_bad_sha" t-field-base-bad 2>&1)"; rc=$?
+content="$(origin_show t-field-base-bad 2>/dev/null)"
+calls="$(gh_calls)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'writer9-value' <<<"$content" \
+   && grep -q 'concurrent-value' <<<"$content" \
+   && [[ "$calls" -eq 1 ]] \
+   && [[ -n "$snap" && -f "$snap/t-field-base-bad.md" ]] \
+   && grep -q 'writer9-value' "$snap/t-field-base-bad.md"; then
+  ok "layer 3: stale --base same-field divergence stays mechanical-unresolved (parks via a single stamp poll, no prior retry loop), and SNAP_DIR retains the writer's original node content"
+else
+  no "layer 3 base conflict (rc=$rc calls=$calls)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# Case 23: a --prune id racing a concurrent edit to the same node is excluded
+# from the layer-2 merge attempt entirely (a deletion has nothing to
+# structurally merge against) — no false "auto-resolved" claim, parks with the
+# prune-specific sentinel note.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_line "$A" t-prune-conflict 1 landed-edit
+run_gc "$A" t-prune-conflict >/dev/null 2>&1
+rm -f "$B/intentions/t-prune-conflict.md"
+out="$(run_gc "$B" --prune t-prune-conflict 2>&1)"; rc=$?
+content="$(origin_show t-prune-conflict 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && ! grep -q 'layer 2/3 auto-resolved' <<<"$out" \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'prune vs. concurrent edit' <<<"$content" \
+   && grep -q 'landed-edit' <<<"$content"; then
+  ok "prune-vs-edit: excluded from the layer-2 merge attempt, parks with the prune-specific reason"
+else
+  no "prune-vs-edit exclusion (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 24: unrelated dirty tracked file — clear pre-flight error, no rebase attempted ---
+set_mode green
+W10="$WORK/w10"
+make_clone "$W10" writer-10
+sync_clone "$W10"
+edit_line "$W10" t-dirty-preflight 1 dirty-edit
+echo "unrelated local change" >>"$W10/packages/intentionsutil/src/store.js"
+before_sha="$(origin_sha)"
+out="$(run_gc "$W10" t-dirty-preflight 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'unrelated dirty tracked file' <<<"$out" \
+   && grep -q 'store.js' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]] \
+   && [[ "$(gh_calls)" -eq 0 ]]; then
+  ok "unrelated dirty tracked file: clear pre-flight error names the file, no rebase/CI attempted, main untouched"
+else
+  no "unrelated dirty tracked file pre-flight (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 25: -C targeting from an unrelated cwd --------------------------------
+# The graph-commit script FILE lives inside w16's checkout, but the invocation
+# passes `-C` pointing at a DIFFERENT clone (w17), from a cwd that is neither.
+# Pre-fix, REPO_ROOT was derived from the script's own on-disk location
+# (SCRIPT_DIR-climbing), so this would have silently landed in w16 regardless
+# of -C or cwd. Post-fix, REPO_ROOT is resolved from -C, so the edit must land
+# via w17's tree.
+set_mode green
+W16="$WORK/w16"; make_clone "$W16" writer-16   # only the script FILE's location
+W17="$WORK/w17"; make_clone "$W17" writer-17   # the actual -C target
+edit_line "$W17" t-cwd-target 1 target-edit-via-C
+UNRELATED_DIR="$WORK/unrelated-cwd"
+mkdir -p "$UNRELATED_DIR"
+out="$(
+  cd "$UNRELATED_DIR" || exit 99
+  export PATH="$WORK/bin:$PATH"
+  export GC_GH_MODE_FILE="$MODE_FILE" GC_GH_CALL_LOG="$CALL_LOG" GC_FIXTURE_DIR="$FIXTURE_DIR"
+  export GRAPH_COMMIT_CHECK_POLL_SECONDS=0 GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5 GRAPH_COMMIT_MAX_ATTEMPTS=5
+  bash "$W16/packages/intentionsutil/scripts/graph-commit" -C "$W17" -m 'test: -C from unrelated cwd' t-cwd-target 2>&1
+)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-cwd-target | grep -q 'line1: target-edit-via-C'; then
+  ok "-C targeting: script physically inside w16, targeting w17 via -C from an unrelated cwd, lands in w17's repo"
+else
+  no "-C targeting from unrelated cwd (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 26: no-repo error -------------------------------------------------------
+# No `-C` given, invoked from a cwd that is not inside any git repository at
+# all (a plain mktemp -d, never `git init`'d). Must die loudly naming the
+# problem — never silently fall back to the script's own on-disk checkout.
+NOREPO_DIR="$WORK/no-repo-dir"
+mkdir -p "$NOREPO_DIR"
+out="$(
+  cd "$NOREPO_DIR" || exit 99
+  export PATH="$WORK/bin:$PATH"
+  export GC_GH_MODE_FILE="$MODE_FILE" GC_GH_CALL_LOG="$CALL_LOG" GC_FIXTURE_DIR="$FIXTURE_DIR"
+  export GRAPH_COMMIT_CHECK_POLL_SECONDS=0 GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5 GRAPH_COMMIT_MAX_ATTEMPTS=5
+  bash "$A/packages/intentionsutil/scripts/graph-commit" -m 'test: no repo' t-happy 2>&1
+)"; rc=$?
+if [[ $rc -ne 0 ]] && grep -q 'not inside a git repository' <<<"$out"; then
+  ok "no-repo error: cwd outside any git repository dies with a clear message, no silent fallback"
+else
+  no "no-repo error (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 27: fail-loud guard, differing blob -------------------------------------
+# A clone that never edited t-fail-loud-diff (nothing staged for it) while
+# origin/main has since advanced with a DIFFERENT edit to that same id (a
+# stale clone/checkout). Under caller-derived repo resolution this can only
+# mean the wrong checkout is targeted, so graph-commit must die loudly rather
+# than emit the false "landed" success the old script-location-derived
+# resolution risked.
+set_mode green
+W13="$WORK/w13"; make_clone "$W13" writer-13   # stays at the seed tip — never synced
+OTHER4="$WORK/other4"; make_clone "$OTHER4" other4
+edit_line "$OTHER4" t-fail-loud-diff 1 concurrent-landed
+git -C "$OTHER4" commit -qam 'concurrent edit lands on origin, unrelated to w13'
+git -C "$OTHER4" push -q origin main
+before_sha="$(origin_sha)"
+out="$(run_gc "$W13" t-fail-loud-diff 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -ne 0 ]] \
+   && grep -q 'mis-pointed -C/--repo' <<<"$out" \
+   && ! grep -q 'landed t-fail-loud-diff on main' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "fail-loud guard: differing blob vs origin/main with nothing staged dies loudly, never lands"
+else
+  no "fail-loud guard differing-blob (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 28: fail-loud guard, benign equal-blob ----------------------------------
+# A clone synced exactly to origin/main's current tip: nothing staged, and the
+# local blob for the id already EQUALS origin/main's blob (the already-landed
+# / already-at-HEAD case). This must proceed benignly — same "no new changes
+# to stage" message as case 2, no die.
+W15="$WORK/w15"; make_clone "$W15" writer-15
+sync_clone "$W15"   # now bit-for-bit at origin/main's tip
+before_sha="$(origin_sha)"
+out="$(run_gc "$W15" t-happy 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'no new changes to stage' <<<"$out" \
+   && ! grep -q 'mis-pointed' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "fail-loud guard: benign equal-blob (already at origin/main's tip) proceeds without error"
+else
+  no "fail-loud guard benign-equal-blob (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 29: contention is now cheap, not exhausting -----------------------
+set_mode blocked-green
+W18="$WORK/w18"; W19="$WORK/w19"
+make_clone "$W18" writer-18
+make_clone "$W19" writer-19
+edit_line "$W18" t-lock-contend 1 A-top
+edit_line "$W19" t-lock-contend 12 B-bottom
+SENTINEL="$WORK/lock-sentinel-29"; rm -f "$SENTINEL"
+outA="$WORK/out-29-a.log"; outB="$WORK/out-29-b.log"
+( GC_SENTINEL="$SENTINEL" run_gc "$W18" -m 'test: lock contend A' t-lock-contend >"$outA" 2>&1; echo $? >"$WORK/rc-29-a" ) &
+pidA=$!
+# Wait (bounded poll) for A to have made its gh call (now blocked inside the
+# shim on the sentinel) — this guarantees A already holds the lock and is
+# parked in await_checks(), so the reset+start-B sequence below cannot race
+# against A's own call landing in the log after the reset.
+claimed=0
+for _ in $(seq 1 100); do
+  [[ "$(gh_calls)" -ge 1 ]] && { claimed=1; break; }
+  sleep 0.1
+done
+if [[ "$claimed" -ne 1 ]]; then
+  no "lock contend: writer A never reached await_checks (no gh call observed)"
+  rm -f "$SENTINEL"; wait "$pidA" 2>/dev/null
+else
+  : >"$CALL_LOG"   # from here, CALL_LOG counts only B's calls
+  ( GC_LOCK_POLL=1 GC_SENTINEL="$SENTINEL" run_gc "$W19" -m 'test: lock contend B' t-lock-contend >"$outB" 2>&1; echo $? >"$WORK/rc-29-b" ) &
+  pidB=$!
+  sleep 1   # give B a moment to attempt (and fail) to claim the held lock
+  callsB_while_blocked="$(gh_calls)"
+  : >"$SENTINEL"   # release A
+  wait "$pidA"; rcA="$(cat "$WORK/rc-29-a")"
+  wait "$pidB"; rcB="$(cat "$WORK/rc-29-b")"
+  callsB_final="$(gh_calls)"
+  content="$(origin_show t-lock-contend)"
+  if [[ "$callsB_while_blocked" -eq 0 && "$rcA" -eq 0 && "$rcB" -eq 0 && "$callsB_final" -eq 1 ]] \
+     && grep -q 'line1: A-top' <<<"$content" && grep -q 'line12: B-bottom' <<<"$content"; then
+    ok "lock contend: B makes 0 polls while A holds the lock, then lands in exactly 1 poll cycle"
+  else
+    no "lock contend: callsB_while_blocked=$callsB_while_blocked rcA=$rcA rcB=$rcB callsB_final=$callsB_final"
+    printf '%s\n' "$(cat "$outA" 2>/dev/null)" "$(cat "$outB" 2>/dev/null)"
+  fi
+fi
+rm -f "$SENTINEL"
+
+plant_lock() { # <expiry_unix_ts> <holder>
+  local expiry="$1" holder="$2" sha
+  sha="$(git -C "$ORIGIN" commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 \
+    -m "graph-commit-lock v1" -m "holder=$holder expiry=$expiry")"
+  # Fail loudly: an empty sha here means no lock gets planted, which silently
+  # turns the steal/wait cases into vacuous passes rather than failures.
+  if [[ -z "$sha" ]]; then
+    echo "plant_lock: commit-tree produced no sha in $ORIGIN" >&2
+    exit 1
+  fi
+  git -C "$ORIGIN" update-ref refs/graph/landing-lock "$sha"
+}
+
+# --- Case 30: dead-holder steal ----------------------------------------------
+set_mode green
+past_expiry=$(( $(date +%s) - 60 ))
+plant_lock "$past_expiry" dead-holder-test
+W20="$WORK/w20"
+make_clone "$W20" writer-20
+edit_line "$W20" t-lock-steal 1 steal-lands
+start_ts=$(date +%s)
+out="$(GC_LOCK_POLL=1 run_gc "$W20" -m 'test: dead-holder steal' t-lock-steal 2>&1)"; rc=$?
+elapsed=$(( $(date +%s) - start_ts ))
+if [[ $rc -eq 0 ]] && origin_show t-lock-steal | grep -q 'line1: steal-lands' && [[ "$elapsed" -le 10 ]]; then
+  ok "dead-holder steal: expired foreign lock is stolen and lands promptly (${elapsed}s)"
+else
+  no "dead-holder steal (rc=$rc elapsed=${elapsed}s)"; printf '%s\n' "$out"
+fi
+
+# --- Case 31: live-holder wait (no premature steal) --------------------------
+set_mode green
+future_expiry=$(( $(date +%s) + 3 ))
+plant_lock "$future_expiry" live-holder-test
+planted_sha="$(git -C "$ORIGIN" for-each-ref --format='%(objectname)' refs/graph/landing-lock)"
+W11="$WORK/w11"
+make_clone "$W11" writer-11
+edit_line "$W11" t-lock-wait 1 wait-then-lands
+outfile="$WORK/out-31.log"
+start_ts=$(date +%s)
+( GC_LOCK_POLL=1 run_gc "$W11" -m 'test: live-holder wait' t-lock-wait >"$outfile" 2>&1; echo $? >"$WORK/rc-31" ) &
+pid20=$!
+sleep 1
+current_sha="$(git -C "$ORIGIN" for-each-ref --format='%(objectname)' refs/graph/landing-lock)"
+no_premature_steal=0
+[[ "$current_sha" == "$planted_sha" ]] && no_premature_steal=1
+wait "$pid20"
+end_ts=$(date +%s)
+elapsed=$(( end_ts - start_ts ))
+rc="$(cat "$WORK/rc-31")"
+out="$(cat "$outfile")"
+if [[ "$no_premature_steal" -eq 1 && $rc -eq 0 && "$elapsed" -ge 2 ]] \
+   && origin_show t-lock-wait | grep -q 'line1: wait-then-lands'; then
+  ok "live-holder wait: does not steal before the planted expiry (${elapsed}s elapsed), lands once it passes"
+else
+  no "live-holder wait (no_premature_steal=$no_premature_steal rc=$rc elapsed=${elapsed}s)"; printf '%s\n' "$out"
+fi
+
+# --- Case 32: lock-ref hygiene ------------------------------------------------
+set_mode green
+W12="$WORK/w12"
+make_clone "$W12" writer-12
+edit_line "$W12" t-lock-hygiene 1 hygiene-lands
+out="$(run_gc "$W12" -m 'test: lock hygiene' t-lock-hygiene 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && ! lock_ref_exists; then
+  ok "lock hygiene: refs/graph/landing-lock absent on origin after a normal successful landing"
+else
+  no "lock hygiene: rc=$rc"; printf '%s\n' "$out"
+fi
+if ! git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**' | grep -q landing-lock; then
+  ok "lock hygiene: refs/heads/graph/** never lists the landing-lock ref (disjoint namespaces)"
+else
+  no "lock hygiene: landing-lock ref leaked into refs/heads/graph/**"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

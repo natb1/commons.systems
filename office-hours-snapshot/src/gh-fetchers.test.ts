@@ -290,17 +290,88 @@ describe("fetchGithub", () => {
     watchers_count: 2,
   });
 
-  it("returns stats + traffic when all endpoints succeed (fetchGithub*Live shape)", async () => {
-    // Call order: stats (repos/o/r), then Promise.all dispatches the three
-    // traffic endpoints in array order: clones, views, popular/referrers.
+  const forksBody = JSON.stringify([
+    {
+      owner: { login: "forker" },
+      html_url: "https://github.com/forker/r",
+      created_at: "2026-01-01T00:00:00Z",
+      pushed_at: "2026-06-01T00:00:00Z",
+      stargazers_count: 3,
+    },
+  ]);
+  const forksDetail = [
+    {
+      owner: "forker",
+      repoUrl: "https://github.com/forker/r",
+      createdAt: "2026-01-01T00:00:00Z",
+      pushedAt: "2026-06-01T00:00:00Z",
+      stars: 3,
+    },
+  ];
+
+  it("returns stats + forksDetail + traffic when all endpoints succeed (fetchGithub*Live shape)", async () => {
+    // Call order: stats (repos/o/r), then the forks list, then Promise.all
+    // dispatches the three traffic endpoints in array order: clones, views,
+    // popular/referrers.
     const { run, calls } = mockRunner([
       ok(repoBody),
+      ok(forksBody),
       ok(JSON.stringify({ count: 10, uniques: 4 })),
       ok(JSON.stringify({ count: 100, uniques: 40 })),
       ok(JSON.stringify([{ referrer: "google.com", count: 9, uniques: 3 }])),
     ]);
 
     const signals = await fetchGithub("o/r", run);
+    expect(signals).toEqual({
+      repo: "o/r",
+      stars: 5,
+      forks: 1,
+      watchers: 2,
+      forksDetail,
+      traffic: {
+        clonesCount: 10,
+        clonesUniques: 4,
+        viewsCount: 100,
+        viewsUniques: 40,
+        topReferrers: [{ referrer: "google.com", count: 9, uniques: 3 }],
+      },
+    });
+    expect(calls[0]).toEqual(["api", "repos/o/r"]);
+    expect(calls[1]).toEqual(["api", "repos/o/r/forks?sort=newest&per_page=100"]);
+  });
+
+  it("omits traffic when a traffic endpoint 403s, keeping public stats + forksDetail", async () => {
+    const { run } = mockRunner([
+      ok(repoBody),
+      ok(forksBody),
+      // clones endpoint fails (e.g. 403) → traffic omitted, stats kept
+      () => {
+        throw new Error("gh api repos/o/r/traffic/clones failed: exit 1\nHTTP 403");
+      },
+      // the parallel views/referrers may or may not run; provide tolerant stubs
+      () => ok(JSON.stringify({ count: 0, uniques: 0 })),
+      () => ok(JSON.stringify([])),
+    ]);
+
+    const signals = await fetchGithub("o/r", run);
+    expect(signals).toEqual({ repo: "o/r", stars: 5, forks: 1, watchers: 2, forksDetail });
+    expect("traffic" in signals).toBe(false);
+  });
+
+  it("omits forksDetail when the forks endpoint errors, keeping stats + traffic", async () => {
+    const { run } = mockRunner([
+      ok(repoBody),
+      // forks endpoint fails → forksDetail omitted, everything else kept
+      () => {
+        throw new Error("gh api repos/o/r/forks failed: exit 1\nHTTP 403");
+      },
+      ok(JSON.stringify({ count: 10, uniques: 4 })),
+      ok(JSON.stringify({ count: 100, uniques: 40 })),
+      ok(JSON.stringify([{ referrer: "google.com", count: 9, uniques: 3 }])),
+    ]);
+
+    const signals = await fetchGithub("o/r", run);
+    expect("forksDetail" in signals).toBe(false);
     expect(signals).toEqual({
       repo: "o/r",
       stars: 5,
@@ -314,24 +385,6 @@ describe("fetchGithub", () => {
         topReferrers: [{ referrer: "google.com", count: 9, uniques: 3 }],
       },
     });
-    expect(calls[0]).toEqual(["api", "repos/o/r"]);
-  });
-
-  it("omits traffic when a traffic endpoint 403s, keeping public stats", async () => {
-    const { run } = mockRunner([
-      ok(repoBody),
-      // clones endpoint fails (e.g. 403) → traffic omitted, stats kept
-      () => {
-        throw new Error("gh api repos/o/r/traffic/clones failed: exit 1\nHTTP 403");
-      },
-      // the parallel views/referrers may or may not run; provide tolerant stubs
-      () => ok(JSON.stringify({ count: 0, uniques: 0 })),
-      () => ok(JSON.stringify([])),
-    ]);
-
-    const signals = await fetchGithub("o/r", run);
-    expect(signals).toEqual({ repo: "o/r", stars: 5, forks: 1, watchers: 2 });
-    expect("traffic" in signals).toBe(false);
   });
 });
 

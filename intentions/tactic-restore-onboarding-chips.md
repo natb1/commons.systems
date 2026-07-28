@@ -4,7 +4,7 @@ kind: tactic
 statement: Restore the progressive-disclosure onboarding chips
   (easy/medium/hard) after tier-2 entry, each flow QA-walked end-to-end first
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Retained from gh #721 and #722 during the 2026-07-06 tier-gate
   interview, extended to cover the Easy chip that tactic-quiet-app-heroes
@@ -23,8 +23,22 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
-office_hours: null
+blocked_by:
+  - tactic-quiet-app-heroes
+office_hours:
+  reason: "Gated on the tier-2 (user) entry declaration on
+    strategy-progressive-validation, which is not yet declared (as of 2026-07-06
+    that node records tier 1 validated by daily use; tiers 2-4 not entered).
+    Restoring the easy/medium/hard onboarding chips re-lights user-facing
+    invitations, which strategy-user-onboarding condition 1 forbids until tier-2
+    is declared and each flow is QA-walked end-to-end. This is author-owned
+    work: the author must first declare tier-2 entry (a dated clarification on
+    strategy-progressive-validation). Recommend: when tier-2 is declared, run
+    /align-tactics strategy-user-onboarding to finalize this into per-chip
+    QA-then-restore units (retained gh #721/#722 scopes are in this node body)
+    blocked_by tactic-quiet-app-heroes; until then leave parked."
+  since: 2026-07-13
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}

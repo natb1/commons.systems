@@ -105,6 +105,21 @@ attributes:
       recovery path to stay real"
     - "review_trigger: what prompts reassessment"
     - "last_assessed: date of the last review"
+    - "household: {shared: boolean, basis: <evidence for the marking>, consent:
+      [{date, move, decision}], preferences: [<household-voiced platform
+      preferences or objections>]} — optional; an absent block means the record
+      is not yet assessed for household sharing. shared marks a delegation the
+      household jointly holds (a migration or re-alignment would change family
+      members' access or workflow); basis cites the record's own evidence.
+      consent and preferences entries carry only the household's own voice,
+      recorded at office-hours — never seeded or inferred by a session
+      (tactic-household-consent-instrument seeds shared/basis proposals only;
+      ratification is tactic-household-consent-offering)."
+  status_vocabulary:
+    raw: a future-candidate capture named before any recovery strategy exists,
+      awaiting selection
+    refining: under active dialectic
+    codified: the author has personally settled this attachment record
   mount_anchor: true
 ---
 # Delegation — an attachment record; where capture is detected and recovery kept real

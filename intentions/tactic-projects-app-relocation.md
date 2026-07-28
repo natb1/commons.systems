@@ -5,7 +5,7 @@ statement: Relocate the 6 hosting apps + functions into projects/ and collapse
   the workspaces glob to ["projects/*","packages/*"] — Tier-2 of the
   packages/+projects/ repo reorg
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Retained 2026-07-08: closed epic #2513 reorganized the repo into
   packages/ (scoped @commons-systems/* leaves) + projects/ (unscoped runnable
@@ -31,7 +31,22 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Deferred behind this round's cheaper signal-path + hardening work. This
+    node's own body records it is worth doing ONLY \"once cheaper work clears\"
+    and that it \"does not block anything\"; this /align-tactics round lands
+    exactly that cheaper work (the dependency-justification audit instrument
+    that validates the strategy signal, plus three small owned-substrate
+    hardening tactics). Fanning its ~8 per-app relocation PRs into the
+    autonomous queue now would flood execution with low-value, non-blocking
+    churn ahead of the cheaper work, contradicting the node's own sequencing.
+    The full #2513 Tier-2 per-app plan is already in this node body. Recommend:
+    after this round's four tactics merge, the author confirms
+    scheduling/priority and re-runs /align-tactics strategy-owned-web-platform
+    (or manually) to fan the per-app children (one PR per app + functions +
+    terminal workspaces-glob collapse, collapse gated last via blocked_by)."
+  since: 2026-07-13
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}

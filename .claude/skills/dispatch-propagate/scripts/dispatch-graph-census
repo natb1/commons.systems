@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# dispatch-graph-census — the standing per-tick reconciliation-debt duty
+# (tactic-graph-census-recurrence Unit 2). Computes the graph's owed
+# reconciliation debt cheaply each tick and, when the debt crosses a threshold
+# and no open census node already exists, births exactly ONE born-parked census
+# tactic naming the batch to drain — landed via graph-commit. Zero-debt ticks
+# birth nothing; the born-parked node IS the recurrence latch (idempotency).
+#
+# Debt = union of: owed prunes (done-but-present nodes), unverified PR-merges,
+# and orphans (dangling parent/serves). The DECISION is computed by the
+# network-free graph-census-debt.ts (the testable half); this script owns the
+# LANDING half (write-node.ts + graph-commit), mirroring the decision/land split
+# between reconcile-graph.ts and reconcile-graph-merged.
+#
+# Cheapness: the standing duty runs GRAPH-ONLY by default — no --pr-states, so
+# it makes no network call (the clarification's "per-tick duty is near-free"
+# rationale). The dominant, network-free owed-prune signal (done-but-present) is
+# exactly what the tick +3 (2026-07-10) observation flagged. The
+# unverified-PR-merge component is supported by graph-census-debt.ts when a
+# caller supplies --pr-states, but the tick's call omits it.
+#
+# Threshold: read from dispatch.config/census.json (`threshold`, a single
+# integer); a baked-in default applies when the file is absent. This is the ONLY
+# dispatch.config tunable — the debt and the census node are graph state, never
+# config (parity with the fuse-breaker doctrine).
+#
+# Doctrine/sandbox mirror reconcile-graph-merged: run from a main-based checkout
+# (graph-commit lands state on main); the CALLER wraps invocation with
+# dangerouslyDisableSandbox (node --import tsx/esm needs the npm cache, and a
+# birth's graph-commit needs gh + network). Best-effort — a failure here must
+# not abort the tick.
+#
+# Stdout protocol (one line, caller prefixes it with `census: `):
+#   born <id> (debt <n> >= threshold <t>)   — a census tactic was born + landed.
+#   latched <id> (debt <n>)                 — debt present but a census is open.
+#   debt <n> < threshold <t>                — below threshold; nothing born.
+#
+# Exit codes: 0 (including a no-birth tick); 1 if the debt computation or a
+# birth's write/land hard-errored.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+DEBT_TS="$UTIL_SCRIPTS/graph-census-debt.ts"
+WRITE_NODE_TS="$UTIL_SCRIPTS/write-node.ts"
+GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
+
+DEFAULT_THRESHOLD=10
+
+# --- Resolve the birth threshold (config override, else baked-in default) -----
+# Mirror dispatch-sweep's loader idiom: fold dispatch-config-load's stderr into
+# CFG (2>&1) so a malformed census.json is distinguishable from an absent one.
+# The loader exits 0 and prints `no-config` when the file is absent (already
+# handled below); a non-zero exit means the file is present-but-invalid (JSON or
+# schema failure, with a diagnostic on stderr). Do NOT swallow that via
+# 2>/dev/null and silently revert to the default with no operator signal — that
+# is the code-style.md "clear error over defensive fallback" anti-pattern. Log
+# the captured diagnostic, then proceed best-effort with the default (a config
+# error must not abort the tick, per this script's best-effort doctrine).
+THRESHOLD="$DEFAULT_THRESHOLD"
+if CFG=$("$SCRIPT_DIR/dispatch-config-load" census 2>&1); then
+  if [[ "$CFG" != "no-config" ]]; then
+    t=$(jq -r '.threshold // empty' <<<"$CFG")
+    [[ -n "$t" ]] && THRESHOLD="$t"
+  fi
+else
+  echo "dispatch-graph-census: census config load failed, using default threshold $DEFAULT_THRESHOLD: $CFG" >&2
+fi
+
+# --- Compute debt + birth decision (network-free) -----------------------------
+OUT=$( (cd "$REPO_ROOT" && node --import tsx/esm "$DEBT_TS" --threshold "$THRESHOLD") ) || {
+  echo "dispatch-graph-census: debt computation failed" >&2; exit 1; }
+
+SHOULD=$(jq -r '.shouldBirth' <<<"$OUT")
+TOTAL=$(jq -r '.total' <<<"$OUT")
+
+if [[ "$SHOULD" != "true" ]]; then
+  OPEN=$(jq -r '.openCensus[0] // empty' <<<"$OUT")
+  if [[ -n "$OPEN" ]]; then
+    echo "latched $OPEN (debt $TOTAL)"
+  else
+    echo "debt $TOTAL < threshold $THRESHOLD"
+  fi
+  exit 0
+fi
+
+# --- Birth: write the born-parked census node, then land it as one graph-commit
+NODE_ID=$(jq -r '.node.id' <<<"$OUT")
+
+# Probe whether the deterministic-per-day NODE_ID already exists on origin/main
+# BEFORE mutating. This mirrors park-node's absent-node guard shape
+# (park-node:70-73) but INVERTED: there absence is a hard failure; here absence
+# is the EXPECTED born-fresh case, and presence is the rare same-day id-collision
+# race. The result selects the failure-path rollback (below): PRIOR_BLOB unset →
+# delete the freshly-written file; PRIOR_BLOB set → restore that prior blob.
+PRIOR_BLOB=""
+if git -C "$REPO_ROOT" rev-parse -q --verify "origin/main:intentions/$NODE_ID.md" >/dev/null 2>&1; then
+  PRIOR_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md")"
+fi
+
+NODE_JSON_FILE=$(mktemp) || { echo "dispatch-graph-census: mktemp failed" >&2; exit 1; }
+# MUTATED gates the file rollback: only delete-or-restore intentions/$NODE_ID.md
+# if this script actually began writing it (armed right before write-node.ts
+# below). A pre-mutation failure must not touch a file this script never created.
+MUTATED=0
+# Bash traps REPLACE (not stack) on the same signal, so this single EXIT trap
+# owns both the temp-file cleanup AND the born-node write rollback. On a failing
+# exit after the mutation began, undo the on-disk write so a failed birth leaves
+# no dirty intentions/*.md to trip graph-commit's assert_clean_outside_ids guard
+# for every other node: delete a born-fresh file, or restore the prior blob in
+# the id-collision race.
+trap '
+  rc=$?
+  rm -f "$NODE_JSON_FILE"
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    if [[ -n "$PRIOR_BLOB" ]]; then
+      git -C "$REPO_ROOT" show "$PRIOR_BLOB" > "$REPO_ROOT/intentions/$NODE_ID.md"
+    else
+      rm -f "$REPO_ROOT/intentions/$NODE_ID.md"
+    fi
+  fi
+' EXIT
+jq -c '.node' <<<"$OUT" > "$NODE_JSON_FILE"
+
+# write-node.ts is the single validation gate; it lands frontmatter only.
+MUTATED=1
+if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$NODE_JSON_FILE") >/dev/null; then
+  echo "dispatch-graph-census: write-node failed for $NODE_ID" >&2; exit 1
+fi
+
+# Overwrite the census body. writeNode does NOT leave a new node body-less: it
+# generates a `# <statement>` placeholder body (store.ts, readExistingTacticBody
+# returns null for a not-yet-existing file, so writeNode falls back to
+# `# ${statement}`). Appending here would produce a malformed two-heading body
+# (the placeholder H1 followed by the census body's own H1). So replace the body
+# wholesale — keep the frontmatter through the closing `---` fence, drop the
+# generated placeholder body, then write the real census body directly after the
+# fence (the store's node-file convention: body starts on the line after the
+# closing fence, no blank line). graph-commit stages the whole intentions/<id>.md.
+NODE_MD="$REPO_ROOT/intentions/$NODE_ID.md"
+if [[ ! -f "$NODE_MD" ]]; then
+  echo "dispatch-graph-census: expected $NODE_MD after write-node, not found" >&2; exit 1
+fi
+FRONTMATTER=$(awk '{print} /^---$/{c++; if(c==2) exit}' "$NODE_MD")
+if [[ "$(tail -n1 <<<"$FRONTMATTER")" != "---" ]]; then
+  echo "dispatch-graph-census: could not locate closing frontmatter fence in $NODE_MD" >&2; exit 1
+fi
+{ printf '%s\n' "$FRONTMATTER"; jq -r '.node_body' <<<"$OUT"; } > "$NODE_MD"
+
+if ! (cd "$REPO_ROOT" && "$GRAPH_COMMIT" \
+        -m "graph: born census $NODE_ID (reconciliation debt $TOTAL)" \
+        "$NODE_ID"); then
+  if [[ -n "$PRIOR_BLOB" ]]; then ROLLBACK_DESC="prior blob restored"; else ROLLBACK_DESC="file deleted"; fi
+  echo "dispatch-graph-census: graph-commit failed for $NODE_ID; the born-node write was rolled back ($ROLLBACK_DESC)" >&2
+  exit 1
+fi
+
+echo "born $NODE_ID (debt $TOTAL >= threshold $THRESHOLD)"
+exit 0

@@ -20,28 +20,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates:
   - strategy-explicit-intent
-blocked_by:
-  - tactic-decision-trace-instrument
-office_hours:
-  reason: "Office-hours reading sitting (~15 author-minutes): run the
-    decision-trace digest (npx tsx
-    packages/intentionsutil/scripts/trace-decisions.ts, landed by
-    tactic-decision-trace-instrument — the blocked_by edge gates this) over the
-    window since the last review cycle, judge the threshold (at least one
-    decision that changed because a node changed), and record the result as
-    reading/gap on strategy-explicit-intent via dump-node.ts then write-node.ts
-    then graph-commit. The sensor is owner review, so the reading is
-    owner-ratified, never auto-written."
-  since: 2026-07-11
-  recommendation: "At the first sitting after the instrument lands: review the
-    digest, record reading (e.g. 'review cycle YYYY-MM-DD: N decisions traced to
-    node changes — <node ids>') and gap against the threshold; if this closes
-    the round's last open tactic, stamp rounds {count: 1, last_completed:
-    <date>} on the strategy in the same commit."
+blocked_by: []
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

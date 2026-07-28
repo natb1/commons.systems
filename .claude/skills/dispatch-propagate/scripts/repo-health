@@ -1,0 +1,371 @@
+#!/usr/bin/env bash
+# repo-health — the standalone graph-native repo-health sensor for the dispatch
+# harness. It owns the two "the repo itself is not safe to build on" recovery
+# latches — main-broken (origin/main's HEAD CI is red) and sync-broken (local
+# main cannot ff-merge origin/main) — and persists their LATCH STATE in a durable
+# JSON record that carries NO GitHub `dispatch:*` label. This is the first unit of
+# migrating the live dispatch harness off the legacy selector/label surface: the
+# two-source main-broken CI probe used to live inside `dispatch-select-target`
+# (the legacy selector) and the sync-broken latch used to be read from an open
+# `dispatch:sync-broken` GitHub issue inline in `dispatch-select-tick`. Both now
+# resolve here.
+#
+# WHY a sensor: latch STATE is dispatch machinery, not user intent. A consumer
+# deciding "is the repo healthy enough to start work?" must be able to answer WITHOUT
+# a `gh` round-trip and without reading a GitHub label. The read modes below
+# (--main-broken-latched / --sync-broken-latched) touch only the local JSON record
+# — no network, no `gh`.
+#
+# ---- Persistence choice: durable JSON record (NOT a graph attribute, NOT a label)
+#
+# The latch state lives in a single small JSON record, resolved to
+# <project-root>/tmp/repo-health.json (override: REPO_HEALTH_STATE_FILE, for
+# tests). This mirrors the sync-repair attempt-counter primitive
+# (sync_repair_attempts_file in lib.sh): repo-health state is RUNTIME state, not
+# user config, so it belongs beside dispatch.lock / sync-repair-attempts in the
+# shared project-root tmp/ (shared across worktrees, git-ignored), not in
+# dispatch.config/ (which holds user-authored config the `dispatch-config-load`
+# schema loader validates). A JSON record — rather than a graph node attribute —
+# keeps the sensor self-contained and readable with zero graph/tsx/npm dependency
+# on the hot path; the record is the durable, label-free home the greenfield
+# target calls for.
+#
+# Record shape (all keys optional; an absent key or an absent file both mean
+# "that latch is CLEAR" — i.e. healthy):
+#   {
+#     "main_broken": { "latched": true, "sha": "<origin/main HEAD sha>", "since": "<iso8601>" },
+#     "sync_broken": { "latched": true, "reason": "merge-failed|fetch-failed", "since": "<iso8601>" }
+#   }
+# A MISSING file is a legitimate "healthy" state, NOT an error (no latch has ever
+# been set). A PRESENT-but-malformed file IS an error (a corrupt record must be
+# surfaced, per .claude/rules/code-style.md — never silently treated as healthy).
+#
+# ---- Announcement surface decision (explicit, per the tactic brief)
+#
+# The human-visibility ANNOUNCEMENT surface STAYS gh-based and is NOT moved by
+# this unit. dispatch-diagnose-main still files the find-or-create
+# `dispatch:main-broken` issue, and dispatch-escalate-sync-broken still files the
+# find-or-create `dispatch:sync-broken` issue — those labeled issues remain the
+# dispatchable, human-readable record of a red episode. What moves here is only
+# the LATCH STATE the selector reads to decide recovery: that is now the durable
+# label-free record above, so no consumer needs `gh` or a label to answer "am I
+# already latched?". The announcement label and the durable latch are kept in
+# sync at the two write sites (escalate → --set-sync-broken; recover →
+# --clear-sync-broken), so the labeled issue stays a pure human-visibility mirror
+# of the durable state, no longer its source of truth.
+#
+# ---- Modes
+#
+#   --main-broken-sha
+#       Probe origin/main's HEAD CI (a two-source aggregation, now with per-check
+#       branch attribution — see the main_broken_sha comment) and print the broken
+#       HEAD SHA, or nothing when main is confirmed green. AS A SIDE EFFECT it
+#       reconciles the durable main_broken latch: red → set/refresh (records the
+#       sha), green → clear. This is the live probe (needs `gh`) and the durable
+#       writer in one; it is the drop-in replacement for
+#       `dispatch-select-target --main-broken-sha`.
+#
+#       Stdout / exit contract:
+#         - confirmed green (attributable checks present, none failing):
+#             (empty stdout), exit 0
+#         - confirmed red (>=1 attributable failing check):
+#             `<sha>`, exit 0
+#         - empty / all-misattributed attributable set (fail closed — the probe
+#           cannot confirm health, so it must NOT read as green):
+#             `NO_ATTRIBUTABLE_CHECKS`, exit 3, and the durable latch is left
+#             UNTOUCHED (neither set nor cleared).
+#         - probe error (a `gh` call failed):
+#             (empty stdout), exit 1, latch untouched.
+#       The caller treats exit 1 and exit 3 alike as UNKNOWN and must not read
+#       either as "green".
+#
+#   --main-broken-latched
+#       READ-ONLY, no `gh`, no network. Print `latched` when the durable record
+#       marks main broken, else `clear`.
+#
+#   --sync-broken-latched
+#       READ-ONLY, no `gh`, no network. Print `latched` when the durable record
+#       marks the local-main sync wedged, else `clear`.
+#
+#   --set-sync-broken --reason <merge-failed|fetch-failed>
+#       Set (or refresh) the durable sync_broken latch. Preserves the original
+#       `since` timestamp across refreshes. Writes nothing to stdout.
+#
+#   --clear-sync-broken
+#       Clear the durable sync_broken latch (idempotent — clearing an unset latch
+#       is a no-op). Writes nothing to stdout.
+#
+# ---- Sandbox
+#
+# --main-broken-sha calls `gh` (network + TLS), so a caller must invoke this
+# script with `dangerouslyDisableSandbox: true` for that mode (see
+# .claude/rules/sandbox.md). The read/write modes touch only the local JSON
+# record and need no sandbox override.
+#
+# ---- Exit codes
+#   0   success (mode ran; stdout carries the mode's result).
+#   1   an operation failed (CI probe error, malformed record, unresolvable state
+#       path) — surfaced on stderr, clear error, no fallback.
+#   2   usage error.
+#   3   (--main-broken-sha only) the attributable check set is empty or entirely
+#       misattributed — the probe cannot confirm main's health, so it fails closed
+#       rather than reading as green. Stdout carries the NO_ATTRIBUTABLE_CHECKS
+#       token; the durable latch is left untouched.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# lib.sh provides gh_retry (transient-failure retry) and resolve_project_root
+# (the shared project-root resolver the state-file path is anchored to).
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib.sh"
+
+# Token printed on stdout (with exit 3) by --main-broken-sha when the attributable
+# check set is empty / all-misattributed — the fail-closed signal a downstream
+# reader (e.g. read-sensors.ts) maps to "cannot confirm main health", distinct
+# from an empty-stdout green. Defined once here rather than repeated as a literal.
+NO_ATTRIBUTABLE_CHECKS="NO_ATTRIBUTABLE_CHECKS"
+
+# ---- Durable latch record ---------------------------------------------------
+
+# Print the latch-record path. An explicit REPO_HEALTH_STATE_FILE is
+# authoritative and bypasses the git lookup (tests rely on this). Otherwise the
+# record lives at the shared project-root tmp/ so concurrent ticks in different
+# worktrees read/write one record — the same rationale as sync_repair_attempts_file.
+state_file() {
+  if [[ -n "${REPO_HEALTH_STATE_FILE:-}" ]]; then
+    printf '%s\n' "$REPO_HEALTH_STATE_FILE"
+    return 0
+  fi
+  local root
+  root=$(resolve_project_root) || {
+    echo "repo-health: not in a git repo and REPO_HEALTH_STATE_FILE is unset" >&2
+    return 1
+  }
+  printf '%s\n' "$root/tmp/repo-health.json"
+}
+
+# Echo the current record as JSON. An ABSENT file is the healthy default and
+# echoes `{}` (a legitimate state, not an error). A PRESENT-but-malformed file is
+# an error (clear-errors: a corrupt record must never be read as healthy).
+read_state() {
+  local f
+  f=$(state_file) || return 1
+  if [[ ! -e "$f" ]]; then
+    printf '%s\n' '{}'
+    return 0
+  fi
+  local parsed
+  if ! parsed=$(jq '.' "$f" 2>&1); then
+    echo "repo-health: $f: invalid JSON latch record: $parsed" >&2
+    return 1
+  fi
+  if [[ -z "$parsed" ]]; then
+    echo "repo-health: $f: latch record is empty or contains no JSON value" >&2
+    return 1
+  fi
+  printf '%s\n' "$parsed"
+}
+
+# Atomically overwrite the record with the JSON passed as $1 (write temp + mv).
+write_state() {
+  local content="$1" f dir tmp
+  f=$(state_file) || return 1
+  dir=$(dirname "$f")
+  mkdir -p "$dir"
+  tmp=$(mktemp "$f.XXXXXX") || { echo "repo-health: could not create temp file next to $f" >&2; return 1; }
+  printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; return 1; }
+  mv "$tmp" "$f"
+}
+
+# Print `latched` when the record's <key>.latched is true, else `clear`. Reader —
+# no gh, no network.
+latch_status() {
+  local key="$1" state
+  state=$(read_state) || return 1
+  if jq -e --arg k "$key" '.[$k].latched == true' <<<"$state" >/dev/null; then
+    echo "latched"
+  else
+    echo "clear"
+  fi
+}
+
+# ---- main-broken CI probe (two-source aggregation, branch-attributed) --------
+# origin/main's CI state spans two sources that must both be aggregated —
+#   - check-runs    (CodeQL default-setup analyses)      — /commits/{sha}/check-runs
+#   - workflow runs (Production Deploy, Firestore rules) — gh run list --branch main
+# The legacy combined-status API is intentionally not used (it reports "pending"
+# for commits with no classic statuses).
+#
+# CHECK-RUN ATTRIBUTION (the /commits/{sha}/check-runs defect this corrects):
+# that endpoint returns EVERY check-run posted against a sha regardless of which
+# branch triggered it. graph-commit fast-forwards graph/** scratch shas onto main,
+# so a sha reachable from main can also carry foreign Graph Fast Path check-runs
+# that were triggered on a graph/** branch (verified false-red: 18 foreign
+# check-runs, 2 "guard: failure", falsely reported main as red). To attribute each
+# check-run to its triggering branch we resolve its parent check-suite: extract the
+# distinct .check_suite.id values, and for each fetch
+# /check-suites/{id} and read .head_branch. A suite is KEPT only when
+# head_branch == "main"; CodeQL default-setup analyses carry head_branch:main
+# (kept, correct), Graph Fast Path suites carry head_branch:graph/... (dropped,
+# correct), and a null/other branch is dropped (conservative — unknown attribution
+# never counts as main's own). Only check-runs whose suite is kept are counted.
+#
+# The workflow-runs source is already correctly attributed by `gh run list
+# --branch main`, so no round-trip is needed there.
+#
+# Return contract (fail-closed): prints origin/main's HEAD SHA and returns 0 when
+# an attributable check has failed (red); prints nothing and returns 0 when main
+# is confirmed green (attributable checks present, none failing — in-progress-only
+# still reads green); returns 3 with no stdout when the attributable set is empty
+# (empty / all-misattributed → the probe cannot confirm health). gh calls route
+# through gh_retry (transient-failure retry); a gh failure aborts under set -e.
+main_broken_sha() {
+  local sha cr_fail cr_items wf_fail wf_items check_runs kept_suites
+  # CI conclusions that count as a failing check; both gh sources report
+  # conclusions in lowercase.
+  local fail='["failure","timed_out","cancelled","action_required","startup_failure","stale"]'
+  sha=$(gh_retry gh api "repos/{owner}/{repo}/commits/main" | jq -r '.sha')
+
+  check_runs=$(gh_retry gh api "repos/{owner}/{repo}/commits/$sha/check-runs")
+
+  # Resolve each distinct check-suite to its triggering branch and keep only the
+  # suites whose head_branch is "main". kept_suites is a JSON array of suite ids.
+  kept_suites='[]'
+  local suite_id head_branch
+  while IFS= read -r suite_id; do
+    [[ -z "$suite_id" ]] && continue
+    head_branch=$(gh_retry gh api "repos/{owner}/{repo}/check-suites/$suite_id" \
+      | jq -r '.head_branch // ""')
+    if [[ "$head_branch" == "main" ]]; then
+      kept_suites=$(jq --argjson id "$suite_id" '. + [$id]' <<<"$kept_suites")
+    fi
+  done < <(jq -r '[.check_runs[].check_suite.id] | unique | .[]' <<<"$check_runs")
+
+  # Count only check-runs whose suite was kept (attributed to main). cr_fail =
+  # attributable failing; cr_items = attributable of any conclusion (preserves the
+  # in-progress-only → green contract for attributable in-progress checks).
+  cr_fail=$(jq --argjson fail "$fail" --argjson kept "$kept_suites" \
+      '[.check_runs[]
+        | select(.check_suite.id as $id | $kept | index($id))
+        | select(.conclusion as $c | $fail | index($c))] | length' \
+      <<<"$check_runs")
+  cr_items=$(jq --argjson kept "$kept_suites" \
+      '[.check_runs[]
+        | select(.check_suite.id as $id | $kept | index($id))] | length' \
+      <<<"$check_runs")
+
+  # --commit scopes the query to main's HEAD (the default 20-run window could
+  # otherwise miss it); the headSha filter is a defense-in-depth guard so a
+  # stale run can never trip the gate.
+  local wf_runs
+  wf_runs=$(gh_retry gh run list --branch main --commit "$sha" \
+    --json headSha,conclusion)
+  wf_fail=$(jq --arg sha "$sha" --argjson fail "$fail" \
+      '[.[] | select(.headSha == $sha)
+            | select(.conclusion as $c | $fail | index($c))] | length' \
+      <<<"$wf_runs")
+  wf_items=$(jq --arg sha "$sha" \
+      '[.[] | select(.headSha == $sha)] | length' <<<"$wf_runs")
+
+  if [[ "$cr_fail" -gt 0 || "$wf_fail" -gt 0 ]]; then
+    printf '%s\n' "$sha"
+    return 0
+  fi
+  if [[ $((cr_items + wf_items)) -eq 0 ]]; then
+    # Empty / all-misattributed attributable set: fail closed. No stdout, distinct
+    # exit — the caller must not read this as green.
+    return 3
+  fi
+  # Confirmed green: attributable checks present, none failing.
+  return 0
+}
+
+# ---- Mode dispatch ----------------------------------------------------------
+
+MODE=""
+REASON=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --main-broken-sha|--main-broken-latched|--sync-broken-latched|--set-sync-broken|--clear-sync-broken)
+      if [[ -n "$MODE" ]]; then
+        echo "repo-health: only one mode may be given (already have $MODE, got $1)" >&2
+        exit 2
+      fi
+      MODE="$1"
+      shift
+      ;;
+    --reason)
+      REASON="${2:-}"
+      shift 2
+      ;;
+    *)
+      echo "repo-health: unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$MODE" ]]; then
+  echo "repo-health: a mode is required (--main-broken-sha | --main-broken-latched | --sync-broken-latched | --set-sync-broken --reason <r> | --clear-sync-broken)" >&2
+  exit 2
+fi
+
+case "$MODE" in
+  --main-broken-sha)
+    # Live CI probe. main_broken_sha's exit code disambiguates green/red from
+    # fail-closed: 0 = confirmed (SHA non-empty → red, empty → green), 3 = empty /
+    # all-misattributed attributable set, any other non-zero = probe error. Capture
+    # the rc explicitly so `set -e` does not swallow the 3.
+    SHA=$(main_broken_sha) && rc=0 || rc=$?
+    if [[ "$rc" -eq 3 ]]; then
+      # Fail closed: cannot confirm main's health. Emit the token and exit 3
+      # WITHOUT touching the latch (neither set nor cleared on this path).
+      printf '%s\n' "$NO_ATTRIBUTABLE_CHECKS"
+      exit 3
+    fi
+    if [[ "$rc" -ne 0 ]]; then
+      # Probe error (a gh call failed). Latch untouched — existing probe-error
+      # contract, matching the prior implicit set -e abort behavior.
+      exit 1
+    fi
+    # rc == 0: confirmed result. Reconcile the durable main_broken latch, then
+    # print the broken SHA (empty when green).
+    NOW=$(date -u +%FT%TZ)
+    if [[ -n "$SHA" ]]; then
+      NEW=$(read_state | jq --arg s "$SHA" --arg ts "$NOW" \
+        '.main_broken = {latched: true, sha: $s, since: (.main_broken.since // $ts)}')
+    else
+      NEW=$(read_state | jq 'del(.main_broken)')
+    fi
+    write_state "$NEW"
+    [[ -n "$SHA" ]] && printf '%s\n' "$SHA"
+    exit 0
+    ;;
+  --main-broken-latched)
+    latch_status main_broken
+    exit 0
+    ;;
+  --sync-broken-latched)
+    latch_status sync_broken
+    exit 0
+    ;;
+  --set-sync-broken)
+    case "$REASON" in
+      merge-failed|fetch-failed) ;;
+      *)
+        echo "repo-health: --set-sync-broken requires --reason merge-failed|fetch-failed (got '$REASON')" >&2
+        exit 2
+        ;;
+    esac
+    NOW=$(date -u +%FT%TZ)
+    NEW=$(read_state | jq --arg r "$REASON" --arg ts "$NOW" \
+      '.sync_broken = {latched: true, reason: $r, since: (.sync_broken.since // $ts)}')
+    write_state "$NEW"
+    exit 0
+    ;;
+  --clear-sync-broken)
+    NEW=$(read_state | jq 'del(.sync_broken)')
+    write_state "$NEW"
+    exit 0
+    ;;
+esac

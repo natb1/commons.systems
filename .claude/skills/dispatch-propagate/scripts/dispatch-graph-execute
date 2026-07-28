@@ -1,51 +1,89 @@
 #!/usr/bin/env bash
-# dispatch-graph-execute — execute a graph selection set as thin tick workflows
-# (tactic-graph-router-selector, unit 4; strategy clarifications 24–25). The
-# graph lane's replacement for the legacy launch chain: the legacy scripts
-# (dispatch-materialize-spawn → dispatch-launch-worker) stay issue-lane-only
-# and retire with the drain (tactic-legacy-router-removal).
+# dispatch-graph-execute — the graph lane's complete launch primitive (Shape B,
+# strategy-graph-native-dispatch clarification 24). The graph sibling of the
+# legacy issue-lane dispatch-launch-worker, keyed on `<id:kind:phase>` instead
+# of `<N> <worktree>`. The legacy scripts (dispatch-materialize-spawn →
+# dispatch-launch-worker) stay issue-lane-only and retire with the drain
+# (tactic-legacy-router-removal).
 #
 # Called by dispatch-tick on a `graph <count> <id:kind:phase>...` decision.
+# For each selected node it spawns the phase as its OWN top-level orchestrator
+# session that invokes the phase skill DIRECTLY — not a runner session that
+# invokes a workflow. This is the Shape-B fix: the top-level session already
+# holds the Workflow tool, so a phase skill that is itself a workflow
+# (/review-fix, /qa-fix) runs directly, instead of being fanned out as an
+# agent() subagent (which is NOT granted the Workflow tool and parked every
+# tick). The orchestrator runs on sonnet for every phase; opus is reintroduced
+# only inside each phase's own workflow (e.g. /review-fix's fix author,
+# /implement's per-unit /implement-unit).
+#
 # For each selected node it:
 #
-#   1. Maps the directive from the PERSISTED phase (phase derivation never
-#      runs for node targets — strategy clarification 1):
-#        strategy            → INVOKE /align-tactics <node-id>
+#   1. Validates the node id and maps the directive from the PERSISTED phase
+#      (phase derivation never runs for node targets — strategy clarification 1):
+#        strategy            → /align-tactics <node-id>
 #        tactic implement    → /implement,  fix → /fix-checks, qa → /qa-fix,
 #               review       → /review-fix, main-qa → /qa-main
-#   2. Resolves the agent's model/effort from the persisted phase via
-#      dispatch-phase-model / dispatch-phase-effort (the audit-written policy
-#      file with its fail-closed demotable allowlist). The phase is already in
-#      hand — no SKILL→PHASE case map to fall through — so the legacy
-#      /qa-main-inherits-Opus routing hole cannot reproduce here.
-#   3. Spawns one runner session named exactly <node-id> (uniform node-id
-#      claiming: the live session name IS the worktree basename, so
-#      worktree_has_live_session and the busy-worker pace count both see it)
-#      whose only job is to invoke the Workflow tool with the
-#      dispatch-graph-tick script — the thin fan-out that launches the node's
-#      agent() with the resolved options. The runner is spawned via
-#      dispatch-spawn-job --no-verify (the budget path: reconciled by the
-#      reservation ledger + sweep).
+#   2. Resolves orchestrator effort from the persisted phase via
+#      dispatch-phase-effort (orthogonal to the model; implement → medium). The
+#      orchestrator model is a launch-layer concern hardcoded to sonnet here
+#      (ORCH_MODEL) — the shared per-phase SUBAGENT/worker model emitter is
+#      shared with the legacy dispatch-launch-worker lane (where /implement
+#      worktree sessions legitimately inherit Opus), so it is left untouched.
+#   3. Launches the phase:
+#        - Strategy lane: a strategy node has no PR/CI/merge gate and
+#          /align-tactics owns its own worktree claim/entry, so it is NOT
+#          pre-provisioned — spawn cwd=PROJECT_ROOT with prompt
+#          `/align-tactics <id>` and let the skill enter its own worktree.
+#        - Tactic lane: tactic phases derive their target from the worktree
+#          branch (BRANCH split in implement/review-fix/fix-checks/qa-fix/
+#          qa-main), so the cwd is load-bearing — pre-provision via
+#          provision-node-worktree and spawn with --cwd <worktree>, prompt
+#          `<skill> <id>`. Mechanical provision dispositions are handled here at
+#          zero token cost (no `claude` session), mirroring
+#          dispatch-launch-worker.
 #   4. Clears the node's reservation-ledger marker on a successful kick — the
 #      live node-id-named session carries the claim from there (mirrors
-#      dispatch-launch-worker's release-on-resolve). On a failed kick the
-#      marker is LEFT for the sweep, so the budget still counts the slot until
+#      dispatch-launch-worker's release-on-resolve). On a failed kick the marker
+#      is LEFT for the sweep, so the budget still counts the slot until
 #      reconciliation.
 #
 # Usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]
 #
-# Stdout: one line per node — `launched <id> <skill>` or `failed <id> <reason>`.
-# Exit codes: 0 all nodes launched; 1 at least one node failed to launch;
-# 2 usage/configuration error (including a malformed phase-model policy, which
-# fails loudly rather than mis-routing every node).
+# Stdout: one line per node — one of:
+#   launched <id> <skill>   the phase session was kicked.
+#   waiting <id>            provision exit 10 (ci-waiting) — retry next tick.
+#   skipped <id>            provision exit 12 (stale-selection) — no graph write.
+#   scope-stale <id>        provision exit 13 — node demoted to implement.
+#                           Rare post-sweep safety net now (the pre-selection
+#                           dispatch-graph-scope-sweep enumerator handles the
+#                           common case before launch), not the routine path.
+#   parked <id>             a mechanical failure parked the node (office_hours
+#                           graph write, never a label).
+#   conflict-retry <id> (strike N/CAP)
+#                           provision exit 11 (merge-conflict) below the
+#                           Producer 1 free-retry cap — no graph write at all,
+#                           just a local sidecar strike counter.
+#   held <id>               provision exit 11 at/above the cap — a tracked
+#                           hold tactic was born/re-entered via hold-node; the
+#                           source's own office_hours is never written.
+#   failed <id> <reason>    the node could neither launch nor cleanly dispose.
 #
-# Requires `dangerouslyDisableSandbox: true` — dispatch-spawn-job queries the
-# local Claude daemon and spawns `claude --bg`.
+# Exit codes: 0 every node launched or cleanly disposed (launched/waiting/
+# skipped/scope-stale/parked/conflict-retry/held are all RC-0 dispositions);
+# 1 at least one node could neither launch nor cleanly dispose (a spawn kick
+# failed — no park is attempted, the marker is left for the sweep — or a
+# park-node/hold-node/demote call itself failed); 2 usage/configuration error.
+#
+# Requires `dangerouslyDisableSandbox: true` — provision-node-worktree runs git,
+# gh, and direnv, and dispatch-spawn-job spawns `claude --bg`.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
 
 if [[ $# -lt 1 ]]; then
   echo "usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]" >&2
@@ -53,17 +91,36 @@ if [[ $# -lt 1 ]]; then
 fi
 
 # Project root = the worktree with `main` checked out (substrate clarification
-# 23). DISPATCH_GRAPH_MAIN_WORKTREE is the test override, authoritative.
-if [[ -n "${DISPATCH_GRAPH_MAIN_WORKTREE:-}" ]]; then
-  PROJECT_ROOT="$DISPATCH_GRAPH_MAIN_WORKTREE"
-else
-  PROJECT_ROOT=$(git worktree list --porcelain 2>/dev/null \
-    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
-fi
+# 23). resolve_main_worktree honors DISPATCH_GRAPH_MAIN_WORKTREE, the test
+# override.
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
   echo "dispatch-graph-execute: cannot resolve the project root (no worktree with 'main' checked out)" >&2
   exit 2
 fi
+
+# The orchestrator session runs sonnet for every phase (Shape B). This is a
+# launch-layer rule, hardcoded here rather than routed through the shared
+# per-phase model emitter (which the legacy lane still depends on — see the
+# header). Opus is reintroduced only inside each phase's own workflow.
+ORCH_MODEL="sonnet"
+
+# park-node / demote-node-to-implement / hold-node live under the
+# intentionsutil package, not beside this script. Resolve them from the
+# project root.
+PARK_NODE="$PROJECT_ROOT/packages/intentionsutil/scripts/park-node"
+DEMOTE_NODE="$PROJECT_ROOT/packages/intentionsutil/scripts/demote-node-to-implement"
+HOLD_NODE="$PROJECT_ROOT/packages/intentionsutil/scripts/hold-node"
+
+# Conflict-retry cap for the Producer 1 free-retry tier below (provision exit
+# 11 — merge-conflict). A baked-in constant, deliberately NOT a
+# `dispatch.config` tunable — parity with FIX_ATTEMPT_CAP
+# (packages/intentionsutil/src/transitions.ts:101), which caps the CI-fix
+# interrupt's own retry ladder the same way. Set higher than that cap (5, not
+# 3): ticks are frequent and cheap, so the free tier's whole point is to spend
+# cheap ticks rather than graph records; only after CONFLICT_STRIKE_CAP
+# consecutive failures does this producer pay for a tracked hold.
+CONFLICT_STRIKE_CAP=5
 
 FAILURES=0
 
@@ -75,9 +132,19 @@ for spec in "$@"; do
     continue
   fi
 
+  # Validate the node id — it flows into --name and the spawn prompt (mirror
+  # provision-node-worktree:52, dispatch-launch-worker id validation). The slug
+  # regex already excludes numeric-prefixed (legacy gh lane) names.
+  if [[ ! "$id" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+    echo "failed $id invalid-node-id"
+    FAILURES=$(( FAILURES + 1 ))
+    continue
+  fi
+
   # Directive mapping from the persisted phase (never re-derived).
   case "$kind:$phase" in
     strategy:*)          SKILL="/align-tactics"; MODEL_PHASE="align-tactics" ;;
+    tactic:align-tactics) SKILL="/align-tactics"; MODEL_PHASE="align-tactics" ;;
     tactic:implement)    SKILL="/implement";     MODEL_PHASE="implement" ;;
     tactic:fix)          SKILL="/fix-checks";    MODEL_PHASE="fix-checks" ;;
     tactic:qa)           SKILL="/qa-fix";        MODEL_PHASE="qa" ;;
@@ -92,47 +159,162 @@ for spec in "$@"; do
       ;;
   esac
 
-  # Per-phase compute. dispatch-phase-model exit 1 = a malformed policy file —
-  # a configuration error that would mis-route EVERY node: fail loudly.
-  if ! MODEL=$("$SCRIPT_DIR/dispatch-phase-model" "$MODEL_PHASE"); then
-    echo "dispatch-graph-execute: dispatch-phase-model failed for phase '$MODEL_PHASE' (malformed policy?)" >&2
-    exit 2
-  fi
+  # Orchestrator effort is orthogonal to the (hardcoded sonnet) model. Empty
+  # means "inherit the session default" — omit the flag entirely.
   EFFORT=$("$SCRIPT_DIR/dispatch-phase-effort" "$MODEL_PHASE") || EFFORT=""
+  EFFORT_ARGS=()
+  [[ -n "$EFFORT" ]] && EFFORT_ARGS=(--effort "$EFFORT")
 
-  ARGS_JSON=$(jq -c -n \
-    --arg node_id "$id" \
-    --arg kind "$kind" \
-    --arg phase "$phase" \
-    --arg skill "$SKILL" \
-    --arg model "$MODEL" \
-    --arg effort "$EFFORT" \
-    --arg project_root "$PROJECT_ROOT" \
-    '{selections: [{node_id: $node_id, kind: $kind, phase: $phase, skill: $skill,
-        model: $model, effort: $effort}],
-      project_root: $project_root, worker_cap: 1}') \
-    || { echo "failed $id args-json"; FAILURES=$(( FAILURES + 1 )); continue; }
-
-  PROMPT="You are a graph-lane dispatch runner for node ${id}. Invoke the Workflow tool with the workflow script named dispatch-graph-tick and pass it exactly these args (as a JSON object): ${ARGS_JSON}
-When the workflow returns, print its result summary and stop. Do NOT perform the phase work yourself, do not edit files, and do not invoke any other skill — the workflow's agent owns the work."
-
-  # Spawn the runner named exactly <node-id> under the project root. --model /
-  # --effort route the RUNNER; the workflow's agent() re-applies them from the
-  # args, so both the plumbing session and the working agent follow the policy.
-  SPAWN_ARGS=(--no-verify --name "$id" --cwd "$PROJECT_ROOT")
-  [[ -n "$MODEL" ]] && SPAWN_ARGS+=(--model "$MODEL")
-  [[ -n "$EFFORT" ]] && SPAWN_ARGS+=(--effort "$EFFORT")
-  if "$SCRIPT_DIR/dispatch-spawn-job" "${SPAWN_ARGS[@]}" "$PROMPT" 1>&2; then
-    # The live node-id-named session carries the claim now; release the marker
-    # (mirrors dispatch-launch-worker's release-on-resolve). Best-effort.
-    reservation_clear "$id" || true
-    echo "launched $id $SKILL"
-  else
-    # Leave the reservation for the sweep — the budget keeps counting the slot
-    # until the ledger reconciles, and the next tick may retry the node.
-    echo "failed $id spawn-failed"
-    FAILURES=$(( FAILURES + 1 ))
+  if [[ "$kind" == "strategy" || "$phase" == "align-tactics" ]]; then
+    # Strategy lane (and a frozen-tactic align target): no pre-provision —
+    # /align-tactics owns its own worktree claim/entry, keyed on the node id
+    # (a strategy's id, or a frozen tactic's id). Spawn cwd=PROJECT_ROOT and let
+    # the skill enter its worktree.
+    if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
+        --cwd "$PROJECT_ROOT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
+        "$SKILL $id" 1>&2; then
+      reservation_clear "$id" || true
+      echo "launched $id $SKILL"
+    else
+      echo "failed $id spawn-failed"
+      FAILURES=$(( FAILURES + 1 ))
+    fi
+    continue
   fi
+
+  # Tactic lane: pre-provision the worktree (cwd is load-bearing — the phase
+  # skill derives its target from the branch). Route on the provision exit code;
+  # NO `claude` session spawns on any non-zero path (mirrors the retired graph
+  # tick workflow's per-node routing, moved up here at zero token cost).
+  WT=$("$SCRIPT_DIR/provision-node-worktree" "$id" "$phase")
+  prov_rc=$?
+  case "$prov_rc" in
+    0)
+      # WT is the worktree path provision printed on stdout. A successful
+      # provision means any prior merge-conflict retry state self-resolved;
+      # reset the Producer 1 strike counter (below) so it means "consecutive
+      # failures", not a lifetime total.
+      rm -f "$PROJECT_ROOT/.claude/worktrees/$id.conflict-strikes"
+      if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
+          --cwd "$WT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
+          "$SKILL $id" 1>&2; then
+        reservation_clear "$id" || true
+        echo "launched $id $SKILL"
+      else
+        # Leave the reservation for the sweep — the budget keeps counting the
+        # slot until the ledger reconciles, and the next tick may retry.
+        echo "failed $id spawn-failed"
+        FAILURES=$(( FAILURES + 1 ))
+      fi
+      ;;
+    10)
+      # ci-waiting: a draft PR's checks are still in progress. Leave the
+      # reservation; the next tick re-selects once the CI verdict lands.
+      echo "waiting $id"
+      ;;
+    11)
+      # merge-conflict, Producer 1 (tactic-mechanical-park-producers). This is
+      # a mechanical retry state, not "no autonomous path exists, a human is
+      # required" — a moving main can transiently fail to merge for a few
+      # ticks in a row on its own. Two-tier disposition: a graph-write-free
+      # local retry for the first CONFLICT_STRIKE_CAP-1 consecutive failures,
+      # then a tracked hold (not an office_hours park on the source) once the
+      # cap is exceeded.
+      #
+      # CONVERGENCE NOTE: this strike/hold branch is an interim step. A
+      # separate in-flight tactic (tactic-graph-router-conflict-routing) is
+      # expected to replace it with an `execution.conflict` interrupt; once
+      # that lands, the cap it enforces will call this SAME hold-node
+      # primitive instead of the strike-counting logic below — this branch is
+      # expected to be replaced wholesale at that point, not extended.
+      #
+      # /dispatch-conflict does NOT accept node targets (dispatch-conflict/
+      # SKILL.md exits on any non-`[0-9]*-*` branch), so a graph node's
+      # conflict cannot route there yet either way; routing is a future
+      # follow-up gated on node-target support.
+      #
+      # Strike counter: a sidecar file OUTSIDE every checkout (the same
+      # convention as provision-node-worktree's own `.scope-fingerprint`
+      # sidecar), so it never dirties a tree and is never a graph write.
+      # Losing the counter (daemon restart, reaped worktree) is fine and
+      # deliberately fail-open — it just grants more free retries.
+      STRIKE_FILE="$PROJECT_ROOT/.claude/worktrees/$id.conflict-strikes"
+      STRIKES=$(cat "$STRIKE_FILE" 2>/dev/null || echo 0)
+      [[ "$STRIKES" =~ ^[0-9]+$ ]] || STRIKES=0
+      STRIKES=$(( STRIKES + 1 ))
+
+      if (( STRIKES < CONFLICT_STRIKE_CAP )); then
+        # Below the cap: bump the sidecar, clear the reservation, and yield —
+        # mirrors case 12's clear-and-yield shape. NO graph write of any kind.
+        printf '%s\n' "$STRIKES" > "$STRIKE_FILE"
+        reservation_clear "$id" || true
+        echo "conflict-retry $id (strike $STRIKES/$CONFLICT_STRIKE_CAP)"
+      else
+        # Cap exceeded: escalate to a tracked hold (hold-node, units 1-2 of
+        # this same plan) instead of parking the source directly. hold-node
+        # births a small born-parked hold tactic carrying the office_hours
+        # park and adds a blocked_by edge from the source — the source's own
+        # office_hours is never written.
+        TMPDIR_HOLD11=$(mktemp -d) || {
+          echo "failed $id hold-mktemp-failed"
+          FAILURES=$(( FAILURES + 1 ))
+          continue
+        }
+        REASON_FILE="$TMPDIR_HOLD11/reason"
+        RECOMMENDATION_FILE="$TMPDIR_HOLD11/recommendation"
+        printf '%s\n' "origin/main has not merged clean into this tactic's branch for $STRIKES consecutive ticks (provision exit 11)." > "$REASON_FILE"
+        printf '%s\n' "Resolve the conflict by hand in \`.claude/worktrees/$id\`, push the branch, then resolve THIS HOLD TACTIC to \`phase: done\` and prune it. Clearing \`office_hours\` alone does not unblock the source." > "$RECOMMENDATION_FILE"
+        if "$HOLD_NODE" "$id" --kind provision-conflict \
+            --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE"; then
+          rm -f "$STRIKE_FILE"
+          echo "held $id"
+        else
+          echo "failed $id hold-failed"
+          FAILURES=$(( FAILURES + 1 ))
+        fi
+        rm -rf "$TMPDIR_HOLD11"
+      fi
+      ;;
+    12)
+      # stale-selection: the directive changed after selection. Clear the claim
+      # and make NO graph write; the next tick re-selects from current state.
+      reservation_clear "$id" || true
+      echo "skipped $id"
+      ;;
+    13)
+      # scope-stale: the tactic's scope changed after the previous phase. The
+      # common path for this disposition now runs BEFORE selection, in the
+      # dispatch-graph-scope-sweep enumerator wired into dispatch-select-tick's
+      # Step 1d (landed in a prior unit of this same plan) — so a metadata-only
+      # scope-stale demote no longer routinely consumes a launch slot here. This
+      # launch-time path only fires as a post-sweep safety re-check for scope
+      # drift introduced between the sweep and this provision call (e.g. a
+      # concurrent author/session edit landing in that window); it should be
+      # rare. Demote to implement so its ladder re-runs against the merge-time
+      # scope, and clear the reservation (mirrors case 12 above) so the demoted
+      # node is freed for next-tick re-selection rather than staying counted
+      # against the budget.
+      reservation_clear "$id" || true
+      if "$DEMOTE_NODE" "$id"; then
+        echo "scope-stale $id"
+      else
+        echo "failed $id demote-failed"
+        FAILURES=$(( FAILURES + 1 ))
+      fi
+      ;;
+    *)
+      # 2 / any other: a mechanical error (bad node id, unresolvable project
+      # root, failed add/fetch). Park the node via the office_hours graph write.
+      if "$PARK_NODE" "$id" \
+          "provision-node-worktree failed for this tactic (exit $prov_rc)" \
+          "Inspect the provisioning failure (git fetch/worktree add, direnv) in the tick journal, fix the environment, and re-run the phase."; then
+        echo "parked $id"
+      else
+        echo "failed $id park-failed"
+        FAILURES=$(( FAILURES + 1 ))
+      fi
+      ;;
+  esac
 done
 
 (( FAILURES == 0 )) && exit 0 || exit 1

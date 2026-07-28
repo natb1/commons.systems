@@ -51,8 +51,13 @@ rationale: >-
   strategy is minted for it directly rather than waiting on this selection —
   exercised 2026-07-02: strategy-diversify-income, minted directly on
   delegation-client-income.
-reading: null
-gap: "no reading yet (threshold: no raw record sits unscored across a review cycle)"
+reading: "2026-07 round: all raw records scored — delegation-communications and
+  delegation-web-analytics selected; delegation-banking, -cloud-backup,
+  -health-records, -media-libraries, -mobile-platform, -connectivity explicitly
+  deferred"
+gap: 2026-07 round scored every raw record (selected or deferred) — no raw
+  record currently sits unscored, meeting the threshold for this cycle; the
+  "across a review cycle" recurrence clause is unproven after a single round
 serves:
   - virtue-progressive-detachment
 recovers: []
@@ -70,6 +75,17 @@ clarifications:
       sensor is unchanged — the select-or-defer decision on each candidate
       remains the owner's at office-hours, ratifying or revising the drafted
       scores. Recorded 2026-07-11 /align-tactics round."
+  - question: What was the outcome of the 2026-07 domain-selection scoring round?
+    answer: "2026-07 round, completed 2026-07-23: all raw records scored against the
+      criteria — delegation-communications and delegation-web-analytics selected
+      (each schedules an /align-strategy interview to mint its recovery
+      strategy); delegation-banking, delegation-cloud-backup,
+      delegation-health-records, delegation-media-libraries,
+      delegation-mobile-platform, and delegation-connectivity explicitly
+      deferred (their interim paths stay named). delegation-client-income and
+      delegation-knowledge-notes were out of scope — excluded by status
+      (refining), not raw. Recorded by hand at office-hours per the
+      round-completion write (bootstrap interim)."
 tooling_goals: []
 success_signal:
   observable: raw candidate records are periodically scored against these criteria
@@ -85,8 +101,9 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds:
-  count: 0
-  last_completed: null
+  count: 1
+  last_completed: 2026-07-23
+  last_aligned: null
 attributes:
   conditions:
     - domains keep appearing where the ownership cost-benefit has flipped and

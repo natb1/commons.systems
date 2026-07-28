@@ -22,21 +22,42 @@ gap: null
 serves:
   - strategy-graph-integrity
 recovers: []
-clarifications: []
+clarifications:
+  - question: Scope and standing amendments from the 2026-07-23
+      tactic-align-audit-legacy-review office-hours sitting.
+    answer: "Recorded 2026-07-23, author present. (1) Census line: the audit report
+      gains an unserved-virtue census — virtue ids appearing in no strategy's
+      serves — as an info-only report line: report-only, never a finding, no
+      disposition or park pressure, because deliberately unserved virtues are
+      slack, not defects (retained from the retired /align-strategy improvement
+      pass; the rest of that pass retires). If PR #2879 is already past
+      implement when this lands, apply it as a follow-up unit rather than mid-qa
+      scope surgery. (2) Contrarian graft declined: the retired rung-5
+      contrarian/consistency passes do NOT fold in — /align-audit stays purely
+      mechanical; anti-calcification lives in the office-hours sitting cadence
+      (see strategy-explicit-intent). (3) Keep-and-judge: the author questioned
+      whether this audit earns its keep, noting it has never run; resolved keep
+      on the recorded graph-integrity charter (the transcript-review
+      token-efficiency function belongs to /dispatch-token-audit under
+      strategy-token-economy, a name-collision surfaced at the sitting) — the
+      first real run's report, produced by this tactic's verification, is
+      reviewed at an office-hours sitting that decides whether the audit
+      continues."
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-align-audit-skill
-  pr: null
+  pr: 2879
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: ba2a6baf40da43d7217194977f7ecd4dbba424a343251236340d524b05479917
+  fix: null
 validates:
   - strategy-graph-integrity
-blocked_by:
-  - tactic-graph-digest-tooling
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

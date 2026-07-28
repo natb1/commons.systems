@@ -87,6 +87,32 @@ export function ProjectSignalsPanel(props: ProjectSignalsPanelProps) {
             )}
           </div>
         )}
+        {/* Forks & derivatives — per-fork identity + activity for the review.
+            An "active" marker (pushedAt > createdAt) is the drive-by-vs-active
+            discriminator the fork-and-derivative review needs. */}
+        {github !== undefined && github.forksDetail !== undefined && github.forksDetail.length > 0 && (
+          <div className="project-signals-forks">
+            <h4 className="project-signals-forks-heading">Forks &amp; derivatives</h4>
+            <ul className="project-signals-forks-list">
+              {github.forksDetail.map((fork) => {
+                const active = fork.pushedAt > fork.createdAt;
+                return (
+                  <li key={fork.repoUrl} className="project-signals-fork">
+                    <a href={fork.repoUrl} target="_blank" rel="noreferrer" className="project-signals-fork-owner">
+                      {fork.owner}
+                    </a>
+                    <span className="project-signals-fork-dates">
+                      created {fork.createdAt} · pushed {fork.pushedAt}
+                    </span>
+                    <span className={`project-signals-fork-activity ${active ? "is-active" : "is-drive-by"}`}>
+                      {active ? "active" : "drive-by"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* GA4 */}

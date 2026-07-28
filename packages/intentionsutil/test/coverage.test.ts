@@ -4,7 +4,7 @@ import { computeReviewCoverage, renderCoverageTable } from "../src/coverage.js";
 
 /** A well-formed office_hours record for a parked fixture node. */
 function parked(reason: string): OfficeHours {
-  return { reason, since: "2026-07-01", recommendation: null };
+  return { reason, since: "2026-07-01", recommendation: null, session_type: "other" };
 }
 
 /** Build an IntentionNode fixture, filling required/default fields. */

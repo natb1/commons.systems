@@ -1,12 +1,18 @@
-// Read the local-first default sensors over the active frontier and write each
-// node's fresh `reading` + derived `gap` back to the local `intentions/` store.
+// Read the local-first default sensors over every node in the store and write
+// each node's fresh `reading` + derived `gap` back to the local `intentions/`
+// store.
 //
-// This is the batch driver for the feedback arm's READ step: for every active
-// frontier node that names a `success_signal.sensor`, it resolves that sensor in
+// This is the batch driver for the feedback arm's READ step: for every node in
+// the store that names a `success_signal.sensor`, it resolves that sensor in
 // a registry, reads the current measurement, derives the mechanical gap, and
 // persists `{ ...node, reading, gap }` — preserving every other field. It reads
 // only the local store and runs only local own-execution commands (no gh API,
-// no analytics, no network).
+// no analytics, no network) — with one deliberate exception: the main-health
+// sensor below shells to `gh` to read the trunk's OWN check-run conclusions.
+// That is still local-first own-execution in this driver's sense (it is the
+// repo observing its OWN pipeline, not external/analytics activity), so it is
+// registered here rather than living behind an opt-in flag like the FLAGGED
+// external sensors described below.
 //
 // Run from anywhere (the store dir is resolved relative to this file, not cwd):
 //   npx tsx packages/intentionsutil/scripts/read-sensors.ts
@@ -21,6 +27,11 @@
 // PageSpeed Insights, anything that observes activity beyond one's own
 // execution) are FLAGGED, opt-in, and deliberately NOT registered here; they
 // live in `.claude/skills/align-init/scripts/fetch-*.sh` behind explicit flags.
+// Own-pipeline CI/check-run status is a different case: even where its probe
+// (below, main-health) shells to `gh`, it observes the repo's OWN execution
+// (own check-run conclusions), not external or analytics activity, so it is
+// explicitly classed local-first and registered here despite the `no gh API`
+// phrasing above, which describes the OTHER sensors in this file.
 //
 // A node naming a sensor that is not registered is NOT silently skipped and does
 // NOT crash the batch: it is collected and reported to stderr at the end. That
@@ -33,9 +44,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes, writeNode } from "../src/store.js";
-import { projectGoals } from "../src/goals.js";
 import { SensorRegistry, deriveGap, type Sensor } from "../src/sensors.js";
 import { IntentionSchemaError } from "../src/errors.js";
+import type { IntentionNode } from "../src/schema.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/read-sensors.ts`, so the
@@ -91,6 +102,105 @@ const gitSensor: Sensor = {
     } catch {
       return "git: unknown";
     }
+  },
+};
+
+// --- main-health sensor ------------------------------------------------------
+// Name `"main-health"` — the short canonical key `strategy-main-health` (and
+// the tactic nodes the self-heal flow auto-creates) name in
+// `success_signal.sensor` (same match-the-declared-name contract token-
+// economy/lifecycle/intention-store use below). Own-pipeline CI/check-run
+// status is a local-first own-execution sensor per this file's header comment,
+// even though its probe shells out to `gh`: checking one's OWN repo's OWN
+// check-run conclusions is the same "own pipeline" class as the vitest/git
+// sensors above — it is distinct from the deliberately-excluded
+// external/analytics sensors (site analytics, PageSpeed Insights, anything
+// observing activity beyond one's own execution) that stay opt-in behind
+// `.claude/skills/align-init/scripts/`.
+
+/** The short canonical `success_signal.sensor` key this sensor registers under. */
+const MAIN_HEALTH_SENSOR_NAME = "main-health";
+
+/**
+ * Exec options for `repo-health --main-broken-sha`, kept separate from the
+ * shared `execOpts` above. `execOpts` backs this file's LOCAL-ONLY, no-network
+ * commands (git diff/status); `repo-health --main-broken-sha` shells out to
+ * `gh` (network + TLS) to probe origin/main's CI, so it gets its own binding —
+ * same cwd/encoding/stdio shape, but a distinct name so a reader never mistakes
+ * this sensor for one of the no-network ones.
+ */
+const ghExecOpts = {
+  cwd: repoRoot,
+  encoding: "utf8" as const,
+  stdio: ["ignore", "pipe", "ignore"] as ["ignore", "pipe", "ignore"],
+};
+
+/**
+ * Own-pipeline CI-status sensor. Shells to
+ * `.claude/skills/dispatch-propagate/scripts/repo-health --main-broken-sha`,
+ * which prints origin/main HEAD's full SHA on stdout when a check has failed,
+ * and prints nothing when every check on that HEAD concludes success (or
+ * neutral/skipped). Empty stdout maps to the exact `strategy-main-health`
+ * `success_signal.threshold` string verbatim (though `deriveGap` compares
+ * case/whitespace-insensitively, `sensors.ts:98-112`); non-empty stdout maps to
+ * a fixed `red: <sha> ...` phrase — never raw log content. That green literal
+ * stays the frozen threshold-matching case — no `strategy-main-health` edit is
+ * needed by this unit.
+ *
+ * `repo-health --main-broken-sha` also exits non-zero (3) with the literal
+ * stdout token `NO_ATTRIBUTABLE_CHECKS` when the attributable check-run/
+ * workflow-run set for origin/main HEAD is empty or entirely misattributed to
+ * another branch (fail-closed: cannot confirm green, but it's not a confirmed
+ * red SHA either). That case reads as a distinct fixed `"unknown: ..."`
+ * phrase, not the plain `"unknown"` used for any other invocation failure.
+ * Either way, a `repo-health` invocation failure (non-zero exit) must not
+ * throw (total-sensor contract above); both unknown readings can never equal
+ * the threshold string, so `gap` stays non-null and the sensor fails safe
+ * rather than reporting a false green.
+ *
+ * SIDE EFFECT: unlike the other sensors in this file, reading this one is not
+ * pure. `repo-health --main-broken-sha` reconciles the durable `main_broken`
+ * latch record as a documented side effect (red → set/refresh the sha, green →
+ * clear it; `repo-health:59-65`). So naming the `main-health` sensor in a
+ * `read-sensors` run mutates that latch state, not just the node's
+ * `reading`/`gap`. This coupling is intentional — the latch and the sensor
+ * reading are two views of the same origin/main CI status — but it means this
+ * sensor breaks the file header's "no side-effect" promise in addition to its
+ * "no network" one.
+ */
+/**
+ * Standalone probe body, extracted so tests can exercise all three branches
+ * (green/red/unknown) against a fake `binaryPath` without shelling to the
+ * real `repo-health` script. `mainHealthSensor.read()` below is a thin
+ * wrapper that supplies the real default path. Exported for unit tests
+ * (mirrors `readWeeklyUtilization`, `readTacticVelocity`, etc. above).
+ */
+export function readMainHealth(binaryPath: string): string {
+  let sha: string;
+  try {
+    sha = execFileSync(binaryPath, ["--main-broken-sha"], ghExecOpts).trim();
+  } catch (err: unknown) {
+    if (
+      isPlainObject(err) &&
+      typeof err.stdout === "string" &&
+      err.stdout.trim() === "NO_ATTRIBUTABLE_CHECKS"
+    ) {
+      return "unknown: no check on the current origin/main HEAD is attributable to main's own workflow (empty or misattributed check set) — cannot confirm green";
+    }
+    return "unknown";
+  }
+  if (sha === "") {
+    return "green: every check on the current origin/main HEAD concludes success (or neutral/skipped)";
+  }
+  return `red: ${sha} has one or more failing checks`;
+}
+
+const mainHealthSensor: Sensor = {
+  name: MAIN_HEALTH_SENSOR_NAME,
+  read(): string {
+    return readMainHealth(
+      join(repoRoot, ".claude", "skills", "dispatch-propagate", "scripts", "repo-health"),
+    );
   },
 };
 
@@ -538,6 +648,271 @@ const lifecycleSensor: Sensor = {
   },
 };
 
+// --- Delegation-records sensor ---------------------------------------------
+// Reads every `kind: delegation` record's exercise state into a compact
+// aggregate for `strategy-exercise-recovery-paths` (whose success_signal names
+// this sensor). Local store reads only — no network, no git, no analytics.
+
+/**
+ * The exact `success_signal.sensor` string on
+ * `intentions/strategy-exercise-recovery-paths.md`. Registry resolution is by
+ * verbatim string match (`src/sensors.ts` `SensorRegistry.resolve`), so this
+ * constant MUST equal that node's `success_signal.sensor` character-for-character.
+ */
+const DELEGATION_RECORDS_SENSOR_NAME = "the delegation records themselves";
+
+/**
+ * One delegation record's exercise-relevant fields, extracted from the free-form
+ * `attributes` of a `kind: delegation` node. The shared extraction that the
+ * aggregate reading and the `--report` table both read from (and that the
+ * later attention surface, `tactic-delegation-capture-visibility`, can reuse).
+ */
+export interface DelegationRecordReading {
+  id: string;
+  origin: string;
+  lastExercised: string | null;
+  lastAssessed: string;
+  nonDelegableFloor: string;
+  reviewTrigger: string;
+}
+
+/** Guard a required non-empty string attribute, naming the record on failure. */
+function requireAttrString(attrs: Record<string, unknown>, key: string, id: string): string {
+  const value = attrs[key];
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new IntentionSchemaError(
+      `Delegation record "${id}" attributes.${key} must be a non-empty string, got ${typeof value}.`,
+    );
+  }
+  return value;
+}
+
+/**
+ * Read every `kind: delegation` node from the store and extract its
+ * exercise-relevant fields. Validates the free-form `attributes` shape at this
+ * boundary and throws `IntentionSchemaError` naming the malformed record.
+ *
+ * A schema-invalid delegation record is a real graph defect, so this
+ * deliberately HALTS rather than degrading to a status string — the honest
+ * failure for a misconfigured input (`.claude/rules/code-style.md`). This is
+ * the intended exception to the "sensor read must be total" convention above:
+ * that convention shields against transient local-command failures (git
+ * unavailable), not against structurally invalid graph data.
+ */
+export function readDelegationRecords(dir: string): DelegationRecordReading[] {
+  const records: DelegationRecordReading[] = [];
+  for (const node of listNodes(dir)) {
+    if (node.kind !== "delegation") {
+      continue;
+    }
+    const attrs = node.attributes;
+    const origin = requireAttrString(attrs, "origin", node.id);
+    const lastAssessed = requireAttrString(attrs, "last_assessed", node.id);
+    const nonDelegableFloor = requireAttrString(attrs, "non_delegable_floor", node.id);
+    const reviewTrigger = requireAttrString(attrs, "review_trigger", node.id);
+
+    const irreversibility = attrs.irreversibility;
+    if (!isPlainObject(irreversibility)) {
+      throw new IntentionSchemaError(
+        `Delegation record "${node.id}" attributes.irreversibility must be an object.`,
+      );
+    }
+    if (!("last_exercised" in irreversibility)) {
+      throw new IntentionSchemaError(
+        `Delegation record "${node.id}" attributes.irreversibility is missing last_exercised.`,
+      );
+    }
+    const rawLastExercised = irreversibility.last_exercised;
+    if (rawLastExercised !== null && typeof rawLastExercised !== "string") {
+      throw new IntentionSchemaError(
+        `Delegation record "${node.id}" attributes.irreversibility.last_exercised must be a ` +
+          `string or null, got ${typeof rawLastExercised}.`,
+      );
+    }
+
+    records.push({
+      id: node.id,
+      origin,
+      lastExercised: rawLastExercised,
+      lastAssessed,
+      nonDelegableFloor,
+      reviewTrigger,
+    });
+  }
+  return records;
+}
+
+/**
+ * The compact aggregate reading that lands on the strategy's `reading`. Declined
+ * records (`origin: declined`) are counted as their own class — never as
+ * unexercised: per the strategy's 2026-07-11 clarification and kind-delegation's
+ * abstention doctrine a declined delegation has no entered path to walk, so the
+ * portfolio review (not a drill) is its exercise. The denominator M is the total
+ * record count so the reader sees how many of ALL records are exercised, with
+ * the declined class broken out. Includes the read date so the fresh-reading
+ * gate can compare against the strategy's `rounds.last_completed`.
+ */
+export function readDelegationRecordsReading(dir: string, today: Date = new Date()): string {
+  const records = readDelegationRecords(dir);
+  const total = records.length;
+  const declined = records.filter((r) => r.origin === "declined");
+  const active = records.filter((r) => r.origin !== "declined");
+  const exercised = active.filter((r) => r.lastExercised !== null);
+  const oldestAssessed = records.reduce<string | null>(
+    (min, r) => (min === null || r.lastAssessed < min ? r.lastAssessed : min),
+    null,
+  );
+  const readDate = today.toISOString().slice(0, 10);
+  return (
+    `${exercised.length} of ${total} delegation records exercised (last_exercised set); ` +
+    `${declined.length} declined-origin (no entered path to exercise); ` +
+    `oldest last_assessed ${oldestAssessed ?? "none"} (sensor read ${readDate})`
+  );
+}
+
+/** Escape a free-form prose cell so it cannot break the markdown table. */
+function escapeReportCell(value: string): string {
+  return value.replace(/\r?\n/g, " ").replace(/\|/g, "\\|").trim();
+}
+
+/**
+ * A markdown table over the same extraction — one row per delegation record —
+ * for the human portfolio review (`tactic-recovery-portfolio-review`). Local
+ * store reads only; no Firestore, no network.
+ */
+export function renderDelegationRecordsReport(dir: string): string {
+  const records = readDelegationRecords(dir);
+  const header =
+    "| id | origin | last_exercised | last_assessed | non_delegable_floor | review_trigger |\n" +
+    "| --- | --- | --- | --- | --- | --- |";
+  const rows = records.map(
+    (r) =>
+      `| ${r.id} | ${r.origin} | ${r.lastExercised ?? "null"} | ${r.lastAssessed} | ` +
+      `${escapeReportCell(r.nonDelegableFloor)} | ${escapeReportCell(r.reviewTrigger)} |`,
+  );
+  return [header, ...rows].join("\n");
+}
+
+const delegationRecordsSensor: Sensor = {
+  name: DELEGATION_RECORDS_SENSOR_NAME,
+  read(): string {
+    return readDelegationRecordsReading(intentionsDir);
+  },
+};
+
+// --- intention-store sensor --------------------------------------------------
+// The verbatim `success_signal.sensor` name strategy-graph-drives-dispatch
+// declares, and the store's self-measuring sensor: it counts how many open
+// tactics carry a serves edge and how many sensor-naming strategies have a
+// reading — the two quantities that strategy's threshold names ("every open
+// tactic carries a non-empty serves edge and sensor-run readings exist for
+// every strategy that names a sensor"). Per strategy clarification 7
+// (2026-07-11): a sensor-naming strategy counts as read when its `reading` is
+// non-null — reading provenance is not recorded in frontmatter, so existence is
+// the deliberate mechanical proxy for a sensor-run — and the sensor separately
+// reports how many name a sensor absent from the registry.
+
+/** The verbatim `success_signal.sensor` name strategy-graph-drives-dispatch declares. */
+export const INTENTION_STORE_SENSOR_NAME = "the intention store itself";
+
+/**
+ * Open-tactic serves coverage: over `kind === "tactic"` nodes carrying an open
+ * dispatch phase (`phase !== null && phase !== "done"`), count how many carry a
+ * non-empty `serves` edge. Exported (like `readTokenEconomy`) for unit testing
+ * over fixture node arrays.
+ */
+export function openTacticServesCoverage(nodes: IntentionNode[]): {
+  withServes: number;
+  open: number;
+} {
+  let withServes = 0;
+  let open = 0;
+  for (const node of nodes) {
+    if (node.kind !== "tactic") {
+      continue;
+    }
+    if (node.phase === null || node.phase === "done") {
+      continue;
+    }
+    open += 1;
+    if (node.serves.length > 0) {
+      withServes += 1;
+    }
+  }
+  return { withServes, open };
+}
+
+/**
+ * Sensor-reading coverage: over `kind === "strategy"` nodes that name a success
+ * signal (`success_signal !== null`), return `{ read, total, unregistered }`:
+ * `read` counts nodes whose `reading` is non-null (the clarification-7 proxy for
+ * a sensor-run); `total` counts all sensor-naming strategies; `unregistered`
+ * counts nodes whose `success_signal.sensor` is not in `registeredNames`.
+ * Exported for unit testing over fixture node arrays.
+ */
+export function sensorReadingCoverage(
+  nodes: IntentionNode[],
+  registeredNames: ReadonlySet<string>,
+): { read: number; total: number; unregistered: number } {
+  let read = 0;
+  let total = 0;
+  let unregistered = 0;
+  for (const node of nodes) {
+    if (node.kind !== "strategy") {
+      continue;
+    }
+    if (node.success_signal === null) {
+      continue;
+    }
+    total += 1;
+    if (node.reading !== null) {
+      read += 1;
+    }
+    if (!registeredNames.has(node.success_signal.sensor)) {
+      unregistered += 1;
+    }
+  }
+  return { read, total, unregistered };
+}
+
+/**
+ * Build the intention-store sensor — the store measuring itself. `read()` is
+ * total (never throws — degrades to `"unknown"` on a load failure, per the
+ * total-sensor contract above) and returns the stable format:
+ *   `serves: <a>/<b> open tactic(s); readings: <c>/<d> sensor-naming strateg(y/ies) (<e> unregistered sensor(s))`
+ * with each counted noun singular/plural to match its count. `getRegisteredNames`
+ * yields the set of sensor names the driver's registry knows (including this
+ * sensor's own name); it is queried at `read()` time so the set can never drift
+ * from the actual registry membership. `loadNodes` reads the store — injected so
+ * unit tests can supply fixture arrays without touching the live store.
+ */
+export function makeIntentionStoreSensor(
+  getRegisteredNames: () => ReadonlySet<string>,
+  loadNodes: () => IntentionNode[],
+): Sensor {
+  return {
+    name: INTENTION_STORE_SENSOR_NAME,
+    read(): string {
+      let nodes: IntentionNode[];
+      try {
+        nodes = loadNodes();
+      } catch {
+        return "unknown";
+      }
+      const serves = openTacticServesCoverage(nodes);
+      const readings = sensorReadingCoverage(nodes, getRegisteredNames());
+      const openNoun = serves.open === 1 ? "tactic" : "tactics";
+      const strategyNoun = readings.total === 1 ? "strategy" : "strategies";
+      const sensorNoun = readings.unregistered === 1 ? "sensor" : "sensors";
+      return (
+        `serves: ${serves.withServes}/${serves.open} open ${openNoun}; ` +
+        `readings: ${readings.read}/${readings.total} sensor-naming ${strategyNoun} ` +
+        `(${readings.unregistered} unregistered ${sensorNoun})`
+      );
+    },
+  };
+}
+
 /**
  * Build the default registry of local-first own-execution sensors. Exported so
  * the registration set can be unit-tested (verification deferred to #2372/QA).
@@ -546,31 +921,62 @@ export function buildDefaultRegistry(): SensorRegistry {
   const registry = new SensorRegistry();
   registry.register(vitestSensor);
   registry.register(gitSensor);
+  registry.register(mainHealthSensor);
   registry.register(tokenEconomySensor);
   registry.register(lifecycleSensor);
+  registry.register(delegationRecordsSensor);
+  // Register the intention-store sensor last and have it derive the set of
+  // registered sensor names from the registry itself at read() time — by then
+  // the registry holds every sensor, including this one. Deriving the set (vs
+  // hand-listing it) means the unregistered-sensor count can never drift from
+  // the true registry membership if a future sensor is added above.
+  registry.register(
+    makeIntentionStoreSensor(
+      () => registry.names(),
+      () => listNodes(intentionsDir),
+    ),
+  );
   return registry;
 }
 
 // --- Core driver -----------------------------------------------------------
 
-/** Summary of one frontier-sensor pass, returned for testability and printing. */
+/** Summary of one store-sensor pass, returned for testability and printing. */
 export interface ReadSummary {
   read: number; // nodes whose sensor was read and written back
-  skippedNoSignal: number; // frontier nodes with no success_signal (nothing to read)
+  skippedNoSignal: number; // store nodes with no success_signal (nothing to read)
   unregistered: { id: string; sensor: string }[]; // named a sensor not in the registry
 }
 
 /**
- * Walk the active frontier and, for each node that names a registered sensor,
+ * Walk EVERY node in the store and, for each that names a registered sensor,
  * read the sensor, derive the gap against the FRESH reading, and write the node
  * back preserving all other fields. Nodes with no signal are skipped silently;
  * nodes naming an unregistered sensor are collected for reporting (never crash,
  * never silently skipped). Exported for later unit testing.
+ *
+ * The scope is the whole store (`listNodes`), NOT the active frontier: the
+ * strategy threshold quantifies over "every strategy that names a sensor", and
+ * `activeFrontier` drops `status: "codified"` nodes and any node that is a
+ * `parent` of another (goals.ts) — so a frontier scope could never write the
+ * readings of codified or parent strategies (e.g. strategy-graph-drives-dispatch
+ * is a parent; strategy-exercise-recovery-paths is codified). Frontier filtering
+ * stays correct for goal projection; it was only wrong as the READ scope.
  */
-export function readFrontierSensors(dir: string, registry: SensorRegistry): ReadSummary {
+export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSummary {
   const summary: ReadSummary = { read: 0, skippedNoSignal: 0, unregistered: [] };
 
-  for (const { node } of projectGoals(listNodes(dir))) {
+  // READ pass: compute every node's fresh reading against a single consistent
+  // pre-run store snapshot, accumulating the updated nodes without writing any.
+  // Deferring all writes to a second pass is what keeps a whole-store sensor
+  // honest: the intention-store sensor re-reads the store while computing its
+  // reading, and if writes happened inline here it would observe a store
+  // partially mutated by earlier iterations — its serves/readings counts would
+  // be an artifact of node iteration order rather than a clean snapshot. With
+  // no writes during this pass, every such re-read sees the same unmutated
+  // pre-run store.
+  const updates: IntentionNode[] = [];
+  for (const node of listNodes(dir)) {
     if (node.success_signal === null) {
       // No signal named — there is genuinely nothing to read. Not reported.
       summary.skippedNoSignal += 1;
@@ -592,7 +998,12 @@ export function readFrontierSensors(dir: string, registry: SensorRegistry): Read
 
     const reading = sensor.read(node);
     const gap = deriveGap({ ...node, reading });
-    writeNode(dir, { ...node, reading, gap });
+    updates.push({ ...node, reading, gap });
+  }
+
+  // WRITE pass: persist every updated node now that all readings are computed.
+  for (const updated of updates) {
+    writeNode(dir, updated);
     summary.read += 1;
   }
 
@@ -602,8 +1013,15 @@ export function readFrontierSensors(dir: string, registry: SensorRegistry): Read
 // --- Main ------------------------------------------------------------------
 
 function main(): void {
+  // `--report`: print the per-record delegation portfolio table and exit. No
+  // frontier read, no writes — a read-only view for the human portfolio review.
+  if (process.argv.includes("--report")) {
+    process.stdout.write(renderDelegationRecordsReport(intentionsDir) + "\n");
+    return;
+  }
+
   const registry = buildDefaultRegistry();
-  const summary = readFrontierSensors(intentionsDir, registry);
+  const summary = readStoreSensors(intentionsDir, registry);
 
   process.stdout.write(
     `read-sensors: ${summary.read} read/written, ` +

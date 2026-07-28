@@ -32,6 +32,8 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint: 62d71ed52ab675485474ed69e3c22ced46d2c99ecece2cfec92f79236fa6b89b
+  fix: null
+  completion: null
 validates:
   - strategy-external-calibration
 blocked_by: []

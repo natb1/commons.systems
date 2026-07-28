@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# assert-worktree-fresh [<worktree-path>] — non-skippable pre-analysis freshness
+# guard for the interactive align skills (/align-strategy, /align-tactics,
+# /align-init, grounding-research, office-hours). It refuses to let a session's
+# graph reads proceed on a STALE local checkout: it fetches origin/main and, if
+# the target worktree's HEAD is behind origin/main, fails so the caller freshens
+# (merges origin/main) before reading the intention graph.
+#
+# The freshness target is the CURRENT worktree (the tree the session actually
+# reads graph files from), i.e. the resolved <worktree-path> or, when omitted,
+# the current working directory — NOT the shared project root. resolve_project_root
+# (from lib.sh) returns the main-checkout root even from inside a linked worktree,
+# so it is used ONLY to give a clear "not inside a git repo" error before the
+# network fetch; the behind-count is computed against the cwd worktree's HEAD.
+#
+# This is a DETECT-ONLY primitive: it NEVER merges or fast-forwards the tree —
+# freshening is the caller's job. It also does NOT disable any sandbox: the
+# read-only `git fetch origin main` to github.com is sandbox-allowlisted, and
+# this script performs no tree-updating git op, so sandbox handling is purely a
+# caller concern.
+#
+# Exit-code contract:
+#   0 — HEAD is up-to-date with (or ahead of) origin/main.
+#   2 — usage error (extra/flag-shaped arg, or un-cd-able path).
+#   1 — fetch failure, not a git repo, or HEAD is behind origin/main (stale).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=./lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
+if [[ $# -gt 1 ]]; then
+  echo "assert-worktree-fresh: unexpected extra arguments after <worktree-path>" >&2
+  exit 2
+fi
+if [[ $# -eq 1 && "$1" == -* ]]; then
+  echo "assert-worktree-fresh: flag-shaped argument '$1' is not a worktree path" >&2
+  exit 2
+fi
+
+# <worktree-path> is optional; default to the current working directory.
+WORKTREE="${1:-$PWD}"
+cd "$WORKTREE" || {
+  echo "assert-worktree-fresh: cannot cd to '$WORKTREE'" >&2
+  exit 2
+}
+
+# Clear error before the network fetch when the target is not inside a git repo.
+if ! resolve_project_root >/dev/null 2>&1; then
+  echo "assert-worktree-fresh: '$WORKTREE' is not inside a git repository" >&2
+  exit 1
+fi
+
+if ! git fetch origin main; then
+  echo "assert-worktree-fresh: git fetch origin main failed in '$WORKTREE' — cannot verify freshness, refusing to proceed on unverified local state" >&2
+  exit 1
+fi
+
+# Count commits reachable from origin/main but not from HEAD — i.e. how far the
+# local checkout is behind. Zero means up-to-date (or ahead); positive means stale.
+if ! BEHIND="$(git rev-list --count HEAD..origin/main 2>/dev/null)"; then
+  echo "assert-worktree-fresh: origin/main did not resolve after fetch in '$WORKTREE' — cannot verify freshness, refusing to proceed" >&2
+  exit 1
+fi
+if [[ "$BEHIND" -gt 0 ]]; then
+  echo "assert-worktree-fresh: HEAD is $BEHIND commit(s) behind origin/main — freshen (merge origin/main) before analysis" >&2
+  exit 1
+fi
+
+# Keep stdout quiet so callers can consume it cleanly (and stdout stays free for
+# any future machine-readable output); the OK note goes to stderr.
+echo "assert-worktree-fresh: HEAD is up-to-date with origin/main" >&2
+exit 0

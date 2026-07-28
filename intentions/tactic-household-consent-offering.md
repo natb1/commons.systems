@@ -27,8 +27,7 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by:
-  - tactic-household-consent-instrument
+blocked_by: []
 office_hours:
   reason: "Author + household work (about 30 minutes), runs after
     tactic-household-consent-instrument lands: ratify or amend the proposed

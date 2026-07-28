@@ -191,7 +191,9 @@ dangling case), so a single broken edge is not double-reported. `serves` on
 delegation and kind nodes is deliberately unenforced — a delegation serves
 whatever depends on it, which is intentionally loose. `validateGraph` throws
 one error listing all violations. (Rules 10–15 cover the graph-native dispatch
-fields and `blocked_by` cycles; rules 16–18 cover mounts — see below.)
+fields and `blocked_by` cycles; rules 16–18 cover status vocabularies,
+clarification provenance and attention dominance; rules 19–21 cover mounts —
+see below.)
 
 ## Mounts
 
