@@ -18,7 +18,8 @@ reading: null
 gap: null
 serves:
   - virtue-temperance
-recovers: []
+recovers:
+  - delegation-food-supply
 clarifications: []
 tooling_goals: []
 success_signal: null

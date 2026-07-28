@@ -100,6 +100,8 @@ describe("listNodesAtRef", () => {
       reason: "blocked on a decision",
       since: "2026-06-15",
       recommendation: "ask the author",
+      // `session_type` is a non-optional field defaulted by validateOfficeHours.
+      session_type: "other",
     });
   });
 

@@ -76,7 +76,7 @@ describe("strategyFingerprintFor", () => {
         kind: "strategy",
         statement: "Own the substrate.",
         reading: "holding at threshold",
-        office_hours: { reason: "author park", since: "2026-07-18", recommendation: null },
+        office_hours: { reason: "author park", since: "2026-07-18", recommendation: null, session_type: "other" },
       }),
     );
     const fp2 = strategyFingerprintFor(dir, "strategy-a");

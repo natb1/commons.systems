@@ -10,9 +10,16 @@ import {
   officeHoursQueue,
   openBlockers,
   selectOfficeHours,
+  SESSION_TYPE_PENALTY,
   type OfficeHoursSelection,
 } from "../src/officeHours.js";
-import { formatDisposition, resolveSessionCwd } from "../scripts/office-hours-select.js";
+import type { SessionType } from "../src/schema.js";
+import {
+  formatDisposition,
+  formatQueueRow,
+  parseSelectorArgs,
+  resolveSessionCwd,
+} from "../scripts/office-hours-select.js";
 import { extractFrontmatter } from "../src/frontmatter.js";
 
 // This test file lives at packages/intentionsutil/test/, so repo root is
@@ -88,7 +95,12 @@ function boost(amount: number): Attention {
 }
 
 function parked(recommendation: string | null = null): OfficeHours {
-  return { reason: "parked", since: "2026-07-06", recommendation };
+  return { reason: "parked", since: "2026-07-06", recommendation, session_type: "other" };
+}
+
+/** Like `parked`, but with an explicit session_type (for penalty-ranking tests). */
+function parkedTyped(sessionType: SessionType, recommendation: string | null = null): OfficeHours {
+  return { reason: "parked", since: "2026-07-06", recommendation, session_type: sessionType };
 }
 
 describe("officeHoursQueue", () => {
@@ -117,6 +129,114 @@ describe("officeHoursQueue", () => {
   it("returns an empty queue when nothing is parked", () => {
     const nodes = [...kinds(), anode({ id: "tactic-x", kind: "tactic" })];
     expect(officeHoursQueue(nodes)).toEqual([]);
+  });
+
+  it("soft-penalizes requirement-discovery/curriculum-review parks below an equal-attention other park", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-other",
+        kind: "tactic",
+        attention: boost(10),
+        office_hours: parkedTyped("other"),
+      }),
+      anode({
+        id: "tactic-reqdisc",
+        kind: "tactic",
+        attention: boost(10),
+        office_hours: parkedTyped("requirement-discovery"),
+      }),
+      anode({
+        id: "tactic-currev",
+        kind: "tactic",
+        attention: boost(10),
+        office_hours: parkedTyped("curriculum-review"),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+
+    expect(queue.map((m) => m.nodeId)).toEqual(["tactic-other", "tactic-currev", "tactic-reqdisc"]);
+    expect(queue.find((m) => m.nodeId === "tactic-other")?.rank).toBe(10);
+    expect(queue.find((m) => m.nodeId === "tactic-reqdisc")?.rank).toBe(10 * SESSION_TYPE_PENALTY);
+  });
+
+  it("lets a sufficiently boosted penalized park overtake a lower-boost other park (soft, not a hard floor)", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-other-low",
+        kind: "tactic",
+        attention: boost(3),
+        office_hours: parkedTyped("other"),
+      }),
+      anode({
+        id: "tactic-reqdisc-high",
+        kind: "tactic",
+        attention: boost(20),
+        office_hours: parkedTyped("requirement-discovery"),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+
+    expect(queue.map((m) => m.nodeId)).toEqual(["tactic-reqdisc-high", "tactic-other-low"]);
+  });
+
+  it("computes QueueMember.rank as rawAttention * SESSION_TYPE_PENALTY for a penalized type, and raw for other", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-other",
+        kind: "tactic",
+        attention: boost(8),
+        office_hours: parkedTyped("other"),
+      }),
+      anode({
+        id: "tactic-currev",
+        kind: "tactic",
+        attention: boost(8),
+        office_hours: parkedTyped("curriculum-review"),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+
+    expect(queue.find((m) => m.nodeId === "tactic-other")?.rank).toBe(8);
+    expect(queue.find((m) => m.nodeId === "tactic-currev")?.rank).toBe(8 * SESSION_TYPE_PENALTY);
+  });
+
+  it("exposes sessionType on every QueueMember and filters by sessionType when given", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-other",
+        kind: "tactic",
+        attention: boost(1),
+        office_hours: parkedTyped("other"),
+      }),
+      anode({
+        id: "tactic-reqdisc",
+        kind: "tactic",
+        attention: boost(1),
+        office_hours: parkedTyped("requirement-discovery"),
+      }),
+      anode({
+        id: "tactic-currev",
+        kind: "tactic",
+        attention: boost(1),
+        office_hours: parkedTyped("curriculum-review"),
+      }),
+    ];
+
+    const full = officeHoursQueue(nodes);
+    expect(full.map((m) => m.sessionType).sort()).toEqual(
+      ["curriculum-review", "other", "requirement-discovery"].sort(),
+    );
+
+    const filtered = officeHoursQueue(nodes, "requirement-discovery");
+    expect(filtered.map((m) => m.nodeId)).toEqual(["tactic-reqdisc"]);
+    expect(filtered.every((m) => m.sessionType === "requirement-discovery")).toBe(true);
   });
 });
 
@@ -198,6 +318,16 @@ describe("selectOfficeHours", () => {
       nodeId: "tactic-ghost",
     });
   });
+
+  it("throws when both target and sessionType are supplied", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-t", kind: "tactic", office_hours: parked() }),
+    ];
+    expect(() => selectOfficeHours(nodes, "tactic-t", "curriculum-review")).toThrow(
+      /mutually exclusive/,
+    );
+  });
 });
 
 describe("resolveSessionCwd", () => {
@@ -217,6 +347,190 @@ describe("resolveSessionCwd", () => {
   it("rejects a path-unsafe id without touching the fs", () => {
     const root = mkdtempSync(join(tmpdir(), "oh-cwd-"));
     expect(() => resolveSessionCwd(root, "../escape")).toThrow(/unsafe node id/);
+  });
+});
+
+describe("parseSelectorArgs", () => {
+  it("treats a single positional as the target (the regression case)", () => {
+    expect(parseSelectorArgs(["tactic-some-id"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: undefined,
+      target: "tactic-some-id",
+      ref: "origin/main",
+    });
+  });
+
+  it("returns no target for empty args", () => {
+    expect(parseSelectorArgs([])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: undefined,
+      target: undefined,
+      ref: "origin/main",
+    });
+  });
+
+  it("sets wantList for --list with no target", () => {
+    expect(parseSelectorArgs(["--list"])).toEqual({
+      kind: "ok",
+      wantList: true,
+      sessionType: undefined,
+      target: undefined,
+      ref: "origin/main",
+    });
+  });
+
+  it("sets sessionType for --type <t> with no target", () => {
+    expect(parseSelectorArgs(["--type", "curriculum-review"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: "curriculum-review",
+      target: undefined,
+      ref: "origin/main",
+    });
+  });
+
+  it("combines --type and --list, excluding the type value from positionals", () => {
+    expect(parseSelectorArgs(["--type", "curriculum-review", "--list"])).toEqual({
+      kind: "ok",
+      wantList: true,
+      sessionType: "curriculum-review",
+      target: undefined,
+      ref: "origin/main",
+    });
+  });
+
+  it("errors when --type is combined with a node-id positional", () => {
+    const result = parseSelectorArgs(["--type", "curriculum-review", "tactic-x"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--type is mutually exclusive/);
+  });
+
+  it("errors when --list is combined with a node-id positional", () => {
+    const result = parseSelectorArgs(["--list", "tactic-x"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--list is mutually exclusive/);
+  });
+
+  it("errors on an unknown --type value", () => {
+    const result = parseSelectorArgs(["--type", "bogus"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/unknown --type/);
+  });
+
+  it("errors with a missing-value message when --type is the last token", () => {
+    const result = parseSelectorArgs(["--type"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/missing value for --type/);
+    // The unknown-value branch would interpolate the literal string "undefined".
+    expect(result.kind === "error" && result.message).not.toMatch(/undefined/);
+  });
+
+  it("errors with a missing-value message when --type is followed by another flag", () => {
+    const result = parseSelectorArgs(["--type", "--list"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/missing value for --type/);
+  });
+
+  it("accepts the --type=<value> spelling", () => {
+    expect(parseSelectorArgs(["--type=curriculum-review"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: "curriculum-review",
+      target: undefined,
+      ref: "origin/main",
+    });
+  });
+
+  it("accepts --type=<value> combined with --list", () => {
+    expect(parseSelectorArgs(["--type=requirement-discovery", "--list"])).toEqual({
+      kind: "ok",
+      wantList: true,
+      sessionType: "requirement-discovery",
+      target: undefined,
+      ref: "origin/main",
+    });
+  });
+
+  it("errors on an unknown --type=<value>", () => {
+    const result = parseSelectorArgs(["--type=bogus"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/unknown --type/);
+  });
+
+  it("errors with a missing-value message on an empty --type=", () => {
+    const result = parseSelectorArgs(["--type="]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/missing value for --type/);
+  });
+
+  it("errors on an unrecognized flag rather than silently ignoring it", () => {
+    // The regression: a filtered-out unknown flag left sessionType undefined and
+    // emitted the UNFILTERED queue head with exit 0.
+    const result = parseSelectorArgs(["--typ", "curriculum-review"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/unknown flag "--typ"/);
+  });
+
+  it("errors when a boolean flag is given a value", () => {
+    const result = parseSelectorArgs(["--list=true"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--list takes no value/);
+  });
+
+  it("sets ref for --ref <git-ref>, excluding the ref value from positionals", () => {
+    expect(parseSelectorArgs(["--ref", "HEAD"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: undefined,
+      target: undefined,
+      ref: "HEAD",
+    });
+  });
+
+  it("accepts the --ref=<value> spelling alongside a node-id target", () => {
+    expect(parseSelectorArgs(["--ref=HEAD", "tactic-some-id"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: undefined,
+      target: "tactic-some-id",
+      ref: "HEAD",
+    });
+  });
+
+  it("errors when --ref is the last token", () => {
+    const result = parseSelectorArgs(["--ref"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--ref requires a git-ref argument/);
+  });
+
+  it("errors when --ref is followed by another flag", () => {
+    const result = parseSelectorArgs(["--ref", "--list"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--ref requires a git-ref argument/);
+  });
+
+  it("errors on more than one node-id positional", () => {
+    const result = parseSelectorArgs(["tactic-a", "tactic-b"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/at most one node-id/);
+  });
+});
+
+describe("formatQueueRow", () => {
+  it("renders the tab-separated --list columns in contract order", () => {
+    // Column order is parsed positionally by office-hours-graph's
+    // `IFS=$'\t' read -r score sessiontype nid date` loop; a reorder there or
+    // here breaks every park lookup and reports a false empty queue.
+    const row = formatQueueRow({
+      nodeId: "tactic-a",
+      rank: 12.5,
+      sessionType: "curriculum-review",
+      since: "2026-07-01",
+    });
+    expect(row).toBe("12.5\tcurriculum-review\ttactic-a\t2026-07-01");
+    expect(row.split("\t")).toEqual(["12.5", "curriculum-review", "tactic-a", "2026-07-01"]);
   });
 });
 
@@ -267,18 +581,19 @@ describe("formatDisposition", () => {
 // checkout with no `origin` remote), matching the defensive posture of
 // committed-store.test.ts's `describe.skipIf(!existsSync(...))`.
 describe.skipIf(!hasOriginMain())("office-hours-select CLI (real repo)", () => {
-  it("--list: every line matches rank\\tnodeId\\tsince", () => {
+  it("--list: every line matches rank\\tsessionType\\tnodeId\\tsince", () => {
     const out = runSelect(["--list"]);
     const lines = out.split("\n").filter((l) => l.length > 0);
     for (const line of lines) {
-      expect(line).toMatch(/^-?\d+(\.\d+)?\t\S+\t\S+$/);
+      expect(line).toMatch(/^-?\d+(\.\d+)?\t\S+\t\S+\t\S+$/);
     }
   }, 15000);
 
   it("main-authority invariant: every listed node is parked on origin/main", () => {
     const out = runSelect(["--list"]);
     const lines = out.split("\n").filter((l) => l.length > 0);
-    const nodeIds = lines.map((line) => line.split("\t")[1]);
+    // Column 2 (0-indexed) is the node id — see formatQueueRow's column contract.
+    const nodeIds = lines.map((line) => line.split("\t")[2]);
     for (const id of nodeIds) {
       const raw = execFileSync("git", ["-C", repoRoot, "show", `origin/main:intentions/${id}.md`], {
         encoding: "utf8",

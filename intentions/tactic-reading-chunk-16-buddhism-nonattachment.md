@@ -38,6 +38,7 @@ office_hours:
     (likely origin: declined, fragments kept)."
   since: 2026-07-07
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

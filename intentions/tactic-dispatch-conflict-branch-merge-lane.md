@@ -61,8 +61,17 @@ attention:
     rank, and matching it would need a raw boost of ~383, which schema rule 18
     rejects without the literal ACK string. That ACK was not sought, so the
     boost is capped at the authored band. Recorded 2026-07-27."
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-dispatch-conflict-branch-merge-lane
+  pr: 2977
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -686,3 +695,41 @@ Manual and judgment checks:
 - **`validate-graph` ordering.** Confirm the merge is committed before any
   `validate-graph` run, so `deletedNodeIds()`'s HEAD traversal does not false-fail
   on prose refs to nodes pruned upstream.
+
+## needs-main residue
+
+Recorded by `/qa-fix` (PR #2977, attempt 0) — machine/browser-verifiable items
+this PR's own Verification section documented as a planned deferral to a
+follow-up drain/observation pass against a live conflicted/held node. Drained
+after `review → main-qa` fires post-merge.
+
+- **item-8 — End-to-end Lane 3 rehearsal against a real held node.** URL path:
+  n/a. Expected outcome: Lane 3 resolves a genuine `origin/main` merge conflict
+  on a real held node's branch end-to-end: reproduce, resolve, verify against
+  the node's own plan, push, un-hold, mark `fix-conflicts` complete. Finding: no
+  live conflicted/held node existed in the QA session to rehearse against.
+- **item-9 — Hold-id entry path resolves to the source node.** URL path: n/a.
+  Expected outcome: entering Lane 3 via a provision-conflict hold id
+  dereferences to the correct source node and behaves identically to entering
+  via the source id directly. Finding: no real hold/source pair existed in the
+  QA session to exercise.
+- **item-10 — `intentions/*.md` node-file conflict rule and semantic-conflict/supersession catch.**
+  URL path: n/a. Expected outcome: the opus resolver defaults to `origin/main`'s
+  copy on `intentions/*.md` conflicts, treats upstream supersession as a
+  first-class outcome, and `dispatch-run-verification` catches a
+  textually-clean-but-semantically-broken merge as ambiguous. Finding: these are
+  opus-subagent judgment behaviors requiring a real conflicted merge to
+  exercise; none existed in the QA session.
+- **item-11 — Config-carrying-merge park path and `validate-graph` ordering.**
+  URL path: n/a. Expected outcome: a config-carrying merge is attempted rather
+  than refused, parks the source node with a reproducible reason+recommendation
+  on commit denial, and the two-write `resolve-hold` sequence never leaves a
+  `validate-graph`-rejecting intermediate state. Finding: requires a live
+  auto-mode commit-denial path and a genuine two-write graph sequence to
+  observe; neither was reproducible in the QA session.
+- **item-12 — No-blind-retry regression on a live fleet tick.** URL path: n/a.
+  Expected outcome: a live provision exit-11 tick spawns the conflict lane on
+  the first occurrence with zero strikes consumed, and the strike-then-hold
+  ladder still engages when the lane itself cannot be launched. Finding: only
+  observable against the running dispatch fleet's own ticks; not reproducible
+  in the QA session.
