@@ -11079,36 +11079,36 @@ else
 fi
 config_teardown
 
-# --- Test 2d: align jit (7d/14d, skill: align-init) validates ------------
+# --- Test 2d: weekly-review jit (7d/14d, skill: weekly-review-engine) validates ------------
 
-echo "Test: align jit (7d/14d, skill: align-init) validates"
+echo "Test: weekly-review jit (7d/14d, skill: weekly-review-engine) validates"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "align",
+      "key": "weekly-review",
       "repo": "test-owner/test-repo",
-      "label": "jit:align",
-      "title": "Alignment review",
-      "body": "Recurring align review.",
+      "label": "jit:weekly-review",
+      "title": "Weekly review",
+      "body": "Recurring weekly review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
       "debounce": "1h",
-      "skill": "align-init"
+      "skill": "weekly-review-engine"
     }
   ]
 }
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
-assert_eq "align jit exits 0" "0" "$rc"
-align_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
-assert_eq "align jit skill value" "align-init" "$align_skill"
-align_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
-assert_eq "align jit remindAfterClose value" "7d" "$align_remind"
-align_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
-assert_eq "align jit dueAfterClose value" "14d" "$align_due"
+assert_eq "weekly-review jit exits 0" "0" "$rc"
+weekly_review_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
+assert_eq "weekly-review jit skill value" "weekly-review-engine" "$weekly_review_skill"
+weekly_review_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
+assert_eq "weekly-review jit remindAfterClose value" "7d" "$weekly_review_remind"
+weekly_review_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
+assert_eq "weekly-review jit dueAfterClose value" "14d" "$weekly_review_due"
 config_teardown
 
 # --- Test 3: absent file prints no-config and exits 0 ------------------------
@@ -18437,24 +18437,24 @@ else
 fi
 jit_teardown
 
-# --- Test 2-align: align jit (7d/14d) cadence cold start -----------------
+# --- Test 2-weekly-review: weekly-review jit (7d/14d) cadence cold start -----------------
 
-echo "Test: dispatch-jit-engine align jit cadence cold start creates an issue"
+echo "Test: dispatch-jit-engine weekly-review jit cadence cold start creates an issue"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "align",
+      "key": "weekly-review",
       "repo": "test-owner/test-repo",
-      "label": "jit:align",
-      "title": "Alignment review",
-      "body": "Recurring align review.",
+      "label": "jit:weekly-review",
+      "title": "Weekly review",
+      "body": "Recurring weekly review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align-init"
+      "skill": "weekly-review-engine"
     }
   ]
 }
@@ -18462,29 +18462,29 @@ EOF
 # open-issues.json and closed-issues.json absent — open/closed both "[]".
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "align cold start exits 0" "0" "$rc"
+assert_eq "weekly-review cold start exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 # Cold start with remind=7d, due=14d, NOW=2026-01-01T00:00:00Z:
 # DUE = NOW + 14d - 7d = NOW + 7d = 2026-01-08T00:00:00Z.
-if [[ "$out" == *"align: created #123 (due 2026-01-08T00:00:00Z)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align cold start reports created #123 (due 2026-01-08T00:00:00Z)"
+if [[ "$out" == *"weekly-review: created #123 (due 2026-01-08T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review cold start reports created #123 (due 2026-01-08T00:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align cold start reports created #123 (due 2026-01-08T00:00:00Z)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review cold start reports created #123 (due 2026-01-08T00:00:00Z)"
   echo "    actual: $out"
 fi
 create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-08T00:00:00Z -->"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align cold start embedded jit-due marker in issue body"
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review cold start embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align cold start embedded jit-due marker in issue body"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review cold start embedded jit-due marker in issue body"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"title=Alignment review"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align cold start created issue with configured title"
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review cold start created issue with configured title"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align cold start created issue with configured title"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review cold start created issue with configured title"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
@@ -18532,24 +18532,24 @@ else
 fi
 jit_teardown
 
-# --- Test 3-align: align jit (7d/14d) within window — skipped, no issue created ---
+# --- Test 3-weekly-review: weekly-review jit (7d/14d) within window — skipped, no issue created ---
 
-echo "Test: dispatch-jit-engine align jit within remindAfterClose is skipped"
+echo "Test: dispatch-jit-engine weekly-review jit within remindAfterClose is skipped"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "align",
+      "key": "weekly-review",
       "repo": "test-owner/test-repo",
-      "label": "jit:align",
-      "title": "Alignment review",
-      "body": "Recurring align review.",
+      "label": "jit:weekly-review",
+      "title": "Weekly review",
+      "body": "Recurring weekly review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align-init"
+      "skill": "weekly-review-engine"
     }
   ]
 }
@@ -18560,41 +18560,41 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "align within-window exits 0" "0" "$rc"
+assert_eq "weekly-review within-window exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"align: skipped (within remindAfterClose)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align within-window reports skipped (within remindAfterClose)"
+if [[ "$out" == *"weekly-review: skipped (within remindAfterClose)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review within-window reports skipped (within remindAfterClose)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align within-window reports skipped (within remindAfterClose)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review within-window reports skipped (within remindAfterClose)"
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align within-window made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review within-window made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align within-window made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review within-window made no issue create call"
   echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
-# --- Test 3b-align: align jit (7d/14d) at the exact 7d boundary — skipped (inclusive) ---
+# --- Test 3b-weekly-review: weekly-review jit (7d/14d) at the exact 7d boundary — skipped (inclusive) ---
 
-echo "Test: dispatch-jit-engine align jit at the exact 7d boundary is skipped"
+echo "Test: dispatch-jit-engine weekly-review jit at the exact 7d boundary is skipped"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "align",
+      "key": "weekly-review",
       "repo": "test-owner/test-repo",
-      "label": "jit:align",
-      "title": "Alignment review",
-      "body": "Recurring align review.",
+      "label": "jit:weekly-review",
+      "title": "Weekly review",
+      "body": "Recurring weekly review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align-init"
+      "skill": "weekly-review-engine"
     }
   ]
 }
@@ -18606,19 +18606,19 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "align exact-7d-boundary exits 0" "0" "$rc"
+assert_eq "weekly-review exact-7d-boundary exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"align: skipped (within remindAfterClose)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align exact-7d-boundary reports skipped (within remindAfterClose)"
+if [[ "$out" == *"weekly-review: skipped (within remindAfterClose)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review exact-7d-boundary reports skipped (within remindAfterClose)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align exact-7d-boundary reports skipped (within remindAfterClose)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review exact-7d-boundary reports skipped (within remindAfterClose)"
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align exact-7d-boundary made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review exact-7d-boundary made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align exact-7d-boundary made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review exact-7d-boundary made no issue create call"
   echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
@@ -18670,24 +18670,24 @@ else
 fi
 jit_teardown
 
-# --- Test 4-align: align jit (7d/14d) cadence steady state ---------------
+# --- Test 4-weekly-review: weekly-review jit (7d/14d) cadence steady state ---------------
 
-echo "Test: dispatch-jit-engine align jit past remindAfterClose creates an issue"
+echo "Test: dispatch-jit-engine weekly-review jit past remindAfterClose creates an issue"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "align",
+      "key": "weekly-review",
       "repo": "test-owner/test-repo",
-      "label": "jit:align",
-      "title": "Alignment review",
-      "body": "Recurring align review.",
+      "label": "jit:weekly-review",
+      "title": "Weekly review",
+      "body": "Recurring weekly review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align-init"
+      "skill": "weekly-review-engine"
     }
   ]
 }
@@ -18698,44 +18698,44 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "align past-window exits 0" "0" "$rc"
+assert_eq "weekly-review past-window exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 # closedAt = NOW − 10d = 2025-12-22T00:00:00Z, dueAfterClose = 14d →
 # DUE = closedAt + 14d = 2026-01-05T00:00:00Z.
-if [[ "$out" == *"align: created #123 (due 2026-01-05T00:00:00Z)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align past-window reports created #123 (due 2026-01-05T00:00:00Z)"
+if [[ "$out" == *"weekly-review: created #123 (due 2026-01-05T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review past-window reports created #123 (due 2026-01-05T00:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align past-window reports created #123 (due 2026-01-05T00:00:00Z)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review past-window reports created #123 (due 2026-01-05T00:00:00Z)"
   echo "    actual: $out"
 fi
 create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-05T00:00:00Z -->"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align past-window embedded jit-due marker in issue body"
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review past-window embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align past-window embedded jit-due marker in issue body"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review past-window embedded jit-due marker in issue body"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
 
-# --- Test 4b-align: align jit (7d/14d) one second past the 7d boundary — creates ---
+# --- Test 4b-weekly-review: weekly-review jit (7d/14d) one second past the 7d boundary — creates ---
 
-echo "Test: dispatch-jit-engine align jit one second past the 7d boundary creates an issue"
+echo "Test: dispatch-jit-engine weekly-review jit one second past the 7d boundary creates an issue"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "align",
+      "key": "weekly-review",
       "repo": "test-owner/test-repo",
-      "label": "jit:align",
-      "title": "Alignment review",
-      "body": "Recurring align review.",
+      "label": "jit:weekly-review",
+      "title": "Weekly review",
+      "body": "Recurring weekly review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align-init"
+      "skill": "weekly-review-engine"
     }
   ]
 }
@@ -18747,22 +18747,22 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "align 7d+1s-past-boundary exits 0" "0" "$rc"
+assert_eq "weekly-review 7d+1s-past-boundary exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 # closedAt = NOW − (7d+1s) = 2025-12-24T23:59:59Z, dueAfterClose = 14d →
 # DUE = closedAt + 14d = 2026-01-07T23:59:59Z.
-if [[ "$out" == *"align: created #123 (due 2026-01-07T23:59:59Z)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align past-window reports created #123 (due 2026-01-07T23:59:59Z)"
+if [[ "$out" == *"weekly-review: created #123 (due 2026-01-07T23:59:59Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review past-window reports created #123 (due 2026-01-07T23:59:59Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align past-window reports created #123 (due 2026-01-07T23:59:59Z)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review past-window reports created #123 (due 2026-01-07T23:59:59Z)"
   echo "    actual: $out"
 fi
 create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-07T23:59:59Z -->"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align 7d+1s-past-boundary embedded jit-due marker in issue body"
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review 7d+1s-past-boundary embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align 7d+1s-past-boundary embedded jit-due marker in issue body"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review 7d+1s-past-boundary embedded jit-due marker in issue body"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
@@ -18807,24 +18807,24 @@ else
 fi
 jit_teardown
 
-# --- Test 5-align: align jit (7d/14d) open-issue guard — skipped when an open issue exists ---
+# --- Test 5-weekly-review: weekly-review jit (7d/14d) open-issue guard — skipped when an open issue exists ---
 
-echo "Test: dispatch-jit-engine align jit skips when an open issue with the label exists"
+echo "Test: dispatch-jit-engine weekly-review jit skips when an open issue with the label exists"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "align",
+      "key": "weekly-review",
       "repo": "test-owner/test-repo",
-      "label": "jit:align",
-      "title": "Alignment review",
-      "body": "Recurring align review.",
+      "label": "jit:weekly-review",
+      "title": "Weekly review",
+      "body": "Recurring weekly review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align-init"
+      "skill": "weekly-review-engine"
     }
   ]
 }
@@ -18832,19 +18832,19 @@ EOF
 echo '[{"number":50}]' > "$STUB_DIR/open-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "align open-guard exits 0" "0" "$rc"
+assert_eq "weekly-review open-guard exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"align: skipped (open issue exists)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align open-guard reports skipped (open issue exists)"
+if [[ "$out" == *"weekly-review: skipped (open issue exists)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review open-guard reports skipped (open issue exists)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align open-guard reports skipped (open issue exists)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review open-guard reports skipped (open issue exists)"
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: align open-guard made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: weekly-review open-guard made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: align open-guard made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review open-guard made no issue create call"
   echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
@@ -32184,7 +32184,7 @@ find_owning_pr_teardown
 # (tactic-align-session-claiming Unit 3)
 # ============================================================================
 # Uniform node-id claiming (strategy clarification 13) must cover worktrees a
-# HUMAN-invoked /align-strategy or /align-tactics session created — sessions
+# HUMAN-invoked /align or /align-tactics session created — sessions
 # that claim by authoring in <root>/.claude/worktrees/<node-id> and never write
 # a router reservation-ledger marker. graph-select-target's claimed-set gate is
 # worktree_has_live_session, name-keyed on the worktree basename, so a live
