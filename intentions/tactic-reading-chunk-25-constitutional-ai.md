@@ -50,6 +50,7 @@ office_hours:
     record time)."
   since: 2026-07-09
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

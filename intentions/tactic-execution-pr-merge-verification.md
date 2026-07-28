@@ -92,6 +92,7 @@ office_hours:
     This is a genuine "wait and observe" park, not an ambiguity — re-park is
     expected until `tactic-census-scripted-tick` ships and a few ticks have run
     against it.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
