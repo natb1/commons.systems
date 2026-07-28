@@ -25,7 +25,17 @@
 #      tree left clean.
 #   3b. Hold already resolved AND the source carries no edge -> idempotent
 #      exit 0, no graph-commit, tree clean.
-#   4. Usage errors (no args, unknown option) -> exit 2.
+#   4. Usage errors (no args, unknown option, non-slug / path-traversal id) ->
+#      exit 2.
+#   5. A far-behind branch worktree where BOTH node files differ from
+#      origin/main at HEAD: both graph-commits still land, because exactly one
+#      node file is mutated at a time (the stub enforces the real
+#      assert_clean_outside_ids rule under GC_STRICT_CLEAN=1).
+#   6. A node read that fails -> non-zero exit, no success line, no commit.
+#   7. Write A lands "successfully" but the hold is unchanged on origin/main ->
+#      exit 1 before Write B, source left blocked.
+#   8. An open hold whose source already lost the edge -> Write A only.
+#   9. --kind fix-attempt-cap targets the fix-cap hold id instead.
 #
 # No network needed; requires bash + git + jq + a real node with tsx resolvable
 # through a read-only node_modules symlink to this repo's own.
@@ -101,6 +111,13 @@ clone_with_node_modules() {
 # the local bare origin) UNLESS the id appears in $GC_NOOP_IDS, in which case it
 # reports success and lands NOTHING — standing in for graph-commit's layer-2
 # union silently dropping a field REMOVAL while reporting a successful land.
+#
+# With GC_STRICT_CLEAN=1 the stub additionally reproduces the REAL graph-commit's
+# assert_clean_outside_ids pre-flight (graph-commit:1253-1307, invoked at :1413):
+# it refuses to start when any dirty TRACKED file sits outside the id set of THIS
+# call. That is what makes Case 5 a real regression test for the two-commit split
+# — without it the stub would happily land a call whose sibling node file is
+# dirty, and the guard interaction would stay unobserved.
 install_graph_commit_stub() {
   cat >"$1/packages/intentionsutil/scripts/graph-commit" <<'SH'
 #!/usr/bin/env bash
@@ -115,6 +132,24 @@ while [[ $# -gt 0 ]]; do
     *) ids+=("$1"); shift ;;
   esac
 done
+if [[ -n "${GC_STRICT_CLEAN:-}" ]]; then
+  offending=""
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ "$line" == '??'* ]] && continue
+    pth="${line:3}"
+    keep=0
+    for id in "${ids[@]}"; do
+      [[ "$pth" == "intentions/$id.md" ]] && keep=1
+    done
+    (( keep )) || offending+="$line"$'\n'
+  done <<<"$(git status --porcelain)"
+  if [[ -n "$offending" ]]; then
+    echo "graph-commit stub: refusing to start -- unrelated dirty tracked file(s) outside this call's node set:" >&2
+    printf '%s' "$offending" >&2
+    exit 1
+  fi
+fi
 for id in "${ids[@]}"; do
   for noop in ${GC_NOOP_IDS:-}; do
     if [[ "$noop" == "$id" ]]; then
@@ -192,7 +227,7 @@ run_sut() {
   set +e
   OUT="$(
     cd "$clone" || exit 99
-    export GC_LOG GC_NOOP_IDS="${GC_NOOP_IDS:-}"
+    export GC_LOG GC_NOOP_IDS="${GC_NOOP_IDS:-}" GC_STRICT_CLEAN="${GC_STRICT_CLEAN:-}"
     bash packages/intentionsutil/scripts/resolve-hold "$@" 2>"$WORK/stderr.log"
   )"
   RC=$?
@@ -333,5 +368,152 @@ assert_eq "unknown option -> exit 2" "2" "$RC"
 
 GC_NOOP_IDS="" run_sut "$C3" "$SOURCE_ID" extra-positional
 assert_eq "extra positional -> exit 2" "2" "$RC"
+
+# A non-slug id must be rejected BEFORE it reaches a filesystem path or a git
+# pathspec — it is interpolated into "$INTENTIONS_DIR/$id.md" and restore_node's
+# `rm -f`, so `../..`-style traversal must never get that far.
+GC_NOOP_IDS="" run_sut "$C3" "../../etc/passwd"
+assert_eq "path-traversal id -> exit 2" "2" "$RC"
+assert_contains "path-traversal id names the offending value" "invalid node id" "$ERR"
+
+GC_NOOP_IDS="" run_sut "$C3" "Tactic-Src"
+assert_eq "non-slug id -> exit 2" "2" "$RC"
+
+# ============================================================================
+# Case 5: a far-behind PR-branch worktree — BOTH node files differ from
+# origin/main at HEAD, so each origin/main refresh dirties them. The two writes
+# land in two SEPARATE graph-commits, and the real graph-commit refuses to start
+# when a tracked file outside THAT call's id set is dirty
+# (assert_clean_outside_ids). Exactly one node file may be mutated at a time.
+# ============================================================================
+echo "Case 5: a far-behind branch worktree still lands both graph-commits"
+T5="$WORK/t5-seed"; build_seed_repo "$T5"
+write_source_node "$T5/intentions/$SOURCE_ID.md" "[$HOLD_ID]"
+write_open_hold_node "$T5/intentions/$HOLD_ID.md"
+new_origin t5; init_and_push "$T5"
+C5="$WORK/t5-clone"; clone_with_node_modules "$C5"; install_graph_commit_stub "$C5"
+
+# Diverge: a node branch whose HEAD copy of BOTH node files differs from
+# origin/main (the shape a PR-branch worktree is normally in).
+git -C "$C5" checkout -q -b "$SOURCE_ID"
+printf '\nbranch-side body line the refresh will overwrite\n' >>"$C5/intentions/$SOURCE_ID.md"
+printf '\nbranch-side body line the refresh will overwrite\n' >>"$C5/intentions/$HOLD_ID.md"
+git -C "$C5" commit -q -am "branch-side edits to both node files"
+
+GC_NOOP_IDS="" GC_STRICT_CLEAN=1 run_sut "$C5" "$SOURCE_ID"
+
+assert_eq "far-behind branch exit 0" "0" "$RC"
+assert_eq "far-behind branch stdout is the single resolved line" \
+  "resolved $HOLD_ID (unblocked $SOURCE_ID)" "$OUT"
+assert_eq "far-behind branch still makes exactly two graph-commit calls" "2" \
+  "$(wc -l <"$GC_LOG" | tr -d ' ')"
+assert_eq "far-behind branch leaves no dirty node file behind" "" \
+  "$(git -C "$C5" status --porcelain intentions/)"
+git -C "$C5" fetch -q origin main
+TOTAL=$((TOTAL + 1))
+if git -C "$C5" show "origin/main:intentions/$SOURCE_ID.md" | grep -qF -- "$HOLD_ID"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: far-behind branch landed the blocked_by removal"
+else
+  PASS=$((PASS + 1)); echo "  PASS: far-behind branch landed the blocked_by removal"
+fi
+
+# ============================================================================
+# Case 6: a node read that fails must NOT reach the success line. read_node_json
+# exits on failure, so it must never be called from a command substitution — an
+# `exit` inside `$(...)` kills only the substitution subshell, and the caller
+# would run on with an empty path, skip BOTH writes, and print `resolved ...`.
+# ============================================================================
+echo "Case 6: a failing node read exits non-zero instead of falsely succeeding"
+T6="$WORK/t6-seed"; build_seed_repo "$T6"
+write_source_node "$T6/intentions/$SOURCE_ID.md" "[$HOLD_ID]"
+write_open_hold_node "$T6/intentions/$HOLD_ID.md"
+new_origin t6; init_and_push "$T6"
+C6="$WORK/t6-clone"; clone_with_node_modules "$C6"; install_graph_commit_stub "$C6"
+printf 'process.exit(1);\n' >"$C6/packages/intentionsutil/scripts/dump-node.ts"
+
+GC_NOOP_IDS="" run_sut "$C6" "$SOURCE_ID"
+
+assert_eq "failed node read exits 1" "1" "$RC"
+assert_eq "failed node read prints no success line" "" "$OUT"
+assert_contains "failed node read names dump-node" "dump-node failed" "$ERR"
+assert_eq "failed node read makes no graph-commit call" "" "$(cat "$GC_LOG")"
+assert_eq "failed node read leaves the tree clean" "" \
+  "$(git -C "$C6" status --porcelain intentions/)"
+
+# ============================================================================
+# Case 7: Write A lands "successfully" but the hold is unchanged on origin/main
+# -> the post-land verification stops the run BEFORE Write B, so the source keeps
+# its edge (never half-unblock a source whose hold did not resolve).
+# ============================================================================
+echo "Case 7: a dropped hold resolution stops the run before Write B"
+T7="$WORK/t7-seed"; build_seed_repo "$T7"
+write_source_node "$T7/intentions/$SOURCE_ID.md" "[$HOLD_ID]"
+write_open_hold_node "$T7/intentions/$HOLD_ID.md"
+new_origin t7; init_and_push "$T7"
+C7="$WORK/t7-clone"; clone_with_node_modules "$C7"; install_graph_commit_stub "$C7"
+
+GC_NOOP_IDS="$HOLD_ID" run_sut "$C7" "$SOURCE_ID"
+
+assert_eq "dropped hold resolution exits 1" "1" "$RC"
+assert_eq "dropped hold resolution prints no success line" "" "$OUT"
+assert_contains "dropped hold resolution names the failed post-land check" \
+  "post-land verification failed for $HOLD_ID" "$ERR"
+assert_eq "dropped hold resolution never reaches Write B" "1" \
+  "$(wc -l <"$GC_LOG" | tr -d ' ')"
+assert_eq "dropped hold resolution leaves the tree clean" "" \
+  "$(git -C "$C7" status --porcelain intentions/)"
+git -C "$C7" fetch -q origin main
+TOTAL=$((TOTAL + 1))
+if git -C "$C7" show "origin/main:intentions/$SOURCE_ID.md" | grep -qF -- "$HOLD_ID"; then
+  PASS=$((PASS + 1)); echo "  PASS: dropped hold resolution leaves the source still blocked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dropped hold resolution leaves the source still blocked"
+fi
+
+# ============================================================================
+# Case 8: an open hold whose source no longer carries the edge -> Write A only.
+# ============================================================================
+echo "Case 8: an open hold with no surviving edge runs Write A only"
+T8="$WORK/t8-seed"; build_seed_repo "$T8"
+write_source_node "$T8/intentions/$SOURCE_ID.md" "[]"
+write_open_hold_node "$T8/intentions/$HOLD_ID.md"
+new_origin t8; init_and_push "$T8"
+C8="$WORK/t8-clone"; clone_with_node_modules "$C8"; install_graph_commit_stub "$C8"
+
+GC_NOOP_IDS="" GC_STRICT_CLEAN=1 run_sut "$C8" "$SOURCE_ID"
+
+assert_eq "edge-already-gone exit 0" "0" "$RC"
+assert_eq "edge-already-gone stdout is the single resolved line" \
+  "resolved $HOLD_ID (unblocked $SOURCE_ID)" "$OUT"
+assert_eq "edge-already-gone makes exactly one graph-commit call" "1" \
+  "$(wc -l <"$GC_LOG" | tr -d ' ')"
+assert_contains "edge-already-gone's single call is the hold resolution" \
+  "$HOLD_ID" "$(cat "$GC_LOG")"
+assert_eq "edge-already-gone leaves the tree clean" "" \
+  "$(git -C "$C8" status --porcelain intentions/)"
+
+# ============================================================================
+# Case 9: --kind fix-attempt-cap resolves the OTHER hold id hold-node-decide.ts
+# derives for the same source (KIND_SLUGS: fix-attempt-cap -> "fix-cap").
+# ============================================================================
+echo "Case 9: --kind fix-attempt-cap targets the fix-cap hold id"
+FIX_HOLD_ID="tactic-hold-fix-cap-src"
+T9="$WORK/t9-seed"; build_seed_repo "$T9"
+write_source_node "$T9/intentions/$SOURCE_ID.md" "[$FIX_HOLD_ID]"
+HOLD_ID_SAVED="$HOLD_ID"; HOLD_ID="$FIX_HOLD_ID"
+write_open_hold_node "$T9/intentions/$FIX_HOLD_ID.md"
+HOLD_ID="$HOLD_ID_SAVED"
+new_origin t9; init_and_push "$T9"
+C9="$WORK/t9-clone"; clone_with_node_modules "$C9"; install_graph_commit_stub "$C9"
+
+GC_NOOP_IDS="" GC_STRICT_CLEAN=1 run_sut "$C9" "$SOURCE_ID" --kind fix-attempt-cap
+
+assert_eq "fix-attempt-cap exit 0" "0" "$RC"
+assert_eq "fix-attempt-cap resolves the fix-cap hold id" \
+  "resolved $FIX_HOLD_ID (unblocked $SOURCE_ID)" "$OUT"
+assert_eq "fix-attempt-cap makes two graph-commit calls" "2" \
+  "$(wc -l <"$GC_LOG" | tr -d ' ')"
+assert_eq "fix-attempt-cap leaves the tree clean" "" \
+  "$(git -C "$C9" status --porcelain intentions/)"
 
 report_results

@@ -206,6 +206,16 @@ assert_eq "conflict-lane writes no strike file" "gone" \
 assert_eq "conflict-lane clears the reservation marker" "gone" \
   "$([ -e "$RES_DIR/tactic-c" ] && echo present || echo gone)"
 
+# A successful kick must also CLEAR a strike file left by earlier failed kicks:
+# the backstop's counter means "consecutive failures to launch the lane", which
+# is what its hold reason asserts.
+printf '%s\n' "3" > "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes"
+touch "$RES_DIR/tactic-c"
+PROV_RC=11 run_exec "tactic-c:tactic:qa"
+assert_eq "conflict-lane stdout after prior strikes" "conflict-lane tactic-c" "$OUT"
+assert_eq "a successful kick resets the strike counter" "gone" \
+  "$([ -e "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes" ] && echo present || echo gone)"
+
 # ============================================================================
 # Case 5b: the strike-then-hold ladder survives as the BACKSTOP for the case
 # where the conflict lane itself cannot be launched. Repeated exit-11 runs whose

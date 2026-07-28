@@ -30,10 +30,11 @@ The skill has **three lanes**, chosen by a shared preamble (see "## Steps"):
 PR (the original behavior); **Lane 2** resolves a graph-native intention-node
 *content* conflict parked by `graph-commit`; **Lane 3** resolves an
 `origin/main` git merge conflict on a graph node's **own branch** — the
-provisioning conflict `provision-node-worktree` exits 11 on. Lanes 2 and 3 are
-invoked by explicit node id or from the node's own worktree (branch == node id)
-— but never by an automatic dispatch tick yet. The node/issue split follows the
-convention the other phase skills adopted (`qa-main`, `office-hours`).
+provisioning conflict `provision-node-worktree` exits 11 on. Both node lanes are
+invoked by explicit node id or from the node's own worktree (branch == node id);
+**Lane 3 is additionally entered by the autonomous dispatch tick** — see "Who
+enters each lane" below. The node/issue split follows the convention the other
+phase skills adopted (`qa-main`, `office-hours`).
 
 Lanes 2 and 3 are **distinct lanes, not one widened lane**. They share exactly
 one step — the fresh-`origin/main` node read in the preamble — and nothing else.
@@ -73,9 +74,20 @@ node lanes — the node itself:
   **source node id**, or by the id of the `provision-conflict` **hold** tracking
   it.
 
-Lanes 2 and 3 are invoked by an **explicit node id** or from the node's own
-worktree (branch == node id) — a human, or a future router — never by an
-automatic dispatch tick yet.
+### Who enters each lane
+
+- **Lane 2** is invoked by an **explicit node id** or from the node's own
+  worktree (branch == node id) — a human, or a future router. No automatic
+  dispatch tick enters Lane 2.
+- **Lane 3** is invoked those same two ways **and by the autonomous dispatch
+  tick**: `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute`
+  case 11 spawns `/dispatch-conflict <node-id>` — `--cwd` set to
+  `<project-root>/.claude/worktrees/<node-id>`, the node's own worktree — every
+  time `provision-node-worktree` exits 11 for that node. That is the lane's
+  primary caller, not a hypothetical one, so Lane 3 must hold up **unattended**:
+  its terminal-disposition steps (Steps 9 and 10, `mark-node-terminal`) are what
+  the tick's reap contract depends on to release the node's live-session slot,
+  and a Lane 3 run that stops without one leaves the node unselectable.
 
 ### Select the lane and resolve the target in place
 
@@ -171,17 +183,37 @@ With `NODE_MD` in hand, parse the node's frontmatter and apply these four cases
    against that source. (`hold-node-decide.ts:168-171` writes both attributes;
    the hold id itself is deterministic —
    `tactic-hold-conflict-<source-id minus its leading "tactic-">`.)
-3. Otherwise, a **source** node carrying an `execution.branch` / `execution.pr`
-   whose `git merge origin/main` fails → **Lane 3** against this node. Lane 3's
-   first step reproduces that merge, so "fails" is confirmed there, not guessed
-   here.
-4. Otherwise → **report and stop**. This node is in none of the states this skill
-   handles: no mechanical-unresolved park, no provision-conflict hold, and no
-   branch conflict to reproduce. Report this plainly and stop without taking any
-   graph-write action. Do **not** call `dispatch-mark-deviation` here: this is not
-   a deviation to escalate — the caller invoked `/dispatch-conflict` against a
-   node that isn't in a state it handles. It is a plain "wrong tool for this node"
-   exit; say so and stop.
+3. Otherwise, a **source** node that has a branch of its own which does not merge
+   `origin/main` clean → **Lane 3** against this node. Gate on the **live git
+   state alone** — a branch named exactly `<node-id>`:
+
+   ```bash
+   git rev-parse --verify --quiet "refs/heads/$NODE_ID" >/dev/null \
+     || git rev-parse --verify --quiet "refs/remotes/origin/$NODE_ID" >/dev/null
+   ```
+
+   Do **not** additionally require `execution.branch` / `execution.pr`.
+   `execution` is `null` until the node's first phase transition writes the
+   record (`packages/intentionsutil/src/schema.ts:166`;
+   `packages/intentionsutil/scripts/apply-node-transition.ts:132,163`), so a node
+   still in its first `implement` pass legitimately carries `execution: null`
+   while already having a branch and a live conflict — and that is exactly the
+   state provision exit 11 fires on before any PR exists (Lane 3's Step 2 calls
+   it "the legitimate `implement`-phase case"). Gating on `execution` here would
+   drop that node into case 4, and the tick would re-kick the same wrong-tool
+   session on every subsequent tick. Lane 3's first step reproduces the merge, so
+   "does not merge clean" is confirmed there, not guessed here.
+4. Otherwise — **no branch named `<node-id>` at all** → **report and stop**. This
+   node is in none of the states this skill handles: no mechanical-unresolved
+   park, no provision-conflict hold, and no branch whose conflict could be
+   reproduced. Report this plainly and stop without taking any graph-write
+   action. Do **not** call `dispatch-mark-deviation` here: this is not a deviation
+   to escalate — the caller invoked `/dispatch-conflict` against a node that isn't
+   in a state it handles. It is a plain "wrong tool for this node" exit; say so
+   and stop. Because the tick can reach this lane (see "Who enters each lane"),
+   still declare the terminal disposition on the way out —
+   `mark-node-terminal "$NODE_ID" conflict-hold` — so the session does not hold
+   the node's live-session slot open.
 
 ## Lane 1 — issue-branch git conflict
 
@@ -939,6 +971,32 @@ same marker discipline Lane 2's `resolved` path uses:
 .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete --phase fix-conflicts
 ```
 
+Then write the **node-terminal** marker. It is a *different* marker with a
+*different* consumer, and both are required:
+
+```bash
+packages/intentionsutil/scripts/mark-node-terminal "$SOURCE_ID" conflict-resolved
+```
+
+`dispatch-mark-complete` writes the `phase-completed` marker;
+`mark-node-terminal` writes `$CLAUDE_JOB_DIR/node-terminal`, the **only**
+evidence `dispatch-self-close` accepts before reaping this job
+(`.claude/skills/dispatch-propagate/scripts/dispatch-self-close`, invariant 2).
+This lane must declare it because `dispatch-graph-execute`'s provision-exit-11
+branch spawns the Lane 3 session with `--name "$SOURCE_ID"` under the node's own
+worktree, which makes it a **graph-native node worker** to
+`.claude/hooks/dispatch-stop.sh`. Nothing on this path calls `park-node` (the
+one primitive that writes the marker for free), so with no explicit call the
+Stop hook HOLDS the job: it stays live in `claude agents --json`, and
+`graph-select-target`'s `worktree_has_live_session` check — name-keyed on the
+node id — then reports the node occupied forever, so the router never selects it
+again and the dead job keeps consuming a live-session slot.
+
+Call it **unconditionally**: `mark-node-terminal` writes nothing unless this
+job's `state.json` `.name` equals `$SOURCE_ID`, so an interactive run
+(`CLAUDE_JOB_DIR` unset) and a hold-id-entered run under a differently-named job
+are both silent no-ops.
+
 Then **stop**.
 
 ### 10. `ambiguous <reason>` — abort, recommend, hold
@@ -980,5 +1038,22 @@ both are multi-line diagnostic text. `hold-node` lands the born-parked hold tact
 and the source's `blocked_by` edge in one `graph-commit`.
 
 Write **no** phase-completed marker on this path — nothing was completed.
+
+Do write the **node-terminal** marker, on both sub-paths (hold already existed,
+or `hold-node` just created it):
+
+```bash
+packages/intentionsutil/scripts/mark-node-terminal "$SOURCE_ID" conflict-hold
+```
+
+This is the escalation counterpart of Step 9's call, and it is required for the
+same reason (see Step 9 for the full contract). It cannot be skipped as "the
+park already marked it": the park lands on the **hold** node, while this session
+is named for the **source**, and `mark-node-terminal`'s ownership gate compares
+against this session's own name — so `hold-node`'s write authorizes nothing
+here. Without this call the job is HELD alive and the source node is never
+selectable again, which would defeat the escalation it just filed. Step 7's
+config-grant path needs no such call: it runs `park-node "$SOURCE_ID"`, which
+already invokes `mark-node-terminal "$SOURCE_ID" park` itself.
 
 Then **stop**.

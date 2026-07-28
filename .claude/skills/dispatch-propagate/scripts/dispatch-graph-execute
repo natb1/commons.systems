@@ -246,12 +246,35 @@ for spec in "$@"; do
       # interrupt is simply a SECOND entry path into the same Lane 3 this
       # branch now kicks directly.
       CONFLICT_WT="$PROJECT_ROOT/.claude/worktrees/$id"
+      # The backstop ladder's sidecar counts CONSECUTIVE failures to LAUNCH the
+      # lane — that is what its hold reason asserts verbatim below. A successful
+      # kick therefore has to reset it, exactly as the exit-0 path resets it
+      # above; otherwise launch failures scattered across weeks and separated by
+      # successful kicks accumulate into a hold whose stated reason ("could not
+      # be launched for N consecutive ticks") is false.
+      STRIKE_FILE="$PROJECT_ROOT/.claude/worktrees/$id.conflict-strikes"
+      # REAP CONTRACT: `--name "$id"` under the node's own worktree makes this
+      # session a graph-native NODE WORKER — dispatch-stop.sh's discriminator 2
+      # matches it (name == node id, `intentions/<id>.md` present) and hands it
+      # to `dispatch-self-close --node "$id"`, which reaps only on a
+      # `$CLAUDE_JOB_DIR/node-terminal` marker naming this node and otherwise
+      # HOLDS the job alive. A held job stays live in `claude agents --json`, and
+      # graph-select-target's `worktree_has_live_session` check is name-keyed on
+      # the node id — so a Lane 3 session that never declares its terminal
+      # disposition would make the node permanently unselectable AND permanently
+      # occupy a live-session slot. Lane 3 therefore declares it on BOTH terminal
+      # paths (`mark-node-terminal "$SOURCE_ID" conflict-resolved` at its Step 9,
+      # `... conflict-hold` at its Step 10; Step 7's park-node writes its own).
+      # Do not spawn this session under a name that is NOT the node id without
+      # first teaching the selector's occupancy check about that name.
+      #
       # No "${EFFORT_ARGS[@]}" here: the effort resolved above belongs to the
       # node's own phase skill, and this session runs /dispatch-conflict
       # instead — it inherits the session default.
       if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
           --cwd "$CONFLICT_WT" --model "$ORCH_MODEL" \
           "/dispatch-conflict $id" 1>&2; then
+        rm -f "$STRIKE_FILE"
         reservation_clear "$id" || true
         echo "conflict-lane $id"
         continue
@@ -267,7 +290,6 @@ for spec in "$@"; do
       # sidecar), so it never dirties a tree and is never a graph write.
       # Losing the counter (daemon restart, reaped worktree) is fine and
       # deliberately fail-open — it just grants more free retries.
-      STRIKE_FILE="$PROJECT_ROOT/.claude/worktrees/$id.conflict-strikes"
       STRIKES=$(cat "$STRIKE_FILE" 2>/dev/null || echo 0)
       [[ "$STRIKES" =~ ^[0-9]+$ ]] || STRIKES=0
       STRIKES=$(( STRIKES + 1 ))
