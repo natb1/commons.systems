@@ -15,6 +15,19 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --app)
       [[ $# -lt 2 ]] && { echo "Error: --app requires an argument" >&2; exit 1; }
+      # --app takes a workspace DIRECTORY, repo-root-relative (`packages/foo`),
+      # not a bare package name (`foo`). Reject a path that does not exist
+      # instead of carrying it forward: a non-existent dir has no tsconfig.json,
+      # so it would fall into the "no tsconfig.json — skipping (non-TS
+      # workspace)" branch below and the run would exit 0 having verified
+      # nothing. That failure mode is silent and reads as a pass, so a typo or a
+      # missing `packages/` prefix disables typechecking for the workspace the
+      # caller believed it was checking.
+      if [ ! -d "$REPO_ROOT/$2" ]; then
+        echo "Error: --app '$2': no such workspace directory under $REPO_ROOT" >&2
+        echo "Pass a repo-root-relative workspace dir, e.g. --app packages/intentionsutil" >&2
+        exit 1
+      fi
       DIRTY_APPS["$2"]=1
       EXPLICIT=true
       shift 2
