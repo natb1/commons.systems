@@ -1,14 +1,14 @@
 ---
-name: align-strategy
-description: Interview-driven recording of a `strategy-*` intention node — the graph-native successor to `/file-issue`'s requirements-definition role. Frames the input as a new strategy or an edit to an existing one, runs a Socratic dialectic to fix intent/placement/benefit/signal/conditions, advises on delegation capture, retains tactical byproducts as draft tactic nodes, and lands the record via `graph-commit`. On-demand only; never files a GitHub issue.
+name: align
+description: Single interactive entry point to the persistent layer — an interview-driven session that records or revises intention nodes (strategies, virtues, traditions, delegations) across the whole persistent layer, not just strategy. Frames the input as new content or an edit to an existing node, runs a Socratic dialectic to fix intent/placement/benefit/signal/conditions, advises on delegation capture, retains tactical byproducts as draft tactic nodes, and lands the record via `graph-commit`. With no prompt, funnels into onboarding. On-demand only; never files a GitHub issue.
 user-invocable: true
 model: opus
 ---
 
-# Align Strategy
+# Align
 
 **On the `model` field's enforcement (strategy-token-economy clarification 10,
-2026-07-16):** `/align-strategy` is `user-invocable: true` — it runs on the
+2026-07-16):** `/align` is `user-invocable: true` — it runs on the
 interactive main loop, not via a `context: fork` subagent launch. A `model:`
 field in frontmatter is confirmed honored for `context: fork` skills; for
 `user-invocable` main-loop skills like this one, honoring is unconfirmed. This
@@ -20,7 +20,7 @@ here is intended-not-guaranteed — backed by the token audit's by-node/by-phase
 attribution (`strategy-token-economy`'s sensor) reading after the fact whether
 the session actually ran on Opus.
 
-`/align-strategy [optional requirement text]` records or revises a
+`/align [optional requirement text]` records or revises a
 `strategy-*` intention node under interview. It supersedes `/file-issue`'s
 requirements-definition role for the graph-native dispatch model
 (`intentions/strategy-graph-native-dispatch.md`): a strategy enters
@@ -51,7 +51,7 @@ permanent gap in the record, not a draft someone else will catch.
 
 ## Trigger and input
 
-On-demand only, human-invoked. Treat any text following `/align-strategy`
+On-demand only, human-invoked. Treat any text following `/align`
 as the **requirement text** for step 1. With no text, run the
 **improvement pass** branch of step 1 instead.
 
