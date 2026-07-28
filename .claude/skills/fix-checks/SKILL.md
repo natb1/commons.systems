@@ -392,6 +392,20 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
            commits — dedup then misses and mints a second tracking node for one
            flake. That is why the `file:line` form is **disallowed**, not merely
            a different-but-acceptable spelling.
+        3. **only when the excerpt provides neither** — the reachable case is a
+           CI-infrastructure hiccup (Step 4's "a CI-infrastructure hiccup"
+           flake diagnosis) whose log carries no runner-emitted test label and
+           names no failing file — the failing **CI workflow / job name exactly
+           as CI reports it**. The stable-id half then repeats the check-name
+           half; that redundancy is deliberate. It makes every label-less,
+           path-less failure under one check collapse to one deterministic
+           fingerprint, which is strictly better than leaving the worker to
+           improvise a string — improvised strings are the nondeterminism this
+           precedence exists to eliminate.
+
+        The precedence is **total**: tier 3 always applies when tiers 1 and 2
+        do not, so there is never a case where `<stable-id>` is undefined and
+        the worker must invent one.
 
         **Never** include any of these in `<stable-id>`: a **line number**, a
         **run id**, a **timestamp**, or a **PR number**. Each of them varies
@@ -552,14 +566,31 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
              spelling reads as `NONE` and mints a second node with no signal to
              a human. Before writing, grep for the **mechanical half alone** —
              the failing check name and the ` — ` separator, not the full
-             fingerprint:
+             fingerprint. Anchor the glob at the repo root (the same reason
+             `dispatch-flake-dedup-node` `cd`s to `git rev-parse
+             --show-toplevel`): if cwd is not the worktree root the glob matches
+             nothing, zsh aborts the command, `|| true` swallows it, and an
+             empty `NEARMISS` is indistinguishable from a genuine no-hit.
              ```bash
-             NEARMISS=$(grep -rlF -- "Fingerprint: <failing-check-name> — " intentions/tactic-*.md 2>/dev/null || true)
+             ROOT=$(git rev-parse --show-toplevel)
+             NEARMISS=$(grep -rlF -- "Fingerprint: <failing-check-name> — " "$ROOT"/intentions/tactic-*.md 2>/dev/null || true)
              ```
-             This is a plain `grep`, not a new script — this step introduces no
-             script surface and no new test file.
+             `NEARMISS` holds absolute paths; take each tactic id from the
+             basename with the `.md` suffix stripped. This is a plain `grep`,
+             not a new script — this step introduces no script surface and no
+             new test file.
              - **No hit** — proceed silently; add no accumulator bullet.
-             - **Hit** — the matched node(s) share this failing check but carry a
+             - **Hit** — before naming any match, **confirm it is actually a
+               flake-tracking tactic** (a node whose body records a flake
+               fingerprint, reproduce command, and failure excerpt). Matching
+               only the mechanical half drops the stable-id anchoring that
+               `dispatch-flake-dedup-node` relies on to keep a coincidental
+               quote of a `Fingerprint:` line in an unrelated node's prose — a
+               planning or meta node, of which this repo has several — from
+               reading as a flake tracker. Discard every non-tracker match; if
+               none survive, treat it as **No hit**.
+
+               The surviving node(s) share this failing check but carry a
                different stable-id. **Still mint the new node exactly as below** —
                two distinct flakes under one check (e.g. two different assertions
                both failing under `hook-tests`) is a normal, expected case, so
@@ -834,6 +865,11 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
     does not reproduce at `origin/main`, so **no node was created at all** and
     there is no id to name. Record alongside it that the remedy is to merge
     `origin/main` and re-run.
+    On the node lane's `CREATED` path, the near-miss advisory check (Step 4's
+    Flake sub-path) may append a trailing advisory clause to this same bullet:
+    `<tactic-id> (CREATED) — possible duplicate of <tactic-id>[, <tactic-id>…]:
+    same failing check, different stable-id`. The clause is advisory only — it
+    never changes the parenthesized disposition and never suppresses the write.
     Omit for every other outcome.
   - **Fingerprint** — *`flake` outcome only* — the dedupe key computed in the
     Flake sub-path (the failing check name plus the stable identifier). Omit for
