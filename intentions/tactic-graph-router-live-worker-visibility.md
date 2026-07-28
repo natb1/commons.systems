@@ -42,7 +42,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: main-qa
+phase: done
 execution:
   branch: tactic-graph-router-live-worker-visibility
   pr: 2918
