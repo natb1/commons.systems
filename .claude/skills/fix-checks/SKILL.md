@@ -545,6 +545,32 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
                re-run CI — the head is simply missing a fix that already landed.
              - **`CURRENT`** — proceed with the node write below, unchanged.
 
+             **Near-miss advisory check (`CURRENT` only, never blocks).**
+             `dispatch-flake-dedup-node` matched nothing because it greps the
+             **full** `Fingerprint: <fingerprint>` line as a fixed string, so a
+             stable-id that diverges even slightly from an existing node's
+             spelling reads as `NONE` and mints a second node with no signal to
+             a human. Before writing, grep for the **mechanical half alone** —
+             the failing check name and the ` — ` separator, not the full
+             fingerprint:
+             ```bash
+             NEARMISS=$(grep -rlF -- "Fingerprint: <failing-check-name> — " intentions/tactic-*.md 2>/dev/null || true)
+             ```
+             This is a plain `grep`, not a new script — this step introduces no
+             script surface and no new test file.
+             - **No hit** — proceed silently; add no accumulator bullet.
+             - **Hit** — the matched node(s) share this failing check but carry a
+               different stable-id. **Still mint the new node exactly as below** —
+               two distinct flakes under one check (e.g. two different assertions
+               both failing under `hook-tests`) is a normal, expected case, so
+               this must never block or delay filing. The only difference: carry
+               an advisory note into the accumulator alongside the flake-tracking
+               id bullet (the same mechanism the `STALE-SUPPRESSED` /
+               `STALE-HEAD-SUPPRESSED` notes use), naming the matched tactic
+               id(s) — e.g. `possible duplicate of <tactic-id>[, <tactic-id>…]:
+               same failing check, different stable-id` — so a human reviewing
+               flake tracking can judge whether to collapse them by hand.
+
              On `CURRENT`, write a **new** flake
              tactic node. Construct its frontmatter JSON and pass it to
              `write-node.ts` (same recipe as `align-tactics/SKILL.md`'s
