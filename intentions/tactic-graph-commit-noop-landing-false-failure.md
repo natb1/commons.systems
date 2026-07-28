@@ -52,7 +52,27 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: The boost 97 is meant to make this the next thing the fleet works —
+      does it actually do that while the node is a draft?
+    answer: "(Recorded 2026-07-28 /align-strategy round.) Not yet, and this is
+      recorded so the gap is not mistaken for a ranking failure. This node is
+      filed status: raw with phase: null — a draft — and the router never
+      selects a draft tactic, so the 97 boost is INERT until an /align-tactics
+      round finalizes this node into a planned tactic with a phase. Only then
+      does it resolve to 102.33 and rank at the top of the authored
+      discretionary band. The precedent that motivated recording this:
+      tactic-graph-commit-staleness-silent-revert carried an authorized boost of
+      173 from 2026-07-26 while sitting at status raw / phase null, and was
+      never selected on that boost at all — its fix ultimately shipped through
+      an office-hours drain session (PR #2978), not through the ranking the
+      boost was intended to buy. What unblocks this node is therefore an
+      /align-tactics round on strategy-graph-native-dispatch, which is already
+      in the align-tactics rotation (it was selected for that lane in the
+      2026-07-28 tick that surfaced this defect). If the fix is wanted sooner
+      than that rotation delivers, the direct route is an office-hours or
+      interactive session against this node rather than a higher boost — raising
+      the number changes nothing while the node remains a draft."
 tooling_goals: []
 success_signal: null
 attention:
