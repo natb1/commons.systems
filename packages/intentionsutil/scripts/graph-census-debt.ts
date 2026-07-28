@@ -44,7 +44,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes } from "../src/store.js";
-import type { IntentionNode } from "../src/schema.js";
+import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
 
 const CENSUS_SERVES = "strategy-graph-native-dispatch";
 const OPEN_PHASES = new Set(["implement", "fix", "qa", "review", "main-qa"]);
@@ -152,6 +152,25 @@ export function computeDebt(nodes: IntentionNode[], mergedIds: Set<string>): Cen
   };
 }
 
+/**
+ * `attributes` payload of a born-parked census node. `IntentionNode.attributes`
+ * is deliberately `Record<string, unknown>` — kind-specific fields are defined
+ * by the `kind-<kind>` node, not the schema — so the census kind names its own
+ * shape here. That keeps the batch lists typed for every reader instead of
+ * making each one cast `unknown` back to an array.
+ */
+export interface CensusAttributes {
+  census: true;
+  batch: {
+    donePresent: string[];
+    mergedUnabsorbed: string[];
+    orphans: string[];
+  };
+}
+
+/** A born-parked census node: the write-input shape with census attributes. */
+export type CensusNode = IntentionNodeInput & { attributes: CensusAttributes };
+
 /** Build the born-parked census node object + its markdown body. */
 function buildCensusNode(id: string, now: string, debt: CensusDebt) {
   const batchLine = `${debt.donePresent.length} owed prune(s), ${debt.mergedUnabsorbed.length} unverified PR-merge(s), ${debt.orphans.length} orphan(s)`;
@@ -159,7 +178,12 @@ function buildCensusNode(id: string, now: string, debt: CensusDebt) {
     `Reconciliation debt reached ${debt.total} (${batchLine}); a census is owed to drain it. ` +
     `Next steps: run the census over the batch listed in this node's body — for each done-but-present node, FIRST verify its execution.completion evidence (a real merge = mergedAt AND mergeCommitSha both non-null; or an out-of-band landing = graphCommitSha non-null); prune ONLY the verified ones with graph-commit --prune (repairing inbound blocked_by edges in the same commit, per tactic-graph-self-consistency-sweep) and LEAVE every evidence-less node in place as an integrity defect to investigate; absorb any unverified PR-merge, and repair any orphan's dangling parent/serves; then resolve this node (phase -> done) so the recurrence latch clears.`;
 
-  const node = {
+  // Typed rather than left to literal inference: the born-parked contract is
+  // defined by which optional fields are OMITTED — `phase` above all — and an
+  // inferred literal type has no `phase` key at all, so a reader asserting
+  // `node.phase === undefined` cannot even name the field. The annotation makes
+  // the omission part of the type and pins owner/status to their schema unions.
+  const node: CensusNode = {
     id,
     kind: "tactic",
     statement:
@@ -168,7 +192,12 @@ function buildCensusNode(id: string, now: string, debt: CensusDebt) {
     status: "codified",
     parent: null,
     serves: [CENSUS_SERVES],
-    office_hours: { reason, since: now, recommendation: null },
+    // `session_type: "other"` is stated rather than left to
+    // `validateOfficeHours`'s absent-field substitution: this is a
+    // machine-authored park with no natural sitting type, which is exactly what
+    // "other" documents, and spelling it out keeps the written node identical to
+    // the validated one.
+    office_hours: { reason, since: now, recommendation: null, session_type: "other" },
     attributes: {
       census: true,
       batch: {
@@ -220,7 +249,7 @@ function buildCensusNode(id: string, now: string, debt: CensusDebt) {
 
 export interface CensusDecision extends CensusDebt {
   shouldBirth: boolean;
-  node?: ReturnType<typeof buildCensusNode>["node"];
+  node?: CensusNode;
   node_body?: string;
 }
 
