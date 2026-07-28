@@ -22,15 +22,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-node-ancestry-context
   pr: 2946
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -484,3 +486,11 @@ Out of scope: weakening the plan-completeness bar; the fingerprint
 freeze/demote machinery (unchanged — it guards substance changes, this
 guards under-determined judgment calls); tradition-record injection
 (alignment-tests territory, tactic-align-strategy-alignment-tests).
+
+## needs-main residue
+
+- id: 9
+  title: Live provisioning end-to-end: the file lands untracked in a real worker worktree
+  url_path: .claude/skills/dispatch-propagate/scripts/provision-node-worktree
+  expected_outcome: Every freshly-provisioned worktree carries a correct, untracked ancestry projection, and a projection failure never blocks provisioning.
+  finding: requires a live dispatch-provisioned worker session; the PR's own test plan defers this item to qa/main-qa (checkbox left unchecked in the PR body's own test plan). Verify against deployed main by running `provision-node-worktree <a-real-tactic-id> <its-phase>` from the main checkout and confirming `<worktree>/.claude/ancestry-context.md` exists, is untracked (`git status --porcelain` empty), and that a forced projection failure warns to stderr without blocking provisioning.

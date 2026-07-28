@@ -39,6 +39,7 @@ office_hours:
     strategy-explicit-intent."
   since: 2026-07-08
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

@@ -28,14 +28,23 @@ validates:
   - strategy-recover-knowledge
 blocked_by: []
 office_hours:
-  reason: "Author-only, not claude-executable: requires the author's Google and
-    Notion accounts plus a judgment call on which documents are representative
-    and what counts as degradation. Recommendation (≤30 minutes): export one
-    representative Google Doc and one Notion page to an open format
-    (markdown/ODF) into owned storage, note what degraded (formatting, links,
-    embedded assets, organizing structure), and record the result on
-    delegation-knowledge-notes."
-  since: 2026-07-06
+  reason: "Feature/requirement discovery, not executable work (classified
+    2026-07-28 by author direction at an office-hours drain sitting): which
+    document is representative and what counts as degradation are undecided
+    requirements, so this node belongs in a requirement-discovery session rather
+    than an execution lane. Substance of the prior park still holds: requires
+    the author's Google and Notion accounts. Note the recording half is
+    mechanical — once the author reports what degraded, any session can write
+    the result into delegation-knowledge-notes (irreversibility.recovery_cost,
+    last_exercised) via write-node.ts + graph-commit. Drive MCP could perform
+    the Google-side export autonomously if the author names the document; Notion
+    has no MCP path."
+  since: 2026-07-28
+  recommendation: "Take this up in a requirement-discovery session, not an
+    execution tick. Recommendation (≤30 minutes): export one representative
+    Google Doc and one Notion page to an open format (markdown/ODF) into owned
+    storage, note what degraded (formatting, links, embedded assets, organizing
+    structure), and record the result on delegation-knowledge-notes."
 pace_exempt: false
 rounds: null
 attributes: {}

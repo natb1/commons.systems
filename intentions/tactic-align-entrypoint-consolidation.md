@@ -31,11 +31,7 @@ execution: null
 validates: []
 blocked_by:
   - tactic-align-tactics-mechanical-floor
-office_hours:
-  reason: provision-node-worktree failed for this tactic (exit 2)
-  since: 2026-07-26
-  recommendation: Inspect the provisioning failure (git fetch/worktree add,
-    direnv) in the tick journal, fix the environment, and re-run the phase.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

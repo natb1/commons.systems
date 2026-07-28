@@ -97,7 +97,17 @@
 #      origin/main's tip (nothing staged, and the local blob for the id
 #      equals origin/main's blob) proceeds benignly — exit 0, the same
 #      "no new changes to stage" message, no die.
-#  29. delete/modify divergence: another writer's deletion lands on main FIRST
+#  29. lock contention is cheap: a waiting writer makes zero gh polls while
+#      blocked on the landing lock, then exactly one poll cycle once it
+#      acquires the lock and lands (not a re-poll-from-scratch retry burn)
+#  30. dead-holder steal: an expired foreign lock claim is stolen promptly,
+#      not held to the full lock-wait timeout
+#  31. live-holder wait: a live foreign lock is not stolen prematurely; the
+#      writer waits for the planted expiry before proceeding
+#  32. lock-ref hygiene: refs/graph/landing-lock is absent after a normal
+#      landing and never appears under refs/heads/graph/** (disjoint from
+#      the scratch-branch namespace graph-fast-path.yml triggers on)
+#  33. delete/modify divergence: another writer's deletion lands on main FIRST
 #      (genuine rm+commit+push, not --prune), then a stale --base edit races
 #      it: exit 1, no false "layer 2/3 auto-resolved" claim, the node is
 #      re-materialized onto main carrying office_hours and the
@@ -128,6 +138,13 @@ no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
 ORIGIN="$WORK/origin.git"
 git init -q --bare "$ORIGIN"
 git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
+# plant_lock (cases 30/31) runs `git commit-tree` directly in this bare repo,
+# which needs an author identity. CI runners have no global git identity, so
+# without this commit-tree fails, plant_lock yields an empty sha, and the lock
+# is never planted — case 31 lands immediately instead of waiting out the
+# expiry, and case 30 passes vacuously with nothing to steal.
+git -C "$ORIGIN" config user.email harness@test
+git -C "$ORIGIN" config user.name harness
 
 SEED="$WORK/seed"
 mkdir -p "$SEED"
@@ -152,7 +169,8 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
 for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2-migration \
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
           t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
-          t-cwd-target t-fail-loud-diff t-fail-loud-benign; do
+          t-cwd-target t-fail-loud-diff t-fail-loud-benign \
+          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene; do
   seed_node "$id"
 done
 
@@ -260,6 +278,10 @@ mode="$(cat "$GC_GH_MODE_FILE")"
 if [[ "$mode" == "hard-fail" ]]; then
   echo "gh: HTTP 403: API rate limit exceeded (harness shim)" >&2
   exit 1
+fi
+if [[ "$mode" == "blocked-green" ]]; then
+  while [[ ! -e "$GC_GH_SENTINEL_FILE" ]]; do sleep 0.2; done
+  mode=green
 fi
 jq_program=""
 while [[ $# -gt 0 ]]; do
@@ -459,8 +481,10 @@ edit_field() { # <clone> <id> <field> <value> — for seed_field_node fixtures
   sed -i "s/^$3: .*/$3: $4/" "$1/intentions/$2.md"
 }
 scratch_refs() { git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**'; }
+lock_ref_exists() { git -C "$ORIGIN" show-ref --verify --quiet refs/graph/landing-lock; }
 
 run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMPTS
+           # GC_LOCK_TTL GC_LOCK_POLL GC_LOCK_WAIT GC_SENTINEL
   local clone="$1"; shift
   (
     cd "$clone" || exit 99
@@ -469,6 +493,10 @@ run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMP
     export GRAPH_COMMIT_CHECK_POLL_SECONDS="${GC_POLL:-0}"
     export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS="${GC_TIMEOUT:-5}"
     export GRAPH_COMMIT_MAX_ATTEMPTS="${GC_ATTEMPTS:-5}"
+    export GRAPH_COMMIT_LOCK_TTL_SECONDS="${GC_LOCK_TTL:-}"
+    export GRAPH_COMMIT_LOCK_POLL_SECONDS="${GC_LOCK_POLL:-}"
+    export GRAPH_COMMIT_LOCK_WAIT_SECONDS="${GC_LOCK_WAIT:-}"
+    export GC_GH_SENTINEL_FILE="${GC_SENTINEL:-}"
     bash packages/intentionsutil/scripts/graph-commit "$@"
   )
 }
@@ -584,7 +612,7 @@ edit_line "$A" t-pending 1 stuck
 out="$(export GC_POLL=1 GC_TIMEOUT=1 GC_ATTEMPTS=2; run_gc "$A" t-pending 2>&1)"; rc=$?
 if [[ $rc -eq 1 ]] \
    && grep -q 'attempt 2/2' <<<"$out" \
-   && grep -q 'could not land on main after 2 attempts' <<<"$out"; then
+   && grep -q 'could not land on main after 2/2 attempts' <<<"$out"; then
   ok "pending timeout stays transient: burns attempts, exits busy-main"
 else
   no "pending timeout retry path (rc=$rc)"; printf '%s\n' "$out"
@@ -904,10 +932,10 @@ fi
 # Case 21: layer 3 (--base stale re-read) auto-resolves a stale --base whose
 # delta touches a DIFFERENT field than the concurrently-landed write.
 set_mode green
-W8="$WORK/w8"
-make_clone "$W8" writer-8
-base_ok_sha="$(git -C "$W8" hash-object intentions/t-field-base-ok.md)"
-edit_field "$W8" t-field-base-ok fieldA writer8-edit
+W21="$WORK/w21"
+make_clone "$W21" writer-21
+base_ok_sha="$(git -C "$W21" hash-object intentions/t-field-base-ok.md)"
+edit_field "$W21" t-field-base-ok fieldA writer8-edit
 
 OTHER2="$WORK/other2"
 make_clone "$OTHER2" other2
@@ -915,7 +943,7 @@ edit_field "$OTHER2" t-field-base-ok fieldB concurrent-edit
 git -C "$OTHER2" commit -qam 'concurrent field edit'
 git -C "$OTHER2" push -q origin main
 
-out="$(run_gc "$W8" -m 'test: base field resolve' --base "t-field-base-ok=$base_ok_sha" t-field-base-ok 2>&1)"; rc=$?
+out="$(run_gc "$W21" -m 'test: base field resolve' --base "t-field-base-ok=$base_ok_sha" t-field-base-ok 2>&1)"; rc=$?
 content="$(origin_show t-field-base-ok 2>/dev/null)"
 if [[ $rc -eq 0 ]] \
    && grep -q 'fieldA: writer8-edit' <<<"$content" \
@@ -929,10 +957,10 @@ fi
 # mechanical-unresolved: exit 1, office_hours.reason carries
 # "mechanical-unresolved", both values are named in the recommendation.
 set_mode green
-W9="$WORK/w9"
-make_clone "$W9" writer-9
-base_bad_sha="$(git -C "$W9" hash-object intentions/t-field-base-bad.md)"
-edit_field "$W9" t-field-base-bad sentinel writer9-value
+W22="$WORK/w22"
+make_clone "$W22" writer-22
+base_bad_sha="$(git -C "$W22" hash-object intentions/t-field-base-bad.md)"
+edit_field "$W22" t-field-base-bad sentinel writer9-value
 
 OTHER3="$WORK/other3"
 make_clone "$OTHER3" other3
@@ -940,7 +968,7 @@ edit_field "$OTHER3" t-field-base-bad sentinel concurrent-value
 git -C "$OTHER3" commit -qam 'concurrent same-field edit'
 git -C "$OTHER3" push -q origin main
 
-out="$(run_gc "$W9" -m 'test: base field conflict' --base "t-field-base-bad=$base_bad_sha" t-field-base-bad 2>&1)"; rc=$?
+out="$(run_gc "$W22" -m 'test: base field conflict' --base "t-field-base-bad=$base_bad_sha" t-field-base-bad 2>&1)"; rc=$?
 content="$(origin_show t-field-base-bad 2>/dev/null)"
 calls="$(gh_calls)"
 snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
@@ -1089,7 +1117,125 @@ else
   no "fail-loud guard benign-equal-blob (rc=$rc)"; printf '%s\n' "$out"
 fi
 
-# --- Case 29: delete/modify divergence — deletion lands first, edit races it via stale --base ---
+# --- Case 29: contention is now cheap, not exhausting -----------------------
+set_mode blocked-green
+W18="$WORK/w18"; W19="$WORK/w19"
+make_clone "$W18" writer-18
+make_clone "$W19" writer-19
+edit_line "$W18" t-lock-contend 1 A-top
+edit_line "$W19" t-lock-contend 12 B-bottom
+SENTINEL="$WORK/lock-sentinel-29"; rm -f "$SENTINEL"
+outA="$WORK/out-29-a.log"; outB="$WORK/out-29-b.log"
+( GC_SENTINEL="$SENTINEL" run_gc "$W18" -m 'test: lock contend A' t-lock-contend >"$outA" 2>&1; echo $? >"$WORK/rc-29-a" ) &
+pidA=$!
+# Wait (bounded poll) for A to have made its gh call (now blocked inside the
+# shim on the sentinel) — this guarantees A already holds the lock and is
+# parked in await_checks(), so the reset+start-B sequence below cannot race
+# against A's own call landing in the log after the reset.
+claimed=0
+for _ in $(seq 1 100); do
+  [[ "$(gh_calls)" -ge 1 ]] && { claimed=1; break; }
+  sleep 0.1
+done
+if [[ "$claimed" -ne 1 ]]; then
+  no "lock contend: writer A never reached await_checks (no gh call observed)"
+  rm -f "$SENTINEL"; wait "$pidA" 2>/dev/null
+else
+  : >"$CALL_LOG"   # from here, CALL_LOG counts only B's calls
+  ( GC_LOCK_POLL=1 GC_SENTINEL="$SENTINEL" run_gc "$W19" -m 'test: lock contend B' t-lock-contend >"$outB" 2>&1; echo $? >"$WORK/rc-29-b" ) &
+  pidB=$!
+  sleep 1   # give B a moment to attempt (and fail) to claim the held lock
+  callsB_while_blocked="$(gh_calls)"
+  : >"$SENTINEL"   # release A
+  wait "$pidA"; rcA="$(cat "$WORK/rc-29-a")"
+  wait "$pidB"; rcB="$(cat "$WORK/rc-29-b")"
+  callsB_final="$(gh_calls)"
+  content="$(origin_show t-lock-contend)"
+  if [[ "$callsB_while_blocked" -eq 0 && "$rcA" -eq 0 && "$rcB" -eq 0 && "$callsB_final" -eq 1 ]] \
+     && grep -q 'line1: A-top' <<<"$content" && grep -q 'line12: B-bottom' <<<"$content"; then
+    ok "lock contend: B makes 0 polls while A holds the lock, then lands in exactly 1 poll cycle"
+  else
+    no "lock contend: callsB_while_blocked=$callsB_while_blocked rcA=$rcA rcB=$rcB callsB_final=$callsB_final"
+    printf '%s\n' "$(cat "$outA" 2>/dev/null)" "$(cat "$outB" 2>/dev/null)"
+  fi
+fi
+rm -f "$SENTINEL"
+
+plant_lock() { # <expiry_unix_ts> <holder>
+  local expiry="$1" holder="$2" sha
+  sha="$(git -C "$ORIGIN" commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 \
+    -m "graph-commit-lock v1" -m "holder=$holder expiry=$expiry")"
+  # Fail loudly: an empty sha here means no lock gets planted, which silently
+  # turns the steal/wait cases into vacuous passes rather than failures.
+  if [[ -z "$sha" ]]; then
+    echo "plant_lock: commit-tree produced no sha in $ORIGIN" >&2
+    exit 1
+  fi
+  git -C "$ORIGIN" update-ref refs/graph/landing-lock "$sha"
+}
+
+# --- Case 30: dead-holder steal ----------------------------------------------
+set_mode green
+past_expiry=$(( $(date +%s) - 60 ))
+plant_lock "$past_expiry" dead-holder-test
+W20="$WORK/w20"
+make_clone "$W20" writer-20
+edit_line "$W20" t-lock-steal 1 steal-lands
+start_ts=$(date +%s)
+out="$(GC_LOCK_POLL=1 run_gc "$W20" -m 'test: dead-holder steal' t-lock-steal 2>&1)"; rc=$?
+elapsed=$(( $(date +%s) - start_ts ))
+if [[ $rc -eq 0 ]] && origin_show t-lock-steal | grep -q 'line1: steal-lands' && [[ "$elapsed" -le 10 ]]; then
+  ok "dead-holder steal: expired foreign lock is stolen and lands promptly (${elapsed}s)"
+else
+  no "dead-holder steal (rc=$rc elapsed=${elapsed}s)"; printf '%s\n' "$out"
+fi
+
+# --- Case 31: live-holder wait (no premature steal) --------------------------
+set_mode green
+future_expiry=$(( $(date +%s) + 3 ))
+plant_lock "$future_expiry" live-holder-test
+planted_sha="$(git -C "$ORIGIN" for-each-ref --format='%(objectname)' refs/graph/landing-lock)"
+W11="$WORK/w11"
+make_clone "$W11" writer-11
+edit_line "$W11" t-lock-wait 1 wait-then-lands
+outfile="$WORK/out-31.log"
+start_ts=$(date +%s)
+( GC_LOCK_POLL=1 run_gc "$W11" -m 'test: live-holder wait' t-lock-wait >"$outfile" 2>&1; echo $? >"$WORK/rc-31" ) &
+pid20=$!
+sleep 1
+current_sha="$(git -C "$ORIGIN" for-each-ref --format='%(objectname)' refs/graph/landing-lock)"
+no_premature_steal=0
+[[ "$current_sha" == "$planted_sha" ]] && no_premature_steal=1
+wait "$pid20"
+end_ts=$(date +%s)
+elapsed=$(( end_ts - start_ts ))
+rc="$(cat "$WORK/rc-31")"
+out="$(cat "$outfile")"
+if [[ "$no_premature_steal" -eq 1 && $rc -eq 0 && "$elapsed" -ge 2 ]] \
+   && origin_show t-lock-wait | grep -q 'line1: wait-then-lands'; then
+  ok "live-holder wait: does not steal before the planted expiry (${elapsed}s elapsed), lands once it passes"
+else
+  no "live-holder wait (no_premature_steal=$no_premature_steal rc=$rc elapsed=${elapsed}s)"; printf '%s\n' "$out"
+fi
+
+# --- Case 32: lock-ref hygiene ------------------------------------------------
+set_mode green
+W12="$WORK/w12"
+make_clone "$W12" writer-12
+edit_line "$W12" t-lock-hygiene 1 hygiene-lands
+out="$(run_gc "$W12" -m 'test: lock hygiene' t-lock-hygiene 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && ! lock_ref_exists; then
+  ok "lock hygiene: refs/graph/landing-lock absent on origin after a normal successful landing"
+else
+  no "lock hygiene: rc=$rc"; printf '%s\n' "$out"
+fi
+if ! git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**' | grep -q landing-lock; then
+  ok "lock hygiene: refs/heads/graph/** never lists the landing-lock ref (disjoint namespaces)"
+else
+  no "lock hygiene: landing-lock ref leaked into refs/heads/graph/**"
+fi
+
+# --- Case 33: delete/modify divergence — deletion lands first, edit races it via stale --base ---
 # The reverse of case 23's direction: there, an edit landed first and a
 # --prune raced it via a rebase CONFLICT. Here, a genuine deletion (rm + commit
 # + push, not --prune) lands on origin/main FIRST, and a second writer's field
@@ -1100,21 +1246,21 @@ fi
 # fix (Unit 2) lands the writer's snapshot back onto main with office_hours
 # instead of crashing on the now-absent target file.
 set_mode green
-W11="$WORK/w11"
-make_clone "$W11" writer-11
-base_de_sha="$(git -C "$W11" hash-object intentions/t-field-delete-edit.md)"
-edit_field "$W11" t-field-delete-edit fieldA writer11-edit
-# do NOT commit/push W11's edit yet — it stays local, matching the stale-base
+W23="$WORK/w23"
+make_clone "$W23" writer-23
+base_de_sha="$(git -C "$W23" hash-object intentions/t-field-delete-edit.md)"
+edit_field "$W23" t-field-delete-edit fieldA writer23-edit
+# do NOT commit/push W23's edit yet — it stays local, matching the stale-base
 # setup cases 21-22 use, so the --base sha above is now stale once the
 # deletion below lands.
 
-W12="$WORK/w12"
-make_clone "$W12" writer-12
-rm -f "$W12/intentions/t-field-delete-edit.md"
-git -C "$W12" commit -qam 'test: delete t-field-delete-edit'
-git -C "$W12" push -q origin main
+W24="$WORK/w24"
+make_clone "$W24" writer-24
+rm -f "$W24/intentions/t-field-delete-edit.md"
+git -C "$W24" commit -qam 'test: delete t-field-delete-edit'
+git -C "$W24" push -q origin main
 
-out="$(run_gc "$W11" -m 'test: delete vs edit' --base "t-field-delete-edit=$base_de_sha" t-field-delete-edit 2>&1)"; rc=$?
+out="$(run_gc "$W23" -m 'test: delete vs edit' --base "t-field-delete-edit=$base_de_sha" t-field-delete-edit 2>&1)"; rc=$?
 content="$(origin_show t-field-delete-edit 2>/dev/null)"
 snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
 [[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
@@ -1122,7 +1268,7 @@ if [[ $rc -eq 1 ]] \
    && ! grep -q 'layer 2/3 auto-resolved' <<<"$out" \
    && grep -q 'office_hours' <<<"$content" \
    && grep -q 'delete/modify divergence' <<<"$content" \
-   && grep -q 'fieldA: writer11-edit' <<<"$content"; then
+   && grep -q 'fieldA: writer23-edit' <<<"$content"; then
   ok "delete/modify divergence: deletion lands first, stale-base edit races it, park re-materializes the node with office_hours"
 else
   no "delete/modify divergence (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
