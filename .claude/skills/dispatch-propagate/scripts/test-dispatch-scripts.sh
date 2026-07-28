@@ -10899,6 +10899,32 @@ else
 fi
 rl_teardown
 
+# --- Test 19: reservation_owner reads the session= owner and guards its arg ---
+# reservation_owner distinguishes "no claim" (reservation_exists false) from
+# "claim held by another/my session" (reservation_exists true, owner known)
+# from "claim with unknown owner" (reservation_exists true, owner fails) — the
+# fail-safe case mirroring reservation_sweep's own malformed-marker handling.
+echo "Test: reservation_owner returns the marker's session owner and guards its argument"
+rl_setup
+reservation_write "995-slug" "995" "sess-owner"
+if out=$(reservation_owner "995-slug"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: exits 0 for a freshly written marker" "0" "$rc"
+assert_eq "rl-owner: stdout is the marker's session id" "sess-owner" "$out"
+# Absent marker → return 1, no stdout.
+if out=$(reservation_owner "996-absent"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: absent marker → return 1" "1" "$rc"
+assert_eq "rl-owner: absent marker → empty stdout" "" "$out"
+# Malformed marker (session= line stripped) → return 1, empty stdout.
+sed -i '/^session=/d' "$DISPATCH_RESERVATION_DIR/995-slug"
+if out=$(reservation_owner "995-slug"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: malformed marker (no session= line) → return 1" "1" "$rc"
+assert_eq "rl-owner: malformed marker → empty stdout" "" "$out"
+# Unsafe basename → return 1 (path-safety guard).
+if out=$(reservation_owner "../escape"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: unsafe basename → return 1" "1" "$rc"
+assert_eq "rl-owner: unsafe basename → empty stdout" "" "$out"
+rl_teardown
+
 # ============================================================================
 # dispatch-config-load tests
 # ============================================================================

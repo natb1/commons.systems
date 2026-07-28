@@ -27,6 +27,7 @@
 #   reservation_write   <worktree-basename> <issue-N> <session-id> [origin]
 #   reservation_clear   <worktree-basename>
 #   reservation_exists  <worktree-basename>
+#   reservation_owner   <worktree-basename>
 #   reservation_count
 #   reserved_claimed_nums
 #   claimed_issue_nums
@@ -85,6 +86,26 @@
 #     return 0 — a marker named <worktree-basename> exists.
 #     return 1 — a missing/unsafe argument, an unresolvable ledger dir, or no
 #               such marker.
+#
+# reservation_owner <worktree-basename>
+#   Print the reserving session id for the marker named exactly
+#   <worktree-basename> to stdout. The basename arg is required and must pass
+#   the same path-safety guard as reservation_write/_clear/_exists
+#   (missing/unsafe → 1, nothing printed). Reads the `session=` line the same
+#   way reservation_sweep does (first match wins via `sed -n
+#   's/^session=//p' | head -n1`) — this is the ONE parser of that line;
+#   reservation_sweep calls this function rather than re-parsing it inline. A
+#   marker that exists but has no readable `session=` line (malformed) prints
+#   nothing and returns 1, the same fail-safe treatment reservation_sweep
+#   gives a malformed marker (kept, not treated as "dead"). This lets a caller
+#   distinguish "no claim" (reservation_exists false) from "claim held by
+#   another session" / "claim held by me" (reservation_exists true,
+#   reservation_owner succeeds) from "claim with unknown owner"
+#   (reservation_exists true, reservation_owner fails) — the fail-safe case.
+#     return 0 — stdout carries the single `session=` value.
+#     return 1 — a missing/unsafe argument, an unresolvable ledger dir, an
+#               absent marker file, or a marker with no readable `session=`
+#               line; nothing printed (or empty stdout).
 #
 # reservation_count
 #   Print the integer count of outstanding marker files to stdout. NEVER fails —
@@ -306,6 +327,35 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     [[ -f "$dir/$wt_name" ]]
   }
 
+  # reservation_owner <worktree-basename> — print the reserving session id.
+  # See the header comment for the return-code contract.
+  reservation_owner() {
+    local wt_name="${1:-}"
+    if [[ -z "$wt_name" ]]; then
+      printf 'lib-reservation-ledger: reservation_owner requires a <worktree-basename> argument\n' >&2
+      return 1
+    fi
+    # Same path guard as reservation_write/_clear/_exists — never let an unsafe
+    # name read outside the ledger dir.
+    case "$wt_name" in
+      *..*|*/*|*[[:cntrl:]]*)
+        printf 'lib-reservation-ledger: reservation_owner: unsafe worktree-basename %q\n' "$wt_name" >&2
+        return 1
+        ;;
+    esac
+    local dir
+    # Unresolvable ledger dir → nothing to read.
+    dir=$(reservation_dir) || return 1
+    [[ -f "$dir/$wt_name" ]] || return 1
+    # Read the `session=` line robustly (first match wins); independent of
+    # line ordering within the marker. Mirrors reservation_sweep's own parse.
+    local sid
+    sid=$(sed -n 's/^session=//p' "$dir/$wt_name" 2>/dev/null | head -n1)
+    [[ -n "$sid" ]] || return 1
+    printf '%s\n' "$sid"
+    return 0
+  }
+
   # reservation_count — print the count of outstanding marker files. Never fails.
   # See the header comment for the return-code contract.
   reservation_count() {
@@ -449,9 +499,10 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     for f in "$dir"/*; do
       [[ -f "$f" ]] || continue
       bn=$(basename "$f")
-      # Read the `session=` line robustly (first match wins); independent of
-      # line ordering within the marker.
-      marker_sid=$(sed -n 's/^session=//p' "$f" 2>/dev/null | head -n1)
+      # Read the `session=` line via reservation_owner — the ONE parser of
+      # that line in this file (independent of line ordering within the
+      # marker; empty on a malformed/absent-session marker).
+      marker_sid=$(reservation_owner "$bn") || marker_sid=""
       # Read the `timestamp=` line and parse it to epoch. The markers store UTC
       # ISO-8601 (e.g. 2026-01-01T00:00:00Z), which GNU `date -d` parses. This
       # may fail (empty/non-numeric marker_epoch) on an absent/unparseable
