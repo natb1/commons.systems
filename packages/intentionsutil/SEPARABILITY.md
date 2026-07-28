@@ -150,7 +150,7 @@ structure.
 
 ## Gap 4 — the align skill family assumes worktrees, dispatch state fields, and router semantics
 
-**What breaks:** the align skills (`/align-strategy`, `/align-tactics`, and
+**What breaks:** the align skills (`/align`, `/align-tactics`, and
 peers) assume git worktrees, live-session detection, the dispatch `phase` /
 `execution` lifecycle, and router selection. None of that is available to a
 standalone adopter who only wants to author and validate a graph.

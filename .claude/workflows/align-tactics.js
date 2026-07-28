@@ -33,7 +33,7 @@
  *       rounds:{count,last_completed,last_aligned} },
  *     target_node: {              // tactic mode ONLY: the single tactic being (re)planned
  *       id, statement, rationale, body, phase },
- *     draft_tactics:[ { id, statement, body } ],  // strategy mode: retained /align-strategy drafts
+ *     draft_tactics:[ { id, statement, body } ],  // strategy mode: retained /align drafts
  *     existing_children:[ { id, phase, on_signal_path } ], // non-draft children already on the signal path
  *     reuse_hunts:[ { focus, scope } ],           // up to 3 reuse-hunt foci (default 1)
  *     existing_ids:[ ... ] }      // pre-existing real node ids (for the caller's resolveTempRefs pass)

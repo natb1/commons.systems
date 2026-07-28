@@ -5,7 +5,7 @@ Apply the Workflow result" (and the tactic-target flow, which reuses this same
 writer for its single-node result). The Workflow
 (`.claude/workflows/align-tactics.js`) authors no files — it returns a
 structured result and this session lands every graph write. The write path
-mirrors `/align-strategy` Step 5 exactly: `write-node.ts` is the single
+mirrors `/align` Step 5 exactly: `write-node.ts` is the single
 validation gate (never hand-author YAML frontmatter), and `graph-commit` is
 the only landing path.
 

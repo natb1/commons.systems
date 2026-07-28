@@ -1237,15 +1237,15 @@ rm -rf "$COV_ROOT"
 # ISOLATED fixture: one minimal worker session per skill, each in its own root
 # so the shared totals stay untouched. Keep this list in lockstep with the
 # alternation regex in aggregate-usage.sh's classifier (10 legacy phase skills
-# + the 3 graph-native align-family skills).
+# + the 4 graph-native align-family skills).
 # ---------------------------------------------------------------------------
 
 echo ""
-echo "--- alternation coverage: all 13 phase skills classify as worker (#2351) ---"
+echo "--- alternation coverage: all 14 phase skills classify as worker (#2351) ---"
 
 for skill in plan-issue implement qa-fix review-fix fix-checks fix-conflicts \
              qa-main budget-parse-job resolve-epic office-hours \
-             align-strategy align-tactics align-init; do
+             align-strategy align-tactics align-init align; do
   ALT_ROOT=$(mktemp -d)
   trap 'rm -rf "$ALT_ROOT"; teardown' EXIT INT TERM
   alt_worktree="$ALT_ROOT/-home-x-worktrees-2351-alternation"
