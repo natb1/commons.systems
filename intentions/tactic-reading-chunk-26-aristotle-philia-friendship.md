@@ -39,6 +39,7 @@ office_hours:
     and political friendship ground philia as the medium of shared leisure?"
   since: 2026-07-11
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

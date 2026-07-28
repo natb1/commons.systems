@@ -38,6 +38,7 @@ office_hours:
     for friends and living-together ground philia as recorded?"
   since: 2026-07-11
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:
