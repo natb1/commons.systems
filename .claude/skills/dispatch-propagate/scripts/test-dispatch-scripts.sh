@@ -18481,7 +18481,7 @@ else
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$create_log" == *"title=Alignment review"* ]]; then
+if [[ "$create_log" == *"title=Weekly review"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: weekly-review cold start created issue with configured title"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: weekly-review cold start created issue with configured title"
