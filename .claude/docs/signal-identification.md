@@ -15,10 +15,10 @@ the intention node `tactic-align-audit-legacy-review`
 there rather than duplicating it here.
 
 This doc is the single source of truth for the signal-identification contract. The
-`ref-signal-identification` skill, the #2371 `align-signal-assessor` role, and #2372
-(the rung-detecting router, which wires this contract into the align loop and is
-blocked by this issue) are all written against the field set, enums, and procedure
-defined here. Do not change them in one place without changing this doc.
+`ref-signal-identification` skill, the #2371 `align-signal-assessor` role (no live
+agent definition today), and #2372 (the rung-detecting router, which wires this
+contract into the align loop and is blocked by this issue) are all written against
+the field set, enums, and procedure defined here. Do not change them in one place without changing this doc.
 
 Signal identification runs at parse time, per intention node. It consumes the schema's
 `success_signal` (`{observable, sensor, threshold, is_proxy}`), `reading`, and `gap`
@@ -136,12 +136,13 @@ maintenance cost.
 ### Perspectives intrinsic to the economics call
 
 Two perspectives are consulted on a WORTH decision. They estimate the terms; they do not
-by themselves decide. They reuse the existing align agents:
+by themselves decide. Both were derived from now-deleted agent definitions; the verbatim
+pre-deletion source is at `origin/main` commit `44493733` under `.claude/agents/`.
 
 | Perspective | Derived from | Estimates |
 |---|---|---|
-| FINANCIAL | `.claude/agents/align-financial.md` | `build`, `run`, `decision_value`, and `decision_frequency` |
-| TECHNICAL | `.claude/agents/align-technical.md` | `maintenance`, and a "safe to abandon" concern on a sensor that would rot if left untouched |
+| FINANCIAL | formerly the deleted `align-financial` agent definition | `build`, `run`, `decision_value`, and `decision_frequency` |
+| TECHNICAL | formerly the deleted `align-technical` agent definition | `maintenance`, and a "safe to abandon" concern on a sensor that would rot if left untouched |
 
 ## Local-first / no-mining principle
 
@@ -209,8 +210,9 @@ consumer can grep it deterministically:
 > NOTE: the carrier is provisional; the field set is the contract. The marker-comment
 > carrier is borrowed from `outcome-envelope.md`, whose marker exists because the
 > envelope is persisted to a PR comment and re-grepped across sessions. #2372's
-> `align-signal-assessor` may instead be a reasoning-time subagent that returns a
-> structured object — the repo's Workflow `schema:` pattern — where the natural carrier
+> `align-signal-assessor` — a role with no live agent definition today — may instead
+> be a reasoning-time subagent that returns a structured object — the repo's Workflow
+> `schema:` pattern — where the natural carrier
 > is the returned JSON, not an HTML-marked block. The **field set, enums, and
 > invariants** below are the stable contract; the marker-comment carrier is a provisional
 > serialization #2372 may revise. Do not treat the marker as immutable.

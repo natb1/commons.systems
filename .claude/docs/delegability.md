@@ -142,12 +142,14 @@ proceduralized.
 ### Perspectives intrinsic to delegation
 
 Two perspectives are always consulted on a SHOULD decision. They estimate the terms;
-they do not by themselves decide. They reuse the existing align agents:
+they do not by themselves decide. Both were derived from now-deleted agent
+definitions; the verbatim pre-deletion source is at `origin/main` commit
+`44493733` under `.claude/agents/`.
 
 | Perspective | Derived from | Estimates |
 |---|---|---|
-| FINANCIAL | `.claude/agents/align-financial.md` — cost analysis, break-even, sustainability | the left-side costs (`build`, `run`), `manual_cost`, and `frequency` |
-| TECHNICAL | `.claude/agents/align-technical.md` — impact × risk × effort, forkability, "safe to abandon" | `maintenance`, and a veto if the codified artifact would not be safe to abandon |
+| FINANCIAL | formerly the deleted `align-financial` agent definition — cost analysis, break-even, sustainability | the left-side costs (`build`, `run`), `manual_cost`, and `frequency` |
+| TECHNICAL | formerly the deleted `align-technical` agent definition — impact × risk × effort, forkability, "safe to abandon" | `maintenance`, and a veto if the codified artifact would not be safe to abandon |
 
 ### Greedy codification
 
@@ -160,8 +162,8 @@ teeth. When all three pass, push down, because the freed attention compounds.
 
 ## Consistency / veto layer
 
-A consistency-tester derived from `.claude/agents/align-consistency.md` — charter
-compliance and ratchet risk — runs over the recommendation. It does not produce the
+A consistency-tester — formerly the deleted `align-consistency` agent definition;
+charter compliance and ratchet risk — runs over the recommendation. It does not produce the
 recommendation; it can veto one. A push-down that is CAN-feasible and ROI-positive is
 still declined if it conflicts with a standing intention or a charter principle — for
 example, if codifying it creates a ratchet tooth that resists later removal. Its
