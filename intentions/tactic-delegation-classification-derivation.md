@@ -98,8 +98,13 @@ must land *before* Unit 2 rewrites the corpus, not after.
   `validateNode`):
   - `divergence.level` ∈ {low, moderate, high}
   - `irreversibility.recovery_cost` ∈ {none, low, moderate, high, prohibitive,
-    unassessed} — see the `unassessed` decision below, which must be settled
-    before this enum is written.
+    unassessed}. `unassessed` is a deliberate enum member (author decision,
+    2026-07-28), not an oversight — six records use it today and it means "not
+    yet measured", which is a different claim from any cost band. Under the
+    derivation rule it triggers **neither** arm (it is not `prohibitive`, not
+    `high`), so a record carrying it classifies on its `divergence.level`
+    alone. It must never be read as a low or absent cost: absence of a
+    measurement is not evidence of a cheap recovery path.
   - `irreversibility.gated` becomes a `{level, note}` object, mirroring
     `divergence`'s existing `{level, ...}` shape:
 
@@ -177,22 +182,18 @@ three:
 - Remove the stored `classification:` line from each record's attributes.
 - All record writes via `packages/intentionsutil/scripts/write-node.ts`.
 
-**Open decision — does `recovery_cost` keep an `unassessed` member?** Six
-records currently say `unassessed`, and the classification rule gives it no
-behavior ("prohibitive recovery" → captured, "high recovery cost" → platform;
-`unassessed` is neither). Two options, and this must be settled before Unit 1
-writes the enum:
+**Settled — `recovery_cost` keeps an `unassessed` member (author, 2026-07-28).**
+Six records say `unassessed` today (five bare, one as `unassessed — app
+repurchase, migration friction, household`). They keep it: "not yet measured"
+is a first-class state, distinguishable from a real low cost, and it mirrors
+how `gated` keeps `0` (axis absent) distinct from `none` (assessed as fully
+open). This unit therefore does **not** assess those six — that is six author
+judgment calls about recovery cost, out of scope here.
 
-- **(a) Add `unassessed` to the enum** — honest about the corpus, keeps the
-  guard green, and makes "not yet assessed" a first-class state distinguishable
-  from a real low cost. Recommended default; it mirrors how `gated` keeps `0`
-  (absent) distinct from `none` (assessed as open).
-- **(b) Assess the six records** — no `unassessed` member, and the six get real
-  values. Higher fidelity, but it is six author judgment calls about recovery
-  cost, which this tactic is not scoped to make.
-
-If (a), state explicitly what `unassessed` derives to under the rule (it must
-not silently read as low).
+Normalizing the one annotated record moves its prose to the audit narrative and
+leaves a bare `unassessed`. Under the derivation rule `unassessed` triggers
+neither arm, so those records classify on `divergence.level` alone; see Unit 1
+for the full statement of its semantics.
 
 **Recommended model:** opus
 
