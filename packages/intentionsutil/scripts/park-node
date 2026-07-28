@@ -265,4 +265,15 @@ if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m
   exit 1
 fi
 
+# A landed park is a terminal disposition: record it so this node worker's Stop
+# hook may reap the job (dispatch-self-close's node-worker invariant). Called
+# unconditionally — mark-node-terminal's own ownership gate makes it a silent
+# no-op when this session is parking some OTHER node (an office-hours drain).
+# Best-effort: a marker write must never turn a landed park into a failure.
+# This also covers the Stop-hook backstop, which calls park-node
+# (dispatch-stop.sh) BEFORE dispatch-self-close, so the marker exists by the
+# time the gate reads it. Note the hook `rm -f`s office-hours-reason on success
+# — which is exactly why park evidence must be a separate marker.
+"$SCRIPT_DIR/mark-node-terminal" "$NODE_ID" park >/dev/null 2>&1 || true
+
 exit 0

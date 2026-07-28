@@ -12,6 +12,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # .claude/skills/dispatch-propagate/scripts; the hooks live at .claude/hooks.
 HOOK_SCRIPT_DIR="$SCRIPT_DIR/../../../hooks"
 
+# UTIL_SCRIPT_DIR — the intentionsutil script directory (graph-commit, park-node,
+# mark-node-terminal). SCRIPT_DIR is .claude/skills/dispatch-propagate/scripts,
+# four levels below the repo root.
+UTIL_SCRIPT_DIR="$SCRIPT_DIR/../../../../packages/intentionsutil/scripts"
+
 # --- test helpers -----------------------------------------------------------
 
 PASS=0
@@ -17813,6 +17818,47 @@ selfclose_write_state() {
   printf '{"name":"%s"}\n' "$name" > "$CLAUDE_JOB_DIR/state.json"
 }
 
+# selfclose_write_terminal_marker <node-id> <disposition> — write the
+# node-terminal marker mark-node-terminal produces, in its exact byte format.
+selfclose_write_terminal_marker() {
+  printf 'node=%s\ndisposition=%s\n' "$1" "$2" > "$CLAUDE_JOB_DIR/node-terminal"
+}
+
+# selfclose_set_agents_probe — replace the fake `claude agents` with one that
+# records every invocation. The node-worker branch must never consult the
+# daemon; tests assert $TMPDIR_TEST/agents-called does not exist.
+selfclose_set_agents_probe() {
+  cat > "$TMPDIR_TEST/fake-agents" <<FAKE
+#!/usr/bin/env bash
+printf 'called\n' >> "$TMPDIR_TEST/agents-called"
+printf '%s\n' '[]'
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-agents"
+}
+
+# selfclose_assert_no_rm <label> — assert no `claude rm` was recorded.
+selfclose_assert_no_rm() {
+  TOTAL=$((TOTAL + 1))
+  if [[ ! -e "$SPAWN_ROUTER_RM_LOG" ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: $1"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: $1"
+    echo "    rm-log: $(cat "$SPAWN_ROUTER_RM_LOG")"
+  fi
+}
+
+# selfclose_assert_daemon_untouched <label> — assert the node branch did not
+# query the daemon (requires selfclose_set_agents_probe).
+selfclose_assert_daemon_untouched() {
+  TOTAL=$((TOTAL + 1))
+  if [[ ! -e "$TMPDIR_TEST/agents-called" ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: $1"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: $1"
+  fi
+}
+
 # selfclose_set_workers [session-spec...] — install the fake `claude agents`
 # command. Each spec is `name:status`. With zero specs it emits an empty array.
 # Always exits 0 (a successfully-queried daemon).
@@ -18030,6 +18076,169 @@ assert_eq "unknown-daemon: router self-close exits 0" "0" "$rc"
 rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
 assert_eq "unknown-daemon: 'claude rm abcd1234' was invoked (fail-safe toward self-close)" \
   "abcd1234" "$rm_log"
+selfclose_teardown
+
+# --- Tests 9-16: the node-worker terminal-disposition invariant ---------------
+#
+# `Stop` fires on every turn yield, not only on terminal exit. dispatch-stop.sh
+# passes `--node <job-name>`; without a `node-terminal` marker naming that node
+# the reap must be HELD. Test 9 is the 2026-07-28 regression directly: node
+# tactic-graph-ref-split's worker yielded mid-turn waiting on background
+# subagents and was reaped, killing a live subagent ~1.7s later.
+# Unlike the router branch, this branch must never consult the daemon.
+
+# --- Test 9: --node, NO marker → HOLD (the 36e64744 regression) ---------------
+
+echo "Test: node worker with no terminal-disposition marker is HELD, not reaped"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "tactic-x"
+selfclose_set_agents_probe
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" --node tactic-x \
+  >/dev/null 2>"$TMPDIR_TEST/hold-err" || rc=$?
+err=$(cat "$TMPDIR_TEST/hold-err")
+assert_eq "node-no-marker: exits 0" "0" "$rc"
+selfclose_assert_no_rm "node-no-marker: no 'claude rm' invocation recorded"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"holding"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: node-no-marker: holding reason on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: node-no-marker: holding reason on stderr"
+  echo "    stderr: $err"
+fi
+selfclose_assert_daemon_untouched "node-no-marker: daemon not consulted"
+selfclose_teardown
+
+# --- Test 10: --node, marker names this node (advance) → SELF-CLOSE ----------
+
+echo "Test: node worker with a matching 'advance' marker self-closes"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "tactic-x"
+selfclose_write_terminal_marker "tactic-x" advance
+selfclose_set_agents_probe
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" --node tactic-x >/dev/null 2>&1 || rc=$?
+assert_eq "node-advance: exits 0" "0" "$rc"
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
+assert_eq "node-advance: 'claude rm abcd1234' was invoked" "abcd1234" "$rm_log"
+selfclose_assert_daemon_untouched "node-advance: daemon not consulted"
+selfclose_teardown
+
+# --- Test 11: --node, marker names a DIFFERENT node → HOLD -------------------
+#
+# The drain / child-land false positive: a session that parked or landed some
+# OTHER node must not authorize its own reap.
+
+echo "Test: node worker whose marker names a different node is HELD"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "tactic-x"
+selfclose_write_terminal_marker "tactic-other" park
+selfclose_set_agents_probe
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" --node tactic-x \
+  >/dev/null 2>"$TMPDIR_TEST/hold-err" || rc=$?
+err=$(cat "$TMPDIR_TEST/hold-err")
+assert_eq "node-other-marker: exits 0" "0" "$rc"
+selfclose_assert_no_rm "node-other-marker: no 'claude rm' invocation recorded"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"holding"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: node-other-marker: holding reason on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: node-other-marker: holding reason on stderr"
+  echo "    stderr: $err"
+fi
+selfclose_assert_daemon_untouched "node-other-marker: daemon not consulted"
+selfclose_teardown
+
+# --- Test 12: --node, ZERO-BYTE marker → HOLD --------------------------------
+
+echo "Test: node worker with a zero-byte node-terminal marker is HELD"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "tactic-x"
+: > "$CLAUDE_JOB_DIR/node-terminal"
+selfclose_set_agents_probe
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" --node tactic-x >/dev/null 2>&1 || rc=$?
+assert_eq "node-empty-marker: exits 0" "0" "$rc"
+selfclose_assert_no_rm "node-empty-marker: no 'claude rm' invocation recorded"
+selfclose_assert_daemon_untouched "node-empty-marker: daemon not consulted"
+selfclose_teardown
+
+# --- Test 13: --node, marker names this node (park) → SELF-CLOSE -------------
+
+echo "Test: node worker with a matching 'park' marker self-closes"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "tactic-x"
+selfclose_write_terminal_marker "tactic-x" park
+selfclose_set_agents_probe
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" --node tactic-x >/dev/null 2>&1 || rc=$?
+assert_eq "node-park: exits 0" "0" "$rc"
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
+assert_eq "node-park: 'claude rm abcd1234' was invoked" "abcd1234" "$rm_log"
+selfclose_assert_daemon_untouched "node-park: daemon not consulted"
+selfclose_teardown
+
+# --- Test 14: NO --node, no marker → SELF-CLOSE (legacy no-regress) ----------
+#
+# dispatch-finalize-phase calls dispatch-self-close with no flag; the invariant
+# must not reach that caller.
+
+echo "Test: a caller passing no --node self-closes unconditionally (legacy lane)"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "tactic-x"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" >/dev/null 2>&1 || rc=$?
+assert_eq "no-flag: exits 0" "0" "$rc"
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
+assert_eq "no-flag: 'claude rm abcd1234' was invoked (node invariant not reached)" \
+  "abcd1234" "$rm_log"
+selfclose_teardown
+
+# --- Test 15: router + busy worker, no marker, no --node → SELF-CLOSE --------
+
+echo "Test: router with a busy worker still self-closes (router lane no-regress)"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+selfclose_write_state "dispatch-abcd1234"
+selfclose_set_workers "824-foo:busy"
+selfclose_set_no_timer
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-self-close" >/dev/null 2>&1 || rc=$?
+assert_eq "router-no-regress: exits 0" "0" "$rc"
+rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
+assert_eq "router-no-regress: 'claude rm abcd1234' was invoked" "abcd1234" "$rm_log"
+selfclose_teardown
+
+# --- Test 16: --node with CLAUDE_JOB_DIR unset → interactive no-op -----------
+
+echo "Test: --node with CLAUDE_JOB_DIR unset is an interactive no-op"
+selfclose_setup
+unset CLAUDE_JOB_DIR
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-self-close" --node tactic-x 2>&1 1>/dev/null) || rc=$?
+assert_eq "node-interactive: exits 0" "0" "$rc"
+selfclose_assert_no_rm "node-interactive: no 'claude rm' invocation recorded"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"not a managed background job"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: node-interactive: interactive diagnostic on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: node-interactive: interactive diagnostic on stderr"
+  echo "    stderr: $err"
+fi
 selfclose_teardown
 
 # ============================================================================
@@ -19883,14 +20092,20 @@ exit 0
 FAKE
   chmod +x "$ROOT/packages/intentionsutil/scripts/park-node"
   : > "$ROOT/park-calls.log"
-  # Fake dispatch-self-close: records each attempt to self-close-calls.log and
-  # appends "self-close" to the shared order.log, honoring an optional
-  # self-close-exit override so a test can drive the best-effort failure branch.
+  # Fake dispatch-self-close: records each attempt's ARGV (one line per call) to
+  # self-close-calls.log and appends "self-close" to the shared order.log,
+  # honoring an optional self-close-exit override so a test can drive the
+  # best-effort failure branch. It also emits a stderr sentinel: the real script
+  # logs its one-line HOLD reason to stderr, and the hook must NOT swallow it.
+  # The fake intentionally still records a call on every invocation — the hook
+  # delegates unconditionally; the reap/hold GATE lives in the real script (see
+  # the dispatch-self-close block's tests 9-16), not here.
   cat > "$ROOT/.claude/skills/dispatch-propagate/scripts/dispatch-self-close" <<'FAKE'
 #!/usr/bin/env bash
 _root="$(cd "$(dirname "$0")/../../../.." && pwd)"
 echo "self-close" >> "$_root/order.log"
-echo "called" >> "$_root/self-close-calls.log"
+printf '%s\n' "$*" >> "$_root/self-close-calls.log"
+echo "SELFCLOSE-STDERR-SENTINEL" >&2
 if [[ -f "$_root/self-close-exit" ]]; then exit "$(cat "$_root/self-close-exit")"; fi
 exit 0
 FAKE
@@ -19907,10 +20122,14 @@ stopnc_teardown() {
 # stopnc_state <name> — write state.json naming this job.
 stopnc_state() { printf '{"name":"%s"}\n' "$1" > "$JOB_DIR/state.json"; }
 
-# stopnc_run — run the hook with CLAUDE_JOB_DIR=$JOB_DIR; capture rc.
+# stopnc_run — run the hook with CLAUDE_JOB_DIR=$JOB_DIR; capture rc. The hook's
+# stderr is captured to $ROOT/hook-stderr.log rather than inherited, so a test
+# can assert on what the hook let through (and the fakes' diagnostics do not
+# pollute the suite's own output).
 stopnc_run() {
   local rc=0
-  ( export CLAUDE_JOB_DIR="$JOB_DIR"; "$ROOT/.claude/hooks/dispatch-stop.sh" </dev/null ) || rc=$?
+  ( export CLAUDE_JOB_DIR="$JOB_DIR"; "$ROOT/.claude/hooks/dispatch-stop.sh" \
+      </dev/null 2>"$ROOT/hook-stderr.log" ) || rc=$?
   echo "$rc"
 }
 
@@ -19944,8 +20163,14 @@ assert_eq "stop: router name → park-node not called" "0" "$(wc -l < "$ROOT/par
 assert_eq "stop: router name → self-close not called" "0" "$(wc -l < "$ROOT/self-close-calls.log")"
 stopnc_teardown
 
-# --- node worker + no office-hours-reason → no-op ----------------------------
-echo "Test: dispatch-stop node worker with no office-hours-reason → no park, self-close called"
+# --- node worker + no office-hours-reason → delegate to the gated self-close --
+#
+# The hook does not decide the reap: it passes `--node <job-name>` and lets
+# dispatch-self-close apply the terminal-disposition gate. The fake here always
+# records the call, so this asserts the DELEGATION (argv + un-swallowed stderr),
+# not the gate — the gate's own hold/reap cases are tests 9-16 of the
+# dispatch-self-close block.
+echo "Test: dispatch-stop node worker with no office-hours-reason → no park, self-close called with --node"
 stopnc_setup
 stopnc_state "tactic-some-node"
 : > "$ROOT/intentions/tactic-some-node.md"
@@ -19953,6 +20178,15 @@ rc=$(stopnc_run)   # no office-hours-reason marker written
 assert_eq "stop: node clean exit → exit 0" "0" "$rc"
 assert_eq "stop: node clean exit → park-node not called" "0" "$(wc -l < "$ROOT/park-calls.log")"
 assert_eq "stop: node clean exit → self-close called once" "1" "$(wc -l < "$ROOT/self-close-calls.log")"
+assert_eq "stop: node clean exit → self-close argv is '--node <job-name>'" \
+  "--node tactic-some-node" "$(cat "$ROOT/self-close-calls.log")"
+TOTAL=$((TOTAL + 1))
+if grep -q 'SELFCLOSE-STDERR-SENTINEL' "$ROOT/hook-stderr.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: stop: node clean exit → self-close stderr is NOT swallowed (the HOLD line must be visible)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop: node clean exit → self-close stderr is NOT swallowed (the HOLD line must be visible)"
+  echo "    hook stderr: $(cat "$ROOT/hook-stderr.log")"
+fi
 stopnc_teardown
 
 # --- node worker + office-hours-reason (no recommendation) → park ------------
@@ -26455,6 +26689,96 @@ EOF
   if grep -q 'head-ref requires a value' "$FDN_TMPDIR/err"; then g=yes; else g=no; fi
   assert_eq "flake-dedup-node: --head-ref with no value → stderr usage error" "yes" "$g"
   fdn_teardown
+
+echo ""
+echo "=== mark-node-terminal ==="
+#
+# mark-node-terminal writes the $CLAUDE_JOB_DIR/node-terminal marker that
+# dispatch-self-close's node-worker invariant reads. Two gates matter:
+#   - CLAUDE_JOB_DIR unset/absent → interactive no-op (exit 0, no write).
+#   - OWNERSHIP: state.json's .name must equal <node-id>, else exit 0 with NO
+#     write. This is what makes park-node's unconditional call safe — an
+#     office-hours drain parking three OTHER nodes cannot authorize its own reap.
+# Usage errors (bad node id, unknown disposition) are exit 2, never a fallback.
+
+MARK_NODE_TERMINAL="$UTIL_SCRIPT_DIR/mark-node-terminal"
+
+# mnt_job <node-id> — fresh job dir whose state.json names <node-id>.
+mnt_job() {
+  MNT_DIR=$(mktemp -d)
+  printf '{"name":"%s"}\n' "$1" > "$MNT_DIR/state.json"
+}
+mnt_clean() { rm -rf "$MNT_DIR"; MNT_DIR=""; }
+# mnt_has_marker — 1 when node-terminal exists, else 0.
+mnt_has_marker() { [ -f "$MNT_DIR/node-terminal" ] && echo 1 || echo 0; }
+
+# ----- owning job → exact marker bytes -----
+mnt_job "tactic-x"
+if CLAUDE_JOB_DIR="$MNT_DIR" "$MARK_NODE_TERMINAL" tactic-x advance 2>/dev/null; then mnt_ec=0; else mnt_ec=$?; fi
+assert_eq "mark-node-terminal: exit 0 on happy path" "0" "$mnt_ec"
+assert_eq "mark-node-terminal: writes exact node-terminal contents" \
+  "$(printf 'node=tactic-x\ndisposition=advance\n')" "$(cat "$MNT_DIR/node-terminal")"
+mnt_clean
+
+# ----- job names a DIFFERENT node → exit 0, NO write -----
+# The office-hours-drain / align-tactics-child-land false positive.
+mnt_job "tactic-other"
+if CLAUDE_JOB_DIR="$MNT_DIR" "$MARK_NODE_TERMINAL" tactic-x park 2>/dev/null; then mnt_ec=0; else mnt_ec=$?; fi
+assert_eq "mark-node-terminal: foreign node exits 0" "0" "$mnt_ec"
+assert_eq "mark-node-terminal: foreign node writes NO marker" "0" "$(mnt_has_marker)"
+mnt_clean
+
+# ----- state.json absent → exit 0, NO write -----
+MNT_DIR=$(mktemp -d)
+if CLAUDE_JOB_DIR="$MNT_DIR" "$MARK_NODE_TERMINAL" tactic-x advance 2>/dev/null; then mnt_ec=0; else mnt_ec=$?; fi
+assert_eq "mark-node-terminal: absent state.json exits 0" "0" "$mnt_ec"
+assert_eq "mark-node-terminal: absent state.json writes NO marker" "0" "$(mnt_has_marker)"
+mnt_clean
+
+# ----- CLAUDE_JOB_DIR unset → exit 0, diagnostic, NO write -----
+# `env -u` because the suite itself may run inside a managed job.
+MNT_DIR=$(mktemp -d)
+mnt_err=$(env -u CLAUDE_JOB_DIR "$MARK_NODE_TERMINAL" tactic-x advance 2>&1 1>/dev/null) && mnt_ec=0 || mnt_ec=$?
+assert_eq "mark-node-terminal: CLAUDE_JOB_DIR unset exits 0" "0" "$mnt_ec"
+assert_eq "mark-node-terminal: CLAUDE_JOB_DIR unset writes NO marker" "0" "$(mnt_has_marker)"
+TOTAL=$((TOTAL + 1))
+if [[ "$mnt_err" == *"CLAUDE_JOB_DIR unset"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: mark-node-terminal: CLAUDE_JOB_DIR unset prints an interactive diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: mark-node-terminal: CLAUDE_JOB_DIR unset prints an interactive diagnostic"
+  echo "    stderr: $mnt_err"
+fi
+mnt_clean
+
+# ----- unknown disposition → exit 2, NO write -----
+mnt_job "tactic-x"
+if CLAUDE_JOB_DIR="$MNT_DIR" "$MARK_NODE_TERMINAL" tactic-x bogus 2>/dev/null; then mnt_ec=0; else mnt_ec=$?; fi
+assert_eq "mark-node-terminal: unknown disposition exit 2" "2" "$mnt_ec"
+assert_eq "mark-node-terminal: unknown disposition writes NO marker" "0" "$(mnt_has_marker)"
+mnt_clean
+
+# ----- malformed node id → exit 2, NO write -----
+mnt_job "824-legacy-worker"
+if CLAUDE_JOB_DIR="$MNT_DIR" "$MARK_NODE_TERMINAL" 824-legacy-worker park 2>/dev/null; then mnt_ec=0; else mnt_ec=$?; fi
+assert_eq "mark-node-terminal: malformed node id exit 2" "2" "$mnt_ec"
+assert_eq "mark-node-terminal: malformed node id writes NO marker" "0" "$(mnt_has_marker)"
+mnt_clean
+
+# ----- wrong argument count → exit 2 -----
+mnt_job "tactic-x"
+if CLAUDE_JOB_DIR="$MNT_DIR" "$MARK_NODE_TERMINAL" tactic-x 2>/dev/null; then mnt_ec=0; else mnt_ec=$?; fi
+assert_eq "mark-node-terminal: missing disposition exit 2" "2" "$mnt_ec"
+mnt_clean
+
+# ----- second call overwrites atomically, leaving no .tmp residue -----
+mnt_job "tactic-x"
+CLAUDE_JOB_DIR="$MNT_DIR" "$MARK_NODE_TERMINAL" tactic-x advance 2>/dev/null
+CLAUDE_JOB_DIR="$MNT_DIR" "$MARK_NODE_TERMINAL" tactic-x park 2>/dev/null
+assert_eq "mark-node-terminal: second call overwrites the marker" \
+  "$(printf 'node=tactic-x\ndisposition=park\n')" "$(cat "$MNT_DIR/node-terminal")"
+assert_eq "mark-node-terminal: no node-terminal.tmp residue" "0" \
+  "$([ -e "$MNT_DIR/node-terminal.tmp" ] && echo 1 || echo 0)"
+mnt_clean
 
 echo ""
 echo "=== dispatch-mark-complete / dispatch-mark-deviation ==="

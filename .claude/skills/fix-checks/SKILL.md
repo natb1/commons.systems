@@ -731,12 +731,21 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
    ```
 
    **Node lane** (`TARGET_KIND=node`): write NO `dispatch-mark-complete` marker
-   (it is a gh-label vehicle, issue-only). The node lane's completion is the
-   `apply-fix-state --spend-attempt` (+ `--record-push` when this iteration
-   pushed) + `graph-commit` write from the completion seam above — every
-   outcome that reaches Step 9 spends one attempt unit there. The Stop hook
-   (`.claude/hooks/dispatch-stop.sh`) needs no marker from a clean node pass —
-   it only backstops the escalation park.
+   (it is a gh-label vehicle, issue-only). Write the node lane's own
+   terminal-disposition marker instead:
+
+   ```bash
+   packages/intentionsutil/scripts/mark-node-terminal "$N" fix-attempt
+   ```
+
+   This is the node lane's terminal-disposition evidence. The completion write
+   is still `apply-fix-state --spend-attempt` (+ `--record-push` when this
+   iteration pushed) + `graph-commit` from the completion seam above — every
+   outcome that reaches Step 9 spends one attempt unit there (retry by design;
+   the selector re-routes on a later tick). This marker only tells the Stop hook
+   (`.claude/hooks/dispatch-stop.sh`) that the pass *ended*: `Stop` fires on
+   every turn yield, not only on terminal exit, so without the marker the hook
+   leaves the job alive rather than reaping it mid-flight.
 
    Then **stop**. The `/dispatch-propagate` background-job chain drives the
    next iteration — the selector observes the pushed sha's CI verdict on a later

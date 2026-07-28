@@ -98,7 +98,7 @@ describe("tactic eligibility", () => {
       tactic({
         id: "tactic-a",
         phase: "implement",
-        office_hours: { reason: "needs a human", since: "2026-07-01", recommendation: null },
+        office_hours: { reason: "needs a human", since: "2026-07-01", recommendation: null, session_type: "other" },
       }),
     ];
     expect(candidateIds(nodes)).toEqual([]);
@@ -232,7 +232,7 @@ describe("strategy eligibility", () => {
 
   it("skips a parked strategy", () => {
     const nodes = [
-      strategy({ id: "strategy-s", office_hours: { reason: "capped", since: "2026-07-01", recommendation: null } }),
+      strategy({ id: "strategy-s", office_hours: { reason: "capped", since: "2026-07-01", recommendation: null, session_type: "other" } }),
     ];
     expect(candidateIds(nodes)).toEqual([]);
   });
@@ -509,7 +509,7 @@ describe("soft-freeze gate", () => {
     // park.
     const nodes = frozenGraph("stale-fingerprint").map((n) =>
       n.id === "strategy-s"
-        ? { ...n, office_hours: { reason: "parked", since: "2026-07-01", recommendation: null } }
+        ? { ...n, office_hours: { reason: "parked", since: "2026-07-01", recommendation: null, session_type: "other" as const } }
         : n,
     );
     const sel = selectGraphTargets(nodes);
@@ -527,7 +527,7 @@ describe("soft-freeze gate", () => {
     // office_hours gating applies to the frozen-tactic emission too.
     const nodes = frozenGraph("stale-fingerprint").map((n) =>
       n.id === "tactic-stale"
-        ? { ...n, office_hours: { reason: "parked", since: "2026-07-01", recommendation: null } }
+        ? { ...n, office_hours: { reason: "parked", since: "2026-07-01", recommendation: null, session_type: "other" as const } }
         : n,
     );
     const ids = selectGraphTargets(nodes).candidates.map((c) => c.id);
@@ -685,7 +685,7 @@ describe("frozen-node candidates", () => {
       tactic({
         id: "tactic-draft",
         phase: "draft",
-        office_hours: { reason: "needs a human", since: "2026-07-01", recommendation: null },
+        office_hours: { reason: "needs a human", since: "2026-07-01", recommendation: null, session_type: "other" },
       }),
     ];
     expect(candidateIds(nodes)).toEqual([]);
@@ -797,7 +797,7 @@ describe("frozenTacticSelectable", () => {
       tactic({
         id: "tactic-draft",
         phase: "draft",
-        office_hours: { reason: "parked", since: "2026-07-01", recommendation: null },
+        office_hours: { reason: "parked", since: "2026-07-01", recommendation: null, session_type: "other" },
       }),
     ];
     expect(frozenTacticSelectable(nodes[0], nodes)).toBe(false);
@@ -893,7 +893,7 @@ describe("strategyFingerprint", () => {
       }),
     ).toBe(fp);
     expect(
-      strategyFingerprint({ ...base, office_hours: { reason: "r", since: "2026-07-01", recommendation: null } }),
+      strategyFingerprint({ ...base, office_hours: { reason: "r", since: "2026-07-01", recommendation: null, session_type: "other" } }),
     ).toBe(fp);
     expect(
       strategyFingerprint({ ...base, attention: { boost: 3, override: null, rationale: "r" } }),
@@ -937,7 +937,7 @@ describe("strategyAlignSelectable", () => {
       strategy({ id: "strategy-validated", reading: "holding at threshold" }),
       strategy({
         id: "strategy-parked",
-        office_hours: { reason: "parked", since: "2026-07-01", recommendation: null },
+        office_hours: { reason: "parked", since: "2026-07-01", recommendation: null, session_type: "other" },
       }),
       strategy({ id: "strategy-blocked" }),
       tactic({

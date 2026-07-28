@@ -28,6 +28,16 @@
 # execution.pr (tactic-office-hours-pr-custody) — still gh-free: this hook only
 # reads a file the session already wrote, no network call.
 #
+# CRITICAL: `Stop` fires whenever the model YIELDS THE TURN, not only on terminal
+# exit. A worker that launches background subagents, posts an interim message and
+# waits fires this hook with its work still in flight (incident 2026-07-28: node
+# tactic-graph-ref-split, session 36e64744 — reaped mid-turn, a live subagent
+# killed ~1.7s later, the node left neither advanced nor parked). So the reap is
+# NOT decided here: this hook passes `--node "$JOB_NAME"` and dispatch-self-close
+# gates on a `node-terminal` marker naming that node, written by the terminal
+# primitives (transition-node, park-node, /fix-checks, /align-tactics). No marker
+# → the job is held alive, visible and resumable.
+#
 # Best-effort by contract: every failure logs to stderr and the hook exits 0 — it
 # must never block session teardown.
 set -uo pipefail
@@ -89,14 +99,20 @@ if [[ -n "$JOB_NAME" && -n "$_HOOK_ROOT" && -f "$_HOOK_ROOT/intentions/$JOB_NAME
 
   _SELF_CLOSE="$_HOOK_ROOT/.claude/skills/dispatch-propagate/scripts/dispatch-self-close"
   if [ -x "$_SELF_CLOSE" ]; then
-    # Reap this node worker's job entry from `claude agents --json` on every
-    # terminal exit -- clean and parked alike. Runs AFTER the park backstop above
-    # so a durable office_hours write lands before the session disappears.
+    # Reap this node worker's job entry from `claude agents --json` -- but only
+    # on a TERMINAL exit, clean or parked. `--node "$JOB_NAME"` opts into
+    # dispatch-self-close's node-worker terminal-disposition branch, which reaps
+    # only when a `node-terminal` marker names this node and otherwise HOLDS the
+    # job alive. A hold is an expected outcome, not an error: it is exactly what
+    # a mid-turn yield (subagents still running) must produce. Runs AFTER the
+    # park backstop above so a durable office_hours write -- and park-node's own
+    # marker -- lands before the reap decision is made.
     # dispatch-self-close is CLAUDE_JOB_DIR-gated and a no-op for interactive
-    # sessions; node-worker names never match `dispatch-*`, so it self-closes
-    # unconditionally here (its router continuation-invariant branch never
-    # triggers for this caller).
-    "$_SELF_CLOSE" >/dev/null 2>&1 \
+    # sessions. stderr is NOT redirected: the one-line HOLD reason is the canary
+    # for a terminal lane that failed to declare, and swallowing it defeats the
+    # design. stdout stays silenced so the duplicate copy does not pollute hook
+    # output.
+    "$_SELF_CLOSE" --node "$JOB_NAME" >/dev/null \
       || echo "[dispatch-stop] WARNING: dispatch-self-close for '$JOB_NAME' failed (non-fatal)" >&2
   fi
 fi
