@@ -1086,6 +1086,10 @@ gh_commit_is_ancestor_rest() {
 #     (same value the porcelain `headRefName` carries).
 #   - headRefOid: the PR's head commit oid, remapped from REST's `head.sha`
 #     (same value the porcelain `headRefOid` carries).
+#   - mergeCommitSha: REST `merge_commit_sha`. NOT a merge signal on its own —
+#     GitHub populates it with the ephemeral test-merge sha on OPEN PRs and
+#     leaves a stale value on closed-unmerged PRs. Only trust it as the commit
+#     the PR landed as when `mergedAt` is also non-null.
 #   - labels: narrowed to the porcelain-visible key (`name`) rather than passing
 #     the full REST label objects through (same as gh_issue_view_rest's labels).
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
@@ -1129,6 +1133,7 @@ gh_pr_view_rest() {
     body: (.body // ""),
     state: (.state | ascii_upcase),
     mergedAt: .merged_at,
+    mergeCommitSha: .merge_commit_sha,
     mergeable: (
       if .mergeable == true then "MERGEABLE"
       elif .mergeable == false then "CONFLICTING"
@@ -1641,6 +1646,36 @@ ensure_deps() {
   fi
 }
 
+# ---- wait_for_dpkg_lock — best-effort wait for the dpkg/apt lock to free ----
+# On real CI a timed-out `apt-get` (see playwright_install_with_deps below)
+# leaves its apt-get/dpkg grandchildren running in the background holding
+# /var/lib/dpkg/lock-frontend, so an immediate retry fails fast on
+# "E: Could not get lock" instead of actually retrying. This polls the lock
+# with a non-blocking `flock -s` (shared probe: succeeds once no writer holds
+# it) for up to DPKG_LOCK_WAIT_TIMEOUT seconds before giving up. Best-effort:
+# degrades to a no-op when the lock file is absent or `flock` isn't installed
+# (mirrors the lib-decision-log.sh `command -v flock` guard), and always
+# returns 0 so it never fails the caller.
+# Tunables (env): DPKG_LOCK_FILE (default /var/lib/dpkg/lock-frontend),
+# DPKG_LOCK_WAIT_TIMEOUT (default 30 seconds).
+wait_for_dpkg_lock() {
+  local lockfile="${DPKG_LOCK_FILE:-/var/lib/dpkg/lock-frontend}"
+  local deadline="${DPKG_LOCK_WAIT_TIMEOUT:-30}"
+  [ -e "$lockfile" ] || return 0
+  command -v flock >/dev/null 2>&1 || return 0
+
+  local waited=0
+  while [ "$waited" -lt "$deadline" ]; do
+    if flock -s -n "$lockfile" true 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "wait_for_dpkg_lock: ${lockfile} still held after ${deadline}s; retrying anyway" >&2
+  return 0
+}
+
 # ---- playwright_install_with_deps — bounded, timed Playwright browser install -
 # Wraps `npx playwright install --with-deps chromium` (which shells out to apt-get
 # and can stall indefinitely on a flaky archive mirror — #1899) in a per-attempt
@@ -1662,10 +1697,81 @@ playwright_install_with_deps() {
     if [ "$attempt" -gt 1 ]; then
       echo "playwright_install_with_deps: attempt $attempt/$attempts" >&2
     fi
-    if timeout --kill-after=30 "$timeout_s" npx playwright install --with-deps chromium; then
+
+    # Background the bounded install so we can capture its PID and, on a stall,
+    # kill the WHOLE tree — `timeout` alone only signals npx/node, leaving the
+    # sudo/apt-get/dpkg grandchildren alive to hold the dpkg lock (PR #2946).
+    # The outer `timeout` bound is looser than our own deadline so OUR watchdog
+    # fires first, while node's apt-get child is still a live descendant
+    # (before node's death reparents it to init, out of kill_tree's reach).
+    timeout --kill-after=30 "$((timeout_s + 60))" \
+      npx playwright install --with-deps chromium &
+    local install_pid=$!
+    local start_ts; start_ts=$(date +%s)
+
+    # Watchdog: after timeout_s of REAL wall-clock, if the install is still
+    # running it has stalled — kill its whole tree. The elapsed-time guard
+    # makes this inert when `sleep` is stubbed instant (unit tests): no real
+    # time passed => not a stall.
+    (
+      # Background our own sleep (known PID) instead of running it as a plain
+      # non-final child: bash forks a non-final `sleep` into a real child that
+      # `kill "$watchdog_pid"` (the fast-path cancel below) can't reach — it
+      # would orphan to init and idle for the rest of timeout_s. A TERM trap
+      # relays that cancel straight to the sleep so it dies immediately.
+      #
+      # Install the trap BEFORE the fork: in the window between `sleep &` and
+      # the trap the subshell still has TERM's default disposition, so a cancel
+      # landing there would kill the watchdog outright and orphan the sleep —
+      # the exact leak this guards against. The trap only records the cancel
+      # (and relays it when the pid is already known); the post-fork check
+      # closes the remaining sliver where the trap ran after the fork but
+      # before `sleep_pid` was assigned. The trap must NOT exit on its own: a
+      # TERM arriving once the watchdog is already inside kill_tree would abort
+      # the SIGTERM->grace->SIGKILL escalation the block below relies on.
+      cancelled=
+      trap 'cancelled=1; kill "${sleep_pid:-}" 2>/dev/null || true' TERM
+      sleep "$timeout_s" &
+      sleep_pid=$!
+      if [ -n "$cancelled" ]; then
+        kill "$sleep_pid" 2>/dev/null || true
+        exit 0
+      fi
+      # `|| true` + the explicit cancelled check: on cancel `wait` returns 143,
+      # and without them the fall-through into the kill decision below would be
+      # stopped only by the caller happening to run with errexit.
+      wait "$sleep_pid" || true
+      if [ -n "$cancelled" ]; then
+        exit 0
+      fi
+      now=$(date +%s)
+      if [ "$((now - start_ts))" -ge "$timeout_s" ] && kill -0 "$install_pid" 2>/dev/null; then
+        kill_tree "$install_pid"
+      fi
+    ) &
+    local watchdog_pid=$!
+
+    local rc=0
+    wait "$install_pid" || rc=$?
+    # If the watchdog already fired (real elapsed >= deadline, i.e. a stall) it
+    # is mid kill_tree — let it finish the SIGTERM->grace->SIGKILL escalation
+    # instead of aborting it in the grace window (which would leave SIGTERM-
+    # ignoring grandchildren alive). Only cancel the watchdog when it is still
+    # idle in its initial sleep (fast success/failure, elapsed < deadline).
+    if [ "$(( $(date +%s) - start_ts ))" -ge "$timeout_s" ]; then
+      wait "$watchdog_pid" 2>/dev/null || true
+    else
+      kill "$watchdog_pid" 2>/dev/null || true
+      wait "$watchdog_pid" 2>/dev/null || true
+    fi
+
+    if [ "$rc" -eq 0 ]; then
       return 0
     fi
+
     echo "playwright_install_with_deps: attempt $attempt/$attempts failed or timed out after ${timeout_s}s" >&2
+    kill_tree "$install_pid" 2>/dev/null || true   # sweep survivors on non-stall failures too
+    wait_for_dpkg_lock
     attempt=$((attempt + 1))
     if [ "$attempt" -le "$attempts" ]; then
       sleep 5

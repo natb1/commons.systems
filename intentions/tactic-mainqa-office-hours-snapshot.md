@@ -24,7 +24,8 @@ attention: null
 phase: main-qa
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-office-hours-snapshot-wire-contract
 office_hours:
   reason: needs owner machine + live credentials (Drive mount, encryption
     password, systemd) — live production verification migrated from the legacy
@@ -72,13 +73,14 @@ and the real encryption password.
    list will evolve as legacy-sourced fields — gh queue metrics, Firestore
    topicUsage — retire with their sources; verify against the then-current
    producer contract, not the 2026-07 field list.)
-5. **Enabled run + concurrency** (was 2727, PR 2722): with
-   `OFFICE_HOURS_SNAPSHOT_ENABLED=1` the producer runs detached and completes;
-   two concurrent runs serialize — the second waits or exits cleanly, no
-   corruption or duplicate writes.
+5. **Concurrency** (was 2727, PR 2722): two concurrent producer runs
+   serialize — the second waits or exits cleanly, no corruption or duplicate
+   writes. (Corrected 2026-07-25: the original item gated this on
+   `OFFICE_HOURS_SNAPSHOT_ENABLED=1`, which no longer exists anywhere in the
+   codebase; verify only the concurrency half.)
 6. **Timer freshness floor** (was 2721, PR 2718): with the dispatch chain
    stopped, the systemd timer fires on schedule, the run succeeds
-   (`systemctl status office-hours-snapshot.timer` + journal), and
+   (`systemctl status office-hours-producer.timer` + journal), and
    `computedAt` advances — the chain-liveness heartbeat.
 7. **Timer catch-up** (was 2720): after a sleep/reboot that misses a fire,
    the service runs on the next resume; `systemctl list-timers` shows past

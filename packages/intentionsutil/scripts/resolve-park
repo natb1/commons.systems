@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+# resolve-park — resolve one parked node's human disposition: clear its
+# office_hours park and dispose of the recorded PR (ratify: promote out of
+# draft; reject: close). (tactic-office-hours-pr-custody, Unit 3)
+#
+# This is the human-facing counterpart to park-node: park-node parks a node
+# and (per tactic-office-hours-pr-custody Unit 1) records execution.pr;
+# resolve-park is what a human runs once they have decided the park's
+# outcome, so the PR does not sit forever in draft (ratify) or dangling
+# (reject) after the decision is made.
+#
+# Usage: resolve-park <node-id> --ratify|--reject [note]
+#
+# PR resolution: prefer the node's recorded `execution.pr` (populated by
+# park-node --pr); when null (a node parked before that landed), fall back to
+# the reliable REST query gh_pr_list_rest --state open --head <node-id>
+# (the same query dispatch-derive-node-target uses).
+#
+# --ratify: `gh pr ready <pr>` (promote out of draft), then clear
+#           office_hours. Deliberately does NOT arm auto-merge — that stays at
+#           the natural review-complete point (transition-node's ARM_MERGE
+#           path); ratify only un-parks and de-drafts.
+# --reject: `gh pr close <pr>`, then clear office_hours.
+#
+# Race-safety: reuses park-node's fresh-origin/main + `--base` compare-and-swap
+# land verbatim, so a concurrent writer is detected and refused rather than
+# silently clobbered.
+#
+# Exit codes: 0 resolved and landed; 1 the write/graph-commit/gh call failed,
+# or the node was not parked, or no PR could be resolved; 2 usage error.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
+LIB_SH="$REPO_ROOT/.claude/skills/dispatch-propagate/scripts/lib.sh"
+
+usage() {
+  echo "usage: resolve-park <node-id> --ratify|--reject [note]" >&2
+}
+
+DISPOSITION=""
+NODE_ID=""
+NOTE=""
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ratify)
+      [[ -n "$DISPOSITION" ]] && { usage; exit 2; }
+      DISPOSITION="ratify"
+      shift
+      ;;
+    --reject)
+      [[ -n "$DISPOSITION" ]] && { usage; exit 2; }
+      DISPOSITION="reject"
+      shift
+      ;;
+    *)
+      POSITIONAL+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${POSITIONAL[@]}"
+
+NODE_ID="${1:-}"
+NOTE="${2:-}"
+if [[ -z "$NODE_ID" || -z "$DISPOSITION" || $# -gt 2 ]]; then
+  usage
+  exit 2
+fi
+
+# Refresh the LOCAL node file from origin/main BEFORE reading it — same
+# fresh-main invariant as park-node (tactic-park-node-fresh-main-clobber-fix).
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "resolve-park: could not fetch origin/main to refresh $NODE_ID" >&2
+  exit 1
+fi
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "resolve-park: intentions/$NODE_ID.md does not exist on origin/main" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$INTENTIONS_DIR/$NODE_ID.md"; then
+  echo "resolve-park: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
+fi
+
+# Read the current office_hours/execution.pr state to decide whether this is
+# a legitimate resolve (refuse a resolve on an unparked node — a stale or
+# erroneous invocation, not a fallback to paper over) and to resolve the PR.
+READ_TS="$(mktemp --suffix=.mts)" \
+  || { echo "resolve-park: could not create temp file for the state read" >&2; exit 1; }
+cat >"$READ_TS" <<'TS'
+// argv: <storeModule> <intentionsDir> <id>
+const [storePath, intentionsDir, id] = process.argv.slice(2);
+const { readNode } = await import(storePath);
+const node = readNode(intentionsDir, id);
+process.stdout.write(JSON.stringify({
+  parked: node.office_hours != null,
+  pr: node.execution && node.execution.pr != null ? node.execution.pr : null,
+}));
+TS
+STATE_JSON="$(cd "$REPO_ROOT" && npx tsx "$READ_TS" "$STORE_MODULE" "$INTENTIONS_DIR" "$NODE_ID")" || {
+  rm -f "$READ_TS"
+  echo "resolve-park: could not read node state for $NODE_ID" >&2
+  exit 1
+}
+rm -f "$READ_TS"
+
+IS_PARKED="$(printf '%s' "$STATE_JSON" | jq -r '.parked')"
+if [[ "$IS_PARKED" != "true" ]]; then
+  echo "resolve-park: $NODE_ID is not parked (office_hours is null) — refusing to resolve" >&2
+  exit 1
+fi
+
+PR="$(printf '%s' "$STATE_JSON" | jq -r '.pr // empty')"
+if [[ -z "$PR" ]]; then
+  # execution.pr is null (a node parked before Unit 1 shipped) — fall back to
+  # the reliable REST query. Sourced lazily: the common path (execution.pr
+  # already populated) never needs lib.sh at all.
+  if [[ ! -f "$LIB_SH" ]]; then
+    echo "resolve-park: lib.sh not found at $LIB_SH (needed for the null-execution.pr fallback)" >&2
+    exit 1
+  fi
+  # shellcheck source=/dev/null
+  source "$LIB_SH"
+  PR_JSON="$(gh_pr_list_rest --state open --head "$NODE_ID" --limit 1)" || {
+    echo "resolve-park: gh_pr_list_rest --head '$NODE_ID' failed" >&2
+    exit 1
+  }
+  PR="$(printf '%s' "$PR_JSON" | jq -r '.[0].number // empty')"
+fi
+if [[ -z "$PR" ]]; then
+  echo "resolve-park: could not resolve a PR for $NODE_ID (execution.pr is null and no open PR found for head '$NODE_ID')" >&2
+  exit 1
+fi
+
+case "$DISPOSITION" in
+  ratify)
+    if ! gh pr ready "$PR" >&2; then
+      echo "resolve-park: gh pr ready $PR failed" >&2
+      exit 1
+    fi
+    ;;
+  reject)
+    if ! gh pr close "$PR" >&2; then
+      echo "resolve-park: gh pr close $PR failed" >&2
+      exit 1
+    fi
+    ;;
+esac
+
+TMPTS="$(mktemp --suffix=.mts)" \
+  || { echo "resolve-park: could not create temp file for the clear write" >&2; exit 1; }
+trap 'rm -f "$TMPTS"' EXIT
+cat >"$TMPTS" <<'TS'
+// argv: <storeModule> <intentionsDir> <id>
+const [storePath, intentionsDir, id] = process.argv.slice(2);
+const { readNode, writeNode } = await import(storePath);
+const node = readNode(intentionsDir, id);
+node.office_hours = null;
+writeNode(intentionsDir, node);
+process.stderr.write(`resolve-park: cleared office_hours on ${id}\n`);
+TS
+
+if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$NODE_ID" >&2); then
+  echo "resolve-park: failed to clear office_hours for $NODE_ID" >&2
+  exit 1
+fi
+
+COMMIT_MSG="graph: resolve-park $NODE_ID ($DISPOSITION PR #$PR)"
+if [[ -n "$NOTE" ]]; then
+  COMMIT_MSG="$COMMIT_MSG - $NOTE"
+fi
+# -C "$REPO_ROOT" is mandatory, not cosmetic. This script's REPO_ROOT is derived
+# from SCRIPT_DIR (its own on-disk location), and every write above -- the
+# origin/main refresh and the office_hours clear -- targets "$INTENTIONS_DIR"
+# under THAT repo. graph-commit, by contrast, resolves its repo from -C if
+# given, else from cwd. Callers routinely invoke the main checkout's copy of
+# this script by absolute path from inside a worktree, so without -C the two
+# resolve to DIFFERENT checkouts: the edit is written to the script's repo
+# while graph-commit inspects the caller's cwd repo, finds nothing staged for
+# the id and its HEAD blob equal to origin/main, takes the benign "no new
+# changes to stage" branch, and prints "landed ... on main" / exits 0 having
+# committed nothing -- leaving the real edit dirty and unpushed in the other
+# checkout. Mirrors park-node, which already passes -C for the same reason.
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "$COMMIT_MSG" "$NODE_ID"; then
+  echo "resolve-park: graph-commit failed for $NODE_ID; office_hours clear is on disk but not landed (PR #$PR disposition ($DISPOSITION) already applied)" >&2
+  exit 1
+fi
+
+exit 0

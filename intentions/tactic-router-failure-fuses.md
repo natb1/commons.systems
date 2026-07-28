@@ -85,14 +85,25 @@ Per-node fuse (node-local gate):
   `attempts.no_progress`) — frontmatter state, written via graph-commit,
   never entering the tactic-scope hash (parity with attempts/markers/park
   writes).
-- Cap 2 (legacy CAP=2 parity): the second consecutive strike parks that
-  node to `office_hours` with the failure history (dispositions,
-  timestamps) as reason plus a next-steps recommendation (condition 6
-  contract). Any successful transition resets the counter to 0.
+- Cap 2 (legacy CAP=2 parity): the second consecutive strike converts to a
+  tracked hold, not a park. `hold-node <id> --kind no-progress` mints (or
+  reopens) that node's hold tactic — carrying the failure history
+  (dispositions, timestamps) as reason plus a next-steps recommendation
+  (condition 6 contract) — and appends `blocked_by: [<hold-id>]` to the
+  struck node in the same graph-commit. The struck node's own `office_hours`
+  stays null: per the 2026-07-25 park-taxonomy clarification
+  (`tactic-mechanical-park-producers`), a mechanical hold is a `blocked_by`
+  edge against a tracked fix tactic, never a park on the work item; the
+  born-parked hold tactic is what enters the office-hours queue. Any
+  successful transition resets the counter to 0.
 - Non-strikes: the start-gate `skipped` disposition (correct yield to a
   freeze/park/phase change) and a worker that parked its own node.
-- Scope: a tripped node fuse blocks only that node — blocked on
-  office-hours like any parked node; selection elsewhere proceeds.
+- Scope: a tripped node fuse blocks only that node — held on a `blocked_by`
+  edge against its hold tactic, exactly like any node with an unresolved
+  blocker; selection elsewhere proceeds. Resolving the hold tactic (phase →
+  done, then prune, which repairs the inbound edge) re-admits the node on
+  the very next tick with no write on the node itself (`blockersComplete`,
+  `packages/intentionsutil/src/router.ts`).
 
 Systemic breaker (the only global gate):
 

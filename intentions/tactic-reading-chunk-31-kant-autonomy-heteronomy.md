@@ -38,6 +38,7 @@ office_hours:
     III's autonomy/heteronomy ground the capture-as-heteronomy reading?"
   since: 2026-07-11
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:
