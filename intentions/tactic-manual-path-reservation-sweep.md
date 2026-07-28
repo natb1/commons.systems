@@ -47,7 +47,122 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: planner scope-deviation on opus-fixable residue — PR body's
+    stale test-suite count (body 3046/3046, tree 3183/3183) can only be fixed by
+    editing PR #2964's GitHub description text, which is outside the auto-fix
+    lane's working-tree scope; a permanent escalation, not attempt-cap
+    exhaustion"
+  since: 2026-07-28
+  recommendation: |-
+    ## Recommendation — PR #2964 office-hours park
+
+    **Take option 1 now, option 2 as the durable fix. Skip option 3.**
+
+    The code change is correct and the suite is green. The only thing standing between
+    this PR and merge is one line of prose in its GitHub description. Fix it by hand,
+    then remove the class of finding rather than building a new write path for it.
+
+    ### Why not option 3
+
+    Giving the qa-fix auto-fix lane a `gh pr edit` step would hand an autonomous lane
+    an untracked, un-reviewed write channel (PR description text lands with no diff,
+    no CI, no review) to serve exactly one recurring finding — and that finding only
+    exists because triage asks for an unstable assertion in the first place. Fixing
+    the input is cheaper and smaller than fixing the pipeline. The `/implement-unit`
+    boundary — "auto-fixes land as working-tree commits" — is a good boundary; the
+    scope-deviation escape did the right thing by refusing.
+
+    ### Step 1 — unblock #2964 (do this regardless)
+
+    The count in the body is unstable by construction: `test-dispatch-scripts.sh` is a
+    shared file that grows from unrelated concurrent PRs, so any number written there
+    is stale within days. Drop the number instead of refreshing it — refreshing just
+    restarts the clock.
+
+    From the worktree, with `dangerouslyDisableSandbox: true` on every `gh` call:
+
+    ```bash
+    cd /home/n8/natb1/commons.systems/.claude/worktrees/tactic-manual-path-reservation-sweep
+    gh pr view 2964 --json body --jq .body > tmp/pr-2964-body.md
+    ```
+
+    Then edit the last line of `tmp/pr-2964-body.md`, replacing:
+
+    ```
+    - `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` — 3046/3046 passed.
+    ```
+
+    with:
+
+    ```
+    - `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` — full suite passes (exit 0).
+    ```
+
+    Apply and confirm no count survives:
+
+    ```bash
+    gh pr edit 2964 --body-file tmp/pr-2964-body.md
+    gh pr view 2964 --json body --jq .body | grep -n 'passed'
+    ```
+
+    The `grep` should show only the countless line. Nothing else in the body changes —
+    the Problem and Change sections are accurate and there are no `Closes` lines to
+    disturb (this is a graph-node-lane PR).
+
+    ### Step 2 — clear the park and let qa re-run
+
+    The node stays at phase `qa`; clearing the park just returns it to the qa lane,
+    where a fresh pass finds no count to compare and the residue item is gone for good.
+    Run the **worktree-local** script and pass `-C` explicitly — running the copy from
+    another checkout, or omitting `-C`, exits 0 while committing nothing:
+
+    ```bash
+    packages/intentionsutil/scripts/clear-park \
+      tactic-manual-path-reservation-sweep \
+      "PR body test-count assertion removed by hand; residue item no longer applies"
+    ```
+
+    Verify it actually landed before walking away:
+
+    ```bash
+    git fetch origin main
+    git show origin/main:intentions/tactic-manual-path-reservation-sweep.md | grep -n 'office_hours'
+    ```
+
+    The unrelated `## needs-main residue` item 16 (multi-day live=N confirmation) stays
+    as-is — it is a planned deferral, not part of this escalation, and should ride the
+    normal main-qa path after merge.
+
+    ### Step 3 — kill the class (the actual fix)
+
+    Two small edits, both worth recording as one tactic node rather than doing ad hoc:
+
+    1. **Triage may not ask for it.** In
+       `.claude/skills/qa-fix/references/triage-subagent.md`, add a classification
+       constraint: an item is only `script-verifiable` when its remediation lands in a
+       tracked file. A finding whose only fix is editing PR description text, labels,
+       or other GitHub-side metadata classifies as `needs-human-judgment`. This stops
+       the Opus fix-planner from being handed work it is structurally unable to do,
+       and converts three wasted qa-fix passes into one clean escalation on the first
+       pass.
+
+    2. **The convention that produced the bad assertion.** PR-body `## Verification`
+       sections are free prose written at implement time
+       (`.claude/skills/implement/SKILL.md`, Step 4 "Open the draft PR", ~line 377) —
+       nothing mandates the count, a session just chose one. Add a line there: cite the
+       suite and its exit status, never an assertion count, for suites in shared files
+       that unrelated PRs extend. Note that the tactic node's own ` ```verify ` block
+       already gets this right — `intentions/tactic-manual-path-reservation-sweep.md`
+       line 114 runs the script bare with no count — so the plan schema is fine and only
+       the PR-body prose convention needs the guardrail.
+
+    ### Cost of doing nothing
+
+    Every future PR that writes an exact suite count into its body against a shared
+    growing test file will burn its full qa-fix attempt budget and land in this same
+    queue. Step 3 costs one small PR; skipping it costs a recurring office-hours item.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

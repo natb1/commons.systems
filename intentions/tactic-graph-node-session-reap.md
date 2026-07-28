@@ -54,7 +54,56 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-main: needs-main residue item #10 (\"Real-daemon self-close and
+    interactive-session safety observed in production\") requires observing
+    `claude agents --json --all` / `claude rm` against the live local Claude
+    daemon and real node-worker session lifecycle -- not a browser-observable
+    outcome. The residue's url_path is the literal string \"current\", not a
+    real page, and its own finding already flags this as non-assertable in a
+    sandboxed session. Merged source PR #2922 (merged 2026-07-26T05:51:57Z) is
+    live, so the fix is deployed; what remains is a human daemon-level check,
+    which Claude-in-Chrome cannot perform."
+  since: 2026-07-28
+  recommendation: >-
+    What to verify and how:
+
+
+    1. This session (job for node `tactic-graph-node-session-reap`, background
+    job id derivable from this `$CLAUDE_JOB_DIR`) is itself a live example of
+    Unit 1's self-close. After this qa-main run parks (cannot-verify) and its
+    Stop hook fires, run `claude agents --json --all` (dangerouslyDisableSandbox
+    required, per `.claude/rules/sandbox.md`) and confirm this job's entry is
+    gone -- proving the Stop-hook self-close (`dispatch-self-close`) reaped it
+    on a parked exit, not just a clean-advance exit.
+
+
+    2. Separately confirm the node's `office_hours` field landed on
+    `intentions/tactic-graph-node-session-reap.md` at origin/main BEFORE the job
+    entry disappeared (durable-before-teardown ordering) -- `git show
+    origin/main:intentions/tactic-graph-node-session-reap.md` should show
+    `office_hours: {reason, recommendation, since}` populated once `park-node`
+    runs.
+
+
+    3. To confirm the clean-advance path too (not just the park path), pick or
+    wait for a different node-worker job that completes a phase cleanly (no
+    office-hours park) and check `claude agents --json --all` before/after its
+    Stop hook fires -- its job entry should also disappear.
+
+
+    4. Confirm an interactive (non-`--bg`) session, e.g. an `/align` or
+    `/office-hours` session with no `CLAUDE_JOB_DIR` set, is never auto-reaped
+    by the same Stop hook -- the `CLAUDE_JOB_DIR`-presence gate in
+    `dispatch-self-close` should make it a no-op there.
+
+
+    If all four hold, this residue item is satisfied and this tactic
+    (`tactic-graph-node-session-reap`, merged PR #2922) can be manually
+    transitioned `main-qa -> done` via `transition-node`. If any fail, file a
+    bug against `dispatch-stop.sh` / `dispatch-self-close` rather than reopening
+    this already-merged PR.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

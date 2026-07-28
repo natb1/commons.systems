@@ -7,7 +7,7 @@ statement: graph-commit runs a full CI-stamped landing cycle for a write that is
   already-stamped SHA, converting a no-op write into a false 'main busy' failure
   that fails the whole dispatch tick
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "(Recorded 2026-07-28 /align-strategy round.) Diagnosed live from the
   2026-07-28 manual dispatch tick that exited 1. Chain: tactic-sync-reader-skill
@@ -46,7 +46,12 @@ rationale: "(Recorded 2026-07-28 /align-strategy round.) Diagnosed live from the
   origin/graph-main under a validate-only gate), which removes await_checks and
   this whole defect class; this node exists because that is a large in-flight
   change and this failure fails ticks deterministically today, at roughly 15
-  wasted minutes per occurrence."
+  wasted minutes per occurrence. Reconciled 2026-07-28 /align-tactics finalize
+  round: verified still current against origin/main a1eb6c16 (graph-commit
+  unchanged at 1505 lines, same line numbers); no material drift found. Body
+  re-verified and updated with current line citations; three immaterial premises
+  the plan surfaced are recorded in this node's own clarifications array below
+  (a tactic-target session may not edit the serving strategy's frontmatter)."
 reading: null
 gap: null
 serves:
@@ -73,6 +78,70 @@ clarifications:
       than that rotation delivers, the direct route is an office-hours or
       interactive session against this node rather than a higher boost — raising
       the number changes nothing while the node remains a draft."
+  - question: Whether the fix must also short-circuit graph-commit's 'no new changes
+      to stage — landing current HEAD' fallback (graph-commit:1476) to skip the
+      scratch-push + await_checks stamp cycle for a HEAD==origin/main no-op, or
+      whether patching await_checks's counting gate alone is sufficient. The
+      gather evidence flags this as 'a separate scope decision worth deciding
+      explicitly in the plan'; neither clarification 3's recorded invariant nor
+      any condition speaks to it.
+    answer: "(Recorded 2026-07-28 /align-tactics round.) Patching await_checks's
+      success-side counting is sufficient on its own to clear the no-op false
+      failure; short-circuiting the 'landing current HEAD' fallback is a cost
+      optimization, not a correctness requirement. Traced end-to-end at HEAD:
+      with a distinct-context gate the already-stamped SHA passes on its
+      existing green rows, and try_land's final `git push origin <sha>:main`
+      (graph-commit:980) is a benign no-op exiting 0 when that SHA already is
+      origin/main's tip, so try_land returns 0 and the write reports 'landed'.
+      Scope for tactic-graph-commit-noop-landing-false-failure is therefore
+      bounded to the counting gate plus a regression case in the existing
+      fixture/shim harness (test-graph-commit.sh:219-287, which runs
+      graph-commit's REAL --jq program and is a required check via
+      .github/workflows/unit-tests.yml:211). Skipping the scratch push and poll
+      entirely for a HEAD==origin/main no-op — saving roughly one stamp cycle
+      per no-op write — is deliberately NOT in scope, since
+      tactic-graph-ref-split deletes the whole stamp cycle."
+  - question: How the distinct-context gate treats rows that are NOT from the
+      current run — both the pending rows of the freshly-fired scratch-push run
+      and any stale concluded-failure row left by an earlier re-run.
+      Clarification 3's recorded invariant ('counts DISTINCT required contexts
+      green, never check-run rows') governs the success side only and is silent
+      on both.
+    answer: "(Recorded 2026-07-28 /align-tactics round, refining the
+      distinct-context invariant recorded with the amendment to clarification
+      80.) The distinct-context gate is evaluated over ALL check-run rows on the
+      SHA, not the newest run's rows: on an already-stamped SHA it passes on the
+      prior run's green rows while the scratch push's freshly-fired run is still
+      pending. That is sound precisely because the SHA is content-identical — a
+      re-run of identical content cannot yield a different verdict — and it is
+      why the fix need not wait for the new run to conclude. The failure side is
+      unchanged and stays unchanged: ANY row among the four required names
+      carrying a concluded non-success is fatal (rc 2 / die,
+      graph-commit:613-616), so a stale red row left by a re-run flake still
+      kills a landing on that SHA. Preserving that semantics is the recorded
+      scope; relaxing it to 'the latest row per required context wins' is flake
+      tolerance the author has not ratified and must not ride along with this
+      fix."
+  - question: That the strategy's signal path is currently un-validated in substance
+      even though one non-draft child carries a validates edge to it — i.e. that
+      the edge is stale relative to the 2026-07-28 amended success_signal. The
+      rationale implies it ('now HISTORY, not pending work') but no
+      clarification records the consequence for eligibility.
+    answer: "(Recorded 2026-07-28 /align-tactics round.)
+      tactic-legacy-router-removal (phase done, PR #2960) is the ONLY node in
+      the corpus carrying `validates: [strategy-graph-native-dispatch]` —
+      verified by scanning every intentions/tactic-*.md validates block — but
+      that edge was authored against the migration-completion threshold this
+      strategy's rationale now marks as superseded HISTORY. Nothing validates
+      the amended success_signal (the owned path carrying tactics through the
+      full lifecycle with a bounded machinery-defect population, sensed via
+      align-tactics-census.ts plus the selection log). Consequence: an
+      eligibility check that reads the signal-path edge alone will see this
+      strategy as already-validated and refuse to decompose — a false negative,
+      since the amended signal is structurally unvalidated. Resolving it
+      (re-pointing or clearing the stale edge, or minting a tactic that actually
+      produces the amended signal's reading) is an author-lane record decision,
+      not something an autonomous round should write."
 tooling_goals: []
 success_signal: null
 attention:
@@ -92,7 +161,7 @@ attention:
     target. Justification: this defect fails whole dispatch ticks
     deterministically and misreports its own cause, so every occurrence costs
     both the tick and the diagnosis time."
-phase: null
+phase: implement
 execution: null
 validates: []
 blocked_by: []
@@ -102,132 +171,238 @@ rounds: null
 attributes: {}
 ---
 
-# graph-commit turns a no-op write into an unlandable CI-stamp cycle, then reports it as "main busy"
-
 ## Context
 
-`packages/intentionsutil/scripts/graph-commit` is the sole write primitive that
-lands intention-node edits on `main`. Its landing path has two independent
-defects that compose into a deterministic tick failure. Both were observed live
-on 2026-07-28 and confirmed against the GitHub API and the script source at
-`origin/main` (29952532).
+`packages/intentionsutil/scripts/graph-commit` is the sole write primitive that lands intention-node edits on `main`. Two independent defects in its landing path compose into a deterministic dispatch-tick failure, observed live on 2026-07-28 and confirmed against the GitHub API and the script at `origin/main` (`29952532`):
 
-## Defect 1 — a no-op write still buys a full landing cycle
+1. **A no-op write still buys a full landing cycle.** When nothing is staged for any target id, `main()` prints `no new changes to stage … landing current HEAD` and falls through to `land` (`packages/intentionsutil/scripts/graph-commit:1477`). PR #2978 hardened that branch to `die` on a mis-pointed `-C` (differing blob, nothing staged), but the surviving branch its own comment calls "a trivial no-op push when HEAD == origin/main" is not trivial: `land` claims the landing lock, pushes a `graph/**` scratch branch, polls `await_checks`, then pushes to `main`. When `HEAD == origin/main` there is nothing to push, so the entire cycle is pure cost.
+2. **The required-check gate counts check-run ROWS, not distinct contexts.** `await_checks` (`packages/intentionsutil/scripts/graph-commit:583-630`) counts rows whose `.name` is one of the four required contexts and gates on `[[ "$nsucc" -eq 4 ]]` (line 610). A SHA accumulates one row per context **per workflow run**, and the same SHA is re-stamped every time it is pushed to another `graph/**` scratch branch or to `main`. Observed on `e81ae2f5c58bd2634b047e86c534e1867684ede7`: 3 successful runs of each of `acceptance`, `preview-and-smoke`, `lint`, `unit-tests` — 12 green rows, 0 failed. `12 != 4`, `nfail == 0`, so neither the success path nor the deterministic exit-2 path could ever fire. The SHA became permanently unlandable.
+3. **The diagnostic names a cause that was not present.** After five attempts × 180 s, `try_land` reports `main busy (landing-lock contention or required checks never stamped green)` (`packages/intentionsutil/scripts/graph-commit:986`). Neither held — no competing writer, every required check green. The message must report the per-context state actually observed.
 
-When nothing is staged for any target id, `graph-commit` prints
-`no new changes to stage ... landing current HEAD` (graph-commit:1476) and falls
-through to `land`. PR #2978 (merged 2026-07-28 as 29952532) hardened this branch
-to `die` when a target id's local blob differs from `origin/main` — the
-mis-pointed `-C` case. What survives is the branch its own comment
-(graph-commit:1457-1459) describes as benign:
+The incident chain: `tactic-sync-reader-skill` provisioned exit 13 → `dispatch-graph-execute` called `demote-node-to-implement` → the node was **already** at `phase: implement`, so the write staged nothing → defect 1 sent a pure no-op into a landing cycle on an already-stamped SHA → defect 2 made that cycle unpassable → defect 3 reported contention → `demote-node-to-implement` rolled back and printed `failed … demote-failed` → `dispatch-graph-execute:320` (`(( FAILURES == 0 )) && exit 0 || exit 1`) failed the tick. The correct outcome for the whole chain was success: the node was already in the target state.
 
-> already landed out-of-band, or a prior attempt committed but did not push →
-> land the current HEAD (a trivial no-op push when HEAD == origin/main)
+**Greenfield vs. this change.** The ideal design deletes the mechanism: `tactic-graph-ref-split` moves the graph to `origin/graph-main` under a validate-only gate, removing the CI stamp, `await_checks`, and this whole defect class. That is a large in-flight change. This tactic is **interim by construction** — a bounded two-unit repair of the existing landing path, scoped to keep the current `land`/`await_checks` architecture intact. It should be dropped if `tactic-graph-ref-split` lands first. Do **not** rewrite the landing/stamp mechanism here, and do **not** raise `GRAPH_COMMIT_MAX_ATTEMPTS` (every retry re-observes the same duplicate rows).
 
-It is not trivial. `land` runs the whole cycle: claim the landing lock, push a
-`graph/**` scratch branch, poll `await_checks` for the four required contexts,
-then push to `main`. When `HEAD == origin/main` there is by definition nothing to
-push, so that entire cycle is pure cost — and, per Defect 2, cost that cannot
-succeed.
+Intended outcome: a no-op write exits 0 immediately without a stamp cycle; a genuinely-landable SHA lands regardless of how many prior runs stamped it; and when checks really are not green, the error names which contexts are green, pending, absent, or failed.
 
-The two cases the comment lumps together are mechanically distinguishable:
+---
 
-- `HEAD == FETCH_HEAD (origin/main)` — nothing to push. A genuine no-op; the
-  correct outcome is immediate success without entering `land`.
-- `HEAD != FETCH_HEAD` — a prior attempt committed locally but did not push.
-  This one genuinely needs `land`, and is the case the fallback exists for.
+## Unit 1 — `await_checks`: gate on distinct required contexts, and report per-context state
 
-## Defect 2 — the required-check gate counts rows, not contexts
+### Scope
 
-`await_checks` (graph-commit:584-630) counts check-run rows whose `name` matches
-one of the four required contexts, then gates on exact equality:
+Files that change:
+
+- `packages/intentionsutil/scripts/graph-commit`
+- `packages/intentionsutil/scripts/test-graph-commit.sh`
+
+**1a. Add a module-level global for the last observed per-context state.**
+
+Declare it alongside the other landing globals (`packages/intentionsutil/scripts/graph-commit:157-198`, e.g. next to `SCRATCH_BRANCH`/`SCRATCH_PUSHED` at lines 160-161), with a short comment: written by `await_checks` on every successful poll, read by `try_land`'s retry and terminal messages so a landing failure reports the state actually observed rather than a guessed cause.
 
 ```sh
-if [[ "$nsucc" -eq 4 ]]; then return 0
+# LAST_CHECK_DETAIL — a human-readable per-context snapshot of the most recent
+# successful check-run poll (e.g. "acceptance=success(3 rows), lint=pending(1
+# row), ..."). Written by await_checks(), read by try_land()'s retry and
+# terminal messages so a failed landing names the state it actually observed
+# instead of guessing at contention (Defect 3).
+LAST_CHECK_DETAIL=""
 ```
 
-`nsucc` is a count of *rows*, not of distinct contexts. A commit accumulates one
-row per context **per workflow run**, and the same SHA is re-stamped every time
-it is pushed to another `graph/**` scratch branch or to `main`. Once more than
-one run exists, `nsucc` is 8, 12, 16 … and the equality can never hold — the SHA
-becomes permanently unlandable.
+**1b. Replace the row-counting `--jq` program in `await_checks`** (`packages/intentionsutil/scripts/graph-commit:598-608`). The new program emits **one line per required context**, in a fixed order, shaped `<name> <latest-conclusion> <row-count>`, where `latest-conclusion` is the conclusion of the newest run for that name (`pending` when it is still `null`) and a name with no rows at all emits `absent 0`:
 
-Observed on `e81ae2f5c58bd2634b047e86c534e1867684ede7`:
+```jq
+["acceptance","preview-and-smoke","lint","unit-tests"] as $req
+| (.check_runs // []) as $all
+| $req[] as $name
+| [$all[] | select(.name == $name)] as $rows
+| if ($rows | length) == 0 then "\($name) absent 0"
+  else ($rows | max_by([(.started_at // ""), (.id // 0)])) as $latest
+    | "\($name) \($latest.conclusion // "pending") \($rows | length)"
+  end
+```
 
-| context | successful runs |
-|---|---|
-| `acceptance` | 3 |
-| `preview-and-smoke` | 3 |
-| `lint` | 3 |
-| `unit-tests` | 3 |
+This program was validated during planning against the harness's existing fixtures and against new duplicate-row / partial-duplicate / stale-failure fixtures; outputs are given under Verification. Keep it as the single `--jq` argv element passed to `gh api "repos/{owner}/{repo}/commits/$sha/check-runs"` — do **not** introduce an `echo "$VAR" | jq` round-trip (`.claude/rules/shell-json.md`), and do **not** add a second query path.
 
-Twelve green, zero failed, `nfail == 0` so the deterministic exit-2 path never
-fired either. The run polled 180s, retried, and repeated five times — attempts
-2-5 pushed nothing (`Everything up-to-date`), so they were guaranteed to observe
-the same 12.
+Ordering key rationale, to be captured in the comment: check-run `id` is monotonic per repository and `started_at` is ISO-8601 (lexicographically sortable), so `max_by([started_at, id])` identifies the newest run for a name. Keying off `.conclusion` alone (`null` = pending) is retained deliberately — GitHub sometimes leaves `status` stuck at `in_progress` after `conclusion` is populated (the #2457 desync the current comment at lines 591-597 documents). Extra runs such as CodeQL `Analyze (*)` and the fast path's `guard` job stay excluded by the name filter.
 
-Relaxing the gate to `-ge 4` would be wrong: with duplicate rows, four green
-`lint` rows and zero `acceptance` rows also satisfies it. The gate must count
-**distinct context names** that are green, taking the latest run per name, and
-require all four present.
+**1c. Replace the counting/gating block** (`packages/intentionsutil/scripts/graph-commit:606-616`). Aggregate the four lines in bash:
 
-## Defect 3 — the diagnostic names a cause that was not present
+```sh
+      gh_fails=0
+      ngreen=0; nbad=0; detail=""
+      while read -r cname cconc crows; do
+        [[ -n "$cname" ]] || continue
+        detail+="${detail:+, }$cname=$cconc(${crows} row(s))"
+        case "$cconc" in
+          success)         ngreen=$((ngreen + 1)) ;;
+          pending|absent)  ;;
+          *)               nbad=$((nbad + 1)) ;;
+        esac
+      done <<<"$counts"
+      LAST_CHECK_DETAIL="$detail"
+      if [[ "$ngreen" -eq 4 ]]; then
+        return 0
+      fi
+      if [[ "$nbad" -gt 0 ]]; then
+        echo "graph-commit: a required check concluded non-success for $sha — $detail" >&2
+        return 2
+      fi
+```
 
-The terminal error reads `main busy (landing-lock contention or required checks
-never stamped green)`. Neither held: no competing writer, and every required
-check was green. The message should report the per-context state it actually
-observed (which names are green, pending, or failed, and how many rows each has),
-so this signature is not misread as contention — see the amended clarification 80
-on `strategy-graph-native-dispatch`.
+Notes the implementer must respect:
 
-## How the three compose into a tick failure
+- The script runs under `set -euo pipefail` (`packages/intentionsutil/scripts/graph-commit:86`). Use `x=$((x + 1))`, never `(( x++ ))` — the latter returns 1 when the pre-increment value is 0 and would kill the script.
+- Update the `local` declaration at line 585 (`local deadline counts nsucc nfail gh_stderr gh_fails=0`) to the variables actually used (`deadline counts ngreen nbad cname cconc crows detail gh_stderr gh_fails=0`), and drop the now-dead `nsucc=0` initialization at line 590.
+- The `[[ -n "$counts" ]] || counts="0 0"` fallback at line 607 becomes dead and must be removed: the new program always emits four lines (`(.check_runs // [])` handles a null/absent array, and a missing name emits `absent 0`). If the jq program itself errors, `gh` exits non-zero and the existing 3-consecutive-failure `die` path handles it — that path is unchanged.
+- **Preserve the 0/1/2 return-code contract exactly** as documented at `packages/intentionsutil/scripts/graph-commit:566-582`: 0 = all four green, 1 = timeout (transient, caller retries), 2 = a required check CONCLUDED non-success (deterministic, caller must not retry). No new return codes, no new signalling. Rewrite the prose of that doc block to describe distinct-context-with-latest-run-per-name counting instead of row counting, and keep the "dies after 3 consecutive gh failures" paragraph verbatim in substance.
+- Preserve the substrings `concluded non-success` (line 614) and `required checks not green within` (line 626) — the existing harness greps them.
 
-1. `tactic-sync-reader-skill` provisioned exit 13 (scope-stale).
-2. `dispatch-graph-execute` case 13 called `demote-node-to-implement`.
-3. The node was **already** at `phase: implement`, so the write staged nothing.
-4. Defect 1 sent a pure no-op into a landing cycle on an already-stamped SHA.
-5. Defect 2 made that cycle unpassable; 5 x 180s burned.
-6. Defect 3 reported contention.
-7. `demote-node-to-implement` rolled back and printed
-   `failed tactic-sync-reader-skill demote-failed`.
-8. `dispatch-graph-execute:320` (`(( FAILURES == 0 )) && exit 0 || exit 1`)
-   exited 1, failing the tick.
+**1d. Update the timeout message** (`packages/intentionsutil/scripts/graph-commit:626`) to append `LAST_CHECK_DETAIL`, e.g.:
 
-Note step 3: the node was already in the target state, so the correct outcome for
-the whole chain was success.
+```sh
+      echo "graph-commit: required checks not green within ${CHECK_TIMEOUT_SECONDS}s for $sha — ${LAST_CHECK_DETAIL:-<no successful poll>}" >&2
+```
 
-## Suggested shape (two units — for /align-tactics to plan, not a plan)
+**1e. Update `try_land`'s two failure messages** so the false "main busy" diagnosis (Defect 3) is replaced by observed state:
 
-- **Unit 1 — no-op guard.** In the nothing-staged branch, after #2978's existing
-  per-id blob comparison, return success without entering `land` when
-  `HEAD == FETCH_HEAD`. Preserve the existing behaviour when they differ.
-- **Unit 2 — distinct-context gate.** Rewrite `await_checks`'s counting to
-  reduce check runs to one latest row per required context name before counting
-  green, and report per-context state in both the timeout and the concluded
-  non-success messages.
+- Line 967 (`checks did not go green for $sha on attempt …`) — append `— ${LAST_CHECK_DETAIL:-<no successful poll>}`.
+- Line 986, the terminal message. **Keep the substrings `could not land on main after $ran/$MAX_PUSH_ATTEMPTS attempts` and `retry later`** (harness cases 5 and 7 grep them), and replace the speculative parenthetical with the observed state. Target shape:
+
+```sh
+  echo "error: graph-commit: could not land on main after $ran/$MAX_PUSH_ATTEMPTS attempts — last observed required-check state: ${LAST_CHECK_DETAIL:-<no successful poll>} (or landing-lock contention if no poll ran); retry later" >&2
+```
+
+**1f. Harness coverage** in `packages/intentionsutil/scripts/test-graph-commit.sh`. Reuse the existing fixture + gh-shim mechanism — the shim at lines 261-287 extracts graph-commit's **real** `--jq` argv and runs it with real `jq` against `$GC_FIXTURE_DIR/<mode>.json`, so any new fixture exercises the real filter end-to-end. Do not add a second shim or a second extraction path.
+
+Add three fixtures next to the existing four (`packages/intentionsutil/scripts/test-graph-commit.sh:219-259`). Existing fixtures stay unchanged (one row per name ⇒ `max_by` is trivially that row):
+
+- `duplicate-rows.json` — two rows per required name, both `completed`/`success`, with distinct `id` and `started_at` (the incident shape: a prior stamp plus a fresh one), plus an unrelated `CodeQL`-named failing row to prove the name filter still excludes it.
+- `partial-duplicate.json` — four rows total but only three distinct names green: two `lint` successes, one `preview-and-smoke`, one `unit-tests`, and **no `acceptance` row**. This is the regression guard against naively relaxing the gate to `-ge 4`.
+- `stale-fail-then-green.json` — for `acceptance`, an older row with `conclusion: "failure"` and a newer row with `conclusion: "success"` (higher `id`/`started_at`); single green rows for the other three.
+
+Add three cases after Case 32 (`packages/intentionsutil/scripts/test-graph-commit.sh:1185-1200`) and **before** the final "No scratch branches left behind anywhere" check at the file tail. Use the existing helpers `set_mode`, `make_clone`, `edit_line`, `run_gc`, `origin_show`, `origin_sha`, `sync_clone`, `gh_calls`, `ok`, `no` (defined at lines 127-129 and 433-466); use the `GC_POLL`/`GC_TIMEOUT`/`GC_ATTEMPTS` knobs on `run_gc` to keep the failing case fast — no new timing plumbing:
+
+- **Case 33 — duplicate green rows land.** `set_mode duplicate-rows`; a fresh clone edits a new id; `run_gc` must exit 0, the edit must be visible via `origin_show`, and the output must not contain `retry later`. This is the direct regression for the incident.
+- **Case 34 — duplicated rows do not paper over a missing context.** `set_mode partial-duplicate`; run with `GC_POLL=0 GC_TIMEOUT=1 GC_ATTEMPTS=1`; must exit 1, must **not** land the edit on `main` (`origin_sha` unchanged), and the output must contain `acceptance=absent` — proving both the distinct-context gate and the Defect-3 diagnostic. Follow the existing convention of `sync_clone` afterwards to drop the never-landed local commit (see Case 5, line 555).
+- **Case 35 — a stale failed row superseded by a newer success lands.** `set_mode stale-fail-then-green`; must exit 0, land the edit, and must **not** print `concluded non-success` (the latest run per name is authoritative).
+
+Extend the header "Covers:" list (`packages/intentionsutil/scripts/test-graph-commit.sh:12-59`) with entries 33-35 in the existing style.
+
+**Out of scope for this unit:** any change to `land()`/`try_land()`'s retry structure, lock handling, or attempt counts; centralizing the four required-context names into a shared constant/array (they currently live inline in graph-commit's jq program and are duplicated as JSON literals in `packages/intentionsutil/scripts/test-graph-commit.sh` and `packages/intentionsutil/scripts/test-park-node.sh:213-216` — verified in sync with `.github/workflows/graph-fast-path.yml:34-55` job names today, and left that way deliberately); any change to `.github/workflows/graph-fast-path.yml`; the no-op short-circuit (Unit 2).
+
+### Recommended model
+
+`opus` — the counting semantics are subtle (latest-run-per-name vs. any-green, pending-vs-absent classification, preserving the 0/1/2 contract and the grepped message substrings under `set -e`), and a wrong call here silently re-arms an unlandable-SHA failure mode.
+
+---
+
+## Unit 2 — short-circuit the landing cycle when the write is a genuine no-op
+
+### Scope
+
+Files that change:
+
+- `packages/intentionsutil/scripts/graph-commit`
+- `packages/intentionsutil/scripts/test-graph-commit.sh`
+
+**2a. Add the no-op guard** in `main()`'s nothing-staged branch, **after** PR #2978's per-id blob comparison loop (`packages/intentionsutil/scripts/graph-commit:1468-1476`) and **before** the existing `no new changes to stage … landing current HEAD` echo at line 1477:
+
+```sh
+    # Nothing is staged AND every id already matches origin/main. If HEAD is
+    # also exactly origin/main there is, by definition, nothing to push: the
+    # whole land() cycle (landing lock, graph/** scratch push, await_checks,
+    # push to main) is pure cost on a SHA that already carries its checks.
+    # Exit success here rather than buying a stamp cycle that cannot change
+    # main (tactic-graph-commit-noop-landing-false-failure, Defect 1).
+    local head_sha main_sha
+    head_sha="$(git rev-parse HEAD)"
+    main_sha="$(git rev-parse FETCH_HEAD)"
+    if [[ "$head_sha" == "$main_sha" ]]; then
+      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} and HEAD is already origin/main (${head_sha:0:8}) — nothing to push; skipping the landing cycle" >&2
+      exit 0
+    fi
+```
+
+Requirements the implementer must respect:
+
+- Use the `FETCH_HEAD` already populated by `ensure_intentions_only_base()`'s fetch (`packages/intentionsutil/scripts/graph-commit:496-499`, called at line 1450) — **do not fetch again**, exactly as the comment at lines 1465-1467 instructs for the blob comparison directly above.
+- Keep the substring `no new changes to stage` in the new message: harness cases 2 and 28 grep it.
+- Do **not** print `landed … on main` on this path — nothing was landed, and a false "landed" claim is the failure mode PR #2978 removed. Callers use the exit status only (`packages/intentionsutil/scripts/park-node:263` branches on `if ! …graph-commit …`; no caller greps graph-commit's output).
+- `exit 0` here runs the `cleanup` EXIT trap installed at line 1401, which restores `ORIG_HEAD` when `ensure_intentions_only_base()` moved a far-ahead worktree onto origin/main and removes `SNAP_DIR`. `SCRATCH_PUSHED` is still 0 and `LOCK_HELD` still 0, so no scratch branch and no lock are involved. Do not add bespoke cleanup.
+- Preserve the existing line-1477 message and fall-through for the `HEAD != FETCH_HEAD` case (a prior attempt committed locally but did not push) — that case genuinely needs `land`. Reword line 1477 so it no longer claims to cover the "nothing to commit" case that now exits above it.
+
+**2b. Harness coverage** in `packages/intentionsutil/scripts/test-graph-commit.sh`:
+
+- **Strengthen Case 2** (idempotent re-run on a clean tree, lines 483-491): call `set_mode green` immediately before the invocation so `gh_calls` is reset (`set_mode` truncates the call log, line 434), then additionally assert `gh_calls` is `0` and `scratch_refs` is empty — i.e. the no-op made no GitHub poll and pushed no scratch branch. Keep the existing rc-0 / unchanged-`origin_sha` / `no new changes to stage` assertions.
+- **Strengthen Case 28** (fail-loud guard, benign equal-blob, lines 1065-1083): same addition — `set_mode green` before the run, then assert `gh_calls` is `0` alongside the existing rc-0 / `no new changes to stage` / no-`mis-pointed` / unchanged-`origin_sha` assertions. This is the exact incident shape (a clone synced bit-for-bit to origin/main's tip), so it is the primary regression guard.
+- **Add Case 36 — a no-op invocation still exits 0 when the check-run state is unusable.** `set_mode hard-fail` (the shim exits 1 on every `gh` call, lines 268-271), a clone synced exactly to origin/main's tip, invoke `run_gc` on an existing id with nothing edited: must exit 0, must not contain `polling failed`, and `gh_calls` must be `0` — proving the no-op path never reaches the poller at all. Place it after Case 35 and before the final "No scratch branches left behind anywhere" check.
+- Extend the header "Covers:" list with entry 36 and amend entries 2 and 28 to mention the zero-poll assertion.
+
+**Out of scope for this unit:** the `HEAD` *behind* `origin/main` with nothing staged case (no local commits to push). It is deliberately left on the existing `land` path — the node body specifies preserving existing behaviour when `HEAD != FETCH_HEAD`, and after Unit 1 that path is cheap: the rebase fast-forwards, the scratch push re-stamps, and `await_checks` returns on its first poll. Also out of scope: any change to `id_files_dirty()` (lines 531-538), to `ensure_intentions_only_base()`, to the #2978 mis-pointed-`-C` `die`, or to `land()`/`try_land()`.
+
+### Dependencies
+
+Unit 1. Both units edit `packages/intentionsutil/scripts/graph-commit` and `packages/intentionsutil/scripts/test-graph-commit.sh`; sequencing them avoids a conflict, and Case 34's assertion on the new diagnostic string depends on Unit 1 having landed.
+
+### Recommended model
+
+`sonnet` — a well-specified guard with a fixed diff shape (one bounded insertion plus explicit test-assertion additions), no design decisions left open.
+
+---
+
+## Reuse
+
+- `packages/intentionsutil/scripts/graph-commit:583-630` — `await_checks()`, the single source of truth for the four required-context names and the row-counting bug. Patch here; do not build a parallel query path.
+- `packages/intentionsutil/scripts/graph-commit:566-582` — the existing `await_checks` 0/1/2 return-code contract comment. Keep the contract; rewrite only the counting prose.
+- `packages/intentionsutil/scripts/graph-commit:1450` / `:496-499` — `ensure_intentions_only_base()` already fetched, so `FETCH_HEAD` is the fresh `origin/main` for both the existing blob comparison and Unit 2's `HEAD` comparison.
+- `packages/intentionsutil/scripts/graph-commit:335-359` — `cleanup()` (EXIT trap) already handles `RESTORE_HEAD`, `SNAP_DIR`, scratch-branch delete and lock release on every exit path, including Unit 2's new `exit 0`.
+- `packages/intentionsutil/scripts/test-graph-commit.sh:219-259` and `:261-287` — the fixture directory and the `gh` shim that extracts graph-commit's real `--jq` argv and runs it with real `jq`. Add fixtures and `set_mode` values; add no new shim.
+- `packages/intentionsutil/scripts/test-graph-commit.sh:127-129, 433-466` — `ok`/`no`, `set_mode`, `gh_calls`, `origin_show`, `origin_sha`, `sync_clone`, `edit_line`, `scratch_refs`, `make_clone`, and `run_gc` with its `GC_POLL`/`GC_TIMEOUT`/`GC_ATTEMPTS`/`GC_LOCK_*` knobs. All new cases use these.
+- `packages/intentionsutil/scripts/test-graph-commit.sh:540-556` (Case 5) and `:572-585` (Case 7) — the assertion style for the die-immediately and burn-attempts-then-fail paths; Case 34 mirrors Case 7's shape.
+- `packages/intentionsutil/scripts/test-park-node.sh:207-258` — a third harness that copies and runs the **real** graph-commit, with its own inline four-name green fixture. It gains the fix automatically; no parallel change is needed there, but it must keep passing (see Verification).
+- `.github/workflows/graph-fast-path.yml:34-55` — the authoritative origin of the four required-context names (`acceptance`, `preview-and-smoke`, `lint`, `unit-tests`). The jq program's inline literals must stay byte-identical to these job names.
+- `.github/workflows/unit-tests.yml:205-211` — where `test-park-node.sh`, `test-transition-node.sh` and `test-graph-commit.sh` are already wired into CI. No workflow change is needed.
 
 ## Verification
 
-`packages/intentionsutil/scripts/test-graph-commit.sh` is the existing
-bare-origin + multi-clone harness and the natural home for both cases: a no-op
-invocation that must exit 0 without pushing a scratch branch, and an
-`await_checks` case whose `gh` shim returns duplicate green rows per context
-(the harness already shims `gh api ... check-runs`).
+Run the full graph-commit harness — it is the bare-origin + multi-clone functional suite and the home of every new case:
 
-## Relationship to other nodes
+```verify
+packages/intentionsutil/scripts/test-graph-commit.sh
+```
 
-- `tactic-graph-ref-split` — the greenfield fix. It moves the graph to
-  `origin/graph-main` under a validate-only gate, deleting the CI stamp and with
-  it `await_checks` and Defect 2 entirely. This node is interim and should be
-  dropped if ref-split lands first.
-- `tactic-graph-commit-staleness-silent-revert` — the inverse failure through the
-  same fallback (a real edit lost and reported as success). Cross-reference when
-  diagnosing.
-- `tactic-graph-commit-landing-lock` (done) — serializes the stamp; unaffected by
-  and orthogonal to both defects here.
+The two sibling harnesses copy and run the real `graph-commit`, so they are the regression check that the new gate did not break the single-row-per-name path:
 
-## Out of scope
+```verify
+packages/intentionsutil/scripts/test-park-node.sh
+```
 
-No implementation plan is carried here — filed `status: raw`, `phase: null` for a
-later `/align-tactics` round. Raising `GRAPH_COMMIT_MAX_ATTEMPTS` is explicitly
-not a fix: every retry re-observes the same duplicate rows.
+```verify
+packages/intentionsutil/scripts/test-transition-node.sh
+```
+
+Shell prose-rule lint (both changed files are shell scripts; `run-lint.sh` auto-detects that and runs `lint-prose-rules.sh`, which enforces `.claude/rules/shell-json.md` on net-new lines — the new `gh api … --jq` call must not become an `echo "$VAR" | jq` round-trip):
+
+```verify
+.claude/skills/dispatch-propagate/scripts/run-lint.sh --prose
+```
+
+Expected `jq` outputs, validated during planning against the exact program in Unit 1b (useful for debugging a harness failure — no separate runnable check needed, the harness cases assert the resulting behaviour):
+
+| fixture | emitted lines | `ngreen` / `nbad` | `await_checks` |
+|---|---|---|---|
+| `green.json` (existing) | 4 × `<name> success 1` | 4 / 0 | 0 |
+| `desynced-success.json` (existing) | 4 × `<name> success 1` | 4 / 0 | 0 |
+| `pending.json` (existing) | 4 × `<name> pending 1` | 0 / 0 | 1 (timeout) |
+| `concluded-fail.json` (existing) | `unit-tests failure 1`, rest success | 3 / 1 | 2 |
+| `duplicate-rows.json` (new) | 4 × `<name> success 2` | 4 / 0 | 0 |
+| `partial-duplicate.json` (new) | `acceptance absent 0`, `lint success 2`, rest success 1 | 3 / 0 | 1 (timeout) |
+| `stale-fail-then-green.json` (new) | `acceptance success 2`, rest success 1 | 4 / 0 | 0 |
+
+Manual / observe-in-production checks (not auto-runnable):
+
+- After the change is on `main`, watch the next dispatch tick that produces a no-op graph write — the common shape is `dispatch-graph-execute` calling `demote-node-to-implement` on a node already at the target phase. Expected: `graph-commit` prints `no new changes to stage … HEAD is already origin/main … skipping the landing cycle`, exits 0 within seconds, and the tick exits 0. Failure signature to watch for is the old one: five `attempt N/5` lines and `could not land on main`.
+- Confirm a normal (non-no-op) land still waits correctly. On the first real graph write after the change, the scratch push fires a fresh fast-path run whose rows are the newest per name and start as `pending`; `await_checks` must wait for them to conclude and then land. If instead it lands instantly off older rows, the ordering key is wrong (that is the `max_by` behaviour to check).
+- Sanity-check the new diagnostic once against a genuinely non-green SHA if one occurs: the terminal message should name per-context state (`acceptance=…`, `lint=…`) rather than asserting contention.
+

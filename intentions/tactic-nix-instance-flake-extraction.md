@@ -26,16 +26,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: implement
 execution:
   branch: tactic-nix-instance-flake-extraction
   pr: 2848
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: null
-  fix: null
+  fix:
+    since: 2026-07-28
+    attempt: 1
+    pushed_sha: null
   completion: null
 validates: []
 blocked_by: []
