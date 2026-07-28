@@ -164,7 +164,21 @@ SCRATCH_PUSHED=0
 # row), ..."). Written by await_checks(), read by try_land()'s retry and
 # terminal messages so a failed landing names the state it actually observed
 # instead of guessing at contention (Defect 3).
+# LAST_CHECK_SHA — the provenance of that snapshot: the commit it was observed
+# on. Written in the SAME statement group as LAST_CHECK_DETAIL and never reset,
+# so a later attempt that ends BEFORE any poll (lock wait exhausted, scratch
+# push failed, lock stolen) still carries an EARLIER attempt's snapshot for an
+# EARLIER commit. Every message therefore renders the pair through
+# check_state_phrase(), which compares this against the SHA it is describing so
+# a stale snapshot is never presented as a current observation of that SHA.
 LAST_CHECK_DETAIL=""
+LAST_CHECK_SHA=""
+# LAST_LAND_REASON — a short human phrase naming why the last try_land()
+# attempt ended, set at each of that loop's exit branches. The terminal exit-11
+# message names it as the cause, so the reader is told what actually happened
+# rather than being handed a "checks bad, or else lock contention" disjunction
+# the code already knows the answer to.
+LAST_LAND_REASON=""
 # Landing-lock globals (see "# --- Landing lock" below).
 # LOCK_HOLDER_ID    — this process's unique claim identity, computed once at
 #                     script load: short hostname + PID + two $RANDOM draws.
@@ -591,6 +605,30 @@ rebase_in_progress() {
 # an auth/rate-limit/network error is a broken environment, not a pending
 # check, so collapsing it into "still polling" until the generic timeout
 # would hide the real cause (clear error over fallback, code-style.md).
+# check_state_phrase <sha> — render, on stdout, what this run actually knows
+# about the required checks ON <sha>, for interpolation into a failure message.
+# Three distinct things a reader must be able to tell apart:
+#   - we never observed any check state at all (no poll completed in this run);
+#   - we never observed <sha>'s state, and the snapshot we do hold belongs to a
+#     DIFFERENT commit (an earlier attempt's) — named as such, never passed off
+#     as <sha>'s current state;
+#   - we observed <sha>'s state, and here it is.
+# The degenerate cases are worded as non-observations rather than dropped into
+# the slot where a check state goes, so "we could not see the checks" never
+# reads as "the checks are not green".
+check_state_phrase() {
+  local sha="$1"
+  if [[ -z "$LAST_CHECK_SHA" ]]; then
+    echo "no check-run poll completed in this run, so the required-check state was never observed (this is a non-observation, not a check state)"
+    return 0
+  fi
+  if [[ "$LAST_CHECK_SHA" != "$sha" ]]; then
+    echo "no check-run poll completed for ${sha:0:8}, so ITS required-check state was never observed; the most recent observation was of a DIFFERENT commit ${LAST_CHECK_SHA:0:8}, which reported: $LAST_CHECK_DETAIL"
+    return 0
+  fi
+  echo "required-check state observed on ${sha:0:8}: $LAST_CHECK_DETAIL"
+}
+
 await_checks() {
   local sha="$1"
   local deadline counts ngreen nbad cname cconc crows detail gh_stderr gh_fails=0
@@ -630,14 +668,25 @@ await_checks() {
       ngreen=0; nbad=0; detail=""
       while read -r cname cconc crows; do
         [[ -n "$cname" ]] || continue
-        detail+="${detail:+, }$cname=$cconc(${crows} row(s))"
+        # `absent` means GitHub never created a check-run row for this name at
+        # all — a different thing from a row that exists but has not concluded
+        # (`pending`), and the parenthetical says so rather than printing a
+        # bare "(0 row(s))" the reader has to decode.
+        if [[ "$cconc" == "absent" ]]; then
+          detail+="${detail:+, }$cname=absent(no check-run rows created)"
+        else
+          detail+="${detail:+, }$cname=$cconc(${crows} row(s))"
+        fi
         case "$cconc" in
           success)         ngreen=$((ngreen + 1)) ;;
           pending|absent)  ;;
           *)               nbad=$((nbad + 1)) ;;
         esac
       done <<<"$counts"
+      # Snapshot and its provenance always move together: a detail string
+      # without the SHA it was read on cannot be attributed by a later message.
       LAST_CHECK_DETAIL="$detail"
+      LAST_CHECK_SHA="$sha"
       if [[ "$ngreen" -eq 4 ]]; then
         return 0
       fi
@@ -654,7 +703,7 @@ await_checks() {
       fi
     fi
     if [[ "$(date +%s)" -ge "$deadline" ]]; then
-      echo "graph-commit: required checks not green within ${CHECK_TIMEOUT_SECONDS}s for $sha — ${LAST_CHECK_DETAIL:-<no successful poll>}" >&2
+      echo "graph-commit: required checks not green within ${CHECK_TIMEOUT_SECONDS}s for $sha — $(check_state_phrase "$sha")" >&2
       return 1
     fi
     sleep "$CHECK_POLL_SECONDS"
@@ -942,13 +991,17 @@ lock_release() {
 # remaining attempts are not burned (clear error over a fallback, per
 # code-style.md).
 try_land() {
-  local attempt sha ck
+  # sha is initialized (not merely declared) because the terminal message below
+  # reads it on the path where the loop ended before any attempt reached the
+  # `git rev-parse HEAD` that assigns it.
+  local attempt ck sha=""
   LOCK_WAIT_DEADLINE=$(( $(date +%s) + LOCK_WAIT_SECONDS ))
   for (( attempt=1; attempt<=MAX_PUSH_ATTEMPTS; attempt++ )); do
     # Serialize concurrent invocations on the landing lock so a losing writer
     # waits/backs off instead of burning a full CI-stamp cycle only to lose
     # the final push to main anyway.
     if ! lock_claim_or_renew; then
+      LAST_LAND_REASON="the landing lock was not acquired within the ${LOCK_WAIT_SECONDS}s wait window (another writer held it)"
       break
     fi
 
@@ -980,6 +1033,7 @@ try_land() {
     # expectation would go stale and spuriously reject the second push. It is a
     # PID-scoped branch this process owns and deletes, so a blind force is safe.
     if ! git push --force origin "HEAD:refs/heads/$SCRATCH_BRANCH" >&2; then
+      LAST_LAND_REASON="the scratch push to the graph scratch branch $SCRATCH_BRANCH failed"
       echo "graph-commit: scratch push to $SCRATCH_BRANCH failed on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
       continue
     fi
@@ -995,12 +1049,14 @@ try_land() {
       die "a required check concluded non-success for $sha — the commit content fails CI; not retrying (fix the content and re-run)"
     fi
     if [[ "$ck" -ne 0 ]]; then
-      echo "graph-commit: checks did not go green for $sha on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying — ${LAST_CHECK_DETAIL:-<no successful poll>}" >&2
+      LAST_LAND_REASON="the required checks did not report green within the ${CHECK_TIMEOUT_SECONDS}s poll window"
+      echo "graph-commit: checks did not go green for $sha on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying — $(check_state_phrase "$sha")" >&2
       continue
     fi
 
     # The SHA now carries the four passing contexts — fast-forward it onto main.
     if [[ "$(git ls-remote origin "$LOCK_REF" | cut -f1)" != "$LOCK_SHA" ]]; then
+      LAST_LAND_REASON="the landing lock was stolen after expiry before the main push"
       echo "graph-commit: landing lock no longer held (stolen after expiry) before the main push on attempt $attempt/$MAX_PUSH_ATTEMPTS; re-claiming and retrying" >&2
       LOCK_HELD=0
       continue
@@ -1009,12 +1065,18 @@ try_land() {
       lock_release
       return 0
     fi
+    LAST_LAND_REASON="the push to main was rejected because main advanced"
     echo "graph-commit: push of $sha to main rejected (main advanced), attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
   done
   lock_release
   local ran=$attempt
   (( ran > MAX_PUSH_ATTEMPTS )) && ran=$MAX_PUSH_ATTEMPTS
-  echo "error: graph-commit: could not land on main after $ran/$MAX_PUSH_ATTEMPTS attempts — last observed required-check state: ${LAST_CHECK_DETAIL:-<no successful poll>} (or landing-lock contention if no poll ran); retry later" >&2
+  # Cause, then evidence. LAST_LAND_REASON is what ended the LAST attempt —
+  # known exactly, never guessed at — and check_state_phrase() attributes the
+  # check snapshot to the commit it was actually read on (or says plainly that
+  # no such observation exists), so an earlier attempt's snapshot can never be
+  # mistaken for a current reading of this failure.
+  echo "error: graph-commit: could not land on main after $ran/$MAX_PUSH_ATTEMPTS attempts — cause: ${LAST_LAND_REASON:-<no attempt reached an exit branch>}; $(check_state_phrase "$sha"); retry later" >&2
   return 11
 }
 

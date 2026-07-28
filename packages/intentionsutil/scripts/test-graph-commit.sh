@@ -24,7 +24,10 @@
 #   6. gh hard failure (shim exits 1): die surfacing gh's stderr after exactly
 #      3 consecutive polls
 #   7. pending timeout (shim reports "0 0"): still transient — burns all
-#      attempts and exits with the busy-main error
+#      attempts and exits with the busy-main error, whose terminal line names
+#      the cause and attributes the observed check state to the SHA it was read
+#      on (guarding against a prior attempt's snapshot being shown as this
+#      failure's state)
 #   8. desynced check-run status (one required check's status is stuck
 #      in_progress even though its conclusion already reports success — a
 #      known GitHub check-runs desync, #2457): the fixed --jq filter keys off
@@ -129,6 +132,12 @@
 #      still exits 0 with zero gh polls and no "polling failed", proving the
 #      no-op path never reaches the poller
 #      (tactic-graph-commit-noop-landing-false-failure, Defect 1)
+#  37. lock-wait exhaustion is diagnosed as lock contention, not as a check
+#      state: a foreign lock with a far-future expiry blocks the writer, which
+#      exits after zero gh polls — the terminal message names the landing lock
+#      as the cause and states that the required-check state was never
+#      observed, instead of presenting any check-state snapshot
+#      (tactic-graph-commit-noop-landing-false-failure, Defect 3 residue)
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -653,6 +662,16 @@ if [[ $rc -eq 1 ]] \
   ok "pending timeout stays transient: burns attempts, exits busy-main"
 else
   no "pending timeout retry path (rc=$rc)"; printf '%s\n' "$out"
+fi
+# The terminal line must attribute the check state to the commit it was read
+# on, and must name what ended the run. Without the SHA, a snapshot carried
+# over from an earlier attempt (an attempt can end before any poll runs) would
+# be printed as if it described this failure.
+if grep -Eq 'required-check state observed on [0-9a-f]{7,}: .*acceptance=' <<<"$out" \
+   && grep -q 'cause: the required checks did not report green' <<<"$out"; then
+  ok "pending timeout: terminal line attributes the observed state to a SHA and names the cause"
+else
+  no "pending timeout terminal attribution"; printf '%s\n' "$out"
 fi
 sync_clone "$A"
 
@@ -1340,6 +1359,34 @@ if [[ $rc -eq 0 ]] \
 else
   no "no-op short-circuit under hard-fail (rc=$rc gh_calls=$calls)"; printf '%s\n' "$out"
 fi
+
+# --- Case 37: lock-wait exhaustion names the lock, not a check observation ---
+# A foreign lock with a far-future expiry is never stolen, so the writer exits
+# the attempt loop having made ZERO check-run polls. The terminal message must
+# then name the landing lock as the cause and state plainly that no check state
+# was ever observed — never print a check-state snapshot (which, before
+# LAST_CHECK_SHA, could only have come from an unrelated earlier attempt).
+# Reuses the t-lock-wait node on a different line; this run must not land.
+set_mode green
+blocking_expiry=$(( $(date +%s) + 3600 ))
+plant_lock "$blocking_expiry" blocking-holder-test
+W37="$WORK/w37"
+make_clone "$W37" writer-37
+edit_line "$W37" t-lock-wait 5 must-not-land
+before="$(origin_sha)"
+out="$(export GC_LOCK_POLL=1 GC_LOCK_WAIT=1 GC_ATTEMPTS=1; run_gc "$W37" -m 'test: lock wait exhausted' t-lock-wait 2>&1)"; rc=$?
+calls="$(gh_calls)"
+if [[ $rc -eq 1 && "$(origin_sha)" == "$before" && "$calls" -eq 0 ]] \
+   && grep -q 'could not land on main after 1/1 attempts' <<<"$out" \
+   && grep -q 'cause: the landing lock was not acquired' <<<"$out" \
+   && grep -q 'required-check state was never observed' <<<"$out" \
+   && ! grep -q 'required-check state observed on' <<<"$out"; then
+  ok "lock-wait exhaustion: names the landing lock as the cause, reports no check observation (0 polls)"
+else
+  no "lock-wait exhaustion diagnostic (rc=$rc gh_calls=$calls origin_moved=$([[ "$(origin_sha)" == "$before" ]] && echo no || echo yes))"
+  printf '%s\n' "$out"
+fi
+git -C "$ORIGIN" update-ref -d refs/graph/landing-lock
 
 # --- No scratch branches left behind anywhere ------------------------------------
 if [[ -z "$(scratch_refs)" ]]; then
