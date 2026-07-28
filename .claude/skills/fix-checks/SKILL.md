@@ -379,9 +379,34 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
         runs).** The fingerprint is `<failing-check-name> — <stable-id>`, where
         `<stable-id>` is chosen by this **fixed precedence** (use the first the
         failure excerpt provides):
-        1. the **test node id** — e.g. `path/to/test.spec.ts:LINE:COL test title`;
-        2. else the **file path:line**;
-        3. else the **CI workflow name**.
+        1. the failing **test name / assertion label exactly as the suite prints
+           it**, verbatim — a Jest/Mocha/vitest/pytest test title, a shell
+           test's assertion description, or any comparable human-readable label
+           the test runner itself emits. This is **not** a `file:line` pointer.
+        2. **only when the excerpt contains no such label**, the failing **file
+           path with NO line number** — e.g.
+           `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`,
+           never `…:22026`. Line numbers drift whenever an unrelated edit lands
+           above that line in the file, so a line-number-bearing id
+           re-fingerprints the *same* failure differently across unrelated
+           commits — dedup then misses and mints a second tracking node for one
+           flake. That is why the `file:line` form is **disallowed**, not merely
+           a different-but-acceptable spelling.
+
+        **Never** include any of these in `<stable-id>`: a **line number**, a
+        **run id**, a **timestamp**, or a **PR number**. Each of them varies
+        across recurrences of one defect, so including one defeats dedup by
+        construction.
+
+        Worked example (2026-07-22 incident). One assertion failure produced two
+        divergent fingerprints under the old rule:
+        `hook-tests — .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh:22026`
+        (keyed on `file:line`) and
+        `hook-tests — select-tick on-main but primary checkout off-main → guard halts (exit 2)`
+        (keyed on the test name) — dedup missed and two nodes were minted for one
+        flake. Under this rule both collapse to the test-name form,
+        `hook-tests — select-tick on-main but primary checkout off-main → guard halts (exit 2)`.
+
         Read `<stable-id>` from the excerpt strictly by this precedence and
         **never paraphrase or summarize it** — the same flake must yield a
         byte-identical fingerprint string on every run, or dedup silently fails in
