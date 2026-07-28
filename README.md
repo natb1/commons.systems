@@ -24,8 +24,9 @@ router is removed.
 ## The intention graph
 
 The graph is the orchestrator's state store and the owner's record of intent —
-one markdown file per node under [`intentions/`](intentions/), schema and
-tooling in [`packages/intentionsutil/`](packages/intentionsutil/SCHEMA.md).
+one markdown file per node under [`intentions/`](intentions/), schema
+declared by [`intentions/kind-kind.md`](intentions/kind-kind.md) and tooling
+in [`packages/intentionsutil/`](packages/intentionsutil/).
 Four kinds:
 
 - **Virtues** — permanent dispositions, the roots (`parent: null`). Never
@@ -236,8 +237,9 @@ run-all-cleanup-preview.sh <pr-number>
 
 - **Landing page** — [commons.systems](https://commons.systems): the project
   showcase and overview.
-- **Graph schema** — [packages/intentionsutil/SCHEMA.md](packages/intentionsutil/SCHEMA.md):
-  node format, layer rules, attention, authority doctrine.
+- **Graph schema** — [intentions/kind-kind.md](intentions/kind-kind.md): node
+  format, layer rules, attention, authority doctrine — the entry point for the
+  self-describing graph.
 - **Router design** — [intentions/tactic-graph-native-dispatch.md](intentions/tactic-graph-native-dispatch.md):
   the graph-native dispatch draft and migration plan, held in the graph as a
   draft tactic.
