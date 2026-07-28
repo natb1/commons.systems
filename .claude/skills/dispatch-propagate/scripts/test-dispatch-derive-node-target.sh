@@ -20,6 +20,8 @@ trap cleanup EXIT INT TERM
 TMP_ROOT=$(mktemp -d)
 
 BODY_MARKER="FIXTURE BODY MARKER TEXT"
+FIXTURE_STATEMENT="Fixture tactic node for dispatch-derive-node-target tests"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd -P)"
 
 # Write a valid intentions/<id>.md node file into $1 (a repo working dir).
 # $2 = node id, $3 = phase, $4 = execution YAML block (optional; defaults to
@@ -32,7 +34,7 @@ write_node_fixture() {
 ---
 id: $id
 kind: tactic
-statement: Fixture tactic node for dispatch-derive-node-target tests
+statement: $FIXTURE_STATEMENT
 owner: ai
 status: codified
 parent: null
@@ -217,6 +219,14 @@ NODE_JSON_LINE=$(printf '%s\n' "$OUT" | sed -n '/=== NODE-JSON ===/{n;p}')
 JSON_PHASE=$(jq -r '.phase' <<<"$NODE_JSON_LINE")
 assert_eq "pr-mode-required-found: NODE-JSON .phase" "implement" "$JSON_PHASE"
 assert_contains "pr-mode-required-found: NODE-BODY has fixture marker" "$BODY_MARKER" "$OUT"
+# The SCOPE-FINGERPRINT line is emitted directly after the PR line and carries a
+# sha256 hex digest.
+FP_LINE=$(printf '%s\n' "$OUT" | sed -n 's/^SCOPE-FINGERPRINT: //p')
+if [[ "$FP_LINE" =~ ^[0-9a-f]{64}$ ]]; then FP_SHAPE=ok; else FP_SHAPE="bad:$FP_LINE"; fi
+assert_eq "pr-mode-required-found: SCOPE-FINGERPRINT is a sha256 hex" "ok" "$FP_SHAPE"
+AFTER_PR=$(printf '%s\n' "$OUT" | sed -n '/^PR: /{n;p}')
+assert_eq "pr-mode-required-found: SCOPE-FINGERPRINT follows the PR line" \
+  "SCOPE-FINGERPRINT: $FP_LINE" "$AFTER_PR"
 
 # ---------------------------------------------------------------------------
 # Test 6: node present at implement, --pr-mode optional, gh returns empty ->
@@ -287,5 +297,25 @@ echo "Test 13: no gate flag given -> exit 2 (usage error)"
 make_repo "tactic-no-gate" "with_node:implement"
 run_sut "tactic-no-gate" --pr-mode none
 assert_eq "no-gate-flag: exit 2" "2" "$RC"
+
+# ---------------------------------------------------------------------------
+# Test 14: the emitted SCOPE-FINGERPRINT equals tacticScopeFingerprint computed
+# directly over the seeded node's statement + body — i.e. the front door emits
+# the node's real CURRENT scope fingerprint, the comparand the phase skills
+# check their durable evidence against.
+# ---------------------------------------------------------------------------
+echo "Test 14: SCOPE-FINGERPRINT equals tacticScopeFingerprint(statement, body)"
+make_repo "tactic-scope-fingerprint" "with_node:implement"
+run_sut "tactic-scope-fingerprint" --expect-phase implement --pr-mode none
+assert_eq "scope-fingerprint: exit 0" "0" "$RC"
+EMITTED_FP=$(printf '%s\n' "$OUT" | sed -n 's/^SCOPE-FINGERPRINT: //p')
+EXPECTED_FP=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+  const { readNodeBody } = await import("./packages/intentionsutil/src/store.js");
+  const { tacticScopeFingerprint } = await import("./packages/intentionsutil/src/router.js");
+  const [dir, id, statement] = process.argv.slice(1);
+  process.stdout.write(tacticScopeFingerprint(statement, readNodeBody(dir, id)));
+' "$REPO/intentions" "tactic-scope-fingerprint" "$FIXTURE_STATEMENT") )
+assert_eq "scope-fingerprint: emitted hash matches tacticScopeFingerprint" \
+  "$EXPECTED_FP" "$EMITTED_FP"
 
 report_results

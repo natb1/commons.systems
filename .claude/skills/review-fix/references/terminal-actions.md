@@ -50,7 +50,18 @@ stays the terminal durable action. Compose a terse "what the review found / fixe
 digest of this pass to `tmp/phase-log-entry-$N.md` — a one-line summary of the
 fixes applied; a clean review writes a line like `failed: none`. Compose it
 **unconditionally** across pass and fail (no "only on failure" branch — the only
-narrowing is normal-vs-re-entry). Then upsert it (use
+narrowing is normal-vs-re-entry).
+
+On the node lane the entry's **first line** is the scope binding
+`<!-- dispatch:scope-fingerprint <SCOPE_FINGERPRINT> -->`, using the value the
+front door emitted and the preamble bound. `dispatch-write-phase-log` is
+content-agnostic on stdin — it upserts whatever body it is handed — so the
+binding is composed here, by the skill, not by the script. It records which scope
+this review evidence was produced under, so a later worker reading the note back
+as `PRIOR_PHASE_LOG` can tell a current-scope handoff from one describing a
+superseded scope (tactic-phase-evidence-fingerprint-bound).
+
+Then upsert it (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
 ```bash
@@ -75,8 +86,10 @@ The upsert is idempotent on the `(review, 1)` key. Why re-entry must not re-writ
 the phase-log write PRECEDES the `dispatch:reviewed` apply (above), and re-entry
 is GATED on `dispatch:reviewed` already being present (see preamble: "If the
 labels line already includes `dispatch:reviewed`") — or, on the node lane, on the
-parallel `reviewed`-in-`execution.markers` check (see preamble: "if `reviewed` is
-present in `execution.markers`"). So whenever re-entry fires, the
+parallel check for a `reviewed` marker in `execution.markers` that is **valid for
+the current `SCOPE_FINGERPRINT`** (see preamble and `references/node-lane.md`; a
+marker bound to a different fingerprint does not fire re-entry, and the review
+runs in full). So whenever re-entry fires, the
 accurate `(review, 1)` entry the original run wrote is guaranteed already durable
 on the comment. The script enforces the skip via `--reentry true`, preserving it.
 A re-write on re-entry has no prior-pass data to restate (`result` is absent), so

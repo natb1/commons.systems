@@ -34,6 +34,19 @@
 #      rev-parsed (no landed content to roll back to) is SKIPPED without any
 #      mutation — a stderr diagnostic names it, the tree stays clean — while the
 #      per-node `while read` loop still processes the other open node.
+#   5. transition-node evidence binding (tactic-phase-evidence-fingerprint-bound
+#      Unit 2): a node with a MATCHING phase-start scope-fingerprint stamp file
+#      transitions cleanly (graph-commit stubbed to succeed) and the landed
+#      completion marker carries the bound `{marker, fingerprint, sha}` object
+#      form, with the fingerprint equal to the STAMP's value.
+#   6. transition-node evidence binding, no-stamp case: with NO stamp file
+#      present, the same transition still succeeds but the landed marker stays
+#      the legacy bare-string (unbound) form — the no-regression check.
+#   7. transition-node broken evidence chain (tactic-phase-evidence-fingerprint-
+#      bound Unit 3): a phase:review node carrying a `qa-done` marker BOUND to a
+#      fingerprint that no longer matches its body demotes to implement instead
+#      of transitioning — the outcome line names the broken chain, graph-commit
+#      is never called for a transition, and the tree is left clean.
 #
 # No network needed; requires bash + git + jq + a real node/npx tsx (resolved
 # against a read-only node_modules symlink to this repo's own — never written).
@@ -119,6 +132,16 @@ fail_graph_commit() { # <dir> — replace graph-commit with an unconditional fai
 #!/usr/bin/env bash
 echo "graph-commit wrapper: simulated post-mutation failure" >&2
 exit 1
+SH
+  chmod +x "$1/packages/intentionsutil/scripts/graph-commit"
+}
+
+succeed_graph_commit() { # <dir> — replace graph-commit with a no-op success, so
+  # the local mutation apply-node-transition.ts already wrote stays in place
+  # (uncommitted) and can be asserted on directly, without a real push.
+  cat >"$1/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+exit 0
 SH
   chmod +x "$1/packages/intentionsutil/scripts/graph-commit"
 }
@@ -347,6 +370,202 @@ if [[ "$rc" -eq 0 ]] \
 else
   no "dispatch-graph-main-red-sync origin-absent refusal guard (rc=$rc)"
   printf 'stdout: %s\n' "$stdout_out"; printf 'stderr: %s\n' "$stderr_out"
+  printf 'status: %s\n' "$status_after"
+fi
+
+# ===========================================================================
+# Case 5: transition-node binds a newly-written completion marker to the
+# phase-start scope-fingerprint STAMP (tactic-phase-evidence-fingerprint-bound
+# Unit 2). A matching stamp file is seeded; graph-commit is stubbed to SUCCEED
+# (a no-op) so the real apply-node-transition.ts mutation stays on disk,
+# uncommitted, and is asserted on directly.
+# ===========================================================================
+T5="$WORK/t5-seed"
+build_seed_repo "$T5"
+cp "$HARNESS_DIR/transition-node" "$T5/.claude/skills/dispatch-propagate/scripts/transition-node"
+chmod +x "$T5/.claude/skills/dispatch-propagate/scripts/transition-node"
+NODE5_STATEMENT="harness node for evidence-fingerprint binding test"
+cat >"$T5/intentions/t-evidence-bound.md" <<NODE
+---
+id: t-evidence-bound
+kind: tactic
+statement: $NODE5_STATEMENT
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+---
+# harness node for evidence-fingerprint binding test
+NODE
+new_origin t5
+init_and_push "$T5"
+
+C5="$WORK/t5-clone"
+clone_with_node_modules "$C5"
+succeed_graph_commit "$C5"
+
+# Compute the REAL tacticScopeFingerprint the gate will compare against, over
+# the exact statement + body just committed to origin/main, then seed a
+# matching stamp file at the path transition-node reads (MAIN_ROOT resolves to
+# $C5 itself here — resolve_project_root's git-common-dir dirname of a plain
+# clone).
+FP5="$(
+  cd "$C5" || exit 99
+  node --import tsx/esm -e '
+    const { readNode, readNodeBody } = await import("./packages/intentionsutil/src/store.js");
+    const { tacticScopeFingerprint } = await import("./packages/intentionsutil/src/router.js");
+    const id = process.argv[1];
+    process.stdout.write(tacticScopeFingerprint(readNode("./intentions", id).statement, readNodeBody("./intentions", id)));
+  ' t-evidence-bound
+)"
+SHA5="$(git -C "$C5" rev-parse origin/main)"
+mkdir -p "$C5/.claude/worktrees"
+printf '%s %s\n' "$FP5" "$SHA5" > "$C5/.claude/worktrees/t-evidence-bound.scope-fingerprint"
+
+out="$(
+  cd "$C5" || exit 99
+  bash .claude/skills/dispatch-propagate/scripts/transition-node t-evidence-bound 2>&1
+)"; rc=$?
+marker_shape="$(node --import tsx/esm -e '
+  const { readNode } = await import("'"$C5"'/packages/intentionsutil/src/store.js");
+  const node = readNode("'"$C5"'/intentions", "t-evidence-bound");
+  process.stdout.write(JSON.stringify(node.execution?.markers ?? []));
+')"
+if [[ $rc -eq 0 ]] \
+   && grep -q "^transitioned t-evidence-bound implement -> qa$" <<<"$out" \
+   && jq -e --arg fp "$FP5" '
+        length == 1 and .[0].marker == "planned" and .[0].fingerprint == $fp and (.[0].sha | length > 0)
+      ' >/dev/null <<<"$marker_shape"; then
+  ok "transition-node evidence binding: the landed marker is bound to the phase-start stamp's fingerprint"
+else
+  no "transition-node evidence binding (rc=$rc)"
+  printf '%s\n' "$out"; printf 'markers: %s\n' "$marker_shape"
+fi
+
+# ===========================================================================
+# Case 6: transition-node with NO stamp file present still writes the legacy
+# bare-string (unbound) marker form — the no-regression check
+# (tactic-phase-evidence-fingerprint-bound Unit 2).
+# ===========================================================================
+T6="$WORK/t6-seed"
+build_seed_repo "$T6"
+cp "$HARNESS_DIR/transition-node" "$T6/.claude/skills/dispatch-propagate/scripts/transition-node"
+chmod +x "$T6/.claude/skills/dispatch-propagate/scripts/transition-node"
+cat >"$T6/intentions/t-no-stamp.md" <<'NODE'
+---
+id: t-no-stamp
+kind: tactic
+statement: harness node with no phase-start stamp file
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+---
+# harness node with no phase-start stamp file
+NODE
+new_origin t6
+init_and_push "$T6"
+
+C6="$WORK/t6-clone"
+clone_with_node_modules "$C6"
+succeed_graph_commit "$C6"
+# Deliberately no .claude/worktrees/t-no-stamp.scope-fingerprint stamp file.
+
+out="$(
+  cd "$C6" || exit 99
+  bash .claude/skills/dispatch-propagate/scripts/transition-node t-no-stamp 2>&1
+)"; rc=$?
+marker_shape="$(node --import tsx/esm -e '
+  const { readNode } = await import("'"$C6"'/packages/intentionsutil/src/store.js");
+  const node = readNode("'"$C6"'/intentions", "t-no-stamp");
+  process.stdout.write(JSON.stringify(node.execution?.markers ?? []));
+')"
+if [[ $rc -eq 0 ]] \
+   && grep -q "^transitioned t-no-stamp implement -> qa$" <<<"$out" \
+   && [[ "$marker_shape" == '["planned"]' ]]; then
+  ok "transition-node no-stamp: the landed marker stays the legacy bare-string (unbound) form (no regression)"
+else
+  no "transition-node no-stamp no-regression (rc=$rc)"
+  printf '%s\n' "$out"; printf 'markers: %s\n' "$marker_shape"
+fi
+
+# ===========================================================================
+# Case 7: transition-node refuses to ratify a BROKEN EVIDENCE CHAIN at the
+# review seam (tactic-phase-evidence-fingerprint-bound Unit 3). The node sits at
+# phase:review carrying a `qa-done` marker bound to a fingerprint that does NOT
+# match its current statement+body — the qa evidence certifies a scope the
+# tactic has since moved off. transition-node must delegate to
+# demote-node-to-implement (stubbed here, recording its argv) BEFORE any
+# mutation, print the broken-evidence-chain outcome line, never invoke
+# graph-commit for a transition, and leave the tree clean.
+# ===========================================================================
+T7="$WORK/t7-seed"
+build_seed_repo "$T7"
+cp "$HARNESS_DIR/transition-node" "$T7/.claude/skills/dispatch-propagate/scripts/transition-node"
+chmod +x "$T7/.claude/skills/dispatch-propagate/scripts/transition-node"
+cat >"$T7/intentions/t-broken-chain.md" <<'NODE'
+---
+id: t-broken-chain
+kind: tactic
+statement: harness node for the broken evidence chain test
+owner: ai
+status: codified
+phase: review
+serves: []
+execution:
+  branch: t-broken-chain
+  pr: null
+  attempts: {}
+  markers:
+    - marker: qa-done
+      fingerprint: "0000000000000000000000000000000000000000000000000000000000000000"
+      sha: cafe1234
+  strategy_fingerprint: null
+---
+# harness node for the broken evidence chain test
+NODE
+new_origin t7
+init_and_push "$T7"
+
+C7="$WORK/t7-clone"
+clone_with_node_modules "$C7"
+# graph-commit is stubbed to RECORD any invocation: the assertion is that the
+# demote path short-circuits before transition-node ever lands a transition.
+cat >"$C7/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$WORK/t7-graph-commit.log"
+exit 0
+SH
+chmod +x "$C7/packages/intentionsutil/scripts/graph-commit"
+# demote-node-to-implement is stubbed (the real one commits and comments on a
+# PR); it records the node id it was handed.
+cat >"$C7/packages/intentionsutil/scripts/demote-node-to-implement" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$1" >>"$WORK/t7-demote.log"
+exit 0
+SH
+chmod +x "$C7/packages/intentionsutil/scripts/demote-node-to-implement"
+
+out="$(
+  cd "$C7" || exit 99
+  bash .claude/skills/dispatch-propagate/scripts/transition-node t-broken-chain 2>&1
+)"; rc=$?
+demote_log="$(cat "$WORK/t7-demote.log" 2>/dev/null)"
+commit_log="$(cat "$WORK/t7-graph-commit.log" 2>/dev/null)"
+status_after="$(git -C "$C7" status --porcelain intentions/)"
+if [[ $rc -eq 0 ]] \
+   && grep -q "^demoted t-broken-chain -> implement (broken evidence chain: qa-done)$" <<<"$out" \
+   && [[ "$demote_log" == "t-broken-chain" ]] \
+   && [[ -z "$commit_log" ]] \
+   && [[ -z "$status_after" ]]; then
+  ok "transition-node broken evidence chain: a review-phase node whose qa-done marker is bound to a superseded scope demotes to implement without any transition write"
+else
+  no "transition-node broken evidence chain (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'demote-log: %s\n' "$demote_log"
+  printf 'graph-commit-log: %s\n' "$commit_log"
   printf 'status: %s\n' "$status_after"
 fi
 

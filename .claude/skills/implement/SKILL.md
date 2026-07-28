@@ -81,6 +81,11 @@ case "$BRANCH" in
     [ "$PR_NUM" = none ] && PR_NUM=""
     NODE_JSON=$(printf '%s\n' "$DERIVED" | sed -n '/^=== NODE-JSON ===$/,/^=== NODE-BODY ===$/p' | sed '1d;$d')
     NODE_BODY=$(printf '%s\n' "$DERIVED" | sed -n '/^=== NODE-BODY ===$/,$p' | sed '1d')
+    # The node's CURRENT scope fingerprint (front door, emitted once). /implement
+    # never reads completion evidence back, so it does not gate on this — it binds
+    # it so the Step-5 handoff note it WRITES carries the scope binding downstream
+    # phases check against (tactic-phase-evidence-fingerprint-bound).
+    SCOPE_FINGERPRINT=$(printf '%s\n' "$DERIVED" | sed -n 's/^SCOPE-FINGERPRINT: //p' | head -1)
     N="$NODE_ID"
     TARGET_KIND=node
     ;;
@@ -415,7 +420,18 @@ of the implementation to `tmp/phase-log-entry-$N.md` — a one-line summary of w
 shipped; on a clean as-planned build the body is a line like `failed: none`.
 Compose it **unconditionally** (no "only on failure" branch) — that is the
 failure-vs-success axis (always log, even a clean pass), orthogonal to the
-re-entry gate below. Then upsert it into the issue's phase-log comment (use
+re-entry gate below.
+
+On the node lane the entry's **first line** is the scope binding
+`<!-- dispatch:scope-fingerprint <SCOPE_FINGERPRINT> -->`, using the value the
+front door emitted and the preamble bound. `dispatch-write-phase-log` is
+content-agnostic on stdin, so the binding is composed here rather than by the
+script. `/implement` never reads this back — it writes it so the later `/qa-fix`
+and `/review-fix` sessions that inherit the note as `PRIOR_PHASE_LOG` can tell
+whether it describes the scope now in force
+(tactic-phase-evidence-fingerprint-bound).
+
+Then upsert it into the issue's phase-log comment (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
 ```bash

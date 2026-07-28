@@ -88,7 +88,23 @@ As soon as the plan returns — **before** any fixing begins — write it to a
 durable human-readable QA-summary PR comment (a first-line
 `<!-- dispatch:qa-summary -->` marker; the incremental marker-comment
 edit-in-place pattern review-fix Step 6 uses — create via `post-pr-comment.sh`,
-capture the comment ID, then `gh api … -X PATCH` to edit in place). Then update
+capture the comment ID, then `gh api … -X PATCH` to edit in place).
+
+The line **immediately after** the marker is the scope binding:
+
+```
+<!-- dispatch:qa-summary -->
+<!-- dispatch:scope-fingerprint <SCOPE_FINGERPRINT> -->
+```
+
+`SCOPE_FINGERPRINT` is the value the front door emitted on its
+`SCOPE-FINGERPRINT:` line and the idempotency preamble bound. It records which
+scope this QA evidence was produced under, so a later re-entry can distinguish
+resume input for the current scope from history describing a superseded one
+(see `references/idempotency-preamble.md` § Idempotency and resume). Carry it
+through every in-place edit of this comment, including the Step-4 finalize.
+
+Then update
 each item's verdict **as each item resolves** through Step 3's lanes — not only
 in the Step 4 phase-end post. Phase progress whose only home is the session is a
 defect: a dead session must leave the plan and the resolved-so-far verdicts

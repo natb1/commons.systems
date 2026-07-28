@@ -48,12 +48,14 @@ const baseArgs: {
   strategyStale: boolean;
   setPr: number | null;
   strategyFingerprint: Record<string, { hash: string; sha: string }> | null;
+  evidenceBinding: { fingerprint: string; sha: string } | null;
 } = {
   id: "tactic-syn",
   scopeStale: false,
   strategyStale: false,
   setPr: null,
   strategyFingerprint: null,
+  evidenceBinding: null,
 };
 
 describe("applyNodeTransition store round-trip", () => {
@@ -153,6 +155,26 @@ describe("applyNodeTransition store round-trip", () => {
     });
   });
 
+  it("writes a bound marker entry when an evidenceBinding is supplied", () => {
+    const dir = tempDir();
+    seedTactic(dir, "implement", "# body\n");
+    applyNodeTransition({
+      ...baseArgs,
+      dir,
+      evidenceBinding: { fingerprint: "fp-1", sha: "sha-1" },
+    });
+    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual([
+      { marker: "planned", fingerprint: "fp-1", sha: "sha-1" },
+    ]);
+  });
+
+  it("reproduces today's bare-string marker when no evidence flags are given (no regression)", () => {
+    const dir = tempDir();
+    seedTactic(dir, "implement", "# body\n");
+    applyNodeTransition({ ...baseArgs, dir });
+    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual(["planned"]);
+  });
+
   it("a re-stamp via applyNodeTransition preserves an untouched pre-existing bare-string sibling key unchanged", () => {
     const dir = tempDir();
     seedTactic(dir, "implement", "# body\n");
@@ -203,6 +225,23 @@ describe("apply-node-transition parseArgs --strategy-fingerprint", () => {
   it("rejects --strategy-fingerprint without --strategy-sha", () => {
     expect(() => parseArgs(["tactic-syn", "--strategy-fingerprint", "strategy-a=hash-a"])).toThrow(
       /--strategy-fingerprint requires --strategy-sha/,
+    );
+  });
+
+  it("parses --evidence-fingerprint + --evidence-sha into evidenceBinding", () => {
+    const args = parseArgs([
+      "tactic-syn",
+      "--evidence-fingerprint",
+      "fp-1",
+      "--evidence-sha",
+      "sha-1",
+    ]);
+    expect(args.evidenceBinding).toEqual({ fingerprint: "fp-1", sha: "sha-1" });
+  });
+
+  it("rejects --evidence-fingerprint without --evidence-sha", () => {
+    expect(() => parseArgs(["tactic-syn", "--evidence-fingerprint", "fp-1"])).toThrow(
+      /--evidence-fingerprint requires --evidence-sha/,
     );
   });
 

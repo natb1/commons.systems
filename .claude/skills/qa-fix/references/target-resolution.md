@@ -2,9 +2,9 @@
 
 Node-lane target resolution runs **once**, in `SKILL.md`'s Idempotency preamble,
 through the shared front door `dispatch-derive-node-target`. Step 0 re-derives
-nothing — by the time it runs, `N`, `TARGET_KIND`, `PR_NUM`, `NODE_JSON`, and
-`NODE_BODY` are already bound. This reference carries the front door's contract,
-its exit-code routing, and the parked-guard rationale.
+nothing — by the time it runs, `N`, `TARGET_KIND`, `PR_NUM`, `NODE_JSON`,
+`NODE_BODY`, and `SCOPE_FINGERPRINT` are already bound. This reference carries the
+front door's contract, its exit-code routing, and the parked-guard rationale.
 
 Before `tactic-dispatch-skill-input-contract`, qa-fix derived the node target
 **twice** — once in the preamble (a `gh pr list --head` PR lookup) and again at
@@ -39,7 +39,17 @@ The stdout sections bind the seams the rest of the skill keys off: the `PR:` lin
 → `PR_NUM` (`none` → empty), `=== NODE-JSON ===` → `NODE_JSON` (the full
 frontmatter as one compact JSON line), `=== NODE-BODY ===` → `NODE_BODY` (raw
 markdown, replacing the former whole-file frontmatter-plus-body read everywhere
-downstream).
+downstream), and the `SCOPE-FINGERPRINT:` line → `SCOPE_FINGERPRINT` (the node's
+current scope fingerprint, computed once by the front door as
+`tacticScopeFingerprint(statement, body)` over the same snapshot).
+
+`SCOPE_FINGERPRINT` is the comparand for every piece of durable evidence this
+session may inherit or write: the `qa-done` re-entry gate over
+`.execution.markers`, the `<!-- dispatch:scope-fingerprint … -->` line on the
+`<!-- dispatch:qa-summary -->` comment, and the same line on the qa phase-log
+entry (tactic-phase-evidence-fingerprint-bound). Evidence bound to a different
+fingerprint was produced under a superseded scope and is not resume input — see
+`idempotency-preamble.md` § Scope-bound resume.
 
 ## Parked re-entry guard
 

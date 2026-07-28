@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
-import { isStrategyStale, REVIEWED_MARKER } from "./transitions.js";
+import { hasMarker, isStrategyStale, REVIEWED_MARKER } from "./transitions.js";
 import { PHASES } from "./schema.js";
 import type { FixState, IntentionNode, Phase } from "./schema.js";
 
@@ -295,7 +295,11 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     if (!isOpenTactic(t)) continue;
     if (frozenTacticIds.has(t.id)) continue;
     if (!blockersComplete(t, byId)) continue;
-    if (t.phase === "review" && t.execution?.markers.includes(REVIEWED_MARKER)) continue;
+    // Name-only presence check: the pure selector has no node body (`readNode`
+    // deliberately drops it), so it cannot compute the current scope
+    // fingerprint to compare a bound marker against. The execute-side gate owns
+    // the fingerprint comparison.
+    if (t.phase === "review" && hasMarker(t.execution?.markers ?? [], REVIEWED_MARKER)) continue;
     candidates.push({
       id: t.id,
       kind: "tactic",

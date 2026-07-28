@@ -11,7 +11,22 @@ Write a markdown summary to `tmp/qa-fix-summary-<n>.md` (where `<n>` is the
 Step-0-resolved issue number `<N>`) with a first line of `<!-- dispatch:qa-summary
 -->` — the same marker the Step-2 incremental flush uses, so this phase-end
 post **finalizes that same comment in place** rather than stacking a second.
-Include:
+
+The **second** line is the scope binding, exactly as the Step-2 flush composed it:
+
+```
+<!-- dispatch:qa-summary -->
+<!-- dispatch:scope-fingerprint <SCOPE_FINGERPRINT> -->
+```
+
+`SCOPE_FINGERPRINT` is the node's current scope fingerprint, emitted by the front
+door (`SCOPE-FINGERPRINT:`) and bound in the idempotency preamble. Because the
+finalize below re-applies the whole body in place, including the binding line
+here is what keeps it on the durable comment. A later re-entry compares this line
+against its own `SCOPE_FINGERPRINT` to decide whether the comment is resume input
+or superseded history (see `idempotency-preamble.md` § Idempotency and resume).
+
+Then include:
 - Items executed (across all three lanes).
 - PASS / FAIL / SKIP counts.
 - **Deferred to office-hours** — each `needs-human-judgment` item **whose
@@ -114,7 +129,17 @@ the issue's cross-phase handoff note so the next worker (a re-QA tick, or a late
 phase) inherits what this pass found. Compose the entry body first into
 `tmp/phase-log-entry-<n>.md` (`<n>` = the Step-0-resolved `<N>`): a
 one-line-per-finding digest of what failed and what changed; a clean pass writes
-a body like `failed: none`. Then write it (use `dangerouslyDisableSandbox: true`
+a body like `failed: none`.
+
+The entry's **first line** is the scope binding
+`<!-- dispatch:scope-fingerprint <SCOPE_FINGERPRINT> -->`, using the same value
+the summary comment carries. `dispatch-write-phase-log` is deliberately
+content-agnostic on stdin — it upserts whatever body it is handed — so the
+binding is composed **here**, by the skill, not by the script. The next worker
+reads this entry back as `PRIOR_PHASE_LOG` and uses the binding to tell a
+current-scope handoff from one describing a superseded scope.
+
+Then write it (use `dangerouslyDisableSandbox: true`
 — the script invokes `gh`):
 
 ```bash

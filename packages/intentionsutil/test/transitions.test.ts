@@ -19,6 +19,13 @@ import {
   isStrategyStale,
   isFingerprintStale,
   stampHash,
+  REVIEWED_MARKER,
+  markerName,
+  markerBinding,
+  hasMarker,
+  findMarker,
+  markerEvidenceStale,
+  staleChainMarkers,
 } from "../src/transitions.js";
 
 function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
@@ -176,12 +183,119 @@ describe("addMarker / incrementAttempt", () => {
     expect(e0.markers).toEqual([]);
   });
 
+  it("appends the bound entry shape when given a binding", () => {
+    const e0 = exec({ markers: [PLANNED_MARKER] });
+    const e1 = addMarker(e0, QA_DONE_MARKER, { fingerprint: "fp1", sha: "abc123" });
+    expect(e1.markers).toEqual([
+      PLANNED_MARKER,
+      { marker: QA_DONE_MARKER, fingerprint: "fp1", sha: "abc123" },
+    ]);
+  });
+
+  it("keys idempotency on the marker NAME across both entry shapes", () => {
+    // Bare present, re-added bound → no-op (entry untouched).
+    const bare = exec({ markers: [QA_DONE_MARKER] });
+    expect(addMarker(bare, QA_DONE_MARKER, { fingerprint: "fp1", sha: "s1" }).markers).toEqual([
+      QA_DONE_MARKER,
+    ]);
+    // Bound present, re-added bare → no-op (binding preserved).
+    const bound = exec({ markers: [{ marker: QA_DONE_MARKER, fingerprint: "fp1", sha: "s1" }] });
+    expect(addMarker(bound, QA_DONE_MARKER).markers).toEqual([
+      { marker: QA_DONE_MARKER, fingerprint: "fp1", sha: "s1" },
+    ]);
+    // Bound present, re-added with a DIFFERENT binding → still a no-op.
+    expect(
+      addMarker(bound, QA_DONE_MARKER, { fingerprint: "fp2", sha: "s2" }).markers,
+    ).toEqual([{ marker: QA_DONE_MARKER, fingerprint: "fp1", sha: "s1" }]);
+  });
+
   it("increments a per-phase attempt counter from zero", () => {
     const e0 = exec({ attempts: {} });
     const e1 = incrementAttempt(e0, "fix");
     expect(e1.attempts).toEqual({ fix: 1 });
     expect(incrementAttempt(e1, "fix").attempts).toEqual({ fix: 2 });
     expect(e0.attempts).toEqual({});
+  });
+});
+
+describe("marker entry helpers", () => {
+  const bound = { marker: QA_DONE_MARKER, fingerprint: "fp1", sha: "sha1" };
+
+  it("markerName/markerBinding discriminate both shapes", () => {
+    expect(markerName(QA_DONE_MARKER)).toBe(QA_DONE_MARKER);
+    expect(markerName(bound)).toBe(QA_DONE_MARKER);
+    expect(markerBinding(QA_DONE_MARKER)).toBeNull();
+    expect(markerBinding(bound)).toEqual({ fingerprint: "fp1", sha: "sha1" });
+  });
+
+  it("hasMarker/findMarker match by name across shapes", () => {
+    expect(hasMarker([PLANNED_MARKER, bound], QA_DONE_MARKER)).toBe(true);
+    expect(hasMarker([PLANNED_MARKER, bound], REVIEWED_MARKER)).toBe(false);
+    expect(hasMarker([], QA_DONE_MARKER)).toBe(false);
+    expect(findMarker([PLANNED_MARKER, bound], QA_DONE_MARKER)).toEqual(bound);
+    expect(findMarker([PLANNED_MARKER, bound], PLANNED_MARKER)).toBe(PLANNED_MARKER);
+    expect(findMarker([PLANNED_MARKER], QA_DONE_MARKER)).toBeUndefined();
+  });
+});
+
+describe("markerEvidenceStale", () => {
+  it("is not stale when the marker is absent (nothing to ratify)", () => {
+    expect(markerEvidenceStale([], QA_DONE_MARKER, "fp1")).toBe(false);
+    expect(markerEvidenceStale([PLANNED_MARKER], QA_DONE_MARKER, "fp1")).toBe(false);
+  });
+
+  it("is not stale when the marker is present but unbound (legacy grandfather)", () => {
+    expect(markerEvidenceStale([QA_DONE_MARKER], QA_DONE_MARKER, "fp1")).toBe(false);
+    expect(markerEvidenceStale([QA_DONE_MARKER], QA_DONE_MARKER, "anything-else")).toBe(false);
+  });
+
+  it("is not stale when the bound fingerprint matches", () => {
+    const markers = [{ marker: QA_DONE_MARKER, fingerprint: "fp1", sha: "s1" }];
+    expect(markerEvidenceStale(markers, QA_DONE_MARKER, "fp1")).toBe(false);
+  });
+
+  it("is stale only when the bound fingerprint differs", () => {
+    const markers = [{ marker: QA_DONE_MARKER, fingerprint: "fp1", sha: "s1" }];
+    expect(markerEvidenceStale(markers, QA_DONE_MARKER, "fp2")).toBe(true);
+  });
+});
+
+describe("staleChainMarkers", () => {
+  it("returns [] for an intact bound chain", () => {
+    const markers = [
+      { marker: PLANNED_MARKER, fingerprint: "fp1", sha: "s1" },
+      { marker: QA_DONE_MARKER, fingerprint: "fp1", sha: "s2" },
+    ];
+    expect(staleChainMarkers(markers, "fp1")).toEqual([]);
+  });
+
+  it("returns [] for a wholly unbound (legacy) chain", () => {
+    expect(staleChainMarkers([PLANNED_MARKER, QA_DONE_MARKER], "fp9")).toEqual([]);
+  });
+
+  it("returns the mismatching marker names, ladder order", () => {
+    const markers = [
+      { marker: PLANNED_MARKER, fingerprint: "fp0", sha: "s1" },
+      { marker: QA_DONE_MARKER, fingerprint: "fp0", sha: "s2" },
+    ];
+    expect(staleChainMarkers(markers, "fp1")).toEqual([PLANNED_MARKER, QA_DONE_MARKER]);
+  });
+
+  it("reports only the bound-and-mismatching entries", () => {
+    const markers = [
+      PLANNED_MARKER, // unbound → grandfathered open
+      { marker: QA_DONE_MARKER, fingerprint: "fp0", sha: "s2" },
+    ];
+    expect(staleChainMarkers(markers, "fp1")).toEqual([QA_DONE_MARKER]);
+  });
+
+  it("honors an explicit phase list", () => {
+    const markers = [
+      { marker: QA_DONE_MARKER, fingerprint: "fp0", sha: "s2" },
+      { marker: REVIEWED_MARKER, fingerprint: "fp0", sha: "s3" },
+    ];
+    expect(staleChainMarkers(markers, "fp1", ["review"])).toEqual([REVIEWED_MARKER]);
+    expect(staleChainMarkers(markers, "fp1", [])).toEqual([]);
   });
 });
 

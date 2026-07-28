@@ -65,6 +65,32 @@ already marks resolved are **not** re-derived (the Step-2 flush persisted them),
 per-unit fix commits are already durable. Diff the worktree against the branch base,
 read the prior comment, and continue from there.
 
+**Scope-bound resume (node lane).** The prior `<!-- dispatch:qa-summary -->` comment
+and `PRIOR_PHASE_LOG` are resume input **only when** their
+`<!-- dispatch:scope-fingerprint … -->` line equals this session's
+`SCOPE_FINGERPRINT` (the node's current scope fingerprint, emitted by the front
+door and bound in the preamble). Three cases:
+
+- **Binding matches** — resume as above: trust the resolved verdicts, re-derive
+  only what is unresolved.
+- **Binding differs** — the artifacts are history from a **superseded scope**: the
+  plan they QA'd is no longer the plan in force, so a resolved verdict there proves
+  nothing about the current one. Re-derive **every** item and **rewrite** the
+  summary from scratch (still finalizing the same marker comment in place, now
+  carrying the current binding) rather than incrementally trusting it. Treat
+  `PRIOR_PHASE_LOG` the same way — at most weak advisory background, never a
+  reason to skip an item.
+- **Binding absent** — a legacy artifact predating scope binding. Grandfathered:
+  behave exactly as today (unbound fails OPEN, i.e. treat it as resume input).
+  That fail-open is a bootstrap policy, not the end state — it flips to
+  fail-CLOSED once every writer of these artifacts binds a fingerprint and the
+  unbound ones have churned out, the same deferral `markerEvidenceStale` records
+  in `packages/intentionsutil/src/transitions.ts`.
+
+The `qa-done` marker itself is gated separately, by the preamble's
+`QA_DONE_VALID` check over the typed `.execution.markers` path, under the same
+three-case policy.
+
 ## Why the preamble pack adds `--pr` and `--phase-log` but not `--diff`
 
 qa-fix adopts `--pr` and `--phase-log` in the preamble's `dispatch-context-pack`

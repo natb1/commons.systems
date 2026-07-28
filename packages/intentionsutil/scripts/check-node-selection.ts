@@ -18,6 +18,12 @@
 //   1. exists      — intentions/<node-id>.md present (a pruned node is a
 //                    completed/removed selection).            exit 12
 //   2. phase       — persisted phase equals <selected-phase>. exit 12
+//                    For a review selection, an already-present `reviewed`
+//                    marker also short-circuits here — but only while its
+//                    evidence is still bound to the current scope; a marker
+//                    bound to a superseded scope falls through to check 5 so
+//                    the verdict is the demote-to-implement exit 13, not a
+//                    plain worker drop.
 //   3. not parked  — office_hours null.                       exit 12
 //   4. fingerprint — only when execution.strategy_fingerprint is non-null:
 //                    each serving strategy's current substance hash matches its
@@ -49,9 +55,9 @@ import {
   strategyFingerprint,
   tacticScopeFingerprint,
 } from "../src/router.js";
-import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
+import { hasMarker, isFingerprintStale, markerEvidenceStale, REVIEWED_MARKER } from "../src/transitions.js";
 import { isPlainObject } from "../src/schema.js";
-import type { FixState, IntentionNode, StrategyStampValue } from "../src/schema.js";
+import type { FixState, IntentionNode, MarkerEntry, StrategyStampValue } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
 // --- Exit codes ------------------------------------------------------------
@@ -140,13 +146,20 @@ function readStrategyFingerprint(
  * reads — a squatter node (attention-surface / token-economy subtree) carries
  * `execution` under `attributes.execution`, where `node.execution` is null.
  */
-function readMarkers(node: IntentionNode): string[] {
+function readMarkers(node: IntentionNode): MarkerEntry[] {
   const firstClass = node.execution?.markers ?? null;
   if (firstClass !== null) return firstClass;
   const squatExec = node.attributes.execution;
   if (squatExec !== null && typeof squatExec === "object" && "markers" in squatExec) {
     const markers = (squatExec as { markers?: unknown }).markers;
-    if (Array.isArray(markers)) return markers.filter((m): m is string => typeof m === "string");
+    // Squatter markers are unvalidated attributes: keep both entry shapes (bare
+    // name, and the bound object carrying a string `marker`) and drop anything
+    // malformed rather than crashing on it.
+    if (Array.isArray(markers)) {
+      return markers.filter((m): m is MarkerEntry =>
+        typeof m === "string" || (isPlainObject(m) && typeof m.marker === "string"),
+      );
+    }
   }
   return [];
 }
@@ -197,6 +210,14 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     throw err;
   }
 
+  // The node's scope fingerprint (statement + body). Computed here, immediately
+  // after the existence check, because two checks below need it: check 2's
+  // reviewed-marker short-circuit (is the recorded review evidence still bound
+  // to the scope in force?) and check 5's scope-chain gate. `readNodeBody`
+  // throws only when the node file is absent, which check 1 above has already
+  // ruled out — so hoisting it here has no ordering side effect.
+  const scopeFp = tacticScopeFingerprint(node.statement, readNodeBody(dir, nodeId));
+
   // 2. phase — the selected phase must still match the node.
   //
   // A strategy is selected at the derived `align-tactics` rung, a string the
@@ -243,7 +264,11 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     }
   } else if (phase !== selectedPhase) {
     return fail(EXIT_STALE_SELECTION, "phase", `selected ${selectedPhase} but node is now ${phase ?? "draft/null"}`);
-  } else if (selectedPhase === "review" && readMarkers(node).includes(REVIEWED_MARKER)) {
+  } else if (
+    selectedPhase === "review" &&
+    !markerEvidenceStale(readMarkers(node), REVIEWED_MARKER, scopeFp) &&
+    hasMarker(readMarkers(node), REVIEWED_MARKER)
+  ) {
     // The pure selector (selectGraphTargets) already skips emitting a
     // phase:review tactic once it carries the reviewed marker — the marker
     // means the review pass already ran and the node is awaiting tick
@@ -251,6 +276,15 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     // mirror of that guard, catching a directive selected just before the
     // marker landed (or a hand-run/explicit-dispatch invocation that bypassed
     // the selector entirely).
+    //
+    // ROUTING: the short-circuit fires only while the reviewed marker's
+    // evidence is still bound to the CURRENT scope (or is legacy-unbound, which
+    // grandfathers open per `markerEvidenceStale`). A marker bound to a scope
+    // that has since changed is not valid evidence, and dropping the worker at
+    // exit 12 would leave that stale evidence in place to be ratified by the
+    // next re-entry. Such a node instead falls through to check 5, which
+    // returns exit 13 — the demote-to-implement disposition that clears the
+    // markers and re-runs the ladder against the scope now in force.
     return fail(
       EXIT_STALE_SELECTION,
       "phase",
@@ -314,8 +348,8 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     }
   }
 
-  // Passed the staleness checks: compute the scope fingerprint (statement + body).
-  const scopeFp = tacticScopeFingerprint(node.statement, readNodeBody(dir, nodeId));
+  // Passed the staleness checks (the scope fingerprint was computed above, at
+  // the top, so check 2 and check 5 share one value).
   const stderr: string[] = [];
 
   // 5. scope chain — chain-of-custody. Only for the phases that inherit a prior

@@ -85,6 +85,11 @@ case "$BRANCH" in
     NODE_JSON=$(printf '%s\n' "$DERIVE_OUT" | sed -n '/^=== NODE-JSON ===$/,/^=== NODE-BODY ===$/p' \
       | sed '1d;$d')
     NODE_BODY=$(printf '%s\n' "$DERIVE_OUT" | sed -n '/^=== NODE-BODY ===$/,$p' | sed '1d')
+    # The node's CURRENT scope fingerprint (front door, emitted once). Comparand
+    # for the `reviewed`-marker re-entry check below and the scope binding this
+    # skill writes into its phase-log entry
+    # (tactic-phase-evidence-fingerprint-bound).
+    SCOPE_FINGERPRINT=$(printf '%s\n' "$DERIVE_OUT" | sed -n 's/^SCOPE-FINGERPRINT: //p' | head -1)
     N="$NODE_ID"; TARGET_KIND=node ;;
 esac
 ```
@@ -178,10 +183,13 @@ left stranded — the flush that lets the router resolve `mergeable == MERGEABLE
 and promote the PR to ready).
 
 On the node lane there is no `dispatch:reviewed` label — check instead for a
-`reviewed` item in the node's `execution.markers`, via a `jq` query against the
-front door's structured `NODE_JSON` (see `references/node-lane.md`). If present,
-this is an interrupted prior run — skip Steps 1–6 to Step 7's terminal flush,
-exactly as the label check routes the issue lane. On either re-entry path the
+`reviewed` item in the node's `execution.markers` that is **valid for the current
+scope** (`SCOPE_FINGERPRINT`), via a `jq` query against the front door's
+structured `NODE_JSON` (see `references/node-lane.md`). If such a marker is
+present, this is an interrupted prior run — skip Steps 1–6 to Step 7's terminal
+flush, exactly as the label check routes the issue lane. A `reviewed` marker
+bound to a **different** fingerprint is evidence from a superseded scope and does
+**not** short-circuit: the review runs in full. On either re-entry path the
 Workflow has not run, so Step 7 skips the phase-log write and the
 outcome-envelope emit and writes the marker. Otherwise run all steps in order.
 

@@ -371,6 +371,24 @@ function validateAttention(value: unknown, field: string): Attention {
 export type StrategyStampValue = string | { hash: string; sha: string };
 
 /**
+ * A single `execution.markers` entry — a phase-completion marker. Either:
+ *  - a bare marker-name string (legacy/UNBOUND form): the marker records only
+ *    THAT a phase completed, not the scope it completed against. Such an entry
+ *    fails OPEN at every ratification gate (`markerEvidenceStale` in
+ *    `transitions.ts`) — a grandfathered marker is never treated as stale
+ *    evidence, because there is no fingerprint to compare.
+ *  - `{marker, fingerprint, sha}`: the bound form. `marker` is the same marker
+ *    name; `fingerprint` is the tactic's scope fingerprint
+ *    (`tacticScopeFingerprint`) at the time the phase completed; `sha` is the
+ *    `origin/main` commit that fingerprint was computed against. A gate can
+ *    then tell whether the evidence was produced under the scope now in force.
+ *
+ * Mirrors the `StrategyStampValue` string-or-object widening shape above; the
+ * discrimination has a single home (`markerName`/`markerBinding`).
+ */
+export type MarkerEntry = string | { marker: string; fingerprint: string; sha: string };
+
+/**
  * Live execution record a router stamps on a tactic in flight. Valid on
  * tactics only (enforced by `validateGraph`).
  *
@@ -431,7 +449,7 @@ export interface Execution {
   branch: string;
   pr: number | null;
   attempts: Record<string, number>; // per-phase attempt counts
-  markers: string[];
+  markers: MarkerEntry[];
   strategy_fingerprint: string | Record<string, StrategyStampValue> | null;
   /**
    * Optional (not just nullable) at the type level: existing `Execution`
@@ -582,6 +600,32 @@ function validateCompletion(value: unknown, field: string): Completion | null {
   };
 }
 
+/**
+ * `execution.markers`: an array of `MarkerEntry`. Each element is either a bare
+ * marker-name string (legacy/unbound) or the bound `{marker, fingerprint, sha}`
+ * object, all three fields required strings. Anything else (number, null,
+ * array, object missing a field) throws — a malformed entry is a corrupt
+ * evidence record, not something to silently coerce.
+ */
+function validateMarkers(value: unknown, field: string): MarkerEntry[] {
+  if (!Array.isArray(value)) {
+    throw new IntentionSchemaError(`Expected array for ${field}, got ${typeof value}`);
+  }
+  return value.map((item, i) => {
+    if (typeof item === "string") return requireString(item, `${field}[${i}]`);
+    if (isPlainObject(item)) {
+      return {
+        marker: requireString(item.marker, `${field}[${i}].marker`),
+        fingerprint: requireString(item.fingerprint, `${field}[${i}].fingerprint`),
+        sha: requireString(item.sha, `${field}[${i}].sha`),
+      };
+    }
+    throw new IntentionSchemaError(
+      `Expected string or {marker,fingerprint,sha} object at ${field}[${i}], got ${typeof item}`,
+    );
+  });
+}
+
 function validateExecution(value: unknown, field: string): Execution {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
@@ -590,7 +634,7 @@ function validateExecution(value: unknown, field: string): Execution {
     branch: requireString(value.branch, `${field}.branch`),
     pr: value.pr == null ? null : requireNonNegativeInt(value.pr, `${field}.pr`),
     attempts: validateAttempts(value.attempts, `${field}.attempts`),
-    markers: validateIdArray(value.markers, `${field}.markers`),
+    markers: validateMarkers(value.markers, `${field}.markers`),
     strategy_fingerprint: validateStrategyFingerprint(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
     fix: validateFixState(value.fix, `${field}.fix`),
     completion: validateCompletion(value.completion, `${field}.completion`),

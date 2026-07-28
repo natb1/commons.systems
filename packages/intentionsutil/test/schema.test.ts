@@ -171,6 +171,65 @@ describe("validateNode", () => {
     });
   });
 
+  it("accepts markers in both the bare-string and bound object shapes", () => {
+    const result = validateNode({
+      id: "n1-markers-mixed",
+      kind: "tactic",
+      statement: "Execution with unbound and bound markers.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: ["planned", { marker: "qa-done", fingerprint: "fp1", sha: "sha1" }],
+        strategy_fingerprint: null,
+      },
+    });
+    expect(result.execution?.markers).toEqual([
+      "planned",
+      { marker: "qa-done", fingerprint: "fp1", sha: "sha1" },
+    ]);
+  });
+
+  it("rejects a bound marker entry missing fingerprint", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-markers-nofp",
+        kind: "tactic",
+        statement: "Marker entry missing fingerprint.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [{ marker: "qa-done", sha: "sha1" }],
+          strategy_fingerprint: null,
+        },
+      }),
+    ).toThrow(/execution\.markers\[0\]\.fingerprint/);
+  });
+
+  it("rejects a non-string, non-object marker entry", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-markers-number",
+        kind: "tactic",
+        statement: "Marker entry that is a number.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [123],
+          strategy_fingerprint: null,
+        },
+      }),
+    ).toThrow(/Expected string or \{marker,fingerprint,sha\} object at execution\.markers\[0\]/);
+  });
+
   it("accepts a per-strategy strategy_fingerprint map", () => {
     const result = validateNode({
       id: "n1-fp-map",

@@ -2,8 +2,8 @@ import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readNode, writeNode } from "../src/store.js";
-import { strategyFingerprint } from "../src/router.js";
+import { readNode, readNodeBody, writeNode } from "../src/store.js";
+import { strategyFingerprint, tacticScopeFingerprint } from "../src/router.js";
 import type { IntentionNode, Phase } from "../src/schema.js";
 import { evaluateSelection } from "../scripts/check-node-selection.js";
 
@@ -101,6 +101,75 @@ describe("evaluateSelection", () => {
     const r = evaluateSelection({ nodeId: "tactic-r", selectedPhase: "review", dir, stamp: null });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/tactic-r already carries the reviewed marker/);
+  });
+
+  // --- Fingerprint-bound reviewed evidence (tactic-phase-evidence-fingerprint-bound Unit 3)
+  //
+  // The bare-string case above is the legacy grandfather. A BOUND marker is
+  // trusted only while its fingerprint still matches the node's current scope;
+  // a marker bound to a superseded scope must route to the demote-to-implement
+  // verdict (exit 13), not the plain worker drop (exit 12).
+
+  /** Seed a review-phase node carrying `markers`, and return its scope fingerprint. */
+  function seedReviewNode(dir: string, id: string, markers: unknown[]): string {
+    seed(
+      dir,
+      anode({
+        id,
+        kind: "tactic",
+        phase: "review",
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: markers as never,
+          strategy_fingerprint: null,
+        },
+      }),
+    );
+    const node = readNode(dir, id);
+    return tacticScopeFingerprint(node.statement, readNodeBody(dir, id));
+  }
+
+  it("exit 12 when the reviewed marker is BOUND to the node's current scope", () => {
+    const dir = tempDir();
+    // Seed once to learn the fingerprint, then re-seed the marker bound to it
+    // (the statement/body are unchanged, so the fingerprint is stable).
+    const fp = seedReviewNode(dir, "tactic-rb", []);
+    seedReviewNode(dir, "tactic-rb", [{ marker: "reviewed", fingerprint: fp, sha: "deadbeef" }]);
+    const stamp = join(dir, "tactic-rb.scope-fingerprint");
+    writeFileSync(stamp, `${fp} deadbeef\n`);
+
+    const r = evaluateSelection({ nodeId: "tactic-rb", selectedPhase: "review", dir, stamp });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/tactic-rb already carries the reviewed marker/);
+  });
+
+  it("exit 13 (NOT 12) when the reviewed marker is bound to a SUPERSEDED scope", () => {
+    const dir = tempDir();
+    const stale = "0".repeat(64);
+    seedReviewNode(dir, "tactic-rs", [{ marker: "reviewed", fingerprint: stale, sha: "cafe1234" }]);
+    // The phase-start stamp matches the marker's (now superseded) binding.
+    const stamp = join(dir, "tactic-rs.scope-fingerprint");
+    writeFileSync(stamp, `${stale} cafe1234\n`);
+
+    const r = evaluateSelection({ nodeId: "tactic-rs", selectedPhase: "review", dir, stamp });
+    expect(r.exitCode).toBe(13);
+    expect(r.stderr[0]).toMatch(/scope-stale: scope-chain:/);
+  });
+
+  it("exit 12 for a LEGACY unbound (bare-string) reviewed marker — grandfathered", () => {
+    const dir = tempDir();
+    const fp = seedReviewNode(dir, "tactic-rl", ["reviewed"]);
+    // A stamp that MISmatches: were the bare-string marker treated as stale
+    // evidence it would fall through to the exit-13 scope-chain verdict.
+    const stamp = join(dir, "tactic-rl.scope-fingerprint");
+    writeFileSync(stamp, `${"0".repeat(64)} cafe1234\n`);
+    expect(fp).not.toBe("0".repeat(64));
+
+    const r = evaluateSelection({ nodeId: "tactic-rl", selectedPhase: "review", dir, stamp });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/tactic-rl already carries the reviewed marker/);
   });
 
   it("passes a review-phase node without the reviewed marker", () => {
