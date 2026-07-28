@@ -32328,11 +32328,21 @@ chmod +x "$GSN_ROOT/bin/claude"
 mkdir -p "$GSN_ROOT/.claude/worktrees/tactic-fixture"
 GSN_GST="$GSN_SCRIPTS/graph-select-target"
 
+# Per-case baseline: no live sessions, no reservations. graph-select-target
+# checks the reserved gate BEFORE the live-session gate, so without an explicit
+# reset the live-session case would only observe its own gate because the
+# reserved case happened to clean up after itself — cases would silently change
+# meaning if reordered or run in isolation.
+gsn_reset() {
+  printf '%s' '[]' > "$GSN_ROOT/claude-payload.json"
+  rm -rf "$GSN_ROOT/reservations"
+  mkdir -p "$GSN_ROOT/reservations"
+}
+
 echo "Test: graph-select-target --node explicit dispatch (tactic-graph-select-target-node-tests)"
 
 # --- Case 1: present candidate, no gate -> selected -------------------------
-printf '%s' '[]' > "$GSN_ROOT/claude-payload.json"
-rm -f "$GSN_ROOT/reservations/tactic-fixture"
+gsn_reset
 gsn1_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
   CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
   DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture 2>/dev/null) && gsn1_rc=0 || gsn1_rc=$?
@@ -32340,8 +32350,7 @@ assert_eq "graph-select-target --node: present candidate, no gate selects" "node
 assert_eq "graph-select-target --node: present candidate, no gate exits 0" "0" "$gsn1_rc"
 
 # --- Case 2: node absent from candidates -> not-found -----------------------
-printf '%s' '[]' > "$GSN_ROOT/claude-payload.json"
-rm -f "$GSN_ROOT/reservations/tactic-fixture"
+gsn_reset
 gsn2_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
   CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
   DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-absent 2>"$GSN_ROOT/stderr.txt") && gsn2_rc=0 || gsn2_rc=$?
@@ -32353,8 +32362,7 @@ assert_contains_local "graph-select-target --node: absent candidate explains not
   "$gsn2_err"
 
 # --- Case 3: present candidate, reserved -> gated ---------------------------
-printf '%s' '[]' > "$GSN_ROOT/claude-payload.json"
-mkdir -p "$GSN_ROOT/reservations"
+gsn_reset
 touch "$GSN_ROOT/reservations/tactic-fixture"
 gsn3_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
   CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
@@ -32363,9 +32371,9 @@ gsn3_err=$(cat "$GSN_ROOT/stderr.txt")
 assert_eq "graph-select-target --node: reserved candidate emits empty" "empty" "$gsn3_out"
 assert_eq "graph-select-target --node: reserved candidate exits 0" "0" "$gsn3_rc"
 assert_eq "graph-select-target --node: reserved candidate reports reserved" "graph-select-target: reserved" "$gsn3_err"
-rm -f "$GSN_ROOT/reservations/tactic-fixture"
 
 # --- Case 4: present candidate, live session -> gated -----------------------
+gsn_reset
 printf '%s' '[{"sessionId":"s1","pid":1,"status":"busy","name":"tactic-fixture","cwd":""}]' \
   > "$GSN_ROOT/claude-payload.json"
 gsn4_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
@@ -32377,6 +32385,7 @@ assert_eq "graph-select-target --node: live-session candidate exits 0" "0" "$gsn
 assert_eq "graph-select-target --node: live-session candidate reports live-session" "graph-select-target: live-session" "$gsn4_err"
 
 # --- Case 5: --node + --top -> usage error ----------------------------------
+gsn_reset
 gsn5_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
   CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
   DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture --top 2 2>"$GSN_ROOT/stderr.txt") && gsn5_rc=0 || gsn5_rc=$?
@@ -32386,6 +32395,7 @@ assert_contains_local "graph-select-target --node: --node + --top reports mutual
   "--node is mutually exclusive with --top and --pace-exempt-only" "$gsn5_err"
 
 # --- Case 6: --node + --pace-exempt-only -> usage error ---------------------
+gsn_reset
 gsn6_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
   CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
   DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture --pace-exempt-only 2>"$GSN_ROOT/stderr.txt") && gsn6_rc=0 || gsn6_rc=$?
