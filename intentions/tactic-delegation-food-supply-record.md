@@ -22,25 +22,11 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Author intake, not a code change: record the missing
-    delegation-food-supply node — statement, delegatee, delegated capability,
-    origin, divergence, irreversibility, non_delegable_floor, review_trigger,
-    last_assessed, per kind-delegation attributes.fields. Put in scope by the
-    2026-07-02 mobility-virtue clarifications and flagged by
-    strategy-nourishment; the known hole in strategy-complete-ledger threshold.
-    About 30 minutes."
-  since: 2026-07-11
-  recommendation: "Run an /align-strategy-style intake at an office-hours sitting
-    (the 2026-07-02 sweep records — delegation-banking, delegation-cloud-backup
-    — are the shape to match; a raw record with first-pass axes beats an
-    invisible edge). Landing the record unblocks the round completeness pass
-    (tactic-ledger-completeness-pass); set this tactic phase: done once the
-    record is on main."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

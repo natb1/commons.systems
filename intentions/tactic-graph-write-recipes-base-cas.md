@@ -61,7 +61,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-graph-write-recipes-base-cas
   pr: 2939
@@ -69,10 +69,11 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-22
-    attempt: 1
-    pushed_sha: null
+  fix: null
+  completion:
+    mergedAt: 2026-07-26T05:52:13Z
+    mergeCommitSha: c063f4906c77912298b97da322f29cd9103b5b80
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

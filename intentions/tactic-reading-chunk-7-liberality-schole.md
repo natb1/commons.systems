@@ -36,6 +36,7 @@ office_hours:
     (the divine question, R20/R21) — see the body's deferral bullets."
   since: 2026-07-06
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

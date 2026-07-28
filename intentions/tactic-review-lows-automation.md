@@ -7,12 +7,13 @@ owner: ai
 status: codified
 parent: null
 rationale: "Finalized 2026-07-11 /align-tactics round from the retained
-  2026-07-05 review-lows draft, narrowed by the greenfield-relevance gate:
-  GitHub issues are disabled (the gh queue drained and retired), so every
-  legacy-gh-router finding is dropped as superseded by
-  tactic-legacy-router-removal — only live-surface fixes remain (CI verification
-  wrappers, session hooks, align-init fetch helpers). Dropped units are recorded
-  in the body with their superseding node."
+  2026-07-05 review-lows draft, scoped to live-surface fixes: CI verification
+  wrappers, session hooks, align-init fetch helpers. Of the legacy-gh-router
+  findings, only dispatch-select-target and dispatch-route are resolved (their
+  scripts are deleted from origin/main); the rest are open and unowned, with no
+  intention node tracking them, apart from one already tracked on
+  tactic-token-audit-node-attribution. See the dispositions section in the body
+  for the per-finding detail."
 reading: null
 gap: null
 serves:
@@ -41,11 +42,14 @@ attributes: {}
 ## Context
 
 Live-surface residue of the 2026-07-05 code review lows (draft split from the
-deleted mixed sweep per the placement doctrine). Narrowed 2026-07-11 by the
-greenfield-relevance gate: GitHub issues are disabled — the gh dispatch queue
-drained and retired — so every legacy-gh-router finding is dropped as
-superseded by `tactic-legacy-router-removal` (see Dropped units). What
-remains: three small live-surface fixes, one PR.
+deleted mixed sweep per the placement doctrine). Scoped 2026-07-11 to
+live-surface fixes. Of the legacy-gh-router findings, only
+`dispatch-select-target` and `dispatch-route` are resolved (their scripts are
+deleted from origin/main); the rest are open and unowned — no intention node
+tracks them — apart from one already tracked on
+`tactic-token-audit-node-attribution`. See the dispositions section below for
+the per-finding detail. What remains as this node's planned work: three small
+live-surface fixes, one PR.
 
 ## Unit 1 — CI wrapper false-green patterns
 
@@ -93,23 +97,51 @@ Scope:
   drift between the two copies, extract one helper into a sourceable lib
   file under `.claude/skills/align-init/scripts/`, and source it from both.
 
-## Dropped units (greenfield-relevance gate, 2026-07-11)
+## Dispositions of the findings left out of this node's plan
 
-- All legacy dispatch-script findings (`dispatch-reconcile-merged:61`
-  creation-ordered window, `dispatch-select-target:270` unpaginated
-  main-broken check, `dispatch-find-owning-pr:92` any-error-as-404,
-  `dispatch-route:179,196,211,277-284` undiagnosed parks,
-  `dispatch-attempt-count` remove-then-add bump, `gh_retry:125-151`
-  non-idempotent POST retries) — superseded by `tactic-legacy-router-removal`
-  (issues disabled; the surface is scheduled for deletion).
-- lib.sh duplication lows (`gh label create` idiom x8, marker-comment upsert
-  copies, `dispatch-attempt-count`/`dispatch-qa-fix-attempt` near-clones) —
-  same supersession.
-- Dead-script deletions (`issue-siblings`, `wait-for-url.sh`,
-  `check-inbox-age`, `dispatch-reclaim-audit`) — deferred to the same
-  removal tactic's deletion sweep.
-- Token-audit local-time window (`aggregate-usage.sh:168,174,846`) — already
-  tracked at `tactic-token-audit-node-attribution` Unit 4.
+The 2026-07-11 greenfield-relevance gate cut these 2026-07-05 findings from this
+node's plan and filed them as dropped, on the assumption that
+`tactic-legacy-router-removal` would delete every script named here. That
+assumption was wrong, and this section was corrected on 2026-07-23 by
+`tactic-legacy-router-removal` Unit 3. `tactic-legacy-router-removal`'s body
+only ever named `dispatch-select-target`, `dispatch-phase`'s derivation logic,
+`dispatch-materialize-spawn`, `dispatch-launch-worker`, `dispatch-trace-leaf`,
+`dispatch-route`, the office-hours entry surface, and the legacy
+`worktree-create.sh` lane — nothing else below was ever in its plan. Only two of
+the findings are actually resolved, and the deletions that resolved them came
+from a different node.
+
+Each finding sits in exactly one of the three groups below. This section is a
+record only: it schedules no work and creates no units.
+
+### Resolved — the code is deleted from origin/main
+
+- `dispatch-select-target:270` (unpaginated main-broken check) and
+  `dispatch-route:179,196,211,277-284` (undiagnosed parks). Both scripts are
+  confirmed absent from origin/main as of 2026-07-23, deleted via the
+  separately-recorded `tactic-dispatch-legacy-rewire` (PR #2869), not via
+  `tactic-legacy-router-removal`. No further action needed.
+
+### Open and unowned — no intention node tracks these
+
+The code is confirmed still present on origin/main as of 2026-07-23, and no
+node — neither `tactic-legacy-router-removal` nor any other — carries these
+findings. They are open and unowned; this record neither claims nor commits to
+fixing them.
+
+- `dispatch-reconcile-merged:61` — creation-ordered window.
+- `dispatch-find-owning-pr:92` — any-error-as-404.
+- `dispatch-attempt-count` — remove-then-add bump.
+- `gh_retry:125-151` (in `lib.sh`) — non-idempotent POST retries.
+- lib.sh duplication lows — `gh label create` idiom x8, marker-comment upsert
+  copies, `dispatch-attempt-count`/`dispatch-qa-fix-attempt` near-clones.
+- Dead-script deletions never scheduled by any sweep — `issue-siblings`,
+  `wait-for-url.sh`, `check-inbox-age`, `dispatch-reclaim-audit`.
+
+### Tracked on another node
+
+- Token-audit local-time window (`aggregate-usage.sh:168,174,846`) — tracked at
+  `tactic-token-audit-node-attribution` Unit 4.
 
 ## Reuse
 

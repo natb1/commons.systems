@@ -25,16 +25,32 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
-phase: qa
+attention:
+  boost: 85
+  override: null
+  rationale: "Author-directed 2026-07-25: the queue-serialization work
+    (dispatch-queue claim integrity, office-hours drain claiming, and the
+    cross-queue landing path) is the current focus. Own boost 85 composes with
+    the +5 inherited from strategy-graph-native-dispatch to an authored 90 —
+    exact parity with tactic-graph-router-live-worker-read-robust, the existing
+    author-set boost on this same defect class — and deliberately below
+    strategy-main-health's standing 100 so the main-health signal keeps its
+    recorded dominance."
+phase: done
 execution:
   branch: tactic-clear-park-primitive
   pr: 2947
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:21:49Z
+    mergeCommitSha: dee357ae4d77018525a3a6a07a0adf0c71fa3cca
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -170,3 +186,48 @@ npx vitest run --project packages/intentionsutil --root .
   exits 0 without a new commit (idempotency). The full drain-lane terminal
   disposition is exercised in production once
   `tactic-office-hours-self-modification-skill` wires the call.
+
+## needs-main residue
+
+`/qa-fix` ran the autonomous QA pass on PR #2947 (2026-07-23). All
+script-verifiable items passed (syntax check, executable+shebang check, usage-error
+exit codes). Two acceptance criteria are genuine planned deferrals — their
+verification requires a live `git fetch origin/main` and a real `graph-commit`
+landing on `main`, both out of scope for an automated non-mutating check — so they
+are deferred here for post-merge verification against deployed main:
+
+`/qa-main` (2026-07-26): neither item is browser-verifiable — both are
+clear-park CLI scenarios gated on a live `git fetch origin/main` and an actual
+`graph-commit` landing on main, not on anything observable via a deployed web
+page (both carry `url_path: current`, not a real path). Author-directed
+2026-07-26: skip rather than park for a human main-qa glance — mark both
+skipped and progress the node to `done`.
+
+- **id 4** — Idempotent no-op exit 0 when the node is already unparked on
+  origin/main
+  - url_path: current (CLI script, no URL)
+  - expected_outcome: Against a node whose `office_hours` is already `null` on
+    origin/main, `clear-park <node-id>` prints an already-unparked note, exits 0,
+    and does NOT invoke `graph-commit` (no empty commit lands).
+  - finding: exercising this path requires a live `git fetch origin main` and an
+    `npx tsx` execution against `store.ts` against a real already-unparked node —
+    network/mutating side effects out of scope for an automated non-mutating
+    shell check in this sandbox; verify by running `clear-park` against a real
+    already-unparked scratch node on main.
+  - status: skipped — not browser-verifiable; author-directed 2026-07-26 to
+    skip rather than escalate to office-hours.
+
+- **id 5** — Full clear-and-land round-trip, `--base` compare-and-swap, and
+  stale-base refusal
+  - url_path: current (CLI script, no URL)
+  - expected_outcome: Against a genuinely parked node, `clear-park <node-id>
+    "<note>"` clears the park and `graph-commit` lands the edit on origin/main
+    with the correct commit message; separately, a since-advanced `--base` is
+    refused (exit 1) rather than silently reverting intervening changes.
+  - finding: the production round-trip (real fetch, real store write,
+    `graph-commit` landing on `origin/main`, and the stale-base refusal path)
+    requires network and repository-mutating side effects out of scope for an
+    automated non-mutating check; verify by running `clear-park` against a real
+    parked scratch node on main, and by testing the stale-base refusal directly.
+  - status: skipped — not browser-verifiable; author-directed 2026-07-26 to
+    skip rather than escalate to office-hours.

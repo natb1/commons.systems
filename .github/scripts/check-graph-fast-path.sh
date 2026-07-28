@@ -27,14 +27,44 @@ fi
 # Parse the JSON array of pushed commit SHAs.
 mapfile -t SHAS < <(printf '%s' "${PUSHED_COMMITS:-}" | jq -r '.[]')
 
-# Fail-closed on an empty commit list. An empty `commits` array occurs only in
-# the degenerate "scratch SHA already reachable from another ref at push time"
-# case (a re-push of an already-landed SHA). Today's three-dot guard ALSO
-# false-fails in that same case, so refusing here is not a new regression — it is
-# the intended fail-closed behavior. Falling back to head_commit.id or an
-# origin/main range would fail OPEN and defeat the guard's purpose.
+# An empty `commits` array is NOT automatically fatal. It has one confirmed
+# benign cause: graph-commit force-pushes a scratch SHA to trigger this workflow,
+# then fast-forwards that SAME SHA onto main. If a second concurrent graph-commit
+# produced byte-identical commit content (identical tree+parent+timestamps =>
+# identical SHA) and its fast-forward landed FIRST, this push re-pushes a SHA
+# GitHub already knows about, so github.event.commits is empty. That SHA is
+# already on main and was already verified — refusing it false-fails a legitimate
+# landing. We skip ONLY when we can PROVE the pushed HEAD SHA is already reachable
+# from origin/main; every other empty-payload case stays fail-closed. Note a
+# fetch-depth: 0 checkout (actions/checkout, graph-fast-path.yml) makes
+# origin/main available as refs/remotes/origin/main without an extra fetch step.
 if [ "${#SHAS[@]}" -eq 0 ]; then
-  echo "::error::PUSHED_COMMITS is empty — no pushed commits to verify. Refusing to fast-path (fail-closed)."
+  HEAD_SHA="${PUSHED_HEAD_SHA:-}"
+  if [ -z "$HEAD_SHA" ]; then
+    echo "::error::PUSHED_COMMITS is empty and PUSHED_HEAD_SHA is unset — cannot prove the pushed commit already landed. Refusing to fast-path (fail-closed)."
+    exit 1
+  fi
+  if ! git rev-parse --verify --quiet "refs/remotes/origin/main^{commit}" >/dev/null; then
+    echo "::error::PUSHED_COMMITS is empty and origin/main is not available to verify the pushed commit already landed. Refusing to fast-path (fail-closed)."
+    exit 1
+  fi
+  # `git merge-base --is-ancestor` distinguishes three outcomes we must NOT
+  # collapse: 0 = reachable (benign already-landed push, skip), 1 = definitively
+  # not an ancestor (fail-closed), any other code (typically 128) = git could not
+  # resolve HEAD_SHA — a malformed or unfetched object — which is an
+  # object-resolution failure, not a reachability verdict. We let git's stderr
+  # reach the CI log rather than swallowing it, so the real cause is visible.
+  rc=0
+  git merge-base --is-ancestor "$HEAD_SHA" refs/remotes/origin/main || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    echo "::notice::PUSHED_COMMITS is empty but pushed HEAD $HEAD_SHA is already reachable from origin/main (benign concurrent already-landed push). Skipping fast-path verification."
+    exit 0
+  fi
+  if [ "$rc" -eq 1 ]; then
+    echo "::error::PUSHED_COMMITS is empty and pushed HEAD $HEAD_SHA is NOT reachable from origin/main — cannot prove it already landed. Refusing to fast-path (fail-closed)."
+    exit 1
+  fi
+  echo "::error::PUSHED_COMMITS is empty and pushed HEAD SHA $HEAD_SHA could not be resolved (git merge-base --is-ancestor exit $rc; see git diagnostics above) — cannot prove it already landed. Refusing to fast-path (fail-closed)."
   exit 1
 fi
 
