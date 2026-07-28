@@ -1,10 +1,18 @@
 # Signal Identification
 
-Signal identification is the parse-time half of `/align-init`'s feedback arm. For each
+Signal identification is the parse-time half of the feedback arm. For each
 intention node, it decides what observable says the intention is met and how to read
 it: first which category the observable falls into (feasibility), then, when a sensor
 must be built, whether it is worth building (economics). It does not act on readings
 and it does not own the node — it reads one node and emits a signal spec.
+
+No entry point runs this step today. It was the parse-time half of the retired
+`/align-init` skill's feedback arm; the rung-5 design it belonged to is retained by
+the intention node `tactic-align-audit-legacy-review`
+(`intentions/tactic-align-audit-legacy-review.md`), which decides whether a future
+`/align-audit` re-consumes this contract. The verbatim pre-deletion source is
+`.claude/skills/align-init/SKILL.md` at `origin/main` commit `44493733` — read it
+there rather than duplicating it here.
 
 This doc is the single source of truth for the signal-identification contract. The
 `ref-signal-identification` skill, the #2371 `align-signal-assessor` role, and #2372

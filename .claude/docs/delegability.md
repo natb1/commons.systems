@@ -1,10 +1,18 @@
 # Delegability Evaluation
 
-The delegability evaluation is the core of `/align-init`'s per-intention loop. For each
+The delegability evaluation is a per-intention-node evaluation. For each
 intention node, it decides where execution can and should be owned along the
 human → AI → procedure continuum: first whether ownership *can* move (feasibility),
 then whether it *should* move (economics). It does not decompose intentions and it
 does not own the node — it reads one node and emits a recommendation.
+
+No entry point runs this evaluation today. It was the core of the retired
+`/align-init` skill's per-intention loop; the rung-5 design it belonged to is
+retained by the intention node `tactic-align-audit-legacy-review`
+(`intentions/tactic-align-audit-legacy-review.md`), which decides whether a future
+`/align-audit` re-consumes this contract. The verbatim pre-deletion source is
+`.claude/skills/align-init/SKILL.md` at `origin/main` commit `44493733` — read it
+there rather than duplicating it here.
 
 This doc is the single source of truth for the delegability contract. The
 `ref-delegability` skill, the #2370 delegability-assessor role, and the dialectic
@@ -14,7 +22,8 @@ changing this doc.
 
 ## The two axes
 
-Two axes run through `/align-init`, and nothing downstream should conflate them.
+Two axes run through the delegability evaluation, and nothing downstream should
+conflate them.
 
 - **Decomposition** — intention → sub-intention → goal. Breaking a broad intention
   into narrower pieces until each is concrete enough to act on. This is *not* this
