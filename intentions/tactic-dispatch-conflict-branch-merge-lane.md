@@ -61,13 +61,12 @@ attention:
     rank, and matching it would need a raw boost of ~383, which schema rule 18
     rejects without the literal ACK string. That ACK was not sought, so the
     boost is capped at the authored band. Recorded 2026-07-27."
-phase: qa
+phase: implement
 execution:
   branch: tactic-dispatch-conflict-branch-merge-lane
   pr: 2977
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
