@@ -158,8 +158,14 @@ export function readingDate(reading: string): string | null {
  * store (prune-on-done makes absence completion) or present with `phase:
  * done` (the transient window between the done transition and its prune).
  * A present, not-done blocker blocks.
+ *
+ * Exported for the review-stall sweep
+ * (`.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall`),
+ * which must skip a node already held by an open blocker (e.g. the
+ * `provision-conflict` hold it just landed) rather than re-holding it every
+ * tick — the same completeness rule the selector applies.
  */
-function blockersComplete(tactic: IntentionNode, byId: Map<string, IntentionNode>): boolean {
+export function blockersComplete(tactic: IntentionNode, byId: Map<string, IntentionNode>): boolean {
   for (const blockerId of tactic.blocked_by) {
     const blocker = byId.get(blockerId);
     if (blocker !== undefined && blocker.phase !== "done") return false;
@@ -299,11 +305,16 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     // its armed auto-merge is tick-owned, not selector-owned. But once a
     // review-stall reconciler (tactic-graph-review-exclusion-stall-recovery)
     // enters execution.fix on a stranded node — because its armed merge
-    // cannot complete (CI red or PR CONFLICTING) and the normal
-    // graph-select-target CI-red gate never got a chance to run on it
-    // (candidates it never sees can't be gated) — the node must resume being
-    // surfaced, now as a `fix` candidate via the phase-override below, so
-    // /fix-checks can act and apply-fix-state --clear-fix can later resolve it.
+    // cannot complete on RED CI and the normal graph-select-target CI-red gate
+    // never got a chance to run on it (candidates it never sees can't be
+    // gated) — the node must resume being surfaced, now as a `fix` candidate
+    // via the phase-override below, so /fix-checks can act and
+    // apply-fix-state --clear-fix can later resolve it. A stranded node whose
+    // merge is blocked by a CONFLICT instead does NOT come through here: the
+    // sweep routes it to the conflict lane (a provision-conflict hold), which
+    // keeps the `reviewed` marker intact — _gate_fix_active reads CI, not
+    // mergeability, so an execution.fix carrying a conflict would be cleared
+    // as "green" on the next tick and throw the review verdict away.
     if (t.phase === "review" && t.execution?.markers.includes(REVIEWED_MARKER) && t.execution?.fix == null) continue;
     candidates.push({
       id: t.id,

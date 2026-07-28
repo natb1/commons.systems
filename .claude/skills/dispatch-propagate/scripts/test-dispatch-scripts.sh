@@ -22776,6 +22776,47 @@ assert_eq "re-triage wiring: dispatch-retriage-orphaned-followups invoked" "pres
   "$([[ -f "$STUB_DIR/retriage-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
+# --- Review-stall sweep wiring (tactic-graph-review-exclusion-stall-recovery) -
+# The tick runs reconcile-graph-review-stall unconditionally right after
+# reconcile-graph-merged and prefixes each of its stdout lines with
+# `review-stall: `. The silent fake emits SEL_REVIEW_STALL_OUT; both stdout
+# shapes the sweep can produce (a `fix` recovery and a `conflict` hold) must
+# come through verbatim behind the prefix.
+echo "Test: select-tick review-stall wiring → review-stall: lines"
+sel_tick_setup
+export SEL_REVIEW_STALL_OUT="recovered tactic-x -> fix (ci=failing merge=MERGEABLE)
+held tactic-y -> conflict via tactic-hold-y (ci=passing merge=CONFLICTING)"
+out=$(run_sel_tick) || true
+TOTAL=$((TOTAL + 1))
+if grep -q '^review-stall: recovered tactic-x -> fix (ci=failing merge=MERGEABLE)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'review-stall: recovered tactic-x -> fix ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'review-stall: recovered tactic-x -> fix ...'"
+  echo "    actual stdout: '$out'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q '^review-stall: held tactic-y -> conflict via tactic-hold-y (ci=passing merge=CONFLICTING)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'review-stall: held tactic-y -> conflict ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'review-stall: held tactic-y -> conflict ...'"
+  echo "    actual stdout: '$out'"
+fi
+sel_tick_teardown
+
+# Silent sweep (the default): no `review-stall: ` line at all, so every other
+# tick test stays byte-identical.
+echo "Test: select-tick review-stall wiring → silent sweep emits no line"
+sel_tick_setup
+out=$(run_sel_tick) || true
+TOTAL=$((TOTAL + 1))
+if ! grep -q '^review-stall: ' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: no 'review-stall:' line when the sweep is silent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no 'review-stall:' line when the sweep is silent"
+  echo "    actual stdout: '$out'"
+fi
+sel_tick_teardown
+
 # --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
 echo "Test: select-tick failing merge under cap → sync-failed, counter bumped"
 sel_tick_setup
