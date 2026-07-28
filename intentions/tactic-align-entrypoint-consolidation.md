@@ -443,3 +443,13 @@ Manual/prose verification:
   `done` (or its PR #2896 abandoned) before starting Unit 2 — the `blocked_by`
   edge in this node's frontmatter should already gate router selection, but a
   human-invoked implementation session should re-check by hand too.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #2983). Drained after `review → main-qa` fires post-merge.
+
+- **id:** 17
+- **title:** Residual `align-strategy` / `align-init` prose inside `intentions/*.md` node bodies
+- **url_path:** current
+- **expected_outcome:** All `align-strategy`/`align-init` hits inside `intentions/` are narrative prose in node bodies scheduled for individual later updates, not executable directives.
+- **finding:** Not walked at QA time — the tactic's own scope statement explicitly defers updating `intentions/tactic-*.md` node bodies that name `align-strategy`/`align-init` in their own prose to later per-node work; completeness there is not assertable against this PR (planned deferral).
