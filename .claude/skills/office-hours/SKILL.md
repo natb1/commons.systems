@@ -378,6 +378,11 @@ an explicit `/office-hours <node-id>` naming an already-live node errors (the
    Relay the `NOTE —` line when present. Open-blocker status is a **signal, not
    a gate** — the human judges readiness; this dispatcher never acts on it.
 
+   The selector resolves park state at the already-fetched `origin/main`, not
+   this checkout's working tree, so a stale worktree no longer skews the
+   advisory: a node cleared on `origin/main` yields `empty not-parked <node-id>`
+   with no `NOTE` line — expected, not an error.
+
 5. **Report where to engage (kind-aware).**
 
    - **Strategy node** — no worktree, no PR. Engage by refining the node itself:
