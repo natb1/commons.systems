@@ -26,7 +26,19 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   tactic-align-entrypoint-consolidation). The legacy gh router runs concurrently
   until the gh queue drains, then it is removed; full /file-issue and
   /plan-issue coverage is mapped into the align family before removal (coverage
-  matrix retained as draft content on tactic-graph-native-dispatch)."
+  matrix retained as draft content on tactic-graph-native-dispatch). (Amended
+  2026-07-28 /align-strategy interview.) The preceding sentence — the legacy gh
+  router running concurrently until the gh queue drains, then being removed with
+  full /file-issue and /plan-issue coverage mapped into the align family first —
+  is now HISTORY, not pending work: it completed 2026-07-26
+  (tactic-legacy-router-removal phase done, PR #2960) and GitHub Issues are
+  disabled repo-wide. What this strategy governs going forward is the steady
+  state that migration produced: the owned graph-dispatch path being exercised
+  and its own defect burden bounded — the \"an unexercised recovery path is a
+  hope, not a path\" clause of virtue-progressive-detachment, which the
+  superseded migration-completion threshold could not read. success_signal was
+  amended this round accordingly; see the threshold-shape and steelman
+  clarifications below."
 reading: null
 gap: null
 serves:
@@ -1876,6 +1888,241 @@ clarifications:
       sections, which leaves author documentation edits tripping the gate and
       leaves the stamp out-of-graph either way. Carrier: draft
       tactic-scope-stamp-in-graph, filed this round.
+  - question: The recorded threshold (legacy gh router deleted, /file-issue and
+      /plan-issue coverage mapped to the align family) is a one-time migration
+      event and is now essentially met, yet the strategy carries 33 open and 43
+      draft children that are overwhelmingly steady-state machinery-correctness
+      defects, with reading null and rounds still 0/null/null after roughly a
+      dozen rounds. Does the strategy complete at migration, or is its signal
+      the wrong shape?
+    answer: '(Recorded 2026-07-28 /align-strategy interview; doctrinal-consistency
+      gate run against origin/main.) The signal was the wrong shape and is
+      amended; the strategy does not complete at migration. The gate is
+      decisive: virtue-progressive-detachment — which this strategy serves, and
+      against whose delegation-github this strategy holds the recovers edge —
+      says "What must never atrophy is the path back: for each delegation, a
+      recovery route (rebuild, re-host, substitute, relearn) whose cost stays
+      bounded... An unexercised recovery path is a hope, not a path." Deleting
+      the legacy router proves only that the substitute was BUILT; the virtue
+      demands the owned path be EXERCISED and its cost BOUNDED, which is exactly
+      what reliable align-tactics execution means. The defect was therefore
+      narrower than a whole-scope error: the observable ALREADY carried the
+      exercise clause ("a tactic completes the full lifecycle — align-tactics
+      breakdown, implement, qa, review, merge — with no GitHub label or issue
+      required"), and only the threshold was terminal. Amended this round: the
+      threshold becomes sustained exercise plus a bounded, non-increasing open
+      machinery-defect backlog; the sensor names align-tactics-census.ts
+      explicitly, which already enumerates that population, so no new instrument
+      is strictly owed despite reading being null; is_proxy flips false to true,
+      because a backlog count proxies correctness and a falling count can mean
+      fewer defects OR less looking — that weakness is recorded, not designed
+      away. The migration clause leaves the observable and threshold; "legacy gh
+      router deleted, coverage mapped" is recorded here as MET
+      (tactic-legacy-router-removal phase done, PR #2960 merged 2026-07-26;
+      GitHub Issues disabled repo-wide), and its non-regression is already
+      covered by the standing legacy-drain-monotonicity condition rather than a
+      duplicate new one. REJECTED ALTERNATIVES, both put to the author at
+      interview: (a) split — let this strategy complete at migration and move
+      the standing stream to strategy-autonomous-execution; rejected because
+      that node measures attention economics (whether the HUMAN is overwhelmed:
+      backlog runway, escalation volume within office-hours capacity), not
+      whether the CHAIN is correct, and the 17 standing machinery conditions
+      recorded here would have to move with roughly 76 open and draft children.
+      (b) no scope change, pay the reconciliation debt only; rejected because
+      the debt is real and separately recorded below but does not explain a
+      threshold that cannot read a standing property.'
+  - question: "Steelman (alternatives gate): substituting an owned dispatch chain
+      for GitHub does not remove an attachment, it swaps one for another — the
+      machinery's virtues become permanent constraints, and a correctness signal
+      is a treadmill that rewards growing the owned surface and can never go
+      green. Should the strategy's end be a CHEAP owned path rather than a
+      CORRECT one?"
+    answer: "(Recorded 2026-07-28 /align-strategy interview; align-strategy
+      dialectic step 2.5.) DIVERGE on the end; ADOPT the warning as a condition.
+      The rival is sourced from virtue-alignment-of-attachments, recorded as
+      tension_with virtue-progressive-detachment: \"Every delegation grafts the
+      delegatee's virtues onto my graph as constraints... prefer delegatees
+      whose alignment I can manage over those engineered to charge the service
+      against virtue buy-in.\" DIVERGE because virtue-progressive-detachment
+      explicitly accepts permanent delegation and skill atrophy as expected and
+      beneficial — what it refuses is a path back that is a hope. A
+      cheap-but-broken owned path fails that test; an exercised-but-costly one
+      does not. So the strategy's end stays the recovery path being real and
+      exercised, not its price. But the treadmill objection is sound and is
+      imported as a recorded condition: the owned machinery's maintenance burden
+      stays inside a band the author declares, and a burden growing without
+      bound is a condition FAILING — which parks the strategy for an author
+      decision — rather than simply more work to do. This makes the treadmill
+      self-limiting without making cheapness the end. Two limits recorded
+      honestly: no band value is declared as of 2026-07-28, so the condition is
+      not yet armed and declaring the band is an author act owed at the next
+      round; and delegation-anthropic-claude was checked for a recovers edge
+      this round and deliberately gets none — this strategy deepens reliance on
+      that delegation rather than unwinding it, which is precisely the exposure
+      the imported condition is there to bound."
+  - question: "A per-node /align-tactics <tactic-id> session receives contradictory
+      instructions about the drift phase's immaterial observations:
+      references/write-path.md:168-171 says land each
+      result.drift.clarifications_to_add entry as a dated clarifications entry
+      on the strategy, while references/tactic-target.md:131-137 says a per-node
+      session never touches the serving strategy's frontmatter (rounds,
+      clarifications, or otherwise) and routes any strategy-record need to a
+      park instead. Which binds?"
+    answer: "(Recorded 2026-07-28 /align-strategy interview.) Standing requirement:
+      a per-node tactic-target session MAY append clarifications entries to the
+      serving strategy, and may touch NOTHING else on it — never
+      rounds/count/last_completed/last_aligned, never statement, rationale,
+      attributes.conditions, success_signal, or any edge. write-path.md:168-171
+      binds in BOTH modes; tactic-target.md's absolute prohibition narrows to
+      everything-but-clarifications. DECISIVE ARGUMENT: strategy-mode
+      /align-tactics already lands these same immaterial clarifications
+      autonomously with no author present — the skill never calls
+      AskUserQuestion in either mode — so tactic mode landing them claims no
+      authority strategy mode does not already have, whereas dropping them
+      violates clarification 31 / condition 7, which makes the graph record the
+      sole carrier from a recording round to the next session. The park escape
+      tactic-target.md offers is unavailable by construction:
+      references/autonomy.md permits a park only on requirement ambiguity, major
+      scope deviation, or an unverifiable blocker, and the drift phase's
+      immaterial path is defined as none of the three (material premises and
+      failed Side-A conditions already arrive as parks in result.parks). So the
+      current doctrine leaves immaterial observations with no legal destination
+      at all, and the outcome depends on which reference file the session read
+      last. CONFIRMED LIVE: the 2026-07-27 per-node run on
+      tactic-align-tactics-tactic-mode-drift-gate (workflow run wf_9f49072c-454)
+      returned 4 clarifications_to_add and 4 unrecorded_premises, all
+      material:false; the session followed tactic-target.md and dropped all of
+      them. They are recovered verbatim from that run's journal and landed as
+      the four clarifications immediately below. SECOND, INDEPENDENT DEFECT in
+      the same path: DRIFT_SCHEMA.clarifications_to_add
+      (.claude/workflows/align-tactics.js:165-173) declares its items as
+      {answer} only, with additionalProperties:false, while the Clarification
+      interface (packages/intentionsutil/src/schema.ts:66-69) requires
+      {question, answer} — so write-path.md's instruction is not mechanically
+      executable as written, and any session obeying it must fabricate the
+      question unguided, as this round did for the four recovered entries. Both
+      halves are tracked as tactic-align-tactics-per-node-clarifications."
+  - question: This round's edit changes success_signal and attributes.conditions,
+      both inputs to strategyFingerprint. How many open children does it freeze,
+      and which need re-stamping?
+    answer: "(Measured 2026-07-28 /align-strategy interview, via the authoritative
+      predicate rather than a grep, as the freeze/re-stamp-cost rule requires.)
+      Zero, and no re-stamp was owed. Computed with readNode plus
+      strategyFingerprint (packages/intentionsutil/src/router.ts:80) plus
+      isFingerprintStale (packages/intentionsutil/src/transitions.ts:365): all
+      33 open (non-draft, non-done) tactics serving this strategy carry NO
+      execution.strategy_fingerprint entry for it — neither a map key nor a
+      legacy bare string — and isFingerprintStale returns false both for a null
+      stamp and for a map lacking the strategy's key. So this round classified
+      nothing into orthogonal/materially-affected/must-land-first buckets,
+      because the population those buckets range over is empty. THE MEASUREMENT
+      IS ITSELF A FINDING: the soft-freeze mechanism that clarification 10
+      depends on is INERT for this strategy — the graph's most-edited node and
+      its largest subtree — so no mid-flight child here has ever re-evaluated
+      against edited strategy substance, and every /align-strategy round on this
+      node to date has silently frozen nothing. Graph-wide the coverage is
+      partial: 35 of 108 open tactics carry any stamp at all, all of them in the
+      deprecated bare-string form. The CAUSE is not diagnosed in this round and
+      this entry asserts none: apply-node-transition.ts:169-172 is the
+      first-class writer and align-strategy's own bootstrap-interim hand-stamp
+      path is the other producer, but which is failing to fire, and whether the
+      absence is a bug or an un-run migration, is unestablished. Tracked as
+      tactic-strategy-fingerprint-stamp-coverage. Note also that no scope-inert
+      .scope-fingerprint re-stamp was owed either: this round edited no
+      in-flight tactic's body."
+  - question: Is this strategy's signal slice undecided, or
+      complete-but-unreconciled — and what does that imply for the next round's
+      eligibility?
+    answer: "(Recorded 2026-07-27 /align-tactics round.) The signal slice is
+      complete but unreconciled, not undecided. tactic-legacy-router-removal —
+      the sole validates-terminal — is phase done via PR 2960, merged
+      2026-07-26T01:10:18Z, and its blocker tactic-phase-skill-node-targets is
+      phase done via PR 2844; both are still present in intentions/ on
+      origin/main because pruning-on-completion has not fired (the same residue
+      appears on at least nine unrelated done nodes, so this is graph-wide, not
+      specific to this strategy). strategy.reading is still null even though the
+      reading instrument tactic-dispatch-lifecycle-sensor completed and was
+      pruned, and rounds.count is still 0 despite a dozen documented
+      re-evaluation rounds since 2026-07-03. Consequence for future rounds: the
+      'no non-draft child on the signal path' eligibility criterion trips on
+      this residue, so the strategy reads as non-decomposable until a
+      read-sensors pass writes the reading, the two done terminals are pruned,
+      and the rounds block is stamped. Reconciliation is the owed action for
+      this slice; further decomposition toward the signal is not. (Landed
+      2026-07-28 by the /align-strategy round that resolved the per-node
+      carve-out above; recovered verbatim from the journal of workflow run
+      wf_9f49072c-454, whose session dropped it. Landing note: the
+      reconciliation this entry names is still owed, but the reading it calls
+      for is now the AMENDED threshold's reading — sustained exercise plus a
+      bounded, non-increasing machinery-defect backlog — not the superseded
+      migration-completion threshold's.)"
+  - question: Is the tactic-mode drift-gate defect actually live on origin/main, and
+      what is its blast radius for this strategy specifically?
+    answer: "(Observed 2026-07-27 /align-tactics round.) The defect
+      tactic-align-tactics-tactic-mode-drift-gate records is still live and
+      uncommitted on origin/main: align-tactics.js line 954 computes planTactics
+      = [] on bare !driftProceed and line 1068 computes deviation =
+      !driftProceed || parks.length > 0, neither carrying the mode !== 'tactic'
+      carve-out that the decompose gate at line 912 already applies. Because
+      this strategy's signal path is claimed by a done-but-unpruned
+      validates-terminal, the strategy-round eligibility criterion legitimately
+      reads false, so every per-node /align-tactics <tactic-id> finalize against
+      this strategy hits the bug: body_markdown null, disposition escalated, and
+      — since SKILL.md Step 2 writes office_hours only from result.parks — no
+      office_hours reason written anywhere, an unrecoverable dead end. The fix
+      is scoped and empirically validated in the tactic's own body;
+      buildDriftPrompt (lines 540-611) should also take mode so the round-level
+      eligibility text is not issued during a per-node finalize, and
+      SKILL.md:205-208 must move in lockstep. (Landed 2026-07-28 by the
+      /align-strategy round that resolved the per-node carve-out above;
+      recovered verbatim from the journal of workflow run wf_9f49072c-454, whose
+      session dropped it. Landing note: that tactic was finalized to phase
+      implement on 2026-07-27 at commit 11558266 with the full three-unit fix
+      plan in its body, and the code defect remained live on origin/main as of
+      2026-07-28.)"
+  - question: "Does the office_hours-recoverable-context condition hold, given that
+      most currently-parked nodes carry recommendation: null?"
+    answer: "(Reviewed 2026-07-27 /align-tactics round.) The
+      office_hours-recoverable-context condition holds prospectively and is
+      mechanically enforced for new parks:
+      packages/intentionsutil/scripts/park-node requires <reason>, takes an
+      optional [recommendation], writes office_hours = { reason, since,
+      recommendation: recommendation || null }, and explicitly never folds the
+      recommendation into the reason on the caller's behalf. A scan of
+      intentions/ found 60 of 109 nodes with a live office_hours block carry
+      recommendation: null; every spot-checked case is dated 2026-07-05 to
+      2026-07-11 — before the field became a separately-passed argument — and
+      the recoverable next-steps content is present, folded into the reason
+      prose. The legacy backlog is a format mismatch, not lost context, and does
+      not count as the condition failing; the condition is read as governing
+      parks written from the split-field contract onward. (Landed 2026-07-28 by
+      the /align-strategy round that resolved the per-node carve-out above;
+      recovered verbatim from the journal of workflow run wf_9f49072c-454, whose
+      session dropped it.)"
+  - question: Can legacy-router-removal work still be re-derived from
+      tactic-legacy-router-removal's own body, and does condition 1's standing
+      premise still hold?
+    answer: "(Recorded 2026-07-27 /align-tactics round.) Do not re-derive
+      legacy-router-removal work from tactic-legacy-router-removal's own Unit-1
+      body text — it narrates a superseded 2026-07-23 state that its frontmatter
+      (phase done, PR 2960) has moved past. The live-wired half landed via
+      tactic-dispatch-legacy-rewire (PR 2869, merged and pruned 2026-07-18); the
+      remaining half was split out 2026-07-23 as
+      tactic-legacy-office-hours-entry-removal, still open at phase implement
+      and blocked_by tactic-graph-node-session-reap. Separately, condition 1's
+      standing premise was re-checked live this round and still holds: gh api
+      repos/natb1/commons.systems reports has_issues false, /file-issue and
+      /plan-issue are both retired with no live code path, and
+      tactic-align-entrypoint-consolidation is still phase implement — so the
+      condition's parenthetical 'today /align-strategy, until
+      tactic-align-entrypoint-consolidation lands' remains accurate. Phase
+      values for this subtree must be read from origin/main, not a local
+      checkout: tactic-demote-node-stale-local-read (filed 2026-07-27)
+      false-demoted tactic-graph-review-exclusion-stall-recovery and
+      tactic-graph-node-session-reap this week off stale local reads. (Landed
+      2026-07-28 by the /align-strategy round that resolved the per-node
+      carve-out above; recovered verbatim from the journal of workflow run
+      wf_9f49072c-454, whose session dropped it.)"
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1898,13 +2145,18 @@ tooling_goals:
     statement: lifecycle telemetry from the store itself — phase transition history
       and round counts readable from node state
 success_signal:
-  observable: a tactic completes the full lifecycle — align-tactics breakdown,
-    implement, qa, review, merge — with no GitHub label or issue required, and
-    the legacy gh router is removed once its queue drains
-  sensor: the intention store and the router's selection log
-  threshold: legacy gh dispatch router deleted from the repo with the /file-issue
-    and /plan-issue coverage matrix fully mapped to the align family
-  is_proxy: false
+  observable: "the owned graph-dispatch path is exercised, not merely built:
+    tactics complete the full lifecycle — align-tactics breakdown, implement,
+    qa, review, merge — with no GitHub label or issue required, and the
+    machinery's own open defect population is visible in the graph as open
+    tactics serving this strategy"
+  sensor: the intention store and the router's selection log —
+    align-tactics-census.ts enumerates the open machinery-defect population
+    serving this strategy; the selection log carries lifecycle completions
+  threshold: the owned path carries tactics through the full lifecycle
+    continuously, and the machinery's own open defect backlog is bounded and
+    non-increasing across consecutive census samples
+  is_proxy: true
 attention:
   boost: 5
   override: null
@@ -2048,6 +2300,15 @@ attributes:
       exception — this is the execution-surface expression of the
       sole-issue-tracker condition, and it binds at open time going forward,
       never retroactively"
+    - the owned dispatch machinery's maintenance burden stays inside a band the
+      author declares — read as the open machinery-defect population serving
+      this strategy together with the share of executed tactics that are
+      machinery fixes rather than product work. A burden growing without bound
+      is this condition FAILING (which parks the strategy for an author
+      decision), not merely more work to do. Recorded 2026-07-28 as the adopted
+      half of the alignment-of-attachments steelman; no band value is declared
+      yet, so until the author declares one this condition reads as
+      not-yet-armed rather than as holding.
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
