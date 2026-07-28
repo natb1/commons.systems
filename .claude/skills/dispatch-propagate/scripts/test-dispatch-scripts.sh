@@ -25273,6 +25273,25 @@ out_at=$(node "$SCRIPT_DIR/align-tactics-tempref-probe.mjs")
 # when every vector passed (and exits non-zero otherwise). Assert on that token.
 assert_eq "align-tactics tempref: all probe vectors pass" "align-tactics-tempref-probe: ALL PASS" "$(printf '%s' "$out_at" | tail -n1)"
 
+# ============================================================================
+# === align-tactics phase gates (computePhaseGates) ===
+# ============================================================================
+# Same CI-vector rationale as the tempref probe above: run-unit-tests.sh has no
+# mapping for .claude/workflows/*, so this is the only per-PR coverage for the
+# tactic-mode plan gate.
+
+echo "Test: align-tactics phase gates (computePhaseGates)"
+
+out_ag=$(node "$SCRIPT_DIR/align-tactics-gates-probe.mjs")
+
+assert_eq "align-tactics gates: all probe vectors pass" "align-tactics-gates-probe: ALL PASS" "$(printf '%s' "$out_ag" | tail -n1)"
+
+# Call-site + regression assertions (mirrors the qa-fix partition call-site
+# assertion): the gates must be computed once and no phase gate may read the
+# raw folded boolean again.
+assert_eq "align-tactics gates: computePhaseGates call site present" "1" "$(grep -c '= computePhaseGates(mode, drift)' "$REPO_ROOT/.claude/workflows/align-tactics.js" || true)"
+assert_eq "align-tactics gates: no phase gate reads raw !driftProceed" "0" "$(grep -c '!driftProceed' "$REPO_ROOT/.claude/workflows/align-tactics.js" || true)"
+
 # planned-deferral branch (issue #1891) — three separate input objects to avoid
 # disturbing the f1..f7 order assertion above.
 #
