@@ -60,17 +60,23 @@
 #                           common case before launch), not the routine path.
 #   parked <id>             a mechanical failure parked the node (office_hours
 #                           graph write, never a label).
-#   conflict-retry <id> (strike N/CAP)
-#                           provision exit 11 (merge-conflict) below the
-#                           Producer 1 free-retry cap — no graph write at all,
-#                           just a local sidecar strike counter.
-#   held <id>               provision exit 11 at/above the cap — a tracked
-#                           hold tactic was born/re-entered via hold-node; the
-#                           source's own office_hours is never written.
+#   conflict-lane <id>      provision exit 11 (merge-conflict) — a
+#                           /dispatch-conflict session was kicked in the node's
+#                           own worktree to resolve the conflict on Lane 3. The
+#                           first responder; no graph write, no strike counted.
+#   held <id>               provision exit 11 where the conflict lane could NOT
+#                           be kicked, on the CONFLICT_STRIKE_CAP-th such
+#                           consecutive failure — a tracked hold tactic was
+#                           born/re-entered via hold-node; the source's own
+#                           office_hours is never written.
 #   failed <id> <reason>    the node could neither launch nor cleanly dispose.
+#                           On exit 11 below the cap this is
+#                           `failed <id> spawn-failed (strike N/CAP)`: the
+#                           conflict-lane kick failed, the sidecar strike
+#                           counter was bumped, and no graph write was made.
 #
 # Exit codes: 0 every node launched or cleanly disposed (launched/waiting/
-# skipped/scope-stale/parked/conflict-retry/held are all RC-0 dispositions);
+# skipped/scope-stale/parked/conflict-lane/held are all RC-0 dispositions);
 # 1 at least one node could neither launch nor cleanly dispose (a spawn kick
 # failed — no park is attempted, the marker is left for the sweep — or a
 # park-node/hold-node/demote call itself failed); 2 usage/configuration error.
@@ -214,24 +220,47 @@ for spec in "$@"; do
       ;;
     11)
       # merge-conflict, Producer 1 (tactic-mechanical-park-producers). This is
-      # a mechanical retry state, not "no autonomous path exists, a human is
-      # required" — a moving main can transiently fail to merge for a few
-      # ticks in a row on its own. Two-tier disposition: a graph-write-free
-      # local retry for the first CONFLICT_STRIKE_CAP-1 consecutive failures,
-      # then a tracked hold (not an office_hours park on the source) once the
-      # cap is exceeded.
+      # a mechanical state with an autonomous resolver, not "no autonomous path
+      # exists, a human is required".
+      #
+      # FIRST RESPONDER: route the conflict to /dispatch-conflict's Lane 3
+      # ("node-branch git conflict", .claude/skills/dispatch-conflict/SKILL.md)
+      # — it reproduces the aborted merge on the node's own branch, resolves it
+      # via an opus subagent, verifies against the node's own plan, and pushes;
+      # an ambiguous conflict escalates to a tracked hold there. Lane 3 is
+      # entered by the source node id (or by the id of the provision-conflict
+      # hold tracking it), which is what retires the blind up-to-4 retries the
+      # strike counter used to spend before anyone looked at the conflict.
+      #
+      # The worktree path is deterministic (provision-node-worktree composes it
+      # the same way; it only PRINTS it on exit 0), and exit 11 leaves that
+      # worktree and its branch in place with the merge already aborted — the
+      # exact state Lane 3's Step 3 expects.
       #
       # CONVERGENCE NOTE: this strike/hold branch is an interim step. A
       # separate in-flight tactic (tactic-graph-router-conflict-routing) is
       # expected to replace it with an `execution.conflict` interrupt; once
       # that lands, the cap it enforces will call this SAME hold-node
       # primitive instead of the strike-counting logic below — this branch is
-      # expected to be replaced wholesale at that point, not extended.
-      #
-      # /dispatch-conflict does NOT accept node targets (dispatch-conflict/
-      # SKILL.md exits on any non-`[0-9]*-*` branch), so a graph node's
-      # conflict cannot route there yet either way; routing is a future
-      # follow-up gated on node-target support.
+      # expected to be replaced wholesale at that point, not extended. That
+      # interrupt is simply a SECOND entry path into the same Lane 3 this
+      # branch now kicks directly.
+      CONFLICT_WT="$PROJECT_ROOT/.claude/worktrees/$id"
+      # No "${EFFORT_ARGS[@]}" here: the effort resolved above belongs to the
+      # node's own phase skill, and this session runs /dispatch-conflict
+      # instead — it inherits the session default.
+      if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
+          --cwd "$CONFLICT_WT" --model "$ORCH_MODEL" \
+          "/dispatch-conflict $id" 1>&2; then
+        reservation_clear "$id" || true
+        echo "conflict-lane $id"
+        continue
+      fi
+
+      # BACKSTOP (below): the conflict lane itself could not be kicked. Fall
+      # back to the strike-then-hold ladder so repeated launch failures still
+      # reach a human through a tracked hold rather than silently retrying
+      # forever. This ladder is no longer the first responder.
       #
       # Strike counter: a sidecar file OUTSIDE every checkout (the same
       # convention as provision-node-worktree's own `.scope-fingerprint`
@@ -244,17 +273,21 @@ for spec in "$@"; do
       STRIKES=$(( STRIKES + 1 ))
 
       if (( STRIKES < CONFLICT_STRIKE_CAP )); then
-        # Below the cap: bump the sidecar, clear the reservation, and yield —
-        # mirrors case 12's clear-and-yield shape. NO graph write of any kind.
+        # Below the cap: bump the sidecar and surface the failed kick. NO graph
+        # write of any kind. The reservation is LEFT for the sweep and the
+        # failure is counted — the same handling the exit-0 path gives its own
+        # spawn failure, since this is that same failure.
         printf '%s\n' "$STRIKES" > "$STRIKE_FILE"
-        reservation_clear "$id" || true
-        echo "conflict-retry $id (strike $STRIKES/$CONFLICT_STRIKE_CAP)"
+        echo "failed $id spawn-failed (strike $STRIKES/$CONFLICT_STRIKE_CAP)"
+        FAILURES=$(( FAILURES + 1 ))
       else
         # Cap exceeded: escalate to a tracked hold (hold-node, units 1-2 of
         # this same plan) instead of parking the source directly. hold-node
         # births a small born-parked hold tactic carrying the office_hours
         # park and adds a blocked_by edge from the source — the source's own
-        # office_hours is never written.
+        # office_hours is never written. The hold id is also a valid
+        # /dispatch-conflict Lane 3 entry point (discriminator case 2), so a
+        # human draining it can hand the same conflict back to the lane.
         TMPDIR_HOLD11=$(mktemp -d) || {
           echo "failed $id hold-mktemp-failed"
           FAILURES=$(( FAILURES + 1 ))
@@ -262,8 +295,8 @@ for spec in "$@"; do
         }
         REASON_FILE="$TMPDIR_HOLD11/reason"
         RECOMMENDATION_FILE="$TMPDIR_HOLD11/recommendation"
-        printf '%s\n' "origin/main has not merged clean into this tactic's branch for $STRIKES consecutive ticks (provision exit 11)." > "$REASON_FILE"
-        printf '%s\n' "Resolve the conflict by hand in \`.claude/worktrees/$id\`, push the branch, then resolve THIS HOLD TACTIC to \`phase: done\` and prune it. Clearing \`office_hours\` alone does not unblock the source." > "$RECOMMENDATION_FILE"
+        printf '%s\n' "origin/main has not merged clean into this tactic's branch (provision exit 11), and the /dispatch-conflict Lane 3 session that resolves it could not be launched for $STRIKES consecutive ticks." > "$REASON_FILE"
+        printf '%s\n' "Run \`/dispatch-conflict $id\` by hand (Lane 3 reproduces and resolves the merge on the node's own branch), or resolve the conflict directly in \`.claude/worktrees/$id\` and push the branch. Either way, also check why the autonomous launch kept failing. Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source." > "$RECOMMENDATION_FILE"
         if "$HOLD_NODE" "$id" --kind provision-conflict \
             --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE"; then
           rm -f "$STRIKE_FILE"
