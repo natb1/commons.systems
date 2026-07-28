@@ -42,7 +42,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-router-live-worker-visibility
   pr: 2918
@@ -50,9 +50,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-26T05:06:34Z
+    mergeCommitSha: ba9874a89ef8be1f514f9f57bc89a6a5450128cf
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

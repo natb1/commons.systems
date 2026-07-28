@@ -40,10 +40,20 @@ attention:
     it, and below the strategy-main-health emergency ceiling (boost 100), which
     the 2026-07-13 write-path guard keeps dominant and which this round does not
     disturb."
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-transition-node-stamp-landed-body
+  pr: 2973
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-scope-fingerprint-plan-substance
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -358,8 +368,14 @@ stamping) and that the stub's contract is exactly steps 3-5 above.
 `cd "$C5" && bash .claude/skills/dispatch-propagate/scripts/transition-node t-stamp`, then assert
 all of:
 
-1. `rc -eq 0` and stdout matches `transitioned t-stamp qa -> main-qa` (the residue routes
-   `qa → main-qa` per `forwardPhase`; see `transitions.ts` and `qa-fix/SKILL.md:179`).
+1. `rc -eq 0` and stdout matches `transitioned t-stamp qa -> review` (`forwardPhase`
+   routes `qa → review` unconditionally — `packages/intentionsutil/src/transitions.ts`;
+   residue only affects the *later* `review` hop, which routes to `main-qa` when residue
+   is present and `done` otherwise). Corrected 2026-07-27 `/align-strategy`: this
+   assertion previously read `qa -> main-qa`, citing a `qa → main-qa` edge that
+   `forwardPhase` has never had — `main-qa` is post-merge by definition and is not
+   reachable from `qa`. The implementer wrote the correct value, so the shipped test
+   asserts `qa -> review` and no code is affected; only this plan text was wrong.
 2. **The trap actually fired** (guards the test against silently not reproducing the bug):
    `git -C "$C5" show origin/main:intentions/t-stamp.md` contains `needs-main`, while the
    working-tree `$C5/intentions/t-stamp.md` does **not** — i.e. the reset dance really did

@@ -61,8 +61,30 @@
 #  10. resolve-park --reject calls `gh pr close <pr>` and clears office_hours.
 #  11. resolve-park refuses a node that is not parked (exit 1), making no gh
 #      call and leaving origin/main untouched.
+#  12. A matching `--base` pin is transparent to the normal park flow: capture
+#      the current origin/main blob sha for t-pinned, pass it back via --base,
+#      and the park lands exactly as it would with no --base at all (exit 0,
+#      office_hours set).
+#  13. A stale `--base` pin (captured before a park that has since advanced
+#      origin/main) refuses BEFORE any mutation: exit 3, a `stale-diagnosis`
+#      marker on stderr, origin/main byte-unchanged, and no local working-tree
+#      diff left behind for the trap to roll back — the pin check in park-node
+#      runs before the local file is even overwritten from origin/main.
+#  14. The manifest-file form of `--base` selects the line matching this
+#      node's id out of a multi-node manifest (dump-node.ts's base-manifest.txt
+#      format): a stale entry for t-pinned still refuses with exit 3, and a
+#      manifest that omits t-pinned entirely (covers only an unrelated node)
+#      is a caller usage error — exit 2, not exit 3 — since the pin can't even
+#      be resolved. Neither sub-case touches origin/main.
+#  15. Flag-parsing regressions on the new leading-flags-only parse loop:
+#      `--base` with no following value, an unrecognized leading flag, and a
+#      non-40-hex `--base` value all exit 2 before any network call. A bare
+#      positional invocation (no --base at all) whose <reason>/<recommendation>
+#      free-text arguments start with `-` and contain embedded spaces still
+#      parks successfully (exit 0) — proving the "first non-flag argument ends
+#      flag parsing" rule isn't fooled by dash-prefixed positionals.
 #
-# No network needed. Cases 1-3 and 6-11 need only bash + git + jq (the gh and
+# No network needed. Cases 1-3 and 6-15 need only bash + git + jq (the gh and
 # npx PATH shims stand in for the GitHub API and the tsx writers). Cases 4-5
 # need a real `node`/`npx tsx` too (case 5's apply-node-transition.ts is real
 # TypeScript, resolved against a node_modules SYMLINK to this repo's own —
@@ -135,7 +157,7 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
     for i in $(seq 1 12); do echo "line$i: base"; done
   } >"$SEED/intentions/$1.md"
 }
-for id in t-stale t-concurrent t-pr t-pr-bad-arg t-resolve-ratify t-resolve-reject t-resolve-unparked; do
+for id in t-stale t-concurrent t-pr t-pr-bad-arg t-resolve-ratify t-resolve-reject t-resolve-unparked t-pinned; do
   seed_node "$id"
 done
 # t-demote: a schema-VALID node (only id/kind/statement/owner/status are
@@ -218,13 +240,15 @@ cat >"$WORK/bin/npx" <<'SH'
 # npx shim: emulates without node the invocations graph-commit/park-node make
 # via `npx tsx ...` for the office_hours write, plus a stub for the layers-1-3
 # mechanical 3-way merge tool:
-#   (a) park-node's own direct write: <dir> <since> <reason> <recommendation> <id>
-#       — exactly 5 args remain after stripping tsx/helper/store.
+#   (a) park-node's own direct write: <dir> <since> <reason> <recommendation> <id> <pr>
+#       — exactly 6 args remain after stripping tsx/helper/store (park-node
+#       always appends a trailing pr slot, empty or numeric).
 #   (b) graph-commit's park_write() concurrent-edit-conflict parking helper:
 #       <dir> <since> <reason> <snapDir> <pruneCsv> <id...> — 6+ args remain
 #       (snapDir/pruneCsv occupy the recommendation/id slots, and one or more
-#       ids follow). Distinguished from (a) by arg count since pruneCsv is
-#       always present (possibly empty) as its own arg.
+#       ids follow). Distinguished from (a) by whether arg4 is a real
+#       directory (snapDir always is; park-node's free-text recommendation
+#       never is).
 #   (c) graph-commit's merge-node.ts 3-way text merge (flag-based argv:
 #       --base/--ours/--theirs/--out, no store-module positional arg at all —
 #       does not fit (a)/(b)'s shape). No real merge tool exists in this
@@ -263,12 +287,9 @@ fi
 shift 3   # tsx, helper script path, store module path
 dir="$1"; since="$2"; reason="$3"
 # Disambiguate (a) park-node's direct write — dir since reason recommendation
-# id [pr] — from (b) graph-commit's park_write — dir since reason snapDir
+# id pr — from (b) graph-commit's park_write — dir since reason snapDir
 # pruneCsv id... — by whether arg4 is a real directory (snapDir always is;
-# park-node's free-text recommendation never is). Argcount alone no longer
-# distinguishes them: park-node now always appends a trailing pr slot (empty
-# or numeric), so its direct-write shape is 6 args wide, same as (b)'s
-# minimum (snapDir pruneCsv + one id).
+# park-node's free-text recommendation never is).
 if [[ -d "$4" ]]; then
   shift 5   # dir, since, reason, snapDir, pruneCsv
   ids=("$@")
@@ -565,10 +586,10 @@ fi
 # ---------------------------------------------------------------------------
 # Case 8: --pr with a non-integer value is rejected before any fetch/write.
 # ---------------------------------------------------------------------------
-H="$WORK/h"
-make_clone "$H" writer-h
+H_PR="$WORK/h-pr"
+make_clone "$H_PR" writer-h-pr
 before_sha="$(origin_sha)"
-out="$(run_pn "$H" --pr not-a-number t-pr-bad-arg 'should not park' 2>&1)"; rc=$?
+out="$(run_pn "$H_PR" --pr not-a-number t-pr-bad-arg 'should not park' 2>&1)"; rc=$?
 if [[ $rc -eq 2 ]] \
    && grep -q 'must be a non-negative integer' <<<"$out" \
    && [[ "$(origin_sha)" == "$before_sha" ]]; then
@@ -580,12 +601,12 @@ fi
 # ---------------------------------------------------------------------------
 # Case 9: resolve-park --ratify calls `gh pr ready <pr>` and clears office_hours.
 # ---------------------------------------------------------------------------
-I="$WORK/i"
-make_clone "$I" writer-i
-run_pn "$I" --pr 3001 t-resolve-ratify 'unit-test resolve ratify setup' >/dev/null 2>&1
-sync_clone "$I"
+I_RATIFY="$WORK/i-ratify"
+make_clone "$I_RATIFY" writer-i-ratify
+run_pn "$I_RATIFY" --pr 3001 t-resolve-ratify 'unit-test resolve ratify setup' >/dev/null 2>&1
+sync_clone "$I_RATIFY"
 GHLOG_RATIFY="$WORK/ghlog-ratify"
-out="$(run_rp "$I" "$GHLOG_RATIFY" t-resolve-ratify --ratify 2>&1)"; rc=$?
+out="$(run_rp "$I_RATIFY" "$GHLOG_RATIFY" t-resolve-ratify --ratify 2>&1)"; rc=$?
 content="$(origin_show t-resolve-ratify)"
 if [[ $rc -eq 0 ]] \
    && grep -q '^ready 3001$' "$GHLOG_RATIFY" \
@@ -598,12 +619,12 @@ fi
 # ---------------------------------------------------------------------------
 # Case 10: resolve-park --reject calls `gh pr close <pr>` and clears office_hours.
 # ---------------------------------------------------------------------------
-J="$WORK/j"
-make_clone "$J" writer-j
-run_pn "$J" --pr 3002 t-resolve-reject 'unit-test resolve reject setup' >/dev/null 2>&1
-sync_clone "$J"
+J_REJECT="$WORK/j-reject"
+make_clone "$J_REJECT" writer-j-reject
+run_pn "$J_REJECT" --pr 3002 t-resolve-reject 'unit-test resolve reject setup' >/dev/null 2>&1
+sync_clone "$J_REJECT"
 GHLOG_REJECT="$WORK/ghlog-reject"
-out="$(run_rp "$J" "$GHLOG_REJECT" t-resolve-reject --reject 'duplicate of #3000' 2>&1)"; rc=$?
+out="$(run_rp "$J_REJECT" "$GHLOG_REJECT" t-resolve-reject --reject 'duplicate of #3000' 2>&1)"; rc=$?
 content="$(origin_show t-resolve-reject)"
 if [[ $rc -eq 0 ]] \
    && grep -q '^close 3002$' "$GHLOG_REJECT" \
@@ -616,11 +637,11 @@ fi
 # ---------------------------------------------------------------------------
 # Case 11: resolve-park refuses a node that is not parked.
 # ---------------------------------------------------------------------------
-K="$WORK/k"
-make_clone "$K" writer-k
+K_UNPARKED="$WORK/k-unparked"
+make_clone "$K_UNPARKED" writer-k-unparked
 before_sha="$(origin_sha)"
 GHLOG_UNPARKED="$WORK/ghlog-unparked"
-out="$(run_rp "$K" "$GHLOG_UNPARKED" t-resolve-unparked --ratify 2>&1)"; rc=$?
+out="$(run_rp "$K_UNPARKED" "$GHLOG_UNPARKED" t-resolve-unparked --ratify 2>&1)"; rc=$?
 if [[ $rc -eq 1 ]] \
    && grep -q 'is not parked' <<<"$out" \
    && [[ ! -s "$GHLOG_UNPARKED" ]] \
@@ -628,6 +649,119 @@ if [[ $rc -eq 1 ]] \
   ok "resolve-park: refuses an unparked node (exit 1), no gh call, main unchanged"
 else
   no "resolve-park refuse-unparked (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 12: a matching --base pin is transparent to the normal park flow.
+# ---------------------------------------------------------------------------
+# Capture the CURRENT origin/main blob for t-pinned, then pass it straight
+# back as --base. Since it matches FRESH_BLOB at execution time, the pin check
+# is a no-op and the park proceeds exactly as an unpinned park would.
+H="$WORK/h"
+make_clone "$H" writer-h
+pin="$(git -C "$ORIGIN" rev-parse main:intentions/t-pinned.md)"
+
+out="$(run_pn "$H" --base "$pin" t-pinned 'diagnosed reason' 2>&1)"; rc=$?
+content="$(origin_show t-pinned)"
+if [[ $rc -eq 0 ]] && grep -q 'office_hours' <<<"$content"; then
+  ok "matching --base pin: park proceeds normally (exit 0, office_hours set)"
+else
+  no "matching --base pin (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 13: a stale --base pin refuses with exit 3, zero side effects.
+# ---------------------------------------------------------------------------
+# Reuse clone H: case 12's own park just advanced origin/main for t-pinned, so
+# the $pin captured before case 12 is now stale relative to the new FRESH_BLOB.
+# The pin check runs before any mutation, so this must refuse cleanly: exit 3,
+# a stale-diagnosis marker on stderr, origin/main byte-unchanged, and no local
+# working-tree diff left over for the trap to roll back.
+before_sha="$(origin_sha)"
+out="$(run_pn "$H" --base "$pin" t-pinned 'second reason' 2>&1)"; rc=$?
+diff_after="$(git -C "$H" diff -- intentions/t-pinned.md)"
+if [[ $rc -eq 3 ]] \
+   && grep -q 'stale-diagnosis' <<<"$out" \
+   && [[ "$(origin_sha)" == "$before_sha" ]] \
+   && [[ -z "$diff_after" ]]; then
+  ok "stale --base pin: refuses before any mutation (exit 3, stale-diagnosis, main unchanged, no local diff)"
+else
+  no "stale --base pin (rc=$rc before_sha=$before_sha)"
+  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 14: manifest-file form of --base, plus a manifest that doesn't cover
+# the requested node.
+# ---------------------------------------------------------------------------
+# A manifest holding entries for multiple nodes (dump-node.ts's
+# base-manifest.txt format, one `<id>=<sha>` line per node) proves park-node
+# selects the line matching THIS invocation's node id: a stale entry for
+# t-pinned (the pre-case-12 $pin, now stale) still refuses with exit 3 even
+# though an unrelated t-stale line is also present. Then, with the t-pinned
+# line removed entirely, the manifest can't even be resolved to a pin for this
+# node — that's a caller usage error (exit 2), distinct from staleness (exit
+# 3). Neither sub-case touches origin/main.
+I="$WORK/i"
+make_clone "$I" writer-i
+stale_blob_for_tstale="$(git -C "$ORIGIN" rev-parse main:intentions/t-stale.md)"
+manifest="$WORK/manifest14.txt"
+cat >"$manifest" <<EOF
+t-pinned=$pin
+t-stale=$stale_blob_for_tstale
+EOF
+
+before_sha="$(origin_sha)"
+out1="$(run_pn "$I" --base "$manifest" t-pinned 'reason' 2>&1)"; rc1=$?
+
+cat >"$manifest" <<EOF
+t-stale=$stale_blob_for_tstale
+EOF
+out2="$(run_pn "$I" --base "$manifest" t-pinned 'reason' 2>&1)"; rc2=$?
+after_sha="$(origin_sha)"
+
+if [[ $rc1 -eq 3 ]] && grep -q 'stale-diagnosis' <<<"$out1" \
+   && [[ $rc2 -eq 2 ]] \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "manifest --base: stale multi-node manifest refuses (exit 3), manifest missing this node's entry is a usage error (exit 2), main unchanged"
+else
+  no "manifest --base (rc1=$rc1 rc2=$rc2 before_sha=$before_sha after_sha=$after_sha)"
+  printf 'out1: %s\n' "$out1"; printf 'out2: %s\n' "$out2"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 15: flag-parsing regressions on the new leading-flags-only parse loop.
+# ---------------------------------------------------------------------------
+# --base with no following value, an unrecognized leading flag, and a
+# non-40-hex --base value must all exit 2 before any network call — none of
+# these mutate origin/main, so they share one clone. A separate, bare
+# positional invocation (no --base at all) with <reason>/<recommendation>
+# arguments that start with `-` and contain embedded spaces must still park
+# successfully (exit 0), proving the "first non-flag argument ends flag
+# parsing, everything after is verbatim positional" rule isn't fooled by
+# dash-prefixed free text. That last sub-case actually lands a park, so it
+# gets its own dedicated fresh clone.
+J="$WORK/j"
+make_clone "$J" writer-j
+
+out_missing="$(run_pn "$J" --base 2>&1)"; rc_missing=$?
+out_unknown="$(run_pn "$J" --nope t-pinned 'reason' 2>&1)"; rc_unknown=$?
+out_badsha="$(run_pn "$J" --base not-a-real-sha t-pinned 'reason' 2>&1)"; rc_badsha=$?
+
+K="$WORK/k"
+make_clone "$K" writer-k
+out_dash="$(run_pn "$K" t-stale '-weird reason with spaces' '--not-a-flag recommendation' 2>&1)"; rc_dash=$?
+content_dash="$(origin_show t-stale)"
+
+if [[ $rc_missing -eq 2 ]] && [[ $rc_unknown -eq 2 ]] && [[ $rc_badsha -eq 2 ]] \
+   && [[ $rc_dash -eq 0 ]] && grep -q 'office_hours' <<<"$content_dash"; then
+  ok "flag-parsing regressions: missing --base value / unknown flag / non-hex --base all exit 2; dash-prefixed free-text positionals still park (exit 0)"
+else
+  no "flag-parsing regressions (rc_missing=$rc_missing rc_unknown=$rc_unknown rc_badsha=$rc_badsha rc_dash=$rc_dash)"
+  printf 'missing: %s\n' "$out_missing"
+  printf 'unknown: %s\n' "$out_unknown"
+  printf 'badsha: %s\n' "$out_badsha"
+  printf 'dash: %s\n' "$out_dash"
 fi
 
 echo

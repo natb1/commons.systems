@@ -19,14 +19,24 @@ rationale: "Surfaced in the 2026-07-19 /align-strategy interview (strategy
   /align-tactics.) Decomposed into four PR-sized units (schema field,
   apply-conflict-state.ts primitive, router/selector/dispatch wiring,
   dispatch-auto-merge conflict-clear guard) — full plan in the body. blocked_by
-  wires only tactic-dispatch-conflict-greenfield: /dispatch-conflict (nee
-  /fix-conflicts) does not yet accept node-id targets, and that tactic's
-  graph-native lane is what adds node-target acceptance, so this tactic's
-  dispatch call site is genuinely gated on it landing first.
-  tactic-pending-merge-phase stays a compose-with, not a blocked_by: this
-  tactic's design surfaces the reviewed-awaiting-merge state via the selector's
-  existing shell-facing signal-phase mechanism (parity with how `fix` is
-  surfaced today) rather than a persisted `pending-merge` phase value, so it
+  wires tactic-dispatch-conflict-branch-merge-lane (repointed 2026-07-27
+  /align-strategy): Unit 3 dispatches /dispatch-conflict against a node id, so
+  the lane answering that call must reproduce and resolve a live
+  origin/main-vs-branch git conflict. The original gate,
+  tactic-dispatch-conflict-greenfield, shipped as PR #2951 and was pruned — it
+  did make /dispatch-conflict accept a node id (Lane 2), but Lane 2 explicitly
+  does not reproduce a live git conflict: it services only graph-commit
+  concurrent-edit parks carrying the mechanical-unresolved marker and refuses
+  anything else, while Lane 1 does reproduce a live conflict but is
+  worktree-derived and rejects node-id targets. Node-id acceptance alone
+  therefore does not discharge this gate; the capability actually owed is
+  tactic-dispatch-conflict-branch-merge-lane's node-id-targeted
+  reproduce-and-resolve lane. The edge was left empty by the greenfield prune,
+  which would have let this tactic ship into a lane that refuses every dispatch
+  it makes. tactic-pending-merge-phase stays a compose-with, not a blocked_by:
+  this tactic's design surfaces the reviewed-awaiting-merge state via the
+  selector's existing shell-facing signal-phase mechanism (parity with how `fix`
+  is surfaced today) rather than a persisted `pending-merge` phase value, so it
   does not need that draft tactic to land first — see the body's Dependencies
   section for the un-narrowed reasoning, retained verbatim from the original
   interview."
@@ -42,7 +52,8 @@ attention: null
 phase: implement
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-dispatch-conflict-branch-merge-lane
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -53,10 +64,10 @@ attributes: {}
 Finalized 2026-07-22 `/align-tactics` (from the 2026-07-19 `/align-strategy`
 interview, strategy clarification 85). This is the **router-side
 detect-and-route** half of the merge-conflict story; the resolution **worker**
-is [[tactic-dispatch-conflict-greenfield]] (`blocked_by`, below — its
-graph-native lane is what makes `/dispatch-conflict` accept a node-id target)
-and the wait phase it composes with (not `blocked_by`, see Dependencies) is
-[[tactic-pending-merge-phase]].
+is [[tactic-dispatch-conflict-branch-merge-lane]] (`blocked_by`, below — its
+node-id-targeted reproduce-and-resolve lane is what lets `/dispatch-conflict`
+answer this tactic's dispatch at all) and the wait phase it composes with (not
+`blocked_by`, see Dependencies) is [[tactic-pending-merge-phase]].
 
 ## Context — the gap
 
@@ -128,17 +139,37 @@ clarification 66 / [[tactic-fix-interrupt-orthogonal-state]].
 - **Tick:** unchanged except that its `MERGEABLE`-gated merge now also requires
   `execution.conflict` clear.
 - **Shell layer:** the `dispatch-conflict` skill invocation is
-  [[tactic-dispatch-conflict-greenfield]]'s scope, not re-implemented here.
+  [[tactic-dispatch-conflict-branch-merge-lane]]'s scope, not re-implemented
+  here.
 
-## Dependencies (wired at finalization, 2026-07-22)
+## Dependencies (wired at finalization, 2026-07-22; repointed 2026-07-27)
 
-`blocked_by: [tactic-dispatch-conflict-greenfield]` — Unit 3's
-`dispatch-graph-execute` switch case dispatches `/dispatch-conflict` (or
-`/fix-conflicts` pre-rename) against a **node id**, but that skill does not
-today accept node-id targets (`fix-conflicts/SKILL.md` exits on any non-numeric
-branch) — `tactic-dispatch-conflict-greenfield`'s graph-native lane is what
-adds node-target acceptance. This tactic's dispatch call site is genuinely
-gated on it landing first, so it is a hard `blocked_by`, not a compose-with.
+`blocked_by: [tactic-dispatch-conflict-branch-merge-lane]` — Unit 3's
+`dispatch-graph-execute` switch case dispatches `/dispatch-conflict` against a
+**node id** for a PR whose GitHub `mergeable` is `CONFLICTING`, i.e. a live
+`origin/main`-vs-branch git conflict. The lane that answers must both accept a
+node id **and** reproduce that conflict in a worktree.
+
+**Repointed 2026-07-27 `/align-strategy`.** The original gate was
+`tactic-dispatch-conflict-greenfield`, on the reasoning that
+`/dispatch-conflict` did not accept node-id targets at all. That tactic shipped
+as PR #2951 and was pruned, and the `blocked_by` edge was cleared to `[]` with
+it — but clearing was wrong, because node-id acceptance was only half the gate.
+Greenfield shipped **Lane 2**, which does take a node id yet explicitly does
+**not** reproduce a live git conflict: it services only `graph-commit`
+concurrent-edit parks carrying the mechanical-unresolved marker, and hard-
+refuses any node not in that state ("not a Lane 2-eligible park" —
+`.claude/skills/dispatch-conflict/SKILL.md`). **Lane 1** does reproduce a live
+conflict but is worktree-derived and rejects node-id targets. So with the edge
+empty, this tactic would ship a dispatch call site that gets refused on every
+invocation, burning `execution.conflict.attempt` up to the cap and then parking
+— strictly worse than the silent-stall it replaces.
+
+The capability actually owed is
+[[tactic-dispatch-conflict-branch-merge-lane]]'s node-id-targeted
+reproduce-and-resolve lane (finalized 2026-07-27, `phase: implement`). This
+tactic's dispatch call site is genuinely gated on it landing first, so it is a
+hard `blocked_by`, not a compose-with.
 
 [[tactic-pending-merge-phase]] stays a **compose-with**, not a `blocked_by`
 (unchanged from the original draft's reasoning): this tactic's design
@@ -318,8 +349,8 @@ design's subtlest point).
 - **Out of scope:** any `pushed_sha`/record-push mode (conflicts have no
   pending-sha guard); invoking `park-node` or `gh` (pure of git/gh); the shell
   wiring (Unit 3); which clear mode the *worker* chooses (that verdict is
-  `tactic-dispatch-conflict-greenfield`'s — this unit only provides the two
-  clear primitives it will call).
+  `tactic-dispatch-conflict-branch-merge-lane`'s — this unit only provides the
+  two clear primitives it will call).
 
 **Tests:** new `packages/intentionsutil/test/apply-conflict-state.test.ts`
 mirroring `apply-fix-state.test.ts`: set (fresh + double-call bump),
@@ -397,8 +428,8 @@ mergeable-race reasoning).
     `review` candidate, not a `conflict` candidate), so no re-review is owed.
     `UNKNOWN` → `return 1` (`mergeable-unknown`, wait). The clear-mechanical /
     clear-intention calls tied to the worker's *verdict* are the worker's
-    (`tactic-dispatch-conflict-greenfield`) — this gate only sets, retries,
-    self-heals, and parks.
+    (`tactic-dispatch-conflict-branch-merge-lane`) — this gate only sets,
+    retries, self-heals, and parks.
   - `sensor_gate` `case "$phase"` (`:294-352`) — add a `pending-merge)` arm
     calling `_gate_pending_merge` (emit `conflict` on rc 0), and a `conflict)`
     arm calling `_gate_conflict_active`, mirroring the existing `fix)` arm
