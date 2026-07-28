@@ -2260,6 +2260,48 @@ clarifications:
       required contexts green, never check-run rows — a row count admits both
       false negatives (duplicate runs) and, under a >= relaxation, false
       positives (four green rows of one context standing in for four contexts)."
+  - question: Are conditions 14 (the write-path boost guard), 16 (the
+      dispatch.config pause-field amendment) and 17 (the CI PR-title guard)
+      implemented in code today, or are they recorded requirements still pending
+      implementation?
+    answer: "(Recorded 2026-07-28 /align-tactics round.) Implementation-status sweep
+      of three conditions, verified directly against origin/main so a future
+      session does not mistake them for observations of current state. Condition
+      14 (a write-path guard refusing any commit that authors a boost/override
+      at or above strategy-main-health's 100, or reduces it) is NOT implemented:
+      'boost', 'override' and 'main-health' do not appear in
+      packages/intentionsutil/scripts/validate-graph.ts or
+      packages/intentionsutil/scripts/graph-commit,
+      packages/intentionsutil/src/attention.ts composes boosts with no cap or
+      refusal, and strategy-main-health.md's own rationale nonetheless asserts
+      the guard exists -- and no tactic in this strategy's child set tracks it,
+      which is the one actionable gap in this sweep. Condition 16's
+      parenthetical amendment (the pause sentinel replaced by a
+      dispatch.config/*.json boolean as the sole mechanism, failing closed) is
+      NOT implemented: dispatch-tick:266 still gates on the DISPATCH_PAUSE_FLAG
+      sentinel file and dispatch-config-load's key list has no 'pause' member;
+      the condition's substantive half DOES hold (the gate covers worker
+      spawning only, never reservation_sweep), and the mechanism half is tracked
+      by tactic-dispatch-pause-config-field (raw). Condition 17's CI title guard
+      does not exist (.github/workflows/pr-checks.yml carries no title
+      validation; dispatch-open-pr takes a caller-supplied --title unvalidated),
+      tracked by tactic-pr-title-node-id-convention (raw). All three read as
+      recorded requirements with pending implementation, not as failed
+      conditions."
+  - question: Condition 1 is framed around a legacy gh router that 'only drains
+      existing issues' — does that draining lane still exist, and does the
+      condition still hold?
+    answer: (Recorded 2026-07-28 /align-tactics round.) Condition 1's framing --
+      'the legacy gh router only drains existing issues' -- is superseded by
+      completion, not failed. dispatch-select-tick's own comments (lines 18-21
+      and 806-816 on origin/main) state the legacy gh selection lane was REMOVED
+      and the graph selector is now the only queue selector;
+      intentions/tactic-dispatch-legacy-rewire.md no longer exists (done and
+      pruned); GitHub Issues are disabled repo-wide. The condition's substantive
+      assertion -- the graph is the sole issue tracker, bug tracker included,
+      with no side-channel work records -- holds in a stronger form than the
+      drain framing describes. Read the condition as that assertion, not as a
+      claim that a draining legacy lane still exists.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
