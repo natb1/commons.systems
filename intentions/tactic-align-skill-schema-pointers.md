@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution:
   branch: tactic-align-skill-schema-pointers
   pr: 2968
@@ -29,6 +29,10 @@ execution:
   markers: []
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T17:28:44Z
+    mergeCommitSha: 082bf7a196bf475bb5f521bb340f320678f4907b
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -54,5 +58,16 @@ commit (the self-modification office-hours lane):
 
 `tactic-schema-md-deprecation` (content move + SCHEMA.md deletion) is
 `blocked_by` this gate, so no skill file ever points at a deleted file.
-Completing the edits and letting a commit touch this node clears the park and
-unblocks the deletion tactic. About 10 author-minutes.
+
+**Done.** The author cleared this park on 2026-07-25 (all three references
+repointed, PR #2968, merged `082bf7a1`). That commit
+(`8c318d1`) nulled `office_hours` but left `phase: null`, which
+`blockersComplete` (`packages/intentionsutil/src/router.ts`) does not treat
+as complete — `tactic-schema-md-deprecation` stayed blocked, and the
+phase-null + office_hours-null combination re-qualified this node as a
+router-selectable draft (`frozenTacticSelectable`), which is how this
+`/align-tactics` pass reached it. This pass verified the merged state (grep
+for `SCHEMA.md` across the three cited files returns nothing; `gh pr view
+2968` reports `MERGED`) and lands `phase: done` with the merge-verification
+evidence in `execution.completion`, closing the bookkeeping gap and
+unblocking the deletion tactic.

@@ -66,6 +66,15 @@ describe("forwardPhase", () => {
     expect(forwardPhase("qa", false)).toBe("review");
   });
 
+  it("never routes qa directly to main-qa, residue or not", () => {
+    // main-qa is post-merge by definition, and merging requires review. The
+    // required progression is qa → review → (merge) → main-qa, so needs-main
+    // residue recorded during qa must NOT divert the phase — it is drained via
+    // the review → main-qa edge below. Pinned because qa-fix's prose once
+    // claimed a `qa → main-qa` edge that this module has never implemented.
+    expect(forwardPhase("qa", true)).toBe("review");
+  });
+
   it("routes review to done without residue and main-qa with residue", () => {
     expect(forwardPhase("review", false)).toBe("done");
     expect(forwardPhase("review", true)).toBe("main-qa");
@@ -113,6 +122,10 @@ describe("decideTransition", () => {
 
   it("advances qa → review unconditionally (CI-blind)", () => {
     expect(decideTransition({ ...base, phase: "qa" }).phase).toBe("review");
+  });
+
+  it("advances qa → review even when needs-main residue is present", () => {
+    expect(decideTransition({ ...base, phase: "qa", hasResidue: true }).phase).toBe("review");
   });
 
   it("arms auto-merge and writes no phase at clean review completion", () => {

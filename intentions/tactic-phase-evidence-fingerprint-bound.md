@@ -42,10 +42,19 @@ attention:
     it, and below the strategy-main-health emergency ceiling (boost 100), which
     the 2026-07-13 write-path guard keeps dominant and which this round does not
     disturb."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-phase-evidence-fingerprint-bound
+  pr: 2975
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-transition-node-stamp-landed-body
 office_hours: null
 pace_exempt: false
 rounds: null

@@ -39,11 +39,60 @@ execution:
 validates: []
 blocked_by: []
 office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-26
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /dispatch-conflict once it accepts node targets.
+  reason: '/qa-main: needs-main residue item 12 ("no regression in live
+    reconcile-graph-merged runs over subsequent dispatch ticks") is not
+    browser-verifiable — its url_path names a repo script, not a web page, and
+    its own finding text says the outcome is only observable across subsequent
+    real dispatch ticks. It routes straight to cannot-verify per the Step 4·0
+    triage rule.'
+  since: 2026-07-28
+  recommendation: >-
+    Source tactic: tactic-execution-pr-merge-verification, PR #2965 (merged
+    2026-07-25T19:24:10Z, merge commit
+    d33e35838f49d22fba0c9f5ea25176b6c665b3a1). It fixed the reconciler
+    (`reconcile-graph-merged` / `reconcile-graph.ts`) to classify
+    merged-vs-closed by `mergedAt` instead of the dead `MERGED` state, record
+    `execution.completion` evidence, and — critically — stop deleting nodes at
+    the done-transition (they now persist at `phase: "done"` for a later census
+    tick to verify and prune).
+
+
+    What to check, and how:
+
+
+    1. **The consumer isn't live yet.**
+    `intentions/tactic-census-scripted-tick.md` — the sibling tactic that is
+    supposed to verify and prune persisted `done` nodes using the new
+    `execution.completion` evidence — is still at `phase: implement`, not yet
+    built. Until it lands, `done` nodes accumulate on disk with no pruning
+    mechanism. Confirm whether it has since progressed (`grep -n '^phase'
+    intentions/tactic-census-scripted-tick.md` on current `origin/main`); if
+    it's still `implement`, this residue item cannot be closed yet — the
+    regression it asks about (round-stamp stalls, unbounded graph growth) can't
+    manifest or be observed until the census tick exists.
+
+
+    2. **Once the census tick is live**, watch a handful of real dispatch ticks
+    and check:
+       - `reconcile-graph-merged` output / `graph-commit` messages for terminal tactics show `execution.completion` populated (merged case: `mergedAt` + `mergeCommitSha` non-null; closed-unmerged case: all three fields null).
+       - A strategy whose last non-done, non-draft child reaches `done` still stamps its `rounds.count` on that same sweep (the Pass-3 filter fix — `n.phase !== "done"` excluded from the "remaining children" check — is what prevents a stall here; a stall would mean that fix regressed).
+       - `done`-phase nodes are eventually pruned by the census tick (not accumulating indefinitely) — spot-check node count in `intentions/` over a few ticks, or grep `phase: done` / `"phase":"done"` before/after a tick run.
+
+    3. **If a defect surfaces** (stall, non-pruning, wrong completion evidence)
+    — file it as an implement-chain bug against `reconcile-graph.ts` /
+    `reconcile-graph-merged`, `blocked_by` this node.
+
+
+    4. **If several ticks run clean** — resolve this residue item and manually
+    advance the source node `main-qa → done`:
+       ```bash
+       .claude/skills/dispatch-propagate/scripts/transition-node tactic-execution-pr-merge-verification
+       ```
+
+    This is a genuine "wait and observe" park, not an ambiguity — re-park is
+    expected until `tactic-census-scripted-tick` ships and a few ticks have run
+    against it.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -269,3 +318,4 @@ Guard that the dead-code prune path is gone from the driver:
 - **url_path:** `.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged`
 - **expected_outcome:** Real dispatch ticks reconcile terminal tactics correctly with `execution.completion` evidence recorded (merged case) or left null (closed-unmerged case); no round-stamp stall as done nodes persist across sweeps; no unbounded graph growth from never-deleted done nodes.
 - **finding:** Cannot be asserted at merge time — this behavior is only observable against `main` across subsequent real dispatch ticks (a planned deferral, per the PR's own QA plan item 12).
+- **disposition:** skipped by human override, 2026-07-28. `/qa-main` routed this item to cannot-verify (non-browser outcome; the consuming sibling `tactic-census-scripted-tick` was still `phase: implement`, so the described regression can't yet manifest or be observed). The author reviewed that recommendation and chose to close this node without waiting on live-tick observation, since Units 1-3's own verification (schema/lib.sh/reconciler tests) already passed. Residual risk — a round-stamp stall or unbounded `done`-node growth — is not tracked against this node going forward; watch for it when `tactic-census-scripted-tick` lands instead.
