@@ -66,13 +66,18 @@ tactic [`tactic-graph-native-dispatch`](intentions/tactic-graph-native-dispatch.
 
 - **`/align <optional requirements>`** — the single entrypoint for forks,
   consuming repos, and ongoing strategy work, in one session. With no prompt
-  it funnels into onboarding: orients the user in the concepts above,
-  validates the tooling deployment, reviews the inherited virtue roots (forks
-  start from this repo's; the harness assumes inherited virtues and
-  strategies are preserved), interviews for new or clarified virtues, and
-  helps craft a first strategy prompt — all without a hand-off to a separate
-  skill. Its periodic form — the scheduled dialectic review — reassesses
-  priorities against the graph. Given requirements, it records new strategies
+  it funnels into onboarding: orients the user in the node kinds above,
+  validates the deployment
+  ([`validate-deployment.sh`](.claude/skills/align/scripts/validate-deployment.sh):
+  workspace installed, graph clean, router heartbeat, each with its own
+  remediation diagnostic), then walks the user Socratically to a crafted
+  prompt and falls through into the interview in the same session — no
+  hand-off to a separate skill. A fork starts from this repo's virtue roots,
+  and the harness assumes inherited virtues and strategies are preserved;
+  there is no separate virtue-review step, because recording a virtue falls
+  out of a normal `/align <requirements>` run — the interview's placement
+  step identifies which `virtue-*` node a new strategy serves and surfaces
+  the gap when none fits. Given requirements, it records new strategies
   or edits under a dialectic interview: intent, justification by virtues or
   parent strategies, benefit, signals, and the conditions the strategy is
   contingent on. Disambiguation happens here — edge cases are put to the
@@ -231,8 +236,8 @@ run-all-cleanup-preview.sh <pr-number>
 - **Infrastructure** (Firebase): hosting and storage for the apps this
   instance of the workflow builds.
 - **Intent**: run `/align` with no prompt — it orients you, validates the
-  deployment, walks the inherited virtue roots, and helps you craft your
-  first strategy prompt in the same session.
+  deployment, and helps you craft your first strategy prompt in the same
+  session.
 
 ## Where to go next
 

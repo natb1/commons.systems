@@ -1,6 +1,6 @@
 ---
 name: align
-description: Single interactive entry point to the persistent layer — an interview-driven session that records or revises intention nodes (strategies, virtues, traditions, delegations) across the whole persistent layer, not just strategy. Frames the input as new content or an edit to an existing node, runs a Socratic dialectic to fix intent/placement/benefit/signal/conditions, advises on delegation capture, retains tactical byproducts as draft tactic nodes, and lands the record via `graph-commit`. With no prompt, funnels into onboarding. On-demand only; never files a GitHub issue.
+description: Single interactive entry point to the persistent layer — an interview-driven session that records or revises a `strategy-*` intention node. Frames the input as a new strategy or an edit to an existing one, runs a Socratic dialectic to fix intent/placement/benefit/signal/conditions, advises on delegation capture, retains tactical byproducts as draft tactic nodes, and lands the record via `graph-commit`. With no prompt, runs an onboarding funnel — orient, validate the deployment, walk to a crafted prompt — that falls through into the same interview. On-demand only; never files a GitHub issue.
 user-invocable: true
 model: opus
 ---
@@ -774,8 +774,10 @@ responsible for closing.
 - `/align-tactics` (breaking a recorded strategy into PR-sized tactics —
   `tactic-align-tactics-skill`): a sibling skill, not this one's job.
 - Deleting `/file-issue` itself: that is `tactic-legacy-router-removal`,
-  gated on the legacy gh queue draining. `/file-issue` keeps working for
-  gh-issue work throughout this skill's rollout.
+  gated on the legacy gh queue draining. `/file-issue` carried gh-issue work
+  through this skill's rollout; it is now retired ("RETIRED — do not invoke",
+  `.claude/skills/file-issue/SKILL.md`) and GitHub Issues are disabled
+  repo-wide.
 
 ## Verification
 
@@ -789,3 +791,15 @@ test surface, so no ```verify block:
   - any draft tactics from step 4 landed in the same commit and read back
     with `phase` absent;
   - no `gh issue`/`gh pr` command ran anywhere in the flow.
+
+- Invoke `/align` with **no prompt** in an interactive session to exercise
+  the onboarding branch. Confirm:
+  - step 1 orients — the practitioner gets the one-screen description of the
+    graph's node kinds before anything else runs;
+  - `.claude/skills/align/scripts/validate-deployment.sh` actually runs, and
+    reports all three checks (workspace installed, graph clean, router
+    heartbeat) each with its own remediation diagnostic — including on the
+    failure paths, and with an inactive daemon reported as non-fatal;
+  - the walk-to-a-prompt step converges on a crafted prompt and then
+    **falls through in-session** into step 1's "With requirement text"
+    branch — it must not re-invoke `/align` through the Skill tool.
