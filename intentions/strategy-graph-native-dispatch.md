@@ -2228,6 +2228,38 @@ clarifications:
       Storybook) may never be machine-verifiable, and this round adopts no
       target for the population's size; a future round that sets one would be
       consistent with this resolution, not a reversal of it."
+  - question: Is the graph-commit MAX_PUSH_ATTEMPTS exhaustion signature always
+      landing contention, as clarification 80 records?
+    answer: "(Amended 2026-07-28, extending clarification 80.) No. Clarification 80
+      diagnoses busy-main exhaustion as landing contention — unrelated nodes
+      racing for the single linear main ref, each retry re-buying the CI stamp —
+      and that diagnosis is correct for the 2026-07-19 observations it was drawn
+      from. It is not exhaustive. A second, non-contention cause produces a
+      byte-identical signature: the same 5/5 attempt exhaustion and the same
+      terminal text, main busy (landing-lock contention or required checks never
+      stamped green). Observed 2026-07-28: graph-commit attempted to land a SHA
+      that was already origin/main HEAD and already CI-stamped (reached via the
+      no new changes to stage — landing current HEAD fallback at
+      graph-commit:1476 for a write that staged nothing). await_checks counts
+      check-run ROWS matching the four required context names and gates on exact
+      equality with 4 (graph-commit:610), but an already-stamped SHA accumulates
+      one row per context per workflow run — the observed SHA carried 3
+      successful rows of each of the four contexts, 12 green and 0 failed — so
+      the gate could never pass, and no amount of retrying could change it.
+      There was no competing writer and no red check. Consequence for diagnosis:
+      the exhaustion signature alone is AMBIGUOUS as to cause and must not be
+      read as contention; distinguish by checking whether the target SHA already
+      exists on origin/main and how many check-run rows per context it carries.
+      Consequence for the ratified resolution: none — this strengthens rather
+      than weakens it. The greenfield (tactic-graph-ref-split) deletes the CI
+      stamp and with it both causes; the interim lock
+      (tactic-graph-commit-landing-lock, since landed) addresses only the
+      contention cause, which is why the arithmetic cause needed its own tracked
+      node (tactic-graph-commit-noop-landing-false-failure, filed this round).
+      Standing invariant recorded with it: a required-check gate counts DISTINCT
+      required contexts green, never check-run rows — a row count admits both
+      false negatives (duplicate runs) and, under a >= relaxation, false
+      positives (four green rows of one context standing in for four contexts)."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
