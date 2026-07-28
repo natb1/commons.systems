@@ -407,9 +407,23 @@ ancestry projection (parent chain + served strategies up to virtue roots) for
 this node."* + the shared discipline clause):
 
 - `.claude/skills/implement/SKILL.md` — node-lane plan source is documented
-  near its "Plan source" bullet (`:82-83`); the plan-read step is
-  `### 1. Read the plan` (`:218-228`). Insert the ancestry note immediately
-  after the plan-read step (`:228`).
+  near its "Plan source" bullet (`:109`); the plan-read step is
+  `### 1. Read the plan` (`:247-264`, followed by `### 2. Build each unit` at
+  `:265`). Insert the ancestry note immediately after the plan-read step.
+
+  **Also make Step 1 self-contained for node targets (added by the 2026-07-28
+  re-plan).** Step 1's body currently states only the issue-lane instruction —
+  "Read the persisted plan from the issue's `<!-- dispatch:plan -->` comment"
+  followed by `dispatch-read-plan <N>` — while the node-lane override that
+  redirects it to `$NODE_BODY` lives 138 lines earlier at `:109`, in the seams
+  list. A worker reading Step 1 in isolation would call `dispatch-read-plan`
+  with a node id, which fails on its non-numeric-arg guard (documented exit 2).
+  That failure is loud rather than silently wrong, so this is a nuisance and
+  not a correctness hazard — but the fix is one sentence and this unit already
+  edits the file. Add, as the first line of Step 1's body, a node-lane sentence
+  pointing at the already-bound `$NODE_BODY` and naming the `:109` seam as
+  governing, so the step no longer has to be read together with a distant
+  section to be executed correctly.
 - `.claude/skills/fix-checks/SKILL.md` — Step-0 node read via `readNode`
   around `:45-62`. Insert immediately after that node-read block.
 - `.claude/skills/qa-fix/SKILL.md` — `$NODE_MD` is read at Step 0
@@ -724,13 +738,44 @@ Expected after Unit 4: `over-cap=0`, `no-virtue=0`, `max-bytes` at or just under
 virtue roots themselves and the `kind-*`/`tradition-*` nodes legitimately walk to
 zero ancestors.)
 
-Spot-check the three nodes that lose their virtue root today; each must now
-render a `(virtue)` block (needs `dangerouslyDisableSandbox: true` for `npx tsx`):
+**The whole-store assertion above is the gate.** It quantifies over every node,
+so it already subsumes any per-node spot-check. Treat a failure there as
+authoritative and do not weaken it into a sample.
+
+The spot-check below exists only to put a rendered worst case in front of a
+human. It **selects its own subject at runtime** — the node with the largest
+rendered projection in the current store — rather than naming ids. An earlier
+draft of this plan hardcoded `tactic-office-hours-session-type`,
+`tactic-align-audit-legacy-review`, and `tactic-office-hours-graph-type-passthrough`
+because those were the three nodes that lost their virtue root on 2026-07-28.
+That is a property of that day's graph, not of the code: as the graph moves,
+those ids can stop being over-cap, and the `grep -q '(virtue)'` would then pass
+without exercising the shed path at all — green for the wrong reason. Naming
+them here as historical examples is fine; asserting on them is not. Needs
+`dangerouslyDisableSandbox: true` for `npx tsx`:
 
 ```verify
-npx tsx packages/intentionsutil/scripts/node-ancestry.ts tactic-office-hours-session-type --dir intentions | grep -q '(virtue)' && echo OK-1
-npx tsx packages/intentionsutil/scripts/node-ancestry.ts tactic-align-audit-legacy-review --dir intentions | grep -q '(virtue)' && echo OK-2
-npx tsx packages/intentionsutil/scripts/node-ancestry.ts tactic-office-hours-graph-type-passthrough --dir intentions | grep -q '(virtue)' && echo OK-3
+npx tsx -e "
+import { readdirSync } from 'node:fs';
+const m = await import('./packages/intentionsutil/scripts/node-ancestry.ts');
+const dir = './intentions';
+const ids = readdirSync(dir).filter(f => f.endsWith('.md') && f !== 'README.md').map(f => f.slice(0, -3));
+let worstId = null, worstBytes = -1;
+for (const id of ids) {
+  const p = m.buildAncestryProjection(dir, id);
+  if (p.ancestors.length === 0) continue;
+  const bytes = Buffer.byteLength(m.renderAncestryProjection(p));
+  if (bytes > worstBytes) { worstBytes = bytes; worstId = id; }
+}
+if (worstId === null) { console.error('FAIL: no node in the store has any ancestor'); process.exit(1); }
+const p = m.buildAncestryProjection(dir, worstId);
+const out = m.renderAncestryProjection(p);
+console.log('worst-case node=' + worstId + ' bytes=' + worstBytes + ' ancestors=' + p.ancestors.length + ' truncated=' + p.truncated);
+console.log(out);
+if (!out.includes('(virtue)')) { console.error('FAIL: worst-case node ' + worstId + ' renders no virtue ancestor'); process.exit(1); }
+if (worstBytes > m.MAX_PROJECTION_BYTES) { console.error('FAIL: worst-case node ' + worstId + ' exceeds the cap'); process.exit(1); }
+console.log('PASS');
+"
 ```
 
 **Manual / observational (Units 2–3, require git + direnv +
