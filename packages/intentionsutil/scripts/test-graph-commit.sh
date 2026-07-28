@@ -12,7 +12,8 @@
 #
 # Covers:
 #   1. happy path lands (exit 0), scratch branch deleted on origin
-#   2. idempotent re-run on a clean tree: exit 0, no new commit on main
+#   2. idempotent re-run on a clean tree: exit 0, no new commit on main, and
+#      the no-op short-circuit makes zero gh polls and leaves no scratch branch
 #   3. non-overlapping concurrent edits auto-merge; both writers' edits survive
 #   4. overlapping concurrent edits: exit 1, the other writer's landed content
 #      survives on main, this writer's content is NOT landed, the office_hours
@@ -96,7 +97,8 @@
 #  28. fail-loud guard, benign equal-blob: a clone synced exactly to
 #      origin/main's tip (nothing staged, and the local blob for the id
 #      equals origin/main's blob) proceeds benignly — exit 0, the same
-#      "no new changes to stage" message, no die.
+#      "no new changes to stage" message, no die, and zero gh polls (the
+#      no-op short-circuit).
 #  29. lock contention is cheap: a waiting writer makes zero gh polls while
 #      blocked on the landing lock, then exactly one poll cycle once it
 #      acquires the lock and lands (not a re-poll-from-scratch retry burn)
@@ -121,6 +123,12 @@
 #      an older conclusion=failure row and a newer conclusion=success row, so
 #      max_by([started_at, id]) resolves it green — exit 0, no "concluded
 #      non-success" misdiagnosis
+#  36. no-op short-circuit exits 0 even when checks are unusable: a clone
+#      synced exactly to origin/main's tip, invoked on an existing id with
+#      nothing edited, while gh is in hard-fail mode (every call exits 1) —
+#      still exits 0 with zero gh polls and no "polling failed", proving the
+#      no-op path never reaches the poller
+#      (tactic-graph-commit-noop-landing-false-failure, Defect 1)
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -540,12 +548,18 @@ else
 fi
 
 # --- Case 2: idempotent re-run on a clean tree ----------------------------------
+set_mode green
 before="$(origin_sha)"
 out="$(run_gc "$A" t-happy 2>&1)"; rc=$?
 if [[ $rc -eq 0 && "$(origin_sha)" == "$before" ]] && grep -q 'no new changes to stage' <<<"$out"; then
   ok "idempotent re-run: exit 0, no new commit on main"
 else
   no "idempotent re-run (rc=$rc)"; printf '%s\n' "$out"
+fi
+if [[ "$(gh_calls)" -eq 0 && -z "$(scratch_refs)" ]]; then
+  ok "idempotent re-run: no-op short-circuit makes zero gh polls, no scratch branch"
+else
+  no "idempotent re-run: expected zero gh polls and no scratch branch (gh_calls=$(gh_calls), scratch_refs=$(scratch_refs))"
 fi
 
 # --- Case 3: non-overlapping concurrent edits auto-merge ------------------------
@@ -1126,6 +1140,7 @@ fi
 # local blob for the id already EQUALS origin/main's blob (the already-landed
 # / already-at-HEAD case). This must proceed benignly — same "no new changes
 # to stage" message as case 2, no die.
+set_mode green
 W15="$WORK/w15"; make_clone "$W15" writer-15
 sync_clone "$W15"   # now bit-for-bit at origin/main's tip
 before_sha="$(origin_sha)"
@@ -1138,6 +1153,11 @@ if [[ $rc -eq 0 ]] \
   ok "fail-loud guard: benign equal-blob (already at origin/main's tip) proceeds without error"
 else
   no "fail-loud guard benign-equal-blob (rc=$rc)"; printf '%s\n' "$out"
+fi
+if [[ "$(gh_calls)" -eq 0 ]]; then
+  ok "fail-loud guard benign-equal-blob: no-op short-circuit makes zero gh polls"
+else
+  no "fail-loud guard benign-equal-blob: expected zero gh polls (gh_calls=$(gh_calls))"
 fi
 
 # --- Case 29: contention is now cheap, not exhausting -----------------------
@@ -1297,6 +1317,28 @@ if [[ $rc -eq 0 ]] && origin_show t-stale-fail | grep -q 'line1: newest-run-wins
   ok "stale failed row superseded by a newer success lands (newest run per name)"
 else
   no "stale-fail-then-green (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 36: no-op short-circuit exits 0 even when checks are unusable ------
+# A clone synced exactly to origin/main's tip, invoked on an existing id with
+# nothing edited, while gh is in hard-fail mode (every call exits 1). If the
+# no-op guard did not short-circuit before the poller, this would die with
+# "polling failed" instead of landing (a genuine no-op) cleanly.
+set_mode hard-fail
+W36="$WORK/w36"
+make_clone "$W36" writer-36
+sync_clone "$W36"   # now bit-for-bit at origin/main's tip
+before_sha="$(origin_sha)"
+out="$(run_gc "$W36" t-happy 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+calls="$(gh_calls)"
+if [[ $rc -eq 0 ]] \
+   && ! grep -q 'polling failed' <<<"$out" \
+   && [[ "$calls" -eq 0 ]] \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "no-op short-circuit exits 0 with zero gh polls even when checks are unusable (hard-fail mode)"
+else
+  no "no-op short-circuit under hard-fail (rc=$rc gh_calls=$calls)"; printf '%s\n' "$out"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

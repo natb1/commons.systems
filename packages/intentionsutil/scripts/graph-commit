@@ -1504,7 +1504,22 @@ main() {
         die "the resolved repo ($REPO_ROOT) holds intentions/$id.md content differing from origin/main but has nothing staged to commit. Under graph-commit's caller-derived repo resolution this can only mean a mis-pointed -C/--repo (or cwd targeting the wrong checkout) — refusing to emit a false 'landed' for a tree that was never going to change origin/main (HEAD blob=${local_blob:-<absent>}, origin/main blob=${main_blob:-<absent>})"
       fi
     done
-    echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD (nothing to commit, or a prior attempt already committed but did not push)" >&2
+
+    # Nothing is staged AND every id already matches origin/main. If HEAD is
+    # also exactly origin/main there is, by definition, nothing to push: the
+    # whole land() cycle (landing lock, graph/** scratch push, await_checks,
+    # push to main) is pure cost on a SHA that already carries its checks.
+    # Exit success here rather than buying a stamp cycle that cannot change
+    # main (tactic-graph-commit-noop-landing-false-failure, Defect 1).
+    local head_sha main_sha
+    head_sha="$(git rev-parse HEAD)"
+    main_sha="$(git rev-parse FETCH_HEAD)"
+    if [[ "$head_sha" == "$main_sha" ]]; then
+      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} and HEAD is already origin/main (${head_sha:0:8}) — nothing to push; skipping the landing cycle" >&2
+      exit 0
+    fi
+
+    echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD (a prior attempt already committed but did not push)" >&2
   fi
 
   local rc=0
