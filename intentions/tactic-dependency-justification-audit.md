@@ -34,7 +34,12 @@ execution:
 validates:
   - strategy-owned-web-platform
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: provision-node-worktree failed for this tactic (exit 2)
+  since: 2026-07-28
+  recommendation: Inspect the provisioning failure (git fetch/worktree add,
+    direnv) in the tick journal, fix the environment, and re-run the phase.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

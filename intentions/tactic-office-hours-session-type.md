@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-office-hours-session-type
   pr: 2961
@@ -32,7 +32,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-28T18:03:08Z
+    mergeCommitSha: db92cc1a2892f159470be6796f0af8dc7ad04b9b
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
