@@ -51,10 +51,14 @@
 #   `$CLAUDE_JOB_DIR/node-terminal` marker naming THAT node. The marker is
 #   written by `packages/intentionsutil/scripts/mark-node-terminal`, called from
 #   transition-node (advance / demote), park-node (park), /fix-checks
-#   (fix-attempt) and /align-tactics (align-round / no-claim):
+#   (fix-attempt), /align-tactics (align-round / no-claim) and
+#   /dispatch-conflict's Lane 3 (conflict-resolved / conflict-hold — the
+#   provision-exit-11 session dispatch-graph-execute spawns under the node's own
+#   name, whose terminal paths call neither transition-node nor park-node):
 #
 #     node=<node-id>
-#     disposition=<advance|demote|park|fix-attempt|align-round|no-claim>
+#     disposition=<advance|demote|park|fix-attempt|align-round|no-claim
+#                  |conflict-resolved|conflict-hold>
 #
 #   Only `^node=` is read here; `disposition=` is diagnostic. The marker names
 #   its node so that a session which parked or landed some OTHER node (an

@@ -26685,6 +26685,21 @@ assert_eq "mark-node-terminal: writes exact node-terminal contents" \
   "$(printf 'node=tactic-x\ndisposition=advance\n')" "$(cat "$MNT_DIR/node-terminal")"
 mnt_clean
 
+# ----- the /dispatch-conflict Lane 3 dispositions are accepted -----
+# Lane 3 is spawned by dispatch-graph-execute's provision-exit-11 branch under
+# the NODE's own name, so it is a node worker to dispatch-stop.sh — but its
+# terminal paths call neither transition-node nor park-node, so it declares its
+# own marker. A rejected disposition would exit 2, leaving the job HELD and the
+# node permanently unselectable.
+for mnt_disp in conflict-resolved conflict-hold; do
+  mnt_job "tactic-x"
+  if CLAUDE_JOB_DIR="$MNT_DIR" "$MARK_NODE_TERMINAL" tactic-x "$mnt_disp" 2>/dev/null; then mnt_ec=0; else mnt_ec=$?; fi
+  assert_eq "mark-node-terminal: '$mnt_disp' exit 0" "0" "$mnt_ec"
+  assert_eq "mark-node-terminal: '$mnt_disp' writes exact node-terminal contents" \
+    "$(printf 'node=tactic-x\ndisposition=%s\n' "$mnt_disp")" "$(cat "$MNT_DIR/node-terminal")"
+  mnt_clean
+done
+
 # ----- job names a DIFFERENT node → exit 0, NO write -----
 # The office-hours-drain / align-tactics-child-land false positive.
 mnt_job "tactic-other"

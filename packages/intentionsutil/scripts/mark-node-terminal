@@ -20,12 +20,19 @@
 #   disposition=<disposition>
 #
 # <disposition> is one of:
-#   advance      transition-node landed a forward phase write
-#   demote       transition-node delegated to demote-node-to-implement
-#   park         park-node landed an office_hours record
-#   fix-attempt  a fix-checks pass spent an attempt (retry by design)
-#   align-round  align-tactics landed a decomposition round
-#   no-claim     the session held no claim and did nothing (safe to reap)
+#   advance            transition-node landed a forward phase write
+#   demote             transition-node delegated to demote-node-to-implement
+#   park               park-node landed an office_hours record
+#   fix-attempt        a fix-checks pass spent an attempt (retry by design)
+#   align-round        align-tactics landed a decomposition round
+#   no-claim           the session held no claim and did nothing (safe to reap)
+#   conflict-resolved  a /dispatch-conflict Lane 3 pass resolved the node's
+#                      origin/main merge and pushed; the node goes back to the
+#                      router with no phase write of its own
+#   conflict-hold      a /dispatch-conflict Lane 3 pass ended `ambiguous`, so the
+#                      escalation landed on the node's `tactic-hold-conflict-*`
+#                      HOLD rather than on the node — meaning no park-node call
+#                      against THIS node id wrote the marker on its behalf
 #
 # Ownership gate: the marker is written ONLY when $CLAUDE_JOB_DIR/state.json's
 # `.name` equals <node-id>. This is what makes it safe for park-node to call
@@ -64,9 +71,9 @@ if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
 fi
 
 case "$DISPOSITION" in
-  advance|demote|park|fix-attempt|align-round|no-claim) ;;
+  advance|demote|park|fix-attempt|align-round|no-claim|conflict-resolved|conflict-hold) ;;
   *)
-    echo "mark-node-terminal: unknown disposition: $DISPOSITION (expected advance, demote, park, fix-attempt, align-round, or no-claim)" >&2
+    echo "mark-node-terminal: unknown disposition: $DISPOSITION (expected advance, demote, park, fix-attempt, align-round, no-claim, conflict-resolved, or conflict-hold)" >&2
     exit 2
     ;;
 esac
