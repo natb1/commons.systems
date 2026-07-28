@@ -28,8 +28,15 @@ defaulting to `0` when none is present (the same `max // 0` capture idiom as
 [.labels[].name | capture("^dispatch:qa-fix-attempt-(?<n>[0-9]+)$").n | tonumber] | max // 0
 ```
 
-Define `CAP=2`, env-overridable via `DISPATCH_QA_FIX_ATTEMPT_CAP` (matching
-`dispatch-qa-fix-attempt`'s default and override). `ATTEMPT_N` is a **distinct**
+Define `CAP=3`, env-overridable via `DISPATCH_QA_FIX_ATTEMPT_CAP` (matching
+`dispatch-qa-fix-attempt`'s default and override). Three, not two: the cap counts
+fixing **passes**, not finding severity, so two passes spent on cosmetic residue
+used to exhaust the budget before the first behavioural defect surfaced — that is
+the justification for the raise. The content-based `dispatch-qa-noprogress` guard
+is a partial backstop, not a second guarantee: it escalates only an attempt that
+resolves **none** of the ids the prior attempt was failing on, and it fails open
+to `progress` on any `gh`/`jq` error. A lane resolving one trivial id per pass is
+never flagged and runs to this ceiling. `ATTEMPT_N` is a **distinct**
 value from `N` (the issue number / node id) — keep it under the separate name and
 never overload `N`. `ATTEMPT_N` and `CAP` feed the Step 3.5 `plan_fix` pre-gate and
 the Step 3.7 auto-fix lane.
@@ -50,7 +57,7 @@ skips Steps 0.5–6 and returns. The auto-fix lane (Step 3.7) is bounded on
 re-invocation by two durable side effects: each `/implement-unit` lands a **durable
 commit** (a re-invocation mid-fix re-QAs against landed work), and the
 `dispatch-qa-fix-attempt` gate applies **exactly one** attempt label per fixing
-pass, hard-capping fixing passes at `CAP` (default 2).
+pass, hard-capping fixing passes at `CAP` (default 3).
 
 **Resume contract (condition 9).** A re-selected worker treats durable state as
 resume input, never an error: items the prior `<!-- dispatch:qa-summary -->` comment

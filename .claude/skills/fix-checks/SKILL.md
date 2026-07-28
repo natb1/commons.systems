@@ -140,11 +140,24 @@ actually completes.
 
   ```bash
   HEAD_SHA=$(git rev-parse HEAD)
+  if ! git fetch origin main >&2; then
+    echo "fix-checks: could not fetch origin/main to refresh $N before recording push" >&2
+    exit 1
+  fi
+  if ! FRESH_BLOB="$(git rev-parse "origin/main:intentions/$N.md" 2>/dev/null)"; then
+    echo "fix-checks: intentions/$N.md does not exist on origin/main — cannot refresh a node that is not landed" >&2
+    exit 1
+  fi
+  if ! git show "origin/main:intentions/$N.md" > "intentions/$N.md"; then
+    echo "fix-checks: could not refresh intentions/$N.md from origin/main" >&2
+    exit 1
+  fi
   node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
     "$N" --spend-attempt
   node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
     "$N" --record-push "$HEAD_SHA"
   packages/intentionsutil/scripts/graph-commit \
+    --base "$N=$FRESH_BLOB" \
     -m "graph: record fix attempt + push $HEAD_SHA on $N" "$N"
   ```
 
@@ -156,23 +169,39 @@ actually completes.
   / flake loops:
 
   ```bash
+  if ! git fetch origin main >&2; then
+    echo "fix-checks: could not fetch origin/main to refresh $N before recording the attempt" >&2
+    exit 1
+  fi
+  if ! FRESH_BLOB="$(git rev-parse "origin/main:intentions/$N.md" 2>/dev/null)"; then
+    echo "fix-checks: intentions/$N.md does not exist on origin/main — cannot refresh a node that is not landed" >&2
+    exit 1
+  fi
+  if ! git show "origin/main:intentions/$N.md" > "intentions/$N.md"; then
+    echo "fix-checks: could not refresh intentions/$N.md from origin/main" >&2
+    exit 1
+  fi
   node --import tsx/esm packages/intentionsutil/scripts/apply-fix-state.ts \
     "$N" --spend-attempt
   packages/intentionsutil/scripts/graph-commit \
+    --base "$N=$FRESH_BLOB" \
     -m "graph: record fix attempt (no push) on $N" "$N"
   ```
 
   The interrupt otherwise stays exactly as it was; the selector re-launches
   `/fix-checks` next tick (or the flake path files its own issue and the node is
   no longer re-routed to fix — see Step 4), unless this spend now trips the
-  3-attempt cap, in which case the selector parks it instead.
+  3-attempt cap, in which case the selector lands a tracked hold instead (a
+  born-parked hold tactic plus a `blocked_by` edge on this node, via
+  `packages/intentionsutil/scripts/hold-node` — this node's own `office_hours`
+  is never written).
 
 Do NOT call `transition-node` here: after the CI-blind redesign it no longer
 knows about `fix` and would force the ladder forward regardless of whether the
 fix actually worked. Do NOT clear `execution.fix`, reset `phase`, or write any
 completion marker — those are the selector's on a later green tick. The Stop hook
 (`.claude/hooks/dispatch-stop.sh`) needs nothing from this seam for a clean pass
-(it only backstops the escalation park); chain continuation is carried by the
+(it only backstops the escalation hold); chain continuation is carried by the
 systemd heartbeat and the tick's convergence reseed.
 
 **Disarm auto-merge on every push.** Whenever this worker pushes ANY commit (a
@@ -702,12 +731,21 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
    ```
 
    **Node lane** (`TARGET_KIND=node`): write NO `dispatch-mark-complete` marker
-   (it is a gh-label vehicle, issue-only). The node lane's completion is the
-   `apply-fix-state --spend-attempt` (+ `--record-push` when this iteration
-   pushed) + `graph-commit` write from the completion seam above — every
-   outcome that reaches Step 9 spends one attempt unit there. The Stop hook
-   (`.claude/hooks/dispatch-stop.sh`) needs no marker from a clean node pass —
-   it only backstops the escalation park.
+   (it is a gh-label vehicle, issue-only). Write the node lane's own
+   terminal-disposition marker instead:
+
+   ```bash
+   packages/intentionsutil/scripts/mark-node-terminal "$N" fix-attempt
+   ```
+
+   This is the node lane's terminal-disposition evidence. The completion write
+   is still `apply-fix-state --spend-attempt` (+ `--record-push` when this
+   iteration pushed) + `graph-commit` from the completion seam above — every
+   outcome that reaches Step 9 spends one attempt unit there (retry by design;
+   the selector re-routes on a later tick). This marker only tells the Stop hook
+   (`.claude/hooks/dispatch-stop.sh`) that the pass *ended*: `Stop` fires on
+   every turn yield, not only on terminal exit, so without the marker the hook
+   leaves the job alive rather than reaping it mid-flight.
 
    Then **stop**. The `/dispatch-propagate` background-job chain drives the
    next iteration — the selector observes the pushed sha's CI verdict on a later

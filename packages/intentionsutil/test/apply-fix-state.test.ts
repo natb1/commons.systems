@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -162,54 +162,86 @@ describe("applyFixState store round-trip", () => {
     );
   });
 
-  it("--park-if-capped at or below the cap makes no write and reports parked: false", () => {
+  it("--check-cap at or below the cap makes no write and reports capped: false", () => {
     const dir = tempDir();
     seedTactic(dir, "qa", []);
     applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir }); // attempt 1
     applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // attempt 2
     applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // attempt 3 (== FIX_ATTEMPT_CAP)
     const before = readNode(dir, "tactic-syn");
-    const r = applyFixState({ id: "tactic-syn", mode: "park-check", pushedSha: null, dir });
-    expect(r.mode).toBe("park-check");
-    expect(r.parked).toBe(false);
-    expect(r.wrote).toBe(false);
+    const path = join(dir, "tactic-syn.md");
+    const mtimeBefore = statSync(path).mtimeMs;
+    const r = applyFixState({ id: "tactic-syn", mode: "check-cap", pushedSha: null, dir });
+    expect(r.mode).toBe("check-cap");
+    expect(r.capped).toBe(false);
+    expect(r.consumed).toBe(2);
+    expect(r.attempt).toBe(3);
     const after = readNode(dir, "tactic-syn");
     expect(after).toEqual(before);
     expect(after.execution?.fix?.attempt).toBe(3);
     expect(after.office_hours).toBeNull();
+    // Pure read: the node file must not be rewritten at all.
+    expect(statSync(path).mtimeMs).toBe(mtimeBefore);
   });
 
-  it("--park-if-capped above the cap parks the node, resets attempt to 1, and writes office_hours", () => {
+  it("--check-cap above the cap reports capped: true with the consumed count, and makes no write", () => {
     const dir = tempDir();
     seedTactic(dir, "qa", []);
     applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir }); // attempt 1
     applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // attempt 2
     applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // attempt 3
     applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // attempt 4 (over the cap of 3)
-    const r = applyFixState({ id: "tactic-syn", mode: "park-check", pushedSha: null, dir });
-    expect(r.mode).toBe("park-check");
-    expect(r.parked).toBe(true);
-    expect(r.wrote).toBe(true);
-    expect(r.attempt).toBe(3); // consumed attempts before the park
+    const path = join(dir, "tactic-syn.md");
+    const mtimeBefore = statSync(path).mtimeMs;
+    const r = applyFixState({ id: "tactic-syn", mode: "check-cap", pushedSha: null, dir });
+    expect(r.mode).toBe("check-cap");
+    expect(r.capped).toBe(true);
+    expect(r.consumed).toBe(3); // consumed attempts before the cap check
+    expect(r.attempt).toBe(4);
     const node = readNode(dir, "tactic-syn");
-    expect(node.office_hours).not.toBeNull();
-    expect(node.office_hours?.reason).toMatch(/3 attempts/);
-    expect(node.office_hours?.since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(node.office_hours?.recommendation).not.toBeNull();
-    // Fresh budget: attempt reset to 1, since/pushed_sha untouched.
-    expect(node.execution?.fix?.attempt).toBe(1);
-    expect(node.phase).toBe("qa"); // ladder phase untouched by the park
+    expect(node.office_hours).toBeNull();
+    expect(node.execution?.fix?.attempt).toBe(4); // untouched by a pure check
+    expect(node.phase).toBe("qa");
+    // Pure read: the node file must not be rewritten at all.
+    expect(statSync(path).mtimeMs).toBe(mtimeBefore);
   });
 
-  it("--park-if-capped with no active interrupt is an error", () => {
+  it("--check-cap with no active interrupt is an error", () => {
     const dir = tempDir();
     seedTactic(dir, "qa", []);
     expect(() =>
-      applyFixState({ id: "tactic-syn", mode: "park-check", pushedSha: null, dir }),
+      applyFixState({ id: "tactic-syn", mode: "check-cap", pushedSha: null, dir }),
     ).toThrow(/execution\.fix is null/);
   });
 
-  it("end-to-end: set-fix, three spends, then park-if-capped parks, then a human clear-fix nulls fix entirely", () => {
+  it("--reset-attempt sets attempt to 1, preserving since/pushed_sha and phase", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", []);
+    const set = applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir });
+    applyFixState({ id: "tactic-syn", mode: "record", pushedSha: "cafef00d", dir });
+    applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // 2
+    applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // 3
+    const r = applyFixState({ id: "tactic-syn", mode: "reset-attempt", pushedSha: null, dir });
+    expect(r.mode).toBe("reset-attempt");
+    expect(r.wrote).toBe(true);
+    expect(r.attempt).toBe(1);
+    const node = readNode(dir, "tactic-syn");
+    expect(node.execution?.fix?.attempt).toBe(1);
+    expect(node.execution?.fix?.since).toBe(set.since);
+    expect(node.execution?.fix?.pushed_sha).toBe("cafef00d");
+    expect(node.phase).toBe("review");
+    expect(node.office_hours).toBeNull();
+  });
+
+  it("--reset-attempt with no active interrupt is an error", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    expect(() =>
+      applyFixState({ id: "tactic-syn", mode: "reset-attempt", pushedSha: null, dir }),
+    ).toThrow(/execution\.fix is null/);
+  });
+
+  it("end-to-end: set-fix, three spends, then check-cap reports capped with no write, then reset-attempt resets, office_hours stays null throughout", () => {
     const dir = tempDir();
     seedTactic(dir, "qa", []);
     const set = applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir });
@@ -218,18 +250,20 @@ describe("applyFixState store round-trip", () => {
     applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // 3
     const third = applyFixState({ id: "tactic-syn", mode: "spend", pushedSha: null, dir }); // 4
     expect(third.attempt).toBe(4);
-    const park = applyFixState({ id: "tactic-syn", mode: "park-check", pushedSha: null, dir });
-    expect(park.parked).toBe(true);
-    const parked = readNode(dir, "tactic-syn");
-    expect(parked.office_hours).not.toBeNull();
-    expect(parked.execution?.fix?.attempt).toBe(1);
-    // Human clears office_hours (out of scope here); the counterpart --clear-fix
-    // still nulls execution.fix entirely, even with office_hours present.
-    const cleared = applyFixState({ id: "tactic-syn", mode: "clear", pushedSha: null, dir });
-    expect(cleared.mode).toBe("clear");
+    const path = join(dir, "tactic-syn.md");
+    const mtimeBefore = statSync(path).mtimeMs;
+    const check = applyFixState({ id: "tactic-syn", mode: "check-cap", pushedSha: null, dir });
+    expect(check.capped).toBe(true);
+    expect(check.consumed).toBe(3);
+    expect(statSync(path).mtimeMs).toBe(mtimeBefore); // no write from a pure check
+    const checked = readNode(dir, "tactic-syn");
+    expect(checked.office_hours).toBeNull();
+    expect(checked.execution?.fix?.attempt).toBe(4); // untouched
+    const reset = applyFixState({ id: "tactic-syn", mode: "reset-attempt", pushedSha: null, dir });
+    expect(reset.attempt).toBe(1);
     const final = readNode(dir, "tactic-syn");
-    expect(final.execution?.fix).toBeNull();
-    expect(final.office_hours).not.toBeNull(); // clear-fix does not touch office_hours
+    expect(final.execution?.fix?.attempt).toBe(1);
+    expect(final.office_hours).toBeNull(); // this file never writes office_hours
   });
 });
 
@@ -254,9 +288,14 @@ describe("apply-fix-state parseArgs", () => {
     expect(a).toMatchObject({ id: "tactic-syn", mode: "spend", pushedSha: null });
   });
 
-  it("parses --park-if-capped", () => {
-    const a = parseArgs(["tactic-syn", "--park-if-capped"]);
-    expect(a).toMatchObject({ id: "tactic-syn", mode: "park-check", pushedSha: null });
+  it("parses --check-cap", () => {
+    const a = parseArgs(["tactic-syn", "--check-cap"]);
+    expect(a).toMatchObject({ id: "tactic-syn", mode: "check-cap", pushedSha: null });
+  });
+
+  it("parses --reset-attempt", () => {
+    const a = parseArgs(["tactic-syn", "--reset-attempt"]);
+    expect(a).toMatchObject({ id: "tactic-syn", mode: "reset-attempt", pushedSha: null });
   });
 
   it("rejects combining two modes", () => {
@@ -269,8 +308,14 @@ describe("apply-fix-state parseArgs", () => {
     );
   });
 
-  it("rejects combining --park-if-capped with --set-fix", () => {
-    expect(() => parseArgs(["tactic-syn", "--park-if-capped", "--set-fix"])).toThrow(
+  it("rejects combining --check-cap with --set-fix", () => {
+    expect(() => parseArgs(["tactic-syn", "--check-cap", "--set-fix"])).toThrow(
+      /mutually exclusive/,
+    );
+  });
+
+  it("rejects combining --reset-attempt with --check-cap", () => {
+    expect(() => parseArgs(["tactic-syn", "--reset-attempt", "--check-cap"])).toThrow(
       /mutually exclusive/,
     );
   });

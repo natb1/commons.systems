@@ -32,35 +32,12 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint: 62d71ed52ab675485474ed69e3c22ced46d2c99ecece2cfec92f79236fa6b89b
+  fix: null
+  completion: null
 validates:
   - strategy-external-calibration
 blocked_by: []
-office_hours:
-  reason: "Plan/scope defect: the tactic home and its prescribed reading-update
-    mechanism are mutually incompatible under tooling the tactic forbids
-    changing. Element 4 tells the owner to update strategy-external-calibration
-    reading/gap via packages/intentionsutil/scripts/write-node.ts, and the whole
-    convention is authored into that strategy node markdown body (kind-strategy
-    settled-mechanism body rule). But store.ts writeNode regenerates a STRATEGY
-    body from statement on every write (readExistingTacticBody returns null for
-    non-tactic kinds; verified empirically) — it preserves ONLY tactic bodies.
-    So the first calibration-event reading update via write-node.ts would erase
-    the entire ## Calibration events doctrine. No strategy node currently uses
-    its body, so this contradiction has never fired; this tactic would be the
-    first, and on the very sensor node whose reading is rewritten at every
-    event. The plan Out-of-scope explicitly forbids store.ts/schema.ts changes,
-    so there is no in-scope path to a durable artifact. Next steps: re-open a
-    /align-tactics round on strategy-external-calibration to re-scope this
-    tactic. Greenfield: extend writeNode to preserve strategy bodies (mirror the
-    tactic-body preservation via readExistingTacticBody + an
-    assertNoTacticBodyLoss analog in packages/intentionsutil/src/store.ts) so
-    kind-strategy settled-mechanism body rule is actually durable, then include
-    that store.ts change in this tactic scope. Brownfield/alt: relocate the
-    registration convention to a body-safe home (a dedicated tactic node body or
-    a package doc the sensor references) if strategy bodies are intentionally
-    ephemeral. Either resolves the contradiction; the current scope cannot."
-  since: 2026-07-11
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

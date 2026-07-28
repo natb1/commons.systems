@@ -60,6 +60,13 @@ MAIN_ROOT="$(resolve_project_root)" || { echo "transition-node: could not resolv
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
 GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
 
+# Record a terminal disposition for this node worker's pass, so its Stop hook
+# may reap the job (dispatch-self-close's node-worker invariant). Best-effort:
+# a marker write must never turn a landed transition into a failure.
+# mark-node-terminal's own ownership gate makes it a no-op when this session is
+# transitioning some OTHER node.
+mark_terminal() { "$UTIL_SCRIPTS/mark-node-terminal" "$NODE_ID" "$1" >/dev/null 2>&1 || true; }
+
 NODE_ID="${1:-}"
 if [[ -z "$NODE_ID" ]]; then
   echo "usage: transition-node <node-id> [--set-pr <n>]" >&2
@@ -79,6 +86,28 @@ while [[ $# -gt 0 ]]; do
     *) echo "transition-node: unexpected argument '$1'" >&2; exit 2 ;;
   esac
 done
+
+# Refresh the LOCAL node file from origin/main BEFORE any read (read_node_json,
+# PHASE/PR extraction, and apply-node-transition's read-modify-write all consume
+# the on-disk copy), so the phase write lands on top of origin/main's current
+# content rather than a stale worktree copy (the invocation may come from a
+# far-behind PR-branch worktree). This fetch also freshens the origin/main ref
+# the freshness snapshot (git archive origin/main) reads below. An unreachable
+# origin/main or a node absent from origin/main is genuine environment breakage —
+# fail with a clear error, never fall back to the local copy (code-style.md).
+# FRESH_BLOB is the compare-and-swap token passed to graph-commit at the land.
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "transition-node: could not fetch origin/main to refresh $NODE_ID before transitioning" >&2
+  exit 1
+fi
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "transition-node: intentions/$NODE_ID.md does not exist on origin/main — cannot transition a node that is not landed" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$REPO_ROOT/intentions/$NODE_ID.md"; then
+  echo "transition-node: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
+fi
 
 # Read the whole local node frontmatter as JSON once, for field extraction.
 read_node_json() {
@@ -153,6 +182,7 @@ STAMPED_SHA="$(jq -r '.stampedSha // empty' <<<"$FRESH")"
 # demote a scope-stale main-qa node — fall through to the normal transition below.
 if [[ "$SCOPE_STALE" == "true" && "$PHASE" != "main-qa" ]]; then
   if "$UTIL_SCRIPTS/demote-node-to-implement" "$NODE_ID"; then
+    mark_terminal demote
     echo "demoted $NODE_ID -> implement (scope drift)"
     exit 0
   fi
@@ -178,6 +208,7 @@ fi
 STALE_CHAIN="$(jq -r '(.staleChainMarkers // []) | join(", ")' <<<"$FRESH")"
 if [[ "$PHASE" == "review" && -n "$STALE_CHAIN" ]]; then
   if "$UTIL_SCRIPTS/demote-node-to-implement" "$NODE_ID"; then
+    mark_terminal demote
     echo "demoted $NODE_ID -> implement (broken evidence chain: $STALE_CHAIN)"
     exit 0
   fi
@@ -203,10 +234,10 @@ APPLY_FLAGS=("$NODE_ID")
 if [[ -n "$STAMPED_FP" && -n "$STAMPED_SHA" ]]; then
   APPLY_FLAGS+=("--evidence-fingerprint" "$STAMPED_FP" "--evidence-sha" "$STAMPED_SHA")
 fi
-FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)" || {
-  echo "transition-node: intentions/$NODE_ID.md does not exist on origin/main — cannot transition a node that is not landed" >&2
-  exit 1
-}
+# FRESH_BLOB was already captured by the refresh-before-read block above (same
+# fetch, same blob) -- reused here rather than re-resolved, so the rollback
+# target and the --base CAS token below are pinned to the exact same
+# origin/main snapshot the read-modify-write below started from.
 MUTATED=1
 if ! RESULT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/apply-node-transition.ts" "${APPLY_FLAGS[@]}") )"; then
   echo "transition-node: apply-node-transition failed for $NODE_ID" >&2
@@ -224,10 +255,22 @@ if [[ "$ARM_MERGE" == "true" && "$STAMP_MISSING" == "true" ]]; then
 fi
 
 # --- Land the state-only write on main ---------------------------------------
-if ! "$GRAPH_COMMIT" -C "$REPO_ROOT" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
+# --base pins the land to the FRESH_BLOB read above: if origin/main's copy of
+# this node advanced again between the refresh and this call (a concurrent
+# writer), graph-commit refuses rather than silently clobbering the advance.
+# -C resolves the target repo from this worktree (tactic-graph-commit-cwd-repo-resolution)
+# rather than the script's own on-disk location.
+if ! "$GRAPH_COMMIT" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
   echo "transition-node: graph-commit failed for $NODE_ID" >&2
   exit 1
 fi
+
+# The write landed: this pass is terminal. Marked HERE rather than at each exit
+# so it covers all three downstream exit-0 outcomes (transitioned, armed-merge,
+# held … (freeze)). Deliberately NOT marked: the missing-stamp hold above (it
+# lands nothing — a genuine stall, correctly left visible) and every exit-1 /
+# exit-2 path.
+mark_terminal advance
 
 refresh_stamp
 
