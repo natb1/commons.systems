@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# dispatch-config-scope — classify a set of conflicted paths as agent-behavior
+# config, or not.
+#
+# Usage: <paths-newline-separated> | dispatch-config-scope
+#
+# Reads newline-separated repo-relative paths on STDIN (mirrors
+# dispatch-run-verification's stdin design — no gh, no network, so it is
+# unit-testable without mocks). Writes to stdout the subset of those paths
+# that are agent-behavior config: anything under `.claude/`, plus a top-level
+# or nested `settings.json` / `settings.local.json` under `.claude/`. This is
+# a path-prefix match only — file contents are never read.
+#
+# This is a PREDICATE, not a report: exit 0 means the input change set has NO
+# config-scope paths ("safe" — nothing self-modifying); exit 1 means it has at
+# least one ("this change set is self-modifying"). Callers branch on the exit
+# code; the printed subset is for logging/diagnostics.
+#
+# Exit codes:
+#   0  the config-scope subset is empty (including empty stdin — an empty
+#      change set is genuinely not config-touching)
+#   1  the config-scope subset is non-empty (config paths printed to stdout)
+#   2  unexpected argument
+#
+# Any unexpected argument is a clear error, not a silent fallback, per
+# .claude/rules/code-style.md.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: <paths-newline-separated> | dispatch-config-scope
+
+Reads newline-separated repo-relative paths on STDIN. Writes to stdout the
+subset that is agent-behavior config (anything under .claude/, matched on
+path prefix only; file contents are never read).
+
+Exit codes:
+  0  config-scope subset is empty (including empty stdin)
+  1  config-scope subset is non-empty (the subset is printed to stdout)
+  2  unexpected argument
+EOF
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  '')
+    ;;
+  *)
+    echo "dispatch-config-scope: unexpected argument: $1" >&2
+    echo "usage: <paths-newline-separated> | dispatch-config-scope" >&2
+    exit 2
+    ;;
+esac
+
+found=0
+
+while IFS= read -r path || [[ -n "$path" ]]; do
+  [[ -z "$path" ]] && continue
+  if [[ "$path" == .claude/* ]]; then
+    printf '%s\n' "$path"
+    found=1
+  fi
+done
+
+if [[ "$found" -eq 1 ]]; then
+  exit 1
+fi
+
+exit 0
