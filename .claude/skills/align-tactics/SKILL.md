@@ -279,6 +279,20 @@ park-writing, and the fingerprint/round-accounting details (per-strategy
 `execution.strategy_fingerprint` map via `strategy-fingerprint.ts`, and the
 strategy's `rounds.count`/`last_completed`/`last_aligned` bookkeeping).
 
+Once the round has landed and `validate-graph.ts` is clean, record the
+terminal disposition:
+
+```bash
+packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" align-round
+```
+
+The Stop hook (`.claude/hooks/dispatch-stop.sh`) reaps this node worker's job
+only on positive evidence that the pass ended — `Stop` fires on every turn
+yield, not only on terminal exit, so an unmarked session is held alive instead
+of reaped. Call it unconditionally: `mark-node-terminal` writes nothing unless
+this job's own name is `<target-node-id>`, so a round that lands *child*
+tactics cannot authorize a reap on their behalf.
+
 ## Re-evaluation mode
 
 When invoked after a mid-flight strategy edit — the router detects a stale

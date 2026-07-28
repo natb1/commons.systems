@@ -39,6 +39,7 @@ office_hours:
     calculus what the graph refuses when it declines to total virtues?"
   since: 2026-07-11
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

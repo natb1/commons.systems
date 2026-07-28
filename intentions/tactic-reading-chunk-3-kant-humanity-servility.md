@@ -36,6 +36,7 @@ office_hours:
     6:434–437 against tradition-kant."
   since: 2026-07-06
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

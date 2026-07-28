@@ -84,6 +84,7 @@ office_hours:
   recommendation: Define the gym-playlist-from-phone critical path (playing a gym
     playlist from the phone via the owned audio player) in a future
     requirement-discovery office-hours session, then plan and implement it.
+  session_type: requirement-discovery
 pace_exempt: false
 rounds:
   count: 0
