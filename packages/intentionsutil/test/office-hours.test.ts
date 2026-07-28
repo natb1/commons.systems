@@ -13,6 +13,7 @@ import {
 import type { SessionType } from "../src/schema.js";
 import {
   formatDisposition,
+  formatQueueRow,
   parseSelectorArgs,
   resolveSessionCwd,
 } from "../scripts/office-hours-select.js";
@@ -392,6 +393,66 @@ describe("parseSelectorArgs", () => {
     const result = parseSelectorArgs(["--type", "--list"]);
     expect(result.kind).toBe("error");
     expect(result.kind === "error" && result.message).toMatch(/missing value for --type/);
+  });
+
+  it("accepts the --type=<value> spelling", () => {
+    expect(parseSelectorArgs(["--type=curriculum-review"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: "curriculum-review",
+      target: undefined,
+    });
+  });
+
+  it("accepts --type=<value> combined with --list", () => {
+    expect(parseSelectorArgs(["--type=requirement-discovery", "--list"])).toEqual({
+      kind: "ok",
+      wantList: true,
+      sessionType: "requirement-discovery",
+      target: undefined,
+    });
+  });
+
+  it("errors on an unknown --type=<value>", () => {
+    const result = parseSelectorArgs(["--type=bogus"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/unknown --type/);
+  });
+
+  it("errors with a missing-value message on an empty --type=", () => {
+    const result = parseSelectorArgs(["--type="]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/missing value for --type/);
+  });
+
+  it("errors on an unrecognized flag rather than silently ignoring it", () => {
+    // The regression: a filtered-out unknown flag left sessionType undefined and
+    // emitted the UNFILTERED queue head with exit 0.
+    const result = parseSelectorArgs(["--typ", "curriculum-review"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/unknown flag "--typ"/);
+  });
+
+  it("errors when a boolean flag is given a value", () => {
+    const result = parseSelectorArgs(["--list=true"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--list takes no value/);
+  });
+});
+
+describe("formatQueueRow", () => {
+  it("renders the tab-separated --list columns in contract order", () => {
+    // Column order is parsed positionally by office-hours-graph's
+    // `IFS=$'\t' read -r score sessiontype nid date` loop; a reorder there or
+    // here breaks every park lookup and reports a false empty queue.
+    const row = formatQueueRow({
+      nodeId: "tactic-a",
+      rank: 12.5,
+      sessionType: "curriculum-review",
+      since: "2026-07-01",
+    });
+    expect(row).toBe("12.5\tcurriculum-review\ttactic-a\t2026-07-01");
+    expect(row.split("\t")).toEqual(["12.5", "curriculum-review", "tactic-a", "2026-07-01"]);
   });
 });
 
