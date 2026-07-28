@@ -43,17 +43,33 @@ reaping in the first place — this toggle gates that reap and the legacy one
 alike; the two are sequenced together because the config check lives in the same
 code path the reap runs through).
 
+**Re-scoped 2026-07-26 (/align-strategy).** This body previously assumed the
+default was "reap on **every** terminal exit". That premise was superseded the
+same day it was written, by the 2026-07-19 reap-scope-narrowing clarification on
+`strategy-graph-native-dispatch`, which explicitly records that this draft "must
+be re-scoped to the narrowed default". The narrowed default is: **reap iff the
+session ended in a phase progression/retry or an escalation-park; every other
+terminal exit is KEPT.** The sections below are corrected to it. The toggle's
+mechanism is unchanged — only the baseline it modifies moved.
+
 ## Problem
 
 `dispatch-self-close`
 (`.claude/skills/dispatch-propagate/scripts/dispatch-self-close` → `claude rm
-<job-id>`) unconditionally auto-closes a completed worker's background job. That
-is the doctrinal default (disposable sessions; the 2026-07-16 reaping
-clarification on `strategy-graph-native-dispatch`). But when an operator is
-debugging a completed or escalation-parked worker, there is no way to KEEP the
-session for local inspection short of racing the Stop hook. The interview added
-a default-off escape hatch: auto-close stays the default, but an operator can
-opt to keep sessions.
+<job-id>`) auto-closes a completed worker's background job. Under the narrowed
+default it reaps **only** the two clean terminal states — a phase
+progression/retry, or an escalation-park — because those two write something
+durable (the transition advanced the node's phase; the park wrote `office_hours`
+into the node), so reaping loses nothing. Every other terminal exit — a hard
+crash, an error exit, or a clean-but-no-transition/no-progress exit — is already
+KEPT for local debugging, because such an exit was never parked to office-hours
+and the live session is its only debugging artifact.
+
+The gap this tactic closes is the remaining case: an operator debugging a
+session that DID transition or park has no way to keep it, short of racing the
+Stop hook. The interview added a default-off escape hatch that layers on top of
+the narrowed default — when enabled, the transitioned/parked sessions the
+default would reap are kept too.
 
 ## Design (decided in the 2026-07-19 interview; scope for /align-tactics)
 
@@ -63,9 +79,16 @@ opt to keep sessions.
   behavior changes until an operator flips it.
 
 - **Symmetric suppression — both clean-advance and escalation-park.** When the
-  toggle is ON (keep), suppress the reap on BOTH a clean phase advance and an
-  escalation-park. When OFF (default), both reap as today. One uniform switch,
+  toggle is ON (keep), suppress the reap on BOTH a phase progression/retry and
+  an escalation-park. When OFF (default), both reap. One uniform switch,
   matching the plain reading of "auto-close worker sessions."
+
+- **The toggle's blast radius is exactly those two states.** It cannot make
+  behavior *more* aggressive than the narrowed default: sessions that end with
+  neither a phase progression/retry nor a park are **never** reaped, regardless
+  of this flag, because they must remain available to debug. The flag therefore
+  only ever moves sessions from "reaped" to "kept", never the reverse
+  (2026-07-26 re-scope).
 
 - **Placement — the shared primitive.** Put the check inside `dispatch-self-close`
   itself (not in a lane-specific branch), so BOTH the legacy gh issue-worker lane
@@ -110,8 +133,13 @@ sensible-default: absence = the documented default, not a failure).
 
 ## Verification (for the eventual plan)
 
-- With no config change (default), a completed node worker's Stop still reaps its
-  job — `claude agents --json` shows no lingering entry — exactly as today.
+- With no config change (default), a node worker that ended in a phase
+  progression/retry has its job reaped on Stop — `claude agents --json` shows no
+  lingering entry.
+- With no config change (default), a worker that exited with NEITHER a phase
+  progression/retry NOR a park (crash, error, or clean-but-no-progress) is
+  **kept** — its job entry and its node-id worktree both remain — and flipping
+  the toggle either way does not change that.
 - With the toggle OFF (keep), after a node worker completes a phase its job
   REMAINS in `claude agents --json`, the node's persisted phase still advanced on
   origin/main, and the node's worktree claim is still held (next phase not

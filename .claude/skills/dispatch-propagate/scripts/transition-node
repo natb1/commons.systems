@@ -72,6 +72,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Refresh the LOCAL node file from origin/main BEFORE any read (read_node_json,
+# PHASE/PR extraction, and apply-node-transition's read-modify-write all consume
+# the on-disk copy), so the phase write lands on top of origin/main's current
+# content rather than a stale worktree copy (the invocation may come from a
+# far-behind PR-branch worktree). This fetch also freshens the origin/main ref
+# the freshness snapshot (git archive origin/main) reads below. An unreachable
+# origin/main or a node absent from origin/main is genuine environment breakage —
+# fail with a clear error, never fall back to the local copy (code-style.md).
+# FRESH_BLOB is the compare-and-swap token passed to graph-commit at the land.
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "transition-node: could not fetch origin/main to refresh $NODE_ID before transitioning" >&2
+  exit 1
+fi
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "transition-node: intentions/$NODE_ID.md does not exist on origin/main — cannot transition a node that is not landed" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$REPO_ROOT/intentions/$NODE_ID.md"; then
+  echo "transition-node: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
+fi
+
 # Read the whole local node frontmatter as JSON once, for field extraction.
 read_node_json() {
   (cd "$REPO_ROOT" && node --import tsx/esm -e '
@@ -154,10 +176,10 @@ fi
 APPLY_FLAGS=("$NODE_ID")
 [[ "$STRATEGY_STALE" == "true" ]] && APPLY_FLAGS+=("--strategy-stale")
 [[ -n "$SET_PR" ]] && APPLY_FLAGS+=("--set-pr" "$SET_PR")
-FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)" || {
-  echo "transition-node: intentions/$NODE_ID.md does not exist on origin/main — cannot transition a node that is not landed" >&2
-  exit 1
-}
+# FRESH_BLOB was already captured by the refresh-before-read block above (same
+# fetch, same blob) -- reused here rather than re-resolved, so the rollback
+# target and the --base CAS token below are pinned to the exact same
+# origin/main snapshot the read-modify-write below started from.
 MUTATED=1
 if ! RESULT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/apply-node-transition.ts" "${APPLY_FLAGS[@]}") )"; then
   echo "transition-node: apply-node-transition failed for $NODE_ID" >&2
@@ -175,7 +197,12 @@ if [[ "$ARM_MERGE" == "true" && "$STAMP_MISSING" == "true" ]]; then
 fi
 
 # --- Land the state-only write on main ---------------------------------------
-if ! "$GRAPH_COMMIT" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
+# --base pins the land to the FRESH_BLOB read above: if origin/main's copy of
+# this node advanced again between the refresh and this call (a concurrent
+# writer), graph-commit refuses rather than silently clobbering the advance.
+# -C resolves the target repo from this worktree (tactic-graph-commit-cwd-repo-resolution)
+# rather than the script's own on-disk location.
+if ! "$GRAPH_COMMIT" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
   echo "transition-node: graph-commit failed for $NODE_ID" >&2
   exit 1
 fi

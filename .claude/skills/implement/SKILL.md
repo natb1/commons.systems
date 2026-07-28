@@ -128,7 +128,11 @@ On the node lane the four issue-keyed seams below are re-keyed to the graph
   human-facing reason to `$CLAUDE_JOB_DIR/office-hours-reason` (and the
   best-next-steps to `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook
   parks the node via `park-node` (`office_hours` graph write) — see
-  `.claude/hooks/dispatch-stop.sh`.
+  `.claude/hooks/dispatch-stop.sh`. Also write the already-bound `PR_NUM` to
+  `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic tempfile+`mv` write as the
+  reason/recommendation files) so the park records `execution.pr`
+  (tactic-office-hours-pr-custody); skip this write when `PR_NUM` is empty
+  (e.g. escalating before Step 4 has opened a PR yet).
 
 Then fetch any prior PR/phase-log context (use `dangerouslyDisableSandbox:
 true` — the context pack hits `gh`).
@@ -323,8 +327,12 @@ Route on the exit code:
 - **exit 1** — a ```verify block failed; the runner reports the failing block
   index on its output. Enter the bounded fix lane: using the failing output, fix
   the defect with one corrective `/implement-unit` (via the Skill tool), then
-  re-run the runner above. Cap at **2** fix attempts (mirroring `qa-fix`'s
-  `CAP=2`). If the runner still exits 1 after the cap, do **not** open the PR:
+  re-run the runner above. Cap at **2** fix attempts. This cap bounds an
+  **in-session** retry loop — the runner re-run has no other termination
+  condition — and is deliberately unrelated to `qa-fix`'s `CAP`, which counts
+  durable, re-selected qa **passes** via the `dispatch:qa-fix-attempt-<n>` PR
+  label. Different loops, different scopes; do not couple the two numbers.
+  If the runner still exits 1 after the cap, do **not** open the PR:
   call `dispatch-mark-deviation` naming the failing check, then **stop** — skip
   the Step 5 completion marker.
 

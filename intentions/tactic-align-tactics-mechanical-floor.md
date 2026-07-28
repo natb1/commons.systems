@@ -81,7 +81,7 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: review
+phase: done
 execution:
   branch: tactic-align-tactics-mechanical-floor
   pr: 2896
@@ -91,14 +91,13 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T19:05:21Z
+    mergeCommitSha: 3e33aeb00434c19a0238ad11979623c398dc3236
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: origin/main does not merge clean into this tactic's branch (provision
-    exit 11)
-  since: 2026-07-23
-  recommendation: Resolve the conflict by hand in the node worktree and re-run the
-    phase, or route to /dispatch-conflict once it accepts node targets.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

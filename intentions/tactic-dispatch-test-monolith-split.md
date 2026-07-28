@@ -32,8 +32,19 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-dispatch-test-monolith-split
+  pr: 2971
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-25
+    attempt: 1
+    pushed_sha: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null

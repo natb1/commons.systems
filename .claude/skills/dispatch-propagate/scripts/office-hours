@@ -161,11 +161,7 @@ attach_session() {
 # <name>, or empty. --all so a just-resumed (or just-forked) session is visible
 # regardless of its momentary state.
 job_id_for_name() {
-  "$CLAUDE_CMD" agents --json --all 2>/dev/null \
-    | jq -r --arg n "$1" '
-        if type == "array"
-        then (first(.[] | select(.name == $n) | .id) // empty)
-        else empty end' 2>/dev/null || true
+  claude_job_id_for_name_all "$1" 2>/dev/null || true
 }
 
 # attach_session_by_name <name> — exec `claude attach` on the background job named

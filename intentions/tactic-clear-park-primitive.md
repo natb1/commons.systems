@@ -36,7 +36,7 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: review
+phase: done
 execution:
   branch: tactic-clear-park-primitive
   pr: 2947
@@ -44,8 +44,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:21:49Z
+    mergeCommitSha: dee357ae4d77018525a3a6a07a0adf0c71fa3cca
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -191,6 +196,13 @@ verification requires a live `git fetch origin/main` and a real `graph-commit`
 landing on `main`, both out of scope for an automated non-mutating check — so they
 are deferred here for post-merge verification against deployed main:
 
+`/qa-main` (2026-07-26): neither item is browser-verifiable — both are
+clear-park CLI scenarios gated on a live `git fetch origin/main` and an actual
+`graph-commit` landing on main, not on anything observable via a deployed web
+page (both carry `url_path: current`, not a real path). Author-directed
+2026-07-26: skip rather than park for a human main-qa glance — mark both
+skipped and progress the node to `done`.
+
 - **id 4** — Idempotent no-op exit 0 when the node is already unparked on
   origin/main
   - url_path: current (CLI script, no URL)
@@ -202,6 +214,8 @@ are deferred here for post-merge verification against deployed main:
     network/mutating side effects out of scope for an automated non-mutating
     shell check in this sandbox; verify by running `clear-park` against a real
     already-unparked scratch node on main.
+  - status: skipped — not browser-verifiable; author-directed 2026-07-26 to
+    skip rather than escalate to office-hours.
 
 - **id 5** — Full clear-and-land round-trip, `--base` compare-and-swap, and
   stale-base refusal
@@ -215,3 +229,5 @@ are deferred here for post-merge verification against deployed main:
     requires network and repository-mutating side effects out of scope for an
     automated non-mutating check; verify by running `clear-park` against a real
     parked scratch node on main, and by testing the stale-base refusal directly.
+  - status: skipped — not browser-verifiable; author-directed 2026-07-26 to
+    skip rather than escalate to office-hours.

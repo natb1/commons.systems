@@ -1,3 +1,4 @@
 {
-  "notInSyncGraceSeconds": 86400
+  "notInSyncGraceSeconds": 86400,
+  "nodeMinAgeSeconds": 3600
 }
