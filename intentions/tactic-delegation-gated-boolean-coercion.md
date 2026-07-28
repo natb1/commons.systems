@@ -37,9 +37,11 @@ rationale: "Surfaced 2026-07-28 at an office-hours sitting and verified against
   /6) by 1/6 and grounding.ts delegationScore (divergenceRank*10 + gatedRank) by
   1 for each of the 9. This node is the cheap non-destructive half: coerce at
   the two read sites, no corpus change, no schema change. The structured-field
-  redesign is tactic-delegation-gated-structured-tristate; this node must NOT be
-  blocked on it, since the whole point is that the two-line correction ships
-  without waiting on a 22-record migration."
+  redesign was folded into tactic-delegation-classification-derivation Unit 1 on
+  2026-07-28 (author decision: gated is a three-band enum, not a boolean); the
+  separate tactic-delegation-gated-structured-tristate node was pruned as
+  absorbed. This node must NOT be blocked on that work, since the whole point is
+  that the two-line correction ships without waiting on a 22-record migration."
 reading: null
 gap: null
 serves:
@@ -161,10 +163,18 @@ of the same assessment:
 
 ## Explicitly out of scope
 
-- Restructuring the field. The greenfield shape
-  (`gated: {level, note}`) is `tactic-delegation-gated-structured-tristate`.
+- Restructuring the field. The greenfield shape (`gated: {level, note}`, level
+  ∈ {none, partial, large}) is Unit 1 of
+  `tactic-delegation-classification-derivation`, where it was folded on
+  2026-07-28 by author decision; the separate
+  `tactic-delegation-gated-structured-tristate` node was pruned as absorbed.
   **This node is deliberately NOT blocked on it** — the two-line correction must
   ship without waiting on a 22-record migration.
+- Note the interaction: once that migration lands, `gated` is no longer a
+  scalar at all, and this node's `typeof gated !== "string"` coercion becomes
+  dead code to delete. That is expected and is not a reason to delay either
+  node — this one corrects the live mis-scoring of 9 records in the interim,
+  which is otherwise wrong for however long the migration takes.
 - Migrating any `intentions/delegation-*.md` record.
 - The `divergence.level` axis, which has its own token-matching reader
   (`attention.ts:76-87`) and is not affected by this defect.
