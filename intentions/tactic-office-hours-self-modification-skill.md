@@ -115,3 +115,64 @@ rounds: null
 attributes: {}
 ---
 # self-modification office-hours skill: a mostly-automated session drains agent-behavior-config parks end-to-end, the human's only interaction the explicit permission grant; /align-tactics encodes self-modifying tactics born-parked with recommendation naming this skill
+
+## Ratified terminal session disposition (2026-07-28)
+
+The green-CI path's terminal SESSION disposition is settled: **the drain skill
+calls `mark-node-terminal` itself**, with a new `park-clear` member added to
+that script's enum (`packages/intentionsutil/scripts/mark-node-terminal:67`).
+`clear-park` is NOT modified. Strategy condition 15's auto-close enumeration
+was amended in the same round to a third clean terminal state; the full
+decision and its reasoning are recorded as the 2026-07-28 ratification
+clarification on `strategy-graph-native-dispatch`.
+
+The principle that decides it: the `node-terminal` marker asserts *the
+session's pass is over*, not that a node was disposed. A scripted primitive may
+write it only where one job disposes exactly one node; this drain is **batched**
+(`.claude/skills/ref-diagnosis-time-cas/SKILL.md:11-13` — diagnose several
+parked nodes, interview the author per disposition, then execute), so only the
+session knows it is done. Had `clear-park` written the marker, it would arm the
+reap on the drain's own primary node mid-batch, and since `dispatch-self-close`
+fires on every turn yield — and an interview yields on every turn — the session
+would be reaped out from under the remaining nodes.
+
+## Adjacent latent defect to carry (not yet tracked elsewhere)
+
+`park-node:277` calls `mark-node-terminal <id> park` unconditionally after a
+landed park. For a **batched** drain that re-parks its own primary node before
+finishing the batch, that arms the reap early — the identical hazard that
+disqualified routing the marker through `clear-park`. Pre-existing and out of
+scope for the ratification; the planning round should carry it as a unit here
+or as a sibling tactic (sole-tracker recording, strategy clarification 28).
+
+## Groundwork verified 2026-07-28 — do not re-derive
+
+No new primitives are needed beyond the `park-clear` enum member above.
+
+- `DECOMPOSE_SCHEMA.tactics[].office_hours`
+  (`.claude/workflows/align-tactics.js:239-247`) is `{reason, since}` with
+  `additionalProperties: false` and must gain a `recommendation` property.
+  `packages/intentionsutil/src/schema.ts:418-423` already carries it
+  first-class and `validateOfficeHours` (`schema.ts:571-580`) accepts it — so
+  **no** node-schema change and **no** `write-node.ts` change is required.
+- `.claude/skills/align-tactics/references/autonomy.md:41-49` and
+  `references/write-path.md:153-166` still carry the now-stale "fold
+  `Recommend: <next step>.` into `reason`" transitional guidance; both must be
+  corrected to write the dedicated field.
+- `buildDecomposePrompt`'s copy-classification gate
+  (`.claude/workflows/align-tactics.js:647-657`) is the prompt-doctrine
+  template to clone for the self-modifying classifier; the MODEL/OWNER rule at
+  `:669-673` is the born-park rule it extends.
+- `.claude/skills/office-hours/SKILL.md`'s graph-native mode Steps 1-4 are the
+  read-and-surface half to reuse verbatim (including its untrusted-data
+  fencing), diverging only where its Step 5 stops at report-where-to-engage.
+- `packages/intentionsutil/src/officeHours.ts` (`officeHoursQueue` /
+  `selectOfficeHours`) already selects and ranks these nodes — no new query
+  code.
+
+Operationally the drain must: check the PR's `mergeStateStatus` before calling
+`clear-park` (a DIRTY/CONFLICTING PR loops straight back to a re-park); stage
+every protected-path edit BEFORE requesting the single in-turn permission
+grant; make those edits in the main thread, never a forked subagent; and phrase
+the grant request plainly, with no meta-commentary about the permission
+classifier.

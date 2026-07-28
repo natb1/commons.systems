@@ -2302,6 +2302,54 @@ clarifications:
       with no side-channel work records -- holds in a stronger form than the
       drain framing describes. Read the condition as that assertion, not as a
       claim that a draining legacy lane still exists.
+  - question: "The office-hours drain lane's terminal SESSION disposition on the
+      green-CI path is unrecorded: clear-park writes no
+      $CLAUDE_JOB_DIR/node-terminal marker while park-node does, so an
+      office-hours-graph-launched drain's SUCCESS path would leave its job held
+      and worktree_has_live_session TRUE, freezing the node it just unblocked.
+      Who writes the marker -- clear-park itself (a), the drain skill (b), or is
+      the drain declared a non-managed interactive session (c)?"
+    answer: "(Ratified 2026-07-28 office-hours session on
+      tactic-office-hours-self-modification-skill.) Option (b): the DRAIN SKILL
+      calls mark-node-terminal itself, with a new `park-clear` member added to
+      that script's disposition enum
+      (packages/intentionsutil/scripts/mark-node-terminal:67). Condition 15's
+      auto-close enumeration is amended in this same round to a third clean
+      terminal state. The governing principle, recorded here because it decides
+      future cases too: the node-terminal marker asserts THE SESSION'S PASS IS
+      OVER, not that a node was disposed. So a scripted primitive may write it
+      only in lanes where one job disposes exactly one node (transition-node's
+      advance/demote, park-node's Stop-hook backstop park); in any lane where
+      one session disposes SEVERAL nodes, only the session can know it is done,
+      which is why /align-tactics and /fix-checks already declare via SKILL.md
+      prose. The drain is definitively in the second class:
+      .claude/skills/ref-diagnosis-time-cas/SKILL.md:11-13 defines it as a
+      BATCHED drain that diagnoses several parked nodes, then interviews the
+      author about each proposed disposition before executing any of them. Under
+      option (a), clear-park would arm the reap on the drain's own primary node
+      mid-batch, and because dispatch-self-close fires on every turn yield --
+      and an interview yields on every turn -- the session would be reaped out
+      from under the remaining nodes: precisely the incident class the marker
+      was introduced to prevent (dispatch-self-close:43-46; node
+      tactic-graph-ref-split, session 36e64744). Two corrections to the
+      reasoning recorded at park time. FIRST, the stated objection to (a) --
+      that resolve-park would inherit the reap -- is factually wrong:
+      resolve-park does NOT call clear-park, it inlines its own office_hours
+      clear and graph-commit (resolve-park:162,188), and clear-park has ZERO
+      code callers on origin/main today. (a)'s blast radius is therefore not the
+      problem; its unsafety under batching is. SECOND, park-node:277's
+      unconditional internal call carries the SAME early-arming hazard for a
+      batched drain that re-parks its own primary node before finishing the
+      batch -- a live latent defect, pre-existing and out of scope for this
+      ratification, recorded in tactic-office-hours-self-modification-skill's
+      body so the planning round carries it as a unit or sibling. Option (c) is
+      rejected as previously recorded: it conflicts with the fallback lane's
+      need for the office-hours-graph-provisioned node-id worktree holding the
+      worker's staged branch. The accepted cost of (b) is the residual
+      dispatch-self-close:75-78 already names: a lane declaring via prose can
+      drop the line, which fails toward HOLD (job kept alive, node stays
+      claimed) rather than toward a lost session -- cheap, recoverable, and
+      operator-visible via the canary log line."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -2435,21 +2483,23 @@ attributes:
       explicit author override"
     - a node-worker session is auto-closed (reaped from the agents list via the
       foreground-safe self-close primitive — `claude rm`; interactive sessions
-      exempt) ONLY on a clean phase-transition or an escalation-park; every
-      other terminal exit — a hard crash, an error, or a
-      clean-but-no-transition/no-progress exit — is KEPT (its job entry and
+      exempt) ONLY on a clean phase-transition, an escalation-park, or a
+      park-clear (the office-hours drain lane's green-CI terminal disposition,
+      ratified 2026-07-28); every other terminal exit — a hard crash, an error,
+      or a clean-but-no-transition/no-progress exit — is KEPT (its job entry and
       node-id worktree both held) for local debugging until an operator manually
       reaps it, because such an exit was not parked to office-hours and the live
       session is its only debugging artifact (2026-07-19 reap-scope-narrowing
-      clarification). Reaping a transitioned/parked session loses nothing
-      durable (the transition advanced the node's phase; the park wrote
-      office_hours into the node), and a transitioned/parked worker job left in
-      `claude agents --json` is a defect UNLESS the default-off keep-all
-      operator escape hatch (2026-07-19 configurable-auto-close clarification)
-      is enabled. A kept failed session holds worktree_has_live_session TRUE, so
-      its node freezes (router will not re-select; no-progress fuse will not
-      count re-selections) until manual reap — accepted freeze-for-debug over
-      silent auto-retry on the failure path. A minimal operator-visible count of
+      clarification). Reaping a transitioned/parked/park-cleared session loses
+      nothing durable (the transition advanced the node's phase; the park wrote
+      office_hours into the node; the park-clear landed the office_hours removal
+      on origin/main), and a transitioned/parked worker job left in `claude
+      agents --json` is a defect UNLESS the default-off keep-all operator escape
+      hatch (2026-07-19 configurable-auto-close clarification) is enabled. A
+      kept failed session holds worktree_has_live_session TRUE, so its node
+      freezes (router will not re-select; no-progress fuse will not count
+      re-selections) until manual reap — accepted freeze-for-debug over silent
+      auto-retry on the failure path. A minimal operator-visible count of
       held-for-debug sessions surfaces accumulation without re-coupling
       observability to session persistence (it reports only the count, never
       session content; it is not a recovery substrate or escalation channel —
