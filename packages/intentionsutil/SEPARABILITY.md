@@ -215,6 +215,14 @@ round-trip, derived attention) but has two concrete holes:
   `SCHEMA.md` addition (or a companion `USAGE.md`) covering the field gap and a
   standalone authoring walkthrough.
 
+**Superseded 2026-07-28:** the remediation above (extend `SCHEMA.md` / add a
+companion `USAGE.md`) no longer applies. `SCHEMA.md` has been deprecated and
+deleted; the still-accurate schema documentation it held was moved into the
+kind-node bodies, and `intentions/kind-kind.md` is now the sole doc home for
+this content (including, going forward, any standalone-adoption and
+dispatch-state-field documentation this gap called for). The dated audit
+narrative above is left as-is as a historical record.
+
 ## Summary
 
 | # | Gap | Severity |
