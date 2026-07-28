@@ -173,7 +173,19 @@ COMMIT_MSG="graph: resolve-park $NODE_ID ($DISPOSITION PR #$PR)"
 if [[ -n "$NOTE" ]]; then
   COMMIT_MSG="$COMMIT_MSG - $NOTE"
 fi
-if ! "$SCRIPT_DIR/graph-commit" --base "$NODE_ID=$FRESH_BLOB" -m "$COMMIT_MSG" "$NODE_ID"; then
+# -C "$REPO_ROOT" is mandatory, not cosmetic. This script's REPO_ROOT is derived
+# from SCRIPT_DIR (its own on-disk location), and every write above -- the
+# origin/main refresh and the office_hours clear -- targets "$INTENTIONS_DIR"
+# under THAT repo. graph-commit, by contrast, resolves its repo from -C if
+# given, else from cwd. Callers routinely invoke the main checkout's copy of
+# this script by absolute path from inside a worktree, so without -C the two
+# resolve to DIFFERENT checkouts: the edit is written to the script's repo
+# while graph-commit inspects the caller's cwd repo, finds nothing staged for
+# the id and its HEAD blob equal to origin/main, takes the benign "no new
+# changes to stage" branch, and prints "landed ... on main" / exits 0 having
+# committed nothing -- leaving the real edit dirty and unpushed in the other
+# checkout. Mirrors park-node, which already passes -C for the same reason.
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "$COMMIT_MSG" "$NODE_ID"; then
   echo "resolve-park: graph-commit failed for $NODE_ID; office_hours clear is on disk but not landed (PR #$PR disposition ($DISPOSITION) already applied)" >&2
   exit 1
 fi
