@@ -48,30 +48,36 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: This node records a defect whose fix has already shipped — what is its
+      disposition, and why is the authorized boost 173 being retired?
+    answer: "(Recorded 2026-07-28 /align-strategy round.) Closed as shipped. The
+      2026-07-28 office-hours drain session root-caused this deterministically
+      as caller-side repo targeting (clear-park and resolve-park invoking
+      graph-commit without -C) and its fix landed in PR #2978, merged as
+      29952532; the separately-observed silent-revert shape was dispositioned in
+      the same pass as the same family (a writer operating from a stale checkout
+      landing an outdated blob), with no race found in graph-commit staleness
+      detection and test-graph-commit.sh passing 43/43 against the fix. phase is
+      therefore set to done and the record retained rather than pruned: the
+      misdiagnosis-and-correction history is itself worth keeping, and
+      tactic-graph-commit-noop-landing-false-failure cross-references this node
+      by id, so pruning would dangle that prose reference. The attention boost
+      of 173 — authored 2026-07-26 under explicit human authorization with the
+      ACK: main-health-dominance substring, when the defect was believed live
+      and systemic — is cleared to null because the WORK IS COMPLETE, not
+      because the defect was reassessed as unimportant; leaving a top-rank claim
+      on shipped work would have distorted the next /align-tactics round on
+      strategy-graph-native-dispatch into planning a fix that already exists.
+      The live remainder of this defect family is tracked separately as
+      tactic-graph-commit-noop-landing-false-failure: the inverse failure
+      through the same nothing-staged / land-current-HEAD fallback, where an
+      absent edit is reported as a hard failure rather than a lost edit reported
+      as success."
 tooling_goals: []
 success_signal: null
-attention:
-  boost: 173
-  override: null
-  rationale: "Author-directed 2026-07-26: boost to top ranking, per explicit human
-    authorization for a >=100 boost (ACK: main-health-dominance). This is the
-    durable fix for a live reliability defect in the sole write path to main
-    (graph-commit) — a silent revert or false-success report on a clear-park
-    write undermines every office-hours drain across the whole fleet, not just
-    one node. Sized at 173 (own claim) so that composed with the +5 inherited
-    from strategy-graph-native-dispatch (authored 178) it lands just above the
-    current live discretionary composed max of 175.33
-    (tactic-graph-commit-landing-lock, elevated via backward blocked_by
-    inheritance from tactic-graph-ref-split), making this tactic the top
-    discretionary dispatch/office-hours target — and still below
-    strategy-main-health's own standing attention.boost of 100 (this node's OWN
-    boost value of 173 numerically exceeds that 100, which is why the literal
-    ACK substring is required and is deliberately included here per the human's
-    explicit authorization in this filing session; the intent is not to claim
-    main-health-dominance's role, only to rank above other discretionary
-    graph-tooling work while main-health itself is not currently parked)."
-phase: null
+attention: null
+phase: done
 execution:
   branch: tactic-graph-commit-staleness-silent-revert
   pr: 2978
