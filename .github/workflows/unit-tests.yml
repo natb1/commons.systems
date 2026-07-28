@@ -38,6 +38,8 @@ jobs:
         with:
           node-version-file: .node-version
           cache: 'npm'
+      - name: Install zsh (needed by zsh-shebang regression tests)
+        run: sudo apt-get update && sudo apt-get install -y zsh
       - name: Run unit tests
         run: .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh
 
@@ -185,18 +187,34 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Install workspace dependencies
+        run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
       - name: Run approve-workflow-commands hook tests
         run: .claude/hooks/test-approve-workflow-commands.sh
       - name: Run dispatch script tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
       - name: Run dispatch-graph-execute tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh
+      - name: Run dispatch-derive-node-target tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-derive-node-target.sh
       - name: Run dispatch-daemon-liveness sensor tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-daemon-liveness.sh
+      - name: Run park-node CAS-guard tests
+        run: packages/intentionsutil/scripts/test-park-node.sh
+      - name: Run transition-node CAS-guard tests
+        run: packages/intentionsutil/scripts/test-transition-node.sh
+      - name: Run graph-commit tests
+        run: packages/intentionsutil/scripts/test-graph-commit.sh
       - name: Run budget-config-load tests
         run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests
         run: .claude/skills/dispatch-propagate/scripts/test-write-phase-log.sh
+      - name: Run flake stale-head guard tests
+        run: .claude/skills/dispatch-propagate/scripts/test-flake-stale-head-check.sh
       - name: Run stable-propagation gate tests
         run: .claude/skills/dispatch-propagate/scripts/test-run-smoke-tests.sh
       - name: Run prose-rule lint tests
@@ -213,6 +231,8 @@ jobs:
         run: .github/scripts/test-check-firestore-query-bounds.sh
       - name: Run test-integrity script tests
         run: .github/scripts/test-check-test-integrity.sh
+      - name: Run graph fast-path guard script tests
+        run: .github/scripts/test-check-graph-fast-path.sh
 
   test-integrity:
     runs-on: ubuntu-latest

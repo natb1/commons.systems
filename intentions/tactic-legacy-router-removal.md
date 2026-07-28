@@ -18,156 +18,142 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-legacy-router-removal
+  pr: 2960
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-07-26T01:10:18Z
+    mergeCommitSha: d63484e034e272484400338206447328a94d2f08
+    graphCommitSha: null
 validates:
   - strategy-graph-native-dispatch
 blocked_by:
-  - tactic-graph-router-transitions
-  - tactic-dispatch-lifecycle-sensor
   - tactic-phase-skill-node-targets
-  - tactic-dispatch-legacy-rewire
-office_hours:
-  reason: "implement: tactic-legacy-router-removal Unit 1 could only be partially
-    completed - several 'legacy' scripts are still live-wired into the
-    graph-native tick and general harness; remaining scope needs a re-plan. See
-    office-hours-recommendation for the full checklist."
-  since: 2026-07-12
-  recommendation: >-
-    ## Recommended next steps — `tactic-legacy-router-removal`
-
-
-    ### Already safely landed (do NOT re-verify)
-
-    Commit `5c753ba7`, merged as `ee12fc1b`, pushed to
-    `origin/tactic-legacy-router-removal`. The non-live-wired portion of Unit 1
-    is done:
-
-    - **Legacy office-hours entry surface deleted** — `office-hours` shell
-    script (attach/resume/provision verbs), `office-hours-select-target`,
-    `dispatch-office-hours-strip.sh` UserPromptSubmit hook (deregistered from
-    `settings.json`), `office-hours/SKILL.md` rewritten to node-id-only,
-    `office-hours.nix` repointed to `office-hours-graph`, dead test sections
-    removed. Fully superseded by `office-hours-graph`.
-
-    - **Legacy `<issue-num>-<slug>` worktree lane deleted** —
-    `worktree-create.sh` reduced to the graph lane
-    (`.claude/worktrees/<node-id>` only); dropped `.bare` anchoring, gh-identity
-    stub, `tmp/dispatch-worktree` marker. Superseded by Claude Code native
-    worktrees.
-
-    - `npm test --prefix packages/intentionsutil` — 404 passing, clean —
-    reconfirmed after the partial Unit 1 change.
-
-
-    These have no remaining callers. They are done and merged — pick up from the
-    coupling checklist below, not from scratch. No PR was opened (the remaining
-    scope wasn't buildable this pass — see below); the branch
-    `tactic-legacy-router-removal` carries the commit directly.
-
-
-    ### Blocked — remaining Unit 1 coupling points
-
-    Each legacy script below is still live-wired. The drain gate (empty queue)
-    proves no legacy *work* flows; it does **not** mean these are *rewired*.
-    Each needs a graph-native target confirmed (or confirmed-not-to-exist-yet)
-    before its counterpart can be deleted:
-
-
-    - [ ] **`dispatch-spawn-job`** — NOT legacy, must stay. Used by
-    `dispatch-graph-execute` (graph-native per-node runner) and `dispatch-tick`
-    aux jobs (sync-repair, diagnose-main, jit-reminder). Action: remove from
-    deletion scope entirely; no rewire.
-
-    - [ ] **`dispatch-select-target`** — owns `--main-broken-sha` (repo-health
-    latch, called unconditionally by `dispatch-select-tick`, not lane-gated) and
-    `--priority-only` (pace-exempt fallback). Action: extract/relocate
-    main-broken detection to a graph-native home, or confirm the graph path
-    should own it, before deleting.
-
-    - [ ] **`dispatch-select-tick` legacy-selection path** — behaviorally inert
-    today (graph selector runs first, queue empty) but coupled to
-    `dispatch-select-target` above and embedded in a ~900-line orchestrator that
-    also runs sync, the sync-broken/main-broken latches, auto-merge,
-    reconcile-merged for the graph path. Action: reduce to graph+latch-only,
-    keeping the still-live latches.
-
-    - [ ] **`dispatch-phase`** — pure read-only sensor; no write/derivation
-    split exists to make. Live callers are `statusline.sh`,
-    `dispatch-scan-recoverable-deaths`, `dispatch-stop.sh`,
-    `restore-dispatch-skill.sh` — NOT a graph transitions layer (graph execute
-    uses persisted phase). Action: rewire each sensor caller off
-    `dispatch:*`-label derivation, or keep the sensor, before touching it —
-    gutting it breaks the status line.
-
-    - [ ] **`dispatch:*` labels** — woven through live paths:
-    `dispatch:main-broken`/`sync-broken` (repo-health latches in
-    `dispatch-select-tick`); `dispatch:office-hours` (written by
-    `dispatch-input-block.sh`, `dispatch-stop.sh`,
-    `dispatch-scan-recoverable-deaths`; read by `dispatch-trace-leaf`,
-    `dispatch-select-target`); `dispatch:planned`/`qa-done`/`reviewed` (drive
-    `dispatch-phase`/`dispatch-route`). Action: retire per-label only after its
-    readers/writers are moved to graph-native state.
-
-    - [ ] **`dispatch-materialize-spawn` / `dispatch-launch-worker`** —
-    legacy-only, but `dispatch-tick`'s `run_materialize()` still calls
-    `dispatch-materialize-spawn` on explicit/pr/issue decisions. Action: reduce
-    `dispatch-tick` (shared router carrying both branches) to graph+aux-only
-    first.
-
-
-    Minor prose-only loose ends, non-blocking: stale references in
-    `dispatch-propagate/reference.md`, `dispatch-mark-deviation:31`,
-    `approve-workflow-commands.sh:64`, and a few `test-dispatch-scripts.sh`
-    comments.
-
-
-    ### Recommended path forward
-
-    1. **Re-scope, don't force.** The remaining Unit 1 work is
-    "rewire-then-delete" across the live dispatch system, not "delete
-    already-dead code" — materially bigger blast radius than this tactic
-    assumed. Split it into its own follow-up tactic (likely a sibling under
-    `tactic-graph-native-dispatch`), scoped to: *rewire
-    `dispatch-select-tick`/`dispatch-phase`/`dispatch-tick`'s remaining
-    `dispatch:*`-label and legacy-script dependencies onto graph-native
-    equivalents, then delete `dispatch-select-target`,
-    `dispatch-materialize-spawn`, `dispatch-launch-worker`, and the drained
-    labels.* It needs its own planning pass. Explicitly carve out
-    `dispatch-spawn-job` as keep-forever.
-
-    2. **Alternatively**, rule on individual coupling points above where you're
-    confident the graph path should simply own the behavior (e.g. main-broken
-    latch) — that lets those specific deletions proceed under the original scope
-    without a full re-plan.
-
-    3. **Keep Units 2 and 3 gated appropriately** (see below — this overrides
-    the implementer's own suggestion on Unit 3).
-
-
-    ### Units 2 and 3 status
-
-    - **Unit 2 — not attempted.** Depends on Unit 1 explicitly per the plan.
-    Keep blocked on the re-scoped follow-up.
-
-    - **Unit 3 — not attempted. Also gated, despite having no explicit `Depends
-    on: Unit 1` line.** Unit 3 prunes nodes whose relevance "expires" at drain
-    completion — specifically `tactic-dispatch-gh-api-interim-hardening`, whose
-    demotion note ties its deletion to the legacy-gh surface actually being
-    removed, and the `tactic-review-lows-automation` sweep of "legacy dispatch
-    scripts" items whose subject files this tactic deletes. Since the legacy-gh
-    surface (`dispatch-select-target`, `dispatch-phase`'s derivation, the
-    `dispatch:*` labels, `dispatch-materialize-spawn`/`dispatch-launch-worker`)
-    is NOT actually removed yet, the expiry event Unit 3 keys off has not
-    occurred. Pruning `tactic-dispatch-gh-api-interim-hardening` now would drop
-    an interim-hardening exception while the surface it hardens is still live —
-    premature and potentially unsafe. Hold Unit 3 until the re-scoped Unit 1
-    follow-up actually lands the deletions.
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # drain complete: remove the legacy gh router and dispatch:* label conventions
+
+## Status — Unit 1 SPLIT: live-wired half landed, non-live-wired half delegated (2026-07-23)
+
+**Read this before touching anything below. An earlier revision of this section
+(2026-07-22) claimed Unit 1 was "fully complete" and instructed "do **not**
+re-attempt any of it." That claim was FALSE and has been removed. Do not
+re-derive it.**
+
+### What actually landed
+
+Unit 1's **live-wired** half landed via a separately-recorded tactic,
+`tactic-dispatch-legacy-rewire` (PR #2869, `a8c4898d`, merged and pruned as done
+2026-07-18). Verified on `origin/main`: `dispatch-select-target`,
+`dispatch-phase`, `dispatch-materialize-spawn`, `dispatch-launch-worker`,
+`dispatch-trace-leaf`, and `dispatch-route` are all absent from
+`.claude/skills/dispatch-propagate/scripts/`. The main-broken/sync-broken latches
+now live in a label-free `repo-health` sensor called from `dispatch-select-tick`;
+`dispatch-select-tick`'s legacy gh-issue-queue selection path is gone;
+`dispatch-tick` has no `run_materialize()` / materialize-spawn call left. That
+half is genuinely done.
+
+### What did NOT land
+
+Unit 1's **non-live-wired** half — the legacy office-hours entry surface and the
+legacy `<issue-num>-<slug>` worktree lane — **never landed on `main`**.
+
+The 2026-07-22 revision cited commit `ee12fc1b` as evidence it had. That citation
+was a misreading. `ee12fc1b` is a merge of `origin/main` **into** the branch
+`tactic-legacy-router-removal`, not a merge of the branch into `main`. No PR was
+ever opened for that branch and it was never merged. The mechanical check:
+
+```
+git merge-base --is-ancestor ee12fc1b origin/main   # returns NON-ZERO
+```
+
+Every file that half claimed to delete is still present on `origin/main` as of
+2026-07-23: `office-hours-select-target` (595 lines), the `office-hours` shell
+entry (333), `.claude/skills/office-hours/SKILL.md` (386, still dual-lane),
+`.claude/hooks/dispatch-office-hours-strip.sh` (50), `nix/packages/office-hours.nix`
+(35, still pointing at the legacy script), the legacy `<issue-num>-<slug>` lane
+inside `.claude/hooks/worktree-create.sh`, and the matching test blocks in
+`test-dispatch-scripts.sh`.
+
+The 2026-07-22 revision was also internally inconsistent: it asserted the strip
+hook was "gone" while a later paragraph in the same section correctly described
+it as "still registered as a UserPromptSubmit hook." The later paragraph was
+right. Both statements have been rewritten below so the body no longer
+contradicts itself.
+
+Consequence of the false claim, and the reason this correction exists: an
+autonomous `/implement` reading "complete, do not re-attempt" silently does
+nothing and the node advances with the work undone. Any future session would be
+trapped the same way.
+
+### Where the residual work went
+
+Split out on 2026-07-23 by explicit author decision into a sibling tactic:
+
+**`tactic-legacy-office-hours-entry-removal`** — carries the full non-live-wired
+scope as a clean-session-executable plan, including the two live-wiring moves
+that must land in the same commit as their deletions (`.claude/settings.json`'s
+`UserPromptSubmit` registration of the strip hook, and
+`nix/packages/office-hours.nix:19`'s `SCRIPT=` pointer, which is the author's
+daily terminal `office-hours` command). It also picks up one stale doc pointer
+the old branch never fixed (`.claude/skills/dispatch-propagate/reference.md:585`).
+
+**Do not re-plan that scope here, and do not re-attempt it from the branch.**
+`origin/tactic-legacy-router-removal` is ~851 commits behind (merge-base
+`444bf41a`) and conflicts in three files whose branch sides are not salvageable
+— it would revert the landed `resolve_main_worktree` DRY refactor, re-introduce
+retired `.bare` prose, and carry 70 references to a script `main` has since
+deleted. The remote ref is deliberately retained as a record of the intended
+shape; it is not a base to build on. The local branch of the same name was reset
+fresh off `main` and holds none of that content.
+
+### Earlier bookkeeping, retained
+
+On 2026-07-22 a follow-up sibling `tactic-legacy-dispatch-rewire-delete` was
+split out to re-plan the *live-wired* half, acting on a 10-day-stale office_hours
+recommendation without re-checking repo state. That follow-up duplicated
+`tactic-dispatch-legacy-rewire`, which had already landed the same scope four
+days earlier, so it was pruned rather than re-planned. Its dangling `blocked_by`
+edge was dropped from this node's frontmatter at that time. That part of the
+2026-07-22 correction stands; only its completion claim for the non-live-wired
+half was wrong.
+
+The `dispatch:*` labels still read/written today (`dispatch:office-hours`,
+`planned`, `qa-done`, `reviewed`, `review-followup`, `chain-stalled`, and
+`sync-broken` as an announcement-only mirror over the now label-free latch) are
+not un-rewired legacy debt — they are current design in active service of the
+still-live legacy issue-lane skills (`plan-issue`, `qa-fix`, `review-fix`) that
+**Unit 2** below retires, or a human-visibility mirror
+`tactic-dispatch-legacy-rewire` Unit 1 deliberately kept.
+
+### This node's remaining scope
+
+**Units 2 and 3 only** (below). Unit 1 is retained for provenance and is closed
+out here: its live-wired half is done, its non-live-wired half belongs to
+`tactic-legacy-office-hours-entry-removal`. Nothing in Unit 1 is this node's work
+any more.
+
+No `blocked_by` edge to the new sibling was added, deliberately. Units 2-3 touch
+disjoint files from it (Unit 2: the `/file-issue` and `/plan-issue` skill docs;
+Unit 3: graph nodes only), and neither node's correctness depends on the other
+landing first. Adding a reflexive edge would re-serialize independent work —
+which is the failure mode this whole correction is cleaning up. The one place the
+sibling matters to this node is Unit 3's sweep of
+`tactic-review-lows-automation`'s "legacy dispatch scripts" section: that sweep
+must now account for files the *sibling* deletes as well as files this node
+deletes, and if the sibling has not landed when Unit 3 runs, leave its items in
+place rather than dropping them.
 
 ## Context
 
@@ -186,6 +172,19 @@ drain) — `blocked_by` edges cannot express an external condition, so the
 gate is a plan step.
 
 ## Unit 1 — remove the selector and phase-derivation surface
+
+> **SPLIT — not this node's work (2026-07-23).** This unit's original scope is
+> retained below for provenance only, but it is **closed out on this node** and
+> split two ways. Its *live-wired* half landed via the separately-recorded
+> `tactic-dispatch-legacy-rewire` (PR #2869, merged 2026-07-18) — that part is
+> genuinely done. Its *non-live-wired* half — the legacy office-hours entry
+> surface and the legacy `<issue-num>-<slug>` worktree lane — **never landed**
+> and is now owned by the sibling tactic
+> `tactic-legacy-office-hours-entry-removal`, which carries the executable plan.
+> A prior revision of this note claimed both halves were complete and told the
+> reader not to re-attempt them; that claim was false (see Status above for the
+> mechanical disproof). Do not implement this unit from this node — if the
+> non-live-wired deletions are still outstanding, they belong to the sibling.
 
 **Recommended model:** opus
 
@@ -218,7 +217,10 @@ deletion cites its matrix row or its graph-native replacement tactic.
 
 **Recommended model:** sonnet
 
-Depends on: Unit 1.
+Depends on: nothing further. Unit 1's live-wired half is complete; its
+non-live-wired half is not this node's work (split to
+`tactic-legacy-office-hours-entry-removal` — see Status above), and Unit 2
+does not depend on it. This node's `blocked_by` set does not gate on either.
 
 Scope: retire `/file-issue` and `/plan-issue` skill docs with pointers to
 their successors. (The gh↔graph mapping layer — `intention-emit`,
@@ -233,13 +235,23 @@ nothing of it remains to retire here.)
 Scope:
 - The greenfield-relevance gate (strategy clarification, 2026-07-06) names
   this tactic as the expiry event for interim-live-risk exceptions on the
-  legacy-gh surface. At drain completion, prune the nodes that expire with
-  it: `tactic-dispatch-gh-api-interim-hardening` (demoted draft whose
-  demotion note says delete here), and sweep
-  `tactic-review-lows-automation`'s "legacy dispatch scripts" section —
-  drop the items whose subject files this tactic deletes, keep the
-  survivors (token-audit, CI wrappers, hooks, lib.sh duplication items
-  that outlive the gh lane).
+  legacy-gh surface. The expiry event is the surface being **actually
+  removed** — **not** merely the queue draining. That removal already
+  happened: `tactic-dispatch-legacy-rewire` (PR #2869, merged and pruned
+  2026-07-18) landed the live-wired deletions (see Status above), so the
+  expiry event has occurred and Unit 3 is unblocked on that count. Prune the
+  nodes that expire with it. Re-check each before acting —
+  `tactic-dispatch-gh-api-interim-hardening` (the demoted draft whose demotion
+  note said delete here) was already pruned from the graph as of 2026-07-23, so
+  that item may be a no-op. Then sweep `tactic-review-lows-automation`'s
+  "legacy dispatch scripts" section — drop the items whose subject files are
+  actually gone from `origin/main`, keep the survivors (token-audit, CI
+  wrappers, hooks, lib.sh duplication items that outlive the gh lane).
+  **Note the split:** several of those subject files (the `office-hours` entry,
+  `office-hours-select-target`, `dispatch-office-hours-strip.sh`) are deleted by
+  the sibling `tactic-legacy-office-hours-entry-removal`, not by this node. Test
+  each item against `origin/main` rather than against a deletion list; if the
+  sibling has not landed yet, leave its items in place.
 - Land the prunes through `graph-commit --prune`
   (`tactic-graph-commit-prune-support` Unit 1) if it has shipped;
   otherwise the hand-orchestrated `graph/**` fast-path per the prune
@@ -247,16 +259,31 @@ Scope:
 
 ## Dependencies
 
+Frontmatter `blocked_by` today is a single entry:
+`tactic-phase-skill-node-targets`, which is `phase: done` — so this node is
+unblocked and may proceed on Units 2 and 3.
+
+Historical dependency notes, kept so the reduction is not re-derived as a
+mistake:
+
+- `tactic-legacy-dispatch-rewire-delete` — a 2026-07-22 re-scope follow-up that
+  turned out to duplicate already-landed work (`tactic-dispatch-legacy-rewire`,
+  PR #2869, merged and pruned 2026-07-18 — see Status above); pruned rather than
+  re-planned, and its edge dropped from `blocked_by`.
 - `tactic-graph-router-transitions`, `tactic-dispatch-lifecycle-sensor`,
-  `tactic-phase-skill-node-targets`, `tactic-main-qa-phase`,
-  `tactic-office-hours-graph-entry` — the frontmatter `blocked_by` set:
-  the replacement surface must be live end to end (the node-targets
-  tactic is what lets the phase skills run on node targets at all; the
-  main-qa tactic is what lets the qa-main label machinery be deleted;
-  the office-hours entry is what lets the legacy office-hours surface in
-  Unit 1's deletion list go). The align-skills pair
-  (`tactic-align-strategy-skill`, `tactic-align-tactics-skill`) already
-  completed and pruned — both skills are live.
+  `tactic-main-qa-phase`, `tactic-office-hours-graph-entry` — formerly in the
+  `blocked_by` set. All four have since completed and been pruned from the
+  graph, so their edges were removed; a prose paragraph here previously still
+  listed them as live frontmatter entries, which no longer matched the
+  frontmatter. Their substance: the replacement surface had to be live end to
+  end before the legacy one could go, and it now is.
+- The align-skills pair (`tactic-align-strategy-skill`,
+  `tactic-align-tactics-skill`) also completed and pruned — both skills are live.
+- `tactic-legacy-office-hours-entry-removal` — the 2026-07-23 split sibling
+  carrying Unit 1's non-live-wired half. **Deliberately not** a `blocked_by`
+  edge: it and this node's Units 2-3 touch disjoint files, and neither gates the
+  other. See the Status section's "This node's remaining scope" for the one
+  interaction (Unit 3's sweep).
 
 ## Verification
 

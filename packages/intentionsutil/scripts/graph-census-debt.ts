@@ -157,13 +157,13 @@ function buildCensusNode(id: string, now: string, debt: CensusDebt) {
   const batchLine = `${debt.donePresent.length} owed prune(s), ${debt.mergedUnabsorbed.length} unverified PR-merge(s), ${debt.orphans.length} orphan(s)`;
   const reason =
     `Reconciliation debt reached ${debt.total} (${batchLine}); a census is owed to drain it. ` +
-    `Next steps: run the census over the batch listed in this node's body — prune each done-but-present node with graph-commit --prune (repairing inbound blocked_by edges in the same commit, per tactic-graph-self-consistency-sweep), absorb any unverified PR-merge, and repair any orphan's dangling parent/serves; then resolve this node (phase -> done) so the recurrence latch clears.`;
+    `Next steps: run the census over the batch listed in this node's body — for each done-but-present node, FIRST verify its execution.completion evidence (a real merge = mergedAt AND mergeCommitSha both non-null; or an out-of-band landing = graphCommitSha non-null); prune ONLY the verified ones with graph-commit --prune (repairing inbound blocked_by edges in the same commit, per tactic-graph-self-consistency-sweep) and LEAVE every evidence-less node in place as an integrity defect to investigate; absorb any unverified PR-merge, and repair any orphan's dangling parent/serves; then resolve this node (phase -> done) so the recurrence latch clears.`;
 
   const node = {
     id,
     kind: "tactic",
     statement:
-      `census: drain accumulated reconciliation debt (${batchLine}) — prune done-but-present nodes with edge repair, absorb unverified PR-merges, and repair orphans`,
+      `census: drain accumulated reconciliation debt (${batchLine}) — prune the completion-VERIFIED done-but-present nodes with edge repair, leave evidence-less ones as integrity defects, absorb unverified PR-merges, and repair orphans`,
     owner: "ai",
     status: "codified",
     parent: null,
@@ -197,12 +197,23 @@ function buildCensusNode(id: string, now: string, debt: CensusDebt) {
     fmt("Unverified PR-merges", debt.mergedUnabsorbed) +
     fmt("Orphans (dangling parent/serves)", debt.orphans) +
     `\n## How to drain\n\n` +
-    `Re-derive the batch at execution (the snapshot above may have aged): prune ` +
-    `each done-but-present node via \`graph-commit --prune <id>\`, removing any ` +
-    `inbound \`blocked_by\` entry that names it in the same commit; absorb any ` +
-    `unverified PR-merge (reconcile-graph-merged); repair any orphan's dangling ` +
-    `\`parent\`/\`serves\`. Then set this node's \`phase\` to \`done\` and prune it ` +
-    `so the recurrence latch clears.\n`;
+    `Re-derive the batch at execution (the snapshot above may have aged).\n\n` +
+    `**Never prune a done-but-present node unverified.** Since ` +
+    `tactic-execution-pr-merge-verification, the reconciler stops deleting at the ` +
+    `done-transition and instead records \`execution.completion\` evidence, so ` +
+    `"done-but-present" no longer implies "safe to delete". For each such node, ` +
+    `check \`execution.completion\`: it verifies when \`mergedAt\` AND ` +
+    `\`mergeCommitSha\` are both non-null (a real PR merge), or when ` +
+    `\`graphCommitSha\` is non-null (content landed out-of-band). Prune ONLY the ` +
+    `verified ones via \`graph-commit --prune <id>\`, removing any inbound ` +
+    `\`blocked_by\` entry that names them in the same commit. Leave every ` +
+    `evidence-less node ON DISK and investigate it — either recover the landing ` +
+    `sha and backfill \`execution.completion.graphCommitSha\` (via ` +
+    `\`packages/intentionsutil/scripts/write-node.ts\`), or record that the work ` +
+    `was genuinely abandoned. Then absorb any unverified PR-merge ` +
+    `(reconcile-graph-merged); repair any orphan's dangling \`parent\`/\`serves\`. ` +
+    `Finally set this node's \`phase\` to \`done\` and prune it so the recurrence ` +
+    `latch clears.\n`;
 
   return { node, body };
 }

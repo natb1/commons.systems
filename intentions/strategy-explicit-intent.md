@@ -47,8 +47,30 @@ rationale: >-
   from capturing the author, and align delegatees with the good, periagoge
   extended to AI delegatees with recorded qualifications — detailed in the
   2026-07-08 and 2026-07-09 clarifications.
-reading: null
-gap: null
+reading: "review cycle 2026-07-28: 2 decisions traced to node changes — (1) the
+  2026-07-19 reap-scope-narrowing clarification on
+  strategy-graph-native-dispatch (commit 8e310bfb) re-scoped
+  tactic-worker-self-close-configurable's plan a week later (commit 5a1eda64,
+  2026-07-26): the causing node recorded the obligation ('must be re-scoped to
+  the narrowed default'), a later separate session found it by reading the
+  record, and the tactic's baseline changed; (2) tactic-legacy-router-removal
+  reaching phase done (PR #2960, merged 2026-07-26) exhausted
+  strategy-graph-native-dispatch's recorded threshold, forcing its
+  success_signal to be re-derived and is_proxy flipped false to true (commit
+  e81ae2f, 2026-07-28) — the observable's 'a failed condition re-derives a
+  strategy' clause firing literally. Threshold met. Taken from the
+  trace-decisions digest (--since 2026-07-11, 133 candidate events) plus a
+  hand-search of the intentions/ patch for causal-reversal language."
+gap: "Threshold met, but the instrument is weak: 130 of the digest's 133
+  candidates are co-occurrence, not causation — its class-1 heuristic fires on
+  any added clarification (it does not check for a node-id citation, despite the
+  observable's wording) and all 43 class-3 events are dispatch attention-boost
+  writes, not calibration challenges. Both traced cases were found by hand-grep,
+  not by the digest. Rejected on the skeptic's test: the 2026-07-23 revert of
+  the successor-cadence resolution on this node (commit b522902) is
+  decision-changed-because-a-node-was-READ —
+  tactic-align-entrypoint-consolidation last changed 2026-07-18, before both
+  decisions."
 serves:
   - virtue-philosophical-mobility
   - virtue-alignment-of-attachments
@@ -321,7 +343,14 @@ clarifications:
       tactic-align-audit-legacy-review office-hours sitting ratifies or reworks
       this successor-cadence wording when it decides /align-audit inclusion of
       the retired rung-5 dialectic and the retired /align-strategy improvement
-      pass. Recorded 2026-07-09 /align consolidation interview."
+      pass. Recorded 2026-07-09 /align consolidation interview. Amended
+      2026-07-23 (tactic-align-audit-legacy-review office-hours sitting, author
+      present): the 2026-07-22 'complementary, not successors' amendment is
+      reverted — its premise (rung-5 live in /align-init) was refuted:
+      tactic-align-entrypoint-consolidation removes /align-init and retires the
+      rung-5 engine, and the cited #2781 (2026-07-07) predates the 2026-07-09
+      retirement decision. The SUCCESSOR framing stands, ratified at the sitting
+      — see the 2026-07-23 clarification on this node."
   - question: What did the chunk-2 reading (NE II.1-6) amend in the 2026-07-09
       cadence-as-habituation deferral?
     answer: "Amended at chunk 2 (II.1-4). The habituation half is ratified and
@@ -346,6 +375,23 @@ clarifications:
       in II.1-4 — destruction is always by contrary or deficient doing;
       Aristotle analyzes the internal hexis only, and the graph-desync mechanism
       is outside his scope. Recorded 2026-07-13 /reading-review chunk 2."
+  - question: Is the 2026-07-09 successor-cadence deferral ratified?
+    answer: "Ratified with the SUCCESSOR framing intact; resolved 2026-07-23 at the
+      tactic-align-audit-legacy-review office-hours sitting with the author
+      present — superseding the reverted 2026-07-22 Claude-authored resolution
+      (commit 8e23a272), whose premise (rung-5 live in /align-init) was refuted:
+      tactic-align-entrypoint-consolidation removes /align-init and retires the
+      rung-5 engine, and its own out-of-scope list reserves the engines' fate
+      for the sitting. The engines retire wholesale (sitting Decision 1); the
+      office-hours review sittings, periodic grounding rounds, and
+      standing-conditions sweep (rehomed to /align-audit;
+      tactic-condition-review-sweep) ARE the successor cadence. Accepted-gap
+      record: with the contrarian and consistency passes retired, no recurring
+      autonomous mechanism challenges recorded doctrine — the sitting cadence
+      explicitly carries the anti-calcification role, and a lapse in sittings is
+      the trigger to revisit this gap. The author-owned doctrine (the cadence
+      must actually recur or recorded doctrine calcifies into dogma) is ratified
+      unchanged."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
@@ -365,6 +411,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - graph maintenance stays cheap enough that nodes track reality rather than
@@ -376,12 +423,12 @@ attributes:
       carrying graph doctrine); an injection lapse reverts the delegatee to
       vendor defaults
     - the re-derivation cadence actually recurs — the office-hours review
-      sittings (including tactic-align-audit-legacy-review, which decides the
-      retired align rung-5 dialectic's successor), the periodic grounding
-      rounds, and the standing-conditions sweep (rehoming from the retired
-      rung-5 consistency pass toward /align-audit, decided at that same sitting)
-      run on their cycle; a lapse lets recorded doctrine calcify into dogma
-      unchallenged, the same cadence-lapse capture mechanism the grounding
-      strategies and the delegatee-education condition above already name
+      sittings, the periodic grounding rounds, and the standing-conditions sweep
+      (rehomed to /align-audit; tactic-condition-review-sweep) run on their
+      cycle, and the sittings explicitly carry the anti-calcification role of
+      the retired rung-5 contrarian and consistency passes (2026-07-23 sitting);
+      a lapse lets recorded doctrine calcify into dogma unchallenged, the same
+      cadence-lapse capture mechanism the grounding strategies and the
+      delegatee-education condition above already name
 ---
 # Govern by an explicit, self-describing intention graph

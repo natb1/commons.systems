@@ -17,12 +17,78 @@
 #
 # The store is read at origin/main ONLY (never a branch, never the working
 # tree): `git archive origin/main intentions` into a temp dir. Selection makes
-# NO graph writes — parks (e.g. a strategy at the rounds cap) are events in the
-# selection log for the transition writer, never writes from here.
+# NO graph writes for eligibility/ordering parks (e.g. a strategy at the rounds
+# cap) — those are events in the selection log for the transition writer.
 #
-# Usage: graph-select-target [--top <n>] [--pace-exempt-only]
+# The ONE exception is the CI-fix interrupt (tactic-fix-interrupt-orthogonal-state):
+# selection is the sole CI-routing authority. On a fix-interruptible ladder phase
+# (implement/qa/review) whose PR CI has CONCLUDED-RED and which carries no active
+# interrupt, the gate ENTERS the interrupt — `apply-fix-state --set-fix` +
+# `graph-commit` (a state-only commit on main, mirroring what transition-node
+# used to do at the transition seam) — and emits the candidate as `fix` the same
+# tick. On CONCLUDED-GREEN of an active interrupt it RESOLVES it — `apply-fix-state
+# --clear-fix` (+ the re-review reset when past review) + `graph-commit`, and
+# disarms auto-merge (`gh pr ready --undo`) — then emits the resolved ladder
+# phase. On a still-red retry that has exhausted the fix-attempt cap (a
+# persistently-red PR), the gate instead lands a tracked hold via
+# `packages/intentionsutil/scripts/hold-node` (never a park on the source
+# node itself: `apply-fix-state --check-cap` reads the cap pure, then
+# `hold-node --kind fix-attempt-cap --reset-fix-attempt` writes a born-parked
+# hold tactic plus a `blocked_by` edge on the source, in one graph-commit) —
+# dropping the node out of the eligible set via that edge rather than
+# re-arming another retry forever. These graph-commit writes (this script's
+# own via `_graph_commit_fix`, and hold-node's own internal commit) are the
+# only writes selection makes.
+#
+# Usage: graph-select-target [--top <n>] [--pace-exempt-only] [--standalone] [--node <id>]
 #
 #   --top <n>            Print at most <n> selected nodes (default 1).
+#   --standalone         Self-contained concurrency safety for manual/emulated
+#                        invocation: acquire the shared dispatch lock, apply the
+#                        live-worker headroom cap dispatch-select-tick's --manual
+#                        branch uses — minus that branch's human-sovereignty
+#                        floor-of-1 at HEADROOM==0 and minus its pace-curve
+#                        override, so an unattended caller degrades to `empty`
+#                        rather than breaching the ceiling OR the pace throttle
+#                        (rationale at the (b) block below; --pace-exempt-only
+#                        remains the only pace-bypass lane) — claim each selected
+#                        node in the reservation ledger, and release the lock —
+#                        folding in
+#                        the lock+headroom+claim cycle dispatch-select-tick
+#                        otherwise wraps around this selector. CLAIM OBLIGATION:
+#                        each claim is a budget-consuming marker. A caller that
+#                        launches its selections hands the marker to
+#                        dispatch-graph-execute (which clears it on spawn); a
+#                        caller that does NOT launch MUST `reservation_clear <id>`
+#                        for every emitted node. Markers written by this flag carry
+#                        `origin=standalone` so reservation_sweep reclaims them
+#                        once they age past DISPATCH_RESERVATION_STANDALONE_TTL_S
+#                        (default 600s) with no live worker of that name — a
+#                        crashed or discard-the-output caller can therefore leak a
+#                        slot only for that TTL, not forever. A run that aborts
+#                        BEFORE printing its selection (e.g. sensor_gate's exit 2)
+#                        rolls back the claims it already wrote, so the obligation
+#                        only ever covers nodes the caller was actually handed.
+#                        EXPLICIT-NODE DIVERGENCE: --standalone is compatible with
+#                        --node, and the headroom/pace ceilings above apply to that
+#                        combination too — so `--standalone --node <id>` prints
+#                        `empty` (disposition concurrency-cap) at the cap. This is
+#                        deliberately UNLIKE dispatch-select-tick's `<node-id>`
+#                        lane, which skips the pace curve and the MAX_WORKERS
+#                        ceiling outright because a human naming a node is
+#                        sovereign; a --standalone caller is unattended, so it is
+#                        ceiling-gated like every other --standalone selection.
+#                        Human explicit dispatch belongs on dispatch-select-tick
+#                        <node-id>, not here. NESTING: this flag
+#                        acquires AND unconditionally releases the lock in one
+#                        invocation, and its terminal --release is a strict
+#                        self-release keyed on CLAUDE_CODE_SESSION_ID. Acquire is
+#                        re-entrant (same-session no-op) but release is NOT, so a
+#                        nested --standalone call would drop an OUTER hold. Use
+#                        --standalone ONLY from standalone/manual callers that do
+#                        not already hold dispatch-acquire-lock (no existing call
+#                        site passes it: neither dispatch-select-tick's call nor
+#                        its --pace-exempt-only probe does).
 #   --pace-exempt-only   The probe lane for a paced-to-zero worker target
 #                        (strategy clarification 14; legacy `priority` parity):
 #                        first consult `dispatch-target-workers --exhausted` —
@@ -31,6 +97,15 @@
 #                        nodes authored `pace_exempt: true`. The caller admits
 #                        at most one gate-exempt worker — the flag bypasses the
 #                        pace GATE, not the worker count or the rank order.
+#   --node <id>          Explicit single-node dispatch: bypass rank order and
+#                        --top truncation and consider ONLY the named node id.
+#                        Every existing environmental gate (claim-safety,
+#                        per-phase sensor_gate) still applies verbatim — this
+#                        is a selection-order override, not a gate bypass.
+#                        Mutually exclusive with --top and --pace-exempt-only
+#                        (usage error, exit 2, when combined). Combining it with
+#                        --standalone is allowed but IS ceiling-gated — see the
+#                        EXPLICIT-NODE DIVERGENCE note under --standalone.
 #
 # Stdout protocol:
 #   node <id> <kind> <phase>   zero to <top> lines, in selection order.
@@ -69,6 +144,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
 
 # The selection log reuses the decision-log appender with its own file: the lib
 # resolves its target from DISPATCH_DECISION_LOG_FILE at source time.
@@ -78,26 +155,58 @@ export DISPATCH_DECISION_LOG_FILE
 source "$SCRIPT_DIR/lib-decision-log.sh" 2>/dev/null || true
 
 TOP=1
+TOP_SET=""
 PACE_EXEMPT_ONLY=""
+STANDALONE=""
+# STANDALONE_LOCKED gates the _cleanup EXIT trap's lock release: set to 1 only
+# once --standalone has actually acquired the lock (step below), so the trap
+# never releases a lock this invocation does not hold.
+STANDALONE_LOCKED=""
+# STANDALONE_CLAIMED / STANDALONE_EMITTED gate the _cleanup EXIT trap's claim
+# ROLLBACK. Claims are written per-candidate inside the selection loop, but a
+# LATER candidate can abort the whole run before any selection reaches stdout
+# (sensor_gate rc==2 — a dispatch-ci-ready environment failure — exits 2 with no
+# output). Without rollback those already-written markers are handed to nobody:
+# the caller launches nothing, so no dispatch-graph-execute ever clears them, and
+# reservation_sweep keeps them until the standalone TTL expires. The trap clears
+# every claim this invocation wrote unless the selection was actually emitted.
+STANDALONE_CLAIMED=()
+STANDALONE_EMITTED=""
+NODE_TARGET=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --top)
       [[ $# -ge 2 && "${2:-}" =~ ^[1-9][0-9]*$ ]] \
         || { echo "graph-select-target: --top requires a positive integer" >&2; exit 2; }
-      TOP="$2"; shift 2 ;;
+      TOP="$2"; TOP_SET=1; shift 2 ;;
     --pace-exempt-only) PACE_EXEMPT_ONLY=1; shift ;;
+    # --standalone: acquire the shared lock + apply the live-worker headroom cap
+    # + claim each selected node, then unconditionally self-release the lock.
+    # Never pass it from a caller already holding dispatch-acquire-lock — the
+    # terminal self-release would drop that outer hold (see header comment).
+    --standalone) STANDALONE=1; shift ;;
+    --node)
+      [[ $# -ge 2 && -n "${2:-}" ]] \
+        || { echo "graph-select-target: --node requires a non-empty id" >&2; exit 2; }
+      NODE_TARGET="$2"; shift 2 ;;
     *)
       echo "graph-select-target: unknown argument '$1'" >&2
-      echo "usage: graph-select-target [--top <n>] [--pace-exempt-only]" >&2
+      echo "usage: graph-select-target [--top <n>] [--pace-exempt-only] [--standalone] [--node <id>]" >&2
       exit 2 ;;
   esac
 done
+
+if [[ -n "$NODE_TARGET" && ( -n "$TOP_SET" || -n "$PACE_EXEMPT_ONLY" ) ]]; then
+  echo "graph-select-target: --node is mutually exclusive with --top and --pace-exempt-only" >&2
+  echo "usage: graph-select-target [--top <n>] [--pace-exempt-only] [--standalone] [--node <id>]" >&2
+  exit 2
+fi
 
 # --- Selection-log emitter (best-effort, one record per invocation) ----------
 # Accumulators consumed by the EXIT trap. SKIPPED is a JSON array of
 # {id, reason} objects; SELECTED a JSON array of ids; EVENTS the pure
 # selector's freeze/cap/gate events (JSON array).
-MODE=$([[ -n "$PACE_EXEMPT_ONLY" ]] && echo "pace-exempt" || echo "normal")
+MODE=$([[ -n "$NODE_TARGET" ]] && echo "node" || { [[ -n "$PACE_EXEMPT_ONLY" ]] && echo "pace-exempt" || echo "normal"; })
 DISPOSITION=""
 SELECTED_JSON="[]"
 SKIPPED_JSON="[]"
@@ -126,6 +235,26 @@ SNAPSHOT_DIR=""
 _cleanup() {
   _selection_log_emit
   [[ -n "$SNAPSHOT_DIR" ]] && rm -rf "$SNAPSHOT_DIR"
+  # Standalone claim rollback, BEFORE the lock release so the ledger is restored
+  # while this invocation still holds the lock. Fires only when the run ended
+  # without printing its selection (any non-`selected` exit: the sensor_gate
+  # rc==2 abort, a signal, or any later-added early exit past the first claim).
+  # On the success path STANDALONE_EMITTED is set just before the selection is
+  # printed, so the caller's claims are left intact for it to hand to
+  # dispatch-graph-execute (or release itself — see the CLAIM OBLIGATION note).
+  if [[ -z "$STANDALONE_EMITTED" ]] && (( ${#STANDALONE_CLAIMED[@]} > 0 )); then
+    local _cid
+    for _cid in "${STANDALONE_CLAIMED[@]}"; do
+      reservation_clear "$_cid" >/dev/null 2>&1 || true
+    done
+  fi
+  # Standalone lock release (guarded so it fires only once --standalone actually
+  # acquired the lock). Living in the EXIT trap covers EVERY exit path between
+  # the standalone acquire and the final claim/release — the no-store early exit,
+  # mktemp/git-archive/select-targets.ts failures, and any path added later —
+  # without a hand-release at each site. Strict self-release; see the --standalone
+  # header note on why nesting under an existing hold is forbidden.
+  [[ -n "${STANDALONE_LOCKED:-}" ]] && "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1
 }
 trap '_cleanup' EXIT
 
@@ -141,6 +270,116 @@ if [[ -n "$PACE_EXEMPT_ONLY" ]]; then
     DISPOSITION="exhausted"
     echo "empty"
     exit 0
+  fi
+fi
+
+# --- Standalone concurrency safety (--standalone) -----------------------------
+# Folds in the SAME lock-acquire -> headroom-check -> (clamp) cycle
+# dispatch-select-tick wraps around this selector, so a manual/emulated-tick
+# caller gets the same double-dispatch protection. The claim (reservation_write)
+# and the release both happen after selection (the release via the _cleanup
+# EXIT trap, keyed on STANDALONE_LOCKED). Selector failure degrades to `empty`
+# exit 0 — the convention dispatch-select-tick uses at this selector's call site.
+if [[ -n "$STANDALONE" ]]; then
+  # (a) Acquire the shared dispatch lock. Anything other than `acquired`
+  # (busy, lock-error) degrades to empty rather than erroring.
+  LOCK=$("$SCRIPT_DIR/dispatch-acquire-lock" --wait) || true
+  if [[ "$LOCK" != acquired ]]; then
+    DISPOSITION="lock-unavailable"
+    echo "empty"
+    exit 0
+  fi
+  STANDALONE_LOCKED=1
+
+  # (b) Live-worker headroom cap. Mirrors dispatch-select-tick's --manual branch
+  # ("manual context-dependent fan-out") for the LIVE_COUNT / MAX_WORKERS /
+  # EXHAUSTED headroom computation and its busy-read failure guard, but
+  # DELIBERATELY omits that branch's SPAWN_N floor-of-1 clamp
+  # (dispatch-select-tick lines ~720-728, comment "Floor re-asserts past the
+  # ceiling clamp: HEADROOM=0 must still yield one deliberate node"). That floor
+  # is the human-dispatch-is-sovereign override — it exists so a literal human
+  # keystroke always launches its one node. An automated/emulated --standalone
+  # caller (a script, an emulated tick) is NOT sovereign, so at HEADROOM==0
+  # --standalone degrades to the concurrency-cap/empty disposition instead of
+  # breaching the MAX_WORKERS ceiling by one; breaching it for unattended callers
+  # would reintroduce the milder over-subscription this whole tactic exists to
+  # prevent. It likewise does NOT inherit that branch's pace-curve OVERRIDE: the
+  # pace-curve gap (TARGET_N - LIVE_COUNT) is applied as a second ceiling below,
+  # for the same non-sovereignty reason. LIVE_COUNT = busy workers + reservations.
+  # All four
+  # environmental reads fail OPEN, each to its own safe default: EXHAUSTED → `ok`
+  # on missing telemetry; MAX_WORKERS → headroom UNKNOWN on an unreadable or
+  # non-numeric ceiling; TARGET_N → pace budget UNKNOWN on the same; daemon UNKNOWN
+  # (busy-worker read failed) → skip the
+  # headroom computation outright. UNKNOWN on any of those reads converges on
+  # the same fail-open floor, TOP=1 (the standalone analogue of
+  # dispatch-select-tick's "GAP stays 1"), never leaving TOP unclamped when the
+  # live-worker count or the ceiling is unknown.
+  if BUSY=$(claude_agents_count_busy_workers); then
+    RESV=$(reservation_count)
+    LIVE_COUNT=$(( BUSY + RESV ))
+    MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max 2>/dev/null) || MAX_WORKERS=""
+    TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers" 2>/dev/null) || TARGET_N=""
+    EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
+    # HEADROOM="" is UNKNOWN — the --max read failed or returned a non-numeric
+    # ceiling (dispatch config missing, unreadable, or carrying a garbled
+    # max_concurrent_workers). Guarding it is what makes this read fail open like
+    # its two siblings: unguarded, an EMPTY value makes
+    # `$(( MAX_WORKERS - LIVE_COUNT ))` negative, the floor below clamps it to 0,
+    # and the run degrades to the concurrency-cap disposition — reporting "fleet
+    # saturated" when the truth is "ceiling unreadable", with nothing on stderr to
+    # tell the two apart. A word-shaped value is worse: under `set -u` the
+    # arithmetic aborts the script mid-run, holding the dispatch lock until the
+    # EXIT trap unwinds.
+    if [[ "$MAX_WORKERS" =~ ^[0-9]+$ ]]; then
+      HEADROOM=$(( MAX_WORKERS - LIVE_COUNT ))
+      (( HEADROOM < 0 )) && HEADROOM=0
+    else
+      echo "graph-select-target: dispatch-target-workers --max returned a non-numeric ceiling ('$MAX_WORKERS'); headroom unknown, failing open to --top 1" >&2
+      HEADROOM=""
+    fi
+    # PACE-CURVE gap budget, the second ceiling. The MAX_WORKERS headroom above is
+    # the ABSOLUTE ceiling; the pace curve (bare `dispatch-target-workers`, i.e.
+    # TARGET_N) is the throttle the autonomous branch of dispatch-select-tick bounds
+    # its fan-out by (`GAP = TARGET_N - LIVE_COUNT`). The --manual branch overrides
+    # the pace curve because a human keystroke is sovereign; an unattended
+    # --standalone caller is NOT (the same reason the floor-of-1 is dropped above),
+    # so it must honor the throttle too — otherwise the documented way to pause the
+    # queue (pin the pace curve so TARGET_N drops to 0) would be bypassed by any
+    # cron job / emulated tick, spending the very token budget the pause protects.
+    # Callers that genuinely need the pace bypass go through --pace-exempt-only.
+    # GAP_BUDGET="" is UNKNOWN (read failed or non-numeric), handled like an
+    # UNKNOWN ceiling: fail open to the TOP=1 floor, never to unbounded fan-out.
+    if [[ "$TARGET_N" =~ ^[0-9]+$ ]]; then
+      GAP_BUDGET=$(( TARGET_N - LIVE_COUNT ))
+      (( GAP_BUDGET < 0 )) && GAP_BUDGET=0
+    else
+      echo "graph-select-target: dispatch-target-workers returned a non-numeric pace target ('$TARGET_N'); pace budget unknown, failing open to --top 1" >&2
+      GAP_BUDGET=""
+    fi
+    if [[ "$EXHAUSTED" == exhausted ]] || [[ "$HEADROOM" == 0 ]] || [[ "$GAP_BUDGET" == 0 ]]; then
+      # Concurrency-cap disposition (mirror dispatch-select-tick's): nothing to
+      # select. The lock is released by the _cleanup EXIT trap. String compares,
+      # not `(( HEADROOM == 0 ))`, so UNKNOWN ("") falls through to the fail-open
+      # clamp below instead of being read as zero headroom / zero pace budget.
+      [[ "$GAP_BUDGET" == 0 ]] && echo "graph-select-target: pace-curve budget exhausted (target $TARGET_N <= $LIVE_COUNT live); standalone selection is paced to zero" >&2
+      DISPOSITION="concurrency-cap"
+      echo "empty"
+      exit 0
+    fi
+
+    # (c) Clamp the effective --top to the TIGHTER of the two ceilings — the
+    # MAX_WORKERS headroom and the pace-curve gap budget. With EITHER of them
+    # UNKNOWN, clamp to the same floor of 1 the busy-read UNKNOWN branch uses.
+    if [[ -n "$HEADROOM" && -n "$GAP_BUDGET" ]]; then
+      CLAMP=$HEADROOM
+      (( GAP_BUDGET < CLAMP )) && CLAMP=$GAP_BUDGET
+      (( TOP > CLAMP )) && TOP=$CLAMP
+    else
+      (( TOP > 1 )) && TOP=1
+    fi
+  else
+    (( TOP > 1 )) && TOP=1
   fi
 fi
 
@@ -176,8 +415,7 @@ done
 # main is checked out at the project root). worktree_has_live_session is
 # name-keyed on the basename, so the root resolution is presentational — the
 # basename (the node id) is what is matched against live session names.
-NATIVE_ROOT=$(git -C "$REPO_ROOT" worktree list --porcelain \
-  | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
+NATIVE_ROOT=$(resolve_main_worktree "$REPO_ROOT")
 NATIVE_ROOT="${NATIVE_ROOT:-$REPO_ROOT}"
 
 skip_note() { # <id> <reason>
@@ -185,17 +423,193 @@ skip_note() { # <id> <reason>
     <<<"$SKIPPED_JSON") || true
 }
 
-# sensor_gate <id> <phase> <pr> — the phase's environmental sensor (§3.1).
-#   0 = satisfied; 1 = not satisfied (reason on stdout); 2 = environment error.
+# --- CI-fix interrupt helpers (tactic-fix-interrupt-orthogonal-state) ---------
+# The store writes land in the MAIN checkout's working tree ($NATIVE_ROOT) and
+# are committed to origin/main via graph-commit — the same state-only-commit-on-
+# main convention transition-node and hold-node use. NATIVE_ROOT is resolved
+# below, before the per-candidate loop that invokes these.
+
+# _apply_fix <id> <mode-flag...> — run apply-fix-state against the main store.
+# Its JSON result is on stdout for the caller to capture.
+_apply_fix() {
+  ( cd "$NATIVE_ROOT" \
+    && npx tsx packages/intentionsutil/scripts/apply-fix-state.ts "$@" --dir "$NATIVE_ROOT/intentions" )
+}
+
+# _graph_commit_fix <message> <id> — land the on-disk fix-state write on main.
+_graph_commit_fix() {
+  ( cd "$NATIVE_ROOT" \
+    && packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1
+}
+
+# FIX_ATTEMPT_CAP mirrors packages/intentionsutil/src/transitions.ts's constant
+# of the same name (currently 3) — used only for the hold reason's diagnostic
+# prose below, never for the capped decision itself (that stays
+# apply-fix-state.ts's `--check-cap`, the single source of truth for the
+# comparison). Keep this literal in sync if the source constant changes.
+FIX_ATTEMPT_CAP=3
+
+# _hold_node_fix_cap <id> <pr> <consumed> <attempt> <since> — build the
+# reason/recommendation files hold-node requires and land a fix-attempt-cap
+# hold (+ blocked_by edge on <id>, + a fix-attempt reset), reusing
+# tmp/fix-checks-summary.md in <id>'s own worktree (its /fix-checks
+# cross-iteration accumulator) as the hold body when it exists — this script
+# runs from the MAIN checkout, so that worktree's tmp/ lives at
+# $NATIVE_ROOT/.claude/worktrees/<id>/tmp/fix-checks-summary.md, not under
+# $NATIVE_ROOT itself. Prints hold-node's stdout line on success; rc mirrors
+# hold-node's own exit code.
+_hold_node_fix_cap() {
+  local id="$1" pr="$2" consumed="$3" attempt="$4" since="$5"
+  local tmpdir reason_file rec_file body_file rc
+  tmpdir=$(mktemp -d) || return 1
+  reason_file="$tmpdir/reason.txt"
+  rec_file="$tmpdir/recommendation.txt"
+  {
+    printf '/fix-checks retry budget exhausted: %s attempts concluded with PR #%s ' \
+      "$consumed" "$pr"
+    printf 'still red (execution.fix.attempt=%s, since %s) — the %s-attempt cap is exhausted.\n' \
+      "$attempt" "$since" "$FIX_ATTEMPT_CAP"
+  } > "$reason_file"
+  {
+    printf 'Review the fix-checks accumulator (tmp/fix-checks-summary.md in the '
+    printf "node's worktree, also posted in PR comments; folded into this hold's "
+    printf 'body when present) to diagnose why %s automated attempts did not resolve CI. ' \
+      "$FIX_ATTEMPT_CAP"
+    printf 'Resolve THIS HOLD TACTIC (phase: done, then prune) to unblock %s with a fresh ' "$id"
+    printf 'retry budget (attempt was reset to 1), or abandon/redesign the tactic if the '
+    printf 'current approach cannot work.\n'
+  } > "$rec_file"
+
+  body_file="$NATIVE_ROOT/.claude/worktrees/$id/tmp/fix-checks-summary.md"
+  local hold_args=("$id" --kind fix-attempt-cap
+    --reason-file "$reason_file" --recommendation-file "$rec_file")
+  [[ -f "$body_file" ]] && hold_args+=(--body-file "$body_file")
+  hold_args+=(--reset-fix-attempt)
+
+  ( cd "$NATIVE_ROOT" && packages/intentionsutil/scripts/hold-node "${hold_args[@]}" ) \
+    >/dev/null 2>&1
+  rc=$?
+  rm -rf "$tmpdir"
+  return $rc
+}
+
+# _read_pr_ci <pr> — one gh_pr_view_rest + one CI verdict, into globals
+# _CI_MERGED / _CI_HEAD / _CI_VERDICT. rc 1 when the PR is unreadable.
+_read_pr_ci() {
+  local pr="$1" pv
+  _CI_MERGED=""; _CI_HEAD=""; _CI_VERDICT=""
+  pv=$(gh_pr_view_rest "$pr" 2>/dev/null) || return 1
+  _CI_MERGED=$(jq -r '.mergedAt // empty' <<<"$pv" 2>/dev/null)
+  _CI_HEAD=$(jq -r '.headRefOid // empty' <<<"$pv" 2>/dev/null)
+  [[ -n "$_CI_HEAD" ]] || return 1
+  _CI_VERDICT=$(dispatch_ci_verdict_rest "$_CI_HEAD" 2>/dev/null || echo pending)
+  return 0
+}
+
+# _gate_maybe_interrupt <id> <pr> — for a fix-interruptible ladder phase carrying
+# NO active interrupt: enter `fix` iff the PR's CI has CONCLUDED-RED. On entry it
+# writes execution.fix and lands it on main.
+#   rc 0 — interrupt entered (caller emits `fix` this tick).
+#   rc 1 — no interrupt (caller falls through to the phase's normal gate).
+#   rc 3 — interrupt was due but the write/commit failed (reason printed; skip).
+_gate_maybe_interrupt() {
+  local id="$1" pr="$2"
+  [[ "$pr" == "null" || -z "$pr" ]] && return 1
+  _read_pr_ci "$pr" || return 1               # unreadable PR → do not interrupt
+  [[ -n "$_CI_MERGED" ]] && return 1          # merged-awaiting-reconcile → not an interrupt
+  [[ "$_CI_VERDICT" == "failing" ]] || return 1
+  # CONCLUDED-RED at an interruptible phase, fix null (guaranteed: the router
+  # would have emitted phase `fix` otherwise). Enter the interrupt this tick.
+  if _apply_fix "$id" --set-fix >/dev/null 2>&1 \
+     && _graph_commit_fix "graph: enter fix-interrupt on $id" "$id"; then
+    return 0
+  fi
+  echo "fix-write-failed"
+  return 3
+}
+
+# _gate_fix_active <id> <pr> <pushed_sha> <fix_since> — the candidate already
+# carries an active interrupt (router emitted phase `fix`). Resolve on green,
+# guard/retry otherwise. Prints the phase to emit (rc 0), a skip reason
+# (rc 1), or an env error (rc 2).
+_gate_fix_active() {
+  local id="$1" pr="$2" pushed_sha="$3" fix_since="$4" out phase
+  if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
+  if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
+  if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+  case "$_CI_VERDICT" in
+    passing)
+      # Resolution: clear the interrupt (+ the re-review reset when past review),
+      # disarm any live auto-merge arm, and emit the resolved ladder phase.
+      out=$(_apply_fix "$id" --clear-fix 2>/dev/null) || { echo "fix-clear-failed"; return 1; }
+      if ! _graph_commit_fix "graph: resolve fix-interrupt on $id" "$id"; then
+        echo "fix-clear-commit-failed"; return 1
+      fi
+      gh pr ready --undo "$pr" >/dev/null 2>&1 || true
+      phase=$(jq -r '.phase // "implement"' <<<"$out" 2>/dev/null) || phase="implement"
+      echo "$phase"; return 0 ;;
+    pending)
+      # Pending-CI guard: the fix worker pushed and CI has not reported on that
+      # exact sha yet — not ready (never misread a pending pushed-sha as green).
+      if [[ -n "$pushed_sha" && "$pushed_sha" != "null" && "$pushed_sha" == "$_CI_HEAD" ]]; then
+        echo "pending-ci-guard"; return 1
+      fi
+      # CI (re)running but not on a recorded push → stay in fix, ready to launch
+      # /fix-checks.
+      echo "fix"; return 0 ;;
+    *)
+      # failing again (a fix attempt did not clear CI). Enforce the retry cap
+      # before re-arming: once FIX_ATTEMPT_CAP completed passes have concluded
+      # red, land a tracked hold via hold-node (a born-parked hold tactic plus
+      # a blocked_by edge on this node, NOT an office_hours park on the source
+      # itself) and this node leaves the eligible set via that edge;
+      # otherwise stay in fix, ready to retry. Do NOT re-clear or re-set the
+      # interrupt itself — --check-cap is a pure read, no write.
+      out=$(_apply_fix "$id" --check-cap 2>/dev/null) \
+        || { echo "fix-cap-check-failed"; return 1; }
+      if [[ "$(jq -r '.capped' <<<"$out" 2>/dev/null)" == "true" ]]; then
+        local consumed attempt
+        consumed=$(jq -r '.consumed' <<<"$out" 2>/dev/null)
+        attempt=$(jq -r '.attempt' <<<"$out" 2>/dev/null)
+        if ! _hold_node_fix_cap "$id" "$pr" "$consumed" "$attempt" "$fix_since"; then
+          echo "fix-cap-hold-failed"; return 1
+        fi
+        echo "fix-attempt-cap-held"; return 1
+      fi
+      echo "fix"; return 0 ;;
+  esac
+}
+
+# sensor_gate <id> <phase> <pr> <pushed_sha> — the phase's environmental sensor
+# and CI-routing authority (§3.1; tactic-fix-interrupt-orthogonal-state).
+#   0 = satisfied, the PHASE TO EMIT is on stdout (may differ from <phase>: a
+#       fresh interrupt emits `fix`; a resolved interrupt emits the ladder phase).
+#   1 = not satisfied (skip reason on stdout); 2 = environment error.
 sensor_gate() {
-  local id="$1" phase="$2" pr="$3" rc merged_at
+  local id="$1" phase="$2" pr="$3" pushed_sha="$4" fix_since="$5" rc merged_at
   case "$phase" in
-    implement|align-tactics)
-      return 0 ;;
-    fix|qa|review)
-      # CI verdict present before fix/qa/review. The node-id branch is the PR
-      # head (§3.4), so dispatch-ci-ready's branch form applies: `waiting`
-      # means a draft PR's checks have not concluded — no actionable verdict.
+    fix)
+      # An active interrupt (router override). Resolve/guard/retry.
+      _gate_fix_active "$id" "$pr" "$pushed_sha" "$fix_since"; return $? ;;
+    align-tactics)
+      echo "align-tactics"; return 0 ;;
+    implement)
+      # Interruptible: a red PR at implement enters fix this tick; else ready
+      # (implement has no CI gate of its own).
+      _gate_maybe_interrupt "$id" "$pr"
+      case $? in
+        0) echo "fix"; return 0 ;;
+        3) return 1 ;;
+      esac
+      echo "implement"; return 0 ;;
+    qa|review)
+      # Interruptible: a red PR enters fix this tick; otherwise the existing
+      # CI-verdict-present gate.
+      _gate_maybe_interrupt "$id" "$pr"
+      case $? in
+        0) echo "fix"; return 0 ;;
+        3) return 1 ;;
+      esac
       if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
       # Defense in depth (tactic-graph-census-recurrence Unit 1): a merge that
       # lands between the tick's reconcile-graph-merged sweep and this selection
@@ -210,7 +624,7 @@ sensor_gate() {
       "$SCRIPT_DIR/dispatch-ci-ready" "$id" >/dev/null 2>&1
       rc=$?
       case "$rc" in
-        0) return 0 ;;
+        0) echo "$phase"; return 0 ;;
         1) echo "ci-pending"; return 1 ;;
         *) echo "graph-select-target: dispatch-ci-ready failed (exit $rc) for $id" >&2; return 2 ;;
       esac ;;
@@ -224,7 +638,7 @@ sensor_gate() {
       if ! merged_at=$(gh_pr_view_rest "$pr" 2>/dev/null | jq -r '.mergedAt // empty'); then
         echo "pr-state-unknown"; return 1
       fi
-      [[ -n "$merged_at" ]] && return 0
+      [[ -n "$merged_at" ]] && { echo "main-qa"; return 0; }
       echo "pr-not-merged"; return 1 ;;
     *)
       echo "unknown-phase"; return 1 ;;
@@ -233,10 +647,12 @@ sensor_gate() {
 
 SELECTED_COUNT=0
 SELECTED_LINES=""
-while IFS=$'\t' read -r id kind phase pr pace_exempt; do
+NODE_PRESENT=0
+while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha fix_since; do
   [[ -n "$id" ]] || continue
+  [[ -n "$NODE_TARGET" ]] && NODE_PRESENT=1
   ELIGIBLE_COUNT=$(( ELIGIBLE_COUNT + 1 ))
-  (( SELECTED_COUNT >= TOP )) && continue
+  [[ -z "$NODE_TARGET" ]] && { (( SELECTED_COUNT >= TOP )) && continue; }
 
   if [[ -n "$PACE_EXEMPT_ONLY" && "$pace_exempt" != "true" ]]; then
     continue
@@ -247,34 +663,81 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt; do
   # daemon-UNKNOWN into occupied (fail-safe: never double-book a node).
   if reservation_exists "$id"; then
     skip_note "$id" "reserved"
+    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: reserved" >&2
     continue
   fi
   if worktree_has_live_session "$NATIVE_ROOT/.claude/worktrees/$id"; then
     skip_note "$id" "live-session"
+    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: live-session" >&2
     continue
   fi
 
-  reason=$(sensor_gate "$id" "$phase" "$pr")
+  # sensor_gate returns the PHASE TO EMIT on stdout when satisfied — it may
+  # differ from the candidate's `phase` (a fresh CI-fix interrupt emits `fix`
+  # after writing execution.fix; a resolved interrupt emits the resolved ladder
+  # phase after clearing it). On not-satisfied the stdout is the skip reason.
+  emit_phase=$(sensor_gate "$id" "$phase" "$pr" "$pushed_sha" "$fix_since")
   rc=$?
   if (( rc == 2 )); then
     exit 2
   elif (( rc == 1 )); then
-    skip_note "$id" "$reason"
+    skip_note "$id" "$emit_phase"
+    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: $emit_phase" >&2
     continue
   fi
 
-  SELECTED_LINES+="node $id $kind $phase"$'\n'
+  # --standalone: claim the node in the reservation ledger (uniform node-id
+  # claiming) so a concurrent tick sees it reserved. Same call shape (incl. the
+  # 1>&2 redirect) dispatch-select-tick's emit_graph_selection uses; a failed
+  # ledger write is a budget undercount, not a selection abort. The fail-open is
+  # the intended operator contract: a transient ledger write failure must not
+  # block manual dispatch, and the cost is bounded to a budget UNDERCOUNT for
+  # this one slot (a concurrent tick may not see the node reserved) — matching
+  # the failure posture of dispatch-select-tick's own emit_graph_selection call.
+  #
+  # The `standalone` ORIGIN stamp (4th arg) bounds the claim's lifetime. Unlike a
+  # tick claim — handed straight to dispatch-graph-execute, which clears it on
+  # spawn — a standalone claim has no guaranteed consumer: a caller that discards
+  # the output, crashes, or is interrupted between selection and launch leaves the
+  # marker behind, and reservation_sweep's dead-session rule never reclaims it while
+  # the (long-lived) calling session stays alive. Markers stamped `origin=standalone`
+  # are instead reclaimed by the sweep's TTL rule once they age past
+  # DISPATCH_RESERVATION_STANDALONE_TTL_S with no live worker of that name, so a
+  # leak costs a slot for one TTL rather than stalling the fleet indefinitely.
+  # Callers that do not launch should still `reservation_clear <id>` promptly.
+  # Each successful claim is recorded in STANDALONE_CLAIMED so the EXIT trap can
+  # roll it back if a LATER candidate aborts the run before the selection is
+  # printed (see the trap). A FAILED write is not recorded — there is nothing to
+  # roll back.
+  if [[ -n "$STANDALONE" ]]; then
+    if reservation_write "$id" "$id" "${CLAUDE_CODE_SESSION_ID:-}" standalone 1>&2; then
+      STANDALONE_CLAIMED+=("$id")
+    else
+      echo "graph-select-target: reservation_write failed for $id; proceeding without a ledger entry (budget may undercount this slot)" >&2
+    fi
+  fi
+
+  SELECTED_LINES+="node $id $kind $emit_phase"$'\n'
   SELECTED_JSON=$(jq -c --arg id "$id" '. + [$id]' <<<"$SELECTED_JSON") || true
   SELECTED_COUNT=$(( SELECTED_COUNT + 1 ))
-done < <(jq -r '.candidates[] | [.id, .kind, .phase, (.pr // "null"), (.pace_exempt | tostring)] | @tsv' \
+done < <(jq -r --arg target "$NODE_TARGET" \
+  '.candidates[] | (if $target != "" then select(.id == $target) else . end) | [.id, .kind, .phase, (.pr // "null"), (.pace_exempt | tostring), (.fix.pushed_sha // "null"), (.fix.since // "null")] | @tsv' \
   <<<"$SELECTION")
 
 if (( SELECTED_COUNT == 0 )); then
-  DISPOSITION="empty"
+  if [[ -n "$NODE_TARGET" && "$NODE_PRESENT" == "0" ]]; then
+    echo "graph-select-target: node $NODE_TARGET is not selectable (not found, done, parked, blocked, or already reviewed — inspect intentions/$NODE_TARGET.md directly for the reason)" >&2
+    DISPOSITION="not-found"
+  else
+    DISPOSITION="empty"
+  fi
   echo "empty"
   exit 0
 fi
 
 DISPOSITION="selected"
+# Past this point the selection IS the caller's: suppress the EXIT trap's claim
+# rollback so the emitted nodes stay claimed for the caller to launch.
+STANDALONE_EMITTED=1
 printf '%s' "$SELECTED_LINES"
 exit 0

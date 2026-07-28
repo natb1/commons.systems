@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# dispatch-graph-main-red-sync — graph-native main-red latch reader + recovery
+# completer (tactic-graph-main-self-heal). Extracted out of
+# dispatch-select-tick's former inline Step 1c block into its own script,
+# matching the script-per-concern convention already used by sibling scripts
+# repo-health and graph-select-target in this directory — each is a small
+# script dispatch-select-tick invokes via "$SCRIPT_DIR/<name>", independently
+# fakeable by the test harness.
+#
+# A diagnosed red episode leaves an open graph tactic node
+# `tactic-main-red-<shortsha>` (written/refreshed by dispatch-diagnose-main) —
+# the gate's per-episode latch, serving strategy-main-health. A node is "open"
+# while its phase is not "done" — regardless of office_hours. A node parked in
+# office_hours is NOT a since-resolved episode: the park means the fix hit a
+# blocker and awaits a human while main is still red, so it must keep the gate
+# closed. Only phase == "done" re-arms the latch. Once origin/main goes green
+# again, this script completes the open node(s) — parked ones included — to
+# phase: "done" so the next red episode re-fires the gate on first detection. A
+# graph write is a side effect of this script, not of the pure selector.
+#
+# Usage: dispatch-graph-main-red-sync
+#
+# Stdout protocol: each open tactic-main-red-* node's id, one per line — the
+# SAME set read at the top of this run, regardless of whether the
+# recovery-completion below succeeds this same invocation (mirrors the
+# original inline block: every downstream consumer within one tick gates on
+# this run's initial read, not a post-completion re-read). Nothing is printed
+# when no node is open. On a graph-read failure the literal string `UNKNOWN` is
+# printed instead of empty output — never silently "main healthy" on a
+# transient read error. All diagnostic/log output goes to stderr, never
+# stdout.
+#
+# Exit code: ALWAYS 0. The caller treats any non-empty stdout (including
+# UNKNOWN) as "do not treat main as healthy" — this script must never exit
+# non-zero in a way that could get swallowed as empty by a caller's `|| true`.
+#
+# NOT set -e: every risky step below is guarded explicitly (matching the
+# sibling dispatch-select-tick / dispatch-graph-census convention), so the
+# script always reaches its final exit 0.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# scripts → dispatch-propagate → skills → .claude → repo root (same convention
+# as sibling script dispatch-graph-census).
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+
+# --- Read the open tactic-main-red-* nodes (verbatim from the former inline
+# Step 1c block, relocated) ---------------------------------------------------
+OPEN_MAIN_RED=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+  const { listNodes } = await import("./packages/intentionsutil/src/store.js");
+  for (const n of listNodes("./intentions")) {
+    if (!n.id.startsWith("tactic-main-red-")) continue;
+    if (n.phase === "done") continue;
+    // NOTE: office_hours-parked nodes are DELIBERATELY kept open. A park means
+    // the fix hit a blocker and awaits a human — the red episode is unresolved
+    // and main is still red. Excluding parked nodes would re-open the
+    // auto-merge gate (dispatch-select-tick gates SOLELY on OPEN_MAIN_RED being
+    // empty) and merge ready PRs onto a still-broken main. Only phase == "done"
+    // re-arms the latch; the recovery-completion loop below drives that
+    // transition once repo-health reports main green again.
+    process.stdout.write(n.id + "\n");
+  }
+') ) || {
+  echo 'dispatch-graph-main-red-sync: graph read of open tactic-main-red-* nodes failed; treating main health as UNKNOWN' >&2
+  OPEN_MAIN_RED=UNKNOWN
+}
+
+if [[ -n "$OPEN_MAIN_RED" && "$OPEN_MAIN_RED" != "UNKNOWN" ]]; then
+  # Use explicit exit-code capture: a failed probe would produce empty output,
+  # which -z would treat as "green" and incorrectly complete the latch. The
+  # probe lives in the standalone repo-health sensor: repo-health
+  # --main-broken-sha runs the two-source CI aggregation and, as a side effect,
+  # reconciles its durable label-free latch record. An empty stdout means green.
+  MB_SHA=""
+  if ! MB_SHA=$("$SCRIPT_DIR/repo-health" --main-broken-sha); then
+    MB_SHA="UNKNOWN"
+  fi
+  if [[ -z "$MB_SHA" ]]; then
+    # main is green again — complete each open tactic-main-red-* node to
+    # phase: "done" (re-arming the gate). ONLY when the node's execution is
+    # still null: a node past draft with a live execution is an in-flight fix
+    # owning its own PR/qa/review lifecycle, which completes it normally; this
+    # mechanical completion must never preempt in-progress work. Best-effort
+    # per node — a single node's completion failing must not abort the run
+    # (each write path is guarded with `|| true`).
+    while IFS= read -r node_id; do
+      [[ -n "$node_id" ]] || continue
+      EXECUTION=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+        const { readNode } = await import("./packages/intentionsutil/src/store.js");
+        const n = readNode("./intentions", process.argv[1]);
+        process.stdout.write((n.execution === null || n.execution === undefined) ? "null\n" : "set\n");
+      ' "$node_id") ) || continue
+      [[ "$EXECUTION" == "null" ]] || continue
+      # Compare-and-swap edit: dump the current node (writes base-manifest.txt),
+      # patch phase → "done", write it back through the validation gate, then
+      # land it with graph-commit --base (the manifest refuses a stale-read
+      # overwrite).
+      COMPLETE_DIR=$(mktemp -d) || continue
+      # Capture the pre-mutation origin/main blob for this node BEFORE the
+      # write-node.ts mutation below, so a failed completion can be rolled back
+      # to a clean tree. This is load-bearing for the log-and-continue behavior:
+      # because this is a `while read` loop, a leaked dirty intentions/$node_id.md
+      # from THIS iteration would trip graph-commit's assert_clean_outside_ids
+      # and cascade-fail every SUBSEQUENT node's `graph-commit --base`. The
+      # rollback below guarantees each iteration hands the next a clean tree.
+      #
+      # A capture FAILURE (the node is absent from origin/main at this instant —
+      # e.g. a stale $OPEN_MAIN_RED enumeration racing a concurrent prune/merge)
+      # is a HARD per-node refusal, mirroring the single-shot siblings
+      # demote-node-to-implement / transition-node: with no landed blob there is
+      # no clean state to roll back to, so mutating anyway would leak exactly the
+      # dirty file this rollback exists to prevent (the restore below would be
+      # silently skipped). Skip ONLY this node and let the loop continue with the
+      # rest — unlike the single-shot siblings, this is a per-node `while read`
+      # loop, so the correct refusal is `continue`, not `exit 1`.
+      if ! FRESH_BLOB=$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$node_id.md" 2>/dev/null) || [[ -z "$FRESH_BLOB" ]]; then
+        echo "dispatch-graph-main-red-sync: intentions/$node_id.md does not exist on origin/main — refusing to mutate a node with no landed content to roll back to; skipping $node_id" >&2
+        rm -rf "$COMPLETE_DIR"
+        continue
+      fi
+      if ! (
+        cd "$REPO_ROOT" || exit 1
+        MANIFEST=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$COMPLETE_DIR" "$node_id") || exit 1
+        jq '.phase = "done"' "$COMPLETE_DIR/$node_id.json" > "$COMPLETE_DIR/$node_id.patched.json" || exit 1
+        npx tsx packages/intentionsutil/scripts/write-node.ts --file "$COMPLETE_DIR/$node_id.patched.json" || exit 1
+        packages/intentionsutil/scripts/graph-commit --base "$MANIFEST" -m "graph: complete $node_id (main-health green)" "$node_id"
+      ) 1>&2; then
+        # Roll back this iteration's mutation FIRST (restore intentions/$node_id.md
+        # to origin/main), THEN surface the failure. Restoring from the origin/main
+        # blob is idempotent — if the write never reached the file it is already
+        # origin/main content — so the tree is clean before the next node runs.
+        # Only then log-and-continue: emit a stderr diagnostic (the former
+        # `|| true` swallowed the failure with zero output) and fall through to
+        # the next loop iteration. This best-effort per-node continue matches the
+        # script header doctrine and the dispatch-graph-scope-sweep precedent; it
+        # is SAFE only because the rollback above guarantees a clean tree.
+        if [[ -n "$FRESH_BLOB" ]]; then
+          git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$REPO_ROOT/intentions/$node_id.md"
+        fi
+        echo "dispatch-graph-main-red-sync: completion of $node_id failed; write rolled back" >&2
+      fi
+      rm -rf "$COMPLETE_DIR"
+    done <<<"$OPEN_MAIN_RED"
+  fi
+fi
+
+[[ -n "$OPEN_MAIN_RED" ]] && printf '%s\n' "$OPEN_MAIN_RED"
+exit 0

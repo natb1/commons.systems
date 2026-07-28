@@ -21,15 +21,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: main-qa
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-office-hours-snapshot-wire-contract
 office_hours:
   reason: needs owner machine + live credentials (Drive mount, encryption
     password, systemd) — live production verification migrated from the legacy
     main-qa queue
   since: 2026-07-05
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -38,11 +40,12 @@ attributes: {}
 
 ## Context
 
-Migrated 2026-07-05 from the legacy gh main-qa office-hours queue during the
-target-state review. Source issues (closed, content preserved here): 2698,
-2696, 2700, 2699, 2727, 2721, 2720, 2704 — all needs-main residue from the
-office-hours snapshot work (issues 2658, 2660, 2661, 2668; PRs 2677, 2718,
-2722, 2695). The local-first encrypted snapshot pipeline is exactly what
+Migrated from the legacy gh main-qa queue (target-state review); migration
+record: tactic-mainqa-first-class-phase. Source issues (closed, content
+preserved here): 2698, 2696, 2700, 2699, 2727, 2721, 2720, 2704 — all
+needs-main residue from the office-hours snapshot work (issues 2658, 2660,
+2661, 2668; PRs 2677, 2718, 2722, 2695). The local-first encrypted snapshot
+pipeline is exactly what
 `strategy-attention-surface` consumes, so this verification survives the
 legacy-router drain. Dropped as obsolete: live parity against the Firestore
 producer docs (legacy issue 2697) — the hosted Firestore owner tier retires
@@ -70,13 +73,14 @@ and the real encryption password.
    list will evolve as legacy-sourced fields — gh queue metrics, Firestore
    topicUsage — retire with their sources; verify against the then-current
    producer contract, not the 2026-07 field list.)
-5. **Enabled run + concurrency** (was 2727, PR 2722): with
-   `OFFICE_HOURS_SNAPSHOT_ENABLED=1` the producer runs detached and completes;
-   two concurrent runs serialize — the second waits or exits cleanly, no
-   corruption or duplicate writes.
+5. **Concurrency** (was 2727, PR 2722): two concurrent producer runs
+   serialize — the second waits or exits cleanly, no corruption or duplicate
+   writes. (Corrected 2026-07-25: the original item gated this on
+   `OFFICE_HOURS_SNAPSHOT_ENABLED=1`, which no longer exists anywhere in the
+   codebase; verify only the concurrency half.)
 6. **Timer freshness floor** (was 2721, PR 2718): with the dispatch chain
    stopped, the systemd timer fires on schedule, the run succeeds
-   (`systemctl status office-hours-snapshot.timer` + journal), and
+   (`systemctl status office-hours-producer.timer` + journal), and
    `computedAt` advances — the chain-liveness heartbeat.
 7. **Timer catch-up** (was 2720): after a sleep/reboot that misses a fire,
    the service runs on the next resume; `systemctl list-timers` shows past

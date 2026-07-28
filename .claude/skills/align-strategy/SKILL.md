@@ -2,9 +2,23 @@
 name: align-strategy
 description: Interview-driven recording of a `strategy-*` intention node — the graph-native successor to `/file-issue`'s requirements-definition role. Frames the input as a new strategy or an edit to an existing one, runs a Socratic dialectic to fix intent/placement/benefit/signal/conditions, advises on delegation capture, retains tactical byproducts as draft tactic nodes, and lands the record via `graph-commit`. On-demand only; never files a GitHub issue.
 user-invocable: true
+model: opus
 ---
 
 # Align Strategy
+
+**On the `model` field's enforcement (strategy-token-economy clarification 10,
+2026-07-16):** `/align-strategy` is `user-invocable: true` — it runs on the
+interactive main loop, not via a `context: fork` subagent launch. A `model:`
+field in frontmatter is confirmed honored for `context: fork` skills; for
+`user-invocable` main-loop skills like this one, honoring is unconfirmed. This
+skill stays whole-session Opus because its interview dialectic is
+non-delegable and it has no dispatch launch path to carry an explicit
+`model: opus` argument the way `/align-tactics`' Step 3 subagent launch does.
+If the harness does not honor this field on the interactive path, the default
+here is intended-not-guaranteed — backed by the token audit's by-node/by-phase
+attribution (`strategy-token-economy`'s sensor) reading after the fact whether
+the session actually ran on Opus.
 
 `/align-strategy [optional requirement text]` records or revises a
 `strategy-*` intention node under interview. It supersedes `/file-issue`'s
@@ -69,13 +83,23 @@ blocks your `graph-commit` rebase, and a stale read races live phase state
    run with `dangerouslyDisableSandbox: true`) — the claim is held by
    another session: stop and report the held claim to the author. Do
    **not** park the node — a held claim is not a defect.
-3. **Enter the worktree.** Otherwise create or re-enter it — native
-   `EnterWorktree` with the node id as the worktree name, or the
-   `provision-node-worktree`
-   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`)
-   primitive — and do all authoring and the step-5 `graph-commit` from
+3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+   or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
-   liveness rule the router uses, so no separate lock is needed.
+   liveness rule the router uses, so no separate lock is needed. **Prefer
+   `provision-node-worktree`**
+   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`): it
+   fetches `origin/main` and cuts the worktree fresh from it, so no separate
+   freshness check is needed after it. If instead you use native
+   `EnterWorktree`, **or** re-enter an **already-existing** worktree by any
+   means **other than `provision-node-worktree`**, running
+   `.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh` is
+   **mandatory** as the very first action in that worktree — **before any
+   graph read** (before Step 1's overlap grep / `readNode`, etc.). A non-zero
+   exit means the checkout is stale **or** the `git fetch` itself failed;
+   either way, **STOP** and freshen (`git fetch origin main && git merge
+   origin/main`) before proceeding. Never treat a failed fetch as license to
+   proceed on unverified state.
 
 **Doctrine-recording rounds pin the pace curve.** A round that records
 governing dispatch doctrine (a concurrency-safety or
@@ -95,13 +119,15 @@ clarification records.
    steps 2–6 once per concern, each producing its own node and its own
    `graph-commit` call in step 5. Do not force unrelated concerns into one
    node to avoid re-running the interview.
-2. **Duplicate / overlap detection.** Grep `intentions/strategy-*.md` for
-   keyword overlap with the requirement (statement, rationale, and
-   clarification text). A strong match means this is an **edit**, not a
-   new strategy — read the matched node in full via
-   `readNode(intentionsDir, id)` (or just read the file: only the
-   frontmatter is authoritative) before the interview, and use it as the
-   dialectic's starting point.
+2. **Duplicate / overlap detection.** Run
+   `npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions`
+   and grep its per-strategy statement dump for keyword overlap with the
+   requirement (statement, rationale, and clarification text) — one flat
+   dump to scan instead of grepping N separate `intentions/strategy-*.md`
+   files. A strong match means this is an **edit**, not a new strategy —
+   read the matched node in full via `readNode(intentionsDir, id)` (or just
+   read the file: only the frontmatter is authoritative) before the
+   interview, and use it as the dialectic's starting point.
 3. **New vs. edit.** No strong overlap → new strategy: identify which
    `virtue-*.md` node(s) it serves (a strategy's `serves` must resolve to
    `kind: virtue` — `validateGraph` rule 8). Overlap found → edit: confirm
@@ -110,7 +136,10 @@ clarification records.
 
 **With no requirement text — improvement pass:**
 
-1. Read every `intentions/strategy-*.md` node. For each, check:
+1. Run
+   `npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions`
+   and check its per-strategy census dump (conditions, reading, gap,
+   clarification provenance) for each strategy:
    - Any `attributes.conditions` entry that no longer plausibly holds
      against current repo/author state.
    - `reading`/`gap` staleness — a `reading` that predates a clarification
@@ -128,9 +157,9 @@ clarification records.
      (e.g. "until the gh-queue drains"). This is the same gate
      `/align-tactics` runs at finalization — running it here too catches
      staleness on strategies with no pending decomposition round.
-2. Separately, list `virtue-*.md` ids that appear in **no** strategy's
-   `serves` — a virtue with no strategy expressing it is a candidate for a
-   brand-new strategy.
+2. Separately, read the census's "Unserved virtues" section — virtue ids
+   that appear in **no** strategy's `serves` — a virtue with no strategy
+   expressing it is a candidate for a brand-new strategy.
 3. Present the candidates (failing-condition strategies, stale-signal
    strategies, contradicted-clarification strategies, doomed-tactic
    strategies, unserved virtues) via `AskUserQuestion` and let the author
@@ -143,10 +172,12 @@ fan out to `Explore` subagents returning compact `path:line`-anchored
 findings — the interview dialectic itself (step 2 onward) is never
 delegated. Keyword grep (this step's corpus sweep, and step 3's delegation
 sweep) only **shortlists** candidates; it never disposes of one — disposition
-requires reading each shortlisted node in full. A strategy-corpus census
-script is planned as an enumeration hook for this sweep
-(`tactic-align-tactics-mechanical-floor` Unit 4); until it lands, sweep the
-corpus by hand as above.
+requires reading each shortlisted node in full. The
+`align-strategy-census.ts` script (`tactic-align-tactics-mechanical-floor`
+Unit 4) is the enumeration hook for this sweep — run it as shown in item 1
+above instead of hand-reading the corpus; the greenfield-relevance gate's
+per-strategy tactic sweep still requires reading each flagged strategy's
+node in full, since the census does not carry tactic state.
 
 ## Step 2 — Interview dialectic
 
@@ -292,8 +323,8 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    boldness + accept-as-deferral, context delivered inside the tool). Record
    the resolution as a dated `clarifications` entry in the adopt/diverge
    shape — either the strategy adopts the rival framing, or it diverges
-   from it with the reason stated — ending with a provenance sentence in the
-   step-2.8 convention.
+   from it with the reason stated — carrying a dated provenance clause per
+   the step-2.8 convention.
 6. **Signal.** Draft a `success_signal` — `{observable, sensor, threshold,
    is_proxy}` — and confirm it names something a sensor can actually read.
    A strategy with no plausible sensor is a sign the intent is still too
@@ -304,19 +335,65 @@ recommendation on trust, never a quiet drop. When the author accepts one:
 8. **Edge cases and consequences.** For each of the above, surface at
    least one edge case or downstream consequence and resolve it with the
    author. Every resolution becomes a dated `clarifications` entry —
-   `{question, answer}` where `answer` ends with a provenance sentence in
-   the existing convention, e.g. `"...Recorded 2026-07-05 interview."`
-   (get the date via `date -u +%Y-%m-%d`, never hand-guessed).
+   `{question, answer}` where `answer` carries a dated provenance clause:
+   an event verb (Recorded / Amended / Reviewed / clarified / adopted,
+   etc.) plus an ISO date, placed wherever it reads best in the sentence —
+   a front-loaded parenthetical is preferred, e.g.
+   `"(Recorded 2026-07-05 interview.) ..."`, but any placement is accepted.
+   The newest ISO date anywhere in the answer is its effective date — the
+   `readingDate()` contract (`packages/intentionsutil/src/router.ts`)
+   extracts it verb-agnostically, and `coverage.ts`'s `lastReviewedOf`
+   depends on it. An amendment adds a new dated clause rather than rewriting
+   the old one, so the history of resolutions stays legible. Get the date
+   via `date -u +%Y-%m-%d`, never hand-guessed. `validateGraph` rule 17
+   mechanically enforces the date-presence half of this convention; the
+   event verb is documented style, not linted.
 9. **Design-canvas support (UI-design requirements only).** When a
    decision is about UI shape and text underspecifies it, supplement
    `AskUserQuestion` with visual aids: build mockup/variant artifacts on
    `@commons-systems/ds` and sync them to the claude.ai/design canvas via
    `DesignSync`, so the author disambiguates by pointing at a variant.
+   For a chart, dashboard, or data-viz requirement, first load the
+   `/dataviz` built-in skill — its procedure governs the recorded design:
+   form chosen by the data's job (including its "is it even a chart" test),
+   color assigned by role (categorical/sequential/diverging/status) never by
+   rank, the categorical palette run through `/dataviz`'s validator script
+   (never eyeballed), mark specs and spacers, a default hover layer, and an
+   accessibility pass (legend for ≥2 series, table view, a selected — not
+   auto-flipped — dark mode). `/dataviz` and the design canvas compose, not
+   compete: `/dataviz` supplies the design method and its computable checks;
+   the canvas still supplies the mockup/variant artifacts for author
+   disambiguation, now built to follow `/dataviz`.
    Canvas artifacts are interview aids, not deliverables — the resolution
    they produce is recorded as an ordinary dated clarification like any
    other. Caveat: a freshly synced component is absent from the canvas
    until the project is opened/refreshed — warn the author if this is
    their first look at a same-session sync.
+10. **Persistent-layer ownership gate.** Whenever this interview is about to
+    record standing structure — a node that owns a `success_signal` that is
+    read on an ongoing basis, a node carrying a standing `attention`
+    boost/override,
+    or any node that other machinery permanently references — the recorded
+    owner must be `kind: strategy` (or `virtue`), never a tactic. Tactics are
+    transient by definition: they complete and leave the selectable graph.
+    If a tactic is proposed as a standing owner, surface it as an interview
+    question, never record-and-fix-later: recommend the owning strategy, and
+    propose creating one if none exists (`strategy-main-health` is the worked
+    precedent, created 2026-07-13 for exactly this reason). Resolution lands
+    as a dated `clarifications` entry per the step-2.8 provenance convention.
+11. **Layer-placement gate.** Before recording any interview outcome, classify
+    its content against kind-tactic's authoring test (`intentions/kind-tactic.md`,
+    2026-07-21 clarification, "Where does an interview outcome land — strategy
+    layer or tactic layer?"): a standing requirement — one that must still hold
+    after every tactic currently serving the strategy completes and is pruned —
+    lands as a strategy or kind clarification; a completable change lands as a
+    draft tactic (Step 4); a split outcome lands as both, the invariant as a
+    clarification and its implementing fix as a tactic. Open-children
+    orthogonality and freeze/re-stamp cost are **never** placement inputs — they
+    govern only the materiality classification's blast radius (see
+    "Documentation completeness over commit size" and "Materiality-scoped
+    freeze", below), a separate, later decision. Cite kind-tactic's test; do
+    not restate its rationale here.
 
 **The `/file-issue` 8-category evaluation, folded into the steps above**
 (so nothing from the coverage matrix silently drops):
@@ -334,8 +411,13 @@ recommendation on trust, never a quiet drop. When the author accepts one:
 
 ## Step 3 — Delegation advice
 
-Grep `intentions/delegation-*.md` for nodes whose `statement` or
-`attributes.delegated` overlaps the strategy's domain. For each match:
+Run
+`npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions`
+and read its "Delegations" section — it already dumps id, statement,
+`attributes.delegated`, `attributes.divergence.level`, and
+`attributes.irreversibility.{gated,recovery_cost}` for every delegation
+node — for entries whose `statement` or `attributes.delegated` overlaps the
+strategy's domain. For each match:
 
 1. Propose (`AskUserQuestion`) whether the strategy should carry a
    `recovers: [<delegation-id>]` edge (`recovers` is valid only on
@@ -396,6 +478,12 @@ substance itself; a substantive TODO with no backing node is a
 review-phase finding, not something this skill should ever produce.
 
 ## Step 5 — Record
+
+Before constructing the JSON to land, re-confirm that no node about to be
+recorded this round — as a `success_signal` owner or a standing `attention`
+boost/override carrier — is `kind: tactic`. This is the same gate as dialectic
+step 10, restated here as the final pre-write check so a resolution made earlier
+in a long interview is not silently dropped by the time the JSON is constructed.
 
 Write the full node through `write-node.ts` — never hand-edit the YAML
 frontmatter:
@@ -464,14 +552,126 @@ landed with `office_hours` set instead of the intended content (a
 concurrent-edit conflict) — tell the author and stop; do not retry
 automatically.
 
-**Soft-freeze warning.** If this is an edit to a strategy that has open
-(non-draft, non-`done`) child tactics, warn the author **before** running
-`graph-commit`: landing this edit queues a soft freeze and re-evaluation
-of the open subtree once the router (`tactic-graph-router-selector` /
-`tactic-graph-router-transitions`) is live (clarification 10). Until then,
-say so explicitly and prompt the author to run the re-evaluation as an
-inline `/align-tactics` pass in the same session — every round recorded on
-`strategy-graph-native-dispatch` so far has done exactly this by hand.
+**Scope-inert re-stamp — protect a tactic's own scope custody.** If this
+round's edit touched the **body** (not just frontmatter) of an in-flight
+tactic — a node with a phase set, i.e. an open child (not `draft`, not
+`done`), the same population the Materiality-scoped-freeze section below
+discusses — then that body edit trips the tactic's own chain-of-custody
+scope gate: the worktree-local `.claude/worktrees/<id>.scope-fingerprint`
+stamp no longer matches the tactic's current body fingerprint, and the gate
+demotes the tactic back to `implement`, discarding its qa/review custody.
+That is correct for a real plan-substance change, but this interview
+sometimes must edit an open tactic's body for a **scope-inert** reason — a
+reconciliation note, a drift-review correction, a provenance annotation, or
+any other body edit clarification 38's amendment-completeness bar produces —
+where the plan substance is unchanged. For those, the demotion is spurious.
+
+Classify this round's own edit, per tactic, as **scope-inert** (plan
+substance unchanged — e.g. a provenance/reconciliation annotation) versus
+**material or unsure**. The rule is fail-closed: **only** a confident
+scope-inert verdict re-stamps; on **any** doubt — including a merely
+plausible substance change — do nothing further here. Leave the stamp
+untouched and let custody demote the tactic exactly as it does today. That
+demotion-on-doubt is the existing correct behavior, not a failure mode to
+work around.
+
+For each tactic whose edit is confidently scope-inert, **after** the body
+edit has landed via `graph-commit` in this **same** round (so it is on
+origin/main), run:
+
+```bash
+npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>
+```
+
+It must run post-`graph-commit`: the script reads the tactic's current
+on-disk body and the current `origin/main` sha to compute the stamp, so a
+pre-landing run would stamp stale content. It re-writes **only** the
+worktree-local `.scope-fingerprint` file — it is never a node write and
+never a `graph-commit` of its own.
+
+Record the classification in this round's own record/summary — the
+scope-inert verdict and the tactic ids re-stamped — as the audit trail the
+doctrine requires.
+
+This is a **separate** stamp from the Materiality-scoped-freeze section that
+follows, not an extension of it. That section's `execution.strategy_fingerprint`
+freeze protects open children broadly against **strategy**-substance drift;
+this step's worktree-local `.scope-fingerprint` re-stamp protects a single
+**tactic**'s own scope-custody gate from being tripped by a scope-inert edit
+to that tactic's own body. Two unrelated stamps, two unrelated mechanisms —
+do not conflate them.
+
+**Documentation completeness over commit size.** When an interview outcome is
+materially a property of the strategy under edit (an invariant of its
+contract, a resolved edge case, a doctrine correction), record it as a
+strategy clarification on that strategy — never relocate it to a draft tactic,
+or omit it, to keep the commit small or to avoid a re-stamp. Commit size is
+never a reason to put documentation in the wrong place; the materiality-scoped
+freeze below is what keeps a warranted clarification's *blast radius* small —
+it is not a reason to avoid recording the clarification itself. Whether the
+outcome belongs in the persistent layer at all is decided upstream, by
+dialectic step 11 (Layer-placement gate); this section governs only the blast
+radius of a placement already made there.
+
+**Measure freeze/re-stamp cost via the authoritative predicate, never a
+grep.** If a recording or materiality decision turns on how many open children
+a clarification would freeze, compute the actual set with `readNode`
+(`packages/intentionsutil/src/store.ts`, re-exported via the package index
+barrel) + `isFingerprintStale`
+(`packages/intentionsutil/src/transitions.ts`) — or
+`strategyFingerprint` (`packages/intentionsutil/src/router.ts`) plus the same
+per-child stamp read the router's selector uses — never a text `grep` over
+`strategy_fingerprint`. A `grep -c` (or similar) over that field counts the
+key line itself, so a null-valued stamp (`strategy_fingerprint: null` — not
+stale, per `isFingerprintStale`) is indistinguishable from a real one in the
+grep count and inflates the estimate. A cost estimate that drives a recording
+or materiality decision must come from the same predicate the router uses, not
+a text search.
+
+**Materiality-scoped freeze — classify each open child.** If this is an edit
+to a strategy that has open (non-draft, non-`done`) child tactics with an
+existing stamped `execution.strategy_fingerprint` entry for this strategy, the
+session must classify **each** such stamped open child against the actual edit
+delta — **before** running `graph-commit` — into exactly one of three buckets.
+The classification is materiality-scoped, not indiscriminate: an edit no longer
+queues a blanket freeze of the whole open subtree; only the children the edit
+actually affects freeze.
+
+There is **no rank gate** — rank is not a proxy for materiality. A low-rank
+child can still be materially affected, and a high-rank child can still be
+orthogonal; classify every stamped open child on the substance of the delta,
+never on its rank.
+
+- **Orthogonal** — the edit does not affect this child's plan at all.
+  Re-stamp its `execution.strategy_fingerprint` entry for this strategy to
+  `{hash: strategyFingerprint(strategy), sha: <origin/main sha at edit time>}`
+  in the **same** `graph-commit` as this strategy edit, so no freeze fires for
+  this child.
+- **Materially affected** — the edit changes something this child's plan
+  depends on. Leave its stamp untouched/stale: the freeze fires and it
+  re-evaluates later at its own rank via the existing re-evaluation mechanism
+  (unchanged — `tactic-graph-router-selector` /
+  `tactic-graph-router-transitions` when live; the inline `/align-tactics` pass
+  in this same session in the bootstrap interim, as every round recorded on
+  `strategy-graph-native-dispatch` so far has done by hand).
+- **Must-land-first migration** — this child must not proceed until some
+  carrier work lands. In addition to leaving its stamp stale (as materially
+  affected), add `blocked_by += [<carrier-id>]` so the router cannot select it
+  until the carrier lands.
+
+`hash` is always `strategyFingerprint(strategy)` from
+`packages/intentionsutil/src/router.ts` — always that helper, never a
+hand-computed hash. In the bootstrap-interim hand-stamp path (no live router
+yet), get `sha` with `git rev-parse origin/main`. The live-router path instead
+passes it through `apply-node-transition.ts --strategy-sha <sha>` rather than
+shelling git itself.
+
+Dropping the legacy bare-string form entirely, and making `validate-graph`
+**reject** bare strings, is sequenced future work (migration step 4), **not**
+this change: bare strings remain valid deprecated-legacy, and only the
+classification-touched (re-stamped) keys convert to the `{hash, sha}` object
+form — opportunistic conversion, not a bulk migration of the extant legacy
+bare-hash stamps.
 
 **Curriculum enrollment (record time).** Maintaining the ever-expanding
 review curriculum is one of /align's roles
