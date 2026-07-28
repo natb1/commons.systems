@@ -42,7 +42,7 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: qa
+phase: done
 execution:
   branch: tactic-graph-commit-landing-lock
   pr: 2915
@@ -51,6 +51,10 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-26T05:28:10Z
+    mergeCommitSha: ba1b713080df6cd7f7ed9dfd78e9582c3d933386
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

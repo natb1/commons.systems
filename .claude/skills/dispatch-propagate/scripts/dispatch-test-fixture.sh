@@ -18,6 +18,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # .claude/skills/dispatch-propagate/scripts; the hooks live at .claude/hooks.
 HOOK_SCRIPT_DIR="$SCRIPT_DIR/../../../hooks"
 
+# UTIL_SCRIPT_DIR — the intentionsutil script directory (graph-commit, park-node,
+# mark-node-terminal). SCRIPT_DIR is .claude/skills/dispatch-propagate/scripts,
+# four levels below the repo root.
+UTIL_SCRIPT_DIR="$SCRIPT_DIR/../../../../packages/intentionsutil/scripts"
+
 # --- test helpers -----------------------------------------------------------
 
 PASS=0

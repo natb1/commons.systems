@@ -44,129 +44,125 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "/qa-fix: opus-fixable residue (PR #2964 Verification section states a
-    stale test-suite total: 3042/3042, tree reports 3046/3046) found, but the
-    qa-fix attempt cap was already reached (ATTEMPT_N=2, CAP=2) by the attempt-1
-    fixing pass; escalating to office-hours for a manual PR-description
-    correction"
-  since: 2026-07-25
-  recommendation: >-
-    ## Recommended next steps — `tactic-manual-path-reservation-sweep` (PR
-    #2964)
+  reason: "/qa-fix: planner scope-deviation on opus-fixable residue — PR body's
+    stale test-suite count (body 3046/3046, tree 3183/3183) can only be fixed by
+    editing PR #2964's GitHub description text, which is outside the auto-fix
+    lane's working-tree scope; a permanent escalation, not attempt-cap
+    exhaustion"
+  since: 2026-07-28
+  recommendation: |-
+    ## Recommendation — PR #2964 office-hours park
 
+    **Take option 1 now, option 2 as the durable fix. Skip option 3.**
 
-    **Bottom line: one administrative edit to the PR description unblocks this.
-    No code change, no re-QA.**
+    The code change is correct and the suite is green. The only thing standing between
+    this PR and merge is one line of prose in its GitHub description. Fix it by hand,
+    then remove the class of finding rather than building a new write path for it.
 
+    ### Why not option 3
 
-    ### 1. The fix (one line, in the PR body — not the tree)
+    Giving the qa-fix auto-fix lane a `gh pr edit` step would hand an autonomous lane
+    an untracked, un-reviewed write channel (PR description text lands with no diff,
+    no CI, no review) to serve exactly one recurring finding — and that finding only
+    exists because triage asks for an unstable assertion in the first place. Fixing
+    the input is cheaper and smaller than fixing the pipeline. The `/implement-unit`
+    boundary — "auto-fixes land as working-tree commits" — is a good boundary; the
+    scope-deviation escape did the right thing by refusing.
 
+    ### Step 1 — unblock #2964 (do this regardless)
 
-    PR #2964's `## Verification` section (line 35 of the body) currently reads:
+    The count in the body is unstable by construction: `test-dispatch-scripts.sh` is a
+    shared file that grows from unrelated concurrent PRs, so any number written there
+    is stale within days. Drop the number instead of refreshing it — refreshing just
+    restarts the clock.
 
+    From the worktree, with `dangerouslyDisableSandbox: true` on every `gh` call:
 
+    ```bash
+    cd /home/n8/natb1/commons.systems/.claude/worktrees/tactic-manual-path-reservation-sweep
+    gh pr view 2964 --json body --jq .body > tmp/pr-2964-body.md
     ```
 
-    - `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` —
-    3042/3042 passed.
+    Then edit the last line of `tmp/pr-2964-body.md`, replacing:
 
     ```
-
-
-    It must read:
-
-
+    - `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` — 3046/3046 passed.
     ```
 
-    - `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` —
-    3046/3046 passed.
+    with:
 
     ```
+    - `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` — full suite passes (exit 0).
+    ```
 
+    Apply and confirm no count survives:
 
-    The count went stale when the attempt-1 qa-fix pass landed the
-    `manual-orphan-saturated` regression test in
-    `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` — 4 new
-    assertions, 3042 → 3046 — without refreshing the PR body. Apply with `gh pr
-    edit 2964 --body-file <file>` (fetch the current body first via `gh pr view
-    2964 --json body --jq .body`, edit only that one number, write it back). Per
-    the sandbox rule, run every `gh` call with `dangerouslyDisableSandbox:
-    true`.
+    ```bash
+    gh pr edit 2964 --body-file tmp/pr-2964-body.md
+    gh pr view 2964 --json body --jq .body | grep -n 'passed'
+    ```
 
+    The `grep` should show only the countless line. Nothing else in the body changes —
+    the Problem and Change sections are accurate and there are no `Closes` lines to
+    disturb (this is a graph-node-lane PR).
 
-    Optional 30-second confirmation before editing: run
-    `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` and
-    read the trailing total. It should print `3046/3046 passed`. If it prints
-    anything else, the number to write is whatever the suite actually reports —
-    do not hand-copy 3046.
+    ### Step 2 — clear the park and let qa re-run
 
+    The node stays at phase `qa`; clearing the park just returns it to the qa lane,
+    where a fresh pass finds no count to compare and the residue item is gone for good.
+    Run the **worktree-local** script and pass `-C` explicitly — running the copy from
+    another checkout, or omitting `-C`, exits 0 while committing nothing:
 
-    ### 2. This is administrative only
+    ```bash
+    packages/intentionsutil/scripts/clear-park \
+      tactic-manual-path-reservation-sweep \
+      "PR body test-count assertion removed by hand; residue item no longer applies"
+    ```
 
+    Verify it actually landed before walking away:
 
-    There is no code defect. The suite is genuinely green at 3046/3046; only the
-    *stated* total in the PR description drifted. Nothing in
-    `dispatch-select-tick` or `test-dispatch-scripts.sh` needs to change, and no
-    re-QA is required beyond confirming the corrected number matches a real
-    suite run. Do not re-run the full QA pass for this.
+    ```bash
+    git fetch origin main
+    git show origin/main:intentions/tactic-manual-path-reservation-sweep.md | grep -n 'office_hours'
+    ```
 
+    The unrelated `## needs-main residue` item 16 (multi-day live=N confirmation) stays
+    as-is — it is a planned deferral, not part of this escalation, and should ride the
+    normal main-qa path after merge.
 
-    ### 3. The rest of the qa-fix chain is clean for this node
+    ### Step 3 — kill the class (the actual fix)
 
+    Two small edits, both worth recording as one tactic node rather than doing ad hoc:
 
-    - **Item 11** (proportionality of the ~30 lines of comments across the two
-    overlapping sweep tests, and whether the saturated-ledger test subsumes the
-    single-marker test) was triaged in attempt 2 and resolved as
-    **already-satisfied** — the two tests assert genuinely distinct
-    discriminators, and comment density matches the file's house style (~18%
-    comment lines file-wide). No action.
+    1. **Triage may not ask for it.** In
+       `.claude/skills/qa-fix/references/triage-subagent.md`, add a classification
+       constraint: an item is only `script-verifiable` when its remediation lands in a
+       tracked file. A finding whose only fix is editing PR description text, labels,
+       or other GitHub-side metadata classifies as `needs-human-judgment`. This stops
+       the Opus fix-planner from being handed work it is structurally unable to do,
+       and converts three wasted qa-fix passes into one clean escalation on the first
+       pass.
 
-    - **Attempts 0 and 1** were re-verified intact in attempt 2, including a
-    live mutation test (deleting the `--manual` block's `reservation_sweep` call
-    made both sweep-regression tests fail, then restored cleanly). No action.
+    2. **The convention that produced the bad assertion.** PR-body `## Verification`
+       sections are free prose written at implement time
+       (`.claude/skills/implement/SKILL.md`, Step 4 "Open the draft PR", ~line 377) —
+       nothing mandates the count, a session just chose one. Add a line there: cite the
+       suite and its exit status, never an assertion count, for suites in shared files
+       that unrelated PRs extend. Note that the tactic node's own ` ```verify ` block
+       already gets this right — `intentions/tactic-manual-path-reservation-sweep.md`
+       line 114 runs the script bare with no count — so the plan schema is fine and only
+       the PR-body prose convention needs the guardrail.
 
-    - **Item 16** (the `## needs-main residue` section on the node body —
-    multi-day real-world confirmation that phantom `live=N` no longer inflates
-    on the manual path) is a **planned deferral**, already correctly recorded
-    and well-formed. It routes the merged tactic to `main-qa` post-merge. It is
-    **not** what this park is about and must not be treated as blocking; leave
-    the section untouched.
+    ### Cost of doing nothing
 
-
-    So once the description number is corrected, this node has no outstanding qa
-    residue.
-
-
-    ### 4. Why qa-fix can't do this itself — and how to resume
-
-
-    `ATTEMPT_N` is at `CAP=2` for the qa-fix auto-fix budget. Both attempts were
-    spent on *different* items (attempt 0: the `--manual` block rationale
-    comment; attempt 1: the `manual-orphan-saturated` coverage gap). The budget
-    is exhausted, so qa-fix will not auto-run a third fixing pass for this
-    trivially mechanical item — hence the park. It will not resolve itself; a
-    human or office-hours session must act.
-
-
-    Resume sequence:
-
-
-    1. Edit the PR body as in step 1 above.
-
-    2. Clear the `office_hours` park on `tactic-manual-path-reservation-sweep`.
-    Do this from a worktree whose `HEAD == origin/main` —
-    `park-node`/`transition-node` read the local checkout, and a stale worktree
-    will silently revert the park state or clobber newer `origin/main` content.
-
-    3. Let the chain proceed `qa` → `review` → merge. Post-merge it lands in
-    `main-qa` on item 16, as already planned.
-
-
-    Nothing here requires a new commit to the branch, so no CI re-run is
-    triggered by the fix itself.
+    Every future PR that writes an exact suite count into its body against a shared
+    growing test file will burn its full qa-fix attempt budget and land in this same
+    queue. Step 3 costs one small PR; skipping it costs a recurring office-hours item.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

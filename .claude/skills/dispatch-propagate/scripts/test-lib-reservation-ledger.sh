@@ -41,7 +41,8 @@ rl_teardown() {
   RL_DIR=""
   RL_FAKE=""
   unset DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_NOW \
-    DISPATCH_RESERVATION_SWEEP_NOW_EPOCH DISPATCH_RESERVATION_BOOT_GRACE_S
+    DISPATCH_RESERVATION_SWEEP_NOW_EPOCH DISPATCH_RESERVATION_BOOT_GRACE_S \
+    DISPATCH_RESERVATION_STANDALONE_TTL_S
 }
 
 # rl_write_fake_claude <json-array> — install a fake `claude` that prints the
@@ -161,6 +162,61 @@ if printf '%s' "$err" | grep -q 'inspect tmp/dispatch-launch'; then
 else
   PASS=$((PASS + 1)); echo "  PASS: rl-sweep-redundant: benign reclaim stays silent (no launch-log diagnostic)"
 fi
+rl_teardown
+
+# --- Test 5b: sweep TTL-reclaims an aged `origin=standalone` marker -----------
+# `graph-select-target --standalone` claims have no guaranteed consumer: a caller
+# that discards the selection, crashes, or is interrupted before launching leaves
+# the marker behind, and while its (long-lived) session stays ALIVE neither the
+# live-worker rule (a) nor the dead-session rule (c) ever fires — the marker is
+# immortal and a few such calls pin LIVE_COUNT at the ceiling, stalling the fleet.
+# Rule (c-ttl) bounds that: past DISPATCH_RESERVATION_STANDALONE_TTL_S with no
+# live worker of that name, the marker is reclaimed regardless of session
+# liveness. Marker stamped at 2026-01-01T00:00:00Z (epoch 1767225600); sweep
+# "now" is 601s later against a 600s TTL.
+echo "Test: reservation_sweep TTL-reclaims an aged origin=standalone marker even though its reserving session is still live"
+rl_setup
+reservation_write "931-slug" "931" "live-sess" "standalone"
+rl_write_fake_claude '[{"sessionId":"live-sess","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_STANDALONE_TTL_S=600
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 601))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+assert_eq "rl-sweep-standalone-ttl: aged standalone marker reclaimed (count 0)" "0" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'standalone-ttl-expired'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-standalone-ttl: note mentions standalone-ttl-expired"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-standalone-ttl: note mentions standalone-ttl-expired"
+  echo "    stderr: $err"
+fi
+rl_teardown
+
+# --- Test 5c: the TTL is scoped — young standalone / aged tick markers KEPT ---
+# Two controls for Test 5b, so the TTL rule cannot over-reclaim: (i) a standalone
+# marker still INSIDE the TTL is in-flight and kept; (ii) an ordinary tick claim
+# (no `origin=` line) of the SAME age is kept, because dispatch-graph-execute owns
+# its lifecycle and its reserving session is live.
+echo "Test: reservation_sweep keeps a young standalone marker and an aged tick marker with a live reserving session"
+rl_setup
+reservation_write "932-slug" "932" "live-sess" "standalone"
+reservation_write "933-slug" "933" "live-sess"
+rl_write_fake_claude '[{"sessionId":"live-sess","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_STANDALONE_TTL_S=600
+# 599s after the stamp: inside the TTL for the standalone marker; the tick marker
+# has no TTL at all, so it is kept at ANY age while its session is live.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 599))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-standalone-ttl-young: young standalone marker kept" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/932-slug" ] && echo 1 || echo 0)"
+# Re-sweep well past the TTL: only the standalone marker goes; the tick claim
+# stays (its session is live), proving the rule keys on `origin=standalone`.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 5000))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-standalone-ttl-scope: aged standalone marker reclaimed" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/932-slug" ] && echo 1 || echo 0)"
+assert_eq "rl-sweep-standalone-ttl-scope: aged tick marker (no origin) kept" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/933-slug" ] && echo 1 || echo 0)"
 rl_teardown
 
 # --- Test 6: sweep reclaims NOTHING when the daemon is UNKNOWN ----------------

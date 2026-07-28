@@ -21,180 +21,24 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: main-qa
 execution:
   branch: tactic-office-hours-session-type
   pr: 2961
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-28T18:03:08Z
+    mergeCommitSha: db92cc1a2892f159470be6796f0af8dc7ad04b9b
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: qa-fix attempt cap reached (ATTEMPT_N=2 == CAP=2) with 3
-    opus-fixable residue items pending (severe office-hours-graph --list
-    column-desync regression, minor undefined-leak in --type error message, and
-    an API-contract hardening decision) — no fix plan could be authored this
-    pass; escalating to office-hours"
-  since: 2026-07-25
-  recommendation: >-
-    ## Office-hours recommendation — `tactic-office-hours-session-type` (PR
-    #2961)
-
-
-    Three residue items are pending; the qa-fix attempt cap (2/2) stopped the
-    autonomous lane before a fix plan could be authored. Two are mechanical, one
-    needs your decision. Suggested order: decide item-7 first (it's the only
-    judgment call), then land all approved fixes in one commit.
-
-
-    ### item-1 — fix first, this is a live regression on the branch
-
-
-    **File:** `packages/intentionsutil/scripts/office-hours-graph`, line 123.
-
-
-    ```bash
-      local score nid date
-      while IFS=$'\t' read -r score nid date; do
-    ```
-
-
-    Unit 4 of this PR changed `office-hours-select.ts --list` from 3 columns to
-    4 (`rank\tsessionType\tnodeId\tsince`; the contract is documented at
-    `office-hours-select.ts:29`), but this consumer still reads 3 fields. `$nid`
-    therefore receives the session-type string, every node lookup fails, and the
-    queue-head walk reports "empty" while 111 nodes are parked.
-    `office-hours-graph` is the graph-native `/office-hours` entry point, so the
-    branch currently cannot pick a next node.
-
-
-    **Fix:** make it a 4-field read matching the new column order.
-
-
-    ```bash
-      local score sessiontype nid date
-      while IFS=$'\t' read -r score sessiontype nid date; do
-    ```
-
-
-    (Note the lowercase local name — `.claude/rules/` has a zsh path-clobber
-    caution about loop variable names; `sessiontype` is safe.)
-
-
-    Grep the tree for other `--list` consumers: line 118 of `office-hours-graph`
-    is the only invocation outside the selector's own header comments and
-    `parseSelectorArgs`. So this one edit closes the item — no other positional
-    readers of the old 3-column shape exist. Worth adding a comment at the read
-    site pointing at the `office-hours-select.ts:29` column contract so the next
-    column change is caught.
-
-
-    **Verify:** run `packages/intentionsutil/scripts/office-hours-graph` with no
-    target and confirm it names a real parked node id rather than printing
-    "empty".
-
-
-    ### item-4 — small UX fix, no decision needed
-
-
-    **File:** `packages/intentionsutil/scripts/office-hours-select.ts`,
-    `parseSelectorArgs`, lines 120–121 and the error at line 142.
-
-
-    When `--type` is the last argv token, `args[typeIdx + 1]` is `undefined` and
-    gets interpolated verbatim: `office-hours-select: unknown --type "undefined"
-    (expected: ...)`. Exit code is still 2 and nothing crashes; it just reads as
-    though the user typed the word "undefined".
-
-
-    **Fix:** before the unknown-value branch at 137–142, detect a missing or
-    flag-shaped value and emit a distinct message:
-
-
-    ```ts
-
-    if (typeIdx !== -1 && (typeValue === undefined ||
-    typeValue.startsWith("--"))) {
-      return { kind: "error", message: `office-hours-select: missing value for --type (expected: ${SESSION_TYPES.join(", ")})` };
-    }
-
-    ```
-
-
-    Add a `parseSelectorArgs` unit case for bare trailing `--type` and for
-    `--type --list`.
-
-
-    ### item-7 — needs your explicit decision before any code changes
-
-
-    **File:** `packages/intentionsutil/src/officeHours.ts`, `selectOfficeHours`
-    at lines 117–131; the behavior is documented at lines 103–113 and re-stated
-    in the inline comment at 123.
-
-
-    Today, when `target` is set, `sessionType` is silently ignored. That is
-    deliberate and documented, and the CLI already makes the combination
-    unreachable (`--type` is rejected alongside a positional at
-    `office-hours-select.ts:132–133`). The two adversarial skeptics reclassified
-    this from needs-human to opus-fixable on the grounds that
-    `selectOfficeHours` is exported from `packages/intentionsutil/src/index.ts`
-    — a public API boundary — and `.claude/rules/code-style.md` encourages
-    guards at such boundaries.
-
-
-    They're arguing a contract change, not a bug fix, so pick one explicitly:
-
-
-    - **(a) Keep silent-ignore.** Defensible: the JSDoc at 103–113 already
-    spells the behavior out, the plan called it intentional, and no in-repo
-    caller can reach the combination. If you take this, no code change is needed
-    beyond optionally tightening the JSDoc wording at line 113 to say *why*
-    (targeting is by id, type is a queue-ordering concern only) — then mark
-    item-7 resolved-as-designed in the PR comment so a future review pass
-    doesn't relitigate it.
-
-    - **(b) Add the guard.** Throw when both `target` and `sessionType` are
-    non-undefined, add a unit test asserting the throw, and rewrite the 103–113
-    JSDoc block plus the 123 inline comment to describe the new contract. This
-    is a breaking change to an exported function's contract — cheap now (no
-    other callers), but it is the kind of thing worth deciding once rather than
-    drifting into.
-
-
-    My read: (a) is the lower-risk close given the CLI already forecloses the
-    combination and the behavior is documented rather than accidental — but this
-    is exactly the call the escalation is asking you to make, so state it either
-    way rather than leaving it implicit.
-
-
-    ### Getting the PR merged
-
-
-    Items 1 and 4 are small, single-file, and low-risk — implement both directly
-    in this session (or in one subagent), plus item-7 per your decision. Then
-    either:
-
-
-    - **Push the fix commits directly.** The review/qa chain re-runs from CI
-    green; this is the shortest path and avoids the attempt-cap machinery
-    entirely.
-
-    - **Or reset the qa-fix attempt window** (clear/decrement the
-    `dispatch:qa-fix-attempt-2` marker) and let the autonomous Opus lane
-    implement all three, if you'd rather the chain own the fix. Only worth it if
-    you want the automated re-QA record; item-1 is a one-line change you can
-    verify by eye faster than a chain round-trip.
-
-
-    Before executing whichever disposition you choose, re-check `origin/main` —
-    the fleet may have landed the `office-hours-graph` column fix out-of-band
-    while this node sat parked, in which case item-1 is already closed and you
-    should not re-commit it.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -596,3 +440,16 @@ Manual / judgment checks:
   with `curriculum-review`/`requirement-discovery` rows showing the halved
   (penalized) rank. Sanity-check `--type curriculum-review --list` lists only
   curriculum parks, and `--type other --list` excludes them.
+
+## needs-main residue
+
+- **id:** item-6
+  **title:** Soft-penalty constant (0.5) tuning
+  **url_path:** `packages/intentionsutil/src/officeHours.ts`
+  **expected_outcome:** The office-hours queue head consistently offers the
+    session the author would have picked themselves; `SESSION_TYPE_PENALTY =
+    0.5` neither starves nor under-penalizes `requirement-discovery` /
+    `curriculum-review` parks.
+  **finding:** Planned deferral — only observable across repeated real
+    `/office-hours` sessions against a live queue; nothing at merge time can
+    decide whether 0.5 is the right weight.

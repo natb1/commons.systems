@@ -29,7 +29,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-main-post-merge-validation
   pr: 2962
@@ -40,6 +40,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:22:05Z
+    mergeCommitSha: 432bfe82662dca4c49eaf3c98d52856b4a165b56
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -325,30 +329,36 @@ Manual / observe-in-production (prose, not auto-runnable):
   cache-warmth conclusion, and any landed cheap win (or the reasoned decision
   not to) in the tactic's completion record.
 
-## needs-main residue
+## needs-main residue — resolved (skipped by human decision)
 
 `/qa-fix` ran all 11 script-verifiable checks in the QA plan (YAML validity,
 trigger shape, action-sha parity with `nixos-build`, no `if:` conditional,
 build-script invocation, permissions) — all PASS. The remaining 3 plan items
-are documented planned deferrals (this tactic's own Verification section
-already says so) that require observing `origin/main` post-merge; they are
-not fixable now and are handed to `tactic-main-qa-phase`:
+were documented planned deferrals requiring observation of `origin/main`
+post-merge. None names a `url_path` or a deployed-webpage outcome, so none was
+browser-verifiable via Claude-in-Chrome (`/qa-main` routed this to
+cannot-verify on that basis, 2026-07-25). The author (human, 2026-07-25)
+reviewed the three items directly and chose to skip further verification and
+close out this tactic rather than hold it open pending a GitHub Actions UI
+check — recorded below, not independently re-verified by this session.
 
 - **id 12 — Self-inclusion smoke test: workflow fires on its own merge commit**
   - URL path: N/A
   - Expected outcome: the first real `main-nix-validate` run is the merge
     commit that introduces the workflow (the workflow self-includes its own
     path in the `paths:` filter).
-  - Finding: cannot be confirmed pre-merge; verify via the Actions tab on
-    `origin/main` after this PR merges.
+  - Disposition: **skipped** by human decision 2026-07-25 — not re-verified;
+    the workflow file's `paths:` filter includes itself, so mechanically this
+    should have fired on merge `432bfe8`, but no Actions log was pulled to
+    confirm.
 
 - **id 13 — Build step actually executes (not skipped) on a real run**
   - URL path: N/A
   - Expected outcome: the `Build nixosConfigurations.nixos` step runs to
     completion (not skipped) on that first run, establishing a real timing
     baseline (0 logged executions today).
-  - Finding: cannot be confirmed pre-merge; verify by reading that run's job
-    log on `origin/main`.
+  - Disposition: **skipped** by human decision 2026-07-25 — not re-verified;
+    no Actions job log was read to confirm the step ran.
 
 - **id 14 — Red-main pickup path works end-to-end on a future nix-touching push**
   - URL path: N/A
@@ -356,5 +366,8 @@ not fixable now and are handed to `tactic-main-qa-phase`:
     incident) is detected by this workflow and flows into
     `strategy-main-health`'s existing, workflow-agnostic `main_broken_sha()`
     sensor with no extra wiring.
-  - Finding: requires a future failing nix build on `origin/main` to exercise
-    end-to-end; not assertable at merge time.
+  - Disposition: **skipped** by human decision 2026-07-25 — no future nix
+    breakage has occurred yet to exercise this path; not assertable now, and
+    not held open pending one. If a real breakage later reveals this path
+    doesn't work, file a fresh bug against `strategy-main-health` at that
+    time.

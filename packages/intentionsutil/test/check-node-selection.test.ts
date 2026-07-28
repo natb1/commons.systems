@@ -165,7 +165,7 @@ describe("evaluateSelection", () => {
         id: "tactic-p",
         kind: "tactic",
         phase: "implement",
-        office_hours: { reason: "author park", since: "2026-07-07", recommendation: null },
+        office_hours: { reason: "author park", since: "2026-07-07", recommendation: null, session_type: "other" },
       }),
     );
     const r = evaluateSelection({ nodeId: "tactic-p", selectedPhase: "implement", dir, stamp: null });
@@ -437,7 +437,7 @@ describe("evaluateSelection", () => {
         anode({
           id: "strategy-a",
           kind: "strategy",
-          office_hours: { reason: "author park", since: "2026-07-11", recommendation: null },
+          office_hours: { reason: "author park", since: "2026-07-11", recommendation: null, session_type: "other" },
         }),
       );
       const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
@@ -554,7 +554,7 @@ describe("evaluateSelection", () => {
           id: "tactic-draft-p",
           kind: "tactic",
           phase: null,
-          office_hours: { reason: "author park", since: "2026-07-16", recommendation: null },
+          office_hours: { reason: "author park", since: "2026-07-16", recommendation: null, session_type: "other" },
         }),
       );
       const r = evaluateSelection({ nodeId: "tactic-draft-p", selectedPhase: "align-tactics", dir, stamp: null });

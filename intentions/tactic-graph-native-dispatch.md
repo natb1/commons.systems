@@ -562,8 +562,20 @@ the node via the `office_hours` graph write. Scoped in
 ## 4. Coverage matrix
 
 Every legacy behavior maps to a home in the new family; nothing silently
-drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
-`.claude/skills/plan-issue/SKILL.md`.)
+drops.
+
+Behavior inventory anchors: both SKILL.md bodies were replaced by retirement
+stubs under `tactic-legacy-router-removal` Unit 2, so the inventories this
+matrix was derived from are no longer in the working tree. Read them at the
+pre-retirement blobs (`8e693b5d` is an ancestor of `origin/main`):
+
+```
+git show 8e693b5d:.claude/skills/file-issue/SKILL.md   # 616 lines
+git show 8e693b5d:.claude/skills/plan-issue/SKILL.md   # 691 lines
+```
+
+Any future audit of this matrix's completeness must diff against those blobs,
+not against the stubs.
 
 ### `/file-issue` → `/align-strategy` + `/align-tactics`
 

@@ -41,7 +41,7 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: review
+phase: done
 execution:
   branch: tactic-office-hours-concurrency-dedup
   pr: 2945
@@ -52,6 +52,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-25T18:21:29Z
+    mergeCommitSha: 68845d04dae5c425303f017937f5534b5673fe57
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -394,18 +398,29 @@ live-daemon session state) that cannot be mechanically re-created in an
 autonomous QA pass — planned deferrals, not defects — so they carry forward
 for post-merge verification against deployed main.
 
+`/qa-main` (2026-07-25): none of the three items are browser-verifiable — each
+depends on a live Claude daemon and a stubbed `claude` command
+(`OFFICE_HOURS_CLAUDE_CMD`), not on anything observable via a deployed web
+page (all three carry `url_path: current`, not a real path). Author-directed
+2026-07-25: skip rather than park for a human main-qa glance — mark all three
+skipped and send the node to `review` for a fresh human/code-review pass
+instead.
+
 - **id:** 8
   **title:** End-to-end `held` collision on a targeted live node (stubbed claude)
   **url_path:** current
   **expected_outcome:** Targeted launch on a live node errors with the `held <node-id> <job-id>` message and exits 1 without launching.
   **finding:** PR test plan lists this stubbed-claude end-to-end scenario as an unchecked manual item; live-session dedup can't be safely re-created mechanically in this pass.
+  **status:** skipped — not browser-verifiable; author-directed 2026-07-25 to skip rather than escalate to office-hours.
 - **id:** 9
   **title:** End-to-end untargeted skip-to-next-rank with a stubbed live session
   **url_path:** current
   **expected_outcome:** Untargeted launch skips the live node (stderr note) and launches the next rank; with no live sessions it launches the top-ranked node.
   **finding:** Depends on live daemon/session state the PR documents as manual-only; not mechanically re-verifiable here.
+  **status:** skipped — not browser-verifiable; author-directed 2026-07-25 to skip rather than escalate to office-hours.
 - **id:** 10
   **title:** End-to-end worktree provisioning (fresh off origin/main, cwd override)
   **url_path:** current
   **expected_outcome:** Provisioning creates/reuses the node-id worktree correctly, launches with bare name and cwd set to the provisioned path.
   **finding:** Requires a real `git worktree add` / launch cycle with stubbed claude that the PR lists as an unchecked manual scenario.
+  **status:** skipped — not browser-verifiable; author-directed 2026-07-25 to skip rather than escalate to office-hours.

@@ -22,13 +22,26 @@ edits to the serving `strategy-*.md`) landed on `origin/main` via
 
 It inherits along two axes, each with a part it deliberately does **not** take:
 
-- **From `/plan-issue` (`.claude/skills/plan-issue/SKILL.md`)** — take the
-  drift-review substance, the Explore/Plan subagent fan-out, the reuse-first
-  and design-proposals discipline, the plan-quality bar, the plan schema, and
-  the autonomous office-hours park model. Drop every gh mechanic: no
-  `dispatch-*` scripts, no plan-comment, no worktree-branch target parsing, no
-  owning-PR probe. The target is the `<strategy-node-id>` argument; sequencing
-  is `blocked_by` frontmatter edges, not a PR-precondition scan.
+- **From the retired `/plan-issue` lane** — the drift-review substance, the
+  Explore/Plan subagent fan-out, the reuse-first and design-proposals
+  discipline, the plan-quality bar, the plan schema, and the autonomous
+  office-hours park model. These are **no longer inherited by reference**:
+  `/plan-issue` is a retirement stub (`.claude/skills/plan-issue/SKILL.md`) with
+  no schema left in it. Their live homes are here and in this skill's workflow:
+  - **Plan schema and quality bar** — the `PLAN BODY SCHEMA` block inlined in
+    `buildPlanPrompt` (`.claude/workflows/align-tactics.js`), summarized under
+    "Plan each claude-eligible tactic" in Step 1 below. That block is
+    authoritative; nothing outside this repo's working tree needs to be read.
+  - **Reuse-first and design-proposals discipline** —
+    `.claude/rules/code-style.md` and `.claude/rules/design-proposals.md`.
+  - **Autonomous office-hours park model** —
+    `.claude/skills/align-tactics/references/autonomy.md`.
+  - **Drift review** — `buildDriftPrompt` in the same workflow file.
+
+  Dropped from that lane: every gh mechanic — no `dispatch-*` scripts, no
+  plan-comment, no worktree-branch target parsing, no owning-PR probe. The
+  target is the `<strategy-node-id>` argument; sequencing is `blocked_by`
+  frontmatter edges, not a PR-precondition scan.
 - **From `/align-strategy` (`.claude/skills/align-strategy/SKILL.md`)** — take
   the write path (`write-node.ts` → body `Edit` → `graph-commit`), the
   citation of `validateGraph` rules by number, and the register. Invert the
@@ -76,6 +89,17 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    session in the same worktree still counts as a held claim and stops the
    run. A held claim is **not** an `office_hours` park (it is not one of the
    three autonomy-contract conditions below) and **not** a defect.
+
+   Before ending the run on a held claim, record the terminal disposition —
+   this session did nothing and lost nothing, so reaping its job is correct:
+
+   ```bash
+   packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
+   ```
+
+   Without it the Stop hook holds the job alive (see the note at the end of
+   Step 2). The call is safe unconditionally: `mark-node-terminal` writes
+   nothing unless this job's own name is `<target-node-id>`.
 3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
    or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
@@ -247,9 +271,11 @@ on this thread. In brief, so a fresh reader still knows *what* happens:
   sole-tracker recording (clarification 28 — every defect lands as a tactic,
   never a side channel).
 - **Plan each claude-eligible tactic** (`buildPlanPrompt`) — a full clean-session
-  plan body per `/plan-issue`'s schema and quality bar (Context, units of work
-  each with Scope / Recommended model / Dependencies, Reuse, Verification),
-  authored on Opus so a fresh session with only the node body can execute it.
+  plan body per the `PLAN BODY SCHEMA` block inlined in that prompt (Context,
+  units of work each with Scope / Recommended model / Dependencies, Reuse,
+  Verification) and its quality bar: a fresh session with ONLY the node body
+  must be able to execute the plan. That block is the schema's canonical home,
+  and the plan is authored on Opus to meet the bar.
   A unit delivering a chart, dashboard, or other data-viz surface loads
   `/dataviz` (the mandated guidance source) and carries its chosen form,
   validated palette, and mark/interaction specs.
@@ -278,6 +304,20 @@ park-writing, and the fingerprint/round-accounting details (per-strategy
 `execution.strategy_fingerprint` map via `strategy-fingerprint.ts`, and the
 strategy's `rounds.count`/`last_completed`/`last_aligned` bookkeeping).
 
+Once the round has landed and `validate-graph.ts` is clean, record the
+terminal disposition:
+
+```bash
+packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" align-round
+```
+
+The Stop hook (`.claude/hooks/dispatch-stop.sh`) reaps this node worker's job
+only on positive evidence that the pass ended — `Stop` fires on every turn
+yield, not only on terminal exit, so an unmarked session is held alive instead
+of reaped. Call it unconditionally: `mark-node-terminal` writes nothing unless
+this job's own name is `<target-node-id>`, so a round that lands *child*
+tactics cannot authorize a reap on their behalf.
+
 ## Re-evaluation mode
 
 When invoked after a mid-flight strategy edit — the router detects a stale
@@ -304,9 +344,11 @@ forms relate.
   not this skill.
 - `/align-strategy` (recording the strategy under interview) and `/align-init`
   (fork onboarding) — sibling skills.
-- Deleting `/plan-issue` / `/file-issue` — that is
-  `tactic-legacy-router-removal`, gated on the legacy gh queue draining. Both
-  keep working for gh-issue work throughout this skill's rollout.
+- Retiring `/plan-issue` / `/file-issue` — done by
+  `tactic-legacy-router-removal` Unit 2. Both SKILL.md bodies are now
+  retirement stubs pointing here and at `/align-strategy`; neither works for
+  gh-issue work any more (GitHub Issues are disabled repo-wide). Deleting the
+  stub directories outright is not this skill's work either.
 - `phase: main-qa` — it is in the spec enum (strategy clarification 22) but
   **not** in `schema.ts`'s `PHASES`, so `write-node.ts` would throw on it.
   This skill lands only `phase: implement` (and consumes drafts); needs-main
