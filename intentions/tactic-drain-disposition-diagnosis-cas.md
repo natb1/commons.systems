@@ -40,7 +40,7 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: main-qa
+phase: done
 execution:
   branch: tactic-drain-disposition-diagnosis-cas
   pr: 2969
