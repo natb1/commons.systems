@@ -1,13 +1,34 @@
 // Office-hours queue selector — the offline disposition oracle for the
 // `office-hours-graph` entry script and the `/office-hours` skill's readiness
-// relay. Reads only the local `intentions/` store (no gh, no daemon, no
-// network) and writes a single machine-readable disposition line to stdout,
-// with any blocker advisory on stderr.
+// relay. Reads the `intentions/` store AT A GIT REF (default `origin/main`),
+// not the local working tree, and writes a single machine-readable disposition
+// line to stdout, with any blocker advisory on stderr.
 //
-// Run from anywhere (the store dir is resolved relative to this file, not cwd):
+// Why the ref: a selector that reads its own checkout answers from whatever
+// that worktree last synced, so a stale worktree silently reports stale park
+// state. Reading at `origin/main` makes the answer independent of the checkout
+// the script happens to run in.
+//
+// No gh, no daemon, no network of its own: this reads an ALREADY-FETCHED ref
+// via `git archive`. It never fetches. A caller that needs absolute freshness
+// runs `git fetch origin main` first — as `office-hours-graph` already does.
+//
+// Consequence, by design (not a bug): a node parked in the local working tree
+// but cleared on `origin/main` is reported `empty not-parked <node-id>`, and
+// vice versa. The ref is the authority.
+//
+// The launch cwd is still resolved against the LOCAL checkout
+// (`resolveSessionCwd` stats `<repoRoot>/.claude/worktrees/<node-id>`) — only
+// the node *store* moved to the ref, not worktree-path resolution.
+//
+// Run from anywhere (the repo root is resolved relative to this file, not cwd):
 //   npx tsx packages/intentionsutil/scripts/office-hours-select.ts            # queue head
 //   npx tsx packages/intentionsutil/scripts/office-hours-select.ts <node-id>  # single item
 //   npx tsx packages/intentionsutil/scripts/office-hours-select.ts --list     # human view
+//
+// Flags:
+//   --ref <git-ref>  read the store at this ref instead of `origin/main`.
+//                    An adopter with no `origin` remote can pass `--ref HEAD`.
 //
 // stdout disposition contract (exactly one line, except --list):
 //   launch <node-id> <cwd>     — launch here; cwd is the node's worktree if it
@@ -32,7 +53,8 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listNodes } from "../src/store.js";
+import { listNodesAtRef } from "./lib-store-at-ref.js";
+import type { IntentionNode } from "../src/schema.js";
 import {
   selectOfficeHours,
   officeHoursQueue,
@@ -46,7 +68,9 @@ import {
 // location, never from cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
-const intentionsDir = join(repoRoot, "intentions");
+
+/** The ref the store is read at when `--ref` is not passed. */
+const DEFAULT_REF = "origin/main";
 
 // --- Helpers (exported for tests) ------------------------------------------
 
@@ -105,15 +129,55 @@ export function formatDisposition(
 
 function main(): void {
   const args = process.argv.slice(2);
-  const wantList = args.includes("--list");
-  const positionals = args.filter((a) => !a.startsWith("--"));
+
+  // Explicit index loop, not a `filter(a => !a.startsWith("--"))`: `--ref`
+  // consumes the argv slot after it, and a filter would mistake that value
+  // (`origin/main`) for a positional node id.
+  let wantList = false;
+  let ref = DEFAULT_REF;
+  const positionals: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--list") {
+      wantList = true;
+    } else if (arg === "--ref") {
+      const value = args[i + 1];
+      if (value === undefined || value === "") {
+        process.stderr.write("office-hours-select: --ref requires a git-ref argument\n");
+        process.exit(2);
+      }
+      ref = value;
+      i++;
+    } else if (arg.startsWith("--")) {
+      process.stderr.write(`office-hours-select: unknown flag: "${arg}"\n`);
+      process.exit(2);
+    } else {
+      positionals.push(arg);
+    }
+  }
 
   if (wantList && positionals.length > 0) {
     process.stderr.write("office-hours-select: --list is mutually exclusive with a node-id\n");
     process.exit(2);
   }
+  if (positionals.length > 1) {
+    process.stderr.write("office-hours-select: at most one node-id may be given\n");
+    process.exit(2);
+  }
 
-  const nodes = listNodes(intentionsDir);
+  // Only the ref read is caught: a failed ref read is an environment problem
+  // this script reports as its own exit-2 failure. A schema-invalid node
+  // (`IntentionSchemaError`) is a repo-integrity failure and propagates uncaught.
+  let nodes: IntentionNode[];
+  try {
+    nodes = listNodesAtRef(repoRoot, ref);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("listNodesAtRef:")) {
+      process.stderr.write(`office-hours-select: ${err.message}\n`);
+      process.exit(2);
+    }
+    throw err;
+  }
 
   if (wantList) {
     for (const m of officeHoursQueue(nodes)) {
