@@ -42,20 +42,23 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution:
   branch: tactic-graph-router-live-worker-visibility
   pr: 2918
   attempts: {}
-  markers: []
+  markers:
+    - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-21
-    attempt: 1
-    pushed_sha: null
+  fix: null
+  completion:
+    mergedAt: 2026-07-26T05:06:34Z
+    mergeCommitSha: ba9874a89ef8be1f514f9f57bc89a6a5450128cf
+    graphCommitSha: null
 validates: []
-blocked_by:
-  - tactic-flake-hook-tests-select-tick
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -290,3 +293,8 @@ Manual/observational:
   finding: Planned deferral — this is a process change for future
     manual/emulated-tick launcher runs, not mechanically verifiable at this
     PR's merge; note it for the author at the next emulated tick.
+  disposition: skipped — author directed /qa-main (2026-07-28) to close
+    without live-prod verification instead of escalating to office-hours;
+    not machine/browser-verifiable by design (url_path n/a). The manual-tick
+    launcher migration itself remains a downstream process change to apply
+    at the next emulated tick.

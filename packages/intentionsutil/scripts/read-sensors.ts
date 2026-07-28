@@ -143,11 +143,20 @@ const ghExecOpts = {
  * neutral/skipped). Empty stdout maps to the exact `strategy-main-health`
  * `success_signal.threshold` string verbatim (though `deriveGap` compares
  * case/whitespace-insensitively, `sensors.ts:98-112`); non-empty stdout maps to
- * a fixed `red: <sha> ...` phrase — never raw log content. A `repo-health`
- * invocation failure (non-zero exit) must not throw (total-sensor contract
- * above) and reads as `"unknown"`, which can never equal the threshold string,
- * so `gap` stays non-null and the sensor fails safe rather than reporting a
- * false green.
+ * a fixed `red: <sha> ...` phrase — never raw log content. That green literal
+ * stays the frozen threshold-matching case — no `strategy-main-health` edit is
+ * needed by this unit.
+ *
+ * `repo-health --main-broken-sha` also exits non-zero (3) with the literal
+ * stdout token `NO_ATTRIBUTABLE_CHECKS` when the attributable check-run/
+ * workflow-run set for origin/main HEAD is empty or entirely misattributed to
+ * another branch (fail-closed: cannot confirm green, but it's not a confirmed
+ * red SHA either). That case reads as a distinct fixed `"unknown: ..."`
+ * phrase, not the plain `"unknown"` used for any other invocation failure.
+ * Either way, a `repo-health` invocation failure (non-zero exit) must not
+ * throw (total-sensor contract above); both unknown readings can never equal
+ * the threshold string, so `gap` stays non-null and the sensor fails safe
+ * rather than reporting a false green.
  *
  * SIDE EFFECT: unlike the other sensors in this file, reading this one is not
  * pure. `repo-health --main-broken-sha` reconciles the durable `main_broken`
@@ -170,7 +179,14 @@ export function readMainHealth(binaryPath: string): string {
   let sha: string;
   try {
     sha = execFileSync(binaryPath, ["--main-broken-sha"], ghExecOpts).trim();
-  } catch {
+  } catch (err: unknown) {
+    if (
+      isPlainObject(err) &&
+      typeof err.stdout === "string" &&
+      err.stdout.trim() === "NO_ATTRIBUTABLE_CHECKS"
+    ) {
+      return "unknown: no check on the current origin/main HEAD is attributable to main's own workflow (empty or misattributed check set) — cannot confirm green";
+    }
     return "unknown";
   }
   if (sha === "") {
@@ -632,6 +648,158 @@ const lifecycleSensor: Sensor = {
   },
 };
 
+// --- Delegation-records sensor ---------------------------------------------
+// Reads every `kind: delegation` record's exercise state into a compact
+// aggregate for `strategy-exercise-recovery-paths` (whose success_signal names
+// this sensor). Local store reads only — no network, no git, no analytics.
+
+/**
+ * The exact `success_signal.sensor` string on
+ * `intentions/strategy-exercise-recovery-paths.md`. Registry resolution is by
+ * verbatim string match (`src/sensors.ts` `SensorRegistry.resolve`), so this
+ * constant MUST equal that node's `success_signal.sensor` character-for-character.
+ */
+const DELEGATION_RECORDS_SENSOR_NAME = "the delegation records themselves";
+
+/**
+ * One delegation record's exercise-relevant fields, extracted from the free-form
+ * `attributes` of a `kind: delegation` node. The shared extraction that the
+ * aggregate reading and the `--report` table both read from (and that the
+ * later attention surface, `tactic-delegation-capture-visibility`, can reuse).
+ */
+export interface DelegationRecordReading {
+  id: string;
+  origin: string;
+  lastExercised: string | null;
+  lastAssessed: string;
+  nonDelegableFloor: string;
+  reviewTrigger: string;
+}
+
+/** Guard a required non-empty string attribute, naming the record on failure. */
+function requireAttrString(attrs: Record<string, unknown>, key: string, id: string): string {
+  const value = attrs[key];
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new IntentionSchemaError(
+      `Delegation record "${id}" attributes.${key} must be a non-empty string, got ${typeof value}.`,
+    );
+  }
+  return value;
+}
+
+/**
+ * Read every `kind: delegation` node from the store and extract its
+ * exercise-relevant fields. Validates the free-form `attributes` shape at this
+ * boundary and throws `IntentionSchemaError` naming the malformed record.
+ *
+ * A schema-invalid delegation record is a real graph defect, so this
+ * deliberately HALTS rather than degrading to a status string — the honest
+ * failure for a misconfigured input (`.claude/rules/code-style.md`). This is
+ * the intended exception to the "sensor read must be total" convention above:
+ * that convention shields against transient local-command failures (git
+ * unavailable), not against structurally invalid graph data.
+ */
+export function readDelegationRecords(dir: string): DelegationRecordReading[] {
+  const records: DelegationRecordReading[] = [];
+  for (const node of listNodes(dir)) {
+    if (node.kind !== "delegation") {
+      continue;
+    }
+    const attrs = node.attributes;
+    const origin = requireAttrString(attrs, "origin", node.id);
+    const lastAssessed = requireAttrString(attrs, "last_assessed", node.id);
+    const nonDelegableFloor = requireAttrString(attrs, "non_delegable_floor", node.id);
+    const reviewTrigger = requireAttrString(attrs, "review_trigger", node.id);
+
+    const irreversibility = attrs.irreversibility;
+    if (!isPlainObject(irreversibility)) {
+      throw new IntentionSchemaError(
+        `Delegation record "${node.id}" attributes.irreversibility must be an object.`,
+      );
+    }
+    if (!("last_exercised" in irreversibility)) {
+      throw new IntentionSchemaError(
+        `Delegation record "${node.id}" attributes.irreversibility is missing last_exercised.`,
+      );
+    }
+    const rawLastExercised = irreversibility.last_exercised;
+    if (rawLastExercised !== null && typeof rawLastExercised !== "string") {
+      throw new IntentionSchemaError(
+        `Delegation record "${node.id}" attributes.irreversibility.last_exercised must be a ` +
+          `string or null, got ${typeof rawLastExercised}.`,
+      );
+    }
+
+    records.push({
+      id: node.id,
+      origin,
+      lastExercised: rawLastExercised,
+      lastAssessed,
+      nonDelegableFloor,
+      reviewTrigger,
+    });
+  }
+  return records;
+}
+
+/**
+ * The compact aggregate reading that lands on the strategy's `reading`. Declined
+ * records (`origin: declined`) are counted as their own class — never as
+ * unexercised: per the strategy's 2026-07-11 clarification and kind-delegation's
+ * abstention doctrine a declined delegation has no entered path to walk, so the
+ * portfolio review (not a drill) is its exercise. The denominator M is the total
+ * record count so the reader sees how many of ALL records are exercised, with
+ * the declined class broken out. Includes the read date so the fresh-reading
+ * gate can compare against the strategy's `rounds.last_completed`.
+ */
+export function readDelegationRecordsReading(dir: string, today: Date = new Date()): string {
+  const records = readDelegationRecords(dir);
+  const total = records.length;
+  const declined = records.filter((r) => r.origin === "declined");
+  const active = records.filter((r) => r.origin !== "declined");
+  const exercised = active.filter((r) => r.lastExercised !== null);
+  const oldestAssessed = records.reduce<string | null>(
+    (min, r) => (min === null || r.lastAssessed < min ? r.lastAssessed : min),
+    null,
+  );
+  const readDate = today.toISOString().slice(0, 10);
+  return (
+    `${exercised.length} of ${total} delegation records exercised (last_exercised set); ` +
+    `${declined.length} declined-origin (no entered path to exercise); ` +
+    `oldest last_assessed ${oldestAssessed ?? "none"} (sensor read ${readDate})`
+  );
+}
+
+/** Escape a free-form prose cell so it cannot break the markdown table. */
+function escapeReportCell(value: string): string {
+  return value.replace(/\r?\n/g, " ").replace(/\|/g, "\\|").trim();
+}
+
+/**
+ * A markdown table over the same extraction — one row per delegation record —
+ * for the human portfolio review (`tactic-recovery-portfolio-review`). Local
+ * store reads only; no Firestore, no network.
+ */
+export function renderDelegationRecordsReport(dir: string): string {
+  const records = readDelegationRecords(dir);
+  const header =
+    "| id | origin | last_exercised | last_assessed | non_delegable_floor | review_trigger |\n" +
+    "| --- | --- | --- | --- | --- | --- |";
+  const rows = records.map(
+    (r) =>
+      `| ${r.id} | ${r.origin} | ${r.lastExercised ?? "null"} | ${r.lastAssessed} | ` +
+      `${escapeReportCell(r.nonDelegableFloor)} | ${escapeReportCell(r.reviewTrigger)} |`,
+  );
+  return [header, ...rows].join("\n");
+}
+
+const delegationRecordsSensor: Sensor = {
+  name: DELEGATION_RECORDS_SENSOR_NAME,
+  read(): string {
+    return readDelegationRecordsReading(intentionsDir);
+  },
+};
+
 // --- intention-store sensor --------------------------------------------------
 // The verbatim `success_signal.sensor` name strategy-graph-drives-dispatch
 // declares, and the store's self-measuring sensor: it counts how many open
@@ -756,6 +924,7 @@ export function buildDefaultRegistry(): SensorRegistry {
   registry.register(mainHealthSensor);
   registry.register(tokenEconomySensor);
   registry.register(lifecycleSensor);
+  registry.register(delegationRecordsSensor);
   // Register the intention-store sensor last and have it derive the set of
   // registered sensor names from the registry itself at read() time — by then
   // the registry holds every sensor, including this one. Deriving the set (vs
@@ -844,6 +1013,13 @@ export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSum
 // --- Main ------------------------------------------------------------------
 
 function main(): void {
+  // `--report`: print the per-record delegation portfolio table and exit. No
+  // frontier read, no writes — a read-only view for the human portfolio review.
+  if (process.argv.includes("--report")) {
+    process.stdout.write(renderDelegationRecordsReport(intentionsDir) + "\n");
+    return;
+  }
+
   const registry = buildDefaultRegistry();
   const summary = readStoreSensors(intentionsDir, registry);
 

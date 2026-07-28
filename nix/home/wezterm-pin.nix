@@ -39,5 +39,5 @@
   # reports a mismatch, first confirm the live zip still unpacks to
   # WezTerm-windows-${version}; if it does, only this hash needs refreshing and
   # the other four fields must be left alone.
-  windowsZipHash = "sha256-QiVmQOEZToNMDnFfVLujiHPl4MrKYXyoLtvCfqzv5X8=";
+  windowsZipHash = "sha256-bTvVHVpB8Mh6g2lF2RB9Egs2IApanVb5Z1R2M9UCZZ8=";
 }

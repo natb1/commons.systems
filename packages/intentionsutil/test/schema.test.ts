@@ -79,6 +79,7 @@ describe("validateNode", () => {
       markers: ["dispatch:qa"],
       strategy_fingerprint: "abc123",
       fix: null,
+      completion: null,
     });
     expect(result.validates).toEqual(["strategy-1"]);
     expect(result.blocked_by).toEqual(["tactic-2"]);
@@ -86,6 +87,7 @@ describe("validateNode", () => {
       reason: "needs human input",
       since: "2026-07-03",
       recommendation: "escalate to the author",
+      session_type: "other",
     });
     expect(result.pace_exempt).toBe(true);
     expect(result.rounds).toEqual({
@@ -111,6 +113,61 @@ describe("validateNode", () => {
       markers: [],
       strategy_fingerprint: null,
       fix: null,
+      completion: null,
+    });
+  });
+
+  it("round-trips a completion object with a full ISO-8601 mergedAt timestamp", () => {
+    const result = validateNode({
+      id: "n1-completion-pr",
+      kind: "tactic",
+      statement: "Execution with a real PR-merge completion.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: 42,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        completion: {
+          mergedAt: "2026-07-11T12:00:00Z",
+          mergeCommitSha: "feedface",
+          graphCommitSha: null,
+        },
+      },
+    });
+    expect(result.execution?.completion).toEqual({
+      mergedAt: "2026-07-11T12:00:00Z",
+      mergeCommitSha: "feedface",
+      graphCommitSha: null,
+    });
+  });
+
+  it("round-trips a completion object for the manual/out-of-band graphCommitSha path", () => {
+    const result = validateNode({
+      id: "n1-completion-oob",
+      kind: "tactic",
+      statement: "Execution with an out-of-band completion.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        completion: {
+          mergedAt: null,
+          mergeCommitSha: null,
+          graphCommitSha: "abc123",
+        },
+      },
+    });
+    expect(result.execution?.completion).toEqual({
+      mergedAt: null,
+      mergeCommitSha: null,
+      graphCommitSha: "abc123",
     });
   });
 
@@ -436,6 +493,7 @@ describe("validateNode", () => {
       reason: "parked",
       since: "2026-07-06",
       recommendation: null,
+      session_type: "other",
     });
   });
 
@@ -477,6 +535,45 @@ describe("validateNode", () => {
         /YYYY-MM-DD date string for office_hours.since/,
       );
     }
+  });
+
+  it("accepts each of the three office_hours.session_type enum values", () => {
+    for (const sessionType of ["requirement-discovery", "curriculum-review", "other"]) {
+      const result = validateNode({
+        id: `n1-oh-type-${sessionType}`,
+        kind: "tactic",
+        statement: "Office hours with an explicit session_type.",
+        owner: "ai",
+        status: "raw",
+        office_hours: { reason: "parked", since: "2026-07-06", session_type: sessionType },
+      });
+      expect(result.office_hours?.session_type).toBe(sessionType);
+    }
+  });
+
+  it("defaults office_hours.session_type to other when omitted", () => {
+    const result = validateNode({
+      id: "n1-oh-notype",
+      kind: "tactic",
+      statement: "Office hours without a session_type.",
+      owner: "ai",
+      status: "raw",
+      office_hours: { reason: "parked", since: "2026-07-06" },
+    });
+    expect(result.office_hours?.session_type).toBe("other");
+  });
+
+  it("rejects an unknown office_hours.session_type", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-oh-badtype",
+        kind: "tactic",
+        statement: "Office hours with an unknown session_type.",
+        owner: "ai",
+        status: "raw",
+        office_hours: { reason: "parked", since: "2026-07-06", session_type: "workshop" },
+      }),
+    ).toThrow();
   });
 
   it("rejects a rounds with a negative or non-integer count", () => {
@@ -1174,7 +1271,7 @@ describe("validateGraph", () => {
       gnode({
         id: "virtue-1",
         kind: "virtue",
-        office_hours: { reason: "parked", since: "2026-07-03", recommendation: null },
+        office_hours: { reason: "parked", since: "2026-07-03", recommendation: null, session_type: "other" },
       }),
     ];
     expect(() => validateGraph(nodes)).toThrow(
@@ -1198,7 +1295,7 @@ describe("validateGraph", () => {
       gnode({
         id: "strategy-1",
         kind: "strategy",
-        office_hours: { reason: "awaiting input", since: "2026-07-03", recommendation: null },
+        office_hours: { reason: "awaiting input", since: "2026-07-03", recommendation: null, session_type: "other" },
         pace_exempt: true,
       }),
     ];

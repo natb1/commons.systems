@@ -43,7 +43,7 @@ trap 'rm -rf "$TMP"' EXIT
 SUT_DIR="$TMP/scripts"
 MAIN_WT="$TMP/main"
 PKG_DIR="$MAIN_WT/packages/intentionsutil/scripts"
-mkdir -p "$SUT_DIR" "$MAIN_WT" "$PKG_DIR"
+mkdir -p "$SUT_DIR" "$MAIN_WT" "$PKG_DIR" "$MAIN_WT/.claude/worktrees"
 
 # Copy the SUT and its sourced libs (lib-reservation-ledger.sh pulls in lib.sh
 # and lib-claude-agents.sh). The real dispatch-phase-effort is pure, so copy it
@@ -59,6 +59,7 @@ chmod +x "$SUT_DIR/dispatch-graph-execute" "$SUT_DIR/dispatch-phase-effort"
 SPAWN_LOG="$TMP/spawn.log"
 PARK_LOG="$TMP/park.log"
 DEMOTE_LOG="$TMP/demote.log"
+HOLD_LOG="$TMP/hold.log"
 
 # provision-node-worktree stub: echo the worktree path on exit 0; exit PROV_RC.
 cat >"$SUT_DIR/provision-node-worktree" <<'STUB'
@@ -87,8 +88,14 @@ cat >"$PKG_DIR/demote-node-to-implement" <<'STUB'
 printf '%s\n' "$*" >> "$DEMOTE_LOG"
 exit "${DEMOTE_RC:-0}"
 STUB
+# hold-node stub: log the full argv, exit HOLD_RC.
+cat >"$PKG_DIR/hold-node" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$HOLD_LOG"
+exit "${HOLD_RC:-0}"
+STUB
 chmod +x "$SUT_DIR/provision-node-worktree" "$SUT_DIR/dispatch-spawn-job" \
-  "$PKG_DIR/park-node" "$PKG_DIR/demote-node-to-implement"
+  "$PKG_DIR/park-node" "$PKG_DIR/demote-node-to-implement" "$PKG_DIR/hold-node"
 
 RES_DIR="$TMP/reservations"
 mkdir -p "$RES_DIR"
@@ -99,12 +106,12 @@ mkdir -p "$RES_DIR"
 OUT=""
 RC=0
 run_exec() {
-  : >"$SPAWN_LOG"; : >"$PARK_LOG"; : >"$DEMOTE_LOG"
+  : >"$SPAWN_LOG"; : >"$PARK_LOG"; : >"$DEMOTE_LOG"; : >"$HOLD_LOG"
   set +e
   OUT=$(
     export DISPATCH_GRAPH_MAIN_WORKTREE="$MAIN_WT"
     export DISPATCH_RESERVATION_DIR="$RES_DIR"
-    export SPAWN_LOG PARK_LOG DEMOTE_LOG
+    export SPAWN_LOG PARK_LOG DEMOTE_LOG HOLD_LOG
     "$SUT_DIR/dispatch-graph-execute" "$@"
   )
   RC=$?
@@ -174,14 +181,84 @@ assert_eq "waiting exit 0" "0" "$RC"
 assert_eq "waiting spawns nothing" "" "$(cat "$SPAWN_LOG")"
 
 # ============================================================================
-# Case 5: provision exit 11 -> parked (no spawn)
+# Case 5: provision exit 11 -> the /dispatch-conflict Lane 3 session is the
+# first responder: it is spawned in the node's own worktree, the reservation is
+# cleared, and NO strike file, NO hold-node call and NO park-node write happen.
 # ============================================================================
-echo "Case 5: provision exit 11 -> parked via park-node, no spawn"
+echo "Case 5: provision exit 11 -> conflict lane spawned, no strike, no graph write"
+rm -f "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes"
+touch "$RES_DIR/tactic-c"
 PROV_RC=11 run_exec "tactic-c:tactic:qa"
-assert_eq "conflict stdout" "parked tactic-c" "$OUT"
-assert_eq "conflict exit 0" "0" "$RC"
-assert_eq "conflict spawns nothing" "" "$(cat "$SPAWN_LOG")"
-assert_contains "conflict parks the node" "tactic-c" "$(cat "$PARK_LOG")"
+SPAWN=$(cat "$SPAWN_LOG")
+assert_eq "conflict-lane stdout" "conflict-lane tactic-c" "$OUT"
+assert_eq "conflict-lane exit 0" "0" "$RC"
+assert_contains "conflict-lane invokes /dispatch-conflict on the node id" \
+  "/dispatch-conflict tactic-c" "$SPAWN"
+assert_contains "conflict-lane --cwd is the node's own worktree" \
+  "--cwd $MAIN_WT/.claude/worktrees/tactic-c" "$SPAWN"
+assert_contains "conflict-lane --name is the node id" "--name tactic-c" "$SPAWN"
+assert_contains "conflict-lane orchestrator model sonnet" "--model sonnet" "$SPAWN"
+assert_contains "conflict-lane spawns with --no-verify" "--no-verify" "$SPAWN"
+assert_eq "conflict-lane makes no park-node write" "" "$(cat "$PARK_LOG")"
+assert_eq "conflict-lane makes no hold-node write" "" "$(cat "$HOLD_LOG")"
+assert_eq "conflict-lane writes no strike file" "gone" \
+  "$([ -e "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes" ] && echo present || echo gone)"
+assert_eq "conflict-lane clears the reservation marker" "gone" \
+  "$([ -e "$RES_DIR/tactic-c" ] && echo present || echo gone)"
+
+# A successful kick must also CLEAR a strike file left by earlier failed kicks:
+# the backstop's counter means "consecutive failures to launch the lane", which
+# is what its hold reason asserts.
+printf '%s\n' "3" > "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes"
+touch "$RES_DIR/tactic-c"
+PROV_RC=11 run_exec "tactic-c:tactic:qa"
+assert_eq "conflict-lane stdout after prior strikes" "conflict-lane tactic-c" "$OUT"
+assert_eq "a successful kick resets the strike counter" "gone" \
+  "$([ -e "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes" ] && echo present || echo gone)"
+
+# ============================================================================
+# Case 5b: the strike-then-hold ladder survives as the BACKSTOP for the case
+# where the conflict lane itself cannot be launched. Repeated exit-11 runs whose
+# lane spawn fails accumulate strikes (no graph write below the cap), and the
+# cap-th such run escalates to hold-node.
+# ============================================================================
+echo "Case 5b: repeated exit-11 runs with an unlaunchable conflict lane accumulate strikes, cap-th run holds"
+rm -f "$MAIN_WT/.claude/worktrees/tactic-acc.conflict-strikes"
+touch "$RES_DIR/tactic-acc"
+for n in 1 2 3 4; do
+  PROV_RC=11 SPAWN_RC=1 run_exec "tactic-acc:tactic:qa"
+  assert_eq "accumulate strike $n stdout" "failed tactic-acc spawn-failed (strike $n/5)" "$OUT"
+  assert_eq "accumulate strike $n exit 1" "1" "$RC"
+  assert_eq "accumulate strike $n no hold-node write" "" "$(cat "$HOLD_LOG")"
+  assert_eq "accumulate strike $n no park-node write" "" "$(cat "$PARK_LOG")"
+  assert_eq "accumulate strike $n strike file holds $n" "$n" \
+    "$(cat "$MAIN_WT/.claude/worktrees/tactic-acc.conflict-strikes")"
+  # A failed lane kick leaves the reservation for the sweep, exactly as the
+  # exit-0 path's own spawn-failure handling does.
+  assert_eq "accumulate strike $n leaves the reservation marker" "present" \
+    "$([ -e "$RES_DIR/tactic-acc" ] && echo present || echo gone)"
+done
+# 5th run: strikes reach the cap -> escalate to hold-node.
+PROV_RC=11 SPAWN_RC=1 run_exec "tactic-acc:tactic:qa"
+assert_eq "cap-th run stdout" "held tactic-acc" "$OUT"
+assert_eq "cap-th run exit 0" "0" "$RC"
+# The only spawn attempted on the exit-11 path is the conflict lane itself (it
+# failed here) — the node's own phase skill is never launched.
+assert_not_contains "cap-th run never launches the phase skill" "/qa-fix" "$(cat "$SPAWN_LOG")"
+assert_contains "cap-th run calls hold-node with --kind provision-conflict" \
+  "tactic-acc --kind provision-conflict" "$(cat "$HOLD_LOG")"
+assert_eq "cap-th run makes no park-node write" "" "$(cat "$PARK_LOG")"
+assert_eq "cap-th run clears the strike sidecar" "gone" \
+  "$([ -e "$MAIN_WT/.claude/worktrees/tactic-acc.conflict-strikes" ] && echo present || echo gone)"
+
+# ============================================================================
+# Case 5c: exit 0 (successful provision) clears the strike sidecar file
+# ============================================================================
+echo "Case 5c: exit 0 clears any accumulated strike sidecar"
+printf '%s\n' "3" > "$MAIN_WT/.claude/worktrees/tactic-clr.conflict-strikes"
+run_exec "tactic-clr:tactic:implement"
+assert_eq "exit-0 clears sidecar" "gone" \
+  "$([ -e "$MAIN_WT/.claude/worktrees/tactic-clr.conflict-strikes" ] && echo present || echo gone)"
 
 # ============================================================================
 # Case 6: provision exit 12 -> skipped, reservation cleared, no spawn
@@ -224,12 +301,17 @@ assert_eq "kick-fail stdout" "failed tactic-k spawn-failed" "$OUT"
 assert_eq "kick-fail exit 1" "1" "$RC"
 
 # ============================================================================
-# Case 10: park-node failure on a conflict -> failed, exit 1
+# Case 10: hold-node failure once the conflict strike cap is exceeded ->
+# failed, exit 1
 # ============================================================================
-echo "Case 10: park-node failure -> failed, exit 1"
-PROV_RC=11 PARK_RC=1 run_exec "tactic-p:tactic:qa"
-assert_eq "park-fail stdout" "failed tactic-p park-failed" "$OUT"
-assert_eq "park-fail exit 1" "1" "$RC"
+echo "Case 10: hold-node failure at the strike cap -> failed, exit 1"
+rm -f "$MAIN_WT/.claude/worktrees/tactic-p.conflict-strikes"
+printf '%s\n' "4" > "$MAIN_WT/.claude/worktrees/tactic-p.conflict-strikes"
+# SPAWN_RC=1 puts the run on the backstop path: the conflict lane cannot be
+# launched, so the strike ladder runs and this run hits the cap.
+PROV_RC=11 SPAWN_RC=1 HOLD_RC=1 run_exec "tactic-p:tactic:qa"
+assert_eq "hold-fail stdout" "failed tactic-p hold-failed" "$OUT"
+assert_eq "hold-fail exit 1" "1" "$RC"
 
 # ============================================================================
 # Case 11: malformed spec -> failed, exit 1

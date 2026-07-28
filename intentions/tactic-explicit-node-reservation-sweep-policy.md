@@ -43,6 +43,7 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -238,3 +239,22 @@ consulting `graph-select-target --node`, noting this would diverge from
 documenting explicitly that explicit-node dispatch intentionally does not
 reclaim stale reservations. Scope: `dispatch-select-tick`; low priority; no
 user-facing production surface.
+
+## needs-main residue
+
+### 5. Design judgment — running the sweep (option 1) is the right disposition vs. documenting the gap
+
+- URL path: current
+- Expected outcome: Human confirms that reclaiming the stranded marker (so
+  explicit dispatch proceeds) is the desired policy and that best-effort
+  `|| true` non-fatal semantics are acceptable — a sweep failure should never
+  block the explicit dispatch.
+- Finding: This is a policy call already made by `/align-tactics` (see the
+  Context/Decision above: option 1 — run `reservation_sweep` — was chosen
+  over option 2 — merely documenting the gap — because a stale dead-session
+  marker silently defeats the whole point of explicit human dispatch
+  overriding the autonomous pace curve). QA's triage subagent flagged this
+  for office-hours ratification as a subjective policy call rather than a
+  machine-assertable fact (`Flag: planned-deferral`); the qa-fix disposition
+  workflow classified it `needs-main` per the planned-deferral rule
+  (issue #1891) — verified downstream, not at this PR's merge.
