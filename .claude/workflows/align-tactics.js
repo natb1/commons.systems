@@ -22,7 +22,12 @@
  *     each claude-eligible one (runs every phase).
  *   - "tactic": finalize/re-plan a single existing tactic node — SKIPS the
  *     `decompose` phase entirely (there is nothing to decompose; only the one
- *     node's plan body needs authoring).
+ *     node's plan body needs authoring). It also runs the drift phase with the
+ *     round-eligibility sanity check disabled (that check — office_hours null,
+ *     signal unvalidated, fresh-reading gate, no non-draft sibling already on
+ *     the signal path, rounds.count < 2 — is a strategy-round question; a
+ *     tactic-mode run opens no round) and every park it emits targets the
+ *     target tactic node, never the strategy.
  *
  * args IN:
  *   { mode: "strategy" | "tactic",
@@ -50,6 +55,9 @@
  *   - gates: born-parked author-approval gates emitted by decompose.
  *   - parks: every park collected across drift / decompose / plan, each
  *     { target, reason, category }.
+ *   - drift.eligibility.decomposable: meaningful in strategy mode only (the
+ *     round-eligibility sanity check's verdict); pinned true in tactic mode,
+ *     where the check does not run.
  *   - deviation: LIVE — true when any park exists or drift said do not proceed.
  *   - disposition: enum {completed, completed_with_fixes, escalated} per
  *     .claude/docs/outcome-envelope.md.

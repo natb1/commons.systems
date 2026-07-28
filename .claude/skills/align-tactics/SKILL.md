@@ -216,7 +216,11 @@ args = {
 The eligibility sanity check (`office_hours` null, signal unvalidated, the
 fresh-reading gate, no non-draft child already on the signal path,
 `rounds.count < 2`) is the Workflow's drift phase — do **not** re-decide it here;
-just supply the inputs it judges from.
+just supply the inputs it judges from. This check is **strategy-mode only**. A
+per-node `/align-tactics <tactic-id>` run does not evaluate it — a sibling
+tactic (in-flight or completed-but-unpruned) sitting on the strategy's signal
+path never blocks a per-node finalize; that run's drift review judges Side A /
+Side B against the one target node and parks the tactic, never the strategy.
 
 **Invoke the Workflow tool on `.claude/workflows/align-tactics.js`**, passing
 `args`. This skill is a sanctioned caller of that Workflow — no `ultracode`
@@ -250,7 +254,8 @@ on this thread. In brief, so a fresh reader still knows *what* happens:
   human-decided) and Side B (the round's plans depend on an *unrecorded* premise
   → a **material** premise parks the strategy for author ratification, an
   **immaterial** one lands as a dated `clarifications` entry without
-  interrupting). Absorbs `/plan-issue`'s relevance/drift, convention-drift, and
+  interrupting). (In `mode: "tactic"`, both sides park **the target tactic**
+  instead of the strategy.) Absorbs `/plan-issue`'s relevance/drift, convention-drift, and
   merged-work-overlap review, with the graph as the corpus. Every clarification
   answer carries a dated provenance clause (`validateGraph` rule 17 enforces the
   date-presence half).
