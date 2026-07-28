@@ -7,9 +7,11 @@
 # Reads newline-separated repo-relative paths on STDIN (mirrors
 # dispatch-run-verification's stdin design — no gh, no network, so it is
 # unit-testable without mocks). Writes to stdout the subset of those paths
-# that are agent-behavior config: anything under `.claude/`, plus a top-level
-# or nested `settings.json` / `settings.local.json` under `.claude/`. This is
-# a path-prefix match only — file contents are never read.
+# that are agent-behavior config: every path under `.claude/`, matched on
+# path prefix only — file contents are never read. A `settings.json` or
+# `settings.local.json` nested under `.claude/` is already caught by this
+# prefix match; a repo-root `settings.json` outside `.claude/` is
+# deliberately NOT matched.
 #
 # This is a PREDICATE, not a report: exit 0 means the input change set has NO
 # config-scope paths ("safe" — nothing self-modifying); exit 1 means it has at
