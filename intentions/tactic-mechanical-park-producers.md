@@ -21,10 +21,11 @@ rationale: "Byproduct of the 2026-07-25 concurrency/serialization review,
   fresh-main/rollback mechanics. Producer 1's ideal greenfield (an orthogonal
   execution.conflict interrupt routed to /dispatch-conflict) is already specced
   and in-flight as tactic-graph-router-conflict-routing (blocked_by
-  tactic-dispatch-conflict-greenfield) — this tactic ships the interim
-  brownfield bridge (a free local-retry tier, then a tracked hold) rather than
-  duplicating that design; Unit 3's comments record the convergence so the
-  strike/hold branch is deleted when that tactic lands."
+  tactic-dispatch-conflict-branch-merge-lane, repointed 2026-07-27 after
+  tactic-dispatch-conflict-greenfield shipped as PR #2951 and was pruned) — this
+  tactic ships the interim brownfield bridge (a free local-retry tier, then a
+  tracked hold) rather than duplicating that design; Unit 3's comments record
+  the convergence so the strike/hold branch is deleted when that tactic lands."
 reading: null
 gap: null
 serves:
@@ -44,16 +45,20 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: qa
+phase: main-qa
 execution:
   branch: tactic-mechanical-park-producers
   pr: 2970
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-26T05:07:00Z
+    mergeCommitSha: 3e3bcca64eace2931d8fc69d4c293abfaa9ba4de
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -119,13 +124,13 @@ no park, in the common case.
 
 That greenfield is **already designed and already in flight as two separate
 tactics** — verified on `origin/main`: `intentions/tactic-graph-router-conflict-routing.md`
-(`phase: implement`, `blocked_by: [tactic-dispatch-conflict-greenfield]`)
+(`phase: implement`, `blocked_by: [tactic-dispatch-conflict-branch-merge-lane]`)
 specifies exactly this (a mergeable sensor, an `apply-conflict-state.ts`
 primitive, `execution.conflict.attempt` capping, and the dispatch call site),
-gated on `intentions/tactic-dispatch-conflict-greenfield.md` (`phase: review`)
-which is what makes `/dispatch-conflict` accept a node-id target at all —
-precisely the gate the `case 11` comment at `dispatch-graph-execute:198-201`
-already names. **Reaching the greenfield is not this tactic's PR, and
+gated on the tactic that gives `/dispatch-conflict` a lane able to reproduce a
+live git conflict against a node-id target — precisely the gate the `case 11`
+comment at `dispatch-graph-execute:198-201` already names. **Reaching the
+greenfield is not this tactic's PR, and
 attempting it here would duplicate work already in flight.** So this PR ships
 the interim brownfield step: a free local-retry tier, then a tracked hold on
 persistent exhaustion. The `hold-node` primitive built here is the durable
@@ -133,6 +138,20 @@ piece — when `tactic-graph-router-conflict-routing` lands, its
 `execution.conflict.attempt` cap calls this same `hold-node` instead of
 parking, and Unit 3's strike/hold branch is deleted. Unit 3's comments must
 record this convergence note.
+
+**Repointed 2026-07-27 `/align-strategy`.** This section originally named
+`tactic-dispatch-conflict-greenfield` (`phase: review`) as the gate. That
+tactic shipped as PR #2951 and was pruned, and the prune cleared the
+`blocked_by` edge on `tactic-graph-router-conflict-routing` to `[]`. Clearing
+it was wrong: greenfield delivered `/dispatch-conflict` **Lane 2**, which
+accepts a node id but explicitly does not reproduce a live git conflict — it
+services only `graph-commit` concurrent-edit parks and refuses anything else,
+while **Lane 1** reproduces live conflicts but rejects node ids. Node-id
+acceptance was therefore only half the gate this section describes, so the
+edge was repointed to `tactic-dispatch-conflict-branch-merge-lane`, which owns
+the residual capability. Editing this body is safe at `phase: main-qa`: main-qa
+is not scope-chained (`SCOPE_CHAINED_PHASES` is `{qa, review}` in
+`packages/intentionsutil/src/scope-sweep.ts:31`), so no demotion follows.
 
 ### The crux decision: the hold tactic is born-`office_hours`-parked, not `phase: implement`
 

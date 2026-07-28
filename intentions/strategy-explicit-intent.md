@@ -47,8 +47,30 @@ rationale: >-
   from capturing the author, and align delegatees with the good, periagoge
   extended to AI delegatees with recorded qualifications — detailed in the
   2026-07-08 and 2026-07-09 clarifications.
-reading: null
-gap: null
+reading: "review cycle 2026-07-28: 2 decisions traced to node changes — (1) the
+  2026-07-19 reap-scope-narrowing clarification on
+  strategy-graph-native-dispatch (commit 8e310bfb) re-scoped
+  tactic-worker-self-close-configurable's plan a week later (commit 5a1eda64,
+  2026-07-26): the causing node recorded the obligation ('must be re-scoped to
+  the narrowed default'), a later separate session found it by reading the
+  record, and the tactic's baseline changed; (2) tactic-legacy-router-removal
+  reaching phase done (PR #2960, merged 2026-07-26) exhausted
+  strategy-graph-native-dispatch's recorded threshold, forcing its
+  success_signal to be re-derived and is_proxy flipped false to true (commit
+  e81ae2f, 2026-07-28) — the observable's 'a failed condition re-derives a
+  strategy' clause firing literally. Threshold met. Taken from the
+  trace-decisions digest (--since 2026-07-11, 133 candidate events) plus a
+  hand-search of the intentions/ patch for causal-reversal language."
+gap: "Threshold met, but the instrument is weak: 130 of the digest's 133
+  candidates are co-occurrence, not causation — its class-1 heuristic fires on
+  any added clarification (it does not check for a node-id citation, despite the
+  observable's wording) and all 43 class-3 events are dispatch attention-boost
+  writes, not calibration challenges. Both traced cases were found by hand-grep,
+  not by the digest. Rejected on the skeptic's test: the 2026-07-23 revert of
+  the successor-cadence resolution on this node (commit b522902) is
+  decision-changed-because-a-node-was-READ —
+  tactic-align-entrypoint-consolidation last changed 2026-07-18, before both
+  decisions."
 serves:
   - virtue-philosophical-mobility
   - virtue-alignment-of-attachments

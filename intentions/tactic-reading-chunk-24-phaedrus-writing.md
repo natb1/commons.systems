@@ -43,6 +43,7 @@ office_hours:
     record any reading-wins catch in divergence.contradictions."
   since: 2026-07-09
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

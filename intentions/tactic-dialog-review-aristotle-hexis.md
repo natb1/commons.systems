@@ -47,6 +47,7 @@ office_hours:
     (two-feeder frontier rule)."
   since: 2026-07-18
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

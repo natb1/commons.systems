@@ -54,7 +54,7 @@ function openCensusTactic(id: string): IntentionNode {
     owner: "ai",
     status: "codified",
     serves: [STRATEGY],
-    office_hours: { reason: "drain", since: "2026-07-01", recommendation: null },
+    office_hours: { reason: "drain", since: "2026-07-01", recommendation: null, session_type: "other" },
     attributes: { census: true },
   });
 }

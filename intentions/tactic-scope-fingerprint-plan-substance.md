@@ -34,13 +34,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 85
+  boost: 96
   override: null
-  rationale: "Recorded 2026-07-25 /align-strategy round: the greenfield target
-    design for the machinery-write custody hazard. Placed in the standing 85
-    band rather than the round's two author-boosted carriers (95) — it is the
-    sequenced target rather than the immediate repair, and the author's boost
-    directive named the false-demotion bug and the correctness hole, not this."
+  rationale: "Author-directed 2026-07-26: boost to top ranking. Re-boosted from
+    the 85 band after the machinery-write custody hazard this tactic removes by
+    construction fired live during /qa-fix on tactic-mechanical-park-producers
+    (PR #2970): the Step 3.6 `## needs-main residue` append this node names as
+    the sole current machinery writer tripped the scope-custody gate against its
+    own expected output, demoting a qa-complete node to implement. The hazard is
+    no longer prospective, so the sequenced-target framing that justified the 85
+    placement no longer holds. Sized at 96 (own claim) so that composed with the
+    +5 inherited from strategy-graph-native-dispatch it reaches an authored 101,
+    above the current live selectable composed max of 100.33, while staying
+    strictly below strategy-main-health's standing 100 boost value so no schema
+    rule 18 dominance ACK is required."
 phase: qa
 execution:
   branch: tactic-scope-fingerprint-plan-substance
@@ -53,7 +60,96 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: scope-deviation escalation on residue item 10 (\"Transitional
+    legacy-fingerprint acceptance has no tracked deletion follow-up\") — the
+    disposition Workflow's fix-plan judged the only fix is filing a new
+    follow-up tactic graph node via write-node.ts + graph-commit, which is
+    outside qa-fix's auto-fix lane (code-only, working-tree-only). PR #2974
+    itself is otherwise fully QA'd: 8/8 script-verifiable checks pass, 1
+    needs-human-judgment item already-satisfied and dropped as PASS. Needs a
+    human call: file the follow-up tactic node, or accept comment-only tracking
+    of the legacy-fingerprint deletion condition."
+  since: 2026-07-28
+  recommendation: >-
+    # Recommendation — `tactic-scope-fingerprint-plan-substance` (PR #2974)
+
+
+    ## The decision
+
+
+    One question, nothing else: **does the transitional legacy-fingerprint
+    acceptance need a tracked graph node, or is the in-code comment enough?**
+
+
+    PR #2974 is otherwise done. 8/8 script-verifiable QA checks pass,
+    re-verified independently; the one `needs-human-judgment` item was assessed
+    already-satisfied and dropped. This park is not about the PR's correctness.
+    The escalation exists only because filing a new node in `intentions/` and
+    landing it via `graph-commit` is outside `/qa-fix`'s auto-fix lane, which
+    only edits code in the PR's working tree.
+
+
+    The substance: `acceptableScopeFingerprints()` in
+    `packages/intentionsutil/src/router.ts` accepts both the new plan-substance
+    fingerprint and the legacy whole-body one, so stamps taken before this merge
+    keep matching. The deletion condition is already written out precisely at
+    `router.ts:139-147`, and the tactic's own Verification block repeats it and
+    names the check. Nothing about the follow-up needs designing — the only open
+    question is whether it gets a node or stays a comment.
+
+
+    Bias toward filing it. Stamps rotate on every worker provision and every
+    transition, so the condition will be met within days, and a comment is the
+    kind of thing that survives long after the condition it guards has passed.
+
+
+    ## Branch A — file the follow-up (recommended)
+
+
+    - Node id: `tactic-remove-legacy-scope-fingerprint`.
+
+    - `kind: tactic`, `status: raw`, no `phase` (draft), `owner: ai`, `parent:
+    null`, `serves: [strategy-graph-native-dispatch]` — same as the parent node.
+
+    - **No `attention.boost`.** Leave it at the default. It is blocked on a
+    filesystem condition, not on design work or urgency; boosting it puts it in
+    front of the selector before the condition can possibly be met.
+
+    - Body restates, from `router.ts:139-147`:
+      - **Deletion condition** — every `<main-root>/.claude/worktrees/*.scope-fingerprint` file postdates PR #2974's merge commit. Check with `ls -l` on that directory against the merge commit date.
+      - **Deletion steps** — drop the legacy entry from `acceptableScopeFingerprints`, inline `tacticScopeFingerprint` into `scopeStampMatches`, delete the private `legacyWholeBodyFingerprint` helper, re-run the parent tactic's verify block.
+    - Write it with the worktree-local
+    `packages/intentionsutil/scripts/write-node.ts` (JSON on stdin or `--file`),
+    then land it with the worktree-local
+    `packages/intentionsutil/scripts/graph-commit
+    tactic-remove-legacy-scope-fingerprint`. Both resolve the repo root from
+    their own script path, so run the copy inside the worktree you are in — not
+    one reached by a relative path out of another checkout.
+
+    - Confirm it landed: `git show
+    origin/main:intentions/tactic-remove-legacy-scope-fingerprint.md`.
+    `graph-commit` can exit 0 having pushed nothing under a fetch race, so check
+    origin/main directly rather than the local tree.
+
+    - Then clear the park: `packages/intentionsutil/scripts/clear-park
+    tactic-scope-fingerprint-plan-substance "follow-up filed as
+    tactic-remove-legacy-scope-fingerprint"`.
+
+
+    ## Branch B — comment-only tracking is enough
+
+
+    - Take no graph action beyond the clear.
+
+    - `packages/intentionsutil/scripts/clear-park
+    tactic-scope-fingerprint-plan-substance "legacy-fingerprint deletion tracked
+    by the router.ts comment; no follow-up node"`.
+
+
+    Either way, once the park is clear the node resumes at `qa` with nothing
+    outstanding, and PR #2974 proceeds normally.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

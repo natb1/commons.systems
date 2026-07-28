@@ -338,8 +338,12 @@ Route on the exit code:
 - **exit 1** — a ```verify block failed; the runner reports the failing block
   index on its output. Enter the bounded fix lane: using the failing output, fix
   the defect with one corrective `/implement-unit` (via the Skill tool), then
-  re-run the runner above. Cap at **2** fix attempts (mirroring `qa-fix`'s
-  `CAP=2`). If the runner still exits 1 after the cap, do **not** open the PR:
+  re-run the runner above. Cap at **2** fix attempts. This cap bounds an
+  **in-session** retry loop — the runner re-run has no other termination
+  condition — and is deliberately unrelated to `qa-fix`'s `CAP`, which counts
+  durable, re-selected qa **passes** via the `dispatch:qa-fix-attempt-<n>` PR
+  label. Different loops, different scopes; do not couple the two numbers.
+  If the runner still exits 1 after the cap, do **not** open the PR:
   call `dispatch-mark-deviation` naming the failing check, then **stop** — skip
   the Step 5 completion marker.
 

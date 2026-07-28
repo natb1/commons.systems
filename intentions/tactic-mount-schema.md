@@ -30,10 +30,17 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint: 04aa02adec88a3145460aa90242ca47578f633087667aba014c921593e28d1b3
+  fix: null
+  completion: null
 validates:
   - strategy-graph-mounts
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: provision-node-worktree failed for this tactic (exit 2)
+  since: 2026-07-28
+  recommendation: Inspect the provisioning failure (git fetch/worktree add,
+    direnv) in the tick journal, fix the environment, and re-run the phase.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
