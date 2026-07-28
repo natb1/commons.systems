@@ -107,6 +107,20 @@
 #  32. lock-ref hygiene: refs/graph/landing-lock is absent after a normal
 #      landing and never appears under refs/heads/graph/** (disjoint from
 #      the scratch-branch namespace graph-fast-path.yml triggers on)
+#  33. duplicate green rows land: a SHA re-stamped by several pushes carries
+#      TWO completed/success rows per required name (plus an unrelated CodeQL
+#      row). The gate counts DISTINCT required contexts resolved to their
+#      newest run, not rows, so this lands (exit 0) instead of spinning to
+#      the busy-main timeout a row-count `== 4` gate could never satisfy
+#  34. duplicated rows do not paper over a missing context: four rows but only
+#      three distinct required names green (two lint successes, no acceptance
+#      row at all) — exit 1, nothing lands on main, and the reported state
+#      names "acceptance=absent" (the regression guard against relaxing the
+#      gate to `-ge 4`)
+#  35. a stale failed row superseded by a newer success lands: acceptance has
+#      an older conclusion=failure row and a newer conclusion=success row, so
+#      max_by([started_at, id]) resolves it green — exit 0, no "concluded
+#      non-success" misdiagnosis
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -164,7 +178,8 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
           t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
-          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene; do
+          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
+          t-dup-rows t-partial-dup t-stale-fail; do
   seed_node "$id"
 done
 
@@ -255,6 +270,50 @@ cat >"$FIXTURE_DIR/desynced-success.json" <<'JSON'
   {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
   {"name": "lint", "status": "completed", "conclusion": "success"},
   {"name": "unit-tests", "status": "in_progress", "conclusion": "success"}
+]}
+JSON
+
+# Duplicate rows: the incident shape. A SHA re-stamped by two pushes carries
+# TWO completed/success rows per required name (distinct id and started_at),
+# so a row-count gate sees 8 green rows and `== 4` can never fire. The
+# unrelated failing CodeQL row proves the name filter still excludes non-
+# required runs.
+cat >"$FIXTURE_DIR/duplicate-rows.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance",        "id": 101, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "acceptance",        "id": 201, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 102, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 202, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 103, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 203, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 104, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 204, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "Analyze (javascript)", "id": 999, "started_at": "2026-07-27T11:30:00Z", "status": "completed", "conclusion": "failure"}
+]}
+JSON
+
+# Partial duplicate: four rows total but only THREE distinct required names
+# green — lint is duplicated and acceptance has no row at all. The regression
+# guard against naively relaxing the gate to a `-ge 4` row count.
+cat >"$FIXTURE_DIR/partial-duplicate.json" <<'JSON'
+{"check_runs": [
+  {"name": "lint",              "id": 301, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 302, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 303, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 304, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"}
+]}
+JSON
+
+# Stale fail then green: acceptance's OLDER row concluded failure and its
+# NEWER row concluded success, so max_by([started_at, id]) must resolve the
+# name to success rather than treating the stale failure as a hard stop.
+cat >"$FIXTURE_DIR/stale-fail-then-green.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance",        "id": 401, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "failure"},
+  {"name": "acceptance",        "id": 402, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 403, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 404, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 405, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"}
 ]}
 JSON
 
@@ -1197,6 +1256,47 @@ if ! git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**' |
   ok "lock hygiene: refs/heads/graph/** never lists the landing-lock ref (disjoint namespaces)"
 else
   no "lock hygiene: landing-lock ref leaked into refs/heads/graph/**"
+fi
+
+# --- Case 33: duplicate green rows still land --------------------------------
+set_mode duplicate-rows
+W33="$WORK/w33"
+make_clone "$W33" writer-33
+edit_line "$W33" t-dup-rows 1 dup-rows-land
+out="$(run_gc "$W33" -m 'test: duplicate rows' t-dup-rows 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-dup-rows | grep -q 'line1: dup-rows-land' \
+   && ! grep -q 'retry later' <<<"$out"; then
+  ok "duplicate green rows per required name still land (distinct-context gate)"
+else
+  no "duplicate green rows (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 34: duplicated rows do not paper over a missing context ------------
+set_mode partial-duplicate
+W34="$WORK/w34"
+make_clone "$W34" writer-34
+edit_line "$W34" t-partial-dup 1 must-not-land
+before="$(origin_sha)"
+out="$(export GC_POLL=0 GC_TIMEOUT=1 GC_ATTEMPTS=1; run_gc "$W34" -m 'test: partial dup' t-partial-dup 2>&1)"; rc=$?
+if [[ $rc -eq 1 && "$(origin_sha)" == "$before" ]] \
+   && grep -q 'acceptance=absent' <<<"$out"; then
+  ok "duplicated rows do not satisfy the gate when a required context is absent"
+else
+  no "partial-duplicate gate (rc=$rc)"; printf '%s\n' "$out"
+fi
+sync_clone "$W34"   # drop the never-landed local commit
+
+# --- Case 35: a stale failed row superseded by a newer success lands ---------
+set_mode stale-fail-then-green
+W35="$WORK/w35"
+make_clone "$W35" writer-35
+edit_line "$W35" t-stale-fail 1 newest-run-wins
+out="$(run_gc "$W35" -m 'test: stale fail then green' t-stale-fail 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-stale-fail | grep -q 'line1: newest-run-wins' \
+   && ! grep -q 'concluded non-success' <<<"$out"; then
+  ok "stale failed row superseded by a newer success lands (newest run per name)"
+else
+  no "stale-fail-then-green (rc=$rc)"; printf '%s\n' "$out"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

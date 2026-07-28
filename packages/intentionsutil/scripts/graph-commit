@@ -159,6 +159,12 @@ CURRENT_MSG=""
 #                  delete it on the remote on exit.
 SCRATCH_BRANCH=""
 SCRATCH_PUSHED=0
+# LAST_CHECK_DETAIL — a human-readable per-context snapshot of the most recent
+# successful check-run poll (e.g. "acceptance=success(3 rows), lint=pending(1
+# row), ..."). Written by await_checks(), read by try_land()'s retry and
+# terminal messages so a failed landing names the state it actually observed
+# instead of guessing at contention (Defect 3).
+LAST_CHECK_DETAIL=""
 # Landing-lock globals (see "# --- Landing lock" below).
 # LOCK_HOLDER_ID    — this process's unique claim identity, computed once at
 #                     script load: short hostname + PID + two $RANDOM draws.
@@ -566,10 +572,15 @@ rebase_in_progress() {
 # --- Fast-path check stamping ----------------------------------------------
 # Poll the branch-protection ruleset's four required contexts on <sha> until all
 # report a successful conclusion, keyed on the check-run NAME (mirrors the four
-# jobs in .github/workflows/graph-fast-path.yml). Only the fast path fires on a
-# `graph/**` push (unit-tests.yml ignores graph/**, pr-checks.yml is PR-only),
-# so there is no same-named run to race. Uses `gh api ... --jq` so gh runs jq on
-# its in-memory JSON — never an `echo "$VAR" | jq` round-trip (shell-json.md).
+# jobs in .github/workflows/graph-fast-path.yml). Gating is per DISTINCT
+# required context, not per check-run row: a SHA re-stamped by several pushes
+# accumulates one row per workflow run per name, so a row count of the green
+# rows can exceed four and an `== 4` row gate can never fire, leaving an
+# already-green SHA permanently unlandable. Instead each required name is
+# resolved to the conclusion of its NEWEST run, and the gate fires when all
+# four distinct names resolve to success. Uses `gh api ... --jq` so gh runs jq
+# on its in-memory JSON — never an `echo "$VAR" | jq` round-trip
+# (shell-json.md).
 # Returns:
 #   0  all four contexts green.
 #   1  the timeout elapsed with the checks still pending (transient — the
@@ -582,36 +593,56 @@ rebase_in_progress() {
 # would hide the real cause (clear error over fallback, code-style.md).
 await_checks() {
   local sha="$1"
-  local deadline counts nsucc nfail gh_stderr gh_fails=0
+  local deadline counts ngreen nbad cname cconc crows detail gh_stderr gh_fails=0
   # gh's stderr is captured per poll inside SNAP_DIR, which already exists for
   # the lifetime of the run and is removed by cleanup() on non-park exits.
   local errfile="$SNAP_DIR/.gh-poll-stderr"
   deadline=$(( $(date +%s) + CHECK_TIMEOUT_SECONDS ))
-  nsucc=0
   while :; do
-    # For the four required names on this SHA, count how many concluded
-    # success and how many concluded non-success, keyed off .conclusion alone
-    # (null = pending, non-null = concluded) rather than requiring
-    # status=="completed" too — GitHub sometimes leaves a check-run's status
-    # stuck at in_progress even after its conclusion is already populated (a
-    # known check-runs desync). Mirrors dispatch_classify_rollup's
-    # `(.conclusion // "")` idiom (lib.sh) fixed for the same desync. Extra
-    # check runs (e.g. CodeQL `Analyze (*)`, `guard`) are ignored by the name
-    # filter.
+    # Emit exactly one line per required name, in a fixed order, shaped
+    # `<name> <latest-conclusion> <row-count>`; a name with no rows at all
+    # emits `absent 0`.
+    #
+    # Ordering key: a check-run `id` is monotonic per repository and
+    # `started_at` is ISO-8601, hence lexicographically sortable, so
+    # max_by([started_at, id]) identifies the NEWEST run for a name. That is
+    # what makes a SHA re-stamped by several pushes resolvable: a stale failed
+    # row is superseded by the newer success rather than counted alongside it.
+    #
+    # Keying off .conclusion alone (null = pending, non-null = concluded)
+    # rather than requiring status=="completed" too is deliberate — GitHub
+    # sometimes leaves a check-run's status stuck at in_progress even after its
+    # conclusion is already populated (a known check-runs desync, #2457).
+    # Mirrors dispatch_classify_rollup's `(.conclusion // "")` idiom (lib.sh)
+    # fixed for the same desync. Extra check runs (e.g. CodeQL `Analyze (*)`,
+    # the fast path's `guard` job) stay excluded by the name filter.
     if counts="$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
-      --jq '[.check_runs[]
-             | select(.name=="acceptance" or .name=="preview-and-smoke"
-                      or .name=="lint" or .name=="unit-tests")]
-            | "\([.[]|select((.conclusion // "") == "success")]|length) \([.[]|select(((.conclusion // "") != "") and (.conclusion != "success"))]|length)"' \
+      --jq '["acceptance","preview-and-smoke","lint","unit-tests"] as $req
+            | (.check_runs // []) as $all
+            | $req[] as $name
+            | [$all[] | select(.name == $name)] as $rows
+            | if ($rows | length) == 0 then "\($name) absent 0"
+              else ($rows | max_by([(.started_at // ""), (.id // 0)])) as $latest
+                | "\($name) \($latest.conclusion // "pending") \($rows | length)"
+              end' \
       2>"$errfile")"; then
       gh_fails=0
-      [[ -n "$counts" ]] || counts="0 0"
-      read -r nsucc nfail <<<"$counts"
-      if [[ "$nsucc" -eq 4 ]]; then
+      ngreen=0; nbad=0; detail=""
+      while read -r cname cconc crows; do
+        [[ -n "$cname" ]] || continue
+        detail+="${detail:+, }$cname=$cconc(${crows} row(s))"
+        case "$cconc" in
+          success)         ngreen=$((ngreen + 1)) ;;
+          pending|absent)  ;;
+          *)               nbad=$((nbad + 1)) ;;
+        esac
+      done <<<"$counts"
+      LAST_CHECK_DETAIL="$detail"
+      if [[ "$ngreen" -eq 4 ]]; then
         return 0
       fi
-      if [[ "${nfail:-0}" -gt 0 ]]; then
-        echo "graph-commit: a required check concluded non-success for $sha ($nsucc/4 green, $nfail failed)" >&2
+      if [[ "$nbad" -gt 0 ]]; then
+        echo "graph-commit: a required check concluded non-success for $sha — $detail" >&2
         return 2
       fi
     else
@@ -623,7 +654,7 @@ await_checks() {
       fi
     fi
     if [[ "$(date +%s)" -ge "$deadline" ]]; then
-      echo "graph-commit: required checks not green within ${CHECK_TIMEOUT_SECONDS}s for $sha (last seen ${nsucc:-0}/4 green)" >&2
+      echo "graph-commit: required checks not green within ${CHECK_TIMEOUT_SECONDS}s for $sha — ${LAST_CHECK_DETAIL:-<no successful poll>}" >&2
       return 1
     fi
     sleep "$CHECK_POLL_SECONDS"
@@ -964,7 +995,7 @@ try_land() {
       die "a required check concluded non-success for $sha — the commit content fails CI; not retrying (fix the content and re-run)"
     fi
     if [[ "$ck" -ne 0 ]]; then
-      echo "graph-commit: checks did not go green for $sha on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
+      echo "graph-commit: checks did not go green for $sha on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying — ${LAST_CHECK_DETAIL:-<no successful poll>}" >&2
       continue
     fi
 
@@ -983,7 +1014,7 @@ try_land() {
   lock_release
   local ran=$attempt
   (( ran > MAX_PUSH_ATTEMPTS )) && ran=$MAX_PUSH_ATTEMPTS
-  echo "error: graph-commit: could not land on main after $ran/$MAX_PUSH_ATTEMPTS attempts — main busy (landing-lock contention or required checks never stamped green); retry later" >&2
+  echo "error: graph-commit: could not land on main after $ran/$MAX_PUSH_ATTEMPTS attempts — last observed required-check state: ${LAST_CHECK_DETAIL:-<no successful poll>} (or landing-lock contention if no poll ran); retry later" >&2
   return 11
 }
 
