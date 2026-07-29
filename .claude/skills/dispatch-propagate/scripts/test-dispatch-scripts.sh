@@ -22255,6 +22255,7 @@ FAKE
   # byte-identical.
   for _hs in dispatch-reconcile-merged:SEL_RECONCILE_MERGED_OUT \
              reconcile-graph-merged:SEL_RECONCILE_GRAPH_OUT \
+             reconcile-graph-review-stall:SEL_REVIEW_STALL_OUT \
              dispatch-graph-census:SEL_CENSUS_OUT \
              dispatch-jit-calendar-import:SEL_CALENDAR_OUT \
              dispatch-statements-scan:SEL_STATEMENTS_OUT; do
@@ -22503,7 +22504,7 @@ sel_tick_teardown() {
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
     SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT \
     SEL_MAIN_BROKEN_SHA SEL_MAIN_RED_NODES SEL_SYNC_BROKEN_LATCHED SEL_JIT_SCAN \
-    SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_CENSUS_OUT \
+    SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_REVIEW_STALL_OUT SEL_CENSUS_OUT \
     SEL_CALENDAR_OUT SEL_STATEMENTS_OUT \
     SEL_PRIMARY_CHECKOUT_BRANCH \
     DISPATCH_DECISION_LOG_DIR
@@ -22773,6 +22774,47 @@ else
 fi
 assert_eq "re-triage wiring: dispatch-retriage-orphaned-followups invoked" "present" \
   "$([[ -f "$STUB_DIR/retriage-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Review-stall sweep wiring (tactic-graph-review-exclusion-stall-recovery) -
+# The tick runs reconcile-graph-review-stall unconditionally right after
+# reconcile-graph-merged and prefixes each of its stdout lines with
+# `review-stall: `. The silent fake emits SEL_REVIEW_STALL_OUT; both stdout
+# shapes the sweep can produce (a `fix` recovery and a `conflict` hold) must
+# come through verbatim behind the prefix.
+echo "Test: select-tick review-stall wiring → review-stall: lines"
+sel_tick_setup
+export SEL_REVIEW_STALL_OUT="recovered tactic-x -> fix (ci=failing merge=MERGEABLE)
+held tactic-y -> conflict via tactic-hold-y (ci=passing merge=CONFLICTING)"
+out=$(run_sel_tick) || true
+TOTAL=$((TOTAL + 1))
+if grep -q '^review-stall: recovered tactic-x -> fix (ci=failing merge=MERGEABLE)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'review-stall: recovered tactic-x -> fix ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'review-stall: recovered tactic-x -> fix ...'"
+  echo "    actual stdout: '$out'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q '^review-stall: held tactic-y -> conflict via tactic-hold-y (ci=passing merge=CONFLICTING)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'review-stall: held tactic-y -> conflict ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'review-stall: held tactic-y -> conflict ...'"
+  echo "    actual stdout: '$out'"
+fi
+sel_tick_teardown
+
+# Silent sweep (the default): no `review-stall: ` line at all, so every other
+# tick test stays byte-identical.
+echo "Test: select-tick review-stall wiring → silent sweep emits no line"
+sel_tick_setup
+out=$(run_sel_tick) || true
+TOTAL=$((TOTAL + 1))
+if ! grep -q '^review-stall: ' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: no 'review-stall:' line when the sweep is silent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no 'review-stall:' line when the sweep is silent"
+  echo "    actual stdout: '$out'"
+fi
 sel_tick_teardown
 
 # --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
