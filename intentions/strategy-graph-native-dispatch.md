@@ -2708,7 +2708,35 @@ clarifications:
       tool for this node' dead end, and the real conflict went unresolved.
       Generalizes to any phase skill spawned into a node worktree: skill
       improvements are invisible to nodes whose branches predate them. Tracked
-      as tactic-node-worker-fresh-skill-body."
+      as tactic-node-worker-fresh-skill-body. AMENDED 2026-07-29 (same-day,
+      after reading provision-node-worktree:98-132): the \"generalizes to any
+      phase skill spawned into a node worktree\" clause above is OVERSTATED and
+      is narrowed to the exit-11 path. provision-node-worktree:126 enforces a
+      MERGED-TREE GUARANTEE — every phase runs on a tree that already contains
+      origin/main — so a successful provision refreshes the worktree's skill
+      bodies as a side effect, before any session is spawned. The exit-11
+      conflict lane is the one path that spawns AFTER that merge failed and was
+      aborted, and is therefore the only known exposure; worktrees are reused
+      (provision only creates when the directory is absent), so staleness
+      accumulates between merges and the merge is what normally clears it. A
+      self-modifying node whose branch edits a skill still runs its own merged
+      version rather than origin/main's, which is intended — that is how a skill
+      change is exercised. The standing invariant is unchanged (a node-worker
+      session must read its instructions from fresh state); only the claimed
+      blast radius narrows. Recommended fix direction, recorded on
+      tactic-node-worker-fresh-skill-body: spawn the lane with --cwd on the
+      primary checkout while keeping --name <node-id>, since cwd conflates where
+      the git work happens with where instructions come from, and Lane 3 already
+      takes the node id as an argument. Both contracts the spawner's own comment
+      warns about were verified to survive that change:
+      worktree_has_live_session matches the session NAME (column 3 of claude
+      agents --json) and never inspects cwd, and dispatch-stop.sh:63 keys on
+      JOB_NAME plus intentions/<JOB_NAME>.md existing at the hook root, which
+      holds in the primary checkout. REJECTED alternative: refreshing .claude/
+      from origin/main before the spawn — 20 of 47 live node branches (43%)
+      modify .claude/, disproportionately the dispatch-machinery nodes most
+      likely to conflict there, so it would clobber in-flight self-modification
+      work exactly where the fix is most needed."
   - question: The freeze that contains an undeclared pass depends on
       worktree_has_live_session. Is that containment durable?
     answer: "(Recorded 2026-07-29 /align-strategy interview, author-selected.) No —
