@@ -2585,6 +2585,169 @@ clarifications:
       nothing this round shifts it. Nothing was held on trust: each
       recommendation's boldness was stated inside the question and the author
       endorsed each outright, so no born-parked review item is owed."
+  - question: Is the office_hours park required at all, or can a plain rank-ordered
+      decision tree (CI-running skip / CI-failed fix / conflict resolve / else
+      execute) replace it?
+    answer: "(Recorded 2026-07-29 /align-strategy interview, author-directed.) The
+      park is required, but narrowly — and the proposal turned out to be
+      substantially this graph's own already-shipped doctrine. The 2026-07-23
+      clarification already fixed what a park asserts (no autonomous path
+      forward exists; a human is required) and that owed mechanical labor never
+      qualifies; the 2026-07-25 clarification already answered the taxonomy
+      question with 'the defect is in the PRODUCERS, not the record', tracked as
+      tactic-mechanical-park-producers, which merged as PR #2970 on 2026-07-26 —
+      exit 11 no longer parks the source. /dispatch-conflict Lane 3 (node id in,
+      reproduce the branch conflict, resolve, verify, push) merged as PR #2977
+      and is phase done. So the round was spent on residue the record did not
+      hold rather than on re-deciding the doctrine. The author's proposed
+      ordering was corrected on one point (conflict must outrank CI-failed, see
+      the precedence clarification) and its two gaps named: it declares no
+      attempt cap, and 'attempt ff merge' is strictly weaker than the real `git
+      merge --no-edit origin/main` provisioning already performs."
+  - question: What exactly must a session pass end with, and what stops a node
+      iterating forever when it does not?
+    answer: "(Recorded 2026-07-29 /align-strategy interview, author-specified.)
+      Every pass ends by DECLARING one of exactly three dispositions in the node
+      — progression, bounded retry-by-design, or park — and then stopping. 'Pass
+      ends' means the declaration happened; absent it the pass has not ended,
+      the session must NOT be reaped so the author can debug it, and the node
+      freezes behind the concurrency controls rather than iterating. The fuse
+      breaker is therefore not the primary containment but a backstop for the
+      residual: a pass that ends undeclared AND is reaped anyway, which leaves
+      the node selectable with nothing recorded. It fires on the FIRST
+      occurrence — author-selected one strike, on the reasoning that every
+      recognized transient class is already contained (an undeclared mid-pass
+      death is not reaped; a failed launch consumes nothing), so a
+      reap-without-declaration is always a defect of the reaping path and should
+      surface loudly the first time rather than be absorbed by a second chance.
+      This SUPERSEDES the prior two-consecutive-strikes no-progress park in the
+      failure-containment condition, and it resolves that condition's
+      unreconciled contradiction with the 2026-07-25 'must not add mechanical
+      parks' clause: an undeclared-but-reaped pass is an invariant violation,
+      not a mechanical retry state, so parking it is correct. Confirmed against
+      shipped code: dispatch-self-close already defaults to HOLD absent a
+      matching marker, so the no-declaration-no-reap direction ships today.
+      Scope limit recorded deliberately: this trichotomy governs session passes
+      only, never tick-level skips. Re-scopes tactic-router-failure-fuses (still
+      raw/unbuilt, so no migration is owed)."
+  - question: Do merge conflicts self-heal against a moving main, and what follows
+      for how they are routed?
+    answer: "(Recorded 2026-07-29 /align-strategy interview, author-directed; AMENDS
+      the 2026-07-25 park-taxonomy clarification's stated premise.) No — a merge
+      conflict is not expected to self-heal. When a conflict is encountered the
+      node always enters the conflict resolution lane. The 2026-07-25
+      clarification's CONCLUSION survives unchanged (a conflict is not an
+      office_hours park), but its REASON is corrected: conflicts are de-parked
+      because an autonomous resolver exists to route them to, not because they
+      resolve themselves. Two consequences follow. First, blind conflict retries
+      have no justification at all — the only legitimate strike counter on this
+      path counts consecutive failures to LAUNCH the lane, which is
+      infrastructure retry, not conflict retry. Second, the two conflict
+      producers must converge: provision exit 11 already spawns Lane 3
+      immediately (dispatch-graph-execute:274) and is correct, while
+      reconcile-graph-review-stall:320 still holds a CONFLICTING reviewed node
+      immediately via hold-node with no resolution attempt and is now a defect.
+      Tracked as tactic-review-stall-conflict-lane; the adjacent
+      tactic-conflict-lane-exit11-retry-bound bounds ineffective lane kicks and
+      is not superseded."
+  - question: When a node's PR is both CONFLICTING and CI-failed, which condition
+      wins — and where is that decided?
+    answer: "(Recorded 2026-07-29 /align-strategy interview, author-selected.)
+      Conflict outranks CI-failed, everywhere, because CI on an unmerged branch
+      is testing stale code. The reviewed-node path already implements this
+      correctly (transitions.ts:272-276, documented at :262-265 as 'CONFLICTING
+      takes precedence over failing when both hold'). The normal path does the
+      opposite and is a defect: graph-select-target enters the fix interrupt and
+      COMMITS execution.fix to main — a graph write consuming attempt 1 of 3 —
+      and only then does provisioning reach exit 11 and route to the conflict
+      lane, so the write is wasted and an attempt is burned. The author's
+      one-ordered-cascade proposal structurally cannot exhibit this, which is
+      the one point on which it is better than the shipped design; the cascade
+      unification itself is recorded as the greenfield with a migration path
+      rather than taken now, because each of this round's smaller fixes removes
+      a special case that would otherwise have to be carried into the unified
+      form. Tracked as tactic-conflict-outranks-ci-precedence."
+  - question: Does a non-progressing tick-level gate need a liveness bound, or only
+      the gates that spend tokens?
+    answer: "(Recorded 2026-07-29 /align-strategy interview, author-selected.) Every
+      non-progressing gate needs a bound, not only the ones that spend money.
+      Verified gap at recording time: pending CI has no liveness bound anywhere
+      on the autonomous path — graph-select-target:628 skips as 'ci-pending'
+      with no counter, provision-node-worktree:138 exits 10 'waiting' with no
+      counter, reconcile-graph-review-stall maps pending to an unknown verdict
+      and no-ops, and lib.sh:697-701 classifies an EMPTY rollup (checks never
+      started) as pending. A grep of every tick script for
+      timeout/stale/since/age/elapsed on a pending verdict returns nothing. So a
+      PR whose checks never start, or whose run is cancelled, stalls its node
+      forever with no counter, no hold, no park and no operator surface — the
+      only stuck state in the system with no cap, against CONFLICT_STRIKE_CAP=5
+      and FIX_ATTEMPT_CAP=3 elsewhere. This is NOT redundant with the fuse
+      breaker: a tick-level skip spawns no session and declares nothing, so it
+      falls outside the terminal trichotomy entirely. Tracked as
+      tactic-autonomous-ci-pending-liveness-bound; the adjacent
+      tactic-dispatch-explicit-ci-wait covers the explicit-node lane and
+      expressly leaves the autonomous path unchanged, so it does not close
+      this."
+  - question: A node-worker session reads its skill body from the node's own
+      worktree. Is that checkout guaranteed fresh enough for the skill to be the
+      one that shipped?
+    answer: "(Recorded 2026-07-29 /align-strategy interview, author-selected.) No,
+      and for the conflict lane it is guaranteed STALE by construction. A
+      node-worker session must read its instructions from fresh state; reading
+      them from a possibly-stale node checkout is a defect. The conflict lane is
+      the worst case because provision exit 11 fires precisely BECAUSE that
+      worktree's merge with origin/main just failed and was aborted
+      (provision-node-worktree:126-129), and the tick then spawns the lane into
+      that same checkout (dispatch-graph-execute:274, --cwd \"$CONFLICT_WT\") —
+      so the lane can never reliably read its own current instructions in
+      exactly the situation it exists for. Observed live this session: Lane 3
+      landed on main 2026-07-28T16:05; the tick spawned it at 16:39 into a
+      worktree 142 commits and three days behind whose
+      dispatch-conflict/SKILL.md contained only Lanes 1 and 2; the session read
+      pre-Lane-3 instructions, found office_hours null, took Lane 2's 'wrong
+      tool for this node' dead end, and the real conflict went unresolved.
+      Generalizes to any phase skill spawned into a node worktree: skill
+      improvements are invisible to nodes whose branches predate them. Tracked
+      as tactic-node-worker-fresh-skill-body."
+  - question: The freeze that contains an undeclared pass depends on
+      worktree_has_live_session. Is that containment durable?
+    answer: "(Recorded 2026-07-29 /align-strategy interview, author-selected.) No —
+      it lives outside the graph, and that is an open leak in the
+      terminal-trichotomy design rather than a property that holds.
+      worktree_has_live_session reads `claude agents --json`, described by its
+      own helper header as the daemon-backed registry of live sessions. If the
+      daemon restarts, the host reboots, or the job entry is garbage-collected,
+      a held-for-debug session stops reading as live; the node becomes
+      selectable with no declaration ever made, and the fuse breaker does NOT
+      fire because nothing was reaped by dispatch-self-close — the evidence
+      simply evaporated. The result is silent re-iteration, the exact outcome
+      the containment exists to prevent. The fix direction is a durable record
+      that a pass started and never declared, surviving a registry loss, so the
+      vanished-session case becomes detectable rather than indistinguishable
+      from 'no pass ever ran'. Boldness recorded honestly: the mechanism is
+      verified from the helper's own header, but the frequency of registry loss
+      is reasoned about, not measured. Tracked as
+      tactic-claim-containment-durable-anchor; the adjacent
+      tactic-graph-router-live-worker-read-robust covers tolerating an empty or
+      partial read and does not close this, because after a genuine daemon
+      restart the read is CORRECT and still reports no live session."
+  - question: Is the terminal declaration the same thing as the graph write it asserts?
+    answer: "(Recorded 2026-07-29 /align-strategy interview, author-selected.) No,
+      and the decoupling is structural. mark-node-terminal writes a marker into
+      $CLAUDE_JOB_DIR; the graph write (transition-node / park-node) is a
+      separate operation, so the marker is a CLAIM ABOUT what happened rather
+      than the happening. One direction fails safe: graph write lands, marker
+      missing → dispatch-self-close HOLDs, which is the trichotomy's intended
+      containment. The other does not: marker written, graph write failed → the
+      session is reaped, the node is re-selected unchanged, and the fuse breaker
+      sees a valid declaration so it never fires. The fix direction is to derive
+      the terminal disposition from durable node state — either the reaper
+      verifies the claimed disposition against the node at origin/main before
+      reaping, or the marker becomes a consequence of the graph write rather
+      than a parallel assertion. Tracked as
+      tactic-terminal-declaration-verified-against-node. Distinct from
+      tactic-qa-fix-node-terminal-declaration, which covers the opposite (safe)
+      direction of a missing declaration and its mechanical guard."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -2683,14 +2846,35 @@ attributes:
       worker treats pre-existing worktree and PR state as resume input rather
       than redoing the phase; session recovery (workflow resume, transcript
       reconstruction) is never router substrate
-    - router failure containment holds — a worker ending a claimed node with
-      neither a transition write nor a park strikes a durable no-progress
-      counter and two consecutive strikes park that node to office_hours
-      (node-local gate), while correlated dead claims (at least 3, constituting
-      the prior tick's selection) trip a graph-recorded breaker incident tactic
-      that halts all selection until a human un-parks it; no unbounded
-      re-selection loop exists in either scope, and breaker state never lives
-      outside the graph
+    - "router failure containment holds — every session pass over a claimed node
+      ENDS by declaring exactly one of three dispositions: progression (a phase
+      transition write), bounded retry-by-design (a retry against a declared
+      finite cap, e.g. the fix-attempt cap), or a park. A pass declaring none of
+      the three HAS NOT ENDED: its session is not reaped, so it stays live,
+      worktree_has_live_session holds the node frozen, and no re-selection —
+      therefore no unbounded iteration — occurs; the held session is the
+      debugging artifact (see the reap-scope condition, whose freeze-for-debug
+      is this mechanism rather than an exception to it). The fuse breaker covers
+      the residual case ONLY: a pass that ends without declaring progression,
+      retry, or park and whose session is nevertheless reaped, leaving the node
+      selectable with nothing recorded. It fires on the FIRST occurrence — no
+      second strike — and parks the node to office_hours, because a
+      reap-without-declaration is a defect of the reaping path rather than a
+      transient to absorb, and every recognized transient class is already
+      contained without it (a session dying mid-pass declares nothing and so is
+      not reaped; a session failing to launch consumes nothing). Correlated dead
+      claims (at least 3, constituting the prior tick's selection) additionally
+      trip a graph-recorded breaker incident tactic halting all selection until
+      a human un-parks it. Breaker state never lives outside the graph. This
+      condition governs SESSION PASSES only — a tick-level skip (ci-pending,
+      reserved, blocked) spawns no session and declares nothing, so its liveness
+      is a separate obligation. Two containment leaks are recorded as open
+      defects rather than as holding: the freeze depends on a process-level
+      session registry rather than graph state
+      (tactic-claim-containment-durable-anchor), and the terminal declaration is
+      a job-dir marker decoupled from the graph write it asserts
+      (tactic-terminal-declaration-verified-against-node). (Amended 2026-07-29:
+      replaces the prior two-consecutive-strikes no-progress park.)"
     - interactive graph-reading skills (/align — today /align-strategy —
       /align-tactics, and the office-hours review) begin analysis only against
       freshly-fetched origin/main state — cut the session worktree from
