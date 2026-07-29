@@ -1660,7 +1660,18 @@ clarifications:
       DISPATCH_PAUSE_FLAG resolution, and the body citation in
       tactic-manual-path-reservation-sweep — the latter is at phase qa and must
       NOT be body-edited from this round, because editing an open tactic's body
-      would trip its own scope-fingerprint custody gate and demote it."
+      would trip its own scope-fingerprint custody gate and demote it. (Amended
+      2026-07-29: the clause \"all of which already resolve through
+      dispatch-config-load\" is a TENSE error as to its third item. The worker
+      auto-close toggle does not resolve through the loader and is entirely
+      unbuilt — dispatch-config-load's validated type allowlist carries no
+      auto-close or worker-sessions member, and dispatch-self-close reads no
+      operator configuration at all. The other two items are correct:
+      max_concurrent_workers and weekly_pace_floor_pct both resolve through the
+      allowlisted target-workers type. Read the clause as the intended end
+      state, not as current state. The uniformity rationale it supports, and
+      every other resolution in this entry, stand unchanged — see the 2026-07-29
+      loader-tense clarification.)"
   - question: "Steelman-alternative test: should dispatch scheduling pause be a
       configurable knob at all, given the graph's own anti-config precedent and
       the fact that pausing is already expressible as a pace-curve pin?"
@@ -2776,6 +2787,65 @@ clarifications:
       tactic-terminal-declaration-verified-against-node. Distinct from
       tactic-qa-fix-node-terminal-declaration, which covers the opposite (safe)
       direction of a missing declaration and its mechanical guard."
+  - question: The 2026-07-26 pause-field clarification's rationale lists the worker
+      auto-close toggle among operator parameters that "already resolve through
+      dispatch-config-load". Is that true of the toggle today, and does it
+      change where the toggle belongs?
+    answer: "(Recorded 2026-07-29 /align-strategy round, verified directly against
+      origin/main at 64ccb60d so a future session does not read the clause as an
+      observation of current state.) No — the clause is a TENSE error, and the
+      direction it argues for is unaffected. The worker auto-close toggle does
+      NOT resolve through dispatch-config-load and is entirely unbuilt. The
+      loader's validated type allowlist is exactly eleven members — projects,
+      jit, statements, target-workers, epic, auto-merge, force-opus,
+      strict-preflight, sweep, selection-lock, census (dispatch-config-load:326,
+      with the identical list in the usage strings at :10 and :328) — and
+      carries no auto-close or worker-sessions member. And dispatch-self-close
+      performs ZERO dispatch-config-load calls anywhere in its 216 lines: it
+      gates the reap on two invariants only (the ROUTER continuation check at
+      :160 and the node-worker marker check at :197, reaping at :216) and reads
+      no operator configuration whatsoever. The clause's other two items ARE
+      correct — max_concurrent_workers and weekly_pace_floor_pct both resolve
+      through the allowlisted target-workers type (dispatch-config-load:166) —
+      so exactly one of the three is false, and the uniformity argument it
+      supports weakens from \"matches three existing parameters\" to \"matches
+      two, and is the pattern the third is being built to\". That is a weaker
+      premise, not a broken one: the pause field's home is unchanged. This is
+      the same read-as-recorded-requirement correction the 2026-07-28
+      implementation-status sweep applied to conditions 14, 16 and 17. DIRECTION
+      UNCHANGED and still ratified: dispatch-config-load under dispatch.config/
+      IS the auto-close toggle's home. It was finalized this same day in
+      tactic-worker-self-close-configurable's landed plan (draft → phase
+      implement, 2026-07-29) as a new `worker-sessions` schema type carrying an
+      `auto_close` boolean, with the DISPATCH_SELF_CLOSE_AUTO_CLOSE environment
+      variable surviving only as the test seam and never as a second operator
+      path — that plan is recorded intent, not landed code. Two consequences
+      recorded for the implementing round. (a) A new loader type is a FOUR-PART
+      edit, because every existing type carries all four parts: the type
+      allowlist plus BOTH usage strings, a validator branch (the force-opus arm
+      at dispatch-config-load:542 is the closest template, being a
+      single-boolean schema), the header schema prose block, and a
+      `<type>.example.json` sibling (eleven exist today). A type that lands with
+      only the allowlist entry is silently unvalidated. (b) Sibling
+      tactic-dispatch-pause-config-field extends the SAME loader with the SAME
+      boolean-field shape, so the two are a likely textual conflict in the type
+      case statement, and whichever lands second should inherit rather than
+      re-invent the convention. This is a coordination note, not a hard
+      dependency — neither tactic needs the other's behavior, so no blocked_by
+      edge is warranted. Standing convention stated once here because it
+      generalizes to every default-true boolean config field, pause included:
+      the absent-key test must be `jq -r 'if has(\"<key>\") then .<key> else
+      empty end'`, never `jq -r '.<key> // empty'`, because `//` treats a
+      literal `false` as absent and so silently collapses an explicit operator
+      opt-out into the default — the polarity trap that makes a default-ON
+      toggle impossible to turn off. Finally, no amendment is owed on the
+      reaping side of this tactic: the 2026-07-29 declared-vs-undeclared
+      clarification already records that dispatch-self-close \"already
+      implements\" the marker-presence test (it greps `^node=` and ignores
+      `disposition=`), and that the keep-all toggle layers on top of the default
+      \"whatever the default's discriminator\" — so the toggle must not
+      re-introduce a disposition enumeration, a framing that has now gone stale
+      twice."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
