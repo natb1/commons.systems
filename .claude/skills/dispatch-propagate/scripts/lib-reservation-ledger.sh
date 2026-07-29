@@ -45,10 +45,15 @@
 #   <worktree-basename> in the ledger dir, with the three documented lines (plus
 #   an `origin=` line when the optional 4th argument is given — a bare
 #   [A-Za-z0-9_-] token; anything else prints a diagnostic and returns 1). The
-#   origin names the claim's writer so the sweep can bound its lifetime:
-#   `standalone` marks a claim written by `graph-select-target --standalone`,
-#   which has no guaranteed consumer and is therefore TTL-reclaimable (see
-#   reservation_sweep rule (c-ttl)). All
+#   origin names the claim's writer so the sweep can bound its lifetime. Two
+#   origins are TTL-reclaimable (see reservation_sweep rule (c-ttl)) because
+#   neither has a guaranteed consumer:
+#     `standalone` — a claim written by `graph-select-target --standalone`.
+#     `explicit`   — a claim written by `dispatch-select-tick`'s explicit
+#                    single-node lane (`dispatch <node-id>`), typically run from
+#                    inside a long-lived interactive session whose id stays live
+#                    for hours.
+#   All
 #   three positional arguments are required and must be non-empty (an empty arg prints a
 #   diagnostic to stderr and returns 1, matching the arg-validation style of the
 #   sibling lib-claude-agents.sh primitives). The basename must also be free of
@@ -115,19 +120,23 @@
 #        spawned worker is still booting and has not yet registered. A marker
 #        with an unparseable/absent timestamp has no age protection — it falls
 #        through to the session rules below (fail-safe to the pre-grace behavior).
-#     (c-ttl) else the marker carries `origin=standalone` AND has aged past
-#        DISPATCH_RESERVATION_STANDALONE_TTL_S (default 600s) → reclaim
-#        (standalone-ttl-expired), REGARDLESS of whether the reserving session is
-#        still live. A `graph-select-target --standalone` claim is written by a
-#        caller with no guaranteed consumer: if it discards the selection, crashes,
-#        or is interrupted before launching, rule (a) never fires (no worker of
-#        that name ever goes live) and rule (c) never fires either while the
-#        (typically long-lived) calling session stays alive — so without this rule
-#        the marker is immortal and a handful of such calls can pin LIVE_COUNT at
-#        the ceiling and stall the whole fleet. A standalone claim that DOES launch
-#        is cleared far sooner (dispatch-graph-execute clears it on spawn, and rule
-#        (a) is an age-independent backstop), so the TTL only ever reclaims a leak.
-#        Rule (a) still precedes it, so a live worker is never disturbed.
+#     (c-ttl) else the marker carries a TTL-reclaimable origin (`standalone` or
+#        `explicit`) AND has aged past DISPATCH_RESERVATION_STANDALONE_TTL_S
+#        (default 600s) → reclaim (ttl-expired), REGARDLESS of whether the
+#        reserving session is still live. Both origins name a claim written by a
+#        caller with no guaranteed consumer: `graph-select-target --standalone`
+#        may discard the selection, and `dispatch-select-tick`'s explicit
+#        single-node lane may have its downstream dispatch-graph-execute spawn
+#        fail (which deliberately leaves the reservation "for the sweep"). In
+#        either case, if the claim never converts, rule (a) never fires (no worker
+#        of that name ever goes live) and rule (c) never fires either while the
+#        (typically long-lived, often interactive) calling session stays alive —
+#        so without this rule the marker is immortal and a handful of such calls
+#        can pin LIVE_COUNT at the ceiling and stall the whole fleet. A claim that
+#        DOES launch is cleared far sooner (dispatch-graph-execute clears it on
+#        spawn, and rule (a) is an age-independent backstop), so the TTL only ever
+#        reclaims a leak. Rule (a) still precedes it, so a live worker is never
+#        disturbed.
 #     c. else reserving session id ∉ live-session-ids AND the marker has aged
 #        past the grace → reserving session is DEAD and never converted; reclaim
 #        (stranded).
@@ -154,10 +163,12 @@
 #                             non-numeric value falls back to 30.
 #   DISPATCH_RESERVATION_STANDALONE_TTL_S
 #                             The TTL (seconds, default 600) after which the sweep
-#                             reclaims an `origin=standalone` marker with no live
-#                             worker of that name, regardless of the reserving
-#                             session's liveness. A non-numeric value falls back
-#                             to 600.
+#                             reclaims a TTL-reclaimable-origin marker
+#                             (`origin=standalone` or `origin=explicit`) with no
+#                             live worker of that name, regardless of the
+#                             reserving session's liveness. A non-numeric value
+#                             falls back to 600. (Named for the origin that first
+#                             needed it; it governs both.)
 #   DISPATCH_RESERVATION_SWEEP_NOW_EPOCH
 #                             Override the sweep's "now" epoch (deterministic
 #                             grace-boundary tests). Default: `date -u +%s`. A
@@ -438,9 +449,11 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     fi
     local grace="${DISPATCH_RESERVATION_BOOT_GRACE_S:-30}"
     [[ "$grace" =~ ^[0-9]+$ ]] || grace=30
-    # TTL for `origin=standalone` claims (rule (c-ttl) in the header).
-    local standalone_ttl="${DISPATCH_RESERVATION_STANDALONE_TTL_S:-600}"
-    [[ "$standalone_ttl" =~ ^[0-9]+$ ]] || standalone_ttl=600
+    # TTL for consumer-less claims — `origin=standalone` and `origin=explicit`
+    # (rule (c-ttl) in the header). The env var keeps its original name for
+    # backward compatibility; it governs both origins.
+    local ttl_s="${DISPATCH_RESERVATION_STANDALONE_TTL_S:-600}"
+    [[ "$ttl_s" =~ ^[0-9]+$ ]] || ttl_s=600
 
     local had_nullglob=0
     shopt -q nullglob && had_nullglob=1
@@ -483,17 +496,20 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
         # future-stamped marker (now - epoch < 0) is < grace, so it is kept too
         # (the safe direction). KEEP — fall through to nothing.
         :
-      elif [[ "$marker_origin" == "standalone" ]] \
+      elif [[ "$marker_origin" == "standalone" || "$marker_origin" == "explicit" ]] \
            && [[ "$marker_epoch" =~ ^[0-9]+$ ]] \
-           && (( now - marker_epoch >= standalone_ttl )); then
-        # (c-ttl) A `graph-select-target --standalone` claim that aged past the TTL
+           && (( now - marker_epoch >= ttl_s )); then
+        # (c-ttl) A consumer-less claim — `graph-select-target --standalone` or
+        # dispatch-select-tick's explicit single-node lane — that aged past the TTL
         # without a live worker of its name ever appearing. Reclaimed regardless of
-        # the reserving session's liveness: a standalone caller has no guaranteed
-        # consumer for the claim, so an unlaunched/discarded/crashed selection would
-        # otherwise hold a budget slot forever while its (long-lived) session stays
-        # alive — enough repeats pin LIVE_COUNT at the ceiling and stall the fleet.
+        # the reserving session's liveness: neither caller has a guaranteed consumer
+        # for the claim, so an unlaunched/discarded/crashed selection (or a failed
+        # dispatch-graph-execute spawn, which deliberately leaves the reservation
+        # for this sweep) would otherwise hold a budget slot forever while its
+        # (long-lived, often interactive) session stays alive — enough repeats pin
+        # LIVE_COUNT at the ceiling and stall the fleet.
         reservation_clear "$bn"
-        printf 'lib-reservation-ledger: reclaimed reservation %s (standalone-ttl-expired after %ss with no live worker)\n' "$bn" "$standalone_ttl" >&2
+        printf 'lib-reservation-ledger: reclaimed reservation %s (%s-ttl-expired after %ss with no live worker)\n' "$bn" "$marker_origin" "$ttl_s" >&2
       elif [[ -z "${live_ids[$marker_sid]:-}" ]]; then
         # (c) The reserving session is not live, the marker has aged past the
         # grace, and it never converted — stranded.

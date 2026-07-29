@@ -200,12 +200,28 @@ refresh_lock() {
 # is in flight). It then RELEASES the selection lock — the markers are the
 # durable claim; the execute path (dispatch-graph-execute) runs lock-free —
 # and emits the single `graph <count> <id:kind:phase>...` decision line.
-# Callers must have sourced lib-reservation-ledger.sh (both call sites are on
-# paths that already do).
+# Callers must have sourced lib-reservation-ledger.sh. Every call site is on a
+# path that does: the autonomous block (Step 1), the `--manual` block, and the
+# explicit-node block all source it before Step 3a's shared call. (Before
+# tactic-explicit-node-reservation-sweep-policy the explicit-node lane did NOT
+# source it, so reservation_write here was an undefined command whose exit 127
+# the `||` swallowed — explicit dispatch silently wrote no marker at all.)
+#
+# Optional $1 = the claim ORIGIN token passed through to reservation_write.
+# Step 3a passes `explicit` on the explicit single-node lane so the sweep's
+# rule (c-ttl) can TTL-reclaim the marker: that lane is typically run from
+# inside a long-lived interactive session, and dispatch-graph-execute has
+# deliberate paths that leave the reservation for the sweep — without an origin
+# no sweep rule could ever reclaim it (rule (a) needs a live worker of that
+# name, rule (c) needs the reserving session dead), so each failed explicit
+# dispatch would permanently add 1 to LIVE_COUNT. Omitted (empty) on the
+# autonomous and manual lanes, whose claims are consumed by the same tick's
+# fan-out and are covered by rules (a)/(c).
 #   return 0 — decision line emitted; the caller exits 0.
 #   return 1 — stdin held no node lines; the caller falls through to the
 #              legacy selector.
 emit_graph_selection() {
+  local origin="${1:-}"
   local specs=() ids=() id kind phase line
   while IFS= read -r line; do
     case "$line" in
@@ -220,8 +236,10 @@ emit_graph_selection() {
   (( ${#specs[@]} > 0 )) || return 1
   for id in "${ids[@]}"; do
     # Mirror dispatch-materialize-spawn's posture: a failed ledger write is a
-    # budget undercount, not a selection abort.
-    reservation_write "$id" "$id" "${CLAUDE_CODE_SESSION_ID:-}" 1>&2 \
+    # budget undercount, not a selection abort. `${origin:+"$origin"}` appends
+    # the optional 4th arg only when an origin was supplied, so the 3-arg
+    # autonomous/manual call is unchanged.
+    reservation_write "$id" "$id" "${CLAUDE_CODE_SESSION_ID:-}" ${origin:+"$origin"} 1>&2 \
       || echo "dispatch-select-tick: reservation_write failed for $id; proceeding without a ledger entry (budget may undercount this slot)" >&2
   done
   release_lock
@@ -763,6 +781,34 @@ elif [[ -n "$NODE_ARG" ]]; then
     exit 0
   fi
   # Not exhausted: GAP stays 1 (its default above) — falls through to Step 3.
+  # Reconcile the reservation ledger before Step 3 consults graph-select-target
+  # --node (tactic-explicit-node-reservation-sweep-policy): an explicit human
+  # dispatch of a named node should see accurate claim state, not a stale
+  # marker left by a dead session. Mirrors the autonomous block's own sweep
+  # call above (source + call, never fails the tick).
+  #
+  # The sourcing is also what makes Step 3a's emit_graph_selection →
+  # reservation_write work on this lane at all — see that function's header.
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-claude-agents.sh"
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+  # Verify the load explicitly rather than absorbing failures with `|| true`
+  # (the posture dispatch-tick's paused branch already takes, dispatch-tick:277).
+  # reservation_sweep's contract is "return 0 — always", so a non-zero status
+  # here could only mean the sources above failed (file missing, unreadable,
+  # truncated) and the function is an undefined command. This script does not
+  # use `set -e`, so a swallowed exit 127 would silently skip reconciliation on
+  # exactly the path this tactic exists to reconcile — the explicit dispatch
+  # would then still be refused `node-not-selectable` by the stale marker, with
+  # nothing greppable in the tick journal to say why. Fail loud instead (see
+  # .claude/rules/code-style.md). Still non-fatal: a human's named dispatch is
+  # not worth aborting over an unreconciled ledger.
+  if declare -f reservation_sweep >/dev/null 2>&1; then
+    reservation_sweep 1>&2
+  else
+    echo "dispatch-select-tick: lib-reservation-ledger.sh failed to load; reservation ledger NOT swept for explicit node dispatch (a stale marker may refuse this node, and its own claim will not be recorded)" >&2
+  fi
 fi
 
 # --- Step 2: run the JIT engine (best-effort) --------------------------------
@@ -831,14 +877,18 @@ refresh_lock
 # (dispatch-materialize-spawn → dispatch-launch-worker) were deleted in
 # tactic-dispatch-legacy-rewire Unit 3. A selector failure degrades to `empty`
 # (fall through to the aux triggers below) rather than wedging the tick.
+GRAPH_ORIGIN=""
 if [[ -n "$NODE_ARG" ]]; then
   GRAPH_OUT=$("$SCRIPT_DIR/graph-select-target" --node "$NODE_ARG") \
     || { echo "dispatch-select-tick: graph-select-target --node failed; treating as empty" >&2; GRAPH_OUT="empty"; }
+  # Stamp the explicit lane's claim so reservation_sweep rule (c-ttl) can bound
+  # its lifetime — see emit_graph_selection's header.
+  GRAPH_ORIGIN="explicit"
 else
   GRAPH_OUT=$("$SCRIPT_DIR/graph-select-target" --top "$GAP") \
     || { echo "dispatch-select-tick: graph-select-target failed; treating as empty" >&2; GRAPH_OUT="empty"; }
 fi
-if emit_graph_selection <<<"$GRAPH_OUT"; then
+if emit_graph_selection ${GRAPH_ORIGIN:+"$GRAPH_ORIGIN"} <<<"$GRAPH_OUT"; then
   exit 0
 fi
 if [[ -n "$NODE_ARG" ]]; then
