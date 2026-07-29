@@ -742,7 +742,12 @@ clarifications:
       kept-for-debug; when ON, the transitioned/parked sessions are ALSO kept.
       Both the narrowed-default transition-or-park check and this keep-all
       toggle live in the shared self-close primitive. See the 2026-07-19
-      reap-scope-narrowing clarification.)"
+      reap-scope-narrowing clarification.) (Amended 2026-07-29: the narrowed
+      default this entry describes — 'reap iff the exit transitioned or parked
+      the node' — is restated as 'reap iff the pass DECLARED a terminal
+      disposition'; see the 2026-07-29 declared-vs-undeclared clarification. The
+      keep-all toggle is unchanged in mechanism and still layers on top of the
+      default, whatever the default's discriminator.)"
   - question: "graph-commit rebase-retry exhaustion: does the 2026-07-13 rejection
       of pessimistic serialization forbid serializing the landing step, and what
       is the resolution — a better serialization method or a higher retry
@@ -878,7 +883,16 @@ clarifications:
       (Unit 1's Stop-hook reap survives, now gated on transition-or-park); and
       tactic-worker-self-close-configurable's draft framing (which assumes 'reap
       on every terminal exit' is the default) must be re-scoped to the narrowed
-      default per (d). Recorded 2026-07-19 interview."
+      default per (d). Recorded 2026-07-19 interview. (Amended 2026-07-29:
+      resolution (a)'s axis — 'reap iff transitioned-or-parked; keep every other
+      terminal exit' — is superseded by the declared-vs-undeclared principle;
+      see the 2026-07-29 declared-vs-undeclared clarification. The
+      keep-for-debug ground, the freeze-for-debug acceptance (b), and the count
+      surfacing (c) all carry over unchanged; only the discriminator changes,
+      from an enumeration of dispositions to the presence of the node-terminal
+      marker. The narrowed axis recorded here is what mis-sorted /qa-fix's
+      fix-finalize pass as a keep-for-debug failure exit when it was a completed
+      pass that had written four durable artifacts.)"
   - question: A merged PR's green CI had run on a stale base and main went red after
       the merge — does merge eligibility require the PR to be current with main,
       and is the recorded reviewed-marker key the author's 'done marker' intent?
@@ -2349,7 +2363,99 @@ clarifications:
       dispatch-self-close:75-78 already names: a lane declaring via prose can
       drop the line, which fails toward HOLD (job kept alive, node stays
       claimed) rather than toward a lost session -- cheap, recoverable, and
-      operator-visible via the canary log line."
+      operator-visible via the canary log line. (Amended 2026-07-29: this
+      entry's governing principle — 'the node-terminal marker asserts THE
+      SESSION'S PASS IS OVER, not that a node was disposed' — is now carried by
+      condition 14 itself as the declared-vs-undeclared test, so park-clear is
+      no longer 'a third clean terminal state' appended to an enumeration but
+      one member of an open set the condition no longer enumerates. This entry's
+      own enumeration amendment is the worked example of why: it added
+      park-clear and left fix-attempt, align-round, no-claim, conflict-resolved,
+      and conflict-hold unreconciled. The accepted residual named here is
+      re-priced, not re-accepted — a dropped declaration on a routine SUCCESS
+      path is a guaranteed deadlock, not a rare recoverable slip; see the
+      2026-07-29 declared-vs-undeclared clarification.)"
+  - question: The reap condition enumerates three reapable dispositions while
+      mark-node-terminal accepts eight and dispatch-self-close reaps on any
+      marker — which governs, and what does a deliberate no-advance terminal
+      exit do when it falls in the gap?
+    answer: "(Recorded 2026-07-29 /align-strategy interview, prompted by a live
+      freeze.) OBSERVATION: /qa-fix Step 3.7's fix-finalize path (job c20b2f8d,
+      node tactic-graph-select-target-node-tests, PR #2985) landed and pushed a
+      fix commit, finalized its `<!-- dispatch:qa-summary -->` PR comment, wrote
+      a qa phase-log entry, and emitted a completed_with_fixes outcome envelope
+      — then DELIBERATELY did not transition, because a fixing pass must leave
+      `phase: qa` so CI restarts and the chain re-QAs
+      (.claude/skills/qa-fix/references/auto-fix-lane.md). It declared no
+      node-terminal marker: dispatch-mark-complete writes only the legacy
+      `phase-completed` marker, and the node-lane seam in
+      .claude/skills/qa-fix/SKILL.md covers only the clean-pass path
+      (transition-node, which declares internally) and the escalation path
+      (office-hours-reason, where park-node declares) — the fix-finalize path, a
+      third terminal path, has no node-lane seam at all. dispatch-self-close
+      therefore HELD the job, and dispatch-sweep's node arm cannot free it
+      either (it requires node-completion evidence AND no live session, and
+      neither holds). So every successful qa auto-fix freezes its own node until
+      an operator manually reaps it, and the chain can never perform the re-QA
+      the fix path's own design depends on. RESOLUTION (author, this round): the
+      primitive's principle governs (mark-node-terminal:11-14 — 'a session may
+      only be reaped when it PROGRESSED (advance), retried by design
+      (fix-attempt), or PARKED'), and condition 14's three-member enumeration
+      was stale relative to the machinery it governs. REFRAME (author endorsed,
+      this round): condition 14 is restated as a PRINCIPLE rather than an
+      enumeration — reap iff the pass DECLARED a terminal disposition (marker
+      presence), keep every UNDECLARED exit. This is what dispatch-self-close
+      already implements (it greps `^node=` and ignores `disposition=`); it is
+      what the 2026-07-28 park-clear ratification already stated in prose
+      without propagating into the condition; and it is what makes the
+      2026-07-19 keep-for-debug ground actually TRUE — an undeclared exit is
+      precisely one that wrote nothing durable saying what it did, so the live
+      session really is its only artifact, whereas the qa-fix fixing pass wrote
+      four durable artifacts and is a false negative of the enumerated form, not
+      a hard case. TIMING INVARIANT (author endorsed, this round):
+      presence-keying makes WHEN a pass declares load-bearing, so condition 14
+      now states it — declare as the LAST durable action of the pass, never
+      earlier, because Stop fires on every turn yield and an early declaration
+      reaps the session out from under its own in-flight work (incident
+      2026-07-28, node tactic-graph-ref-split, session 36e64744).
+      park-node:277's unconditional internal call is named there as a live
+      instance of violating it; it stays tracked in
+      tactic-office-hours-self-modification-skill's body and was deliberately
+      NOT pulled into this round's scope. STEELMAN (crash-only /
+      recovery-oriented computing — Candea & Fox, 'Crash-Only Software', HotOS
+      IX 2003): a component should have exactly one way to stop, and any state
+      it must REMEMBER to write on the way out is soft state that will
+      eventually be dropped; on that reading node-terminal is itself the design
+      error, reapability should be derived by an external reconciler from
+      durable state (node phase, PR, CI, pushed commits), and the record's own
+      accepted residual (dispatch-self-close:75-78, 'a lane declaring via prose
+      can drop the line') is exactly the failure crash-only predicts — with this
+      session its first confirmed instance. DIVERGED (author, this round) on the
+      marker's EXISTENCE: turn-yield-versus-terminal is knowledge only the
+      session holds, since a reconciler reading durable state cannot distinguish
+      'yielded mid-flight' from 'done' (the durable state is identical in both),
+      so the marker carries information that is not reconstructable and removing
+      it re-opens the 36e64744 incident class. ADOPTED crash-only's soft-state
+      critique by narrowing what the marker carries: it asserts only 'my pass is
+      over', and every richer question (did work land, should the node advance)
+      is already answered from durable state. The residual is RE-PRICED rather
+      than re-accepted — the 2026-07-28 entry priced a dropped declaration as a
+      rare slip, 'cheap, recoverable, and operator-visible via the canary log
+      line'; when the dropping lane is a routine SUCCESS path the price is a
+      guaranteed deadlock on every success, which is why the implementing tactic
+      carries a mechanical guard and not only the missing call. IMPLEMENTATION
+      retained as draft tactic-qa-fix-node-terminal-declaration. Unit 2's
+      feasibility is unverified — whether node-lane terminal-declaration
+      coverage is mechanically checkable at reasonable cost was flagged as a
+      bold recommendation and endorsed anyway; the recorded fallback, if it is
+      not, is that Unit 2 shrinks to a documented audit rather than growing
+      scope. DISJOINT from tactic-outcome-envelope-node-lane-parity, which owns
+      a different defect in the same SKILL.md region (the numeric --issue
+      argument on dispatch-emit-outcome / dispatch-write-phase-log, serving
+      strategy-token-economy); the two touch adjacent lines of qa-fix/SKILL.md's
+      node-lane terminal section and must not be planned as one. Nothing was
+      held on trust this round — the author endorsed each resolution outright —
+      so no born-parked review item is owed."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -2481,31 +2587,50 @@ attributes:
       validate-graph/graph-commit refuses a commit that authors another boost or
       override at or above it, or that reduces it, unless the commit carries an
       explicit author override"
-    - a node-worker session is auto-closed (reaped from the agents list via the
+    - "a node-worker session is auto-closed (reaped from the agents list via the
       foreground-safe self-close primitive — `claude rm`; interactive sessions
-      exempt) ONLY on a clean phase-transition, an escalation-park, or a
-      park-clear (the office-hours drain lane's green-CI terminal disposition,
-      ratified 2026-07-28); every other terminal exit — a hard crash, an error,
-      or a clean-but-no-transition/no-progress exit — is KEPT (its job entry and
+      exempt) iff its pass DECLARED a terminal disposition — the presence of the
+      `$CLAUDE_JOB_DIR/node-terminal` marker naming that node, whatever its
+      disposition member; every UNDECLARED terminal exit — a hard crash, an
+      error, or a clean-but-silent no-progress exit — is KEPT (its job entry and
       node-id worktree both held) for local debugging until an operator manually
-      reaps it, because such an exit was not parked to office-hours and the live
-      session is its only debugging artifact (2026-07-19 reap-scope-narrowing
-      clarification). Reaping a transitioned/parked/park-cleared session loses
-      nothing durable (the transition advanced the node's phase; the park wrote
-      office_hours into the node; the park-clear landed the office_hours removal
-      on origin/main), and a transitioned/parked worker job left in `claude
-      agents --json` is a defect UNLESS the default-off keep-all operator escape
-      hatch (2026-07-19 configurable-auto-close clarification) is enabled. A
-      kept failed session holds worktree_has_live_session TRUE, so its node
-      freezes (router will not re-select; no-progress fuse will not count
-      re-selections) until manual reap — accepted freeze-for-debug over silent
-      auto-retry on the failure path. A minimal operator-visible count of
-      held-for-debug sessions surfaces accumulation without re-coupling
-      observability to session persistence (it reports only the count, never
-      session content; it is not a recovery substrate or escalation channel —
-      escalations still surface via the office-hours PARKED panel). Auto-close
-      remains the doctrinal default for the two clean terminal states, and the
-      session is never router substrate
+      reaps it, because such an exit wrote nothing durable saying what it did
+      and the live session is its only debugging artifact (2026-07-19
+      reap-scope-narrowing clarification, reframed 2026-07-29 from an
+      enumeration of reapable dispositions to this presence test — see the
+      declared-vs-undeclared clarification of that date). The disposition member
+      (advance, demote, park, fix-attempt, align-round, no-claim,
+      conflict-resolved, conflict-hold, park-clear) is the primitive's
+      diagnostic detail, never doctrine: dispatch-self-close reads only
+      `^node=`, so adding a member never re-stales this condition — which is
+      precisely how the enumerated form went stale (the 2026-07-28 park-clear
+      ratification added one member and left five unreconciled). A pass DECLARES
+      as the LAST durable action of the pass, never earlier: `Stop` fires on
+      every turn yield, not only terminal exit, so declaring early reaps the
+      session out from under its own in-flight work (incident 2026-07-28, node
+      tactic-graph-ref-split, session 36e64744); park-node:277's unconditional
+      internal call is a named live instance of violating this, tracked in
+      tactic-office-hours-self-modification-skill's body. Reaping a declared
+      session loses nothing durable — by construction it recorded what it did
+      (an advance moved the node's phase; a park wrote office_hours into the
+      node; a park-clear landed the office_hours removal on origin/main; a
+      fix-attempt landed and pushed its commits) — and a declared worker job
+      left in `claude agents --json` is a defect UNLESS the default-off keep-all
+      operator escape hatch (2026-07-19 configurable-auto-close clarification)
+      is enabled. A kept undeclared session holds worktree_has_live_session
+      TRUE, so its node freezes (router will not re-select; no-progress fuse
+      will not count re-selections) until manual reap — accepted
+      freeze-for-debug over silent auto-retry on the failure path, but accepted
+      ONLY for genuinely undeclared exits: a lane that completed its pass and
+      merely omitted the declaration freezes its node with no failure to debug,
+      which is a defect of that lane (confirmed live 2026-07-29 on /qa-fix's
+      fix-finalize path). A minimal operator-visible count of held-for-debug
+      sessions surfaces accumulation without re-coupling observability to
+      session persistence (it reports only the count, never session content; it
+      is not a recovery substrate or escalation channel — escalations still
+      surface via the office-hours PARKED panel). Auto-close remains the
+      doctrinal default for every declared terminal disposition, and the session
+      is never router substrate"
     - "paused-scheduling with manual-only dispatch is a supported STANDING
       operating mode, not a degraded or temporary state — the pause sentinel
       gates worker spawning only, never reservation-ledger reconciliation — so
