@@ -25,7 +25,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-tick-node-lane-auto-merge
   pr: 2904
@@ -35,9 +35,118 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-07-30T16:11:25Z
+    mergeCommitSha: c2a7970c0b7b773f1e0b973422961aec52cdcc66
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-main: all 3 needs-main residue items on
+    tactic-graph-tick-node-lane-auto-merge (id 7, 8, 9) are
+    non-browser-verifiable — none carries a url_path, and each asks whether a
+    live dispatch-select-tick cycle merges/holds a *different, future* node-lane
+    PR in production (graph-auto-merge auto-merge, transition-node's
+    deferred-merge line, and the scope-stale hold-and-demote path). There is no
+    prod URL or UI surface to observe for any of the three; the qa-fix triage
+    that filed them already classified them as \"not verifiable at merge time\"
+    for the same reason. Source PR #2904 is confirmed MERGED (mergedAt
+    2026-07-30T16:11:25Z, mergeCommit c2a7970c), so the deploy-readiness signal
+    is favorable — this is a routing barrier (item 1 of the qa-main decision
+    tree: not browser-verifiable), not a deploy-lag or ambiguity case."
+  since: 2026-07-30
+  recommendation: >-
+    ## What to verify
+
+
+    All three residue items need direct observation of a live tick cycle, not a
+
+    browser check, so `/qa-main` cannot resolve them itself. Here is a concrete
+    lead
+
+    plus what to look for on each.
+
+
+    **Promising lead already found:** PR #2986 ("bootstrap: node-terminal
+
+    declaration + dump-node manifest CAS guard") merged at 2026-07-30T16:17:38Z
+    —
+
+    6 minutes after PR #2904 (this tactic) merged at 16:11:25Z. Its head branch
+
+    (`bootstrap-integrity-guards`) is non-numeric — a node-lane branch — and it
+
+    carries **zero labels**, i.e. it merged label-free. Right after, origin/main
+
+    commit `b552dfa2` ("narrow the qa-fix terminal-declaration node to Unit 2;
+
+    prune the shipped dump-node manifest tactic") shows the corresponding node
+    was
+
+    pruned, consistent with a clean review → auto-merge → `main-qa`/`done` →
+
+    prune pass. This is strong circumstantial evidence the new
+    `graph-auto-merge`
+
+    path already fired once in production, but it has not been confirmed against
+
+    the actual dispatch-tick session transcript.
+
+
+    ### id 7 — first node-lane tactic auto-merges via the tick in production
+
+
+    - Find the dispatch-tick session that ran around 2026-07-30T16:11–16:18Z
+      (`claude agents --json` history, or the dispatch session logs) and confirm it
+      printed `merge: merged #2986 (bootstrap-integrity-guards)` from the new
+      `graph-auto-merge` reconciler (wired in
+      `.claude/skills/dispatch-propagate/scripts/dispatch-select-tick`, the block
+      right after the legacy issue-lane auto-merge and before
+      `reconcile-graph-merged`).
+    - If that line is present, id 7 is confirmed working end-to-end and can be
+      closed out; if PR #2986 merged some other way (e.g. a human `gh pr merge`),
+      keep watching the next node-lane PR that reaches clean review.
+
+    ### id 8 — `transition-node` defers the merge and prints the new line
+
+
+    - In the same tick/session window, look for `transition-node`'s output on
+      `bootstrap-integrity-guards` (or whichever node reached clean review) —
+      expect `review-complete <id> (merge deferred to tick)` and **no**
+      `dispatch-auto-merge` invocation from that script itself
+      (`.claude/skills/dispatch-propagate/scripts/transition-node`, arm block
+      removed at what was `:166-174`).
+
+    ### id 9 — a scope-edited node is held and demoted
+
+
+    - No evidence yet either way. Needs a node that reaches `phase:review` +
+      `reviewed` marker, then has its scope edited before the tick's freshness
+      re-check runs. Watch the next occurrence, or deliberately construct one: put
+      a node through review, then touch a file the tactic's scope fingerprint
+      covers before the next tick, and confirm the tick emits `held <id>
+      (scope-stale)` (no merge) and the next selection tick demotes it to
+      `implement`.
+
+    ## Suggested resolution
+
+
+    Since id 7/8 already have a strong real-world candidate (PR #2986), the
+    fastest
+
+    path is: pull the dispatch session transcript covering 16:11–16:18Z on
+
+    2026-07-30, grep for `graph-auto-merge`, `merge:`, and `review-complete`,
+    and
+
+    confirm the exact lines above. If confirmed, mark ids 7 and 8 done via a
+    normal
+
+    graph-commit needs-main-residue update; only id 9 needs a fresh live
+
+    observation.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

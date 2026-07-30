@@ -28,7 +28,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 20
+  override: null
+  rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
+    scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
+    follows the Wave-A write-path fixes. Interim scaffolding only;
+    tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
+    numeric scheme."
 phase: null
 execution: null
 validates: []
@@ -42,6 +49,20 @@ attributes: {}
 
 Draft context retained from the 2026-07-29 `/align-strategy` round. Not yet
 refined into a plan — `/align-tactics` owns that.
+
+## Unit 1 is DONE — this node is now Unit 2 only
+
+Unit 1 (the missing `mark-node-terminal "$N" fix-attempt` on `/qa-fix`'s
+fix-finalize path) landed 2026-07-30 in PR #2986, out of band, as part of the
+dispatch-pipeline bootstrap. Both the reference (`auto-fix-lane.md`) and the
+condensed `SKILL.md` mirror were edited, with the timing invariant stated in the
+inserted prose. **This node's remaining scope is Unit 2 — the mechanical
+coverage guard — and nothing else.** Unit 1's text below is retained as the
+record of what was fixed and why; do not re-implement it.
+
+The bootstrap also ran the audit Unit 2's fallback contemplates, and it found a
+**second** undeclaring lane that the coverage table below gets wrong. See "Audit
+finding" under Unit 2.
 
 ## The defect, confirmed live
 
@@ -120,8 +141,37 @@ Current coverage, as surveyed 2026-07-29 (`.claude/skills/*/SKILL.md`):
 | `/review-fix` | clean-pass, deviation-park | yes, via `transition-node` / `park-node` |
 | `/implement`, `/qa-main` | clean-pass, escalation | yes, via `transition-node` / `park-node` |
 
-`/qa-fix` is the only phase skill with a deliberate non-transitioning terminal
-path that does not declare.
+### Audit finding 2026-07-30 — the table above is incomplete
+
+The bootstrap ran the full node-lane terminal audit. The `/dispatch-conflict`
+row is **wrong**: it surveyed Lane 3 only. **Lane 2's `resolved` path
+(`.claude/skills/dispatch-conflict/SKILL.md:530-606`) does not declare** — after
+`write-node.ts` + `graph-commit` it calls only `dispatch-mark-complete --phase
+fix-conflicts`, which writes the legacy `phase-completed` marker that
+`dispatch-self-close --node` never reads. Lane 2's sibling `ambiguous` path
+(`:608-664`) does not declare either. The SKILL.md text itself explains why no
+other primitive covers it (`:596-605`).
+
+So the claim below — that `/qa-fix` is the *only* phase skill with a
+non-declaring terminal — was false, and `dispatch-self-close:79`'s "two of the
+terminal lanes declare via SKILL.md prose" residual counts **this** as the
+second lane.
+
+Why it was not fixed alongside Unit 1: Lane 2 is phase-agnostic (a
+`graph-commit` mechanical-conflict park can occur at any phase) and is **not
+reachable by the autonomous fleet** — SKILL.md states twice that no dispatch
+tick enters Lane 2 (`:80-81`, `:454-455`), and only Lane 3 is auto-spawned, by
+`dispatch-graph-execute:226-276`. It strands nothing today. It deadlocks the
+moment a human or a future router runs Lane 2 as a managed `--node` background
+job, since `dispatch-stop.sh:56-63` gates purely on the job name matching an
+`intentions/<id>.md` id, regardless of which skill ran inside it.
+
+**Accepted risk, recorded rather than fixed.** Unit 2's guard should catch this
+lane; if Unit 2 shrinks to a documented audit per its fallback, this finding IS
+that audit's first result and the Lane 2 fix should be filed as its own tactic.
+Note also that `dispatch-self-close:60-67`'s own caller enumeration omits
+`/qa-fix`'s `fix-attempt` caller — independent staleness in the same comment
+block.
 
 ## Out of scope
 

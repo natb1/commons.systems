@@ -2846,6 +2846,104 @@ clarifications:
       \"whatever the default's discriminator\" — so the toggle must not
       re-introduce a disposition enumeration, a framing that has now gone stale
       twice."
+  - question: The 2026-07-25 fingerprint-custody round recorded four clarifications
+      (entries 102-105) as held-on-trust — Claude-recommended-and-adopted rather
+      than author-ratified — and enrolled them for ratification at
+      tactic-review-sitting-fingerprint-custody-2026-07-25, along with the
+      round's two 95 boosts. What is the author's ruling?
+    answer: >-
+      (Recorded 2026-07-30 office-hours sitting; AUTHOR-RATIFIED.) The sitting
+      was held with the author present and produced six rulings.
+
+
+      (1) Entry 102 — the substance-scoped fingerprint target, carrier
+      tactic-scope-fingerprint-plan-substance — is RATIFIED AS RECORDED. The
+      plan-substance vs machinery-output body-section convention it presumes is
+      accepted as permanent graph structure, not a provisional device: a
+      machinery append is definitionally not plan substance, and the convention
+      that makes that distinction expressible is the substantive design work the
+      carrier owns.
+
+
+      (2) Entry 103 — the fingerprint-bound phase-evidence invariant, carrier
+      tactic-phase-evidence-fingerprint-bound — is RATIFIED. The binding is
+      mechanical across all three evidence surfaces (the phase-log entry, the
+      qa-done marker, and the QA PR comment); a re-entry that finds completion
+      evidence at a different fingerprint must RE-RUN the phase rather than
+      ratify it. The round's rejection of both rivals is ratified with it: (a)
+      having the demotion strike or clear the phase-log, and (b) documenting the
+      rule as prose in /qa-fix's re-entry preamble with no mechanism.
+
+
+      (3) Entry 104 — the prospective-only reading — is RATIFIED AS RECORDED.
+      The binding is PROSPECTIVE: unstamped evidence reads as unbound, not as
+      mismatched, and stays ratifiable on re-entry. The author was offered, and
+      explicitly DECLINED, the stricter retroactive reading that entry 104
+      itself flagged as needing an author decision (an unbound qa-done forces a
+      re-run), because it would force a re-QA of every in-flight node. The
+      Fingerprint & Freeze net guarantee is therefore restored only for evidence
+      produced after the binding lands, and the window closes as the in-flight
+      tactics cycle.
+
+
+      (4) Entry 105 — the boundary against the standing phase-progress condition
+      (resume-as-input for in-progress residue; re-run only for completed-phase
+      evidence at a differing fingerprint) — stays a CLARIFICATION NOTE. The
+      author-owned phase-progress condition text is NOT to be edited to absorb
+      it.
+
+
+      (5) The two 95 boosts on tactic-transition-node-stamp-landed-body and
+      tactic-phase-evidence-fingerprint-bound are CONFIRMED as priority intent,
+      but the SEQUENCING IS REORDERED. tactic-transition-node-stamp-landed-body
+      — the immediate refresh_stamp repair, PR #2973 — must land AHEAD OF
+      tactic-scope-fingerprint-plan-substance — the greenfield target, PR #2974.
+      This restores the 2026-07-25 round's own "immediate fix before sequenced
+      target" framing, which commit d84eb5b2 (2026-07-27, "graph: serialize the
+      qa-fix Step 3.6 overlapping tactics") inverted as a side effect when it
+      chained the other three behind tactic-scope-fingerprint-plan-substance to
+      stop concurrent writers colliding on the shared qa-fix Step 3.6 paragraph.
+      The serialization intent stands; only its head changes. Attention VALUES
+      are unchanged at 96/95/95/96 — this ruling changes blocked_by ordering
+      only. Landed topology after this sitting:
+      tactic-transition-node-stamp-landed-body (blocked_by []) is the head;
+      tactic-scope-fingerprint-plan-substance and
+      tactic-phase-evidence-fingerprint-bound both hang off it;
+      tactic-demote-node-stale-local-read stays behind
+      tactic-phase-evidence-fingerprint-bound.
+
+
+      (6) tactic-scope-stamp-in-graph stays RAW AND UNBOOSTED for now. Entry 115
+      (2026-07-27) found that entry 102's shape leaves the residual hole this
+      tactic names — author documentation edits still trip the scope-custody
+      gate, and the stamp stays out-of-graph either way — so the carrier's
+      diagnosis is accepted. The author nonetheless declined to boost or chain
+      it at this sitting, because four nodes are already serialized on this seam
+      with nothing landed in five days, and adding a fifth to the queue would
+      buy no throughput.
+
+
+      Recorded honestly as part of the ratification: the 2026-07-25 round's
+      ACTUAL AskUserQuestion prompts and option sets are NOT retrievable. That
+      round's commit 2cd33a7e carries a one-line message and stores no
+      transcript. What the author ratified at this sitting is the CONTENT AS
+      RECORDED in entries 102-105, reconstructed from those entries' own
+      "Adopted .../Rejected rivals ..." language — not a recovered interview
+      log. The process caveat the enrolling node recorded (the 2026-07-25 round
+      ran in a background session and the harness signalled mid-round that human
+      input could not be confirmed) is therefore discharged by re-deciding the
+      recorded content in the author's presence, not by recovering what was
+      originally asked.
+
+
+      Observed state at ratification time, recorded so a later reader can date
+      the ruling against the machinery: PRs #2973, #2974, and #2975 are all
+      still OPEN DRAFTS; #2975 is red on type-safety-sensor; and the
+      refresh_stamp defect entries 102-103 describe is still LIVE on origin/main
+      — transition-node:213 lands the write via graph-commit, refresh_stamp runs
+      after at transition-node:225, and graph-commit's cleanup does `git reset
+      --hard "$ORIG_HEAD"` at graph-commit:344. Nothing in this sitting changes
+      code; it ratifies doctrine and reorders the queue.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -3290,6 +3388,14 @@ so no machinery write can trip custody by construction), and
 tactic-phase-evidence-fingerprint-bound (bind completion evidence to the fingerprint it
 was produced under, which is what makes a GENUINE drift safe). Until those land, treat
 the net guarantee as an intent, not an enforced invariant.
+
+Ratified 2026-07-30 at an author office-hours sitting (entry 142): entries 102-103
+stand as recorded, and the guarantee they restore is PROSPECTIVE per entry 104 —
+evidence carrying no bound fingerprint reads as unbound, not mismatched, so the window
+closes as the in-flight tactics cycle rather than by a corpus-wide forced re-QA. The
+same sitting reordered the carriers so the immediate repair
+(tactic-transition-node-stamp-landed-body) is sequenced AHEAD OF the greenfield target
+(tactic-scope-fingerprint-plan-substance).
 
 Migration is backwards-incompatible for stamp readers and sequenced (schema accepts
 `string | {hash, sha}` → new stamps write the map form → bare-hash stamps migrate

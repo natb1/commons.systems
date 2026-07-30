@@ -34,7 +34,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-explicit-node-reservation-sweep-policy
   pr: 2952
@@ -45,7 +45,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-29T14:07:03Z
+    mergeCommitSha: 30b51ea46cc279564a672bc0c96e01b39057d8ca
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

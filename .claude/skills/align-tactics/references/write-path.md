@@ -46,6 +46,11 @@ mechanically rather than by rebase luck (the 2026-07-06 near-miss). Nodes
 this round **creates** (new tactics, new gates) have no origin/main blob and
 take no `--base` entry.
 
+The two recipes below are alternatives — pick one. Either way, a single
+`dump-node.ts` call must name **every** id the `graph-commit` will land: a
+manifest only guards the ids it holds, and the rest land with no
+compare-and-swap at all.
+
 ```bash
 BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
   --out-dir "$TMPDIR/dump" <pre-existing-id> [<pre-existing-id> ...])

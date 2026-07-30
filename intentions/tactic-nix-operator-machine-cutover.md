@@ -30,8 +30,7 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by:
-  - tactic-nix-instance-flake-extraction
+blocked_by: []
 office_hours:
   reason: "Owner execution, not claude-executable: requires a private repo the
     fleet cannot write, the operator's real ssh public keys and git identity,
@@ -112,11 +111,23 @@ that target builds `placeholderInstance` (`username = "operator"`,
 operator's machines can no longer pick up their real identity from the public
 repo.
 
-Nothing mechanically gates #2848's merge on this cutover, and no such gate was
-authorized — this is a scheduling warning, not a blocker on that PR. As of
-2026-07-30 #2848 is red on `nixos-build`
+This cutover now mechanically gates that merge: as of 2026-07-30
+`tactic-nix-instance-flake-extraction` is `blocked_by` this node, so #2848
+cannot land until the real private instance exists. The author added that gate
+after an office-hours tick verified their earlier assumption was wrong (the
+private repo was a stale #2479 QA harness, not a working instance flake). As of
+2026-07-30 #2848 is also red on `nixos-build`
 (`unit-home-manager-operator.service.drv`, label
-`dispatch:qa-fix-attempt-1`), so there is time to close the window first.
+`dispatch:qa-fix-attempt-1`).
+
+**Why this node is not itself blocked_by the extraction** (that would be a
+`blocked_by` cycle, which schema rule 15 rejects): the cutover needs #2848's
+*content*, not its *merge*. `mkDarwinConfiguration` / `mkNixosConfiguration`
+exist on the PR branch already, and a private instance flake pins
+`commons.systems` as a flake input — so it can point at
+`github:natb1/commons.systems/tactic-nix-instance-flake-extraction` until the PR
+lands. The honest order is: stand up the private repo against the PR branch →
+switch both machines → let #2848 merge → repoint the input to `main`.
 
 ## What is owed (owner)
 
