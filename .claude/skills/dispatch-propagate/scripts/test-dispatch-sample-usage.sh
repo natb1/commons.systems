@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests for dispatch-sample-usage -- moved verbatim from test-dispatch-scripts.sh
+# Tests for dispatch-sample-usage and its writer usage-sample-writer.mjs (run
+# here only in --dry-run) -- moved verbatim from test-dispatch-scripts.sh
 # (tactic-dispatch-test-monolith-split). Original section: 24765-25156.
 set -euo pipefail
 

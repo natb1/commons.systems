@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Tests for dispatch-project-helpers -- moved verbatim from test-dispatch-scripts.sh
-# (tactic-dispatch-test-monolith-split). Original section: 13418-13636.
+# Tests for the three dispatch project helpers -- dispatch-project-item-add,
+# dispatch-project-status-read and dispatch-project-status-write (there is no
+# script literally named dispatch-project-helpers; the trio is exercised
+# together against a shared gh stub, with dispatch-config-load staged alongside
+# as the catalog loader they resolve). Moved verbatim from
+# test-dispatch-scripts.sh (tactic-dispatch-test-monolith-split). Original
+# section: 13418-13636.
 set -euo pipefail
 
 FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"

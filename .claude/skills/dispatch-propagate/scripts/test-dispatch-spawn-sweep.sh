@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Tests for dispatch-spawn-sweep -- moved verbatim from test-dispatch-scripts.sh
-# (tactic-dispatch-test-monolith-split). Original section: 13858-14354.
+# (tactic-dispatch-test-monolith-split). Original section: 13858-14354. The
+# section's second half also covers lib.sh's ensure_sweep_timer (#2023) -- the
+# other half of "how the worktree sweep gets launched": the durable periodic
+# systemd --user timer, including the timer-fired service path into
+# dispatch-sweep. It is sourced from lib.sh and called directly, not reached
+# through dispatch-spawn-sweep.
 set -euo pipefail
 
 FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"
