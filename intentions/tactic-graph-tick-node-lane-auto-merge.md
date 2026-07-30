@@ -454,6 +454,21 @@ defect):
     label-free without author intervention.
   - Finding: Requires a live tick cycle acting on a different downstream node in
     production after this PR merges; not verifiable at merge time.
+  - **DISCHARGED 2026-07-30 — observed, not asserted.** A single
+    `dispatch-tick` cycle (pid 1840083) merged two reviewed node-lane PRs
+    label-free, with no author intervention:
+
+    ```
+    Jul 30 16:13:05 nixos dispatch-tick[1840083]: merge: merged #2987 (tactic-fix-checks-pushed-nothing-base)
+    Jul 30 16:13:05 nixos dispatch-tick[1840083]: merge: merged #2973 (tactic-transition-node-stamp-landed-body)
+    ```
+
+    Both nodes read `phase: done` on `origin/main` afterwards. This was only
+    possible once `tactic-main-red-sync-completion-test` landed (PR #2941,
+    `eeefa235`): until then `dispatch-graph-main-red-sync` misread that
+    ordinary tactic as an open red episode and silently suppressed **all**
+    auto-merge fleet-wide, so this criterion could not have been observed
+    regardless of how many node-lane PRs reached clean review.
 
 - **id 8** — `transition-node` emits the exact `review-complete` line and does
   not merge in a live run.
@@ -468,3 +483,41 @@ defect):
     (scope-stale)`) and subsequently demoted to `implement` by selection.
   - Finding: Requires a live tick observing a scope-edited downstream node in
     production; not verifiable at merge time.
+
+**Items 8 and 9 remain outstanding — do not hand-write evidence for an event
+that has not happened.** Re-checked 2026-07-30T20:55Z:
+
+```
+journalctl --user --since '2026-07-27' --no-pager | grep -cE 'review-complete|scope-stale'
+0
+```
+
+Both need a real occurrence in a live run. Item 8 fires the first time a
+node-lane node completes review through `transition-node` after PR #2904;
+item 9 needs a node whose scope fingerprint goes stale mid-flight. Re-run the
+grep above; when each is observed, record the journal line here the same way
+item 7 is recorded, then transition `main-qa -> done`.
+
+**The `office_hours` park on this node is a misroute, and it is deliberately
+left in place until 8 and 9 are observed.** Its stated reason is "not
+browser-verifiable — none carries a `url_path`", but the greenfield qa-main
+design makes the criterion machine-verifiable / author-required, never
+browser-verifiable: `strategy-graph-native-dispatch` at lines 2224-2227 (only a
+VERIFIABILITY cannot-verify becomes an `office_hours` park), 2221 (parking wakes
+the author for something no author is needed for), 3182-3188 (the sort is an
+explicitly recorded state, never inferred), and 2195-2200 (a cannot-verify park
+on a machine-sorted node is a mis-sort by construction). All three items are
+git/journal queries. "Browser-verifiable" is the *interim* implementation
+predicate, single-sourced in `dispatch-main-qa-triage` and
+`qa-main/SKILL.md:297`; at least four sibling nodes carry the same misroute
+(`tactic-drain-disposition-diagnosis-cas`, `tactic-mechanical-park-producers`,
+`tactic-main-post-merge-validation`,
+`tactic-execution-pr-merge-verification`). Clearing the park now would only
+return the node to a `main-qa` lane that re-applies the same interim predicate
+and re-parks it, with 8 and 9 still undischargeable — a loop. Clear it as part
+of the discharge, once 8 and 9 are observed.
+
+**Open seam, not yet tracked by its own node:** the greenfield clarification
+says the sorting predicate is "unchanged" (`:2192-2194`), yet that predicate is
+still written in browser terms in
+`qa-fix/references/needs-main-followups.md:65-72`.
