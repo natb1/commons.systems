@@ -52,11 +52,22 @@ success_signal: null
 attention:
   boost: 50
   override: null
-  rationale: "Bootstrap re-scale 2026-07-30: anchor for the long branch of the
-    fingerprint-custody cluster, replacing the pre-bootstrap 96. Attention flows
-    backward along blocked_by, so this single 50 lifts
-    tactic-phase-evidence-fingerprint-bound - which therefore carries no
-    attention of its own - with no summing. Interim scaffolding only;
+  rationale: "Bootstrap re-scale 2026-07-30: the SOLE attention anchor for the
+    fingerprint-custody chain. The 2026-07-30 re-serialization (d2b161a3) turned
+    the cluster from a tree into a linear chain -
+    tactic-demote-node-stale-local-read ->
+    tactic-phase-evidence-fingerprint-bound ->
+    tactic-scope-fingerprint-plan-substance ->
+    tactic-transition-node-stamp-landed-body - so a single anchor on this, the
+    most-downstream node, lifts every blocker upstream of it and the whole chain
+    resolves to a flat 55.33. Attention flows backward along blocked_by and SUMS
+    over distinct sources, so a second anchor anywhere in the chain
+    double-counts: the interim 50 briefly also sat on
+    tactic-scope-fingerprint-plan-substance and that node resolved to 105.33 -
+    back above strategy-main-health 101, the exact failure this re-scale exists
+    to remove. That second anchor was removed; do not reintroduce one while the
+    chain is linear. Note validate-graph rule 18 does NOT catch this - it checks
+    the authored boost (50), not the resolved rank. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
 phase: null

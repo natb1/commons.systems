@@ -33,15 +33,7 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention:
-  boost: 50
-  override: null
-  rationale: "Bootstrap re-scale 2026-07-30: anchor for the short branch of the
-    fingerprint-custody cluster, replacing the pre-bootstrap 96. Under the order
-    ratified 2026-07-30 (6556f70b) this node is a leaf blocked by
-    tactic-transition-node-stamp-landed-body, so it needs its own value or it
-    falls to 5.33. Interim scaffolding only; tactic-attention-tier-ranking and
-    tactic-attention-boost-scripts retire this numeric scheme."
+attention: null
 phase: qa
 execution:
   branch: tactic-scope-fingerprint-plan-substance
