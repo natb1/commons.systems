@@ -107,6 +107,15 @@
 #  32. lock-ref hygiene: refs/graph/landing-lock is absent after a normal
 #      landing and never appears under refs/heads/graph/** (disjoint from
 #      the scratch-branch namespace graph-fast-path.yml triggers on)
+#  33. --expect happy path: an --expect entry matching the blob the caller
+#      actually wrote is transparent — exit 0, the edit lands
+#  34. --expect catches the equal-blob wrong-repo case that case 28's benign
+#      path cannot: a clone synced bit-for-bit to origin/main (nothing staged,
+#      local blob == origin/main blob, so the nothing-staged guard passes)
+#      invoked with an --expect sha for content that is NOT there — dies
+#      naming "mis-pointed -C/--repo", never reaches "landed", main untouched
+#  35. --expect on a --prune id is a usage error (exit 2, origin untouched) —
+#      a deletion has no content to assert
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -164,7 +173,8 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
           t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
-          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene; do
+          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
+          t-expect-happy t-expect-wrong-repo t-expect-prune; do
   seed_node "$id"
 done
 
@@ -1197,6 +1207,68 @@ if ! git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**' |
   ok "lock hygiene: refs/heads/graph/** never lists the landing-lock ref (disjoint namespaces)"
 else
   no "lock hygiene: landing-lock ref leaked into refs/heads/graph/**"
+fi
+
+# --- Case 33: --expect is transparent on the happy path -----------------------
+# The caller hashes the content it just wrote in its OWN checkout and pins it.
+# The resolved repo is that same checkout, so the assertion holds and the edit
+# lands exactly as it would without --expect.
+set_mode green
+W33="$WORK/w33"; make_clone "$W33" writer-33
+sync_clone "$W33"
+edit_line "$W33" t-expect-happy 1 expect-happy-lands
+expect_sha="$(git -C "$W33" hash-object -- intentions/t-expect-happy.md)"
+out="$(run_gc "$W33" -m 'test: expect happy' --expect "t-expect-happy=$expect_sha" t-expect-happy 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-expect-happy | grep -q 'line1: expect-happy-lands'; then
+  ok "--expect happy path: matching blob assertion is transparent, edit lands"
+else
+  no "--expect happy path (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 34: --expect catches the equal-blob wrong-repo case -------------------
+# The exact hole case 28 leaves open. This clone is bit-for-bit at origin/main
+# and has nothing staged, so the nothing-staged guard sees local_blob ==
+# main_blob and proceeds benignly ("no new changes to stage" + "landed") — a
+# false success when the caller's real edit lives in a DIFFERENT checkout.
+# With --expect naming the content the caller actually wrote, graph-commit must
+# refuse instead.
+set_mode green
+W34="$WORK/w34"; make_clone "$W34" writer-34
+sync_clone "$W34"   # bit-for-bit at origin/main, nothing staged
+elsewhere_sha="$(printf 'content that lives in some OTHER checkout\n' | git -C "$W34" hash-object --stdin)"
+before_sha="$(origin_sha)"
+out="$(run_gc "$W34" -m 'test: expect wrong repo' --expect "t-expect-wrong-repo=$elsewhere_sha" t-expect-wrong-repo 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+# The assertion greps an --expect-SPECIFIC substring. 'mis-pointed -C/--repo'
+# appears in BOTH the --expect die and the pre-existing nothing-staged guard
+# (which case 27 greps with exactly that string), so it cannot tell the two
+# apart — and this case exists precisely to prove --expect fired where the
+# nothing-staged guard structurally could not.
+if [[ $rc -ne 0 ]] \
+   && grep -q 'does not hold the content the caller asserted' <<<"$out" \
+   && ! grep -q 'landed t-expect-wrong-repo on main' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "--expect: equal-blob wrong-repo invocation dies loudly, never emits a false landed"
+else
+  no "--expect wrong-repo (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 35: --expect on a --prune id is a usage error ------------------------
+# A deletion has no content to assert, so pinning one is a caller mistake.
+set_mode green
+W35="$WORK/w35"; make_clone "$W35" writer-35
+sync_clone "$W35"
+prune_sha="$(git -C "$W35" hash-object -- intentions/t-expect-prune.md)"
+rm -f "$W35/intentions/t-expect-prune.md"   # --prune requires the file gone on disk
+before_sha="$(origin_sha)"
+out="$(run_gc "$W35" -m 'test: expect prune' --prune t-expect-prune --expect "t-expect-prune=$prune_sha" 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -eq 2 ]] \
+   && grep -q 'no content to assert' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "--expect on a --prune id is a usage error (exit 2), origin untouched"
+else
+  no "--expect on a prune id (rc=$rc)"; printf '%s\n' "$out"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
