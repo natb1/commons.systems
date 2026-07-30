@@ -410,7 +410,11 @@ each fork site.
    take the **escalate finalize path** instead (`fix-pass-landed-nothing`).
    Otherwise run Step 4, Step 5, `dispatch-mark-complete --phase qa` (NO
    `dispatch:qa-done`), emit the outcome envelope (`--disposition
-   completed_with_fixes`, `--fixes-applied <fixes_applied_count>`), and **STOP**.
+   completed_with_fixes`, `--fixes-applied <fixes_applied_count>`); node lane
+   then writes `mark-node-terminal "$N" fix-attempt` (**after** the PR
+   comment, phase marker, and outcome envelope — `Stop` fires on every turn
+   yield, not only terminal exit, so writing it any earlier risks the hook
+   reaping the job mid-write); and **STOP**.
 
    **Escalate finalize path** (cap / scope-deviation / planning-failed /
    fix-pass-landed-nothing / no-progress / gate said `escalate`): run Step 4, Step

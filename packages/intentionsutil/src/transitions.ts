@@ -216,6 +216,65 @@ export function incrementAttempt(execution: Execution, phase: string): Execution
 
 // --- Reconciler (Unit 2) -----------------------------------------------------
 
+/** GitHub's PR mergeability enum, as gh_pr_view_rest projects it. */
+export type Mergeable = "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+
+/**
+ * The recovery lane a stalled `phase: review` + `reviewed` tactic must be
+ * routed to, or `null` when nothing has regressed.
+ *
+ *  - `"fix"` — the CI-fix interrupt (`execution.fix`), acted on by
+ *    `/fix-checks` and resolved by `apply-fix-state --clear-fix`.
+ *  - `"conflict"` — the conflict lane (`/dispatch-conflict`, or a tracked
+ *    `provision-conflict` hold via `hold-node`), which resolves an
+ *    origin/main merge conflict on the node's own branch.
+ */
+export type ReviewStallRoute = "fix" | "conflict" | null;
+
+/**
+ * Which recovery lane an armed `phase: review` tactic carrying the `reviewed`
+ * marker needs, for the review-stall reconciler
+ * (`tactic-graph-review-exclusion-stall-recovery`). Once a node reaches
+ * `review` and picks up the `reviewed` marker, the selector's reviewed-marker
+ * exclusion (`selectGraphTargets` in `router.ts`,
+ * `tactic-graph-selector-reviewed-exclusion`) removes it from selection
+ * entirely — so the normal CI-red fix-interrupt entry (`graph-select-target`'s
+ * `_gate_maybe_interrupt`, which only runs on candidates the selector already
+ * emits) never gets a chance to run on this node again, and a later CI
+ * regression or merge conflict would otherwise strand it forever.
+ *
+ * The two regressions route to DIFFERENT lanes — they are not interchangeable:
+ *
+ *  - `ci === "failing"` → `"fix"`. Red CI is exactly what the `execution.fix`
+ *    interrupt carries.
+ *  - `mergeable === "CONFLICTING"` → `"conflict"`. A merge conflict must NOT
+ *    enter `execution.fix`: `graph-select-target`'s `_gate_fix_active` reads
+ *    CI, not mergeability, so a conflicted-but-green PR would be seen as
+ *    resolved on the very next selection and `apply-fix-state --clear-fix`
+ *    would strip the `reviewed` marker, reset `phase` to `review`, and
+ *    `gh pr ready --undo` the PR back to draft — discarding a completed review
+ *    verdict and re-running the whole review pass while the conflict itself
+ *    stayed untouched. That is an unbounded review-cost amplifier anyone able
+ *    to land a commit on main touching the PR's files could fire repeatedly.
+ *    Only the conflict lane actually resolves the conflict, and it preserves
+ *    the `reviewed` marker.
+ *
+ * `CONFLICTING` takes precedence over `failing` when both hold: the fix lane
+ * would have to merge origin/main to even run, so the conflict must clear
+ * first. Once it does, a later sweep sees `ci === "failing"` on the
+ * (no-longer-conflicting) PR and routes to `"fix"` then.
+ *
+ * `UNKNOWN` mergeability and any non-`failing` CI verdict are NOT a regression:
+ * GitHub computes mergeability asynchronously and self-heals `UNKNOWN` to a
+ * real value on a later sweep — the same no-op posture
+ * `dispatch-reconcile-ready` takes on an `UNKNOWN` read.
+ */
+export function reviewStallRoute(ci: CiVerdict, mergeable: Mergeable): ReviewStallRoute {
+  if (mergeable === "CONFLICTING") return "conflict";
+  if (ci === "failing") return "fix";
+  return null;
+}
+
 /**
  * The phase a merged-out-of-band tactic reconciles to: `main-qa` when the node
  * carries a needs-main residue section (verified post-merge, strategy

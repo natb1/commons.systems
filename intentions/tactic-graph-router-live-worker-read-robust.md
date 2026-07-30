@@ -4,35 +4,36 @@ kind: tactic
 statement: The router's live-worker read tolerates an empty or partial `claude
   agents --json` result — a momentary undercount neither inflates spawn headroom
   nor lets the per-node occupancy check skip a node that already has a live
-  worker — closing the duplicate-dispatch path that put two /implement workers on
-  one node and one worktree
+  worker — closing the duplicate-dispatch path that put two /implement workers
+  on one node and one worktree
 owner: ai
 status: raw
 parent: null
 rationale: "Surfaced 2026-07-21: a manual dispatch tick launched a SECOND
   /implement worker for tactic-primary-checkout-main-guard while a worker was
   already live in that node's worktree — `claude agents --json` showed two busy
-  sessions (pids 139471, 164656) sharing one checkout. The tick's fan-out printed
-  `live=1` though at least 6 workers were live (the immediately-prior tick alone
-  had launched 6). Root cause (code read): dispatch-select-tick's --manual branch
-  computes LIVE_COUNT = claude_agents_count_busy_workers + reservation_count
-  (dispatch-select-tick:684-686), and the downstream per-node occupancy exclusion
-  (worktree_has_live_session) reads the SAME `claude agents --json` source. That
-  read is known-unreliable: the daemon Unix socket is blocked under sandbox and
-  returns an empty `[]` indistinguishable from a genuine no-sessions result (see
-  .claude/rules/sandbox.md, `claude agents --json` section), and sessions.json is
-  roughly 50% stale. A single empty/partial read therefore both inflates HEADROOM
-  (MAX_WORKERS-1 → over-spawn) AND makes the per-node check miss the already-live
-  worker, so a top-ranked node gets dispatched twice. This complements
-  tactic-graph-router-live-worker-visibility (the --standalone lock+headroom+claim
-  cycle, PR #2918): that closes the missing-lock / missing-headroom path for
-  external manual/emulated callers; this hardens the underlying live-worker READ
-  that BOTH the count and the per-node dedup trust, so an undercount cannot defeat
-  the fleet count or the per-node occupancy exclusion even through the locked
-  daemon path. blocked_by that tactic so it lands on top of the --standalone mode
-  rather than racing it. Author-directed 2026-07-21: filed as a new dependent
-  tactic (not folded into the mid-QA router-visibility node) and boosted to top
-  rank."
+  sessions (pids 139471, 164656) sharing one checkout. The tick's fan-out
+  printed `live=1` though at least 6 workers were live (the immediately-prior
+  tick alone had launched 6). Root cause (code read): dispatch-select-tick's
+  --manual branch computes LIVE_COUNT = claude_agents_count_busy_workers +
+  reservation_count (dispatch-select-tick:684-686), and the downstream per-node
+  occupancy exclusion (worktree_has_live_session) reads the SAME `claude agents
+  --json` source. That read is known-unreliable: the daemon Unix socket is
+  blocked under sandbox and returns an empty `[]` indistinguishable from a
+  genuine no-sessions result (see .claude/rules/sandbox.md, `claude agents
+  --json` section), and sessions.json is roughly 50% stale. A single
+  empty/partial read therefore both inflates HEADROOM (MAX_WORKERS-1 →
+  over-spawn) AND makes the per-node check miss the already-live worker, so a
+  top-ranked node gets dispatched twice. This complements
+  tactic-graph-router-live-worker-visibility (the --standalone
+  lock+headroom+claim cycle, PR #2918): that closes the missing-lock /
+  missing-headroom path for external manual/emulated callers; this hardens the
+  underlying live-worker READ that BOTH the count and the per-node dedup trust,
+  so an undercount cannot defeat the fleet count or the per-node occupancy
+  exclusion even through the locked daemon path. blocked_by that tactic so it
+  lands on top of the --standalone mode rather than racing it. Author-directed
+  2026-07-21: filed as a new dependent tactic (not folded into the mid-QA
+  router-visibility node) and boosted to top rank."
 reading: null
 gap: null
 serves:
@@ -42,21 +43,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 85
+  boost: 10
   override: null
-  rationale: "Author-directed 2026-07-21: boost to top ranking. This is the
-    durable fix for the 2026-07-21 duplicate-dispatch incident (two live
-    /implement workers on tactic-primary-checkout-main-guard's single worktree)
-    — the router trusts a fragile point-in-time `claude agents --json` read for
-    both fleet headroom and per-node dedup, and one empty/partial read let a
-    top-ranked node be dispatched twice. Sized at 85 — above the live
-    discretionary composed max (80.00, tactic-primary-checkout-main-guard) so this
-    tactic serving strategy-graph-native-dispatch becomes the top discretionary
-    dispatch target — and kept below the strategy-main-health ceiling (100,
-    author-override-guarded), which it must not displace. The blocked_by edge to
-    tactic-graph-router-live-worker-visibility flows this boost backward onto that
-    node too, prioritizing PR #2918's completion (which unblocks this node) — the
-    intended critical path."
+  rationale: "Bootstrap re-scale 2026-07-30: demoted from the pre-bootstrap 85-90
+    band to 10. These are ordinary improvements, not integrity defects; at 85-90
+    they outranked strategy-main-health (101 resolved) and flooded the selector
+    hot band. Interim scaffolding only; tactic-attention-tier-ranking and
+    tactic-attention-boost-scripts retire this numeric scheme."
 phase: null
 execution: null
 validates: []

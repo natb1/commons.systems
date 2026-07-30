@@ -10647,6 +10647,40 @@ assert_eq "rl-sweep-standalone-ttl-scope: aged tick marker (no origin) kept" "1"
   "$([ -f "$DISPATCH_RESERVATION_DIR/933-slug" ] && echo 1 || echo 0)"
 rl_teardown
 
+# --- Test 5d: the TTL also covers `origin=explicit` (explicit-node dispatch) ---
+# tactic-explicit-node-reservation-sweep-policy: dispatch-select-tick's explicit
+# single-node lane (`dispatch <node-id>`) stamps its claim `origin=explicit`. That
+# lane is typically run from inside a long-lived INTERACTIVE session, and
+# dispatch-graph-execute has deliberate paths that leave the reservation for the
+# sweep on a spawn failure — so with a live reserving session and no worker of
+# that name, rules (a)/(c) never fire and the marker would be immortal, each
+# failed explicit dispatch permanently adding 1 to LIVE_COUNT. Rule (c-ttl) must
+# treat `explicit` exactly like `standalone`. Same fixture shape as Test 5b/5c.
+echo "Test: reservation_sweep TTL-reclaims an aged origin=explicit marker even though its reserving session is still live"
+rl_setup
+reservation_write "tactic-explicit-aged" "tactic-explicit-aged" "live-sess" "explicit"
+reservation_write "tactic-explicit-young" "tactic-explicit-young" "live-sess" "explicit"
+rl_write_fake_claude '[{"sessionId":"live-sess","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_STANDALONE_TTL_S=600
+# Inside the TTL first: an explicit claim that has not aged out is in-flight and
+# must be KEPT (the rule cannot over-reclaim a just-issued explicit dispatch).
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 599))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-explicit-ttl-young: young explicit marker kept" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-explicit-young" ] && echo 1 || echo 0)"
+# Past the TTL: reclaimed despite the reserving session still being live.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 601))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+assert_eq "rl-sweep-explicit-ttl: aged explicit marker reclaimed (count 0)" "0" "$(reservation_count)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'explicit-ttl-expired'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-explicit-ttl: note mentions explicit-ttl-expired"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-explicit-ttl: note mentions explicit-ttl-expired"
+  echo "    stderr: $err"
+fi
+rl_teardown
+
 # --- Test 6: sweep reclaims NOTHING when the daemon is UNKNOWN ----------------
 
 echo "Test: reservation_sweep reclaims nothing (fail safe) when the daemon is UNKNOWN"
@@ -22255,6 +22289,7 @@ FAKE
   # byte-identical.
   for _hs in dispatch-reconcile-merged:SEL_RECONCILE_MERGED_OUT \
              reconcile-graph-merged:SEL_RECONCILE_GRAPH_OUT \
+             reconcile-graph-review-stall:SEL_REVIEW_STALL_OUT \
              dispatch-graph-census:SEL_CENSUS_OUT \
              dispatch-jit-calendar-import:SEL_CALENDAR_OUT \
              dispatch-statements-scan:SEL_STATEMENTS_OUT; do
@@ -22313,6 +22348,20 @@ echo called >> "$STUB_DIR/auto-merge-calls.log"
 exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/dispatch-auto-merge"
+  # tactic-graph-tick-node-lane-auto-merge Unit 3: fake graph-auto-merge invoked
+  # by the node-lane Step 1d (cont.) block, gated on the same OPEN_MB condition
+  # as dispatch-auto-merge above. Logs its invocation and emits a configurable
+  # merge line so a wiring test can assert the tick prefixes it with `merge: `.
+  # The real merge logic has its own unit tests (graph-auto-merge); here we only
+  # verify the tick wiring.
+  cat > "$TMPDIR_TEST/graph-auto-merge" <<'FAKE'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
+echo called >> "$STUB_DIR/graph-auto-merge-calls.log"
+[[ -n "${SEL_GRAPH_AUTO_MERGE_OUT:-}" ]] && printf '%s\n' "$SEL_GRAPH_AUTO_MERGE_OUT"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/graph-auto-merge"
   # #1812: fake dispatch-retriage-orphaned-followups invoked unconditionally by
   # Step 2e. Logs its invocation and emits a configurable line so a wiring test
   # can assert the tick prefixes it with `retriage: `. SILENT by default (emits
@@ -22501,9 +22550,9 @@ sel_tick_teardown() {
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
-    SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT \
+    SEL_AUTO_MERGE_OUT SEL_GRAPH_AUTO_MERGE_OUT SEL_RETRIAGE_OUT \
     SEL_MAIN_BROKEN_SHA SEL_MAIN_RED_NODES SEL_SYNC_BROKEN_LATCHED SEL_JIT_SCAN \
-    SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_CENSUS_OUT \
+    SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_REVIEW_STALL_OUT SEL_CENSUS_OUT \
     SEL_CALENDAR_OUT SEL_STATEMENTS_OUT \
     SEL_PRIMARY_CHECKOUT_BRANCH \
     DISPATCH_DECISION_LOG_DIR
@@ -22512,6 +22561,14 @@ sel_tick_teardown() {
 # Run the orchestrator, capturing full stdout; the decision is the last line.
 run_sel_tick() {
   "$TMPDIR_TEST/dispatch-select-tick" "$@" 2>/dev/null
+}
+
+# Same as run_sel_tick, but the tick's stderr is written to $1 instead of being
+# discarded. Use this when the behavior under test is only observable on stderr
+# (e.g. the reservation sweep's `reclaimed reservation ...` notes).
+run_sel_tick_err() {
+  local errfile="$1"; shift
+  "$TMPDIR_TEST/dispatch-select-tick" "$@" 2>"$errfile"
 }
 
 # --- empty queue → release + empty ------------------------------------------
@@ -22568,6 +22625,11 @@ assert_eq "graph: reservation written under the node id" "1" \
   "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-x" ] && echo 1 || echo 0)"
 assert_eq "graph: reservation issue field is the node id" "issue=tactic-x" \
   "$(grep '^issue=' "$DISPATCH_RESERVATION_DIR/tactic-x")"
+# Control for the explicit-lane origin test below: the AUTONOMOUS lane writes NO
+# `origin=` line, so its claim keeps the ordinary (a)/(c) sweep lifecycle and is
+# never TTL-reclaimed out from under the fan-out it belongs to.
+assert_eq "graph: autonomous claim carries no origin= line" "0" \
+  "$(grep -c '^origin=' "$DISPATCH_RESERVATION_DIR/tactic-x")"
 assert_eq "graph: legacy selector not consulted" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
 assert_eq "graph: decision log disposition" "graph" \
@@ -22757,6 +22819,49 @@ assert_eq "auto-merge suppressed: dispatch-auto-merge NOT invoked" "absent" \
   "$([[ -f "$STUB_DIR/auto-merge-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
+# --- Step 1d (cont.): node-lane auto-merge wiring, main healthy → invoked -----
+# (tactic-graph-tick-node-lane-auto-merge Unit 3). main is healthy (no
+# main-broken-open.txt → OPEN_MB empty), so the node-lane block runs
+# graph-auto-merge and prefixes each of its lines with `merge: `, the same
+# prefix convention the issue-lane block uses. The fake emits
+# SEL_GRAPH_AUTO_MERGE_OUT.
+echo "Test: select-tick node-lane auto-merge wiring (main healthy) → merge: line, graph-auto-merge invoked"
+sel_tick_setup
+export SEL_GRAPH_AUTO_MERGE_OUT="merged #77 (tactic-y)"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if grep -q '^merge: merged #77 (tactic-y)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'merge: merged #77 (tactic-y)'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'merge: merged #77 (tactic-y)'"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "node-lane auto-merge wiring: graph-auto-merge invoked" "present" \
+  "$([[ -f "$STUB_DIR/graph-auto-merge-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 1d (cont.): node-lane auto-merge suppressed while main is broken ----
+# (tactic-graph-tick-node-lane-auto-merge Unit 3). An open main-red latch
+# (OPEN_MAIN_RED non-empty, from SEL_MAIN_RED_NODES) suppresses the node-lane
+# block exactly like it suppresses the issue-lane block: graph-auto-merge is NOT
+# invoked and no `merge:` line attributable to it is emitted, even though the
+# fake would emit one if called.
+echo "Test: select-tick node-lane auto-merge suppressed while main is broken"
+sel_tick_setup
+export SEL_MAIN_RED_NODES="tactic-main-red-redsha1"
+export SEL_GRAPH_AUTO_MERGE_OUT="merged #77 (tactic-y)"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'merge: merged #77' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: no node-lane 'merge:' line while main is broken"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no node-lane 'merge:' line while main is broken"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "node-lane auto-merge suppressed: graph-auto-merge NOT invoked" "absent" \
+  "$([[ -f "$STUB_DIR/graph-auto-merge-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
 # --- Step 2e: re-triage orphaned follow-ups wiring (#1812) -------------------
 # Step 2e runs dispatch-retriage-orphaned-followups unconditionally and prefixes
 # each of its stdout lines with `retriage: `. The fake emits SEL_RETRIAGE_OUT.
@@ -22773,6 +22878,47 @@ else
 fi
 assert_eq "re-triage wiring: dispatch-retriage-orphaned-followups invoked" "present" \
   "$([[ -f "$STUB_DIR/retriage-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Review-stall sweep wiring (tactic-graph-review-exclusion-stall-recovery) -
+# The tick runs reconcile-graph-review-stall unconditionally right after
+# reconcile-graph-merged and prefixes each of its stdout lines with
+# `review-stall: `. The silent fake emits SEL_REVIEW_STALL_OUT; both stdout
+# shapes the sweep can produce (a `fix` recovery and a `conflict` hold) must
+# come through verbatim behind the prefix.
+echo "Test: select-tick review-stall wiring → review-stall: lines"
+sel_tick_setup
+export SEL_REVIEW_STALL_OUT="recovered tactic-x -> fix (ci=failing merge=MERGEABLE)
+held tactic-y -> conflict via tactic-hold-y (ci=passing merge=CONFLICTING)"
+out=$(run_sel_tick) || true
+TOTAL=$((TOTAL + 1))
+if grep -q '^review-stall: recovered tactic-x -> fix (ci=failing merge=MERGEABLE)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'review-stall: recovered tactic-x -> fix ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'review-stall: recovered tactic-x -> fix ...'"
+  echo "    actual stdout: '$out'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q '^review-stall: held tactic-y -> conflict via tactic-hold-y (ci=passing merge=CONFLICTING)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'review-stall: held tactic-y -> conflict ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'review-stall: held tactic-y -> conflict ...'"
+  echo "    actual stdout: '$out'"
+fi
+sel_tick_teardown
+
+# Silent sweep (the default): no `review-stall: ` line at all, so every other
+# tick test stays byte-identical.
+echo "Test: select-tick review-stall wiring → silent sweep emits no line"
+sel_tick_setup
+out=$(run_sel_tick) || true
+TOTAL=$((TOTAL + 1))
+if ! grep -q '^review-stall: ' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: no 'review-stall:' line when the sweep is silent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no 'review-stall:' line when the sweep is silent"
+  echo "    actual stdout: '$out'"
+fi
 sel_tick_teardown
 
 # --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
@@ -23444,6 +23590,79 @@ assert_eq "node-explicit at-cap: decision line" "graph 1 foo-bar:tactic:implemen
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "node-explicit at-cap: graph selector called --node <id> (not --top)" \
   "--node foo-bar" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+sel_tick_teardown
+
+# --- explicit node-id, stale reservation reclaimed by sweep → still selects ---
+# tactic-explicit-node-reservation-sweep-policy Unit 2: Unit 1 added a
+# reservation_sweep call to the explicit-node branch, mirroring the autonomous
+# path's sweep-before-count pattern. Plant a stale marker for the target node
+# under a session absent from the fake claude-agents registry, then confirm
+# the tick's own sweep (run at real wall-clock time, no DISPATCH_RESERVATION_NOW
+# override for the tick itself) reclaims it before graph-select-target --node is
+# consulted — so the explicit dispatch is NOT wrongly refused as
+# node-not-selectable due to a stranded marker.
+echo "Test: select-tick explicit node-id, stale reservation reclaimed by sweep → still selects"
+sel_tick_setup
+# Plant the stale marker with a far-past timestamp (real reservation_write,
+# sourced locally here — DISPATCH_RESERVATION_DIR is already exported by
+# sel_tick_setup). The reserving session ("dead-sess") is absent from
+# SEL_AGENTS_TSV below, so the sweep's liveness check treats it as stranded.
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z" reservation_write "foo-bar" "999" "dead-sess"
+# A SECOND stale marker under an id the tick never selects. Nothing on the
+# explicit-node path re-creates it (emit_graph_selection only writes markers for
+# the ids it selected), so its absence after the tick is evidence ONLY the sweep
+# can produce — delete the sweep call and this marker survives.
+DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z" reservation_write "stale-other" "998" "dead-sess"
+# A different, unrelated LIVE session — feeds the FAKE claude_agents_list_all
+# sel_tick_setup already wires up, so the sweep sees a live registry that does
+# NOT include "dead-sess".
+export SEL_AGENTS_TSV=$'other-sess\tbusy\tworkerX'
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+SEL_TICK_ERR="$TMPDIR_TEST/logs/sel-tick.err"
+out=$(run_sel_tick_err "$SEL_TICK_ERR" foo-bar)
+assert_eq "node-explicit stale-reservation: decision line" "graph 1 foo-bar:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+# The sweep's own stderr note is the direct observable: emit_graph_selection's
+# unconditional re-claim of the selected id cannot forge it, and the fake
+# graph-select-target ignores the ledger entirely, so this line appears only if
+# the explicit-node branch actually ran reservation_sweep.
+assert_eq "node-explicit stale-reservation: sweep reclaimed the target's stale marker" "1" \
+  "$(grep -qF 'reclaimed reservation foo-bar (dead-session-stranded)' "$SEL_TICK_ERR" && echo 1 || echo 0)"
+# And the never-selected marker is gone — the same evidence, checked on the
+# filesystem rather than on stderr.
+assert_eq "node-explicit stale-reservation: unrelated stale marker cleared" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/stale-other" ] && echo 1 || echo 0)"
+sel_tick_teardown
+unset SEL_TICK_ERR
+
+# --- explicit node-id → a reservation marker IS written, stamped origin=explicit
+# Regression for the red-team finding on tactic-explicit-node-reservation-sweep-
+# policy. Two defects in one:
+#   1. Before this tactic the explicit-node lane never sourced
+#      lib-reservation-ledger.sh, so emit_graph_selection's reservation_write was
+#      an undefined command (exit 127) swallowed by its `||` warning — explicit
+#      dispatch claimed NOTHING and its slot was invisible to the budget.
+#   2. Once sourced, an un-stamped marker keyed to a long-lived INTERACTIVE
+#      session id is immortal: rule (a) needs a live worker named <id> (never
+#      appears if dispatch-graph-execute's spawn fails, a path that deliberately
+#      leaves the reservation for the sweep), rule (c) needs the reserving
+#      session dead (it is not), and rule (c-ttl) only reclaims stamped origins.
+#      Each failed explicit dispatch would permanently add 1 to LIVE_COUNT.
+# So assert BOTH: the marker exists, and it carries `origin=explicit` (the token
+# rule (c-ttl) keys on — see the lib's Test 5d).
+echo "Test: select-tick explicit node-id writes a reservation marker stamped origin=explicit"
+sel_tick_setup
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit origin: decision line" "graph 1 foo-bar:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-explicit origin: reservation marker written under the node id" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/foo-bar" ] && echo 1 || echo 0)"
+assert_eq "node-explicit origin: marker session is the dispatching session" \
+  "session=select-tick-session" "$(grep '^session=' "$DISPATCH_RESERVATION_DIR/foo-bar")"
+assert_eq "node-explicit origin: marker stamped origin=explicit (TTL-reclaimable)" \
+  "origin=explicit" "$(grep '^origin=' "$DISPATCH_RESERVATION_DIR/foo-bar")"
 sel_tick_teardown
 
 # --- AC3 non-fatal guarantee: unwritable log dir does NOT kill the tick -------
@@ -33098,6 +33317,220 @@ assert_eq "main-red-sync(f): dump-node NOT run for lookalike" "0" "$(count_match
 assert_eq "main-red-sync(f): graph-commit NOT run for lookalike" "0" "$(count_matches "$MRS_LOG/graph-commit.log" "$LOOKALIKE_ID")"
 
 rm -rf "$MRS_ROOT"
+
+# ============================================================================
+# Test: graph-auto-merge — the graph-native, marker-keyed PR auto-merger
+# (tactic-graph-tick-node-lane-auto-merge Unit 1)
+# ============================================================================
+# graph-auto-merge derives REPO_ROOT/UTIL_SCRIPTS from its own on-disk location
+# and shells out to two `node --import tsx/esm` invocations (the listNodes
+# candidate enumeration and compute-freshness.ts) plus gh. Following the
+# graph-select-target precedent above, the two pure `node` computations are
+# STUBBED on PATH (the enumeration filter and the freshness verdict are covered
+# by the pure layer's own tests); this fixture exercises the bash orchestration
+# the unit owns: the config kill-switch, the per-candidate OPEN/MERGEABLE/CI
+# gates, the fail-closed fingerprint hold, and the label-free squash merge.
+#
+# The fake `node` re-implements the enumeration filter with jq over a nodes
+# fixture and serves per-id freshness fixtures; the fake `gh` serves per-PR raw
+# REST objects (gh_pr_view_rest projects them), records merge PUTs, and no-ops
+# `gh pr ready`. CI verdicts are injected through DISPATCH_CI_VERDICT_CACHE so no
+# check-runs stub is needed. MAIN_ROOT is pinned via GRAPH_AUTO_MERGE_MAIN_ROOT
+# so the stamp path resolves without a git lookup.
+echo "Test: graph-auto-merge — marker-keyed node-lane PR auto-merge"
+GAM_ROOT=$(mktemp -d)
+GAM_SCRIPTS="$GAM_ROOT/.claude/skills/dispatch-propagate/scripts"
+mkdir -p "$GAM_SCRIPTS" "$GAM_ROOT/bin" "$GAM_ROOT/stub" "$GAM_ROOT/cache" \
+         "$GAM_ROOT/config" "$GAM_ROOT/.claude/worktrees"
+# graph-auto-merge's REPO_ROOT resolves to GAM_ROOT itself (4 levels up from
+# GAM_SCRIPTS), so its `git archive origin/main intentions` runs for real here
+# — the fail-closed freshness-gate fix makes that call hard-error instead of
+# silently degrading to an empty snapshot on failure, so origin/main must
+# genuinely resolve. Mirror the dispatch-graph-scope-sweep fixture above: a
+# real git repo seeded with an intentions/ tree, pushed to a local bare remote
+# and fetched, so refs/remotes/origin/main resolves without network or a git
+# stub. The freshness computation itself is still fully mocked by the fake
+# `node` below, so the tree's actual content never matters — only that the
+# archive succeeds.
+GAM_BARE=$(mktemp -d)
+git init -q -b main "$GAM_ROOT"
+git -C "$GAM_ROOT" config user.email t@t
+git -C "$GAM_ROOT" config user.name t
+mkdir -p "$GAM_ROOT/intentions"
+echo '# placeholder' > "$GAM_ROOT/intentions/placeholder.md"
+git -C "$GAM_ROOT" add -A
+git -C "$GAM_ROOT" commit -q -m seed
+git init -q --bare -b main "$GAM_BARE"
+git -C "$GAM_ROOT" remote add origin "$GAM_BARE"
+git -C "$GAM_ROOT" push -q origin main
+git -C "$GAM_ROOT" fetch -q origin
+# REPO_ROOT is derived from the script's real location, so the copy is physical;
+# dispatch-config-load and lib.sh sit alongside (both resolved via SCRIPT_DIR).
+cp "$SCRIPT_DIR"/graph-auto-merge "$SCRIPT_DIR"/dispatch-config-load \
+   "$SCRIPT_DIR"/lib.sh "$GAM_SCRIPTS/"
+GAM_SCRIPT="$GAM_SCRIPTS/graph-auto-merge"
+
+# Fake node: enumeration ( -e inline ) applies the id/phase/pr/reviewed-marker
+# filter over stub/nodes.json; compute-freshness.ts <id> serves stub/freshness-<id>.json.
+cat > "$GAM_ROOT/bin/node" <<'GAMNODE'
+#!/usr/bin/env bash
+STUB="$(cd "$(dirname "$0")/.." && pwd)/stub"
+if [[ "$*" == *compute-freshness.ts* ]]; then
+  id="" ; seen_ts=0
+  for a in "$@"; do
+    if [[ "$seen_ts" == 1 ]]; then id="$a"; break; fi
+    [[ "$a" == *compute-freshness.ts ]] && seen_ts=1
+  done
+  cat "$STUB/freshness-$id.json"
+  exit 0
+fi
+# enumeration — mirror the script's listNodes filter with jq.
+jq -r '.[]
+  | select(.kind=="tactic" and .phase=="review"
+           and (.execution.pr != null)
+           and ((.execution.markers // []) | index("reviewed")))
+  | "\(.id)\t\(.execution.pr)"' "$STUB/nodes.json"
+exit 0
+GAMNODE
+
+# Fake gh: `pr ready` no-ops; `api .../pulls/<N>` serves the raw REST fixture;
+# `api -X PUT .../pulls/<N>/merge` records the call.
+cat > "$GAM_ROOT/bin/gh" <<'GAMGH'
+#!/usr/bin/env bash
+STUB="$(cd "$(dirname "$0")/.." && pwd)/stub"
+if [[ "$1" == "pr" && "$2" == "ready" ]]; then exit 0; fi
+if [[ "$1" == "api" ]]; then
+  path=""
+  for a in "$@"; do [[ "$a" == repos/* ]] && { path="$a"; break; }; done
+  if [[ "$path" == */merge ]]; then
+    echo "$*" >> "$STUB/merge-calls.log"
+    echo '{}'
+    exit 0
+  fi
+  N="${path##*/}"
+  if [[ -f "$STUB/pr-$N.json" ]]; then cat "$STUB/pr-$N.json"; exit 0; fi
+  echo "gh stub: no fixture for $path" >&2; exit 1
+fi
+echo "gh stub: unexpected: $*" >&2; exit 1
+GAMGH
+chmod +x "$GAM_ROOT/bin/node" "$GAM_ROOT/bin/gh"
+
+gam_reset() {
+  rm -f "$GAM_ROOT/stub/"* "$GAM_ROOT/cache/"* "$GAM_ROOT/config/"*.json \
+        "$GAM_ROOT/.claude/worktrees/"*.scope-fingerprint 2>/dev/null || true
+}
+run_gam() {
+  PATH="$GAM_ROOT/bin:$SAVED_PATH" \
+  DISPATCH_CONFIG_DIR="$GAM_ROOT/config" \
+  DISPATCH_CI_VERDICT_CACHE="$GAM_ROOT/cache" \
+  GRAPH_AUTO_MERGE_MAIN_ROOT="$GAM_ROOT" \
+  GH_RETRY_BASE_DELAY=0 GH_RETRY_ATTEMPTS=1 \
+  "$GAM_SCRIPT"
+}
+gam_fresh() {  # write a fresh (not-stale) freshness fixture for node id $1
+  printf '%s\n' '{"scopeStale":false,"strategyStale":false,"stampMissing":false,"nodeOnMain":true}' \
+    > "$GAM_ROOT/stub/freshness-$1.json"
+}
+
+# ---- (a) reviewed + green CI + MERGEABLE + fresh stamp → merges -------------
+gam_reset
+printf '%s\n' '[{"id":"tactic-a","kind":"tactic","phase":"review","execution":{"pr":101,"markers":["planned","qa-done","reviewed"]}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":101,"title":"Tactic A","body":"Closes #1","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-a","sha":"sha101"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-101.json"
+echo passing > "$GAM_ROOT/cache/sha101"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-a.scope-fingerprint"
+gam_fresh tactic-a
+gam_a_out=$(run_gam 2>/dev/null); gam_a_rc=$?
+assert_eq "graph-auto-merge (a): reviewed+green+mergeable node merges" \
+  "merged #101 (tactic-a)" "$gam_a_out"
+assert_eq "graph-auto-merge (a): exit 0" "0" "$gam_a_rc"
+if grep -q 'pulls/101/merge' "$GAM_ROOT/stub/merge-calls.log" 2>/dev/null; then gam_a_m=yes; else gam_a_m=no; fi
+assert_eq "graph-auto-merge (a): squash-merge PUT issued for #101" "yes" "$gam_a_m"
+if grep -q 'merge_method=squash' "$GAM_ROOT/stub/merge-calls.log" 2>/dev/null; then gam_a_sq=yes; else gam_a_sq=no; fi
+assert_eq "graph-auto-merge (a): merge is a squash" "yes" "$gam_a_sq"
+
+# ---- (b) phase:review WITHOUT the reviewed marker → skipped ----------------
+gam_reset
+printf '%s\n' '[{"id":"tactic-b","kind":"tactic","phase":"review","execution":{"pr":102,"markers":["planned","qa-done"]}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+gam_b_out=$(run_gam 2>/dev/null); gam_b_rc=$?
+assert_eq "graph-auto-merge (b): review node without reviewed marker is not merged" "" "$gam_b_out"
+assert_eq "graph-auto-merge (b): exit 0" "0" "$gam_b_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_b_m=present; else gam_b_m=absent; fi
+assert_eq "graph-auto-merge (b): no merge attempted" "absent" "$gam_b_m"
+
+# ---- (c) pending CI and failing CI → skipped (no merge) --------------------
+gam_reset
+printf '%s\n' '[{"id":"tactic-c","kind":"tactic","phase":"review","execution":{"pr":103,"markers":["reviewed"]}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":103,"title":"Tactic C","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-c","sha":"sha103"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-103.json"
+echo pending > "$GAM_ROOT/cache/sha103"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-c.scope-fingerprint"
+gam_fresh tactic-c
+gam_c_out=$(run_gam 2>/dev/null)
+assert_eq "graph-auto-merge (c): pending CI is skipped" "" "$gam_c_out"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_c_m=present; else gam_c_m=absent; fi
+assert_eq "graph-auto-merge (c): pending CI issues no merge" "absent" "$gam_c_m"
+echo failing > "$GAM_ROOT/cache/sha103"
+gam_cf_out=$(run_gam 2>/dev/null)
+assert_eq "graph-auto-merge (c): failing CI is skipped" "" "$gam_cf_out"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_cf_m=present; else gam_cf_m=absent; fi
+assert_eq "graph-auto-merge (c): failing CI issues no merge (fix interrupt owns red CI)" "absent" "$gam_cf_m"
+
+# ---- (d) CONFLICTING mergeable → skipped -----------------------------------
+gam_reset
+printf '%s\n' '[{"id":"tactic-d","kind":"tactic","phase":"review","execution":{"pr":104,"markers":["reviewed"]}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":104,"title":"Tactic D","body":"","state":"open","merged_at":null,"mergeable":false,"mergeable_state":"dirty","head":{"ref":"tactic-d","sha":"sha104"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-104.json"
+echo passing > "$GAM_ROOT/cache/sha104"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-d.scope-fingerprint"
+gam_fresh tactic-d
+gam_d_out=$(run_gam 2>/dev/null)
+assert_eq "graph-auto-merge (d): CONFLICTING PR is skipped" "" "$gam_d_out"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_d_m=present; else gam_d_m=absent; fi
+assert_eq "graph-auto-merge (d): CONFLICTING PR issues no merge" "absent" "$gam_d_m"
+
+# ---- (e) scope-stale and missing-stamp → held (fail closed, no merge) ------
+gam_reset
+printf '%s\n' '[{"id":"tactic-e","kind":"tactic","phase":"review","execution":{"pr":105,"markers":["reviewed"]}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":105,"title":"Tactic E","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-e","sha":"sha105"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-105.json"
+echo passing > "$GAM_ROOT/cache/sha105"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-e.scope-fingerprint"
+printf '%s\n' '{"scopeStale":true,"strategyStale":false,"stampMissing":false,"nodeOnMain":true}' \
+  > "$GAM_ROOT/stub/freshness-tactic-e.json"
+gam_e_out=$(run_gam 2>/dev/null)
+assert_eq "graph-auto-merge (e): scope-stale node is held" "held tactic-e (scope-stale)" "$gam_e_out"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_e_m=present; else gam_e_m=absent; fi
+assert_eq "graph-auto-merge (e): scope-stale hold issues no merge" "absent" "$gam_e_m"
+# missing stamp: same PR, delete the stamp file so the file-existence gate fires.
+rm -f "$GAM_ROOT/.claude/worktrees/tactic-e.scope-fingerprint"
+gam_em_out=$(run_gam 2>/dev/null)
+assert_eq "graph-auto-merge (e): missing stamp is held" "held tactic-e (missing-stamp)" "$gam_em_out"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_em_m=present; else gam_em_m=absent; fi
+assert_eq "graph-auto-merge (e): missing-stamp hold issues no merge" "absent" "$gam_em_m"
+
+# ---- (f) config kill-switch (enabled:false) suppresses all merges ----------
+gam_reset
+printf '%s\n' '{"enabled":false}' > "$GAM_ROOT/config/auto-merge.json"
+printf '%s\n' '[{"id":"tactic-a","kind":"tactic","phase":"review","execution":{"pr":101,"markers":["reviewed"]}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":101,"title":"Tactic A","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-a","sha":"sha101"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-101.json"
+echo passing > "$GAM_ROOT/cache/sha101"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-a.scope-fingerprint"
+gam_fresh tactic-a
+gam_f_out=$(run_gam 2>/dev/null); gam_f_rc=$?
+assert_eq "graph-auto-merge (f): kill-switch suppresses output" "" "$gam_f_out"
+assert_eq "graph-auto-merge (f): kill-switch exit 0" "0" "$gam_f_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_f_m=present; else gam_f_m=absent; fi
+assert_eq "graph-auto-merge (f): kill-switch issues no merge" "absent" "$gam_f_m"
+
+rm -rf "$GAM_ROOT" "$GAM_BARE"
 
 # ============================================================================
 # repo-health --main-broken-sha branch-attribution tests
