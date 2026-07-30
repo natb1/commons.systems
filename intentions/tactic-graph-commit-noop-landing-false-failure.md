@@ -154,12 +154,13 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-phase: implement
+phase: qa
 execution:
   branch: tactic-graph-commit-noop-landing-false-failure
   pr: 2981
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
   fix: null
   completion: null
