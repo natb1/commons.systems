@@ -114,6 +114,18 @@
 #      must not be reverted by the far-ahead rebuild's snapshot-restore, so
 #      both writers' fields land, the code commit is excluded, and HEAD is
 #      restored to the far-ahead tip
+#  34. far-ahead, NO --base, disjoint field: a concurrent writer lands an edit
+#      to a DIFFERENT field of the same node between this writer's snapshot and
+#      the far-ahead rebuild — the rebuild's three-way replay merges instead of
+#      blindly copying, so both edits land (pre-fix the concurrent edit was
+#      silently reverted with no conflict, park, or diagnostic)
+#  35. far-ahead, NO --base, SAME field: the rebuild's replay cannot resolve the
+#      divergence, so it parks (exit 1, "mechanical-unresolved", both values
+#      named) instead of overwriting — and the far-ahead worktree's HEAD is
+#      still restored to its PR tip on this new park path
+#  36. far-ahead --prune racing a concurrent edit to the same node: the prune is
+#      guarded rather than forced through — exit 1, park, and the node SURVIVES
+#      on main carrying the concurrent edit
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -171,7 +183,8 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
           t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
-          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene; do
+          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
+          t-farahead-prune-race; do
   seed_node "$id"
 done
 
@@ -203,6 +216,8 @@ seed_field_node t-field-conflict "sentinel: base"
 seed_field_node t-field-base-ok "fieldA: base" "fieldB: base"
 seed_field_node t-field-base-bad "sentinel: base"
 seed_field_node t-farahead-base "fieldA: base" "fieldB: base"
+seed_field_node t-farahead-race "fieldA: base" "fieldB: base"
+seed_field_node t-farahead-race-conflict "sentinel: base"
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -1248,6 +1263,117 @@ if [[ $rc -eq 0 ]] \
   ok "far-ahead + stale --base: layer-3 merge survives the far-ahead rebuild, both fields land"
 else
   no "far-ahead + stale --base (rc=$rc restored3=$restored3 fab_tip=$fab_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# ---------------------------------------------------------------------------
+# Cases 34-36: the far-ahead rebuild's three-way replay (Unit 2).
+#
+# Cases 16/18/33 all exercise the far-ahead rebuild where either nothing landed
+# concurrently or a --base CAS caught the divergence first. These three cover
+# the hole that opened when NEITHER applies: a writer with NO --base whose
+# worktree is far-ahead, racing a concurrent landing to the same node. Pre-Unit-2
+# the rebuild blindly `cp`'d the snapshot back over the freshly-reset tree, so
+# the concurrent edit was reverted with no conflict, no park, and no diagnostic.
+#
+# NOT covered here: a concurrent PRUNE racing this writer's edit (the node exists
+# at the fork point but is absent on origin/main). The real merge-node.ts treats
+# an empty --theirs with a non-null base as a delete/modify conflict (see
+# merge-node.ts's own comment), but this harness's npx shim resolves an empty
+# --theirs in favor of ours — a test here would assert shim behavior, not
+# product behavior. It is covered by the real merge primitive's own unit tests.
+
+# --- Case 34: far-ahead, no --base, disjoint field — both edits land ---------
+set_mode green
+W34="$WORK/w34"
+make_clone "$W34" writer-34
+mkdir -p "$W34/src"
+echo "console.log('pr feature code, far-ahead race')" >"$W34/src/farahead-race-feature.js"
+git -C "$W34" add src/farahead-race-feature.js
+git -C "$W34" commit -qm 'pr: non-intentions code change (far-ahead race)'
+race_tip="$(git -C "$W34" rev-parse HEAD)"
+edit_field "$W34" t-farahead-race fieldA writer-edit
+
+OTHERRACE="$WORK/otherrace"
+make_clone "$OTHERRACE" otherrace
+edit_field "$OTHERRACE" t-farahead-race fieldB concurrent-edit
+git -C "$OTHERRACE" commit -qam 'concurrent field edit (far-ahead race)'
+git -C "$OTHERRACE" push -q origin main
+
+out="$(run_gc "$W34" -m 'test: far-ahead race, disjoint field' t-farahead-race 2>&1)"; rc=$?
+content="$(origin_show t-farahead-race 2>/dev/null)"
+main_tree34="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+restored34="$(git -C "$W34" rev-parse HEAD)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'fieldA: writer-edit' <<<"$content" \
+   && grep -q 'fieldB: concurrent-edit' <<<"$content" \
+   && ! grep -q 'src/farahead-race-feature.js' <<<"$main_tree34" \
+   && [[ "$restored34" == "$race_tip" ]]; then
+  ok "far-ahead race, no --base: the rebuild's three-way replay merges, both writers' fields land"
+else
+  no "far-ahead race disjoint field (rc=$rc restored34=$restored34 race_tip=$race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 35: far-ahead, no --base, SAME field — parks, HEAD restored --------
+set_mode green
+W35="$WORK/w35"
+make_clone "$W35" writer-35
+mkdir -p "$W35/src"
+echo "console.log('pr feature code, far-ahead race conflict')" >"$W35/src/farahead-race-conflict-feature.js"
+git -C "$W35" add src/farahead-race-conflict-feature.js
+git -C "$W35" commit -qm 'pr: non-intentions code change (far-ahead race conflict)'
+race_conflict_tip="$(git -C "$W35" rev-parse HEAD)"
+edit_field "$W35" t-farahead-race-conflict sentinel writer-value
+
+OTHERRACE2="$WORK/otherrace2"
+make_clone "$OTHERRACE2" otherrace2
+edit_field "$OTHERRACE2" t-farahead-race-conflict sentinel concurrent-value
+git -C "$OTHERRACE2" commit -qam 'concurrent same-field edit (far-ahead race conflict)'
+git -C "$OTHERRACE2" push -q origin main
+
+out="$(run_gc "$W35" -m 'test: far-ahead race, same field' t-farahead-race-conflict 2>&1)"; rc=$?
+content="$(origin_show t-farahead-race-conflict 2>/dev/null)"
+restored35="$(git -C "$W35" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'writer-value' <<<"$content" \
+   && grep -q 'concurrent-value' <<<"$content" \
+   && [[ "$restored35" == "$race_conflict_tip" ]]; then
+  ok "far-ahead race, same field: parks mechanical-unresolved instead of overwriting, HEAD restored to the PR tip"
+else
+  no "far-ahead race same-field park (rc=$rc restored35=$restored35 race_conflict_tip=$race_conflict_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 36: far-ahead --prune racing a concurrent edit — park, node survives ---
+set_mode green
+W36="$WORK/w36"
+make_clone "$W36" writer-36
+mkdir -p "$W36/src"
+echo "console.log('pr feature code, far-ahead prune race')" >"$W36/src/farahead-prune-race-feature.js"
+git -C "$W36" add src/farahead-prune-race-feature.js
+git -C "$W36" commit -qm 'pr: non-intentions code change (far-ahead prune race)'
+prune_race_tip="$(git -C "$W36" rev-parse HEAD)"
+rm -f "$W36/intentions/t-farahead-prune-race.md"
+
+OTHERRACE3="$WORK/otherrace3"
+make_clone "$OTHERRACE3" otherrace3
+edit_line "$OTHERRACE3" t-farahead-prune-race 1 concurrent-edit-survives
+git -C "$OTHERRACE3" commit -qam 'concurrent edit racing a far-ahead prune'
+git -C "$OTHERRACE3" push -q origin main
+
+out="$(run_gc "$W36" -m 'test: far-ahead prune race' --prune t-farahead-prune-race 2>&1)"; rc=$?
+content="$(origin_show t-farahead-prune-race 2>/dev/null || true)"
+restored36="$(git -C "$W36" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'line1: concurrent-edit-survives' <<<"$content" \
+   && grep -q 'prune vs. concurrent edit' <<<"$content" \
+   && [[ "$restored36" == "$prune_race_tip" ]]; then
+  ok "far-ahead prune race: the prune is guarded, the node survives on main with the concurrent edit, HEAD restored"
+else
+  no "far-ahead prune race (rc=$rc restored36=$restored36 prune_race_tip=$prune_race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
