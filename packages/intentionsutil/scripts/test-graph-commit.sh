@@ -107,6 +107,13 @@
 #  32. lock-ref hygiene: refs/graph/landing-lock is absent after a normal
 #      landing and never appears under refs/heads/graph/** (disjoint from
 #      the scratch-branch namespace graph-fast-path.yml triggers on)
+#  33. far-ahead + stale --base: the layer-3 merge survives the rebuild — a
+#      writer whose worktree is BOTH far-ahead (a non-intentions code commit
+#      on HEAD) AND carrying a stale --base that a concurrent writer has
+#      since landed a disjoint-field edit against; the layer-3 merge's result
+#      must not be reverted by the far-ahead rebuild's snapshot-restore, so
+#      both writers' fields land, the code commit is excluded, and HEAD is
+#      restored to the far-ahead tip
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -195,6 +202,7 @@ seed_field_node t-field-merge "fieldA: base" "fieldB: base"
 seed_field_node t-field-conflict "sentinel: base"
 seed_field_node t-field-base-ok "fieldA: base" "fieldB: base"
 seed_field_node t-field-base-bad "sentinel: base"
+seed_field_node t-farahead-base "fieldA: base" "fieldB: base"
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -1197,6 +1205,49 @@ if ! git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**' |
   ok "lock hygiene: refs/heads/graph/** never lists the landing-lock ref (disjoint namespaces)"
 else
   no "lock hygiene: landing-lock ref leaked into refs/heads/graph/**"
+fi
+
+# --- Case 33: far-ahead + stale --base: the layer-3 merge survives the rebuild ---
+# Unit 1 regression guard. Wfab is BOTH far-ahead (a non-intentions code
+# commit on HEAD, like case 16) AND carrying a stale --base whose field-level
+# delta is disjoint from a concurrent writer's landed edit (like case 21).
+# Before Unit 1's fix, ensure_intentions_only_base()'s far-ahead rebuild would
+# copy the PRE-merge SNAP_DIR content back over the layer-3 merge result,
+# silently reverting the concurrent writer's landed fieldB edit even though
+# the log line still claimed "layer 2/3 auto-resolved". The fix keeps
+# SNAP_DIR authoritative once the merge resolves, so the rebuild replays the
+# merged content instead.
+set_mode green
+Wfab="$WORK/wfab"
+make_clone "$Wfab" writer-fab
+fab_sha="$(git -C "$Wfab" hash-object intentions/t-farahead-base.md)"
+
+mkdir -p "$Wfab/src"
+echo "console.log('pr feature code, far-ahead + stale base')" >"$Wfab/src/farahead-base-feature.js"
+git -C "$Wfab" add src/farahead-base-feature.js
+git -C "$Wfab" commit -qm 'pr: non-intentions code change (far-ahead + stale base)'
+fab_tip="$(git -C "$Wfab" rev-parse HEAD)"
+
+edit_field "$Wfab" t-farahead-base fieldA farahead-edit
+
+OTHERFAB="$WORK/otherfab"
+make_clone "$OTHERFAB" otherfab
+edit_field "$OTHERFAB" t-farahead-base fieldB concurrent-edit
+git -C "$OTHERFAB" commit -qam 'concurrent field edit (far-ahead + stale base)'
+git -C "$OTHERFAB" push -q origin main
+
+out="$(run_gc "$Wfab" -m 'test: far-ahead stale base' --base "t-farahead-base=$fab_sha" t-farahead-base 2>&1)"; rc=$?
+content="$(origin_show t-farahead-base 2>/dev/null)"
+main_tree3="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+restored3="$(git -C "$Wfab" rev-parse HEAD)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'fieldA: farahead-edit' <<<"$content" \
+   && grep -q 'fieldB: concurrent-edit' <<<"$content" \
+   && ! grep -q 'src/farahead-base-feature.js' <<<"$main_tree3" \
+   && [[ "$restored3" == "$fab_tip" ]]; then
+  ok "far-ahead + stale --base: layer-3 merge survives the far-ahead rebuild, both fields land"
+else
+  no "far-ahead + stale --base (rc=$rc restored3=$restored3 fab_tip=$fab_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

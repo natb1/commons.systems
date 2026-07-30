@@ -313,6 +313,11 @@ check_base_freshness() {
       # write proceeds against exactly origin_sha. RESOLVED_VIA_MERGE is already
       # set to 1 by run_merge_node().
       cp -- "$out_f" "$INTENTIONS_DIR/$id.md"
+      # Keep SNAP_DIR authoritative: it is the content ensure_intentions_only_base()
+      # replays onto the fresh base, and the content park_write() points a human at.
+      # Leaving the pre-merge snapshot here would let the far-ahead rebuild copy the
+      # unmerged bytes back over this merge and silently revert the other writer.
+      cp -- "$out_f" "$SNAP_DIR/$id.md"
       continue
     fi
     # run_merge_node() already appended the unresolved fields to
