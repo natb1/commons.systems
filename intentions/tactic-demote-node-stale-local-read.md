@@ -50,21 +50,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 96
+  boost: 50
   override: null
-  rationale: "Author-directed 2026-07-26: boost to top ranking. This is a
-    data-loss defect in a backward-transition primitive on the sole write path
-    to main -- a demotion silently discards landed body content and
-    completed-phase markers, and the loss is invisible (no conflict, no park,
-    exit 0), so it is only ever caught by a human noticing missing sections
-    after the fact. Sized at 96 (own claim) so that composed with the +5
-    inherited from strategy-graph-native-dispatch it reaches an authored 101,
-    above the current live selectable composed max of 100.33
-    (tactic-transition-node-stamp-landed-body and
-    tactic-phase-evidence-fingerprint-bound, both at own boost 95), while
-    staying strictly below strategy-main-health's standing 100 boost value so no
-    schema rule 18 dominance ACK is required and the main-health signal keeps
-    its recorded dominance."
+  rationale: "Bootstrap re-scale 2026-07-30: anchor for the long branch of the
+    fingerprint-custody cluster, replacing the pre-bootstrap 96. Attention flows
+    backward along blocked_by, so this single 50 lifts
+    tactic-phase-evidence-fingerprint-bound - which therefore carries no
+    attention of its own - with no summing. Interim scaffolding only;
+    tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
+    numeric scheme."
 phase: null
 execution: null
 validates: []

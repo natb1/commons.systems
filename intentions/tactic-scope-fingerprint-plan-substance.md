@@ -34,20 +34,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 96
+  boost: 50
   override: null
-  rationale: "Author-directed 2026-07-26: boost to top ranking. Re-boosted from
-    the 85 band after the machinery-write custody hazard this tactic removes by
-    construction fired live during /qa-fix on tactic-mechanical-park-producers
-    (PR #2970): the Step 3.6 `## needs-main residue` append this node names as
-    the sole current machinery writer tripped the scope-custody gate against its
-    own expected output, demoting a qa-complete node to implement. The hazard is
-    no longer prospective, so the sequenced-target framing that justified the 85
-    placement no longer holds. Sized at 96 (own claim) so that composed with the
-    +5 inherited from strategy-graph-native-dispatch it reaches an authored 101,
-    above the current live selectable composed max of 100.33, while staying
-    strictly below strategy-main-health's standing 100 boost value so no schema
-    rule 18 dominance ACK is required."
+  rationale: "Bootstrap re-scale 2026-07-30: anchor for the short branch of the
+    fingerprint-custody cluster, replacing the pre-bootstrap 96. Under the order
+    ratified 2026-07-30 (6556f70b) this node is a leaf blocked by
+    tactic-transition-node-stamp-landed-body, so it needs its own value or it
+    falls to 5.33. Interim scaffolding only; tactic-attention-tier-ranking and
+    tactic-attention-boost-scripts retire this numeric scheme."
 phase: qa
 execution:
   branch: tactic-scope-fingerprint-plan-substance

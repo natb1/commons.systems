@@ -1,25 +1,24 @@
 ---
 id: tactic-clear-park-repo-targeting-guard
 kind: tactic
-statement: "graph-commit's --base token asserts the resolved repo actually holds
+statement: graph-commit's --base token asserts the resolved repo actually holds
   that base blob at HEAD and has a pending edit, so a wrong-repo invocation can
   no longer pass the nothing-staged guard by coincidence; and clear-park /
   resolve-park gain a functional test harness that exercises the repo-targeting
-  dimension"
+  dimension
 owner: ai
 status: raw
 parent: null
 rationale: "Surfaced 2026-07-28 at an office-hours drain sitting, while
   root-causing why a clear-park invocation reported success without landing.
   clear-park derives REPO_ROOT from its own script location
-  (packages/intentionsutil/scripts/clear-park:55) and mutates
-  intentions/<id>.md under THAT root, but invokes graph-commit as
-  \"$SCRIPT_DIR/graph-commit\" with no -C argument
-  (packages/intentionsutil/scripts/clear-park:169) — and graph-commit resolves
-  its target repo from the CALLER'S CWD, by design, since
+  (packages/intentionsutil/scripts/clear-park:55) and mutates intentions/<id>.md
+  under THAT root, but invokes graph-commit as \"$SCRIPT_DIR/graph-commit\" with
+  no -C argument (packages/intentionsutil/scripts/clear-park:169) — and
+  graph-commit resolves its target repo from the CALLER'S CWD, by design, since
   tactic-graph-commit-cwd-repo-resolution landed. When cwd and the
-  script-derived REPO_ROOT are different checkouts, clear-park writes repo A
-  and graph-commit lands repo B. resolve-park has the identical shape at
+  script-derived REPO_ROOT are different checkouts, clear-park writes repo A and
+  graph-commit lands repo B. resolve-park has the identical shape at
   packages/intentionsutil/scripts/resolve-park:176. The immediate two-call-site
   fix (pass -C for REPO_ROOT) is being landed separately on branch
   tactic-graph-commit-staleness-silent-revert; this node covers ONLY the
@@ -34,13 +33,13 @@ rationale: "Surfaced 2026-07-28 at an office-hours drain sitting, while
   case. The guard is written to catch a differing blob; it structurally cannot
   catch the equal-blob wrong-repo case. This is a designed hole, not an
   oversight, but the --base token clear-park already passes carries exactly the
-  information needed to close it. (b) There is NO test coverage of clear-park
-  at all — grep over the repo's test-*.sh files returns zero references to
+  information needed to close it. (b) There is NO test coverage of clear-park at
+  all — grep over the repo's test-*.sh files returns zero references to
   clear-park — which is precisely why the missing -C shipped. resolve-park is
   partially covered (test-park-node.sh cases 9-11 exercise --ratify, --reject,
   and the unparked refusal), but no case for either script exercises the
-  repo-targeting dimension: every existing case runs with cwd equal to the
-  clone root, so the cwd/REPO_ROOT divergence that produces the defect is never
+  repo-targeting dimension: every existing case runs with cwd equal to the clone
+  root, so the cwd/REPO_ROOT divergence that produces the defect is never
   constructed."
 reading: null
 gap: null
@@ -50,7 +49,16 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 50
+  override: null
+  rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
+    (50 / 20 / 10) that puts write-path integrity work above ordinary feature
+    work. This band holds the silent graph-write-corruption defects plus the two
+    paths the bootstrap arms or depends on. Interim scaffolding only -
+    tactic-attention-tier-ranking replaces the whole numeric scheme with
+    lexicographic (tier, rank) and max-lifting, and
+    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
 phase: null
 execution: null
 validates: []

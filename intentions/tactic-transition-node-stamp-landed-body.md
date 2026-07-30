@@ -32,14 +32,29 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 95
-  override: null
-  rationale: "Author-directed 2026-07-25 /align-strategy round ('boost both to top
-    rank'): this and tactic-phase-evidence-fingerprint-bound rank at the top of
-    normal work — above the current top tactic band (90) and the 85 band below
-    it, and below the strategy-main-health emergency ceiling (boost 100), which
-    the 2026-07-13 write-path guard keeps dominant and which this round does not
-    disturb."
+  boost: null
+  override: 60
+  rationale: "Bootstrap re-scale 2026-07-30: override 60 caps the
+    fingerprint-custody cluster at its convergence node. The cluster is a tree
+    (ratified 2026-07-30, 6556f70b): tactic-demote-node-stale-local-read ->
+    tactic-phase-evidence-fingerprint-bound -> HERE, and
+    tactic-scope-fingerprint-plan-substance -> HERE. Attention flows backward
+    along blocked_by and SUMS over distinct sources, so two 50 anchors plus the
+    strategy 5 would resolve this node to 105 - back above strategy-main-health
+    101. An override REPLACES the outgoing set with {(self, 60)} and discards
+    everything incoming (attention.ts:243-254, 364-365), which caps the branch;
+    60 also places this node above the 55.33 band, expressing the sitting
+    ratified land-the-repair-first order in rank. TWO CAVEATS, recorded so a
+    later round need not rediscover them. (1) The override is a branch cap: this
+    node no longer inherits anything through blocked_by. That costs nothing -
+    red-main preemption does not travel by rank at all (it comes from
+    dispatch-graph-main-red-sync minting tactic-main-red-<sha> born pace_exempt,
+    plus the --main-broken-sha bypass at dispatch-select-tick:672) - but the
+    insulation is deliberate. (2) This is temporary scaffolding for the cluster
+    serialization, not a standing judgment: once this node is done the cap has
+    no subject, and tactic-attention-boost-scripts must retire it along with the
+    interim 50/20/10 boosts. Under tactic-attention-tier-ranking lexicographic
+    (tier, rank) with max-lifting the cap has no job at all."
 phase: review
 execution:
   branch: tactic-transition-node-stamp-landed-body
