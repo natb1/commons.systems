@@ -48,8 +48,16 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 # Step 1c block, relocated) ---------------------------------------------------
 OPEN_MAIN_RED=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const { listNodes } = await import("./packages/intentionsutil/src/store.js");
+  // Anchored to the exact tactic-main-red-<shortsha> shape (8 lowercase hex
+  // chars, dispatch-diagnose-main SKILL.md: `git rev-parse --short=8`), NOT a
+  // bare startsWith prefix test — a bare prefix test previously matched ANY
+  // tactic id merely beginning with "tactic-main-red-" (e.g. an unrelated
+  // hand-authored tactic like tactic-main-red-sync-completion-test), causing
+  // this script to mechanically auto-complete it to phase:"done" as though it
+  // were a real main-red episode latch.
+  const MAIN_RED_ID = /^tactic-main-red-[0-9a-f]{8}$/;
   for (const n of listNodes("./intentions")) {
-    if (!n.id.startsWith("tactic-main-red-")) continue;
+    if (!MAIN_RED_ID.test(n.id)) continue;
     if (n.phase === "done") continue;
     // NOTE: office_hours-parked nodes are DELIBERATELY kept open. A park means
     // the fix hit a blocker and awaits a human — the red episode is unresolved
