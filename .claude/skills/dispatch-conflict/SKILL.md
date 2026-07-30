@@ -544,11 +544,13 @@ the JSON with `dump-node.ts` (it writes `$SCRATCH/$NODE_ID.json`, the exact
 shape `readNode` returns, ready to pipe back into `write-node.ts`). It also
 writes a base-manifest — **ignore it**; this land is a normal edit with no
 `--base` (see below). Use an explicit `/tmp/claude-<uid>` scratch path, not
-`$TMPDIR` (unset under `dangerouslyDisableSandbox`):
+`$TMPDIR` (unset under `dangerouslyDisableSandbox`). The path is specific to
+this branch (`-resolved`) so it never shares an out-dir with the `ambiguous`
+path's dump further down — one out-dir per `graph-commit`:
 
 ```bash
 git checkout origin/main -- "intentions/$NODE_ID.md"
-SCRATCH="/tmp/claude-$(id -u)/dispatch-conflict-$NODE_ID"
+SCRATCH="/tmp/claude-$(id -u)/dispatch-conflict-resolved-$NODE_ID"
 mkdir -p "$SCRATCH"
 npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$SCRATCH" "$NODE_ID"
 ```
@@ -639,11 +641,13 @@ already in `office_hours.recommendation`, the skill **may** append it to that
 field — same write-back shape as the `resolved` path above, but appending text
 to `.office_hours.recommendation` rather than clearing `.office_hours`
 (schema `packages/intentionsutil/src/schema.ts:392-397`). This is optional; the
-default acceptable behavior is confirm-and-report only, with no write:
+default acceptable behavior is confirm-and-report only, with no write. As on
+the `resolved` path, the scratch dir is specific to this branch (`-note`) so
+the two never share an out-dir:
 
 ```bash
 git checkout origin/main -- "intentions/$NODE_ID.md"
-SCRATCH="/tmp/claude-$(id -u)/dispatch-conflict-$NODE_ID"
+SCRATCH="/tmp/claude-$(id -u)/dispatch-conflict-note-$NODE_ID"
 mkdir -p "$SCRATCH"
 npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$SCRATCH" "$NODE_ID"
 jq --arg extra "$NEXT_STEP" \
