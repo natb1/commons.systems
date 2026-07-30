@@ -191,6 +191,125 @@ is the secondary one.
 - The new exit code must be threaded through `dispatch-graph-execute`'s case statement and
   documented in `provision-node-worktree`'s header exit-code table alongside 10/11/12/13/2.
 
+## Second defect — a stale LOCAL branch shadows the pushed tip (added 2026-07-30)
+
+**Scope note:** the frontmatter `statement` above still describes only the exit-11 /
+unusable-worktree defect. This section and the next add two further defects in the same
+script and the same family (provisioning mis-reads worktree/branch state). Whoever plans
+this node should widen the `statement` to match; it was deliberately left unedited here
+because the drain that added these sections was authorized to add units, not to rewrite
+the node's frontmatter.
+
+**Source:** three office-hours drains run in parallel on 2026-07-30 over nodes parked by a
+single transient `git worktree add` failure in one 16-wide fan-out at ~14:09-14:12 on
+2026-07-28: `tactic-mount-schema`, `tactic-first-sensor-pass`, and
+`tactic-dependency-justification-audit`.
+
+**Location:** `.claude/skills/dispatch-propagate/scripts/provision-node-worktree:108-121`
+(the worktree-add block), specifically the remote-branch arm at `:109-111`.
+
+### The defect
+
+```bash
+if git -C "$PROJECT_ROOT" ls-remote --heads --exit-code origin "$NODE_ID" >/dev/null 2>&1; then
+  git -C "$PROJECT_ROOT" fetch origin "$NODE_ID" 1>&2 \
+    && git -C "$PROJECT_ROOT" worktree add "$WT" "$NODE_ID" 1>&2
+```
+
+`git fetch origin "$NODE_ID"` updates only the **remote-tracking** ref
+(`refs/remotes/origin/<id>`). `git worktree add "$WT" "$NODE_ID"` then resolves `<id>` to
+the **local** branch when one exists, so the fetched tip is discarded and the phase agent
+is handed a checkout of whatever the local ref happened to point at.
+
+A failed provisioning run manufactures exactly that stale local ref. `git worktree add`
+DWIMs the local branch into existence from the remote-tracking ref *before* the checkout,
+so when the checkout then fails the branch survives, frozen at that moment's tip, while
+the worktree does not. Every later provisioning run takes the branch arm above and
+silently prefers the frozen ref.
+
+The two halves compound: the transient failure that produces the stale ref is also what
+parks the node, and the park keeps the node out of the fleet long enough for the pushed
+branch to move on without it.
+
+### Evidence
+
+**`tactic-mount-schema` — the shadowing, measured.** Reflog:
+`821e8a4f tactic-mount-schema@{2026-07-28 14:09:13 -0400}: branch: Created from
+refs/remotes/origin/tactic-mount-schema`, two seconds before the park commit `c19be54e`
+at 14:09:15. The pushed branch then advanced out of band at 14:50:33 to `73ffb235`
+(`Merge remote-tracking branch 'origin/main' into HEAD`). The local ref never moved:
+`git rev-list --left-right --count tactic-mount-schema...origin/tactic-mount-schema`
+returned `0 1258` — **1258 commits behind**, zero ahead. Re-running the add on 2026-07-30
+reproduced the shadowing live: it checked out `821e8a4f`, not the pushed `73ffb235`.
+
+**`tactic-dependency-justification-audit` — the consequence, proved.** From its stale
+local ref `cd5fdfc7`, `git merge origin/main` **conflicts** on
+`intentions/strategy-graph-native-dispatch.md` and
+`packages/intentionsutil/scripts/read-sensors.ts`. After fast-forwarding to the pushed tip
+`c623e1c5`, the same merge is **clean**.
+
+That second case is the important one, and it upgrades the severity of this defect: the
+stale checkout does not merely hand an agent old code, it **manufactures false exit-11
+conflict-lane dispatches**. A node in this state trips the merged-tree guarantee at
+`:126-130` on every tick, against a conflict that does not exist on the real branch. Like
+Modes A and B above, it is a steady state the retry ladder can never clear — and it feeds
+the same conflict lane those modes do, from a third direction.
+
+### Recommended fix
+
+Align the worktree to its own remote tip after the add block (`:121`), before the
+origin/main merge:
+
+```bash
+if git -C "$PROJECT_ROOT" ls-remote --heads --exit-code origin "$NODE_ID" >/dev/null 2>&1; then
+  if ! git -C "$WT" merge --no-edit "origin/$NODE_ID" 1>&2; then
+    git -C "$WT" merge --abort 1>&2 || true
+    echo "provision-node-worktree: origin/$NODE_ID does not merge clean into the local $NODE_ID branch" >&2
+    exit 11
+  fi
+fi
+```
+
+A merge (not a reset) is the deliberate choice. `git worktree add -B "$NODE_ID"
+"origin/$NODE_ID"` is shorter and would fix the observed cases — both stale refs were
+strict ancestors of the remote tip — but `-B` force-moves the local ref and would silently
+discard genuinely-unpushed local commits in the ahead-or-diverged case. The merge is a
+no-op fast-forward when the local ref is behind or equal, preserves a local ref that is
+ahead, and surfaces a true divergence through the existing conflict disposition rather
+than by destroying one side.
+
+Place it after the add block so it also covers the **reused-worktree** path: an existing
+worktree left behind by an earlier session can be behind the pushed tip for the same
+reason, and the current code never checks.
+
+Sequencing note: this guard shares the `git merge` / `git merge --abort` idiom the first
+defect above replaces. Land it *after* the exit-14 precondition work, or land both in one
+pass, so the abort here is verified rather than `|| true`-ed for the same reason given
+there.
+
+## Third defect — orphan worktree registrations are never pruned (added 2026-07-30)
+
+**Location:** `.claude/skills/dispatch-propagate/scripts/provision-node-worktree:108`,
+immediately before the add block.
+
+`provision-node-worktree` never runs `git worktree prune`. A registration under
+`.git/worktrees/<name>` whose checkout directory is gone stays in `git worktree list`
+indefinitely, and git refuses to re-register a path it still believes is taken — the
+same class of failure as the transient add failure that produced the parks above, but
+permanent rather than transient.
+
+This is not hypothetical: as of 2026-07-30 the repository carries a live orphan.
+`git worktree prune --dry-run -v` reports:
+
+```
+Removing worktrees/graph-tx-reap-close: gitdir file does not exist
+```
+
+**Fix:** `git -C "$PROJECT_ROOT" worktree prune` before the `[[ ! -d "$WT" ]]` test at
+`:108`. It is cheap, idempotent, and touches only registrations whose checkout is already
+gone — it never removes a live worktree, so it is safe to run unconditionally on a shared
+repository with a live fleet.
+
 ## Verification
 
 ```verify
@@ -208,6 +327,14 @@ so the two should be sequenced or merged):
 - detached HEAD → exit 14;
 - untracked-only files → exit 0 (untracked files must not trip the dirty check, since
   worktrees routinely carry build output).
+- local branch strictly behind `origin/<id>` → the provisioned worktree HEAD equals the
+  pushed tip, not the stale local ref;
+- local branch ahead of `origin/<id>` → the local commits survive provisioning (the
+  regression guard against `worktree add -B`);
+- local branch diverged from `origin/<id>` → exit 11, tree clean afterwards;
+- an orphan registration under `.git/worktrees/<name>` whose checkout directory is gone
+  → the add succeeds because `git worktree prune` ran first, rather than failing on a
+  path git still believes is registered.
 
 Manual: after landing, confirm no node accumulates consecutive `conflict-retry` /
 `conflict-lane` ticks whose worktree has a non-empty `git status --porcelain
