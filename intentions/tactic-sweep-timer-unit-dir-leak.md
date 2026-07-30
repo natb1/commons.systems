@@ -21,6 +21,15 @@ rationale: Surfaced 2026-07-28 debugging dispatch-sweep-periodic.service failing
   author's manual restore on 2026-07-28 — roughly 2.5 days. The journal shows
   ~100 distinct temp ExecStart paths since 2026-06-19, so the clobber has been
   recurring for weeks and was masked only by real ticks re-asserting the unit.
+  Recurred 2026-07-30 during the bootstrap Stage 4 drain and was re-derived
+  independently from the same evidence (five script-level harnesses missing the
+  sweep/heartbeat unit-dir overrides; no cleanup_stale_sweep_units;
+  dispatch-tick-recover re-asserting only the heartbeat), confirming the
+  diagnosis in this body still holds on origin/main. The journal for that
+  episode names two further fixture paths - /tmp/tmp.x9VoCy8ULR/main and
+  /home/n8/.claude/jobs/b1b8e0bc/tmp/tmp.UfmJEjZKax/main - the second showing
+  the leak also fires when the suite runs inside a Claude job whose TMPDIR is
+  the job directory. Promoted to Wave A by that bootstrap.
 reading: null
 gap: null
 serves:
@@ -30,8 +39,22 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
-phase: null
+attention:
+  boost: 50
+  override: null
+  rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
+    (50 / 20 / 10) that puts write-path and pipeline-integrity work above
+    ordinary feature work. Promoted into Wave A after the defect recurred live
+    during the bootstrap Stage 4 drain: dispatch-sweep-periodic.service was
+    found pointing at a deleted mktemp fixture and failing 203/EXEC, healed by
+    hand with a direct ensure_sweep_timer call. It belongs in this band because
+    it takes the whole fleet down rather than corrupting one node - a poisoned
+    sweep unit has no autonomous recovery path at all, so worktree GC stays down
+    until a human notices. Interim scaffolding only -
+    tactic-attention-tier-ranking replaces the whole numeric scheme with
+    lexicographic (tier, rank) and max-lifting, and
+    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
+phase: implement
 execution: null
 validates: []
 blocked_by:

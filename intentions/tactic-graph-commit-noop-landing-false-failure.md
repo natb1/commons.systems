@@ -154,13 +154,12 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-phase: qa
+phase: implement
 execution:
   branch: tactic-graph-commit-noop-landing-false-failure
   pr: 2981
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -406,4 +405,13 @@ Manual / observe-in-production checks (not auto-runnable):
 - After the change is on `main`, watch the next dispatch tick that produces a no-op graph write — the common shape is `dispatch-graph-execute` calling `demote-node-to-implement` on a node already at the target phase. Expected: `graph-commit` prints `no new changes to stage … HEAD is already origin/main … skipping the landing cycle`, exits 0 within seconds, and the tick exits 0. Failure signature to watch for is the old one: five `attempt N/5` lines and `could not land on main`.
 - Confirm a normal (non-no-op) land still waits correctly. On the first real graph write after the change, the scratch push fires a fresh fast-path run whose rows are the newest per name and start as `pending`; `await_checks` must wait for them to conclude and then land. If instead it lands instantly off older rows, the ordering key is wrong (that is the `max_by` behaviour to check).
 - Sanity-check the new diagnostic once against a genuinely non-green SHA if one occurs: the terminal message should name per-context state (`acceptance=…`, `lint=…`) rather than asserting contention.
+
+
+## needs-main residue
+
+- id: 11
+  title: Interim-by-construction scope holds until tactic-graph-ref-split lands
+  url_path: current
+  expected_outcome: The interim fix stops the deterministic dispatch-tick failure without accruing debt the greenfield ref-split fix must pay down; live ticks confirm genuine no-ops land instantly.
+  finding: Judgment item flagged planned-deferral by the qa-fix disposition Workflow — the golden-path claim (a genuine no-op lands instantly on the live dispatch tick) and the non-recurrence of the 12-row false failure are only observable against real GitHub check-run data across subsequent ticks on main, not at PR merge time.
 
