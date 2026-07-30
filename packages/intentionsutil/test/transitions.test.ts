@@ -10,6 +10,7 @@ import {
   incrementAttempt,
   reconcileMergedPhase,
   reconcileClosedPhase,
+  reviewStallRoute,
   hasNeedsMainResidue,
   stampRound,
   inboundBlockers,
@@ -193,6 +194,40 @@ describe("reconciler routing", () => {
 
   it("routes a closed-not-merged tactic straight to done", () => {
     expect(reconcileClosedPhase()).toBe("done");
+  });
+});
+
+describe("reviewStallRoute", () => {
+  it("routes a failing CI verdict to the fix interrupt", () => {
+    expect(reviewStallRoute("failing", "MERGEABLE")).toBe("fix");
+    expect(reviewStallRoute("failing", "UNKNOWN")).toBe("fix");
+  });
+
+  it("routes a CONFLICTING mergeability to the conflict lane, never to fix", () => {
+    // A conflict must NOT enter execution.fix: _gate_fix_active reads CI, not
+    // mergeability, so a green-but-CONFLICTING PR would be cleared as resolved
+    // on the next selection — stripping the `reviewed` marker, drafting the PR,
+    // and re-running the whole review pass with the conflict untouched.
+    expect(reviewStallRoute("passing", "CONFLICTING")).toBe("conflict");
+    expect(reviewStallRoute("unknown", "CONFLICTING")).toBe("conflict");
+  });
+
+  it("prefers the conflict lane when CI is failing AND the PR conflicts", () => {
+    // The fix lane would have to merge origin/main to run at all, so the
+    // conflict clears first; a later sweep re-routes the still-red CI to fix.
+    expect(reviewStallRoute("failing", "CONFLICTING")).toBe("conflict");
+  });
+
+  it("is not a regression when CI passes and the PR is mergeable", () => {
+    expect(reviewStallRoute("passing", "MERGEABLE")).toBe(null);
+  });
+
+  it("is not a regression when both CI and mergeability are unknown", () => {
+    expect(reviewStallRoute("unknown", "UNKNOWN")).toBe(null);
+  });
+
+  it("self-heals: an UNKNOWN mergeability with passing CI is not a regression", () => {
+    expect(reviewStallRoute("passing", "UNKNOWN")).toBe(null);
   });
 });
 

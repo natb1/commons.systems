@@ -48,7 +48,26 @@ rationale: "Discovered 2026-07-16 during a /qa-fix pass on
   tactic-graph-node-lane-write-hardening (PR #2882) already tracked and fixed
   for the node lane's authoring/transition convention -- this is a sixth, in the
   outcome-envelope's own emit path, discovered after that tactic's scope had
-  already closed."
+  already closed. SECOND CONFIRMED MEMBER OF THE SAME FAMILY, folded in
+  2026-07-29 (/align-strategy round on strategy-graph-native-dispatch):
+  dispatch-write-phase-log has the identical bug shape — qa-fix/SKILL.md's and
+  review-fix/SKILL.md's node-lane phase-log writes pass \"$N\" (the node id)
+  while the script validates its issue-num positionally as a positive integer
+  and hard-rejects anything else. Confirmed live twice: 2026-07-18 on a
+  /review-fix re-entry pass over PR #2882 (exit 2, 'issue-num must be a positive
+  integer'), and again 2026-07-29 on a /qa-fix pass over PR #2985, where the
+  session again worked around it by passing the resolved numeric $PR_NUM. The
+  author confirmed this node is the node of record for the whole numeric-arg
+  family rather than just the emit-outcome instance, so dispatch-write-phase-log
+  is tracked here as an added unit instead of being filed as a duplicate tactic;
+  the interim workaround for any such call site stays uniform — pass the
+  resolved numeric $PR_NUM in place of $N for the script's numeric arg, never a
+  per-script variant. DISJOINT from tactic-qa-fix-node-terminal-declaration
+  (serving strategy-graph-native-dispatch), which fixes a different defect in
+  the adjacent lines of the same qa-fix node-lane terminal section — a missing
+  mark-node-terminal declaration on the fix-finalize path. The two must not be
+  planned as one unit, but if both are in flight simultaneously they will
+  conflict textually in that file region."
 reading: null
 gap: null
 serves:

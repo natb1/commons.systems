@@ -46,7 +46,8 @@ execution:
     pushed_sha: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-conflict-dispatch-test-monolith-split
 office_hours: null
 pace_exempt: false
 rounds: null

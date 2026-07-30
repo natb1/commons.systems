@@ -34,14 +34,18 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: review
 execution:
   branch: tactic-explicit-node-reservation-sweep-policy
   pr: 2952
   attempts: {}
-  markers: []
+  markers:
+    - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null

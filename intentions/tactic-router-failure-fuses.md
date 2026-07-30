@@ -1,9 +1,10 @@
 ---
 id: tactic-router-failure-fuses
 kind: tactic
-statement: "router failure fuses: sweep-written per-node no-progress counter
-  (cap 2 → office_hours park) and systemic breaker (correlated-dead-claim quorum
-  → born-parked incident tactic gating all selection)"
+statement: "router failure fuses, re-scoped to the terminal trichotomy: a
+  reap-without-declaration fires a ONE-strike fuse parking the node to
+  office_hours, and a correlated-dead-claim quorum trips a born-parked breaker
+  incident tactic gating all selection"
 owner: ai
 status: raw
 parent: null
@@ -16,7 +17,27 @@ rationale: "Surfaced in the 2026-07-07 /align-strategy fuse-breaker interview:
   look dead at once, which a naive per-node fuse would convert into a false
   mass-park of the whole queue). Doctrine recorded in the strategy's
   fuse-breaker clarification and failure-containment condition; this draft
-  carries the implementation design."
+  carries the implementation design. RE-SCOPED 2026-07-29 (/align-strategy
+  interview, author-specified): the original draft's per-node no-progress
+  counter with cap 2 is superseded. Containment is no longer a strike counter at
+  all — a pass that declares none of progression / bounded retry / park has not
+  ended, so its session is not reaped, and the node freezes behind the
+  concurrency controls with the held session as the debugging artifact.
+  dispatch-self-close already implements that direction (it HOLDs absent a
+  matching marker). What remains for this tactic is the residual backstop only:
+  a pass that ends undeclared AND is reaped anyway, leaving the node selectable
+  with nothing recorded. That fires on the FIRST occurrence, because every
+  recognized transient class is already contained without a second chance (an
+  undeclared mid-pass death is not reaped; a failed launch consumes nothing),
+  making a reap-without-declaration always a defect of the reaping path. The
+  systemic-breaker limb is unchanged. Two leaks must be closed for this fuse to
+  be sound, and are tracked separately: tactic-claim-containment-durable-anchor
+  (the freeze depends on the daemon-backed session registry, so a registry loss
+  frees the node without firing the fuse) and
+  tactic-terminal-declaration-verified-against-node (the declaration is a
+  job-dir marker decoupled from the graph write, so a marker-without-write reaps
+  while the fuse sees a valid declaration). This tactic should be planned after
+  both."
 reading: null
 gap: null
 serves:

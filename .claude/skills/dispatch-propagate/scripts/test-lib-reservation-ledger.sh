@@ -219,6 +219,40 @@ assert_eq "rl-sweep-standalone-ttl-scope: aged tick marker (no origin) kept" "1"
   "$([ -f "$DISPATCH_RESERVATION_DIR/933-slug" ] && echo 1 || echo 0)"
 rl_teardown
 
+# --- Test 5d: the TTL also covers `origin=explicit` (explicit-node dispatch) ---
+# tactic-explicit-node-reservation-sweep-policy: dispatch-select-tick's explicit
+# single-node lane (`dispatch <node-id>`) stamps its claim `origin=explicit`. That
+# lane is typically run from inside a long-lived INTERACTIVE session, and
+# dispatch-graph-execute has deliberate paths that leave the reservation for the
+# sweep on a spawn failure — so with a live reserving session and no worker of
+# that name, rules (a)/(c) never fire and the marker would be immortal, each
+# failed explicit dispatch permanently adding 1 to LIVE_COUNT. Rule (c-ttl) must
+# treat `explicit` exactly like `standalone`. Same fixture shape as Test 5b/5c.
+echo "Test: reservation_sweep TTL-reclaims an aged origin=explicit marker even though its reserving session is still live"
+rl_setup
+reservation_write "tactic-explicit-aged" "tactic-explicit-aged" "live-sess" "explicit"
+reservation_write "tactic-explicit-young" "tactic-explicit-young" "live-sess" "explicit"
+rl_write_fake_claude '[{"sessionId":"live-sess","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_STANDALONE_TTL_S=600
+# Inside the TTL first: an explicit claim that has not aged out is in-flight and
+# must be KEPT (the rule cannot over-reclaim a just-issued explicit dispatch).
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 599))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-explicit-ttl-young: young explicit marker kept" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-explicit-young" ] && echo 1 || echo 0)"
+# Past the TTL: reclaimed despite the reserving session still being live.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 601))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+assert_eq "rl-sweep-explicit-ttl: aged explicit marker reclaimed (count 0)" "0" "$(reservation_count)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'explicit-ttl-expired'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-explicit-ttl: note mentions explicit-ttl-expired"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-explicit-ttl: note mentions explicit-ttl-expired"
+  echo "    stderr: $err"
+fi
+rl_teardown
+
 # --- Test 6: sweep reclaims NOTHING when the daemon is UNKNOWN ----------------
 
 echo "Test: reservation_sweep reclaims nothing (fail safe) when the daemon is UNKNOWN"
