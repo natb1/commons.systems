@@ -113,7 +113,7 @@ function readManifest(manifestPath: string): Map<string, string> {
  *   manifest line makes ("this is the content that was read"), and it is the
  *   only claim a later call is in a position to re-assert.
  * - An unverifiable leftover is dropped with a loud stderr warning naming the
- *   id. It is NOT carried forward: `graph-commit`'s `add_base_pair` accepts a
+ *   id. It is NOT carried forward: `graph-commit`'s `add_blob_pair` accepts a
  *   `--base` entry for any id with no membership check against the ids being
  *   committed, and `check_base_freshness` iterates every entry independently —
  *   so a stale blob for an unrelated, already-landed node makes graph-commit

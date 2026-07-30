@@ -107,23 +107,32 @@
 #  32. lock-ref hygiene: refs/graph/landing-lock is absent after a normal
 #      landing and never appears under refs/heads/graph/** (disjoint from
 #      the scratch-branch namespace graph-fast-path.yml triggers on)
-#  33. far-ahead + stale --base: the layer-3 merge survives the rebuild — a
+#  33. --expect happy path: an --expect entry matching the blob the caller
+#      actually wrote is transparent — exit 0, the edit lands
+#  34. --expect catches the equal-blob wrong-repo case that case 28's benign
+#      path cannot: a clone synced bit-for-bit to origin/main (nothing staged,
+#      local blob == origin/main blob, so the nothing-staged guard passes)
+#      invoked with an --expect sha for content that is NOT there — dies
+#      naming "mis-pointed -C/--repo", never reaches "landed", main untouched
+#  35. --expect on a --prune id is a usage error (exit 2, origin untouched) —
+#      a deletion has no content to assert
+#  36. far-ahead + stale --base: the layer-3 merge survives the rebuild — a
 #      writer whose worktree is BOTH far-ahead (a non-intentions code commit
 #      on HEAD) AND carrying a stale --base that a concurrent writer has
 #      since landed a disjoint-field edit against; the layer-3 merge's result
 #      must not be reverted by the far-ahead rebuild's snapshot-restore, so
 #      both writers' fields land, the code commit is excluded, and HEAD is
 #      restored to the far-ahead tip
-#  34. far-ahead, NO --base, disjoint field: a concurrent writer lands an edit
+#  37. far-ahead, NO --base, disjoint field: a concurrent writer lands an edit
 #      to a DIFFERENT field of the same node between this writer's snapshot and
 #      the far-ahead rebuild — the rebuild's three-way replay merges instead of
 #      blindly copying, so both edits land (pre-fix the concurrent edit was
 #      silently reverted with no conflict, park, or diagnostic)
-#  35. far-ahead, NO --base, SAME field: the rebuild's replay cannot resolve the
+#  38. far-ahead, NO --base, SAME field: the rebuild's replay cannot resolve the
 #      divergence, so it parks (exit 1, "mechanical-unresolved", both values
 #      named) instead of overwriting — and the far-ahead worktree's HEAD is
 #      still restored to its PR tip on this new park path
-#  36. far-ahead --prune racing a concurrent edit to the same node: the prune is
+#  39. far-ahead --prune racing a concurrent edit to the same node: the prune is
 #      guarded rather than forced through — exit 1, park, and the node SURVIVES
 #      on main carrying the concurrent edit
 #
@@ -184,7 +193,8 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
           t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
-          t-farahead-prune-race; do
+          t-farahead-prune-race \
+          t-expect-happy t-expect-wrong-repo t-expect-prune; do
   seed_node "$id"
 done
 
@@ -1222,7 +1232,69 @@ else
   no "lock hygiene: landing-lock ref leaked into refs/heads/graph/**"
 fi
 
-# --- Case 33: far-ahead + stale --base: the layer-3 merge survives the rebuild ---
+# --- Case 33: --expect is transparent on the happy path -----------------------
+# The caller hashes the content it just wrote in its OWN checkout and pins it.
+# The resolved repo is that same checkout, so the assertion holds and the edit
+# lands exactly as it would without --expect.
+set_mode green
+W33="$WORK/w33"; make_clone "$W33" writer-33
+sync_clone "$W33"
+edit_line "$W33" t-expect-happy 1 expect-happy-lands
+expect_sha="$(git -C "$W33" hash-object -- intentions/t-expect-happy.md)"
+out="$(run_gc "$W33" -m 'test: expect happy' --expect "t-expect-happy=$expect_sha" t-expect-happy 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-expect-happy | grep -q 'line1: expect-happy-lands'; then
+  ok "--expect happy path: matching blob assertion is transparent, edit lands"
+else
+  no "--expect happy path (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 34: --expect catches the equal-blob wrong-repo case -------------------
+# The exact hole case 28 leaves open. This clone is bit-for-bit at origin/main
+# and has nothing staged, so the nothing-staged guard sees local_blob ==
+# main_blob and proceeds benignly ("no new changes to stage" + "landed") — a
+# false success when the caller's real edit lives in a DIFFERENT checkout.
+# With --expect naming the content the caller actually wrote, graph-commit must
+# refuse instead.
+set_mode green
+W34="$WORK/w34"; make_clone "$W34" writer-34
+sync_clone "$W34"   # bit-for-bit at origin/main, nothing staged
+elsewhere_sha="$(printf 'content that lives in some OTHER checkout\n' | git -C "$W34" hash-object --stdin)"
+before_sha="$(origin_sha)"
+out="$(run_gc "$W34" -m 'test: expect wrong repo' --expect "t-expect-wrong-repo=$elsewhere_sha" t-expect-wrong-repo 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+# The assertion greps an --expect-SPECIFIC substring. 'mis-pointed -C/--repo'
+# appears in BOTH the --expect die and the pre-existing nothing-staged guard
+# (which case 27 greps with exactly that string), so it cannot tell the two
+# apart — and this case exists precisely to prove --expect fired where the
+# nothing-staged guard structurally could not.
+if [[ $rc -ne 0 ]] \
+   && grep -q 'does not hold the content the caller asserted' <<<"$out" \
+   && ! grep -q 'landed t-expect-wrong-repo on main' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "--expect: equal-blob wrong-repo invocation dies loudly, never emits a false landed"
+else
+  no "--expect wrong-repo (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 35: --expect on a --prune id is a usage error ------------------------
+# A deletion has no content to assert, so pinning one is a caller mistake.
+set_mode green
+W35="$WORK/w35"; make_clone "$W35" writer-35
+sync_clone "$W35"
+prune_sha="$(git -C "$W35" hash-object -- intentions/t-expect-prune.md)"
+rm -f "$W35/intentions/t-expect-prune.md"   # --prune requires the file gone on disk
+before_sha="$(origin_sha)"
+out="$(run_gc "$W35" -m 'test: expect prune' --prune t-expect-prune --expect "t-expect-prune=$prune_sha" 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -eq 2 ]] \
+   && grep -q 'no content to assert' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "--expect on a --prune id is a usage error (exit 2), origin untouched"
+else
+  no "--expect on a prune id (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 36: far-ahead + stale --base: the layer-3 merge survives the rebuild ---
 # Unit 1 regression guard. Wfab is BOTH far-ahead (a non-intentions code
 # commit on HEAD, like case 16) AND carrying a stale --base whose field-level
 # delta is disjoint from a concurrent writer's landed edit (like case 21).
@@ -1266,9 +1338,9 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Cases 34-36: the far-ahead rebuild's three-way replay (Unit 2).
+# Cases 37-39: the far-ahead rebuild's three-way replay (Unit 2).
 #
-# Cases 16/18/33 all exercise the far-ahead rebuild where either nothing landed
+# Cases 16/18/36 all exercise the far-ahead rebuild where either nothing landed
 # concurrently or a --base CAS caught the divergence first. These three cover
 # the hole that opened when NEITHER applies: a writer with NO --base whose
 # worktree is far-ahead, racing a concurrent landing to the same node. Pre-Unit-2
@@ -1282,16 +1354,16 @@ fi
 # --theirs in favor of ours — a test here would assert shim behavior, not
 # product behavior. It is covered by the real merge primitive's own unit tests.
 
-# --- Case 34: far-ahead, no --base, disjoint field — both edits land ---------
+# --- Case 37: far-ahead, no --base, disjoint field — both edits land ---------
 set_mode green
-W34="$WORK/w34"
-make_clone "$W34" writer-34
-mkdir -p "$W34/src"
-echo "console.log('pr feature code, far-ahead race')" >"$W34/src/farahead-race-feature.js"
-git -C "$W34" add src/farahead-race-feature.js
-git -C "$W34" commit -qm 'pr: non-intentions code change (far-ahead race)'
-race_tip="$(git -C "$W34" rev-parse HEAD)"
-edit_field "$W34" t-farahead-race fieldA writer-edit
+W37="$WORK/w37"
+make_clone "$W37" writer-37
+mkdir -p "$W37/src"
+echo "console.log('pr feature code, far-ahead race')" >"$W37/src/farahead-race-feature.js"
+git -C "$W37" add src/farahead-race-feature.js
+git -C "$W37" commit -qm 'pr: non-intentions code change (far-ahead race)'
+race_tip="$(git -C "$W37" rev-parse HEAD)"
+edit_field "$W37" t-farahead-race fieldA writer-edit
 
 OTHERRACE="$WORK/otherrace"
 make_clone "$OTHERRACE" otherrace
@@ -1299,30 +1371,30 @@ edit_field "$OTHERRACE" t-farahead-race fieldB concurrent-edit
 git -C "$OTHERRACE" commit -qam 'concurrent field edit (far-ahead race)'
 git -C "$OTHERRACE" push -q origin main
 
-out="$(run_gc "$W34" -m 'test: far-ahead race, disjoint field' t-farahead-race 2>&1)"; rc=$?
+out="$(run_gc "$W37" -m 'test: far-ahead race, disjoint field' t-farahead-race 2>&1)"; rc=$?
 content="$(origin_show t-farahead-race 2>/dev/null)"
-main_tree34="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
-restored34="$(git -C "$W34" rev-parse HEAD)"
+main_tree37="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+restored37="$(git -C "$W37" rev-parse HEAD)"
 if [[ $rc -eq 0 ]] \
    && grep -q 'fieldA: writer-edit' <<<"$content" \
    && grep -q 'fieldB: concurrent-edit' <<<"$content" \
-   && ! grep -q 'src/farahead-race-feature.js' <<<"$main_tree34" \
-   && [[ "$restored34" == "$race_tip" ]]; then
+   && ! grep -q 'src/farahead-race-feature.js' <<<"$main_tree37" \
+   && [[ "$restored37" == "$race_tip" ]]; then
   ok "far-ahead race, no --base: the rebuild's three-way replay merges, both writers' fields land"
 else
-  no "far-ahead race disjoint field (rc=$rc restored34=$restored34 race_tip=$race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+  no "far-ahead race disjoint field (rc=$rc restored37=$restored37 race_tip=$race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
-# --- Case 35: far-ahead, no --base, SAME field — parks, HEAD restored --------
+# --- Case 38: far-ahead, no --base, SAME field — parks, HEAD restored --------
 set_mode green
-W35="$WORK/w35"
-make_clone "$W35" writer-35
-mkdir -p "$W35/src"
-echo "console.log('pr feature code, far-ahead race conflict')" >"$W35/src/farahead-race-conflict-feature.js"
-git -C "$W35" add src/farahead-race-conflict-feature.js
-git -C "$W35" commit -qm 'pr: non-intentions code change (far-ahead race conflict)'
-race_conflict_tip="$(git -C "$W35" rev-parse HEAD)"
-edit_field "$W35" t-farahead-race-conflict sentinel writer-value
+W38="$WORK/w38"
+make_clone "$W38" writer-38
+mkdir -p "$W38/src"
+echo "console.log('pr feature code, far-ahead race conflict')" >"$W38/src/farahead-race-conflict-feature.js"
+git -C "$W38" add src/farahead-race-conflict-feature.js
+git -C "$W38" commit -qm 'pr: non-intentions code change (far-ahead race conflict)'
+race_conflict_tip="$(git -C "$W38" rev-parse HEAD)"
+edit_field "$W38" t-farahead-race-conflict sentinel writer-value
 
 OTHERRACE2="$WORK/otherrace2"
 make_clone "$OTHERRACE2" otherrace2
@@ -1330,31 +1402,31 @@ edit_field "$OTHERRACE2" t-farahead-race-conflict sentinel concurrent-value
 git -C "$OTHERRACE2" commit -qam 'concurrent same-field edit (far-ahead race conflict)'
 git -C "$OTHERRACE2" push -q origin main
 
-out="$(run_gc "$W35" -m 'test: far-ahead race, same field' t-farahead-race-conflict 2>&1)"; rc=$?
+out="$(run_gc "$W38" -m 'test: far-ahead race, same field' t-farahead-race-conflict 2>&1)"; rc=$?
 content="$(origin_show t-farahead-race-conflict 2>/dev/null)"
-restored35="$(git -C "$W35" rev-parse HEAD)"
+restored38="$(git -C "$W38" rev-parse HEAD)"
 snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
 [[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
 if [[ $rc -eq 1 ]] \
    && grep -q 'mechanical-unresolved' <<<"$content" \
    && grep -q 'writer-value' <<<"$content" \
    && grep -q 'concurrent-value' <<<"$content" \
-   && [[ "$restored35" == "$race_conflict_tip" ]]; then
+   && [[ "$restored38" == "$race_conflict_tip" ]]; then
   ok "far-ahead race, same field: parks mechanical-unresolved instead of overwriting, HEAD restored to the PR tip"
 else
-  no "far-ahead race same-field park (rc=$rc restored35=$restored35 race_conflict_tip=$race_conflict_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+  no "far-ahead race same-field park (rc=$rc restored38=$restored38 race_conflict_tip=$race_conflict_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
-# --- Case 36: far-ahead --prune racing a concurrent edit — park, node survives ---
+# --- Case 39: far-ahead --prune racing a concurrent edit — park, node survives ---
 set_mode green
-W36="$WORK/w36"
-make_clone "$W36" writer-36
-mkdir -p "$W36/src"
-echo "console.log('pr feature code, far-ahead prune race')" >"$W36/src/farahead-prune-race-feature.js"
-git -C "$W36" add src/farahead-prune-race-feature.js
-git -C "$W36" commit -qm 'pr: non-intentions code change (far-ahead prune race)'
-prune_race_tip="$(git -C "$W36" rev-parse HEAD)"
-rm -f "$W36/intentions/t-farahead-prune-race.md"
+W39="$WORK/w39"
+make_clone "$W39" writer-39
+mkdir -p "$W39/src"
+echo "console.log('pr feature code, far-ahead prune race')" >"$W39/src/farahead-prune-race-feature.js"
+git -C "$W39" add src/farahead-prune-race-feature.js
+git -C "$W39" commit -qm 'pr: non-intentions code change (far-ahead prune race)'
+prune_race_tip="$(git -C "$W39" rev-parse HEAD)"
+rm -f "$W39/intentions/t-farahead-prune-race.md"
 
 OTHERRACE3="$WORK/otherrace3"
 make_clone "$OTHERRACE3" otherrace3
@@ -1362,18 +1434,18 @@ edit_line "$OTHERRACE3" t-farahead-prune-race 1 concurrent-edit-survives
 git -C "$OTHERRACE3" commit -qam 'concurrent edit racing a far-ahead prune'
 git -C "$OTHERRACE3" push -q origin main
 
-out="$(run_gc "$W36" -m 'test: far-ahead prune race' --prune t-farahead-prune-race 2>&1)"; rc=$?
+out="$(run_gc "$W39" -m 'test: far-ahead prune race' --prune t-farahead-prune-race 2>&1)"; rc=$?
 content="$(origin_show t-farahead-prune-race 2>/dev/null || true)"
-restored36="$(git -C "$W36" rev-parse HEAD)"
+restored39="$(git -C "$W39" rev-parse HEAD)"
 snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
 [[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
 if [[ $rc -eq 1 ]] \
    && grep -q 'line1: concurrent-edit-survives' <<<"$content" \
    && grep -q 'prune vs. concurrent edit' <<<"$content" \
-   && [[ "$restored36" == "$prune_race_tip" ]]; then
+   && [[ "$restored39" == "$prune_race_tip" ]]; then
   ok "far-ahead prune race: the prune is guarded, the node survives on main with the concurrent edit, HEAD restored"
 else
-  no "far-ahead prune race (rc=$rc restored36=$restored36 prune_race_tip=$prune_race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+  no "far-ahead prune race (rc=$rc restored39=$restored39 prune_race_tip=$prune_race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
