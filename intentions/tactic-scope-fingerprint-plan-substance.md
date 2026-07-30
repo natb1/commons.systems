@@ -59,7 +59,8 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-transition-node-stamp-landed-body
 office_hours: null
 pace_exempt: false
 rounds: null
