@@ -10647,6 +10647,40 @@ assert_eq "rl-sweep-standalone-ttl-scope: aged tick marker (no origin) kept" "1"
   "$([ -f "$DISPATCH_RESERVATION_DIR/933-slug" ] && echo 1 || echo 0)"
 rl_teardown
 
+# --- Test 5d: the TTL also covers `origin=explicit` (explicit-node dispatch) ---
+# tactic-explicit-node-reservation-sweep-policy: dispatch-select-tick's explicit
+# single-node lane (`dispatch <node-id>`) stamps its claim `origin=explicit`. That
+# lane is typically run from inside a long-lived INTERACTIVE session, and
+# dispatch-graph-execute has deliberate paths that leave the reservation for the
+# sweep on a spawn failure — so with a live reserving session and no worker of
+# that name, rules (a)/(c) never fire and the marker would be immortal, each
+# failed explicit dispatch permanently adding 1 to LIVE_COUNT. Rule (c-ttl) must
+# treat `explicit` exactly like `standalone`. Same fixture shape as Test 5b/5c.
+echo "Test: reservation_sweep TTL-reclaims an aged origin=explicit marker even though its reserving session is still live"
+rl_setup
+reservation_write "tactic-explicit-aged" "tactic-explicit-aged" "live-sess" "explicit"
+reservation_write "tactic-explicit-young" "tactic-explicit-young" "live-sess" "explicit"
+rl_write_fake_claude '[{"sessionId":"live-sess","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_STANDALONE_TTL_S=600
+# Inside the TTL first: an explicit claim that has not aged out is in-flight and
+# must be KEPT (the rule cannot over-reclaim a just-issued explicit dispatch).
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 599))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-explicit-ttl-young: young explicit marker kept" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-explicit-young" ] && echo 1 || echo 0)"
+# Past the TTL: reclaimed despite the reserving session still being live.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 601))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+assert_eq "rl-sweep-explicit-ttl: aged explicit marker reclaimed (count 0)" "0" "$(reservation_count)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'explicit-ttl-expired'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-explicit-ttl: note mentions explicit-ttl-expired"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-explicit-ttl: note mentions explicit-ttl-expired"
+  echo "    stderr: $err"
+fi
+rl_teardown
+
 # --- Test 6: sweep reclaims NOTHING when the daemon is UNKNOWN ----------------
 
 echo "Test: reservation_sweep reclaims nothing (fail safe) when the daemon is UNKNOWN"
@@ -22255,6 +22289,7 @@ FAKE
   # byte-identical.
   for _hs in dispatch-reconcile-merged:SEL_RECONCILE_MERGED_OUT \
              reconcile-graph-merged:SEL_RECONCILE_GRAPH_OUT \
+             reconcile-graph-review-stall:SEL_REVIEW_STALL_OUT \
              dispatch-graph-census:SEL_CENSUS_OUT \
              dispatch-jit-calendar-import:SEL_CALENDAR_OUT \
              dispatch-statements-scan:SEL_STATEMENTS_OUT; do
@@ -22503,7 +22538,7 @@ sel_tick_teardown() {
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
     SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT \
     SEL_MAIN_BROKEN_SHA SEL_MAIN_RED_NODES SEL_SYNC_BROKEN_LATCHED SEL_JIT_SCAN \
-    SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_CENSUS_OUT \
+    SEL_RECONCILE_MERGED_OUT SEL_RECONCILE_GRAPH_OUT SEL_REVIEW_STALL_OUT SEL_CENSUS_OUT \
     SEL_CALENDAR_OUT SEL_STATEMENTS_OUT \
     SEL_PRIMARY_CHECKOUT_BRANCH \
     DISPATCH_DECISION_LOG_DIR
@@ -22512,6 +22547,14 @@ sel_tick_teardown() {
 # Run the orchestrator, capturing full stdout; the decision is the last line.
 run_sel_tick() {
   "$TMPDIR_TEST/dispatch-select-tick" "$@" 2>/dev/null
+}
+
+# Same as run_sel_tick, but the tick's stderr is written to $1 instead of being
+# discarded. Use this when the behavior under test is only observable on stderr
+# (e.g. the reservation sweep's `reclaimed reservation ...` notes).
+run_sel_tick_err() {
+  local errfile="$1"; shift
+  "$TMPDIR_TEST/dispatch-select-tick" "$@" 2>"$errfile"
 }
 
 # --- empty queue → release + empty ------------------------------------------
@@ -22568,6 +22611,11 @@ assert_eq "graph: reservation written under the node id" "1" \
   "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-x" ] && echo 1 || echo 0)"
 assert_eq "graph: reservation issue field is the node id" "issue=tactic-x" \
   "$(grep '^issue=' "$DISPATCH_RESERVATION_DIR/tactic-x")"
+# Control for the explicit-lane origin test below: the AUTONOMOUS lane writes NO
+# `origin=` line, so its claim keeps the ordinary (a)/(c) sweep lifecycle and is
+# never TTL-reclaimed out from under the fan-out it belongs to.
+assert_eq "graph: autonomous claim carries no origin= line" "0" \
+  "$(grep -c '^origin=' "$DISPATCH_RESERVATION_DIR/tactic-x")"
 assert_eq "graph: legacy selector not consulted" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
 assert_eq "graph: decision log disposition" "graph" \
@@ -22773,6 +22821,47 @@ else
 fi
 assert_eq "re-triage wiring: dispatch-retriage-orphaned-followups invoked" "present" \
   "$([[ -f "$STUB_DIR/retriage-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Review-stall sweep wiring (tactic-graph-review-exclusion-stall-recovery) -
+# The tick runs reconcile-graph-review-stall unconditionally right after
+# reconcile-graph-merged and prefixes each of its stdout lines with
+# `review-stall: `. The silent fake emits SEL_REVIEW_STALL_OUT; both stdout
+# shapes the sweep can produce (a `fix` recovery and a `conflict` hold) must
+# come through verbatim behind the prefix.
+echo "Test: select-tick review-stall wiring → review-stall: lines"
+sel_tick_setup
+export SEL_REVIEW_STALL_OUT="recovered tactic-x -> fix (ci=failing merge=MERGEABLE)
+held tactic-y -> conflict via tactic-hold-y (ci=passing merge=CONFLICTING)"
+out=$(run_sel_tick) || true
+TOTAL=$((TOTAL + 1))
+if grep -q '^review-stall: recovered tactic-x -> fix (ci=failing merge=MERGEABLE)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'review-stall: recovered tactic-x -> fix ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'review-stall: recovered tactic-x -> fix ...'"
+  echo "    actual stdout: '$out'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q '^review-stall: held tactic-y -> conflict via tactic-hold-y (ci=passing merge=CONFLICTING)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'review-stall: held tactic-y -> conflict ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'review-stall: held tactic-y -> conflict ...'"
+  echo "    actual stdout: '$out'"
+fi
+sel_tick_teardown
+
+# Silent sweep (the default): no `review-stall: ` line at all, so every other
+# tick test stays byte-identical.
+echo "Test: select-tick review-stall wiring → silent sweep emits no line"
+sel_tick_setup
+out=$(run_sel_tick) || true
+TOTAL=$((TOTAL + 1))
+if ! grep -q '^review-stall: ' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: no 'review-stall:' line when the sweep is silent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no 'review-stall:' line when the sweep is silent"
+  echo "    actual stdout: '$out'"
+fi
 sel_tick_teardown
 
 # --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
@@ -23444,6 +23533,79 @@ assert_eq "node-explicit at-cap: decision line" "graph 1 foo-bar:tactic:implemen
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "node-explicit at-cap: graph selector called --node <id> (not --top)" \
   "--node foo-bar" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+sel_tick_teardown
+
+# --- explicit node-id, stale reservation reclaimed by sweep → still selects ---
+# tactic-explicit-node-reservation-sweep-policy Unit 2: Unit 1 added a
+# reservation_sweep call to the explicit-node branch, mirroring the autonomous
+# path's sweep-before-count pattern. Plant a stale marker for the target node
+# under a session absent from the fake claude-agents registry, then confirm
+# the tick's own sweep (run at real wall-clock time, no DISPATCH_RESERVATION_NOW
+# override for the tick itself) reclaims it before graph-select-target --node is
+# consulted — so the explicit dispatch is NOT wrongly refused as
+# node-not-selectable due to a stranded marker.
+echo "Test: select-tick explicit node-id, stale reservation reclaimed by sweep → still selects"
+sel_tick_setup
+# Plant the stale marker with a far-past timestamp (real reservation_write,
+# sourced locally here — DISPATCH_RESERVATION_DIR is already exported by
+# sel_tick_setup). The reserving session ("dead-sess") is absent from
+# SEL_AGENTS_TSV below, so the sweep's liveness check treats it as stranded.
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z" reservation_write "foo-bar" "999" "dead-sess"
+# A SECOND stale marker under an id the tick never selects. Nothing on the
+# explicit-node path re-creates it (emit_graph_selection only writes markers for
+# the ids it selected), so its absence after the tick is evidence ONLY the sweep
+# can produce — delete the sweep call and this marker survives.
+DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z" reservation_write "stale-other" "998" "dead-sess"
+# A different, unrelated LIVE session — feeds the FAKE claude_agents_list_all
+# sel_tick_setup already wires up, so the sweep sees a live registry that does
+# NOT include "dead-sess".
+export SEL_AGENTS_TSV=$'other-sess\tbusy\tworkerX'
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+SEL_TICK_ERR="$TMPDIR_TEST/logs/sel-tick.err"
+out=$(run_sel_tick_err "$SEL_TICK_ERR" foo-bar)
+assert_eq "node-explicit stale-reservation: decision line" "graph 1 foo-bar:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+# The sweep's own stderr note is the direct observable: emit_graph_selection's
+# unconditional re-claim of the selected id cannot forge it, and the fake
+# graph-select-target ignores the ledger entirely, so this line appears only if
+# the explicit-node branch actually ran reservation_sweep.
+assert_eq "node-explicit stale-reservation: sweep reclaimed the target's stale marker" "1" \
+  "$(grep -qF 'reclaimed reservation foo-bar (dead-session-stranded)' "$SEL_TICK_ERR" && echo 1 || echo 0)"
+# And the never-selected marker is gone — the same evidence, checked on the
+# filesystem rather than on stderr.
+assert_eq "node-explicit stale-reservation: unrelated stale marker cleared" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/stale-other" ] && echo 1 || echo 0)"
+sel_tick_teardown
+unset SEL_TICK_ERR
+
+# --- explicit node-id → a reservation marker IS written, stamped origin=explicit
+# Regression for the red-team finding on tactic-explicit-node-reservation-sweep-
+# policy. Two defects in one:
+#   1. Before this tactic the explicit-node lane never sourced
+#      lib-reservation-ledger.sh, so emit_graph_selection's reservation_write was
+#      an undefined command (exit 127) swallowed by its `||` warning — explicit
+#      dispatch claimed NOTHING and its slot was invisible to the budget.
+#   2. Once sourced, an un-stamped marker keyed to a long-lived INTERACTIVE
+#      session id is immortal: rule (a) needs a live worker named <id> (never
+#      appears if dispatch-graph-execute's spawn fails, a path that deliberately
+#      leaves the reservation for the sweep), rule (c) needs the reserving
+#      session dead (it is not), and rule (c-ttl) only reclaims stamped origins.
+#      Each failed explicit dispatch would permanently add 1 to LIVE_COUNT.
+# So assert BOTH: the marker exists, and it carries `origin=explicit` (the token
+# rule (c-ttl) keys on — see the lib's Test 5d).
+echo "Test: select-tick explicit node-id writes a reservation marker stamped origin=explicit"
+sel_tick_setup
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+out=$(run_sel_tick foo-bar)
+assert_eq "node-explicit origin: decision line" "graph 1 foo-bar:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "node-explicit origin: reservation marker written under the node id" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/foo-bar" ] && echo 1 || echo 0)"
+assert_eq "node-explicit origin: marker session is the dispatching session" \
+  "session=select-tick-session" "$(grep '^session=' "$DISPATCH_RESERVATION_DIR/foo-bar")"
+assert_eq "node-explicit origin: marker stamped origin=explicit (TTL-reclaimable)" \
+  "origin=explicit" "$(grep '^origin=' "$DISPATCH_RESERVATION_DIR/foo-bar")"
 sel_tick_teardown
 
 # --- AC3 non-fatal guarantee: unwritable log dir does NOT kill the tick -------
@@ -26649,6 +26811,21 @@ assert_eq "mark-node-terminal: exit 0 on happy path" "0" "$mnt_ec"
 assert_eq "mark-node-terminal: writes exact node-terminal contents" \
   "$(printf 'node=tactic-x\ndisposition=advance\n')" "$(cat "$MNT_DIR/node-terminal")"
 mnt_clean
+
+# ----- the /dispatch-conflict Lane 3 dispositions are accepted -----
+# Lane 3 is spawned by dispatch-graph-execute's provision-exit-11 branch under
+# the NODE's own name, so it is a node worker to dispatch-stop.sh — but its
+# terminal paths call neither transition-node nor park-node, so it declares its
+# own marker. A rejected disposition would exit 2, leaving the job HELD and the
+# node permanently unselectable.
+for mnt_disp in conflict-resolved conflict-hold; do
+  mnt_job "tactic-x"
+  if CLAUDE_JOB_DIR="$MNT_DIR" "$MARK_NODE_TERMINAL" tactic-x "$mnt_disp" 2>/dev/null; then mnt_ec=0; else mnt_ec=$?; fi
+  assert_eq "mark-node-terminal: '$mnt_disp' exit 0" "0" "$mnt_ec"
+  assert_eq "mark-node-terminal: '$mnt_disp' writes exact node-terminal contents" \
+    "$(printf 'node=tactic-x\ndisposition=%s\n' "$mnt_disp")" "$(cat "$MNT_DIR/node-terminal")"
+  mnt_clean
+done
 
 # ----- job names a DIFFERENT node → exit 0, NO write -----
 # The office-hours-drain / align-tactics-child-land false positive.
