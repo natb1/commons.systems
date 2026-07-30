@@ -33428,6 +33428,49 @@ unset REPO_HEALTH_STATE_FILE
 teardown
 
 # ============================================================================
+# fix-checks: node-lane completion recipes carry the graph-write --base CAS
+# guard (tactic-graph-write-recipes-base-cas / tactic-fix-checks-pushed-nothing-base)
+# ============================================================================
+echo "=== fix-checks: node-lane completion recipes --base CAS guard ==="
+#
+# The two node-lane completion recipes (record-push and pushed-nothing) in
+# .claude/skills/fix-checks/SKILL.md must each refresh intentions/$N.md from
+# origin/main and pass graph-commit --base before writing. graph-commit does
+# whole-file replacement of intentions/<id>.md, so an unpinned write from a
+# stale worktree silently reverts sibling frontmatter another writer landed
+# concurrently — this happened for real on 2026-07-22 on PR #2927. The
+# refresh-then---base pattern was landed by PR #2939 and is tracked by
+# tactic-graph-write-recipes-base-cas and tactic-fix-checks-pushed-nothing-base.
+#
+# If a count below legitimately changes (e.g. a new completion recipe is
+# added), update the expected number here AND confirm every recipe still
+# carries the full refresh + --base sequence — never lower a count just to
+# make this suite green.
+
+FIXCHECKS_GUARD_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
+FIXCHECKS_GUARD_SKILL="$FIXCHECKS_GUARD_ROOT/.claude/skills/fix-checks/SKILL.md"
+
+if [[ ! -f "$FIXCHECKS_GUARD_SKILL" ]]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: fix-checks CAS guard: file missing: .claude/skills/fix-checks/SKILL.md"
+else
+  actual=$({ grep -cF -- '--base "$N=$FRESH_BLOB"' "$FIXCHECKS_GUARD_SKILL" || true; })
+  assert_eq "fix-checks CAS guard: --base \"\$N=\$FRESH_BLOB\" count" "2" "$actual"
+
+  actual=$({ grep -cF -- 'FRESH_BLOB="$(git rev-parse "origin/main:intentions/$N.md"' "$FIXCHECKS_GUARD_SKILL" || true; })
+  assert_eq "fix-checks CAS guard: FRESH_BLOB=\$(git rev-parse origin/main:intentions/\$N.md count" "2" "$actual"
+
+  actual=$({ grep -cF -- 'git show "origin/main:intentions/$N.md" > "intentions/$N.md"' "$FIXCHECKS_GUARD_SKILL" || true; })
+  assert_eq "fix-checks CAS guard: git show origin/main:intentions/\$N.md refresh count" "2" "$actual"
+
+  # Tripwire: forces a deliberate revisit of the guard when a new graph-commit
+  # call site is added to this file (2 completion-seam invocations + 3 on the
+  # flake-tracking path, as of PR #2939).
+  actual=$({ grep -cF -- 'packages/intentionsutil/scripts/graph-commit' "$FIXCHECKS_GUARD_SKILL" || true; })
+  assert_eq "fix-checks CAS guard: packages/intentionsutil/scripts/graph-commit call-site count" "5" "$actual"
+fi
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
