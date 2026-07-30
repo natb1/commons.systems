@@ -25,7 +25,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-tick-node-lane-auto-merge
   pr: 2904
@@ -35,6 +35,11 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-07-30T16:11:25Z
+    mergeCommitSha: c2a7970c0b7b773f1e0b973422961aec52cdcc66
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

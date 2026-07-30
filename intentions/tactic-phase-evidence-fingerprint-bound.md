@@ -33,15 +33,7 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention:
-  boost: 95
-  override: null
-  rationale: "Author-directed 2026-07-25 /align-strategy round ('boost both to top
-    rank'): this and tactic-transition-node-stamp-landed-body rank at the top of
-    normal work — above the current top tactic band (90) and the 85 band below
-    it, and below the strategy-main-health emergency ceiling (boost 100), which
-    the 2026-07-13 write-path guard keeps dominant and which this round does not
-    disturb."
+attention: null
 phase: qa
 execution:
   branch: tactic-phase-evidence-fingerprint-bound
@@ -54,6 +46,7 @@ execution:
   completion: null
 validates: []
 blocked_by:
+  - tactic-scope-fingerprint-plan-substance
   - tactic-transition-node-stamp-landed-body
 office_hours: null
 pace_exempt: false

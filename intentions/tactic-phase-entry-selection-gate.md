@@ -17,7 +17,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 20
+  override: null
+  rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
+    scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
+    follows the Wave-A write-path fixes. Interim scaffolding only;
+    tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
+    numeric scheme."
 phase: null
 execution: null
 validates: []

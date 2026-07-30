@@ -44,17 +44,11 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Born-parked review item awaiting an office-hours sitting: ratify or
-    amend the 2026-07-25 fingerprint-custody round's held-on-trust resolutions
-    on strategy-graph-native-dispatch, and confirm the two 95 boosts. Not
-    autonomous work — it is an author judgment call on recorded doctrine."
-  since: 2026-07-25
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

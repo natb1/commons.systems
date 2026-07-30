@@ -23,7 +23,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-review-exclusion-stall-recovery
   pr: 2920
@@ -31,9 +31,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-29T14:06:46Z
+    mergeCommitSha: 3b62fbd5d087158e354a9fa0460b59ba0b6d5a74
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

@@ -39,7 +39,8 @@ execution:
     pushed_sha: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-nix-operator-machine-cutover
 office_hours: null
 pace_exempt: false
 rounds: null

@@ -176,7 +176,19 @@ Otherwise (opus-fixable items present), choose exactly one path:
      --subagents-launched <SKILL_SUBAGENTS + result.subagents_launched> \
      --disposition completed_with_fixes
    ```
-6. **STOP.**
+6. **Write the node lane's terminal-disposition marker** (`TARGET_KIND=node`
+   only; the legacy issue lane has no such marker). This must come **after**
+   the PR comment (Step 4), the phase-completed marker (item 4 above), and the
+   outcome envelope (item 5 above) — `Stop` fires on every turn yield, not
+   only on terminal exit, so writing this marker early would let the hook reap
+   the job before those writes land:
+   ```bash
+   packages/intentionsutil/scripts/mark-node-terminal "$N" fix-attempt
+   ```
+   `fix-attempt` is correct here too: this pass spent an attempt via the fix
+   lane, same as `/fix-checks`' own node lane (retry by design — the selector
+   re-routes on a later tick).
+7. **STOP.**
 
 ## Escalate finalize path
 
