@@ -1,11 +1,11 @@
 ---
 id: tactic-graph-commit-intentions-base-stale-restore
 kind: tactic
-statement: "graph-commit's ensure_intentions_only_base() resets to a re-fetched
+statement: graph-commit's ensure_intentions_only_base() resets to a re-fetched
   base and then unconditionally copies its pre-reset snapshot back over
   intentions/<id>.md with no freshness check, so a concurrent landing that
-  advanced that id between snapshot and reset is silently overwritten with
-  stale content"
+  advanced that id between snapshot and reset is silently overwritten with stale
+  content
 owner: ai
 status: raw
 parent: null
@@ -27,12 +27,12 @@ rationale: "Root-caused by a sibling session and surfaced 2026-07-28 at an
   landed content is reverted. It is also distinct from
   tactic-clear-park-repo-targeting-guard (wrong-repo targeting). Historical
   proof on origin/main: commits 15047ed7 (office_hours park to null) and
-  ba5d9848 (null back to park, while carrying a clear-park commit message),
-  both authored at 2026-07-25 21:42:40 -0400 on
-  tactic-graph-commit-landing-lock — a same-second pair where the second commit
-  reinstates the value the first had just cleared, and whose message describes
-  clearing the park it in fact restored. The pair is the observable signature of
-  a stale snapshot being copied back over a fresher base."
+  ba5d9848 (null back to park, while carrying a clear-park commit message), both
+  authored at 2026-07-25 21:42:40 -0400 on tactic-graph-commit-landing-lock — a
+  same-second pair where the second commit reinstates the value the first had
+  just cleared, and whose message describes clearing the park it in fact
+  restored. The pair is the observable signature of a stale snapshot being
+  copied back over a fresher base."
 reading: null
 gap: null
 serves:
@@ -41,7 +41,16 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 50
+  override: null
+  rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
+    (50 / 20 / 10) that puts write-path integrity work above ordinary feature
+    work. This band holds the silent graph-write-corruption defects plus the two
+    paths the bootstrap arms or depends on. Interim scaffolding only -
+    tactic-attention-tier-ranking replaces the whole numeric scheme with
+    lexicographic (tier, rank) and max-lifting, and
+    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
 phase: null
 execution: null
 validates: []

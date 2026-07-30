@@ -145,22 +145,15 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 97
+  boost: 50
   override: null
-  rationale: "Author-directed 2026-07-28 /align-strategy round: lift to the top of
-    the authored discretionary band. Composes with the +5.33 inherited from
-    strategy-graph-native-dispatch to a resolved 102.33, just above the current
-    top authored rank of 101.33 (tactic-dispatch-conflict-branch-merge-lane,
-    boost 96) — measured from select-targets.ts this session, not estimated.
-    Deliberately held at 97, below strategy-main-health's standing 100, so no
-    >=100 authorization or ACK substring is required (schema rule 18). It does
-    NOT out-rank the live composed max of 387.33
-    (tactic-scope-fingerprint-plan-substance, whose rank is compounded by
-    inbound blocked_by rather than authored); that node is at qa on PR #2974 and
-    expected to complete, after which this becomes the effective top selectable
-    target. Justification: this defect fails whole dispatch ticks
-    deterministically and misreports its own cause, so every occurrence costs
-    both the tick and the diagnosis time."
+  rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
+    (50 / 20 / 10) that puts write-path integrity work above ordinary feature
+    work. This band holds the silent graph-write-corruption defects plus the two
+    paths the bootstrap arms or depends on. Interim scaffolding only -
+    tactic-attention-tier-ranking replaces the whole numeric scheme with
+    lexicographic (tier, rank) and max-lifting, and
+    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
 phase: qa
 execution:
   branch: tactic-graph-commit-noop-landing-false-failure
