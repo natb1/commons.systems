@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# Tests for dispatch-plan-io -- moved verbatim from test-dispatch-scripts.sh
-# (tactic-dispatch-test-monolith-split). Original section: 25626-26070.
+# Tests for dispatch-write-plan / dispatch-read-plan / dispatch-write-recommendation
+# -- moved verbatim from test-dispatch-scripts.sh
+# (tactic-dispatch-test-monolith-split). Original section: 25626-26070, plus the
+# merged-in dispatch-write-recommendation section 26071-26187 -- two original
+# ranges in one file. The NOTE above the dispatch-write-recommendation section
+# explains why that section must run in this same process.
+# "dispatch-plan-io" is a grouped name for this plan-I/O family of scripts, not
+# a script name: no script called dispatch-plan-io exists.
 set -euo pipefail
 
 FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"

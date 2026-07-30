@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Shared fixture for the dispatch-scripts test suite (test-dispatch-scripts.sh
-# and its per-script sibling test files): common harness (assert_eq,
+# Shared fixture for the dispatch-scripts test suite -- the per-script
+# test-*.sh files in this directory: common harness (assert_eq,
 # report_results, setup/teardown, PR/rollup builders) plus a handful of
 # helpers promoted out of their original per-section homes because more than
 # one test file needs them. Sourced, not executed directly.

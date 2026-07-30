@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests for dispatch-mark-complete -- moved verbatim from test-dispatch-scripts.sh
+# Tests for dispatch-mark-complete / dispatch-mark-deviation -- moved verbatim
+# from test-dispatch-scripts.sh
 # (tactic-dispatch-test-monolith-split). Original section: 24113-24284.
 set -euo pipefail
 
