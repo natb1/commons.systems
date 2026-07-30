@@ -407,3 +407,12 @@ Manual / observe-in-production checks (not auto-runnable):
 - Confirm a normal (non-no-op) land still waits correctly. On the first real graph write after the change, the scratch push fires a fresh fast-path run whose rows are the newest per name and start as `pending`; `await_checks` must wait for them to conclude and then land. If instead it lands instantly off older rows, the ordering key is wrong (that is the `max_by` behaviour to check).
 - Sanity-check the new diagnostic once against a genuinely non-green SHA if one occurs: the terminal message should name per-context state (`acceptance=…`, `lint=…`) rather than asserting contention.
 
+
+## needs-main residue
+
+- id: 11
+  title: Interim-by-construction scope holds until tactic-graph-ref-split lands
+  url_path: current
+  expected_outcome: The interim fix stops the deterministic dispatch-tick failure without accruing debt the greenfield ref-split fix must pay down; live ticks confirm genuine no-ops land instantly.
+  finding: Judgment item flagged planned-deferral by the qa-fix disposition Workflow — the golden-path claim (a genuine no-op lands instantly on the live dispatch tick) and the non-recurrence of the 12-row false failure are only observable against real GitHub check-run data across subsequent ticks on main, not at PR merge time.
+
