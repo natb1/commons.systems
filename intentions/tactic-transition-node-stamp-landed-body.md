@@ -55,7 +55,7 @@ attention:
     tactic-attention-boost-scripts must retire it along with the interim
     50/20/10 boosts. Under tactic-attention-tier-ranking lexicographic (tier,
     rank) with max-lifting the cap has no job at all."
-phase: review
+phase: done
 execution:
   branch: tactic-transition-node-stamp-landed-body
   pr: 2973
@@ -66,7 +66,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-30T20:11:21Z
+    mergeCommitSha: 0848a10eb4b10ee7a716b648032d2704f9623142
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
