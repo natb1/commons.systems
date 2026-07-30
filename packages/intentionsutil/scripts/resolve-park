@@ -194,9 +194,16 @@ fi
 # changes to stage" branch, and prints "landed ... on main" / exits 0 having
 # committed nothing -- leaving the real edit dirty and unpushed in the other
 # checkout. Mirrors park-node, which already passes -C for the same reason.
-# --expect is the second half of the same guarantee: -C points graph-commit at
-# the right checkout, and --expect proves the content this script wrote is
-# really there by asserting the on-disk blob matches EXPECT_BLOB.
+#
+# --expect does NOT add a second, independent check on -C from this call site:
+# EXPECT_BLOB is hashed under the same "$REPO_ROOT" that is passed as -C, so
+# the assertion is self-satisfying whenever -C resolves to the tree this script
+# wrote. What it buys here is narrower: it asserts graph-commit's
+# `git rev-parse --show-toplevel` resolution of -C lands on the same tree this
+# script wrote to (they can differ if REPO_ROOT is not itself a git toplevel),
+# and it guards against a concurrent writer touching intentions/$NODE_ID.md
+# between the hash above and graph-commit's staging. See park-node's fuller
+# note at the same call site.
 if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "$COMMIT_MSG" "$NODE_ID"; then
   echo "resolve-park: graph-commit failed for $NODE_ID; office_hours clear is on disk but not landed (PR #$PR disposition ($DISPOSITION) already applied)" >&2
   exit 1

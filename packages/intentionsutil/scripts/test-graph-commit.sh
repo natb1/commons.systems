@@ -1239,8 +1239,13 @@ elsewhere_sha="$(printf 'content that lives in some OTHER checkout\n' | git -C "
 before_sha="$(origin_sha)"
 out="$(run_gc "$W34" -m 'test: expect wrong repo' --expect "t-expect-wrong-repo=$elsewhere_sha" t-expect-wrong-repo 2>&1)"; rc=$?
 after_sha="$(origin_sha)"
+# The assertion greps an --expect-SPECIFIC substring. 'mis-pointed -C/--repo'
+# appears in BOTH the --expect die and the pre-existing nothing-staged guard
+# (which case 27 greps with exactly that string), so it cannot tell the two
+# apart — and this case exists precisely to prove --expect fired where the
+# nothing-staged guard structurally could not.
 if [[ $rc -ne 0 ]] \
-   && grep -q 'mis-pointed -C/--repo' <<<"$out" \
+   && grep -q 'does not hold the content the caller asserted' <<<"$out" \
    && ! grep -q 'landed t-expect-wrong-repo on main' <<<"$out" \
    && [[ "$after_sha" == "$before_sha" ]]; then
   ok "--expect: equal-blob wrong-repo invocation dies loudly, never emits a false landed"

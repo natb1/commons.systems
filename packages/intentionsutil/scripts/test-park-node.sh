@@ -967,16 +967,24 @@ content_a="$(origin_show t-clear-cwd)"
 porcelain_a="$(git -C "$Y_CWD" status --porcelain -- intentions/)"
 
 # (b) cwd = a directory that is not a git repository at all.
+# `office_hours: null` alone is NOT discriminating here: part (a) already
+# cleared this same id, and the harness's clear shim APPENDS the sentinel
+# rather than rewriting the file, so (a)'s leftover line satisfies the grep
+# even if (b) landed nothing at all. Pin origin/main's sha immediately before
+# the run and require it to MOVE, so this arm proves a commit actually landed.
 run_pn "$X_CWD" t-clear-cwd 'unit-test non-repo-cwd setup' >/dev/null 2>&1
+before_sha_b="$(origin_sha)"
 out_b="$(run_cp_from "$NOREPO_CWD" "$X_CWD" t-clear-cwd 'from non-repo dir' 2>&1)"; rc_b=$?
 content_b="$(origin_show t-clear-cwd)"
 porcelain_b="$(git -C "$Y_CWD" status --porcelain -- intentions/)"
+after_sha_b="$(origin_sha)"
 
 if [[ $rc_a -eq 0 ]] && grep -q 'office_hours: null' <<<"$content_a" && [[ -z "$porcelain_a" ]] \
-   && [[ $rc_b -eq 0 ]] && grep -q 'office_hours: null' <<<"$content_b" && [[ -z "$porcelain_b" ]]; then
+   && [[ $rc_b -eq 0 ]] && grep -q 'office_hours: null' <<<"$content_b" && [[ -z "$porcelain_b" ]] \
+   && [[ "$after_sha_b" != "$before_sha_b" ]]; then
   ok "clear-park repo targeting: script in clone X invoked from clone Y's cwd and from a non-repo cwd still lands the clear on origin/main; Y's intentions/ never written"
 else
-  no "clear-park repo targeting (rc_a=$rc_a rc_b=$rc_b porcelain_a='$porcelain_a' porcelain_b='$porcelain_b')"
+  no "clear-park repo targeting (rc_a=$rc_a rc_b=$rc_b porcelain_a='$porcelain_a' porcelain_b='$porcelain_b' before_sha_b=$before_sha_b after_sha_b=$after_sha_b)"
   printf 'a: %s\n' "$out_a"; printf '%s\n' "$content_a"
   printf 'b: %s\n' "$out_b"; printf '%s\n' "$content_b"
 fi
