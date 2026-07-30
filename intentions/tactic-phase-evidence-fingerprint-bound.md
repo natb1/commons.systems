@@ -54,7 +54,7 @@ execution:
   completion: null
 validates: []
 blocked_by:
-  - tactic-transition-node-stamp-landed-body
+  - tactic-scope-fingerprint-plan-substance
 office_hours: null
 pace_exempt: false
 rounds: null
