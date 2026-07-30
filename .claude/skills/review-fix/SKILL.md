@@ -145,9 +145,10 @@ output — do not re-resolve any of them later:
 On the node lane every step runs unchanged except three re-keyed seams:
 
 - **Completion** — invoke `transition-node "$N" --set-pr "$PR_NUM"` (records the
-  `reviewed` marker in `execution.markers` and arms gh auto-merge as one
-  state-only graph-commit), **not** `dispatch-complete-phase` /
-  `dispatch-mark-complete` / `dispatch-finalize-phase`.
+  `reviewed` marker in `execution.markers` as one state-only graph-commit; it does
+  **not** arm or perform any merge), **not** `dispatch-complete-phase` /
+  `dispatch-mark-complete` / `dispatch-finalize-phase`. Merging is deferred to the
+  tick's `graph-auto-merge` reconciler, keyed off the `reviewed` marker.
 - **Deferred findings (Step 5)** — deferred/security follow-ups become **draft
   tactic nodes**, not gh issues.
 - **Escalation** — write the reason to `$CLAUDE_JOB_DIR/office-hours-reason`
