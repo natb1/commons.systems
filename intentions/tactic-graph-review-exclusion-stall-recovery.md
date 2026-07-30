@@ -23,12 +23,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: review
 execution:
   branch: tactic-graph-review-exclusion-stall-recovery
   pr: 2920
   attempts: {}
-  markers: []
+  markers:
+    - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
   completion: null

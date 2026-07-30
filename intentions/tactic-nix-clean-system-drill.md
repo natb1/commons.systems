@@ -28,11 +28,14 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint: 4ee635b8acf77f2cb701ca3625baa5edf2209e23bf04d30e72650eb7b94f36fa
+  fix: null
+  completion: null
 validates:
   - strategy-exercise-recovery-paths
 blocked_by:
   - tactic-nix-instance-flake-extraction
-  - tactic-nix-fullsystem-instance-split
+  - tactic-nix-host-option-surface
+  - tactic-nix-operator-machine-cutover
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -54,17 +57,18 @@ toolchain and CI's (`actions/setup-node` + `.node-version`, currently
 Sequencing (the `blocked_by` edges): the drill must run against the
 framework flake with placeholder instance values —
 `tactic-nix-instance-flake-extraction` (personal values out of
-`flake.nix`) and `tactic-nix-fullsystem-instance-split` (the full-system
-layer split). Before those land, a drill would exercise the wrong entry
+`flake.nix`), `tactic-nix-host-option-surface` (the host-specific
+option surface), and `tactic-nix-operator-machine-cutover` (the operator
+machine relocation). Before those land, a drill would exercise the wrong entry
 point: a repo hardcoding the author's identity behind `--impure` /
-`builtins.getEnv`. Re-read both tactics' final shape at implement time —
+`builtins.getEnv`. Re-read all three tactics' final shape at implement time —
 this plan anchors on the post-split contract, not on today's `flake.nix`
 line numbers.
 
 Layer honesty: this tactic covers the **devshell** half of the floor
 (`nix develop` from scratch). The full-system half (`home-manager switch`
 / OS provision on fresh hardware) is author work that rides
-`tactic-nix-fullsystem-instance-split`'s completion; the record flip in
+`tactic-nix-operator-machine-cutover`'s completion; the record flip in
 Unit 3 names the exercised layer explicitly.
 
 ## Unit 1 — clean-environment devshell drill in CI
@@ -131,7 +135,7 @@ Scope: update `intentions/delegation-os-hardware.md` via
 date, and note in `attributes.irreversibility.recovery_path` (or the
 node body's audit narrative) that the exercised layer is the devshell
 provision, with the full-system half riding
-`tactic-nix-fullsystem-instance-split`. Land via
+`tactic-nix-operator-machine-cutover`. Land via
 `packages/intentionsutil/scripts/graph-commit delegation-os-hardware` —
 node edits never ride the code PR.
 
