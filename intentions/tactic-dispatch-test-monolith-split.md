@@ -21,26 +21,17 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention:
-  boost: 10
-  override: null
-  rationale: "Bootstrap re-scale 2026-07-30: demoted from the pre-bootstrap 85-90
-    band to 10. These are ordinary improvements, not integrity defects; at 85-90
-    they outranked strategy-main-health (101 resolved) and flooded the selector
-    hot band. Interim scaffolding only; tactic-attention-tier-ranking and
-    tactic-attention-boost-scripts retire this numeric scheme."
-phase: qa
+attention: null
+phase: review
 execution:
   branch: tactic-dispatch-test-monolith-split
   pr: 2971
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-25
-    attempt: 1
-    pushed_sha: null
+  fix: null
   completion: null
 validates: []
 blocked_by: []

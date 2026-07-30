@@ -29,7 +29,7 @@
 # retries, and deletes it on every exit path).
 #
 # Usage:
-#   graph-commit [-C <repo-path>] [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]
+#   graph-commit [-C <repo-path>] [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... [--expect <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]
 #   graph-commit -m 'graph: seed dispatch state' tactic-graph-commit
 #   graph-commit -C /path/to/worktree -m 'graph: land edit' tactic-foo
 #
@@ -49,6 +49,24 @@
 #   pair per line): optional compare-and-swap freshness check. If any entry's
 #   blob no longer matches origin/main after a fetch, the write is refused
 #   before any local commit is made. Omit entirely to keep pre-CAS behavior.
+#
+# --expect <id>=<blobsha> (repeatable) or --expect <manifest-file> (one
+#   <id>=<sha> pair per line): optional wrong-repo assertion. The sha is the
+#   blob of the content the caller WROTE — `git hash-object -- intentions/<id>.md`
+#   run in the caller's OWN checkout after its edit. Before any tree mutation,
+#   graph-commit hashes the same path in the repo it resolved (-C/--repo, else
+#   cwd) and refuses to land on a mismatch.
+#
+#   --base and --expect assert different things and are not interchangeable:
+#   --base asserts the PRE-edit blob against origin/main (a freshness /
+#   compare-and-swap check about concurrent writers), while --expect asserts the
+#   POST-edit blob against the resolved checkout (a targeting check about WHICH
+#   repo this invocation is committing). Only --expect can catch a wrong-repo
+#   invocation whose blob happens to equal origin/main: the nothing-staged guard
+#   below only fires when the wrong repo's blob DIFFERS from origin/main, so a
+#   wrong repo that is merely in sync with origin/main slips through it and
+#   reports a false "landed" while the caller's real edit sits dirty elsewhere.
+#   Omit entirely to keep pre-assertion behavior.
 #
 # Exit status — four observable outcomes across rc 0 and rc 1:
 #   0  the edit landed on main. Two sub-cases, distinguished only by a log line
@@ -140,6 +158,9 @@ LOCK_WAIT_SECONDS="${GRAPH_COMMIT_LOCK_WAIT_SECONDS:-$((MAX_PUSH_ATTEMPTS * (CHE
 # BASE        — optional --base compare-and-swap manifest: node id -> the blob
 #               SHA the caller read it at (git hash-object at read time).
 #               Empty unless --base was passed; empty means skip the check.
+# EXPECT_BLOB — optional --expect assertion manifest: node id -> the blob SHA of
+#               the content the caller WROTE (git hash-object after its edit).
+#               Empty unless --expect was passed.
 # EXPECTED    — associative set of the exact staged paths we permit.
 # SNAP_DIR    — tempdir holding the on-disk node content we are trying to land.
 # KEEP_SNAP   — 1 when SNAP_DIR must survive exit (the fail-closed conflict
@@ -150,6 +171,7 @@ declare -a IDS=()
 declare -a PRUNE_IDS=()
 declare -a ALL_IDS=()
 declare -A BASE=()
+declare -A EXPECT_BLOB=()
 declare -A EXPECTED=()
 SNAP_DIR=""
 KEEP_SNAP=0
@@ -223,7 +245,7 @@ die() {
 }
 
 usage() {
-  echo "usage: graph-commit [-C <repo-path>] [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]" >&2
+  echo "usage: graph-commit [-C <repo-path>] [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... [--expect <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]" >&2
 }
 
 # --- Prune / base id helpers -------------------------------------------------
@@ -247,32 +269,85 @@ validate_id_chars() {
   esac
 }
 
-# Record one <id>=<blobsha> pair into BASE.
-add_base_pair() {
-  local pair="$1" id sha
+# Record one <id>=<blobsha> pair into the named associative array (BASE for
+# --base, EXPECT_BLOB for --expect). The target array is passed BY NAME and
+# bound with a bash nameref (requires bash 4.3; the script already requires
+# bash 4 for `declare -A`), so --base and --expect share one parser instead of
+# maintaining two copies that can drift.
+add_blob_pair() { # <array-name> <flag-name> <pair>
+  local -n _target="$1"
+  local flag="$2" pair="$3" id sha
   id="${pair%%=*}"
   sha="${pair#*=}"
   if [[ -z "$id" || "$id" == "$pair" || -z "$sha" ]]; then
-    die "invalid --base entry '$pair' (expected <id>=<blobsha>)"
+    die "invalid $flag entry '$pair' (expected <id>=<blobsha>)"
   fi
-  BASE["$id"]="$sha"
+  _target["$id"]="$sha"
 }
 
-# A --base argument is either a literal <id>=<blobsha> pair or, when it names
-# an existing file, a manifest of such pairs (one per line, blank lines
-# ignored) — so a caller holding a whole dump's worth of base shas can pass
-# one flag instead of one --base per node.
-parse_base_arg() {
-  local arg="$1"
+# A --base/--expect argument is either a literal <id>=<blobsha> pair or, when it
+# names an existing file, a manifest of such pairs (one per line, blank lines
+# ignored) — so a caller holding a whole dump's worth of blob shas can pass one
+# flag instead of one flag per node.
+parse_blob_arg() { # <array-name> <flag-name> <arg>
+  local arr="$1" flag="$2" arg="$3"
   if [[ -f "$arg" ]]; then
     local line
     while IFS= read -r line || [[ -n "$line" ]]; do
       [[ -z "$line" ]] && continue
-      add_base_pair "$line"
+      add_blob_pair "$arr" "$flag" "$line"
     done <"$arg"
   else
-    add_base_pair "$arg"
+    add_blob_pair "$arr" "$flag" "$arg"
   fi
+}
+
+# --- Wrong-repo assertion (--expect) ----------------------------------------
+# Assert that the repo this invocation RESOLVED actually holds the content the
+# caller wrote. The caller computes `git hash-object -- intentions/<id>.md` in
+# its OWN checkout after its edit and passes it as --expect <id>=<sha>; here we
+# hash the same path in REPO_ROOT and compare.
+#
+# Why this exists on top of the nothing-staged guard in main(): that guard only
+# fires when the wrongly-targeted repo's blob DIFFERS from origin/main. When the
+# wrong repo happens to be in sync with origin/main — the common case for an
+# idle checkout — both blobs are equal, the guard passes, and graph-commit
+# reports a false "landed" while the caller's real edit sits dirty in a
+# different checkout. --expect closes that hole because it asserts the caller's
+# POST-edit content, independent of any pre-edit or origin/main state.
+#
+# Ordering is load-bearing: this must run before check_base_freshness (layer 3's
+# auto-merge overwrites $INTENTIONS_DIR/$id.md on disk) and before
+# ensure_intentions_only_base (which can `git reset --hard` the tree). Later
+# would hash content graph-commit itself rewrote, not the caller's.
+#
+# Opt-in: no --expect means no behavior change for existing callers.
+assert_expected_content() {
+  [[ "${#EXPECT_BLOB[@]}" -eq 0 ]] && return 0
+  local id
+  # Pass 1 — validation. A --prune is a deletion: there is no content to
+  # assert, so pinning one is a usage error (exit 2, like the other argument
+  # validators; die() would exit 1). Keys naming neither an ordinary id nor a
+  # prune id are ignored, matching --base manifest semantics where one batch
+  # manifest may cover more nodes than a given invocation commits.
+  for id in "${!EXPECT_BLOB[@]}"; do
+    if is_prune_id "$id"; then
+      echo "error: graph-commit: --expect $id=... names a --prune id — a deletion has no content to assert" >&2
+      exit 2
+    fi
+  done
+  # Pass 2 — assertion over the ordinary edit ids only. main() has already
+  # cd'd to REPO_ROOT, so the repo-relative path is correct.
+  local sha actual
+  for id in "${IDS[@]}"; do
+    sha="${EXPECT_BLOB[$id]:-}"
+    [[ -z "$sha" ]] && continue
+    actual="$(git hash-object -- "intentions/$id.md")" \
+      || die "could not hash intentions/$id.md in the resolved repo ($REPO_ROOT)"
+    if [[ "$actual" != "$sha" ]]; then
+      die "the resolved repo ($REPO_ROOT) does not hold the content the caller asserted for intentions/$id.md (--expect $sha, on disk $actual) — the edit was made in a DIFFERENT checkout: mis-pointed -C/--repo (or cwd targeting the wrong checkout). Refusing to land."
+    fi
+  done
 }
 
 # Reconcile each --base entry against origin/main after a fetch. If an entry's
@@ -1412,7 +1487,9 @@ main() {
       --prune) [[ $# -ge 2 ]] || { usage; die "--prune requires a node id argument"; }
                PRUNE_IDS+=("$2"); shift 2 ;;
       --base) [[ $# -ge 2 ]] || { usage; die "--base requires an <id>=<blobsha> argument or a manifest file path"; }
-              parse_base_arg "$2"; shift 2 ;;
+              parse_blob_arg BASE --base "$2"; shift 2 ;;
+      --expect) [[ $# -ge 2 ]] || { usage; die "--expect requires an <id>=<blobsha> argument or a manifest file path"; }
+                parse_blob_arg EXPECT_BLOB --expect "$2"; shift 2 ;;
       -h|--help) usage; exit 0 ;;
       --) shift; while [[ $# -gt 0 ]]; do IDS+=("$1"); shift; done ;;
       -*) usage; echo "error: graph-commit: unknown option '$1'" >&2; exit 2 ;;
@@ -1504,6 +1581,12 @@ main() {
   # `git reset --hard`; the guard must run ahead of it so a stray dirty file is
   # surfaced (and named) rather than silently discarded.
   assert_clean_outside_ids
+
+  # Wrong-repo assertion (opt-in via --expect). MUST run here: before
+  # check_base_freshness (whose layer-3 auto-merge rewrites node files on disk)
+  # and before ensure_intentions_only_base (which can `git reset --hard` the
+  # tree). Running it any later would hash content graph-commit itself wrote.
+  assert_expected_content
 
   # Capture the writer's intended on-disk content BEFORE check_base_freshness.
   # Layer 3's stale-base park (park_and_exit, reached from inside

@@ -112,27 +112,36 @@
 #  32. lock-ref hygiene: refs/graph/landing-lock is absent after a normal
 #      landing and never appears under refs/heads/graph/** (disjoint from
 #      the scratch-branch namespace graph-fast-path.yml triggers on)
-#  33. duplicate green rows land: a SHA re-stamped by several pushes carries
+#  33. --expect happy path: an --expect entry matching the blob the caller
+#      actually wrote is transparent — exit 0, the edit lands
+#  34. --expect catches the equal-blob wrong-repo case that case 28's benign
+#      path cannot: a clone synced bit-for-bit to origin/main (nothing staged,
+#      local blob == origin/main blob, so the nothing-staged guard passes)
+#      invoked with an --expect sha for content that is NOT there — dies
+#      naming "mis-pointed -C/--repo", never reaches "landed", main untouched
+#  35. --expect on a --prune id is a usage error (exit 2, origin untouched) —
+#      a deletion has no content to assert
+#  36. duplicate green rows land: a SHA re-stamped by several pushes carries
 #      TWO completed/success rows per required name (plus an unrelated CodeQL
 #      row). The gate counts DISTINCT required contexts resolved to their
 #      newest run, not rows, so this lands (exit 0) instead of spinning to
 #      the busy-main timeout a row-count `== 4` gate could never satisfy
-#  34. duplicated rows do not paper over a missing context: four rows but only
+#  37. duplicated rows do not paper over a missing context: four rows but only
 #      three distinct required names green (two lint successes, no acceptance
 #      row at all) — exit 1, nothing lands on main, and the reported state
 #      names "acceptance=absent" (the regression guard against relaxing the
 #      gate to `-ge 4`)
-#  35. a stale failed row superseded by a newer success lands: acceptance has
+#  38. a stale failed row superseded by a newer success lands: acceptance has
 #      an older conclusion=failure row and a newer conclusion=success row, so
 #      max_by([started_at, id]) resolves it green — exit 0, no "concluded
 #      non-success" misdiagnosis
-#  36. no-op short-circuit exits 0 even when checks are unusable: a clone
+#  39. no-op short-circuit exits 0 even when checks are unusable: a clone
 #      synced exactly to origin/main's tip, invoked on an existing id with
 #      nothing edited, while gh is in hard-fail mode (every call exits 1) —
 #      still exits 0 with zero gh polls and no "polling failed", proving the
 #      no-op path never reaches the poller
 #      (tactic-graph-commit-noop-landing-false-failure, Defect 1)
-#  37. lock-wait exhaustion is diagnosed as lock contention, not as a check
+#  40. lock-wait exhaustion is diagnosed as lock contention, not as a check
 #      state: a foreign lock with a far-future expiry blocks the writer, which
 #      exits after zero gh polls — the terminal message names the landing lock
 #      as the cause and states that the required-check state was never
@@ -196,6 +205,7 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
           t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
+          t-expect-happy t-expect-wrong-repo t-expect-prune \
           t-dup-rows t-partial-dup t-stale-fail; do
   seed_node "$id"
 done
@@ -1297,12 +1307,74 @@ else
   no "lock hygiene: landing-lock ref leaked into refs/heads/graph/**"
 fi
 
-# --- Case 33: duplicate green rows still land --------------------------------
+# --- Case 33: --expect is transparent on the happy path -----------------------
+# The caller hashes the content it just wrote in its OWN checkout and pins it.
+# The resolved repo is that same checkout, so the assertion holds and the edit
+# lands exactly as it would without --expect.
+set_mode green
+W33="$WORK/w33"; make_clone "$W33" writer-33
+sync_clone "$W33"
+edit_line "$W33" t-expect-happy 1 expect-happy-lands
+expect_sha="$(git -C "$W33" hash-object -- intentions/t-expect-happy.md)"
+out="$(run_gc "$W33" -m 'test: expect happy' --expect "t-expect-happy=$expect_sha" t-expect-happy 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-expect-happy | grep -q 'line1: expect-happy-lands'; then
+  ok "--expect happy path: matching blob assertion is transparent, edit lands"
+else
+  no "--expect happy path (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 34: --expect catches the equal-blob wrong-repo case -------------------
+# The exact hole case 28 leaves open. This clone is bit-for-bit at origin/main
+# and has nothing staged, so the nothing-staged guard sees local_blob ==
+# main_blob and proceeds benignly ("no new changes to stage" + "landed") — a
+# false success when the caller's real edit lives in a DIFFERENT checkout.
+# With --expect naming the content the caller actually wrote, graph-commit must
+# refuse instead.
+set_mode green
+W34="$WORK/w34"; make_clone "$W34" writer-34
+sync_clone "$W34"   # bit-for-bit at origin/main, nothing staged
+elsewhere_sha="$(printf 'content that lives in some OTHER checkout\n' | git -C "$W34" hash-object --stdin)"
+before_sha="$(origin_sha)"
+out="$(run_gc "$W34" -m 'test: expect wrong repo' --expect "t-expect-wrong-repo=$elsewhere_sha" t-expect-wrong-repo 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+# The assertion greps an --expect-SPECIFIC substring. 'mis-pointed -C/--repo'
+# appears in BOTH the --expect die and the pre-existing nothing-staged guard
+# (which case 27 greps with exactly that string), so it cannot tell the two
+# apart — and this case exists precisely to prove --expect fired where the
+# nothing-staged guard structurally could not.
+if [[ $rc -ne 0 ]] \
+   && grep -q 'does not hold the content the caller asserted' <<<"$out" \
+   && ! grep -q 'landed t-expect-wrong-repo on main' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "--expect: equal-blob wrong-repo invocation dies loudly, never emits a false landed"
+else
+  no "--expect wrong-repo (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 35: --expect on a --prune id is a usage error ------------------------
+# A deletion has no content to assert, so pinning one is a caller mistake.
+set_mode green
+W35="$WORK/w35"; make_clone "$W35" writer-35
+sync_clone "$W35"
+prune_sha="$(git -C "$W35" hash-object -- intentions/t-expect-prune.md)"
+rm -f "$W35/intentions/t-expect-prune.md"   # --prune requires the file gone on disk
+before_sha="$(origin_sha)"
+out="$(run_gc "$W35" -m 'test: expect prune' --prune t-expect-prune --expect "t-expect-prune=$prune_sha" 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -eq 2 ]] \
+   && grep -q 'no content to assert' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "--expect on a --prune id is a usage error (exit 2), origin untouched"
+else
+  no "--expect on a prune id (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 36: duplicate green rows still land --------------------------------
 set_mode duplicate-rows
-W33="$WORK/w33"
-make_clone "$W33" writer-33
-edit_line "$W33" t-dup-rows 1 dup-rows-land
-out="$(run_gc "$W33" -m 'test: duplicate rows' t-dup-rows 2>&1)"; rc=$?
+W36="$WORK/w36"
+make_clone "$W36" writer-36
+edit_line "$W36" t-dup-rows 1 dup-rows-land
+out="$(run_gc "$W36" -m 'test: duplicate rows' t-dup-rows 2>&1)"; rc=$?
 if [[ $rc -eq 0 ]] && origin_show t-dup-rows | grep -q 'line1: dup-rows-land' \
    && ! grep -q 'retry later' <<<"$out"; then
   ok "duplicate green rows per required name still land (distinct-context gate)"
@@ -1310,27 +1382,27 @@ else
   no "duplicate green rows (rc=$rc)"; printf '%s\n' "$out"
 fi
 
-# --- Case 34: duplicated rows do not paper over a missing context ------------
+# --- Case 37: duplicated rows do not paper over a missing context ------------
 set_mode partial-duplicate
-W34="$WORK/w34"
-make_clone "$W34" writer-34
-edit_line "$W34" t-partial-dup 1 must-not-land
+W37="$WORK/w37"
+make_clone "$W37" writer-37
+edit_line "$W37" t-partial-dup 1 must-not-land
 before="$(origin_sha)"
-out="$(export GC_POLL=0 GC_TIMEOUT=1 GC_ATTEMPTS=1; run_gc "$W34" -m 'test: partial dup' t-partial-dup 2>&1)"; rc=$?
+out="$(export GC_POLL=0 GC_TIMEOUT=1 GC_ATTEMPTS=1; run_gc "$W37" -m 'test: partial dup' t-partial-dup 2>&1)"; rc=$?
 if [[ $rc -eq 1 && "$(origin_sha)" == "$before" ]] \
    && grep -q 'acceptance=absent' <<<"$out"; then
   ok "duplicated rows do not satisfy the gate when a required context is absent"
 else
   no "partial-duplicate gate (rc=$rc)"; printf '%s\n' "$out"
 fi
-sync_clone "$W34"   # drop the never-landed local commit
+sync_clone "$W37"   # drop the never-landed local commit
 
-# --- Case 35: a stale failed row superseded by a newer success lands ---------
+# --- Case 38: a stale failed row superseded by a newer success lands ---------
 set_mode stale-fail-then-green
-W35="$WORK/w35"
-make_clone "$W35" writer-35
-edit_line "$W35" t-stale-fail 1 newest-run-wins
-out="$(run_gc "$W35" -m 'test: stale fail then green' t-stale-fail 2>&1)"; rc=$?
+W38="$WORK/w38"
+make_clone "$W38" writer-38
+edit_line "$W38" t-stale-fail 1 newest-run-wins
+out="$(run_gc "$W38" -m 'test: stale fail then green' t-stale-fail 2>&1)"; rc=$?
 if [[ $rc -eq 0 ]] && origin_show t-stale-fail | grep -q 'line1: newest-run-wins' \
    && ! grep -q 'concluded non-success' <<<"$out"; then
   ok "stale failed row superseded by a newer success lands (newest run per name)"
@@ -1338,17 +1410,17 @@ else
   no "stale-fail-then-green (rc=$rc)"; printf '%s\n' "$out"
 fi
 
-# --- Case 36: no-op short-circuit exits 0 even when checks are unusable ------
+# --- Case 39: no-op short-circuit exits 0 even when checks are unusable ------
 # A clone synced exactly to origin/main's tip, invoked on an existing id with
 # nothing edited, while gh is in hard-fail mode (every call exits 1). If the
 # no-op guard did not short-circuit before the poller, this would die with
 # "polling failed" instead of landing (a genuine no-op) cleanly.
 set_mode hard-fail
-W36="$WORK/w36"
-make_clone "$W36" writer-36
-sync_clone "$W36"   # now bit-for-bit at origin/main's tip
+W39="$WORK/w39"
+make_clone "$W39" writer-39
+sync_clone "$W39"   # now bit-for-bit at origin/main's tip
 before_sha="$(origin_sha)"
-out="$(run_gc "$W36" t-happy 2>&1)"; rc=$?
+out="$(run_gc "$W39" t-happy 2>&1)"; rc=$?
 after_sha="$(origin_sha)"
 calls="$(gh_calls)"
 if [[ $rc -eq 0 ]] \
@@ -1360,7 +1432,7 @@ else
   no "no-op short-circuit under hard-fail (rc=$rc gh_calls=$calls)"; printf '%s\n' "$out"
 fi
 
-# --- Case 37: lock-wait exhaustion names the lock, not a check observation ---
+# --- Case 40: lock-wait exhaustion names the lock, not a check observation ---
 # A foreign lock with a far-future expiry is never stolen, so the writer exits
 # the attempt loop having made ZERO check-run polls. The terminal message must
 # then name the landing lock as the cause and state plainly that no check state
@@ -1370,11 +1442,11 @@ fi
 set_mode green
 blocking_expiry=$(( $(date +%s) + 3600 ))
 plant_lock "$blocking_expiry" blocking-holder-test
-W37="$WORK/w37"
-make_clone "$W37" writer-37
-edit_line "$W37" t-lock-wait 5 must-not-land
+W40="$WORK/w40"
+make_clone "$W40" writer-40
+edit_line "$W40" t-lock-wait 5 must-not-land
 before="$(origin_sha)"
-out="$(export GC_LOCK_POLL=1 GC_LOCK_WAIT=1 GC_ATTEMPTS=1; run_gc "$W37" -m 'test: lock wait exhausted' t-lock-wait 2>&1)"; rc=$?
+out="$(export GC_LOCK_POLL=1 GC_LOCK_WAIT=1 GC_ATTEMPTS=1; run_gc "$W40" -m 'test: lock wait exhausted' t-lock-wait 2>&1)"; rc=$?
 calls="$(gh_calls)"
 if [[ $rc -eq 1 && "$(origin_sha)" == "$before" && "$calls" -eq 0 ]] \
    && grep -q 'could not land on main after 1/1 attempts' <<<"$out" \

@@ -112,21 +112,42 @@ read_node_json() {
   ' "$NODE_ID")
 }
 
-# Refresh the phase-start stamp to the post-write scope fingerprint + the new
-# origin/main sha, so machinery body appends do not later trip the custody gate.
+# Refresh the phase-start stamp to the fingerprint of what ACTUALLY LANDED on
+# origin/main, plus that same sha — so a machinery body edit that reached
+# origin/main during the phase does not later read as scope drift and trip
+# dispatch-graph-scope-sweep's demotion.
+#
+# The content MUST come from git, never from the local worktree, for two
+# independent reasons:
+#   1. graph-commit's cleanup()
+#      (packages/intentionsutil/scripts/graph-commit:335-359; the
+#      `git reset --hard "$ORIG_HEAD"` at :344) resets this worktree back to
+#      the PR-branch tip after landing, so by the time we get here REPO_ROOT's
+#      intentions/<id>.md is the PR-branch copy, not what landed.
+#   2. That PR-branch copy can be arbitrarily far behind origin/main — the
+#      invocation routinely comes from a long-lived node worktree.
+# NOTE: an UNCOMMITTED worktree body edit is not a content source here and
+# never was — the origin/main refresh above (the `git show origin/main:... >`
+# at the top of this script) overwrites intentions/<id>.md before anything
+# reads it. A caller that wants a body edit to ride into this transition must
+# land it on origin/main itself (via graph-commit) first.
+#
+# Best-effort by design: the transition always continues (the caller never
+# aborts or changes exit code on a restamp failure) — but fail-open is not
+# fail-silent. The primitive itself fails LOUD with a `restamp-scope-
+# fingerprint: <message>` stderr line; on a non-zero exit we forward that
+# message here (prefixed) so a silently-missing/stale stamp — the exact
+# demotion bug this seam exists to prevent — is diagnosable in worker logs.
 refresh_stamp() {
-  local stamp_file="$MAIN_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
-  local sha fp
-  sha="$( (cd "$REPO_ROOT" && git rev-parse origin/main 2>/dev/null) )" || return 0
-  fp="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
-    const { readNode, readNodeBody } = await import("./packages/intentionsutil/src/store.js");
-    const { tacticScopeFingerprint } = await import("./packages/intentionsutil/src/router.js");
-    const id = process.argv[1];
-    process.stdout.write(tacticScopeFingerprint(readNode("./intentions", id).statement, readNodeBody("./intentions", id)));
-  ' "$NODE_ID" 2>/dev/null) )" || return 0
-  [[ -n "$fp" && -n "$sha" ]] || return 0
-  mkdir -p "$(dirname "$stamp_file")" 2>/dev/null || true
-  printf '%s %s\n' "$fp" "$sha" > "$stamp_file" 2>/dev/null || true
+  local err rc
+  err="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/restamp-scope-fingerprint.ts" \
+    --repo-root "$REPO_ROOT" --main-root "$MAIN_ROOT" --from-rev origin/main \
+    "$NODE_ID") 2>&1 >/dev/null )"
+  rc=$?
+  if [[ $rc -ne 0 ]]; then
+    echo "transition-node: refresh_stamp failed for $NODE_ID (best-effort, continuing): ${err:-no diagnostic}" >&2
+  fi
+  return 0
 }
 
 # --- Read the current phase --------------------------------------------------
