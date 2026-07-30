@@ -352,4 +352,100 @@ assert_eq "pr-list: exit non-zero" "nonzero" "$_t14_rc"
 assert_contains "pr-list: output names the file" "script.sh" "$OUT"
 assert_contains "pr-list: remediation helper present" "gh_pr_list_rest" "$OUT"
 
+# ---------------------------------------------------------------------------
+# Test 15: the relocation exemption, and its limits.
+#
+# The rule's contract is net-NEW porcelain. A pure MOVE of an existing call adds
+# no call site, so it must not be reported (15a) -- otherwise any large file
+# split reports lines that have sat on origin/main unflagged for months, and the
+# only escapes are editing moved content or burying it under allow-markers.
+#
+# 15b and 15c are the anti-blindness guards: the exemption must not become a
+# loophole that lets real net-new porcelain ride in alongside a move.
+# ---------------------------------------------------------------------------
+echo "Test 15a: porcelain RELOCATED between files is NOT flagged"
+REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+git -C "$BARE" init --bare --quiet --initial-branch=main
+git -C "$REPO" init --quiet --initial-branch=main
+git -C "$REPO" config user.email "test@example.com"
+git -C "$REPO" config user.name "Test User"
+git -C "$REPO" remote add origin "$BARE"
+# Baseline: the porcelain lives in old.sh, already on main (so it is pre-existing
+# and unflagged there, exactly like the monolith's calls).
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/old.sh"
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/old.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "baseline with porcelain in old.sh"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" checkout --quiet -b feature
+git -C "$REPO" fetch --quiet origin main
+# Move it verbatim into new.sh and delete old.sh -- a pure relocation.
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/new.sh"
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/new.sh"
+rm "$REPO/old.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "relocate porcelain from old.sh to new.sh"
+run_sut
+assert_eq "relocation: exit 0" "0" "$RC"
+assert_contains "relocation: PASS printed" "PASS" "$OUT"
+
+echo "Test 15b: a genuinely NEW call riding alongside a relocation is STILL flagged"
+# Same relocation as 15a, but the commit also introduces a DIFFERENT porcelain
+# call that never existed on main. This is the proof the rule did not go blind:
+# if the exemption were a blanket skip, this would pass.
+REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+git -C "$BARE" init --bare --quiet --initial-branch=main
+git -C "$REPO" init --quiet --initial-branch=main
+git -C "$REPO" config user.email "test@example.com"
+git -C "$REPO" config user.name "Test User"
+git -C "$REPO" remote add origin "$BARE"
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/old.sh"
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/old.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "baseline with porcelain in old.sh"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" checkout --quiet -b feature
+git -C "$REPO" fetch --quiet origin main
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/new.sh"
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/new.sh"
+# The net-new one: a different subcommand, with no matching removal anywhere.
+printf '%s\n' "$PORC_PR_LIST" >> "$REPO/new.sh"
+rm "$REPO/old.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "relocate porcelain and add a new call"
+run_sut
+[ "$RC" -ne 0 ] && _t15b_rc=nonzero || _t15b_rc=zero
+assert_eq "relocation+new: exit non-zero" "nonzero" "$_t15b_rc"
+assert_contains "relocation+new: the NEW call is named" "gh_pr_list_rest" "$OUT"
+
+echo "Test 15c: exemption is a MULTISET match — 2 copies added, 1 removed → 1 flagged"
+# Duplicating a moved call is not a move. One removal can excuse exactly one
+# addition; the surplus copy is a net-new call site and must be reported.
+REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+git -C "$BARE" init --bare --quiet --initial-branch=main
+git -C "$REPO" init --quiet --initial-branch=main
+git -C "$REPO" config user.email "test@example.com"
+git -C "$REPO" config user.name "Test User"
+git -C "$REPO" remote add origin "$BARE"
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/old.sh"
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/old.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "baseline with one porcelain call"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" checkout --quiet -b feature
+git -C "$REPO" fetch --quiet origin main
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/new.sh"
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/new.sh"
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/new.sh"
+rm "$REPO/old.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "relocate porcelain but duplicate it"
+run_sut
+[ "$RC" -ne 0 ] && _t15c_rc=nonzero || _t15c_rc=zero
+assert_eq "relocation-duplicate: exit non-zero" "nonzero" "$_t15c_rc"
+assert_contains "relocation-duplicate: output names the file" "new.sh" "$OUT"
+
 report_results

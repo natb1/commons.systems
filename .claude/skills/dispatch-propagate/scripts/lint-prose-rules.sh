@@ -47,6 +47,25 @@ PREV_WAS_ALLOW=0
 VIOLATIONS=()
 PORCELAIN_VIOLATIONS=()
 
+# Relocation exemption for the porcelain rule -- see the check site below for the
+# full rationale. Count every REMOVED line in this same diff, keyed by exact
+# content. A line that is merely relocated appears in the diff BOTH as a removal
+# (from its old home) and as an addition (in its new home); a genuinely new call
+# appears only as an addition. Counting rather than set-membership is deliberate:
+# it makes the exemption a MULTISET match, so adding three copies of a line that
+# was removed only once still reports the two net-new copies.
+declare -A REMOVED_LINES=()
+while IFS= read -r rline; do
+  # '---' old-file headers are not content lines.
+  [[ "$rline" == '---'* ]] && continue
+  [[ "$rline" == '-'* ]] || continue
+  rcontent="${rline:1}"
+  # An empty removed line is an invalid associative-array subscript, and can
+  # never match the porcelain pattern anyway.
+  [[ -z "$rcontent" ]] && continue
+  REMOVED_LINES["$rcontent"]=$(( ${REMOVED_LINES["$rcontent"]:-0} + 1 ))
+done <<<"$DIFF"
+
 while IFS= read -r line; do
   # +++ header: new-file path (or /dev/null for deleted files)
   if [[ "$line" == '+++ '* ]]; then
@@ -115,6 +134,18 @@ while IFS= read -r line; do
     # working-tree file at LINE_NUM-1 to catch the pre-existing-marker case.
     if [[ "$content" =~ $PORCELAIN_PATTERN ]]; then
       suppressed=$PREV_WAS_ALLOW
+      # Relocation exemption. The rule's contract is net-NEW porcelain: moving an
+      # existing call between files adds no call site, so the repo-wide count of
+      # raw porcelain is unchanged and there is nothing for the author to migrate.
+      # Without this, any large file split reports every moved line -- including
+      # lines that have sat on origin/main unflagged for months -- and the only
+      # ways out are editing moved content or burying it under allow-markers.
+      # Consuming one removal per exempted addition keeps the check honest: a
+      # genuinely new call has no matching removal and is still reported.
+      if [[ "$suppressed" -eq 0 ]] && [[ ${REMOVED_LINES["$content"]:-0} -gt 0 ]]; then
+        REMOVED_LINES["$content"]=$(( REMOVED_LINES["$content"] - 1 ))
+        suppressed=1
+      fi
       if [[ "$suppressed" -eq 0 ]] && [[ "$LINE_NUM" -gt 1 ]]; then
         prev_line=$(sed -n "$(( LINE_NUM - 1 ))p" "$REPO_ROOT/$CURRENT_PATH")
         if [[ "$prev_line" =~ $ALLOW_RE ]]; then suppressed=1; fi
