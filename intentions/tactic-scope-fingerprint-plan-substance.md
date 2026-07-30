@@ -33,14 +33,7 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention:
-  boost: 85
-  override: null
-  rationale: "Recorded 2026-07-25 /align-strategy round: the greenfield target
-    design for the machinery-write custody hazard. Placed in the standing 85
-    band rather than the round's two author-boosted carriers (95) — it is the
-    sequenced target rather than the immediate repair, and the author's boost
-    directive named the false-demotion bug and the correctness hole, not this."
+attention: null
 phase: qa
 execution:
   branch: tactic-scope-fingerprint-plan-substance
@@ -52,7 +45,8 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-transition-node-stamp-landed-body
 office_hours: null
 pace_exempt: false
 rounds: null

@@ -89,6 +89,17 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    session in the same worktree still counts as a held claim and stops the
    run. A held claim is **not** an `office_hours` park (it is not one of the
    three autonomy-contract conditions below) and **not** a defect.
+
+   Before ending the run on a held claim, record the terminal disposition —
+   this session did nothing and lost nothing, so reaping its job is correct:
+
+   ```bash
+   packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
+   ```
+
+   Without it the Stop hook holds the job alive (see the note at the end of
+   Step 2). The call is safe unconditionally: `mark-node-terminal` writes
+   nothing unless this job's own name is `<target-node-id>`.
 3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
    or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
@@ -292,6 +303,20 @@ full write-node.ts/dump-node.ts/graph-commit mechanics, exit-1 discrimination,
 park-writing, and the fingerprint/round-accounting details (per-strategy
 `execution.strategy_fingerprint` map via `strategy-fingerprint.ts`, and the
 strategy's `rounds.count`/`last_completed`/`last_aligned` bookkeeping).
+
+Once the round has landed and `validate-graph.ts` is clean, record the
+terminal disposition:
+
+```bash
+packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" align-round
+```
+
+The Stop hook (`.claude/hooks/dispatch-stop.sh`) reaps this node worker's job
+only on positive evidence that the pass ended — `Stop` fires on every turn
+yield, not only on terminal exit, so an unmarked session is held alive instead
+of reaped. Call it unconditionally: `mark-node-terminal` writes nothing unless
+this job's own name is `<target-node-id>`, so a round that lands *child*
+tactics cannot authorize a reap on their behalf.
 
 ## Re-evaluation mode
 

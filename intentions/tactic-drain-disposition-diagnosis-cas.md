@@ -40,7 +40,7 @@ attention:
     author-set boost on this same defect class — and deliberately below
     strategy-main-health's standing 100 so the main-health signal keeps its
     recorded dominance."
-phase: review
+phase: done
 execution:
   branch: tactic-drain-disposition-diagnosis-cas
   pr: 2969
@@ -50,10 +50,65 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-26T05:06:48Z
+    mergeCommitSha: be70f133fdfbccb1bc5ac037d8bd3e2c275952d9
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    /qa-main: needs-main residue item 10 ("clear-park --base — sibling half of
+    the pin") on tactic-drain-disposition-diagnosis-cas is not
+    browser-verifiable — its url_path
+    (packages/intentionsutil/scripts/clear-park) names a repo script path, not a
+    live-prod web URL, so Claude-in-Chrome verification does not apply (Step 4·0
+    non-browser-outcome routing).
+
+
+    Repo inspection instead (gh + git, not browser) found the residue's recorded
+    finding is now stale: sibling PR #2947 (tactic-clear-park-primitive) shows
+    state MERGED, mergedAt 2026-07-25T18:21:49Z — the residue text said it was
+    "still in phase qa." clear-park now exists on origin/main (git cat-file -e
+    origin/main:packages/intentionsutil/scripts/clear-park succeeds). But its
+    usage line is still `clear-park <node-id> [note]` with no --base flag — Unit
+    3 of this tactic (the mirrored diagnosis-time pin: same leading-flags-only
+    --base parse loop, three value forms, 40-hex validation, stale-diagnosis
+    exit 3 ordered before the already-cleared no-op guard) was never
+    implemented; it was explicitly deferred at plan/execution time because #2947
+    had not yet merged. That blocker has now cleared.
+  since: 2026-07-28
+  recommendation: >-
+    File/plan a follow-on tactic that implements Unit 3 of
+    tactic-drain-disposition-diagnosis-cas verbatim, now that its blocker (PR
+    #2947 / clear-park existing on origin/main) has cleared:
+
+
+    1. Edit packages/intentionsutil/scripts/clear-park: add the same
+    leading-flags-only `--base` parse loop as park-node (three value forms —
+    bare 40-hex sha, `<id>=<sha>`, or manifest file; same exit-2 validation),
+    the same pin check placed immediately after FRESH_BLOB resolves and strictly
+    BEFORE the already-cleared no-op guard (ordering is the crux — see Unit 3's
+    rationale in intentions/tactic-drain-disposition-diagnosis-cas.md), and the
+    same `stale-diagnosis` exit-3 message wording (substituting `clear-park:`).
+    Verify the merged script's internal no-op signal (the `.mts` helper's
+    internal exit 3) is fully translated to exit 0 by the wrapper and never
+    leaks — remap it (e.g. to 9) if it does, so the script's externally
+    observable exit 3 means stale-diagnosis and nothing else.
+
+    2. Extend packages/intentionsutil/scripts/test-park-node.sh with case 10
+    exactly as specified: park t-pinned, capture the pin, land a concurrent
+    clear from another clone, then assert `clear-park --base <pin> t-pinned`
+    exits 3 with the stale-diagnosis marker and unchanged origin_sha (the pin
+    must fire instead of the no-op guard).
+
+    3. Once landed, this needs-main residue item (id 10) on
+    tactic-drain-disposition-diagnosis-cas can close — re-run /qa-main (or
+    verify by hand) to confirm.
+
+
+    Full spec: intentions/tactic-drain-disposition-diagnosis-cas.md, "Unit 3 —
+    clear-park --base" section.
 pace_exempt: false
 rounds: null
 attributes: {}

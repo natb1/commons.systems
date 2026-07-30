@@ -21,10 +21,11 @@ rationale: "Byproduct of the 2026-07-25 concurrency/serialization review,
   fresh-main/rollback mechanics. Producer 1's ideal greenfield (an orthogonal
   execution.conflict interrupt routed to /dispatch-conflict) is already specced
   and in-flight as tactic-graph-router-conflict-routing (blocked_by
-  tactic-dispatch-conflict-greenfield) — this tactic ships the interim
-  brownfield bridge (a free local-retry tier, then a tracked hold) rather than
-  duplicating that design; Unit 3's comments record the convergence so the
-  strike/hold branch is deleted when that tactic lands."
+  tactic-dispatch-conflict-branch-merge-lane, repointed 2026-07-27 after
+  tactic-dispatch-conflict-greenfield shipped as PR #2951 and was pruned) — this
+  tactic ships the interim brownfield bridge (a free local-retry tier, then a
+  tracked hold) rather than duplicating that design; Unit 3's comments record
+  the convergence so the strike/hold branch is deleted when that tactic lands."
 reading: null
 gap: null
 serves:
@@ -34,137 +35,81 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 85
+  boost: 10
   override: null
-  rationale: "Author-directed 2026-07-25: the queue-serialization work
-    (dispatch-queue claim integrity, office-hours drain claiming, and the
-    cross-queue landing path) is the current focus. Own boost 85 composes with
-    the +5 inherited from strategy-graph-native-dispatch to an authored 90 —
-    exact parity with tactic-graph-router-live-worker-read-robust, the existing
-    author-set boost on this same defect class — and deliberately below
-    strategy-main-health's standing 100 so the main-health signal keeps its
-    recorded dominance."
-phase: qa
+  rationale: "Bootstrap re-scale 2026-07-30: demoted from the pre-bootstrap 85-90
+    band to 10. These are ordinary improvements, not integrity defects; at 85-90
+    they outranked strategy-main-health (101 resolved) and flooded the selector
+    hot band. Interim scaffolding only; tactic-attention-tier-ranking and
+    tactic-attention-boost-scripts retire this numeric scheme."
+phase: main-qa
 execution:
   branch: tactic-mechanical-park-producers
   pr: 2970
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-26T05:07:00Z
+    mergeCommitSha: 3e3bcca64eace2931d8fc69d4c293abfaa9ba4de
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "/qa-fix: QA found two opus-fixable residue items that the disposition
-    workflow's fix-planner refused with a scope-deviation — both are
-    author-confirmation judgment calls (whether CONFLICT_STRIKE_CAP=5 is the
-    right interim tuning value; whether the brownfield/greenfield scope split
-    for the exit-11 producer is correctly bounded) that the plan already
-    documents but that need the author's explicit sign-off, not a code fix.
-    Escalating to office-hours."
-  since: 2026-07-26
+  reason: "/qa-main: needs-main residue item #15 on
+    tactic-mechanical-park-producers (\"Queue-noise reduction: fewer tracked
+    holds than today's exit-11 park rate\") is not browser-verifiable. Its
+    url_path is the literal string \"current\", not a real page — the expected
+    outcome is a week-over-time count of
+    tactic-hold-conflict-*/tactic-hold-fix-cap-* node creations on origin/main
+    compared to the ~5/week exit-11-park baseline named in the plan, a
+    graph/git-history query, not a page Claude-in-Chrome can observe. It also
+    cannot be judged yet on timing alone: source PR #2970 merged
+    2026-07-26T05:07:00Z, only 2 days before this check, short of the week-long
+    observation window the plan's own Verification section specifies."
+  since: 2026-07-28
   recommendation: >-
-    # Best next steps — PR #2970 (`tactic-mechanical-park-producers`)
+    Wait until at least 2026-08-02 (one week after the PR #2970 merge on
+    2026-07-26) before judging this item.
 
 
-    Two author decisions. Everything script-verifiable already passed this pass;
-    nothing below is a bug fix.
+    Then check the rate directly against origin/main:
 
 
-    ## Decision 1 — Ratify or retune `CONFLICT_STRIKE_CAP=5`
+    ```bash
+
+    git -C <repo> log --since=2026-07-26 --diff-filter=A --name-only --oneline
+    -- 'intentions/tactic-hold-conflict-*.md'
+    'intentions/tactic-hold-fix-cap-*.md' origin/main
+
+    ```
 
 
-    `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:123`
-    (rationale comment at lines 115–122; used at 220 and 246–251).
+    Count the created hold nodes in that window. The plan's success signal
+    (Verification section, "Queue-noise outcome") is materially fewer than
+    ~5/week — ideally zero in a week where main is moving normally. Any
+    tactic-hold-conflict-* node that does appear is expected signal for a
+    genuine structural conflict (not noise); if the count is high, check whether
+    `CONFLICT_STRIKE_CAP=5` in
+    `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute` needs to
+    be tuned looser.
 
 
-    What the number actually buys: a node whose branch fails to merge
-    `origin/main` gets 4 free, graph-write-free retries (sidecar counter at
-    `.claude/worktrees/<id>.conflict-strikes`, reset to zero on any clean
-    provision at line 199), and the 5th consecutive failure pays for a tracked
-    hold tactic plus a `blocked_by` edge. The counter is consecutive-only and
-    fail-open — a daemon restart or reaped worktree silently grants more
-    retries. So 5 is a ceiling on a run of bad luck, not a lifetime budget.
+    Also spot-check hygiene per the plan's other manual checks: confirm the
+    strike-counter sidecar (`.claude/worktrees/<id>.conflict-strikes`) is being
+    deleted on successful provisions rather than accumulating for reaped
+    worktrees, and confirm any hold tactic that landed carries the mandatory
+    "clearing office_hours alone does not unblock the source" sentence in its
+    body.
 
 
-    - **Accept 5** — no code change. Do it if you read the failure mode as
-    "moving main transiently blocks a merge for a few ticks," where 5
-    consecutive failures is strong evidence the conflict is real and needs
-    hands.
-
-    - **Change it** — one-line edit at `:123`, plus three test sites in
-    `test-dispatch-graph-execute.sh`: Case 5 (lines 184–197, asserts the literal
-    string `strike 1/5`), Case 5b (199–219, loops strikes 1–4 asserting `strike
-    n/5` then expects `held` on the 5th), and Case 10 (270–279, seeds the
-    sidecar with `4` = cap−1 to reach the hold branch in one run). The cap is
-    not a `dispatch.config` tunable and the PR argues it shouldn't be — if you
-    want it configurable, that is a *different* change, and probably not worth
-    it given decision 2.
-
-
-    Guidance on which way: the honest tuning signal here is queue noise (how
-    many tracked holds per week vs. today's ~5 exit-11 parks/week), and that
-    signal is already deferred to the `## needs-main` residue on the node body
-    for observation on deployed main. Retuning now would be guessing ahead of
-    that data. Accepting 5 and letting the main observation move it is the
-    cheaper path; only override that if you have a prior that 5 ticks is
-    obviously too many or too few in wall-clock terms for how fast the chain
-    currently turns.
-
-
-    ## Decision 2 — Ratify the brownfield/greenfield split, and judge the
-    convergence note
-
-
-    The branch at `dispatch-graph-execute:215–276` ships a strike-counter retry
-    tier plus `hold-node` on exhaustion, instead of the ideal design (an
-    orthogonal `execution.conflict` interrupt dispatching `/dispatch-conflict`
-    against the source's worktree). The stated reason is not "greenfield is too
-    expensive" — it's that greenfield is already specced and in-flight as
-    `tactic-graph-router-conflict-routing`, gated on
-    `tactic-dispatch-conflict-greenfield`, and building it twice would collide.
-    There is also a hard blocker recorded at lines 231–235: `/dispatch-conflict`
-    currently exits on any non-`[0-9]*-*` branch, so it cannot accept a node
-    target at all today. That makes the greenfield path unbuildable in this PR
-    regardless of appetite.
-
-
-    - **Ratify the split (recommended default)** — no code change. The gating
-    chain is real, the routing target doesn't exist yet, and this PR's
-    `hold-node` primitive is the piece greenfield will reuse.
-
-    - **Pull greenfield in now** — means unblocking
-    `tactic-dispatch-conflict-greenfield` and teaching `/dispatch-conflict` node
-    targets first; that is a scope change to two other tactics, not an edit to
-    this PR. If you want that, close this decision by re-sequencing those
-    tactics, not by widening #2970.
-
-    - **Narrow the bridge** — the only meaningful narrowing available is
-    dropping the hold tier and leaving exit 11 as an unbounded free retry. That
-    regresses to conflicts never surfacing, which is the problem the PR exists
-    to fix. Don't.
-
-
-    Then the smaller call: read the convergence note at lines 224–229 and decide
-    if it survives a future reader. It says the branch is "expected to be
-    replaced wholesale at that point, not extended" and names the replacing
-    tactic — which is the right content. The gap is that the note lives only
-    inside case 11, while the constant's own comment at lines 115–122 argues for
-    the value on its own terms with no hint the whole mechanism is temporary.
-    Cheapest hardening: add one line to the `:115–122` comment pointing at the
-    case-11 convergence note, so someone tuning the constant learns the branch
-    is slated for deletion before they invest in tuning it. That is a
-    comment-only edit, no test churn.
-
-
-    ## If you accept both as-is
-
-
-    No edits. The PR is verification-clean; move it to its next phase and let
-    the `## needs-main` queue-noise observation drive any later retune of the
-    cap.
+    If the count and hygiene look right, this residue item is satisfied and the
+    node's main-qa phase can be advanced to done via the normal graph-transition
+    path.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -227,13 +172,13 @@ no park, in the common case.
 
 That greenfield is **already designed and already in flight as two separate
 tactics** — verified on `origin/main`: `intentions/tactic-graph-router-conflict-routing.md`
-(`phase: implement`, `blocked_by: [tactic-dispatch-conflict-greenfield]`)
+(`phase: implement`, `blocked_by: [tactic-dispatch-conflict-branch-merge-lane]`)
 specifies exactly this (a mergeable sensor, an `apply-conflict-state.ts`
 primitive, `execution.conflict.attempt` capping, and the dispatch call site),
-gated on `intentions/tactic-dispatch-conflict-greenfield.md` (`phase: review`)
-which is what makes `/dispatch-conflict` accept a node-id target at all —
-precisely the gate the `case 11` comment at `dispatch-graph-execute:198-201`
-already names. **Reaching the greenfield is not this tactic's PR, and
+gated on the tactic that gives `/dispatch-conflict` a lane able to reproduce a
+live git conflict against a node-id target — precisely the gate the `case 11`
+comment at `dispatch-graph-execute:198-201` already names. **Reaching the
+greenfield is not this tactic's PR, and
 attempting it here would duplicate work already in flight.** So this PR ships
 the interim brownfield step: a free local-retry tier, then a tracked hold on
 persistent exhaustion. The `hold-node` primitive built here is the durable
@@ -241,6 +186,20 @@ piece — when `tactic-graph-router-conflict-routing` lands, its
 `execution.conflict.attempt` cap calls this same `hold-node` instead of
 parking, and Unit 3's strike/hold branch is deleted. Unit 3's comments must
 record this convergence note.
+
+**Repointed 2026-07-27 `/align-strategy`.** This section originally named
+`tactic-dispatch-conflict-greenfield` (`phase: review`) as the gate. That
+tactic shipped as PR #2951 and was pruned, and the prune cleared the
+`blocked_by` edge on `tactic-graph-router-conflict-routing` to `[]`. Clearing
+it was wrong: greenfield delivered `/dispatch-conflict` **Lane 2**, which
+accepts a node id but explicitly does not reproduce a live git conflict — it
+services only `graph-commit` concurrent-edit parks and refuses anything else,
+while **Lane 1** reproduces live conflicts but rejects node ids. Node-id
+acceptance was therefore only half the gate this section describes, so the
+edge was repointed to `tactic-dispatch-conflict-branch-merge-lane`, which owns
+the residual capability. Editing this body is safe at `phase: main-qa`: main-qa
+is not scope-chained (`SCOPE_CHAINED_PHASES` is `{qa, review}` in
+`packages/intentionsutil/src/scope-sweep.ts:31`), so no demotion follows.
 
 ### The crux decision: the hold tactic is born-`office_hours`-parked, not `phase: implement`
 

@@ -1,24 +1,28 @@
 #!/usr/bin/env bash
 # dispatch-self-close — delete this background job.
 #
-# Invoked by the dispatch-stop Stop hook on a clean phase advance, and by
-# /dispatch-propagate's router on its terminal-disposition paths (drain
-# concurrency-cap, propagate-success). `claude rm <id>` wants the *job-id*
-# — the 8-hex-char basename of $CLAUDE_JOB_DIR — not the conversation
+# Usage: dispatch-self-close [--node <node-id>]
+#
+# Invoked by the dispatch-stop Stop hook for a graph-native node worker (with
+# `--node <node-id>`), by dispatch-finalize-phase on the legacy issue lane (no
+# flag), and by /dispatch-propagate's router on its terminal-disposition paths
+# (drain concurrency-cap, propagate-success). `claude rm <id>` wants the
+# *job-id* — the 8-hex-char basename of $CLAUDE_JOB_DIR — not the conversation
 # session UUID and not the registry's .sessionId.
 # CLAUDE_JOB_DIR is set only in managed background jobs, so its presence
 # doubles as the foreground-safe gate: an interactive session reaching this
 # script is a no-op — the user's live conversation is not deleted.
 #
-# Continuation invariant (#1010):
-#   /dispatch-propagate is a self-perpetuating chain carried forward only by
-#   (1) a worker's Stop hook (dispatch-stop.sh → spawn_router) or (2) a
-#   `dispatch-reseed*` systemd timer. A ROUTER's own self-close carries
-#   nothing — the Stop hook is a no-op for router sessions (their name does
-#   not match `^[0-9]+-`). Several terminal `drain` dispositions route through
-#   this script having spawned no worker and scheduled no reseed, so the chain
-#   could silently die with work still queued (e.g. when the only live worker
-#   is parked on `dispatch:office-hours` and never fires its Stop hook).
+# Two independent invariants gate the reap. Each covers one caller lane; a call
+# matching neither reaps unconditionally, as it always has.
+#
+# Invariant 1 — ROUTER continuation (#1010):
+#   /dispatch-propagate is a self-perpetuating chain carried forward only by a
+#   `dispatch-reseed*` systemd timer or a live busy worker. A ROUTER's own
+#   self-close carries nothing. Several terminal `drain` dispositions route
+#   through this script having spawned no worker and scheduled no reseed, so the
+#   chain could silently die with work still queued (e.g. when the only live
+#   worker is parked on `dispatch:office-hours` and never fires its Stop hook).
 #
 #   To make that structurally impossible, a ROUTER tick may self-close only
 #   if it leaves a continuation:
@@ -30,20 +34,66 @@
 #   emits a one-line reason, so the stall is visible and resumable by
 #   office-hours.
 #
-#   The invariant is gated to ROUTER sessions only (state.json `.name` matches
-#   `dispatch-*`). It is intentionally NOT applied to:
-#     - workers (name `^[0-9]+-`): the worker Stop-hook self-close always calls
-#       `spawn_router` first, so it already leaves a continuation.
-#     - empty/missing name, or absent state.json: legacy / non-router callers
-#       (the interactive gate, plain managed jobs) keep their
-#       existing unconditional behavior, which also keeps existing tests green.
+#   Gated to ROUTER sessions only (state.json `.name` matches `dispatch-*`).
+#
+# Invariant 2 — NODE-WORKER terminal disposition:
+#   `Stop` fires whenever the model YIELDS THE TURN, not only on terminal exit.
+#   A node worker that launches background subagents, posts an interim message,
+#   and waits fires Stop — and before this gate existed the hook reaped the job,
+#   killing the still-running subagents mid-write (confirmed incident
+#   2026-07-28: node tactic-graph-ref-split, session 36e64744; a surviving
+#   subagent transcript stops mid-stream ~1.7s after the reap, and the node was
+#   left neither advanced nor parked).
+#
+#   So a node worker (caller passes `--node <id>`; dispatch-stop.sh already
+#   knows authoritatively that it is one) may be reaped only on positive
+#   evidence that its pass reached a terminal disposition: a
+#   `$CLAUDE_JOB_DIR/node-terminal` marker naming THAT node. The marker is
+#   written by `packages/intentionsutil/scripts/mark-node-terminal`, called from
+#   transition-node (advance / demote), park-node (park), /fix-checks
+#   (fix-attempt), /align-tactics (align-round / no-claim) and
+#   /dispatch-conflict's Lane 3 (conflict-resolved / conflict-hold — the
+#   provision-exit-11 session dispatch-graph-execute spawns under the node's own
+#   name, whose terminal paths call neither transition-node nor park-node):
+#
+#     node=<node-id>
+#     disposition=<advance|demote|park|fix-attempt|align-round|no-claim
+#                  |conflict-resolved|conflict-hold>
+#
+#   Only `^node=` is read here; `disposition=` is diagnostic. The marker names
+#   its node so that a session which parked or landed some OTHER node (an
+#   office-hours drain, an align-tactics child land) cannot authorize its own
+#   reap — mark-node-terminal enforces that at write time via state.json.
+#   Absent a matching marker this script HOLDS: it does not reap, leaves the job
+#   alive and resumable, and logs one line.
+#
+#   FAIL DIRECTION — deliberately OPPOSITE to the daemon-UNKNOWN fail-safe in
+#   invariant 1 below (which fails toward SELF-CLOSE). Do not "fix" the
+#   inconsistency: there, the cost of a spurious park is a wedged router, cheap
+#   and recoverable, and the resource at risk is nothing. Here, the resource at
+#   risk is an in-flight session's context plus its subagents' unfinished
+#   writes, which are unrecoverable once the job is deleted. So this branch
+#   fails toward HOLD. A held job is visible in `claude agents --json` and can
+#   be resumed or cleared by hand; a wrongly-reaped one is simply gone.
+#
+#   Accepted residual: two of the terminal lanes declare via SKILL.md prose. A
+#   dropped line means the job is HELD, not reaped — no work lost, but the node
+#   stays claimed until someone clears it. The distinctive log line is the
+#   canary; broad or repeated firing means a lane is failing to declare.
+#
+# Neither invariant applies to: an empty/missing name with no `--node` (legacy /
+# plain managed-job callers, e.g. dispatch-finalize-phase), which keeps its
+# existing unconditional behavior.
 #
 # Behavior:
-#   $CLAUDE_JOB_DIR unset           → diagnostic to stderr, exit 0 (no-op).
-#   $CLAUDE_JOB_DIR set, non-router → `claude rm $(basename "$CLAUDE_JOB_DIR")`.
-#   $CLAUDE_JOB_DIR set, router with continuation → `claude rm ...` (self-close).
-#   $CLAUDE_JOB_DIR set, router with NO continuation → park: print reason, exit 0
-#                                                      WITHOUT `claude rm`.
+#   $CLAUDE_JOB_DIR unset                    → diagnostic to stderr, exit 0 (no-op).
+#   router with continuation                 → `claude rm ...` (self-close).
+#   router with NO continuation              → park: print reason, exit 0
+#                                              WITHOUT `claude rm`.
+#   --node <id>, marker names <id>           → `claude rm ...` (self-close).
+#   --node <id>, marker missing/other node   → HOLD: print reason, exit 0
+#                                              WITHOUT `claude rm`.
+#   anything else                            → `claude rm $(basename "$CLAUDE_JOB_DIR")`.
 #
 # Environment overrides for testability (mirroring dispatch-spawn-job's
 # DISPATCH_SPAWN_JOB_CLAUDE_CMD):
@@ -62,6 +112,30 @@ set -uo pipefail
 
 CLAUDE_CMD="${DISPATCH_SELF_CLOSE_CLAUDE_CMD:-claude}"
 SYSTEMCTL="${DISPATCH_SELF_CLOSE_SYSTEMCTL_CMD:-systemctl}"
+
+# --node <id>: the caller asserts this job is the graph-native worker for node
+# <id>, opting into the terminal-disposition invariant. Explicit rather than
+# inferred from the session name — dispatch-stop.sh already knows.
+REQUIRE_NODE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --node)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-self-close: --node requires a value" >&2
+        echo "usage: dispatch-self-close [--node <node-id>]" >&2
+        exit 2
+      fi
+      REQUIRE_NODE="$2"
+      shift 2
+      ;;
+    *)
+      echo "dispatch-self-close: unexpected argument: $1" >&2
+      echo "usage: dispatch-self-close [--node <node-id>]" >&2
+      exit 2
+      ;;
+  esac
+done
+
 JOB_ID=$(basename "${CLAUDE_JOB_DIR:-}")
 
 if [[ -z "$JOB_ID" || "$JOB_ID" == "." ]]; then
@@ -78,9 +152,11 @@ if [[ -f "$STATE_JSON" ]]; then
   SESSION_NAME=$(jq -r '.name // ""' "$STATE_JSON" 2>/dev/null) || SESSION_NAME=""
 fi
 
-# Continuation invariant applies only to ROUTER sessions (name `dispatch-*`).
-# Everything else — workers (`^[0-9]+-`), empty/missing name — self-closes
-# unconditionally as before.
+# Invariant 1 (continuation) applies only to ROUTER sessions (name `dispatch-*`)
+# and is checked FIRST, byte-identically to before. Invariant 2 (node-worker
+# terminal disposition) is the `elif` below, reached only when the caller opted
+# in with `--node`. A call matching neither self-closes unconditionally, as
+# before.
 if [[ "$SESSION_NAME" == dispatch-* ]]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   # shellcheck source=/dev/null
@@ -118,6 +194,23 @@ if [[ "$SESSION_NAME" == dispatch-* ]]; then
     echo "$msg" >&2
     exit 0
   fi
+elif [[ -n "$REQUIRE_NODE" ]]; then
+  # Node-worker terminal-disposition invariant. Read `^node=` from the marker
+  # with a single `sed` on the FILE — no pipe (this script runs `set -uo
+  # pipefail`), no `echo … | jq` (shell-json.md). A missing or zero-byte marker
+  # leaves `marked` empty, which never equals a valid node id.
+  # The daemon is deliberately NOT consulted on this branch.
+  marked=""
+  [[ -s "$CLAUDE_JOB_DIR/node-terminal" ]] &&
+    marked="$(sed -n '/^node=/{s/^node=//;p;q;}' "$CLAUDE_JOB_DIR/node-terminal")"
+  if [[ "$marked" != "$REQUIRE_NODE" ]]; then
+    msg="dispatch-self-close: holding — node worker '$REQUIRE_NODE' has no terminal-disposition marker (no transition-node advance, no park, no recorded fix attempt); Stop fired on a turn yield, not a terminal exit. Job stays alive and resumable."
+    echo "$msg"
+    echo "$msg" >&2
+    exit 0
+  fi
+  # The marker is intentionally NOT consumed on a successful reap: the job is
+  # deleted anyway, and a repeat Stop reaping an already-gone job is idempotent.
 fi
 
 exec "$CLAUDE_CMD" rm "$JOB_ID"

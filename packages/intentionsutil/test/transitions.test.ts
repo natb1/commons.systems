@@ -10,6 +10,7 @@ import {
   incrementAttempt,
   reconcileMergedPhase,
   reconcileClosedPhase,
+  reviewStallRoute,
   hasNeedsMainResidue,
   stampRound,
   inboundBlockers,
@@ -65,6 +66,15 @@ describe("forwardPhase", () => {
     expect(forwardPhase("qa", false)).toBe("review");
   });
 
+  it("never routes qa directly to main-qa, residue or not", () => {
+    // main-qa is post-merge by definition, and merging requires review. The
+    // required progression is qa → review → (merge) → main-qa, so needs-main
+    // residue recorded during qa must NOT divert the phase — it is drained via
+    // the review → main-qa edge below. Pinned because qa-fix's prose once
+    // claimed a `qa → main-qa` edge that this module has never implemented.
+    expect(forwardPhase("qa", true)).toBe("review");
+  });
+
   it("routes review to done without residue and main-qa with residue", () => {
     expect(forwardPhase("review", false)).toBe("done");
     expect(forwardPhase("review", true)).toBe("main-qa");
@@ -112,6 +122,10 @@ describe("decideTransition", () => {
 
   it("advances qa → review unconditionally (CI-blind)", () => {
     expect(decideTransition({ ...base, phase: "qa" }).phase).toBe("review");
+  });
+
+  it("advances qa → review even when needs-main residue is present", () => {
+    expect(decideTransition({ ...base, phase: "qa", hasResidue: true }).phase).toBe("review");
   });
 
   it("arms auto-merge and writes no phase at clean review completion", () => {
@@ -180,6 +194,40 @@ describe("reconciler routing", () => {
 
   it("routes a closed-not-merged tactic straight to done", () => {
     expect(reconcileClosedPhase()).toBe("done");
+  });
+});
+
+describe("reviewStallRoute", () => {
+  it("routes a failing CI verdict to the fix interrupt", () => {
+    expect(reviewStallRoute("failing", "MERGEABLE")).toBe("fix");
+    expect(reviewStallRoute("failing", "UNKNOWN")).toBe("fix");
+  });
+
+  it("routes a CONFLICTING mergeability to the conflict lane, never to fix", () => {
+    // A conflict must NOT enter execution.fix: _gate_fix_active reads CI, not
+    // mergeability, so a green-but-CONFLICTING PR would be cleared as resolved
+    // on the next selection — stripping the `reviewed` marker, drafting the PR,
+    // and re-running the whole review pass with the conflict untouched.
+    expect(reviewStallRoute("passing", "CONFLICTING")).toBe("conflict");
+    expect(reviewStallRoute("unknown", "CONFLICTING")).toBe("conflict");
+  });
+
+  it("prefers the conflict lane when CI is failing AND the PR conflicts", () => {
+    // The fix lane would have to merge origin/main to run at all, so the
+    // conflict clears first; a later sweep re-routes the still-red CI to fix.
+    expect(reviewStallRoute("failing", "CONFLICTING")).toBe("conflict");
+  });
+
+  it("is not a regression when CI passes and the PR is mergeable", () => {
+    expect(reviewStallRoute("passing", "MERGEABLE")).toBe(null);
+  });
+
+  it("is not a regression when both CI and mergeability are unknown", () => {
+    expect(reviewStallRoute("unknown", "UNKNOWN")).toBe(null);
+  });
+
+  it("self-heals: an UNKNOWN mergeability with passing CI is not a regression", () => {
+    expect(reviewStallRoute("passing", "UNKNOWN")).toBe(null);
   });
 });
 

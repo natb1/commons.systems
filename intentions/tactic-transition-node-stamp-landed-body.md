@@ -32,21 +32,37 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 95
-  override: null
-  rationale: "Author-directed 2026-07-25 /align-strategy round ('boost both to top
-    rank'): this and tactic-phase-evidence-fingerprint-bound rank at the top of
-    normal work — above the current top tactic band (90) and the 85 band below
-    it, and below the strategy-main-health emergency ceiling (boost 100), which
-    the 2026-07-13 write-path guard keeps dominant and which this round does not
-    disturb."
-phase: qa
+  boost: null
+  override: 60
+  rationale: "Bootstrap re-scale 2026-07-30: override 60 pins the head of the
+    fingerprint-custody chain. After the 2026-07-30 re-serialization (d2b161a3)
+    the cluster is linear - tactic-demote-node-stale-local-read ->
+    tactic-phase-evidence-fingerprint-bound ->
+    tactic-scope-fingerprint-plan-substance -> HERE - and this node, blocked by
+    nothing, is the repair the 2026-07-30 sitting moved to the front. The
+    override holds it at 60, above the 55.33 the rest of the chain inherits from
+    the single anchor on tactic-demote-node-stale-local-read, so the ratified
+    land-the-repair-first order is expressed in rank. TWO CAVEATS, recorded so a
+    later round need not rediscover them. (1) An override REPLACES the outgoing
+    set with {(self, 60)} and discards everything incoming
+    (attention.ts:243-254, 364-365), so this node no longer inherits through
+    blocked_by. That costs nothing - red-main preemption does not travel by rank
+    at all (it comes from dispatch-graph-main-red-sync minting
+    tactic-main-red-<sha> born pace_exempt, plus the --main-broken-sha bypass at
+    dispatch-select-tick:672) - but the insulation is deliberate. (2) This is
+    temporary scaffolding for the chain serialization, not a standing judgment:
+    once this node is done the cap has no subject, and
+    tactic-attention-boost-scripts must retire it along with the interim
+    50/20/10 boosts. Under tactic-attention-tier-ranking lexicographic (tier,
+    rank) with max-lifting the cap has no job at all."
+phase: review
 execution:
   branch: tactic-transition-node-stamp-landed-body
   pr: 2973
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -366,8 +382,14 @@ stamping) and that the stub's contract is exactly steps 3-5 above.
 `cd "$C5" && bash .claude/skills/dispatch-propagate/scripts/transition-node t-stamp`, then assert
 all of:
 
-1. `rc -eq 0` and stdout matches `transitioned t-stamp qa -> main-qa` (the residue routes
-   `qa → main-qa` per `forwardPhase`; see `transitions.ts` and `qa-fix/SKILL.md:179`).
+1. `rc -eq 0` and stdout matches `transitioned t-stamp qa -> review` (`forwardPhase`
+   routes `qa → review` unconditionally — `packages/intentionsutil/src/transitions.ts`;
+   residue only affects the *later* `review` hop, which routes to `main-qa` when residue
+   is present and `done` otherwise). Corrected 2026-07-27 `/align-strategy`: this
+   assertion previously read `qa -> main-qa`, citing a `qa → main-qa` edge that
+   `forwardPhase` has never had — `main-qa` is post-merge by definition and is not
+   reachable from `qa`. The implementer wrote the correct value, so the shipped test
+   asserts `qa -> review` and no code is affected; only this plan text was wrong.
 2. **The trap actually fired** (guards the test against silently not reproducing the bug):
    `git -C "$C5" show origin/main:intentions/t-stamp.md` contains `needs-main`, while the
    working-tree `$C5/intentions/t-stamp.md` does **not** — i.e. the reset dance really did

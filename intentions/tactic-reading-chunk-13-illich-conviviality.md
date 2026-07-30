@@ -35,6 +35,7 @@ office_hours:
     the gift/convivial-tool strategies; create tradition-illich."
   since: 2026-07-07
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

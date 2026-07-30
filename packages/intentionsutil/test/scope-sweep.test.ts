@@ -110,7 +110,7 @@ describe("listScopeStaleTactics", () => {
         id: "tactic-parked",
         kind: "tactic",
         phase: "qa",
-        office_hours: { reason: "author park", since: "2026-07-16", recommendation: null },
+        office_hours: { reason: "author park", since: "2026-07-16", recommendation: null, session_type: "other" },
       }),
     );
     stamp(stampDir, "tactic-parked", "f".repeat(64));
