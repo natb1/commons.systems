@@ -639,10 +639,14 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
            - **`EXISTING <tactic-id>` / `REOPENED <tactic-id>`** — a matching
              flake tactic already exists. First dump a `--base` manifest for it
              (pre-existing node — same optimistic-concurrency guard
-             `align-tactics` Step 5 uses):
+             `align-tactics` Step 5 uses). Note the `--out-dir`: this dump feeds
+             its own `graph-commit`, so it gets its own directory, separate from
+             sub-step 4's dump of `$N` below. One out-dir per `graph-commit` —
+             sharing one leaves a manifest whose entries the later commit never
+             meant to guard:
              ```bash
              BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
-               --out-dir /tmp/claude-<uid>/dump <tactic-id>)
+               --out-dir /tmp/claude-<uid>/dump-flake-tactic <tactic-id>)
              ```
              `Edit` the existing tactic's body to **append** the recurrence
              content (`tmp/flake-recurrence.md`'s content) — never replace the
@@ -701,10 +705,13 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
         Read `$N`'s current `blocked_by` array (`dump-node.ts`/reading
         `intentions/$N.md`'s frontmatter). If the flake tactic's id is already
         present, this is a no-op (idempotent re-run) — skip the write. Otherwise
-        append it and land the one-field frontmatter change:
+        append it and land the one-field frontmatter change. This is a second,
+        separate `graph-commit`, so it takes its own `--out-dir` — never
+        sub-step 3's `dump-flake-tactic` directory, whose entry the flake
+        `graph-commit` has already consumed and landed:
         ```bash
         BASE_N=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
-          --out-dir /tmp/claude-<uid>/dump "$N")
+          --out-dir /tmp/claude-<uid>/dump-source-tactic "$N")
         npx tsx packages/intentionsutil/scripts/write-node.ts --file <updated-N.json>
         packages/intentionsutil/scripts/graph-commit --base "$BASE_N" "$N"
         ```
