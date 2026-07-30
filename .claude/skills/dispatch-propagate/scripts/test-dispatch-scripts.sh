@@ -33442,10 +33442,23 @@ echo "=== fix-checks: node-lane completion recipes --base CAS guard ==="
 # refresh-then---base pattern was landed by PR #2939 and is tracked by
 # tactic-graph-write-recipes-base-cas and tactic-fix-checks-pushed-nothing-base.
 #
-# If a count below legitimately changes (e.g. a new completion recipe is
-# added), update the expected number here AND confirm every recipe still
-# carries the full refresh + --base sequence — never lower a count just to
-# make this suite green.
+# The guard binds each key to the recipe it protects: it extracts every
+# ```bash fence in the skill that spends an attempt (that is what makes a
+# fence a node-lane completion recipe) and asserts that fence carries the
+# WHOLE documented sequence exactly once —
+#
+#   1. git fetch origin main            (refresh the remote-tracking ref)
+#   2. FRESH_BLOB=$(git rev-parse …)    (capture the CAS base blob)
+#   3. git show origin/main:… > …       (refresh the working file)
+#   4. graph-commit --base "$N=…"       (pin the write to that base)
+#
+# A file-global occurrence count would let the totals stay correct while one
+# recipe is left unguarded — exactly the regression this exists to catch — so
+# the per-recipe report below is the assertion, not a count.
+#
+# If the expectation below legitimately changes (e.g. a new completion recipe
+# is added), add its row here AND confirm every recipe still carries all four
+# steps — never drop a row or a step just to make this suite green.
 
 FIXCHECKS_GUARD_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 FIXCHECKS_GUARD_SKILL="$FIXCHECKS_GUARD_ROOT/.claude/skills/fix-checks/SKILL.md"
@@ -33454,14 +33467,30 @@ if [[ ! -f "$FIXCHECKS_GUARD_SKILL" ]]; then
   TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
   echo "  FAIL: fix-checks CAS guard: file missing: .claude/skills/fix-checks/SKILL.md"
 else
-  actual=$({ grep -cF -- '--base "$N=$FRESH_BLOB"' "$FIXCHECKS_GUARD_SKILL" || true; })
-  assert_eq "fix-checks CAS guard: --base \"\$N=\$FRESH_BLOB\" count" "2" "$actual"
-
-  actual=$({ grep -cF -- 'FRESH_BLOB="$(git rev-parse "origin/main:intentions/$N.md"' "$FIXCHECKS_GUARD_SKILL" || true; })
-  assert_eq "fix-checks CAS guard: FRESH_BLOB=\$(git rev-parse origin/main:intentions/\$N.md count" "2" "$actual"
-
-  actual=$({ grep -cF -- 'git show "origin/main:intentions/$N.md" > "intentions/$N.md"' "$FIXCHECKS_GUARD_SKILL" || true; })
-  assert_eq "fix-checks CAS guard: git show origin/main:intentions/\$N.md refresh count" "2" "$actual"
+  actual=$(awk '
+    function countsub(hay, needle,   c, p) {
+      c = 0
+      while ((p = index(hay, needle)) > 0) { c++; hay = substr(hay, p + length(needle)) }
+      return c
+    }
+    /^[[:space:]]*```bash[[:space:]]*$/ { inblock = 1; buf = ""; next }
+    inblock && /^[[:space:]]*```[[:space:]]*$/ {
+      inblock = 0
+      if (index(buf, "--spend-attempt") > 0) {
+        n += 1
+        printf "recipe %d: fetch=%d rev-parse=%d show=%d base=%d\n", n,
+          countsub(buf, "git fetch origin main >&2"),
+          countsub(buf, "FRESH_BLOB=\"$(git rev-parse \"origin/main:intentions/$N.md\""),
+          countsub(buf, "git show \"origin/main:intentions/$N.md\" > \"intentions/$N.md\""),
+          countsub(buf, "--base \"$N=$FRESH_BLOB\"")
+      }
+      next
+    }
+    inblock { buf = buf $0 "\n" }
+  ' "$FIXCHECKS_GUARD_SKILL")
+  assert_eq "fix-checks CAS guard: each attempt-spending recipe carries fetch + rev-parse + show + --base" \
+    'recipe 1: fetch=1 rev-parse=1 show=1 base=1
+recipe 2: fetch=1 rev-parse=1 show=1 base=1' "$actual"
 
   # Tripwire: forces a deliberate revisit of the guard when a new graph-commit
   # call site is added to this file (2 completion-seam invocations + 3 on the
