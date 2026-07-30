@@ -113,14 +113,24 @@ read_node_json() {
 }
 
 # Refresh the phase-start stamp to the fingerprint of what ACTUALLY LANDED on
-# origin/main, plus that same sha — so machinery body appends made during the
-# phase (e.g. /qa-fix Step 3.6's `## needs-main residue`) do not later read as
-# scope drift and trip dispatch-graph-scope-sweep's demotion.
+# origin/main, plus that same sha — so a machinery body edit that reached
+# origin/main during the phase does not later read as scope drift and trip
+# dispatch-graph-scope-sweep's demotion.
 #
-# The content MUST come from git, never from the local worktree: graph-commit's
-# cleanup() (packages/intentionsutil/scripts/graph-commit:311-321) resets this
-# worktree back to the PR-branch tip after landing, so REPO_ROOT's
-# intentions/<id>.md is the PRE-transition body by the time we get here.
+# The content MUST come from git, never from the local worktree, for two
+# independent reasons:
+#   1. graph-commit's cleanup()
+#      (packages/intentionsutil/scripts/graph-commit:335-359; the
+#      `git reset --hard "$ORIG_HEAD"` at :344) resets this worktree back to
+#      the PR-branch tip after landing, so by the time we get here REPO_ROOT's
+#      intentions/<id>.md is the PR-branch copy, not what landed.
+#   2. That PR-branch copy can be arbitrarily far behind origin/main — the
+#      invocation routinely comes from a long-lived node worktree.
+# NOTE: an UNCOMMITTED worktree body edit is not a content source here and
+# never was — the origin/main refresh above (the `git show origin/main:... >`
+# at the top of this script) overwrites intentions/<id>.md before anything
+# reads it. A caller that wants a body edit to ride into this transition must
+# land it on origin/main itself (via graph-commit) first.
 #
 # Best-effort by design: the transition always continues (the caller never
 # aborts or changes exit code on a restamp failure) — but fail-open is not

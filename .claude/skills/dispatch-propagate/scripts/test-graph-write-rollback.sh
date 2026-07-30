@@ -35,11 +35,12 @@
 #      mutation — a stderr diagnostic names it, the tree stays clean — while the
 #      per-node `while read` loop still processes the other open node.
 #   5. transition-node stamps the LANDED body, not the post-reset worktree copy
-#      (tactic-transition-node-stamp-landed-body): a graph-commit stand-in
-#      performs the real reset-to-main / land / reset-back dance with an
-#      uncommitted `## needs-main residue` append riding along, and the freshness
-#      computation dispatch-graph-scope-sweep runs afterward reports
-#      scopeStale=false. This is the ONE case whose graph-commit stub SUCCEEDS.
+#      (tactic-transition-node-stamp-landed-body): a `## needs-main residue`
+#      section is landed on origin/main out-of-band while the PR branch stays
+#      residue-free, a graph-commit stand-in performs the real reset-to-main /
+#      land / reset-back dance, and the freshness computation
+#      dispatch-graph-scope-sweep runs afterward reports scopeStale=false. This
+#      is the ONE case whose graph-commit stub SUCCEEDS.
 #
 # No network needed; requires bash + git + jq + a real node/npx tsx (resolved
 # against a read-only node_modules symlink to this repo's own — never written).
@@ -421,16 +422,32 @@ fi
 #
 # The regression: refresh_stamp() used to hash REPO_ROOT's on-disk
 # intentions/<id>.md, but graph-commit's cleanup() has by then reset the
-# worktree back to the PR-branch tip — so a transition that also carried a body
-# edit (e.g. /qa-fix Step 3.6's `## needs-main residue` append, an uncommitted
-# worktree edit that rides into the land) stamped the PRE-edit fingerprint. The
-# next freshness computation then read the landed body as scope drift, and
-# dispatch-graph-scope-sweep demoted the node and wiped execution.markers.
+# worktree back to the PR-branch tip — so whenever the node's body on
+# origin/main differs from the PR-branch copy (a `## needs-main residue`
+# section landed during the qa phase, an align-round body edit, any machinery
+# append), refresh_stamp() stamped the PR-branch fingerprint instead of the
+# landed one. The next freshness computation then read the landed body as
+# scope drift, and dispatch-graph-scope-sweep demoted the node and wiped
+# execution.markers.
 #
-# This case reproduces that world exactly — landing_graph_commit performs the
-# real reset-to-main / land / reset-back dance — and asserts (a) the trap really
-# fired (origin/main has the residue, the worktree copy does not) and (b) the
-# very computation the sweep performs afterward reports scopeStale=false.
+# Reproducing that divergence is what gives this case teeth: the residue is
+# LANDED on origin/main out-of-band (from the seed repo) while the PR branch
+# `t-stamp` stays residue-free, so the worktree copy and the origin/main copy
+# genuinely differ in `body` — the only input, besides `statement`, that
+# tacticScopeFingerprint hashes. Against the OLD worktree-sourced
+# refresh_stamp() assertion 3 fails (scopeStale=true); against the new
+# --from-rev origin/main one it passes.
+#
+# NOTE on /qa-fix Step 3.6: its `## needs-main residue` append does NOT ride
+# into the land as an uncommitted worktree edit — transition-node's
+# `git show origin/main:intentions/<id>.md > intentions/<id>.md` refresh
+# clobbers any uncommitted body edit before anything reads it. Landing the
+# residue out-of-band here is therefore the accurate reproduction, not a
+# convenience.
+#
+# The case asserts (a) the reset dance really fired (origin/main has the
+# residue, the post-run worktree copy does not) and (b) the very computation
+# the sweep performs afterward reports scopeStale=false.
 # ===========================================================================
 T5="$WORK/t5-seed"
 build_seed_repo "$T5"
@@ -463,9 +480,36 @@ echo 'arbitrary product change' >"$C5/src-change.txt"
 git -C "$C5" add src-change.txt
 git -C "$C5" commit -qm 'local-only product change ahead of origin/main'
 
+# The mid-phase body edit, LANDED on origin/main from outside this worktree
+# (the seed repo stands in for whichever writer landed it — /qa-fix's Step 3.6
+# residue append via graph-commit, an align round, dispatch-graph-main-red-sync).
+# The `t-stamp` branch tip in $C5 never sees it, so the worktree copy and the
+# origin/main copy now genuinely differ in `body`.
+cat >>"$T5/intentions/t-stamp.md" <<'RESIDUE'
+
+## needs-main residue
+
+- verify the deployed behavior on main after merge
+RESIDUE
+git -C "$T5" add intentions/t-stamp.md
+git -C "$T5" commit -qm 'qa: append needs-main residue to t-stamp'
+git -C "$T5" push -q origin main
+git -C "$C5" fetch -q origin
+
+# Guard the setup itself: origin/main must carry the residue while the local
+# branch tip must not. If this ever stops holding, the case has lost its teeth
+# and every later assertion would pass vacuously.
+if ! git -C "$C5" show origin/main:intentions/t-stamp.md | grep -q 'needs-main' \
+   || grep -q 'needs-main' "$C5/intentions/t-stamp.md"; then
+  echo "error: case 5 setup failed to diverge origin/main from the t-stamp branch tip" >&2
+  exit 1
+fi
+
 # Seed the phase-start stamp the way provision-node-worktree does
 # (provision-node-worktree:83-100): `<scope-fingerprint> <origin-main-sha>`,
-# computed over the ORIGIN/MAIN copy of the node.
+# computed over the ORIGIN/MAIN copy of the node — which now carries the
+# residue, so the PRE-transition scope gate reads clean (scopeStale=false) and
+# the transition is allowed to proceed.
 STAMP5_FP="$(
   cd "$C5" || exit 99
   node --import tsx/esm -e '
@@ -481,15 +525,6 @@ STAMP5_FP="$(
 mkdir -p "$C5/.claude/worktrees"
 STAMP5="$C5/.claude/worktrees/t-stamp.scope-fingerprint"
 printf '%s %s\n' "$STAMP5_FP" "$(git -C "$C5" rev-parse origin/main)" >"$STAMP5"
-
-# /qa-fix Step 3.6: the residue is appended as an UNCOMMITTED worktree edit that
-# rides into the next transition-node-triggered graph-commit.
-cat >>"$C5/intentions/t-stamp.md" <<'RESIDUE'
-
-## needs-main residue
-
-- verify the deployed behavior on main after merge
-RESIDUE
 
 out="$(
   cd "$C5" || exit 99

@@ -23,7 +23,12 @@ import { extractFrontmatter, extractBody } from "./frontmatter.js";
 // `v1..v2-migration` are legal — rejecting them here would silently defeat
 // graph-commit's relaxed check, since every id passes through this gate first
 // via write-node.ts before graph-commit ever sees it.
-function assertPathSafeId(id: string): void {
+// Exported so every consumer that turns an id into a path component — not just
+// the `readNode`/`writeNode` disk paths in this module — can apply the SAME
+// check. `restamp-scope-fingerprint.ts` calls it at its single stamp-write seam
+// (`writeScopeStamp`), which is reachable from a content source that never
+// touches `readNode`.
+export function assertPathSafeId(id: string): void {
   if (id.includes("/") || id.includes("\\")) {
     throw new IntentionSchemaError(
       `Node id contains path separators: "${id}"`

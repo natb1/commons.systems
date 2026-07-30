@@ -23,9 +23,13 @@
 // nothing is swallowed). The align re-stamp caller lets that surface
 // directly, since it follows an explicit human classification decision and a
 // silent failure there would leave the align round believing the stamp was
-// refreshed when it was not. `transition-node`'s `refresh_stamp()` caller (a
-// later unit) instead wraps the call in its own best-effort contract
-// (`|| return 0`), matching its existing background-refresh semantics.
+// refreshed when it was not. `transition-node`'s `refresh_stamp()` caller
+// instead wraps the call in its own best-effort contract: it captures this
+// script's non-zero exit and its stderr, emits a
+// `transition-node: refresh_stamp failed for <id> (best-effort, continuing):
+// <message>` diagnostic, and returns 0 so the transition proceeds. Fail-open,
+// but not fail-silent — the diagnostic is what makes a missing or stale stamp
+// traceable in worker logs.
 //
 // Usage:
 //   npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts \
@@ -42,7 +46,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tacticScopeFingerprint } from "../src/router.js";
-import { readNode, readNodeBody, parseNodeRaw } from "../src/store.js";
+import { readNode, readNodeBody, parseNodeRaw, assertPathSafeId } from "../src/store.js";
 import { extractBody } from "../src/frontmatter.js";
 
 // --- Paths -------------------------------------------------------------
@@ -69,6 +73,13 @@ const USAGE =
  * `<fingerprint> <sha>\n`. Shared by both content sources (`restampScope`
  * and `restampScopeFromRev`) — this is the write half of the recipe; the two
  * callers differ only in how they obtain `statement`/`body`/`sha`.
+ *
+ * `id` is validated here, at the single write seam, rather than in each
+ * caller: `restampScope` inherits `assertPathSafeId` incidentally via
+ * `readNode`, but `restampScopeFromRev` reads through `git show` and never
+ * touches that path, so without this call an id containing a separator would
+ * reach `join(mainRoot, ".claude", "worktrees", ...)` + `mkdirSync(...,
+ * { recursive: true })` and write outside the worktrees directory.
  */
 export function writeScopeStamp(
   mainRoot: string,
@@ -77,6 +88,7 @@ export function writeScopeStamp(
   body: string,
   sha: string,
 ): { fingerprint: string; sha: string } {
+  assertPathSafeId(id);
   const fingerprint = tacticScopeFingerprint(statement, body);
 
   const stampPath = join(mainRoot, ".claude", "worktrees", `${id}.scope-fingerprint`);
@@ -126,8 +138,9 @@ export function restampScope(
  * the pre-transition branch tip and so no longer reflects what actually
  * landed.
  *
- * Fails LOUD on every error (nonexistent rev, nonexistent path at that rev,
- * parse failure, write failure) — same contract as `restampScope`.
+ * Fails LOUD on every error (a path-unsafe id, nonexistent rev, nonexistent
+ * path at that rev, parse failure, write failure) — same contract as
+ * `restampScope`.
  */
 export function restampScopeFromRev(
   repoRoot: string,
@@ -136,6 +149,13 @@ export function restampScopeFromRev(
   rev: string,
   intentionsDir?: string,
 ): { fingerprint: string; sha: string } {
+  // `id` becomes a path component of `gitPath` below. `restampScope` gets this
+  // check for free via `readNode`; this path never touches `readNode`, so it
+  // asks explicitly — and here rather than only at `writeScopeStamp`, so the
+  // error names the real problem instead of surfacing as an opaque
+  // `git show` "path does not exist".
+  assertPathSafeId(id);
+
   const sha = execFileSync("git", ["rev-parse", rev], {
     cwd: repoRoot,
     encoding: "utf8",
