@@ -230,9 +230,14 @@ cat >"$T3/.claude/skills/dispatch-propagate/scripts/repo-health" <<'SH'
 exit 0
 SH
 chmod +x "$T3/.claude/skills/dispatch-propagate/scripts/repo-health"
-cat >"$T3/intentions/tactic-main-red-abc1234.md" <<'NODE'
+# Latch-node ids below are EXACTLY 8 lowercase hex chars: dispatch-graph-main-red-sync
+# enumerates open latches through an anchored `^tactic-main-red-[0-9a-f]{8}$` filter
+# (matching dispatch-diagnose-main's `git rev-parse --short=8`), so a shorter or
+# non-hex fixture id is not enumerated at all and every assertion below silently
+# degenerates to "nothing happened".
+cat >"$T3/intentions/tactic-main-red-abc12345.md" <<'NODE'
 ---
-id: tactic-main-red-abc1234
+id: tactic-main-red-abc12345
 kind: tactic
 statement: harness open main-red latch node
 owner: ai
@@ -258,8 +263,8 @@ rc=$?
 stderr_out="$(cat "$WORK/t3-stderr.log")"
 status_after="$(git -C "$C3" status --porcelain intentions/)"
 if [[ "$rc" -eq 0 ]] \
-   && grep -q '^tactic-main-red-abc1234$' <<<"$stdout_out" \
-   && grep -q 'completion of tactic-main-red-abc1234 failed; write rolled back' <<<"$stderr_out" \
+   && grep -q '^tactic-main-red-abc12345$' <<<"$stdout_out" \
+   && grep -q 'completion of tactic-main-red-abc12345 failed; write rolled back' <<<"$stderr_out" \
    && [[ -z "$status_after" ]]; then
   ok "dispatch-graph-main-red-sync: failed completion surfaces a stderr diagnostic naming the node and leaves the tree clean"
 else
@@ -293,9 +298,9 @@ SH
 chmod +x "$T4/.claude/skills/dispatch-propagate/scripts/repo-health"
 # Node A is seeded AND pushed to origin, so its FRESH_BLOB capture succeeds and
 # it exercises the (stubbed-failing) graph-commit rollback path.
-cat >"$T4/intentions/tactic-main-red-aaa1111.md" <<'NODE'
+cat >"$T4/intentions/tactic-main-red-aaa11111.md" <<'NODE'
 ---
-id: tactic-main-red-aaa1111
+id: tactic-main-red-aaa11111
 kind: tactic
 statement: harness open main-red latch node present on origin
 owner: ai
@@ -315,9 +320,9 @@ fail_graph_commit "$C4"
 # Node B exists ONLY in the clone (committed locally, never pushed), so
 # listNodes enumerates it into OPEN_MAIN_RED while origin/main:intentions/<id>.md
 # genuinely does not exist — the FRESH_BLOB capture fails, triggering the refusal.
-cat >"$C4/intentions/tactic-main-red-bbb2222.md" <<'NODE'
+cat >"$C4/intentions/tactic-main-red-bbb22222.md" <<'NODE'
 ---
-id: tactic-main-red-bbb2222
+id: tactic-main-red-bbb22222
 kind: tactic
 statement: harness open main-red latch node absent from origin
 owner: ai
@@ -328,7 +333,7 @@ execution: null
 ---
 # harness open main-red latch node absent from origin
 NODE
-git -C "$C4" add intentions/tactic-main-red-bbb2222.md
+git -C "$C4" add intentions/tactic-main-red-bbb22222.md
 git -C "$C4" commit -qm 'local-only latch node absent from origin'
 
 stdout_out="$(
@@ -339,9 +344,9 @@ rc=$?
 stderr_out="$(cat "$WORK/t4-stderr.log")"
 status_after="$(git -C "$C4" status --porcelain intentions/)"
 if [[ "$rc" -eq 0 ]] \
-   && grep -q 'intentions/tactic-main-red-bbb2222.md does not exist on origin/main' <<<"$stderr_out" \
-   && grep -q 'skipping tactic-main-red-bbb2222' <<<"$stderr_out" \
-   && grep -q 'completion of tactic-main-red-aaa1111 failed; write rolled back' <<<"$stderr_out" \
+   && grep -q 'intentions/tactic-main-red-bbb22222.md does not exist on origin/main' <<<"$stderr_out" \
+   && grep -q 'skipping tactic-main-red-bbb22222' <<<"$stderr_out" \
+   && grep -q 'completion of tactic-main-red-aaa11111 failed; write rolled back' <<<"$stderr_out" \
    && [[ -z "$status_after" ]]; then
   ok "dispatch-graph-main-red-sync: a node absent from origin/main is skipped (no mutation, stderr names it) while the loop still processes the present node"
 else
