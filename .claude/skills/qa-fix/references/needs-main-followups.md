@@ -19,13 +19,23 @@ another class.
 
 A node target files **nothing anywhere**. Instead, append a `## needs-main
 residue` section to the tactic's **own body** (`intentions/<node-id>.md` —
-bodies are authoritative for tactics), one entry per `needs-main` item with
-its `id`, `title`, `url_path`, `expected_outcome`, and `finding`. That append
-rides in the Step-4 state-only completion commit (the `transition-node` write),
-which still advances `qa → review` — the residue section does **not** divert the
-phase, and there is no `qa → main-qa` edge. `main-qa` is post-merge by
-definition, so the residue is drained only after review merges the PR: the
-`review → main-qa` edge fires (`forwardPhase` in
+bodies are authoritative for tactics) by running:
+
+```
+npx tsx packages/intentionsutil/scripts/append-machinery-section.ts <node-id> --section-file <path-to-composed-section>
+```
+
+(or piping the composed markdown via stdin — `--section-file -` is the
+default), never by hand-editing the node file directly, with one entry per
+`needs-main` item carrying its `id`, `title`, `url_path`, `expected_outcome`,
+and `finding`. This CLI is mandatory: it places the section below the
+machinery sentinel, which is what keeps the append outside the tactic scope
+fingerprint, so the append can never trigger a false scope-drift demotion.
+That append rides in the Step-4 state-only completion commit (the
+`transition-node` write), which still advances `qa → review` — the residue
+section does **not** divert the phase, and there is no `qa → main-qa` edge.
+`main-qa` is post-merge by definition, so the residue is drained only after
+review merges the PR: the `review → main-qa` edge fires (`forwardPhase` in
 `packages/intentionsutil/src/transitions.ts`, or the reconciler's
 `reconcileMergedPhase` when the merge lands out of band), and
 `tactic-main-qa-phase`'s handler owns verification there. Only

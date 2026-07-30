@@ -1,9 +1,10 @@
-import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readNode, writeNode } from "../src/store.js";
 import { strategyFingerprint } from "../src/router.js";
+import { MACHINERY_SENTINEL } from "../src/body-substance.js";
 import type { IntentionNode, Phase } from "../src/schema.js";
 import { evaluateSelection } from "../scripts/check-node-selection.js";
 
@@ -618,6 +619,33 @@ describe("evaluateSelection", () => {
       });
       expect(r.exitCode).toBe(0);
       expect(r.stderr[0]).toMatch(/warning: no scope stamp.*bootstrap policy/);
+    });
+
+    it("passes at qa when a machinery residue section was appended after the stamp", () => {
+      const dir = tempDir();
+      const fp = seedTactic(dir, "qa");
+      const stampPath = join(dir, "tactic-c.scope-fingerprint");
+      writeFileSync(stampPath, `${fp} abc1234\n`);
+      // /qa-fix's needs-main residue lands below the machinery boundary: not scope.
+      appendFileSync(
+        join(dir, "tactic-c.md"),
+        `\n${MACHINERY_SENTINEL}\n\n## needs-main residue\n\nVerify the banner on prod.\n`,
+      );
+      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "qa", dir, stamp: stampPath });
+      expect(r.exitCode).toBe(0);
+    });
+
+    it("exit 13 at qa when the authored plan prose changed after the stamp", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "tactic-c", kind: "tactic", phase: "qa" }));
+      const nodePath = join(dir, "tactic-c.md");
+      appendFileSync(nodePath, "\n## Context\n\nOriginal prose.\n");
+      const { stdout: fp } = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "qa", dir, stamp: null });
+      const stampPath = join(dir, "tactic-c.scope-fingerprint");
+      writeFileSync(stampPath, `${String(fp)} abc1234\n`);
+      writeFileSync(nodePath, readFileSync(nodePath, "utf8").replace("Original prose.", "Changed prose."));
+      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "qa", dir, stamp: stampPath });
+      expect(r.exitCode).toBe(13);
     });
   });
 });

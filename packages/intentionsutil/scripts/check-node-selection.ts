@@ -48,6 +48,7 @@ import {
   strategyAlignSelectable,
   strategyFingerprint,
   tacticScopeFingerprint,
+  scopeStampMatches,
 } from "../src/router.js";
 import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
 import { isPlainObject } from "../src/schema.js";
@@ -314,8 +315,13 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     }
   }
 
-  // Passed the staleness checks: compute the scope fingerprint (statement + body).
-  const scopeFp = tacticScopeFingerprint(node.statement, readNodeBody(dir, nodeId));
+  // Passed the staleness checks: compute the scope fingerprint (statement + the
+  // body's PLAN SUBSTANCE — machinery sections below the boundary excluded).
+  // This value is what lands on stdout and becomes the phase-start stamp, so the
+  // stamp always carries the current fingerprint definition; the comparison
+  // below additionally accepts the transitional legacy one.
+  const body = readNodeBody(dir, nodeId);
+  const scopeFp = tacticScopeFingerprint(node.statement, body);
   const stderr: string[] = [];
 
   // 5. scope chain — chain-of-custody. Only for the phases that inherit a prior
@@ -338,7 +344,7 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     }
     if (stampLine !== null && stampLine !== "") {
       const [stampedScope, stampedSha = "<unknown>"] = stampLine.split(/\s+/);
-      if (stampedScope !== scopeFp) {
+      if (!scopeStampMatches(stampedScope, node.statement, body)) {
         return fail(
           EXIT_SCOPE_STALE,
           "scope-chain",

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readNodeBody } from "./store.js";
-import { tacticScopeFingerprint } from "./router.js";
+import { scopeStampMatches } from "./router.js";
 import type { IntentionNode } from "./schema.js";
 
 // Pre-selection scope-staleness sweep (tactic-tick-scriptable-then-spawn Unit 1).
@@ -68,8 +68,10 @@ function readStampedFingerprint(stampDir: string, id: string): string | null {
  *     the demote is only for idle nodes),
  *   - a scope-fingerprint stamp file exists at
  *     `<stampDir>/<id>.scope-fingerprint`, AND
- *   - the stamped fingerprint differs from the node's CURRENT scope fingerprint
- *     (`tacticScopeFingerprint(statement, body)`).
+ *   - the stamped fingerprint is not among the node's currently-accepted scope
+ *     fingerprints (`scopeStampMatches`) — i.e. the node's PLAN SUBSTANCE
+ *     changed. A machinery section appended below the boundary (needs-main
+ *     residue) is excluded from the fingerprint, so it never makes a node stale.
  *
  * A MISSING stamp file is NOT stale (bootstrap fail-open, matching
  * check-node-selection.ts's missing-stamp policy) — such nodes are excluded, not
@@ -102,8 +104,8 @@ export function listScopeStaleTactics(
     const stamped = readStampedFingerprint(stampDir, node.id);
     if (stamped === null) continue; // missing/empty stamp: fail-open, not stale
 
-    const current = tacticScopeFingerprint(node.statement, readNodeBody(dir, node.id));
-    if (stamped !== current) stale.push(node.id);
+    const body = readNodeBody(dir, node.id);
+    if (!scopeStampMatches(stamped, node.statement, body)) stale.push(node.id);
   }
   return stale;
 }

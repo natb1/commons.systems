@@ -110,6 +110,9 @@ export function readNode(dir: string, id: string): IntentionNode {
  * the body (only frontmatter is authoritative on read), but the tactic scope
  * fingerprint (`tacticScopeFingerprint`) hashes the body, so its caller reads
  * it through this helper rather than re-parsing the fence boundary by hand.
+ * Verbatim is deliberate: the fingerprint's exclusion of machinery sections
+ * happens in `tacticScopeFingerprint` (via `planSubstance`), never here — other
+ * readers (residue routing, worker handoff) need the whole body.
  */
 export function readNodeBody(dir: string, id: string): string {
   assertPathSafeId(id);

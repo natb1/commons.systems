@@ -1,9 +1,10 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { listNodes, readNodeBody, writeNode } from "../src/store.js";
 import { tacticScopeFingerprint } from "../src/router.js";
+import { MACHINERY_SENTINEL } from "../src/body-substance.js";
 import { listScopeStaleTactics } from "../src/scope-sweep.js";
 import type { IntentionNode } from "../src/schema.js";
 
@@ -115,5 +116,30 @@ describe("listScopeStaleTactics", () => {
     );
     stamp(stampDir, "tactic-parked", "f".repeat(64));
     expect(listScopeStaleTactics(listNodes(dir), dir, stampDir, new Set())).toEqual([]);
+  });
+
+  it("excludes a qa node given a machinery residue append after its stamp", () => {
+    const dir = tempDir("scope-sweep-store-");
+    const stampDir = tempDir("scope-sweep-stamps-");
+    const fp = seed(dir, anode({ id: "tactic-residue", kind: "tactic", phase: "qa" }));
+    stamp(stampDir, "tactic-residue", fp);
+    // /qa-fix appends its needs-main residue below the machinery boundary: not scope.
+    appendFileSync(
+      join(dir, "tactic-residue.md"),
+      `\n${MACHINERY_SENTINEL}\n\n## needs-main residue\n\nVerify the banner on prod.\n`,
+    );
+    expect(listScopeStaleTactics(listNodes(dir), dir, stampDir, new Set())).toEqual([]);
+  });
+
+  it("still returns a qa node whose authored plan prose changed", () => {
+    const dir = tempDir("scope-sweep-store-");
+    const stampDir = tempDir("scope-sweep-stamps-");
+    const node = anode({ id: "tactic-edited", kind: "tactic", phase: "qa" });
+    seed(dir, node);
+    const file = join(dir, "tactic-edited.md");
+    appendFileSync(file, "\n## Context\n\nOriginal prose.\n");
+    stamp(stampDir, "tactic-edited", tacticScopeFingerprint(node.statement, readNodeBody(dir, "tactic-edited")));
+    writeFileSync(file, readFileSync(file, "utf8").replace("Original prose.", "Changed prose."));
+    expect(listScopeStaleTactics(listNodes(dir), dir, stampDir, new Set())).toEqual(["tactic-edited"]);
   });
 });
