@@ -45,8 +45,9 @@
 #      test-park-node.sh's wrapper trick, graph-commit is swapped for a wrapper
 #      that lands a concurrent change once then delegates to the real
 #      graph-commit (graph-commit.real), whose check_base_freshness then sees
-#      origin moved past FRESH_BLOB. Its layers-1-3 auto-merge fails on the raw
-#      collision (the npx merge shim always fails) and falls through to the
+#      origin moved past FRESH_BLOB. The concurrent write collides on the SAME
+#      field transition-node writes (phase), so its layers-1-3 auto-merge
+#      genuinely cannot resolve and falls through to the
 #      documented auto-park fallback: office_hours is set (reason containing
 #      "mechanical-unresolved") and pushed to origin/main; transition-node itself
 #      exits non-zero (its OWN phase write did not land).
@@ -178,18 +179,179 @@ SH
 # npx shim: emulates without node the `npx tsx ...` invocations graph-commit
 # makes — the layers-1-3 mechanical 3-way merge (merge-node.ts) and the
 # conflict-park writer (park_write). Verbatim in spirit from test-park-node.sh:
-#   (c) merge-node.ts (flag argv --base/--ours/--theirs/--out): no real merge
-#       tool in this no-node harness, so this always fails, which is exactly what
-#       makes graph-commit's layers 1-3 fall through to the conflict-park path —
-#       the refusal behavior case 2 verifies.
+#   (c) merge-node.ts (flag argv --base/--ours/--theirs/--out): a REAL (if
+#       simplified) three-way merge, ported from test-park-node.sh's shim and
+#       adapted to this file's real-frontmatter fixtures. It does NOT
+#       reimplement the production field merge (mergeIntentionNodes, covered by
+#       packages/intentionsutil/test/node-merge.test.ts — the source of truth);
+#       it only proves graph-commit invokes merge-node.ts at the right point and
+#       branches correctly on its resolved/unresolved verdict. An always-fail
+#       stub cannot do that: it misreports case 1's genuinely DISJOINT merge
+#       (local `phase` change vs. a landed `blocked_by` addition) as a conflict,
+#       which is exactly the far-ahead-rebuild reconciliation this suite guards.
+#       Adaptation vs. test-park-node.sh's flat `key: value` fixtures: these
+#       nodes carry real `---`-fenced frontmatter, a markdown body, and (via
+#       add_blocked_by) a two-line YAML list —
+#         blocked_by:
+#           - t-blocker
+#       — so the parser groups a top-level `key:` line with its following
+#       INDENTED continuation lines into one raw multi-line block (reconstructed
+#       byte-for-byte on output), treats the fences as structure rather than
+#       keys, and three-way merges the body as a single unit.
 #   (b) park_write (dir since reason snapDir pruneCsv id...): appends an
 #       office_hours line carrying graph-commit's park reason to each node.
 cat >"$WORK/bin/npx" <<'SH'
 #!/usr/bin/env bash
 [[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
 if [[ "$2" == *merge-node.ts ]]; then
-  echo "npx shim: no real 3-way merge tool available (test harness stub)" >&2
-  exit 1
+  shift 2
+  m_base=""; m_ours=""; m_theirs=""; m_out=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --base) m_base="$2"; shift 2 ;;
+      --ours) m_ours="$2"; shift 2 ;;
+      --theirs) m_theirs="$2"; shift 2 ;;
+      --out) m_out="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  # theirs genuinely absent (the id no longer exists on the landed side): ours is
+  # the only content, so ours wins outright (mirrors merge-node.ts's real
+  # documented behavior for an empty --theirs).
+  if [[ -z "$m_theirs" ]]; then
+    [[ -n "$m_out" && -n "$m_ours" ]] && cp -- "$m_ours" "$m_out"
+    printf '{"resolved":true,"conflicts":[]}\n'
+    exit 0
+  fi
+
+  # parse_node <file> — split one node markdown file into
+  #   PK    ordered frontmatter keys
+  #   PV    key -> RAW block (the `key:` line plus every following indented
+  #         continuation line, joined by newlines; emitted verbatim on output)
+  #   PBODY everything after the closing `---` fence, verbatim
+  # `---` fences and blank frontmatter lines are structure, not keys.
+  PK=(); declare -A PV=(); PBODY=""
+  parse_node() {
+    local f="$1" line cur="" curblock="" state=start
+    local -a bodylines=()
+    PK=(); PV=(); PBODY=""
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      case "$state" in
+        start)
+          if [[ "$line" == "---" ]]; then state=fm; else state=body; bodylines+=("$line"); fi
+          ;;
+        fm)
+          if [[ "$line" == "---" ]]; then
+            if [[ -n "$cur" ]]; then PV["$cur"]="$curblock"; cur=""; curblock=""; fi
+            state=body
+          elif [[ -n "$line" && "$line" == [[:space:]]* && -n "$cur" ]]; then
+            curblock+=$'\n'"$line"
+          elif [[ "$line" == *:* ]]; then
+            if [[ -n "$cur" ]]; then PV["$cur"]="$curblock"; fi
+            cur="${line%%:*}"; curblock="$line"
+            PK+=("$cur")
+          fi
+          ;;
+        body)
+          bodylines+=("$line")
+          ;;
+      esac
+    done <"$f"
+    if [[ -n "$cur" ]]; then PV["$cur"]="$curblock"; fi
+    if [[ ${#bodylines[@]} -gt 0 ]]; then PBODY="$(printf '%s\n' "${bodylines[@]}")"; fi
+  }
+
+  declare -A M_BASE_V=() M_OURS_V=() M_THEIRS_V=()
+  declare -a M_ALL_KEYS=()
+  m_base_body=""; m_ours_body=""; m_theirs_body=""
+  m_have_base=0; m_have_ours=0; m_have_theirs=0
+  if [[ -n "$m_base" && -f "$m_base" ]]; then
+    m_have_base=1; parse_node "$m_base"
+    for k in ${PK[@]+"${PK[@]}"}; do M_BASE_V["$k"]="${PV[$k]}"; done
+    m_base_body="$PBODY"
+  fi
+  if [[ -n "$m_ours" && -f "$m_ours" ]]; then
+    m_have_ours=1; parse_node "$m_ours"
+    for k in ${PK[@]+"${PK[@]}"}; do
+      if [[ -z "${M_OURS_V[$k]+x}" ]]; then M_OURS_V["$k"]="${PV[$k]}"; M_ALL_KEYS+=("$k"); fi
+    done
+    m_ours_body="$PBODY"
+  fi
+  if [[ -f "$m_theirs" ]]; then
+    m_have_theirs=1; parse_node "$m_theirs"
+    for k in ${PK[@]+"${PK[@]}"}; do
+      if [[ -z "${M_THEIRS_V[$k]+x}" ]]; then
+        M_THEIRS_V["$k"]="${PV[$k]}"
+        m_seen=0
+        for m_existing in ${M_ALL_KEYS[@]+"${M_ALL_KEYS[@]}"}; do
+          [[ "$m_existing" == "$k" ]] && { m_seen=1; break; }
+        done
+        [[ $m_seen -eq 1 ]] || M_ALL_KEYS+=("$k")
+      fi
+    done
+    m_theirs_body="$PBODY"
+  fi
+
+  # Standard three-way scalar rule, applied to whole raw blocks:
+  #   ours == theirs                -> take it
+  #   ours == base (theirs moved)   -> take theirs
+  #   theirs == base (ours moved)   -> take ours
+  #   only one side has it          -> take that side
+  #   otherwise                     -> conflict
+  m_conflicts_json="[]"
+  m_resolved=true
+  m_merged_blocks=()
+  m_resolve3() { # <have_b> <have_o> <have_t> <bv> <ov> <tv> — prints the winner
+    local hb="$1" ho="$2" ht="$3" bv="$4" ov="$5" tv="$6"
+    if [[ $ho -eq 1 && $ht -eq 1 && "$ov" == "$tv" ]]; then printf '%s' "$ov"; return 0
+    elif [[ $hb -eq 1 && $ho -eq 1 && $ht -eq 1 && "$ov" == "$bv" ]]; then printf '%s' "$tv"; return 0
+    elif [[ $hb -eq 1 && $ho -eq 1 && $ht -eq 1 && "$tv" == "$bv" ]]; then printf '%s' "$ov"; return 0
+    elif [[ $ho -eq 1 && $ht -eq 0 ]]; then printf '%s' "$ov"; return 0
+    elif [[ $ht -eq 1 && $ho -eq 0 ]]; then printf '%s' "$tv"; return 0
+    fi
+    return 1
+  }
+  for k in ${M_ALL_KEYS[@]+"${M_ALL_KEYS[@]}"}; do
+    have_b=0; [[ -n "${M_BASE_V[$k]+x}" ]] && have_b=1
+    have_o=0; [[ -n "${M_OURS_V[$k]+x}" ]] && have_o=1
+    have_t=0; [[ -n "${M_THEIRS_V[$k]+x}" ]] && have_t=1
+    bv="${M_BASE_V[$k]-}"; ov="${M_OURS_V[$k]-}"; tv="${M_THEIRS_V[$k]-}"
+    if final="$(m_resolve3 "$have_b" "$have_o" "$have_t" "$bv" "$ov" "$tv")"; then
+      m_merged_blocks+=("$final")
+    else
+      m_resolved=false
+      m_conflicts_json="$(jq -c --arg field "$k" --arg ours "$ov" --arg theirs "$tv" \
+        '. + [{field:$field, ours:$ours, theirs:$theirs}]' <<<"$m_conflicts_json")"
+    fi
+  done
+
+  # The markdown body is merged as one unit under the pseudo-field "body".
+  m_merged_body=""
+  if m_merged_body="$(m_resolve3 "$m_have_base" "$m_have_ours" "$m_have_theirs" \
+                                 "$m_base_body" "$m_ours_body" "$m_theirs_body")"; then
+    :
+  else
+    m_resolved=false
+    m_conflicts_json="$(jq -c --arg field body --arg ours "$m_ours_body" --arg theirs "$m_theirs_body" \
+      '. + [{field:$field, ours:$ours, theirs:$theirs}]' <<<"$m_conflicts_json")"
+  fi
+
+  if [[ "$m_resolved" == true ]]; then
+    if [[ -n "$m_out" ]]; then
+      : >"$m_out"
+      if [[ ${#m_merged_blocks[@]} -gt 0 ]]; then
+        printf -- '---\n' >>"$m_out"
+        printf '%s\n' "${m_merged_blocks[@]}" >>"$m_out"
+        printf -- '---\n' >>"$m_out"
+      fi
+      [[ -n "$m_merged_body" ]] && printf '%s\n' "$m_merged_body" >>"$m_out"
+    fi
+    printf '{"resolved":true,"conflicts":[]}\n'
+  else
+    printf '{"resolved":false,"conflicts":%s}\n' "$m_conflicts_json"
+  fi
+  exit 0
 fi
 shift 3   # tsx, helper script path, store module path
 dir="$1"; since="$2"; reason="$3"
@@ -384,7 +546,9 @@ fi
 # on origin/main for the node, then delegates to the real graph-commit
 # (graph-commit.real). The real graph-commit's check_base_freshness re-fetches,
 # sees origin's blob no longer matches FRESH_BLOB, and its layers-1-3 auto-merge
-# fails (the npx merge shim always fails) — so it falls through to park_and_exit():
+# fails (the concurrent write moved `phase` — the very field transition-node is
+# writing — to a third value, an unresolvable three-way divergence: base
+# implement, ours qa, theirs main-qa) — so it falls through to park_and_exit():
 # office_hours is set (reason containing "mechanical-unresolved") and pushed to
 # origin/main. transition-node exits non-zero (its OWN phase write did not land).
 C="$WORK/c"
@@ -402,7 +566,10 @@ if [[ ! -f "$SD/.concurrent-landed" ]]; then
   git clone -q "$GC_ORIGIN" "$D"
   git -C "$D" config user.email other@test
   git -C "$D" config user.name other
-  printf 'concurrent-line: landed elsewhere\n' >>"$D/intentions/$GC_NODE.md"
+  # Collide on the SAME field transition-node itself writes (phase). A disjoint
+  # addition would now merge cleanly under the real 3-way shim and silently
+  # defeat this case; base=implement / ours=qa / theirs=main-qa cannot resolve.
+  sed -i 's/^phase: .*/phase: main-qa/' "$D/intentions/$GC_NODE.md"
   git -C "$D" commit -qam 'concurrent edit (bypassing transition-node)'
   git -C "$D" push -q origin main
   rm -rf "$D"
@@ -428,7 +595,7 @@ out="$(
 )"; rc=$?
 content="$(origin_show t-concurrent)"
 if [[ $rc -ne 0 ]] \
-   && grep -q 'concurrent-line: landed elsewhere' <<<"$content" \
+   && grep -q '^phase: main-qa' <<<"$content" \
    && grep -q 'office_hours' <<<"$content" \
    && grep -q 'mechanical-unresolved' <<<"$content"; then
   ok "concurrent origin/main advance triggers auto-park: transition-node exits non-zero, concurrent content survives, node auto-parked via office_hours"
