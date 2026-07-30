@@ -160,6 +160,15 @@ elif [[ $npx_status -ne 0 ]]; then
   exit 1
 fi
 
+# EXPECT_BLOB captures the blob this script just wrote to intentions/$NODE_ID.md
+# under its OWN REPO_ROOT, for graph-commit's --expect guard below. Hashing
+# failure is genuine environment breakage — fail loudly rather than omitting
+# --expect (code-style.md).
+if ! EXPECT_BLOB="$(git -C "$REPO_ROOT" hash-object -- "intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "clear-park: could not hash intentions/$NODE_ID.md after the office_hours clear" >&2
+  exit 1
+fi
+
 if [[ -n "$NOTE" ]]; then
   MESSAGE="graph: clear office_hours park on $NODE_ID ($NOTE)"
 else
@@ -178,7 +187,10 @@ fi
 # changes to stage" branch, and prints "landed ... on main" / exits 0 having
 # committed nothing -- leaving the real edit dirty and unpushed in the other
 # checkout. Mirrors park-node, which already passes -C for the same reason.
-if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "$MESSAGE" "$NODE_ID"; then
+# --expect is the second half of the same guarantee: -C points graph-commit at
+# the right checkout, and --expect proves the content this script wrote is
+# really there by asserting the on-disk blob matches EXPECT_BLOB.
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "$MESSAGE" "$NODE_ID"; then
   echo "clear-park: graph-commit failed for $NODE_ID; the office_hours write was rolled back" >&2
   exit 1
 fi

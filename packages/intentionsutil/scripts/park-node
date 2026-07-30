@@ -260,7 +260,25 @@ if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SI
   exit 1
 fi
 
-if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
+# EXPECT_BLOB captures the blob this script just wrote to intentions/$NODE_ID.md
+# under its OWN REPO_ROOT, for graph-commit's --expect guard below. Hashing
+# failure is genuine environment breakage — fail loudly rather than omitting
+# --expect (code-style.md).
+if ! EXPECT_BLOB="$(git -C "$REPO_ROOT" hash-object -- "intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "park-node: could not hash intentions/$NODE_ID.md after the office_hours write" >&2
+  exit 1
+fi
+
+# -C "$REPO_ROOT" is mandatory, not cosmetic: this script's REPO_ROOT is derived
+# from SCRIPT_DIR (its own on-disk location), and the office_hours write above
+# targets "$INTENTIONS_DIR" under THAT repo, while graph-commit resolves its own
+# repo from -C if given, else from cwd. Callers routinely invoke the main
+# checkout's copy of this script by absolute path from inside a worktree, so
+# without -C the two would resolve to DIFFERENT checkouts. --expect is the
+# second half of the same guarantee: -C points graph-commit at the right
+# checkout, and --expect proves the content this script wrote is really there
+# by asserting the on-disk blob matches EXPECT_BLOB.
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
   echo "park-node: graph-commit failed for $NODE_ID; the office_hours write was rolled back" >&2
   exit 1
 fi
