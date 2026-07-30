@@ -34,6 +34,13 @@
 #      rev-parsed (no landed content to roll back to) is SKIPPED without any
 #      mutation — a stderr diagnostic names it, the tree stays clean — while the
 #      per-node `while read` loop still processes the other open node.
+#   5. transition-node stamps the LANDED body, not the post-reset worktree copy
+#      (tactic-transition-node-stamp-landed-body): a `## needs-main residue`
+#      section is landed on origin/main out-of-band while the PR branch stays
+#      residue-free, a graph-commit stand-in performs the real reset-to-main /
+#      land / reset-back dance, and the freshness computation
+#      dispatch-graph-scope-sweep runs afterward reports scopeStale=false. This
+#      is the ONE case whose graph-commit stub SUCCEEDS.
 #
 # No network needed; requires bash + git + jq + a real node/npx tsx (resolved
 # against a read-only node_modules symlink to this repo's own — never written).
@@ -85,6 +92,7 @@ build_seed_repo() {
   cp "$UTIL_SCRIPTS_SRC/dump-node.ts" "$dst/packages/intentionsutil/scripts/dump-node.ts"
   cp "$UTIL_SCRIPTS_SRC/write-node.ts" "$dst/packages/intentionsutil/scripts/write-node.ts"
   cp "$UTIL_SCRIPTS_SRC/graph-census-debt.ts" "$dst/packages/intentionsutil/scripts/graph-census-debt.ts"
+  cp "$UTIL_SCRIPTS_SRC/restamp-scope-fingerprint.ts" "$dst/packages/intentionsutil/scripts/restamp-scope-fingerprint.ts"
   chmod +x "$dst/packages/intentionsutil/scripts/graph-commit"
   cp "$HARNESS_DIR/lib.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib.sh"
   cp "$HARNESS_DIR/dispatch-config-load" "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
@@ -119,6 +127,64 @@ fail_graph_commit() { # <dir> — replace graph-commit with an unconditional fai
 #!/usr/bin/env bash
 echo "graph-commit wrapper: simulated post-mutation failure" >&2
 exit 1
+SH
+  chmod +x "$1/packages/intentionsutil/scripts/graph-commit"
+}
+
+# landing_graph_commit <dir> — a FAITHFUL graph-commit stand-in (the sibling of
+# fail_graph_commit above: same install point, opposite outcome — this one
+# SUCCEEDS).
+#
+# The real graph-commit cannot run in this harness: it pushes a scratch branch
+# to GitHub and then blocks polling for the CI check stamping that gates its
+# land, so it never terminates offline. What this stub reproduces is exactly the
+# part transition-node's stamp refresh depends on — the "reset dance" of
+# graph-commit's ensure_intentions_only_base() + cleanup() EXIT trap:
+#
+#   3. git fetch origin main; git reset --hard FETCH_HEAD   (move to main's tip,
+#      discarding the PR-branch state — ensure_intentions_only_base)
+#   4. restore the edited node file on top, commit, push to main  (the land)
+#   5. git reset --hard "$ORIG_HEAD"                        (cleanup()'s restore
+#      of the PR-branch tip)
+#
+# Step 5 deliberately does NOT re-fetch — matching the real cleanup() — so the
+# local intentions/<id>.md ends up back at the PRE-land branch copy while
+# origin/main carries the landed edit, and the only correct content source for
+# the stamp is the (already-updated-by-the-push) origin/main tracking ref.
+landing_graph_commit() { # <dir> — replace graph-commit with the reset-dance stand-in.
+  cat >"$1/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+# Stub: accepts transition-node's `-C <dir> -m <msg> <id>` invocation shape.
+set -uo pipefail
+dir=""; id=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m) shift 2 ;;
+    *)  id="$1"; shift ;;
+  esac
+done
+[[ -n "$dir" && -n "$id" ]] || { echo "graph-commit stub: expected -C <dir> -m <msg> <id>" >&2; exit 2; }
+cd "$dir" || exit 2
+
+ORIG_HEAD="$(git rev-parse HEAD)" || exit 2
+staged="$(mktemp)" || exit 2
+cp "intentions/$id.md" "$staged" || exit 2
+
+# ensure_intentions_only_base(): rebase the write onto origin/main's tip.
+git fetch -q origin main || exit 1
+git reset -q --hard FETCH_HEAD || exit 1
+
+# The land: the edited node content actually reaches origin/main.
+cp "$staged" "intentions/$id.md" || exit 1
+rm -f "$staged"
+git add "intentions/$id.md" || exit 1
+git commit -qm "graph: stub land $id" || exit 1
+git push -q origin HEAD:main || exit 1
+
+# cleanup() EXIT trap: restore the pre-land PR-branch tip (no re-fetch).
+git reset -q --hard "$ORIG_HEAD" || exit 1
+exit 0
 SH
   chmod +x "$1/packages/intentionsutil/scripts/graph-commit"
 }
@@ -353,6 +419,154 @@ else
   no "dispatch-graph-main-red-sync origin-absent refusal guard (rc=$rc)"
   printf 'stdout: %s\n' "$stdout_out"; printf 'stderr: %s\n' "$stderr_out"
   printf 'status: %s\n' "$status_after"
+fi
+
+# ===========================================================================
+# Case 5: transition-node stamps what LANDED, not the reverted worktree
+# (tactic-transition-node-stamp-landed-body Unit 3).
+#
+# The regression: refresh_stamp() used to hash REPO_ROOT's on-disk
+# intentions/<id>.md, but graph-commit's cleanup() has by then reset the
+# worktree back to the PR-branch tip — so whenever the node's body on
+# origin/main differs from the PR-branch copy (a `## needs-main residue`
+# section landed during the qa phase, an align-round body edit, any machinery
+# append), refresh_stamp() stamped the PR-branch fingerprint instead of the
+# landed one. The next freshness computation then read the landed body as
+# scope drift, and dispatch-graph-scope-sweep demoted the node and wiped
+# execution.markers.
+#
+# Reproducing that divergence is what gives this case teeth: the residue is
+# LANDED on origin/main out-of-band (from the seed repo) while the PR branch
+# `t-stamp` stays residue-free, so the worktree copy and the origin/main copy
+# genuinely differ in `body` — the only input, besides `statement`, that
+# tacticScopeFingerprint hashes. Against the OLD worktree-sourced
+# refresh_stamp() assertion 3 fails (scopeStale=true); against the new
+# --from-rev origin/main one it passes.
+#
+# NOTE on /qa-fix Step 3.6: its `## needs-main residue` append does NOT ride
+# into the land as an uncommitted worktree edit — transition-node's
+# `git show origin/main:intentions/<id>.md > intentions/<id>.md` refresh
+# clobbers any uncommitted body edit before anything reads it. Landing the
+# residue out-of-band here is therefore the accurate reproduction, not a
+# convenience.
+#
+# The case asserts (a) the reset dance really fired (origin/main has the
+# residue, the post-run worktree copy does not) and (b) the very computation
+# the sweep performs afterward reports scopeStale=false.
+# ===========================================================================
+T5="$WORK/t5-seed"
+build_seed_repo "$T5"
+cp "$HARNESS_DIR/transition-node" "$T5/.claude/skills/dispatch-propagate/scripts/transition-node"
+chmod +x "$T5/.claude/skills/dispatch-propagate/scripts/transition-node"
+cat >"$T5/intentions/t-stamp.md" <<'NODE'
+---
+id: t-stamp
+kind: tactic
+statement: harness node for the landed-body stamp test
+owner: ai
+status: codified
+phase: qa
+serves: []
+execution: null
+---
+# harness node for the landed-body stamp test
+NODE
+new_origin t5
+init_and_push "$T5"
+
+C5="$WORK/t5-clone"
+clone_with_node_modules "$C5"
+landing_graph_commit "$C5"
+
+# A real node-lane PR-branch worktree: on its own branch, ahead of origin/main
+# with unpushed non-intentions work (so the cleanup() reset-back is observable).
+git -C "$C5" checkout -qb t-stamp
+echo 'arbitrary product change' >"$C5/src-change.txt"
+git -C "$C5" add src-change.txt
+git -C "$C5" commit -qm 'local-only product change ahead of origin/main'
+
+# The mid-phase body edit, LANDED on origin/main from outside this worktree
+# (the seed repo stands in for whichever writer landed it — /qa-fix's Step 3.6
+# residue append via graph-commit, an align round, dispatch-graph-main-red-sync).
+# The `t-stamp` branch tip in $C5 never sees it, so the worktree copy and the
+# origin/main copy now genuinely differ in `body`.
+cat >>"$T5/intentions/t-stamp.md" <<'RESIDUE'
+
+## needs-main residue
+
+- verify the deployed behavior on main after merge
+RESIDUE
+git -C "$T5" add intentions/t-stamp.md
+git -C "$T5" commit -qm 'qa: append needs-main residue to t-stamp'
+git -C "$T5" push -q origin main
+git -C "$C5" fetch -q origin
+
+# Guard the setup itself: origin/main must carry the residue while the local
+# branch tip must not. If this ever stops holding, the case has lost its teeth
+# and every later assertion would pass vacuously.
+if ! git -C "$C5" show origin/main:intentions/t-stamp.md | grep -q 'needs-main' \
+   || grep -q 'needs-main' "$C5/intentions/t-stamp.md"; then
+  echo "error: case 5 setup failed to diverge origin/main from the t-stamp branch tip" >&2
+  exit 1
+fi
+
+# Seed the phase-start stamp the way provision-node-worktree does
+# (provision-node-worktree:83-100): `<scope-fingerprint> <origin-main-sha>`,
+# computed over the ORIGIN/MAIN copy of the node — which now carries the
+# residue, so the PRE-transition scope gate reads clean (scopeStale=false) and
+# the transition is allowed to proceed.
+STAMP5_FP="$(
+  cd "$C5" || exit 99
+  node --import tsx/esm -e '
+    const { execFileSync } = await import("node:child_process");
+    const { tacticScopeFingerprint } = await import("./packages/intentionsutil/src/router.js");
+    const { parseNodeRaw } = await import("./packages/intentionsutil/src/store.js");
+    const { extractBody } = await import("./packages/intentionsutil/src/frontmatter.js");
+    const id = process.argv[1];
+    const raw = execFileSync("git", ["show", "origin/main:intentions/" + id + ".md"], { encoding: "utf8" });
+    process.stdout.write(tacticScopeFingerprint(parseNodeRaw(raw, id).statement, extractBody(raw, id)));
+  ' t-stamp
+)" || { echo "error: case 5 stamp fingerprint computation failed" >&2; exit 1; }
+mkdir -p "$C5/.claude/worktrees"
+STAMP5="$C5/.claude/worktrees/t-stamp.scope-fingerprint"
+printf '%s %s\n' "$STAMP5_FP" "$(git -C "$C5" rev-parse origin/main)" >"$STAMP5"
+
+out="$(
+  cd "$C5" || exit 99
+  bash .claude/skills/dispatch-propagate/scripts/transition-node t-stamp 2>&1
+)"; rc=$?
+
+landed_body="$(git -C "$C5" show origin/main:intentions/t-stamp.md)"
+worktree_body="$(cat "$C5/intentions/t-stamp.md")"
+SNAP5="$WORK/t5-snapshot"
+mkdir -p "$SNAP5"
+(cd "$C5" && git archive origin/main intentions | tar -x -C "$SNAP5")
+fresh5="$(
+  cd "$C5" || exit 99
+  node --import tsx/esm packages/intentionsutil/scripts/compute-freshness.ts t-stamp \
+    --snapshot "$SNAP5/intentions" --stamp "$STAMP5"
+)"
+scope_stale5="$(jq -r '.scopeStale' <<<"$fresh5")"
+stamp_missing5="$(jq -r '.stampMissing' <<<"$fresh5")"
+stamp_sha5="$(awk '{print $2}' "$STAMP5")"
+origin_sha5="$(git -C "$C5" rev-parse origin/main)"
+
+if [[ $rc -eq 0 ]] \
+   && grep -q '^transitioned t-stamp qa -> review$' <<<"$out" \
+   && grep -q 'needs-main' <<<"$landed_body" \
+   && ! grep -q 'needs-main' <<<"$worktree_body" \
+   && [[ "$scope_stale5" == "false" ]] \
+   && [[ "$stamp_missing5" == "false" ]] \
+   && [[ "$stamp_sha5" == "$origin_sha5" ]]; then
+  ok "transition-node stamps the LANDED body: after graph-commit's reset dance reverts the worktree copy, the refreshed stamp matches origin/main (scopeStale=false, sha=origin/main)"
+else
+  no "transition-node landed-body stamp (rc=$rc, scopeStale=$scope_stale5, stampMissing=$stamp_missing5)"
+  printf '%s\n' "$out"
+  printf 'stamp: %s\n' "$(cat "$STAMP5")"
+  printf 'origin/main sha: %s\n' "$origin_sha5"
+  printf 'landed residue lines: %s / worktree residue lines: %s\n' \
+    "$(grep -c 'needs-main' <<<"$landed_body" || true)" \
+    "$(grep -c 'needs-main' <<<"$worktree_body" || true)"
 fi
 
 echo
