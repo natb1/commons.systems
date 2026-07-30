@@ -9,6 +9,7 @@ FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=dispatch-test-fixture.sh
 source "$FIXTURE_DIR/dispatch-test-fixture.sh"
 
+# >>> MOVED FROM test-dispatch-scripts.sh >>>
 # ============================================================================
 # Test: graph-auto-merge — the graph-native, marker-keyed PR auto-merger
 # (tactic-graph-tick-node-lane-auto-merge Unit 1)
@@ -222,5 +223,7 @@ if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_f_m=present; else gam_f_m
 assert_eq "graph-auto-merge (f): kill-switch issues no merge" "absent" "$gam_f_m"
 
 rm -rf "$GAM_ROOT" "$GAM_BARE"
+
+# <<< END MOVED <<<
 
 report_results
