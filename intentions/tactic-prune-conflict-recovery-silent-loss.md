@@ -58,7 +58,7 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-phase: main-qa
+phase: done
 execution:
   branch: tactic-prune-conflict-recovery-silent-loss
   pr: 2991
@@ -73,79 +73,7 @@ execution:
 validates: []
 blocked_by:
   - tactic-hold-residue-prune-conflict-recovery-silent-loss
-office_hours:
-  reason: '/qa-main: needs-main residue item 17 on
-    tactic-prune-conflict-recovery-silent-loss is not browser-verifiable —
-    url_path is the placeholder "current" (not a real page path) and
-    expected_outcome asks a human to confirm a design/documentation tradeoff,
-    not observe prod behavior. Routed straight to cannot-verify per Step 4·0
-    without loading browser tools.'
-  since: 2026-07-31
-  recommendation: >-
-    ## What to check
-
-
-    Decide whether the rc-1 caller contract that landed with this PR (commit
-
-    777c4fe1, `packages/intentionsutil/scripts/graph-commit`) should stay
-
-    documentation-only, or whether it needs a machine-readable signal.
-
-
-    **Background.** The landed fix makes `graph-commit` land bystander `--prune`
-
-    deletions even when the invocation parks for a different, conflicted id
-    (Unit 1
-
-    in the node body) and makes `--base` freshness checks prune-aware (Unit 2).
-    The
-
-    mixed outcome — "parked overall (rc=1), but some prunes still landed" — is
-
-    documented in the script's header/comment block, but no caller currently
-
-    branches on it programmatically: the node body itself notes "no in-repo
-    caller
-
-    currently passes `--prune` programmatically" that would need to distinguish
-
-    "fully parked" from "partially landed, partially parked."
-
-
-    **The choice:**
-
-    - **Option A (status quo)** — keep it documentation-only. An agent or
-    operator
-      reading the header before retrying a parked batch sees which ids landed vs.
-      parked from the office-hours queue state and re-tries only the parked ones.
-      No code change.
-    - **Option B** — add a distinct exit code (e.g. rc=2 for "mixed outcome") or
-    a
-      machine-readable marker (e.g. a JSON summary on stdout/stderr) so a future
-      programmatic caller (like the owed-prune census workflow,
-      `packages/intentionsutil/scripts/graph-census-debt.ts:179`) can branch on it
-      without re-deriving state from the graph.
-
-    **How to verify/decide:**
-
-    1. Read `packages/intentionsutil/scripts/graph-commit`'s exit-status comment
-       block (originally at lines 68-77, may have shifted) to see the current
-       documented contract.
-    2. Check whether `graph-census-debt.ts` or any other caller has since
-    started
-       invoking `graph-commit --prune` programmatically (it did not as of this
-       plan) — if one now exists, that tips toward Option B.
-    3. If Option A: no action needed beyond acknowledging the choice — this
-       residue item can simply be marked resolved/dismissed.
-    4. If Option B: file a small follow-up tactic scoped to adding the exit code
-       or marker, referencing this node (tactic-prune-conflict-recovery-silent-loss)
-       as the source of the question.
-
-    This is a design-altitude judgment call on the primitive's contract surface,
-    not
-
-    a defect — the landed code is correct and harness-covered either way.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -439,3 +367,42 @@ cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispat
   **url_path**: current
   **expected_outcome**: A human confirms the documentation-only choice (no distinct exit code or machine-readable marker for "parked, but a bystander prune landed") is acceptable, or records that a distinct exit code / machine-readable marker is the right follow-up.
   **finding**: The rc-1 caller contract added by commit 777c4fe1 documents but does not mechanically enforce the mixed park/land outcome — its own text admits no in-repo caller currently passes `--prune` programmatically, so the contract exists for an agent reading the header before a retry, not for a caller to branch on. This is a design-altitude question about the primitive's contract surface, not a defect in the landed code (which is correct and harness-covered) — flagged as a planned deferral rather than a blocker. (Ids 11, 18, 19 and 20 were dropped from this section by the review pass: 20 was a verbatim re-affirmation of this item, and 11/18/19 tracked the two then-uncovered partition branches, both of which are now closed in code — `conflicted_ids()` honors its empty-accumulator contract, an empty `park_ids` falls back to parking every id, and harness Cases 40/41 cover the layer-3 and foreign-manifest entries.)
+
+## Verification evidence 2026-07-31 — residue item 17 ruled, park cleared
+
+PR #2991 merged 2026-07-31T06:00:53Z (sha ce00fb25); CI green on the merge commit
+across lint, unit-tests, acceptance, guard, preview-and-smoke and deploy-and-smoke.
+Harness cases 44 (bystander prune), 45 (stale `--base` on a prune) and 46 (layer-3
+bystander) are present at `test-graph-commit.sh:1661,1697,1736`.
+
+Item 17 asked whether documenting rather than enforcing the rc-1 contract is the
+right call. That is a genuine design ruling with no observable fact behind it, so
+the park destination was correct — but the recorded *reason* ("not
+browser-verifiable", placeholder `url_path`) cites the wrong criterion and should
+not be treated as precedent: as written it would equally mis-sort a fully
+machine-checkable item whose `url_path` happens to be `current`.
+
+All three research steps the recommendation attached to the ruling were
+machine-answered before it was put to the author:
+
+1. **No in-repo caller passes `--prune` programmatically.** The only two hits
+   outside the harness are template literals inside `graph-census-debt.ts:175-179`
+   — prose assembled into a born-parked census node's `reason`, i.e. agent
+   instructions, not a shell invocation. The two real programmatic `graph-commit`
+   call sites (`dispatch-graph-main-red-sync:134`, `graph-select-target:443`) pass
+   no `--prune`. So the premise of Option A holds and nothing tips toward Option B.
+2. **The item's "no machine-readable marker" premise is wrong as landed.** A
+   parseable marker already exists: a distinct commit subject shape
+   (`graph: park <ids> (concurrent-edit conflict); prune <ids>`,
+   `graph-commit:1577`) and a distinct stderr line naming the landed-deletion set
+   separately from the parked set (`:1597`, with the both-failed case at `:1602`).
+   The genuine gap is narrower than the item states — no distinct *exit code*
+   (rc stays 1) and no structured JSON summary.
+3. **The "observe in production" signal has not fired.** No concurrent-edit park
+   commit and no `intentions/` deletion since the merge. A wait, not a blocker.
+
+**Ruling, author, 2026-07-31: ACCEPT.** `rc=1` plus the stderr discriminator stands
+as the permanent contract for `graph-commit --prune`'s park-with-bystander-prune
+path. No follow-up for `rc=2` or a JSON summary is filed. Should a programmatic
+`--prune` caller ever appear, revisit — that is the condition that would tip
+toward Option B, and check (1) above is the query that detects it.
