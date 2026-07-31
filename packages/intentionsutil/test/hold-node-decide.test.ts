@@ -3,6 +3,7 @@ import { validateNode, type IntentionNode } from "../src/schema.js";
 import {
   decideHold,
   holdIdFor,
+  RESERVED_KIND_SLUGS,
   RESOLUTION_SENTENCE,
   type HoldInput,
 } from "../scripts/hold-node-decide.js";
@@ -72,6 +73,12 @@ describe("holdIdFor", () => {
   it("derives the residue slug id for worktree-residue", () => {
     expect(holdIdFor("worktree-residue", "tactic-some-work")).toBe(
       "tactic-hold-residue-some-work",
+    );
+  });
+
+  it("derives the ci-stalled slug id for ci-pending-stalled", () => {
+    expect(holdIdFor("ci-pending-stalled", "tactic-foo")).toBe(
+      "tactic-hold-ci-stalled-foo",
     );
   });
 
@@ -163,8 +170,44 @@ describe("decideHold dispositions", () => {
     });
   });
 
+  it("uses the ci-stalled hold id when the kind is ci-pending-stalled", () => {
+    const d = decideHold([source()], input({ kind: "ci-pending-stalled" }));
+    expect(d.disposition).toBe("NONE");
+    expect(d.hold_id).toBe("tactic-hold-ci-stalled-some-work");
+    expect(d.source_edge_needed).toBe(true);
+    expect(d.node?.attributes).toEqual({
+      hold_for: SOURCE,
+      hold_kind: "ci-pending-stalled",
+    });
+    expect(d.node_body).toContain(RESOLUTION_SENTENCE);
+  });
+
   it("throws when the source node is not in the store", () => {
     expect(() => decideHold([], input())).toThrow(/is not in the store/);
+  });
+});
+
+describe("reserved kind slugs", () => {
+  it("keeps no-progress reserved and unclaimed by any implemented kind", () => {
+    expect(RESERVED_KIND_SLUGS).toContain("no-progress");
+    for (const [kind, d] of [
+      ["provision-conflict", decideHold([source()], input())],
+      [
+        "fix-attempt-cap",
+        decideHold([source()], input({ kind: "fix-attempt-cap" })),
+      ],
+      [
+        "worktree-residue",
+        decideHold([source()], input({ kind: "worktree-residue" })),
+      ],
+      [
+        "ci-pending-stalled",
+        decideHold([source()], input({ kind: "ci-pending-stalled" })),
+      ],
+    ] as const) {
+      expect(holdIdFor(kind, SOURCE)).not.toContain("no-progress");
+      expect(d.hold_id).not.toContain("no-progress");
+    }
   });
 });
 

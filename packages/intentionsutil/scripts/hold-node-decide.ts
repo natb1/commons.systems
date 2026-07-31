@@ -18,7 +18,7 @@
 //
 // Usage:
 //   node --import tsx/esm hold-node-decide.ts --source <id>
-//     --kind <provision-conflict|fix-attempt-cap|worktree-residue>
+//     --kind <provision-conflict|fix-attempt-cap|worktree-residue|ci-pending-stalled>
 //     --reason-file <f> --recommendation-file <f>
 //     [--body-file <f>] [--now <YYYY-MM-DD>] [--intentions <dir>]
 //
@@ -58,12 +58,30 @@ import type { IntentionNode } from "../src/schema.js";
  *                    no-progress fuse. Deliberately NOT wired to a producer
  *                    kind or a CLI case here; the name is reserved so the id
  *                    scheme (`tactic-hold-no-progress-<source>`) is documented
- *                    and cannot be claimed for something else.
+ *                    and cannot be claimed for something else. `ci-stalled`
+ *                    below was minted separately rather than claiming this
+ *                    slug: `no-progress` is reserved for a general any-phase
+ *                    no-progress fuse (a different future tactic), while
+ *                    `ci-stalled` is a specific single-cause bound on one
+ *                    sensor's verdict (the CI-pending observation). Claiming
+ *                    the general slug for a specific cause would make the
+ *                    eventual general fuse unnameable, and would make
+ *                    `tactic-hold-no-progress-<source>` ambiguous between two
+ *                    producers.
+ *  - `ci-stalled`  — ci-pending-stalled: the autonomous tick observed the
+ *                    node's draft-PR CI verdict as `pending` on the SAME head
+ *                    SHA for DISPATCH_CI_PENDING_STRIKE_CAP consecutive
+ *                    observations (checks never started, or a run that never
+ *                    concluded). Unlike `worktree-residue` this DOES have a
+ *                    plausible self-heal (checks may still start), so it sits
+ *                    behind a strike ladder rather than escalating on first
+ *                    occurrence. IMPLEMENTED.
  */
 export const HOLD_KINDS = [
   "provision-conflict",
   "fix-attempt-cap",
   "worktree-residue",
+  "ci-pending-stalled",
 ] as const;
 
 export type HoldKind = (typeof HOLD_KINDS)[number];
@@ -72,6 +90,7 @@ const KIND_SLUGS: Record<HoldKind, string> = {
   "provision-conflict": "conflict",
   "fix-attempt-cap": "fix-cap",
   "worktree-residue": "residue",
+  "ci-pending-stalled": "ci-stalled",
 };
 
 /**
@@ -308,7 +327,7 @@ function parseArgs(argv: string[]): Args {
 
   if (sourceId === null || sourceId === "") fail("--source <node-id> is required");
   if (kind === null) {
-    fail("--kind <provision-conflict|fix-attempt-cap|worktree-residue> is required");
+    fail(`--kind <${HOLD_KINDS.join("|")}> is required`);
   }
   if (!isHoldKind(kind)) {
     fail(`--kind must be one of ${HOLD_KINDS.join("|")}, got "${kind}"`);
