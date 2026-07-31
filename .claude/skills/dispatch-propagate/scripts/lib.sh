@@ -2916,6 +2916,453 @@ EOF
 }
 
 
+# Disable a stale healer timer/service whose installed unit points at a
+# different main-worktree path than the current one, mirroring
+# cleanup_stale_sweep_units above. Thin wrapper over cleanup_stale_unit_pair;
+# see that function for the full contract.
+# Args: $1 = installed service-unit path, $2 = current main worktree path,
+#       $3 = systemctl command
+cleanup_stale_healer_units() {
+  cleanup_stale_unit_pair "$1" "$2" "$3" \
+    dispatch-heal.timer dispatch-heal.service \
+    cleanup_stale_healer_units healer
+}
+
+# Install and activate the durable `dispatch-heal.timer` (+ its paired
+# `dispatch-heal.service`) so the systemd-unit poisoning healer
+# (dispatch-heal-units) fires on a wall-clock cadence rather than only from an
+# ad hoc invocation.
+#
+# The .service is Type=oneshot and carries NO [Install] section — the .timer
+# pulls it in via Unit=, and a oneshot with an [Install] would be pointlessly
+# enable-able on its own. ExecStart points directly at the
+# `dispatch-heal-units` script.
+#
+# SuccessExitStatus=1 2: a finding (exit 1) or UNKNOWN (exit 2) must not latch
+# this unit into `failed` — findings are already reported via the graph node +
+# journal, and a latched-failed unit would then be "healed" by the healer in a
+# pointless loop. Only a genuine internal error (exit 69, or a signal) should
+# mark the unit failed.
+#
+# Best-effort: a failure here must not abort the caller (a tick/reseed
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# timer just means the unit-poisoning healer falls back to on-demand-only
+# invocation.
+# Args: $1 = main worktree path
+ensure_healer_units() {
+  local main_worktree="$1"
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in any value we interpolate below would land
+  # as an attacker-controlled extra directive in the [Service] section. The
+  # main worktree path comes from git output or a test override and never
+  # legitimately contains a newline; reject it rather than emit a malformed
+  # unit (best-effort: warn + return per this helper's contract — never exit).
+  if [[ "$main_worktree" == *$'\n'* ]]; then
+    echo "WARNING: ensure_healer_units: main worktree path contains a newline; refusing to write unit; unit-poisoning healer unavailable" >&2
+    return 1
+  fi
+  # WorkingDirectory= does not unescape quotes, so a space in the bare path would
+  # split the value at the first space; reject it (same contract: warn + return 1).
+  if [[ "$main_worktree" == *' '* ]]; then
+    echo "WARNING: ensure_healer_units: main worktree path contains a space; refusing to write unit; unit-poisoning healer unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted ("$HEALER_SCRIPT"); HEALER_SCRIPT is derived
+  # from main_worktree below. An embedded double-quote in the path would
+  # prematurely close that quoted token, making systemd parse the executable and
+  # arguments wrong (bad-setting) and permanently break the unit. The path never
+  # legitimately contains a double-quote; reject it rather than emit a malformed
+  # unit (same contract: warn + return 1).
+  if [[ "$main_worktree" == *'"'* ]]; then
+    echo "WARNING: ensure_healer_units: main worktree path contains a double-quote; refusing to write unit; unit-poisoning healer unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in
+  # the path would be misread as an escape sequence and corrupt the executable
+  # token. The path never legitimately contains a backslash; reject it (#1212).
+  if [[ "$main_worktree" == *'\'* ]]; then
+    echo "WARNING: ensure_healer_units: main worktree path contains a backslash; refusing to write unit; unit-poisoning healer unavailable" >&2
+    return 1
+  fi
+
+  local HEALER_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-heal-units"
+  local UNIT_DIR="${DISPATCH_HEALER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local SERVICE_PATH="$UNIT_DIR/dispatch-heal.service"
+  local TIMER_PATH="$UNIT_DIR/dispatch-heal.timer"
+  local SYSTEMCTL_CMD="${DISPATCH_HEALER_SYSTEMCTL_CMD:-systemctl}"
+
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
+
+  # Desired .service content. Environment=PATH= captures the launching caller's
+  # full nix-store PATH at write time, for the same reason the recover, sweep,
+  # and heartbeat units do — the systemd user manager's minimal default PATH
+  # omits the nix store, so dispatch-heal-units could not otherwise resolve
+  # git/jq/claude/systemctl.
+  #
+  # ExecStart= and Environment= are double-quoted: systemd unescapes C-style
+  # quotes for these two directives, so a path containing spaces is parsed as a
+  # single token rather than split into an executable + spurious arguments.
+  # WorkingDirectory= is the exception — it does NOT unescape quotes; a leading
+  # `"` makes the path non-absolute and systemd rejects the unit (bad-setting),
+  # so it takes the bare path (the no-spaces invariant is enforced by the guard
+  # above, so the bare value is a single token).
+  #
+  # SyslogIdentifier=dispatch-heal-units is the stable `journalctl --user -t
+  # <id>` rate source for this unit. Use `-t` (SyslogIdentifier), never `-u`
+  # (unit name) — a `-u` match against a oneshot triggered by a timer can
+  # silently drop events, a documented past bug.
+  #
+  # Deliberately NO [Install] section — the .timer pulls this oneshot in via
+  # Unit=, so the service is never enabled on its own.
+  local desired_service
+  desired_service=$(cat <<EOF
+[Unit]
+Description=Dispatch systemd-unit poisoning healer (timer-triggered)
+
+[Service]
+Type=oneshot
+SuccessExitStatus=1 2
+SyslogIdentifier=dispatch-heal-units
+Environment="PATH=$safe_path"
+ExecStart="$HEALER_SCRIPT"
+WorkingDirectory=$main_worktree
+EOF
+)
+
+  # Desired .timer content. OnBootSec delays the first fire past session start;
+  # OnUnitActiveSec re-arms 2min after each activation for the steady cadence.
+  # Unit= names the paired oneshot above.
+  #
+  # Deliberately NO Persistent= — it only affects OnCalendar= timers (catching
+  # up missed wall-clock fires across downtime) and is a no-op for the
+  # monotonic OnBootSec=/OnUnitActiveSec= triggers used here.
+  local desired_timer
+  desired_timer=$(cat <<EOF
+[Unit]
+Description=Dispatch unit-poisoning healer timer
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+Unit=dispatch-heal.service
+
+[Install]
+WantedBy=timers.target
+EOF
+)
+
+  # Steady-state hot path: if BOTH installed units already match byte-for-byte
+  # AND the timer is active (armed), skip the write/reload/enable entirely.
+  if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
+     && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
+     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-heal.timer; then
+    return 0
+  fi
+
+  # Path-change cleanup, mirroring ensure_sweep_timer: if the installed unit
+  # names a different main worktree (or is otherwise stale), disable it before
+  # rewriting the unit content below. Best-effort; never aborts.
+  cleanup_stale_healer_units "$SERVICE_PATH" "$main_worktree" "$SYSTEMCTL_CMD"
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_healer_units: mkdir -p $UNIT_DIR failed; unit-poisoning healer unavailable" >&2
+    return 1
+  fi
+
+  # Write the .service atomically only when its content differs: temp file in the
+  # same dir, then mv into place.
+  if [ ! -f "$SERVICE_PATH" ] || [ "$(cat "$SERVICE_PATH")" != "$desired_service" ]; then
+    local tmp_service
+    tmp_service=$(mktemp "$UNIT_DIR/.dispatch-heal.service.XXXXXX") || {
+      echo "WARNING: ensure_healer_units: could not create temp file in $UNIT_DIR; unit-poisoning healer unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired_service" > "$tmp_service"; then
+      echo "WARNING: ensure_healer_units: failed to write $tmp_service; unit-poisoning healer unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+    if ! mv "$tmp_service" "$SERVICE_PATH"; then
+      echo "WARNING: ensure_healer_units: failed to install $SERVICE_PATH; unit-poisoning healer unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+  fi
+
+  # Write the .timer atomically only when its content differs: temp file in the
+  # same dir, then mv into place.
+  if [ ! -f "$TIMER_PATH" ] || [ "$(cat "$TIMER_PATH")" != "$desired_timer" ]; then
+    local tmp_timer
+    tmp_timer=$(mktemp "$UNIT_DIR/.dispatch-heal.timer.XXXXXX") || {
+      echo "WARNING: ensure_healer_units: could not create temp file in $UNIT_DIR; unit-poisoning healer unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired_timer" > "$tmp_timer"; then
+      echo "WARNING: ensure_healer_units: failed to write $tmp_timer; unit-poisoning healer unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+    if ! mv "$tmp_timer" "$TIMER_PATH"; then
+      echo "WARNING: ensure_healer_units: failed to install $TIMER_PATH; unit-poisoning healer unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+  fi
+
+  # daemon-reload unconditionally on this slow path, outside both write blocks.
+  # The hot path above already returned early when both units matched
+  # byte-for-byte AND the timer was active; reaching here means at least one unit
+  # was just written OR both exist on disk but the timer is not active. A
+  # daemon-reload that failed on a prior call (after the mv succeeded) leaves the
+  # units on disk but unknown to systemd, so the content compare skips the write
+  # blocks on every later call — running the reload outside those blocks ensures
+  # it is retried until systemd has loaded the units, instead of falling straight
+  # through to a doomed `enable --now`. Both files are on disk before the reload
+  # since the timer's Unit= references the service.
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_healer_units: systemctl --user daemon-reload failed; unit-poisoning healer unavailable" >&2
+    return 1
+  fi
+
+  # Install + activate the TIMER (not the oneshot service): enable symlinks it
+  # under WantedBy=timers.target (so it re-arms on every user-session start) and
+  # --now arms it immediately. A .timer does nothing until this enable --now;
+  # the paired service stays inert until the timer triggers it.
+  if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-heal.timer; then
+    echo "WARNING: ensure_healer_units: systemctl --user enable --now dispatch-heal.timer failed; unit-poisoning healer unavailable" >&2
+    return 1
+  fi
+}
+
+
+# Disable a stale watcher timer/service whose installed unit points at a
+# different main-worktree path than the current one, mirroring
+# cleanup_stale_sweep_units above. Thin wrapper over cleanup_stale_unit_pair;
+# see that function for the full contract.
+# Args: $1 = installed service-unit path, $2 = current main worktree path,
+#       $3 = systemctl command
+cleanup_stale_watcher_units() {
+  cleanup_stale_unit_pair "$1" "$2" "$3" \
+    dispatch-fleet-watch.timer dispatch-fleet-watch.service \
+    cleanup_stale_watcher_units watcher
+}
+
+# Install and activate the durable `dispatch-fleet-watch.timer` (+ its paired
+# `dispatch-fleet-watch.service`) so the fleet watchdog (dispatch-fleet-watch)
+# fires on a wall-clock cadence rather than only from an ad hoc invocation.
+#
+# The .service is Type=oneshot and carries NO [Install] section — the .timer
+# pulls it in via Unit=, and a oneshot with an [Install] would be pointlessly
+# enable-able on its own. ExecStart points directly at the
+# `dispatch-fleet-watch` script.
+#
+# SuccessExitStatus=1 2: a finding (exit 1) or UNKNOWN (exit 2) must not latch
+# this unit into `failed` — findings are already reported via the graph node +
+# journal, and a latched-failed unit would then be "healed" by the healer in a
+# pointless loop. Only a genuine internal error (exit 69, or a signal) should
+# mark the unit failed.
+#
+# OnBootSec=3min / OnUnitActiveSec=5min are staggered off the healer's
+# 1min/2min so the two timers don't fire together.
+#
+# Best-effort: a failure here must not abort the caller (a tick/reseed
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# timer just means the fleet watchdog falls back to on-demand-only invocation.
+# Args: $1 = main worktree path
+ensure_watcher_units() {
+  local main_worktree="$1"
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in any value we interpolate below would land
+  # as an attacker-controlled extra directive in the [Service] section. The
+  # main worktree path comes from git output or a test override and never
+  # legitimately contains a newline; reject it rather than emit a malformed
+  # unit (best-effort: warn + return per this helper's contract — never exit).
+  if [[ "$main_worktree" == *$'\n'* ]]; then
+    echo "WARNING: ensure_watcher_units: main worktree path contains a newline; refusing to write unit; fleet watchdog unavailable" >&2
+    return 1
+  fi
+  # WorkingDirectory= does not unescape quotes, so a space in the bare path would
+  # split the value at the first space; reject it (same contract: warn + return 1).
+  if [[ "$main_worktree" == *' '* ]]; then
+    echo "WARNING: ensure_watcher_units: main worktree path contains a space; refusing to write unit; fleet watchdog unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted ("$WATCHER_SCRIPT"); WATCHER_SCRIPT is derived
+  # from main_worktree below. An embedded double-quote in the path would
+  # prematurely close that quoted token, making systemd parse the executable and
+  # arguments wrong (bad-setting) and permanently break the unit. The path never
+  # legitimately contains a double-quote; reject it rather than emit a malformed
+  # unit (same contract: warn + return 1).
+  if [[ "$main_worktree" == *'"'* ]]; then
+    echo "WARNING: ensure_watcher_units: main worktree path contains a double-quote; refusing to write unit; fleet watchdog unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in
+  # the path would be misread as an escape sequence and corrupt the executable
+  # token. The path never legitimately contains a backslash; reject it (#1212).
+  if [[ "$main_worktree" == *'\'* ]]; then
+    echo "WARNING: ensure_watcher_units: main worktree path contains a backslash; refusing to write unit; fleet watchdog unavailable" >&2
+    return 1
+  fi
+
+  local WATCHER_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-fleet-watch"
+  local UNIT_DIR="${DISPATCH_WATCHER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local SERVICE_PATH="$UNIT_DIR/dispatch-fleet-watch.service"
+  local TIMER_PATH="$UNIT_DIR/dispatch-fleet-watch.timer"
+  local SYSTEMCTL_CMD="${DISPATCH_WATCHER_SYSTEMCTL_CMD:-systemctl}"
+
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
+
+  # Desired .service content. Environment=PATH= captures the launching caller's
+  # full nix-store PATH at write time, for the same reason the recover, sweep,
+  # heartbeat, and healer units do — the systemd user manager's minimal default
+  # PATH omits the nix store, so dispatch-fleet-watch could not otherwise
+  # resolve git/jq/claude/systemctl.
+  #
+  # ExecStart= and Environment= are double-quoted: systemd unescapes C-style
+  # quotes for these two directives, so a path containing spaces is parsed as a
+  # single token rather than split into an executable + spurious arguments.
+  # WorkingDirectory= is the exception — it does NOT unescape quotes; a leading
+  # `"` makes the path non-absolute and systemd rejects the unit (bad-setting),
+  # so it takes the bare path (the no-spaces invariant is enforced by the guard
+  # above, so the bare value is a single token).
+  #
+  # SyslogIdentifier=dispatch-fleet-watch is the stable `journalctl --user -t
+  # <id>` rate source for this unit. Use `-t` (SyslogIdentifier), never `-u`
+  # (unit name) — a `-u` match against a oneshot triggered by a timer can
+  # silently drop events, a documented past bug.
+  #
+  # Deliberately NO [Install] section — the .timer pulls this oneshot in via
+  # Unit=, so the service is never enabled on its own.
+  local desired_service
+  desired_service=$(cat <<EOF
+[Unit]
+Description=Dispatch fleet watchdog (timer-triggered)
+
+[Service]
+Type=oneshot
+SuccessExitStatus=1 2
+SyslogIdentifier=dispatch-fleet-watch
+Environment="PATH=$safe_path"
+ExecStart="$WATCHER_SCRIPT"
+WorkingDirectory=$main_worktree
+EOF
+)
+
+  # Desired .timer content. OnBootSec delays the first fire past session start,
+  # staggered 2min after the healer's 1min so the two don't fire together;
+  # OnUnitActiveSec re-arms 5min after each activation for the steady cadence
+  # (also staggered off the healer's 2min). Unit= names the paired oneshot
+  # above.
+  #
+  # Deliberately NO Persistent= — it only affects OnCalendar= timers (catching
+  # up missed wall-clock fires across downtime) and is a no-op for the
+  # monotonic OnBootSec=/OnUnitActiveSec= triggers used here.
+  local desired_timer
+  desired_timer=$(cat <<EOF
+[Unit]
+Description=Dispatch fleet watchdog timer
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+Unit=dispatch-fleet-watch.service
+
+[Install]
+WantedBy=timers.target
+EOF
+)
+
+  # Steady-state hot path: if BOTH installed units already match byte-for-byte
+  # AND the timer is active (armed), skip the write/reload/enable entirely.
+  if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
+     && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
+     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-fleet-watch.timer; then
+    return 0
+  fi
+
+  # Path-change cleanup, mirroring ensure_sweep_timer: if the installed unit
+  # names a different main worktree (or is otherwise stale), disable it before
+  # rewriting the unit content below. Best-effort; never aborts.
+  cleanup_stale_watcher_units "$SERVICE_PATH" "$main_worktree" "$SYSTEMCTL_CMD"
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_watcher_units: mkdir -p $UNIT_DIR failed; fleet watchdog unavailable" >&2
+    return 1
+  fi
+
+  # Write the .service atomically only when its content differs: temp file in the
+  # same dir, then mv into place.
+  if [ ! -f "$SERVICE_PATH" ] || [ "$(cat "$SERVICE_PATH")" != "$desired_service" ]; then
+    local tmp_service
+    tmp_service=$(mktemp "$UNIT_DIR/.dispatch-fleet-watch.service.XXXXXX") || {
+      echo "WARNING: ensure_watcher_units: could not create temp file in $UNIT_DIR; fleet watchdog unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired_service" > "$tmp_service"; then
+      echo "WARNING: ensure_watcher_units: failed to write $tmp_service; fleet watchdog unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+    if ! mv "$tmp_service" "$SERVICE_PATH"; then
+      echo "WARNING: ensure_watcher_units: failed to install $SERVICE_PATH; fleet watchdog unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+  fi
+
+  # Write the .timer atomically only when its content differs: temp file in the
+  # same dir, then mv into place.
+  if [ ! -f "$TIMER_PATH" ] || [ "$(cat "$TIMER_PATH")" != "$desired_timer" ]; then
+    local tmp_timer
+    tmp_timer=$(mktemp "$UNIT_DIR/.dispatch-fleet-watch.timer.XXXXXX") || {
+      echo "WARNING: ensure_watcher_units: could not create temp file in $UNIT_DIR; fleet watchdog unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired_timer" > "$tmp_timer"; then
+      echo "WARNING: ensure_watcher_units: failed to write $tmp_timer; fleet watchdog unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+    if ! mv "$tmp_timer" "$TIMER_PATH"; then
+      echo "WARNING: ensure_watcher_units: failed to install $TIMER_PATH; fleet watchdog unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+  fi
+
+  # daemon-reload unconditionally on this slow path, outside both write blocks.
+  # The hot path above already returned early when both units matched
+  # byte-for-byte AND the timer was active; reaching here means at least one unit
+  # was just written OR both exist on disk but the timer is not active. A
+  # daemon-reload that failed on a prior call (after the mv succeeded) leaves the
+  # units on disk but unknown to systemd, so the content compare skips the write
+  # blocks on every later call — running the reload outside those blocks ensures
+  # it is retried until systemd has loaded the units, instead of falling straight
+  # through to a doomed `enable --now`. Both files are on disk before the reload
+  # since the timer's Unit= references the service.
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_watcher_units: systemctl --user daemon-reload failed; fleet watchdog unavailable" >&2
+    return 1
+  fi
+
+  # Install + activate the TIMER (not the oneshot service): enable symlinks it
+  # under WantedBy=timers.target (so it re-arms on every user-session start) and
+  # --now arms it immediately. A .timer does nothing until this enable --now;
+  # the paired service stays inert until the timer triggers it.
+  if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-fleet-watch.timer; then
+    echo "WARNING: ensure_watcher_units: systemctl --user enable --now dispatch-fleet-watch.timer failed; fleet watchdog unavailable" >&2
+    return 1
+  fi
+}
+
+
 # Install and activate the durable always-on heartbeat: a `systemd --user`
 # `dispatch-heartbeat.timer` firing `dispatch-heartbeat.service` (a no-arg
 # `dispatch-tick`) on a wall-clock schedule — `OnBootSec=2min`,
