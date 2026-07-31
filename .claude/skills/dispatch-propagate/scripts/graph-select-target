@@ -319,6 +319,17 @@ if [[ -n "$STANDALONE" ]]; then
   # the same fail-open floor, TOP=1 (the standalone analogue of
   # dispatch-select-tick's "GAP stays 1"), never leaving TOP unclamped when the
   # live-worker count or the ceiling is unknown.
+  #
+  # The ledger is SWEPT before it is counted, mirroring dispatch-select-tick's
+  # autonomous gate. Since the spawn handoff landed, a launched claim is no
+  # longer cleared at the kick but re-stamped `origin=spawned` and held until its
+  # worker registers — so an unswept count charges a registered worker twice
+  # (once busy, once reserved). That matters more here than on the manual lane:
+  # this path deliberately omits the floor-of-1 above, so an inflated LIVE_COUNT
+  # drives HEADROOM to 0 and the run selects NOTHING while real headroom exists.
+  # Sweep rule (a) drops exactly those redundant markers. The dispatch lock is
+  # already held (step (a) above), so the sweep cannot race a concurrent tick.
+  reservation_sweep 1>&2 || true
   if BUSY=$(claude_agents_count_busy_workers); then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))

@@ -416,14 +416,42 @@ rl_teardown
 # reservation_clear on a successful kick, so the claim stays in force until the
 # worker registers. The existing session=/issue= values are preserved and the
 # timestamp is refreshed to spawn time.
-echo "Test: reservation_mark_spawned re-stamps an existing marker as origin=spawned, preserving session/issue"
+# The two DISPATCH_RESERVATION_NOW values are DISTINCT on purpose: the refresh is
+# load-bearing (selection→spawn includes provision-node-worktree's fetch/
+# worktree-add and can take minutes, so carrying the selection stamp forward
+# could hand back an already-expired handoff). Pinning both writes to one value
+# would let a regression that preserved the ORIGINAL stamp pass this assertion.
+echo "Test: reservation_mark_spawned re-stamps an existing marker as origin=spawned, preserving session/issue and refreshing the timestamp"
 rl_setup
+export DISPATCH_RESERVATION_NOW="2025-12-31T23:50:00Z"   # selection time
 reservation_write "tactic-x" "tactic-x" "headless:abc"
+export DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z"   # spawn time, 10min later
 if reservation_mark_spawned "tactic-x"; then rc=0; else rc=$?; fi
 assert_eq "rl-mark-spawned-content: exits 0" "0" "$rc"
-assert_eq "rl-mark-spawned-content: marker is the 4 documented lines with origin=spawned" \
+assert_eq "rl-mark-spawned-content: marker is the 4 documented lines with origin=spawned and the SPAWN-time stamp" \
   "$(printf 'session=headless:abc\nissue=tactic-x\norigin=spawned\ntimestamp=2026-01-01T00:00:00Z')" \
   "$(cat "$DISPATCH_RESERVATION_DIR/tactic-x")"
+rl_teardown
+
+# --- Test D2: the refreshed stamp is what the sweep's handoff TTL measures -----
+# End-to-end guard for the refresh: a marker whose ORIGINAL (selection) stamp is
+# older than the handoff TTL, but whose spawn re-stamp is fresh, must SURVIVE the
+# sweep. A regression that carried the selection stamp forward would hand back an
+# already-expired handoff and the marker would be reclaimed here.
+echo "Test: an origin=spawned marker whose ORIGINAL stamp predates the handoff TTL survives the sweep on its refreshed stamp"
+rl_setup
+export DISPATCH_RESERVATION_NOW="2025-12-31T23:50:00Z"   # 600s before spawn time
+reservation_write "tactic-x" "tactic-x" "headless:abc"
+export DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z"   # spawn time (epoch 1767225600)
+reservation_mark_spawned "tactic-x"
+# Neither the reserving session nor a worker named tactic-x is live.
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+# 90s past SPAWN time — well inside the 300s handoff TTL, but 690s past the
+# selection stamp, i.e. past it had the refresh not happened.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 90))
+reservation_sweep 2>/dev/null
+assert_eq "rl-mark-spawned-refresh: handoff measured from the SPAWN stamp, marker kept (count 1)" "1" \
+  "$(reservation_count)"
 rl_teardown
 
 # --- Test E: reservation_mark_spawned creates a marker when none exists --------

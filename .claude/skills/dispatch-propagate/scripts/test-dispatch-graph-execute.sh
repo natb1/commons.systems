@@ -142,6 +142,12 @@ assert_eq "implement hands off the reservation marker, does not clear it" "prese
   "$([ -e "$RES_DIR/tactic-foo" ] && echo present || echo gone)"
 assert_contains "implement marker is re-stamped origin=spawned" "origin=spawned" \
   "$(cat "$RES_DIR/tactic-foo")"
+# The re-stamp preserves the selection marker's identity fields rather than
+# falling back to the synthesized create-if-absent values (Case 15).
+assert_contains "implement handoff preserves the selection session=" "session=headless:t" \
+  "$(cat "$RES_DIR/tactic-foo")"
+assert_contains "implement handoff preserves the selection issue=" "issue=tactic-foo" \
+  "$(cat "$RES_DIR/tactic-foo")"
 
 # ============================================================================
 # Case 2: per-phase skill map (review/qa/fix/main-qa)
@@ -199,7 +205,10 @@ assert_eq "waiting spawns nothing" "" "$(cat "$SPAWN_LOG")"
 # ============================================================================
 echo "Case 5: provision exit 11 -> conflict lane spawned, no strike, no graph write"
 rm -f "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes"
-touch "$RES_DIR/tactic-c"
+# A WELL-FORMED selection-time marker, not a bare `touch`: the handoff must carry
+# the existing session=/issue= forward. An empty marker would instead exercise the
+# create-if-absent fallback, which Case 15 already covers.
+printf 'session=headless:c\nissue=tactic-c\ntimestamp=2026-01-01T00:00:00Z\n' > "$RES_DIR/tactic-c"
 PROV_RC=11 run_exec "tactic-c:tactic:qa"
 SPAWN=$(cat "$SPAWN_LOG")
 assert_eq "conflict-lane stdout" "conflict-lane tactic-c" "$OUT"
@@ -219,12 +228,18 @@ assert_eq "conflict-lane hands off the reservation marker, does not clear it" "p
   "$([ -e "$RES_DIR/tactic-c" ] && echo present || echo gone)"
 assert_contains "conflict-lane marker is re-stamped origin=spawned" "origin=spawned" \
   "$(cat "$RES_DIR/tactic-c")"
+# The re-stamp must PRESERVE the selection marker's identity fields, not
+# overwrite them with the create-if-absent fallback (session=spawn-handoff).
+assert_contains "conflict-lane handoff preserves the selection session=" "session=headless:c" \
+  "$(cat "$RES_DIR/tactic-c")"
+assert_contains "conflict-lane handoff preserves the selection issue=" "issue=tactic-c" \
+  "$(cat "$RES_DIR/tactic-c")"
 
 # A successful kick must also CLEAR a strike file left by earlier failed kicks:
 # the backstop's counter means "consecutive failures to launch the lane", which
 # is what its hold reason asserts.
 printf '%s\n' "3" > "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes"
-touch "$RES_DIR/tactic-c"
+printf 'session=headless:c\nissue=tactic-c\ntimestamp=2026-01-01T00:00:00Z\n' > "$RES_DIR/tactic-c"
 PROV_RC=11 run_exec "tactic-c:tactic:qa"
 assert_eq "conflict-lane stdout after prior strikes" "conflict-lane tactic-c" "$OUT"
 assert_eq "a successful kick resets the strike counter" "gone" \

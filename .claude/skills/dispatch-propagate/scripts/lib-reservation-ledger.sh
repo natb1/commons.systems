@@ -46,14 +46,22 @@
 #   <worktree-basename> in the ledger dir, with the three documented lines (plus
 #   an `origin=` line when the optional 4th argument is given — a bare
 #   [A-Za-z0-9_-] token; anything else prints a diagnostic and returns 1). The
-#   origin names the claim's writer so the sweep can bound its lifetime. Two
-#   origins are TTL-reclaimable (see reservation_sweep rule (c-ttl)) because
-#   neither has a guaranteed consumer:
+#   origin names the claim's writer so the sweep can bound its lifetime. Three
+#   origins are recognized. Two are TTL-reclaimable (see reservation_sweep rule
+#   (c-ttl)) because neither has a guaranteed consumer:
 #     `standalone` — a claim written by `graph-select-target --standalone`.
 #     `explicit`   — a claim written by `dispatch-select-tick`'s explicit
 #                    single-node lane (`dispatch <node-id>`), typically run from
 #                    inside a long-lived interactive session whose id stays live
 #                    for hours.
+#   The third is the spawn handoff:
+#     `spawned`    — a claim RE-STAMPED by reservation_mark_spawned at a
+#                    successful spawn kick. It is governed by sweep rule
+#                    (a-handoff) and DISPATCH_RESERVATION_HANDOFF_TTL_S — NOT by
+#                    the standalone TTL — and its intended release is an event:
+#                    rule (a) drops it the instant the spawned worker registers.
+#                    Callers write it via reservation_mark_spawned, not by
+#                    passing the token here.
 #   All
 #   three positional arguments are required and must be non-empty (an empty arg prints a
 #   diagnostic to stderr and returns 1, matching the arg-validation style of the
@@ -185,10 +193,17 @@
 #        past the grace → reserving session is DEAD and never converted; reclaim
 #        (stranded).
 #     d. else (reserving session alive, no live worker yet) → in-flight; KEEP.
-#   Reclaim = `reservation_clear <basename>` plus a one-line stderr note
-#   distinguishing the two reasons (live-worker-redundant vs dead-session-
-#   stranded), mirroring dispatch-sweep's reclaim-note style. `.tmp`/dot
-#   tempfiles are skipped.
+#   Reclaim = `reservation_clear <basename>` plus a one-line stderr note naming
+#   which of the four reasons fired, mirroring dispatch-sweep's reclaim-note
+#   style:
+#     `live-worker-redundant`  rule (a) — the worker registered.
+#     `spawn-handoff-expired`  rule (a-handoff) — an origin=spawned claim aged
+#                              past DISPATCH_RESERVATION_HANDOFF_TTL_S with no
+#                              live worker.
+#     `<origin>-ttl-expired`   rule (c-ttl) — a `standalone`/`explicit` claim
+#                              aged past DISPATCH_RESERVATION_STANDALONE_TTL_S.
+#     `dead-session-stranded`  rule (c) — the reserving session is dead.
+#   `.tmp`/dot tempfiles are skipped.
 #     return 0 — always (sweep completed, or fail-safe no-op on UNKNOWN /
 #               absent ledger).
 #

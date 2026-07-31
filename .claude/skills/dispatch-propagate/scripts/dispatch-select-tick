@@ -727,13 +727,19 @@ elif [[ -n "$MANUAL" ]]; then
   # dispatch-materialize-spawn's existing --gap N machinery (the highest rank level
   # is globally exhausted first; the `priority` label is the cap bypass, not an
   # ordering signal). LIVE_COUNT mirrors the
-  # autonomous block's effective-live count (busy workers + reservations); the
-  # manual path does NOT sweep the reservation ledger (a possibly-stale count
-  # can only make manual fan-out more conservative, which is safe).
+  # autonomous block's effective-live count (busy workers + reservations), and —
+  # like that block — it SWEEPS the ledger before counting. The sweep is
+  # load-bearing since the spawn handoff landed: a claim is no longer cleared at
+  # the spawn kick but re-stamped `origin=spawned` and held until the worker
+  # registers, so between registration and the next sweep the SAME node is both a
+  # busy worker and an outstanding reservation. Counting unswept would charge it
+  # twice and shrink manual fan-out for up to a full tick interval. Sweep rule (a)
+  # drops exactly those redundant markers.
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+  reservation_sweep 1>&2 || true
   if BUSY=$(claude_agents_count_busy_workers); then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
