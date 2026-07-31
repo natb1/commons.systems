@@ -96,13 +96,12 @@ attention:
     stop; a second, tighter (6s) recurrence confirmed it 2026-07-31. blocked_by
     is empty, so this promotion lifts no blocker and cannot compound. Finalized
     to phase: implement 2026-07-31 via /align-tactics."
-phase: qa
+phase: implement
 execution:
   branch: tactic-router-spawn-window-duplicate-worker
   pr: 2995
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
