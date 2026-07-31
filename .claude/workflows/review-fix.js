@@ -30,7 +30,8 @@
  *     deferred_filings:[{title, body, blocker_issue_nums:[N,...]|"independent"}],
  *     security_followup_input:[...codeql/npm out-of-scope subset...],
  *     verify_report:[{id, location, verdict, skeptic_votes, rationale}],
- *     deviation:bool, security_note?, coverage_incomplete:bool, coverage_note?:string }
+ *     deviation:bool, security_note?, coverage_incomplete:bool, coverage_note?:string,
+ *     instrument_failures:[{instrument, reason}] }
  *
  * NORMATIVE SPECS for the three inline kernel helpers below are the pure bash/jq
  * scripts (unit-tested by the per-SUT test-*.sh files sharing
@@ -185,8 +186,21 @@ const FIX_SCHEMA = {
 const LANE_A_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['fixed', 'residue'],
+  required: ['fixed', 'residue', 'instrument'],
   properties: {
+    // The instrument receipt: which named built-in this stage was required to
+    // invoke, whether it actually ran, and — when it did not — the verbatim
+    // failure text. Consumed by instrumentVerdict().
+    instrument: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['name', 'invoked', 'failure_text'],
+      properties: {
+        name: { type: 'string' },
+        invoked: { type: 'boolean' },
+        failure_text: { type: 'string' },
+      },
+    },
     fixed: {
       type: 'array',
       items: {
@@ -287,6 +301,96 @@ const RESIDUE_TREE_SCHEMA = {
 // fixed/residue envelope (LANE_A_SCHEMA) rather than findings for the shared
 // gather→classify→verify→fix pipeline.
 const LANE_A = new Set(['code-review', 'security-review']);
+
+// >>> instrument gate: sliced + eval'd by review-fix-instrument-probe.mjs >>>
+// Named instruments a finder is required to invoke — a stage that claims to run
+// a built-in under its own name must return a receipt proving it did. Without
+// this, a finder whose Skill(...) call is rejected can silently substitute its
+// own review and report the result under the built-in's name.
+const INSTRUMENTS = {
+  'code-review': {
+    label: '/code-review',
+    kind: 'skill',        // 'skill' → Skill tool; 'command' → Bash command
+    skill: 'code-review', // the Skill-tool `skill` argument to look for
+    edits_nothing: false, // runs with --fix, so it applies its own edits
+  },
+  'security-review': {
+    label: '/security-review',
+    kind: 'skill',
+    skill: 'security-review',
+    edits_nothing: true,  // no --fix flag; it is inherently findings-only
+  },
+};
+
+// Pure. Returns { ok, checked, reason }.
+//   checked:false  → the gate does not apply (no named instrument, or the
+//                    finder returned nothing at all — see the null note below).
+function instrumentVerdict(name, res) {
+  const spec = INSTRUMENTS[name];
+  // Lane-B lenses (cost, input-validation, red-team, …) are the agent's OWN
+  // work by design: they name no instrument, so the gate must not touch them.
+  if (!spec) return { ok: true, checked: false, reason: '' };
+  // LOAD-BEARING: a null/undefined finder result is the existing probe-wave
+  // throttle signal, which deliberately still applies dispatch:reviewed and
+  // writes the marker. A dead finder contributed no payload, so nothing is
+  // attributed to the instrument and there is nothing to guard. Turning this
+  // into a lane failure would park the node on every rate-limit.
+  if (res === null || res === undefined) return { ok: true, checked: false, reason: '' };
+
+  const receipt = res.instrument;
+  if (!receipt || typeof receipt !== 'object') {
+    return {
+      ok: false,
+      checked: true,
+      reason: `${name}: no instrument receipt returned (schema violation)`,
+    };
+  }
+  if (receipt.name !== spec.skill) {
+    return {
+      ok: false,
+      checked: true,
+      reason: `${name}: instrument receipt names "${receipt.name}" but this stage must invoke "${spec.skill}"`,
+    };
+  }
+  if (receipt.invoked !== true) {
+    const raw = (receipt.failure_text || '').trim().replace(/\s+/g, ' ');
+    const why = raw.length <= 300 ? raw : raw.slice(0, 300);
+    return {
+      ok: false,
+      checked: true,
+      reason: `${name}: instrument reported NOT invoked — ${why}`,
+    };
+  }
+
+  // Payload-signature rules. Be honest about what these buy: they raise the
+  // cost of a fabricated receipt (the fabrication must now also be internally
+  // consistent with what the real instrument's output looks like), they do NOT
+  // make one impossible. The non-fabricable evidence is the independent
+  // transcript verdict — a separate stage, not this function.
+  const fixed = res.fixed || [];
+  if (spec.edits_nothing === true && fixed.length > 0) {
+    return {
+      ok: false,
+      checked: true,
+      reason: `${name}: payload signature mismatch — this instrument applies no edits, but the payload reports ${fixed.length} fix(es)`,
+    };
+  }
+  if (spec.edits_nothing === false) {
+    // A real --fix run edits a file for every fix it reports.
+    for (const e of fixed) {
+      if (!e || !e.touched_files || e.touched_files.length === 0) {
+        return {
+          ok: false,
+          checked: true,
+          reason: `${name}: payload signature mismatch — a "fixed" entry reports no touched_files`,
+        };
+      }
+    }
+  }
+
+  return { ok: true, checked: true, reason: '' };
+}
+// <<< instrument gate <<<
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-finders
 // Returns the AGENT finder-source set (the codeql/npm finders are NOT agents —
@@ -417,7 +521,11 @@ const LANE_A_BLURB = [
   '- "category": the finding\'s category (code-review category or vulnerability class)',
   '- "exploit_scenario": the concrete attack scenario, or "" for a non-security finding',
   '- "recommended_fix": the concrete corrective action',
-  'Return { "fixed": [ ... ], "residue": [ ... ] }. Use [] for an empty array.',
+  'Also return an "instrument" object recording the built-in you were told to invoke:',
+  '- "name": the exact skill name you invoked (e.g. "code-review")',
+  '- "invoked": true only if the Skill tool actually ran that built-in and it returned',
+  '- "failure_text": "" when invoked is true; otherwise the VERBATIM error/rejection text',
+  'Return { "fixed": [ ... ], "residue": [ ... ], "instrument": { ... } }. Use [] for an empty array.',
 ].join('\n');
 
 function diffContext(args) {
@@ -609,16 +717,50 @@ const finderResults = qualityFinders
   .map((name, i) => ({ name, res: qualityResults[i] }))
   .concat(securityFinders.map((name, i) => ({ name, res: securityResults[i] })));
 
+// --- instrument gate ---------------------------------------------------------
+// A stage that claims to have run a named built-in must return a receipt proving
+// it did. A missing/false/inconsistent receipt means the named review did NOT
+// happen, so whatever the stage returned is its own unattributed work — it is
+// DISCARDED below rather than merged under the instrument's name.
+const instrumentFailures = []; // [{ instrument, reason }]
+const instrumentFailed = new Set();
+for (const { name, res } of finderResults) {
+  const v = instrumentVerdict(name, res);
+  if (v.ok) continue;
+  instrumentFailures.push({ instrument: name, reason: v.reason });
+  instrumentFailed.add(name);
+  log(`finders: INSTRUMENT GATE FAILED — ${v.reason}`);
+}
+if (instrumentFailures.length) {
+  coverage_incomplete = true;
+  const notes = instrumentFailures.map(
+    (f) =>
+      `Instrument not verified — ${f.reason}. Its output was DISCARDED, not merged under the instrument's name.`
+  );
+  // Preserve any note the throttle path already set.
+  coverage_note = [coverage_note, ...notes].filter(Boolean).join(' ');
+}
+
 // --- Lane-A capture (code-review, security-review) ---------------------------
 // These two finders bypass the shared dedup→classify→verify→fix pipeline. Capture
 // their raw { fixed, residue } results here, separately from the Lane-B gather, so
 // a LATER unit's "residue" phase can dispose of the residue and merge the fixes.
 // code-review is wave 1 (qualityFinders has exactly one entry when present).
-const codeReviewResult = qualityResults[qualityFinders.indexOf('code-review')] || null;
+// A failed instrument gate nulls the capture: the payload is never merged, never
+// dispositioned, never credited. Everything downstream (laneAFixed, laneAResidue,
+// the residue phase, fixed[], dispositions[], fixes_applied) already degrades
+// correctly from a null capture, so a discarded payload also contributes zero
+// yield — no token economy can be credited to an unverified instrument.
+const codeReviewResult = instrumentFailed.has('code-review')
+  ? null
+  : qualityResults[qualityFinders.indexOf('code-review')] || null;
 // security-review is a wave-2 finder (only launched when surface === 'code');
 // securityFinders and securityResults are parallel/same-index.
 const securityReviewIdx = securityFinders.indexOf('security-review');
-const securityReviewResult = securityReviewIdx >= 0 ? securityResults[securityReviewIdx] : null;
+const securityReviewResult =
+  instrumentFailed.has('security-review') || securityReviewIdx < 0
+    ? null
+    : securityResults[securityReviewIdx];
 
 // Seed fixed[] early with code-review's own applied fixes. Synthesize sequential
 // ids in array order. Unit 4 merges laneAFixed into the final fixed[] envelope;
@@ -1440,7 +1582,12 @@ const security_followup_input = deduped
 //     resolve — an ignore/defer/phantom-resolve leaves the item unresolved and escalates.
 // A high-severity original item with no returned disposition (agent dropped it) has no
 // map entry (!== true) and therefore also escalates.
+//
+// An unverified instrument escalates UNCONDITIONALLY — it is not severity-scaled,
+// because the failure is not "a finding went unfixed" but "the named review did
+// not happen at all". No severity can be read off a review that never ran.
 const deviation =
+  instrumentFailures.length > 0 ||
   keptFindings.some(
     (f) =>
       f.bucket === 'Required' &&
@@ -1548,6 +1695,10 @@ return {
   // likely throttled), surfaced in the Step 6 partial-coverage comment line.
   coverage_incomplete,
   coverage_note,
+  // One entry per stage whose named-instrument receipt failed verification. A
+  // non-empty array means that stage's payload was discarded and `deviation` is
+  // true regardless of finding severity.
+  instrument_failures: instrumentFailures,
   findings_surfaced,
   findings_actionable,
   fixes_applied,
