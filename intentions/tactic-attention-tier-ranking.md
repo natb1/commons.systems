@@ -38,11 +38,125 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-phase: implement
-execution: null
+  tier: 1
+phase: qa
+execution:
+  branch: tactic-attention-tier-ranking
+  pr: 2997
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA needs a human — design decision (b) (cross-tier-namespace
+    unfiltered authored-claim summation) is an author-flagged policy choice the
+    gated fix-planner refused to resolve (scope-deviation: 'Residue 7 is an
+    author-flagged policy choice (unfiltered vs. same-tier-namespace-filtered
+    inheritance of authored claims) that only the human reviewer can ratify or
+    overturn — the issue authorizes neither outcome, so no autonomous unit can
+    fix it.'); escalating to office-hours"
+  since: 2026-07-31
+  recommendation: >-
+    ## Recommendation — PR #2997 (`tactic-attention-tier-ranking`)
+
+
+    ### 1. The one decision
+
+
+    The plan's flagged design decision **(b)**: when a node inherits authored
+    attention claims down `parent`/`serves` edges from ancestors whose boost was
+    authored in a *different* tier namespace, do those claims —
+
+
+    - **(A) keep summing unfiltered** (what's shipped), or
+
+    - **(B) get filtered to only same-tier-namespace sources** before summing?
+
+
+    That's the whole call. Nothing else in the PR is open.
+
+
+    Context that should make it fast: tier inherits downward along the *same*
+    edges the authored flow uses and is max-based, so a receiver's effective
+    tier is always `>=` every source's namespace tier. A tier-1-scale number can
+    therefore only ever reorder nodes that are *already all inside* the same
+    higher tier — it can never lift a node across a tier boundary. The residual
+    risk is intra-tier miscalibration, not tier inversion. QA confirmed zero
+    tier-inversions across 186 real candidates in the live store.
+
+
+    The real question behind it is which philosophy you want on record going
+    forward: **"tier is an isolation boundary"** (→ B) vs **"authored authority
+    flows globally, tier only orders"** (→ A). Answer that and the code follows.
+
+
+    ### 2. If you ratify as-is (A)
+
+
+    Nothing to change. Clear the office-hours park on
+    `tactic-attention-tier-ranking`; the chain advances `qa → review`.
+    Optionally record the ratification as a one-line `rationale` addition on the
+    node so the fork isn't re-litigated later — but that is not required to
+    merge.
+
+
+    ### 3. If you flip to the rival (B)
+
+
+    One place to edit, in the compose step of `resolveAttention`:
+
+
+    - `packages/intentionsutil/src/attention.ts:507-511` — the sum loop `for
+    (const amt of authoredOut.values()) authoredValue += amt;` and the `sources`
+    array built from the same `authoredOut` map. Filter both by the source
+    node's `attention.tier` (default 1) against the receiver's `tier` resolved
+    at `:513`. **Filter both, not just the sum** — if you drop a source from the
+    total but leave it in `sources`, the `sources`/`terms` breakdown reports a
+    contributor that contributed nothing, which is precisely the opacity the
+    plan objected to. Effectively a 2-line change, not 1.
+
+
+    Tests to update, in `packages/intentionsutil/test/attention.test.ts`:
+
+
+    - `describe("resolveAttention tier axis")` at `:571-657` — currently has
+    **no** case pinning cross-tier authored inheritance. Add one (tier-1-boosted
+    ancestor → tier-3 receiver, expect the boost excluded from `value` and
+    absent from `sources`).
+
+    - Watch the `boost()` helper at `:52` — it defaults `tier = 1`. Every
+    existing fixture boost is tier 1, so any existing case that flows a boost
+    into a tier-marked node would start resolving to a *different* value under
+    (B). Re-run the whole file and read the diff in expected values rather than
+    assuming only the new case moves.
+
+    - Also re-run `validate-graph` against the live `intentions/` store:
+    `graph-fast-path.yml` runs it, but PR unit-test CI does **not**, so a rank
+    change in the live store won't surface from `unit-tests.yml` alone.
+
+
+    Because the change is this small and localized, flipping *after* merge is
+    cheap. If you're leaning B but not certain, merging as-is and filing the
+    flip as a follow-up tactic is a legitimate answer — it does not compound.
+
+
+    ### 4. This is the only blocker
+
+
+    Everything else was independently re-verified by QA against the live 400+
+    node store, not just unit tests: `validate-graph` clean; both migration node
+    edits (`intentions/strategy-main-health.md`,
+    `intentions/strategy-graph-native-dispatch.md`) present and correct; all 5
+    live bug_fix/security nodes resolve tier 2 and sort ahead of every tier-1
+    node in real selector output; zero tier-inversions across 186 candidates;
+    frontier render correct. No QA failure, no code defect. The park exists
+    solely because the autonomous fix-planner (correctly) refused to pick a
+    product philosophy on your behalf.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

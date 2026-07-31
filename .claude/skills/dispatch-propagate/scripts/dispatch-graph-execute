@@ -42,11 +42,16 @@
 #          `<skill> <id>`. Mechanical provision dispositions are handled here at
 #          zero token cost (no `claude` session), mirroring
 #          dispatch-launch-worker.
-#   4. Clears the node's reservation-ledger marker on a successful kick — the
-#      live node-id-named session carries the claim from there (mirrors
-#      dispatch-launch-worker's release-on-resolve). On a failed kick the marker
-#      is LEFT for the sweep, so the budget still counts the slot until
-#      reconciliation.
+#   4. Hands off (does not drop) the node's reservation-ledger marker on a
+#      successful kick: it is re-stamped `origin=spawned` with a fresh
+#      timestamp (reservation_mark_spawned) instead of cleared outright, so the
+#      claim survives the boot window before the worker's own live session
+#      registers. It is released by reservation_sweep rule (a) once that
+#      session registers, or by the handoff TTL if it never does. The
+#      stale-selection (exit 12) and scope-stale (exit 13) dispositions still
+#      clear the marker outright — no spawn happened there. On a failed kick
+#      the marker is still LEFT for the sweep, so the budget still counts the
+#      slot until reconciliation.
 #
 # Usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]
 #
@@ -141,6 +146,20 @@ CONFLICT_STRIKE_CAP=5
 
 FAILURES=0
 
+# hand_off_reservation <id> — the spawn handoff, at every successful-kick site.
+# Non-fatal by design: the worker is already launched, so failing the kick here
+# would be worse than the degradation. But the degradation is NOT silent — if the
+# re-stamp fails (unwritable ledger dir, failed mv), the OLD marker survives with
+# its selection-time origin, so reservation_sweep falls back to the pre-handoff
+# lifecycle and reclaims it as dead-session-stranded once the 30s boot grace
+# lapses. That is exactly the duplicate-worker window this handoff exists to
+# close, so name the consequence on stderr where a log grep can find it.
+hand_off_reservation() {
+  local node_id="$1"
+  reservation_mark_spawned "$node_id" || \
+    echo "dispatch-graph-execute: WARNING: spawn handoff re-stamp failed for $node_id; the claim reverts to the pre-handoff sweep lifecycle and the boot-window duplicate-worker guard is OFF for this node" >&2
+}
+
 for spec in "$@"; do
   IFS=: read -r id kind phase <<<"$spec"
   if [[ -z "$id" || -z "$kind" || -z "$phase" ]]; then
@@ -190,7 +209,9 @@ for spec in "$@"; do
     if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
         --cwd "$PROJECT_ROOT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
         "$SKILL $id" 1>&2; then
-      reservation_clear "$id" || true
+      # Hold the claim through the boot window; reservation_sweep rule (a)
+      # releases it once the worker registers.
+      hand_off_reservation "$id"
       echo "launched $id $SKILL"
     else
       echo "failed $id spawn-failed"
@@ -215,7 +236,9 @@ for spec in "$@"; do
       if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
           --cwd "$WT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
           "$SKILL $id" 1>&2; then
-        reservation_clear "$id" || true
+        # Hold the claim through the boot window; reservation_sweep rule (a)
+        # releases it once the worker registers.
+        hand_off_reservation "$id"
         echo "launched $id $SKILL"
       else
         # Leave the reservation for the sweep — the budget keeps counting the
@@ -299,7 +322,9 @@ for spec in "$@"; do
           --cwd "$PROJECT_ROOT" --model "$ORCH_MODEL" \
           "/dispatch-conflict $id" 1>&2; then
         rm -f "$STRIKE_FILE"
-        reservation_clear "$id" || true
+        # Hold the claim through the boot window; reservation_sweep rule (a)
+        # releases it once the worker registers.
+        hand_off_reservation "$id"
         echo "conflict-lane $id"
         continue
       fi
