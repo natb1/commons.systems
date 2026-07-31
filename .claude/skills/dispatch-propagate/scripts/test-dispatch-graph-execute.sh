@@ -8,7 +8,8 @@
 # (0/10/11/12/13/2) — routed here at zero token cost with no `claude` session on
 # any non-zero path.
 #
-# Harness (mirrors test-dispatch-scripts.sh): copy the SUT + its sourced libs
+# Harness (mirrors the per-SUT test-*.sh files sharing dispatch-test-fixture.sh):
+# copy the SUT + its sourced libs
 # into a tmp dir and drop stub SIBLINGS so `"$SCRIPT_DIR/<name>"` resolves to
 # them (provision-node-worktree, dispatch-spawn-job, dispatch-phase-effort). The
 # package primitives park-node / demote-node-to-implement resolve from the

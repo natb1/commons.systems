@@ -22,7 +22,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-dispatch-test-monolith-split
   pr: 2971
@@ -30,9 +30,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T00:45:40Z
+    mergeCommitSha: 58e5bc3476ef11e0b628a4bb788198eb4e89bf29
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

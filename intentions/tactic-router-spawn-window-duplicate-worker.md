@@ -183,3 +183,66 @@ leave the worktree to the survivor.
 - `tactic-stopped-session-blocks-node` — the same lifecycle defect at the other
   end: the claim released too early at session **end**. This one is released too
   early at spawn **start**.
+
+## Second occurrence, 2026-07-30T23:57Z — the spawn window does NOT explain it
+
+A second duplicate fired on `tactic-dispatch-test-monolith-split` (review lane,
+`/review-fix`). It was detected by a fleet-health watcher, corroborated on all
+three fingerprint elements, and contained per the runbook (`claude stop` the
+newer session; **never** `claude rm` — both shared one worktree).
+
+| time (UTC) | tick pid | event |
+|---|---|---|
+| 23:44:10 | 3885947 | selected the node |
+| 23:44:14 | — | session `1945e7fe` created, cwd = the node's worktree |
+| 23:44:16 | 3885947 | `launched tactic-dispatch-test-monolith-split /review-fix` |
+| 23:57:46 | 3888935 | **selected the same node again** |
+| 23:57:49 | — | session `24fef132` created, **same worktree** |
+| 23:57:52 | 3888935 | `launched … /review-fix` (second worker) |
+
+**The two launches are 814 seconds apart — 13m34s.** That is the finding.
+
+The mechanism recorded above is a *boot-latency* window: the reservation marker
+is cleared at spawn, and the spawned session is not yet observable in
+`claude agents` under its node-id name, so for a brief interval the node is
+covered by neither guard. **A 13m34s interval cannot be a boot window.** Session
+`1945e7fe` was created at 23:44:14 and was still `state: working` with
+`cwd` set to that worktree when checked at 23:59:44 — continuously present for
+the entire gap.
+
+Worse, the live-session machinery demonstrably ran and returned *not live* for
+this node specifically. The 23:57:46 selection record skipped two other nodes
+for `live-session` in the very same decision while omitting this one:
+
+```
+{"ts":"2026-07-30T23:57:46Z",
+ "selected":["tactic-dispatch-test-monolith-split","tactic-graph-commit-noop-landing-false-failure"],
+ "skipped":[{"id":"tactic-graph-commit-intentions-base-stale-restore","reason":"live-session"},
+            {"id":"tactic-scope-fingerprint-plan-substance","reason":"live-session"}]}
+```
+
+`tmp/dispatch-reservations/` was empty, as in the first occurrence.
+
+**Consequence for this node's scope — read before planning.** The fix sketched
+above (hold the reservation past spawn until the spawned session is observable
+under its node id, then release) would **not** have prevented this occurrence.
+The handoff it protects had completed thirteen minutes earlier. Closing only the
+spawn window leaves this failure mode fully open.
+
+So the "adjacent but distinct" note above is now **partly wrong on the
+evidence**: it asserts "here the read is correct; the session has genuinely not
+registered yet." That held for the 16:08/16:10 occurrence (90s apart). It does
+not hold here. This occurrence is consistent with the mechanism
+`tactic-graph-router-live-worker-read-robust` names — a false-negative live
+read — or with a third, still-unidentified defect in how
+`worktree_has_live_session` resolves a session to a node.
+
+**Still do not merge the two nodes.** There are now two demonstrated windows and
+they need two fixes; collapsing them would let one hide behind the other. What
+this evidence does change: the spawn-window fix must not be treated as closing
+the duplicate-worker problem, and a duplicate observed after that fix lands is
+**not** proof the fix regressed.
+
+Open question for the planner, deliberately not answered here: why did the
+live-session check succeed for two sibling nodes and fail for this one in the
+same decision? Answer that before scoping either fix.
