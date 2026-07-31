@@ -87,7 +87,55 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: |-
+    Corrected re-park (bug J instance): the original park was authored by the
+    /qa-main pass on this node but never landed — built from the PR-branch
+    worktree (violates I1), stranded as a marker at
+    /home/n8/.claude/jobs/4a1c8fc8/office-hours-reason, session terminal (0/8
+    Stop-hook-backstop track record).
+
+    The original REASON text is also a bug-L misroute: it cites "not
+    browser-verifiable, so Step 4.0's triage routes to cannot-verify" — that
+    predicate is exactly what ruling 7 already rejects (a git/journal/log/shell
+    check no browser can perform is MACHINE-verifiable, not author-required
+    merely for lacking a browser target).
+
+    The real reason to defer is different: the feature these 4 items validate
+    (the tick-owned terminal-disposition sweep, commit c06c7295 "Replace
+    Stop-hook escalation-park backstop with a tick-owned terminal-disposition
+    sweep") merged at 2026-07-31 16:15:43 EDT (PR #3004) -- under two hours
+    before this re-park, and well under the "day-plus of live ticks (both
+    paused and normal cadences)" window the node's own recommendation below
+    requires before design-2 through design-5 can be judged against real
+    production volume.
+
+    Early readings as of 2026-07-31 21:35Z, taken via the exact machine checks
+    the recommendation specifies, are already clean and show no violation:
+    - 4/4 "terminal-disposition sweep complete" lines since the feature merged
+      read terminal=0 parked=0 observing=0 unmeasurable=0 deferred=0 (no spike,
+      no growing backlog).
+    - 0 occurrences of "daemon unqueryable; parking nothing" (design-4).
+    - 0 node ids recurring in "will retry next tick" (design-5).
+    - 1 terminal node currently registered under the sweep's own candidate
+      query -- this session itself, the very occurrence that produced this
+      park.
+    None of the four items are failing; there simply is not yet a day-plus of
+    production history to confirm against. Re-run the checks below once that
+    window has elapsed.
+  since: 2026-07-31
+  recommendation: |-
+    This is a fleet-observation check, not a page to load — a human (or a future scripted check) should read the dispatch-tick journal over a day-plus of live ticks (both the paused and normal cadences) and confirm:
+
+    1. **design-2 (grace=300s, park-cap=3 defaults):** `lib-frozen-session-park: terminal-disposition sweep complete (terminal=... parked=... observing=... unmeasurable=... deferred=...)` summary lines never show a spike of `parked` (too aggressive) or a growing backlog of `observing`/`deferred` that never clears (too slow) relative to the fleet's actual terminal-worker volume.
+    2. **design-3 (unmeasurable-keep):** the `unmeasurable=` count in those same summary lines stays near zero over time — a persistently nonzero count means terminal workers are losing their transcripts, which needs its own investigation, not a park-cap change.
+    3. **design-4 (daemon-UNKNOWN):** grep the journal for "daemon unqueryable; parking nothing" — if it ever appears for more than one or two consecutive ticks, that's a real daemon outage silently disabling the sweep; escalate rather than treat it as routine.
+    4. **design-5 (retry-forever):** grep the journal for "park failed for <name> ... will retry next tick" and confirm no single node id recurs there indefinitely — a node stuck retrying-and-failing across many ticks is itself the residue to act on (likely a park-node CAS or write failure worth debugging directly).
+
+    Cross-check node counts against `claude agents --json --all | jq '[.[] | select(.name | test("^tactic-|^strategy-")) | select(((.state // .status) // "") | IN("done","stopped","killed","failed","errored","error","cancelled","canceled","terminated"))] | length'` per the node body's own manual-check §1.
+
+    Once satisfied the defaults and fail-safes are holding up in production, `clear-park tactic-phase-terminal-requires-disposition` to let the node proceed to `done`.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
