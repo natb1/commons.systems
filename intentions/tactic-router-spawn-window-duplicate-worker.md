@@ -246,3 +246,67 @@ the duplicate-worker problem, and a duplicate observed after that fix lands is
 Open question for the planner, deliberately not answered here: why did the
 live-session check succeed for two sibling nodes and fail for this one in the
 same decision? Answer that before scoping either fix.
+
+## Third occurrence, 2026-07-31T01:03Z — the spawn window again, at 6 seconds
+
+A third duplicate fired on `tactic-graph-commit-noop-landing-false-failure`
+(`fix` lane, `/fix-checks`). Unlike occurrence 2, this one **is** the documented
+spawn window — and it is the tightest yet observed.
+
+Corroborated on two independent sources.
+
+**`graph-selection.jsonl` — the same node selected twice, six seconds apart:**
+
+```
+{"ts":"2026-07-31T01:03:52Z","selected":["tactic-graph-commit-noop-landing-false-failure","tactic-graph-commit-rebuild-snapshot-stale-revert"],
+ "skipped":[{"id":"tactic-graph-commit-intentions-base-stale-restore","reason":"live-session"},
+            {"id":"tactic-scope-fingerprint-plan-substance","reason":"live-session"}]}
+{"ts":"2026-07-31T01:03:58Z","selected":["tactic-graph-commit-noop-landing-false-failure"],
+ "skipped":[{"id":"tactic-graph-commit-intentions-base-stale-restore","reason":"live-session"},
+            {"id":"tactic-scope-fingerprint-plan-substance","reason":"live-session"}]}
+```
+
+Note the fingerprint holds exactly: **both** records skip two *sibling* nodes for
+`live-session` while the duplicated node is absent from `skipped` in both. The
+live-session read was working correctly in the very same decision — it simply had
+nothing to see yet, which is the spawn window and not a read defect.
+
+**The journal — two `launched` lines from two different tick pids:**
+
+```
+Jul 30 21:04:01 nixos dispatch-tick[261259]: launched tactic-graph-commit-noop-landing-false-failure /fix-checks
+Jul 30 21:04:15 nixos dispatch-tick[251964]: launched tactic-graph-commit-noop-landing-false-failure /fix-checks
+```
+
+(Local time; `21:04` EDT = `01:04Z`.) Two distinct tick processes, 14 seconds
+apart, both launching `/fix-checks` into the same worktree.
+
+### What the three occurrences now establish
+
+| # | when | node | gap | mechanism |
+|---|---|---|---|---|
+| 1 | 07-30 16:08→16:10 | `graph-commit-intentions-base-stale-restore` | 90 s | spawn window |
+| 2 | 07-30 23:44→23:57 | `dispatch-test-monolith-split` | 814 s | **not** a spawn window |
+| 3 | 07-31 01:03:52→01:03:58 | `graph-commit-noop-landing-false-failure` | **6 s** | spawn window |
+
+Occurrences 1 and 3 are the documented reservation/spawn overlap and the scope
+sketch above would have prevented both. **Occurrence 2 it would not have
+prevented.** The two-mechanism split stands, and the six-second gap in
+occurrence 3 sharpens the first mechanism rather than changing it: the window is
+not a long boot latency to be waited out, it is a genuine coverage hole that two
+ticks can both fall into within seconds.
+
+### Rate, and why triage itself provokes it
+
+All three duplicates appeared within **~10 minutes of a node being released and
+re-selected**. Every reap is a spawn event, so **triage sweeps themselves provoke
+this defect** — which is a direct argument against "just reap and respawn" as a
+remedy for any of the held-node findings.
+
+### Aftermath is a separate node
+
+What happens *after* a duplicate — the loser stands down, then the winner dies
+before pushing, and the loser waits forever on a dead session — is
+`tactic-standdown-winner-liveness`, filed 2026-07-31. It is this node's
+consequence, not its duplicate, and every duplicate this node permits is a
+potential permanent freeze there.

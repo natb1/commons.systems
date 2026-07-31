@@ -121,27 +121,35 @@
 #      naming "mis-pointed -C/--repo", never reaches "landed", main untouched
 #  35. --expect on a --prune id is a usage error (exit 2, origin untouched) —
 #      a deletion has no content to assert
-#  36. duplicate green rows land: a SHA re-stamped by several pushes carries
+#  36. a rebase ALREADY in progress in the target checkout: refused up front
+#      (non-zero exit naming "already in progress"), main untouched, zero gh
+#      calls — graph-commit never runs on a mid-operation worktree, so a
+#      caller's own stopped rebase is never aborted by case 37's cleanup
+#  37. a rebase THIS run stranded (a die() fires while the pull --rebase
+#      conflict is still live) is aborted by cleanup(): no rebase state dir
+#      survives, HEAD is reattached to the branch, and the checkout's local
+#      commits are intact
+#  38. duplicate green rows land: a SHA re-stamped by several pushes carries
 #      TWO completed/success rows per required name (plus an unrelated CodeQL
 #      row). The gate counts DISTINCT required contexts resolved to their
 #      newest run, not rows, so this lands (exit 0) instead of spinning to
 #      the busy-main timeout a row-count `== 4` gate could never satisfy
-#  37. duplicated rows do not paper over a missing context: four rows but only
+#  39. duplicated rows do not paper over a missing context: four rows but only
 #      three distinct required names green (two lint successes, no acceptance
 #      row at all) — exit 1, nothing lands on main, and the reported state
 #      names "acceptance=absent" (the regression guard against relaxing the
 #      gate to `-ge 4`)
-#  38. a stale failed row superseded by a newer success lands: acceptance has
+#  40. a stale failed row superseded by a newer success lands: acceptance has
 #      an older conclusion=failure row and a newer conclusion=success row, so
 #      max_by([started_at, id]) resolves it green — exit 0, no "concluded
 #      non-success" misdiagnosis
-#  39. no-op short-circuit exits 0 even when checks are unusable: a clone
+#  41. no-op short-circuit exits 0 even when checks are unusable: a clone
 #      synced exactly to origin/main's tip, invoked on an existing id with
 #      nothing edited, while gh is in hard-fail mode (every call exits 1) —
 #      still exits 0 with zero gh polls and no "polling failed", proving the
 #      no-op path never reaches the poller
 #      (tactic-graph-commit-noop-landing-false-failure, Defect 1)
-#  40. lock-wait exhaustion is diagnosed as lock contention, not as a check
+#  42. lock-wait exhaustion is diagnosed as lock contention, not as a check
 #      state: a foreign lock with a far-future expiry blocks the writer, which
 #      exits after zero gh polls — the terminal message names the landing lock
 #      as the cause and states that the required-check state was never
@@ -206,6 +214,7 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
           t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
           t-expect-happy t-expect-wrong-repo t-expect-prune \
+          t-preexist-conflict t-preexist-rebase t-strand-other t-strand-main \
           t-dup-rows t-partial-dup t-stale-fail; do
   seed_node "$id"
 done
@@ -1369,12 +1378,93 @@ else
   no "--expect on a prune id (rc=$rc)"; printf '%s\n' "$out"
 fi
 
-# --- Case 36: duplicate green rows still land --------------------------------
+# --- Case 36: a pre-existing rebase is refused up front -------------------------
+# graph-commit must not run on a mid-operation worktree. The refusal runs before
+# the EXIT trap is installed, precisely so this caller-owned rebase survives the
+# refusal untouched (case 37's cleanup abort would otherwise destroy it).
+set_mode green
+W36="$WORK/w36"; make_clone "$W36" writer-36
+sync_clone "$W36"
+OTHER36="$WORK/other36"; make_clone "$OTHER36" other36
+sync_clone "$OTHER36"
+edit_line "$OTHER36" t-preexist-conflict 1 landed-remote
+git -C "$OTHER36" commit -qam 'concurrent edit lands on origin (case 36 fixture)'
+git -C "$OTHER36" push -q origin main
+# W36 is now stale: give it a conflicting local commit and start the rebase that
+# stops on it, leaving a live rebase state dir and a detached HEAD.
+edit_line "$W36" t-preexist-conflict 1 local-side
+git -C "$W36" commit -qam 'local conflicting commit (case 36 fixture)'
+git -C "$W36" fetch -q origin main
+git -C "$W36" rebase FETCH_HEAD >/dev/null 2>&1
+rebase_started=0
+[[ -d "$W36/.git/rebase-merge" || -d "$W36/.git/rebase-apply" ]] && rebase_started=1
+# An unrelated node edit, so the invocation would otherwise be a normal landing.
+edit_line "$W36" t-preexist-rebase 1 should-never-land
+set_mode green   # resets the gh call log
+before_sha="$(origin_sha)"
+out="$(run_gc "$W36" -m 'test: pre-existing rebase' t-preexist-rebase 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ "$rebase_started" -eq 1 && $rc -ne 0 ]] \
+   && grep -q 'a rebase is already in progress' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]] \
+   && [[ "$(gh_calls)" -eq 0 ]]; then
+  ok "pre-existing rebase: refused up front, main untouched, zero gh calls"
+else
+  no "pre-existing rebase refusal (rebase_started=$rebase_started rc=$rc gh_calls=$(gh_calls))"; printf '%s\n' "$out"
+fi
+# The caller's rebase must still be there — the refusal aborts nothing.
+if [[ -d "$W36/.git/rebase-merge" || -d "$W36/.git/rebase-apply" ]]; then
+  ok "pre-existing rebase: the caller's own rebase is left in progress, not aborted"
+else
+  no "pre-existing rebase: the caller's rebase was destroyed by the refusal"
+fi
+git -C "$W36" rebase --abort >/dev/null 2>&1
+
+# --- Case 37: a rebase this run stranded is aborted by cleanup() ----------------
+# End-to-end (not the sourced-function fallback): the run is driven down a real
+# die() that fires while `git pull --rebase origin main`'s conflict is still
+# live. The lever is try_layer2_resolve()'s broken-staging-invariant die — an
+# EXTRA local commit touching a DIFFERENT node id conflicts on the rebase, and
+# that conflicted path is outside this invocation's node set, so layer 2 dies
+# instead of reaching its own explicit `git rebase --abort`. Only cleanup() can
+# clear the rebase on this path. (The extra commit is intentions/-only, so
+# ensure_intentions_only_base() leaves the worktree alone and the commit
+# survives to be replayed.)
+set_mode green
+W37="$WORK/w37"; make_clone "$W37" writer-37
+sync_clone "$W37"
+OTHER37="$WORK/other37"; make_clone "$OTHER37" other37
+sync_clone "$OTHER37"
+edit_line "$OTHER37" t-strand-other 1 landed-remote
+git -C "$OTHER37" commit -qam 'concurrent edit lands on origin (case 37 fixture)'
+git -C "$OTHER37" push -q origin main
+edit_line "$W37" t-strand-other 1 local-strand
+git -C "$W37" commit -qam 'local conflicting commit on an out-of-set node (case 37 fixture)'
+edit_line "$W37" t-strand-main 1 strand-edit   # the node actually passed to graph-commit
+before_sha="$(origin_sha)"
+out="$(run_gc "$W37" -m 'test: stranded rebase' t-strand-main 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -ne 0 ]] \
+   && grep -q 'unexpected conflicted path' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "stranded rebase: the run dies mid-rebase on the broken-staging-invariant path"
+else
+  no "stranded rebase setup (rc=$rc)"; printf '%s\n' "$out"
+fi
+if [[ ! -d "$W37/.git/rebase-merge" && ! -d "$W37/.git/rebase-apply" ]] \
+   && [[ "$(git -C "$W37" symbolic-ref -q HEAD)" == "refs/heads/main" ]] \
+   && git -C "$W37" show HEAD:intentions/t-strand-other.md | grep -q 'line1: local-strand'; then
+  ok "stranded rebase: cleanup() aborted it — no state dir, HEAD reattached, local commits intact"
+else
+  no "stranded rebase not aborted by cleanup (HEAD=$(git -C "$W37" symbolic-ref -q HEAD))"; printf '%s\n' "$out"
+fi
+
+# --- Case 38: duplicate green rows still land --------------------------------
 set_mode duplicate-rows
-W36="$WORK/w36"
-make_clone "$W36" writer-36
-edit_line "$W36" t-dup-rows 1 dup-rows-land
-out="$(run_gc "$W36" -m 'test: duplicate rows' t-dup-rows 2>&1)"; rc=$?
+W38="$WORK/w38"
+make_clone "$W38" writer-38
+edit_line "$W38" t-dup-rows 1 dup-rows-land
+out="$(run_gc "$W38" -m 'test: duplicate rows' t-dup-rows 2>&1)"; rc=$?
 if [[ $rc -eq 0 ]] && origin_show t-dup-rows | grep -q 'line1: dup-rows-land' \
    && ! grep -q 'retry later' <<<"$out"; then
   ok "duplicate green rows per required name still land (distinct-context gate)"
@@ -1382,27 +1472,27 @@ else
   no "duplicate green rows (rc=$rc)"; printf '%s\n' "$out"
 fi
 
-# --- Case 37: duplicated rows do not paper over a missing context ------------
+# --- Case 39: duplicated rows do not paper over a missing context ------------
 set_mode partial-duplicate
-W37="$WORK/w37"
-make_clone "$W37" writer-37
-edit_line "$W37" t-partial-dup 1 must-not-land
+W39="$WORK/w39"
+make_clone "$W39" writer-39
+edit_line "$W39" t-partial-dup 1 must-not-land
 before="$(origin_sha)"
-out="$(export GC_POLL=0 GC_TIMEOUT=1 GC_ATTEMPTS=1; run_gc "$W37" -m 'test: partial dup' t-partial-dup 2>&1)"; rc=$?
+out="$(export GC_POLL=0 GC_TIMEOUT=1 GC_ATTEMPTS=1; run_gc "$W39" -m 'test: partial dup' t-partial-dup 2>&1)"; rc=$?
 if [[ $rc -eq 1 && "$(origin_sha)" == "$before" ]] \
    && grep -q 'acceptance=absent' <<<"$out"; then
   ok "duplicated rows do not satisfy the gate when a required context is absent"
 else
   no "partial-duplicate gate (rc=$rc)"; printf '%s\n' "$out"
 fi
-sync_clone "$W37"   # drop the never-landed local commit
+sync_clone "$W39"   # drop the never-landed local commit
 
-# --- Case 38: a stale failed row superseded by a newer success lands ---------
+# --- Case 40: a stale failed row superseded by a newer success lands ---------
 set_mode stale-fail-then-green
-W38="$WORK/w38"
-make_clone "$W38" writer-38
-edit_line "$W38" t-stale-fail 1 newest-run-wins
-out="$(run_gc "$W38" -m 'test: stale fail then green' t-stale-fail 2>&1)"; rc=$?
+W40="$WORK/w40"
+make_clone "$W40" writer-40
+edit_line "$W40" t-stale-fail 1 newest-run-wins
+out="$(run_gc "$W40" -m 'test: stale fail then green' t-stale-fail 2>&1)"; rc=$?
 if [[ $rc -eq 0 ]] && origin_show t-stale-fail | grep -q 'line1: newest-run-wins' \
    && ! grep -q 'concluded non-success' <<<"$out"; then
   ok "stale failed row superseded by a newer success lands (newest run per name)"
@@ -1410,17 +1500,17 @@ else
   no "stale-fail-then-green (rc=$rc)"; printf '%s\n' "$out"
 fi
 
-# --- Case 39: no-op short-circuit exits 0 even when checks are unusable ------
+# --- Case 41: no-op short-circuit exits 0 even when checks are unusable ------
 # A clone synced exactly to origin/main's tip, invoked on an existing id with
 # nothing edited, while gh is in hard-fail mode (every call exits 1). If the
 # no-op guard did not short-circuit before the poller, this would die with
 # "polling failed" instead of landing (a genuine no-op) cleanly.
 set_mode hard-fail
-W39="$WORK/w39"
-make_clone "$W39" writer-39
-sync_clone "$W39"   # now bit-for-bit at origin/main's tip
+W41="$WORK/w41"
+make_clone "$W41" writer-41
+sync_clone "$W41"   # now bit-for-bit at origin/main's tip
 before_sha="$(origin_sha)"
-out="$(run_gc "$W39" t-happy 2>&1)"; rc=$?
+out="$(run_gc "$W41" t-happy 2>&1)"; rc=$?
 after_sha="$(origin_sha)"
 calls="$(gh_calls)"
 if [[ $rc -eq 0 ]] \
@@ -1432,7 +1522,7 @@ else
   no "no-op short-circuit under hard-fail (rc=$rc gh_calls=$calls)"; printf '%s\n' "$out"
 fi
 
-# --- Case 40: lock-wait exhaustion names the lock, not a check observation ---
+# --- Case 42: lock-wait exhaustion names the lock, not a check observation ---
 # A foreign lock with a far-future expiry is never stolen, so the writer exits
 # the attempt loop having made ZERO check-run polls. The terminal message must
 # then name the landing lock as the cause and state plainly that no check state
@@ -1442,11 +1532,11 @@ fi
 set_mode green
 blocking_expiry=$(( $(date +%s) + 3600 ))
 plant_lock "$blocking_expiry" blocking-holder-test
-W40="$WORK/w40"
-make_clone "$W40" writer-40
-edit_line "$W40" t-lock-wait 5 must-not-land
+W42="$WORK/w42"
+make_clone "$W42" writer-42
+edit_line "$W42" t-lock-wait 5 must-not-land
 before="$(origin_sha)"
-out="$(export GC_LOCK_POLL=1 GC_LOCK_WAIT=1 GC_ATTEMPTS=1; run_gc "$W40" -m 'test: lock wait exhausted' t-lock-wait 2>&1)"; rc=$?
+out="$(export GC_LOCK_POLL=1 GC_LOCK_WAIT=1 GC_ATTEMPTS=1; run_gc "$W42" -m 'test: lock wait exhausted' t-lock-wait 2>&1)"; rc=$?
 calls="$(gh_calls)"
 if [[ $rc -eq 1 && "$(origin_sha)" == "$before" && "$calls" -eq 0 ]] \
    && grep -q 'could not land on main after 1/1 attempts' <<<"$out" \

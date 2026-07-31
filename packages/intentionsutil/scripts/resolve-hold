@@ -75,10 +75,14 @@
 # `blocked_by` still names the hold is rejected by validate-graph, so prune
 # ordering is a separate concern (the owed-prune census), not this script's.
 #
-# Usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap>]
+# Usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap|worktree-residue>]
 #
 # --kind defaults to `provision-conflict` (the Lane-3 case). It selects which
 #   hold id is resolved, since a source can in principle carry one hold per kind.
+#   The list must stay in sync with hold-node-decide.ts's HOLD_KINDS — a kind
+#   missing from it here is silently undrainable in practice: a human reading
+#   the usage omits --kind and resolves a hold that does not exist (an
+#   idempotent no-op), leaving the real hold in place.
 #
 # Stdout on success: exactly one line — `resolved <hold-id> (unblocked <source-id>)`.
 #
@@ -102,7 +106,7 @@ DUMP_NODE_TS="$SCRIPT_DIR/dump-node.ts"
 WRITE_NODE_TS="$SCRIPT_DIR/write-node.ts"
 GRAPH_COMMIT="$SCRIPT_DIR/graph-commit"
 
-USAGE="usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap>]"
+USAGE="usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap|worktree-residue>]"
 
 SOURCE_ID=""
 KIND="provision-conflict"
