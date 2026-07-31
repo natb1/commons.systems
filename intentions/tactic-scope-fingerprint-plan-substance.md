@@ -47,7 +47,142 @@ execution:
 validates: []
 blocked_by:
   - tactic-transition-node-stamp-landed-body
-office_hours: null
+office_hours:
+  reason: "/dispatch-conflict: stale-skill-body deadlock
+    (tactic-node-worker-fresh-skill-body), not a QA or judgment item — this node
+    cannot progress autonomously and cannot self-heal. PR #2974 is genuinely
+    CONFLICTING/DIRTY against origin/main, which is a real origin/main merge
+    conflict on a graph node's own branch — exactly the case /dispatch-conflict
+    Lane 3 exists to service. But the node's worktree is 143 commits behind
+    origin/main, and the SKILL.md it serves predates Lane 3: the worktree copy
+    of .claude/skills/dispatch-conflict/SKILL.md contains 0 occurrences of
+    \"Lane 3\" (blob bca805af8dc7d52a4a0d2e595088c321ec61a107) while
+    origin/main's copy contains 28 (blob
+    6544ffc934167a6e26b951c75c0f6605bdcaff3a). Two successive sessions
+    (9e84a55e, 9eed1a95) each read that pre-Lane-3 body, correctly found that
+    Lane 1 is gated on a numeric <N>- issue-branch shape this branch does not
+    have and Lane 2 only services nodes graph-commit already parked with a
+    mechanical-unresolved marker (office_hours was null), correctly concluded
+    neither lane applied, and correctly stopped without taking any graph-write
+    action. Both behaved exactly as instructed; the instructions they were given
+    were stale. This is why releasing the node does not help:
+    provision-node-worktree recreates a worktree from the existing branch
+    (remote first, then local) and only falls through to `worktree add -b <id>
+    origin/main` when neither exists, so a respawned worker re-checks-out the
+    same stale branch and re-reads the same pre-Lane-3 skill. Every reap
+    therefore reproduces the identical dead end while consuming a concurrency
+    slot, and each respawn is itself a spawn event that provokes
+    tactic-router-spawn-window-duplicate-worker. Parked rather than reaped so
+    the node leaves the router's lane instead of churning. Nothing is at risk in
+    the worktree: all code work is already pushed to
+    origin/tactic-scope-fingerprint-plan-substance, and the only commits absent
+    from both origin/main and the remote branch are two merge commits whose
+    trees are byte-identical to a recomputed `git merge-tree --write-tree` of
+    their parents (verified 2026-07-31) — no conflict resolutions, no original
+    content."
+  since: 2026-07-31
+  recommendation: >-
+    ## Recommendation — unblock tactic-scope-fingerprint-plan-substance (PR
+    #2974)
+
+
+    Two independent things are wrong. Do them in this order; the second is not
+
+    possible before the first.
+
+
+    **Step 1 — refresh the worktree so it serves a current skill body.** The
+    worktree
+
+    at .claude/worktrees/tactic-scope-fingerprint-plan-substance is 143 commits
+
+    behind origin/main and its .claude/skills/dispatch-conflict/SKILL.md has no
+
+    Lane 3. Merge origin/main into the branch there (`git -C <wt> merge
+    origin/main`,
+
+    sandbox-disabled — a tree-updating op that touches the read-only
+    .claude/skills
+
+    carve-out will otherwise abort half-written and leave the tree dirty with
+    HEAD
+
+    unmoved). Expect conflicts: that merge IS the work PR #2974 needs, so
+    resolving
+
+    it here is not a detour. Confirm afterwards that
+
+    `grep -c 'Lane 3' <wt>/.claude/skills/dispatch-conflict/SKILL.md` is
+    non-zero
+
+    before doing anything else — if it is still 0, the merge did not complete
+    and
+
+    every subsequent step will repeat the same dead end.
+
+
+    **Step 2 — then let the node re-enter the lane.** With a current skill body
+    in
+
+    place, /dispatch-conflict routes this node to Lane 3 (an origin/main merge
+
+    conflict on a graph node's own branch, entered by source id), which is the
+    lane
+
+    that actually covers it. Clear this park and let the router re-select, or
+    run the
+
+    phase by hand from the refreshed worktree.
+
+
+    **Do not reap the worktree or the branch as a shortcut.** PR #2974 is OPEN,
+    so
+
+    the branch-reap precondition (PR merged, tree clean, no open PR) is not met,
+    and
+
+    deleting the worktree alone changes nothing — provision-node-worktree
+    recreates
+
+    it from the same stale branch, which is precisely the deadlock.
+
+
+    **Verify nothing was lost if the worktree is ever rebuilt:** all code work
+    is
+
+    already on origin/tactic-scope-fingerprint-plan-substance. The only local
+
+    commits absent from both that branch and origin/main are two merge commits,
+    and
+
+    both were confirmed reproducible on 2026-07-31 (`git merge-tree
+    --write-tree` of
+
+    each merge's parents yields a tree byte-identical to the recorded one), so
+    they
+
+    carry no conflict resolutions and no original content.
+
+
+    **Worth filing separately if it recurs:** the general defect is
+
+    tactic-node-worker-fresh-skill-body — a spawned worker executes the skill
+    body
+
+    from its target worktree rather than main. This node is the second observed
+
+    instance and the first where the stale body caused a silent no-op exit
+    rather
+
+    than an outright failure to declare. The sharper variant this instance
+
+    demonstrates: a node whose own branch predates the skill that would fix it
+
+    cannot be repaired by any amount of respawning, because the repair
+    instructions
+
+    are the thing that is missing.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
