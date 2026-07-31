@@ -140,9 +140,10 @@
 #      names "acceptance=absent" (the regression guard against relaxing the
 #      gate to `-ge 4`)
 #  40. a stale failed row superseded by a newer success lands: acceptance has
-#      an older conclusion=failure row and a newer conclusion=success row, so
-#      max_by([started_at, id]) resolves it green — exit 0, no "concluded
-#      non-success" misdiagnosis
+#      a lower-id conclusion=failure row and a higher-id conclusion=success
+#      row, so max_by(.id) resolves it green — exit 0, no "concluded
+#      non-success" misdiagnosis. The stale row carries the LATER started_at,
+#      so ordering on that caller-settable field would fail this case
 #  41. no-op short-circuit exits 0 even when checks are unusable: a clone
 #      synced exactly to origin/main's tip, invoked on an existing id with
 #      nothing edited, while gh is in hard-fail mode (every call exits 1) —
@@ -155,6 +156,11 @@
 #      as the cause and states that the required-check state was never
 #      observed, instead of presenting any check-state snapshot
 #      (tactic-graph-commit-noop-landing-false-failure, Defect 3 residue)
+#  43. a forged green row cannot mask a genuine failure: `lint` has a real
+#      GitHub-Actions failure row plus a success row written by another App
+#      (a `checks: write` principal) with a far-future started_at and a higher
+#      id. The producer filter drops the foreign row, so `lint` resolves to the
+#      failure — hard refusal (1 poll, "not retrying"), nothing lands on main
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -215,7 +221,7 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
           t-expect-happy t-expect-wrong-repo t-expect-prune \
           t-preexist-conflict t-preexist-rebase t-strand-other t-strand-main \
-          t-dup-rows t-partial-dup t-stale-fail; do
+          t-dup-rows t-partial-dup t-stale-fail t-forged-green; do
   seed_node "$id"
 done
 
@@ -270,30 +276,36 @@ FIXTURE_DIR="$WORK/fixtures"
 # Fixture JSON per mode: {status,conclusion}-shaped check_runs entries for the
 # four required names, run through graph-commit's REAL --jq filter below (not
 # a hardcoded count) so the filter itself is exercised end-to-end.
+#
+# Every genuine row carries `"app": {"slug": "github-actions"}` because that is
+# what the real payload carries for a row written by the GitHub Actions App —
+# and the filter now considers ONLY those rows, so a fixture row without it is
+# invisible to the gate (see the forged-green fixture, which relies on exactly
+# that).
 cat >"$FIXTURE_DIR/green.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
-  {"name": "lint", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests", "status": "completed", "conclusion": "success"}
+  {"name": "acceptance", "id": 1, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 2, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "lint", "id": 3, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "id": 4, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"}
 ]}
 JSON
 
 cat >"$FIXTURE_DIR/pending.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance", "status": "in_progress", "conclusion": null},
-  {"name": "preview-and-smoke", "status": "in_progress", "conclusion": null},
-  {"name": "lint", "status": "in_progress", "conclusion": null},
-  {"name": "unit-tests", "status": "in_progress", "conclusion": null}
+  {"name": "acceptance", "id": 1, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": null},
+  {"name": "preview-and-smoke", "id": 2, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": null},
+  {"name": "lint", "id": 3, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": null},
+  {"name": "unit-tests", "id": 4, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": null}
 ]}
 JSON
 
 cat >"$FIXTURE_DIR/concluded-fail.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
-  {"name": "lint", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests", "status": "completed", "conclusion": "failure"}
+  {"name": "acceptance", "id": 1, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 2, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "lint", "id": 3, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "id": 4, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "failure"}
 ]}
 JSON
 
@@ -302,10 +314,10 @@ JSON
 # the fixed --jq filter tolerates by keying off .conclusion alone) — #2457.
 cat >"$FIXTURE_DIR/desynced-success.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
-  {"name": "lint", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests", "status": "in_progress", "conclusion": "success"}
+  {"name": "acceptance", "id": 1, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 2, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "lint", "id": 3, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "id": 4, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": "success"}
 ]}
 JSON
 
@@ -316,15 +328,15 @@ JSON
 # required runs.
 cat >"$FIXTURE_DIR/duplicate-rows.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance",        "id": 101, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "acceptance",        "id": 201, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "id": 102, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "id": 202, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "lint",              "id": 103, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "lint",              "id": 203, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests",        "id": 104, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests",        "id": 204, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "Analyze (javascript)", "id": 999, "started_at": "2026-07-27T11:30:00Z", "status": "completed", "conclusion": "failure"}
+  {"name": "acceptance",        "id": 101, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "acceptance",        "id": 201, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 102, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 202, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 103, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 203, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 104, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 204, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "Analyze (javascript)", "id": 999, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:30:00Z", "status": "completed", "conclusion": "failure"}
 ]}
 JSON
 
@@ -333,23 +345,43 @@ JSON
 # guard against naively relaxing the gate to a `-ge 4` row count.
 cat >"$FIXTURE_DIR/partial-duplicate.json" <<'JSON'
 {"check_runs": [
-  {"name": "lint",              "id": 301, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "lint",              "id": 302, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "id": 303, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests",        "id": 304, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"}
+  {"name": "lint",              "id": 301, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 302, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 303, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 304, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"}
 ]}
 JSON
 
 # Stale fail then green: acceptance's OLDER row concluded failure and its
-# NEWER row concluded success, so max_by([started_at, id]) must resolve the
-# name to success rather than treating the stale failure as a hard stop.
+# NEWER row (higher server-assigned id) concluded success, so max_by(.id) must
+# resolve the name to success rather than treating the stale failure as a hard
+# stop. The stale row deliberately carries the LATER started_at, so a filter
+# that still ordered on the caller-settable timestamp would resolve this name
+# to failure and fail this case.
 cat >"$FIXTURE_DIR/stale-fail-then-green.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance",        "id": 401, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "failure"},
-  {"name": "acceptance",        "id": 402, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "id": 403, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "lint",              "id": 404, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests",        "id": 405, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"}
+  {"name": "acceptance",        "id": 401, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T12:00:00Z", "status": "completed", "conclusion": "failure"},
+  {"name": "acceptance",        "id": 402, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 403, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 404, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 405, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"}
+]}
+JSON
+
+# Forged green: a genuine GitHub-Actions `lint` FAILURE row, plus a row a
+# `checks: write` principal (any other App, or a PAT) could POST onto the
+# scratch SHA — same name, conclusion success, a far-future caller-supplied
+# started_at, and (as any forger would) a high id. Neither the timestamp nor
+# the id may let it supersede the genuine row: the producer filter drops it
+# before a winner is picked, so `lint` resolves to the real failure and the
+# gate refuses hard (exit 2) instead of fast-forwarding a red SHA onto main.
+cat >"$FIXTURE_DIR/forged-green.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance",        "id": 501, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 502, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 503, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 504, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "failure"},
+  {"name": "lint",              "id": 999999, "app": {"slug": "attacker-app"}, "started_at": "9999-01-01T00:00:00Z", "status": "completed", "conclusion": "success"}
 ]}
 JSON
 
@@ -1549,6 +1581,30 @@ else
   printf '%s\n' "$out"
 fi
 git -C "$ORIGIN" update-ref -d refs/graph/landing-lock
+
+# --- Case 43: a forged green row cannot mask a genuine failure ---------------
+# A row named `lint` written by a principal OTHER than the GitHub Actions App
+# (any holder of `checks: write`), with conclusion success, a far-future
+# caller-supplied started_at, and a high id. The producer filter drops it, so
+# `lint` still resolves to the genuine failure row: hard refusal, no retry,
+# nothing lands on main.
+set_mode forged-green
+W43="$WORK/w43"
+make_clone "$W43" writer-43
+edit_line "$W43" t-forged-green 1 must-not-land
+before="$(origin_sha)"
+out="$(run_gc "$W43" -m 'test: forged green row' t-forged-green 2>&1)"; rc=$?
+calls="$(gh_calls)"
+if [[ $rc -eq 1 && "$(origin_sha)" == "$before" && "$calls" -eq 1 ]] \
+   && grep -q 'concluded non-success' <<<"$out" \
+   && grep -q 'lint=failure' <<<"$out" \
+   && grep -q 'not retrying' <<<"$out"; then
+  ok "forged non-Actions green row cannot supersede a genuine failure (hard refusal, nothing lands)"
+else
+  no "forged-green gate (rc=$rc gh_calls=$calls origin_moved=$([[ "$(origin_sha)" == "$before" ]] && echo no || echo yes))"
+  printf '%s\n' "$out"
+fi
+sync_clone "$W43"   # drop the never-landed local commit
 
 # --- No scratch branches left behind anywhere ------------------------------------
 if [[ -z "$(scratch_refs)" ]]; then

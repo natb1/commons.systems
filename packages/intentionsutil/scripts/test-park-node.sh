@@ -240,12 +240,15 @@ make_clone() { # <dst> <identity>
 # <id>) by appending an office_hours line to the file park-node has ALREADY
 # refreshed from origin/main — so a correct refresh is what survives.
 mkdir -p "$WORK/bin" "$WORK/fixtures"
+# `app.slug` is required, not decorative: graph-commit's required-check gate
+# only considers rows authored by the github-actions App, so a fixture row
+# without it is dropped as a foreign producer and the context reads `absent`.
 cat >"$WORK/fixtures/green.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
-  {"name": "lint", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests", "status": "completed", "conclusion": "success"}
+  {"name": "acceptance", "status": "completed", "conclusion": "success", "id": 1, "app": {"slug": "github-actions"}},
+  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success", "id": 2, "app": {"slug": "github-actions"}},
+  {"name": "lint", "status": "completed", "conclusion": "success", "id": 3, "app": {"slug": "github-actions"}},
+  {"name": "unit-tests", "status": "completed", "conclusion": "success", "id": 4, "app": {"slug": "github-actions"}}
 ]}
 JSON
 

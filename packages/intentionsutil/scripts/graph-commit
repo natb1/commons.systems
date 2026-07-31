@@ -65,12 +65,18 @@
 #   invocation whose blob happens to equal origin/main: the nothing-staged guard
 #   below only fires when the wrong repo's blob DIFFERS from origin/main, so a
 #   wrong repo that is merely in sync with origin/main slips through it and
-#   reports a false "landed" while the caller's real edit sits dirty elsewhere.
+#   exits 0 (as the nothing-to-push sub-case below, or as a "landed" that landed
+#   nothing) while the caller's real edit sits dirty elsewhere.
 #   Omit entirely to keep pre-assertion behavior.
 #
-# Exit status — four observable outcomes across rc 0 and rc 1:
-#   0  the edit landed on main. Two sub-cases, distinguished only by a log line
-#      (same exit code):
+# Exit status — five observable outcomes across rc 0 and rc 1:
+#   0  nothing needed to land, or the edit landed on main. Three sub-cases,
+#      distinguished only by a log line (same exit code):
+#        nothing-to-push        — every target id already matches origin/main
+#          AND HEAD is already origin/main, so nothing this run holds could
+#          change main. The landing cycle (lock, scratch push, check poll, push
+#          to main) is skipped entirely and NO "landed" line is printed; the
+#          log line ends "nothing to push; skipping the landing cycle".
 #        landed                 — no concurrent-edit divergence; no special log.
 #        landed-after-resolution — a concurrent-edit divergence was auto-merged
 #          by layer 2 (rebase-conflict field merge) or layer 3 (stale --base
@@ -687,8 +693,10 @@ rebase_in_progress() {
 # accumulates one row per workflow run per name, so a row count of the green
 # rows can exceed four and an `== 4` row gate can never fire, leaving an
 # already-green SHA permanently unlandable. Instead each required name is
-# resolved to the conclusion of its NEWEST run, and the gate fires when all
-# four distinct names resolve to success. Uses `gh api ... --jq` so gh runs jq
+# resolved to the conclusion of its NEWEST GitHub-Actions-authored run (highest
+# server-assigned `id`; rows from any other App are ignored outright), and the
+# gate fires when all four distinct names resolve to success. Uses
+# `gh api ... --jq` so gh runs jq
 # on its in-memory JSON — never an `echo "$VAR" | jq` round-trip
 # (shell-json.md).
 # Returns:
@@ -701,30 +709,6 @@ rebase_in_progress() {
 # an auth/rate-limit/network error is a broken environment, not a pending
 # check, so collapsing it into "still polling" until the generic timeout
 # would hide the real cause (clear error over fallback, code-style.md).
-# check_state_phrase <sha> — render, on stdout, what this run actually knows
-# about the required checks ON <sha>, for interpolation into a failure message.
-# Three distinct things a reader must be able to tell apart:
-#   - we never observed any check state at all (no poll completed in this run);
-#   - we never observed <sha>'s state, and the snapshot we do hold belongs to a
-#     DIFFERENT commit (an earlier attempt's) — named as such, never passed off
-#     as <sha>'s current state;
-#   - we observed <sha>'s state, and here it is.
-# The degenerate cases are worded as non-observations rather than dropped into
-# the slot where a check state goes, so "we could not see the checks" never
-# reads as "the checks are not green".
-check_state_phrase() {
-  local sha="$1"
-  if [[ -z "$LAST_CHECK_SHA" ]]; then
-    echo "no check-run poll completed in this run, so the required-check state was never observed (this is a non-observation, not a check state)"
-    return 0
-  fi
-  if [[ "$LAST_CHECK_SHA" != "$sha" ]]; then
-    echo "no check-run poll completed for ${sha:0:8}, so ITS required-check state was never observed; the most recent observation was of a DIFFERENT commit ${LAST_CHECK_SHA:0:8}, which reported: $LAST_CHECK_DETAIL"
-    return 0
-  fi
-  echo "required-check state observed on ${sha:0:8}: $LAST_CHECK_DETAIL"
-}
-
 await_checks() {
   local sha="$1"
   local deadline counts ngreen nbad cname cconc crows detail gh_stderr gh_fails=0
@@ -737,11 +721,30 @@ await_checks() {
     # `<name> <latest-conclusion> <row-count>`; a name with no rows at all
     # emits `absent 0`.
     #
-    # Ordering key: a check-run `id` is monotonic per repository and
-    # `started_at` is ISO-8601, hence lexicographically sortable, so
-    # max_by([started_at, id]) identifies the NEWEST run for a name. That is
-    # what makes a SHA re-stamped by several pushes resolvable: a stale failed
-    # row is superseded by the newer success rather than counted alongside it.
+    # Producer filter FIRST, ordering second — this gate is the one code path
+    # that pushes straight to a protected branch, so both must be
+    # forgery-resistant:
+    #
+    #   - Only rows authored by GitHub Actions (`.app.slug == "github-actions"`,
+    #     the App that runs .github/workflows/graph-fast-path.yml) are
+    #     considered. Any principal holding `checks: write` — a workflow's
+    #     GITHUB_TOKEN, an installed App, a leaked PAT — can POST a check run
+    #     with an arbitrary `name` and `conclusion: "success"` onto the
+    #     `graph/**` scratch SHA. Rows from any other App are dropped before a
+    #     winner is picked, so a foreign row can neither satisfy a required
+    #     context nor supersede the genuine one.
+    #   - The winner is `max_by(.id)` and NOTHING else. `id` is server-assigned
+    #     and monotonic per repository; `started_at` is caller-supplied on
+    #     `POST /repos/{owner}/{repo}/check-runs` and rewritable by `PATCH`, so
+    #     ordering on it would let a row claiming `started_at:
+    #     "9999-01-01T00:00:00Z"` sort above a genuine failure. Ordering on `id`
+    #     alone still resolves the real case this gate exists for: a SHA
+    #     re-stamped by several pushes, where the newer run's row has the higher
+    #     id and supersedes the stale failed one.
+    #
+    # The gate stays fail-closed: the selected row for each required name must
+    # itself conclude success, and any non-success selected row is a hard
+    # refusal (return 2, no retry).
     #
     # Keying off .conclusion alone (null = pending, non-null = concluded)
     # rather than requiring status=="completed" too is deliberate — GitHub
@@ -754,9 +757,11 @@ await_checks() {
       --jq '["acceptance","preview-and-smoke","lint","unit-tests"] as $req
             | (.check_runs // []) as $all
             | $req[] as $name
-            | [$all[] | select(.name == $name)] as $rows
+            | [$all[]
+               | select(.name == $name)
+               | select((.app.slug // "") == "github-actions")] as $rows
             | if ($rows | length) == 0 then "\($name) absent 0"
-              else ($rows | max_by([(.started_at // ""), (.id // 0)])) as $latest
+              else ($rows | max_by(.id // 0)) as $latest
                 | "\($name) \($latest.conclusion // "pending") \($rows | length)"
               end' \
       2>"$errfile")"; then
@@ -804,6 +809,30 @@ await_checks() {
     fi
     sleep "$CHECK_POLL_SECONDS"
   done
+}
+
+# check_state_phrase <sha> — render, on stdout, what this run actually knows
+# about the required checks ON <sha>, for interpolation into a failure message.
+# Three distinct things a reader must be able to tell apart:
+#   - we never observed any check state at all (no poll completed in this run);
+#   - we never observed <sha>'s state, and the snapshot we do hold belongs to a
+#     DIFFERENT commit (an earlier attempt's) — named as such, never passed off
+#     as <sha>'s current state;
+#   - we observed <sha>'s state, and here it is.
+# The degenerate cases are worded as non-observations rather than dropped into
+# the slot where a check state goes, so "we could not see the checks" never
+# reads as "the checks are not green".
+check_state_phrase() {
+  local sha="$1"
+  if [[ -z "$LAST_CHECK_SHA" ]]; then
+    echo "no check-run poll completed in this run, so the required-check state was never observed (this is a non-observation, not a check state)"
+    return 0
+  fi
+  if [[ "$LAST_CHECK_SHA" != "$sha" ]]; then
+    echo "no check-run poll completed for ${sha:0:8}, so ITS required-check state was never observed; the most recent observation was of a DIFFERENT commit ${LAST_CHECK_SHA:0:8}, which reported: $LAST_CHECK_DETAIL"
+    return 0
+  fi
+  echo "required-check state observed on ${sha:0:8}: $LAST_CHECK_DETAIL"
 }
 
 # --- Prune-id membership ----------------------------------------------------
@@ -1701,7 +1730,19 @@ main() {
       exit 0
     fi
 
-    echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD (a prior attempt already committed but did not push)" >&2
+    # HEAD differs from origin/main, so the landing cycle still runs — but WHY
+    # it differs decides what an operator should go looking for, and the two
+    # cases are not the same thing. Read the relation rather than asserting one
+    # of them: an unpushed-commit count of 0 means HEAD is BEHIND origin/main
+    # (a stale checkout), where telling the reader "a prior attempt committed
+    # but did not push" would point at a commit that does not exist.
+    local unpushed
+    unpushed="$(git rev-list --count "$main_sha..$head_sha")"
+    if [[ "$unpushed" -gt 0 ]]; then
+      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD ($unpushed local commit(s) not on origin/main: a prior attempt already committed but did not push)" >&2
+    else
+      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD (HEAD ${head_sha:0:8} is behind origin/main ${main_sha:0:8}; no unpushed local commit, so the landing cycle will fast-forward)" >&2
+    fi
   fi
 
   local rc=0
