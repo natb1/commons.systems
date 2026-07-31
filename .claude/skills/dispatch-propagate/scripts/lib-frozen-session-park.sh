@@ -143,7 +143,22 @@
 #                                          window, far short of a real stall.
 #   DISPATCH_TERMINAL_DISPOSITION_PARK_MAX Maximum parks per invocation of the
 #                                          terminal-disposition sweep.
-#                                          Default: 3.
+#                                          Default: 2, so the whole sweep's park
+#                                          budget (cap x park timeout) stays
+#                                          small against the 15-minute tick.
+#   DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S
+#                                          Wall-clock seconds a single
+#                                          `park-node` call may take before it
+#                                          is killed (rc 124, handled as a
+#                                          `park-timeout` disposition retried on
+#                                          the next tick). Default: 120.
+#   DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S
+#                                          Exported to each `park-node` call as
+#                                          GRAPH_COMMIT_LOCK_WAIT_SECONDS, so
+#                                          graph-commit abandons a contended
+#                                          landing lock inside the timeout above
+#                                          rather than after its own 1050s
+#                                          default. Default: 60.
 #   DISPATCH_TERMINAL_DISPOSITION_PROJECTS_ROOT
 #                                          Transcript store root. Default:
 #                                          $HOME/.claude/projects.
@@ -153,6 +168,9 @@
 #                                          `office-hours-recommendation` /
 #                                          `office-hours-pr` escalation files
 #                                          live. Default: $HOME/.claude/jobs.
+#                                          Job dirs are named by the registry's
+#                                          `.id` field, NOT by the sessionId —
+#                                          see the sweep's step (11).
 #   DISPATCH_TERMINAL_DISPOSITION_REPO_ROOT
 #                                          Repo root for the `git show
 #                                          origin/main:` reads and the default
@@ -161,7 +179,15 @@
 #   DISPATCH_TERMINAL_DISPOSITION_PARK_NODE
 #                                          park-node path. Default:
 #                                          <repo-root>/packages/intentionsutil/
-#                                          scripts/park-node.
+#                                          scripts/park-node. MUST still resolve
+#                                          inside that directory — the
+#                                          terminal-disposition sweep carries the
+#                                          SAME two provenance checks as
+#                                          frozen_session_sweep (primary checkout
+#                                          on `main`, park-node an executable
+#                                          regular file inside the repo's
+#                                          intentionsutil scripts dir); anything
+#                                          else aborts the sweep.
 #   CLAUDE_AGENTS_CMD                      Inherited from lib-claude-agents.sh.
 #   DISPATCH_STANDDOWN_DIR                 Inherited from lib-standdown-recheck.sh
 #                                          (the stand-down ledger this sweep
@@ -570,7 +596,21 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
   #
   # This replaces the Stop-hook backstop, whose park silently failed (wrong
   # worktree base, no landing budget, swallowed errors). The single most
-  # important difference is WHERE park-node runs from — see step (11) below.
+  # important difference is WHERE park-node runs from — see step (12) below.
+  #
+  # The stand-down interlock. A stood-down LOSER of the duplicate-worker protocol
+  # has EXACTLY this sweep's candidate shape BY DESIGN: `dispatch-standdown` tells
+  # it to yield the turn WITHOUT a `node-terminal` marker, precisely so the Stop
+  # hook HOLDS the job — while the WINNER goes on working that same node under the
+  # same session name. Parking it is the spurious interruption the stand-down
+  # protocol exists to avoid, and that protocol deliberately carries NO age term
+  # on this path, so this sweep must not reintroduce one through the back door.
+  # Two independent signals, either sufficient to KEEP (step (5)): a stand-down
+  # marker exists for the node (`standdown_exists`), or a live session that is not
+  # itself one of this sweep's candidates is registered under the node name
+  # (`claude_agents_list_all`, the ACTIVE view, minus this sweep's own candidate
+  # session ids). `standdown_recheck_sweep` owns those nodes and parks them itself
+  # once the winner is definitely gone.
   #
   # Accepted residuals:
   #   - A session that DID declare but whose `claude rm` reap itself failed
@@ -581,12 +621,45 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
   #   - A node at `phase: null` with a held terminal `/align-tactics` session is
   #     included BY DESIGN: an align pass that ended without a claim and without
   #     a `no-claim` marker is the same churn shape.
+  #   - The MIRROR of the soundness argument is NOT covered: a session that wrote
+  #     BOTH a `node-terminal` marker (so `dispatch-self-close` reaps it) AND an
+  #     unconsumed `office-hours-reason` leaves no registry row for this sweep to
+  #     find, so its escalation text is consumed by nobody and its node is left
+  #     unparked. The deleted Stop-hook backstop ran before the reap in the same
+  #     hook and did cover that ordering. It is accepted here rather than closed
+  #     because the only two ways to close it — having `dispatch-self-close` HOLD
+  #     on a pending `office-hours-reason`, or having `mark-node-terminal` fail
+  #     loudly on one — change the reap path for EVERY lane, and a wrong HOLD
+  #     accumulates un-reapable jobs fleet-wide. The shape itself is a session
+  #     bug: a pass that asked for a human AND declared a machine disposition
+  #     contradicted itself, and the contradiction belongs upstream, in whichever
+  #     skill wrote both.
   #
-  # One daemon query and at most one `git fetch` per invocation; the fetch is
-  # LAZY (only once a candidate has actually aged past the grace). One greppable
-  # stderr line per disposition, and exactly one summary line.
+  # Two daemon queries (the `--all` candidate listing, which cannot come from the
+  # tick snapshot, and the snapshot-backed ACTIVE view behind the interlock) and
+  # at most one `git fetch` per invocation; the fetch is LAZY (only once a
+  # candidate has actually aged past the grace). One greppable stderr line per
+  # disposition, and exactly one summary line.
+  #
+  # Bounded and provenance-checked exactly as `frozen_session_sweep` is, and for
+  # the same reasons (see that function's header): this sweep also runs INLINE on
+  # the tick's scheduling path, unattended, with the sandbox disabled.
+  #   - each `park-node` call runs under `timeout` (default 120s) with a short
+  #     GRAPH_COMMIT_LOCK_WAIT_SECONDS (default 60s), so a contended landing lock
+  #     is DEFERRED to the next tick rather than waited out in-line for
+  #     graph-commit's own ~1050s default; a missing `timeout` is a loud abort,
+  #     never a silent downgrade to an unbounded call;
+  #   - the park cap defaults to 2, so the whole sweep's park budget is
+  #     cap x timeout;
+  #   - the repo root must be a primary checkout on `main`, and the resolved
+  #     `park-node` must be an executable regular file whose REAL directory is
+  #     `<repo-root>/packages/intentionsutil/scripts` — otherwise the sweep would
+  #     execute an unreviewed (or wholly arbitrary, via the environment override)
+  #     script that force-pushes `refs/graph/**` and `main`.
   terminal_without_disposition_sweep() {
-    # Exactly one liveness query. UNKNOWN → park nothing (fail safe).
+    # The candidate query — a DIRECT `--all` listing (the tick snapshot is
+    # captured without `--all` and so lacks the terminal rows this sweep exists
+    # to find). UNKNOWN → park nothing (fail safe).
     local candidates
     if ! candidates=$(claude_agents_list_terminal_workers); then
       printf 'lib-frozen-session-park: daemon unqueryable; parking nothing\n' >&2
@@ -612,10 +685,30 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
     fi
     local grace="${DISPATCH_TERMINAL_DISPOSITION_GRACE_S:-300}"
     [[ "$grace" =~ ^[0-9]+$ ]] || grace=300
-    local park_max="${DISPATCH_TERMINAL_DISPOSITION_PARK_MAX:-3}"
-    [[ "$park_max" =~ ^[0-9]+$ ]] || park_max=3
+    # Park cap defaults to 2: the sweep is inline on the tick's scheduling path,
+    # so its whole park budget is cap x park_timeout (see the header).
+    local park_max="${DISPATCH_TERMINAL_DISPOSITION_PARK_MAX:-2}"
+    [[ "$park_max" =~ ^[0-9]+$ ]] || park_max=2
+    local park_timeout="${DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S:-120}"
+    [[ "$park_timeout" =~ ^[0-9]+$ ]] || park_timeout=120
+    local lock_wait="${DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S:-60}"
+    [[ "$lock_wait" =~ ^[0-9]+$ ]] || lock_wait=60
     local projects_root="${DISPATCH_TERMINAL_DISPOSITION_PROJECTS_ROOT:-$HOME/.claude/projects}"
     local jobs_root="${DISPATCH_TERMINAL_DISPOSITION_JOBS_ROOT:-$HOME/.claude/jobs}"
+
+    # `timeout` is coreutils and always present in this fleet's environment, but
+    # resolve it explicitly rather than assuming: an unbounded park is a fleet
+    # stall, so a missing `timeout` is a loud abort, not a silent downgrade to an
+    # unbounded call (.claude/rules/code-style.md). Same posture as
+    # frozen_session_sweep.
+    local timeout_bin
+    timeout_bin=$(command -v timeout 2>/dev/null) || timeout_bin=""
+    if [[ -z "$timeout_bin" ]]; then
+      printf 'lib-frozen-session-park: `timeout` not found; refusing to run an unbounded park-node on the tick path; parking nothing\n' >&2
+      printf 'lib-frozen-session-park: terminal-disposition sweep complete (terminal=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
+        "$terminal" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
+      return 0
+    fi
 
     local repo_root="${DISPATCH_TERMINAL_DISPOSITION_REPO_ROOT:-}"
     if [[ -z "$repo_root" ]]; then
@@ -627,7 +720,45 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         "$terminal" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
       return 0
     fi
-    local park_node="${DISPATCH_TERMINAL_DISPOSITION_PARK_NODE:-$repo_root/packages/intentionsutil/scripts/park-node}"
+
+    # Provenance (1), copied from frozen_session_sweep: the checkout we are about
+    # to run `park-node` OUT OF must be the primary checkout on `main`. A drift
+    # off `main` (the 2026-07-21 direct-to-main incident, PR #2925; also the
+    # failed-`worktree add` + chained-`cd` shape) means the sweep would execute an
+    # unreviewed branch's version of a script that force-pushes refs/graph/** and
+    # main — unattended, from the headless tick, sandbox off.
+    if ! assert_primary_checkout_on_main "$repo_root"; then
+      printf 'lib-frozen-session-park: repo root %s is not a primary checkout on main; refusing to run its park-node; parking nothing\n' "$repo_root" >&2
+      printf 'lib-frozen-session-park: terminal-disposition sweep complete (terminal=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
+        "$terminal" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
+      return 0
+    fi
+
+    # Provenance (2), copied from frozen_session_sweep: the resolved park-node
+    # must be an executable regular file whose REAL directory is the repo's
+    # intentionsutil scripts dir. Canonicalize both sides (`pwd -P`) so `..`
+    # segments and symlinked temp roots cannot slip an arbitrary executable past
+    # a string prefix test. This is what makes honouring
+    # DISPATCH_TERMINAL_DISPOSITION_PARK_NODE safe: an inherited environment
+    # cannot redirect this unattended, sandbox-off call to another executable.
+    local park_dir park_node park_dir_real park_node_dir_real
+    park_dir="$repo_root/packages/intentionsutil/scripts"
+    park_node="${DISPATCH_TERMINAL_DISPOSITION_PARK_NODE:-$park_dir/park-node}"
+    park_dir_real=$(cd "$park_dir" 2>/dev/null && pwd -P) || park_dir_real=""
+    park_node_dir_real=$(cd "$(dirname -- "$park_node")" 2>/dev/null && pwd -P) || park_node_dir_real=""
+    if [[ -z "$park_dir_real" || "$park_node_dir_real" != "$park_dir_real" ]]; then
+      printf 'lib-frozen-session-park: park-node path %s does not resolve inside %s; parking nothing\n' \
+        "$park_node" "$park_dir" >&2
+      printf 'lib-frozen-session-park: terminal-disposition sweep complete (terminal=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
+        "$terminal" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
+      return 0
+    fi
+    if [[ ! -f "$park_node" || ! -x "$park_node" ]]; then
+      printf 'lib-frozen-session-park: park-node at %s is not an executable regular file; parking nothing\n' "$park_node" >&2
+      printf 'lib-frozen-session-park: terminal-disposition sweep complete (terminal=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
+        "$terminal" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
+      return 0
+    fi
 
     # The lazy-fetch latch: at most one `git fetch` per sweep invocation, and
     # none at all when no candidate ages past the grace.
@@ -640,9 +771,70 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
     local -a rows=()
     mapfile -t rows <<<"$candidates"
 
-    local row sid name cwd
+    # The stand-down interlock's second signal (see the header): the set of node
+    # names that still have a LIVE session. `claude_agents_list_all` is the
+    # ACTIVE view (no `--all`), so it is computed against a different registry
+    # read than the `--all` candidate query above — and this sweep's own
+    # candidates are subtracted from it by session id, so a terminal row that the
+    # active view happens to surface (a `stopped`/`error` row is terminal by this
+    # file's enumeration but need not be hidden from the default listing) can
+    # never mask itself as its own "someone else is working this node" evidence.
+    # UNKNOWN here aborts the sweep rather than downgrading to "nobody else holds
+    # this node": a definite-looking answer derived from a failed query is exactly
+    # the false park this interlock exists to prevent (.claude/rules/code-style.md).
+    local -A terminal_sids=()
+    local drow dsid
+    for drow in "${rows[@]}"; do
+      dsid="${drow%%$'\t'*}"
+      [[ -n "$dsid" ]] || continue
+      terminal_sids["$dsid"]=1
+    done
+
+    local live_rows
+    if ! live_rows=$(claude_agents_list_all); then
+      printf 'lib-frozen-session-park: live-session registry unqueryable; cannot rule out a stand-down; parking nothing\n' >&2
+      printf 'lib-frozen-session-park: terminal-disposition sweep complete (terminal=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
+        "$terminal" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
+      return 0
+    fi
+    # Field-split by parameter expansion, NOT `IFS=$'\t' read`: TAB is IFS
+    # WHITESPACE, so `read` collapses a run of tabs into one delimiter and an
+    # empty middle column (a row with a null `.status`, which `@tsv` renders as
+    # "") would silently shift `name` one column left. The first/last field of a
+    # fixed 3-column row is unambiguous under expansion.
+    local -A live_names=()
+    local lrow lsid lname
+    if [[ -n "$live_rows" ]]; then
+      while IFS= read -r lrow; do
+        [[ -n "$lrow" ]] || continue
+        lsid="${lrow%%$'\t'*}"
+        lname="${lrow##*$'\t'}"
+        [[ -n "$lname" ]] || continue
+        if [[ -n "${terminal_sids[$lsid]:-}" ]]; then
+          continue
+        fi
+        if [[ -n "${live_names[$lname]:-}" ]]; then
+          live_names["$lname"]="${live_names[$lname]},$lsid"
+        else
+          live_names["$lname"]="$lsid"
+        fi
+      done <<<"$live_rows"
+    fi
+
+    # `jid` is the registry's own `.id` — the managed-job dir's name, which is
+    # NOT the sessionId nor a prefix of it once a session has been resumed. The
+    # transcript is keyed on `sid`; the job dir is keyed on `jid`. See step (11).
+    local row rest sid jid name cwd
     for row in "${rows[@]}"; do
-      IFS=$'\t' read -r sid name cwd <<<"$row"
+      # Field-split by parameter expansion for the reason given above the live
+      # map: `IFS=$'\t' read` collapses runs of tabs, so a row whose `.id` is
+      # null (`@tsv` renders it "") would shift `name` onto the cwd column and
+      # the sweep would silently reject its own candidate as "not a valid node
+      # id" instead of falling back to the synthesized reason.
+      sid="${row%%$'\t'*}";  rest="${row#*$'\t'}"
+      jid="${rest%%$'\t'*}"; rest="${rest#*$'\t'}"
+      name="${rest%%$'\t'*}"
+      cwd="${rest#*$'\t'}"
       [[ -n "$sid" && -n "$name" ]] || continue
       terminal=$(( terminal + 1 ))
 
@@ -702,7 +894,33 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (5) Lazy fetch, once per sweep. A fetch failure is non-fatal: fall back
+      # (5) Stand-down interlock. A stood-down LOSER of the duplicate-worker
+      # protocol has EXACTLY this candidate's shape by design: `dispatch-standdown`
+      # instructs it to yield the turn WITHOUT a `node-terminal` marker precisely
+      # so the Stop hook HOLDS the job, which leaves a terminal row under the node
+      # name while the WINNER is actively working that node. Parking it is the
+      # spurious interruption the stand-down protocol exists to avoid, and that
+      # protocol deliberately carries NO age term on this path — so this sweep
+      # must not reintroduce one through the back door. Two independent signals,
+      # either sufficient to KEEP: a stand-down marker exists for the node, or a
+      # live session (one that is not itself a candidate of this sweep) is still
+      # registered under the node name. `standdown_recheck_sweep`
+      # (lib-standdown-recheck.sh, which runs earlier in the same tick) owns these
+      # nodes and parks them itself, with the right reason, once the winner is
+      # DEFINITELY gone.
+      if standdown_exists "$name"; then
+        observing=$(( observing + 1 ))
+        printf 'lib-frozen-session-park: keeping %s (stand-down marker present — another session holds this node; the stand-down re-check owns it)\n' "$name" >&2
+        continue
+      fi
+      if [[ -n "${live_names[$name]:-}" ]]; then
+        observing=$(( observing + 1 ))
+        printf 'lib-frozen-session-park: keeping %s (live sessions still registered under this node name: %s; the node is being worked)\n' \
+          "$name" "${live_names[$name]}" >&2
+        continue
+      fi
+
+      # (6) Lazy fetch, once per sweep. A fetch failure is non-fatal: fall back
       # to whatever `origin/main` ref this checkout already has rather than
       # blocking the sweep on a network blip.
       if (( fetched == 0 )); then
@@ -710,7 +928,7 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         fetched=1
       fi
 
-      # (6) Node exists on origin/main. origin/main is the authoritative graph
+      # (7) Node exists on origin/main. origin/main is the authoritative graph
       # state; a name with no node file there is not a graph node we can park.
       local body
       if ! body=$(git -C "$repo_root" show "origin/main:intentions/${name}.md" 2>/dev/null); then
@@ -718,7 +936,7 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (7) Already parked. Idiom copied VERBATIM from `park_live_on_main` in
+      # (8) Already parked. Idiom copied VERBATIM from `park_live_on_main` in
       # `packages/intentionsutil/scripts/office-hours-graph` — deliberately
       # inlined rather than shared (the same deliberate duplication
       # frozen_session_sweep step (8) carries). The frontmatter scoping is
@@ -737,7 +955,7 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (8) Phase gate — the discriminator this predicate adds over the frozen
+      # (9) Phase gate — the discriminator this predicate adds over the frozen
       # sweep. A node at `phase: done` is FINISHED and must never be parked;
       # everything else — any in-flight phase, and `phase: null` — is still at a
       # working phase and is a candidate. This is exactly the `active-phase`
@@ -749,7 +967,7 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (9) Cap. Excess candidates are deferred to the next tick rather than
+      # (10) Cap. Excess candidates are deferred to the next tick rather than
       # serializing N graph-commit landing-lock pushes inside this one.
       if (( parked_count >= park_max )); then
         deferred=$(( deferred + 1 ))
@@ -757,28 +975,56 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (10) Recover the worker's OWN escalation text. Job directories are named
-      # by the first hyphen-delimited field of the session id. When the session
-      # wrote `office-hours-reason` (the escalation contract every phase skill
-      # follows) that text is used VERBATIM — this sweep automates the manual
-      # recovery procedure, it does not re-derive the judgment. An
-      # `office-hours-pr` holding an integer is threaded as `--pr <n>`, which
-      # preserves the `execution.pr` custody the deleted Stop-hook backstop
-      # provided; it reads a file the session already wrote, so the sweep stays
-      # gh-free.
-      local job_dir reason="" recommendation="" pr=""
-      job_dir="$jobs_root/${sid%%-*}"
-      if [[ -s "$job_dir/office-hours-reason" ]]; then
-        reason=$(cat "$job_dir/office-hours-reason" 2>/dev/null) || reason=""
-        if [[ -s "$job_dir/office-hours-recommendation" ]]; then
-          recommendation=$(cat "$job_dir/office-hours-recommendation" 2>/dev/null) || recommendation=""
+      # (11) Recover the worker's OWN escalation text. Job directories are named
+      # by the registry's `.id` field — NOT the session id, and NOT a prefix of
+      # it: a RESUMED session keeps its original job id while its sessionId
+      # changes (a live registry shows `id=c20b2f8d` beside
+      # `sessionId=699ca965-…`). Keying on the sessionId would read a DIFFERENT
+      # session's escalation files whenever the two collide, land that text on
+      # this node, and then delete the other session's markers.
+      #
+      # Two guards therefore stand between the registry row and the job dir:
+      # the same shape check applied to `sid` (the id becomes a path component),
+      # and an OWNERSHIP check — `state.json`'s `.name` (the field dispatch-stop
+      # itself reads) must be this node id. Anything else falls back to the
+      # synthesized reason and, crucially, does NOT delete the markers it did not
+      # write.
+      #
+      # When the session wrote `office-hours-reason` (the escalation contract
+      # every phase skill follows) that text is used VERBATIM — this sweep
+      # automates the manual recovery procedure, it does not re-derive the
+      # judgment. An `office-hours-pr` holding an integer is threaded as
+      # `--pr <n>`, which preserves the `execution.pr` custody the deleted
+      # Stop-hook backstop provided; it reads a file the session already wrote,
+      # so the sweep stays gh-free.
+      local job_dir="" job_owned=0 reason="" recommendation="" pr=""
+      if [[ -n "$jid" && "$jid" =~ ^[0-9a-fA-F-]+$ ]]; then
+        local job_name
+        job_name=$(jq -r '.name // empty' "$jobs_root/$jid/state.json" 2>/dev/null) || job_name=""
+        if [[ -n "$job_name" && "$job_name" == "$name" ]]; then
+          job_dir="$jobs_root/$jid"
+          job_owned=1
+        else
+          printf 'lib-frozen-session-park: job dir %s does not belong to %s (state.json name=%s); using the synthesized reason and leaving its markers alone\n' \
+            "$jobs_root/$jid" "$name" "${job_name:-<unreadable>}" >&2
         fi
+      else
+        printf 'lib-frozen-session-park: terminal worker %s has no usable job id (id=%s); using the synthesized reason\n' \
+          "$name" "${jid:-<empty>}" >&2
       fi
-      if [[ -s "$job_dir/office-hours-pr" ]]; then
-        local pr_raw
-        pr_raw=$(cat "$job_dir/office-hours-pr" 2>/dev/null) || pr_raw=""
-        if [[ "$pr_raw" =~ ^[0-9]+$ ]]; then
-          pr="$pr_raw"
+      if (( job_owned )); then
+        if [[ -s "$job_dir/office-hours-reason" ]]; then
+          reason=$(cat "$job_dir/office-hours-reason" 2>/dev/null) || reason=""
+          if [[ -s "$job_dir/office-hours-recommendation" ]]; then
+            recommendation=$(cat "$job_dir/office-hours-recommendation" 2>/dev/null) || recommendation=""
+          fi
+        fi
+        if [[ -s "$job_dir/office-hours-pr" ]]; then
+          local pr_raw
+          pr_raw=$(cat "$job_dir/office-hours-pr" 2>/dev/null) || pr_raw=""
+          if [[ "$pr_raw" =~ ^[0-9]+$ ]]; then
+            pr="$pr_raw"
+          fi
         fi
       fi
       if [[ -z "$reason" ]]; then
@@ -788,7 +1034,7 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         recommendation="Read the session's transcript or attach the held job (\`claude agents --all\`, \`claude attach <job-id>\`) to see what it concluded. Decide the judgment item it stopped on, then either answer it here and \`clear-park <node-id>\`, or stop the session (\`claude stop <job-id>\`), let \`dispatch-sweep\` reap the worktree, and \`clear-park <node-id>\` to return the node to the lane. Do NOT simply reap the terminal session and release the node — that is what restarts the churn loop."
       fi
 
-      # (11) Park. Invoked BY PATH under $repo_root, exactly as
+      # (12) Park. Invoked BY PATH under $repo_root, exactly as
       # frozen_session_sweep and lib-standdown-recheck.sh:699 do: `park-node`
       # resolves its repo root from its OWN script location, so a park-node path
       # under $repo_root satisfies invariant I1 regardless of the tick's cwd.
@@ -796,22 +1042,41 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       # backstop, which ran park-node from the worker's own PR-branch worktree
       # and so wrote against the wrong base. `</dev/null`: park-node's git/node
       # subprocesses have no business reading the sweep's inherited stdin.
+      #
+      # Bounded exactly as frozen_session_sweep's park is: `timeout` caps the
+      # wall clock this one call may take, and the short
+      # GRAPH_COMMIT_LOCK_WAIT_SECONDS makes graph-commit abandon a contended
+      # landing lock inside that cap rather than after its own 1050s default.
+      # The tick must keep scheduling even when the landing lock is busy — the
+      # header's "retries on the next tick if a landing-lock wait is in progress"
+      # is only true because of these two bounds.
       local -a park_args=()
       if [[ -n "$pr" ]]; then
         park_args+=(--pr "$pr")
       fi
       park_args+=("$name" "$reason" "$recommendation")
       local rc=0
-      "$park_node" "${park_args[@]}" >/dev/null </dev/null || rc=$?
+      GRAPH_COMMIT_LOCK_WAIT_SECONDS="$lock_wait" \
+        "$timeout_bin" "$park_timeout" "$park_node" "${park_args[@]}" >/dev/null </dev/null || rc=$?
       if (( rc == 0 )); then
         parked_count=$(( parked_count + 1 ))
         printf 'lib-frozen-session-park: parked %s (terminal-without-disposition after %ss; session=%s)\n' "$name" "$idle" "$sid" >&2
         _terminal_disposition_log_decision "$name" "$sid" "$idle" "parked"
         # Clear the session's escalation markers so a later sweep cannot re-land
         # stale text — mirroring dispatch-stop.sh's on-success cleanup, the one
-        # behaviour of the deleted backstop worth keeping.
-        rm -f "$job_dir/office-hours-reason" "$job_dir/office-hours-recommendation" \
-              "$job_dir/office-hours-pr" 2>/dev/null || true
+        # behaviour of the deleted backstop worth keeping. ONLY for a job dir
+        # this node actually owns: deleting another session's pending escalation
+        # markers would destroy its park evidence.
+        if (( job_owned )); then
+          rm -f "$job_dir/office-hours-reason" "$job_dir/office-hours-recommendation" \
+                "$job_dir/office-hours-pr" 2>/dev/null || true
+        fi
+      elif (( rc == 124 )); then
+        # A timeout is just another park failure — same non-fatal handling, the
+        # markers are retained, but it is named distinctly so a contended landing
+        # lock is greppable as itself.
+        printf 'lib-frozen-session-park: park failed for %s (park-node timed out after %ss); will retry next tick\n' "$name" "$park_timeout" >&2
+        _terminal_disposition_log_decision "$name" "$sid" "$idle" "park-timeout"
       else
         # A park failure is never fatal to the sweep or the tick: log it, KEEP
         # the marker files so the retry can still use the session's own text,

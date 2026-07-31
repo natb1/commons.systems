@@ -89,10 +89,15 @@
 #      recorded disposition. Runs on the same two cadences as the frozen-session
 #      sweep above, immediately after it, for the same reason: the paused-branch
 #      `exit 0` is the only autonomous path that never reaches
-#      dispatch-select-tick's own sweeps, and the normal path runs it before Step
-#      1 selection so it reuses this tick's single daemon snapshot and any node it
-#      parks is already excluded from this tick's own selection. A load failure of
-#      lib-frozen-session-park.sh is logged loudly and never aborts the tick.
+#      dispatch-select-tick's own sweeps. On the normal path its placement before
+#      Step 1 buys ONE thing only — any node it parks is already excluded from
+#      this tick's own selection. It does NOT share the tick's daemon snapshot:
+#      `claude_agents_list_terminal_workers` queries `claude agents --json --all`
+#      DIRECTLY, because the snapshot is captured without `--all` and so lacks the
+#      terminal rows the sweep exists to find, so the sweep costs one extra daemon
+#      round-trip (its stand-down interlock's ACTIVE-view read IS
+#      snapshot-backed). A load failure of lib-frozen-session-park.sh is logged
+#      loudly and never aborts the tick.
 #   1. Run dispatch-select-tick, echoing all of its stdout through (the
 #      jit:/calendar: passthrough lines AND the decision line) so journald and a
 #      live relay both see the narrative. The decision is its LAST stdout line.
@@ -575,12 +580,14 @@ fi
 
 # --- Terminal-without-disposition sweep (tactic-phase-terminal-requires-disposition) ---
 # Runs here — immediately after the frozen-session sweep above, before Step 1's
-# selection below — so it reuses this tick's single daemon snapshot (no extra
-# round-trip) and any node it parks this tick is excluded from THIS tick's own
-# selection: park-node has already landed office_hours on main by the time
-# dispatch-select-tick runs. Same guard posture as the paused branch above: a
-# load failure is logged loudly and never aborts or skips the rest of the tick —
-# the sweep is observability/containment, never a gate.
+# selection below — for ONE reason: any node it parks this tick is excluded from
+# THIS tick's own selection, because park-node has already landed office_hours on
+# main by the time dispatch-select-tick runs. It does NOT ride this tick's daemon
+# snapshot: its candidate query is a DIRECT `claude agents --json --all` (the
+# snapshot is captured without `--all`, so it cannot carry the terminal rows the
+# sweep looks for), which costs one extra round-trip. Same guard posture as the
+# paused branch above: a load failure is logged loudly and never aborts or skips
+# the rest of the tick — the sweep is observability/containment, never a gate.
 if declare -f terminal_without_disposition_sweep >/dev/null 2>&1; then
   terminal_without_disposition_sweep 1>&2
 else
