@@ -82,12 +82,12 @@ rationale: "Filed 2026-07-31 as the owed tracking node for bug-ledger rows O and
   one. Fold in the keyspace filter as a property of whatever the watcher
   becomes, and give every such instrument the general rule this class demands:
   state explicitly what it prints when it cannot see, and never let that equal
-  healthy. An instrument that cannot read its input must report UNKNOWN, not
-  OK — the repo's code-style rule already says prefer clear errors over
-  defensive fallbacks.
-  Interim attention scaffolding only — tactic-attention-tier-ranking replaces
-  the numeric scheme with lexicographic (tier, rank) and max-lifting, and
-  tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
+  healthy. An instrument that cannot read its input must report UNKNOWN, not OK
+  — the repo's code-style rule already says prefer clear errors over defensive
+  fallbacks. Interim attention scaffolding only — tactic-attention-tier-ranking
+  replaces the numeric scheme with lexicographic (tier, rank) and max-lifting,
+  and tactic-attention-boost-scripts converts these boosts to tier/bug_fix
+  marks."
 reading: null
 gap: null
 serves:
@@ -114,7 +114,87 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    (/align-tactics tactic-target round, 2026-07-31.) Drift review surfaced two
+    MATERIAL design premises this tactic's plan cannot be authored without, and
+    which the serving strategy (strategy-graph-native-dispatch) does not record.
+    (1) Alarm surface: promoting the watcher and healer to systemd user units
+    removes their only current surface -- an operator's terminal -- and nothing
+    records what replaces it. The four enduring out-of-band checks (tick
+    staleness, daemon liveness, sustained BUSY=0, auto-merge suppression) all
+    detect fleet-level non-progression, which condition 10's graph-recorded
+    breaker does not cover (it is scoped to correlated dead claims, at least 3,
+    not a stopped tick). Shipping journald-only would itself instantiate the "no
+    counter, no hold, no park, no operator surface" defect class the 2026-07-29
+    clarification (condition 10 lineage, and this node's own "class" section)
+    forbids these instruments from adding a sixth member to; wiring these checks
+    into the condition-10 breaker instead would halt all selection on a
+    fleet-level signal the author never scoped it to. (2) Pause-awareness:
+    tick-staleness and sustained-BUSY=0 cannot distinguish a stalled fleet from
+    a deliberately paused one without reading pause state, and the recorded
+    mechanism disagrees with the live one -- condition 16's 2026-07-26 amendment
+    names a dispatch.config/*.json field as the sole pause mechanism, but
+    dispatch-tick:291-292 still gates on the sentinel file
+    $XDG_DATA_HOME/commons-dispatch/paused (modified as recently as 2026-07-31),
+    no config field exists in the repo yet, and its owning node
+    (tactic-dispatch-pause-config-field) is status raw / phase null. During a
+    pause, dispatch-tick exits before dispatch-select-tick runs, so both checks
+    would fire continuously through every standing pause -- a supported,
+    standing operating mode per condition 16. Condition 16's fail-CLOSED default
+    (an unreadable pause state reads as paused) also inverts for an instrument:
+    silencing on an unreadable input is the exact silent-PASS class this node
+    exists to close, not a safe default to inherit.
+
+
+    Three immaterial observations from the same drift review already landed as
+    dated clarifications on strategy-graph-native-dispatch and need no author
+    action: the systemd-unit-provisioning-mechanism choice (the runtime ensure_*
+    pattern in lib.sh, not home-manager), the sequencing dependency of two of
+    this node's own scope-boundary dispositions on unmerged sibling tactics
+    (tactic-phase-terminal-requires-disposition, phase implement;
+    tactic-denied-command-parks-node, phase review -- Dependencies-section notes
+    for the eventual plan, not blockers to ratifying the two premises above),
+    and a stale line-anchor correction to a 2026-07-31 clarification
+    (claude_agents_count_busy_workers is at lib-claude-agents.sh:1022 in current
+    main, not :596-600).
+  since: 2026-07-31
+  recommendation: >-
+    Ratify in a two-question /align-strategy sitting on
+    strategy-graph-native-dispatch citing this park: (1) should an out-of-band
+    fleet instrument's finding or UNKNOWN land as a find-or-create graph node --
+    the dispatch-diagnose-main / tactic-main-red-<shortsha> pattern -- rather
+    than journald alone, and should these instruments be explicitly excluded
+    from tripping the condition-10 breaker (report, never fleet-halt)? (2)
+    should tick-staleness and sustained-BUSY=0 stay quiet during a standing
+    pause (daemon-liveness does not -- a paused fleet still has a live daemon),
+    reading the live sentinel at $XDG_DATA_HOME/commons-dispatch/paused through
+    one shared helper until tactic-dispatch-pause-config-field lands, with
+    condition 16's fail-CLOSED default inverted for these instruments (an
+    unreadable pause state reports UNKNOWN and still emits, never silently
+    suppresses)? Then clear this office_hours park and re-run /align-tactics
+    tactic-fleet-watchdogs-session-scoped to finalize.
+
+
+    The round already produced a complete reuse set, so the re-run should not
+    need to redo this research: ensure_sweep_timer / ensure_heartbeat_units /
+    cleanup_stale_unit_pair in .claude/skills/dispatch-propagate/scripts/lib.sh
+    (systemd-unit provisioning -- atomic temp-file-then-mv writes, injection
+    guards, self-heal on a stale WorkingDirectory) as the pattern for the new
+    units; dispatch-daemon-liveness (run it, do not reimplement it -- already
+    has a --json mode and a documented verdict/exit-code contract) for the
+    daemon-liveness check; worktree_has_live_session in lib-claude-agents.sh
+    (the keyspace-match predicate, reuse UNCHANGED, build the
+    node-keyspace-and-not-self array once at the input boundary per this node's
+    own "What the two false starts teach" section); and the journalctl --user -t
+    dispatch-tick fix landed by tactic-reclaim-audit-journal-unit-filter (use
+    -t, the SYSLOG_IDENTIFIER match, never -u, for any new sensor reading
+    dispatch-tick's own journal). No ordering blocker: this park does not depend
+    on tactic-phase-terminal-requires-disposition or
+    tactic-denied-command-parks-node landing first -- those only affect two of
+    the plan's scope-boundary dispositions, tracked as Dependencies notes for
+    the eventual plan, not preconditions for ratifying the two premises above.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
