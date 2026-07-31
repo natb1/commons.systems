@@ -65,7 +65,7 @@ attention:
     promotion lifts no blocker and cannot compound. Finalized 2026-07-31 via
     /align-tactics (tactic-target round): status is now codified and phase
     implement, carrying the full plan in the body; the boost is unchanged."
-phase: main-qa
+phase: done
 execution:
   branch: tactic-standdown-winner-liveness
   pr: 2996
@@ -83,50 +83,7 @@ execution:
 validates: []
 blocked_by:
   - tactic-hold-residue-standdown-winner-liveness
-office_hours:
-  reason: >-
-    /qa-main: both needs-main residue items on tactic-standdown-winner-liveness
-    (PR #2996) are not browser-verifiable — neither has a real url_path (both
-    say "current", not a web page) and both require inspecting live
-    dispatch-fleet infrastructure state or making a human judgment call, not
-    observing a deployed URL via Claude-in-Chrome:
-
-    1. "Live-fleet behavior of the sweep" — requires reading the tick journal
-    for `standdown_recheck_sweep` run lines, checking `tmp/dispatch-standdown/`
-    stays empty in steady state, and confirming a
-    `standdown-winner-dead-work-unpushed` park record (once one occurs) carries
-    recoverable context.
-
-    2. "Ruling on the shared grace/park-cap defaults" — explicitly asks a human
-    to accept or re-tune `DISPATCH_STANDDOWN_IDLE_GRACE_S=900` /
-    `DISPATCH_STANDDOWN_PARK_MAX=3`; the node's own text says this duplicates an
-    already-open office-hours item on sibling node
-    tactic-denied-command-parks-node (commit 0f6af041).
-  since: 2026-07-31
-  recommendation: >-
-    For item 1: check the dispatch tick journal for `lib-standdown-recheck:
-    sweep complete (…)` lines appearing on both the paused and normal ticks; `ls
-    tmp/dispatch-standdown/` on the fleet host and confirm it's empty in steady
-    state (a marker lingering more than a tick or two is a problem); if/when a
-    `standdown-winner-dead-work-unpushed` park has occurred, pull it from the
-    office-hours queue and confirm its reason text alone (worktree path,
-    unpushed sha, winner sid) is enough to recover the work without reading a
-    session transcript.
-
-
-    For item 2: this is a pure tuning judgment call, no observation needed —
-    decide whether DISPATCH_STANDDOWN_IDLE_GRACE_S=900s and
-    DISPATCH_STANDDOWN_PARK_MAX=3 are acceptable defaults (they mirror the
-    sibling sweep lib-frozen-session-park.sh). Since the identical question is
-    already parked on sibling node tactic-denied-command-parks-node (commit
-    0f6af041), consider ruling on both at once rather than treating them as
-    separate decisions — a single answer likely resolves both.
-
-
-    Once both are dispositioned, clear the office_hours park on
-    tactic-standdown-winner-liveness (clear-park) so the node can advance
-    main-qa → done.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -782,3 +739,50 @@ section rather than escalated. Drained by `tactic-main-qa-phase` after
    - url_path: current
    - expected_outcome: `DISPATCH_STANDDOWN_IDLE_GRACE_S=900` and `DISPATCH_STANDDOWN_PARK_MAX=3` are accepted as reasonable operational defaults, or a human re-tunes them.
    - finding: These values mirror the sibling sweep `lib-frozen-session-park.sh`'s defaults. The identical tuning question (900s grace / 3-park cap) is already parked to office-hours on the sibling node `tactic-denied-command-parks-node` (commit `0f6af041`, which reclassified it as needing a human ruling). Re-raising it as a fresh blocker here would duplicate an already-open queue item. The blast radius of a wrong value is bounded: it only affects the `origin=observed` path's park timing — never a release, never a spurious park of a declared stand-down (verified during this QA pass).
+
+## Verification evidence 2026-07-31 — residue item 1 PASSES, item 2 ruled, park cleared
+
+Machine-verified after PR #2996 merged (2026-07-31T10:10:04Z). Item 1 is fully
+machine-verifiable and was mis-sorted by a browser-verifiability test; item 2 was
+a genuine author ruling and has now been given.
+
+**Item 1 — live-fleet sweep behavior. PASS.**
+
+*Sweep runs each tick:* 21 `lib-standdown-recheck: sweep complete` lines since
+merge, one per tick. Exactly one tick pid lacks a sweep — `2940130`, timestamped
+06:11:38 EDT, the tick already in flight when the merge landed at 06:10:04 and
+which had therefore not sourced the new lib. Every tick started after the merge
+logged exactly one sweep, and no `lib-standdown-recheck` load-failure diagnostic
+appears anywhere in the journal. The paused-branch cadence could not be observed
+in production (dispatch is not paused) but is covered by real, non-mocked tests —
+`test-dispatch-tick.sh` 102/102, including `paused-standdown`, `normal-standdown`
+and `standdown-load-fail`.
+
+*Ledger empty in steady state:* `tmp/dispatch-standdown/` was never created, and
+all 21 sweep lines read `markers=0 recorded=0 parked=0 observing=0 cleared=0
+deferred=0`.
+
+*First dead-winner park carries recoverable context:* **not yet occurred** — no
+`standdown-winner-dead-work-unpushed` park exists, consistent with no duplicate
+spawn since deploy. This is a wait, not a park reason, and the sweep itself will
+surface it; no human needs to watch for it. The content requirement is already
+statically satisfied: the template at `lib-standdown-recheck.sh:686` interpolates
+the winner sid, the surviving stood-down sids, the worktree path, and
+`git log --oneline -n 3 origin/main..HEAD` — all four required fields — and `:697`
+names the recovery procedure including the `claude rm` destroys-unpushed-work
+warning. `test-lib-standdown-recheck.sh` 83/83.
+
+**Item 2 — grace and park-cap defaults. RULED ACCEPTABLE by the author,
+2026-07-31.** `DISPATCH_STANDDOWN_IDLE_GRACE_S=900` and
+`DISPATCH_STANDDOWN_PARK_MAX=3` stand as the operational defaults. The ruling was
+taken jointly with `tactic-denied-command-parks-node`, whose parked item 7 is the
+same question against `lib-frozen-session-park.sh`; one answer discharges both,
+and that node's park may be cleared on this ruling.
+
+**This node's sweep is now the reference implementation for every heal path.** It
+is the only park writer measured working: it runs `park-node` from `$repo_root`
+(`:495`) rather than a PR-branch worktree, so it satisfies invariant I1; and on
+failure it keeps its marker and retries next tick (`:708`) rather than swallowing
+the error. The contrasting Stop-hook backstop failed 5/5 the same day. See
+`tactic-phase-terminal-requires-disposition`, whose scope now points at this
+pattern.

@@ -96,7 +96,7 @@ attention:
     stop; a second, tighter (6s) recurrence confirmed it 2026-07-31. blocked_by
     is empty, so this promotion lifts no blocker and cannot compound. Finalized
     to phase: implement 2026-07-31 via /align-tactics."
-phase: main-qa
+phase: done
 execution:
   branch: tactic-router-spawn-window-duplicate-worker
   pr: 2995
@@ -113,49 +113,7 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: '/qa-main: both needs-main residue items on
-    tactic-router-spawn-window-duplicate-worker (PR #2995) are not
-    browser-verifiable — url_path is "current" and both expected outcomes
-    require observing accumulated production behavior over time (tick-journal
-    `launched <id>` lines across pids, `tmp/dispatch-reservations/` occupancy,
-    and the live-worker-redundant vs spawn-handoff-expired reclaim-note mix),
-    not a page load. The residue body itself states both are "cannot be asserted
-    at merge time" / "requires production log review over time, not a merge-time
-    command." No Claude-in-Chrome check applies.'
-  since: 2026-07-31
-  recommendation: >-
-    A human (or a future tick-journal-aware tool, not yet built) should
-    periodically check, over the days following the 2026-07-31 merge of PR #2995
-    (mergeCommitSha 3ddf7858...):
-
-
-    1. Duplicate-worker recurrence check (residue #9): grep the dispatch tick
-    journal for `launched <id>` lines and cross-reference
-    `graph-selection.jsonl` -- confirm no node id gets two `launched` lines from
-    different tick pids within the boot window (the pre-fix defect). A
-    recurrence within about 300s of spawn (the new
-    DISPATCH_RESERVATION_HANDOFF_TTL_S default) would mean this fix regressed; a
-    recurrence with a much larger gap (e.g. about 814s, as seen historically) is
-    the separate sibling defect tracked by
-    tactic-graph-router-live-worker-read-robust and should NOT be attributed to
-    this fix.
-
-    2. Ledger health check (residue #10): inspect `tmp/dispatch-reservations/`
-    during a worker's boot window (should be non-empty -- the direct observable
-    that the handoff claim is being held) and tail the journal for
-    `lib-reservation-ledger: reclaimed reservation <id> (spawn-handoff-expired
-    ...)` notes. A steady trickle is healthy; a flood means
-    DISPATCH_RESERVATION_HANDOFF_TTL_S (default 300s) is shorter than real
-    registration latency and should be raised, not reverted. Also expect
-    `live-worker-redundant` reclaim counts (per dispatch-reclaim-audit) to rise
-    substantially post-fix -- this is the expected new normal, not a red flag.
-
-
-    No PR-body task list or code artifact needs revisiting; this is pure
-    post-merge production observation over an accumulation window, which cannot
-    be compressed into a single QA session.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -658,3 +616,65 @@ linter). Drained after `review → main-qa`.
 - Finding: The trickle-vs-flood ratio and ledger-occupancy pattern only
   become meaningful after the fleet accumulates real spawn cycles post-merge;
   requires production log review over time, not a merge-time command.
+
+## Verification evidence 2026-07-31 — residue items 9 and 10 PASS, park cleared
+
+Machine-verified after PR #2995 merged (2026-07-31T11:31:10Z, sha 3ddf7858). Both
+items were resolved with `journalctl`, `ls`, `jq` and `git show` — no browser, no
+author input — so the "not browser-verifiable" park was a mis-sort against the
+criterion at `strategy-graph-native-dispatch.md:2224-2227`.
+
+**Item 10 — ledger occupancy and reclaim mix. PASS, and it is direct mechanism
+evidence.** Captured during the live 14:34:30Z spawn window, three markers held:
+
+```
+tmp/dispatch-reservations/tactic-stopped-session-blocks-node
+  session=headless:b2f404c6599f4b96ab2dd8d7124d07e7
+  issue=tactic-stopped-session-blocks-node
+  origin=spawned
+  timestamp=2026-07-31T14:34:23Z
+```
+
+Before the fix these markers were **deleted at spawn** — an empty ledger during a
+boot window was precisely this defect's signature. They are now held past spawn.
+Reclaim-note mix moved as the plan predicted: `live-worker-redundant` 2 in ~18h
+pre-merge -> **12 in 3.1h** post-merge (the expected new normal), and the new
+`spawn-handoff-expired` fired exactly once (11:47:06Z), a trickle rather than a
+flood, so the 300s handoff TTL needs no adjustment. That string did not exist in
+the codebase before this merge (`git show 3ddf7858^1:lib-reservation-ledger.sh`
+-> 0 hits; `3ddf7858` -> 3).
+
+**Item 9 — no post-merge recurrence. PASS, but record it as an UNSTRESSED pass.**
+A pairwise self-join over `launched <id>` journal lines (same node, different tick
+pid, within the boot window) finds no post-merge duplicate across 15 launches over
+8 tick pids. But every post-merge inter-tick gap following a launching tick was
+826-1808s — far outside both the boot window and the new 300s TTL. The only tight
+post-merge pair (14:17:58Z -> 14:19:08Z, 70s) had an `empty` disposition on both
+sides, so there was nothing to shadow. **The guard has not yet been exercised in
+anger.** Anyone strengthening this claim should wait for a tick pair firing <300s
+apart with a launch in the earlier one, and hold rather than park until then.
+
+**Two previously unrecorded pre-merge occurrences.** The body records three; there
+were five, four of them this mechanism. Both below predate the merge (11:31:10Z),
+so neither falsifies item 9.
+
+| # | time (EDT) | node | gap | pids |
+|---|---|---|---|---|
+| 4 | 03:01:20 -> 03:01:50 | `tactic-router-spawn-window-duplicate-worker` (itself) | **30s** | 2215829 / 2249277 |
+| 5 | 06:05:02 -> 06:06:16 | `tactic-stopped-session-blocks-node` | **74s** | 2857386 / 2901813 |
+
+Both carry the textbook signature in `graph-selection.jsonl`: sibling nodes
+correctly skipped for `live-session`, the target **not** skipped, on two
+consecutive selection records. With occurrences 1 (90s) and 3 (14s) this puts the
+spawn-window mechanism at four observations spanning 14s-90s, which is the boot
+latency the fix now covers. Occurrence 2 (816s) remains the separate live-session
+read defect tracked by `tactic-graph-router-live-worker-read-robust`.
+
+**Tooling defect found while verifying item 10, filed separately as
+`tactic-reclaim-audit-journal-unit-filter`.** `dispatch-reclaim-audit:179` queries
+`journalctl --user -u dispatch-tick`, but reclaim lines are emitted by ticks
+running under *transient* units and land under `user@1000.service` with
+`SYSLOG_IDENTIFIER=dispatch-tick`. It reports 0 against a true count of 14, and
+`:182`/`:187` fail **open** to zero counts. That audit is the tool this node's own
+park recommendation names for the item-10 check — following the recommendation as
+written would have returned a vacuous clean.

@@ -62,11 +62,12 @@ execution:
   strategy_fingerprint: null
   fix:
     since: 2026-07-31
-    attempt: 1
+    attempt: 2
     pushed_sha: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-preview-and-smoke-dpkg-lock
 office_hours: null
 pace_exempt: false
 rounds: null
