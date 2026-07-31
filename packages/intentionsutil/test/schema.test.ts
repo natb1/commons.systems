@@ -1532,24 +1532,22 @@ describe("validateGraph", () => {
     expect(caught.message).toMatch(/virtue-1: clarifications\[0\]\.answer carries no dated provenance clause/);
   });
 
-  // Rule 18: strategy-main-health dominant-attention guard.
-  type Attn = { boost: number | null; override: number | null; rationale: string; tier: number };
+  // Rule 18: strategy-main-health owns tier 3 exclusively.
 
   /**
-   * Build a minimal goal-layer node set with a dominant `strategy-main-health`
-   * (default attention.boost 100) and a sibling `strategy-other` carrying
-   * `siblingAttention`. Pass `mainHealthAttention: null` to null out
-   * strategy-main-health's attention (exercises the inert path).
+   * Build a minimal goal-layer node set with `strategy-main-health` (holding
+   * `attributes.tier: 3` by default) and a sibling `strategy-other` carrying
+   * `sibling`'s fields. Pass `mainHealth: null` to omit strategy-main-health
+   * from the set entirely (exercises the inert path), or override its own
+   * fields to exercise the "must hold tier 3" half.
    */
   function mainHealthNodes(
-    siblingAttention: Attn | null,
-    opts: { mainHealthAttention?: Attn | null } = {},
+    sibling: Partial<IntentionNode> = {},
+    opts: { mainHealth?: Partial<IntentionNode> | null } = {},
   ): IntentionNode[] {
-    const mhAttention: Attn | null =
-      "mainHealthAttention" in opts
-        ? (opts.mainHealthAttention ?? null)
-        : { boost: 100, override: null, rationale: "Author-directed: dominant.", tier: 1 };
-    return [
+    const mh: Partial<IntentionNode> | null =
+      "mainHealth" in opts ? opts.mainHealth ?? null : { attributes: { tier: 3 } };
+    const nodes = [
       gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
       gnode({
         id: "kind-strategy",
@@ -1560,59 +1558,61 @@ describe("validateGraph", () => {
           status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
         },
       }),
-      gnode({ id: "strategy-main-health", kind: "strategy", attention: mhAttention }),
-      gnode({ id: "strategy-other", kind: "strategy", attention: siblingAttention }),
+      gnode({ id: "strategy-other", kind: "strategy", ...sibling }),
     ];
+    if (mh !== null) {
+      nodes.push(gnode({ id: "strategy-main-health", kind: "strategy", ...mh }));
+    }
+    return nodes;
   }
 
-  it("Rule 18: throws when another node's attention.boost matches the dominant boost", () => {
-    const nodes = mainHealthNodes({ boost: 100, override: null, rationale: "trying to tie", tier: 1 });
+  it("Rule 18: throws when another node authors an explicit attributes.tier: 3", () => {
+    const nodes = mainHealthNodes({ attributes: { tier: 3 } });
     expect(() => validateGraph(nodes)).toThrow(
-      /strategy-other: attention\.boost \(100\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
+      /strategy-other: authors attributes\.tier: 3, the tier reserved for strategy-main-health/,
     );
   });
 
-  it("Rule 18: throws when another node's attention.boost exceeds the dominant boost", () => {
-    const nodes = mainHealthNodes({ boost: 101, override: null, rationale: "trying to beat", tier: 1 });
-    expect(() => validateGraph(nodes)).toThrow(
-      /strategy-other: attention\.boost \(101\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
-    );
-  });
-
-  it("Rule 18: throws when another node's attention.override matches or exceeds the dominant boost", () => {
-    const nodes = mainHealthNodes({ boost: null, override: 100, rationale: "override tie", tier: 1 });
-    expect(() => validateGraph(nodes)).toThrow(
-      /strategy-other: attention\.override \(100\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
-    );
-  });
-
-  it("Rule 18: passes when the node opts out with ACK: main-health-dominance in its rationale", () => {
+  it("Rule 18: passes when the tier-3 author opts out via ACK: main-health-dominance in rationale", () => {
     const nodes = mainHealthNodes({
-      boost: 100,
-      override: null,
+      attributes: { tier: 3 },
       rationale: "Deliberately co-dominant. ACK: main-health-dominance",
-      tier: 1,
     });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  it("Rule 18: passes for a sibling boost strictly below the dominant boost", () => {
-    const nodes = mainHealthNodes({ boost: 99, override: null, rationale: "below", tier: 1 });
+  it("Rule 18: passes when the ACK lives in attention.rationale instead", () => {
+    const nodes = mainHealthNodes({
+      attributes: { tier: 3 },
+      attention: {
+        boost: 5,
+        override: null,
+        rationale: "Deliberately co-dominant. ACK: main-health-dominance",
+        tier: 3,
+      },
+    });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  it("Rule 18: is inert when strategy-main-health's attention is null (no dominance to protect)", () => {
-    const nodes = mainHealthNodes(
-      { boost: 100, override: null, rationale: "would-be violation", tier: 1 },
-      { mainHealthAttention: null },
+  it("Rule 18: passes for a sibling authoring attributes.tier: 2 (only tier 3 is reserved)", () => {
+    const nodes = mainHealthNodes({ attributes: { tier: 2 } });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 18: throws when strategy-main-health is present without attributes.tier: 3", () => {
+    const nodes = mainHealthNodes({}, { mainHealth: {} });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-main-health: must author attributes\.tier: 3/,
     );
+  });
+
+  it("Rule 18: is inert when strategy-main-health is absent from the node set", () => {
+    const nodes = mainHealthNodes({ attributes: { tier: 2 } }, { mainHealth: null });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  it("Rule 18: does not constrain strategy-main-health's own attention.boost", () => {
-    // The guard excludes the node itself: strategy-main-health carrying a boost
-    // equal to its own threshold must not self-trip.
-    const nodes = mainHealthNodes(null);
+  it("Rule 18: strategy-main-health's own attributes.tier: 3 does not self-trip the authorship half", () => {
+    const nodes = mainHealthNodes();
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 

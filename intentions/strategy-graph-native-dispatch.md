@@ -3246,12 +3246,18 @@ attributes:
     - the legacy drain state is monotonic — no dispatch surface re-enables a
       disabled GitHub feature (has_issues included); a skill whose spec requires
       a disabled feature is a defect of the skill, never license to re-enable
-    - "strategy-main-health's standing boost (100) stays the graph's top
-      authored rank, enforced at the write path rather than by ranking logic
-      (parsimony — the node is simply boosted, no specialized rank treatment):
-      validate-graph/graph-commit refuses a commit that authors another boost or
-      override at or above it, or that reduces it, unless the commit carries an
-      explicit author override"
+    - "strategy-main-health holds attributes.tier: 3, the top tier, and so
+      outranks all other work structurally; enforced at the write path rather
+      than by ranking logic (parsimony — the node is simply in the top tier, no
+      specialized numeric treatment): validate-graph/graph-commit refuses a
+      commit that authors an explicit attributes.tier: 3 on any other node, or
+      that removes tier 3 from strategy-main-health, unless the node carries the
+      ACK: main-health-dominance opt-out. Inheriting tier 3 down serves/parent
+      is unguarded — that is how auto-created red-main fix tactics get their
+      urgency. (amended 2026-07-31: was the standing boost 100 as the graph's
+      top authored rank, with the guard on boosts/overrides at or above it;
+      migrated to the tier model, same write-path posture and same ACK
+      substring)"
     - "a node-worker session is auto-closed (reaped from the agents list via the
       foreground-safe self-close primitive — `claude rm`; interactive sessions
       exempt) iff its pass DECLARED a terminal disposition — the presence of the

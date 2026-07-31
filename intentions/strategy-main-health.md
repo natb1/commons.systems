@@ -14,7 +14,16 @@ rationale: "Red main halts the autonomous dispatch chain — no new work is safe
   persistent-layer doctrine). Auto-created red-main fix tactics serve and
   validate this node and inherit its standing boost through the normal downward
   attention flow; the boost's dominance is maintained by a write-path guard
-  (author override required to out-boost or reduce it), never by recompute."
+  (author override required to out-boost or reduce it), never by recompute.
+  2026-07-31: the standing boost 100 is migrated to attributes.tier: 3 under
+  the tier model — red-main fix tactics now inherit tier 3 through the same
+  downward parent/serves flow, and dominance is structural (this node is simply
+  in the top tier) rather than numeric (highest boost). The write-path guard
+  (validate-graph rule 18) is retargeted accordingly: no other node may author
+  an explicit attributes.tier: 3, and this node must keep it, unless the commit
+  carries the ACK: main-health-dominance override. Earlier clarifications on
+  this node narrate 'boost 100'; they are dated historical records, superseded
+  in effect by this note, not rewritten."
 reading: "unreliable — signal under repair (hand-set 2026-07-23; the next
   read-sensors run overwrites this with readMainHealth()'s literal output).
   origin/main HEAD e2136ff9 carries eight check-runs, all concluding success,
@@ -156,17 +165,7 @@ success_signal:
   threshold: "green: every check on the current origin/main HEAD concludes success
     (or neutral/skipped)"
   is_proxy: true
-attention:
-  boost: 100
-  override: null
-  rationale: "Author-directed 2026-07-13: main health outranks all other work —
-    auto-created red-main fix tactics serve this node and inherit this boost
-    undecayed. Kept dominant by the write-path guard (author override required
-    to author a boost or override at or above it, or to reduce it —
-    strategy-graph-native-dispatch's 2026-07-13 guard condition), never by
-    recompute. Context: other authored boosts are currently 1-10 and derived
-    terms cap at 2; blocked_by compounding cannot overtake because blocking is
-    orthogonal to boosting (strategy-graph-drives-dispatch, 2026-07-13)."
+attention: null
 phase: null
 execution: null
 validates: []
@@ -177,7 +176,8 @@ rounds:
   count: 0
   last_completed: null
   last_aligned: null
-attributes: {}
+attributes:
+  tier: 3
 ---
 # origin/main stays green: a continuously releasable trunk, red episodes self-healing through the sensor flow
 

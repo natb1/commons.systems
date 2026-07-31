@@ -967,34 +967,47 @@ function checkClarificationDates(node: IntentionNode, problems: string[]): void 
 }
 
 /**
- * Rule 18: no node other than strategy-main-health may match or exceed its
- * dominant attention.boost via either attention.boost or attention.override.
- * Threshold (`dominantBoost`) is read live by the caller; when null the guard is
- * inert. An author may opt out with "ACK: main-health-dominance" in the node's
- * attention.rationale.
+ * Rule 18: `strategy-main-health` owns tier 3 (the top tier) exclusively.
+ *
+ *  (a) No node other than `strategy-main-health` may AUTHOR an explicit
+ *      `attributes.tier: 3`. The check reads the RAW `attributes.tier` field —
+ *      not `ownTier`, and not `resolveAttention`'s effective tier — because
+ *      INHERITING tier 3 down `parent`/`serves` is exactly how auto-created
+ *      red-main fix tactics get their urgency. Authorship is guarded; the
+ *      derived value never is.
+ *  (b) When `strategy-main-health` is present in the node set, it must itself
+ *      carry `attributes.tier: 3` — the structural successor to the old
+ *      numeric guard's "or reduce it" half. When it is absent (partial
+ *      fixtures) this half is inert.
+ *
+ * An author may opt out of either half with the literal substring
+ * "ACK: main-health-dominance" in the node's `rationale`, or in
+ * `attention.rationale` when `attention` is non-null (a node can be
+ * tier-lifted with `attention: null`, so `rationale` must be accepted too).
  */
-function checkAttentionDominance(
+function checkTierDominance(
   node: IntentionNode,
-  dominantBoost: number | null,
+  mainHealthPresent: boolean,
   problems: string[],
 ): void {
-  if (
-    dominantBoost === null ||
-    node.id === "strategy-main-health" ||
-    node.attention === null ||
-    node.attention.rationale.includes("ACK: main-health-dominance")
-  ) {
+  const ACK = "ACK: main-health-dominance";
+  const acked =
+    (node.rationale !== null && node.rationale.includes(ACK)) ||
+    (node.attention !== null && node.attention.rationale.includes(ACK));
+  if (acked) return;
+  if (node.id === "strategy-main-health") {
+    // (b) main-health must hold tier 3 itself.
+    if (mainHealthPresent && node.attributes.tier !== 3) {
+      problems.push(
+        `${node.id}: must author attributes.tier: 3 — it owns the top tier so red-main fix work outranks everything else; restore attributes.tier: 3 or add "${ACK}" to its rationale to override`,
+      );
+    }
     return;
   }
-  const { boost, override } = node.attention;
-  if (boost !== null && boost >= dominantBoost) {
+  // (a) no other node may author an explicit tier 3.
+  if (node.attributes.tier === 3) {
     problems.push(
-      `${node.id}: attention.boost (${boost}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
-    );
-  }
-  if (override !== null && override >= dominantBoost) {
-    problems.push(
-      `${node.id}: attention.override (${override}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
+      `${node.id}: authors attributes.tier: 3, the tier reserved for strategy-main-health — use attributes.tier: 2 (or inherit tier 3 via serves/parent), or add "${ACK}" to its rationale to override`,
     );
   }
 }
@@ -1129,14 +1142,19 @@ function checkBlockedByCycles(
  *      uniform across every kind). This is the convention `readingDate()`
  *      (router.ts) and `coverage.ts`'s `lastReviewedOf` parse to date a
  *      clarification; a dateless answer silently breaks those consumers.
- *  18. `strategy-main-health` holds a dominant attention: no OTHER node's
- *      `attention.boost` or `attention.override` may match or exceed
- *      `strategy-main-health`'s own live `attention.boost`. This keeps red-main
- *      fix work outranking everything else. The threshold is read live from the
- *      graph (never hardcoded); if `strategy-main-health` is absent or its
- *      `attention`/`attention.boost` is null there is no dominance to protect
- *      and the guard is inert. A node may opt out by placing the literal
- *      substring `ACK: main-health-dominance` in its `attention.rationale`.
+ *  18. `strategy-main-health` owns tier 3 exclusively — dominance is now
+ *      structural (top tier) rather than numeric (highest boost). No node
+ *      other than `strategy-main-health` may AUTHOR an explicit
+ *      `attributes.tier: 3`, and `strategy-main-health`, when present in the
+ *      node set, must carry `attributes.tier: 3` itself (that half is inert
+ *      when it is absent, e.g. partial fixtures). The check reads the RAW
+ *      `attributes.tier` field, never `ownTier`'s combined value or the
+ *      effective inherited tier: INHERITING tier 3 down `parent`/`serves` is
+ *      exactly how auto-created red-main fix tactics get their urgency, so
+ *      only authorship is guarded. A node may opt out of either half by
+ *      placing the literal substring `ACK: main-health-dominance` in its
+ *      `rationale`, or in its `attention.rationale` when `attention` is
+ *      non-null.
  *  19. Tier marks are well-shaped: `attributes.bug_fix` and
  *      `attributes.security`, when present, are booleans; `attributes.tier`,
  *      when present, is the number 2 or 3. An explicit `attributes.tier: 1` is
@@ -1165,14 +1183,10 @@ export function validateGraph(nodes: IntentionNode[]): void {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const ids = new Set(byId.keys());
   const problems: string[] = [];
-  // Rule 18 threshold: strategy-main-health's own live attention.boost. Read
-  // from the same nodes array; null when the node, its attention, or its boost
-  // is absent — in which case there is no dominance to protect (guard inert).
-  const mainHealthNode = byId.get("strategy-main-health");
-  const dominantBoost =
-    mainHealthNode !== undefined && mainHealthNode.attention !== null
-      ? mainHealthNode.attention.boost
-      : null;
+  // Rule 18: is strategy-main-health part of the set being validated? When it
+  // is absent (a partial fixture) the "main-health must hold tier 3" half of
+  // the guard is inert — there is no node to hold it.
+  const mainHealthPresent = byId.has("strategy-main-health");
   for (const node of nodes) {
     // Rules 1-4: every referenced id exists.
     checkExistenceEdges(node, ids, problems);
@@ -1198,8 +1212,8 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkStatusVocabulary(node, byId, problems);
     // Rule 17: clarification answers carry a dated provenance clause.
     checkClarificationDates(node, problems);
-    // Rule 18: main-health attention dominance.
-    checkAttentionDominance(node, dominantBoost, problems);
+    // Rule 18: strategy-main-health owns tier 3 exclusively.
+    checkTierDominance(node, mainHealthPresent, problems);
     // Rule 19: tier marks are well-shaped.
     checkTierMarkShape(node, problems);
     // Rule 20: attention.tier tags the node's own tier namespace.
