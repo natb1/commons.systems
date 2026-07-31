@@ -66,7 +66,8 @@ execution:
     pushed_sha: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-preview-and-smoke-dpkg-lock
 office_hours: null
 pace_exempt: false
 rounds: null
