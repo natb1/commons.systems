@@ -17,6 +17,8 @@
 #   verify_agent_registered_under      <agent-name> <cwd>
 #   claude_agents_snapshot_capture     <path>
 #   claude_job_id_for_name_all         <name>
+#   claude_session_id_is_live          <sid>
+#   claude_agents_list_duplicate_node_names
 #
 # claude_sessions_under <path>
 #   The cwd-based low-level primitive. Runs `claude agents --json --cwd <path>`,
@@ -146,6 +148,40 @@
 #     return 0 — a row with the given <agent-name> was observed.
 #     return 1 — exhaustion: the agent never appeared within the budget.
 #   Used by `dispatch-launch-worker` / `dispatch-spawn-job` Step 4 verify.
+#
+# claude_session_id_is_live <sid>
+#   The winner-liveness predicate for the duplicate-worker stand-down protocol.
+#   Built on ONE `claude_agents_list_all` fetch — never a bespoke `claude agents
+#   --json` call. Exact-matches column 1 (sessionId) against <sid> with
+#   `awk -F'\t'`, never a substring grep — session ids share prefixes, so a
+#   substring match could conflate two distinct sessions.
+#   This is the SAME fail-safe posture as `worktree_has_live_session`
+#   (occupied-on-unknown), applied to a session id instead of a worktree name —
+#   the inversion is load-bearing: a caller parking a node on `return 1` must
+#   never park because the daemon hiccupped.
+#     return 0 — LIVE: <sid> matched a row in a successfully-queried registry,
+#               OR the registry could not be queried (UNKNOWN folds to live).
+#     return 1 — definitely NOT live: the registry was queried successfully
+#               and no row's sessionId equals <sid>.
+#   Empty/missing <sid>: prints a stderr diagnostic and returns 0 (fail safe),
+#   mirroring `worktree_has_live_session`'s own empty-arg handling.
+#
+# claude_agents_list_duplicate_node_names
+#   The observed-pair detector for the duplicate-worker stand-down protocol.
+#   Takes no arguments. One `claude_agents_list_all` fetch, then keeps only rows
+#   whose name (column 3) matches the graph-node worker shape `^tactic-|^strategy-`
+#   — the same keyspace `claude_agents_count_busy_workers` counts — which
+#   excludes routers (`dispatch-<short-id>`) and legacy `<N>-slug` issue workers
+#   (those have no graph node to park). Groups by name and emits one line per
+#   name with TWO OR MORE live sessions: `name<TAB>sid1,sid2,...` — sids in the
+#   order the registry returned them, output lines sorted by name for
+#   deterministic output. Implemented as a single awk pass; no per-name
+#   shell-out.
+#     return 0 — daemon queried successfully. Stdout carries one line per
+#               duplicated name (empty when the registry holds no duplicate —
+#               a definite "no duplicates" answer, not a failure).
+#     return 1 — UNKNOWN. `claude_agents_list_all` could not be queried. Stdout
+#               is empty.
 #
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is
@@ -584,6 +620,77 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
 
     # The query succeeded and matched neither name: definitely free.
     return 1
+  }
+
+  # claude_session_id_is_live <sid> — fail-safe winner-liveness predicate for
+  # the duplicate-worker stand-down protocol. See the header comment for the
+  # return-code contract (the inversion is load-bearing: UNKNOWN folds to
+  # LIVE, the same fail-safe posture as `worktree_has_live_session` applied to
+  # a session id instead of a worktree name).
+  claude_session_id_is_live() {
+    local sid="${1:-}"
+    if [[ -z "$sid" ]]; then
+      printf 'lib-claude-agents: claude_session_id_is_live requires a <sid> argument\n' >&2
+      return 0  # fail safe: treat as live
+    fi
+
+    # One machine-wide fetch — claude_agents_list_all is the fetch-once
+    # primitive.
+    local all
+    if ! all=$(claude_agents_list_all); then
+      # Unknown — the daemon could not be queried. Fail safe: live.
+      return 0
+    fi
+
+    # claude_agents_list_all emits sessionId<TAB>status<TAB>name (sessionId is
+    # column 1). Exact match only — never a substring grep, since session ids
+    # share prefixes.
+    if awk -F'\t' -v sid="$sid" '$1 == sid { found = 1; exit } END { exit !found }' \
+        <<<"$all"; then
+      return 0
+    fi
+
+    # The query succeeded and no row's sessionId equals <sid>: definitely not
+    # live.
+    return 1
+  }
+
+  # claude_agents_list_duplicate_node_names — emit one line per graph-node
+  # worker name with two or more live sessions. See the header comment for the
+  # return-code contract.
+  claude_agents_list_duplicate_node_names() {
+    # One machine-wide fetch — claude_agents_list_all is the fetch-once
+    # primitive.
+    local all
+    if ! all=$(claude_agents_list_all); then
+      # Unknown — the daemon could not be queried.
+      return 1
+    fi
+
+    # Single awk pass: keep only rows whose name matches the graph-node worker
+    # shape (^tactic-|^strategy-, the same keyspace claude_agents_count_busy_workers
+    # counts — excludes routers and legacy <N>-slug issue workers), group
+    # sessionIds by name in registry order, then emit name<TAB>sid1,sid2,...
+    # for every name with >= 2 sessions, sorted by name for deterministic
+    # output.
+    awk -F'\t' '
+      $3 ~ /^tactic-|^strategy-/ {
+        if (!($3 in seen)) { order[++n] = $3; seen[$3] = 1 }
+        if (sids[$3] == "") { sids[$3] = $1 } else { sids[$3] = sids[$3] "," $1 }
+        count[$3]++
+      }
+      END {
+        for (i = 1; i <= n; i++) {
+          name = order[i]
+          if (count[name] >= 2) { dup[name] = sids[name] }
+        }
+        m = asorti(dup, sorted_names)
+        for (i = 1; i <= m; i++) {
+          name = sorted_names[i]
+          print name "\t" dup[name]
+        }
+      }' <<<"$all"
+    return 0
   }
 
   # claude_agents_count_busy_workers — emit the count of live sessions that are

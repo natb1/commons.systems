@@ -638,6 +638,106 @@ assert_eq "live-claimed unique: 10 and 20 each once" \
   "$(printf '10\n20')" "$(printf '%s\n' "$out" | sort -n)"
 ca_teardown
 
+# --- claude_session_id_is_live (tactic-standdown-winner-liveness) -----------
+# The winner-liveness predicate for the duplicate-worker stand-down protocol:
+# exact-matches a sessionId against a single claude_agents_list_all fetch,
+# folding UNKNOWN to LIVE (return 0) — the same fail-safe inversion as
+# worktree_has_live_session, applied to a session id.
+
+# --- Test 36: sid-live-exact — exact match, no substring match --------------
+echo "Test: claude_session_id_is_live exact-matches sessionId, no substring match"
+ca_setup
+write_fake_claude '[{"sessionId":"aaa","pid":1,"status":"busy","name":"tactic-x"},{"sessionId":"aab","pid":2,"status":"busy","name":"tactic-y"}]' 0
+if claude_session_id_is_live "aaa"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-exact: aaa is live" "0" "$rc"
+if claude_session_id_is_live "aab"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-exact: aab is live" "0" "$rc"
+if claude_session_id_is_live "aa"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-exact: aa (substring only) is not live" "1" "$rc"
+ca_teardown
+
+# --- Test 37: sid-live-absent — well-formed registry without the sid --------
+echo "Test: claude_session_id_is_live returns 1 for a sid absent from a well-formed registry"
+ca_setup
+write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"tactic-x"}]' 0
+if claude_session_id_is_live "missing-sid"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-absent: absent sid is not live" "1" "$rc"
+ca_teardown
+
+ca_setup
+write_fake_claude '[]' 0
+if claude_session_id_is_live "missing-sid"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-absent: empty registry, absent sid is not live" "1" "$rc"
+ca_teardown
+
+# --- Test 38: sid-live-unknown — daemon failure folds to live (fail safe) ---
+echo "Test: claude_session_id_is_live folds daemon UNKNOWN to live"
+ca_setup
+write_fake_claude '' 1
+if claude_session_id_is_live "any-sid"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-unknown: non-zero exit folds to live" "0" "$rc"
+ca_teardown
+
+ca_setup
+write_fake_claude '{}' 0
+if claude_session_id_is_live "any-sid"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-unknown: non-array output folds to live" "0" "$rc"
+ca_teardown
+
+# --- Test 39: sid-live-empty-arg — missing argument fails safe to live ------
+echo "Test: claude_session_id_is_live fails safe to live with no argument and warns on stderr"
+ca_setup
+if out=$(claude_session_id_is_live 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "sid-live-empty-arg: no argument is live" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if err=$(claude_session_id_is_live 2>&1 1>/dev/null) && printf '%s' "$err" | grep -q "requires a <sid> argument"; then
+  PASS=$((PASS + 1)); echo "  PASS: sid-live-empty-arg: warns on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: sid-live-empty-arg: warns on stderr"
+fi
+ca_teardown
+
+# --- claude_agents_list_duplicate_node_names (tactic-standdown-winner-liveness) --
+# The observed-pair detector: groups live graph-node-worker (^tactic-|^strategy-)
+# sessions by name and emits one line per name with >= 2 live sessions.
+
+# --- Test 40: dup-names-pair — one duplicated name amid noise ---------------
+echo "Test: claude_agents_list_duplicate_node_names emits only the duplicated name"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s1","pid":1,"status":"busy","name":"tactic-x"},
+  {"sessionId":"s2","pid":2,"status":"busy","name":"tactic-x"},
+  {"sessionId":"s3","pid":3,"status":"busy","name":"tactic-y"},
+  {"sessionId":"s4","pid":4,"status":"busy","name":"dispatch-abc"},
+  {"sessionId":"s5","pid":5,"status":"busy","name":"1234-slug"}
+]' 0
+if out=$(claude_agents_list_duplicate_node_names); then rc=0; else rc=$?; fi
+assert_eq "dup-names-pair: exits 0" "0" "$rc"
+assert_eq "dup-names-pair: only tactic-x with both sids, in registry order" \
+  "$(printf 'tactic-x\ts1,s2')" "$out"
+ca_teardown
+
+# --- Test 41: dup-names-none — one row per name, no duplicates --------------
+echo "Test: claude_agents_list_duplicate_node_names returns 0 with no output when nothing duplicates"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s1","pid":1,"status":"busy","name":"tactic-x"},
+  {"sessionId":"s2","pid":2,"status":"busy","name":"strategy-y"}
+]' 0
+if out=$(claude_agents_list_duplicate_node_names); then rc=0; else rc=$?; fi
+assert_eq "dup-names-none: exits 0" "0" "$rc"
+assert_eq "dup-names-none: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 42: dup-names-unknown — daemon failure returns 1, empty stdout ----
+echo "Test: claude_agents_list_duplicate_node_names returns 1 with empty stdout on daemon UNKNOWN"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_agents_list_duplicate_node_names); then rc=0; else rc=$?; fi
+assert_eq "dup-names-unknown: exits 1" "1" "$rc"
+assert_eq "dup-names-unknown: prints nothing" "" "$out"
+ca_teardown
+
 # <<< END MOVED <<<
 
 report_results
