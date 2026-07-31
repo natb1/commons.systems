@@ -14,6 +14,7 @@
 #   live_session_claimed_nums
 #   worktree_has_live_session          <worktree-path> [exclude_sid]
 #   claude_agents_count_busy_workers
+#   claude_agents_count_held_for_debug
 #   verify_agent_registered_under      <agent-name> <cwd>
 #   claude_agents_snapshot_capture     <path>
 #   claude_job_id_for_name_all         <name>
@@ -816,6 +817,57 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       then [ .[]
         | select(.name | type == "string" and test("^[0-9]+-|^tactic-|^strategy-"))
         | select(.status == "busy") ] | length
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 1
+    fi
+    printf '%s\n' "$count"
+    return 0
+  }
+
+  # claude_agents_count_held_for_debug — emit the count of worker sessions
+  # (name matches `^[0-9]+-` / `^tactic-` / `^strategy-`, the same keyspace
+  # `claude_agents_count_busy_workers` counts — excluding `dispatch-*`
+  # routers) whose status is neither `busy` nor `idle` — i.e. terminal
+  # (done/error/crashed/etc) sessions a narrowed auto-close default is
+  # keeping alive instead of reaping. This makes that otherwise-invisible
+  # accumulation visible in dispatch-sweep's log. Deliberately does NOT
+  # enumerate terminal statuses (no `done`/`error`/`stopped`/`crashed`
+  # literal match): "not busy, not idle" is the total, forward-compatible
+  # predicate, so a new terminal status the daemon introduces is still
+  # counted without a code change here.
+  #
+  # Unlike `claude_agents_count_busy_workers`, this function queries
+  # `claude agents --json --all` DIRECTLY, bypassing `_claude_agents_raw` —
+  # the tick snapshot it wraps is captured without `--all` and so lacks the
+  # terminal-state rows this function exists to see (same rationale as
+  # `claude_sessions_with_name_all`'s direct `--all` query above).
+  #     return 0 — daemon queried successfully. Stdout is the count (>= 0).
+  #     return 1 — UNKNOWN. `claude` missing, non-zero exit, empty output,
+  #               or non-array JSON. Stdout is empty; never prints a count
+  #               on this path.
+  claude_agents_count_held_for_debug() {
+    # --all so terminal (done/error/etc) rows are visible; queried DIRECTLY
+    # (not via _claude_agents_raw) because the snapshot lacks --all and
+    # therefore lacks the very rows this function counts. 2>/dev/null drops
+    # daemon noise; only the exit code and well-formed JSON on stdout are
+    # trusted.
+    local out
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json --all 2>/dev/null); then
+      return 1
+    fi
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # One jq pass validates the array shape and counts matches. Non-array
+    # input errors out and the result is UNKNOWN.
+    local count
+    if ! count=$(jq -r '
+      if type == "array"
+      then [ .[]
+        | select(.name | type == "string" and test("^[0-9]+-|^tactic-|^strategy-"))
+        | select(.status != "busy" and .status != "idle") ] | length
       else error("claude agents --json output is not a JSON array")
       end' <<<"$out" 2>/dev/null); then
       return 1
