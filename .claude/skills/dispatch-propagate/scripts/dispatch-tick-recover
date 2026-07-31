@@ -186,6 +186,13 @@ fi
 # here is non-fatal; the chain continuation still runs via OnFailure.
 ensure_heartbeat_units "$MAIN_WORKTREE" || true
 
+# Same early re-assertion for the sweep timer: without this, recovery only
+# repaired the heartbeat, leaving a corrupted sweep unit (e.g. WorkingDirectory=
+# pointing at a deleted temp path) unrepaired until dispatch-spawn-tick or one
+# of the dispatch-schedule-* scripts happens to call ensure_sweep_timer.
+# Best-effort, same as above.
+ensure_sweep_timer "$MAIN_WORKTREE" || true
+
 # ---- Step 1: NOW ------------------------------------------------------------
 
 NOW="${DISPATCH_TICK_RECOVER_NOW:-$(date +%s)}"
