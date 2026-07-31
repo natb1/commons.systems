@@ -32,6 +32,21 @@ tick_setup() {
   # paused-branch reservation_sweep genuinely runs instead of source-failing.
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
+  # lib-standdown-recheck.sh (Unit 3 wiring) and its own sourced siblings, so
+  # the tick's paused-branch and normal-path standdown_recheck_sweep calls
+  # genuinely run instead of source-failing, matching the lib-claude-agents.sh
+  # / lib-reservation-ledger.sh copies above.
+  cp "$SCRIPT_DIR/lib-standdown-recheck.sh" "$TMPDIR_TEST/lib-standdown-recheck.sh"
+  cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/lib-worktree-in-sync.sh"
+  cp "$SCRIPT_DIR/lib-decision-log.sh" "$TMPDIR_TEST/lib-decision-log.sh"
+  # Isolate the sweep's own ledger dir from the host's real
+  # tmp/dispatch-standdown, and give it a scratch repo root so its lazy
+  # `git fetch` / `git show origin/main:...` reads never touch the real repo.
+  # An empty scratch ledger dir means the sweep's re-check loop finds no
+  # markers and simply logs the sweep-complete summary line, which is all these
+  # invocation tests need.
+  export DISPATCH_STANDDOWN_DIR="$TMPDIR_TEST/standdown"
+  mkdir -p "$DISPATCH_STANDDOWN_DIR"
   chmod +x "$TMPDIR_TEST/dispatch-tick"
   # Pin the canonical main worktree so the advisory diagnose-main / jit-reminder
   # spawns get a deterministic --cwd independent of the host repo layout and the
@@ -131,7 +146,8 @@ tick_teardown() {
   unset TICK_DECISION TICK_SEL_RC TICK_GRAPH_EXEC_RC \
     TICK_SEL_PRE TICK_GRAPH_EXEC_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
     DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG \
-    DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_SWEEP_NOW_EPOCH
+    DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_SWEEP_NOW_EPOCH \
+    DISPATCH_STANDDOWN_DIR
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -690,6 +706,63 @@ out=$(run_tick) && rc=0 || rc=$?
 assert_eq "refresh-failsafe: exit 0 despite probe failure" "0" "$rc"
 assert_eq "refresh-failsafe: tick still ran select after failed refresh" \
   "$(printf 'refresh\nselect')" "$(cat "$TMPDIR_TEST/logs/order.log")"
+tick_teardown
+
+# --- tactic-standdown-winner-liveness Unit 3: standdown_recheck_sweep wiring --
+# Both call sites run the REAL standdown_recheck_sweep (lib-standdown-recheck.sh,
+# copied into TMPDIR_TEST by tick_setup, same idiom as lib-reservation-ledger.sh
+# for the sibling reservation_sweep call) against an empty scratch ledger dir
+# (DISPATCH_STANDDOWN_DIR), so the sweep finds no markers and simply emits its
+# one-line "sweep complete" summary to stderr — sufficient to assert invocation.
+# There is no existing ordering-assertion mechanism for the sibling
+# reservation_sweep call (it has no counterpart on the normal path at all), so
+# per the unit's scope, only invocation is asserted here, not ordering.
+
+echo "Test: dispatch-tick paused branch invokes standdown_recheck_sweep"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-standdown: exit 0" "0" "$rc"
+assert_eq "paused-standdown: standdown_recheck_sweep ran (sweep-complete line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck: sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick normal path invokes standdown_recheck_sweep"
+tick_setup
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "normal-standdown: exit 0" "0" "$rc"
+assert_eq "normal-standdown: standdown_recheck_sweep ran (sweep-complete line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck: sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+# --- lib-standdown-recheck.sh fails to load → loud diagnostic, tick still completes ---
+# Replace the copied lib with an unsourceable file (invalid bash syntax) so the
+# tick's `source` fails and `declare -f standdown_recheck_sweep` comes back
+# false on BOTH call sites. Both must log the loud diagnostic and the tick must
+# still complete (exit 0) rather than abort.
+echo "Test: dispatch-tick lib-standdown-recheck.sh load failure → loud diagnostic, tick still completes"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-standdown-recheck.sh"
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "standdown-load-fail: tick still exits 0 (paused branch)" "0" "$rc"
+assert_eq "standdown-load-fail: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick' && echo 1 || echo 0)"
+assert_eq "standdown-load-fail: no sweep-complete line (sweep never ran)" "0" \
+  "$(printf '%s' "$err" | grep -cF 'lib-standdown-recheck: sweep complete')"
+tick_teardown
+
+echo "Test: dispatch-tick lib-standdown-recheck.sh load failure on normal path → loud diagnostic, tick still completes"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-standdown-recheck.sh"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "standdown-load-fail-normal: tick still exits 0" "0" "$rc"
+assert_eq "standdown-load-fail-normal: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick' && echo 1 || echo 0)"
 tick_teardown
 
 # <<< END MOVED <<<
