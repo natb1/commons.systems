@@ -479,4 +479,93 @@ rm -rf "$ehu_tmp"
 
 # <<< END MOVED <<<
 
+# ============================================================================
+# cleanup_stale_sweep_units: path-change disable (tactic-sweep-timer-unit-dir-leak)
+# ============================================================================
+# Mirrors the cleanup_stale_heartbeat_units cases above for the sweep pair.
+# Called DIRECTLY (not via ensure_sweep_timer): the "paths match" case would
+# otherwise hit the hot-path early-return before reaching the cleanup call.
+echo ""
+echo "=== cleanup_stale_sweep_units: path-change disable ==="
+esu_tmp=$(mktemp -d)
+mkdir -p "$esu_tmp/bin" "$esu_tmp/main-worktree" "$esu_tmp/systemd-user"
+cat > "$esu_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+exit 0
+STUB
+chmod +x "$esu_tmp/bin/systemctl"
+esu_svc="$esu_tmp/systemd-user/dispatch-sweep-periodic.service"
+esu_log="$esu_tmp/systemctl.log"
+
+# 1. Installed WorkingDirectory differs from current → disable fires, naming the
+#    SWEEP units (not the heartbeat pair).
+: > "$esu_log"
+printf '%s\n' '[Service]' 'WorkingDirectory=/old/path' > "$esu_svc"
+(
+  export STUB_LOG="$esu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_sweep_units "$esu_svc" "$esu_tmp/main-worktree" "$esu_tmp/bin/systemctl"
+) 2>/dev/null
+TOTAL=$((TOTAL + 1))
+if grep -q 'disable --now dispatch-sweep-periodic.timer dispatch-sweep-periodic.service' "$esu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_sweep_units disabled stale units on path change"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_sweep_units did not disable on path change"
+fi
+
+# 2. Installed WorkingDirectory matches current → no disable.
+: > "$esu_log"
+printf '%s\n' '[Service]' "WorkingDirectory=$esu_tmp/main-worktree" > "$esu_svc"
+(
+  export STUB_LOG="$esu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_sweep_units "$esu_svc" "$esu_tmp/main-worktree" "$esu_tmp/bin/systemctl"
+) 2>/dev/null
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$esu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_sweep_units did not disable when path matches"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_sweep_units disabled despite matching path"
+fi
+
+# 3. No prior service unit → no-op (returns 0, no disable).
+: > "$esu_log"
+esu_cleanup_rc=0
+(
+  export STUB_LOG="$esu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_sweep_units "$esu_tmp/systemd-user/does-not-exist.service" \
+    "$esu_tmp/main-worktree" "$esu_tmp/bin/systemctl"
+) 2>/dev/null || esu_cleanup_rc=$?
+assert_eq "cleanup_stale_sweep_units: missing unit → returns 0" "0" "$esu_cleanup_rc"
+# Counts the inline grep check below; the assert_eq above counts itself.
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$esu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_sweep_units no-op when no prior units"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_sweep_units ran disable with no prior units"
+fi
+
+# 4. [Service] section present but no WorkingDirectory= line → early return: no
+#    disable, returns 0.
+: > "$esu_log"
+printf '%s\n' '[Service]' > "$esu_svc"
+esu_cleanup_rc=0
+(
+  export STUB_LOG="$esu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_sweep_units "$esu_svc" "$esu_tmp/main-worktree" "$esu_tmp/bin/systemctl"
+) 2>/dev/null || esu_cleanup_rc=$?
+assert_eq "cleanup_stale_sweep_units: no WorkingDirectory= → returns 0" "0" "$esu_cleanup_rc"
+# Counts the inline grep check below; the assert_eq above counts itself.
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$esu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_sweep_units no-op when WorkingDirectory= absent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_sweep_units ran disable with no WorkingDirectory="
+fi
+
+rm -rf "$esu_tmp"
+
 report_results

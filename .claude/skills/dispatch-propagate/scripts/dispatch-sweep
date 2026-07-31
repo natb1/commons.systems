@@ -522,4 +522,28 @@ if marker_dir=$(reap_marker_dir "$PROJECT_ROOT") && [[ -d "$marker_dir" ]]; then
   shopt -u nullglob
 fi
 
+# ---- Held-for-debug session count (hygiene/observability metric) ------------
+# Log how many worker-keyspace sessions are sitting in a terminal state under
+# the narrowed auto-close default (tactic-frozen-session-debug-count).
+# This is not a control-flow signal — nothing downstream acts on it. UNKNOWN
+# is logged distinctly from 0 because "daemon unqueryable" and "zero held
+# sessions" are different facts and must not be conflated.
+#
+# The n=0 reading is only meaningful when the sweep runs UNSANDBOXED, which is
+# how it actually runs (the worker Stop hook / systemd-launched dispatch-tick).
+# Under a sandboxed Bash call the daemon's Unix socket is unreachable and
+# `claude agents --json` returns `[]` with exit 0 (.claude/rules/sandbox.md),
+# which reads here as a definite n=0 — the UNKNOWN branch cannot catch it
+# because nothing failed. Read an n=0 from a sandboxed run as "not measured".
+if held_out=$(claude_agents_count_held_for_debug); then
+  held_rc=0
+else
+  held_rc=$?
+fi
+if [[ "$held_rc" -eq 0 ]]; then
+  log "HELD_FOR_DEBUG_COUNT: n=$held_out"
+else
+  log "HELD_FOR_DEBUG_COUNT: n=UNKNOWN (daemon unqueryable)"
+fi
+
 exit 0

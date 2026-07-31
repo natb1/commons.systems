@@ -565,6 +565,69 @@ are handled asymmetrically: non-numeric `used_weekly` is treated as missing
 weekly-bounded max workers). The stdout contract — a single integer —
 and the router gate `LIVE_COUNT >= TARGET_N` are unchanged.
 
+## ACTIVE vs REGISTERED session views
+
+`lib-claude-agents.sh` exposes two views of the daemon's session list, and
+consumers split across them deliberately:
+
+| view | query | question | consumers |
+|---|---|---|---|
+| REGISTERED | `claude agents --json --all` | "Is this node/worktree spoken for?" Registration IS the claim; release is `claude rm`. | `worktree_has_live_session` (node concurrency gate, worktree reuse, worktree removal) |
+| ACTIVE | `claude agents --json` | "Is a process running right now?" | pace/concurrency budget, spawn-registration race, dead-router reservation reclaim |
+
+`worktree_has_live_session` reads REGISTERED. A session that has stopped (gone
+`done`) but has not been `claude rm`'d still occupies its worktree and still
+blocks its node's concurrent execution. The only release is `claude rm <id>` —
+an explicit human act. There is no timeout, and no age cutoff, grace period, or
+auto-expiry may be added: a timeout would make a held node silently
+re-selectable, which is exactly the failure this split removes.
+
+Held nodes therefore accumulate, and that is the intended trade — containment
+(the stopped session and its worktree survive for inspection) over throughput.
+Blocking is paired with visibility: on a REGISTERED match whose state is `done`,
+`worktree_has_live_session` writes a stderr diagnostic naming the worktree path,
+the session id, and `claude rm <sid>` as the release act. Blocking, visibility,
+and explicit human release together are the design; any one alone is incomplete.
+
+The same predicate also gates worktree removal (`dispatch-sweep`,
+`.claude/hooks/worktree-remove.sh`) and worktree reuse
+(`dispatch-resolve-worktree`), among other callers, so a held worktree survives
+sweeping and stays inspectable rather than merely being unselectable.
+
+`claude rm` conventionally deletes the session registration and its worktree
+together, but the predicate does not depend on that coupling: it is keyed on the
+worktree basename via the registry row's `name` field, not on whether the
+worktree directory still exists. Removing just the session registration unblocks
+the node; if the checkout went with it, `dispatch-resolve-worktree`
+re-provisions it on the next selection.
+
+Two rules govern the split, and a maintainer must not break either:
+
+1. **Do not reconstruct ACTIVE from REGISTERED client-side.** A
+   `select(.state != "done")` filter over the `--all` array guesses at the
+   daemon's terminal-state set — which `lib-claude-agents.sh`'s own comment on
+   `claude_job_id_for_name_all` describes as "done/stopped/etc". Ask the daemon
+   for the view you want; do not model its state machine.
+2. **Do not flip the shared `claude_agents_list_all` wholesale to `--all`.** It
+   also backs `reservation_sweep`'s dead-router reclaim
+   (`lib-reservation-ledger.sh:418`, rule (c)), which reclaims a marker when the
+   reserving session id drops out of the LIVE set. Reserving sessions are
+   routers (`dispatch-<short-id>`) that routinely go done, so making done rows
+   visible there would make reservation markers immortal: `reservation_count`
+   climbs monotonically, `LIVE_COUNT = busy_workers + reservations`
+   (`dispatch-select-tick:640-644`) pins at the ceiling, and the whole fleet
+   stalls. The REGISTERED view is confined to the occupancy predicate, which has
+   its own accessors (`_claude_agents_raw_registered` /
+   `claude_agents_list_registered`).
+
+The spawn-time per-worktree dedup query and `verify_agent_registered_under` stay
+on ACTIVE via `claude_sessions_under`: they need a LIVE successor, and a stale
+`done` row of the same name would falsely report a successful registration.
+
+Naming trap: the `_all` suffix in `claude_agents_list_all` means MACHINE-WIDE
+(no `--cwd` filter, no name filter) — it is not the `--all` flag, and that
+helper reads the ACTIVE view.
+
 ## The #725 cap-keyed re-seed
 
 The #725 re-seed is the chain's resume-from-stall mechanism. When a tick's
