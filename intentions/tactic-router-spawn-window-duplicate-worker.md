@@ -96,7 +96,7 @@ attention:
     stop; a second, tighter (6s) recurrence confirmed it 2026-07-31. blocked_by
     is empty, so this promotion lifts no blocker and cannot compound. Finalized
     to phase: implement 2026-07-31 via /align-tactics."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-router-spawn-window-duplicate-worker
   pr: 2995
@@ -104,9 +104,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T11:31:10Z
+    mergeCommitSha: 3ddf7858666638885a68a6f92b7069db4567fe0d
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

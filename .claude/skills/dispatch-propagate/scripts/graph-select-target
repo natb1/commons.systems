@@ -58,8 +58,12 @@
 #                        otherwise wraps around this selector. CLAIM OBLIGATION:
 #                        each claim is a budget-consuming marker. A caller that
 #                        launches its selections hands the marker to
-#                        dispatch-graph-execute (which clears it on spawn); a
-#                        caller that does NOT launch MUST `reservation_clear <id>`
+#                        dispatch-graph-execute, which re-stamps it
+#                        `origin=spawned` on a successful spawn kick and lets
+#                        reservation_sweep release it once the worker
+#                        registers as live (or via the bounded handoff TTL if
+#                        it never does); a caller that does NOT launch MUST
+#                        `reservation_clear <id>`
 #                        for every emitted node. Markers written by this flag carry
 #                        `origin=standalone` so reservation_sweep reclaims them
 #                        once they age past DISPATCH_RESERVATION_STANDALONE_TTL_S
@@ -315,6 +319,17 @@ if [[ -n "$STANDALONE" ]]; then
   # the same fail-open floor, TOP=1 (the standalone analogue of
   # dispatch-select-tick's "GAP stays 1"), never leaving TOP unclamped when the
   # live-worker count or the ceiling is unknown.
+  #
+  # The ledger is SWEPT before it is counted, mirroring dispatch-select-tick's
+  # autonomous gate. Since the spawn handoff landed, a launched claim is no
+  # longer cleared at the kick but re-stamped `origin=spawned` and held until its
+  # worker registers — so an unswept count charges a registered worker twice
+  # (once busy, once reserved). That matters more here than on the manual lane:
+  # this path deliberately omits the floor-of-1 above, so an inflated LIVE_COUNT
+  # drives HEADROOM to 0 and the run selects NOTHING while real headroom exists.
+  # Sweep rule (a) drops exactly those redundant markers. The dispatch lock is
+  # already held (step (a) above), so the sweep cannot race a concurrent tick.
+  reservation_sweep 1>&2 || true
   if BUSY=$(claude_agents_count_busy_workers); then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
@@ -696,8 +711,10 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha fix_since; do
   # the failure posture of dispatch-select-tick's own emit_graph_selection call.
   #
   # The `standalone` ORIGIN stamp (4th arg) bounds the claim's lifetime. Unlike a
-  # tick claim — handed straight to dispatch-graph-execute, which clears it on
-  # spawn — a standalone claim has no guaranteed consumer: a caller that discards
+  # tick claim — handed straight to dispatch-graph-execute, which re-stamps it
+  # `origin=spawned` on a successful spawn kick and lets reservation_sweep
+  # release it once the worker registers as live (or via the bounded handoff
+  # TTL if it never does) — a standalone claim has no guaranteed consumer: a caller that discards
   # the output, crashes, or is interrupted between selection and launch leaves the
   # marker behind, and reservation_sweep's dead-session rule never reclaims it while
   # the (long-lived) calling session stays alive. Markers stamped `origin=standalone`
