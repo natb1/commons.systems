@@ -79,7 +79,7 @@ if (!sliceSource) {
 }
 
 const instrumentVerdict = (function () {
-  // eslint-disable-next-line no-eval
+  // eslint-disable-next-line no-eval -- see comment above // type-safety-ok: eval is required (not new Function) because the sliced source has two top-level statements, not a single expression
   return eval(`(function () { ${sliceSource}\nreturn instrumentVerdict; })()`);
 })();
 
