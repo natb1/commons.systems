@@ -110,8 +110,14 @@
 #   (matching the worker session spawned with `--name=<basename>` by
 #   `dispatch-launch-worker`) AND `office-hours-<N>`, where <N> is the basename's
 #   numeric prefix (matching the office-hours session, renamed off the basename
-#   in #1311 and carrying no reservation-ledger marker). Reports occupied if
-#   either name matches a live session or the query is UNKNOWN. Folds unknown
+#   in #1311 and carrying no reservation-ledger marker). The second name is only
+#   formed when the basename actually starts with `<digits>-` (a legacy issue
+#   worktree); a graph-node worktree (`tactic-*` / `strategy-*`) has no numeric
+#   prefix, so it is matched on its basename alone — never on a shared
+#   `office-hours-tactic`-style key, which one registration would use to claim
+#   every node worktree at once, permanently (the registered view has no
+#   expiry). Reports occupied if either name matches a live session or the
+#   query is UNKNOWN. Folds unknown
 #   into the occupied branch:
 #     return 0 — occupied OR unknown: do NOT start a session under <path>.
 #     return 1 — definitely no live session under either name for the worktree.
@@ -773,8 +779,11 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # (the office-hours session name, where <N> is the basename's numeric prefix —
   # office-hours sessions were renamed off the basename in #1311 and write no
   # reservation-ledger marker, so this is the sole backstop keeping the router
-  # from spawning a phase worker into an office-hours-occupied worktree). Reports
-  # occupied if EITHER name matches a live session OR the query returns UNKNOWN.
+  # from spawning a phase worker into an office-hours-occupied worktree). The
+  # office-hours name is formed ONLY from a numeric `<digits>-` prefix; a
+  # graph-node worktree basename has none and is matched on the basename alone.
+  # Reports occupied if EITHER name matches a live session OR the query returns
+  # UNKNOWN.
   # See the header comment for the return-code contract.
   #
   # Optional second argument `exclude_sid` — a live-session id to exclude: a
@@ -790,9 +799,25 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       return 0  # fail safe: treat as occupied
     fi
     local exclude_sid="${2:-}"
-    local base num
+    local base oh
     base="$(basename "$pth")"
-    num="${base%%-*}"
+    # The office-hours key is only meaningful for a legacy `<N>-<slug>` issue
+    # worktree, whose basename starts with the issue number: office-hours
+    # sessions are named `office-hours-<N>` with a NUMERIC <N> (see
+    # live_session_claimed_nums' `^office-hours-[0-9]+$` anchor). A graph-node
+    # worktree is named by node id (`tactic-*` / `strategy-*`), so a naive
+    # `${base%%-*}` would yield the literal word `tactic`, and the key
+    # `office-hours-tactic` would be SHARED by every tactic worktree — one
+    # session registered under that name would claim all of them at once. In the
+    # REGISTERED view that claim never expires (no timeout, by contract), so a
+    # single such registration would permanently make every node unselectable,
+    # unreapable, and unreusable. Build the key only from a genuine numeric
+    # prefix; otherwise leave it empty and skip the second comparison entirely.
+    if [[ "$base" =~ ^([0-9]+)- ]]; then
+      oh="office-hours-${BASH_REMATCH[1]}"
+    else
+      oh=""
+    fi
 
     # One machine-wide fetch covers both names — `claude_agents_list_registered`
     # is the fetch-once primitive, so we avoid two separate daemon round-trips per
@@ -808,8 +833,11 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     # match claude_agents_list_all byte-for-byte). Match column 3 exactly against
     # EITHER the phase-worker name (the worktree basename, spawned with
     # --name=<basename>) OR the office-hours name (office-hours-<N>, renamed off
-    # the basename in #1311). Exact match — never a substring grep, which would
-    # conflate office-hours-1 with office-hours-12. When `exclude_sid` is
+    # the basename in #1311) when the basename carries a numeric issue prefix.
+    # Exact match — never a substring grep, which would conflate office-hours-1
+    # with office-hours-12. An empty `oh` (non-numeric basename prefix, i.e. a
+    # graph node worktree) matches nothing: the comparison is skipped rather than
+    # run against a shared `office-hours-<word>` key. When `exclude_sid` is
     # non-empty, a row whose sessionId (column 1) equals it is skipped: the
     # caller's own session is not "another" claim (see the second-argument
     # contract above). The matched row's sessionId and state are printed so a
@@ -817,15 +845,24 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     # the exit-on-first-match short-circuit and `END { exit !found }` semantics
     # are unchanged.
     local matched
-    if matched=$(awk -F'\t' -v base="$base" -v oh="office-hours-$num" -v exclude_sid="$exclude_sid" \
-        '($3 == base || $3 == oh) && (exclude_sid == "" || $1 != exclude_sid) { found = 1; print $1 "\t" $4; exit } END { exit !found }' \
+    if matched=$(awk -F'\t' -v base="$base" -v oh="$oh" -v exclude_sid="$exclude_sid" \
+        '($3 == base || (oh != "" && $3 == oh)) && (exclude_sid == "" || $1 != exclude_sid) { found = 1; print $1 "\t" $4; exit } END { exit !found }' \
         <<<"$all"); then
       # A registered phase-worker or office-hours session occupies this worktree.
       local msid mstate
-      IFS=$'\t' read -r msid mstate <<<"$matched"
+      # Split with parameter expansion, NOT `IFS=$'\t' read`: tab is IFS
+      # whitespace, so `read` COLLAPSES a leading empty field — a row whose
+      # sessionId is null (`.sessionId` is not defaulted in the projection, by
+      # design) would yield msid="done", mstate="" and silently lose the
+      # diagnostic. `%%`/`#` preserve empty fields on both sides.
+      msid="${matched%%$'\t'*}"
+      mstate="${matched#*$'\t'}"
       # A `done` holder is the non-obvious case: nothing is running, yet the
-      # worktree stays blocked until a human releases it. Say so, once, naming
-      # the release act. Any other state (including empty) stays silent.
+      # worktree stays blocked until a human releases it. Say so — on EVERY
+      # probe that matches it, one line per probe (there is no dedup: the
+      # per-skip diagnostic IS the pressure valve, and each skip is a distinct
+      # decision worth a trace line). Name the release act. Any other state
+      # (including empty) stays silent.
       if [[ "$mstate" == "done" ]]; then
         printf "lib-claude-agents: %s held by a done-but-not-removed session %s — release it with 'claude rm %s' (a stopped session keeps blocking its node by design)\n" \
           "$pth" "$msid" "$msid" >&2
