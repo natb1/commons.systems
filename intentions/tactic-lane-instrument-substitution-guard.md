@@ -23,7 +23,22 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 56
+  override: null
+  rationale: "Author-directed 2026-07-31: top-of-band boost so the generic
+    lane-instrument substitution guard is picked first. /code-review ships with
+    disable-model-invocation, so all 18 Skill(code-review) calls across
+    07-27..07-31 were rejected and the finder substituted its own review under
+    the built-in's name — undetected for four days. This node is the generic
+    loud-failure guard; it is deliberately ranked one above
+    tactic-review-code-review-invocation-contract (55), honoring that node's own
+    stated ordering without a blocked_by edge, so a guard stall cannot deadlock
+    the target. Top-of-band, not maximum: trunk-health work still outranks it
+    (strategy-main-health = 101). Part of the interim 50/20/10 scale's
+    inventory — convert to a tier/bug_fix mark when
+    tactic-attention-tier-ranking and tactic-attention-boost-scripts retire the
+    interim scale; do not orphan this boost."
 phase: null
 execution: null
 validates: []

@@ -22,7 +22,22 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 55
+  override: null
+  rationale: "Author-directed 2026-07-31: top-of-band boost so the /code-review
+    invocation fix is picked immediately after
+    tactic-lane-instrument-substitution-guard (56). The built-in has never run
+    in dispatch — all 18 Skill(code-review, 'max --fix') calls across
+    07-27..07-31 were rejected with disable-model-invocation and the finder
+    hand-rolled a review reported as the built-in's, so every review-phase
+    quality claim since 07-27 rests on an agent reviewing itself. Ranked one
+    below the generic guard by this node's own stated ordering, and without a
+    blocked_by edge so a guard stall cannot deadlock it. Top-of-band, not
+    maximum: trunk-health work still outranks it (strategy-main-health = 101).
+    Part of the interim 50/20/10 scale's inventory — convert to a tier/bug_fix
+    mark when tactic-attention-tier-ranking and tactic-attention-boost-scripts
+    retire the interim scale; do not orphan this boost."
 phase: null
 execution: null
 validates: []
