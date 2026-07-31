@@ -81,7 +81,100 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "qa-fix: item 7 (900s grace / 3-park cap tuning judgment on
+    lib-frozen-session-park.sh) reclassified opus-fixable by the disposition
+    Workflow's skeptic pass, then hit a planner scope-deviation — no in-scope
+    code change exists; re-tuning env-var defaults is a decision the node does
+    not authorize. Escalating to office-hours for a human ruling on whether the
+    shipped defaults (DISPATCH_FROZEN_SESSION_GRACE_S=900,
+    DISPATCH_FROZEN_SESSION_PARK_MAX=3) are acceptable."
+  since: 2026-07-31
+  recommendation: >-
+    # Office-hours: PR #2994 — accept or retune the frozen-session park defaults
+
+
+    **Nothing is broken.** Tests are green (89/89, 43/43, 102/102), CI passes,
+    no code defect was found. The automated pipeline deliberately declined to
+    touch this: re-tuning the fleet's own timing policy is an authorization call
+    it isn't allowed to make. This is a sign-off, not a bug.
+
+
+    ## The one decision
+
+
+    Accept the shipped defaults, or name different ones before merge:
+
+
+    - `DISPATCH_FROZEN_SESSION_GRACE_S` = **900s** — how long a `state: blocked`
+    worker session must sit idle before the sweep parks its node.
+
+    - `DISPATCH_FROZEN_SESSION_PARK_MAX` = **3** — max parks per sweep.
+
+
+    Both live in
+    `.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`
+    (defaults at ~lines 52-56, integer guards at ~154-157, both documented in
+    the file header). Both are env-overridable at runtime — you can change them
+    later without a code change.
+
+
+    ## How to think about the risk
+
+
+    - **Too short a grace** → a legitimately slow-but-alive worker gets parked.
+    Cost is low: the node lands in office_hours, you `clear-park` it, work
+    resumes. Nothing is reaped, no branch or worktree is destroyed — that's the
+    "park, don't reap" design, and confirming it's intended is part of this
+    sign-off.
+
+    - **Too long a grace** → a genuinely frozen worker holds a router deadlock
+    for up to 15 minutes longer. That's the status quo the PR exists to fix.
+
+    - **The 3-park cap** bounds blast radius if the detector is ever wrong: a
+    bad sweep can misfire at most 3 nodes per tick, not the whole fleet.
+
+
+    Ask yourself: *have you seen a real worker legitimately idle past 15 minutes
+    mid-task?* If yes, raise the grace. If not, 900s/3 is the conservative
+    choice and you should accept it.
+
+
+    ## To change a value
+
+
+    Edit the two `: "${VAR:=...}"` default lines in `lib-frozen-session-park.sh`
+    and re-run the suites. Or defer entirely — set the env var in the dispatch
+    environment after merge and skip the code change.
+
+
+    ## Already handled — don't spend time here
+
+
+    Two items are **not** for this session. They're filed as `## needs-main
+    residue` on the tactic node's own body (landed on origin/main, commit
+    `bfdfbf34`) for post-merge verification against real production denials:
+
+
+    1. Confirming the literal `state: "blocked"` value against a live classifier
+    denial.
+
+    2. Walking the full park → surface → attach → `clear-park` recovery loop
+    end-to-end.
+
+
+    Both are verifiable only after merge, by design. They're tracked; leave
+    them.
+
+
+    ## Recommended action
+
+
+    **Accept as shipped**, unpark the node, let it merge. The defaults are
+    conservative, the failure mode is a recoverable park rather than data loss,
+    and both knobs are env-tunable in production if real fleet timing says
+    otherwise.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
