@@ -7,6 +7,16 @@ FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=dispatch-test-fixture.sh
 source "$FIXTURE_DIR/dispatch-test-fixture.sh"
 
+# dispatch-tick-recover now calls ensure_sweep_timer (as well as
+# ensure_heartbeat_units), so this suite is a sweep-unit writer: every harness
+# here must redirect DISPATCH_SWEEP_TIMER_UNIT_DIR / DISPATCH_HEARTBEAT_UNIT_DIR
+# (and their *_SYSTEMCTL_CMD pairs) into the tmp sandbox (see tr_setup). The
+# host-unit-dir leak guard that enforces that is armed for EVERY suite by
+# dispatch-test-fixture.sh (dispatch_host_systemd_guard_check) — it resolves the
+# unit dir the way lib.sh does, watches all five installable units plus the
+# timers.target.wants symlink set, and records any call reaching the real
+# `systemctl`.
+
 # >>> MOVED FROM test-dispatch-scripts.sh >>>
 # ============================================================================
 # dispatch-tick-recover tests (#1150)
@@ -119,6 +129,16 @@ STUB
   export DISPATCH_HEARTBEAT_UNIT_DIR="$TMPDIR_TEST/heartbeat-systemd-user"
   export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/heartbeat-systemctl"
 
+  # ensure_sweep_timer (called alongside ensure_heartbeat_units at the top of
+  # recover) has the same hazard: unredirected it writes
+  # dispatch-sweep-periodic.{service,timer} into the real
+  # ~/.config/systemd/user and runs the real `systemctl --user enable --now`,
+  # arming a host timer whose ExecStart/WorkingDirectory point at this suite's
+  # per-run temp dir (deleted at teardown). Wire it to a temp unit dir and the
+  # heartbeat logging stub so it stays hermetic.
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$TMPDIR_TEST/sweep-systemd-user"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/heartbeat-systemctl"
+
   export DISPATCH_TICK_RECOVER_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
   export DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_TICK_RECOVER_GH_CMD="$TMPDIR_TEST/bin/gh"
@@ -149,6 +169,7 @@ tr_teardown() {
   unset DISPATCH_TICK_RECOVER_RESET_WINDOW
   unset DISPATCH_TICK_RECOVER_HEARTBEAT
   unset DISPATCH_HEARTBEAT_UNIT_DIR DISPATCH_HEARTBEAT_SYSTEMCTL_CMD
+  unset DISPATCH_SWEEP_TIMER_UNIT_DIR DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD
   unset DISPATCH_TICK_RECOVER_BENIGN
 }
 
@@ -199,6 +220,18 @@ else
   echo "    log: $log"
 fi
 assert_eq "first-fail: state count == 1" "1" "$(tr_state_count)"
+# Recover re-asserts the sweep timer as well as the heartbeat: the units must
+# land in the REDIRECTED sweep unit dir (never the host's), point at this run's
+# main worktree, and be enabled through the redirected systemctl seam.
+assert_eq "recover: installs dispatch-sweep-periodic.service in the redirected unit dir" \
+  "WorkingDirectory=$TMPDIR_TEST/main" \
+  "$(grep '^WorkingDirectory=' "$TMPDIR_TEST/sweep-systemd-user/dispatch-sweep-periodic.service" 2>/dev/null || echo missing)"
+assert_eq "recover: installs dispatch-sweep-periodic.timer in the redirected unit dir" \
+  "present" \
+  "$([ -f "$TMPDIR_TEST/sweep-systemd-user/dispatch-sweep-periodic.timer" ] && echo present || echo absent)"
+assert_eq "recover: enables the sweep timer via the redirected systemctl" "present" \
+  "$(grep -q 'enable --now dispatch-sweep-periodic.timer' "$TMPDIR_TEST/heartbeat-systemctl-log" \
+     && echo present || echo absent)"
 tr_teardown
 
 # --- Test 2: busy worker is no longer a continuation → arms heartbeat reseed ---
@@ -528,4 +561,6 @@ tr_teardown
 
 # <<< END MOVED <<<
 
+# The host-unit-dir leak re-check runs inside report_results (and, on an early
+# abort, from the fixture's EXIT trap).
 report_results
