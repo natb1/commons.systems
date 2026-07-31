@@ -614,3 +614,21 @@ Manual / judgment:
   tree-updating op, so it needs **no** `dangerouslyDisableSandbox`. Confirm it
   runs clean under the default sandbox; if an implementer finds themselves
   reaching for a sandbox override, the script is doing something it should not.
+
+## needs-main residue
+
+- **id:** item-8-scope-and-incident-claim
+  **title:** Interim-scaffolding scope call and the live-incident claim
+  **url_path:** current
+  **expected_outcome:** A human agrees the narrowed scope (not extending the
+  mandate to `transition-node`, `qa-fix` needs-main residue,
+  `park-node`/`clear-park`; no `PreToolUse` hook) is the right interim trade
+  given `tactic-graph-ref-split` is the greenfield fix, the doctrine prose is
+  unambiguous, and the guard would in fact have caught the 2026-07-31
+  incident in a live run.
+  **finding:** Planned deferral — this is a design judgment (the scope
+  trade-off against the greenfield `tactic-graph-ref-split` migration) and a
+  claim only observable on a future live `/align-tactics` run where a node
+  moves mid-session; neither is decidable by a merge-time script. QA's
+  disposition workflow classified it `needs-main` on that basis (verified
+  downstream, not a code defect).
