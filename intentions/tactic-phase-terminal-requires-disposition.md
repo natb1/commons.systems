@@ -70,7 +70,7 @@ attention:
     codified and phase implement, with a full plan in the body; blocked_by names
     tactic-denied-command-parks-node, so the router will not select this node
     for implementation until that PR lands lib-frozen-session-park.sh."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-phase-terminal-requires-disposition
   pr: 3004
@@ -81,7 +81,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T20:15:44Z
+    mergeCommitSha: c06c72950f96061b392dedfb05aeeb2b0ee094d8
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
