@@ -172,6 +172,15 @@ assert_eq 'populations["genuine-death"] = genuine-strand' "1" \
 assert_eq 'populations["false-reclaim-of-live"] = alive-across' "1" \
   "$(jq '.populations["false-reclaim-of-live"]' <<<"$OUT")"
 
+# SWEEP STATUS SENTINELS on the fixture-file path: the read succeeded, and there
+# is no live journal behind a pre-captured file to cross-check against.
+assert_eq "fixture-path sweep.status" '"ok"' \
+  "$(jq '.sweep.status' <<<"$OUT")"
+assert_eq "fixture-path sweep.crosscheck" '"skipped"' \
+  "$(jq '.sweep.crosscheck' <<<"$OUT")"
+assert_eq "fixture-path sweep.available (legacy key)" "true" \
+  "$(jq '.sweep.available' <<<"$OUT")"
+
 # --- journalctl-path test: -t (identifier) filter, not -u (unit) filter -----
 #
 # The fixture path above sets DISPATCH_RECLAIM_SWEEP_LOG, which the script reads
@@ -186,39 +195,78 @@ assert_eq 'populations["false-reclaim-of-live"] = alive-across' "1" \
 echo ""
 echo "Running dispatch-reclaim-audit against fixture (journalctl path, -t filter)..."
 
-JOURNALCTL_STUB="$ROOT/journalctl-stub"
 JOURNALCTL_ARGV_LOG="$ROOT/journalctl-argv.log"
-cat > "$JOURNALCTL_STUB" <<STUB
+
+# The six fixture reclaim lines, reused as canned journalctl stub responses.
+# Same shape as the $SWEEP_LOG fixture built in setup().
+RECLAIM_FIXTURE_LINES=(
+  "111 1001-aaa dead-session-stranded"
+  "112 1002-bbb dead-session-stranded"
+  "113 1003-ccc dead-session-stranded"
+  "114 1004-ddd dead-session-stranded"
+  "115 1005-eee live-worker-redundant"
+  "116 1006-fff live-worker-redundant"
+)
+
+# reclaim_lines — print the first N fixture reclaim lines. No `head`: truncating
+# a pipe under `set -o pipefail` would fail the producer on SIGPIPE.
+reclaim_lines() {
+  local n="$1" i pid wt reason
+  for (( i = 0; i < n; i++ )); do
+    read -r pid wt reason <<<"${RECLAIM_FIXTURE_LINES[$i]}"
+    printf '%s host dispatch-tick[%s]: lib-reservation-ledger: reclaimed reservation %s (%s)\n' \
+      "$T" "$pid" "$wt" "$reason"
+  done
+}
+
+# make_journalctl_stub — author a journalctl stub responding to THREE argv
+# shapes, so both the identifier-filtered read and the unfiltered cross-check
+# probe can be modelled independently:
+#   -u dispatch-tick        → the host bug: the unit filter finds nothing.
+#   -t dispatch-tick        → the corrected identifier filter (canned file).
+#   --grep (no -u/-t)       → the audit's unfiltered cross-check probe.
+# Canned responses are served from files on disk so no quoting from this test
+# file has to survive the heredoc.
+#   $1 stub path  $2 filtered-response file  $3 unfiltered-probe response file
+#   $4 exit code for the -t read  $5 exit code for the --grep probe
+make_journalctl_stub() {
+  local stub="$1" filtered_file="$2" unfiltered_file="$3" filtered_rc="$4" probe_rc="$5"
+  cat > "$stub" <<STUB
 #!/usr/bin/env bash
 echo "\$*" >> "$JOURNALCTL_ARGV_LOG"
 if [[ " \$* " == *" -u dispatch-tick "* ]]; then
   exit 0
 fi
 if [[ " \$* " == *" -t dispatch-tick "* ]]; then
-  cat <<'LINES'
-$T host dispatch-tick[111]: lib-reservation-ledger: reclaimed reservation 1001-aaa (dead-session-stranded)
-$T host dispatch-tick[112]: lib-reservation-ledger: reclaimed reservation 1002-bbb (dead-session-stranded)
-$T host dispatch-tick[113]: lib-reservation-ledger: reclaimed reservation 1003-ccc (dead-session-stranded)
-$T host dispatch-tick[114]: lib-reservation-ledger: reclaimed reservation 1004-ddd (dead-session-stranded)
-$T host dispatch-tick[115]: lib-reservation-ledger: reclaimed reservation 1005-eee (live-worker-redundant)
-$T host dispatch-tick[116]: lib-reservation-ledger: reclaimed reservation 1006-fff (live-worker-redundant)
-LINES
+  [[ $filtered_rc -eq 0 ]] || exit $filtered_rc
+  cat -- "$filtered_file"
+  exit 0
+fi
+if [[ " \$* " == *" --grep "* ]]; then
+  [[ $probe_rc -eq 0 ]] || exit $probe_rc
+  cat -- "$unfiltered_file"
   exit 0
 fi
 exit 0
 STUB
-chmod +x "$JOURNALCTL_STUB"
+  chmod +x "$stub"
+}
 
 unset DISPATCH_RECLAIM_SWEEP_LOG
-export DISPATCH_RECLAIM_JOURNALCTL_CMD="$JOURNALCTL_STUB"
 
-JOURNALCTL_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json)
+# --- case A: healthy live-journal path -------------------------------------
+# The -t identifier filter and the unfiltered --grep probe agree (6 lines each)
+# → crosscheck ok, exit 0. This is what distinguishes a genuine measurement from
+# the silent undercount asserted in case C below.
+reclaim_lines 6 > "$ROOT/lines6.txt"
+make_journalctl_stub "$ROOT/journalctl-stub-ok" "$ROOT/lines6.txt" "$ROOT/lines6.txt" 0 0
+export DISPATCH_RECLAIM_JOURNALCTL_CMD="$ROOT/journalctl-stub-ok"
 
-export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
-unset DISPATCH_RECLAIM_JOURNALCTL_CMD
+JOURNALCTL_RC=0
+JOURNALCTL_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json) || JOURNALCTL_RC=$?
 
 echo ""
-echo "--- assertions (journalctl -t filter path) ---"
+echo "--- assertions (journalctl -t filter path, cross-check agrees) ---"
 
 assert_eq "journalctl-path sweep.dead_session_stranded_events" "4" \
   "$(jq '.sweep.dead_session_stranded_events' <<<"$JOURNALCTL_OUT")"
@@ -226,6 +274,62 @@ assert_eq "journalctl-path sweep.live_worker_redundant_events" "2" \
   "$(jq '.sweep.live_worker_redundant_events' <<<"$JOURNALCTL_OUT")"
 assert_eq "journalctl-path sweep.source contains -t dispatch-tick" "1" \
   "$(jq '(.sweep.source | test("-t dispatch-tick")) | if . then 1 else 0 end' <<<"$JOURNALCTL_OUT")"
+assert_eq "journalctl-path sweep.status" '"ok"' \
+  "$(jq '.sweep.status' <<<"$JOURNALCTL_OUT")"
+assert_eq "journalctl-path sweep.crosscheck" '"ok"' \
+  "$(jq '.sweep.crosscheck' <<<"$JOURNALCTL_OUT")"
+assert_eq "journalctl-path exit code" "0" "$JOURNALCTL_RC"
+
+# --- case B: journalctl errors → status unavailable, exit 3 -----------------
+# The read itself fails (no systemd / sandboxed). The counts are zero, but zero
+# here means NOT MEASURED — the sentinel and the non-zero exit make that
+# impossible for a caller to read as "zero reclaims".
+make_journalctl_stub "$ROOT/journalctl-stub-err" "$ROOT/lines6.txt" "$ROOT/lines6.txt" 1 0
+export DISPATCH_RECLAIM_JOURNALCTL_CMD="$ROOT/journalctl-stub-err"
+
+ERR_RC=0
+ERR_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json 2>/dev/null) || ERR_RC=$?
+
+echo ""
+echo "--- assertions (journalctl errors → unavailable) ---"
+
+assert_eq "journalctl-error sweep.status" '"unavailable"' \
+  "$(jq '.sweep.status' <<<"$ERR_OUT")"
+assert_eq "journalctl-error sweep.available (legacy key)" "false" \
+  "$(jq '.sweep.available' <<<"$ERR_OUT")"
+assert_eq "journalctl-error sweep.dead_session_stranded_events" "0" \
+  "$(jq '.sweep.dead_session_stranded_events' <<<"$ERR_OUT")"
+assert_eq "journalctl-error sweep.live_worker_redundant_events" "0" \
+  "$(jq '.sweep.live_worker_redundant_events' <<<"$ERR_OUT")"
+assert_eq "journalctl-error exit code" "3" "$ERR_RC"
+
+# --- case C: silent undercount → crosscheck mismatch, exit 3 ---------------
+# The direct regression lock for the reported bug's failure mode: the identifier
+# filter matches only a SUBSET of the reclaim lines the journal actually holds in
+# the window. Without the cross-check the audit would report the subset as a
+# measurement.
+reclaim_lines 2 > "$ROOT/lines2.txt"
+make_journalctl_stub "$ROOT/journalctl-stub-under" "$ROOT/lines2.txt" "$ROOT/lines6.txt" 0 0
+export DISPATCH_RECLAIM_JOURNALCTL_CMD="$ROOT/journalctl-stub-under"
+
+UNDER_RC=0
+UNDER_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json 2>/dev/null) || UNDER_RC=$?
+
+echo ""
+echo "--- assertions (identifier filter undercounts the journal) ---"
+
+assert_eq "undercount sweep.status" '"ok"' \
+  "$(jq '.sweep.status' <<<"$UNDER_OUT")"
+assert_eq "undercount sweep.crosscheck" '"mismatch"' \
+  "$(jq '.sweep.crosscheck' <<<"$UNDER_OUT")"
+assert_eq "undercount sweep.crosscheck_journal_lines" "6" \
+  "$(jq '.sweep.crosscheck_journal_lines' <<<"$UNDER_OUT")"
+assert_eq "undercount sweep.crosscheck_filtered_lines" "2" \
+  "$(jq '.sweep.crosscheck_filtered_lines' <<<"$UNDER_OUT")"
+assert_eq "undercount exit code" "3" "$UNDER_RC"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
+unset DISPATCH_RECLAIM_JOURNALCTL_CMD
 
 report_results
 exit $FAIL
