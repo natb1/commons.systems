@@ -510,11 +510,14 @@ defect):
     (scope-stale)`) and subsequently demoted to `implement` by selection.
   - Finding: Requires a live tick observing a scope-edited downstream node in
     production; not verifiable at merge time.
-  - **PARTIALLY OBSERVED 2026-07-31 — and the criterion as written conflates
-    two different mechanisms. Do not discharge it until the wording is
-    corrected.** The *demotion* half is observed repeatedly on real nodes; the
-    `held <id> (scope-stale)` half is emitted by a **different script** and has
-    never fired on a real node.
+  - **SPLIT into 9a and 9b (ratified 2026-07-31).** The criterion as written
+    conflated two different mechanisms owned by two different scripts, so it
+    could never be discharged as a unit. 9a is discharged below on observed
+    evidence; 9b stays open awaiting a real occurrence.
+
+  - **9a — a scope-stale node is demoted in a live run. DISCHARGED 2026-07-31
+    — observed, not asserted.** The *demotion* half is observed repeatedly on
+    real nodes, three independent ways.
     - **Demotion — observed, three independent ways.** `transition-node` has no
       hold path for a pre-merge scope-stale node: at
       `transition-node:197-201` a `scopeStale` node (phase ≠ `main-qa`) is
@@ -537,24 +540,29 @@ defect):
       Jul 31 11:18:58 nixos dispatch-tick[741133]: scope-sweep: scope-stale tactic-denied-command-parks-node
       ```
 
-    - **The `held <id> (scope-stale)` half belongs to `graph-auto-merge`, not
-      to `transition-node`.** It is the fail-closed stamp re-check at the
-      review→merge *arming* point, which `transition-node`'s own header
-      documents as owned by the tick reconciler. It therefore only fires when a
-      node's scope goes stale in the window between review completion and the
-      tick's arming pass — a narrow race that has not yet occurred in
-      production. The only occurrences of the string anywhere are against a
-      synthetic single-letter fixture id inside `test-dispatch-graph-execute.sh`
-      and `test-graph-auto-merge.sh` — i.e. test output, never a real node.
-    - **Next action for id 9:** split it into 9a (demotion — already
-      discharged by the evidence above) and 9b (`graph-auto-merge` fail-closed
-      hold at the arming point — still awaiting a real occurrence), or restate
-      it against the mechanism that actually implements it. Whichever, this is
-      a criterion-wording decision, not something to satisfy by re-running a
-      grep.
+    - **Re-verified 2026-07-31T19:45Z.** The transcript grep (in its corrected
+      form below) returns **11 distinct real nodes**, and the tick-side
+      `scope-sweep: scope-stale` journal grep returns the same four nodes
+      listed above. 9a is therefore discharged on standing, reproducible
+      evidence rather than a one-shot observation.
 
-**Item 8 is discharged; item 9 is not. Do not hand-write evidence for an event
-that has not happened.**
+  - **9b — `graph-auto-merge`'s fail-closed hold at the review→merge arming
+    point. STILL OPEN — awaiting a real occurrence.** The `held <id>
+    (scope-stale)` half belongs to `graph-auto-merge`, not to
+    `transition-node`. It is the fail-closed stamp re-check at the review→merge
+    *arming* point, which `transition-node`'s own header documents as owned by
+    the tick reconciler. It therefore only fires when a node's scope goes stale
+    in the window between review completion and the tick's arming pass — a
+    narrow race that has not yet occurred in production. The only occurrences
+    of the string anywhere are against a synthetic single-letter fixture id
+    inside `test-dispatch-graph-execute.sh` and `test-graph-auto-merge.sh` —
+    i.e. test output, never a real node. Re-confirmed 2026-07-31T19:45Z:
+    journald carries **zero** such lines under the `dispatch-tick` identifier,
+    and every transcript hit belongs to a session that had just run one of
+    those two suites.
+
+**Items 7, 8 and 9a are discharged; 9b is not. Do not hand-write evidence for an
+event that has not happened.** This node stays at `main-qa` until 9b fires.
 
 **The re-check command previously recorded here was structurally blind — it
 could never have discharged item 8.** It read:
@@ -577,9 +585,23 @@ the same self-contamination shape as the routing-log fixture leak
 
 ```
 grep -rhoE 'review-complete [a-z0-9-]+ \(merge deferred to tick\)' \
-  --exclude-dir='*strategy-graph-native-dispatch*' /home/n8/.claude/projects/*/*.jsonl \
-  | sort -u
+  --exclude-dir='*strategy-graph-native-dispatch*' /home/n8/.claude/projects/
 ```
+
+**Pass the projects DIRECTORY, not a `*/*.jsonl` glob.** The obvious-looking
+form `--exclude-dir='...' /home/n8/.claude/projects/*/*.jsonl` **does not
+exclude anything**: the shell expands the glob to an explicit file list before
+`grep` runs, and `--exclude-dir` is only consulted while `grep` recurses a
+directory itself. Verified 2026-07-31 on a two-directory fixture — the glob form
+matched both the kept and the skipped directory (2 hits), the directory form
+matched only the kept one (1 hit).
+
+That failure is silent and self-confirming: the excluded directory is the
+*reading* session's own transcript, so the broken form reports back whatever the
+reading session just printed. It is the same shape as the two defects this
+node's own residue already documents — a detect that reports a healthy-looking
+answer when it structurally cannot see — so the guard against self-contamination
+must itself be checked, not assumed.
 
 The journal grep remains correct for the tick-side lines only —
 `merge: merged #<pr>` and `scope-sweep: scope-stale <id>` — because those are
