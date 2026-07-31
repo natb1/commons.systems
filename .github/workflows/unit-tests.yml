@@ -208,6 +208,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-qa-fix-partition.sh
       - name: Run align-tactics resolveTempRefs tests
         run: .claude/skills/dispatch-propagate/scripts/test-align-tactics-tempref.sh
+      - name: Run review-fix instrument-gate tests
+        run: .claude/skills/dispatch-propagate/scripts/test-review-fix-instrument.sh
       - name: Run dispatch-stop hook tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-stop-hook.sh
       - name: Run dispatch-office-hours-strip hook tests
