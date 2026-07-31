@@ -376,3 +376,15 @@ cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispat
   **url_path**: current
   **expected_outcome**: A human confirms id 11's deferral still covers the full uncovered surface after the attempt-0 fix (`d91ae7cf`) reshaped `park_msg` construction — specifically, whether an empty `park_ids` now also produces a degenerate commit subject (`graph: park  (concurrent-edit conflict); prune <id>`) via the new `park_msg="graph: park ${park_ids[*]} (concurrent-edit conflict); prune ${bystander_prunes[*]}"` line, not just an untested `park_write` call as id 11's finding currently states — and amends id 11's finding text if so.
   **finding**: Re-affirms the scope of the already-filed id 11 (the `conflicted_ids()` failure fallback and the empty-`park_ids`/`park_write` branch) after the attempt-0 wording fix landed; not a new defect, a deferral-bookkeeping check against merged state. Flagged as a planned deferral rather than a blocker.
+
+- **id**: 19
+  **title**: Id 11's deferred-branch scope re-affirmed unchanged at attempt-2 HEAD
+  **url_path**: current
+  **expected_outcome**: A human confirms id 11's two flagged fallback branches (the `conflicted_ids()` failure fallback; the empty-`park_ids`/`park_write` call) remain exactly as characterized, with the disposition (defer to main-qa, verify against deployed main/prod) still correct.
+  **finding**: qa-fix attempt 2's disposition triage re-read both fallback branches after the attempt-1 wording fix (`8f716fdc`, comment-only in this area) and confirmed neither branch's runtime behavior changed. Not a new defect — a deferral-bookkeeping re-check against merged state, same class as id 18.
+
+- **id**: 20
+  **title**: Whether documenting rather than enforcing the rc-1 contract is the right call, re-affirmed at attempt-2 HEAD
+  **url_path**: current
+  **expected_outcome**: A human confirms the documentation-only choice (no distinct exit code or machine-readable marker for "parked, but a bystander prune landed") is still acceptable, or records that enforcement is the right follow-up.
+  **finding**: Re-affirms id 17 after the attempt-1 wording fix (`8f716fdc`) made the rc-1 contract's recovery recipe concrete: still a design-altitude question about whether the contract should be mechanically enforced rather than documented (no in-repo caller currently passes `--prune` programmatically), not a defect in the landed code. Flagged as a planned deferral rather than a blocker.
