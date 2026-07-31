@@ -31,10 +31,11 @@
 #                        sessions/worktrees write into the transcript tree at
 #                        once. The project directory is deliberately NOT derived
 #                        from a path slug.
-#     --wait-secs        bounded poll (default 10) used ONLY when the first pass
-#                        found no evidence either way, since transcripts can lag
-#                        a moment behind real-time writes. This is
-#                        evidence-gathering, not a substitute invocation.
+#     --wait-secs        bounded poll (default 10) used ONLY while no terminal
+#                        evidence (a paired success or a paired failure) has been
+#                        seen, since transcripts can lag a moment behind
+#                        real-time writes. This is evidence-gathering, not a
+#                        substitute invocation.
 #
 # WHAT IT SCANS
 #   Projects root: ${DISPATCH_AUDIT_PROJECTS_ROOT:-$HOME/.claude/projects} — the
@@ -46,20 +47,37 @@
 #   workflow-subagent nesting
 #   (<projectdir>/<sessionid>/subagents/workflows/wf_<id>/agent-*.jsonl).
 #
+#   The candidate set is pruned to files whose mtime is at/after --since (minus a
+#   slack margin). A record timestamped at/after --since cannot live in a file
+#   last written before it, so this cannot hide evidence — it just keeps the
+#   parse off the host's entire transcript history. Each candidate is parsed with
+#   a STREAMING jq (`-n` + `inputs`), never a whole-file slurp, and the poll loop
+#   re-parses only files whose mtime advanced since the previous pass.
+#
 # WHAT IT COUNTS (over the cwd+since-filtered records)
-#   rejections   `.type == "user"` records carrying a `tool_result` content block
-#                with `.is_error == true` whose stringified `.content` matches
-#                "Skill <instrument> cannot be used with Skill tool". The first
-#                match is reported verbatim (untruncated — the caller truncates)
-#                as failure_text.
 #   invocations  `.type == "assistant"` records carrying a matching `tool_use`
 #                content block (see --kind). Their `.id`s form the pairing set.
 #   succeeded    `tool_result` blocks whose `.tool_use_id` is in that set and
 #                whose `.is_error` is not true. The tool_use and its paired
-#                tool_result always appear in the same transcript file, so
-#                per-file id-pairing is sufficient — no cross-file joins.
+#                tool_result always appear in the same transcript file, in that
+#                order, so a single streaming pass per file is sufficient — no
+#                cross-file joins and no second pass.
+#   rejections   `tool_result` blocks whose `.tool_use_id` is in that SAME set
+#                and whose `.is_error` is true — i.e. this instrument's own call
+#                failed. The first one's `.content` is reported verbatim
+#                (untruncated — the caller truncates) as failure_text.
 #
-#   verified is true iff succeeded >= 1 AND rejections == 0.
+#                Pairing by id is what makes the count non-fabricable. An earlier
+#                revision instead substring-matched "Skill <instrument> cannot be
+#                used with Skill tool" against the error text of ANY failed tool
+#                call in the window; that phrase is plain text an attacker can
+#                commit to their own PR (a doc, a fixture, a comment) and get
+#                echoed back by any failing Edit/Bash, which would have let a PR
+#                author suppress review of their own diff.
+#
+#   verified is true iff succeeded >= 1. A paired success is direct evidence the
+#   harness ran the instrument, so it is authoritative even if the same
+#   instrument was also rejected on an earlier attempt in the window.
 #
 # OUTPUT / EXIT CONTRACT (mirrors dispatch-recover-session-id's 0/1/2 style)
 #   0  verified; exactly one JSON document on stdout.
@@ -148,80 +166,140 @@ if [[ ! "$SINCE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; t
   exit 2
 fi
 
+# Epoch form of --since, used as the `find -newermt` candidate-file floor in
+# scan(). The slack below it absorbs filesystem mtime granularity and small clock
+# skew between whoever wrote a transcript and this process; it only ever WIDENS
+# the candidate set, so it cannot suppress evidence.
+if ! SINCE_EPOCH=$(date -u -d "$SINCE" +%s); then
+  echo "dispatch-verify-instrument-invocation: --since could not be converted to an epoch: $SINCE" >&2
+  exit 2
+fi
+MTIME_FLOOR="@$((SINCE_EPOCH - 600))"
+
 PROJECTS_ROOT="${DISPATCH_AUDIT_PROJECTS_ROOT:-${HOME:-}/.claude/projects}"
 if [[ -z "$PROJECTS_ROOT" || ! -d "$PROJECTS_ROOT" ]]; then
   echo "dispatch-verify-instrument-invocation: transcript root '$PROJECTS_ROOT' is not a directory" >&2
   exit 2
 fi
 
-# The rejection signature the substitution incident produced verbatim:
-#   <tool_use_error>Skill code-review cannot be used with Skill tool due to
-#   disable-model-invocation</tool_use_error>
-REJECT_RE="Skill ${INSTRUMENT} cannot be used with Skill tool"
-
 INVOCATIONS=0
 SUCCEEDED=0
 REJECTIONS=0
 FAILURE_TEXT=""
 
-# Per-file jq program. Slurps one transcript's records, filters to this cwd and
-# time window, then emits one compact object. Files are handled independently so
-# a huge tree is never slurped whole, and id-pairing stays within a session.
+# Per-file jq program. STREAMING (`-n` + `inputs`): records are folded one at a
+# time, so peak memory is the id set rather than the whole transcript — a
+# multi-hundred-MB session file no longer becomes a slurp-sized allocation.
+#
+# The single pass relies on the transcript's own ordering invariant: a tool_use
+# is appended before the tool_result that answers it, in the same file. That is
+# why no pending/second-pass bookkeeping is needed to pair them.
+#
+# Both outcomes are counted only through that id pairing — a tool_result is
+# attributed to this instrument iff its .tool_use_id is one this instrument's
+# tool_use emitted. Nothing is matched against free-form error text, so text an
+# attacker can plant in the repo (and get echoed back by an unrelated failing
+# tool call) cannot manufacture a rejection.
 JQ_PROG='
-  map(select(((.cwd? // "") == $cwd) and ((.timestamp? // "") >= $since))) as $recs
-  | [ $recs[]
-      | select(.type == "user")
-      | .message.content[]?
-      | select(.type == "tool_result" and .is_error == true)
-      | (.content | tostring)
-      | select(test($rejre))
-    ] as $rej
-  | [ $recs[]
-      | select(.type == "assistant")
-      | .message.content[]?
-      | select(.type == "tool_use")
-      | select(
-          if $kind == "skill"
-          then (.name == "Skill" and ((.input.skill? // "") == $skill))
-          else (.name == "Bash" and (((.input.command? // "") | tostring) | test($cmdre)))
-          end
-        )
-      | .id
-    ] as $ids
-  | [ $recs[]
-      | .message.content[]?
-      | select(.type == "tool_result")
-      | select((.tool_use_id? // "") as $t | ($ids | index($t)) != null)
-      | select((.is_error? // false) != true)
-    ] as $ok
-  | {
-      invocations: ($ids | length),
-      succeeded: ($ok | length),
-      rejections: ($rej | length),
-      failure_text: ($rej[0] // "")
-    }
+  def matches_instrument:
+    if $kind == "skill"
+    then (.name == "Skill" and ((.input.skill? // "") == $skill))
+    else (.name == "Bash" and (((.input.command? // "") | tostring) | test($cmdre)))
+    end;
+  reduce (
+    inputs
+    | select(((.cwd? // "") == $cwd) and ((.timestamp? // "") >= $since))
+  ) as $r (
+    {ids: {}, invocations: 0, succeeded: 0, rejections: 0, failure_text: ""};
+    reduce ($r.message.content[]?) as $b (
+      .;
+      if ($r.type == "assistant"
+          and $b.type == "tool_use"
+          and (($b.id? // "") != "")
+          and ($b | matches_instrument))
+      then .ids[($b.id | tostring)] = true
+           | .invocations += 1
+      elif ($b.type == "tool_result"
+            and (($b.tool_use_id? // "") != "")
+            and (.ids[($b.tool_use_id | tostring)] // false))
+      then (if (($b.is_error? // false) == true)
+            then .rejections += 1
+                 | (if .failure_text == ""
+                    then .failure_text = ($b.content | tostring)
+                    else . end)
+            else .succeeded += 1
+            end)
+      else .
+      end
+    )
+  )
+  | {invocations, succeeded, rejections, failure_text}
 '
 
+# Per-file parse cache, keyed by path, holding the mtime the cached counts were
+# computed from. The poll loop below re-parses a file only when its mtime moved.
+declare -A CACHE_MTIME
+declare -A CACHE_JSON
+
 scan() {
-  local per_file agg f
+  local list err per_file agg f mtime json
+
+  list="$(mktemp)"
+  err="$(mktemp)"
   per_file="$(mktemp)"
+
+  # Candidate files only: transcripts written at/after the --since floor. A
+  # record timestamped at/after --since cannot sit in a file whose last write
+  # predates it, so this prunes the host's entire transcript history to the
+  # current window without changing any verdict.
+  #
+  # find's stderr is NOT discarded: an unreadable directory or an IO error is an
+  # environment error and must surface as exit 2, never as "no invocation record
+  # found" (.claude/rules/code-style.md — clear errors over silent fallbacks).
+  if ! find "$PROJECTS_ROOT" -type f -name '*.jsonl' -newermt "$MTIME_FLOOR" \
+       >"$list" 2>"$err" || [[ -s "$err" ]]; then
+    echo "dispatch-verify-instrument-invocation: transcript scan failed under '$PROJECTS_ROOT':" >&2
+    cat "$err" >&2
+    rm -f "$list" "$err" "$per_file"
+    exit 2
+  fi
 
   while IFS= read -r f; do
     [[ -n "$f" ]] || continue
-    if ! jq -s -c \
+
+    if ! mtime=$(stat -c %Y "$f" 2>/dev/null); then
+      # The file disappeared between the find and the stat (session cleanup).
+      # There is nothing to read; a later pass sees whatever replaced it.
+      echo "dispatch-verify-instrument-invocation: skipping vanished transcript: $f" >&2
+      continue
+    fi
+
+    if [[ "${CACHE_MTIME[$f]:-}" == "$mtime" ]]; then
+      # Unchanged since the previous pass — reuse its counts. This is what keeps
+      # the bounded poll from re-parsing the whole candidate set once a second.
+      printf '%s\n' "${CACHE_JSON[$f]}" >>"$per_file"
+      continue
+    fi
+
+    if json=$(jq -n -c \
       --arg cwd "$CWD" \
       --arg since "$SINCE" \
-      --arg rejre "$REJECT_RE" \
       --arg kind "$KIND" \
       --arg skill "$SKILL_ARG" \
       --arg cmdre "$COMMAND_PATTERN" \
-      "$JQ_PROG" "$f" >>"$per_file" 2>/dev/null
+      "$JQ_PROG" "$f" 2>/dev/null)
     then
+      CACHE_MTIME["$f"]="$mtime"
+      CACHE_JSON["$f"]="$json"
+      printf '%s\n' "$json" >>"$per_file"
+    else
       # A corrupt or alien transcript must not abort the verdict; report and
-      # move on (same posture as aggregate-usage.sh's files_failed tally).
+      # move on (same posture as aggregate-usage.sh's files_failed tally). The
+      # failure is deliberately NOT cached, so a file that was mid-write when it
+      # was read is retried on the next pass.
       echo "dispatch-verify-instrument-invocation: skipping unparseable transcript: $f" >&2
     fi
-  done < <(find "$PROJECTS_ROOT" -type f -name '*.jsonl' 2>/dev/null)
+  done <"$list"
 
   # Aggregate the per-file objects. jq reads the file directly — never an
   # echo-into-jq round-trip of a captured variable (.claude/rules/shell-json.md).
@@ -237,28 +315,35 @@ scan() {
   REJECTIONS=$(jq -r '.rejections' <<<"$agg")
   FAILURE_TEXT=$(jq -r '.failure_text' <<<"$agg")
 
-  rm -f "$per_file"
+  rm -f "$list" "$err" "$per_file"
 }
 
 scan
 
-# Flush lag: only when the first pass found NO evidence either way is a bounded
-# re-scan worth doing. Any rejection or any invocation is already a verdict.
+# Flush lag: re-scan only while no TERMINAL evidence has landed. A paired
+# success or a paired failure is already a verdict; a bare tool_use whose result
+# has not been flushed yet is not, so that case keeps waiting too. Repeat passes
+# re-parse only files whose mtime advanced (see scan()), so the wait is cheap.
 waited=0
-while [[ "$INVOCATIONS" -eq 0 && "$REJECTIONS" -eq 0 && "$waited" -lt "$WAIT_SECS" ]]; do
+while [[ "$SUCCEEDED" -eq 0 && "$REJECTIONS" -eq 0 && "$waited" -lt "$WAIT_SECS" ]]; do
   sleep 1
   waited=$((waited + 1))
   scan
 done
 
 REASON=""
-if [[ "$SUCCEEDED" -ge 1 && "$REJECTIONS" -eq 0 ]]; then
+if [[ "$SUCCEEDED" -ge 1 ]]; then
+  # A paired non-error result is direct evidence the harness ran the instrument.
+  # It stands even alongside a rejection: an instrument that was refused once and
+  # then genuinely ran did run.
   VERIFIED=true
 else
   VERIFIED=false
-  if [[ "$INVOCATIONS" -eq 0 && "$REJECTIONS" -eq 0 ]]; then
+  if [[ "$INVOCATIONS" -eq 0 ]]; then
     # Fail-closed: absence of evidence is not evidence of invocation.
     REASON="no invocation record found"
+  elif [[ "$REJECTIONS" -eq 0 ]]; then
+    REASON="invocation recorded but no completed result within the wait window"
   fi
 fi
 

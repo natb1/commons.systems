@@ -261,7 +261,15 @@ command block, normalization rules, and the per-finder roster and descriptions.
 ### 2. Build `args` and invoke the Workflow
 
 Collect the fields for the Workflow invocation. Parse `Closes #N` from the pack's
-`=== PR ===` body to resolve `implementing_issues`:
+`=== PR ===` body to resolve `implementing_issues`. Workflow scripts cannot call
+`new Date()` / `Date.now()` themselves (the runtime throws — it would break
+resume), so capture the instrument-verification lower-bound timestamp here in
+bash, immediately before invoking the Workflow, and pass it through as
+`run_started_at`:
+
+```bash
+RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+```
 
 ```
 args = {
@@ -273,6 +281,7 @@ args = {
   app_or_rules:        <true|false>,
   prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
+  run_started_at:      <RUN_STARTED_AT>, // ISO8601 lower bound for the instrument-invocation transcript verifier
   security_note:       <string or omit>, // set for empty/docs/tests; omit for code
   prior_phase_log:     <string or omit> // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
 }

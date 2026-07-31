@@ -121,7 +121,15 @@ Step 7 escalates to office-hours via `dispatch-mark-deviation`. The transcript
 verdict wins any disagreement with the receipt: a receipt claiming `invoked:true`
 against a transcript that shows no successful invocation is exactly the
 fabrication signature the check exists to catch, and a verifier agent that died
-fails the gate too (fail-closed).
+fails the gate too (fail-closed). That verifier agent sees counts and booleans
+only: the verify script's verbatim transcript rejection text is
+attacker-influenceable (it is transcript content — the error body of this
+instrument's own failed tool call, quoted verbatim), so each command it runs
+projects the verdict down to
+`{instrument, verified, invocations, succeeded, rejections}` with `jq` and drops
+stderr before the output reaches the agent, and the schema has no free-text field.
+The "why not verified" phrase in `coverage_note` is rebuilt from those integers by
+the orchestrator, never transcribed by the agent.
 
 Do not conflate this with the throttle path above. They look superficially alike
 — both set `coverage_incomplete` — but they end differently and deliberately so:

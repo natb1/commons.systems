@@ -21,7 +21,9 @@
  *     deps:bool, app_or_rules:bool,
  *     prescanned_findings:[...Per-finding items, Source "codeql"|"npm",
  *       carrying their source-specific fields...],
- *     implementing_issues:[N,...], security_note?:string }
+ *     implementing_issues:[N,...], run_started_at:string (ISO8601, captured by
+ *       the skill via `date -u` immediately before this Workflow is invoked —
+ *       this script cannot call `new Date()`/`Date.now()` itself), security_note?:string }
  *
  * return OUT (the ONLY thing this script returns):
  *   { dispositions:[{id, short_desc, location, bucket, sources:[...],
@@ -299,10 +301,17 @@ const RESIDUE_TREE_SCHEMA = {
 // finder wrote about ITSELF; `invoked: true` is fabricable. This schema carries the
 // verdict of a SEPARATE agent whose only job is to run
 // .claude/skills/dispatch-propagate/scripts/dispatch-verify-instrument-invocation,
-// which reads the actual Claude session transcript record (tool-call history). Like
-// residue-tree-verify, that agent is fed NO finding text — only a command line — so
-// a prompt-injection payload embedded in an attacker-controlled finding description
-// cannot steer it.
+// which reads the actual Claude session transcript record (tool-call history).
+//
+// The schema is deliberately COUNTS-AND-BOOLEANS ONLY — no free-text field. The
+// verify script also emits a `failure_text` (the verbatim rejection message it
+// found in the transcript) and a `reason`, but that rejection text is transcript
+// content selected by a substring match, i.e. attacker-influenceable: a payload
+// planted in an errored tool_result would land in the verifier's context in the
+// position of maximum influence over its own output if the agent were asked to
+// transcribe it. So the command the agent runs projects those fields away before
+// the agent ever sees them (see verifyLines below), and the human-readable
+// "why not verified" phrase is derived script-side from these integers.
 const INSTRUMENT_VERIFY_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -313,13 +322,13 @@ const INSTRUMENT_VERIFY_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['instrument', 'verified', 'rejections', 'failure_text', 'reason'],
+        required: ['instrument', 'verified', 'invocations', 'succeeded', 'rejections'],
         properties: {
           instrument: { type: 'string' },
           verified: { type: 'boolean' },
+          invocations: { type: 'integer' },
+          succeeded: { type: 'integer' },
           rejections: { type: 'integer' },
-          failure_text: { type: 'string' },
-          reason: { type: 'string' },
         },
       },
     },
@@ -423,6 +432,31 @@ function instrumentVerdict(name, res) {
   return { ok: true, checked: true, reason: '' };
 }
 // <<< instrument gate <<<
+
+// Pure. Renders the independent transcript verdict as a FIXED, script-authored
+// phrase derived only from the verdict's integer counts. Nothing the verifier
+// agent read as text is passed through: the rejection message the verify script
+// finds in the transcript is attacker-influenceable, so it is projected away
+// before the agent sees it and never reconstructed here. `tv` is null/undefined
+// when the verifier agent itself died after retries (fail-closed).
+function transcriptVerdictDetail(tv) {
+  if (!tv) {
+    return 'the independent transcript verifier returned no result (agent died after retries)';
+  }
+  const rejections = Number.isFinite(tv.rejections) ? tv.rejections : 0;
+  const invocations = Number.isFinite(tv.invocations) ? tv.invocations : 0;
+  const succeeded = Number.isFinite(tv.succeeded) ? tv.succeeded : 0;
+  if (rejections > 0) {
+    return `the transcript records ${rejections} rejected invocation(s) of this instrument`;
+  }
+  if (invocations === 0) {
+    return 'no invocation record found in the transcript';
+  }
+  if (succeeded === 0) {
+    return `${invocations} invocation record(s) found, none of which returned successfully`;
+  }
+  return 'the verifier reported verified:false';
+}
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-finders
 // Returns the AGENT finder-source set (the codeql/npm finders are NOT agents —
@@ -693,10 +727,14 @@ function finderPrompt(name, args) {
 const _a = typeof args === 'string' ? JSON.parse(args) : (args || {});
 log(`args type: ${typeof args}; surface=${_a.surface}; changed_files count=${(_a.changed_files || []).length}`);
 
-// Lower bound for the instrument-invocation transcript search. Captured ONCE here,
-// before any finder is launched, so the verifier can never credit an invocation
-// recorded by an earlier run in this same worktree.
-const runStartedAt = new Date().toISOString();
+// Lower bound for the instrument-invocation transcript search. The skill
+// captures this in bash (via `date -u`) immediately before invoking this
+// Workflow and passes it in as `args.run_started_at` — Workflow scripts cannot
+// call `new Date()`/`Date.now()` themselves (it would break resume; the
+// runtime throws on any such call). Capturing it in the caller, one step
+// before the Workflow launches any finder, still gives the verifier a lower
+// bound no earlier run in this worktree could have satisfied.
+const runStartedAt = _a.run_started_at;
 
 // subagents_launched (source 1, this Workflow's own fan-out): a single
 // accumulator incremented at each spawn site, inside the guard that actually
@@ -786,9 +824,20 @@ const finderResults = qualityFinders
 //
 // Modeled on residue-tree-verify: ONE separate, minimally-scoped agent, fed ONLY
 // the command line(s) to run and the return shape. NO finding text, NO residue
-// content, NO diff context reaches it. That is load-bearing, not tidiness: it is
-// what keeps a prompt-injection payload embedded in an untrusted finding
-// description from steering the verifier into reporting a false `verified`.
+// content, NO diff context reaches it.
+//
+// Being fed no ORCHESTRATOR-supplied text is not by itself isolation, because the
+// command the agent runs prints text of its own: the verify script reports the
+// verbatim transcript rejection message as `failure_text`, and that string is
+// transcript content selected by a substring match — attacker-influenceable by
+// exactly the primitive this gate exists to catch (plant a crafted
+// `<tool_use_error>` payload, get it read back into the verifier's context, and
+// steer it into reporting a false `verified`). So the isolation is enforced in the
+// command line, not in the prompt: each command projects the verdict down to
+// counts and booleans with `jq` and drops stderr, so the untrusted text never
+// enters the agent's context at all, and the schema has no free-text field for it
+// to land in. The "why not verified" prose the gate reports is rebuilt script-side
+// from the integers by transcriptVerdictDetail().
 const laneAChecked = finderResults
   .filter(({ name, res }) => INSTRUMENTS[name] && res !== null && res !== undefined)
   .map(({ name }) => name);
@@ -796,10 +845,15 @@ let instrumentVerifyResults = null;
 if (laneAChecked.length) {
   const verifyLines = laneAChecked.map((name) => {
     const spec = INSTRUMENTS[name];
+    // The trailing `2>/dev/null | jq …` is the isolation boundary, not cosmetics:
+    // it strips the verify script's verbatim transcript rejection text (and its
+    // stderr, which echoes transcript file paths) so only counts and booleans
+    // reach the agent's context.
     return (
       `.claude/skills/dispatch-propagate/scripts/dispatch-verify-instrument-invocation ` +
       `--instrument ${name} --kind ${spec.kind} --skill ${spec.skill} ` +
-      `--since ${runStartedAt} --cwd <CWD>`
+      `--since ${runStartedAt} --cwd <CWD> 2>/dev/null ` +
+      `| jq -c '{instrument, verified, invocations, succeeded, rejections}'`
     );
   });
   subagentsLaunched += 1;
@@ -812,19 +866,24 @@ if (laneAChecked.length) {
       'Then run EACH of these commands exactly as written, from that directory:',
       ...verifyLines,
       '',
-      'A non-zero exit from this command is EXPECTED and NORMAL when the instrument',
+      'Run each pipeline WHOLE — keep the `2>/dev/null` and the trailing `| jq ...`',
+      'exactly as given. Do NOT run the script without that filter, and do NOT go',
+      'looking for the unfiltered output: the filter is a security boundary, and the',
+      'five fields it prints are the only ones anyone wants from you.',
+      '',
+      'A non-zero exit from this pipeline is EXPECTED and NORMAL when the instrument',
       'was not verified — this is a successful verification run reporting a negative',
       'result, NOT a failure of your task. You MUST return the JSON printed on the',
-      "command's stdout regardless of its exit status. Do NOT treat a non-zero exit",
+      "pipeline's stdout regardless of its exit status. Do NOT treat a non-zero exit",
       'as your own failure and do NOT retry the command.',
       '',
       'Make NO edits, NO commits, NO pushes; run nothing else.',
       '',
-      'Return { "results": [ ... ] } with one object per command, each carrying the',
-      'instrument, verified, rejections, failure_text and reason values from that',
-      "command's stdout JSON. If a command printed no stdout JSON at all, return that",
-      'instrument with verified:false, rejections:0, failure_text:"" and reason set to',
-      'the stderr diagnostic.',
+      'Return { "results": [ ... ] } with one object per command, copying the',
+      'instrument, verified, invocations, succeeded and rejections values from that',
+      "pipeline's stdout JSON verbatim. If a pipeline printed no stdout JSON at all,",
+      'return that instrument with verified:false and invocations, succeeded and',
+      'rejections all 0. Report nothing else — no prose, no quoted output.',
     ].join('\n'),
     {
       model: 'sonnet',
@@ -868,14 +927,12 @@ for (const { name, res } of finderResults) {
   if (!laneAChecked.includes(name) || instrumentFailed.has(name)) continue;
   const tv = verifyByInstrument.get(name);
   if (tv && tv.verified === true) continue;
-  const why = tv
-    ? String(tv.reason || tv.failure_text || 'no verdict detail returned')
-        .trim()
-        .replace(/\s+/g, ' ')
-    : 'the independent transcript verifier returned no result (agent died after retries)';
+  // Script-authored detail only — see transcriptVerdictDetail(). No transcript
+  // text (attacker-influenceable) is echoed into the reason, so no truncation or
+  // sanitization is needed here.
   const reason =
     `${name}: instrument invocation not verified in the transcript record — ` +
-    (why.length <= 300 ? why : why.slice(0, 300));
+    transcriptVerdictDetail(tv);
   instrumentFailures.push({ instrument: name, reason });
   instrumentFailed.add(name);
   log(`finders: INSTRUMENT GATE FAILED — ${reason}`);

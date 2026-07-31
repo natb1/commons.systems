@@ -29,9 +29,13 @@ export DISPATCH_AUDIT_PROJECTS_ROOT="$VERIFY_ROOT"
 
 CWD_A="/home/tester/wt/node-a"
 CWD_B="/home/tester/wt/node-b"
-SINCE="2026-07-31T12:00:00.000Z"
-T_OK="2026-07-31T12:05:00.000Z"
-T_OLD="2026-07-31T09:00:00.000Z"
+# Derived from the wall clock, not hard-coded: the SUT prunes candidate files to
+# those whose mtime is at/after --since, and every fixture file below is written
+# NOW. A fixed calendar instant would make the suite pass or fail depending on
+# the hour of day it runs at.
+SINCE="$(date -u -d '-1 hour' +%Y-%m-%dT%H:%M:%S.000Z)"
+T_OK="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+T_OLD="$(date -u -d '-3 hours' +%Y-%m-%dT%H:%M:%S.000Z)"
 
 # Mimic the nested workflow-subagent layout so the recursive find is exercised
 # at its deepest real nesting, not just the flat top level.
@@ -116,16 +120,22 @@ assert_eq "case 1: no rejections" "0" "$(jq -r '.rejections' <<<"$OUT")"
 assert_eq "case 1: reason empty" "" "$(jq -r '.reason' <<<"$OUT")"
 
 # ============================================================================
-# Case 2 — the real rejection: is_error result carrying the substitution text.
+# Case 2 — the real rejection: the Skill tool_use the harness refused, plus its
+# paired is_error result. Both halves are present in a real transcript, and the
+# SUT counts a rejection ONLY through that tool_use_id pairing.
 # ============================================================================
 reset_fixtures
-err_result_record "$CWD_A" "$T_OK" "toolu_rej1" "$REJECT_TEXT" > "$PROJ_DIR/agent-rej.jsonl"
+{
+  skill_use_record "$CWD_A" "$T_OK" "toolu_rej1" "code-review"
+  err_result_record "$CWD_A" "$T_OK" "toolu_rej1" "$REJECT_TEXT"
+} > "$PROJ_DIR/agent-rej.jsonl"
 
 run_sut "$SUT" --instrument code-review --kind skill --skill code-review \
   --since "$SINCE" --cwd "$CWD_A" --wait-secs 0
 assert_eq "case 2: rejection exits 1" "1" "$RC"
 assert_eq "case 2: not verified" "false" "$(jq -r '.verified' <<<"$OUT")"
 assert_eq "case 2: rejections counted" "1" "$(jq -r '.rejections' <<<"$OUT")"
+assert_eq "case 2: no success counted" "0" "$(jq -r '.succeeded' <<<"$OUT")"
 assert_eq "case 2: failure_text is verbatim" "$REJECT_TEXT" "$(jq -r '.failure_text' <<<"$OUT")"
 # A rejection IS evidence, so the fail-closed no-evidence reason must NOT fire.
 assert_eq "case 2: reason empty (rejection is evidence)" "" "$(jq -r '.reason' <<<"$OUT")"
@@ -135,7 +145,10 @@ assert_eq "case 2: reason empty (rejection is evidence)" "" "$(jq -r '.reason' <
 # A rejection in another worktree must not poison this worktree's verdict.
 # ============================================================================
 reset_fixtures
-err_result_record "$CWD_B" "$T_OK" "toolu_rej1" "$REJECT_TEXT" > "$PROJ_DIR/agent-rej.jsonl"
+{
+  skill_use_record "$CWD_B" "$T_OK" "toolu_rej1" "code-review"
+  err_result_record "$CWD_B" "$T_OK" "toolu_rej1" "$REJECT_TEXT"
+} > "$PROJ_DIR/agent-rej.jsonl"
 
 run_sut "$SUT" --instrument code-review --kind skill --skill code-review \
   --since "$SINCE" --cwd "$CWD_A" --wait-secs 0
@@ -210,5 +223,79 @@ run_sut "$SUT" --instrument code-review --kind skill --skill code-review \
   --since "yesterday" --cwd "$CWD_A" --wait-secs 0
 assert_eq "case 6c: unparseable --since exits 2" "2" "$RC"
 assert_eq "case 6c: unparseable --since prints no stdout" "" "$OUT"
+
+# ============================================================================
+# Case 7 — rejection-text poisoning. An UNRELATED failed tool call (a Bash that
+# exited non-zero after echoing a repo file, say) whose error text happens to
+# contain the rejection phrase must NOT count as a rejection: the phrase is
+# plain text anyone can commit to the PR under review. Only tool_use_id pairing
+# counts, so the genuine invocation below stays verified.
+# ============================================================================
+reset_fixtures
+{
+  skill_use_record "$CWD_A" "$T_OK" "toolu_ok2" "code-review"
+  ok_result_record "$CWD_A" "$T_OK" "toolu_ok2"
+  bash_use_record "$CWD_A" "$T_OK" "toolu_bash1" "cat fixtures/notes.md"
+  err_result_record "$CWD_A" "$T_OK" "toolu_bash1" "$REJECT_TEXT"
+} > "$PROJ_DIR/agent-poison.jsonl"
+
+run_sut "$SUT" --instrument code-review --kind skill --skill code-review \
+  --since "$SINCE" --cwd "$CWD_A" --wait-secs 0
+assert_eq "case 7: unpaired reject text does not flip the verdict" "0" "$RC"
+assert_eq "case 7: still verified" "true" "$(jq -r '.verified' <<<"$OUT")"
+assert_eq "case 7: unpaired reject text not counted" "0" "$(jq -r '.rejections' <<<"$OUT")"
+assert_eq "case 7: failure_text stays empty" "" "$(jq -r '.failure_text' <<<"$OUT")"
+
+# The same poisoning attempt with NO genuine invocation must still be no-evidence
+# (fail-closed) rather than a counted rejection.
+reset_fixtures
+{
+  bash_use_record "$CWD_A" "$T_OK" "toolu_bash2" "cat fixtures/notes.md"
+  err_result_record "$CWD_A" "$T_OK" "toolu_bash2" "$REJECT_TEXT"
+} > "$PROJ_DIR/agent-poison.jsonl"
+
+run_sut "$SUT" --instrument code-review --kind skill --skill code-review \
+  --since "$SINCE" --cwd "$CWD_A" --wait-secs 0
+assert_eq "case 7b: poison-only exits 1" "1" "$RC"
+assert_eq "case 7b: poison-only not counted as rejection" "0" "$(jq -r '.rejections' <<<"$OUT")"
+assert_eq "case 7b: fail-closed reason" "no invocation record found" "$(jq -r '.reason' <<<"$OUT")"
+
+# ============================================================================
+# Case 8 — refused once, then genuinely run. A paired success is direct evidence
+# the harness executed the instrument, so it is authoritative over the earlier
+# paired rejection.
+# ============================================================================
+reset_fixtures
+{
+  skill_use_record "$CWD_A" "$T_OK" "toolu_rej2" "code-review"
+  err_result_record "$CWD_A" "$T_OK" "toolu_rej2" "$REJECT_TEXT"
+  skill_use_record "$CWD_A" "$T_OK" "toolu_ok3" "code-review"
+  ok_result_record "$CWD_A" "$T_OK" "toolu_ok3"
+} > "$PROJ_DIR/agent-retry.jsonl"
+
+run_sut "$SUT" --instrument code-review --kind skill --skill code-review \
+  --since "$SINCE" --cwd "$CWD_A" --wait-secs 0
+assert_eq "case 8: retry-after-rejection exits 0" "0" "$RC"
+assert_eq "case 8: verified" "true" "$(jq -r '.verified' <<<"$OUT")"
+assert_eq "case 8: both attempts counted" "2" "$(jq -r '.invocations' <<<"$OUT")"
+assert_eq "case 8: rejection still reported" "1" "$(jq -r '.rejections' <<<"$OUT")"
+
+# ============================================================================
+# Case 9 — a transcript file whose mtime predates --since is pruned from the
+# candidate set before parsing (the scan-scoping guard). Its records would match
+# on cwd and timestamp, so only the mtime prefilter can exclude it.
+# ============================================================================
+reset_fixtures
+{
+  skill_use_record "$CWD_A" "$T_OK" "toolu_stale1" "code-review"
+  ok_result_record "$CWD_A" "$T_OK" "toolu_stale1"
+} > "$PROJ_DIR/agent-stale.jsonl"
+# Well under the SUT's slack margin below --since (1h ago): 2 days back.
+touch -d '2 days ago' "$PROJ_DIR/agent-stale.jsonl"
+
+run_sut "$SUT" --instrument code-review --kind skill --skill code-review \
+  --since "$SINCE" --cwd "$CWD_A" --wait-secs 0
+assert_eq "case 9: stale-mtime transcript is not parsed" "1" "$RC"
+assert_eq "case 9: no invocations from a pruned file" "0" "$(jq -r '.invocations' <<<"$OUT")"
 
 report_results
