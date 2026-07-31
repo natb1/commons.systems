@@ -409,6 +409,27 @@ check_base_freshness() {
 # failure never masks the real exit status.
 cleanup() {
   local rc=$?
+  # Abort a rebase this run stranded. main() refuses to start at all when a
+  # rebase is ALREADY in progress (see the pre-flight check there, which
+  # deliberately runs BEFORE this trap is installed), so any rebase still in
+  # progress here was necessarily started by THIS run's `git pull --rebase` —
+  # that is the load-bearing premise for aborting unconditionally, with no
+  # separate "did we start it" flag.
+  #
+  # This MUST precede the RESTORE_HEAD `git reset --hard` below: a reset --hard
+  # inside a live rebase moves the tree but leaves the rebase state dir behind,
+  # which is exactly the mid-operation residue this is meant to clear.
+  #
+  # Deliberately incomplete: a SIGKILL fires no trap at all, so this cannot be
+  # the only defense. provision-node-worktree's precondition guard (which
+  # detects and repairs an abandoned rebase before handing a worktree to a
+  # session) is the primary one; this is the secondary, cheap backstop.
+  # Best-effort (|| true), on the same footing as the lock release and the
+  # scratch-branch delete below — its failure must never mask the real exit
+  # status, which this function still returns as $rc.
+  if rebase_in_progress; then
+    git rebase --abort >&2 || true
+  fi
   # Restore the original (far-ahead) HEAD if ensure_intentions_only_base() moved
   # the worktree onto origin/main to land an intentions/-only SHA. The intended
   # edit is already on main by this point (or failed to land); either way the
@@ -1416,6 +1437,22 @@ main() {
   fi
   INTENTIONS_DIR="$REPO_ROOT/intentions"
   cd "$REPO_ROOT"
+
+  # Refuse to run on a mid-operation worktree. A clear error at a system edge,
+  # not a fallback: a rebase in progress means someone (or something) else owns
+  # this checkout's HEAD right now, and graph-commit's own rebase/reset flow
+  # would compound the damage.
+  #
+  # Placement is load-bearing — this must run BEFORE `trap cleanup EXIT` is
+  # installed further down. cleanup() aborts any rebase in progress on exit; if
+  # this refusal ran after the trap were armed, the very die() below would abort
+  # the caller's own rebase — including an `edit`-stopped one, which leaves a
+  # CLEAN tree and would otherwise slip past assert_clean_outside_ids entirely.
+  # Refusing before the trap exists is what makes cleanup()'s unconditional
+  # abort provably safe: any rebase seen there was started by this run.
+  if rebase_in_progress; then
+    die "a rebase is already in progress in $REPO_ROOT — graph-commit will not run on a mid-operation worktree; finish or 'git rebase --abort' it first"
+  fi
 
   if [[ "${#IDS[@]}" -eq 0 && "${#PRUNE_IDS[@]}" -eq 0 ]]; then
     usage
