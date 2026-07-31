@@ -96,13 +96,12 @@ attention:
     stop; a second, tighter (6s) recurrence confirmed it 2026-07-31. blocked_by
     is empty, so this promotion lifts no blocker and cannot compound. Finalized
     to phase: implement 2026-07-31 via /align-tactics."
-phase: qa
+phase: implement
 execution:
   branch: tactic-router-spawn-window-duplicate-worker
   pr: 2995
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -579,3 +578,35 @@ sessions share **one** worktree. `claude rm <session-id>` deletes the session
 handoff window (the observed 814 s case) is the sibling read-defect mechanism,
 not a regression of this fix. Record it against
 `tactic-graph-router-live-worker-read-robust`; do not reopen this work for it.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #2995). Both items are planned deferrals documented in
+the PR body's own "Observe in production" section — not code defects, not
+assertable at merge time. All 8 script-verifiable QA plan items in this pass
+PASSed (both directly-affected test suites, both neighboring test suites, the
+call-site census, syntax + primitive/env-var checks, a black-box marker
+lifecycle smoke test against the real committed library, and the prose
+linter). Drained after `review → main-qa`.
+
+### 9. No duplicate-worker recurrence in the live fleet after merge
+
+- URL path: current
+- Expected outcome: No new spawn-window duplicate-worker pair is observed in
+  the live fleet after merge (no two `launched <id>` tick-journal lines for
+  the same node id from different tick pids within the boot window).
+- Finding: Cannot be asserted at merge time — requires accumulated production
+  spawn cycles observed over time via the tick journal and
+  `graph-selection.jsonl`.
+
+### 10. Ledger occupancy and reclaim-note mix look healthy in production logs
+
+- URL path: current
+- Expected outcome: `tmp/dispatch-reservations/` is non-empty during a
+  worker's boot window post-merge; `live-worker-redundant` reclaims dominate
+  as the normal release path; `spawn-handoff-expired` stays a rare trickle
+  rather than a flood (a flood would mean the 300 s TTL needs raising, not
+  that the rule is wrong).
+- Finding: The trickle-vs-flood ratio and ledger-occupancy pattern only
+  become meaningful after the fleet accumulates real spawn cycles post-merge;
+  requires production log review over time, not a merge-time command.
