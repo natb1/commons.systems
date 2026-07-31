@@ -14,6 +14,7 @@
 #   live_session_claimed_nums
 #   worktree_has_live_session          <worktree-path> [exclude_sid]
 #   claude_agents_count_busy_workers
+#   claude_agents_list_blocked_workers
 #   verify_agent_registered_under      <agent-name> <cwd>
 #   claude_agents_snapshot_capture     <path>
 #   claude_job_id_for_name_all         <name>
@@ -624,6 +625,59 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       return 1
     fi
     printf '%s\n' "$count"
+    return 0
+  }
+
+  # claude_agents_list_blocked_workers — emit live worker sessions whose state
+  # is "blocked" as sessionId<TAB>name<TAB>cwd TSV. Reads the raw registry via
+  # `_claude_agents_raw` (snapshot-aware, like `claude_agents_count_busy_workers`) —
+  # NOT `--all` directly: a `state: "blocked"` session is an ACTIVE session and
+  # is already present in the default (non-`--all`) listing, so within a tick
+  # that already captured DISPATCH_AGENTS_SNAPSHOT this costs zero extra daemon
+  # round-trips. Querying `--all` here would additionally surface `state: "done"`
+  # rows, which belong to a different tactic and must not be included. The
+  # keyspace filter (`^[0-9]+-|^tactic-|^strategy-`) is identical to
+  # `claude_agents_count_busy_workers` and excludes routers (`dispatch-<short-id>`).
+  # `state` (not `status`) is the discriminator — `status` is busy/idle/stopped;
+  # `state` carries the finer-grained blocked/paused/done distinctions.
+  #     return 0 — daemon queried successfully. Stdout carries one TSV line per
+  #               blocked worker: sessionId<TAB>name<TAB>cwd. Zero matches (or a
+  #               `[]` registry) → return 0 with empty stdout: a definite "no
+  #               blocked workers", NOT a failure.
+  #     return 1 — UNKNOWN. `_claude_agents_raw` failure, whitespace-only output,
+  #               or a jq failure (non-array input). Stdout is empty. Callers
+  #               MUST treat UNKNOWN as "cannot reconcile", never as "none".
+  claude_agents_list_blocked_workers() {
+    # No --cwd here: callers need the machine-wide set of blocked workers, not
+    # a per-path filter. The raw array comes from the tick snapshot when set,
+    # else a live per-call query (see _claude_agents_raw). 2>/dev/null inside
+    # the helper drops daemon noise.
+    local out
+    if ! out=$(_claude_agents_raw); then
+      return 1
+    fi
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # One jq pass validates the array shape, filters to the worker keyspace and
+    # `state == "blocked"`, and projects the TSV. Non-array input errors out and
+    # the result is UNKNOWN.
+    local lines
+    if ! lines=$(jq -r '
+      if type == "array"
+      then .[]
+        | select(.name | type == "string" and test("^[0-9]+-|^tactic-|^strategy-"))
+        | select(.state == "blocked")
+        | [.sessionId, .name, .cwd] | @tsv
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 1
+    fi
+    # `[]` or no matches → empty $lines → emit nothing, still return 0.
+    if [[ -n "$lines" ]]; then
+      printf '%s\n' "$lines"
+    fi
     return 0
   }
 
