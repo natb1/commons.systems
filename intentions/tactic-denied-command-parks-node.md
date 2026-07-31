@@ -69,7 +69,7 @@ attention:
     and cannot compound. Finalized 2026-07-31 by /align-tactics to phase:
     implement with a full clean-session plan in the body; the boost carries over
     unchanged, since attention rank is independent of phase."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-denied-command-parks-node
   pr: 2994
@@ -80,10 +80,71 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T17:15:22Z
+    mergeCommitSha: 03a156232a4b3b38ccd6072da03c073bf64c558d
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    Both needs-main residue items require a live event that has not yet
+    occurred, so validation is deferred rather than refused. Item 1 needs a real
+    Claude Code classifier denial so the frozen row's literal `state` value can
+    be read back from `claude agents --json`. Item 2 needs a real frozen session
+    plus a live `claude attach` to walk freeze -> detect -> park ->
+    office-hours-surface -> human-unblock -> clear-park -> resume end to end.
+    This is a DEFERRED OBSERVATION, not an author judgment call: a human is
+    needed to provoke the occurrence (or to accept the deferral), not to decide
+    anything.
+
+
+    Correcting the prior park's stated reason. That park sorted these items to
+    cannot-verify on browser-reachability -- "neither residue item is
+    browser-verifiable", "URL path: current", "without loading Chrome tools".
+    That is the wrong criterion. The graph sorts machine-verifiable vs
+    author-required, not browser vs non-browser; item 1 is a shell command that
+    merely needs an occurrence to observe. Recorded as a live instance for
+    tactic-qa-main-verifiability-sort-criterion, which owns that fix.
+
+
+    The prior park also never landed -- a live instance of the writer defect. It
+    was built as unpushed commit 079e4b76 inside the PR-branch worktree, which
+    violates invariant I1, and park-node's exit trap then reverted the tree,
+    leaving this node on origin/main at phase main-qa with office_hours null and
+    the park text stranded in the session job directory. Ownership of that
+    defect sits with tactic-phase-terminal-requires-disposition, which deletes
+    the Stop-hook backstop in favour of the tick sweep. This park is landed from
+    a checkout at origin/main instead.
+
+
+    NOTHING IS GATED ON THIS PARK. tactic-phase-terminal-requires-disposition
+    previously carried a blocked_by edge onto this node; it was removed in
+    824e9cb7 so that step 2 proceeds on the merged code (#2994, merge commit
+    03a15623, lib-frozen-session-park.sh present on main) rather than on this
+    node's phase. The general rule that motivated the removal: validating a fix
+    must not block progress that depends only on the fix having landed.
+  since: 2026-07-31
+  recommendation: "Provoke one real classifier denial in a throwaway session
+    (issue a command the auto-mode classifier will refuse), then
+    sandbox-disabled run `claude agents --json | jq -c '.[] |
+    {name,status,state,waitingFor}'` to confirm the frozen row reads `state:
+    \"blocked\"` (item 1). With that session still frozen, set
+    `DISPATCH_FROZEN_SESSION_GRACE_S=0` and run `dispatch-tick` manually
+    (sandbox-disabled) to observe the full loop: the journal logs
+    `lib-frozen-session-park: parked <node>`, `git show
+    origin/main:intentions/<node>.md` shows a non-null `office_hours` with
+    `reason`/`recommendation`, and a `site: \"frozen-session-sweep\"` record
+    lands in `routing-decisions.jsonl`. Then attach the session (`claude attach
+    <job-id>`), answer/cancel the prompt, `claude rm` it, let `dispatch-sweep`
+    reap the worktree, run `clear-park <node-id>`, and confirm via
+    `graph-select-target --top 20` that the node returns to the selectable set
+    (item 2). If both hold, this residue can be cleared and the node advanced
+    main-qa -> done by hand; if the `state` literal differs, fix Unit 1's
+    predicate in `lib-claude-agents.sh` rather than widening it to a `status !=
+    busy` complement (would collide with tactic-stopped-session-blocks-node /
+    tactic-frozen-session-debug-count)."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

@@ -73,8 +73,7 @@ attention:
 phase: implement
 execution: null
 validates: []
-blocked_by:
-  - tactic-denied-command-parks-node
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -175,6 +174,27 @@ The framework file does not exist on `origin/main` yet — it ships in PR #2994
 4. Only **then** delete the Stop-hook backstop and reword the SKILL.md prose
    that names it (Unit 4) — the replacement must be live before the seam is
    uncovered.
+
+### Dependency note — why `blocked_by` is empty
+
+This node previously carried `blocked_by: [tactic-denied-command-parks-node]`,
+encoding "step 2 depends on step 1" from the bootstrap plan. That edge was
+removed 2026-07-31 once PR #2994 merged (17:15:22Z, `03a15623`).
+
+The real dependency is **the sweep framework must exist to add a predicate to
+it**, and `lib-frozen-session-park.sh` is on `main` — Unit 0 below asserts
+exactly that, which is the right place for it. What the `blocked_by` edge
+actually gated was the *blocker node reaching `done`*, and that node went to
+`main-qa` carrying `## needs-main` residue whose item 1 is verifiable only
+against a real live classifier denial occurring by chance. Left in place, the
+edge would have held this node until an unrelated external event happened.
+
+**The general rule, which holds beyond this node: validating a fix must not
+block progress that depends only on the fix having landed.** A node awaiting
+deferred observation is a legitimate state; propagating that wait to its
+dependents is not. Where a dependent needs merged code, gate it on the code
+(assert the file/function exists, as Unit 0 does) rather than on the producing
+node's phase.
 
 ### Unit 0 — precondition check (do this first, no code)
 
