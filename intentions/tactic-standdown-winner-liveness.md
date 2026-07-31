@@ -81,8 +81,7 @@ execution:
     mergeCommitSha: 2c8a150695066780aedb41f5324882ae3a7cbdaf
     graphCommitSha: null
 validates: []
-blocked_by:
-  - tactic-hold-residue-standdown-winner-liveness
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
