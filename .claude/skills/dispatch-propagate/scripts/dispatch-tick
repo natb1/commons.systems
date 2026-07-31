@@ -399,6 +399,14 @@ fi
 # (.claude/rules/sandbox.md), so this is the one place the Unix-socket-backed
 # `claude agents` call is made. The snapshot lives under the mktemp -d workspace
 # the EXIT/INT/TERM trap removes.
+#
+# The tick captures TWO independent snapshots, one per daemon view (ACTIVE below,
+# REGISTERED next) — not one query filtered client-side into both. Reconstructing
+# ACTIVE from REGISTERED (or vice versa) means guessing at the daemon's
+# terminal-state set client-side, which lib-claude-agents.sh's own header
+# ("ACTIVE vs REGISTERED", design rule 1) forbids: ask the daemon for the view you
+# want. So this is two daemon queries per tick, not one — still a fixed constant
+# instead of hundreds of live per-call round-trips.
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 _SNAPSHOT_FILE="$DISPATCH_TICK_WORKSPACE/agents-snapshot.json"
@@ -411,6 +419,21 @@ else
   # NOT abort the tick — degrade to the pre-#1452 behavior. (#1452)
   rm -f "$_SNAPSHOT_FILE"
   echo "dispatch-tick: claude agents snapshot capture failed; selection will use live per-call reads (#1452)" >&2
+fi
+
+# Second, independent capture: the REGISTERED (--all) view. This is what
+# worktree_has_live_session now reads (tactic-stopped-session-blocks-node Unit 1)
+# so a stopped-but-not-removed session still blocks its node/worktree. Without
+# this capture, every occupancy probe in the tick would fall through to a live
+# `claude agents --json --all` daemon round-trip — hundreds per tick instead of
+# one. Independent of the ACTIVE capture above: either may fail without affecting
+# the other.
+_SNAPSHOT_ALL_FILE="$DISPATCH_TICK_WORKSPACE/agents-snapshot-all.json"
+if claude_agents_snapshot_capture_registered "$_SNAPSHOT_ALL_FILE"; then
+  export DISPATCH_AGENTS_SNAPSHOT_ALL="$_SNAPSHOT_ALL_FILE"
+else
+  rm -f "$_SNAPSHOT_ALL_FILE"
+  echo "dispatch-tick: registered (--all) agents snapshot capture failed; occupancy checks will use live per-call reads" >&2
 fi
 
 # --- Step 1: select the target ------------------------------------------------
