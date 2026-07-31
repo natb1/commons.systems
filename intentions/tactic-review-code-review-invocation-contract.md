@@ -38,14 +38,12 @@ attention:
     Part of the interim 50/20/10 scale's inventory — convert to a tier/bug_fix
     mark when tactic-attention-tier-ranking and tactic-attention-boost-scripts
     retire the interim scale; do not orphan this boost."
-phase: review
+phase: implement
 execution:
   branch: tactic-review-code-review-invocation-contract
   pr: 3007
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
