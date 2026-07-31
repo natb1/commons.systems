@@ -81,13 +81,14 @@ attention:
     leaves a plan built on superseded intent, with the node reading as
     successfully planned. blocked_by is empty, so this promotion lifts no
     blocker and cannot compound."
-phase: qa
+phase: review
 execution:
   branch: tactic-node-body-stale-in-worker-worktree
   pr: 3005
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
