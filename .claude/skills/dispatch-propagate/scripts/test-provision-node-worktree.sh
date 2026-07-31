@@ -95,9 +95,14 @@ exit 0
 STUB
 chmod +x "$BIN_DIR/npx"
 
-# direnv shim: `direnv allow` / `direnv exec … true` both no-op successfully.
-cat >"$BIN_DIR/direnv" <<'STUB'
+# direnv shim: `direnv allow` / `direnv exec … true` both no-op successfully,
+# and each invocation is journalled so a test can assert the .envrc gate
+# refused BEFORE anything approved or executed the file.
+DIRENV_LOG="$TMP/direnv.log"
+: >"$DIRENV_LOG"
+cat >"$BIN_DIR/direnv" <<STUB
 #!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$DIRENV_LOG"
 exit 0
 STUB
 chmod +x "$BIN_DIR/direnv"
@@ -316,5 +321,114 @@ rm -rf "$WT9"
 run_prov "$id9"
 assert_eq "case9 re-provision exit 0 after orphan prune" "0" "$PROV_RC"
 assert_eq "case9 worktree recreated" "yes" "$([[ -d "$WT9" ]] && echo yes || echo no)"
+
+# ==========================================================================
+# Case 10: the OPPOSITE of case 9 — the registration is gone but the
+# DIRECTORY survives (`rm <wt>/.git` + prune). The directory then sits inside
+# the project root's own working tree with no `.git` file, so every
+# `git -C "$WT" …` resolves to the PROJECT ROOT. The identity assertion must
+# refuse (exit 2, `orphan-directory`) before running any of them — in
+# particular it must NOT abort the main checkout's in-progress rebase, and
+# must NOT report the main checkout's dirt as this node's residue (exit 14).
+# ==========================================================================
+echo "Case 10: orphan directory (registration pruned, files left) -> exit 2, main checkout untouched"
+id10="prov-case-orphan-directory"
+
+run_prov "$id10"
+assert_eq "case10 first provision exit 0" "0" "$PROV_RC"
+WT10=$(wt_path "$id10")
+rm -f "$WT10/.git"
+git -C "$MAIN_WT" worktree prune
+echo "residue-content" >"$WT10/residue.txt"
+
+# Stage an in-progress, conflicted rebase in the MAIN checkout. Pre-fix, the
+# guard's `git -C "$WT" rebase --abort` aborted exactly this.
+git -C "$MAIN_WT" checkout -q -b case10-topic
+echo "topic" >"$MAIN_WT/case10.txt"
+git -C "$MAIN_WT" add case10.txt
+git -C "$MAIN_WT" commit -q -m "case10 topic edit"
+git -C "$MAIN_WT" checkout -q main
+echo "mainline" >"$MAIN_WT/case10.txt"
+git -C "$MAIN_WT" add case10.txt
+git -C "$MAIN_WT" commit -q -m "case10 main edit"
+git -C "$MAIN_WT" checkout -q case10-topic
+set +e
+git -C "$MAIN_WT" rebase main >/dev/null 2>&1
+set -e
+assert_eq "case10 fixture: main checkout is mid-rebase" "yes" \
+  "$([[ -d "$MAIN_WT/.git/rebase-merge" || -d "$MAIN_WT/.git/rebase-apply" ]] && echo yes || echo no)"
+
+run_prov "$id10"
+assert_eq "case10 exit 2 (orphan directory is not a worktree)" "2" "$PROV_RC"
+assert_contains "case10 stderr names the orphan-directory refusal" \
+  "is not the linked worktree for" "$PROV_STDERR"
+assert_eq "case10 main checkout's rebase NOT aborted" "yes" \
+  "$([[ -d "$MAIN_WT/.git/rebase-merge" || -d "$MAIN_WT/.git/rebase-apply" ]] && echo yes || echo no)"
+assert_eq "case10 residue left untouched" "residue-content" "$(cat "$WT10/residue.txt")"
+
+set +e
+git -C "$MAIN_WT" rebase --abort >/dev/null 2>&1
+git -C "$MAIN_WT" checkout -q main
+set -e
+
+# ==========================================================================
+# Cases 11-12: the .envrc provenance gate. Provisioning merges
+# origin/<node-id> into the worktree and then `direnv allow` / `direnv exec`
+# it on the operator's host with the sandbox disabled, so an .envrc that is
+# not already on origin/main must never be approved or executed.
+# From here on origin/main carries an .envrc.
+# ==========================================================================
+echo "Cases 11-12: .envrc provenance gate"
+printf 'export CASE_ENVRC=1\n' >"$MAIN_WT/.envrc"
+git -C "$MAIN_WT" add .envrc
+git -C "$MAIN_WT" commit -q -m "add .envrc"
+git -C "$MAIN_WT" push -q origin main
+ENVRC_TIP=$(git -C "$MAIN_WT" rev-parse origin/main)
+
+# Case 11: .envrc matching origin/main -> exit 0, direnv ran.
+id11="prov-case-envrc-match"
+make_plain_branch "$id11" "$ENVRC_TIP"
+: >"$DIRENV_LOG"
+run_prov "$id11"
+assert_eq "case11 exit 0 (.envrc identical to origin/main)" "0" "$PROV_RC"
+assert_eq "case11 direnv ran" "yes" \
+  "$([[ -s "$DIRENV_LOG" ]] && echo yes || echo no)"
+
+# Case 12: the node branch rewrites .envrc -> exit 2, direnv never invoked.
+id12="prov-case-envrc-drift"
+create_branch_with_commit "$id12" "$ENVRC_TIP" ".envrc" \
+  'export CASE_ENVRC=1; echo pwned' "case12 hostile .envrc"
+: >"$DIRENV_LOG"
+run_prov "$id12"
+assert_eq "case12 exit 2 (.envrc differs from origin/main)" "2" "$PROV_RC"
+assert_contains "case12 stderr names the .envrc refusal" \
+  "refusing to direnv allow/exec" "$PROV_STDERR"
+assert_eq "case12 direnv never invoked" "" "$(cat "$DIRENV_LOG")"
+
+# ==========================================================================
+# Case 13: the worktree IS this node's registered worktree, but it has some
+# OTHER branch checked out. The identity assertion passes (the git dir is
+# .git/worktrees/<node-id>), so without the branch check the pushed-tip merge
+# would merge origin/<node-id> into the unrelated branch and the phase agent
+# would be handed a cwd deriving the wrong BRANCH. Expect exit 14
+# (`wrong-branch`), with the foreign branch's own commit untouched.
+# ==========================================================================
+echo "Case 13: worktree on a foreign branch -> exit 14 (wrong-branch)"
+id13="prov-case-wrong-branch"
+TIP13=$(git -C "$MAIN_WT" rev-parse origin/main)
+make_plain_branch "$id13" "$TIP13"
+WT13=$(wt_path "$id13")
+git -C "$MAIN_WT" worktree add -q "$WT13" "$id13"
+git -C "$WT13" checkout -q -b "$id13-foreign"
+echo "foreign-work" >"$WT13/case13.txt"
+git -C "$WT13" add case13.txt
+git -C "$WT13" commit -q -m "case13 foreign-branch commit"
+FOREIGN_HEAD13=$(git -C "$WT13" rev-parse HEAD)
+
+run_prov "$id13"
+assert_eq "case13 exit 14" "14" "$PROV_RC"
+assert_contains "case13 stderr names wrong-branch" "wrong-branch" "$PROV_STDERR"
+assert_eq "case13 foreign branch still checked out, untouched" "$FOREIGN_HEAD13" \
+  "$(git -C "$WT13" rev-parse HEAD)"
 
 report_results

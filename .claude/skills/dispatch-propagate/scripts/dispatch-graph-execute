@@ -328,8 +328,15 @@ for spec in "$@"; do
         }
         REASON_FILE="$TMPDIR_HOLD11/reason"
         RECOMMENDATION_FILE="$TMPDIR_HOLD11/recommendation"
-        printf '%s\n' "origin/main has not merged clean into this tactic's branch (provision exit 11), and the /dispatch-conflict Lane 3 session that resolves it could not be launched for $STRIKES consecutive ticks." > "$REASON_FILE"
-        printf '%s\n' "Run \`/dispatch-conflict $id\` by hand (Lane 3 reproduces and resolves the merge on the node's own branch), or resolve the conflict directly in \`.claude/worktrees/$id\` and push the branch. Either way, also check why the autonomous launch kept failing. Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source." > "$RECOMMENDATION_FILE"
+        # Exit 11 has TWO causes, and this producer cannot tell them apart: the
+        # branch does not merge origin/main clean, OR it does not merge its OWN
+        # pushed tip origin/<id> clean (provision-node-worktree's pushed-tip
+        # alignment, which runs first). Naming only origin/main here
+        # would state something false half the time — exactly the wrong-reason
+        # failure this hold path exists to avoid. The provision stderr line in
+        # the tick journal names the actual conflicting ref.
+        printf '%s\n' "This tactic's branch does not merge clean (provision exit 11) — either against \`origin/main\` or against its own pushed tip \`origin/$id\`; the provision stderr line in the tick journal names which ref — and the /dispatch-conflict Lane 3 session that resolves it could not be launched for $STRIKES consecutive ticks." > "$REASON_FILE"
+        printf '%s\n' "Run \`/dispatch-conflict $id\` by hand (Lane 3 reproduces and resolves the merge on the node's own branch; it merges \`origin/$id\` before reproducing the \`origin/main\` merge, which covers both causes), or resolve the conflict directly in \`.claude/worktrees/$id\` and push the branch. Either way, also check why the autonomous launch kept failing. Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source." > "$RECOMMENDATION_FILE"
         if "$HOLD_NODE" "$id" --kind provision-conflict \
             --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE"; then
           rm -f "$STRIKE_FILE"
@@ -402,7 +409,7 @@ for spec in "$@"; do
       # worktree yields an explanatory line rather than a silently empty
       # section — and cannot abort the loop.
       {
-        printf '%s\n\n' "provision-node-worktree refused to provision this tactic's worktree: it carries mechanical residue from a dead session (exit 14), not a content conflict. \`origin/main\` merges clean once the residue is cleared."
+        printf '%s\n\n' "provision-node-worktree refused to provision this tactic's worktree: it carries mechanical residue from a dead session (exit 14), not a content conflict. \`origin/main\` merges clean once the residue is cleared — with one exception the status output below distinguishes: on the \`failed-merge-abort\` condition a merge git could NOT abort is still in progress (MERGE_HEAD present, \`UU\` paths), and that merge has to be finished or aborted before anything else."
         printf '%s\n' "\`git -C $RESIDUE_WT status --porcelain --untracked-files=no\`:"
         git -C "$RESIDUE_WT" status --porcelain --untracked-files=no 2>&1 \
           || echo "(could not read the worktree at $RESIDUE_WT)"
@@ -410,7 +417,7 @@ for spec in "$@"; do
         git -C "$RESIDUE_WT" diff --stat 2>&1 \
           || echo "(could not read the worktree at $RESIDUE_WT)"
       } > "$REASON_FILE"
-      printf '%s\n' "Inspect the diff recorded above in \`.claude/worktrees/$id\` and decide what the uncommitted content IS. If it is unlanded work, land it — \`graph-commit\` for an intentions/ node write, or commit and push the branch for code — and never discard it sight-unseen; the uncommitted edit may be its only copy. If it is safely discardable (build output, a half-applied edit already landed elsewhere), clear it with \`git restore\`. A detached HEAD with commits on it needs a branch before anything is reset. Once the worktree is clean, the next tick provisions it normally. Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source." > "$RECOMMENDATION_FILE"
+      printf '%s\n' "Inspect the diff recorded above in \`.claude/worktrees/$id\` and decide what the uncommitted content IS. If it is unlanded work, land it — \`graph-commit\` for an intentions/ node write, or commit and push the branch for code — and never discard it sight-unseen; the uncommitted edit may be its only copy. If it is safely discardable (build output, a half-applied edit already landed elsewhere), clear it with \`git restore\` — but NOT while a merge is live: if the status above shows \`UU\` paths or the worktree has a MERGE_HEAD, abort or complete THAT merge first, since \`git restore\` inside one discards the wrong side. A detached HEAD with commits on it needs a branch before anything is reset, and a worktree sitting on a branch other than \`$id\` (the \`wrong-branch\` condition) needs that branch's own state settled before it is switched back. Once the worktree is clean, the next tick provisions it normally. Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source. \`resolve-hold $id --kind worktree-residue\` does the resolve and the source's \`blocked_by\` clear in one landed write." > "$RECOMMENDATION_FILE"
       if "$HOLD_NODE" "$id" --kind worktree-residue \
           --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE"; then
         echo "held $id worktree-residue"
