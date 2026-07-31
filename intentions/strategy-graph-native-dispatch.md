@@ -3495,6 +3495,266 @@ clarifications:
       delegation is a hope, not a delegation. A lane failing this way parks with
       the rejection as its recorded reason, per the standing park-context
       condition, rather than proceeding on substituted output."
+  - question: A main-qa verification test recorded by the qa phase always entered
+      the dispatch queue first and parked to office-hours only after a worker
+      had already analysed it. Where is a post-merge verification test's
+      destination decided, and what is the routing unit?
+    answer: "(Recorded 2026-07-28 /align-strategy interview.) Standing requirement:
+      a post-merge (main-qa) verification test is sorted to its terminal queue
+      AT RECORD TIME, by the qa phase that discovers it; a dispatch worker never
+      boots to discover that a test needs the author. The record already
+      asserted this invariant —
+      .claude/skills/qa-fix/references/needs-main-followups.md, node lane:
+      'verifiability is triaged here at record time ... This makes the legacy
+      boot-then-reject waste structurally impossible on the node lane' — but the
+      machinery could not deliver it, because the ROUTING UNIT was the source
+      tactic and a source tactic has exactly one destination. /qa-fix appended a
+      '## needs-main residue' section to the source's own body and advanced it
+      review -> main-qa, so mixed residue could not be split, and an
+      author-required item could not be parked at qa time without blocking the
+      very merge its observation depends on. Live cost:
+      tactic-execution-pr-merge-verification residue item 12 booted /qa-main,
+      which analysed it and concluded 'not browser-verifiable — its url_path
+      names a repo script, not a web page', parked 2026-07-28, and was then
+      drained by human override. Greenfield design adopted: the sorting unit
+      becomes the routing unit. At qa record time /qa-fix writes STANDALONE
+      tactic-mainqa-* nodes — grouped by destination, at most two per source
+      (one carrying all machine-verifiable items, one carrying all
+      author-required items, either omitted when empty) — instead of a residue
+      body section. Birth state IS the routing decision, reusing the shape
+      already live on the migrated tactic-mainqa-* nodes: machine-verifiable ->
+      phase main-qa, office_hours null, owner ai (dispatch queue);
+      author-required -> phase main-qa, office_hours {reason, since,
+      recommendation}, owner human (office-hours queue only — the selector's
+      tactic eligibility requires office_hours null,
+      packages/intentionsutil/src/router.ts:197, so it is never selectable).
+      Both carry execution.pr (the deploy to check) and blocked_by [<source
+      tactic>]: on the machine lane that is a merge gate, on the author lane it
+      is the readiness advisory office-hours already surfaces as a
+      signal-not-gate, and it self-clears correctly because pruning the done
+      source strips inbound blocked_by in the same commit and absence reads as
+      completion (inboundBlockers,
+      packages/intentionsutil/src/transitions.ts:265-272). The source tactic
+      then goes review -> done directly: no main-qa phase on the source, no
+      residue body append. The sorting predicate is unchanged — the
+      autonomous|human criteria already recorded in needs-main-followups.md
+      section 1, uncertain -> author. main-qa remains a valid standing phase;
+      only the SOURCE's use of it is retired. Measurement: the mis-sort rate —
+      /qa-main cannot-verify parks on nodes born office_hours null, over all
+      machine-sorted main-qa nodes; sensor is a graph census over parked main-qa
+      nodes (a cannot-verify park on a machine-sorted node IS a mis-sort by
+      construction, so this is a direct count, not a proxy); threshold at most 1
+      in 20. Recorded honestly: the opposite direction — an author-sorted item
+      Claude could have verified — is NOT mechanically observable and stays
+      unmeasured. This measurement is recorded here rather than in
+      success_signal because that slot carries this strategy's broader lifecycle
+      signal, which still holds and is not displaced by a narrower one.
+      Supersedes entry 22 (2026-07-04), whose answer located post-merge residue
+      in a body section of the source node; amends the parenthetical in entry
+      111 (2026-07-27) that 'main-qa is reachable only via review -> main-qa on
+      needs-main residue' — under this design main-qa is reached by a
+      verification node being BORN at it, while forwardPhase remains the single
+      home of phase routing exactly as entry 111 requires. AMENDED 2026-07-31
+      (/align-strategy): the clause \"The sorting predicate is unchanged — the
+      autonomous|human criteria already recorded in needs-main-followups.md
+      section 1\" NO LONGER HOLDS. That predicate sorts on browser-reachability,
+      not on machine-verifiability, which is the defect
+      tactic-qa-main-verifiability-sort-criterion exists to close; see the
+      2026-07-31 entry recording the corrected predicate and the `owner` sort
+      mark. The mis-sort measurement above is likewise restated on `owner: ai`
+      rather than on birth-office_hours-null, because office_hours is cleared on
+      drain and cannot carry the mark."
+  - question: Condition 20 requires the machine-verifiable/author-required sort to
+      be an explicitly recorded state, never inferred from whether office_hours
+      is set — but entry 123 encodes it as exactly that inference. Where does
+      the mark actually live, and is the sorting predicate itself correct?
+    answer: >-
+      (Recorded 2026-07-31 /align-strategy interview, ratifying the office_hours
+      park on tactic-qa-main-verifiability-sort-criterion.) Two rulings.
+
+
+      FIRST — WHERE THE SORT MARK LIVES. No new field and no schema change: the
+      mark is the existing required-core `owner` field. Greenfield (entry 123's
+      shape): each standalone tactic-mainqa-* node is single-class by
+      construction — at most two per source, grouped by destination — so `owner:
+      ai` IS the machine-verifiable mark and `owner: human` IS the
+      author-required mark. This is already live and already consistent: of the
+      13 tactic-mainqa-* nodes on origin/main at record time, 12 carry `owner:
+      human` with non-null office_hours, and tactic-mainqa-record-time-routing
+      carries `owner: ai` with office_hours null. office_hours is DERIVED from
+      the mark, never its source. Verified at record time: clear-park does not
+      touch `owner`, so draining an author-required node clears its office_hours
+      WITHOUT erasing the sort — precisely what condition 20 asks for and
+      exactly what the office_hours inference could not provide. Condition 20 is
+      therefore SATISFIED by reading `owner`, and is amended in place to name
+      that field rather than being narrowed to the measurement read. Entry 123's
+      mis-sort measurement is restated on the same field: cannot-verify parks on
+      `owner: ai` nodes, over all `owner: ai` main-qa nodes, threshold at most 1
+      in 20.
+
+
+      Interim, until entry 123's standalone-node shape is live: source tactics
+      still carry a `## needs-main residue` body section (live on origin/main at
+      record time — e.g. tactic-graph-tick-node-lane-auto-merge, ids 7-9), and
+      one such node genuinely carries mixed-class items, which a single per-node
+      `owner` cannot express. For those, each residue bullet carries an explicit
+      `Verifiability:` sub-line valued MACHINE, AUTHOR or WAIT, alongside its
+      existing `Expected outcome:` and `Finding:` lines; the node's office_hours
+      is derived from those marks. This interim convention retires WITH the
+      residue body section itself — it is not a second permanent mechanism.
+
+
+      SECOND — THE PREDICATE ITSELF IS WRONG AND IS CORRECTED HERE. Entry 123's
+      clause "The sorting predicate is unchanged — the autonomous|human criteria
+      already recorded in needs-main-followups.md section 1" is AMENDED. That
+      predicate sorts on BROWSER-REACHABILITY (an objective check /qa-main's
+      read-only Claude-in-Chrome flow can perform), not on
+      machine-verifiability, and that gap is the defect
+      tactic-qa-main-verifiability-sort-criterion exists to close. The corrected
+      predicate: an item is author-required ONLY IF it cannot be machine-checked
+      AT ALL. A git, journal, log, shell or filesystem check that no browser can
+      perform is MACHINE, not AUTHOR. A park reason citing browser-reachability
+      — including the recurring "url_path names a repo script, not a web page"
+      form — must be REJECTED by the lane rather than written. Evidence this is
+      not theoretical: on 2026-07-31 four office_hours parks on four nodes all
+      gave "not browser-verifiable", and all four were then machine-verified in
+      a single session with journalctl, ls, jq, git show and grep, no browser
+      and no author input; only 2 of the 7 items across them were genuinely
+      author-required, so the predicate produced roughly 5 false author
+      interrupts out of 7.
+
+
+      Correcting the sort means editing the LIVE predicate sites — the
+      hand-inlined prose at qa-main/SKILL.md:112-119 and
+      qa-fix/references/needs-main-followups.md:32 and :65-72 — and NOT
+      dispatch-main-qa-triage, which despite its own header is dead code on this
+      lane (qa-main/SKILL.md:117 explicitly skips it, and its only remaining
+      caller sits in the removed legacy issue lane).
+  - question: The qa-main lane needs a third outcome besides pass and park — a
+      not-yet-observed deploy-lag hold that must never wake a human. What shape
+      does it take, what advances it, and what caps it?
+    answer: >-
+      (Recorded 2026-07-31 /align-strategy interview, ratifying the office_hours
+      park on tactic-qa-main-verifiability-sort-criterion.) A WAIT is a hold
+      node born with `office_hours: null` and NO phase, carrying an attempt
+      counter and a finite cap.
+
+
+      Three mechanics make that shape work, each verified against origin/main at
+      record time. officeHoursQueue admits EVERY non-null-office_hours node to
+      the human queue (packages/intentionsutil/src/officeHours.ts, `if
+      (n.office_hours === null) continue`), so an office_hours-null WAIT is
+      absent from that queue BY CONSTRUCTION rather than filtered out of it —
+      the "never wakes a human" property therefore cannot regress into waking
+      the author. blockersComplete
+      (packages/intentionsutil/src/router.ts:168-175) returns false for any
+      blocker whose phase is not `done`, so a phase-less WAIT genuinely does
+      hold its source. isDraft (router.ts:122) treats a null phase as draft, so
+      the executable work loop at router.ts:301 skips it.
+
+
+      ONE CODE CHANGE IS REQUIRED AND MUST NOT BE SKIPPED: router.ts:343-355
+      DOES emit a phase-less, office_hours-null tactic as an /align-tactics
+      candidate. Without an explicit exclusion there, the router would spawn an
+      align worker on every WAIT node. Add that exclusion in the draft-candidate
+      loop, in the same shape as the existing subtreeParentIds skip immediately
+      above it. This was found by direct read during the ratification interview
+      and is not recorded in the park text.
+
+
+      ADVANCEMENT AND CAP. The WAIT is re-checked by the EXISTING tick sweep
+      framework — the one landed by tactic-denied-command-parks-node as PR #2994
+      — as one more predicate on that framework. Never a second sweep: this
+      strategy's architectural rule is one sweep framework with several
+      predicates, and a second implementation of a predicate is the failure that
+      rule forbids. When the observation lands, the sweep sets the WAIT node
+      `phase: done`, which clears the source's blocked_by through
+      blockersComplete and returns the source to selection. When the cap is
+      exhausted, the sweep writes office_hours onto the WAIT node, making it a
+      genuine park that DOES reach the author — which is what satisfies
+      condition 10's declared-finite-cap requirement. The cap is owned by the
+      sweep, not by whoever authors the node.
+
+
+      REJECTED ALTERNATIVE, recorded with its reason so it is not re-proposed:
+      giving the WAIT a non-null office_hours with a new session_type filtered
+      out of officeHoursQueue was declined because it would make "never wakes a
+      human" depend on a filter that fails OPEN — if that filter ever regresses,
+      every WAIT floods the office-hours queue. That is the same silent-failure
+      class (a check whose failure mode is a silent PASS on the signal that
+      matters) this strategy already tracks five members of, and an instrument
+      must not be built on it.
+  - question: Promoting the fleet watchdogs to systemd units removes their only
+      operator surface. What replaces it, and may a fleet-level instrument halt
+      dispatch?
+    answer: >-
+      (Recorded 2026-07-31 /align-strategy interview, ratifying the office_hours
+      park on tactic-fleet-watchdogs-session-scoped.) Two rulings.
+
+
+      ALARM SURFACE. An out-of-band fleet instrument's finding lands as a
+      find-or-create graph node, reusing the proven dispatch-diagnose-main /
+      tactic-main-red-<shortsha> pattern — never journald alone. A journald-only
+      instrument has no counter, no hold, no park and no operator surface, which
+      is the exact defect class these instruments exist to close; shipping it
+      that way would add a new member to that class at the fix site. An UNKNOWN
+      reading lands a node TOO, not only a positive finding: an instrument that
+      cannot see must say so loudly, because silence on an unreadable input is
+      indistinguishable from a healthy fleet. That clause is the load-bearing
+      half of this ruling.
+
+
+      NEVER FLEET-HALT. These instruments are explicitly EXCLUDED from tripping
+      the condition-10 breaker. They report; they do not halt the fleet.
+      Condition 10 is scoped to correlated dead claims (at least 3) and does not
+      cover a stopped tick, so wiring fleet-level non-progression into it would
+      halt ALL selection on a signal it was never scoped to — converting an
+      instrument false-positive into a total dispatch outage. Given that every
+      instrument in this pipeline has so far shipped with a silent-failure mode,
+      a false halt is the likelier outcome than a true one.
+
+
+      Scope note for the eventual plan, not a blocker: the checks this covers
+      are the ones no in-band sweep can perform — tick staleness, daemon
+      liveness, sustained BUSY=0, and auto-merge suppression. A check running
+      INSIDE dispatch-tick structurally cannot report that dispatch-tick has
+      stopped running. The defect is observed, not hypothetical: at record time
+      both watchdogs were running, but heal-units.log's last line was `watchdog
+      exiting; heals=23` at 2026-07-31T07:51:41Z — an 8.2h unwatched gap that
+      nothing anywhere reported.
+  - question: Can a fleet instrument tell a stalled fleet from a deliberately paused
+      one, and which way should it fail when it cannot read pause state?
+    answer: >-
+      (Recorded 2026-07-31 /align-strategy interview, ratifying the office_hours
+      park on tactic-fleet-watchdogs-session-scoped.) Tick-staleness and
+      sustained-BUSY=0 stay QUIET during a standing pause. During a pause
+      dispatch-tick exits before dispatch-select-tick runs, so both checks would
+      otherwise fire continuously through a supported, standing operating mode
+      and train the author to ignore them. Daemon-liveness does NOT go quiet: a
+      paused fleet still has a live daemon, so a dead daemon remains a defect
+      worth reporting even under pause.
+
+
+      All three read the LIVE pause mechanism through ONE shared helper. The
+      live mechanism is the sentinel file at
+      $XDG_DATA_HOME/commons-dispatch/paused (dispatch-tick:291-292; the file
+      was modified as recently as 2026-07-31), NOT the dispatch.config/*.json
+      field that condition 16's 2026-07-26 amendment names — that field does not
+      exist in the repo, and its owning node tactic-dispatch-pause-config-field
+      is status raw / phase null. Routing every instrument through one helper
+      makes the eventual migration a single edit. This does not amend condition
+      16's intent: it records that the instruments track the mechanism that is
+      actually live today, and follow condition 16 to the config field when
+      tactic-dispatch-pause-config-field lands.
+
+
+      CONDITION 16'S FAIL-CLOSED DEFAULT IS INVERTED FOR THESE INSTRUMENTS. For
+      a GATE, an unreadable pause state reading as "paused" is the safe default
+      — it declines to dispatch. For an INSTRUMENT it is not: silencing on an
+      unreadable input is exactly the silent-PASS failure this work exists to
+      close. So an unreadable pause state reports UNKNOWN and STILL EMITS; it
+      never silently suppresses. This inversion is scoped to out-of-band
+      instruments and does not weaken condition 16 anywhere it governs a gate.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -3737,6 +3997,20 @@ attributes:
       extends strategy-verified-requirements' recorded condition that
       not-machine-verifiable is an explicit recorded state, never a silent
       omission
+    - "the machine-verifiable / author-required sort is an explicitly recorded
+      state on the verification node, never inferred from whether office_hours
+      happens to be set — office_hours is cleared when the author drains the
+      item, which would erase the very mark the mis-sort measurement reads; this
+      extends strategy-verified-requirements' recorded condition that
+      not-machine-verifiable is an explicit recorded state, never a silent
+      omission — AMENDED 2026-07-31 (/align-strategy): the explicitly recorded
+      state is the existing required-core `owner` field (`owner: ai` =
+      machine-verifiable, `owner: human` = author-required), not a new field and
+      not office_hours; clear-park does not touch `owner`, so the mark survives
+      the drain that erases office_hours. While source-node `## needs-main
+      residue` body sections remain live, a mixed-class source node instead
+      carries a per-item `Verifiability:` sub-line (MACHINE|AUTHOR|WAIT) on each
+      residue bullet, a convention that retires with that section."
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
