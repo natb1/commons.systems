@@ -1,0 +1,555 @@
+#!/usr/bin/env bash
+#
+# dispatch-fleet-watch — ONE-SHOT fleet-health watcher pass.
+#
+# Reads four independent fleet-health predicates, reports each one, and turns
+# every finding (and every unreadable input) into a graph node through
+# dispatch-fleet-alarm. Then it exits. It does NOT loop and it takes no deadline
+# argument: cadence belongs to the systemd timer that invokes it, not to the
+# watcher. A one-shot that the timer re-fires is restartable, observable in
+# journald per pass, and cannot wedge in a sleep.
+#
+# THE SINGLE MOST IMPORTANT PROPERTY: every predicate is evaluated on every
+# pass, and the pass NEVER exits on the first violation. The scratch predecessor
+# (fleet-health-watch.sh) evaluated predicates in sequence and returned at the
+# first finding — so one spurious finding silently stopped every LATER predicate
+# from being read at all, and the fleet went unwatched while a watcher appeared
+# to be running. Four verdicts are collected first; reporting happens once, at
+# the end, over the complete set.
+#
+# THE SECOND MOST IMPORTANT PROPERTY: an unreadable input is `unknown`, never
+# `clear`. A watcher that reports "ok" because it could not read the thing it
+# watches is worse than no watcher — it manufactures a false all-clear. Any
+# `unknown` on any predicate raises a `watch-unknown` alarm naming every
+# unreadable input, and the pass never prints a bare `ok`.
+#
+# Predicates (each returns clear | finding | unknown | quiet):
+#   1. tick-stale            age of the newest routing-decisions.jsonl line
+#   2. daemon-degraded       delegated to dispatch-daemon-liveness
+#   3. busy-stall            sustained BUSY=0 across passes (state-file spanned)
+#   4. automerge-suppressed  open tactic-main-red-* latch held too long
+#
+# WHY ONE SNAPSHOT, CAPTURED AT THE INPUT BOUNDARY:
+#   Only predicate 3 currently reads the live session array, and it reads it
+#   through claude_agents_count_busy_workers, which already applies the worker
+#   keyspace filter (`^[0-9]+-|^tactic-|^strategy-`, lib-claude-agents.sh:1043).
+#   Nonetheless this script captures ONE machine-wide snapshot per pass via
+#   claude_agents_snapshot_capture and exports it as DISPATCH_AGENTS_SNAPSHOT.
+#   History: the session-keyspace exclusion used to be bolted onto individual
+#   predicates one at a time, and the bug recurred every single time a new
+#   predicate was added — the new test read the raw array, forgot the filter,
+#   and counted routers/human sessions as workers. The filter must be a PROPERTY
+#   OF THE INPUT, captured once at the boundary, not a rule each test restates.
+#   A fifth predicate added later inherits both the single daemon query and the
+#   filter for free, without knowing either exists.
+#
+# NEVER FLEET-HALT: this script does not write the pause sentinel, does not
+# invoke any fleet-halt entry point (the stop/pause scripts), and never writes a blocking edge
+# or an office-hours park onto any graph node. Its ONLY graph side effect is via
+# dispatch-fleet-alarm, which touches exactly its own tactic-fleet-alarm-<kind>
+# nodes. A watcher's job is to record a reading, not to stop the fleet. This is
+# ratcheted by grep assertions in test-dispatch-fleet-watch.sh, which fail the
+# suite if this file ever grows a pause-sentinel write or either park/blocking
+# field name.
+#
+# PAUSE: dispatch_pause_state (lib-pause-state.sh) is consulted ONCE per pass.
+#   paused   — predicates 1 and 3 are `quiet` (not evaluated, not reported as
+#              clear/finding/unknown, and 3 additionally CLEARS its
+#              busy_zero_since stamp so the pause window does not accumulate
+#              toward the stall span). Predicates 2 and 4 evaluate normally: a
+#              paused fleet still has a live daemon, and a suppressed auto-merge
+#              latch is still suppressed.
+#   unknown  — ALL FOUR predicates evaluate and emit as normal, each tagged
+#              `pause=unknown`, AND the pass emits a watch-unknown finding
+#              naming the unreadable pause state. Silencing on an unreadable
+#              input is exactly the failure class this rewrite exists to close.
+#
+# Usage:
+#   dispatch-fleet-watch          human-readable per-predicate report
+#   dispatch-fleet-watch --json   machine-readable reading (mirrors the shape of
+#                                 dispatch-daemon-liveness --json)
+#   dispatch-fleet-watch -h|--help
+#
+# Exit codes:
+#   0   every EVALUATED predicate is clear (quiet predicates do not count)
+#   1   at least one finding
+#   2   at least one unknown and no finding
+#   64  usage error
+#   69  environment error
+#
+# Thresholds (seconds):
+#   DISPATCH_FLEET_WATCH_TICK_MAX_AGE      default 1500   (25m)
+#   DISPATCH_FLEET_WATCH_IDLE_LIMIT        default 2700   (45m)
+#   DISPATCH_FLEET_WATCH_SUPPRESSION_LIMIT default 21600  (6h)
+#
+# Paths:
+#   DISPATCH_DECISION_LOG_FILE / DISPATCH_DECISION_LOG_DIR
+#       Resolved EXACTLY as lib-decision-log.sh:68 resolves it, so that
+#       library's existing test-override seam works here for free.
+#   DISPATCH_FLEET_WATCH_STATE_FILE
+#       Cross-pass state (busy_zero_since, suppression_since). Default:
+#       ${XDG_DATA_HOME:-$HOME/.local/share}/commons-dispatch/fleet-watch-state.json
+#   DISPATCH_PAUSE_FLAG  — read by lib-pause-state.sh (never written here).
+#
+# Dependency-injection seams (unset in production; used by
+# test-dispatch-fleet-watch.sh so the suite never touches systemd, a real
+# `claude agents` daemon, or a real graph/git remote):
+#   DISPATCH_FLEET_WATCH_LIVENESS_CMD  default: $SCRIPT_DIR/dispatch-daemon-liveness
+#   DISPATCH_FLEET_WATCH_REDSYNC_CMD   default: $SCRIPT_DIR/dispatch-graph-main-red-sync
+#   DISPATCH_FLEET_WATCH_ALARM_CMD     default: $SCRIPT_DIR/dispatch-fleet-alarm
+#   CLAUDE_AGENTS_CMD                  lib-claude-agents.sh's own `claude` seam
+#
+# NOT set -e: every risky step is guarded explicitly so the pass always reaches
+# its reporting block (same convention as sibling dispatch-graph-main-red-sync).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+log() { printf 'dispatch-fleet-watch: %s\n' "$*" >&2; }
+
+usage() {
+  cat <<'USAGE'
+usage: dispatch-fleet-watch [--json]
+       dispatch-fleet-watch -h|--help
+
+One-shot fleet-health watcher pass. Evaluates four predicates (tick-stale,
+daemon-degraded, busy-stall, automerge-suppressed), ALWAYS all four, and
+records findings / unreadable inputs as graph nodes via dispatch-fleet-alarm.
+
+exit: 0 all clear, 1 finding, 2 unknown, 64 usage, 69 environment.
+USAGE
+}
+
+JSON=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json) JSON=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) log "unknown argument: $1"; usage >&2; exit 64 ;;
+  esac
+done
+
+for tool in jq date; do
+  command -v "$tool" >/dev/null 2>&1 || { log "required tool not found: $tool"; exit 69; }
+done
+
+# --- injected commands -------------------------------------------------------
+LIVENESS_CMD="${DISPATCH_FLEET_WATCH_LIVENESS_CMD:-$SCRIPT_DIR/dispatch-daemon-liveness}"
+REDSYNC_CMD="${DISPATCH_FLEET_WATCH_REDSYNC_CMD:-$SCRIPT_DIR/dispatch-graph-main-red-sync}"
+ALARM_CMD="${DISPATCH_FLEET_WATCH_ALARM_CMD:-$SCRIPT_DIR/dispatch-fleet-alarm}"
+
+# --- thresholds --------------------------------------------------------------
+TICK_MAX_AGE="${DISPATCH_FLEET_WATCH_TICK_MAX_AGE:-1500}"
+IDLE_LIMIT="${DISPATCH_FLEET_WATCH_IDLE_LIMIT:-2700}"
+SUPPRESSION_LIMIT="${DISPATCH_FLEET_WATCH_SUPPRESSION_LIMIT:-21600}"
+for t in "$TICK_MAX_AGE" "$IDLE_LIMIT" "$SUPPRESSION_LIMIT"; do
+  [[ "$t" =~ ^[0-9]+$ ]] || { log "threshold must be a non-negative integer, got '$t'"; exit 64; }
+done
+
+# --- paths -------------------------------------------------------------------
+# Resolved exactly as lib-decision-log.sh:68 does, so DISPATCH_DECISION_LOG_FILE
+# / DISPATCH_DECISION_LOG_DIR override this reader and that writer identically.
+DECISION_LOG_FILE="${DISPATCH_DECISION_LOG_FILE:-${DISPATCH_DECISION_LOG_DIR:-$HOME/.local/share/commons-dispatch}/routing-decisions.jsonl}"
+STATE_FILE="${DISPATCH_FLEET_WATCH_STATE_FILE:-${XDG_DATA_HOME:-$HOME/.local/share}/commons-dispatch/fleet-watch-state.json}"
+
+NOW=$(date -u +%s)
+
+WORK_DIR="$(mktemp -d)" || { log "mktemp failed"; exit 69; }
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+# --- cross-pass state --------------------------------------------------------
+# A tiny JSON object: {"busy_zero_since": <epoch|null>, "suppression_since": <epoch|null>}.
+# This one-shot has no memory across runs, so a SPAN predicate (predicate 3's
+# "sustained BUSY=0", predicate 4's "suppressed longer than 6h") needs its
+# first-seen instant persisted here.
+state_get() { # <key> -> value or empty
+  local key="$1" v
+  [[ -r "$STATE_FILE" ]] || return 0
+  v=$(jq -r --arg k "$key" '.[$k] // empty' "$STATE_FILE" 2>/dev/null) || return 0
+  [[ "$v" =~ ^[0-9]+$ ]] || return 0
+  printf '%s' "$v"
+}
+
+state_set() { # <key> <epoch|null>
+  local key="$1" val="$2" tmp existing
+  mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || { log "cannot create state dir for $STATE_FILE"; return 1; }
+  existing='{}'
+  if [[ -r "$STATE_FILE" ]]; then
+    existing=$(jq -c . "$STATE_FILE" 2>/dev/null) || existing='{}'
+    [[ -n "$existing" ]] || existing='{}'
+  fi
+  tmp="$WORK_DIR/state.$$.json"
+  if [[ "$val" == "null" ]]; then
+    jq -c --arg k "$key" 'del(.[$k])' <<<"$existing" > "$tmp" 2>/dev/null || return 1
+  else
+    jq -c --arg k "$key" --argjson v "$val" '.[$k] = $v' <<<"$existing" > "$tmp" 2>/dev/null || return 1
+  fi
+  mv -f "$tmp" "$STATE_FILE" 2>/dev/null || return 1
+  return 0
+}
+
+# --- one snapshot at the input boundary --------------------------------------
+# See the header ("WHY ONE SNAPSHOT"). Capture failure is NOT fatal: the library
+# falls back to a live per-call query, which carries its own UNKNOWN contract.
+# shellcheck source=/dev/null
+if ! source "$SCRIPT_DIR/lib-claude-agents.sh" 2>/dev/null; then
+  log "cannot source lib-claude-agents.sh"
+  exit 69
+fi
+SNAPSHOT_PATH="$WORK_DIR/agents-snapshot.json"
+if claude_agents_snapshot_capture "$SNAPSHOT_PATH" 2>/dev/null; then
+  export DISPATCH_AGENTS_SNAPSHOT="$SNAPSHOT_PATH"
+fi
+
+# --- pause state, read ONCE --------------------------------------------------
+# shellcheck source=/dev/null
+if ! source "$SCRIPT_DIR/lib-pause-state.sh" 2>/dev/null; then
+  log "cannot source lib-pause-state.sh"
+  exit 69
+fi
+PAUSE_STATE="$(dispatch_pause_state)"
+PAUSED=0
+PAUSE_UNKNOWN=0
+case "$PAUSE_STATE" in
+  paused) PAUSED=1 ;;
+  unknown) PAUSE_UNKNOWN=1 ;;
+esac
+
+# =============================================================================
+# Predicate evaluation. NOTHING below exits early — every predicate runs, its
+# verdict is recorded, and reporting happens once at the end over the full set.
+# =============================================================================
+
+# --- 1. tick staleness -------------------------------------------------------
+V_TICK="quiet"; D_TICK="paused — not evaluated"
+if [[ "$PAUSED" -ne 1 ]]; then
+  V_TICK="unknown"; D_TICK=""
+  if [[ ! -r "$DECISION_LOG_FILE" ]]; then
+    D_TICK="decision log not readable: $DECISION_LOG_FILE"
+  else
+    TICK_LAST_LINE=$(tail -n 1 "$DECISION_LOG_FILE" 2>/dev/null)
+    if [[ -z "${TICK_LAST_LINE//[[:space:]]/}" ]]; then
+      D_TICK="decision log is empty: $DECISION_LOG_FILE"
+    elif ! TICK_TS=$(jq -r 'if type == "object" then (.ts // empty) else empty end' <<<"$TICK_LAST_LINE" 2>/dev/null) \
+         || [[ -z "$TICK_TS" ]]; then
+      D_TICK="last decision-log line has no parseable .ts: $DECISION_LOG_FILE"
+    elif ! TICK_EPOCH=$(date -u -d "$TICK_TS" +%s 2>/dev/null) || [[ ! "$TICK_EPOCH" =~ ^[0-9]+$ ]]; then
+      D_TICK="last decision-log timestamp will not parse: '$TICK_TS'"
+    else
+      TICK_AGE=$(( NOW - TICK_EPOCH ))
+      if (( TICK_AGE > TICK_MAX_AGE )); then
+        V_TICK="finding"
+        D_TICK="newest routing decision is ${TICK_AGE}s old (limit ${TICK_MAX_AGE}s), ts=$TICK_TS"
+      else
+        V_TICK="clear"
+        D_TICK="newest routing decision is ${TICK_AGE}s old (limit ${TICK_MAX_AGE}s)"
+      fi
+    fi
+  fi
+fi
+
+# --- 2. daemon liveness ------------------------------------------------------
+# NOT quiet under pause: a paused fleet still has a live daemon, and a dead
+# daemon during a pause is exactly the state nobody would otherwise notice.
+# Classification is delegated wholesale to dispatch-daemon-liveness (cgroup
+# managed-vs-transient reasoning is that script's job, not restated here).
+V_DAEMON="unknown"; D_DAEMON=""
+LIVENESS_JSON=""
+LIVENESS_OUT=$("$LIVENESS_CMD" --json 2>/dev/null)
+LIVENESS_RC=$?
+LIVENESS_VERDICT=""
+LIVENESS_REASON=""
+if [[ -n "${LIVENESS_OUT//[[:space:]]/}" ]] && jq -e . >/dev/null 2>&1 <<<"$LIVENESS_OUT"; then
+  LIVENESS_JSON="$LIVENESS_OUT"
+  LIVENESS_VERDICT=$(jq -r '.verdict // empty' <<<"$LIVENESS_OUT" 2>/dev/null)
+  LIVENESS_REASON=$(jq -r '.degraded_reason // empty' <<<"$LIVENESS_OUT" 2>/dev/null)
+fi
+case "$LIVENESS_RC" in
+  0)
+    V_DAEMON="clear"
+    D_DAEMON="daemon liveness: ${LIVENESS_VERDICT:-managed-live}"
+    ;;
+  2|3|4)
+    V_DAEMON="finding"
+    D_DAEMON="daemon liveness: ${LIVENESS_VERDICT:-<verdict unavailable, exit $LIVENESS_RC>}"
+    [[ -n "$LIVENESS_REASON" ]] && D_DAEMON="$D_DAEMON — $LIVENESS_REASON"
+    ;;
+  *)
+    V_DAEMON="unknown"
+    D_DAEMON="dispatch-daemon-liveness exited $LIVENESS_RC (environment/unclassifiable) — daemon state unreadable"
+    ;;
+esac
+
+# --- 3. sustained BUSY=0 -----------------------------------------------------
+# The count comes from claude_agents_count_busy_workers, which already applies
+# the worker keyspace filter and already returns 1 (its own UNKNOWN signal)
+# rather than 0 on failure. Do NOT re-derive either here.
+V_BUSY="quiet"; D_BUSY="paused — not evaluated"
+BUSY_COUNT=""
+BUSY_SINCE_BEFORE="$(state_get busy_zero_since)"
+BUSY_SINCE_AFTER="$BUSY_SINCE_BEFORE"
+if [[ "$PAUSED" -eq 1 ]]; then
+  # A paused pass CLEARS the stamp: the pause window must not accumulate toward
+  # the stall span, or the first pass after a long pause would alarm instantly.
+  if [[ -n "$BUSY_SINCE_BEFORE" ]]; then
+    state_set busy_zero_since null || log "failed to clear busy_zero_since in $STATE_FILE"
+    BUSY_SINCE_AFTER=""
+  fi
+else
+  if ! BUSY_COUNT=$(claude_agents_count_busy_workers 2>/dev/null) || [[ ! "$BUSY_COUNT" =~ ^[0-9]+$ ]]; then
+    # UNKNOWN. LEAVE THE STAMP UNTOUCHED — neither reset nor advanced. "I could
+    # not read the session array" is not evidence that zero workers are busy,
+    # and it is equally not evidence that some are: resetting would erase a
+    # genuine accumulating stall, advancing would fabricate one.
+    V_BUSY="unknown"
+    D_BUSY="busy-worker count unreadable (claude_agents_count_busy_workers returned UNKNOWN); busy_zero_since left unchanged"
+    BUSY_COUNT=""
+  elif (( BUSY_COUNT > 0 )); then
+    if [[ -n "$BUSY_SINCE_BEFORE" ]]; then
+      state_set busy_zero_since null || log "failed to clear busy_zero_since in $STATE_FILE"
+      BUSY_SINCE_AFTER=""
+    fi
+    V_BUSY="clear"
+    D_BUSY="$BUSY_COUNT busy worker(s)"
+  else
+    if [[ -z "$BUSY_SINCE_BEFORE" ]]; then
+      state_set busy_zero_since "$NOW" || log "failed to record busy_zero_since in $STATE_FILE"
+      BUSY_SINCE_AFTER="$NOW"
+    fi
+    BUSY_SPAN=$(( NOW - ${BUSY_SINCE_AFTER:-$NOW} ))
+    if (( BUSY_SPAN > IDLE_LIMIT )); then
+      V_BUSY="finding"
+      D_BUSY="0 busy workers for ${BUSY_SPAN}s (limit ${IDLE_LIMIT}s), since epoch ${BUSY_SINCE_AFTER}"
+    else
+      V_BUSY="clear"
+      D_BUSY="0 busy workers for ${BUSY_SPAN}s (under the ${IDLE_LIMIT}s stall limit)"
+    fi
+  fi
+fi
+
+# --- 4. auto-merge suppression ----------------------------------------------
+# dispatch-graph-main-red-sync ALWAYS exits 0 by contract (so a caller's `|| true`
+# can never swallow its signal); the signal is entirely in stdout. Branch on
+# stdout content, NEVER on $?.
+# Not quiet under pause: a held latch stays held while the fleet is paused, and
+# 6h of suppression is worth knowing about either way.
+V_AUTOMERGE="unknown"; D_AUTOMERGE=""
+REDSYNC_OUT=$("$REDSYNC_CMD" 2>/dev/null)
+RED_NODES="$(printf '%s' "$REDSYNC_OUT" | sed '/^[[:space:]]*$/d')"
+SUPPRESSION_SINCE_BEFORE="$(state_get suppression_since)"
+SUPPRESSION_SINCE_AFTER="$SUPPRESSION_SINCE_BEFORE"
+if [[ "$RED_NODES" == "UNKNOWN" ]]; then
+  V_AUTOMERGE="unknown"
+  D_AUTOMERGE="dispatch-graph-main-red-sync reported UNKNOWN — the main-red latch could not be read"
+elif [[ -z "$RED_NODES" ]]; then
+  if [[ -n "$SUPPRESSION_SINCE_BEFORE" ]]; then
+    state_set suppression_since null || log "failed to clear suppression_since in $STATE_FILE"
+    SUPPRESSION_SINCE_AFTER=""
+  fi
+  V_AUTOMERGE="clear"
+  D_AUTOMERGE="no open tactic-main-red-* node; auto-merge is not suppressed"
+else
+  # Threshold-gated on purpose: a short red episode is NORMAL and already has
+  # its own tactic-main-red-<sha> node elsewhere. Alarming on every episode
+  # would train the reader to ignore this alarm kind entirely.
+  if [[ -z "$SUPPRESSION_SINCE_BEFORE" ]]; then
+    state_set suppression_since "$NOW" || log "failed to record suppression_since in $STATE_FILE"
+    SUPPRESSION_SINCE_AFTER="$NOW"
+  fi
+  SUPPRESSION_SPAN=$(( NOW - ${SUPPRESSION_SINCE_AFTER:-$NOW} ))
+  RED_NODES_ONELINE="$(printf '%s' "$RED_NODES" | tr '\n' ' ')"
+  if (( SUPPRESSION_SPAN > SUPPRESSION_LIMIT )); then
+    V_AUTOMERGE="finding"
+    D_AUTOMERGE="auto-merge suppressed for ${SUPPRESSION_SPAN}s (limit ${SUPPRESSION_LIMIT}s) by open node(s): ${RED_NODES_ONELINE% }"
+  else
+    V_AUTOMERGE="clear"
+    D_AUTOMERGE="auto-merge suppressed for ${SUPPRESSION_SPAN}s (under the ${SUPPRESSION_LIMIT}s limit) by open node(s): ${RED_NODES_ONELINE% }"
+  fi
+fi
+
+# =============================================================================
+# Reporting — runs ONCE, over the complete verdict set.
+# =============================================================================
+PAUSE_TAG=""
+[[ "$PAUSE_UNKNOWN" -eq 1 ]] && PAUSE_TAG=" pause=unknown"
+
+FINDING_COUNT=0
+UNKNOWN_COUNT=0
+UNKNOWN_REASONS=""
+
+note_verdict() { # <verdict> <detail>
+  case "$1" in
+    finding) FINDING_COUNT=$((FINDING_COUNT + 1)) ;;
+    unknown) UNKNOWN_COUNT=$((UNKNOWN_COUNT + 1)); UNKNOWN_REASONS+="- $2"$'\n' ;;
+  esac
+}
+note_verdict "$V_TICK"      "tick-stale: $D_TICK"
+note_verdict "$V_DAEMON"    "daemon-degraded: $D_DAEMON"
+note_verdict "$V_BUSY"      "busy-stall: $D_BUSY"
+note_verdict "$V_AUTOMERGE" "automerge-suppressed: $D_AUTOMERGE"
+
+# An unreadable PAUSE state is itself an unreadable input — it must raise
+# watch-unknown even when all four predicates happened to read cleanly.
+if [[ "$PAUSE_UNKNOWN" -eq 1 ]]; then
+  UNKNOWN_COUNT=$((UNKNOWN_COUNT + 1))
+  UNKNOWN_REASONS+="- pause-state: dispatch_pause_state returned unknown — the sentinel's parent directory exists but is not searchable, so pause state could not be determined. Every predicate was evaluated anyway (pause silences nothing when pause itself is unreadable)."$'\n'
+fi
+
+if [[ "$FINDING_COUNT" -gt 0 ]]; then
+  EXIT_CODE=1
+elif [[ "$UNKNOWN_COUNT" -gt 0 ]]; then
+  EXIT_CODE=2
+else
+  EXIT_CODE=0
+fi
+
+# --- alarm dispatch ----------------------------------------------------------
+ALARM_FAILED=0
+raise_alarm() { # <kind> <statement> <body>
+  local kind="$1" statement="$2" body="$3" bodyfile
+  bodyfile="$WORK_DIR/alarm-$kind.md"
+  printf '%s\n' "$body" > "$bodyfile"
+  if ! "$ALARM_CMD" --kind "$kind" --statement "$statement" --body-file "$bodyfile" >&2; then
+    log "dispatch-fleet-alarm --kind $kind failed; this pass is journald-only for that finding"
+    ALARM_FAILED=1
+  fi
+}
+
+resolve_alarm() { # <kind>
+  local kind="$1"
+  if ! "$ALARM_CMD" --resolve --kind "$kind" >&2; then
+    log "dispatch-fleet-alarm --resolve --kind $kind failed"
+    ALARM_FAILED=1
+  fi
+}
+
+# One finding alarm per finding predicate; one resolve per DEFINITIVELY clear
+# predicate. A `quiet` (paused) predicate resolves nothing — it was not
+# evaluated, so it is not evidence the condition cleared. An `unknown`
+# predicate resolves nothing either, for the same reason.
+dispatch_predicate() { # <verdict> <kind> <statement> <body>
+  case "$1" in
+    finding) raise_alarm "$2" "$3" "$4" ;;
+    clear)   resolve_alarm "$2" ;;
+  esac
+}
+
+dispatch_predicate "$V_TICK" tick-stale \
+  "The dispatch tick has not recorded a routing decision recently" \
+  "$D_TICK
+
+Decision log: $DECISION_LOG_FILE
+Threshold: DISPATCH_FLEET_WATCH_TICK_MAX_AGE=${TICK_MAX_AGE}s
+Pause state: $PAUSE_STATE"
+
+dispatch_predicate "$V_DAEMON" daemon-degraded \
+  "The managed dispatch daemon is not healthy" \
+  "$D_DAEMON
+
+Liveness exit code: $LIVENESS_RC
+Liveness verdict: ${LIVENESS_VERDICT:-<unavailable>}
+Degraded reason: ${LIVENESS_REASON:-<none>}
+Pause state: $PAUSE_STATE (daemon liveness is evaluated regardless of pause)
+
+Raw dispatch-daemon-liveness --json:
+\`\`\`json
+${LIVENESS_JSON:-<no parseable JSON emitted>}
+\`\`\`"
+
+dispatch_predicate "$V_BUSY" busy-stall \
+  "No dispatch worker has been busy for a sustained span" \
+  "$D_BUSY
+
+Threshold: DISPATCH_FLEET_WATCH_IDLE_LIMIT=${IDLE_LIMIT}s
+busy_zero_since: ${BUSY_SINCE_AFTER:-<unset>}
+State file: $STATE_FILE
+Pause state: $PAUSE_STATE"
+
+dispatch_predicate "$V_AUTOMERGE" automerge-suppressed \
+  "Auto-merge has been suppressed by an open main-red latch for a sustained span" \
+  "$D_AUTOMERGE
+
+Threshold: DISPATCH_FLEET_WATCH_SUPPRESSION_LIMIT=${SUPPRESSION_LIMIT}s
+suppression_since: ${SUPPRESSION_SINCE_AFTER:-<unset>}
+Open main-red node(s):
+$RED_NODES
+State file: $STATE_FILE
+Pause state: $PAUSE_STATE (auto-merge suppression is evaluated regardless of pause)"
+
+# THE most important single behavior in this script: any unknown, for any
+# reason, is announced. A watcher that cannot read its inputs must say so
+# loudly rather than emit a false all-clear.
+if [[ "$UNKNOWN_COUNT" -gt 0 ]]; then
+  raise_alarm watch-unknown \
+    "dispatch-fleet-watch could not read $UNKNOWN_COUNT of its inputs this pass" \
+    "One or more fleet-health inputs were unreadable on this watcher pass. An
+unreadable input is reported as UNKNOWN, never as clear — a false all-clear is
+the failure this watcher exists to prevent.
+
+Unreadable inputs:
+$UNKNOWN_REASONS
+Pause state: $PAUSE_STATE
+Decision log: $DECISION_LOG_FILE
+State file: $STATE_FILE"
+fi
+
+# --- output ------------------------------------------------------------------
+if [[ "$JSON" -eq 1 ]]; then
+  jq -n \
+    --arg pause_state "$PAUSE_STATE" \
+    --argjson exit_code "$EXIT_CODE" \
+    --argjson finding_count "$FINDING_COUNT" \
+    --argjson unknown_count "$UNKNOWN_COUNT" \
+    --argjson alarm_failed "$( [[ "$ALARM_FAILED" -eq 1 ]] && echo true || echo false )" \
+    --arg v_tick "$V_TICK" --arg d_tick "$D_TICK" \
+    --arg v_daemon "$V_DAEMON" --arg d_daemon "$D_DAEMON" \
+    --arg v_busy "$V_BUSY" --arg d_busy "$D_BUSY" \
+    --arg v_automerge "$V_AUTOMERGE" --arg d_automerge "$D_AUTOMERGE" \
+    --arg busy_count "${BUSY_COUNT:-}" \
+    --arg busy_zero_since "${BUSY_SINCE_AFTER:-}" \
+    --arg suppression_since "${SUPPRESSION_SINCE_AFTER:-}" \
+    --arg red_nodes "$RED_NODES" \
+    --argjson liveness_exit "$LIVENESS_RC" \
+    --arg unknown_reasons "$UNKNOWN_REASONS" \
+    '
+    def blank_null: if . == "" then null else . end;
+    {
+      pause_state: $pause_state,
+      exit_code: $exit_code,
+      finding_count: $finding_count,
+      unknown_count: $unknown_count,
+      alarm_write_failed: $alarm_failed,
+      predicates: {
+        "tick-stale":            { verdict: $v_tick,      detail: $d_tick },
+        "daemon-degraded":       { verdict: $v_daemon,    detail: $d_daemon, liveness_exit_code: $liveness_exit },
+        "busy-stall":            { verdict: $v_busy,      detail: $d_busy,
+                                   busy_count: ($busy_count | blank_null | if . == null then null else tonumber end),
+                                   busy_zero_since: ($busy_zero_since | blank_null | if . == null then null else tonumber end) },
+        "automerge-suppressed":  { verdict: $v_automerge, detail: $d_automerge,
+                                   suppression_since: ($suppression_since | blank_null | if . == null then null else tonumber end),
+                                   open_main_red_nodes: ($red_nodes | blank_null | if . == null then [] else split("\n") end) }
+      },
+      unknown_reasons: ($unknown_reasons | blank_null)
+    }'
+  exit "$EXIT_CODE"
+fi
+
+printf 'dispatch fleet watch: pause=%s\n' "$PAUSE_STATE"
+printf '  tick-stale:           %-8s %s%s\n' "$V_TICK"      "$D_TICK"      "$PAUSE_TAG"
+printf '  daemon-degraded:      %-8s %s%s\n' "$V_DAEMON"    "$D_DAEMON"    "$PAUSE_TAG"
+printf '  busy-stall:           %-8s %s%s\n' "$V_BUSY"      "$D_BUSY"      "$PAUSE_TAG"
+printf '  automerge-suppressed: %-8s %s%s\n' "$V_AUTOMERGE" "$D_AUTOMERGE" "$PAUSE_TAG"
+
+# Never print a bare `ok` when anything is unknown — that is the false
+# all-clear this watcher exists to prevent.
+if [[ "$UNKNOWN_COUNT" -gt 0 ]]; then
+  printf 'result: unknown (%s finding(s), %s unreadable input(s)) — watch-unknown alarm raised\n' \
+    "$FINDING_COUNT" "$UNKNOWN_COUNT"
+elif [[ "$FINDING_COUNT" -gt 0 ]]; then
+  printf 'result: finding (%s)\n' "$FINDING_COUNT"
+else
+  printf 'result: ok\n'
+fi
+[[ "$ALARM_FAILED" -eq 1 ]] && printf 'note: at least one dispatch-fleet-alarm graph write FAILED this pass\n'
+
+exit "$EXIT_CODE"
