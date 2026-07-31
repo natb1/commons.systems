@@ -3740,14 +3740,23 @@ clarifications:
       stuck node.
 
 
-      LIVE DEFECT RECORDED AT RATIFICATION: dispatch-select-tick's autonomous
-      block contains ZERO references to MAX_WORKERS (verified 2026-07-31 against
-      the script at origin/main), so the at-cap pace-exempt bypass fires on
-      effective-live >= pace-target with no ceiling check at all. Today's
-      behavior is therefore BOTH narrower than this clause (one worker, via
-      graph-select-target --pace-exempt-only --top 1) and wider than entry 33
-      (it admits that worker even at live == max, yielding max+1). Both halves
-      are defects against the record rather than design choices;
+      LIVE DEFECT RECORDED AT RATIFICATION, CORRECTED 2026-07-31 (same-day
+      author correction): dispatch-select-tick's autonomous block contains ZERO
+      references to MAX_WORKERS (verified against the script at origin/main), so
+      the at-cap pace-exempt bypass fires on effective-live >= pace-target with
+      no ceiling check at all. Today's behavior is BOTH narrower than this
+      clause (one worker per firing, via graph-select-target --pace-exempt-only
+      --top 1) and wider than entry 33 (no ceiling check at all) -- but the wide
+      half is NOT bounded to "max+1": the gate is re-evaluated fresh every tick
+      with no memory of a prior bypass, and the newly spawned worker counts as
+      busy on the very next tick, so effective-live stays >= pace-target
+      (trivially so at a paced-to-zero curve, 0 >= 0) and the lane can fire
+      again, admitting one MORE worker beyond whatever is currently live. The
+      correct characterization is "one additional worker every time the gate
+      fires, regardless of the current active count" -- compounding across
+      ticks, bounded only by how many distinct selectable pace_exempt candidates
+      exist (not by max_concurrent_workers, which this code path never reads).
+      Both halves are defects against the record rather than design choices;
       tactic-pace-exempt-ceiling-fanout carries the fix.
 
 
