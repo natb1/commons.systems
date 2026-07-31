@@ -7,26 +7,13 @@ FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=dispatch-test-fixture.sh
 source "$FIXTURE_DIR/dispatch-test-fixture.sh"
 
-# --- host-unit-dir leak guard (regression check for tactic-sweep-timer-unit-dir-leak) --
-# Every harness in this file must redirect DISPATCH_SWEEP_TIMER_UNIT_DIR /
-# DISPATCH_HEARTBEAT_UNIT_DIR (and their *_SYSTEMCTL_CMD pairs) into the tmp
-# sandbox. If any test path fails to do so, ensure_sweep_timer /
-# ensure_heartbeat_units (lib.sh) would write to the developer's real
-# ~/.config/systemd/user/ unit files. Snapshot their hashes now and re-check
-# at the end of the suite so a leak fails the run instead of silently
-# clobbering the host.
-_host_unit_hash() {
-  local f="$1"
-  if [[ -f "$f" ]]; then
-    sha256sum "$f" | awk '{print $1}'
-  else
-    echo "absent"
-  fi
-}
-_HOST_SWEEP_UNIT="$HOME/.config/systemd/user/dispatch-sweep-periodic.service"
-_HOST_HEARTBEAT_UNIT="$HOME/.config/systemd/user/dispatch-heartbeat.service"
-_HOST_SWEEP_HASH_BEFORE=$(_host_unit_hash "$_HOST_SWEEP_UNIT")
-_HOST_HEARTBEAT_HASH_BEFORE=$(_host_unit_hash "$_HOST_HEARTBEAT_UNIT")
+# The host-unit-dir leak guard that used to live here is now armed for EVERY
+# suite by dispatch-test-fixture.sh (dispatch_host_systemd_guard_check): it
+# resolves the unit dir the way lib.sh does, covers all five installable units
+# plus the timers.target.wants symlink set, records any call that reaches the
+# real `systemctl`, and re-checks from both report_results and an EXIT trap so
+# an abort under `set -e` cannot skip it. Each harness below still must wire its
+# *_UNIT_DIR / *_SYSTEMCTL_CMD pairs into the tmp sandbox (see st_setup).
 
 # >>> MOVED FROM test-dispatch-scripts.sh >>>
 # ============================================================================
@@ -256,18 +243,6 @@ st_teardown
 
 # <<< END MOVED <<<
 
-# --- host-unit-dir leak guard: re-check ------------------------------------
-_HOST_SWEEP_HASH_AFTER=$(_host_unit_hash "$_HOST_SWEEP_UNIT")
-_HOST_HEARTBEAT_HASH_AFTER=$(_host_unit_hash "$_HOST_HEARTBEAT_UNIT")
-TOTAL=$((TOTAL + 1))
-if [[ "$_HOST_SWEEP_HASH_AFTER" == "$_HOST_SWEEP_HASH_BEFORE" && "$_HOST_HEARTBEAT_HASH_AFTER" == "$_HOST_HEARTBEAT_HASH_BEFORE" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: host systemd unit dir untouched (no sweep/heartbeat leak)"
-else
-  FAIL=$((FAIL + 1))
-  echo "  FAIL: host systemd unit dir untouched (no sweep/heartbeat leak)"
-  echo "FAIL: a harness in this suite leaked into the real host unit dir ($HOME/.config/systemd/user)" >&2
-  echo "  dispatch-sweep-periodic.service: before=$_HOST_SWEEP_HASH_BEFORE after=$_HOST_SWEEP_HASH_AFTER" >&2
-  echo "  dispatch-heartbeat.service:      before=$_HOST_HEARTBEAT_HASH_BEFORE after=$_HOST_HEARTBEAT_HASH_AFTER" >&2
-fi
-
+# The host-unit-dir leak re-check runs inside report_results (and, on an early
+# abort, from the fixture's EXIT trap).
 report_results
