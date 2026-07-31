@@ -26,7 +26,15 @@
 # label. When the session also left an office-hours-pr marker, that PR number is
 # threaded through to park-node's own --pr flag so the park records
 # execution.pr (tactic-office-hours-pr-custody) — still gh-free: this hook only
-# reads a file the session already wrote, no network call.
+# reads a file the session already wrote, no network call. When the session also
+# left an office-hours-base marker (a 40-hex blob sha of the node at origin/main,
+# read at the session's DIAGNOSIS time), it is threaded through to park-node's
+# own --base flag so the park is a compare-and-swap: it lands only against the
+# state the session actually diagnosed, and otherwise refuses with exit 3
+# (`stale-diagnosis`) having written nothing, rather than silently reverting a
+# newer transition that landed while the session was still verifying
+# (tactic-qa-main-park-base-cas; incident 2026-07-28). The marker is OPT-IN: its
+# absence keeps today's unpinned park.
 #
 # CRITICAL: `Stop` fires whenever the model YIELDS THE TURN, not only on terminal
 # exit. A worker that launches background subagents, posts an interim message and
@@ -75,24 +83,61 @@ if [[ -n "$JOB_NAME" && -n "$_HOOK_ROOT" && -f "$_HOOK_ROOT/intentions/$JOB_NAME
         _OH_PR="$_OH_PR_RAW"
       fi
     fi
+    # Diagnosis-time compare-and-swap pin. OPT-IN by design: absence of this
+    # marker keeps today's unpinned park — fix-checks, review-fix, qa-fix and
+    # dispatch-conflict do not write it yet, and a fail-closed hook would break
+    # every park they make. A malformed value is ignored (degrades to unpinned)
+    # rather than passed through, which park-node would reject as a usage error.
+    _OH_BASE=""
+    if [ -s "$CLAUDE_JOB_DIR/office-hours-base" ]; then
+      _OH_BASE_RAW="$(cat "$CLAUDE_JOB_DIR/office-hours-base" 2>/dev/null || true)"
+      if [[ "$_OH_BASE_RAW" =~ ^[0-9a-f]{40}$ ]]; then
+        _OH_BASE="$_OH_BASE_RAW"
+      fi
+    fi
     _PARK="$_HOOK_ROOT/packages/intentionsutil/scripts/park-node"
     if [ -n "$_OH_REASON" ] && [ -x "$_PARK" ]; then
       # Backstop park via the graph-commit primitive. Best-effort: a failure
       # (e.g. graph-commit's PR-branch fast-path guard — the worker's own
       # in-session park applies the reset-dance; this backstop does not) is
       # non-fatal, matching this hook's best-effort philosophy.
-      _PARK_ARGS=("$JOB_NAME")
-      if [ -n "$_OH_PR" ]; then
-        _PARK_ARGS=("--pr" "$_OH_PR" "$JOB_NAME")
+      # park-node's parser is leading-flags-only — it stops scanning at the
+      # first non-flag argument — so every flag must precede the node id.
+      _PARK_ARGS=()
+      if [ -n "$_OH_BASE" ]; then
+        _PARK_ARGS+=("--base" "$_OH_BASE")
       fi
-      _PARK_ARGS+=("$_OH_REASON")
+      if [ -n "$_OH_PR" ]; then
+        _PARK_ARGS+=("--pr" "$_OH_PR")
+      fi
+      _PARK_ARGS+=("$JOB_NAME" "$_OH_REASON")
       if [ -n "$_OH_RECO" ]; then
         _PARK_ARGS+=("$_OH_RECO")
       fi
-      if "$_PARK" "${_PARK_ARGS[@]}" >/dev/null 2>&1; then
-        rm -f "$_OH_REASON_FILE" "$CLAUDE_JOB_DIR/office-hours-recommendation" "$CLAUDE_JOB_DIR/office-hours-pr"
+      # stdout is silenced, but stderr is CAPTURED (not swallowed) so park-node's
+      # own diagnostic — notably the `stale-diagnosis` marker on exit 3 — can be
+      # surfaced on this hook's stderr below.
+      _PARK_ERR=""
+      _PARK_RC=0
+      _PARK_ERR="$("$_PARK" "${_PARK_ARGS[@]}" 2>&1 >/dev/null)" || _PARK_RC=$?
+      if [ "$_PARK_RC" -eq 0 ]; then
+        rm -f "$_OH_REASON_FILE" "$CLAUDE_JOB_DIR/office-hours-recommendation" \
+          "$CLAUDE_JOB_DIR/office-hours-pr" "$CLAUDE_JOB_DIR/office-hours-base"
+      elif [ "$_PARK_RC" -eq 3 ]; then
+        # stale-diagnosis: the node changed on origin/main between the session's
+        # diagnosis-time read and this park, so park-node REFUSED and wrote
+        # nothing. The newer landed state stands. Markers are deliberately NOT
+        # consumed and the park is NOT retried (and never re-run unpinned) — the
+        # next run against the node's current state is the re-diagnosis.
+        echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' refused with stale-diagnosis (exit 3): the node changed on origin/main since this session read it; nothing was written, markers left in place (non-fatal)" >&2
+        if [ -n "$_PARK_ERR" ]; then
+          echo "[dispatch-stop] park-node stderr: $_PARK_ERR" >&2
+        fi
       else
         echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' failed (non-fatal)" >&2
+        if [ -n "$_PARK_ERR" ]; then
+          echo "[dispatch-stop] park-node stderr: $_PARK_ERR" >&2
+        fi
       fi
     fi
   fi

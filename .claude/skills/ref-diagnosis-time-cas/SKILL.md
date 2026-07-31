@@ -15,9 +15,33 @@ during that interview window would be silently absorbed by park-node's /
 clear-park's own execution-time self-refresh of origin/main, including one
 that changes what the human should have decided.
 
-NOT needed for immediate mechanical parks that diagnose and execute in the
-same breath — e.g. the Stop-hook backstop (`.claude/hooks/dispatch-stop.sh`),
-which parks right after detecting a failure, with no interview gap.
+The criterion is the **gap**, not the caller. NOT needed for a disposition that
+diagnoses and executes in the same breath — e.g. a provisioning failure, which
+parks immediately on detecting the failure, with nothing able to intervene.
+Being executed by the Stop-hook backstop (`.claude/hooks/dispatch-stop.sh`) does
+NOT by itself mean there is no gap: the hook executes a decision the session made
+earlier, and how much earlier varies by caller.
+
+`/qa-main`'s **cannot-verify** park is exactly such a case, and it DOES use the
+pin. Its diagnosis-time read is the front door's node snapshot
+(`dispatch-derive-node-target`, which prints the node's `origin/main` blob sha on
+a `BASE:` line); a multi-minute browser-verification pass against deployed prod
+runs before the session writes its markers and yields. A `main-qa → done`
+transition landing in that window would be silently reverted by an unpinned park
+(incident 2026-07-28: the revert landed 54 seconds after the transition and
+deadlocked a downstream node). The seam is the **`office-hours-base` marker**:
+`/qa-main` writes the base sha to `$CLAUDE_JOB_DIR/office-hours-base` alongside
+`office-hours-reason` / `office-hours-recommendation`, and the Stop hook threads
+it through as `park-node --base`. That marker is this contract's single home —
+any other Stop-hook-executed park with a real gap should adopt it (`fix-checks`,
+`review-fix`, `qa-fix`, and `dispatch-conflict` do not write it yet, so the hook
+treats it as opt-in: absent marker → today's unpinned park).
+
+**Exit-3 disposition on this path.** The park is refused and nothing is written;
+the node keeps whatever newer state landed on `origin/main`; the job is **held**
+(not reaped), its markers left in place, and it is neither retried nor re-parked
+unpinned. The next `/qa-main` run against the node's current state IS the
+re-diagnosis.
 
 ## The three-step protocol
 

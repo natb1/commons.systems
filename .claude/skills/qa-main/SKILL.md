@@ -80,6 +80,12 @@ case "$BRANCH" in
     # is one compact line; NODE-BODY is raw markdown.
     NODE_JSON=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-JSON ===$/,/^=== NODE-BODY ===$/p' | sed '1d;$d')
     NODE_BODY=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-BODY ===$/,$p' | sed '1d')
+    # Diagnosis-time compare-and-swap token: the blob sha of
+    # intentions/$NODE_ID.md at origin/main as of THIS read. Parsed from the
+    # header region only (everything before the NODE-JSON fence) — a line inside
+    # the node body could otherwise begin with `BASE: `. Used by the
+    # cannot-verify exit below to pin the Stop-hook park.
+    NODE_BASE=$(printf '%s\n' "$FRONT_DOOR" | sed -n '1,/^=== NODE-JSON ===$/p' | sed -n 's/^BASE: //p' | head -1)
     ;;
 esac
 ```
@@ -197,14 +203,36 @@ asymmetric — when the signal is unclear, route to **cannot-verify**.
   Then **STOP**.
 
 - **cannot-verify** → the safety valve. Do **not** call `dispatch-mark-deviation`
-  (a gh path). Write the specific reason to `$CLAUDE_JOB_DIR/office-hours-reason`
-  and the best-next-steps recommendation — **what the human must verify and how**
-  (strategy clarification 30 / condition 6) — to
-  `$CLAUDE_JOB_DIR/office-hours-recommendation`. The Stop hook parks the node via
-  `park-node`, writing `office_hours` `{reason, recommendation, since}` on
-  `origin/main`. See `.claude/hooks/dispatch-stop.sh`. Then **STOP**. Always name
-  the specific reason so the office-hours surface tells the human exactly what to
-  check.
+  (a gh path). Write **three** markers into `$CLAUDE_JOB_DIR`, each with the
+  atomic tempfile+`mv` convention this codebase uses for marker writes (write the
+  value to `<marker>.tmp`, then `mv` it onto `<marker>` — the idiom at the tail of
+  `.claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation`):
+
+  1. `office-hours-reason` — the specific reason.
+  2. `office-hours-recommendation` — the best-next-steps recommendation, **what
+     the human must verify and how** (strategy clarification 30 / condition 6).
+  3. `office-hours-base` — the value of `$NODE_BASE` bound by the front-door
+     block above (the 40-hex blob sha of `intentions/$N.md` at `origin/main` as
+     of this session's diagnosis-time read).
+
+  The Stop hook parks the node via `park-node`, writing `office_hours`
+  `{reason, recommendation, since}` on `origin/main`, and threads
+  `office-hours-base` through as `park-node --base`. See
+  `.claude/hooks/dispatch-stop.sh`. Then **STOP**. Always name the specific
+  reason so the office-hours surface tells the human exactly what to check.
+
+  **What the base pin buys.** Browser verification takes minutes, so
+  `origin/main` can advance between the front door's read and the Stop hook's
+  park. Unpinned, the park would silently revert whatever landed in between (a
+  `main-qa → done` transition, for instance). Pinned, `park-node` compares the
+  supplied base against `origin/main`'s current blob before any mutation.
+
+  **What an exit-3 refusal means.** `park-node` exits 3 (`stale-diagnosis`), the
+  park is **refused and nothing is written**, the node keeps whatever newer state
+  landed on `origin/main`, and the job is **held** (not reaped) for a human to
+  look at. Do **not** retry the park, and do **not** re-park without the pin —
+  the next `/qa-main` run against the node's current state is the re-diagnosis.
+  See `.claude/skills/ref-diagnosis-time-cas/SKILL.md`.
 
 ## Sandbox
 
