@@ -3161,6 +3161,98 @@ clarifications:
       concern rather than a design question — expressible as blocked_by edges
       among the tactics, requiring no author decision. Recorded so a later round
       does not re-derive the overlap from scratch."
+  - question: Does the 2026-07-31 clarification's stated ground for
+      tactic-denied-command-parks-node not authoring its own held-for-debug
+      counter — that tactic-frozen-session-debug-count's counter 'already sweeps
+      a denial-frozen session in' via a busy/idle complement predicate — hold
+      against the shipped function?
+    answer: (Recorded 2026-07-31 /align-tactics tactic-target round, drift review of
+      tactic-claim-containment-durable-anchor.) The 2026-07-31 clarification
+      asserting that the held-for-debug counter landing under
+      tactic-frozen-session-debug-count already sweeps a
+      classifier-denial-frozen session into its total — 'its predicate is the
+      complement of busy/idle, and a denied session reports status waiting' — is
+      contradicted by the shipped function. claude_agents_count_held_for_debug
+      (.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:1051-1116)
+      keys on an explicit terminal-state enumeration
+      (done|stopped|killed|failed|errored|error|cancelled|canceled|terminated),
+      and its own comment at :1064-1069 records that a complement-of-busy/idle
+      predicate was REJECTED specifically because it 'would ... count LIVE
+      blocked sessions (waiting on input/permission) as held.' As shipped, a
+      denial-frozen session (state blocked / status waiting) is therefore
+      counted by NEITHER claude_agents_count_busy_workers (busy-only,
+      :1040-1048) nor the held-for-debug counter — it is invisible to both
+      surfaces. This does not reverse tactic-denied-command-parks-node's scoping
+      decision, whose distinct contributions (the denial-specific detector, the
+      office_hours write, the greppable journal line) are what make the case
+      visible at all; it corrects the stated GROUND for that decision, which as
+      recorded does not hold.
+  - question: Was the 2026-07-28 office-hours ratification's option (b) — the drain
+      skill calling mark-node-terminal with a new `park-clear` disposition
+      member — actually implemented, on either side (mark-node-terminal's enum
+      or dispatch-self-close's mirror)?
+    answer: "(Recorded 2026-07-31 /align-tactics tactic-target round.) The
+      2026-07-28 office-hours ratification records that option (b) was
+      implemented with 'a new `park-clear` member added to that script's
+      disposition enum (packages/intentionsutil/scripts/mark-node-terminal:67)'.
+      It was not. On origin/main the enum at mark-node-terminal:73-79 still
+      carries the original eight members
+      (advance|demote|park|fix-attempt|align-round|no-claim|conflict-resolved|c\
+      onflict-hold), dispatch-self-close:47-52 mirrors the same eight, and
+      `park-clear` appears nowhere in .claude/skills/ or packages/ — only in
+      intentions/*.md prose. No drain skill calls mark-node-terminal at all. So
+      the ratified fix is unimplemented on BOTH sides, and the defect it
+      resolved is still live: the office-hours drain's green-CI success path
+      declares nothing, dispatch-self-close HOLDs the job, and the node it just
+      unblocked stays frozen. A drain that called `mark-node-terminal <node>
+      park-clear` today would exit 2 on the unknown disposition and write no
+      marker at all. Condition 14 is unaffected — dispatch-self-close reads only
+      `^node=`, so a missing member changes no doctrine — which is precisely why
+      the gap went unnoticed. Carried in prose in
+      tactic-office-hours-self-modification-skill (status raw, phase null); no
+      node carries it as a planned unit."
+  - question: Between a node's selection and its first phase transition, what
+      durable evidence exists today that a pass has started — and does the
+      daemon-registry sweep preserve or erase that evidence once a live session
+      registers?
+    answer: "(Recorded 2026-07-31 /align-tactics tactic-target round, drift review
+      of tactic-claim-containment-durable-anchor.) As of this round the dispatch
+      spawn path writes NO graph-side record that a node has been claimed.
+      dispatch-graph-execute's only claim-time write is reservation_mark_spawned
+      (:159) into the file ledger under
+      <project-root>/tmp/dispatch-reservations; the node's next durable graph
+      write is its first phase transition. Between selection and that
+      transition, the only evidence a pass exists is the daemon registry plus
+      that ledger — and reservation_sweep rule (a) ('live-worker-redundant',
+      lib-reservation-ledger.sh:593-596) deliberately CLEARS the ledger marker
+      the instant a live session registers under the worktree basename, handing
+      sole authority to the registry. This is why the leak recorded in the
+      2026-07-29 containment-durability clarification is total rather than
+      partial: after a registry loss the node reads as never-claimed, not as
+      claimed-and-stale, so no reconciler can currently tell the two apart.
+      Recorded as the factual ground under that tactic's store question, not as
+      an answer to it."
+  - question: Is the drift phase's eligibility sanity check (buildDriftPrompt)
+      mode-aware, and does its 'no non-draft child tactic already on its signal
+      path' clause correctly gate a tactic-mode per-node round against this
+      strategy's 64 non-draft children?
+    answer: "(Recorded 2026-07-31 /align-tactics tactic-target round.) The drift
+      phase's eligibility sanity check is stated mode-blind: buildDriftPrompt
+      (.claude/workflows/align-tactics.js:541) receives only the strategy record
+      and the gather evidence, never `mode`, so a tactic-mode round is handed
+      the strategy-mode gate verbatim — including 'it has no non-draft child
+      tactic already on its signal path'. strategy-graph-native-dispatch carries
+      64 non-draft children, so a literal reading of that clause would park
+      every per-node finalize round run on this strategy, even though
+      align-tactics.js:907-912 skips the decompose phase entirely when mode is
+      'tactic' and the clause exists only to prevent a redundant strategy-level
+      decomposition. Read the clause as inoperative in tactic mode; the
+      operative gates there are the strategy's office_hours, the fresh-reading
+      gate, and rounds.count. This is a defect of the prompt builder, not of
+      this strategy — adjacent to the recorded align-tactics harness gaps
+      (tactic-align-tactics-target-node-context-dropped,
+      tactic-align-tactics-per-node-clarifications), and a candidate unit for
+      whichever of those owns buildDriftPrompt's inputs."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
