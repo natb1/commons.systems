@@ -34,7 +34,10 @@ ca_teardown() {
   rm -rf "$CA_DIR"
   CA_DIR=""
   CA_FAKE=""
-  unset CLAUDE_AGENTS_CMD
+  # DISPATCH_AGENTS_SNAPSHOT_ALL is unset here too so the registered-view
+  # snapshot set by a ca_all_* case can never leak into a case using this
+  # (older) pair — a stale snapshot would shadow the fake daemon entirely.
+  unset CLAUDE_AGENTS_CMD DISPATCH_AGENTS_SNAPSHOT_ALL
 }
 
 # write_fake_claude <stdout-payload> <exit-code> — install a fake `claude` that
@@ -152,6 +155,31 @@ mkdir -p "$wt"
 write_fake_claude '[{"sessionId":"oh-1","pid":99,"status":"busy","name":"office-hours-1311"}]' 0
 if worktree_has_live_session "$wt"; then live=occupied; else live=free; fi
 assert_eq "office-hours occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+# --- Test 8b2: a non-numeric basename prefix forms NO office-hours key --------
+#
+# The office-hours key is `office-hours-<N>` with a NUMERIC <N>. A graph-node
+# worktree is named by node id (`tactic-*` / `strategy-*`), so deriving the key
+# as "basename up to the first dash" would yield `office-hours-tactic` — a key
+# SHARED by every tactic worktree. One session registered under that name would
+# then claim all of them at once (and, in the registered view, hold that claim
+# with no expiry). The key must only be formed from a real numeric prefix.
+
+echo "Test: a non-numeric basename prefix forms no office-hours key (shared-key claim)"
+ca_setup
+for wt_base in tactic-foo-bar strategy-foo-bar; do
+  wt="$CA_DIR/$wt_base"
+  mkdir -p "$wt"
+  oh_name="office-hours-${wt_base%%-*}"
+  write_fake_claude "[{\"sessionId\":\"oh-x\",\"pid\":98,\"status\":\"busy\",\"name\":\"$oh_name\"}]" 0
+  if worktree_has_live_session "$wt"; then live=occupied; else live=free; fi
+  assert_eq "shared-key claim: $oh_name does not occupy $wt_base" "free" "$live"
+done
+# The basename match itself is unaffected.
+write_fake_claude '[{"sessionId":"n-1","pid":97,"status":"busy","name":"tactic-foo-bar"}]' 0
+if worktree_has_live_session "$CA_DIR/tactic-foo-bar"; then live=occupied; else live=free; fi
+assert_eq "shared-key claim: exact node-name match still occupies" "occupied" "$live"
 ca_teardown
 
 # --- Test 8c: stopped session still occupies its worktree (#2240 byte-identical router) ---
@@ -637,6 +665,211 @@ assert_eq "live-claimed unique: exits 0" "0" "$rc"
 assert_eq "live-claimed unique: 10 and 20 each once" \
   "$(printf '10\n20')" "$(printf '%s\n' "$out" | sort -n)"
 ca_teardown
+
+# --- REGISTERED view: a stopped-but-not-removed session still holds its node --
+# (tactic-stopped-session-blocks-node, Unit 3)
+#
+# These cases use `office_hours_state_fake_claude` from dispatch-test-fixture.sh
+# — NOT the `write_fake_claude` above, which is argv-blind (it `cat`s the same
+# payload whatever flags it was called with) and so structurally cannot express
+# the ACTIVE/REGISTERED split. The fixture fake is `--all`-faithful; quoting its
+# contract comment (dispatch-test-fixture.sh, "--all FAITHFULNESS"):
+#
+#   "Production hides `done` sessions from the default `claude agents --json`
+#    and surfaces them ONLY under `--all`. This fake mirrors that exactly: on
+#    `agents`, it scans argv for `--all`; if present it returns the FULL payload
+#    (including any `done` rows), and if absent it returns the payload with
+#    `done` rows stripped. ... (A naive fake that returned `done` regardless of
+#    `--all` would let a `--all`-forgetting path still pass.)"
+#
+# Its pairs are `name:state[:cwd]`; a row is sessionId `s-<name>`, job id
+# `j-<name>`, status JSON "busy" iff state == "working" (else null), name
+# `<name>`. It writes $TMPDIR_TEST/bin/claude and $TMPDIR_TEST/claude-payload.json
+# and exports both CLAUDE_AGENTS_CMD and OFFICE_HOURS_CLAUDE_CMD — hence the
+# dedicated setup/teardown below, which (unlike ca_setup) provides TMPDIR_TEST
+# with a `bin/` exactly one level under it, the layout the fake's relative
+# payload lookup requires.
+
+ca_all_setup() { TMPDIR_TEST=$(mktemp -d); mkdir -p "$TMPDIR_TEST/bin"; }
+ca_all_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset CLAUDE_AGENTS_CMD OFFICE_HOURS_CLAUDE_CMD DISPATCH_AGENTS_SNAPSHOT_ALL
+}
+
+# ca_all_raw_fake <stdout-payload> <exit-code> — install a one-off fake `claude`
+# at $TMPDIR_TEST/bin/claude that prints <stdout-payload> and exits <exit-code>,
+# ignoring argv. Used ONLY by the UNKNOWN fail-safe cases, where the ACTIVE /
+# REGISTERED distinction is irrelevant (the query never returns a usable array).
+# Deliberately separate from write_fake_claude, which is keyed on CA_DIR/CA_FAKE
+# from the other setup pair.
+ca_all_raw_fake() {
+  local payload="$1" exit_code="$2"
+  printf '%s' "$payload" > "$TMPDIR_TEST/raw-payload.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<FAKE
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/raw-payload.json"
+exit $exit_code
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
+# --- Test 43: THE REQUIREMENT — a `done` session still occupies its worktree --
+echo "Test: worktree_has_live_session reports occupied for a done-but-not-removed session"
+ca_all_setup
+mkdir -p "$TMPDIR_TEST/wt/tactic-foo"
+office_hours_state_fake_claude "tactic-foo:done"
+if worktree_has_live_session "$TMPDIR_TEST/wt/tactic-foo"; then live=occupied; else live=free; fi
+assert_eq "registered done: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_all_teardown
+
+# --- Test 44: the discriminator that makes Test 43 non-vacuous ---------------
+# Same fake, ACTIVE accessor: the `done` row MUST be invisible without `--all`.
+# If a future regression drops `--all` from claude_agents_list_registered, the
+# registered accessor collapses onto this (empty) view and Test 43 flips red —
+# which is exactly what this case proves is possible. Both halves are asserted:
+# rc 0 (a definite answer, not UNKNOWN) AND the absence of the name.
+echo "Test: the --all-faithful fake hides the done row from the ACTIVE view"
+ca_all_setup
+office_hours_state_fake_claude "tactic-foo:done"
+if out=$(claude_agents_list_all); then rc=0; else rc=$?; fi
+assert_eq "active view of a done row: exits 0 (definite, not UNKNOWN)" "0" "$rc"
+assert_not_contains_local "active view of a done row: the done session is NOT listed" \
+  "tactic-foo" "$out"
+ca_all_teardown
+
+# --- Test 45: claude_agents_list_registered 4-column shape -------------------
+echo "Test: claude_agents_list_registered emits working AND done rows with the state column"
+ca_all_setup
+office_hours_state_fake_claude "tactic-a:working" "tactic-b:done"
+if out=$(claude_agents_list_registered); then rc=0; else rc=$?; fi
+assert_eq "list-registered mixed: exits 0" "0" "$rc"
+# Columns 1-3 are byte-identical to claude_agents_list_all's projection
+# (sessionId/status/name); .state is appended as column 4. status is JSON null
+# for a non-working row, which @tsv renders as an EMPTY field (not defaulted).
+assert_eq "list-registered mixed: working row is s-tactic-a/busy/tactic-a/working" \
+  "$(printf 's-tactic-a\tbusy\ttactic-a\tworking')" \
+  "$(printf '%s\n' "$out" | awk -F'\t' '$3 == "tactic-a"')"
+assert_eq "list-registered mixed: done row carries state=done in column 4" \
+  "done" "$(printf '%s\n' "$out" | awk -F'\t' '$3 == "tactic-b" { print $4 }')"
+ca_all_teardown
+
+# --- Test 46: a held node does NOT consume the fleet's concurrency budget ----
+# Unit 1's explicit out-of-scope boundary: the pace/concurrency gate stays on
+# the ACTIVE view, so a done session burns no budget.
+echo "Test: claude_agents_count_busy_workers counts 0 when the only session is done"
+ca_all_setup
+office_hours_state_fake_claude "tactic-foo:done"
+if out=$(claude_agents_count_busy_workers); then rc=0; else rc=$?; fi
+assert_eq "busy-count done-only: exits 0" "0" "$rc"
+assert_eq "busy-count done-only: counts 0 (a held node is not a busy worker)" "0" "$out"
+ca_all_teardown
+
+# --- Test 47: dead-router reclaim is unaffected (the fleet-stall guard) ------
+# reservation_sweep rule (c) reclaims a marker when its reserving session id has
+# left the LIVE set. Reserving sessions are routers (`dispatch-<short-id>`) that
+# routinely go done — if a done router stayed visible to claude_agents_list_all,
+# its marker would become immortal, reservation_count would climb monotonically,
+# and LIVE_COUNT would pin at the ceiling, stalling the whole fleet.
+echo "Test: claude_agents_list_all still drops a done router row (reservation-reclaim guard)"
+ca_all_setup
+office_hours_state_fake_claude "dispatch-abc:done"
+if out=$(claude_agents_list_all); then rc=0; else rc=$?; fi
+assert_eq "active view of a done router: exits 0" "0" "$rc"
+assert_eq "active view of a done router: emits no session lines" "" "$out"
+ca_all_teardown
+
+# --- Test 48: the registered snapshot short-circuits the daemon query --------
+# DISPATCH_AGENTS_SNAPSHOT_ALL names a captured `claude agents --json --all`
+# array. CLAUDE_AGENTS_CMD points at a nonexistent binary, so any fallthrough to
+# a live query would fail; occupancy must still be answered from the snapshot.
+echo "Test: worktree_has_live_session reads DISPATCH_AGENTS_SNAPSHOT_ALL, not the daemon"
+ca_all_setup
+mkdir -p "$TMPDIR_TEST/wt/tactic-snap"
+printf '%s' '[{"sessionId":"s-tactic-snap","id":"j-tactic-snap","pid":1,"state":"done","status":null,"name":"tactic-snap","cwd":""}]' \
+  > "$TMPDIR_TEST/snapshot-all.json"
+export DISPATCH_AGENTS_SNAPSHOT_ALL="$TMPDIR_TEST/snapshot-all.json"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+# Asserted first so the occupancy result below cannot be a fail-safe in
+# disguise: rc 0 with the row present proves the snapshot was genuinely read.
+if out=$(claude_agents_list_registered); then rc=0; else rc=$?; fi
+assert_eq "snapshot-all: list-registered exits 0 from the snapshot alone" "0" "$rc"
+assert_contains_local "snapshot-all: the snapshot's done row is projected" \
+  "tactic-snap" "$out"
+if worktree_has_live_session "$TMPDIR_TEST/wt/tactic-snap"; then live=occupied; else live=free; fi
+assert_eq "snapshot-all: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_all_teardown
+
+# --- Test 49: UNKNOWN fail-safe preserved on the registered accessor ---------
+# Three UNKNOWN shapes — missing binary, zero exit with empty output, zero exit
+# with non-array output. Each must yield rc 1 + empty stdout from
+# claude_agents_list_registered, and OCCUPIED from worktree_has_live_session.
+echo "Test: claude_agents_list_registered returns rc 1 (UNKNOWN) and the predicate fails safe"
+ca_all_setup
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+if out=$(claude_agents_list_registered); then rc=0; else rc=$?; fi
+assert_eq "registered missing-claude: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "registered missing-claude: prints nothing" "" "$out"
+if worktree_has_live_session "$TMPDIR_TEST/wt/tactic-foo"; then live=occupied; else live=free; fi
+assert_eq "registered missing-claude: predicate fails safe (occupied)" "occupied" "$live"
+ca_all_raw_fake '   ' 0
+if out=$(claude_agents_list_registered); then rc=0; else rc=$?; fi
+assert_eq "registered empty-output: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "registered empty-output: prints nothing" "" "$out"
+if worktree_has_live_session "$TMPDIR_TEST/wt/tactic-foo"; then live=occupied; else live=free; fi
+assert_eq "registered empty-output: predicate fails safe (occupied)" "occupied" "$live"
+ca_all_raw_fake '{}' 0
+if out=$(claude_agents_list_registered); then rc=0; else rc=$?; fi
+assert_eq "registered non-array: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "registered non-array: prints nothing" "" "$out"
+if worktree_has_live_session "$TMPDIR_TEST/wt/tactic-foo"; then live=occupied; else live=free; fi
+assert_eq "registered non-array: predicate fails safe (occupied)" "occupied" "$live"
+ca_all_teardown
+
+# --- Test 50: exclude_sid still applies on the registered view ---------------
+# The self-exclusion seam (a caller spawned with --name=<basename> must not match
+# its OWN session) must survive the switch from the active to the registered
+# accessor — the match is still keyed on column 1.
+echo "Test: exclude_sid excludes the caller's own registered session"
+ca_all_setup
+mkdir -p "$TMPDIR_TEST/wt/tactic-foo"
+office_hours_state_fake_claude "tactic-foo:done"
+if worktree_has_live_session "$TMPDIR_TEST/wt/tactic-foo" "s-tactic-foo"; then live=occupied; else live=free; fi
+assert_eq "exclude_sid on registered view: own session does not self-block" "free" "$live"
+if worktree_has_live_session "$TMPDIR_TEST/wt/tactic-foo"; then live=occupied; else live=free; fi
+assert_eq "exclude_sid omitted: the same row still occupies" "occupied" "$live"
+ca_all_teardown
+
+# --- Test 51: the operator diagnostic for a done holder ----------------------
+# A done holder is the non-obvious case: nothing is running, yet the node stays
+# blocked until a human runs `claude rm`. Naming the session and the release act
+# on stderr is a contract, not a nicety — without it the block is unexplainable.
+echo "Test: a done holder emits a stderr diagnostic naming the session and 'claude rm'"
+ca_all_setup
+mkdir -p "$TMPDIR_TEST/wt/tactic-foo"
+office_hours_state_fake_claude "tactic-foo:done"
+if err=$(worktree_has_live_session "$TMPDIR_TEST/wt/tactic-foo" 2>&1 >/dev/null); then :; fi
+assert_contains_local "done diagnostic: names the holding session id" "s-tactic-foo" "$err"
+assert_contains_local "done diagnostic: names the release act" "claude rm" "$err"
+ca_all_teardown
+
+# --- Test 52: a null sessionId does not eat the state column -----------------
+# The matched row is split with parameter expansion, not `IFS=$'\t' read`: tab is
+# IFS whitespace, so `read` collapses a LEADING empty field. `.sessionId` is not
+# defaulted in the projection (by design), so a row without one yields a leading
+# empty field — under `read` the state `done` would slide into the sessionId
+# variable, the state would read empty, and the diagnostic would vanish.
+echo "Test: a registered row with a null sessionId still emits the done diagnostic"
+ca_all_setup
+mkdir -p "$TMPDIR_TEST/wt/tactic-nullsid"
+printf '%s' '[{"sessionId":null,"id":"j-x","pid":1,"state":"done","status":null,"name":"tactic-nullsid","cwd":""}]' \
+  > "$TMPDIR_TEST/snapshot-all.json"
+export DISPATCH_AGENTS_SNAPSHOT_ALL="$TMPDIR_TEST/snapshot-all.json"
+if err=$(worktree_has_live_session "$TMPDIR_TEST/wt/tactic-nullsid" 2>&1 >/dev/null); then :; fi
+assert_contains_local "null sessionId: the done diagnostic is still emitted" \
+  "done-but-not-removed" "$err"
+ca_all_teardown
 
 # --- claude_session_id_is_live (tactic-standdown-winner-liveness) -----------
 # The winner-liveness predicate for the duplicate-worker stand-down protocol:

@@ -575,3 +575,11 @@ returns `[]` indistinguishably from "no sessions", per `.claude/rules/sandbox.md
    A climbing `R` would mean the reservation sweep started seeing `done` rows —
    i.e. the flip leaked past `worktree_has_live_session` — and is the one
    failure mode that stalls the whole fleet.
+
+## needs-main residue
+
+- **id**: 11
+- **title**: Over several real dispatch ticks, a held node blocks re-selection without the reservation count climbing
+- **url_path**: current
+- **expected_outcome**: The containment property holds under real fleet conditions: the held node is never re-selected, the held worktree survives `dispatch-sweep`, and the reservation-ledger count does not grow monotonically from the held session.
+- **finding**: Planned deferral — requires live fleet observation across multiple real `dispatch-tick` runs with a genuinely held session; not assertable by any single command at merge time. Verified downstream by dispatch monitoring (reservation-count trend and re-selection audit) once this PR is on `main`.
