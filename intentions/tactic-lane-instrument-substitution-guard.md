@@ -39,13 +39,14 @@ attention:
     — convert to a tier/bug_fix mark when tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire the interim scale; do not orphan this
     boost."
-phase: qa
+phase: review
 execution:
   branch: tactic-lane-instrument-substitution-guard
   pr: 3006
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -695,4 +696,64 @@ Manual and judgment checks:
   instrument: `fixes_applied` counts zero fixes from it, and it contributes no
   `Fixed`-bucket disposition. This is the paired half of the invariant — no yield
   metric may be credited to an instrument whose invocation was not verified.
+
+## needs-main residue
+
+Filed by `/qa-fix` (2026-07-31). All 11 script-verifiable QA items passed
+(syntax check, both new unit-test suites, lint, CI wiring, induced-unavailability
+fixture behavior, throttle-path non-regression, payload-signature checks,
+direct fixture invocation of the verifier script, and the gate-wiring/dedup
+greps). The five manual/judgment items below are the node body's own planned
+deferrals — none is a code defect; each awaits a live post-merge check. Drained
+when `review → main-qa` fires.
+
+1. **Live no-false-failure run: this PR's own `/review-fix` pass shows
+   `instrument-verify` returning `verified: true`**
+   - URL path: current
+   - Expected outcome: The `instrument-verify` subagent returns `verified:true`
+     for each Lane-A instrument that genuinely ran; `result.instrument_failures`
+     is `[]`; `deviation` is not set by the gate.
+   - Finding: Not statically assertable — requires observing a live
+     `/review-fix` Workflow run's actual subagent transcript. Explicitly listed
+     in the node body as a required manual check before this node leaves QA.
+
+2. **Induced-unavailability end-to-end on a live lane**
+   - URL path: current
+   - Expected outcome: On a live run with an instrument genuinely unavailable,
+     the lane discards the payload, sets `deviation`, and escalates to
+     office-hours with the verbatim rejection text in `coverage_note`.
+   - Finding: Fixtures cover the decision function (`instrumentVerdict`) in
+     isolation; the end-to-end live-lane behavior (real Workflow run, real
+     `dispatch-mark-deviation` escalation) is not assertable from a static
+     worktree.
+
+3. **Transcript sweep after merge**
+   - URL path: current
+   - Expected outcome: Zero instances, over a window of post-merge review-fix
+     transcripts, of a `cannot be used with Skill tool` rejection followed by
+     findings from the same agent being merged.
+   - Finding: Requires production observation over a window of post-merge runs;
+     the node body explicitly documents this as deliberately not a
+     source-tree grep (the string appears only in tool results, never in
+     committed code).
+
+4. **Token-economy sensor reading for the added verifier subagent**
+   - URL path: current
+   - Expected outcome: On an instrument-failure run, the outcome envelope
+     credits no yield to the discarded instrument (`fixes_applied` counts zero
+     fixes from it).
+   - Finding: A cost/value design call requiring post-merge
+     `strategy-token-economy` sensor data. Explicitly listed as a required
+     manual check in the node body's Verification section.
+
+5. **Prompt-injection isolation of the verifier subagent**
+   - URL path: current
+   - Expected outcome: A reviewer agrees the minimally-scoped `instrument-verify`
+     agent (fed only command lines, no finding text) cannot be steered by a
+     hostile finding-description payload into reporting `verified:true`.
+   - Finding: Adversarial-design judgment about agent trust boundaries and the
+     `pwd`-derived cwd seam; not decidable by a static assertion, though the
+     design is documented and modeled on the existing residue-tree-verify
+     pattern. If `/qa-main` cannot verify this autonomously it should park to
+     office-hours rather than pass.
 
