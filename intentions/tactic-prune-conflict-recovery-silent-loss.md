@@ -73,7 +73,79 @@ execution:
 validates: []
 blocked_by:
   - tactic-hold-residue-prune-conflict-recovery-silent-loss
-office_hours: null
+office_hours:
+  reason: '/qa-main: needs-main residue item 17 on
+    tactic-prune-conflict-recovery-silent-loss is not browser-verifiable —
+    url_path is the placeholder "current" (not a real page path) and
+    expected_outcome asks a human to confirm a design/documentation tradeoff,
+    not observe prod behavior. Routed straight to cannot-verify per Step 4·0
+    without loading browser tools.'
+  since: 2026-07-31
+  recommendation: >-
+    ## What to check
+
+
+    Decide whether the rc-1 caller contract that landed with this PR (commit
+
+    777c4fe1, `packages/intentionsutil/scripts/graph-commit`) should stay
+
+    documentation-only, or whether it needs a machine-readable signal.
+
+
+    **Background.** The landed fix makes `graph-commit` land bystander `--prune`
+
+    deletions even when the invocation parks for a different, conflicted id
+    (Unit 1
+
+    in the node body) and makes `--base` freshness checks prune-aware (Unit 2).
+    The
+
+    mixed outcome — "parked overall (rc=1), but some prunes still landed" — is
+
+    documented in the script's header/comment block, but no caller currently
+
+    branches on it programmatically: the node body itself notes "no in-repo
+    caller
+
+    currently passes `--prune` programmatically" that would need to distinguish
+
+    "fully parked" from "partially landed, partially parked."
+
+
+    **The choice:**
+
+    - **Option A (status quo)** — keep it documentation-only. An agent or
+    operator
+      reading the header before retrying a parked batch sees which ids landed vs.
+      parked from the office-hours queue state and re-tries only the parked ones.
+      No code change.
+    - **Option B** — add a distinct exit code (e.g. rc=2 for "mixed outcome") or
+    a
+      machine-readable marker (e.g. a JSON summary on stdout/stderr) so a future
+      programmatic caller (like the owed-prune census workflow,
+      `packages/intentionsutil/scripts/graph-census-debt.ts:179`) can branch on it
+      without re-deriving state from the graph.
+
+    **How to verify/decide:**
+
+    1. Read `packages/intentionsutil/scripts/graph-commit`'s exit-status comment
+       block (originally at lines 68-77, may have shifted) to see the current
+       documented contract.
+    2. Check whether `graph-census-debt.ts` or any other caller has since
+    started
+       invoking `graph-commit --prune` programmatically (it did not as of this
+       plan) — if one now exists, that tips toward Option B.
+    3. If Option A: no action needed beyond acknowledging the choice — this
+       residue item can simply be marked resolved/dismissed.
+    4. If Option B: file a small follow-up tactic scoped to adding the exit code
+       or marker, referencing this node (tactic-prune-conflict-recovery-silent-loss)
+       as the source of the question.
+
+    This is a design-altitude judgment call on the primitive's contract surface,
+    not
+
+    a defect — the landed code is correct and harness-covered either way.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
