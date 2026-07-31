@@ -215,8 +215,10 @@ assert_eq "conflict-lane stdout" "conflict-lane tactic-c" "$OUT"
 assert_eq "conflict-lane exit 0" "0" "$RC"
 assert_contains "conflict-lane invokes /dispatch-conflict on the node id" \
   "/dispatch-conflict tactic-c" "$SPAWN"
-assert_contains "conflict-lane --cwd is the node's own worktree" \
-  "--cwd $MAIN_WT/.claude/worktrees/tactic-c" "$SPAWN"
+assert_contains "conflict-lane --cwd is the project root" \
+  "--cwd $MAIN_WT --model" "$SPAWN"
+assert_not_contains "conflict-lane --cwd is NOT the node's own worktree" \
+  "$MAIN_WT/.claude/worktrees/tactic-c" "$SPAWN"
 assert_contains "conflict-lane --name is the node id" "--name tactic-c" "$SPAWN"
 assert_contains "conflict-lane orchestrator model sonnet" "--model sonnet" "$SPAWN"
 assert_contains "conflict-lane spawns with --no-verify" "--no-verify" "$SPAWN"
