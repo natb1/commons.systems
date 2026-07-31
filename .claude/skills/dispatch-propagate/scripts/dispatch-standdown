@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# dispatch-standdown — CLI entry point for the losing session in the
+# duplicate-worker stand-down protocol.
+#
+# Usage: dispatch-standdown <node-id> --winner <session-id>
+#
+# Two sessions can get spawned for the same graph node (a bug elsewhere in the
+# spawn path). The session holding uncommitted/unpushed work wins; the other
+# stands down. A stand-down that is only implicit — the losing session simply
+# stops acting — is unsafe: if the winner then dies before pushing (crash,
+# OOM, API error, classifier denial), the loser (and the node) is stranded on
+# a session that no longer exists, with nobody watching. This script makes the
+# stand-down a durable, re-checkable record instead: it writes a ledger marker
+# naming the declared winner, and `standdown_recheck_sweep`
+# (lib-standdown-recheck.sh, run on both dispatch-tick cadences) re-checks that
+# winner's liveness on every subsequent tick, parking the node to office-hours
+# if the winner turns out to have died with work unpushed.
+#
+# Before writing anything, this script re-checks the winner's liveness ONE
+# MORE TIME, right now — it does not just trust the caller's premise. A
+# session decides to stand down because it believes another session is ahead
+# of it; by the time it actually calls this script, that belief may already be
+# stale. If the named winner is DEFINITELY gone at this exact moment, there is
+# no one to stand down FOR — writing a stand-down marker in that case would
+# strand the node on a winner that was never actually alive. So this script
+# refuses to write the marker in that case; it is the caller's job to notice
+# `winner-absent` and decide what to do next (most likely: become the worker
+# itself), not this script's.
+#
+# WHAT THE CALLER DOES NEXT, on `stood-down` (exit 0): yield the turn WITHOUT
+# writing a `node-terminal` marker (see `packages/intentionsutil/scripts/
+# mark-node-terminal` and dispatch-self-close's Invariant 2). The Stop hook
+# then HOLDS the job — it does not reap it — because no terminal-disposition
+# marker names this node. That hold is now SAFE: before this protocol existed
+# it was a silent trap (a held job nobody re-checks); now it is recorded in the
+# stand-down ledger, and `standdown_recheck_sweep` (tick-cadence, in
+# lib-standdown-recheck.sh) owns re-checking it from here — it will park the
+# node to office-hours if the winner dies before pushing.
+#
+# THE STANDING-DOWN SESSION MUST NEVER `claude rm` ITSELF (self-close). Both
+# duplicate sessions run in the SAME shared worktree — that is the root reason
+# this whole protocol exists. `claude rm` deletes the job AND its worktree. If
+# the winner's fix is still uncommitted or unpushed in that worktree when the
+# loser self-closes, the fix is destroyed along with it. Yielding the turn and
+# letting the Stop hook hold the job is the only safe path; the ledger marker
+# this script writes is what makes that hold observable and recoverable rather
+# than a silent stall.
+#
+# THE STANDING-DOWN SESSION MUST NEVER WRITE ITS OWN OFFICE-HOURS PARK either.
+# A park here would spuriously knock the node out of the dispatch lane while
+# the winner is still actively working it — exactly the interruption this
+# protocol exists to avoid. Only `standdown_recheck_sweep`, once it has
+# confirmed the winner is definitely gone, parks the node.
+#
+# Behavior, in order:
+#   1. Validate arguments (see the regexes below). A missing --winner flag, or
+#      either argument failing its regex, is a hard usage error — never a
+#      fallback to a default. Bad args → stderr diagnostic, exit 2.
+#   2. Re-check the winner's liveness right now via `claude_session_id_is_live`
+#      (lib-claude-agents.sh). A DEFINITE 1 (the registry queried successfully,
+#      no such session) means the winner is confirmed gone: print
+#      `winner-absent`, write NO marker, exit 3.
+#   3. Otherwise (live, or the daemon query was UNKNOWN — which
+#      claude_session_id_is_live folds into "live", fail-safe) write the
+#      ledger marker via `standdown_write <node-id> declared <winner-sid>
+#      <sessions-csv>`, where <sessions-csv> is "<winner-sid>,<own-sid>" when
+#      $CLAUDE_CODE_SESSION_ID is non-empty, or just "<winner-sid>" (no
+#      trailing comma) when it is empty/unset. Then append one best-effort
+#      decision-log record (site "standdown-declared") behind a `command -v
+#      decision_log_append` guard, built with `jq -c -n` — never fatal to this
+#      script.
+#   4. Print exactly one stdout token and exit accordingly:
+#        stood-down       marker written.                 exit 0
+#        winner-absent    winner definitely gone; no marker written.  exit 3
+#      No other stdout output on any path — diagnostics go to stderr.
+#
+# Arguments:
+#   <node-id>            Must match ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ — the same
+#                         node-id shape mark-node-terminal and
+#                         dispatch-graph-execute validate against.
+#   --winner <session-id> Required. Must match ^[0-9a-fA-F-]+$.
+#
+# Exit codes:
+#   0  stood-down — the ledger marker was written.
+#   2  usage error — missing/malformed <node-id>, missing --winner, or
+#      malformed <session-id>.
+#   3  winner-absent — the named winner is definitely not live; no marker
+#      written. The caller must decide what to do next (this script does not).
+#
+# Environment:
+#   CLAUDE_CODE_SESSION_ID  This session's own id, folded into the marker's
+#                           sessions= field alongside the winner's. Optional —
+#                           an unset/empty value omits it (and the trailing
+#                           comma) rather than writing a malformed field.
+#   CLAUDE_AGENTS_CMD       Forwarded to lib-claude-agents.sh (the winner-
+#                           liveness query). Test override; default `claude`.
+#   DISPATCH_STANDDOWN_*    Forwarded to lib-standdown-recheck.sh (ledger
+#                           location, clock, etc). See that file's header.
+#   DISPATCH_DECISION_LOG_DIR / _FILE  Forwarded to lib-decision-log.sh.
+#
+# Sandbox: the winner-liveness re-check reaches the local Claude daemon over a
+# Unix socket, so callers must run this with `dangerouslyDisableSandbox: true`
+# — see `.claude/rules/sandbox.md`.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib-claude-agents.sh
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+# shellcheck source=lib-standdown-recheck.sh
+source "$SCRIPT_DIR/lib-standdown-recheck.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-decision-log.sh" 2>/dev/null || true
+
+usage() {
+  echo "usage: dispatch-standdown <node-id> --winner <session-id>" >&2
+}
+
+# ---- Step 1: parse and validate arguments -----------------------------------
+NODE_ID=""
+WINNER_SID=""
+HAVE_WINNER=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --winner)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-standdown: --winner requires a value" >&2
+        usage
+        exit 2
+      fi
+      WINNER_SID="$2"
+      HAVE_WINNER=1
+      shift 2
+      ;;
+    *)
+      if [[ -n "$NODE_ID" ]]; then
+        echo "dispatch-standdown: unexpected extra argument: $1" >&2
+        usage
+        exit 2
+      fi
+      NODE_ID="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$NODE_ID" ]]; then
+  echo "dispatch-standdown: missing required <node-id> argument" >&2
+  usage
+  exit 2
+fi
+if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  echo "dispatch-standdown: invalid node id: $NODE_ID" >&2
+  usage
+  exit 2
+fi
+if [[ "$HAVE_WINNER" -eq 0 || -z "$WINNER_SID" ]]; then
+  echo "dispatch-standdown: missing required --winner <session-id>" >&2
+  usage
+  exit 2
+fi
+if [[ ! "$WINNER_SID" =~ ^[0-9a-fA-F-]+$ ]]; then
+  echo "dispatch-standdown: invalid --winner session id: $WINNER_SID" >&2
+  usage
+  exit 2
+fi
+
+# ---- Step 2: re-check the winner's liveness RIGHT NOW -----------------------
+# claude_session_id_is_live returns 0 (live) both on an actual match and on a
+# daemon-UNKNOWN query — folded fail-safe. Only a definite 1 (registry
+# queried, no such session) means the winner is confirmed gone.
+if ! claude_session_id_is_live "$WINNER_SID"; then
+  echo "dispatch-standdown: winner session $WINNER_SID is definitely not live; refusing to stand down for it (node=$NODE_ID)" >&2
+  echo "winner-absent"
+  exit 3
+fi
+
+# ---- Step 3: write the ledger marker ----------------------------------------
+OWN_SID="${CLAUDE_CODE_SESSION_ID:-}"
+if [[ -n "$OWN_SID" ]]; then
+  SESSIONS_CSV="${WINNER_SID},${OWN_SID}"
+else
+  SESSIONS_CSV="${WINNER_SID}"
+fi
+
+if ! standdown_write "$NODE_ID" declared "$WINNER_SID" "$SESSIONS_CSV"; then
+  echo "dispatch-standdown: could not write the stand-down ledger marker for $NODE_ID (winner=$WINNER_SID)" >&2
+  exit 2
+fi
+
+if command -v decision_log_append >/dev/null 2>&1; then
+  standdown_json=$(jq -c -n \
+    --arg ts       "$(date -u +%FT%TZ)" \
+    --arg site     "standdown-declared" \
+    --arg node     "$NODE_ID" \
+    --arg winner   "$WINNER_SID" \
+    --arg sessions "$SESSIONS_CSV" \
+    '{ts: $ts, site: $site, node: $node, winner: $winner, sessions: $sessions}' \
+    2>/dev/null) && decision_log_append "$standdown_json" || true
+fi
+
+echo "dispatch-standdown: stood down for node $NODE_ID in favour of winner $WINNER_SID (sessions=$SESSIONS_CSV); yield the turn WITHOUT a node-terminal marker so the Stop hook holds the job" >&2
+echo "stood-down"
+exit 0
