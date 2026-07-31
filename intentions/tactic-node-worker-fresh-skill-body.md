@@ -113,7 +113,7 @@ attention:
     the whole numeric scheme with lexicographic (tier, rank) and max-lifting,
     and tactic-attention-boost-scripts converts these boosts to tier/bug_fix
     marks."
-phase: review
+phase: done
 execution:
   branch: tactic-node-worker-fresh-skill-body
   pr: 3001
@@ -124,7 +124,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T15:46:11Z
+    mergeCommitSha: be86cd497cfb7eb3f0eff8d2b0fa9a988ebf82f3
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
