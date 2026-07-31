@@ -116,6 +116,15 @@
 #      naming "mis-pointed -C/--repo", never reaches "landed", main untouched
 #  35. --expect on a --prune id is a usage error (exit 2, origin untouched) —
 #      a deletion has no content to assert
+#  36. bystander prune lands despite a park on another id in the same
+#      invocation: a --prune id NOT implicated in a concurrent-edit conflict
+#      is re-applied and landed with the park commit rather than resurrected
+#      and silently dropped; the conflicted id still parks exactly as before
+#  37. stale --base on a --prune id parks with a prune-specific reason instead
+#      of resurrecting the file: check_base_freshness() refuses to hand a
+#      nonexistent --ours to merge-node.ts, so a prune whose base moved on
+#      origin/main fails closed (exit 1) rather than silently landing rc 0
+#      through the empty-diff "no new changes to stage" branch
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -174,7 +183,8 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
           t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
-          t-expect-happy t-expect-wrong-repo t-expect-prune; do
+          t-expect-happy t-expect-wrong-repo t-expect-prune \
+          t-bystander-prune t-bystander-conflict t-prune-base-stale; do
   seed_node "$id"
 done
 
@@ -313,7 +323,10 @@ cat >"$WORK/bin/npx" <<'SH'
 #     for each key appearing in ours and/or theirs, if both sides agree (or
 #     only one side touched it), that value wins; if both sides changed it
 #     away from base to DIFFERENT values (or there is no base to compare
-#     against and the two sides disagree), it is an unresolved conflict.
+#     against and the two sides disagree), it is an unresolved conflict. A
+#     missing --ours file exits 1 with no JSON, mirroring the real CLI's crash
+#     contract (merge-node.ts:14-16) instead of silently resolving from theirs
+#     alone.
 #   anything else (park_write's throwaway tsx module) — emulates `npx tsx
 #     <helper> <storeModule> <intentionsDir> <since> <reason> <snapDir>
 #     <pruneCsv> <id...>` without node. Mirrors the real helper's two-pass
@@ -340,6 +353,17 @@ case "$(basename "$2")" in
         *) shift ;;
       esac
     done
+
+    # Mirror the real CLI's crash contract (merge-node.ts:14-16: "A tool crash
+    # ... exits non-zero with an error on stderr and NO JSON on stdout") for a
+    # missing --ours file. Without this guard the shim below silently treats a
+    # nonexistent --ours as an empty OURS_V map and resolves from theirs alone
+    # — diverging from the real merge-node.ts, which throws ENOENT reading a
+    # missing --ours path.
+    if [[ -n "$ours" && ! -f "$ours" ]]; then
+      echo "merge-node shim: --ours file does not exist: $ours" >&2
+      exit 1
+    fi
 
     # theirs genuinely absent (the id no longer exists on the landed side):
     # ours is the only content, so ours wins outright (mirrors merge-node.ts's
@@ -1269,6 +1293,65 @@ if [[ $rc -eq 2 ]] \
   ok "--expect on a --prune id is a usage error (exit 2), origin untouched"
 else
   no "--expect on a prune id (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 36: bystander prune lands despite a park on another id ---------------
+# t-bystander-conflict races a concurrent edit (same shape as Case 4) while
+# t-bystander-prune, an unrelated node, is pruned in the SAME invocation. The
+# conflicted id still parks; the bystander prune is not implicated in the
+# conflict, so it must be re-applied after the park's re-sync and land WITH
+# the park commit — not resurrected on disk and silently dropped.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_line "$A" t-bystander-conflict 1 A-wins
+run_gc "$A" t-bystander-conflict >/dev/null 2>&1
+edit_line "$B" t-bystander-conflict 1 B-loses
+rm -f "$B/intentions/t-bystander-prune.md"
+out="$(run_gc "$B" -m 'test: bystander prune' t-bystander-conflict --prune t-bystander-prune 2>&1)"; rc=$?
+content="$(origin_show t-bystander-conflict 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'line1: A-wins' <<<"$content" \
+   && ! grep -q '^line1: B-loses' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content" \
+   && ! git -C "$ORIGIN" cat-file -e main:intentions/t-bystander-prune.md 2>/dev/null; then
+  ok "bystander prune: conflicted id parks, unrelated --prune lands anyway"
+else
+  no "bystander prune (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+# --- Case 37: stale --base on a --prune id parks, no resurrection --------------
+# A concurrent writer advances t-prune-base-stale on origin/main after W37
+# read its base blob. W37 then prunes it locally with that stale --base. Before
+# Unit 2, check_base_freshness() handed the (nonexistent, by --prune contract)
+# --ours path to the merge-node shim, which — lacking a guard for a missing
+# --ours — silently resolved from theirs alone, resurrecting the file and
+# landing rc 0 through the empty-diff branch. Since Unit 2, a --prune id is
+# excluded from the merge attempt entirely and parks with a prune-specific
+# reason.
+set_mode green
+W37="$WORK/w37"
+make_clone "$W37" writer-37
+stale="$(git -C "$W37" hash-object intentions/t-prune-base-stale.md)"
+OTHER37="$WORK/other37"
+make_clone "$OTHER37" other37
+echo "line13: concurrent edit" >>"$OTHER37/intentions/t-prune-base-stale.md"
+git -C "$OTHER37" commit -qam 'concurrent edit'
+git -C "$OTHER37" push -q origin main
+rm -f "$W37/intentions/t-prune-base-stale.md"
+out="$(run_gc "$W37" -m 'test: prune stale base' --base "t-prune-base-stale=$stale" --prune t-prune-base-stale 2>&1)"; rc=$?
+content="$(origin_show t-prune-base-stale 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && [[ -n "$content" ]] \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 'prune base moved' <<<"$content" \
+   && ! grep -q 'could not attempt structural merge' <<<"$content" \
+   && ! grep -q 'layer 2/3 auto-resolved' <<<"$out"; then
+  ok "prune stale base: refuses to land, parks with a prune-specific reason, no resurrection"
+else
+  no "prune stale base (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
