@@ -207,8 +207,9 @@ loud and stops — the node lanes are only invoked against a real node id, so a
 missing file is a misconfiguration (a should-never-happen), not a conflict to
 resolve or a park to escalate. Do **not** silently fall back to the local tree,
 and do **not** route it to `dispatch-mark-deviation` + Lane 1's Step 7: that
-escalation parks an *existing* node (the Stop hook's backstop `park-node` needs
-the node file), so with no node on `origin/main` there is nothing to park. The
+escalation parks an *existing* node (`dispatch-tick`'s
+`terminal_without_disposition_sweep` calls `park-node`, which needs the node
+file), so with no node on `origin/main` there is nothing to park. The
 loud non-zero exit is the correct terminal state — the operator who invoked a
 node lane against a nonexistent id sees the error directly.
 
@@ -663,10 +664,11 @@ a `transition-node` write — clearing `office_hours` via the reconciled write
 above already advanced the node out of the park. Node-lane chain continuation is
 then carried by the systemd heartbeat and the convergence reseed a graph execute
 arms — **not** by a Stop-hook read of this marker: for a graph-native node worker
-`.claude/hooks/dispatch-stop.sh`'s only duty is the escalation-park backstop (see
-that hook's header, and the graph-native `park-node` path), so the marker write
-here records phase completion but does not itself drive propagation. Then
-**stop**.
+`.claude/hooks/dispatch-stop.sh`'s only duty is the marker-gated reap delegation
+to `dispatch-self-close` (see that hook's header; the escalation park itself is
+landed by `dispatch-tick`'s `terminal_without_disposition_sweep`), so the
+marker write here records phase completion but does not itself drive
+propagation. Then **stop**.
 
 ### `ambiguous <reason>` — confirm the existing park, report, stop
 

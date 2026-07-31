@@ -19,8 +19,8 @@ two ways:
    completion but surfaced a deviation from the approved plan or the acceptance
    criteria; or `/plan-issue` hit genuine ambiguity it could not resolve and
    called `dispatch-mark-deviation`. In both cases the phase skill skipped its
-   `phase-completed` marker and wrote `office-hours-reason`; the Stop hook
-   (`dispatch-stop.sh`) applied `dispatch:office-hours` to the issue.
+   `phase-completed` marker and wrote `office-hours-reason`; `dispatch-tick`'s
+   `terminal_without_disposition_sweep` applied `dispatch:office-hours` to the issue.
 
 This skill is a **review-and-recommend dispatcher**. It runs two ways: a human
 types `/office-hours` inside an existing Claude session, or the `office-hours`

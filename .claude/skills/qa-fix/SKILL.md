@@ -10,8 +10,8 @@ The `qa` phase of the issue workflow, dispatched by `/dispatch-propagate` — th
 needs a human — a `needs-human` judgment item, an unexpected permission prompt, or
 a bounded auto-fix-exhausted bug (cap reached / scope-deviation / planning-failed
 on an `opus-fixable` item) — it escalates to office-hours via the standard path
-(skip the `phase-completed` marker, write `office-hours-reason`; the Stop hook
-applies `dispatch:office-hours` and parks the session).
+(skip the `phase-completed` marker, write `office-hours-reason`;
+`dispatch-tick`'s `terminal_without_disposition_sweep` parks the session).
 
 The Step 3.5 disposition Workflow classifies residue on a **four-class axis**:
 `opus-fixable` bugs are auto-fixed (Step 3.7); `needs-main` bugs are filed as
@@ -188,9 +188,10 @@ each fork site.
 
    - **Escalation.** Instead of `dispatch:office-hours`, write the reason to
      `$CLAUDE_JOB_DIR/office-hours-reason` (and best-next-steps to
-     `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook parks the node
-     via `park-node` (see `.claude/hooks/dispatch-stop.sh`). Also write the
-     already-bound `PR_NUM` to `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic
+     `$CLAUDE_JOB_DIR/office-hours-recommendation`); `dispatch-tick`'s
+     `terminal_without_disposition_sweep` parks the node via `park-node` (see
+     `.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`).
+     Also write the already-bound `PR_NUM` to `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic
      tempfile+`mv` write) so the park records `execution.pr`
      (tactic-office-hours-pr-custody).
    - **Merge (Step 0.5).** Skip the in-session `origin/main` merge entirely — the
