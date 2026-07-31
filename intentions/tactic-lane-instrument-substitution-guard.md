@@ -56,7 +56,54 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-main: node tactic-lane-instrument-substitution-guard's needs-main
+    residue (5 items) is not browser-verifiable — none names a real url_path
+    (all stamped \"current\") or a browser-observable outcome. Each requires
+    reading live workflow subagent transcripts, observing a real /review-fix
+    Workflow run's behavior, or making adversarial-design/cost judgment calls —
+    none of which Claude-in-Chrome can inspect. Per Step 4·0 this fails the
+    pre-triage and routes straight to cannot-verify, not Steps 4a-4e. Source PR
+    #3006 merged 2026-07-31T22:45:49Z (DEPLOY_READY=merged-and-likely-deployed),
+    so the code is live, but the check itself is out of reach for this lane."
+  since: 2026-07-31
+  recommendation: >-
+    A human (or a session with transcript/workflow-log access) should walk the
+    five needs-main residue items on
+    intentions/tactic-lane-instrument-substitution-guard.md directly:
+
+
+    1. Live no-false-failure run — find a post-merge /review-fix Workflow run in
+    this repo and confirm its `instrument-verify` subagent transcript shows
+    `verified: true` for each Lane-A instrument that actually ran, and that
+    `result.instrument_failures` is `[]`.
+
+    2. Induced-unavailability end-to-end — deliberately make an instrument
+    unreachable (e.g. point the registry's `skill` at a nonexistent name) on a
+    live lane and confirm the payload is discarded, `deviation` is set, and
+    office-hours escalation carries the verbatim rejection text.
+
+    3. Transcript sweep — grep a window of post-merge review-fix subagent
+    transcripts under ~/.claude/projects for "cannot be used with Skill tool due
+    to disable-model-invocation" and confirm no such rejection is followed by
+    that agent's findings being merged.
+
+    4. Token-economy sensor reading — on an instrument-failure run, confirm the
+    outcome envelope's `fixes_applied` credits zero fixes to the discarded
+    instrument.
+
+    5. Prompt-injection isolation — a human reviewer judgment call: does the
+    minimally-scoped `instrument-verify` agent (fed only command lines, no
+    finding text) resist being steered by a hostile finding-description payload
+    into reporting `verified: true`?
+
+
+    None of these can be driven through a browser against deployed prod — they
+    all require reading Claude Code session/workflow transcripts or making a
+    design-trust judgment. Once satisfied, transition the node main-qa -> done
+    via `.claude/skills/dispatch-propagate/scripts/transition-node
+    tactic-lane-instrument-substitution-guard`.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
