@@ -12,6 +12,13 @@
 # with a test-controlled exit code), and the clock via
 # DISPATCH_FROZEN_SESSION_NOW_EPOCH.
 #
+# The scratch repo must satisfy the sweep's two provenance checks, so the fixture
+# builds it the way a real primary checkout looks: HEAD on `main` (set explicitly
+# — CI has no init.defaultBranch, so a bare `git init` would land on `master`),
+# and the fake `park-node` installed at the ONLY path the sweep will execute,
+# `<repo-root>/packages/intentionsutil/scripts/park-node`. Tests 11 and 12 cover
+# the negative side of both checks.
+#
 # frozen_session_sweep always returns 0, but every call is still wrapped in an
 # `if` to capture the code — the test shell runs under `set -e`.
 set -euo pipefail
@@ -45,13 +52,20 @@ fs_setup() {
   FS_FAKE="$FS_DIR/fake-claude"
   FS_REPO="$FS_DIR/repo"
   FS_PROJ="$FS_DIR/projects"
-  FS_PARK="$FS_DIR/fake-park-node"
+  # The sweep executes ONLY <repo-root>/packages/intentionsutil/scripts/park-node
+  # (provenance check 2), so the fake lives there — DISPATCH_FROZEN_SESSION_PARK_NODE
+  # still selects it, it just cannot select anything outside that directory.
+  FS_PARK="$FS_REPO/packages/intentionsutil/scripts/park-node"
   FS_PARKLOG="$FS_DIR/park-node.log"
   FS_ENTRIES=()
-  mkdir -p "$FS_REPO/intentions" "$FS_PROJ/proj-a" "$FS_DIR/decisions"
+  mkdir -p "$FS_REPO/intentions" "$FS_REPO/packages/intentionsutil/scripts" \
+           "$FS_PROJ/proj-a" "$FS_DIR/decisions"
   : > "$FS_PARKLOG"
 
   git -C "$FS_REPO" init -q
+  # Provenance check 1 requires HEAD on `main`. Set it explicitly rather than
+  # relying on init.defaultBranch, which is unset in CI.
+  git -C "$FS_REPO" symbolic-ref HEAD refs/heads/main
   git -C "$FS_REPO" config user.email "test@example.com"
   git -C "$FS_REPO" config user.name "Test"
 
@@ -59,12 +73,20 @@ fs_setup() {
   # want exercised (_claude_agents_raw prefers the snapshot when it is set).
   unset DISPATCH_AGENTS_SNAPSHOT || true
 
+  # The stand-down interlock reads the stand-down ledger through
+  # `standdown_exists`. Point it at a scratch dir so the tests never see (or
+  # write) the real project-root ledger.
+  DISPATCH_STANDDOWN_DIR="$FS_DIR/standdown"
+  mkdir -p "$DISPATCH_STANDDOWN_DIR"
+
   DISPATCH_FROZEN_SESSION_NOW_EPOCH="$FS_NOW"
   DISPATCH_FROZEN_SESSION_REPO_ROOT="$FS_REPO"
   DISPATCH_FROZEN_SESSION_PROJECTS_ROOT="$FS_PROJ"
   DISPATCH_FROZEN_SESSION_PARK_NODE="$FS_PARK"
   unset DISPATCH_FROZEN_SESSION_GRACE_S || true
   unset DISPATCH_FROZEN_SESSION_PARK_MAX || true
+  unset DISPATCH_FROZEN_SESSION_PARK_TIMEOUT_S || true
+  unset DISPATCH_FROZEN_SESSION_LOCK_WAIT_S || true
 
   # lib-decision-log.sh resolves DECISION_LOG_FILE ONCE, at source time, inside
   # its load guard — so a per-test DISPATCH_DECISION_LOG_DIR set after sourcing
@@ -83,18 +105,24 @@ fs_teardown() {
   unset DISPATCH_FROZEN_SESSION_NOW_EPOCH DISPATCH_FROZEN_SESSION_REPO_ROOT \
         DISPATCH_FROZEN_SESSION_PROJECTS_ROOT DISPATCH_FROZEN_SESSION_PARK_NODE \
         DISPATCH_FROZEN_SESSION_GRACE_S DISPATCH_FROZEN_SESSION_PARK_MAX \
-        DISPATCH_DECISION_LOG_DIR || true
+        DISPATCH_FROZEN_SESSION_PARK_TIMEOUT_S DISPATCH_FROZEN_SESSION_LOCK_WAIT_S \
+        DISPATCH_DECISION_LOG_DIR DISPATCH_STANDDOWN_DIR || true
 }
 
-# fs_write_park_node <exit-code> — install the fake park-node: it appends its
-# argc and each positional argument to the log, then exits <exit-code>.
+# fs_write_park_node <exit-code> [sleep-seconds] — install the fake park-node: it
+# appends its argc, each positional argument, and the inherited
+# GRAPH_COMMIT_LOCK_WAIT_SECONDS to the log, optionally sleeps (to exercise the
+# `timeout` bound), then exits <exit-code>.
 fs_write_park_node() {
+  local sleep_s="${2:-0}"
   cat > "$FS_PARK" <<PARK
 #!/usr/bin/env bash
 {
   printf 'ARGC=%s\n' "\$#"
   for a in "\$@"; do printf 'ARG=%s\n' "\$a"; done
+  printf 'LOCK=%s\n' "\${GRAPH_COMMIT_LOCK_WAIT_SECONDS:-unset}"
 } >> "$FS_PARKLOG"
+sleep $sleep_s
 exit $1
 PARK
   chmod +x "$FS_PARK"
@@ -231,6 +259,7 @@ assert_eq "park: park-node received 3 positional args" "ARGC=3" "$(grep '^ARGC='
 assert_eq "park: node id is \$1" "tactic-frozen-one" "$(grep '^ARG=' "$FS_PARKLOG" | head -n1 | sed 's/^ARG=//')"
 assert_eq "park: stderr reports the park" "yes" "$(fs_contains 'parked tactic-frozen-one (denied-command-frozen')"
 assert_eq "park: one decision record, disposition=parked" "parked" "$(fs_log_dispositions)"
+assert_eq "park: the call carries the short landing-lock wait" "LOCK=60" "$(grep '^LOCK=' "$FS_PARKLOG")"
 assert_eq "park: summary counts one park" "yes" \
   "$(fs_contains 'sweep complete (blocked=1 parked=1 observing=0 unmeasurable=0 deferred=0)')"
 fs_teardown
@@ -400,6 +429,204 @@ assert_eq "bad-id: park-node not invoked" "0" "$(fs_park_calls)"
 assert_eq "bad-id: stderr reports the invalid node id" "yes" \
   "$(fs_contains 'frozen worker tactic-Bad_Id is not a valid node id; not parking')"
 assert_eq "bad-id: no transcript/idle line was reached for it" "no" "$(fs_contains 'idle_seconds')"
+fs_teardown
+
+# --- Test 11: the default park cap is 1 (the sweep is on the tick path) ------
+
+echo "Test: with no override the sweep parks at most one node per invocation"
+fs_setup
+fs_write_node "tactic-default-cap-one" unparked
+fs_write_node "tactic-default-cap-two" unparked
+fs_commit_nodes
+fs_write_transcript "0bac-1010" $(( FS_NOW - 4000 ))
+fs_write_transcript "0cbd-1011" $(( FS_NOW - 4000 ))
+fs_add_session "0bac-1010" "tactic-default-cap-one" "blocked"
+fs_add_session "0cbd-1011" "tactic-default-cap-two" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "default-cap: sweep returns 0" "0" "$FS_RC"
+assert_eq "default-cap: exactly one park-node invocation" "1" "$(fs_park_calls)"
+assert_eq "default-cap: summary defers the second" "yes" \
+  "$(fs_contains 'sweep complete (blocked=2 parked=1 observing=0 unmeasurable=0 deferred=1)')"
+fs_teardown
+
+# --- Test 12: a park-node call that hangs is killed, not waited on -----------
+
+echo "Test: a hanging park-node is killed by the timeout and reported as a park failure"
+fs_setup
+DISPATCH_FROZEN_SESSION_PARK_TIMEOUT_S=1
+fs_write_park_node 0 5
+fs_write_node "tactic-hang" unparked
+fs_commit_nodes
+fs_write_transcript "0dce-1212" $(( FS_NOW - 4000 ))
+fs_add_session "0dce-1212" "tactic-hang" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "timeout: sweep returns 0" "0" "$FS_RC"
+assert_eq "timeout: stderr reports the timeout" "yes" \
+  "$(fs_contains 'park failed for tactic-hang (park-node timed out after 1s); will retry next tick')"
+assert_eq "timeout: the decision record names the timeout" "park-timeout" "$(fs_log_dispositions)"
+assert_eq "timeout: summary counts zero parks" "yes" \
+  "$(fs_contains 'sweep complete (blocked=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
+fs_teardown
+
+# --- Test 13: a repo root drifted off `main` aborts the sweep ----------------
+
+echo "Test: a repo root that is not a primary checkout on main parks nothing"
+fs_setup
+fs_write_node "tactic-drifted" unparked
+fs_commit_nodes
+git -C "$FS_REPO" checkout -q -b some-feature-branch
+fs_write_transcript "0eaf-1313" $(( FS_NOW - 4000 ))
+fs_add_session "0eaf-1313" "tactic-drifted" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "drift: sweep returns 0" "0" "$FS_RC"
+assert_eq "drift: park-node not invoked" "0" "$(fs_park_calls)"
+assert_eq "drift: stderr reports the refusal" "yes" \
+  "$(fs_contains 'is not a primary checkout on main; refusing to run its park-node; parking nothing')"
+fs_teardown
+
+# --- Test 14: a park-node override outside the scripts dir is rejected -------
+
+echo "Test: a park-node path outside <repo-root>/packages/intentionsutil/scripts is rejected"
+fs_setup
+fs_write_node "tactic-rogue" unparked
+fs_commit_nodes
+ROGUE="$FS_DIR/rogue-park-node"
+cat > "$ROGUE" <<'ROGUEEOF'
+#!/usr/bin/env bash
+exit 0
+ROGUEEOF
+chmod +x "$ROGUE"
+DISPATCH_FROZEN_SESSION_PARK_NODE="$ROGUE"
+fs_write_transcript "0fba-1414" $(( FS_NOW - 4000 ))
+fs_add_session "0fba-1414" "tactic-rogue" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "rogue: sweep returns 0" "0" "$FS_RC"
+assert_eq "rogue: the in-tree park-node was not invoked either" "0" "$(fs_park_calls)"
+assert_eq "rogue: stderr reports the rejected path" "yes" "$(fs_contains 'does not resolve inside')"
+fs_teardown
+
+# --- Test 15: a non-executable park-node aborts the sweep -------------------
+
+echo "Test: a park-node that is not an executable regular file parks nothing"
+fs_setup
+fs_write_node "tactic-noexec" unparked
+fs_commit_nodes
+chmod -x "$FS_PARK"
+fs_write_transcript "0acb-1515" $(( FS_NOW - 4000 ))
+fs_add_session "0acb-1515" "tactic-noexec" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "noexec: sweep returns 0" "0" "$FS_RC"
+assert_eq "noexec: stderr reports the unusable park-node" "yes" \
+  "$(fs_contains 'is not an executable regular file; parking nothing')"
+fs_teardown
+
+# --- Test 16: a stand-down marker keeps the node ------------------------------
+#
+# A stood-down LOSER has exactly a frozen worker's shape (state=blocked, stale
+# transcript) but its session name is the node id the WINNER is actively
+# working. Parking it is the interruption the stand-down protocol exists to
+# avoid, and the stand-down re-check sweep owns the node.
+
+echo "Test: a node with a stand-down marker is kept, never parked"
+fs_setup
+fs_write_node "tactic-standdown" unparked
+fs_commit_nodes
+fs_write_transcript "0abc-1616" $(( FS_NOW - 4000 ))
+fs_add_session "0abc-1616" "tactic-standdown" "blocked"
+fs_install_claude 0
+standdown_write "tactic-standdown" declared "0def-1617" "0def-1617,0abc-1616"
+fs_run
+assert_eq "standdown: sweep returns 0" "0" "$FS_RC"
+assert_eq "standdown: park-node not invoked" "0" "$(fs_park_calls)"
+assert_eq "standdown: stderr reports the interlock" "yes" \
+  "$(fs_contains 'keeping tactic-standdown (stand-down marker present')"
+assert_eq "standdown: summary counts it as observing" "yes" \
+  "$(fs_contains 'sweep complete (blocked=1 parked=0 observing=1 unmeasurable=0 deferred=0)')"
+fs_teardown
+
+# --- Test 17: two live sessions under one node name keep the node -------------
+#
+# The marker-free half of the same interlock: a duplicate that no stand-down
+# marker records (a failed ledger write, or a pair that appeared after the
+# stand-down sweep ran earlier in this tick) is still two sessions holding one
+# node, and the blocked one is not a lone frozen worker.
+
+echo "Test: a node with two live sessions is kept even with no stand-down marker"
+fs_setup
+fs_write_node "tactic-dup-pair" unparked
+fs_write_node "tactic-lone" unparked
+fs_commit_nodes
+fs_write_transcript "0bcd-1717" $(( FS_NOW - 4000 ))
+fs_write_transcript "0cde-1718" $(( FS_NOW - 4000 ))
+# Two sessions registered under ONE node name: the blocked loser and a live
+# winner still working it.
+fs_add_session "0bcd-1717" "tactic-dup-pair" "blocked"
+fs_add_session "0def-1719" "tactic-dup-pair" "working"
+# A genuinely lone frozen worker in the same sweep still gets parked.
+fs_add_session "0cde-1718" "tactic-lone" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "dup-pair: sweep returns 0" "0" "$FS_RC"
+assert_eq "dup-pair: stderr reports the duplicate hold" "yes" \
+  "$(fs_contains 'keeping tactic-dup-pair (2 live sessions registered under this node name')"
+assert_eq "dup-pair: exactly one park-node invocation" "1" "$(fs_park_calls)"
+assert_eq "dup-pair: the lone frozen worker is the one parked" "tactic-lone" \
+  "$(grep '^ARG=' "$FS_PARKLOG" | head -n1 | sed 's/^ARG=//')"
+fs_teardown
+
+# --- Test 18: the grace boundary is inclusive (idle == grace parks) -----------
+
+echo "Test: idle exactly equal to the grace is parked (the test is idle >= grace)"
+fs_setup
+fs_write_node "tactic-boundary" unparked
+fs_commit_nodes
+fs_write_transcript "0eab-1818" $(( FS_NOW - 900 ))
+fs_add_session "0eab-1818" "tactic-boundary" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "boundary: sweep returns 0" "0" "$FS_RC"
+assert_eq "boundary: park-node invoked once" "1" "$(fs_park_calls)"
+assert_eq "boundary: stderr reports the park" "yes" \
+  "$(fs_contains 'parked tactic-boundary (denied-command-frozen after 900s')"
+fs_teardown
+
+# --- Test 19: a park-node that reads stdin cannot eat the candidate list ------
+#
+# park-node shells out to graph-commit, a long chain of git/node subprocesses.
+# If the candidate loop left the remaining candidates on the loop body's stdin,
+# one of them draining stdin would silently drop the rest of the sweep.
+
+echo "Test: a park-node that drains stdin does not drop the remaining candidates"
+fs_setup
+DISPATCH_FROZEN_SESSION_PARK_MAX=2
+cat > "$FS_PARK" <<PARK
+#!/usr/bin/env bash
+cat >/dev/null
+{
+  printf 'ARGC=%s\n' "\$#"
+  for a in "\$@"; do printf 'ARG=%s\n' "\$a"; done
+} >> "$FS_PARKLOG"
+exit 0
+PARK
+chmod +x "$FS_PARK"
+fs_write_node "tactic-stdin-one" unparked
+fs_write_node "tactic-stdin-two" unparked
+fs_commit_nodes
+fs_write_transcript "0fbc-1919" $(( FS_NOW - 4000 ))
+fs_write_transcript "0acd-1920" $(( FS_NOW - 4000 ))
+fs_add_session "0fbc-1919" "tactic-stdin-one" "blocked"
+fs_add_session "0acd-1920" "tactic-stdin-two" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "stdin-drain: sweep returns 0" "0" "$FS_RC"
+assert_eq "stdin-drain: both candidates parked" "2" "$(fs_park_calls)"
+assert_eq "stdin-drain: summary counts both" "yes" \
+  "$(fs_contains 'sweep complete (blocked=2 parked=2 observing=0 unmeasurable=0 deferred=0)')"
 fs_teardown
 
 report_results

@@ -102,19 +102,25 @@ tick_setup() {
   # cannot reach the host's real graph, transcripts, or park-node.
   export DISPATCH_FROZEN_SESSION_PROJECTS_ROOT="$TMPDIR_TEST/frozen-projects"
   mkdir -p "$TMPDIR_TEST/frozen-projects"
+  # The scratch repo must look like a real primary checkout, because the sweep
+  # asserts it: HEAD on `main` (set explicitly — CI has no init.defaultBranch),
+  # and the fake `park-node` at the only path the sweep will execute,
+  # <repo-root>/packages/intentionsutil/scripts/park-node.
   export DISPATCH_FROZEN_SESSION_REPO_ROOT="$TMPDIR_TEST/frozen-repo"
-  mkdir -p "$TMPDIR_TEST/frozen-repo/intentions"
+  mkdir -p "$TMPDIR_TEST/frozen-repo/intentions" \
+           "$TMPDIR_TEST/frozen-repo/packages/intentionsutil/scripts"
   git -C "$TMPDIR_TEST/frozen-repo" init -q
+  git -C "$TMPDIR_TEST/frozen-repo" symbolic-ref HEAD refs/heads/main
   git -C "$TMPDIR_TEST/frozen-repo" config user.email "test@example.com"
   git -C "$TMPDIR_TEST/frozen-repo" config user.name "Test"
-  export DISPATCH_FROZEN_SESSION_PARK_NODE="$TMPDIR_TEST/fake-park-node"
-  cat > "$TMPDIR_TEST/fake-park-node" <<FAKE
+  export DISPATCH_FROZEN_SESSION_PARK_NODE="$TMPDIR_TEST/frozen-repo/packages/intentionsutil/scripts/park-node"
+  cat > "$DISPATCH_FROZEN_SESSION_PARK_NODE" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >> "$TMPDIR_TEST/logs/park-node.log"
 echo "park" >> "$TMPDIR_TEST/logs/order.log"
 exit \${TICK_PARK_NODE_RC:-0}
 FAKE
-  chmod +x "$TMPDIR_TEST/fake-park-node"
+  chmod +x "$DISPATCH_FROZEN_SESSION_PARK_NODE"
   export DISPATCH_DECISION_LOG_DIR="$TMPDIR_TEST/decisions"
   mkdir -p "$TMPDIR_TEST/decisions"
 
