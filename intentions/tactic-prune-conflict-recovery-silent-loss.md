@@ -71,7 +71,8 @@ execution:
     mergeCommitSha: ce00fb25bf12a17ad9fb01728bfb9e522740f68a
     graphCommitSha: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-residue-prune-conflict-recovery-silent-loss
 office_hours: null
 pace_exempt: false
 rounds: null
