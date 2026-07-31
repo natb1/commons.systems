@@ -2657,6 +2657,41 @@ EOF
 # Install and activate the durable `dispatch-sweep-periodic.timer` (+ its paired
 # `dispatch-sweep-periodic.service`) so the worktree garbage-collector fires on a
 # wall-clock cadence instead of only from a finishing worker's Stop hook (#2023).
+# Disable a stale sweep timer/service whose installed unit points at a
+# different main-worktree path than the current one, mirroring
+# cleanup_stale_heartbeat_units above. Fires when the installed
+# WorkingDirectory= no longer matches the current main worktree (e.g. a
+# checkout path change, or a corrupted unit pointing at a deleted temp path);
+# does nothing if no unit is installed yet or its WorkingDirectory= already
+# matches. Best-effort — disable is suppressed on failure and this never
+# aborts the caller (a tick/reseed/worker launcher); the subsequent unit
+# rewrite in ensure_sweep_timer is what actually repairs the state.
+# Args: $1 = installed service-unit path, $2 = current main worktree path,
+#       $3 = systemctl command
+cleanup_stale_sweep_units() {
+  local service_path="$1"
+  local current_main_worktree="$2"
+  local systemctl_cmd="$3"
+
+  # No prior units → nothing to clean up.
+  [ -f "$service_path" ] || return 0
+
+  local installed_workdir
+  installed_workdir=$(sed -n 's/^WorkingDirectory=//p' "$service_path" | head -1)
+
+  # No WorkingDirectory= to compare → nothing to do.
+  [ -n "$installed_workdir" ] || return 0
+
+  # Path unchanged → the timer points at the right place; leave it running.
+  [ "$installed_workdir" = "$current_main_worktree" ] && return 0
+
+  # Path changed: stop the stale timer/service before the caller rewrites the
+  # unit content. Best-effort — disable exits non-zero (no [Install] section
+  # on the service), so suppress the failure and warn; never abort the caller.
+  echo "WARNING: cleanup_stale_sweep_units: installed sweep unit points at '$installed_workdir' but current main worktree is '$current_main_worktree'; disabling stale timer/service before rewrite" >&2
+  "$systemctl_cmd" --user disable --now dispatch-sweep-periodic.timer dispatch-sweep-periodic.service || true
+}
+
 # The sweep launcher currently runs only when a worker stops, so an idle or
 # drained chain never GCs its stale worktrees. A `systemd --user` timer ticks
 # regardless of chain activity, keeping the sweep durable across idle periods.
@@ -2780,6 +2815,11 @@ EOF
      && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-sweep-periodic.timer; then
     return 0
   fi
+
+  # Path-change cleanup, mirroring ensure_heartbeat_units: if the installed
+  # unit names a different main worktree (or is otherwise stale), disable it
+  # before rewriting the unit content below. Best-effort; never aborts.
+  cleanup_stale_sweep_units "$SERVICE_PATH" "$main_worktree" "$SYSTEMCTL_CMD"
 
   if ! mkdir -p "$UNIT_DIR"; then
     echo "WARNING: ensure_sweep_timer: mkdir -p $UNIT_DIR failed; periodic sweep unavailable" >&2
