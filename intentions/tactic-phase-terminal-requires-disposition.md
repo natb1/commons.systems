@@ -70,8 +70,17 @@ attention:
     codified and phase implement, with a full plan in the body; blocked_by names
     tactic-denied-command-parks-node, so the router will not select this node
     for implementation until that PR lands lib-frozen-session-park.sh."
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-phase-terminal-requires-disposition
+  pr: 3004
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -807,3 +816,37 @@ bash -c 'set -e; ! grep -q "park-node" .claude/hooks/dispatch-stop.sh; grep -q "
    its pre-session phase is what *restarts* the churn. Check the node's `phase`
    and `office_hours` on `origin/main` before reaping anything; unadvanced plus
    unparked means diagnose, not collect.
+
+## needs-main residue
+
+`/qa-fix` (PR #3004) ran the full script-verifiable + guard + lint suite green
+(178/178, 136/136, 121/121, 29/29, 83/83 tests; both `park-node`-removed and
+`dispatch-self-close`-intact guards confirmed; lint clean) and classified five
+design-judgment items through the disposition Workflow. Four downgraded to
+`needs-main` (their acceptance criterion is only observable from live post-merge
+tick behavior, per `planned_deferral: true`) and are filed here rather than as
+separate follow-up nodes, to be verified once this reaches `main-qa`:
+
+1. **id `design-2-grace-cap-defaults`** — grace default (300s,
+   `DISPATCH_TERMINAL_DISPOSITION_GRACE_S`) and park-cap default (3,
+   `DISPATCH_TERMINAL_DISPOSITION_PARK_MAX`) in `lib-frozen-session-park.sh`.
+   Expected outcome: both defaults hold up against the normal fleet's actual
+   terminal-worker volume and idle-time distribution over live tick runs; no
+   evidence of nodes parked too aggressively or too slowly.
+2. **id `design-3-unmeasurable-keep`** — a terminal worker with an
+   unreadable/rotated transcript is always kept, never parked (fail-safe
+   miss, an accepted residual per this node's own "Accepted residuals"
+   section). Expected outcome: this miss stays rare in practice and does not
+   accumulate a population of permanently-unparked terminal-without-disposition
+   nodes.
+3. **id `design-4-daemon-unknown`** — `claude_agents_list_terminal_workers`
+   returning UNKNOWN (daemon unreachable/non-array JSON) makes the sweep
+   no-op that tick, with no louder signal than the summary stderr line.
+   Expected outcome: a real daemon outage does not silently disable the sweep
+   for an extended period without being noticed via the tick journal.
+4. **id `design-5-best-effort-retry-forever`** — a structurally-failing
+   `park-node` call retries every tick indefinitely (always returns 0, no
+   escalation, no distinct signal beyond "will retry next tick" in stderr).
+   Expected outcome: no candidate is observed retrying-and-failing
+   indefinitely in production; if one does, that is itself the residue to
+   act on.
