@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Execution, IntentionNode } from "../src/schema.js";
 import { PHASES } from "../src/schema.js";
+import { IntentionSchemaError } from "../src/errors.js";
 import {
+  effectivePrecedence,
   frozenTacticSelectable,
   readingDate,
   resolveFrozenDescendant,
@@ -879,6 +881,129 @@ describe("ordering", () => {
       tactic({ id: "tactic-a", phase: "implement" }),
     ];
     expect(candidateIds(nodes)).toEqual(["tactic-a", "tactic-b"]);
+  });
+
+  it("tier is the OUTER axis: a tier-2 node at rank 0 beats a heavily boosted tier-1 node", () => {
+    const nodes = [
+      ...kinds(),
+      tactic({
+        id: "tactic-hot-tier1",
+        phase: "implement",
+        attention: { boost: 99, override: null, rationale: "very hot", tier: 1 },
+      }),
+      tactic({ id: "tactic-bug", phase: "implement", attributes: { bug_fix: true } }),
+    ];
+    expect(candidateIds(nodes)).toEqual(["tactic-bug", "tactic-hot-tier1"]);
+    const sel = selectGraphTargets(nodes);
+    expect(sel.candidates[0]).toMatchObject({ id: "tactic-bug", tier: 2, rank: 0 });
+  });
+
+  it("tier 3 sorts ahead of tier 2", () => {
+    const nodes = [
+      ...kinds(),
+      tactic({ id: "tactic-t2", phase: "implement", attributes: { bug_fix: true } }),
+      tactic({ id: "tactic-t3", phase: "implement", attributes: { tier: 3 } }),
+    ];
+    expect(candidateIds(nodes)).toEqual(["tactic-t3", "tactic-t2"]);
+  });
+
+  it("within one tier, boost still orders normally", () => {
+    const nodes = [
+      ...kinds(),
+      tactic({
+        id: "tactic-t2-low",
+        phase: "implement",
+        attributes: { bug_fix: true },
+        attention: { boost: 1, override: null, rationale: "low", tier: 2 },
+      }),
+      tactic({
+        id: "tactic-t2-high",
+        phase: "implement",
+        attributes: { bug_fix: true },
+        attention: { boost: 5, override: null, rationale: "high", tier: 2 },
+      }),
+    ];
+    expect(candidateIds(nodes)).toEqual(["tactic-t2-high", "tactic-t2-low"]);
+  });
+
+  it("a blocker's precedence lifts to the blocked node's (tier, rank); its OWN tier/rank are untouched", () => {
+    const nodes = [
+      ...kinds(),
+      tactic({
+        id: "tactic-blocker",
+        phase: "implement",
+        blocked_by: [],
+      }),
+      // Tier-3 and blocked: itself ineligible, so its urgency reaches selection
+      // only through the lift onto tactic-blocker.
+      tactic({
+        id: "tactic-blocked",
+        phase: "implement",
+        attributes: { tier: 3 },
+        blocked_by: ["tactic-blocker"],
+      }),
+      // A tier-2 node that would otherwise sort first.
+      tactic({ id: "tactic-other", phase: "implement", attributes: { bug_fix: true } }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-blocker", "tactic-other"]);
+    const blocker = sel.candidates.find((c) => c.id === "tactic-blocker");
+    expect(blocker).toMatchObject({ tier: 1, rank: 0, precedence: { tier: 3, rank: 0 } });
+  });
+
+  it("the lift is recursive: a blocker of a blocker of a tier-3 node lifts to tier 3", () => {
+    const nodes = [
+      ...kinds(),
+      tactic({ id: "tactic-root-blocker", phase: "implement" }),
+      tactic({ id: "tactic-mid", phase: "implement", blocked_by: ["tactic-root-blocker"] }),
+      tactic({
+        id: "tactic-top",
+        phase: "implement",
+        attributes: { tier: 3 },
+        blocked_by: ["tactic-mid"],
+      }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-root-blocker"]);
+    expect(sel.candidates[0]).toMatchObject({
+      tier: 1,
+      precedence: { tier: 3, rank: 0 },
+    });
+  });
+
+  it("nothing compounds: blocking TWO tier-3 nodes still lifts to tier 3, not tier 6 or a summed rank", () => {
+    const nodes = [
+      ...kinds(),
+      tactic({ id: "tactic-blocker", phase: "implement" }),
+      tactic({
+        id: "tactic-t3-a",
+        phase: "implement",
+        attributes: { tier: 3 },
+        attention: { boost: 4, override: null, rationale: "a", tier: 3 },
+        blocked_by: ["tactic-blocker"],
+      }),
+      tactic({
+        id: "tactic-t3-b",
+        phase: "implement",
+        attributes: { tier: 3 },
+        attention: { boost: 6, override: null, rationale: "b", tier: 3 },
+        blocked_by: ["tactic-blocker"],
+      }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    const blocker = sel.candidates.find((c) => c.id === "tactic-blocker");
+    // Lexicographic MAX, never a sum: tier 3 (not 6), rank 6 (not 10).
+    expect(blocker?.precedence).toEqual({ tier: 3, rank: 6 });
+  });
+
+  it("a blocked_by cycle throws IntentionSchemaError rather than looping", () => {
+    const nodes = [
+      ...kinds(),
+      tactic({ id: "tactic-a", phase: "implement", blocked_by: ["tactic-b"] }),
+      tactic({ id: "tactic-b", phase: "implement", blocked_by: ["tactic-a"] }),
+    ];
+    expect(() => selectGraphTargets(nodes)).toThrow(IntentionSchemaError);
+    expect(() => effectivePrecedence(nodes)).toThrow(/blocking precedence cycle/);
   });
 
   it("the progression ordinal runs over the full PHASES order", () => {

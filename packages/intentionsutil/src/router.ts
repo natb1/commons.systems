@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
+import { IntentionSchemaError } from "./errors.js";
 import { isStrategyStale, REVIEWED_MARKER } from "./transitions.js";
-import { PHASES } from "./schema.js";
+import { ownTier, PHASES } from "./schema.js";
 import type { FixState, IntentionNode, Phase } from "./schema.js";
 
 // Graph router v2, first half: selection (tactic-graph-router-selector).
@@ -24,8 +25,29 @@ export interface GraphCandidate {
   kind: "strategy" | "tactic";
   /** The tactic's persisted phase; `align-tactics` for a strategy. */
   phase: string;
-  /** Resolved attention rank (the outermost ordering axis). */
+  /**
+   * The node's OWN resolved attention rank — the inner ordering axis, under
+   * `tier`. Reported as resolved for THIS node; never lifted by blocking.
+   */
   rank: number;
+  /**
+   * The node's OWN resolved effective tier (`resolveAttention`'s `tier`) — the
+   * outer ordering axis. Order lexicographically by `(tier, rank)`, never by
+   * `rank` alone. Like `rank`, this is the node's own reported value and is
+   * never lifted by blocking.
+   */
+  tier: number;
+  /**
+   * The lexicographic `(tier, rank)` pair this candidate actually SORTS at —
+   * its selection precedence, which is the lexicographic max of the node's own
+   * `(tier, rank)` and the precedence of every node it blocks (recursive,
+   * max-based, never additive; see `effectivePrecedence`).
+   *
+   * Kept alongside `tier`/`rank` rather than replacing them: a blocker is
+   * RANKED higher (it drains at the urgency of what waits on it) without being
+   * BOOSTED higher (its own reported attention is untouched).
+   */
+  precedence: { tier: number; rank: number };
   /** The node's authored pace-gate bypass flag (strategy clarification 14). */
   pace_exempt: boolean;
   /** The tactic's execution.pr — the wrapper's sensor-gate input. Null for strategies. */
@@ -58,7 +80,11 @@ export interface SelectionEvent {
 }
 
 export interface GraphSelection {
-  /** Eligible nodes in selection order: rank desc, progression ordinal desc, id asc. */
+  /**
+   * Eligible nodes in selection order: lexicographic `(tier, rank)` over each
+   * candidate's LIFTED `precedence` — tier desc, then rank desc — then
+   * progression ordinal desc, then id asc.
+   */
   candidates: GraphCandidate[];
   /** Freeze / cap / gate events observed during the scan. */
   events: SelectionEvent[];
@@ -173,6 +199,102 @@ export function blockersComplete(tactic: IntentionNode, byId: Map<string, Intent
   return true;
 }
 
+/** A lexicographic `(tier, rank)` selection-precedence pair — tier outermost. */
+export interface Precedence {
+  tier: number;
+  rank: number;
+}
+
+/** Lexicographic max: tier first, rank only when tiers are equal. */
+function maxPrecedence(a: Precedence, b: Precedence): Precedence {
+  if (a.tier !== b.tier) return a.tier > b.tier ? a : b;
+  return a.rank >= b.rank ? a : b;
+}
+
+/**
+ * Selection precedence per node: the lexicographic `(tier, rank)` pair each
+ * node SORTS at, as opposed to the `(tier, rank)` it reports.
+ *
+ * A node's precedence is the lexicographic max over its own resolved
+ * `(tier, value)` and the precedence of every node that lists IT in that node's
+ * `blocked_by` — i.e. every node this node blocks. Recursive (a blocker of a
+ * blocker lifts too) and MAX-BASED, never additive: blocking two tier-3 nodes
+ * lifts a blocker to tier 3, not to "tier 6" or a summed rank. This replaces
+ * the retired backward-flow doctrine in the authored attention term: a boost no
+ * longer FLOWS into blockers (which made a node's reported rank a function of
+ * who happened to wait on it); instead the blocker keeps its own values and
+ * merely drains at the urgency of what it holds up.
+ *
+ * Computed over the FULL node array, not just the eligible/candidate list: a
+ * blocked node is itself ineligible to be a candidate, so its urgency reaches
+ * the selector ONLY through this lift onto its blocker.
+ *
+ * Blocking still GATES eligibility (`blockersComplete`) — precedence is a
+ * separate, ordering-only concern and never makes an ineligible node eligible.
+ *
+ * Cycle guard: `validateGraph` rule 15 forbids `blocked_by` cycles, but the
+ * selector runs over a store snapshot that was never necessarily validated, so
+ * the rule is not relied on here. Re-entering a node still on the recursion
+ * stack throws an `IntentionSchemaError` naming the cycle — a clear error, never
+ * a silent 0 or an infinite loop.
+ */
+export function effectivePrecedence(nodes: IntentionNode[]): Map<string, Precedence> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const attention = resolveAttention(nodes);
+
+  // reverseBlockers(id) = every node that lists `id` in its OWN blocked_by —
+  // i.e. the nodes `id` blocks. Same construction as `computeSignalPath`'s.
+  const reverseBlockers = new Map<string, string[]>();
+  for (const n of nodes) {
+    for (const blocker of n.blocked_by) {
+      const list = reverseBlockers.get(blocker);
+      if (list) list.push(n.id);
+      else reverseBlockers.set(blocker, [n.id]);
+    }
+  }
+
+  const memo = new Map<string, Precedence>();
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+
+  const resolve = (id: string): Precedence => {
+    const cached = memo.get(id);
+    if (cached !== undefined) return cached;
+    if (onStack.has(id)) {
+      throw new IntentionSchemaError(
+        `blocking precedence cycle: ${[...stack, id].join(" -> ")}`,
+      );
+    }
+    onStack.add(id);
+    stack.push(id);
+
+    // The node's OWN pair. An ineligible node (not goal-layer) has no
+    // `ResolvedAttention` entry; it can still sit mid-chain, so fall back to its
+    // own authored tier and the neutral rank baseline (0) rather than dropping it.
+    const resolved = attention.get(id);
+    const node = byId.get(id);
+    let best: Precedence =
+      resolved !== undefined
+        ? { tier: resolved.tier, rank: resolved.value }
+        : { tier: node !== undefined ? ownTier(node) : 1, rank: 0 };
+
+    for (const blocked of reverseBlockers.get(id) ?? []) {
+      if (!byId.has(blocked)) continue;
+      best = maxPrecedence(best, resolve(blocked));
+    }
+
+    stack.pop();
+    onStack.delete(id);
+    memo.set(id, best);
+    return best;
+  };
+
+  // Deterministic entry order (id ascending), though the max-fold result is
+  // order-independent.
+  for (const id of nodes.map((n) => n.id).sort()) resolve(id);
+  return memo;
+}
+
 /**
  * A candidate's progression ordinal over the full `PHASES` order (schema.ts):
  * the index of its effective phase, so a MORE-progressed candidate carries a
@@ -241,16 +363,33 @@ function progressionIndex(candidate: GraphCandidate, byId: Map<string, Intention
  * A strategy with only draft children still emits its own fresh-round
  * align-tactics candidate; the two compete by rank.
  *
- * Order: resolved attention rank outermost (node-keyed, directly from
- * `resolveAttention` — the retired node↔issue rank-map bridge is not revived);
- * within a rank level the progression ordinal (full `PHASES` order) sorts the
- * more-progressed candidate first; id ascending as the deterministic tiebreak.
+ * Order: lexicographic `(tier, rank)`, tier outermost — both node-keyed and
+ * directly from `resolveAttention` (the retired node↔issue rank-map bridge is
+ * not revived). A tier-2 node at rank 0 therefore outranks a tier-1 node with
+ * any boost; rank orders only WITHIN a tier. The pair actually sorted is each
+ * candidate's `precedence`, not its own reported `(tier, rank)`: a node's
+ * selection precedence is lifted to the lexicographic max of its own pair and
+ * the precedence of every node it blocks (`effectivePrecedence` — recursive,
+ * max-based, never additive), so a blocker drains at the urgency of what waits
+ * on it while its own reported `tier`/`rank` stay untouched. Blocking still
+ * gates and serializes eligibility; it never boosts. Within one precedence pair
+ * the progression ordinal (full `PHASES` order) sorts the more-progressed
+ * candidate first; id ascending as the deterministic tiebreak.
  */
 export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const attention = resolveAttention(nodes);
+  // Computed over the FULL node array: a blocked node is never a candidate, so
+  // its urgency reaches selection only as a lift onto the blocker.
+  const precedence = effectivePrecedence(nodes);
   const onPath = computeSignalPath(nodes);
   const events: SelectionEvent[] = [];
+
+  /** The node's OWN reported tier (never lifted). */
+  const tierOf = (n: IntentionNode): number => attention.get(n.id)?.tier ?? ownTier(n);
+  /** The lifted pair the candidate sorts at. */
+  const precedenceOf = (n: IntentionNode): Precedence =>
+    precedence.get(n.id) ?? { tier: tierOf(n), rank: attention.get(n.id)?.value ?? 0 };
 
   const strategies = nodes.filter((n) => n.kind === "strategy");
   const tactics = nodes.filter((n) => n.kind === "tactic");
@@ -324,6 +463,8 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
       // its real `phase` stays put and the interrupt is carried orthogonally.
       phase: t.execution?.fix != null ? "fix" : t.phase,
       rank: attention.get(t.id)?.value ?? 0,
+      tier: tierOf(t),
+      precedence: precedenceOf(t),
       pace_exempt: t.pace_exempt,
       pr: t.execution?.pr ?? null,
       fix: t.execution?.fix ?? null,
@@ -350,6 +491,8 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
         kind: "tactic",
         phase: "align-tactics", // directive rung, not the node's real (null) phase
         rank: attention.get(t.id)?.value ?? 0,
+        tier: tierOf(t),
+        precedence: precedenceOf(t),
         pace_exempt: t.pace_exempt,
         pr: null,
         fix: null,
@@ -361,6 +504,8 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
         kind: "tactic",
         phase: "align-tactics",
         rank: attention.get(t.id)?.value ?? 0,
+        tier: tierOf(t),
+        precedence: precedenceOf(t),
         pace_exempt: t.pace_exempt,
         pr: t.execution?.pr ?? null,
         fix: t.execution?.fix ?? null,
@@ -378,6 +523,8 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
       kind: "strategy",
       phase: "align-tactics",
       rank: attention.get(s.id)?.value ?? 0,
+      tier: tierOf(s),
+      precedence: precedenceOf(s),
       pace_exempt: s.pace_exempt,
       pr: null,
       fix: null,
@@ -440,7 +587,9 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
 
   // --- Order -------------------------------------------------------------------
   candidates.sort((a, b) => {
-    if (a.rank !== b.rank) return b.rank - a.rank;
+    // Lexicographic (tier, rank) over the LIFTED precedence pair, tier outermost.
+    if (a.precedence.tier !== b.precedence.tier) return b.precedence.tier - a.precedence.tier;
+    if (a.precedence.rank !== b.precedence.rank) return b.precedence.rank - a.precedence.rank;
     const ap = progressionIndex(a, byId);
     const bp = progressionIndex(b, byId);
     if (ap !== bp) return bp - ap;
@@ -484,7 +633,8 @@ export function strategyAlignSelectable(strategy: IntentionNode, nodes: Intentio
  * with office_hours null and complete blockers.
  *
  * The selector is the single source of truth: this walks its ALREADY-SORTED
- * candidate list (rank desc, progression ordinal desc, id asc) and returns the
+ * candidate list (precedence tier desc, precedence rank desc, progression
+ * ordinal desc, id asc) and returns the
  * node behind the first qualifying candidate, so ranking/tiebreaks match the
  * real selection exactly. Returns null for a zero-tactic strategy or one whose
  * descendants are all non-frozen.
