@@ -115,17 +115,27 @@
 #     boolean silently coerced to a healthy state (same shape as
 #     dispatch-graph-main-red-sync's UNKNOWN sentinel):
 #       SWEEP_STATUS     ok | unavailable
-#       SWEEP_CROSSCHECK ok | mismatch | unavailable | skipped
+#       SWEEP_CROSSCHECK ok | mismatch | inconsistent | unavailable | skipped
 #     On the live-journal path the read is cross-checked against a SECOND,
-#     identifier-UNfiltered `--grep` probe over the same window. If the journal
-#     holds more reclaim lines than the `-t dispatch-tick` filter matched, the
-#     filter is undercounting and the rate is only a LOWER BOUND.
+#     identifier-UNfiltered `--grep` probe over the SAME CLOSED window (both
+#     probes are bounded `--since`/`--until`, so neither can see records the
+#     other could not). If the journal holds more reclaim lines than the
+#     `-t dispatch-tick` filter matched, the filter is undercounting and the
+#     rate is only a LOWER BOUND (`mismatch`). The unfiltered probe is a strict
+#     superset of the filtered read, so the reverse (journal < filtered) is a
+#     contradiction between the two probes: it is graded `inconsistent`, never
+#     `ok` — an inequality in either direction means the cross-check established
+#     nothing.
 #
 # EXIT CODES
 #   0  ok
 #   2  usage error (bad/unknown arg, non-integer --days, no GNU date)
 #   3  sweep counts are not trustworthy (SWEEP_STATUS != ok or
 #      SWEEP_CROSSCHECK == mismatch) — the report was still emitted in full
+#      `inconsistent` and `unavailable` do NOT set 3: like a `--grep`-less
+#      journalctl, they say the cross-check could not establish anything, which
+#      is not itself evidence the `-t` counts undercount. Both print their own
+#      distinct stderr warning and report NOTE.
 set -euo pipefail
 
 # Fail fast if GNU date is not available (BSD/macOS date uses a different syntax).
@@ -180,7 +190,7 @@ trap 'rm -rf "$TMP"' EXIT
 SWEEP_RAW="$TMP/sweep.txt"
 # Status sentinels — never a boolean silently coerced to a healthy state.
 #   SWEEP_STATUS     ok | unavailable
-#   SWEEP_CROSSCHECK ok | mismatch | unavailable | skipped
+#   SWEEP_CROSSCHECK ok | mismatch | inconsistent | unavailable | skipped
 SWEEP_STATUS=ok
 SWEEP_CROSSCHECK=skipped
 SWEEP_SOURCE=""
@@ -212,17 +222,24 @@ else
   if command -v "$JOURNALCTL" >/dev/null 2>&1; then
     # Capture explicitly so a non-zero exit (no systemd, sandboxed) cannot kill
     # the script under `set -e`. -o short-iso puts a parseable ISO timestamp at
-    # the start of each line. Window to --since so the denominator matches the
-    # transcript window.
-    if "$JOURNALCTL" --user -t dispatch-tick -o short-iso --no-pager --since "$SINCE" >"$SWEEP_RAW" 2>/dev/null; then
-      # CROSS-CHECK — a SECOND probe over the same window with NO identifier
-      # filter at all. If the journal holds more reclaim lines than the
-      # `-t dispatch-tick` filter matched, the filter is undercounting and the
-      # rate below is a lower bound, not a measurement. This is the direct guard
-      # against the class of bug where the filter flag silently drops emitters.
+    # the start of each line. Window to the CLOSED [--since .. --until] interval
+    # so the denominator matches the transcript window AND matches, exactly, the
+    # window the cross-check probe below scans: an open-ended read would end at
+    # its own invocation instant, and the ~0.1s gap between the two probes would
+    # manufacture a false `mismatch` whenever a reclaim landed in that gap.
+    if "$JOURNALCTL" --user -t dispatch-tick -o short-iso --no-pager \
+         --since "$SINCE" --until "$UNTIL" >"$SWEEP_RAW" 2>/dev/null; then
+      # CROSS-CHECK — a SECOND probe over the same closed window with NO
+      # identifier filter at all. If the journal holds more reclaim lines than
+      # the `-t dispatch-tick` filter matched, the filter is undercounting and
+      # the rate below is a lower bound, not a measurement. This is the direct
+      # guard against the class of bug where the filter flag silently drops
+      # emitters. The --grep pre-filter uses the same ALL_RECLAIM_RE constant as
+      # both authoritative `grep -c` counts below, so the two sides of the
+      # comparison cannot drift apart.
       CROSSCHECK_RAW="$TMP/crosscheck.txt"
-      if "$JOURNALCTL" --user --no-pager -o cat --since "$SINCE" \
-           --grep 'lib-reservation-ledger: reclaimed reservation' >"$CROSSCHECK_RAW" 2>/dev/null; then
+      if "$JOURNALCTL" --user --no-pager -o cat --since "$SINCE" --until "$UNTIL" \
+           --grep "$ALL_RECLAIM_RE" >"$CROSSCHECK_RAW" 2>/dev/null; then
         CROSSCHECK_JOURNAL_LINES=$(grep -cE "$ALL_RECLAIM_RE" "$CROSSCHECK_RAW" || true)
         CROSSCHECK_FILTERED_LINES=$(grep -cE "$ALL_RECLAIM_RE" "$SWEEP_RAW" || true)
         CROSSCHECK_JOURNAL_LINES=${CROSSCHECK_JOURNAL_LINES:-0}
@@ -230,6 +247,15 @@ else
         if (( CROSSCHECK_JOURNAL_LINES > CROSSCHECK_FILTERED_LINES )); then
           SWEEP_CROSSCHECK=mismatch
           echo "dispatch-reclaim-audit: sweep filter UNDERCOUNT — the journal holds $CROSSCHECK_JOURNAL_LINES reclaim lines in this window but the -t dispatch-tick filter matched only $CROSSCHECK_FILTERED_LINES; rate counts are a LOWER BOUND" >&2
+        elif (( CROSSCHECK_JOURNAL_LINES < CROSSCHECK_FILTERED_LINES )); then
+          # The unfiltered probe is a strict superset of the filtered read, so it
+          # can never legitimately see FEWER lines. The two probes contradict
+          # each other (journal rotation between them, or a broken journalctl),
+          # which means the cross-check established nothing — grading it `ok`
+          # would be exactly the silent coercion to a healthy state this sentinel
+          # exists to prevent.
+          SWEEP_CROSSCHECK=inconsistent
+          echo "dispatch-reclaim-audit: sweep cross-check INCONSISTENT — the unfiltered probe returned $CROSSCHECK_JOURNAL_LINES reclaim lines but the -t dispatch-tick filter matched $CROSSCHECK_FILTERED_LINES over the same window; the probes contradict each other, so no undercount check was established" >&2
         else
           SWEEP_CROSSCHECK=ok
         fi
@@ -463,8 +489,9 @@ if (( JSON_OUT )); then
         crosscheck: $sweep_crosscheck,
         # Retained for callers reading the pre-sentinel key; derived from status.
         available: ($sweep_status == "ok"),
-        # Always emitted; meaningful only when crosscheck == "mismatch" (0/0
-        # otherwise, i.e. when the unfiltered probe did not run).
+        # Always emitted; meaningful only when crosscheck == "mismatch" or
+        # "inconsistent" (0/0 otherwise, i.e. when the unfiltered probe did not
+        # run).
         crosscheck_journal_lines: $crosscheck_journal_lines,
         crosscheck_filtered_lines: $crosscheck_filtered_lines,
         dead_session_stranded_events: $dead_events,
@@ -510,6 +537,10 @@ if [[ "$SWEEP_STATUS" != ok ]]; then
 fi
 if [[ "$SWEEP_CROSSCHECK" == mismatch ]]; then
   printf 'NOTE: sweep filter UNDERCOUNT — journal holds %d reclaim lines in this window, the identifier filter matched %d. Rate counts below are a LOWER BOUND, not a measurement.\n' \
+    "$CROSSCHECK_JOURNAL_LINES" "$CROSSCHECK_FILTERED_LINES"
+fi
+if [[ "$SWEEP_CROSSCHECK" == inconsistent ]]; then
+  printf 'NOTE: sweep filter cross-check INCONSISTENT — the unfiltered probe returned %d reclaim lines but the identifier filter matched %d over the same window. The probes contradict each other, so no undercount check was established.\n' \
     "$CROSSCHECK_JOURNAL_LINES" "$CROSSCHECK_FILTERED_LINES"
 fi
 if [[ "$SWEEP_CROSSCHECK" == unavailable ]]; then

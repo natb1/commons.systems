@@ -280,6 +280,33 @@ assert_eq "journalctl-path sweep.crosscheck" '"ok"' \
   "$(jq '.sweep.crosscheck' <<<"$JOURNALCTL_OUT")"
 assert_eq "journalctl-path exit code" "0" "$JOURNALCTL_RC"
 
+# --- case A, argv assertions: pin the CONSTRUCTED command -------------------
+# `.sweep.source` asserted above is a hand-maintained display string inside
+# dispatch-reclaim-audit, decoupled from the real invocation — it proves nothing
+# about the flags actually passed to journalctl. These assertions read the stub's
+# own argv log instead, so a revert to the `-u` unit filter, a dropped `--grep`
+# probe, or an unbounded (open-ended) window fails here directly rather than only
+# via the downstream counts.
+ARGV_TOTAL_LINES=$(grep -c '' "$JOURNALCTL_ARGV_LOG" || true)
+ARGV_T_LINES=$(grep -c -- '-t dispatch-tick' "$JOURNALCTL_ARGV_LOG" || true)
+ARGV_U_LINES=$(grep -c -- '-u dispatch-tick' "$JOURNALCTL_ARGV_LOG" || true)
+ARGV_GREP_LINES=$(grep -c -- '--grep' "$JOURNALCTL_ARGV_LOG" || true)
+ARGV_UNTIL_LINES=$(grep -c -- '--until' "$JOURNALCTL_ARGV_LOG" || true)
+
+assert_eq "journalctl argv: identifier read used -t dispatch-tick" "1" \
+  "$(( ARGV_T_LINES >= 1 ? 1 : 0 ))"
+assert_eq "journalctl argv: never invoked with the -u unit filter" "0" \
+  "${ARGV_U_LINES:-0}"
+assert_eq "journalctl argv: unfiltered --grep cross-check probe ran" "1" \
+  "$(( ARGV_GREP_LINES >= 1 ? 1 : 0 ))"
+assert_eq "journalctl argv: both probes invoked" "1" \
+  "$(( ARGV_TOTAL_LINES >= 2 ? 1 : 0 ))"
+# Every probe must carry --until: an open-ended window would end at each probe's
+# own invocation instant, and a reclaim landing in the gap between them would
+# manufacture a false `mismatch` on a healthy filter.
+assert_eq "journalctl argv: every probe bounded with --until" "$ARGV_TOTAL_LINES" \
+  "${ARGV_UNTIL_LINES:-0}"
+
 # --- case B: journalctl errors → status unavailable, exit 3 -----------------
 # The read itself fails (no systemd / sandboxed). The counts are zero, but zero
 # here means NOT MEASURED — the sentinel and the non-zero exit make that
@@ -327,6 +354,32 @@ assert_eq "undercount sweep.crosscheck_journal_lines" "6" \
 assert_eq "undercount sweep.crosscheck_filtered_lines" "2" \
   "$(jq '.sweep.crosscheck_filtered_lines' <<<"$UNDER_OUT")"
 assert_eq "undercount exit code" "3" "$UNDER_RC"
+
+# --- case D: contradictory probes → crosscheck inconsistent, exit 0 ---------
+# The unfiltered probe is a strict superset of the identifier-filtered read, so
+# it can never legitimately return FEWER lines. When it does, the two probes
+# contradict each other and the cross-check established nothing — it must NOT be
+# graded "ok" (that is the silent coercion to a healthy state the sentinel
+# exists to prevent). It does not set exit 3 either: a contradiction is not
+# evidence the -t counts undercount.
+make_journalctl_stub "$ROOT/journalctl-stub-incons" "$ROOT/lines6.txt" "$ROOT/lines2.txt" 0 0
+export DISPATCH_RECLAIM_JOURNALCTL_CMD="$ROOT/journalctl-stub-incons"
+
+INCONS_RC=0
+INCONS_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json 2>/dev/null) || INCONS_RC=$?
+
+echo ""
+echo "--- assertions (probes contradict → inconsistent, never ok) ---"
+
+assert_eq "inconsistent sweep.status" '"ok"' \
+  "$(jq '.sweep.status' <<<"$INCONS_OUT")"
+assert_eq "inconsistent sweep.crosscheck" '"inconsistent"' \
+  "$(jq '.sweep.crosscheck' <<<"$INCONS_OUT")"
+assert_eq "inconsistent sweep.crosscheck_journal_lines" "2" \
+  "$(jq '.sweep.crosscheck_journal_lines' <<<"$INCONS_OUT")"
+assert_eq "inconsistent sweep.crosscheck_filtered_lines" "6" \
+  "$(jq '.sweep.crosscheck_filtered_lines' <<<"$INCONS_OUT")"
+assert_eq "inconsistent exit code" "0" "$INCONS_RC"
 
 export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
 unset DISPATCH_RECLAIM_JOURNALCTL_CMD
