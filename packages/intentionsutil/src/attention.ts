@@ -1,4 +1,5 @@
 import { IntentionSchemaError } from "./errors.js";
+import { ownTier } from "./schema.js";
 import type { IntentionNode } from "./schema.js";
 
 // --- Types -------------------------------------------------------------------
@@ -13,6 +14,19 @@ export interface TermContribution {
 export interface ResolvedAttention {
   /** The node's rank — the weighted sum of every term's contribution. */
   value: number;
+  /**
+   * The node's EFFECTIVE tier — the outer ranking axis, dominating `value`
+   * lexicographically: order by `(tier, value)`, never by `value` alone. It is
+   * `max` of the node's own tier (`ownTier`: bug_fix/security marks or an
+   * explicit `attributes.tier`) and the effective tier of every node that
+   * distributes to it (parent/serves), so a tier lift flows downward exactly
+   * like the authored term does.
+   *
+   * Required, not optional: an optional field invites a `?? 1` fallback at call
+   * sites, which would silently sort a genuinely tier-3 node into tier 1 —
+   * exactly the bug this axis exists to prevent.
+   */
+  tier: number;
   /**
    * Ids of the source nodes whose authored boosts/overrides contribute to this
    * node's rank via the `authored` term, ordered by contribution (largest
@@ -233,25 +247,26 @@ export function computeSignalPath(nodes: IntentionNode[]): Set<string> {
  *
  *   - `authored` — additive-flow rank via an outgoing `Map<sourceId, amount>`
  *     per node, without decay or dilution ("hot means hot"). A node's outgoing
- *     set flows to its distributees along three edge relations: down `parent`
- *     and `serves` to its subtree (the v2 downward flow), AND backward along
- *     `blocked_by` to its blockers — every node X distributes its set to each
- *     id in `X.blocked_by`, so a boost/override on a blocked node lifts its
- *     whole critical path, recursively and interleaved with the downward flow
- *     (2026-07-07 `strategy-graph-drives-dispatch` clarifications: applying
- *     attention prioritizes the full critical path to the hot node). An
- *     `override` REPLACES a node's outgoing set with `{(self, override)}`
- *     (incoming discarded — a cap on this node's own branch, though a
- *     distributee's OTHER sources still contribute their own claims); a `boost`
- *     adds `(self, boost)` to the incoming union. Computed as a monotone
- *     fixpoint (the widened relation admits legitimate mixed
- *     parent/serves/blocked_by cycles — e.g. a node blocked by a tactic inside
- *     its own subtree): each non-override node's outgoing = union of its
- *     distributors' outgoing plus its own boost entry, iterated to convergence
- *     (unions only grow, override outputs are constant). This term is also the
- *     one that reports `sources` (the "via strategy-x" explainability marker)
- *     and short-circuits the whole composition on `override` — clarification
- *     11: "an override pins the value absolutely."
+ *     set flows DOWNWARD ONLY, along `parent` and `serves`, to its subtree.
+ *     It does NOT flow backward along `blocked_by`: a boost on a blocked node
+ *     no longer lifts its blockers. Blocking precedence is a separate,
+ *     structural concern of the selector — an authored value flowing into a
+ *     blocker made the blocker's rank a function of who happened to be blocked
+ *     on it, which is not what the author claimed. An `override` REPLACES a
+ *     node's outgoing set with `{(self, override)}` (incoming discarded — a cap
+ *     on this node's own branch, though a distributee's OTHER sources still
+ *     contribute their own claims); a `boost` adds `(self, boost)` to the
+ *     incoming union. Computed as a monotone fixpoint: each non-override node's
+ *     outgoing = union of its distributors' outgoing plus its own boost entry,
+ *     iterated to convergence (unions only grow, override outputs are
+ *     constant). The fixpoint is kept as-is — it is still correct and still the
+ *     mechanism — but with `blocked_by` out of the distributor relation, MIXED
+ *     parent/blocked_by cycles can no longer arise at all; the only cycle the
+ *     relation can now form is a pure `parent` (or parent/serves) cycle, and
+ *     the pure-parent-cycle guard below is what remains active against it.
+ *     This term is also the one that reports `sources` (the "via strategy-x"
+ *     explainability marker) and short-circuits the whole composition on
+ *     `override` — clarification 11: "an override pins the value absolutely."
  *   - `signal` — structural: a node is on-path iff it (transitively) blocks —
  *     reachable by walking `blocked_by` in reverse (who lists me as a
  *     blocker), or inherits down a `parent` chain — a validates-terminal: a
@@ -268,12 +283,24 @@ export function computeSignalPath(nodes: IntentionNode[]): Set<string> {
  *
  * New attention conditions add as terms with weights — never bands.
  *
+ * Orthogonal to the weighted sum, every result also carries a `tier` — the
+ * OUTER ranking axis. `tier` is resolved as its own monotone fixpoint over the
+ * SAME downward distributor relation: `effectiveTier(n) = max(ownTier(n), max
+ * over distributors d of effectiveTier(d))`. So a tier-3 strategy lifts every
+ * tactic serving it, and tier never flows upward. It is resolved for EVERY node
+ * (an ineligible node can still sit mid-chain relaying tier to descendants),
+ * though only eligible nodes get a `ResolvedAttention` entry. Consumers order
+ * lexicographically by `(tier, value)` — tier dominates, value breaks ties
+ * within a tier. An `override` pins `value` only; `tier` is a separate axis and
+ * is still computed and reported on an overridden node.
+ *
  * Cycle guards: the authored term throws an `IntentionSchemaError` only on a
  * pure `parent`-edge cycle (a node that is its own ancestor — malformed, and
  * NOT caught by `validateGraph`, whose rule 15 rejects only `blocked_by`
- * cycles); its values are ill-defined there. Cycles that involve a `blocked_by`
- * edge are legitimate under the backward flow and resolve via the monotone
- * fixpoint. The signal term's reachability DFS does NOT throw on a cycle: a
+ * cycles); its values are ill-defined there. With `blocked_by` no longer in the
+ * distributor relation, a mixed parent/blocked_by cycle can no longer arise, so
+ * that guard is the only cycle guard the authored/tier fixpoints need. The
+ * signal term's reachability DFS does NOT throw on a cycle: a
  * boolean OR-over-paths query is well-defined even with a cycle in the mix — a
  * node fully enclosed in a cycle with no external escape to a terminal simply
  * isn't on-path, which is the correct answer, not an error.
@@ -290,28 +317,15 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
     return kindNode !== undefined && kindNode.attributes.goal_layer === true;
   };
 
-  // --- Authored term (monotone fixpoint over the widened relation) -------
-
-  // reverseBlockers(id) = every node that lists `id` in its OWN blocked_by —
-  // i.e. the nodes `id` blocks. Same construction as `computeSignalPath` above.
-  // A node X flows its outgoing set BACKWARD to each of its blockers (the ids in
-  // X.blocked_by), so a boost/override on a blocked node lifts its blockers, and
-  // their subtrees inherit via the normal downward flow. Built once.
-  const reverseBlockers = new Map<string, string[]>();
-  for (const n of nodes) {
-    for (const blocker of n.blocked_by) {
-      const list = reverseBlockers.get(blocker);
-      if (list) list.push(n.id);
-      else reverseBlockers.set(blocker, [n.id]);
-    }
-  }
+  // --- Distributor relation (downward only) -------------------------------
 
   // Distribution edges into c — the nodes whose outgoing set c inherits:
-  //   { c.parent } ∪ (eligible c only) { c.serves } ∪ { X : c ∈ X.blocked_by }.
-  // The first two are the v2 downward flow; the third is the backward
-  // blocked_by flow (reverseBlockers(c) = the nodes c blocks, each of which
-  // distributes its sources to c). Each restricted to ids that resolve; sorted
-  // for determinism.
+  //   { c.parent } ∪ (eligible c only) { c.serves }.
+  // Downward only. `blocked_by` is deliberately NOT part of this relation: a
+  // boost on a blocked node does not flow back into its blockers (blocking
+  // precedence is the selector's structural concern, not an authored value's).
+  // Each entry is restricted to ids that resolve; sorted for determinism.
+  // Shared by the authored-term fixpoint and the effective-tier fixpoint below.
   const distributorIds = (c: IntentionNode): string[] => {
     const ids = new Set<string>();
     if (c.parent !== null && byId.has(c.parent)) ids.add(c.parent);
@@ -319,9 +333,6 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
       for (const s of c.serves) {
         if (byId.has(s)) ids.add(s);
       }
-    }
-    for (const blocked of reverseBlockers.get(c.id) ?? []) {
-      if (byId.has(blocked)) ids.add(blocked);
     }
     return [...ids].sort();
   };
@@ -332,9 +343,10 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
   // from any node either reaches a root (`parent === null`) or repeats; a
   // repeat is the cycle. Surface it as a clear error (authored values are
   // ill-defined under a pure authored cycle) rather than let the fixpoint
-  // silently converge it to 0. Cycles that involve a `blocked_by` edge are
-  // legitimate under the backward flow and are handled by the fixpoint — this
-  // guard fires ONLY on parent-only cycles.
+  // silently converge it to 0. This is now the ONLY cycle the distributor
+  // relation can form: with `blocked_by` removed from it, a mixed
+  // parent/blocked_by cycle can no longer arise at all, so this pure-parent
+  // guard is the one that remains active.
   for (const start of nodes) {
     const seen = new Set<string>();
     let cur: IntentionNode | undefined = start;
@@ -348,6 +360,8 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
       cur = byId.get(cur.parent);
     }
   }
+
+  // --- Authored term (monotone fixpoint over the downward relation) --------
 
   // Outgoing source set per node, computed as a monotone fixpoint. Seed each
   // node from its own authored field: override → the constant `{(self,
@@ -413,6 +427,38 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
     }
   }
 
+  // --- Effective tier (monotone fixpoint over the SAME downward relation) --
+
+  // effectiveTier(n) = max(ownTier(n), max over distributors d of
+  // effectiveTier(d)). Same shape and sweep style as the authored fixpoint
+  // above: seed from the node's own value, then sweep in sorted id order until
+  // a full pass changes nothing. Values only increase and are bounded above by
+  // the top tier, so convergence is guaranteed; the sorted sweep keeps the
+  // result independent of input order.
+  //
+  // Resolved for EVERY node, not just eligible ones: an ineligible node (a
+  // virtue, say) can sit mid-chain and relay a tier to its descendants, so
+  // skipping it would silently cut the chain. Only eligible nodes still get a
+  // `ResolvedAttention` entry in the output map.
+  const effectiveTier = new Map<string, number>();
+  for (const n of nodes) effectiveTier.set(n.id, ownTier(n));
+
+  let tierChanged = true;
+  while (tierChanged) {
+    tierChanged = false;
+    for (const id of sortedNodeIds) {
+      const node = mustGet(byId, id, "node");
+      let next = mustGet(effectiveTier, id, "effectiveTier entry");
+      for (const d of distributorIds(node)) {
+        next = Math.max(next, mustGet(effectiveTier, d, "effectiveTier entry"));
+      }
+      if (next !== mustGet(effectiveTier, id, "effectiveTier entry")) {
+        effectiveTier.set(id, next);
+        tierChanged = true;
+      }
+    }
+  }
+
   // --- Signal-satisfaction term -------------------------------------------
   // Shared with the graph router's strategy-eligibility gate — see
   // computeSignalPath above for the reachability semantics and cycle handling.
@@ -464,12 +510,17 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
       .sort((a, b) => (a[1] !== b[1] ? b[1] - a[1] : a[0] < b[0] ? -1 : 1))
       .map(([src]) => src);
 
+    const tier = mustGet(effectiveTier, n.id, "effectiveTier entry");
+
     const overridden = n.attention !== null && n.attention.override !== null;
     if (overridden) {
       // Clarification 11: an override pins the value absolutely — derived
-      // terms never silently overwhelm (or even touch) it.
+      // terms never silently overwhelm (or even touch) it. It pins the VALUE
+      // only: tier is a separate, outer axis, so an overridden node still
+      // reports its computed (possibly inherited) effective tier.
       result.set(n.id, {
         value: authoredValue,
+        tier,
         sources,
         terms: [{ term: "authored", value: authoredValue }],
       });
@@ -481,6 +532,7 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
     const value = authoredValue + signalValue + captureValue;
     result.set(n.id, {
       value,
+      tier,
       sources,
       terms: [
         { term: "authored", value: authoredValue },

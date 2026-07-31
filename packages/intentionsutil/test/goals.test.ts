@@ -154,7 +154,7 @@ describe("projectGoals attention ordering", () => {
       id: "strategy-s",
       kind: "strategy",
       status: "raw",
-      attention: { boost: 10, override: null, rationale: "urgent" },
+      attention: { boost: 10, override: null, rationale: "urgent", tier: 1 },
     });
     // The frontier leaf that inherits the strategy's flow. Highest id, no gap —
     // so gap/id keys alone would rank it LAST.
@@ -173,7 +173,7 @@ describe("projectGoals attention ordering", () => {
       id: "t-eligible",
       kind: "tactic",
       status: "raw",
-      attention: { boost: 10, override: null, rationale: "r" },
+      attention: { boost: 10, override: null, rationale: "r", tier: 1 },
     });
     // kind "note" has no goal_layer flag → not eligible → no resolver entry.
     const ineligible = node({ id: "n-note", kind: "note", status: "raw" });
@@ -195,12 +195,12 @@ describe("renderFrontier attention markers", () => {
       {
         node: node({ id: "hi-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 20, sources: ["strategy-x"] },
+        attention: { value: 20, tier: 1, sources: ["strategy-x"] },
       },
       {
         node: node({ id: "lo-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 0, sources: [] },
+        attention: { value: 0, tier: 1, sources: [] },
       },
     ];
     expect(renderFrontier(goals)).toBe(
@@ -214,7 +214,7 @@ describe("renderFrontier attention markers", () => {
       {
         node: node({ id: "r-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 5, sources: [] },
+        attention: { value: 5, tier: 1, sources: [] },
       },
     ];
     expect(renderFrontier(goals)).toBe(

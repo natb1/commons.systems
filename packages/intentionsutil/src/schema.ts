@@ -20,6 +20,20 @@ export type Status = string;
 
 export const STATUSES: readonly string[] = ["raw", "refining", "delegated", "codified"];
 
+/**
+ * The tier axis: the outer, lexicographically-dominant ranking key. Tier 1 is
+ * the default; tier 2 is a bug-fix/security mark or an explicit authored lift;
+ * tier 3 is production/main work. Tier is never authored as `1` — 1 is the
+ * implicit default (rule 19 rejects an explicit `attributes.tier: 1`).
+ */
+export const TIERS: readonly number[] = [1, 2, 3];
+
+/** The default tier every unmarked node sits in. */
+export const DEFAULT_TIER = 1;
+
+/** The tiers an author may name explicitly via `attributes.tier`. */
+export const AUTHORABLE_TIERS: readonly number[] = [2, 3];
+
 /** What kind of tooling a goal codifies. */
 export type ToolingKind = "actuator" | "sensor";
 
@@ -112,6 +126,13 @@ export interface ToolingGoal {
  *    branch).
  *  - `override` REPLACES this node's outgoing set with `{(self, override)}` —
  *    an ABSOLUTE cap on this node's own branch. Must be finite and `>= 0`.
+ *  - `tier` is the per-tier boost NAMESPACE tag: the tier whose scale the value
+ *    was chosen in — NOT the node's tier (that is derived by `ownTier`, and the
+ *    effective tier is derived by `resolveAttention`). Defaults to 1 when
+ *    absent, so every pre-tier boost is implicitly a tier-1 boost. Rule 20 in
+ *    `validateGraph` requires it to equal the node's OWN tier, which is what
+ *    forces an author to re-select a boost value when a node's tier changes:
+ *    a value meaningful on the tier-1 scale means nothing on the tier-2 scale.
  *
  * Valid only on goal-layer kinds (those whose kind node sets
  * `attributes.goal_layer: true`) — enforced by `validateGraph`, not here. The
@@ -122,6 +143,7 @@ export interface Attention {
   boost: number | null; // finite, > 0 when present
   override: number | null; // finite, >= 0 when present
   rationale: string; // required, non-empty
+  tier: number; // 1 | 2 | 3; the tier whose scale the value was chosen in (default 1)
 }
 
 // --- Node ------------------------------------------------------------------
@@ -353,7 +375,44 @@ function validateAttention(value: unknown, field: string): Attention {
     throw new IntentionSchemaError(`${field}.rationale must be a non-empty string`);
   }
 
-  return { boost, override, rationale };
+  // Absent/null defaults to 1: every boost authored before the tier axis existed
+  // was chosen on the tier-1 scale, so the default keeps the field additive over
+  // the whole existing store with no node-file edits.
+  let tier = 1;
+  if (value.tier != null) {
+    if (typeof value.tier !== "number" || !Number.isInteger(value.tier) || !TIERS.includes(value.tier)) {
+      throw new IntentionSchemaError(
+        `${field}.tier must be one of ${TIERS.join(", ")}, got ${JSON.stringify(value.tier)}`,
+      );
+    }
+    tier = value.tier;
+  }
+
+  return { boost, override, rationale, tier };
+}
+
+/**
+ * A node's OWN tier — what its own marks say, ignoring anything inherited from
+ * ancestors (`resolveAttention` derives the effective, inherited tier over the
+ * parent/serves relation on top of this).
+ *
+ * `max(explicit, semantic, 1)`:
+ *  - explicit: `attributes.tier` when it is the number 2 or 3. Any other value
+ *    contributes nothing here — rule 19 is what rejects it, and normalizing it
+ *    away silently would hide the violation from the validator.
+ *  - semantic: 2 when `attributes.bug_fix === true` or `attributes.security ===
+ *    true` — the marks that mean "this is a defect/security fix", which sit in
+ *    tier 2 without the author naming a tier at all.
+ *
+ * One implementation, shared by `attention.ts`'s effective-tier fixpoint and by
+ * `validateGraph`'s rule 20.
+ */
+export function ownTier(node: IntentionNode): number {
+  const attributes = isPlainObject(node.attributes) ? node.attributes : {};
+  const explicit =
+    attributes.tier === 2 || attributes.tier === 3 ? (attributes.tier as number) : 0;
+  const semantic = attributes.bug_fix === true || attributes.security === true ? 2 : 0;
+  return Math.max(explicit, semantic, DEFAULT_TIER);
 }
 
 // --- Dispatch-state structured fields --------------------------------------
@@ -941,6 +1000,51 @@ function checkAttentionDominance(
 }
 
 /**
+ * Rule 19: tier-mark shape. `attributes.bug_fix` and `attributes.security` are
+ * booleans when present; `attributes.tier` is the number 2 or 3 when present.
+ * An explicit `attributes.tier: 1` is REJECTED — 1 is the implicit default that
+ * every unmarked node already carries, so authoring it is redundant noise that
+ * would make "no tier key" and "tier 1" two spellings of one state.
+ */
+function checkTierMarkShape(node: IntentionNode, problems: string[]): void {
+  for (const mark of ["bug_fix", "security"] as const) {
+    const value = node.attributes[mark];
+    if (value !== undefined && typeof value !== "boolean") {
+      problems.push(
+        `${node.id}: attributes.${mark} must be a boolean, got ${typeof value}`,
+      );
+    }
+  }
+  const tier = node.attributes.tier;
+  if (tier !== undefined && !AUTHORABLE_TIERS.includes(tier as number)) {
+    problems.push(
+      `${node.id}: attributes.tier must be ${AUTHORABLE_TIERS.join(" or ")}, got ${JSON.stringify(tier)} — tier 1 is the implicit default and must never be authored`,
+    );
+  }
+}
+
+/**
+ * Rule 20: the per-tier boost namespace. A non-null `attention` must tag the
+ * tier its value was chosen in, and that tag must equal the node's OWN tier
+ * (`ownTier`) — never its effective/inherited tier. An effective-tier check
+ * would cascade: marking one ancestor tier 2 would instantly invalidate every
+ * boosted descendant, none of whose authors did anything wrong. Checking the
+ * node's own tier localizes the obligation to the node whose tier actually
+ * changed.
+ */
+function checkAttentionTierNamespace(node: IntentionNode, problems: string[]): void {
+  if (node.attention === null) return;
+  const own = ownTier(node);
+  if (node.attention.tier !== own) {
+    problems.push(
+      `${node.id}: attention.tier is ${node.attention.tier} but the node's own tier is ${own} — ` +
+        `a boost value is only meaningful within one tier's scale, so pick a fresh boost/override ` +
+        `value on the tier-${own} scale and set attention.tier: ${own} to match`,
+    );
+  }
+}
+
+/**
  * Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
  * flags every node that participates in a cycle (a tactic transitively blocked
  * by itself). Dangling edges are reported by rule 13, not traversed.
@@ -1033,6 +1137,19 @@ function checkBlockedByCycles(
  *      `attention`/`attention.boost` is null there is no dominance to protect
  *      and the guard is inert. A node may opt out by placing the literal
  *      substring `ACK: main-health-dominance` in its `attention.rationale`.
+ *  19. Tier marks are well-shaped: `attributes.bug_fix` and
+ *      `attributes.security`, when present, are booleans; `attributes.tier`,
+ *      when present, is the number 2 or 3. An explicit `attributes.tier: 1` is
+ *      rejected — 1 is the implicit default every unmarked node already
+ *      carries, so authoring it would give one state two spellings.
+ *  20. Per-tier boost namespace: a node with non-null `attention` must set
+ *      `attention.tier` equal to its OWN tier (`ownTier` — its own marks, NOT
+ *      the effective tier it inherits down parent/serves). A boost value is
+ *      only meaningful within one tier's scale, so when a node's tier changes
+ *      the author must re-select the value in the new tier's namespace. The
+ *      check deliberately uses the own tier, not the effective one: an
+ *      effective-tier check would cascade, invalidating every boosted
+ *      descendant the moment any ancestor gained a mark.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -1083,6 +1200,10 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkClarificationDates(node, problems);
     // Rule 18: main-health attention dominance.
     checkAttentionDominance(node, dominantBoost, problems);
+    // Rule 19: tier marks are well-shaped.
+    checkTierMarkShape(node, problems);
+    // Rule 20: attention.tier tags the node's own tier namespace.
+    checkAttentionTierNamespace(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkBlockedByCycles(nodes, byId, problems);

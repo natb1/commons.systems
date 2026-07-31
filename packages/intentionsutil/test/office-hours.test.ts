@@ -58,7 +58,7 @@ function kinds(): IntentionNode[] {
 }
 
 function boost(amount: number): Attention {
-  return { boost: amount, override: null, rationale: "because" };
+  return { boost: amount, override: null, rationale: "because", tier: 1 };
 }
 
 function parked(recommendation: string | null = null): OfficeHours {

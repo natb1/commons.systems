@@ -44,14 +44,18 @@ function svnode(partial: Partial<IntentionNode> & { id: string }): IntentionNode
   return anode({ reading: "measured", ...partial, kind: "strategy" });
 }
 
-/** A relative boost injection. */
-function boost(amount: number, rationale = "because"): Attention {
-  return { boost: amount, override: null, rationale };
+/**
+ * A relative boost injection. `tier` defaults to 1 — the tier every fixture
+ * node sits in unless it carries a tier mark (rule 20 requires the tag to match
+ * the node's own tier, so a marked node's injection must name its tier).
+ */
+function boost(amount: number, rationale = "because", tier = 1): Attention {
+  return { boost: amount, override: null, rationale, tier };
 }
 
 /** An absolute branch-capping override injection. */
-function override(amount: number, rationale = "because"): Attention {
-  return { boost: null, override: amount, rationale };
+function override(amount: number, rationale = "because", tier = 1): Attention {
+  return { boost: null, override: amount, rationale, tier };
 }
 
 /**
@@ -465,11 +469,18 @@ describe("resolveAttention capture-resolution term", () => {
   });
 });
 
-describe("resolveAttention backward blocked_by distribution", () => {
-  it("flows a blocked leaf's boost backward to its blocker and its blocker's blocker, undecayed", () => {
+// The authored term flows DOWNWARD ONLY — parent and serves, never backward
+// along blocked_by. This block records that doctrine change: the 2026-07-07
+// backward-distribution doctrine (a boost on a blocked node lifted its whole
+// critical path) is retired. Blocking precedence is the selector's structural
+// concern; an authored value must not make a blocker's rank a function of who
+// happens to be blocked on it. The downward-flow half of the old block (the
+// serves-edge diamond) is unchanged and still holds.
+describe("resolveAttention authored flow is downward-only (no backward blocked_by)", () => {
+  it("does not flow a blocked leaf's boost backward to its blocker or its blocker's blocker", () => {
     // tactic-hot (boost 5) is blocked by blocker-a; blocker-a is blocked by
-    // blocker-b. The boost flows backward along blocked_by, two hops, undecayed:
-    // both blockers rank at the full 5, with tactic-hot as the source.
+    // blocker-b. Nothing flows backward: both blockers resolve to 0 with no
+    // sources, and only tactic-hot itself carries the authored value.
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hot", kind: "tactic", blocked_by: ["blocker-a"], attention: boost(5) }),
@@ -479,16 +490,15 @@ describe("resolveAttention backward blocked_by distribution", () => {
 
     const result = resolveAttention(nodes);
     expect(result.get("tactic-hot")?.value).toBe(5);
-    expect(result.get("blocker-a")?.value).toBe(5);
-    expect(result.get("blocker-a")?.sources).toEqual(["tactic-hot"]);
-    expect(result.get("blocker-b")?.value).toBe(5);
-    expect(result.get("blocker-b")?.sources).toEqual(["tactic-hot"]);
+    expect(result.get("blocker-a")?.value).toBe(0);
+    expect(result.get("blocker-a")?.sources).toEqual([]);
+    expect(result.get("blocker-b")?.value).toBe(0);
+    expect(result.get("blocker-b")?.sources).toEqual([]);
   });
 
-  it("carries the received sources on into the blocker's own subtree (downward flow)", () => {
+  it("leaves a blocker's own subtree untouched — nothing arrives to carry downward", () => {
     // tactic-hot (boost 5) blocked by blocker-a; blocker-a has a child via
-    // parent. The child inherits blocker-a's received source through the normal
-    // downward parent flow — the backward and downward flows interleave.
+    // parent. blocker-a receives nothing, so its child inherits nothing either.
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hot", kind: "tactic", blocked_by: ["blocker-a"], attention: boost(5) }),
@@ -497,12 +507,13 @@ describe("resolveAttention backward blocked_by distribution", () => {
     ];
 
     const result = resolveAttention(nodes);
-    expect(result.get("blocker-a")?.value).toBe(5);
-    expect(result.get("blocker-child")?.value).toBe(5);
-    expect(result.get("blocker-child")?.sources).toEqual(["tactic-hot"]);
+    expect(result.get("blocker-a")?.value).toBe(0);
+    expect(result.get("blocker-a")?.sources).toEqual([]);
+    expect(result.get("blocker-child")?.value).toBe(0);
+    expect(result.get("blocker-child")?.sources).toEqual([]);
   });
 
-  it("flows an override's value backward to blockers identically to a boost", () => {
+  it("does not flow an override's value backward to blockers either", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hot", kind: "tactic", blocked_by: ["blocker-a"], attention: override(5) }),
@@ -511,16 +522,17 @@ describe("resolveAttention backward blocked_by distribution", () => {
 
     const result = resolveAttention(nodes);
     expect(result.get("tactic-hot")?.value).toBe(5);
-    expect(result.get("blocker-a")?.value).toBe(5);
-    expect(result.get("blocker-a")?.sources).toEqual(["tactic-hot"]);
+    expect(result.get("blocker-a")?.value).toBe(0);
+    expect(result.get("blocker-a")?.sources).toEqual([]);
   });
 
-  it("converges a mixed parent/blocked_by cycle to a stable fixpoint instead of throwing", () => {
-    // outer (boost 4) has a child `inner` via parent (outer distributes down to
-    // inner), and outer is blocked by inner (inner distributes backward to
-    // outer): a legitimate mixed cycle — a node blocked by a tactic inside its
-    // own subtree. The old DFS threw `attention flow cycle`; the fixpoint now
-    // converges both to the full boost.
+  it("resolves a mixed parent/blocked_by structure without throwing (no cycle can form)", () => {
+    // outer (boost 4) has a child `inner` via parent, and outer is blocked by
+    // inner. Under the old backward flow this was a genuine mixed cycle needing
+    // fixpoint-convergence reasoning; with blocked_by out of the distributor
+    // relation the structure is just a one-edge parent chain, so no cycle can
+    // form at all. It must still resolve, not throw: inner inherits outer's
+    // boost downward, and the blocked_by edge contributes nothing.
     const nodes = [
       ...kinds(),
       anode({ id: "outer", kind: "tactic", blocked_by: ["inner"], attention: boost(4) }),
@@ -536,11 +548,11 @@ describe("resolveAttention backward blocked_by distribution", () => {
     expect(result.get("inner")?.sources).toEqual(["outer"]);
   });
 
-  it("counts a source reaching a blocker via both a serves edge and a backward blocked_by edge exactly once", () => {
-    // strategy-hot (boost 5) is served by two tactics: blocker and hot. hot is
-    // blocked by blocker, so blocker receives strategy-hot's source TWICE — once
-    // via its own serves edge, once backward from hot (which also serves
-    // strategy-hot). The union dedupes by source id: blocker reads 5, not 10.
+  it("counts a source reaching a node via two serves paths exactly once (downward flow, unchanged)", () => {
+    // strategy-hot (boost 5) is served by two tactics: blocker and hot. Each
+    // draws strategy-hot's source through its OWN serves edge, undiluted and
+    // deduped by source id — the downward half of the old doctrine, unchanged.
+    // The blocked_by edge from hot to blocker now contributes nothing.
     const nodes = [
       ...kinds(),
       svnode({ id: "strategy-hot", attention: boost(5) }),
@@ -551,6 +563,96 @@ describe("resolveAttention backward blocked_by distribution", () => {
     const result = resolveAttention(nodes);
     expect(result.get("blocker")?.value).toBe(5);
     expect(result.get("blocker")?.sources).toEqual(["strategy-hot"]);
+    expect(result.get("hot")?.value).toBe(5);
+    expect(result.get("hot")?.sources).toEqual(["strategy-hot"]);
+  });
+});
+
+describe("resolveAttention tier axis", () => {
+  it("resolves an unmarked node to tier 1", () => {
+    const result = resolveAttention([...kinds(), svnode({ id: "strategy-plain" })]);
+    expect(result.get("strategy-plain")?.tier).toBe(1);
+  });
+
+  it("resolves a bug_fix-marked node to tier 2", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-bug", attributes: { bug_fix: true } }),
+    ]);
+    expect(result.get("strategy-bug")?.tier).toBe(2);
+  });
+
+  it("resolves a security-marked node to tier 2", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-sec", attributes: { security: true } }),
+    ]);
+    expect(result.get("strategy-sec")?.tier).toBe(2);
+  });
+
+  it("resolves an explicit attributes.tier: 3 to tier 3", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-prod", attributes: { tier: 3 } }),
+    ]);
+    expect(result.get("strategy-prod")?.tier).toBe(3);
+  });
+
+  it("takes the MAX of a semantic mark and an explicit tier, never their sum", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-both", attributes: { bug_fix: true, tier: 3 } }),
+    ]);
+    expect(result.get("strategy-both")?.tier).toBe(3); // not 2 + 3
+  });
+
+  it("lifts a tactic that serves a tier-3 strategy to tier 3", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-prod", attributes: { tier: 3 } }),
+      anode({ id: "tactic-child", kind: "tactic", serves: ["strategy-prod"] }),
+    ]);
+    expect(result.get("tactic-child")?.tier).toBe(3);
+  });
+
+  it("takes the MAX across two serving strategies of different tiers", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-two", attributes: { bug_fix: true } }),
+      svnode({ id: "strategy-three", attributes: { tier: 3 } }),
+      anode({
+        id: "tactic-both",
+        kind: "tactic",
+        serves: ["strategy-two", "strategy-three"],
+      }),
+    ]);
+    expect(result.get("tactic-both")?.tier).toBe(3);
+  });
+
+  it("does not flow tier upward — a tier-3 child leaves its parent at tier 1", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-parent" }),
+      svnode({ id: "strategy-child", parent: "strategy-parent", attributes: { tier: 3 } }),
+    ]);
+    expect(result.get("strategy-parent")?.tier).toBe(1);
+    expect(result.get("strategy-child")?.tier).toBe(3);
+  });
+
+  it("reports the inherited effective tier on an overridden node (an override pins value only)", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-prod", attributes: { tier: 3 } }),
+      svnode({
+        id: "strategy-capped",
+        parent: "strategy-prod",
+        attributes: { tier: 3 },
+        attention: override(2, "capped", 3),
+      }),
+    ]);
+    const capped = result.get("strategy-capped");
+    expect(capped?.value).toBe(2); // override pins the value
+    expect(capped?.tier).toBe(3); // tier is a separate axis, still resolved
   });
 });
 

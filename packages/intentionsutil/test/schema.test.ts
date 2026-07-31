@@ -34,6 +34,8 @@ describe("validateNode", () => {
     };
     expect(validateNode(input)).toEqual({
       ...input,
+      // attention.tier defaults to 1 when the author names no tier.
+      attention: { ...input.attention, tier: 1 },
       // Graph-native dispatch fields default when absent.
       phase: null,
       execution: null,
@@ -767,7 +769,7 @@ describe("validateNode", () => {
       status: "raw",
       attention: { boost: 3, rationale: "urgent" },
     });
-    expect(result.attention).toEqual({ boost: 3, override: null, rationale: "urgent" });
+    expect(result.attention).toEqual({ boost: 3, override: null, rationale: "urgent", tier: 1 });
   });
 
   it("accepts an attention with only an override (including override 0)", () => {
@@ -779,7 +781,7 @@ describe("validateNode", () => {
       status: "raw",
       attention: { override: 0, rationale: "parked" },
     });
-    expect(result.attention).toEqual({ boost: null, override: 0, rationale: "parked" });
+    expect(result.attention).toEqual({ boost: null, override: 0, rationale: "parked", tier: 1 });
   });
 
   it("rejects an attention that sets both boost and override", () => {
@@ -938,6 +940,7 @@ describe("validateGraph", () => {
           boost: 3,
           override: null,
           rationale: "A live strategy that draws attention.",
+          tier: 1,
         },
       }),
       gnode({
@@ -1000,7 +1003,7 @@ describe("validateGraph", () => {
       gnode({
         id: "virtue-1",
         kind: "virtue",
-        attention: { boost: 1, override: null, rationale: "r" },
+        attention: { boost: 1, override: null, rationale: "r", tier: 1 },
       }),
     ];
     expect(() => validateGraph(nodes)).toThrow(/attention is only valid on goal-layer kinds/);
@@ -1134,7 +1137,7 @@ describe("validateGraph", () => {
       gnode({
         id: "broken-2",
         kind: "virtue",
-        attention: { boost: 1, override: null, rationale: "r" },
+        attention: { boost: 1, override: null, rationale: "r", tier: 1 },
       }),
       // Same-kind-parent violation: a tactic parented to a virtue.
       gnode({ id: "broken-3", kind: "tactic", parent: "virtue-root" }),
@@ -1530,7 +1533,7 @@ describe("validateGraph", () => {
   });
 
   // Rule 18: strategy-main-health dominant-attention guard.
-  type Attn = { boost: number | null; override: number | null; rationale: string };
+  type Attn = { boost: number | null; override: number | null; rationale: string; tier: number };
 
   /**
    * Build a minimal goal-layer node set with a dominant `strategy-main-health`
@@ -1545,7 +1548,7 @@ describe("validateGraph", () => {
     const mhAttention: Attn | null =
       "mainHealthAttention" in opts
         ? (opts.mainHealthAttention ?? null)
-        : { boost: 100, override: null, rationale: "Author-directed: dominant." };
+        : { boost: 100, override: null, rationale: "Author-directed: dominant.", tier: 1 };
     return [
       gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
       gnode({
@@ -1563,21 +1566,21 @@ describe("validateGraph", () => {
   }
 
   it("Rule 18: throws when another node's attention.boost matches the dominant boost", () => {
-    const nodes = mainHealthNodes({ boost: 100, override: null, rationale: "trying to tie" });
+    const nodes = mainHealthNodes({ boost: 100, override: null, rationale: "trying to tie", tier: 1 });
     expect(() => validateGraph(nodes)).toThrow(
       /strategy-other: attention\.boost \(100\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
     );
   });
 
   it("Rule 18: throws when another node's attention.boost exceeds the dominant boost", () => {
-    const nodes = mainHealthNodes({ boost: 101, override: null, rationale: "trying to beat" });
+    const nodes = mainHealthNodes({ boost: 101, override: null, rationale: "trying to beat", tier: 1 });
     expect(() => validateGraph(nodes)).toThrow(
       /strategy-other: attention\.boost \(101\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
     );
   });
 
   it("Rule 18: throws when another node's attention.override matches or exceeds the dominant boost", () => {
-    const nodes = mainHealthNodes({ boost: null, override: 100, rationale: "override tie" });
+    const nodes = mainHealthNodes({ boost: null, override: 100, rationale: "override tie", tier: 1 });
     expect(() => validateGraph(nodes)).toThrow(
       /strategy-other: attention\.override \(100\) matches or exceeds strategy-main-health's dominant boost \(100\)/,
     );
@@ -1588,18 +1591,19 @@ describe("validateGraph", () => {
       boost: 100,
       override: null,
       rationale: "Deliberately co-dominant. ACK: main-health-dominance",
+      tier: 1,
     });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
   it("Rule 18: passes for a sibling boost strictly below the dominant boost", () => {
-    const nodes = mainHealthNodes({ boost: 99, override: null, rationale: "below" });
+    const nodes = mainHealthNodes({ boost: 99, override: null, rationale: "below", tier: 1 });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
   it("Rule 18: is inert when strategy-main-health's attention is null (no dominance to protect)", () => {
     const nodes = mainHealthNodes(
-      { boost: 100, override: null, rationale: "would-be violation" },
+      { boost: 100, override: null, rationale: "would-be violation", tier: 1 },
       { mainHealthAttention: null },
     );
     expect(() => validateGraph(nodes)).not.toThrow();
@@ -1609,6 +1613,69 @@ describe("validateGraph", () => {
     // The guard excludes the node itself: strategy-main-health carrying a boost
     // equal to its own threshold must not self-trip.
     const nodes = mainHealthNodes(null);
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  // Rules 19 & 20: tier-mark shape and the per-tier boost namespace.
+
+  /** A goal-layer kind set plus one strategy carrying the fields under test. */
+  function tierNodes(partial: Partial<IntentionNode>): IntentionNode[] {
+    return [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
+      }),
+      gnode({ id: "strategy-under-test", kind: "strategy", ...partial }),
+    ];
+  }
+
+  it("Rule 19: rejects a non-boolean attributes.bug_fix", () => {
+    const nodes = tierNodes({ attributes: { bug_fix: "yes" } });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-under-test: attributes\.bug_fix must be a boolean, got string/,
+    );
+  });
+
+  it("Rule 19: rejects an explicit attributes.tier: 1 (1 is the implicit default)", () => {
+    const nodes = tierNodes({ attributes: { tier: 1 } });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-under-test: attributes\.tier must be 2 or 3, got 1 — tier 1 is the implicit default/,
+    );
+  });
+
+  it("Rule 19: rejects an out-of-range attributes.tier: 4", () => {
+    const nodes = tierNodes({ attributes: { tier: 4 } });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-under-test: attributes\.tier must be 2 or 3, got 4/,
+    );
+  });
+
+  it("Rule 20: rejects a tier-2 node whose attention.tier still reads 1, telling the author to re-select", () => {
+    const nodes = tierNodes({
+      attributes: { bug_fix: true },
+      attention: { boost: 5, override: null, rationale: "hot", tier: 1 },
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-under-test: attention\.tier is 1 but the node's own tier is 2 — .*pick a fresh boost\/override value on the tier-2 scale and set attention\.tier: 2 to match/,
+    );
+  });
+
+  it("Rule 20: accepts the same node once attention.tier matches its own tier", () => {
+    const nodes = tierNodes({
+      attributes: { bug_fix: true },
+      attention: { boost: 5, override: null, rationale: "hot", tier: 2 },
+    });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 20: is inert on a marked node with no attention at all", () => {
+    const nodes = tierNodes({ attributes: { bug_fix: true, security: true }, attention: null });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 });

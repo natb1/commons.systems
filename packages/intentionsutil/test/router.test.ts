@@ -751,7 +751,7 @@ describe("resolveFrozenDescendant", () => {
         id: "tactic-draft",
         serves: ["strategy-s"],
         phase: "draft",
-        attention: { boost: 5, override: null, rationale: "hot" },
+        attention: { boost: 5, override: null, rationale: "hot", tier: 1 },
       }),
       // A soft-frozen (open, stale-fingerprint) child at lower rank.
       tactic({
@@ -837,12 +837,12 @@ describe("ordering", () => {
       tactic({
         id: "tactic-low",
         phase: "review",
-        attention: { boost: 1, override: null, rationale: "low" },
+        attention: { boost: 1, override: null, rationale: "low", tier: 1 },
       }),
       tactic({
         id: "tactic-high",
         phase: "implement",
-        attention: { boost: 5, override: null, rationale: "high" },
+        attention: { boost: 5, override: null, rationale: "high", tier: 1 },
       }),
     ];
     // Higher rank wins even though review is closer to done than implement.
@@ -910,7 +910,7 @@ describe("strategyFingerprint", () => {
       strategyFingerprint({ ...base, office_hours: { reason: "r", since: "2026-07-01", recommendation: null, session_type: "other" } }),
     ).toBe(fp);
     expect(
-      strategyFingerprint({ ...base, attention: { boost: 3, override: null, rationale: "r" } }),
+      strategyFingerprint({ ...base, attention: { boost: 3, override: null, rationale: "r", tier: 1 } }),
     ).toBe(fp);
   });
 
