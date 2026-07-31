@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Shared fixture for the dispatch-scripts test suite -- the per-script
 # test-*.sh files in this directory: common harness (assert_eq,
-# report_results, setup/teardown, PR/rollup builders) plus a handful of
-# helpers promoted out of their original per-section homes because more than
-# one test file needs them. Sourced, not executed directly.
+# report_results, setup/teardown, PR/rollup builders) plus the helpers the
+# split lifted out of their original per-section homes so a per-SUT file can
+# source them. Most have several consumers; a few (make_pr_mergeable,
+# office_hours_fake_claude, office_hours_fresh_fake_claude,
+# write_fake_spawn_router_claude, write_rest_check_runs) currently have one,
+# and make_pr_union / make_pr_union_mergeable were already unreferenced in the
+# monolith and stay that way here. Sourced, not executed directly.
 set -euo pipefail
 
 # Block A: original test-dispatch-scripts.sh lines 7-1325 (shared harness:

@@ -36,6 +36,44 @@ if ! DIFF=$(git -C "$REPO_ROOT" diff origin/main...HEAD --unified=0); then
   exit 1
 fi
 
+# Old-side revision of that three-dot diff. Needed to classify removals from
+# files the branch deleted or renamed away: their content is only on this side.
+if ! MERGE_BASE=$(git -C "$REPO_ROOT" merge-base origin/main HEAD); then
+  echo "ERROR: could not resolve merge-base of origin/main and HEAD" >&2
+  exit 1
+fi
+
+# Shebang test for old-side paths, mirroring lib.sh's is_shell_script. Kept
+# local because is_shell_script reads the WORKING TREE, which no longer has the
+# file when the branch deleted it -- exactly the relocation case below.
+OLD_SHEBANG_RE='^#!.*/(env[[:space:]]+(-S[[:space:]]+)?)?(ba|z)?sh([[:space:]]|$)'
+declare -A OLD_SHELL_CACHE=()
+
+# Is the old-side path a shell script? Same scoping the addition side applies
+# via is_shell_script, evaluated against the merge-base blob for deleted paths.
+old_path_is_shell() {
+  local path="$1" cached blob first verdict=1
+  cached="${OLD_SHELL_CACHE[$path]:-}"
+  if [[ -n "$cached" ]]; then
+    [[ "$cached" == yes ]]
+    return
+  fi
+  if [[ "$path" == *.sh ]]; then
+    verdict=0
+  elif is_shell_script "$path"; then
+    verdict=0
+  elif blob=$(git -C "$REPO_ROOT" show "$MERGE_BASE:$path" 2>/dev/null); then
+    first="${blob%%$'\n'*}"
+    if [[ "$first" =~ $OLD_SHEBANG_RE ]]; then verdict=0; fi
+  fi
+  if [[ "$verdict" -eq 0 ]]; then
+    OLD_SHELL_CACHE["$path"]=yes
+  else
+    OLD_SHELL_CACHE["$path"]=no
+  fi
+  return "$verdict"
+}
+
 # Hunk header regex: @@ -a[,b] +c[,d] @@ ...
 # Stored in a variable to avoid bare-word regex splitting issues under set -e.
 HUNK_RE='^@@ -[0-9]+(,[0-9]+)? \+([0-9]+)(,[0-9]+)? @@'
@@ -54,11 +92,31 @@ PORCELAIN_VIOLATIONS=()
 # appears only as an addition. Counting rather than set-membership is deliberate:
 # it makes the exemption a MULTISET match, so adding three copies of a line that
 # was removed only once still reports the two net-new copies.
+# The index is scoped to shell scripts on the OLD side, mirroring the
+# is_shell_script scoping the addition side applies: a porcelain-shaped line
+# removed from a .md doc or a .js workflow is not a relocated shell call, and
+# must not excuse a net-new call added to a .sh file.
 declare -A REMOVED_LINES=()
+REMOVAL_PATH=""
+REMOVAL_SKIP=true
 while IFS= read -r rline; do
-  # '---' old-file headers are not content lines.
+  # '--- a/<path>' old-file headers carry the old-side path (or /dev/null for a
+  # file the branch created, which has no removals).
+  if [[ "$rline" == '--- '* ]]; then
+    rrest="${rline#--- }"
+    if [[ "$rrest" == '/dev/null' ]]; then
+      REMOVAL_PATH=""
+      REMOVAL_SKIP=true
+    else
+      REMOVAL_PATH="${rrest#a/}"
+      if old_path_is_shell "$REMOVAL_PATH"; then REMOVAL_SKIP=false; else REMOVAL_SKIP=true; fi
+    fi
+    continue
+  fi
+  # Other '---'-prefixed lines are not content lines either.
   [[ "$rline" == '---'* ]] && continue
   [[ "$rline" == '-'* ]] || continue
+  [[ "$REMOVAL_SKIP" == true ]] && continue
   rcontent="${rline:1}"
   # An empty removed line is an invalid associative-array subscript, and can
   # never match the porcelain pattern anyway.
@@ -134,6 +192,10 @@ while IFS= read -r line; do
     # working-tree file at LINE_NUM-1 to catch the pre-existing-marker case.
     if [[ "$content" =~ $PORCELAIN_PATTERN ]]; then
       suppressed=$PREV_WAS_ALLOW
+      if [[ "$suppressed" -eq 0 ]] && [[ "$LINE_NUM" -gt 1 ]]; then
+        prev_line=$(sed -n "$(( LINE_NUM - 1 ))p" "$REPO_ROOT/$CURRENT_PATH")
+        if [[ "$prev_line" =~ $ALLOW_RE ]]; then suppressed=1; fi
+      fi
       # Relocation exemption. The rule's contract is net-NEW porcelain: moving an
       # existing call between files adds no call site, so the repo-wide count of
       # raw porcelain is unchanged and there is nothing for the author to migrate.
@@ -142,13 +204,12 @@ while IFS= read -r line; do
       # ways out are editing moved content or burying it under allow-markers.
       # Consuming one removal per exempted addition keeps the check honest: a
       # genuinely new call has no matching removal and is still reported.
+      # Evaluated LAST, after both allow-marker sources: a line an allow-marker
+      # already suppresses must not spend removal budget that a later, genuinely
+      # relocated copy of the same line needs.
       if [[ "$suppressed" -eq 0 ]] && [[ ${REMOVED_LINES["$content"]:-0} -gt 0 ]]; then
         REMOVED_LINES["$content"]=$(( REMOVED_LINES["$content"] - 1 ))
         suppressed=1
-      fi
-      if [[ "$suppressed" -eq 0 ]] && [[ "$LINE_NUM" -gt 1 ]]; then
-        prev_line=$(sed -n "$(( LINE_NUM - 1 ))p" "$REPO_ROOT/$CURRENT_PATH")
-        if [[ "$prev_line" =~ $ALLOW_RE ]]; then suppressed=1; fi
       fi
       if [[ "$suppressed" -eq 0 ]]; then
         PORCELAIN_VIOLATIONS+=("${CURRENT_PATH}:${LINE_NUM}: ${content}")

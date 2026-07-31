@@ -3,11 +3,13 @@
 //
 // CI-vector probe for resolveTempRefs in .claude/workflows/align-tactics.js.
 // run-unit-tests.sh has no mapping for .claude/workflows/*, so a PR touching
-// only align-tactics.js triggers no vitest suite. The align-tactics tempref
-// test that runs on every PR now lives in test-qa-fix-partition.sh, one of the
-// per-SUT sibling test files under this directory; run-unit-tests.sh discovers
-// it automatically via its test-*.sh glob, so no CI wiring is needed. This
-// probe is driven from that script.
+// only align-tactics.js triggers no vitest suite. Its test-*.sh glob over this
+// directory is NOT a fallback either: that glob only runs when RUN_PR_SCRIPTS
+// is set, which auto-detect sets solely for changed paths under
+// .claude/skills/dispatch-propagate/scripts/ (run-unit-tests.sh:88). The actual
+// CI vector is the hook-tests job in .github/workflows/unit-tests.yml, which
+// runs test-align-tactics-tempref.sh (this probe's driver) unconditionally on
+// every PR. Keep that step wired — deleting it removes all coverage here.
 //
 // align-tactics.js is a Workflow-tool script (top-level await + injected
 // globals), so it CANNOT be imported/executed by node. Instead this probe
@@ -75,7 +77,8 @@ if (!fnSource) {
 const resolveTempRefs = new Function('return ' + fnSource)();
 
 // Minimal assertion helpers (this probe prints its own PASS/FAIL lines; the
-// driver in test-qa-fix-partition.sh asserts on the final "ALL PASS" token).
+// driver in test-align-tactics-tempref.sh asserts on the final "ALL PASS"
+// token).
 let failures = 0;
 function ok(name, cond) {
   if (cond) {

@@ -385,8 +385,8 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
            the test runner itself emits. This is **not** a `file:line` pointer.
         2. **only when the excerpt contains no such label**, the failing **file
            path with NO line number** — e.g.
-           `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`,
-           never `…:22026`. Line numbers drift whenever an unrelated edit lands
+           `.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh`,
+           never `…:412`. Line numbers drift whenever an unrelated edit lands
            above that line in the file, so a line-number-bearing id
            re-fingerprints the *same* failure differently across unrelated
            commits — dedup then misses and mints a second tracking node for one
@@ -420,6 +420,9 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
         (keyed on the test name) — dedup missed and two nodes were minted for one
         flake. Under this rule both collapse to the test-name form,
         `hook-tests — select-tick on-main but primary checkout off-main → guard halts (exit 2)`.
+        (The quoted path is historical: `test-dispatch-scripts.sh` has since been
+        split into per-SUT `test-*.sh` files — that assertion now lives in
+        `test-dispatch-select-tick.sh`.)
 
         Read `<stable-id>` from the excerpt strictly by this precedence and
         **never paraphrase or summarize it** — the same flake must yield a

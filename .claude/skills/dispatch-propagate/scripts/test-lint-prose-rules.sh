@@ -448,4 +448,73 @@ run_sut
 assert_eq "relocation-duplicate: exit non-zero" "nonzero" "$_t15c_rc"
 assert_contains "relocation-duplicate: output names the file" "new.sh" "$OUT"
 
+echo "Test 15d: a removal from a NON-shell file does not exempt a .sh addition"
+# The removal index is scoped to shell scripts on the old side. A doc line that
+# merely quotes a porcelain call is not a relocated shell call, so deleting it
+# must not buy an exemption for a byte-identical net-new call in a .sh file.
+REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+git -C "$BARE" init --bare --quiet --initial-branch=main
+git -C "$REPO" init --quiet --initial-branch=main
+git -C "$REPO" config user.email "test@example.com"
+git -C "$REPO" config user.name "Test User"
+git -C "$REPO" remote add origin "$BARE"
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/script.sh"
+# The doc carries the porcelain-shaped line on main.
+printf '%s\n' "$PORC_ISSUE_VIEW" > "$REPO/doc.md"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "baseline with porcelain quoted in a doc"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" checkout --quiet -b feature
+git -C "$REPO" fetch --quiet origin main
+# Delete the doc line and add the identical line as a real call in the script.
+rm "$REPO/doc.md"
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/script.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "drop the doc line, add a real call"
+run_sut
+[ "$RC" -ne 0 ] && _t15d_rc=nonzero || _t15d_rc=zero
+assert_eq "doc-removal-no-exemption: exit non-zero" "nonzero" "$_t15d_rc"
+assert_contains "doc-removal-no-exemption: output names the script" "script.sh" "$OUT"
+
+echo "Test 15e: an allow-marked addition does not spend the relocation budget"
+# Two byte-identical porcelain lines land in one branch. In new.sh the call sits
+# under a PRE-EXISTING allow-marker (unchanged on main, so it is absent from the
+# unified-0 diff and only the working-tree lookup sees it). In relocated.sh the
+# same line is a genuine move of the one call removed from old.sh. The single
+# removal must be spent on the relocation, not consumed by the allow-marked copy
+# that needs no exemption. Diff order is alphabetical (new.sh before old.sh
+# before relocated.sh), so the allow-marked addition is processed first. old.sh
+# survives the branch minus its call line — deleting the whole file would let
+# git pair it with relocated.sh as a rename, which emits no content lines at all.
+REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+git -C "$BARE" init --bare --quiet --initial-branch=main
+git -C "$REPO" init --quiet --initial-branch=main
+git -C "$REPO" config user.email "test@example.com"
+git -C "$REPO" config user.name "Test User"
+git -C "$REPO" remote add origin "$BARE"
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/old.sh"
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/old.sh"
+printf '%s\n' 'echo keep-me' >> "$REPO/old.sh"
+# new.sh ships on main with the marker already in place and no call under it.
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/new.sh"
+printf '%s\n' "# lint-allow: gh-rest-porcelain deliberate" >> "$REPO/new.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "baseline: call in old.sh, bare marker in new.sh"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" checkout --quiet -b feature
+git -C "$REPO" fetch --quiet origin main
+# Branch: add the call under the pre-existing marker, and relocate old.sh's call.
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/new.sh"
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/relocated.sh"
+printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/relocated.sh"
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/old.sh"
+printf '%s\n' 'echo keep-me' >> "$REPO/old.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "allow-marked call plus the relocated call"
+run_sut
+assert_eq "allow-marker-keeps-budget: exit 0" "0" "$RC"
+assert_contains "allow-marker-keeps-budget: PASS printed" "PASS" "$OUT"
+
 report_results
