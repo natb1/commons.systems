@@ -35,7 +35,7 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-phase: review
+phase: done
 execution:
   branch: tactic-provision-exit11-worktree-residue
   pr: 2992
@@ -46,7 +46,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T03:45:50Z
+    mergeCommitSha: 78d576ec8dfa756a9e9882dc636a01775c086079
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
