@@ -14,6 +14,7 @@
 #   live_session_claimed_nums
 #   worktree_has_live_session          <worktree-path> [exclude_sid]
 #   claude_agents_count_busy_workers
+#   claude_agents_count_held_for_debug
 #   verify_agent_registered_under      <agent-name> <cwd>
 #   claude_agents_snapshot_capture     <path>
 #   claude_job_id_for_name_all         <name>
@@ -816,6 +817,73 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       then [ .[]
         | select(.name | type == "string" and test("^[0-9]+-|^tactic-|^strategy-"))
         | select(.status == "busy") ] | length
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 1
+    fi
+    printf '%s\n' "$count"
+    return 0
+  }
+
+  # claude_agents_count_held_for_debug — emit the count of worker sessions
+  # (name matches `^[0-9]+-` / `^tactic-` / `^strategy-`, the same keyspace
+  # `claude_agents_count_busy_workers` counts — excluding `dispatch-*`
+  # routers) sitting in a TERMINAL state — sessions a narrowed auto-close
+  # default is keeping alive instead of reaping. This makes that
+  # otherwise-invisible accumulation visible in dispatch-sweep's log.
+  #
+  # The predicate keys on `(.state // .status)` and matches the SAME terminal
+  # enumeration `claude_session_id_is_live` uses
+  # (done|stopped|killed|failed|errored|error|cancelled|canceled|terminated),
+  # so the two agree on what "terminal" means. `.state` is the granular field
+  # the `--all` listing carries — a terminal row is
+  # `{"state":"done"}` with NO `.status` key at all, while a live row is
+  # `{"state":"working","status":"busy"|"idle"}`. A complement predicate
+  # ("not busy, not idle") would therefore match every non-`working` row,
+  # counting LIVE `blocked` sessions (waiting on input/permission) as held.
+  # The enumeration is deliberate, not an oversight: a new state the daemon
+  # introduces reads as live (not counted) until it is added here, which
+  # under-reports rather than inventing frozen nodes that do not exist.
+  #
+  # Unlike `claude_agents_count_busy_workers`, this function queries
+  # `claude agents --json --all` DIRECTLY, bypassing `_claude_agents_raw` —
+  # the tick snapshot it wraps is captured without `--all` and so lacks the
+  # terminal-state rows this function exists to see (same rationale as
+  # `claude_sessions_with_name_all`'s direct `--all` query above).
+  #     return 0 — daemon queried successfully. Stdout is the count (>= 0).
+  #     return 1 — UNKNOWN. `claude` missing, non-zero exit, empty output,
+  #               or non-array JSON. Stdout is empty; never prints a count
+  #               on this path.
+  claude_agents_count_held_for_debug() {
+    # --all so terminal (done/error/etc) rows are visible; queried DIRECTLY
+    # (not via _claude_agents_raw) because the snapshot lacks --all and
+    # therefore lacks the very rows this function counts. 2>/dev/null drops
+    # daemon noise; only the exit code and well-formed JSON on stdout are
+    # trusted.
+    local out
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json --all 2>/dev/null); then
+      return 1
+    fi
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # One jq pass validates the array shape and counts matches. Non-array
+    # input errors out and the result is UNKNOWN. `(.state // .status) // ""`
+    # mirrors `claude_session_id_is_live`'s resolution: the granular `.state`
+    # the --all listing carries, falling back to the coarse `.status` for a
+    # row that has no `.state`, and "" for a row with neither (which is NOT
+    # terminal → not counted).
+    local count
+    if ! count=$(jq -r '
+      def terminal_states:
+        ["done","stopped","killed","failed","errored","error",
+         "cancelled","canceled","terminated"];
+      if type == "array"
+      then [ .[]
+        | select(.name | type == "string" and test("^[0-9]+-|^tactic-|^strategy-"))
+        | select((((.state // .status) // "") | tostring) as $st
+                 | terminal_states | index($st)) ] | length
       else error("claude agents --json output is not a JSON array")
       end' <<<"$out" 2>/dev/null); then
       return 1

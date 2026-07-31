@@ -808,6 +808,112 @@ assert_eq "dup-names-unknown: exits 1" "1" "$rc"
 assert_eq "dup-names-unknown: prints nothing" "" "$out"
 ca_teardown
 
+# --- claude_agents_count_held_for_debug (tactic-frozen-session-debug-count) --
+# Counts worker sessions (^[0-9]+-|^tactic-|^strategy-, excluding dispatch-*
+# routers) in a TERMINAL state — sessions a narrowed auto-close default is
+# keeping alive instead of reaping.
+#
+# Payloads below mirror the REAL `claude agents --json --all` row shapes,
+# verified against the live daemon:
+#   terminal:  {"sessionId":..,"name":..,"state":"done"}   — NO .status key
+#   live work: {"sessionId":..,"pid":..,"name":..,"state":"working","status":"busy"|"idle"}
+#   live wait: {"sessionId":..,"name":..,"state":"blocked"} — NO .status key
+# A hand-written `"status":"done"` row is a shape the daemon never emits; the
+# only test that uses one is the coarse-`.status`-fallback case below, which
+# exists precisely to exercise the `.state`-missing branch.
+
+# --- Test 43: held-for-debug-mixed — only the terminal worker row counts ----
+echo "Test: claude_agents_count_held_for_debug counts only terminal worker rows"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s1","pid":1,"state":"working","status":"busy","name":"tactic-x"},
+  {"sessionId":"s2","pid":2,"state":"working","status":"idle","name":"strategy-y"},
+  {"sessionId":"s3","state":"done","name":"1234-slug"},
+  {"sessionId":"s4","state":"done","name":"dispatch-abc"}
+]' 0
+if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
+assert_eq "held-for-debug-mixed: exits 0" "0" "$rc"
+assert_eq "held-for-debug-mixed: counts only the terminal worker row" "1" "$out"
+ca_teardown
+
+# --- Test 43b: held-for-debug-blocked — a blocked worker is LIVE, not held --
+# `blocked` (waiting on input/permission) is a live state: the session is
+# still there and can resume. claude_session_id_is_live classifies it live,
+# and this counter must agree — a complement predicate ("not busy, not idle")
+# would wrongly count it, since a blocked row carries no .status at all.
+echo "Test: claude_agents_count_held_for_debug does not count blocked (live) workers"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s1","state":"blocked","name":"tactic-x"},
+  {"sessionId":"s2","state":"blocked","name":"1234-slug"},
+  {"sessionId":"s3","state":"done","name":"tactic-y"}
+]' 0
+if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
+assert_eq "held-for-debug-blocked: exits 0" "0" "$rc"
+assert_eq "held-for-debug-blocked: counts only the done row, not the blocked ones" "1" "$out"
+ca_teardown
+
+# --- Test 43c: held-for-debug-status-fallback — row with no .state ----------
+# The predicate resolves `(.state // .status)`, so a row carrying only the
+# coarse `.status` still classifies correctly.
+echo "Test: claude_agents_count_held_for_debug falls back to .status when .state is absent"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s1","pid":1,"status":"busy","name":"tactic-x"},
+  {"sessionId":"s2","pid":2,"status":"error","name":"tactic-y"}
+]' 0
+if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
+assert_eq "held-for-debug-status-fallback: exits 0" "0" "$rc"
+assert_eq "held-for-debug-status-fallback: counts the status-only terminal row" "1" "$out"
+ca_teardown
+
+# --- Test 44: held-for-debug-all-live — only live rows → count 0 ------------
+echo "Test: claude_agents_count_held_for_debug returns 0 when all worker rows are live"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s1","pid":1,"state":"working","status":"busy","name":"tactic-x"},
+  {"sessionId":"s2","pid":2,"state":"working","status":"idle","name":"1234-slug"},
+  {"sessionId":"s3","state":"blocked","name":"strategy-z"}
+]' 0
+if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
+assert_eq "held-for-debug-all-live: exits 0" "0" "$rc"
+assert_eq "held-for-debug-all-live: counts 0" "0" "$out"
+ca_teardown
+
+# --- Test 45: held-for-debug-empty — empty registry → count 0, exit 0 -------
+echo "Test: claude_agents_count_held_for_debug returns 0 with count 0 for an empty registry"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
+assert_eq "held-for-debug-empty: exits 0" "0" "$rc"
+assert_eq "held-for-debug-empty: counts 0" "0" "$out"
+ca_teardown
+
+# --- Test 46: held-for-debug-unknown — daemon failure → rc 1, empty stdout --
+echo "Test: claude_agents_count_held_for_debug returns 1 with empty stdout on daemon UNKNOWN"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
+assert_eq "held-for-debug-unknown: exits 1" "1" "$rc"
+assert_eq "held-for-debug-unknown: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 47: held-for-debug-all-flag — proves the query passes --all ------
+# write_fake_claude_all only reveals a `state: done` row when --all is in
+# argv; without --all it filters that row out. A regression to a
+# non---all query would silently undercount instead of failing loudly, so
+# this test proves the function's own query includes --all.
+echo "Test: claude_agents_count_held_for_debug proves its query passes --all"
+ca_setup
+write_fake_claude_all '[
+  {"sessionId":"s1","pid":1,"state":"working","status":"busy","name":"tactic-x"},
+  {"sessionId":"s2","state":"done","name":"tactic-y"}
+]'
+if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
+assert_eq "held-for-debug-all-flag: exits 0" "0" "$rc"
+assert_eq "held-for-debug-all-flag: counts the --all-only terminal row" "1" "$out"
+ca_teardown
+
 # <<< END MOVED <<<
 
 report_results
