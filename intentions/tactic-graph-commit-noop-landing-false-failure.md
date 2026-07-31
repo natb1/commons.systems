@@ -154,7 +154,7 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-phase: main-qa
+phase: done
 execution:
   branch: tactic-graph-commit-noop-landing-false-failure
   pr: 2981
@@ -480,3 +480,70 @@ question.
   expected_outcome: The interim fix stops the deterministic dispatch-tick failure without accruing debt the greenfield ref-split fix must pay down; live ticks confirm genuine no-ops land instantly.
   finding: Judgment item flagged planned-deferral by the qa-fix disposition Workflow — the golden-path claim (a genuine no-op lands instantly on the live dispatch tick) and the non-recurrence of the 12-row false failure are only observable against real GitHub check-run data across subsequent ticks on main, not at PR merge time.
 
+## Verification evidence 2026-07-31 — residue item 11 PASSES, park was a misroute
+
+Machine-verified after PR #2981 merged (2026-07-31T14:31:12Z, merge commit
+`10f9e91a`). The single `needs-main` residue item (id 11) resolves entirely from
+live post-merge machine data — `journalctl` for the tick behavior, `gh api
+.../check-runs` for the row data, `gh pr view --json files` for the scope claim.
+No author-required question remains, so the node advances `main-qa` → `done`
+rather than waiting on office-hours.
+
+**Clause A — "live ticks confirm genuine no-ops land instantly" — PASS.** The
+Unit 2 short-circuit fired on a real headless tick (heartbeat #2022,
+2026-07-31T15:00–15:01Z), 29 minutes after the merge:
+`graph-commit: no new changes to stage for … and HEAD is already origin/main
+(663d38c9) — nothing to push; skipping the landing cycle`, with the next
+`graph-select-target` step 3 seconds later. No `refs/graph/landing-lock` push,
+no `graph/**` scratch branch, and no check-run poll appears anywhere in the
+window. Contrast the pre-fix no-op over the same node set 29 minutes earlier:
+`— landing current HEAD` at 14:31:38Z → lock push → scratch push → `landed` at
+14:32:54Z = **76 s of stamp cycle for a zero-diff write**.
+
+**Clause B — "non-recurrence of the 12-row false failure" — PASS.** The
+signature (`required checks not green within …` / `could not land on main …
+main busy`) has **243 occurrences** in the five days before the fix, including
+two full 5-attempt burn cycles in the 45 minutes before merge (`12/4 green` at
+13:49–14:01Z — the literal 12-row symptom — then `16/4 green` at 14:05–14:17Z as
+a fourth duplicate set landed). The last occurrence is **14:17:54Z, 14 minutes
+before the merge**; there are **zero** occurrences after the new binary reached
+the tick's checkout at 14:31:42Z. The stuck SHA `06c19a40` carries 16 rows
+across 4 required contexts (4 each of acceptance, preview-and-smoke, lint,
+unit-tests) — the exact unlandable shape — and is already an ancestor of
+`origin/main`. Post-fix, the genuine land `d4f0b0d3` (14:47:52Z, first attempt,
+no retry lines) and the no-op SHA `663d38c9` each carry one row per context.
+
+  One honest limit, recorded rather than papered over: post-merge no
+  *duplicate-row* SHA has yet reached `await_checks` on live main, because
+  Unit 2 now short-circuits the path that produced them. Unit 1's
+  distinct-context gate is therefore proven by the harness cases (33–36, green
+  in the required `unit-tests` run on merge commit `10f9e91a`) rather than by a
+  live duplicate-row land. That does not weaken item 11, whose claim is
+  non-recurrence of the failure, not exercise of the gate.
+
+**Clause C — "without accruing debt the greenfield ref-split fix must pay
+down" — PASS.** PR #2981 touches only `packages/intentionsutil/SEPARABILITY.md`,
+`scripts/graph-commit`, and the three harness scripts — confined to
+`await_checks` plus the nothing-staged branch, i.e. precisely the two code paths
+`tactic-graph-ref-split` deletes wholesale. That successor is alive and
+progressing (`phase: implement`, unparked). Residual scope was split out as its
+own node, `tactic-graph-commit-noop-shortcircuit-head-behind`, rather than left
+as debt.
+
+**Why this sat in `main-qa` at all — an instance of the verifiability-sort
+defect.** The `/qa-main` pass sorted item 11 to office-hours on the ground that
+it "is not browser-verifiable — its `url_path` is the literal string `current`".
+That is true and irrelevant: the graph's criterion is machine-verifiable vs.
+author-required, not browser vs. non-browser. Recorded here as a live instance
+for `tactic-qa-main-verifiability-sort-criterion`, which owns the fix.
+
+**The park never landed — a live instance of the Stop-hook backstop defect.**
+The `/qa-main` pass built the park as local commit `db99d1ec` in
+`.claude/worktrees/tactic-graph-commit-noop-landing-false-failure`, which was
+never pushed to any remote; `park-node`'s exit trap then reverted the working
+tree, leaving the node on `origin/main` untouched at `phase: main-qa` /
+`office_hours: null` and the park text stranded in the session's job directory.
+Both the misroute and the stranding are recorded on
+`tactic-phase-terminal-requires-disposition`, which owns deleting that backstop
+in favor of the tick sweep. The stranded commit is discarded rather than landed,
+because the correct disposition is this evidence, not the park.
