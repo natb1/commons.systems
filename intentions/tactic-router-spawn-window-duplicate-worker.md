@@ -113,7 +113,49 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: '/qa-main: both needs-main residue items on
+    tactic-router-spawn-window-duplicate-worker (PR #2995) are not
+    browser-verifiable — url_path is "current" and both expected outcomes
+    require observing accumulated production behavior over time (tick-journal
+    `launched <id>` lines across pids, `tmp/dispatch-reservations/` occupancy,
+    and the live-worker-redundant vs spawn-handoff-expired reclaim-note mix),
+    not a page load. The residue body itself states both are "cannot be asserted
+    at merge time" / "requires production log review over time, not a merge-time
+    command." No Claude-in-Chrome check applies.'
+  since: 2026-07-31
+  recommendation: >-
+    A human (or a future tick-journal-aware tool, not yet built) should
+    periodically check, over the days following the 2026-07-31 merge of PR #2995
+    (mergeCommitSha 3ddf7858...):
+
+
+    1. Duplicate-worker recurrence check (residue #9): grep the dispatch tick
+    journal for `launched <id>` lines and cross-reference
+    `graph-selection.jsonl` -- confirm no node id gets two `launched` lines from
+    different tick pids within the boot window (the pre-fix defect). A
+    recurrence within about 300s of spawn (the new
+    DISPATCH_RESERVATION_HANDOFF_TTL_S default) would mean this fix regressed; a
+    recurrence with a much larger gap (e.g. about 814s, as seen historically) is
+    the separate sibling defect tracked by
+    tactic-graph-router-live-worker-read-robust and should NOT be attributed to
+    this fix.
+
+    2. Ledger health check (residue #10): inspect `tmp/dispatch-reservations/`
+    during a worker's boot window (should be non-empty -- the direct observable
+    that the handoff claim is being held) and tail the journal for
+    `lib-reservation-ledger: reclaimed reservation <id> (spawn-handoff-expired
+    ...)` notes. A steady trickle is healthy; a flood means
+    DISPATCH_RESERVATION_HANDOFF_TTL_S (default 300s) is shorter than real
+    registration latency and should be raised, not reverted. Also expect
+    `live-worker-redundant` reclaim counts (per dispatch-reclaim-audit) to rise
+    substantially post-fix -- this is the expected new normal, not a red flag.
+
+
+    No PR-body task list or code artifact needs revisiting; this is pure
+    post-merge production observation over an accumulation window, which cannot
+    be compressed into a single QA session.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

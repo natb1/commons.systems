@@ -214,3 +214,107 @@ skipped.
 `tactic-router-spawn-window-duplicate-worker` are **one family**: the fleet cannot
 reliably tell whether a node is being worked on. Same root confusion — **"held"
 and "being worked" are not the same predicate, and no code distinguishes them.**
+
+## Second shape, quantified — 2026-07-31: the Stop-hook backstop failed 4/4
+
+The shape recorded above ("the skill delegates the write to a Stop hook that
+silently no-ops") was observed **four times in one night**, on four different
+nodes, in four different phase lanes. In every case the worker did everything
+correctly and the disposition still never reached `origin/main`.
+
+| session | node | lane | park commit built (local, EDT) |
+|---|---|---|---|
+| `878e5c1f` | `tactic-prune-conflict-recovery-silent-loss` | `/qa-main` | `e3b27d87` 02:18:36 |
+| `5ca126b1` | `tactic-standdown-winner-liveness` | `/qa-main` | `174615ec` 06:33:30 |
+| `e747c30d` | `tactic-router-spawn-window-duplicate-worker` | `/qa-main` | `25a90307` 07:48:53 |
+| `02a9c342` | `tactic-frozen-session-debug-count` | `/qa-main` | `f956f2b6` 09:18:14 |
+
+### The failure has a durable, recoverable residue nobody was reading
+
+This is the part that makes the defect diagnosable, and it was not previously
+recorded. The backstop does **not** fail before doing anything. It gets most of
+the way:
+
+1. `park-node` writes `office_hours` into `intentions/<id>.md` and **commits it
+   locally**, onto the node worker's own PR branch.
+2. The landing (CAS push to `origin/main`) does not complete.
+3. `park-node`'s exit trap **reverts the working tree**, leaving the branch HEAD
+   carrying a `graph: park …` commit that is reachable from **no remote ref** —
+   confirmed for all four: `branch -r --contains` is empty and
+   `merge-base --is-ancestor <sha> origin/main` is false.
+4. The residue on disk is a single dirty file — `M intentions/<id>.md` — whose
+   diff shows `office_hours` being *removed*, because HEAD has the park and the
+   tree does not. It reads as a stray manual edit.
+
+So the escalation text exists in three places (the job dir's
+`office-hours-reason`, the local commit, the dirty-file diff) and in none of the
+places anything reads.
+
+### Why it cannot work where it is called from
+
+`.claude/hooks/dispatch-stop.sh:5-7` states the backstop is "where a node
+worker's escalation park is **guaranteed** to land even if the model's in-session
+park write did not complete." It is not guaranteed, for a structural reason:
+
+- The hook invokes `park-node` **from the node worker's own worktree** — a PR
+  branch 9–13 commits ahead of `origin/main`.
+- `graph-commit`'s landing budget is
+  `LOCK_WAIT_SECONDS = MAX_PUSH_ATTEMPTS × (CHECK_TIMEOUT_SECONDS + 30)`
+  (`graph-commit:217,223,234`) = **5 × 210 = 1050 s**, i.e. up to ~17.5 minutes
+  of legitimate waiting on `refs/graph/landing-lock` — a tick's own reconcile
+  routinely holds it ~10 minutes.
+- That call runs in a **Stop hook at session teardown**, which `.claude/settings.json`
+  registers with no `timeout` (so the harness default applies). A teardown hook's
+  budget is orders of magnitude below the primitive's own worst-case wait.
+
+The backstop therefore calls a minutes-scale blocking primitive from a
+seconds-scale context.
+
+### The failure is swallowed three times over
+
+- `dispatch-stop.sh:92` runs `park-node … >/dev/null 2>&1`, so the primitive's
+  own diagnosis is discarded.
+- The `else` branch (`:95`) writes one line to the hook's stderr, which reaches
+  no journal — `journalctl --user` for 2026-07-31 contains **zero**
+  `[dispatch-stop] WARNING` lines.
+- The hook is best-effort by contract (`:41-42`) and exits 0 regardless.
+
+### The consequence is the churn loop, one level down
+
+`park-node` writes the `node-terminal` marker only on success. No park ⇒ no
+marker ⇒ `dispatch-self-close --node` **HOLDs the job alive** (`:100-109`, by
+design). So each failure produces, simultaneously:
+
+- a node still at `office_hours: null` on `origin/main` — fully selectable, so
+  the router re-selects it into an identical pass; **and**
+- a permanently registered session that `worktree_has_live_session` counts as
+  holding that node (name-keyed, registered view — `lib-claude-agents.sh:102-125`).
+
+The node is therefore *both* re-selectable *and* held. Which one wins is a race,
+and neither outcome is the escalation the worker actually performed.
+
+### The discriminator that separates this from an ordinary contention failure
+
+In-session `park-node` calls **succeeded four times the same day** — four
+`graph: park …` commits landed on `origin/main` between 00:04 and 06:55 EDT.
+Every landing failure was a Stop-hook backstop call; every success was an
+in-session call. The mechanism is the calling context, not lock contention.
+
+This is direct support for the remedy already recorded above — **park in-session
+via `packages/intentionsutil/scripts/park-node`, and never let the landing depend
+on a Stop hook that can be killed.** Note also that
+`tactic-dispatch-stop-backstop-comment` (`status: raw`, `phase: implement`)
+is scoped to reword `dispatch-stop.sh:62-63` on the premise that the backstop is
+now "far-ahead-safe". That premise is about `graph-commit`'s base handling and is
+not contradicted here — the park commits *were* built successfully. What fails is
+the landing, downstream of it. A comment reword must not be read as evidence the
+backstop path works.
+
+### Recovery, for an operator holding one of these worktrees
+
+The park text survives in `$CLAUDE_JOB_DIR/office-hours-reason` and
+`office-hours-recommendation` (the hook deletes them only on success,
+`dispatch-stop.sh:93`), and the built commit survives on the local branch. Do not
+re-derive the text. Re-land it with an in-session `park-node` from a checkout at
+`origin/main`, per invariant I1 — never from the PR-branch worktree that produced
+it.

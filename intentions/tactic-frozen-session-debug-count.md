@@ -54,7 +54,57 @@ execution:
 validates: []
 blocked_by:
   - tactic-graph-node-session-reap
-office_hours: null
+office_hours:
+  reason: "/qa-main: node tactic-frozen-session-debug-count's needs-main residue
+    item (id 10) names url_path \"current\" and an expected outcome about
+    dispatch-sweep's log output (a HELD_FOR_DEBUG_COUNT line), not a live prod
+    webpage — this is not browser-verifiable via Claude-in-Chrome (analogous to
+    the \"nix flake check\" / darwin-build non-browser examples in the qa-main
+    SKILL). Source PR #3000 is merged (mergedAt 2026-07-31T12:45:34Z), so the
+    sensor gate is satisfied, but verifying the actual claim requires running
+    dispatch-sweep against the live claude daemon and reading its log — outside
+    this skill's browser-only verification scope."
+  since: 2026-07-31
+  recommendation: >-
+    ## What to verify
+
+
+    Confirm `dispatch-sweep` logs the documented interim value on the real
+    fleet, not a browser-checkable claim.
+
+
+    ## How
+
+
+    1. Run (or observe the next scheduled run of)
+    `.claude/skills/dispatch-propagate/scripts/dispatch-sweep` against the live
+    claude daemon.
+
+    2. Confirm the log contains a line of the form `HELD_FOR_DEBUG_COUNT: n=0`.
+       - `n=0` is the documented-correct interim reading (PR #3000 / node body "Verification" section): `tactic-graph-node-session-reap`'s narrowed auto-close mechanism does not exist yet, so no session is ever held-for-debug today.
+       - `n=UNKNOWN (daemon unqueryable)` means the daemon could not be queried — check daemon health before concluding anything about the count itself.
+       - Any other nonzero count would be unexpected and worth a closer look (it would mean something is already treating a session as held-for-debug despite the narrowing not existing).
+    3. If the log reads `n=0` (or `n=UNKNOWN` on a transient daemon hiccup that
+    clears on retry): the residue item passes as documented. Clear the
+    `office_hours` park and advance the node:
+       ```bash
+       .claude/skills/dispatch-propagate/scripts/transition-node tactic-frozen-session-debug-count
+       ```
+    4. If the log persistently reads `n=UNKNOWN`: check whether `dispatch-sweep`
+    is actually running on its cadence (cron/systemd wiring) — that's a separate
+    issue from this tactic's own function.
+
+
+    ## Context
+
+
+    - Source PR: #3000 (merged 2026-07-31T12:45:34Z) —
+    "tactic-frozen-session-debug-count: minimal held-for-debug session count".
+
+    - Blocked-by: `tactic-graph-node-session-reap` (still not landed as of this
+    park) — until it lands, `n=0` is the only value this metric can ever report,
+    by design.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

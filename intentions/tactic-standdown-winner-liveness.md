@@ -83,7 +83,50 @@ execution:
 validates: []
 blocked_by:
   - tactic-hold-residue-standdown-winner-liveness
-office_hours: null
+office_hours:
+  reason: >-
+    /qa-main: both needs-main residue items on tactic-standdown-winner-liveness
+    (PR #2996) are not browser-verifiable — neither has a real url_path (both
+    say "current", not a web page) and both require inspecting live
+    dispatch-fleet infrastructure state or making a human judgment call, not
+    observing a deployed URL via Claude-in-Chrome:
+
+    1. "Live-fleet behavior of the sweep" — requires reading the tick journal
+    for `standdown_recheck_sweep` run lines, checking `tmp/dispatch-standdown/`
+    stays empty in steady state, and confirming a
+    `standdown-winner-dead-work-unpushed` park record (once one occurs) carries
+    recoverable context.
+
+    2. "Ruling on the shared grace/park-cap defaults" — explicitly asks a human
+    to accept or re-tune `DISPATCH_STANDDOWN_IDLE_GRACE_S=900` /
+    `DISPATCH_STANDDOWN_PARK_MAX=3`; the node's own text says this duplicates an
+    already-open office-hours item on sibling node
+    tactic-denied-command-parks-node (commit 0f6af041).
+  since: 2026-07-31
+  recommendation: >-
+    For item 1: check the dispatch tick journal for `lib-standdown-recheck:
+    sweep complete (…)` lines appearing on both the paused and normal ticks; `ls
+    tmp/dispatch-standdown/` on the fleet host and confirm it's empty in steady
+    state (a marker lingering more than a tick or two is a problem); if/when a
+    `standdown-winner-dead-work-unpushed` park has occurred, pull it from the
+    office-hours queue and confirm its reason text alone (worktree path,
+    unpushed sha, winner sid) is enough to recover the work without reading a
+    session transcript.
+
+
+    For item 2: this is a pure tuning judgment call, no observation needed —
+    decide whether DISPATCH_STANDDOWN_IDLE_GRACE_S=900s and
+    DISPATCH_STANDDOWN_PARK_MAX=3 are acceptable defaults (they mirror the
+    sibling sweep lib-frozen-session-park.sh). Since the identical question is
+    already parked on sibling node tactic-denied-command-parks-node (commit
+    0f6af041), consider ruling on both at once rather than treating them as
+    separate decisions — a single answer likely resolves both.
+
+
+    Once both are dispositioned, clear the office_hours park on
+    tactic-standdown-winner-liveness (clear-park) so the node can advance
+    main-qa → done.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

@@ -3386,6 +3386,93 @@ clarifications:
       manual `claude rm <session-id>` reap verbatim as the human's own action,
       and must carry the mandatory RESOLUTION_SENTENCE (hold-node-decide.ts)
       rather than a re-typed paraphrase."
+  - question: "Does PR #2889 (tactic-align-skills-latest-graph-guard, merged
+      2026-07-18) close the phase-skill entry-gate gap that
+      tactic-phase-entry-selection-gate targets?"
+    answer: "(Recorded 2026-07-31 /align-tactics per-node round on
+      tactic-phase-entry-selection-gate.) PR #2889
+      (tactic-align-skills-latest-graph-guard, merged 2026-07-18) does NOT close
+      the phase-skill entry-gate gap, resolving the 'overlap to verify first'
+      question that clarification 1 (2026-07-19) and the draft tactic's own
+      first unit left open. Verified directly at HEAD 06c19a40: #2889's diff
+      touches only the align-family SKILL.md Step-0 text plus
+      .claude/skills/dispatch-propagate/scripts/assert-worktree-fresh, and that
+      script is detect-only freshness (git fetch + behind-count vs origin/main)
+      — it never calls check-node-selection.ts and never reads phase,
+      office_hours, or any fingerprint. A tree-wide grep confirms
+      packages/intentionsutil/scripts/check-node-selection.ts has exactly one
+      functional call site: provision-node-worktree:125 (clarification 1 and the
+      tactic body both cite ':87'; the file has grown, the call is unchanged).
+      align-tactics/SKILL.md:113 and align-strategy/SKILL.md:96 still route
+      re-entry through assert-worktree-fresh alone. So #2889 is a freshness
+      layer, not a selection-validity layer: the tactic's verification unit
+      resolves to 'no overlap — proceed with the explicit gate', and the tactic
+      is not droppable."
+  - question: What is the actual per-phase-skill-entry primitive in service today,
+      and does it already run the mechanical selection-validity gate
+      (check-node-selection.ts)?
+    answer: (Recorded 2026-07-31 /align-tactics per-node round on
+      tactic-phase-entry-selection-gate.) The per-phase-skill-entry primitive
+      actually in service today is
+      .claude/skills/dispatch-propagate/scripts/dispatch-derive-node-target,
+      wired into /implement, /qa-fix, /qa-main, /review-fix and /fix-checks via
+      --expect-phase / --expect-fix-active. Its Step-5 gate (~lines 148-163)
+      hand-rolls only a SUBSET of check-node-selection's checks — bare
+      phase-string equality, or execution.fix non-null — and checks neither
+      office_hours-parked, nor strategy_fingerprint staleness, nor
+      align-eligibility, nor scope-chain staleness. /qa-fix bolts a second
+      hand-rolled parked check on top (SKILL.md:96 and
+      references/target-resolution.md:44-67), whose own comment concedes it
+      'must agree with the canonical selection gate readParked
+      (check-node-selection.ts:90-93)'; the other four skills lack even that
+      partial copy. dispatch-derive-node-target already snapshots the node from
+      origin/main and holds NODE_JSON/COMBINED_JSON in memory — the exact inputs
+      the gate needs — so routing it through check-node-selection.ts reuses a
+      read it already performs. Any implementation of the entry-gate requirement
+      should collapse these duplicates through the canonical gate rather than
+      add a sixth partial reimplementation, and should treat align-tactics
+      separately since it uses assert-worktree-fresh, not this front door.
+  - question: What complicates binding check-node-selection.ts uniformly across
+      every align-family entry path?
+    answer: "(Recorded 2026-07-31 /align-tactics per-node round on
+      tactic-phase-entry-selection-gate.) check-node-selection.ts takes a
+      required positional <selected-phase> and exits 12 when node.phase differs,
+      so binding it to the align-family entry path requires deciding what phase
+      argument a draft-tactic finalize passes — the target node itself is phase:
+      null, and a router phase worker always has one while a manual
+      /align-tactics invocation does not. The gate already models align-tactics'
+      two selection shapes internally (strategy at null phase, frozen-tactic
+      re-eval), so this is resolvable in code rather than by new doctrine, but
+      the recorded requirement does not distinguish the draft-finalize case from
+      a re-plan of an already-phased tactic and an implementing plan must.
+      Relatedly, the gate cannot simply be folded into assert-worktree-fresh for
+      all callers: align-strategy and grounding-research invoke that script with
+      no phase concept at all. The requirement binds phase-skill entries, per
+      its own wording — freshness first, selection-validity second, and only
+      where a selected phase exists."
+  - question: Do the strategy-main-health boost-100 write-path guard and the
+      PR-title <node id> CI guard conditions have corroborating code today?
+    answer: "(Observed 2026-07-31 /align-tactics per-node round; recorded as an
+      observation, not a re-decision of an author-decided condition.) Two
+      recorded conditions describe mechanisms that targeted searches could not
+      corroborate at HEAD 06c19a40. (a) The strategy-main-health standing-boost
+      condition says validate-graph/graph-commit 'refuses a commit that authors
+      another boost or override at or above it, or that reduces it' —
+      packages/intentionsutil/scripts/validate-graph.ts contains no occurrence
+      of 'boost' at all; the only intentionsutil sources naming boost are
+      src/attention.ts, src/goals.ts, src/officeHours.ts and src/schema.ts
+      (ranking and schema) plus scripts/trace-decisions.ts (diff display). No
+      write-path refusal was found. (b) The PR-title '<node id>: <short
+      description>' condition says 'a CI guard rejects a title that is
+      non-conforming or whose id does not resolve' — no title conformance check
+      exists in .github/workflows/ or .github/scripts/, dispatch-open-pr still
+      accepts a free-form --title, and the implementing tactic
+      tactic-pr-title-node-id-convention is still status:raw / phase:null.
+      Neither is treated as a failed condition on this evidence: both read as
+      recorded doctrine awaiting implementation, and neither is a premise any
+      plan of this round depends on. Flagged so a future author sitting can
+      decide whether to arm the mechanisms or restate the conditions as target
+      state."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
