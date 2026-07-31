@@ -65,13 +65,15 @@ attention:
     promotion lifts no blocker and cannot compound. Finalized 2026-07-31 via
     /align-tactics (tactic-target round): status is now codified and phase
     implement, carrying the full plan in the body; the boost is unchanged."
-phase: qa
+phase: review
 execution:
   branch: tactic-standdown-winner-liveness
   pr: 2996
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -716,3 +718,20 @@ The defect is a live-fleet race no unit test reproduces end to end:
 loser exit (that needs a reap-session-without-removing-worktree capability the
 daemon does not expose today), and does not take over the winner's work — the
 sweep surfaces, a human resolves. Record those as separate work.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #2996) — both items are planned deferrals with no
+merge-time-verifiable content; deferred here per the node's own Verification
+section rather than escalated. Drained by `tactic-main-qa-phase` after
+`review → main-qa` fires post-merge.
+
+1. **Live-fleet behavior of the sweep**
+   - url_path: current
+   - expected_outcome: The 2026-07-31 stranded-stand-down incident class becomes visible instead of silent once deployed to the live dispatch fleet: the tick journal shows `standdown_recheck_sweep` running each tick, `tmp/dispatch-standdown/` stays empty in steady state, and the first `standdown-winner-dead-work-unpushed` park carries enough context (worktree path, unpushed sha, winner sid) to recover the work without reading a session transcript.
+   - finding: Not assertable at merge time in a single-PR QA pass — this is a live-fleet race across two concurrent Claude sessions racing on tick cadence, explicitly documented in this node's own Verification section as "Observe in production (post-merge, judgment call — this is the real signal)". All 8 script-verifiable QA items (invariant checks + full test-suite integration) passed; this is the residual post-merge observation the node's author already called out as not unit-testable.
+
+2. **Ruling on the shared grace/park-cap defaults**
+   - url_path: current
+   - expected_outcome: `DISPATCH_STANDDOWN_IDLE_GRACE_S=900` and `DISPATCH_STANDDOWN_PARK_MAX=3` are accepted as reasonable operational defaults, or a human re-tunes them.
+   - finding: These values mirror the sibling sweep `lib-frozen-session-park.sh`'s defaults. The identical tuning question (900s grace / 3-park cap) is already parked to office-hours on the sibling node `tactic-denied-command-parks-node` (commit `0f6af041`, which reclassified it as needing a human ruling). Re-raising it as a fresh blocker here would duplicate an already-open queue item. The blast radius of a wrong value is bounded: it only affects the `origin=observed` path's park timing — never a release, never a spurious park of a declared stand-down (verified during this QA pass).

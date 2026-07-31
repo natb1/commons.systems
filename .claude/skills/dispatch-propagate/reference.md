@@ -212,6 +212,41 @@ worktree, each advancing its own issue's phase without contention. Only the
 router selection step is serialized; the worker execution path is per-
 worktree-parallel.
 
+## Duplicate-worker stand-down
+
+Sometimes a bug elsewhere in the spawn path produces two live sessions for the
+same graph node. The stand-down protocol resolves that without interrupting
+whichever session is actually ahead:
+
+1. The session holding uncommitted/unpushed work wins. The other stands down.
+2. The standing-down session calls `dispatch-standdown <node-id> --winner
+   <winner-sid>` and yields the turn. The script re-checks the winner's
+   liveness one more time, right at the moment of decision, before writing
+   anything — a stale premise (the winner already died) must not produce a
+   stand-down record naming a winner that was never actually there. **Yield
+   only on exit 0 (`stood-down`).** Exit 3 (`winner-absent`) means there is no
+   winner to stand down for — become the worker instead. Exit 4
+   (`ledger-unwritable`) means the stand-down was not recorded, so nothing will
+   ever re-check it — do not yield on it either; fix the ledger and re-run, or
+   keep working the node.
+3. It writes NO office-hours park itself. A park here would spuriously knock a
+   node another session is actively working out of the dispatch lane —
+   precisely the interruption this protocol exists to avoid.
+4. It never self-closes via `claude rm`. The worktree is shared with the
+   winner, and `claude rm` deletes the job's worktree along with the job — if
+   the winner's fix is still uncommitted or unpushed there, self-closing would
+   destroy it.
+
+Yielding the turn without a `node-terminal` marker leaves the job HELD by the
+Stop hook (dispatch-self-close's Invariant 2) rather than reaped. That hold
+used to be an invisible trap: nothing re-checked whether the winner was still
+alive, so a winner that died before pushing left the node stranded forever.
+`standdown_recheck_sweep` (lib-standdown-recheck.sh), run on both
+`dispatch-tick` cadences, closes that gap — it re-checks every stand-down
+marker's declared winner against the live-session registry and parks the node
+to office-hours if the winner turns out to be definitely gone, surfacing the
+stall to a human instead of leaving it silent.
+
 ## Selection-ladder mechanics
 
 This explains what `dispatch-select-target` does internally. The router only
