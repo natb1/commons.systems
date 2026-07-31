@@ -55,7 +55,46 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: item 12 (dispatch-stop.sh malformed office-hours-base marker
+    silently degrades to an unpinned park, no stderr warning, unlike its two
+    sibling branches) was dispositioned opus-fixable and refuted by adversarial
+    skeptics as 'nothing to fix', but the gated fix-plan phase refused to author
+    a fix, flagging a scope-deviation: choosing among
+    ratify/warn-on-stderr/fail-closed is a failure-mode policy decision the PR's
+    acceptance criteria do not authorize. Escalating to office-hours for a human
+    ratification call; no code defect found, no attempt label applied (permanent
+    deviation escalation, not attempt-capped)."
+  since: 2026-07-31
+  recommendation: |-
+    # Recommendation: `tactic-qa-main-park-base-cas` (PR #2993)
+
+    ## The decision you need to make
+
+    `dispatch-stop.sh` reads the new `office-hours-base` marker and, if the value is not 40 hex chars, silently drops it and parks unpinned (`.claude/hooks/dispatch-stop.sh:91-97`). The *degrade-rather-than-pass-through* choice is settled and correct — passing a bad value to `park-node` yields a usage error (exit 2) and loses the escalation park entirely. What is **not** settled is whether that branch should say anything. Its two siblings in the same function both warn on stderr (`:132-135` for `stale-diagnosis`, `:137-140` for generic failure). Pick one: **(a) add a stderr warning** matching the siblings, **(b) ratify the silence** and record why in the comment, or **(c) fail closed** (refuse the park on a malformed marker).
+
+    Two automated judgments split on this, which is why it reached you: the disposition workflow classified it `opus-fixable` and 2/2 skeptics refuted "nothing to fix"; the fix-planning agent refused, calling failure-mode selection outside the PR's acceptance criteria. Both are defensible — the fix is mechanical, but it *is* a behavior choice, and that is your call.
+
+    ## My read (for you to ratify or override)
+
+    Option (a), the stderr warning. `.claude/rules/code-style.md` is close to dispositive: silently swallowing a malformed input is exactly the "defensive fallback" it warns against, while "defensive checks... that turn confusing crashes into clear errors are encouraged." A malformed `office-hours-base` marker means a *producer bug* — `dispatch-derive-node-target` emitted a bad `BASE:`, or the marker got truncated — and the only symptom today is that the CAS protection this whole PR exists to add quietly stops applying. That is the failure mode the PR was written to prevent, reintroduced through the back door. A warning costs nothing, changes no control flow, and leaves the degrade decision untouched.
+
+    I would **not** take (c): fail-closed contradicts the opt-in design documented at `:86-90` and the hook's stated best-effort philosophy, and losing an escalation park is worse than losing a pin. (b) is tenable if you consider hook stderr already noisy enough that a warning would be ignored — but then say so in the comment, so the asymmetry with the siblings is explained rather than merely present.
+
+    ## If you choose (a)
+
+    Add the `else` arm to the regex check at `.claude/hooks/dispatch-stop.sh:94-96`, in the sibling branches' format:
+
+    ```
+    [dispatch-stop] WARNING: office-hours-base marker for '$JOB_NAME' is malformed (not a 40-hex blob sha); parking UNPINNED (non-fatal)
+    ```
+
+    Do not echo the raw value verbatim without thought — it lands in hook stderr. Extend the existing malformed-marker test at `.claude/skills/dispatch-propagate/scripts/test-dispatch-stop-hook.sh:254-265`: it currently asserts exit code and argv-has-no-`--base` but never inspects stderr. Add an assertion that stderr contains the warning marker, mirroring how the exit-3 case at `:267+` already asserts stderr surfacing. Keep the existing exit-0 and single-`park-node`-call assertions intact. Then rerun `test-dispatch-stop-hook.sh` (61/61 today) — no other suite should move.
+
+    ## Item 11 is not yours today
+
+    The end-to-end question — does the pin actually fire on a real `/qa-main` cannot-verify park with a genuine concurrent transition — is already filed as `needs-main` residue on the node body and will be verified post-merge during `main-qa`. It needs a live production occurrence and requires no action from you now. Item 12 above is the only thing blocking this park.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

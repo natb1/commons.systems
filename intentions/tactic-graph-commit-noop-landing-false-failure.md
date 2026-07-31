@@ -161,10 +161,7 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-30
-    attempt: 3
-    pushed_sha: null
+  fix: null
   completion: null
 validates: []
 blocked_by: []
