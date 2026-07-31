@@ -2148,66 +2148,6 @@ clarifications:
       2026-07-28 by the /align-strategy round that resolved the per-node
       carve-out above; recovered verbatim from the journal of workflow run
       wf_9f49072c-454, whose session dropped it.)"
-  - question: A main-qa verification test recorded by the qa phase always entered
-      the dispatch queue first and parked to office-hours only after a worker
-      had already analysed it. Where is a post-merge verification test's
-      destination decided, and what is the routing unit?
-    answer: "(Recorded 2026-07-28 /align-strategy interview.) Standing requirement:
-      a post-merge (main-qa) verification test is sorted to its terminal queue
-      AT RECORD TIME, by the qa phase that discovers it; a dispatch worker never
-      boots to discover that a test needs the author. The record already
-      asserted this invariant —
-      .claude/skills/qa-fix/references/needs-main-followups.md, node lane:
-      'verifiability is triaged here at record time ... This makes the legacy
-      boot-then-reject waste structurally impossible on the node lane' — but the
-      machinery could not deliver it, because the ROUTING UNIT was the source
-      tactic and a source tactic has exactly one destination. /qa-fix appended a
-      '## needs-main residue' section to the source's own body and advanced it
-      review -> main-qa, so mixed residue could not be split, and an
-      author-required item could not be parked at qa time without blocking the
-      very merge its observation depends on. Live cost:
-      tactic-execution-pr-merge-verification residue item 12 booted /qa-main,
-      which analysed it and concluded 'not browser-verifiable — its url_path
-      names a repo script, not a web page', parked 2026-07-28, and was then
-      drained by human override. Greenfield design adopted: the sorting unit
-      becomes the routing unit. At qa record time /qa-fix writes STANDALONE
-      tactic-mainqa-* nodes — grouped by destination, at most two per source
-      (one carrying all machine-verifiable items, one carrying all
-      author-required items, either omitted when empty) — instead of a residue
-      body section. Birth state IS the routing decision, reusing the shape
-      already live on the migrated tactic-mainqa-* nodes: machine-verifiable ->
-      phase main-qa, office_hours null, owner ai (dispatch queue);
-      author-required -> phase main-qa, office_hours {reason, since,
-      recommendation}, owner human (office-hours queue only — the selector's
-      tactic eligibility requires office_hours null,
-      packages/intentionsutil/src/router.ts:197, so it is never selectable).
-      Both carry execution.pr (the deploy to check) and blocked_by [<source
-      tactic>]: on the machine lane that is a merge gate, on the author lane it
-      is the readiness advisory office-hours already surfaces as a
-      signal-not-gate, and it self-clears correctly because pruning the done
-      source strips inbound blocked_by in the same commit and absence reads as
-      completion (inboundBlockers,
-      packages/intentionsutil/src/transitions.ts:265-272). The source tactic
-      then goes review -> done directly: no main-qa phase on the source, no
-      residue body append. The sorting predicate is unchanged — the
-      autonomous|human criteria already recorded in needs-main-followups.md
-      section 1, uncertain -> author. main-qa remains a valid standing phase;
-      only the SOURCE's use of it is retired. Measurement: the mis-sort rate —
-      /qa-main cannot-verify parks on nodes born office_hours null, over all
-      machine-sorted main-qa nodes; sensor is a graph census over parked main-qa
-      nodes (a cannot-verify park on a machine-sorted node IS a mis-sort by
-      construction, so this is a direct count, not a proxy); threshold at most 1
-      in 20. Recorded honestly: the opposite direction — an author-sorted item
-      Claude could have verified — is NOT mechanically observable and stays
-      unmeasured. This measurement is recorded here rather than in
-      success_signal because that slot carries this strategy's broader lifecycle
-      signal, which still holds and is not displaced by a narrower one.
-      Supersedes entry 22 (2026-07-04), whose answer located post-merge residue
-      in a body section of the source node; amends the parenthetical in entry
-      111 (2026-07-27) that 'main-qa is reachable only via review -> main-qa on
-      needs-main residue' — under this design main-qa is reached by a
-      verification node being BORN at it, while forwardPhase remains the single
-      home of phase routing exactly as entry 111 requires."
   - question: A deploy lag makes /qa-main park a correctly-sorted machine-verifiable
       item as cannot-verify. Is that an office_hours park?
     answer: "(Recorded 2026-07-28 /align-strategy interview, alongside the same-day
@@ -3990,13 +3930,6 @@ attributes:
       this strategy's park-context failure earlier rather than removing it; this
       is the standing park-recommendation condition applied at creation time
       instead of at park time
-    - the machine-verifiable / author-required sort is an explicitly recorded
-      state on the verification node, never inferred from whether office_hours
-      happens to be set — office_hours is cleared when the author drains the
-      item, which would erase the very mark the mis-sort measurement reads; this
-      extends strategy-verified-requirements' recorded condition that
-      not-machine-verifiable is an explicit recorded state, never a silent
-      omission
     - "the machine-verifiable / author-required sort is an explicitly recorded
       state on the verification node, never inferred from whether office_hours
       happens to be set — office_hours is cleared when the author drains the
