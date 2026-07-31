@@ -3053,6 +3053,53 @@ clarifications:
       spawned on an unsynced primary checkout. Residual staleness is one
       intra-tick window, against the 142- and 365-commit node worktrees the
       tactic removes.
+  - question: Is the 'the Stop hook does not reliably fire the park after a session
+      awaits a background Workflow' root-cause claim (recorded in
+      tactic-phase-terminal-requires-disposition's rationale) verified against
+      the hook's own source?
+    answer: "(Recorded 2026-07-31 /align-tactics drift review of
+      tactic-phase-terminal-requires-disposition.) The node-lane escalation path
+      in /qa-fix, /qa-main, /review-fix and /fix-checks writes only
+      $CLAUDE_JOB_DIR/office-hours-reason (plus -recommendation, -pr) and
+      delegates the actual park to .claude/hooks/dispatch-stop.sh —
+      .claude/skills/qa-fix/SKILL.md:190-192 is the pattern, and none of the
+      four calls park-node in-session. On 2026-07-31 that delegation produced
+      office_hours: null on origin/main for
+      tactic-graph-commit-intentions-base-stale-restore even though the
+      escalating session had written both office-hours-reason and
+      office-hours-recommendation to its job directory. The OUTCOME is
+      evidenced; the MECHANISM is not. The session's self-report — 'the Stop
+      hook does not reliably fire the park after a session awaits a background
+      Workflow' — is not reproducible from the hook source:
+      dispatch-stop.sh:56-98 fires its park branch unconditionally on every Stop
+      event, gated only on CLAUDE_JOB_DIR / state.json / node-file existence.
+      Recorded so that no plan treats the stated mechanism as established fact:
+      the fix shape that does NOT depend on the root-cause diagnosis already
+      exists as the legacy issue lane's belt-and-suspenders precedent
+      (dispatch-mark-deviation runs dispatch-apply-office-hours in-session
+      FIRST, keeping the marker only as a Stop-hook fallback, per #2541), with
+      .claude/skills/dispatch-conflict/SKILL.md:948-965 as the worked node-lane
+      call shape for an in-session park-node invocation."
+  - question: Who owns reconciling the four-member 'held vs being worked' family's
+      shared family-scope predicate work (claude_agents_count_busy_workers's
+      busy-only filter vs worktree_has_live_session), now that
+      tactic-denied-command-parks-node has explicitly scoped it out of itself?
+    answer: "(Recorded 2026-07-31 /align-tactics drift review.) The four-member
+      'held vs being worked' family — tactic-denied-command-parks-node,
+      tactic-phase-terminal-requires-disposition,
+      tactic-standdown-winner-liveness,
+      tactic-router-spawn-window-duplicate-worker — currently has no node owning
+      its family-scope work. tactic-denied-command-parks-node's own 2026-07-31
+      clarifications declared the reconciliation of
+      claude_agents_count_busy_workers' busy-only pace filter
+      (.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:590-628)
+      with worktree_has_live_session's any-status name match
+      (.claude/skills/dispatch-propagate/scripts/graph-select-target:665-673) to
+      be FAMILY scope and explicitly out of its own scope, and the remaining two
+      members are still status: raw / phase: null on origin/main. Observation
+      only — it gates no individual member's plan — but as currently scoped no
+      member will plan the family-scope predicate reconciliation, so it needs a
+      home before the family is considered closed."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
