@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool on two lanes: code-review and security-review (Lane A) run their own built-in review-and-fix — code-review via `/code-review max --fix`, applying its own edits — trusting the built-ins, with un-auto-fixed residue dispositioned (resolve/defer/ignore) by a dedicated Opus residue phase; every other finder — domain security reviewers, cost, codeql, npm, erosion (Lane B) — still goes through code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
+description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool on two lanes: code-review and security-review (Lane A) run their own built-in review-and-fix — code-review via a serialized `claude -p '/code-review low --fix'` exclusive pre-stage (Step 1b, run before the Workflow's finder fan-out), applying its own edits — trusting the built-ins, with un-auto-fixed residue dispositioned (resolve/defer/ignore) by a dedicated Opus residue phase; every other finder — domain security reviewers, cost, codeql, npm, erosion (Lane B) — still goes through code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -258,6 +258,88 @@ Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
 to pass to the Workflow. **See `references/inline-scans.md`** for the exact
 command block, normalization rules, and the per-finder roster and descriptions.
 
+### 1b. Run the built-in `/code-review` as an exclusive pre-stage
+
+`dispatch-code-review` shells `claude -p '/code-review <effort> --fix
+[--comment]'` — the `-p` user-turn entry point is the only way to invoke a
+skill marked `disable-model-invocation`, which the built-in `/code-review`
+carries (see `references/code-review-invocation.md` for the full measured
+contract). Because `--fix` **writes the working tree**, this stage must run
+to completion before any owned lens fans out — **never inside** the Step 2
+Workflow's parallel finder fan-out, which would race concurrent writers
+against the same tree. This is why it is its own serialized step between
+Step 1 and Step 2, not a finder inside the Workflow.
+
+`MERGE_BASE` is already bound by Step 1 above — reuse it as `<target>`; do not
+recompute or hand-roll a second target formatter.
+
+Do **not** pass `--effort` to `dispatch-code-review` here — leave it at the
+script's own default (`low`). This is deliberate, not an oversight: Unit 1's
+measured investigation (`references/code-review-invocation.md` §1.2, §5.4, §7)
+found that `max` effort against a real, non-trivial diff ran over 39 minutes
+without completing — `claude -p` buffers all output until the run completes,
+so the timeout was a total loss of ~$372 of price-proxy spend for zero bytes
+of output — and that `medium` effort did not complete within 300s either.
+Only `low` effort is measured to reliably complete (14-30s observed). Raising
+the effort level for this lane is an open follow-up for
+`strategy-token-economy`, not settled by this node.
+
+Run this call with `dangerouslyDisableSandbox: true` and `timeout: 600000`
+(it is a nested `claude` session — `--comment` shells `gh` and it touches the
+local Claude daemon; see `.claude/rules/sandbox.md`):
+
+```bash
+CR_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-code-review \
+  --target "$MERGE_BASE" --out-dir "tmp/code-review-$N" 2>"tmp/code-review-$N.err")
+CR_RC=$?
+```
+
+**Hard stop on any non-zero `CR_RC`**, following the same stdout/stderr-split,
+case-on-exit-code idiom this file already uses for the front door
+(`DERIVE_OUT`/`DERIVE_ERR`, preamble above) and for `commit-merge-push`
+(Step 3):
+
+```bash
+case $CR_RC in
+  0) ;;
+  1) echo "/review-fix: 'claude -p /code-review' exited non-zero: $(cat "tmp/code-review-$N.err")" >&2; exit 1 ;;
+  2) echo "/review-fix: dispatch-code-review argument/empty-output error: $(cat "tmp/code-review-$N.err")" >&2; exit 1 ;;
+  3) echo "/review-fix: /code-review is unavailable — rejection signature in output: $(cat "tmp/code-review-$N.err")" >&2; exit 1 ;;
+  4) echo "/review-fix: 'claude -p /code-review' timed out" >&2; exit 1 ;;
+esac
+```
+
+**A failure here fails the phase.** This pass never degrades to an
+agent-performed review, never retries with a substitute, and never reports
+substituted output under the built-in's name — that is the exact four-day
+silent-substitution defect this node's Context section documents and exists
+to fix. Exit 3 in particular means the instrument itself is unavailable — the
+office-hours park reason must carry the verbatim stderr captured above, not a
+paraphrase.
+
+Parse the summary with the same `sed -n 's/^key=//p'` idiom Step 1 uses for
+`SURFACE_OUT`:
+
+```bash
+CR_FINDINGS=$(printf '%s\n' "$CR_OUT" | sed -n 's/^findings_path=//p')
+CR_PATCH=$(printf '%s\n' "$CR_OUT" | sed -n 's/^patch_path=//p')
+CR_TOUCHED=$(printf '%s\n' "$CR_OUT" | sed -n 's/^touched_file=//p')
+```
+
+`CR_FINDINGS` and `CR_PATCH` are each a single absolute path (one
+`findings_path=` line, one `patch_path=` line). `CR_TOUCHED` collects
+potentially multiple `touched_file=` lines — one per file the built-in's
+`--fix` actually touched, derived by `dispatch-code-review` from a
+before/after `git diff`, never from the review's own self-report of what it
+fixed.
+
+Do **not** recompute `surface` or `changed_files` after this pre-stage. The
+built-in's `--fix` edits are uncommitted working-tree changes to files
+already in the diff, and the Lane-B finder prompt tells each finder to diff
+against `merge_base` — a `git diff <merge_base>` run by a Workflow subagent
+already includes these working-tree edits. This is deliberate; a later reader
+should not "fix" it by adding a recompute step.
+
 ### 2. Build `args` and invoke the Workflow
 
 Collect the fields for the Workflow invocation. Parse `Closes #N` from the pack's
@@ -274,13 +356,27 @@ args = {
   prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
   security_note:       <string or omit>, // set for empty/docs/tests; omit for code
-  prior_phase_log:     <string or omit> // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
+  prior_phase_log:     <string or omit>, // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
+  code_review: {
+    status:         "ok",
+    findings_path:  <CR_FINDINGS>,        // absolute path; the Workflow's reader subagent reads it
+    patch_path:     <CR_PATCH>,           // absolute path to the before/after patch
+    touched_files:  [ <CR_TOUCHED lines> ] // git-derived; the AUTHORITATIVE fixed[] constraint
+  }
 }
 ```
 
 When `PRIOR_PHASE_LOG` is non-empty, pass it as `prior_phase_log` so the review
 finders see what an earlier phase (e.g. qa-fix) already tried; omit the field
 when the preamble read the `phase-log: none` sentinel.
+
+`code_review` carries **paths, not findings** — Step 1b's raw review text at
+`CR_FINDINGS` is never read into this skill's own context; only the path
+crosses into `args`, preserving the property this file already asserts below
+("The skill's context never holds raw findings — only this compact summary,"
+Step 2's Workflow-invocation prose). The current Workflow (`review-fix.js`)
+does not read this field yet — it is additive here, consumed once the
+Workflow is rewired.
 
 **Invoke the Workflow tool on `.claude/workflows/review-fix.js`**, passing `args`.
 The Workflow is a sanctioned call from this skill — no `ultracode` keyword needed.
@@ -304,8 +400,10 @@ result = {
 The Workflow's fix-authoring agents (non-isolated, Opus) have already edited the
 working tree by the time `result` is returned — this includes THREE sources
 of edits merged into the one envelope above: the shared Lane-B Opus fix fan-out,
-Lane-A code-review's own `/code-review max --fix` edits, and the residue phase's
-applied resolve-dispositioned fixes. The skill's context never holds raw
+Lane-A code-review's own Step 1b `claude -p '/code-review low --fix'`
+pre-stage edits (already applied and committed-to-diff before this Workflow
+call even starts — see Step 1b), and the residue phase's applied
+resolve-dispositioned fixes. The skill's context never holds raw
 findings — only this compact summary. **See
 `references/schema-edge-cases-notes.md`** for the full model split across
 finder/fix/classify stages (#1172, #2872, tactic-review-phase-trust-builtin-review).
