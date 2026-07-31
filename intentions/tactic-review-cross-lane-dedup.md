@@ -6,11 +6,17 @@ statement: Deduplicate built-in-lane residue against owned-lens findings for fix
 owner: ai
 status: raw
 parent: null
-rationale: Surfaced by the 2026-07-31 review-fix token audit interview.
+rationale: 'Surfaced by the 2026-07-31 review-fix token audit interview.
   laneAResidue never enters the allFindings pool, so 7 of 27 confirmed findings
   per window were dispositioned and fixed twice by two different Opus agents —
   duplicate draw plus a concurrent-edit hazard on one file. See clarification 20
-  on strategy-token-economy.
+  on strategy-token-economy. Amended 2026-07-31 (second interview): the "7 of
+  27" measurement describes overlap between two OWNED reviews, because the
+  built-in never ran — see clarification 17. The defect this node fixes
+  (laneAResidue never entering the allFindings pool) is unaffected and still
+  real; only the magnitude is unmeasured against the real instrument, and the
+  serialized post-fix ordering in clarification 24 removes part of the overlap
+  structurally.'
 reading: null
 gap: null
 serves:
@@ -94,3 +100,21 @@ prevent.
   applied fix, not two.
 - Skeptic agent count does not rise after the merge.
 - No file is edited by the residue agent and a fix agent in the same run.
+
+## Reconciliation (2026-07-31, second interview)
+
+The "7 of 27 confirmed findings dispositioned and fixed twice" measurement
+describes overlap between **two owned reviews**: the built-in never ran, so
+what this node calls "built-in-lane residue" was produced by a general-purpose
+Opus agent (see `strategy-token-economy` clarification 17).
+
+The defect is unaffected and still real — `laneAResidue` never enters the
+`allFindings` pool (`.claude/workflows/review-fix.js:636` vs `:655`), so
+whatever Lane A produces is dispositioned independently of Lane B. Only the
+*magnitude* is unmeasured against the real instrument.
+
+Note the interaction with clarification 24: serializing the built-in ahead of
+the owned lenses, running the lenses against the post-fix tree, removes the
+*fixed*-finding half of the overlap structurally. This node's remaining job is
+the residue half — findings the built-in reports but does not fix.
+

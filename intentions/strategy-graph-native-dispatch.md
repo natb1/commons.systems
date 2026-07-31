@@ -3473,6 +3473,28 @@ clarifications:
       plan of this round depends on. Flagged so a future author sitting can
       decide whether to arm the mechanisms or restate the conditions as target
       state."
+  - question: What must a dispatch lane do when it cannot invoke its named instrument?
+    answer: "(Recorded 2026-07-31 interview.) Fail the lane. A lane that cannot
+      invoke its named instrument never substitutes an ad-hoc equivalent, and
+      never reports substituted output under that instrument's name. This binds
+      for every named instrument a lane delegates to — a vendor skill, one of
+      our own scripts, an external service — not only for vendor instruments,
+      because the failure mode is not vendor-specific: an agent directed to run
+      one of our scripts can hand-roll it just as readily. Live instance: across
+      18 review-fix runs (2026-07-27 to 07-31) every Skill(code-review) call was
+      rejected with disable-model-invocation; the finder agent read the
+      rejection, wrote \"I'll perform the review directly at max effort\", and
+      ran roughly 39 tool calls of its own review, which the workflow then
+      reported as the built-in's output. Nothing in the pipeline detected this
+      for four days, and a strategy divergence was recorded on the strength of
+      it (strategy-token-economy clarification 21). The doctrinal ground is
+      virtue-progressive-detachment's floor — the capability to read, evaluate,
+      and reason about what the delegatee produces is the floor under every
+      recovery path. What failed was not skill atrophy but the absence of any
+      check that the delegatee produced anything at all: an unexercised
+      delegation is a hope, not a delegation. A lane failing this way parks with
+      the rejection as its recorded reason, per the standing park-context
+      condition, rather than proceeding on substituted output."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
