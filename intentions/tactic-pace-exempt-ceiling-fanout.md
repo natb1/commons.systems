@@ -8,9 +8,11 @@ parent: null
 rationale: "Surfaced by the 2026-07-31 /align-strategy fleet-scheduling
   exception-lanes round. dispatch-select-tick's autonomous at-cap block diverges
   from the record in two opposite directions at once, and one ratified rule
-  fixes both: it admits only ONE pace-exempt worker (narrower than the amended
-  fill-to-ceiling rule) while consulting no ceiling at all (wider than the
-  standing max_concurrent_workers invariant, yielding max+1). Both are defects
+  fixes both: it admits only ONE pace-exempt worker per gate firing (narrower
+  than the amended fill-to-ceiling rule) while consulting no ceiling at all
+  (wider than the standing max_concurrent_workers invariant) — and because the
+  gate re-evaluates every tick with no memory of a prior bypass, that unbounded
+  half can compound across ticks, not just overshoot by one. Both are defects
   against the record, not design choices."
 reading: null
 gap: null
@@ -47,14 +49,21 @@ at-cap branch (the `if (( LIVE_COUNT >= TARGET_N ))` block, roughly lines
 1. **Too narrow.** It probes
    `graph-select-target --pace-exempt-only --top 1` and admits exactly one
    gate-exempt worker. The ratified rule is fill-to-headroom.
-2. **Too wide.** The block never reads `MAX_WORKERS` at all — verified: zero
-   occurrences of `MAX_WORKERS` between the start of the autonomous block and
-   its hard-cap exit, while the `--manual` branch below it does resolve
-   `dispatch-target-workers --max`. The branch fires on
-   `LIVE_COUNT >= TARGET_N` whatever `TARGET_N` is, so at a genuine
-   `live == max_concurrent_workers` a selectable pace-exempt node still admits
-   one more worker. That is the `max + 1` overage observed live on 2026-07-31,
-   and it contradicts the standing ceiling invariant that predates this round.
+2. **Too wide, and not bounded to "max + 1".** The block never reads
+   `MAX_WORKERS` at all — verified: zero occurrences of `MAX_WORKERS` between
+   the start of the autonomous block and its hard-cap exit, while the
+   `--manual` branch below it does resolve `dispatch-target-workers --max`.
+   The branch fires on `LIVE_COUNT >= TARGET_N` whatever `TARGET_N` is, and
+   admits one more worker than whatever is currently live at that instant —
+   not specifically one more than `max_concurrent_workers`. Worse, the gate is
+   re-evaluated fresh every tick with no memory of a prior bypass: the
+   spawned worker counts as busy on the next tick, `LIVE_COUNT` is still
+   `>= TARGET_N` (trivially so at a paced-to-zero curve, `0 >= 0`), and the
+   lane can fire again — admitting yet another worker. So the overage
+   compounds across ticks, bounded only by how many distinct selectable
+   `pace_exempt` candidates exist, not by `max_concurrent_workers` (this code
+   path never reads it) and not by a single "+1". It contradicts the standing
+   ceiling invariant that predates this round.
 
 The two are not independent bugs to fix separately: computing the headroom is
 what fixes both at once.
