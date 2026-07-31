@@ -65,12 +65,13 @@ attention:
     promotion lifts no blocker and cannot compound. Finalized 2026-07-31 via
     /align-tactics (tactic-target round): status is now codified and phase
     implement, carrying the full plan in the body; the boost is unchanged."
-phase: implement
+phase: qa
 execution:
   branch: tactic-standdown-winner-liveness
   pr: 2996
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
   fix: null
   completion: null
