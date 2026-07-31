@@ -503,14 +503,30 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
 
   const result = new Map<string, ResolvedAttention>();
   for (const n of eligible) {
+    const tier = mustGet(effectiveTier, n.id, "effectiveTier entry");
+
+    // TIER IS AN ISOLATION BOUNDARY (author ruling 2026-07-31, design decision
+    // (b)). Authored authority does not flow ACROSS a tier namespace: only a
+    // claim authored by a source sitting in this node's own effective tier
+    // contributes to its value. Filtering here rather than in the authored
+    // fixpoint keeps that fixpoint a pure "who reaches whom" relation, and
+    // keeps the isolation rule stated in exactly one place.
+    //
+    // Effective tier is max-lifted along the SAME distributor edges the
+    // authored fixpoint walks, so every source reaching `n` has an effective
+    // tier <= `n`'s: this filter only ever drops strictly-LOWER-tier sources,
+    // and can never drop the node's own claim, which by construction sits at
+    // the node's own tier. That is also why it cannot introduce a tier
+    // inversion — it removes contributions, never adds them.
     const authoredOut = mustGet(authoredOutgoing, n.id, "authoredOutgoing entry");
+    const contributing = [...authoredOut.entries()].filter(
+      ([src]) => mustGet(effectiveTier, src, "effectiveTier entry") === tier,
+    );
     let authoredValue = 0;
-    for (const amt of authoredOut.values()) authoredValue += amt;
-    const sources = [...authoredOut.entries()]
+    for (const [, amt] of contributing) authoredValue += amt;
+    const sources = contributing
       .sort((a, b) => (a[1] !== b[1] ? b[1] - a[1] : a[0] < b[0] ? -1 : 1))
       .map(([src]) => src);
-
-    const tier = mustGet(effectiveTier, n.id, "effectiveTier entry");
 
     const overridden = n.attention !== null && n.attention.override !== null;
     if (overridden) {

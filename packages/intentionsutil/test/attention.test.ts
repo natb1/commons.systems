@@ -654,6 +654,68 @@ describe("resolveAttention tier axis", () => {
     expect(capped?.value).toBe(2); // override pins the value
     expect(capped?.tier).toBe(3); // tier is a separate axis, still resolved
   });
+
+  // Author ruling 2026-07-31, design decision (b): tier is an ISOLATION
+  // BOUNDARY — authored authority does not flow across a tier namespace.
+  it("does not sum a lower-tier source's claim into a higher-tier receiver", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-low", attention: boost(10, "ordinary work") }),
+      svnode({
+        id: "strategy-high",
+        parent: "strategy-low",
+        attributes: { tier: 3 },
+        attention: boost(5, "production health", 3),
+      }),
+    ]);
+    const high = result.get("strategy-high");
+    // 5, not 15: the tier-1 parent's claim is filtered out before summing.
+    expect(high?.value).toBe(5);
+    expect(high?.tier).toBe(3);
+    // The node's own claim is never dropped — it sits at the node's own tier.
+    expect(high?.sources).toEqual(["strategy-high"]);
+  });
+
+  it("still sums a SAME-tier source's claim — the filter is by tier, not by distance", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({
+        id: "strategy-peer",
+        attributes: { tier: 3 },
+        attention: boost(10, "production health", 3),
+      }),
+      svnode({
+        id: "strategy-heir",
+        parent: "strategy-peer",
+        attributes: { tier: 3 },
+        attention: boost(5, "production health", 3),
+      }),
+    ]);
+    const heir = result.get("strategy-heir");
+    expect(heir?.value).toBe(15);
+    expect(heir?.sources).toEqual(["strategy-peer", "strategy-heir"]);
+  });
+
+  it("drops a lower-tier source lifted through an intermediate — filtering is on the SOURCE's tier", () => {
+    // strategy-low (tier 1, boost 7) -> tactic-mid (lifted to tier 3 by its
+    // serves edge) -> the receiver. tactic-mid RELAYS the tier-1 claim, and
+    // being lifted to tier 3 itself does not relabel that claim's origin.
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-low", attention: boost(7, "ordinary work") }),
+      svnode({ id: "strategy-prod", attributes: { tier: 3 } }),
+      anode({
+        id: "tactic-mid",
+        kind: "tactic",
+        parent: "strategy-low",
+        serves: ["strategy-prod"],
+      }),
+    ]);
+    const mid = result.get("tactic-mid");
+    expect(mid?.tier).toBe(3);
+    expect(mid?.value).toBe(0); // the tier-1 claim does not cross the boundary
+    expect(mid?.sources).toEqual([]);
+  });
 });
 
 describe("resolveAttention term composition is modular", () => {
