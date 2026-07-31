@@ -81,100 +81,7 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "qa-fix: item 7 (900s grace / 3-park cap tuning judgment on
-    lib-frozen-session-park.sh) reclassified opus-fixable by the disposition
-    Workflow's skeptic pass, then hit a planner scope-deviation — no in-scope
-    code change exists; re-tuning env-var defaults is a decision the node does
-    not authorize. Escalating to office-hours for a human ruling on whether the
-    shipped defaults (DISPATCH_FROZEN_SESSION_GRACE_S=900,
-    DISPATCH_FROZEN_SESSION_PARK_MAX=3) are acceptable."
-  since: 2026-07-31
-  recommendation: >-
-    # Office-hours: PR #2994 — accept or retune the frozen-session park defaults
-
-
-    **Nothing is broken.** Tests are green (89/89, 43/43, 102/102), CI passes,
-    no code defect was found. The automated pipeline deliberately declined to
-    touch this: re-tuning the fleet's own timing policy is an authorization call
-    it isn't allowed to make. This is a sign-off, not a bug.
-
-
-    ## The one decision
-
-
-    Accept the shipped defaults, or name different ones before merge:
-
-
-    - `DISPATCH_FROZEN_SESSION_GRACE_S` = **900s** — how long a `state: blocked`
-    worker session must sit idle before the sweep parks its node.
-
-    - `DISPATCH_FROZEN_SESSION_PARK_MAX` = **3** — max parks per sweep.
-
-
-    Both live in
-    `.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`
-    (defaults at ~lines 52-56, integer guards at ~154-157, both documented in
-    the file header). Both are env-overridable at runtime — you can change them
-    later without a code change.
-
-
-    ## How to think about the risk
-
-
-    - **Too short a grace** → a legitimately slow-but-alive worker gets parked.
-    Cost is low: the node lands in office_hours, you `clear-park` it, work
-    resumes. Nothing is reaped, no branch or worktree is destroyed — that's the
-    "park, don't reap" design, and confirming it's intended is part of this
-    sign-off.
-
-    - **Too long a grace** → a genuinely frozen worker holds a router deadlock
-    for up to 15 minutes longer. That's the status quo the PR exists to fix.
-
-    - **The 3-park cap** bounds blast radius if the detector is ever wrong: a
-    bad sweep can misfire at most 3 nodes per tick, not the whole fleet.
-
-
-    Ask yourself: *have you seen a real worker legitimately idle past 15 minutes
-    mid-task?* If yes, raise the grace. If not, 900s/3 is the conservative
-    choice and you should accept it.
-
-
-    ## To change a value
-
-
-    Edit the two `: "${VAR:=...}"` default lines in `lib-frozen-session-park.sh`
-    and re-run the suites. Or defer entirely — set the env var in the dispatch
-    environment after merge and skip the code change.
-
-
-    ## Already handled — don't spend time here
-
-
-    Two items are **not** for this session. They're filed as `## needs-main
-    residue` on the tactic node's own body (landed on origin/main, commit
-    `bfdfbf34`) for post-merge verification against real production denials:
-
-
-    1. Confirming the literal `state: "blocked"` value against a live classifier
-    denial.
-
-    2. Walking the full park → surface → attach → `clear-park` recovery loop
-    end-to-end.
-
-
-    Both are verifiable only after merge, by design. They're tracked; leave
-    them.
-
-
-    ## Recommended action
-
-
-    **Accept as shipped**, unpark the node, let it merge. The defaults are
-    conservative, the failure mode is a recoverable park rather than data loss,
-    and both knobs are env-tunable in production if real fleet timing says
-    otherwise.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -764,3 +671,41 @@ call stays `needs-human` and is escalated to office-hours directly instead.
      frozen session and a live human attach that no unit test can substitute
      for. Planned deferral — verifiable only against a real frozen session
      post-merge.
+
+## Author rulings 2026-07-31 — defaults accepted; convergence with the disposition sweep
+
+The office-hours park is cleared. Two rulings, both from the author.
+
+**Ruling 1 — item 7, the shipped defaults are ACCEPTED.**
+`DISPATCH_FROZEN_SESSION_GRACE_S=900` and `DISPATCH_FROZEN_SESSION_PARK_MAX=3`
+stand as the operational defaults; no retuning, no follow-up filed. The ruling was
+taken jointly with `tactic-standdown-winner-liveness`, whose parked residue item 2
+is the same question against `DISPATCH_STANDDOWN_IDLE_GRACE_S` and
+`DISPATCH_STANDDOWN_PARK_MAX`. One answer discharges both, and both parks are
+cleared on it. Should either number ever need revisiting, it is a fresh decision
+rather than an unresolved one.
+
+**Ruling 2 — this PR is rebased and landed; it becomes the sweep framework.**
+The author ruled that PR #2994 is rebased onto `origin/main` and merged as-is
+rather than being closed and folded into a larger generic sweep. Reasons on
+record: it is working, tested code (a 307-line library plus 621 lines of tests
+across three suites), Finding G's auto-heal goes live soonest this way, and the
+alternative would have discarded that work and grown the follow-on unit
+substantially.
+
+The consequence for the graph is a scope narrowing elsewhere, recorded here
+because it is this node's framework that absorbs it:
+`tactic-phase-terminal-requires-disposition` is now scoped to **add a
+terminal-without-disposition predicate to this node's sweep framework**, not to
+build a second parallel sweep. The intended end state is one sweep framework with
+several predicates — frozen-at-denial (this node), terminal-without-disposition
+(that node), and stand-down recheck (`tactic-standdown-winner-liveness`, whose
+`lib-standdown-recheck.sh` is the pattern all three follow) — rather than two or
+three near-duplicate implementations that a later consolidation tactic has to
+reconcile.
+
+**Known risk, stated rather than assumed:** the rebase cost was unknown at ruling
+time (GitHub reported `mergeable: UNKNOWN`, having earlier reported
+`CONFLICTING`). If the rebase turns out to be genuinely expensive, that is new
+information and the fold-into-one-sweep alternative becomes worth re-examining —
+it should not be forced through on the strength of this ruling alone.

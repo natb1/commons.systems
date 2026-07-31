@@ -341,3 +341,34 @@ drift review raised still stand — the mechanical guard is homed in
 homed in `tactic-router-failure-fuses`, which should be planned only after
 `tactic-claim-containment-durable-anchor` and
 `tactic-terminal-declaration-verified-against-node`.
+
+## Scope narrowing 2026-07-31 — extend the existing sweep, do not build a second one
+
+Author ruling, taken together with the disposition of
+`tactic-denied-command-parks-node` (PR #2994): that PR is rebased and landed
+as-is, and **this node's mechanical guard is added to its sweep framework as one
+more predicate**, rather than implemented as a separate sweep of its own.
+
+So the scope recorded in the re-scope section above narrows further. It is not
+"build a per-tick sweep modelled on `standdown_recheck_sweep`" — that sweep will
+already exist. It is:
+
+- add a **terminal-without-disposition** predicate to the sweep framework
+  `lib-frozen-session-park.sh` establishes, and
+- delete the `dispatch-stop.sh` escalation-park backstop, which has never
+  succeeded and whose presence hides the failure it was added to prevent.
+
+The intended end state is one sweep framework carrying several predicates —
+frozen-at-denial (`tactic-denied-command-parks-node`),
+terminal-without-disposition (this node), and stand-down recheck
+(`tactic-standdown-winner-liveness`) — rather than three near-duplicate
+implementations. All three share the properties that make the pattern correct:
+run `park-node` from the main checkout so invariant I1 holds, keep the marker and
+retry on the next tick rather than swallowing a failed land, and emit a per-sweep
+count so a growing population is visible rather than silent.
+
+Dependency consequence: this node should be planned **after** PR #2994 lands,
+since it extends a framework that does not exist on `origin/main` until then.
+That ordering is in addition to the two already recorded above (the guard homed
+in `tactic-qa-fix-node-terminal-declaration` Unit 2, and the fuse homed in
+`tactic-router-failure-fuses`).
