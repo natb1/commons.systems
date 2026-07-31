@@ -21,7 +21,13 @@
 # RATE vs CAUSE — the two-source design
 #   RATE (how many, ground truth): read from the reservation sweep's own stderr
 #     lines, retained on the host in the systemd user journal
-#     (`journalctl --user -u dispatch-tick -o short-iso`). The exact lines are:
+#     (`journalctl --user -t dispatch-tick -o short-iso`). The identifier match
+#     (-t, matching SYSLOG_IDENTIFIER) is used instead of the unit match (-u,
+#     matching _SYSTEMD_UNIT) because the ticks that emit reclaim log lines run
+#     either as transient `dispatch-reseed-*.service` units or as children of the
+#     durable heartbeat under `user@1000.service` — none of which have
+#     _SYSTEMD_UNIT=dispatch-tick, so a -u match silently drops them all. The
+#     exact lines are:
 #       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (dead-session-stranded)
 #       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (live-worker-redundant)
 #     where <wt> is the worktree basename and the leading field is the event's
@@ -75,7 +81,7 @@
 # WHAT IT SCANS
 #   Sweep log: $DISPATCH_RECLAIM_SWEEP_LOG if set (a file of pre-captured
 #     `-o short-iso` journal text — used by the test fixture); otherwise the live
-#     output of `journalctl --user -u dispatch-tick -o short-iso`, windowed to
+#     output of `journalctl --user -t dispatch-tick -o short-iso`, windowed to
 #     --since. If journalctl is missing or errors (host without systemd, or
 #     sandboxed), the sweep log is reported unavailable and the script continues
 #     with zero counts rather than crashing.
@@ -94,6 +100,7 @@
 #   Env overrides:
 #     DISPATCH_RECLAIM_SWEEP_LOG       path to pre-captured `-o short-iso` text.
 #     DISPATCH_RECLAIM_PROJECTS_ROOT   override the projects root.
+#     DISPATCH_RECLAIM_JOURNALCTL_CMD  override the journalctl command (test stub).
 #
 # BEHAVIOR CONTRACT
 #   - The window filter uses an explicit timestamp computed from `date -d`. The
@@ -117,6 +124,7 @@ fi
 DAYS=7
 JSON_OUT=0
 PROJECTS_ROOT="${DISPATCH_RECLAIM_PROJECTS_ROOT:-$HOME/.claude/projects}"
+JOURNALCTL="${DISPATCH_RECLAIM_JOURNALCTL_CMD:-journalctl}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -170,16 +178,16 @@ if [[ -n "${DISPATCH_RECLAIM_SWEEP_LOG:-}" ]]; then
     : >"$SWEEP_RAW"
   fi
 else
-  SWEEP_SOURCE="journalctl --user -u dispatch-tick -o short-iso"
-  if command -v journalctl >/dev/null 2>&1; then
+  SWEEP_SOURCE="journalctl --user -t dispatch-tick -o short-iso"
+  if command -v "$JOURNALCTL" >/dev/null 2>&1; then
     # Capture explicitly so a non-zero exit (no systemd, sandboxed) cannot kill
     # the script under `set -e`. -o short-iso puts a parseable ISO timestamp at
     # the start of each line. Window to --since so the denominator matches the
     # transcript window.
-    if journalctl --user -u dispatch-tick -o short-iso --no-pager --since "$SINCE" >"$SWEEP_RAW" 2>/dev/null; then
+    if "$JOURNALCTL" --user -t dispatch-tick -o short-iso --no-pager --since "$SINCE" >"$SWEEP_RAW" 2>/dev/null; then
       :
     else
-      echo "dispatch-reclaim-audit: journalctl --user -u dispatch-tick unavailable (no systemd or sandboxed); continuing with zero sweep counts" >&2
+      echo "dispatch-reclaim-audit: journalctl --user -t dispatch-tick unavailable (no systemd or sandboxed); continuing with zero sweep counts" >&2
       SWEEP_AVAILABLE=0
       : >"$SWEEP_RAW"
     fi

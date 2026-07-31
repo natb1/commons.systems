@@ -172,5 +172,60 @@ assert_eq 'populations["genuine-death"] = genuine-strand' "1" \
 assert_eq 'populations["false-reclaim-of-live"] = alive-across' "1" \
   "$(jq '.populations["false-reclaim-of-live"]' <<<"$OUT")"
 
+# --- journalctl-path test: -t (identifier) filter, not -u (unit) filter -----
+#
+# The fixture path above sets DISPATCH_RECLAIM_SWEEP_LOG, which the script reads
+# via `cat` and never invokes journalctl — it cannot regression-test the filter
+# flag itself. This test leaves DISPATCH_RECLAIM_SWEEP_LOG unset so the script
+# takes the live journalctl path, and points DISPATCH_RECLAIM_JOURNALCTL_CMD at a
+# stub that models the real host bug: a `-u dispatch-tick` (unit) filter finds
+# nothing, while the corrected `-t dispatch-tick` (syslog identifier) filter
+# returns the sweep lines. The stub reuses the exact six fixture lines from
+# setup() above (same $SWEEP_LOG content) and logs its full argv for inspection.
+
+echo ""
+echo "Running dispatch-reclaim-audit against fixture (journalctl path, -t filter)..."
+
+JOURNALCTL_STUB="$ROOT/journalctl-stub"
+JOURNALCTL_ARGV_LOG="$ROOT/journalctl-argv.log"
+cat > "$JOURNALCTL_STUB" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$JOURNALCTL_ARGV_LOG"
+if [[ " \$* " == *" -u dispatch-tick "* ]]; then
+  exit 0
+fi
+if [[ " \$* " == *" -t dispatch-tick "* ]]; then
+  cat <<'LINES'
+$T host dispatch-tick[111]: lib-reservation-ledger: reclaimed reservation 1001-aaa (dead-session-stranded)
+$T host dispatch-tick[112]: lib-reservation-ledger: reclaimed reservation 1002-bbb (dead-session-stranded)
+$T host dispatch-tick[113]: lib-reservation-ledger: reclaimed reservation 1003-ccc (dead-session-stranded)
+$T host dispatch-tick[114]: lib-reservation-ledger: reclaimed reservation 1004-ddd (dead-session-stranded)
+$T host dispatch-tick[115]: lib-reservation-ledger: reclaimed reservation 1005-eee (live-worker-redundant)
+$T host dispatch-tick[116]: lib-reservation-ledger: reclaimed reservation 1006-fff (live-worker-redundant)
+LINES
+  exit 0
+fi
+exit 0
+STUB
+chmod +x "$JOURNALCTL_STUB"
+
+unset DISPATCH_RECLAIM_SWEEP_LOG
+export DISPATCH_RECLAIM_JOURNALCTL_CMD="$JOURNALCTL_STUB"
+
+JOURNALCTL_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json)
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
+unset DISPATCH_RECLAIM_JOURNALCTL_CMD
+
+echo ""
+echo "--- assertions (journalctl -t filter path) ---"
+
+assert_eq "journalctl-path sweep.dead_session_stranded_events" "4" \
+  "$(jq '.sweep.dead_session_stranded_events' <<<"$JOURNALCTL_OUT")"
+assert_eq "journalctl-path sweep.live_worker_redundant_events" "2" \
+  "$(jq '.sweep.live_worker_redundant_events' <<<"$JOURNALCTL_OUT")"
+assert_eq "journalctl-path sweep.source contains -t dispatch-tick" "1" \
+  "$(jq '(.sweep.source | test("-t dispatch-tick")) | if . then 1 else 0 end' <<<"$JOURNALCTL_OUT")"
+
 report_results
 exit $FAIL
