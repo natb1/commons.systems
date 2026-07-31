@@ -102,14 +102,38 @@
 #          subject (and, on a failed land, the unlanded-park error) names the
 #          parked set and the landed-deletion set separately, so a bystander
 #          prune is never described as parked.
-#        refused-by-die — any die() call (see `die()` below) prints
-#          `error: graph-commit: <msg>` to stderr and exits 1. This covers the
-#          existence guards (the ordinary-edit "does not exist — write the node
-#          via write-node.ts" guard and both --prune guards), the --expect
-#          wrong-repo refusal, the missing-flag-argument checks (-m/-C/--prune/
-#          --base/--expect with no value), and the not-a-git-repo refusal.
-#          These are argument/validation refusals raised BEFORE any git write:
-#          nothing is committed, nothing is pushed, and NO park is written.
+#        refused-by-die — a die() call (see `die()` below) prints
+#          `error: graph-commit: <msg>` to stderr and exits 1. This sub-case is
+#          the PRE-WRITE validation refusals specifically: the existence guards
+#          (the ordinary-edit "does not exist — write the node via
+#          write-node.ts" guard and both --prune guards), the --expect
+#          wrong-repo refusal, the malformed `<id>=<blobsha>` refusal for
+#          --base/--expect, the missing-flag-argument checks (-m/-C/--prune/
+#          --base/--expect with no value), the not-a-git-repo refusal, and the
+#          rebase-already-in-progress refusal. All of those run before main()
+#          touches the tree: nothing is committed, nothing is pushed, and NO
+#          park is written.
+#          die() is NOT exclusive to those guards, so `rc 1` plus an
+#          `error: graph-commit:` line does not by itself license a caller to
+#          assume nothing happened — the stderr text is the discriminator, not
+#          the exit code. The die() sites that fire AFTER the tree, the index,
+#          or the remote was already mutated:
+#            - inside try_land(): the concluded-non-success die and the
+#              check-run-polling die — a local commit exists and a `graph/**`
+#              scratch branch was already pushed. Both belong to the busy-main
+#              sub-case above, which already owns them; they are named here
+#              only so the enumeration is not read as exhaustive.
+#            - "unexpected land status" on that same path, likewise after the
+#              local commit.
+#            - check_base_freshness()'s unreadable-base-blob die and
+#              try_layer2_resolve()'s broken-staging-invariant die, both of
+#              which run after layer 2/3 may have rewritten node files on disk.
+#            - park_write()'s "failed to write the office_hours parking record"
+#              die, reached from park_and_exit() AFTER
+#              `git reset --hard FETCH_HEAD` discarded this writer's tree. That
+#              is the one die() that leaves NO park recorded while the writer's
+#              content is already gone from the worktree — SNAP_DIR is the only
+#              surviving copy.
 #        Caller contract: rc 1 does not mean "nothing landed". When the
 #          invocation mixed --prune ids with other ids, a bystander prune's
 #          deletion may have landed on main together with the park commit. A
@@ -1224,9 +1248,16 @@ JQ
 # ids, one per line, on stdout; returns 1 (no output) when the accumulator was
 # never created or is empty, which park_and_exit() treats as "could not
 # determine the conflicted set" and falls back to parking every id.
+# `-s` alone is not emptiness: the accumulator is created holding the two-byte
+# literal `[]` (init_conflict_fields()), and an append of a zero-length array
+# leaves it that way — so the id list itself, not the file size, decides. This
+# matches park_write()'s reader, which gates on `jq 'length'` for the same file.
 conflicted_ids() {
   [[ -n "$CONFLICT_FIELDS_JSON" && -s "$CONFLICT_FIELDS_JSON" ]] || return 1
-  jq -r '.[].id' "$CONFLICT_FIELDS_JSON" | sort -u
+  local ids
+  ids="$(jq -r '.[].id' "$CONFLICT_FIELDS_JSON" | sort -u)"
+  [[ -n "$ids" ]] || return 1
+  printf '%s\n' "$ids"
 }
 
 # --- Parking fallback ------------------------------------------------------
@@ -1350,8 +1381,9 @@ TS
 # overwrite the other writer's just-landed edit, which is exactly the
 # fail-closed contract above forbids. When the conflicted set cannot be
 # determined (conflicted_ids() fails/empty — e.g. try_layer2_resolve() returned
-# 1 with nothing appended), fall back to the conservative default: every id
-# parks, no prune is re-applied.
+# 1 with nothing appended), or when it names no id this invocation is actually
+# committing (so the partition would park nothing at all), fall back to the
+# conservative default: every id parks, no prune is re-applied.
 park_and_exit() {
   # Fail closed: discard this writer's local conflicting commit, park the node as
   # it exists on fresh origin/main (the other writer's already-landed content
@@ -1399,6 +1431,23 @@ park_and_exit() {
     # Could not determine the conflicted set — conservative fallback: every id
     # parks, no prune is re-applied.
     park_ids=("${ALL_IDS[@]}")
+  fi
+
+  # Degenerate partition: every id in this invocation was classified a bystander
+  # prune, so nothing would park. Reachable when the unresolved conflict is on a
+  # --base id OUTSIDE this invocation's node set — check_base_freshness()
+  # iterates every BASE key, and a batch manifest may cover more nodes than the
+  # invocation commits (see assert_expected_content()'s note on that manifest
+  # semantics) — while every id actually being committed is a bystander prune.
+  # Parking nothing while the stderr and the exit status announce a park is the
+  # silent-loss shape this whole path exists to prevent, so route it to the same
+  # conservative default as an undeterminable conflicted set: every id parks, no
+  # prune is re-applied. The prune is then re-derivable by the caller from
+  # origin/main (see the rc-1 caller contract in the header).
+  if [[ "${#park_ids[@]}" -eq 0 ]]; then
+    echo "graph-commit: the unresolved conflict names no id in this invocation's node set — parking every id and re-applying no prune (conservative fallback)" >&2
+    park_ids=("${ALL_IDS[@]}")
+    bystander_prunes=()
   fi
 
   local park_msg

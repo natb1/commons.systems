@@ -360,32 +360,8 @@ cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispat
 
 ## needs-main residue
 
-- **id**: 11
-  **title**: Two uncovered edge paths in the new partition logic (`conflicted_ids()` fallback; empty `park_ids`)
-  **url_path**: current
-  **expected_outcome**: A human confirms the conservative fallback (`conflicted_ids()` fails/empty → every id parks, no prune re-applied) is genuinely unreachable in the silent-loss scenario this PR fixes, and that a zero-id `park_ids`/`park_write` call is unreachable or harmless.
-  **finding**: Two defensive branches added by Units 1/2 are not exercised by the new harness cases: (1) `park_and_exit()`'s fallback when `conflicted_ids()` returns 1 (`CONFLICT_FIELDS_JSON` empty/missing) reverts to the pre-fix behavior of parking every id with no bystander re-application — if this branch is reachable when a `--prune` invocation actually parks, the silent-loss bug this PR exists to fix could still occur through it. (2) if every `ALL_IDS` entry is classified a bystander prune, `park_ids` would be empty and `park_write` would be called with zero ids — unclear whether the underlying `npx tsx` helper tolerates a zero-id argument list. Both are conservative-by-design fallback branches (not claimed new behavior), flagged as a planned deferral rather than a blocker — verify reachability against deployed main/prod before considering this class of defect fully closed.
-
 - **id**: 17
   **title**: Whether documenting rather than enforcing the rc-1 contract is the right call given no in-repo caller
   **url_path**: current
   **expected_outcome**: A human confirms the documentation-only choice (no distinct exit code or machine-readable marker for "parked, but a bystander prune landed") is acceptable, or records that a distinct exit code / machine-readable marker is the right follow-up.
-  **finding**: The rc-1 caller contract added by commit 777c4fe1 documents but does not mechanically enforce the mixed park/land outcome — its own text admits no in-repo caller currently passes `--prune` programmatically, so the contract exists for an agent reading the header before a retry, not for a caller to branch on. This is a design-altitude question about the primitive's contract surface, not a defect in the landed code (which is correct and harness-covered) — flagged as a planned deferral rather than a blocker.
-
-- **id**: 18
-  **title**: Id 11's deferred-branch scope after the attempt-0 wording fix
-  **url_path**: current
-  **expected_outcome**: A human confirms id 11's deferral still covers the full uncovered surface after the attempt-0 fix (`d91ae7cf`) reshaped `park_msg` construction — specifically, whether an empty `park_ids` now also produces a degenerate commit subject (`graph: park  (concurrent-edit conflict); prune <id>`) via the new `park_msg="graph: park ${park_ids[*]} (concurrent-edit conflict); prune ${bystander_prunes[*]}"` line, not just an untested `park_write` call as id 11's finding currently states — and amends id 11's finding text if so.
-  **finding**: Re-affirms the scope of the already-filed id 11 (the `conflicted_ids()` failure fallback and the empty-`park_ids`/`park_write` branch) after the attempt-0 wording fix landed; not a new defect, a deferral-bookkeeping check against merged state. Flagged as a planned deferral rather than a blocker.
-
-- **id**: 19
-  **title**: Id 11's deferred-branch scope re-affirmed unchanged at attempt-2 HEAD
-  **url_path**: current
-  **expected_outcome**: A human confirms id 11's two flagged fallback branches (the `conflicted_ids()` failure fallback; the empty-`park_ids`/`park_write` call) remain exactly as characterized, with the disposition (defer to main-qa, verify against deployed main/prod) still correct.
-  **finding**: qa-fix attempt 2's disposition triage re-read both fallback branches after the attempt-1 wording fix (`8f716fdc`, comment-only in this area) and confirmed neither branch's runtime behavior changed. Not a new defect — a deferral-bookkeeping re-check against merged state, same class as id 18.
-
-- **id**: 20
-  **title**: Whether documenting rather than enforcing the rc-1 contract is the right call, re-affirmed at attempt-2 HEAD
-  **url_path**: current
-  **expected_outcome**: A human confirms the documentation-only choice (no distinct exit code or machine-readable marker for "parked, but a bystander prune landed") is still acceptable, or records that enforcement is the right follow-up.
-  **finding**: Re-affirms id 17 after the attempt-1 wording fix (`8f716fdc`) made the rc-1 contract's recovery recipe concrete: still a design-altitude question about whether the contract should be mechanically enforced rather than documented (no in-repo caller currently passes `--prune` programmatically), not a defect in the landed code. Flagged as a planned deferral rather than a blocker.
+  **finding**: The rc-1 caller contract added by commit 777c4fe1 documents but does not mechanically enforce the mixed park/land outcome — its own text admits no in-repo caller currently passes `--prune` programmatically, so the contract exists for an agent reading the header before a retry, not for a caller to branch on. This is a design-altitude question about the primitive's contract surface, not a defect in the landed code (which is correct and harness-covered) — flagged as a planned deferral rather than a blocker. (Ids 11, 18, 19 and 20 were dropped from this section by the review pass: 20 was a verbatim re-affirmation of this item, and 11/18/19 tracked the two then-uncovered partition branches, both of which are now closed in code — `conflicted_ids()` honors its empty-accumulator contract, an empty `park_ids` falls back to parking every id, and harness Cases 40/41 cover the layer-3 and foreign-manifest entries.)
