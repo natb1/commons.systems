@@ -39,13 +39,14 @@ attention:
     — convert to a tier/bug_fix mark when tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire the interim scale; do not orphan this
     boost."
-phase: qa
+phase: review
 execution:
   branch: tactic-lane-instrument-substitution-guard
   pr: 3006
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
