@@ -387,7 +387,20 @@ check_base_freshness() {
       # Fully resolved: overwrite the on-disk node with the merged content so the
       # write proceeds against exactly origin_sha. RESOLVED_VIA_MERGE is already
       # set to 1 by run_merge_node().
+      #
+      # The SNAP_DIR copy is refreshed in the SAME step, deliberately: SNAP_DIR
+      # holds the content THIS RUN INTENDS TO LAND, not a frozen pre-merge copy
+      # of what the writer happened to have on disk at snapshot() time. A later
+      # ensure_intentions_only_base() re-materializes each node from SNAP_DIR
+      # after resetting the tree to fresh origin/main; if the snapshot still held
+      # the pre-merge content, that re-materialization would silently discard the
+      # reconciliation performed right here. Keeping the two in sync also means
+      # park_and_exit()'s "this writer's unlanded content is preserved at
+      # $SNAP_DIR" message points at the RECONCILED content — the best available
+      # starting point for the manual merge — rather than at a stale pre-merge
+      # copy.
       cp -- "$out_f" "$INTENTIONS_DIR/$id.md"
+      cp -- "$out_f" "$SNAP_DIR/$id.md"
       continue
     fi
     # run_merge_node() already appended the unresolved fields to
@@ -467,6 +480,16 @@ assert_staged_safe() {
 # origin/main), so this snapshot becomes the only surviving copy of the
 # writer's content — cleanup() keeps SNAP_DIR on that path (KEEP_SNAP=1) and
 # the park message points at it for the manual merge.
+#
+# SNAP_DIR is NOT a frozen pre-merge copy: it holds the content THIS RUN INTENDS
+# TO LAND, and it is refreshed in place whenever a layer-3 merge resolves — by
+# check_base_freshness() (stale --base reconciliation) and by
+# ensure_intentions_only_base() (the rebuild path's implicit compare-and-swap).
+# Two consequences follow. First, ensure_intentions_only_base() re-materializes
+# nodes from SNAP_DIR after resetting the tree to fresh origin/main, so a stale
+# snapshot there would silently revert a reconciliation. Second, park_and_exit()'s
+# "this writer's unlanded content is preserved at $SNAP_DIR" message points at
+# the reconciled content, not at a superseded pre-merge copy.
 snapshot() {
   local id
   for id in "${IDS[@]}"; do
@@ -577,10 +600,107 @@ ensure_intentions_only_base() {
   nonint="$(git diff --name-only "$base_sha"...HEAD | grep -v '^intentions/' || true)"
   [[ -z "$nonint" ]] && return 0
   echo "graph-commit: worktree HEAD is ahead of origin/main with non-intentions changes — rebuilding the edit on an intentions/-only base (HEAD restored on exit)" >&2
+  # Set the HEAD-restore state BEFORE the compare-and-swap below, so a park taken
+  # from inside this function still returns the worktree to its PR tip via
+  # cleanup(). Setting RESTORE_HEAD=1 ahead of a reset that may never happen is
+  # harmless: cleanup()'s `git reset --hard "$ORIG_HEAD"` is a no-op when HEAD
+  # never moved.
   ORIG_HEAD="$(git rev-parse HEAD)"
   RESTORE_HEAD=1
+
+  # --- Implicit compare-and-swap on the rebuild path -------------------------
+  # The rebuild below is CONTENT-based, not diff-based: it resets the tree to
+  # fresh origin/main and copies each snapshotted node over the top. That is a
+  # whole-file overwrite with no conflict detection. If this checkout's copy of a
+  # node is STALE — origin/main moved after the worktree was provisioned, which
+  # is the normal shape of any long-running phase worker — the snapshot silently
+  # reverts whatever landed in between, with no conflict and no warning.
+  #
+  # So before touching the tree, compare each node's blob at the merge-base (the
+  # content this checkout's edit is derived FROM) against its blob on fresh
+  # origin/main. Equal → the copy is a safe fast-forward. Different → reconcile
+  # through the same run_merge_node() primitive layers 2 and 3 use, and park when
+  # it cannot resolve.
+  #
+  # Every read below hits the object database, not the working tree, so running
+  # them all BEFORE `git reset --hard` is safe — and it means a park starts from
+  # an untouched tree.
+  local mb
+  mb="$(git merge-base "$base_sha" HEAD)" \
+    || die "could not compute the merge-base of origin/main ($base_sha) and HEAD — cannot verify the rebuild path's snapshot is not stale"
+
+  local id snap_base origin_blob rebuild_unresolved=0
+  for id in "${IDS[@]}"; do
+    # An id the caller pinned with --base has ALREADY been verified (and, on a
+    # divergence, reconciled) by check_base_freshness(), which also refreshes
+    # SNAP_DIR so the copy below lays down the merged content. Re-deriving a base
+    # from the merge-base here would second-guess the caller's own declared read
+    # point. Load-bearing: test-transition-node.sh Case 1 depends on this skip.
+    [[ -n "${BASE[$id]:-}" ]] && continue
+
+    snap_base="$(git rev-parse "$mb:intentions/$id.md" 2>/dev/null || true)"
+    origin_blob="$(git rev-parse "$base_sha:intentions/$id.md" 2>/dev/null || true)"
+    # Equal (including both empty — an id that exists in neither) means nothing
+    # landed on this node since this checkout diverged: the copy cannot revert
+    # anything.
+    [[ "$snap_base" == "$origin_blob" ]] && continue
+
+    echo "graph-commit: rebuild path: '$id' advanced on origin/main since this checkout's merge-base — reconciling the snapshot instead of overwriting" >&2
+    # Plain-file base/ours/theirs mapping, identical to check_base_freshness()'s
+    # (no git-rebase stage inversion applies here):
+    #   base   = the node as of the merge-base (what this checkout edited FROM),
+    #            or "" when the id was created concurrently (absent at the base)
+    #   ours   = the writer's captured content (SNAP_DIR, NOT INTENTIONS_DIR —
+    #            the tree may already have been rewritten by layer 3)
+    #   theirs = origin/main's current content, or "" when the id was pruned there
+    local rb_base rb_theirs rb_out
+    rb_out="$SNAP_DIR/.rebuild-out-$id"
+    if [[ -n "$snap_base" ]]; then
+      rb_base="$SNAP_DIR/.rebuild-base-$id"
+      git cat-file -p "$snap_base" >"$rb_base" \
+        || die "could not read the merge-base blob $snap_base for '$id' — cannot verify the rebuild path's snapshot is not stale"
+    else
+      rb_base=""
+    fi
+    if [[ -n "$origin_blob" ]]; then
+      rb_theirs="$SNAP_DIR/.rebuild-theirs-$id"
+      git show "$base_sha:intentions/$id.md" >"$rb_theirs" \
+        || die "could not read origin/main's content for '$id' — cannot verify the rebuild path's snapshot is not stale"
+    else
+      rb_theirs=""
+    fi
+    if run_merge_node "$id" "$rb_base" "$SNAP_DIR/$id.md" "$rb_theirs" "$rb_out"; then
+      # Resolved: the cp loop below lays down the reconciled content instead of
+      # the stale snapshot.
+      cp -- "$rb_out" "$SNAP_DIR/$id.md"
+      continue
+    fi
+    # run_merge_node() already appended the unresolved fields to
+    # CONFLICT_FIELDS_JSON. Record the divergence but keep checking every
+    # remaining id so the eventual park names them all.
+    rebuild_unresolved=1
+  done
+
+  for id in "${PRUNE_IDS[@]}"; do
+    snap_base="$(git rev-parse "$mb:intentions/$id.md" 2>/dev/null || true)"
+    origin_blob="$(git rev-parse "$base_sha:intentions/$id.md" 2>/dev/null || true)"
+    [[ "$snap_base" == "$origin_blob" ]] && continue
+    # A prune carries no content, so there is nothing to three-way merge: a
+    # concurrent edit to an id this run wants to delete is unresolvable by
+    # construction. This is the same delete-vs-edit collision the in-place path
+    # surfaces as a rebase conflict (try_layer2_resolve()'s prune branch), so it
+    # takes the same outcome — a structured park, not a silent deletion of the
+    # other writer's landed edit.
+    echo "graph-commit: rebuild path: '$id' advanced on origin/main since this checkout's merge-base, but this run prunes it — a deletion has nothing to merge" >&2
+    append_conflicts "$(jq -cn --arg id "$id" '[{id: $id, note: "prune vs. concurrent edit landed on origin/main since this checkout diverged (rebuild path)"}]')"
+    rebuild_unresolved=1
+  done
+
+  if [[ "$rebuild_unresolved" -eq 1 ]]; then
+    park_and_exit   # never returns; always exits 1
+  fi
+
   git reset --hard "$base_sha" >&2
-  local id
   for id in "${IDS[@]}"; do
     cp -- "$SNAP_DIR/$id.md" "$INTENTIONS_DIR/$id.md"
   done
@@ -1223,11 +1343,22 @@ TS
 
 # --- Shared fail-closed park path (never returns) ---------------------------
 # The concurrent-edit conflict fail-closed sequence, extracted from main()'s
-# rc-12 tail so a second call site (Unit 3, before any commit exists) can invoke
-# the identical park without duplicating fetch/reset/park_write/re-commit/land
-# logic. Self-contained: relies only on globals (ALL_IDS, SNAP_DIR, KEEP_SNAP)
-# and the committed helpers, never on state that exists only after
-# try_land()/land() ran — it does its own fetch/reset. Always calls exit 1.
+# rc-12 tail so other call sites can invoke the identical park without
+# duplicating fetch/reset/park_write/re-commit/land logic. Self-contained:
+# relies only on globals (ALL_IDS, SNAP_DIR, KEEP_SNAP) and the committed
+# helpers, never on state that exists only after try_land()/land() ran — it does
+# its own fetch/reset. Always calls exit 1.
+#
+# Three call sites:
+#   1. main()'s rc-12 tail — a rebase conflict layer 2 could not resolve.
+#   2. check_base_freshness() — a stale --base (layer 3) whose divergence
+#      run_merge_node() could not resolve.
+#   3. ensure_intentions_only_base() — the rebuild path's implicit
+#      compare-and-swap found a node (or a --prune id) that advanced on
+#      origin/main since this checkout's merge-base and could not reconcile it.
+#      This one parks BEFORE any tree mutation or local commit exists; the
+#      function's own `git reset --hard "$base_sha"` has not run yet, and
+#      cleanup()'s RESTORE_HEAD still returns the worktree to its PR tip.
 park_and_exit() {
   local park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
   # Fail closed: discard this writer's local conflicting commit, park the node as

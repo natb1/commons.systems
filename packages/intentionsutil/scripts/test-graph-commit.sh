@@ -116,6 +116,25 @@
 #      naming "mis-pointed -C/--repo", never reaches "landed", main untouched
 #  35. --expect on a --prune id is a usage error (exit 2, origin untouched) —
 #      a deletion has no content to assert
+#  36. rebuild path CAS, non-overlapping: a far-ahead PR-branch clone holding a
+#      STALE copy of a node (origin/main advanced that node after the clone
+#      diverged) edits a different field — the rebuild reconciles instead of
+#      overwriting, so the concurrently-landed edit is NOT reverted (exit 0,
+#      both edits on main). Pre-fix the snapshot cp silently reverted it.
+#  37. rebuild path CAS, overlapping: the same setup with both sides editing
+#      the SAME field parks (exit 1) — the landed content survives on main,
+#      office_hours is set, and the far-ahead writer's content is preserved in
+#      the kept snapshot dir
+#  38. rebuild path CAS, fresh node: a far-ahead clone whose node copy matches
+#      origin/main at the merge-base takes the unchanged fast path — exit 0,
+#      the edit lands, no reconciliation or park message, HEAD restored
+#  39. rebuild path CAS, --prune vs. a concurrent edit: a far-ahead --prune of
+#      a node that advanced on origin/main is unresolvable by construction
+#      (a deletion has no content to merge) — parks, node still on main
+#  40. rebuild path + --base: a far-ahead caller that DID pass --base keeps the
+#      layer-3 reconciliation check_base_freshness() performed — the snapshot
+#      is refreshed alongside the on-disk node, so the rebuild re-materializes
+#      the merged content rather than the pre-merge copy (exit 0, both edits)
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -174,7 +193,8 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
           t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
-          t-expect-happy t-expect-wrong-repo t-expect-prune; do
+          t-expect-happy t-expect-wrong-repo t-expect-prune \
+          t-rebuild-fresh t-rebuild-prune; do
   seed_node "$id"
 done
 
@@ -205,6 +225,10 @@ seed_field_node t-field-merge "fieldA: base" "fieldB: base"
 seed_field_node t-field-conflict "sentinel: base"
 seed_field_node t-field-base-ok "fieldA: base" "fieldB: base"
 seed_field_node t-field-base-bad "sentinel: base"
+# Rebuild-path compare-and-swap fixtures (cases 36-40).
+seed_field_node t-rebuild-stale-ok "fieldA: base" "fieldB: base"
+seed_field_node t-rebuild-stale-bad "sentinel: base"
+seed_field_node t-rebuild-base "fieldA: base" "fieldB: base"
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -1269,6 +1293,165 @@ if [[ $rc -eq 2 ]] \
   ok "--expect on a --prune id is a usage error (exit 2), origin untouched"
 else
   no "--expect on a prune id (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Cases 36-40: the rebuild path's implicit compare-and-swap.
+#
+# ensure_intentions_only_base() reacts to a far-ahead PR-branch worktree by
+# resetting the tree to fresh origin/main and copying each snapshotted node over
+# the top — a CONTENT-based overwrite with no conflict detection. When the
+# worktree's copy of a node is STALE (origin/main advanced that node after the
+# worktree was provisioned — the normal shape of a long-running phase worker),
+# that copy silently reverts whatever landed in between. These cases pin the
+# compare-and-swap that turns the silent revert into a reconciliation (36, 40),
+# a park (37, 39), or an untouched fast path (38).
+#
+# far_ahead_clone <dst> <identity> <tag> — a clone carrying a non-intentions
+# code commit on top of whatever origin/main was when it was cloned, i.e. the
+# shape case 16 builds by hand.
+# ---------------------------------------------------------------------------
+far_ahead_clone() { # <dst> <identity> <tag>
+  make_clone "$1" "$2"
+  mkdir -p "$1/src"
+  echo "console.log('pr feature code $3')" >"$1/src/feature-$3.js"
+  git -C "$1" add "src/feature-$3.js"
+  git -C "$1" commit -qm "pr: non-intentions code change ($3)"
+}
+
+# --- Case 36: rebuild path CAS, non-overlapping stale node — reconciles ---------
+# W36 is cloned (and goes far-ahead) BEFORE the concurrent writer lands, so its
+# copy of t-rebuild-stale-ok is stale by the time it commits. It edits fieldB;
+# the concurrent writer landed fieldA. Pre-fix the reset+cp would have laid W36's
+# stale whole file over origin/main, reverting fieldA with exit 0 and no warning.
+set_mode green
+W36="$WORK/w36"
+far_ahead_clone "$W36" writer-36 36
+far_tip36="$(git -C "$W36" rev-parse HEAD)"
+
+OTHER36="$WORK/other36"; make_clone "$OTHER36" other36
+edit_field "$OTHER36" t-rebuild-stale-ok fieldA concurrent-landed
+git -C "$OTHER36" commit -qam 'concurrent edit lands while w36 is far-ahead and stale'
+git -C "$OTHER36" push -q origin main
+
+edit_field "$W36" t-rebuild-stale-ok fieldB farahead-edit
+out="$(run_gc "$W36" -m 'test: rebuild stale reconcile' t-rebuild-stale-ok 2>&1)"; rc=$?
+content="$(origin_show t-rebuild-stale-ok 2>/dev/null)"
+restored36="$(git -C "$W36" rev-parse HEAD)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'fieldA: concurrent-landed' <<<"$content" \
+   && grep -q 'fieldB: farahead-edit' <<<"$content" \
+   && [[ "$restored36" == "$far_tip36" ]]; then
+  ok "rebuild CAS: a stale far-ahead snapshot is reconciled, the concurrently-landed edit is NOT reverted"
+else
+  no "rebuild CAS non-overlapping (rc=$rc restored=$restored36 far_tip=$far_tip36)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 37: rebuild path CAS, overlapping stale node — parks ------------------
+set_mode green
+W37="$WORK/w37"
+far_ahead_clone "$W37" writer-37 37
+
+OTHER37="$WORK/other37"; make_clone "$OTHER37" other37
+edit_field "$OTHER37" t-rebuild-stale-bad sentinel concurrent-landed
+git -C "$OTHER37" commit -qam 'concurrent same-field edit lands while w37 is far-ahead'
+git -C "$OTHER37" push -q origin main
+
+edit_field "$W37" t-rebuild-stale-bad sentinel farahead-value
+out="$(run_gc "$W37" -m 'test: rebuild stale conflict' t-rebuild-stale-bad 2>&1)"; rc=$?
+content="$(origin_show t-rebuild-stale-bad 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -ne 0 ]] \
+   && grep -q 'sentinel: concurrent-landed' <<<"$content" \
+   && ! grep -q '^sentinel: farahead-value' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && [[ -n "$snap" && -f "$snap/t-rebuild-stale-bad.md" ]] \
+   && grep -q 'sentinel: farahead-value' "$snap/t-rebuild-stale-bad.md"; then
+  ok "rebuild CAS: an unresolvable stale far-ahead divergence parks, landed content survives, writer's content kept in the snapshot"
+else
+  no "rebuild CAS overlapping (rc=$rc snap='$snap')"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 38: rebuild path CAS, fresh node — unchanged fast path ----------------
+# The far-ahead clone's copy of the node matches origin/main at the merge-base,
+# so no reconciliation is attempted at all and the pre-existing behavior (case
+# 16) is untouched.
+set_mode green
+W38="$WORK/w38"
+far_ahead_clone "$W38" writer-38 38
+far_tip38="$(git -C "$W38" rev-parse HEAD)"
+edit_line "$W38" t-rebuild-fresh 1 fresh-farahead-edit
+out="$(run_gc "$W38" -m 'test: rebuild fresh' t-rebuild-fresh 2>&1)"; rc=$?
+content="$(origin_show t-rebuild-fresh 2>/dev/null)"
+restored38="$(git -C "$W38" rev-parse HEAD)"
+main_tree38="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'line1: fresh-farahead-edit' <<<"$content" \
+   && ! grep -q 'reconciling the snapshot' <<<"$out" \
+   && ! grep -q 'graph-commit: concurrent-edit conflict on' <<<"$out" \
+   && ! grep -q 'auto-resolved' <<<"$out" \
+   && ! grep -q 'src/feature-38.js' <<<"$main_tree38" \
+   && [[ "$restored38" == "$far_tip38" ]]; then
+  ok "rebuild CAS: a fresh far-ahead snapshot takes the unchanged path (no merge, no park), edit lands, HEAD restored"
+else
+  no "rebuild CAS fresh node (rc=$rc restored=$restored38 far_tip=$far_tip38)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 39: rebuild path CAS, --prune vs. a concurrent edit — parks -----------
+# A deletion has no content to three-way merge, so a node that advanced on
+# origin/main since the far-ahead checkout diverged cannot be reconciled: the
+# prune must park rather than silently delete the other writer's landed edit.
+set_mode green
+W39="$WORK/w39"
+far_ahead_clone "$W39" writer-39 39
+
+OTHER39="$WORK/other39"; make_clone "$OTHER39" other39
+edit_line "$OTHER39" t-rebuild-prune 1 concurrent-landed
+git -C "$OTHER39" commit -qam 'concurrent edit lands while w39 is far-ahead'
+git -C "$OTHER39" push -q origin main
+
+rm -f "$W39/intentions/t-rebuild-prune.md"
+out="$(run_gc "$W39" -m 'test: rebuild stale prune' --prune t-rebuild-prune 2>&1)"; rc=$?
+still_present=0
+git -C "$ORIGIN" cat-file -e main:intentions/t-rebuild-prune.md 2>/dev/null && still_present=1
+content="$(origin_show t-rebuild-prune 2>/dev/null || true)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -ne 0 ]] \
+   && [[ "$still_present" -eq 1 ]] \
+   && grep -q 'line1: concurrent-landed' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content"; then
+  ok "rebuild CAS: a far-ahead --prune of a concurrently-edited node parks, the node survives on main"
+else
+  no "rebuild CAS far-ahead prune (rc=$rc still_present=$still_present)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 40: rebuild path + --base keeps the layer-3 reconciliation ------------
+# check_base_freshness() merges a stale --base into the on-disk node; the rebuild
+# path then re-materializes every node from SNAP_DIR. If the snapshot were not
+# refreshed alongside the on-disk write, the pre-merge copy would land and the
+# concurrently-landed field would be reverted with exit 0.
+set_mode green
+W40="$WORK/w40"
+far_ahead_clone "$W40" writer-40 40
+base40_sha="$(git -C "$W40" hash-object intentions/t-rebuild-base.md)"
+
+OTHER40="$WORK/other40"; make_clone "$OTHER40" other40
+edit_field "$OTHER40" t-rebuild-base fieldB concurrent-landed
+git -C "$OTHER40" commit -qam 'concurrent edit lands while w40 is far-ahead'
+git -C "$OTHER40" push -q origin main
+
+edit_field "$W40" t-rebuild-base fieldA farahead-edit
+out="$(run_gc "$W40" -m 'test: rebuild + base' --base "t-rebuild-base=$base40_sha" t-rebuild-base 2>&1)"; rc=$?
+content="$(origin_show t-rebuild-base 2>/dev/null)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'fieldA: farahead-edit' <<<"$content" \
+   && grep -q 'fieldB: concurrent-landed' <<<"$content"; then
+  ok "rebuild + --base: the layer-3 reconciliation survives the rebuild's re-materialization (snapshot kept in sync)"
+else
+  no "rebuild + --base reconciliation (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
