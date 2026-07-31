@@ -42,11 +42,16 @@
 #          `<skill> <id>`. Mechanical provision dispositions are handled here at
 #          zero token cost (no `claude` session), mirroring
 #          dispatch-launch-worker.
-#   4. Clears the node's reservation-ledger marker on a successful kick — the
-#      live node-id-named session carries the claim from there (mirrors
-#      dispatch-launch-worker's release-on-resolve). On a failed kick the marker
-#      is LEFT for the sweep, so the budget still counts the slot until
-#      reconciliation.
+#   4. Hands off (does not drop) the node's reservation-ledger marker on a
+#      successful kick: it is re-stamped `origin=spawned` with a fresh
+#      timestamp (reservation_mark_spawned) instead of cleared outright, so the
+#      claim survives the boot window before the worker's own live session
+#      registers. It is released by reservation_sweep rule (a) once that
+#      session registers, or by the handoff TTL if it never does. The
+#      stale-selection (exit 12) and scope-stale (exit 13) dispositions still
+#      clear the marker outright — no spawn happened there. On a failed kick
+#      the marker is still LEFT for the sweep, so the budget still counts the
+#      slot until reconciliation.
 #
 # Usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]
 #
@@ -190,7 +195,9 @@ for spec in "$@"; do
     if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
         --cwd "$PROJECT_ROOT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
         "$SKILL $id" 1>&2; then
-      reservation_clear "$id" || true
+      # Hold the claim through the boot window; reservation_sweep rule (a)
+      # releases it once the worker registers.
+      reservation_mark_spawned "$id" || true
       echo "launched $id $SKILL"
     else
       echo "failed $id spawn-failed"
@@ -215,7 +222,9 @@ for spec in "$@"; do
       if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
           --cwd "$WT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
           "$SKILL $id" 1>&2; then
-        reservation_clear "$id" || true
+        # Hold the claim through the boot window; reservation_sweep rule (a)
+        # releases it once the worker registers.
+        reservation_mark_spawned "$id" || true
         echo "launched $id $SKILL"
       else
         # Leave the reservation for the sweep — the budget keeps counting the
@@ -286,7 +295,9 @@ for spec in "$@"; do
           --cwd "$CONFLICT_WT" --model "$ORCH_MODEL" \
           "/dispatch-conflict $id" 1>&2; then
         rm -f "$STRIKE_FILE"
-        reservation_clear "$id" || true
+        # Hold the claim through the boot window; reservation_sweep rule (a)
+        # releases it once the worker registers.
+        reservation_mark_spawned "$id" || true
         echo "conflict-lane $id"
         continue
       fi
