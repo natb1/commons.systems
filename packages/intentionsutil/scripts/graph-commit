@@ -97,7 +97,10 @@
 #          independent of whatever id(s) failed to resolve, so it is
 #          re-applied and lands WITH the park commit rather than parking (see
 #          park_and_exit()). Only a prune id that IS part of the conflicted
-#          set keeps this "content is NOT landed" fate.
+#          set keeps this "content is NOT landed" fate. The park commit
+#          subject (and, on a failed land, the unlanded-park error) names the
+#          parked set and the landed-deletion set separately, so a bystander
+#          prune is never described as parked.
 #   2  usage error.
 #
 # Conventions: mirrors the bounded-retry shape/logging of `gh_retry` in
@@ -1275,7 +1278,6 @@ TS
 # 1 with nothing appended), fall back to the conservative default: every id
 # parks, no prune is re-applied.
 park_and_exit() {
-  local park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
   # Fail closed: discard this writer's local conflicting commit, park the node as
   # it exists on fresh origin/main (the other writer's already-landed content
   # wins), and preserve this writer's unlanded content in SNAP_DIR for the
@@ -1324,14 +1326,17 @@ park_and_exit() {
     park_ids=("${ALL_IDS[@]}")
   fi
 
+  local park_msg
   if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
+    park_msg="graph: park ${park_ids[*]} (concurrent-edit conflict); prune ${bystander_prunes[*]}"
     echo "graph-commit: concurrent-edit conflict on ${park_ids[*]}; parking node(s) — this writer's content is NOT landed" >&2
     echo "graph-commit: re-applying and landing bystander prune(s) not implicated in the conflict: ${bystander_prunes[*]}" >&2
     for id in "${bystander_prunes[@]}"; do
       rm -f -- "$INTENTIONS_DIR/$id.md"
     done
   else
-    echo "graph-commit: concurrent-edit conflict on ${ALL_IDS[*]}; parking node(s) — this writer's content is NOT landed" >&2
+    park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
+    echo "graph-commit: concurrent-edit conflict on ${park_ids[*]}; parking node(s) — this writer's content is NOT landed" >&2
   fi
 
   park_write "${park_ids[@]}"
@@ -1348,7 +1353,11 @@ park_and_exit() {
       echo "graph-commit: parked ${ALL_IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
     fi
   else
-    echo "error: graph-commit: could not land the parking write for ${ALL_IDS[*]} — office_hours set locally but not pushed to main" >&2
+    if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
+      echo "error: graph-commit: could not land the parking write for ${park_ids[*]} — office_hours set locally but not pushed to main; the bystander prune deletion for ${bystander_prunes[*]} also did not land — it is committed locally but unpushed, same as the park" >&2
+    else
+      echo "error: graph-commit: could not land the parking write for ${park_ids[*]} — office_hours set locally but not pushed to main" >&2
+    fi
   fi
   exit 1
 }

@@ -356,3 +356,11 @@ cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispat
 **Line-number drift.** Every `path:line` anchor above was read against this worktree at `origin/main` b552dfa2. Re-grep for the named function or comment text before editing rather than trusting a line number; earlier units in the same PR shift later ones.
 
 **Observe in production (post-merge, no automated check possible).** The next owed-prune census batch that hits a concurrent-edit park is the real signal: its bystander prunes should be gone from `origin/main` and should NOT appear in the office-hours queue, while the one genuinely conflicted node should. Check `git log --diff-filter=D --name-only origin/main -- intentions/` against the park commit for that batch.
+
+## needs-main residue
+
+- **id**: 11
+  **title**: Two uncovered edge paths in the new partition logic (`conflicted_ids()` fallback; empty `park_ids`)
+  **url_path**: current
+  **expected_outcome**: A human confirms the conservative fallback (`conflicted_ids()` fails/empty → every id parks, no prune re-applied) is genuinely unreachable in the silent-loss scenario this PR fixes, and that a zero-id `park_ids`/`park_write` call is unreachable or harmless.
+  **finding**: Two defensive branches added by Units 1/2 are not exercised by the new harness cases: (1) `park_and_exit()`'s fallback when `conflicted_ids()` returns 1 (`CONFLICT_FIELDS_JSON` empty/missing) reverts to the pre-fix behavior of parking every id with no bystander re-application — if this branch is reachable when a `--prune` invocation actually parks, the silent-loss bug this PR exists to fix could still occur through it. (2) if every `ALL_IDS` entry is classified a bystander prune, `park_ids` would be empty and `park_write` would be called with zero ids — unclear whether the underlying `npx tsx` helper tolerates a zero-id argument list. Both are conservative-by-design fallback branches (not claimed new behavior), flagged as a planned deferral rather than a blocker — verify reachability against deployed main/prod before considering this class of defect fully closed.

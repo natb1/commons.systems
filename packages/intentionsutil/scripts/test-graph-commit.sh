@@ -119,7 +119,9 @@
 #  36. bystander prune lands despite a park on another id in the same
 #      invocation: a --prune id NOT implicated in a concurrent-edit conflict
 #      is re-applied and landed with the park commit rather than resurrected
-#      and silently dropped; the conflicted id still parks exactly as before
+#      and silently dropped; the conflicted id still parks exactly as before;
+#      the landed park commit's subject names the parked id and the pruned
+#      id in separate clauses, never describing the pruned id as parked
 #  37. stale --base on a --prune id parks with a prune-specific reason instead
 #      of resurrecting the file: check_base_freshness() refuses to hand a
 #      nonexistent --ours to merge-node.ts, so a prune whose base moved on
@@ -1300,7 +1302,9 @@ fi
 # t-bystander-prune, an unrelated node, is pruned in the SAME invocation. The
 # conflicted id still parks; the bystander prune is not implicated in the
 # conflict, so it must be re-applied after the park's re-sync and land WITH
-# the park commit — not resurrected on disk and silently dropped.
+# the park commit — not resurrected on disk and silently dropped. The landed
+# park commit's subject must name the parked id and the pruned id in separate
+# clauses (park.../prune...), never listing the pruned id as parked.
 set_mode green
 sync_clone "$A"; sync_clone "$B"
 edit_line "$A" t-bystander-conflict 1 A-wins
@@ -1311,14 +1315,18 @@ out="$(run_gc "$B" -m 'test: bystander prune' t-bystander-conflict --prune t-bys
 content="$(origin_show t-bystander-conflict 2>/dev/null)"
 snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
 [[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+subject="$(git -C "$ORIGIN" log -1 --format=%s main)"
+park_clause="${subject%%; prune*}"
 if [[ $rc -eq 1 ]] \
    && grep -q 'line1: A-wins' <<<"$content" \
    && ! grep -q '^line1: B-loses' <<<"$content" \
    && grep -q 'office_hours' <<<"$content" \
-   && ! git -C "$ORIGIN" cat-file -e main:intentions/t-bystander-prune.md 2>/dev/null; then
-  ok "bystander prune: conflicted id parks, unrelated --prune lands anyway"
+   && ! git -C "$ORIGIN" cat-file -e main:intentions/t-bystander-prune.md 2>/dev/null \
+   && grep -q 't-bystander-conflict' <<<"$park_clause" \
+   && ! grep -q 't-bystander-prune' <<<"$park_clause"; then
+  ok "bystander prune: conflicted id parks, unrelated --prune lands anyway, commit subject names sets separately"
 else
-  no "bystander prune (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+  no "bystander prune (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"; printf 'subject: %s\n' "$subject"
 fi
 # --- Case 37: stale --base on a --prune id parks, no resurrection --------------
 # A concurrent writer advances t-prune-base-stale on origin/main after W37
