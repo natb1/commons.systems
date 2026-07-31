@@ -66,8 +66,16 @@ attention:
     tactic-target round: status is now codified and phase implement with a full
     clean-session plan landed in the node body, so the selector emits it as an
     /implement candidate rather than an /align-tactics candidate."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-reclaim-audit-journal-unit-filter
+  pr: 3003
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
