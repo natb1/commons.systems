@@ -1238,7 +1238,10 @@ teardown() {
   unset CLAUDE_CODE_SESSION_ID
   # The #1452 tick-snapshot / trace-cache exports must not leak across tests
   # either — both default OFF so existing tests keep the live/uncached path.
-  unset DISPATCH_AGENTS_SNAPSHOT DISPATCH_TRACE_CACHE_DIR
+  # DISPATCH_AGENTS_SNAPSHOT_ALL is the REGISTERED-view (`--json --all`) snapshot
+  # counterpart; it must not leak either, or a later test would silently read a
+  # previous test's registered snapshot instead of its own fake daemon.
+  unset DISPATCH_AGENTS_SNAPSHOT DISPATCH_TRACE_CACHE_DIR DISPATCH_AGENTS_SNAPSHOT_ALL
   # The reservation-ledger override (#1046) must not leak across tests either.
   unset DISPATCH_RESERVATION_DIR
   # The attention-rank seam (Attention v2) must not leak either — a per-test rank
