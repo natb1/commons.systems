@@ -98,7 +98,52 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: '/qa-main: needs-main residue item "item-8-scope-and-incident-claim"
+    (title: "Interim-scaffolding scope call and the live-incident claim") is not
+    browser-verifiable — its url_path is the literal string "current" (not a
+    real URL) and its expected_outcome is "A human agrees the narrowed scope ...
+    is the right interim trade", a design-judgment call about whether to extend
+    the assert-node-fresh mandate to transition-node/qa-fix/park-node-clear-park
+    and whether the guard would have caught the 2026-07-31 incident in a live
+    run. Neither is observable by navigating a page in Chrome. Per Step 4·0 of
+    /qa-main this fails the pre-triage and routes straight to cannot-verify, not
+    Steps 4a-4e.'
+  since: 2026-07-31
+  recommendation: >-
+    Read intentions/tactic-node-body-stale-in-worker-worktree.md's "##
+    needs-main residue" item item-8-scope-and-incident-claim and the merged PR
+    #3005 it describes (merged 2026-07-31T23:17:19Z). Confirm two things by
+    judgment, not by browser observation:
+
+
+    1. The interim scope call is right: Unit 2 of the plan mandates
+    assert-node-fresh only in /align-tactics' own write path, and explicitly
+    declines to extend the same freshness guard to transition-node, qa-fix's
+    needs-main residue write, or park-node/clear-park (each has its own sibling
+    tactic tracking that follow-up:
+    tactic-transition-node-needs-main-residue-clobbered,
+    tactic-qa-fix-node-terminal-declaration). It also declines a PreToolUse hook
+    (rejected in the node's Context section as too heavy — network fetch on
+    every graph edit, false-fires on legitimate divergent-content flows, and
+    superseded by the in-flight tactic-graph-ref-split migration). Agree or
+    disagree that this is the right interim trade given tactic-graph-ref-split
+    is weeks out.
+
+    2. The live-incident claim holds: that a live /align-tactics run where a
+    node moves mid-session (the exact 2026-07-31 timeline recorded in the node
+    body — filed 12:42:45, worktree provisioned 12:47:22, corrected scope landed
+    13:02:43) would in fact have been caught by assert-node-fresh had it existed
+    at the time, per the mechanism described (base blob vs FETCH_HEAD
+    comparison, refusing before the wholesale body Edit).
+
+
+    If both hold, this residue item can be manually resolved (no code change
+    needed — it was a scope/design-judgment QA deferral, not a defect). If
+    either is in question, comment on PR #3005's tactic node describing which
+    additional writer(s) should be brought under the guard, or whether a
+    PreToolUse hook should be reconsidered.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
