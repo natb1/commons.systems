@@ -56,7 +56,7 @@ validates: []
 blocked_by:
   - tactic-graph-router-live-worker-visibility
 office_hours: null
-pace_exempt: false
+pace_exempt: true
 rounds: null
 attributes: {}
 ---

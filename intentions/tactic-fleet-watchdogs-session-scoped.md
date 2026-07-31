@@ -115,7 +115,7 @@ execution: null
 validates: []
 blocked_by: []
 office_hours: null
-pace_exempt: false
+pace_exempt: true
 rounds: null
 attributes: {}
 ---
