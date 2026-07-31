@@ -358,3 +358,11 @@ cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispat
 **Line-number drift.** Every `path:line` anchor above was read against this worktree at `origin/main` b552dfa2. Re-grep for the named function or comment text before editing rather than trusting a line number; earlier units in the same PR shift later ones.
 
 **Observe in production (post-merge, no automated check possible).** The next owed-prune census batch that hits a concurrent-edit park is the real signal: its bystander prunes should be gone from `origin/main` and should NOT appear in the office-hours queue, while the one genuinely conflicted node should. Check `git log --diff-filter=D --name-only origin/main -- intentions/` against the park commit for that batch.
+
+## needs-main residue
+
+- **id**: 17
+  **title**: Whether documenting rather than enforcing the rc-1 contract is the right call given no in-repo caller
+  **url_path**: current
+  **expected_outcome**: A human confirms the documentation-only choice (no distinct exit code or machine-readable marker for "parked, but a bystander prune landed") is acceptable, or records that a distinct exit code / machine-readable marker is the right follow-up.
+  **finding**: The rc-1 caller contract added by commit 777c4fe1 documents but does not mechanically enforce the mixed park/land outcome — its own text admits no in-repo caller currently passes `--prune` programmatically, so the contract exists for an agent reading the header before a retry, not for a caller to branch on. This is a design-altitude question about the primitive's contract surface, not a defect in the landed code (which is correct and harness-covered) — flagged as a planned deferral rather than a blocker. (Ids 11, 18, 19 and 20 were dropped from this section by the review pass: 20 was a verbatim re-affirmation of this item, and 11/18/19 tracked the two then-uncovered partition branches, both of which are now closed in code — `conflicted_ids()` honors its empty-accumulator contract, an empty `park_ids` falls back to parking every id, and harness Cases 40/41 cover the layer-3 and foreign-manifest entries.)

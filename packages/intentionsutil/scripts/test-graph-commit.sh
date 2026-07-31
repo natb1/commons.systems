@@ -124,6 +124,28 @@
 #      conflict is still live) is aborted by cleanup(): no rebase state dir
 #      survives, HEAD is reattached to the branch, and the checkout's local
 #      commits are intact
+#  38. bystander prune lands despite a park on another id in the same
+#      invocation: a --prune id NOT implicated in a concurrent-edit conflict
+#      is re-applied and landed with the park commit rather than resurrected
+#      and silently dropped; the conflicted id still parks exactly as before;
+#      the landed park commit's subject names the parked id and the pruned
+#      id in separate clauses, never describing the pruned id as parked
+#  39. stale --base on a --prune id parks with a prune-specific reason instead
+#      of resurrecting the file: check_base_freshness() refuses to hand a
+#      nonexistent --ours to merge-node.ts, so a prune whose base moved on
+#      origin/main fails closed (exit 1) rather than silently landing rc 0
+#      through the empty-diff "no new changes to stage" branch
+#  40. bystander prune lands through the LAYER-3 park entry (the --base path an
+#      owed-prune census actually takes): a stale --base same-field divergence
+#      on one id parks it from inside check_base_freshness() — before any
+#      commit exists and with the writer's edits still uncommitted — while an
+#      unrelated --prune in the same invocation is re-applied after the reset
+#      and lands with the park commit
+#  41. a --base MANIFEST entry outside this invocation's node set that fails to
+#      merge does not degenerate into a park of nothing: every committed id is
+#      a bystander prune, so the partition would leave park_ids empty — the
+#      conservative fallback parks every id instead and re-applies no prune,
+#      rather than announcing a park while writing office_hours on no node
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -183,7 +205,9 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
           t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
           t-expect-happy t-expect-wrong-repo t-expect-prune \
-          t-preexist-conflict t-preexist-rebase t-strand-other t-strand-main; do
+          t-preexist-conflict t-preexist-rebase t-strand-other t-strand-main \
+          t-bystander-prune t-bystander-conflict t-prune-base-stale \
+          t-base-bystander-prune t-manifest-foreign t-manifest-prune; do
   seed_node "$id"
 done
 
@@ -214,6 +238,7 @@ seed_field_node t-field-merge "fieldA: base" "fieldB: base"
 seed_field_node t-field-conflict "sentinel: base"
 seed_field_node t-field-base-ok "fieldA: base" "fieldB: base"
 seed_field_node t-field-base-bad "sentinel: base"
+seed_field_node t-base-bystander-conflict "sentinel: base"
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -322,7 +347,10 @@ cat >"$WORK/bin/npx" <<'SH'
 #     for each key appearing in ours and/or theirs, if both sides agree (or
 #     only one side touched it), that value wins; if both sides changed it
 #     away from base to DIFFERENT values (or there is no base to compare
-#     against and the two sides disagree), it is an unresolved conflict.
+#     against and the two sides disagree), it is an unresolved conflict. A
+#     missing --ours file exits 1 with no JSON, mirroring the real CLI's crash
+#     contract (merge-node.ts:14-16) instead of silently resolving from theirs
+#     alone.
 #   anything else (park_write's throwaway tsx module) — emulates `npx tsx
 #     <helper> <storeModule> <intentionsDir> <since> <reason> <snapDir>
 #     <pruneCsv> <id...>` without node. Mirrors the real helper's two-pass
@@ -349,6 +377,17 @@ case "$(basename "$2")" in
         *) shift ;;
       esac
     done
+
+    # Mirror the real CLI's crash contract (merge-node.ts:14-16: "A tool crash
+    # ... exits non-zero with an error on stderr and NO JSON on stdout") for a
+    # missing --ours file. Without this guard the shim below silently treats a
+    # nonexistent --ours as an empty OURS_V map and resolves from theirs alone
+    # — diverging from the real merge-node.ts, which throws ENOENT reading a
+    # missing --ours path.
+    if [[ -n "$ours" && ! -f "$ours" ]]; then
+      echo "merge-node shim: --ours file does not exist: $ours" >&2
+      exit 1
+    fi
 
     # theirs genuinely absent (the id no longer exists on the landed side):
     # ours is the only content, so ours wins outright (mirrors merge-node.ts's
@@ -1359,6 +1398,156 @@ if [[ ! -d "$W37/.git/rebase-merge" && ! -d "$W37/.git/rebase-apply" ]] \
   ok "stranded rebase: cleanup() aborted it — no state dir, HEAD reattached, local commits intact"
 else
   no "stranded rebase not aborted by cleanup (HEAD=$(git -C "$W37" symbolic-ref -q HEAD))"; printf '%s\n' "$out"
+fi
+
+# --- Case 38: bystander prune lands despite a park on another id ---------------
+# t-bystander-conflict races a concurrent edit (same shape as Case 4) while
+# t-bystander-prune, an unrelated node, is pruned in the SAME invocation. The
+# conflicted id still parks; the bystander prune is not implicated in the
+# conflict, so it must be re-applied after the park's re-sync and land WITH
+# the park commit — not resurrected on disk and silently dropped. The landed
+# park commit's subject must name the parked id and the pruned id in separate
+# clauses (park.../prune...), never listing the pruned id as parked.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_line "$A" t-bystander-conflict 1 A-wins
+run_gc "$A" t-bystander-conflict >/dev/null 2>&1
+edit_line "$B" t-bystander-conflict 1 B-loses
+rm -f "$B/intentions/t-bystander-prune.md"
+out="$(run_gc "$B" -m 'test: bystander prune' t-bystander-conflict --prune t-bystander-prune 2>&1)"; rc=$?
+content="$(origin_show t-bystander-conflict 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+subject="$(git -C "$ORIGIN" log -1 --format=%s main)"
+park_clause="${subject%%; prune*}"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'line1: A-wins' <<<"$content" \
+   && ! grep -q '^line1: B-loses' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content" \
+   && ! git -C "$ORIGIN" cat-file -e main:intentions/t-bystander-prune.md 2>/dev/null \
+   && grep -q 't-bystander-conflict' <<<"$park_clause" \
+   && ! grep -q 't-bystander-prune' <<<"$park_clause"; then
+  ok "bystander prune: conflicted id parks, unrelated --prune lands anyway, commit subject names sets separately"
+else
+  no "bystander prune (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"; printf 'subject: %s\n' "$subject"
+fi
+# --- Case 39: stale --base on a --prune id parks, no resurrection --------------
+# A concurrent writer advances t-prune-base-stale on origin/main after W39
+# read its base blob. W39 then prunes it locally with that stale --base. Before
+# Unit 2, check_base_freshness() handed the (nonexistent, by --prune contract)
+# --ours path to the merge-node shim, which — lacking a guard for a missing
+# --ours — silently resolved from theirs alone, resurrecting the file and
+# landing rc 0 through the empty-diff branch. Since Unit 2, a --prune id is
+# excluded from the merge attempt entirely and parks with a prune-specific
+# reason.
+set_mode green
+W39="$WORK/w39"
+make_clone "$W39" writer-39
+stale="$(git -C "$W39" hash-object intentions/t-prune-base-stale.md)"
+OTHER39="$WORK/other39"
+make_clone "$OTHER39" other39
+echo "line13: concurrent edit" >>"$OTHER39/intentions/t-prune-base-stale.md"
+git -C "$OTHER39" commit -qam 'concurrent edit'
+git -C "$OTHER39" push -q origin main
+rm -f "$W39/intentions/t-prune-base-stale.md"
+out="$(run_gc "$W39" -m 'test: prune stale base' --base "t-prune-base-stale=$stale" --prune t-prune-base-stale 2>&1)"; rc=$?
+content="$(origin_show t-prune-base-stale 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && [[ -n "$content" ]] \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 'prune base moved' <<<"$content" \
+   && ! grep -q 'could not attempt structural merge' <<<"$content" \
+   && ! grep -q 'layer 2/3 auto-resolved' <<<"$out"; then
+  ok "prune stale base: refuses to land, parks with a prune-specific reason, no resurrection"
+else
+  no "prune stale base (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 40: bystander prune lands through the LAYER-3 park entry -------------
+# Case 38 enters park_and_exit() from the layer-2 rc-12 tail: a local commit
+# already exists and the conflicting rebase was aborted. This case enters it
+# from inside check_base_freshness() instead — before any commit exists, with
+# the writer's edits still uncommitted in the tree — which is the entry a
+# --base-passing caller (the owed-prune census this fix exists for) actually
+# takes. Same partition contract must hold: the stale-base id parks, the
+# unrelated --prune is re-applied after the reset and lands with the park
+# commit, and the subject names the two sets in separate clauses.
+set_mode green
+W40="$WORK/w40"
+make_clone "$W40" writer-40
+base40_sha="$(git -C "$W40" hash-object intentions/t-base-bystander-conflict.md)"
+edit_field "$W40" t-base-bystander-conflict sentinel writer40-value
+rm -f "$W40/intentions/t-base-bystander-prune.md"
+
+OTHER40="$WORK/other40"
+make_clone "$OTHER40" other40
+edit_field "$OTHER40" t-base-bystander-conflict sentinel concurrent40-value
+git -C "$OTHER40" commit -qam 'concurrent same-field edit'
+git -C "$OTHER40" push -q origin main
+
+out="$(run_gc "$W40" -m 'test: layer-3 bystander prune' \
+        --base "t-base-bystander-conflict=$base40_sha" \
+        t-base-bystander-conflict --prune t-base-bystander-prune 2>&1)"; rc=$?
+content="$(origin_show t-base-bystander-conflict 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+subject="$(git -C "$ORIGIN" log -1 --format=%s main)"
+park_clause="${subject%%; prune*}"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'sentinel: concurrent40-value' <<<"$content" \
+   && ! git -C "$ORIGIN" cat-file -e main:intentions/t-base-bystander-prune.md 2>/dev/null \
+   && grep -q 't-base-bystander-conflict' <<<"$park_clause" \
+   && ! grep -q 't-base-bystander-prune' <<<"$park_clause" \
+   && grep -q 't-base-bystander-prune' <<<"$subject"; then
+  ok "layer 3 bystander prune: stale --base parks its own node while the unrelated --prune lands with the park commit"
+else
+  no "layer 3 bystander prune (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"; printf 'subject: %s\n' "$subject"
+fi
+
+# --- Case 41: a foreign --base manifest entry must not park nothing ------------
+# check_base_freshness() walks EVERY --base key, and a batch manifest (the
+# owed-prune census's whole-graph dump) may name nodes this invocation does not
+# commit. Here t-manifest-foreign was pruned on origin/main by another writer
+# after the dump, so the manifest blob is stale AND the id is absent from this
+# fresh checkout — merge-node.ts crashes on the nonexistent --ours, which lands
+# t-manifest-foreign (and only it) in the conflicted set. Every id this
+# invocation actually commits is then a bystander prune, so the naive partition
+# leaves park_ids empty: park_write() would be called with zero ids, the subject
+# would carry an empty park clause, and the run would exit 1 announcing a park
+# that exists nowhere. The conservative fallback must fire instead — park every
+# id, re-apply no prune.
+set_mode green
+OTHER41="$WORK/other41"
+make_clone "$OTHER41" other41
+stale41="$(git -C "$OTHER41" hash-object intentions/t-manifest-foreign.md)"
+git -C "$OTHER41" rm -q intentions/t-manifest-foreign.md
+git -C "$OTHER41" commit -qm 'concurrent prune of the foreign manifest node'
+git -C "$OTHER41" push -q origin main
+
+W41="$WORK/w41"
+make_clone "$W41" writer-41            # fresh: t-manifest-foreign is NOT on disk
+MANIFEST41="$WORK/base41.manifest"
+printf 't-manifest-foreign=%s\n' "$stale41" >"$MANIFEST41"
+rm -f "$W41/intentions/t-manifest-prune.md"
+
+out="$(run_gc "$W41" -m 'test: foreign manifest entry' --base "$MANIFEST41" \
+        --prune t-manifest-prune 2>&1)"; rc=$?
+content="$(origin_show t-manifest-prune 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+subject="$(git -C "$ORIGIN" log -1 --format=%s main)"
+if [[ $rc -eq 1 ]] \
+   && grep -q "names no id in this invocation's node set" <<<"$out" \
+   && [[ -n "$content" ]] \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 't-manifest-prune' <<<"$subject" \
+   && ! grep -q '; prune' <<<"$subject"; then
+  ok "foreign manifest entry: park_ids never degenerates to empty — every id parks, no prune is re-applied"
+else
+  no "foreign manifest entry (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"; printf 'subject: %s\n' "$subject"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

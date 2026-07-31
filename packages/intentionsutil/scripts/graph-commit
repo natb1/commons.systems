@@ -68,7 +68,7 @@
 #   reports a false "landed" while the caller's real edit sits dirty elsewhere.
 #   Omit entirely to keep pre-assertion behavior.
 #
-# Exit status — four observable outcomes across rc 0 and rc 1:
+# Exit status — five observable outcomes across rc 0 and rc 1:
 #   0  the edit landed on main. Two sub-cases, distinguished only by a log line
 #      (same exit code):
 #        landed                 — no concurrent-edit divergence; no special log.
@@ -76,7 +76,8 @@
 #          by layer 2 (rebase-conflict field merge) or layer 3 (stale --base
 #          re-read), then landed. The final log line carries the
 #          "(layer 2/3 auto-resolved a concurrent-edit divergence)" suffix.
-#   1  push could not land. Two distinct rc-1 sub-cases:
+#   1  push could not land, OR the invocation was refused before any write.
+#      Three distinct rc-1 sub-cases:
 #        busy-main — busy main after all attempts, the required checks never
 #          stamped green within the poll window, a required check CONCLUDED
 #          non-success (deterministic content failure — no retry), or check-run
@@ -92,8 +93,93 @@
 #          "mechanical-unresolved" and office_hours.recommendation holds a
 #          per-diverged-field breakdown; a park with no captured field detail
 #          keeps the plain "concurrent-edit conflict — manual merge needed"
-#          reason and no recommendation.
-#   2  usage error.
+#          reason and no recommendation. Carve-out: a --prune id that is NOT
+#          itself part of the conflicted set is a bystander — its deletion is
+#          independent of whatever id(s) failed to resolve, so it is
+#          re-applied and lands WITH the park commit rather than parking (see
+#          park_and_exit()). Only a prune id that IS part of the conflicted
+#          set keeps this "content is NOT landed" fate. The park commit
+#          subject (and, on a failed land, the unlanded-park error) names the
+#          parked set and the landed-deletion set separately, so a bystander
+#          prune is never described as parked.
+#        refused-by-die — a die() call (see `die()` below) prints
+#          `error: graph-commit: <msg>` to stderr and exits 1. This sub-case is
+#          the PRE-WRITE validation refusals specifically: the existence guards
+#          (the ordinary-edit "does not exist — write the node via
+#          write-node.ts" guard and both --prune guards), the --expect
+#          wrong-repo refusal, the malformed `<id>=<blobsha>` refusal for
+#          --base/--expect, the missing-flag-argument checks (-m/-C/--prune/
+#          --base/--expect with no value), the not-a-git-repo refusal, and the
+#          rebase-already-in-progress refusal. All of those run before main()
+#          touches the tree: nothing is committed, nothing is pushed, and NO
+#          park is written.
+#          die() is NOT exclusive to those guards, so `rc 1` plus an
+#          `error: graph-commit:` line does not by itself license a caller to
+#          assume nothing happened — the stderr text is the discriminator, not
+#          the exit code. The die() sites that fire AFTER the tree, the index,
+#          or the remote was already mutated:
+#            - inside try_land(): the concluded-non-success die and the
+#              check-run-polling die — a local commit exists and a `graph/**`
+#              scratch branch was already pushed. Both belong to the busy-main
+#              sub-case above, which already owns them; they are named here
+#              only so the enumeration is not read as exhaustive.
+#            - "unexpected land status" on that same path, likewise after the
+#              local commit.
+#            - check_base_freshness()'s unreadable-base-blob die and
+#              try_layer2_resolve()'s broken-staging-invariant die, both of
+#              which run after layer 2/3 may have rewritten node files on disk.
+#            - park_write()'s "failed to write the office_hours parking record"
+#              die, reached from park_and_exit() AFTER
+#              `git reset --hard FETCH_HEAD` discarded this writer's tree. That
+#              is the one die() that leaves NO park recorded while the writer's
+#              content is already gone from the worktree — SNAP_DIR is the only
+#              surviving copy.
+#        Caller contract: rc 1 does not mean "nothing landed". When the
+#          invocation mixed --prune ids with other ids, a bystander prune's
+#          deletion may have landed on main together with the park commit. A
+#          caller that retries after rc 1 must NOT replay the same argv
+#          blindly. Per --prune id, re-derive whether the deletion is still
+#          outstanding by asking origin/main directly:
+#            git fetch origin main
+#            git cat-file -e origin/main:intentions/<id>.md
+#          rc 0 = the file is still present on origin/main, the prune is still
+#          outstanding — keep `--prune <id>` in the retry argv. rc non-zero =
+#          the deletion already landed — DROP `--prune <id>` from the retry
+#          argv. (`git cat-file -e` is the quiet existence test, and is the
+#          same idiom the script's own prune guard uses.)
+#          If an already-landed `--prune <id>` IS re-passed, that guard refuses
+#          the retry with rc 1 (not rc 2 — it goes through die()) and this
+#          exact stderr line:
+#            error: graph-commit: intentions/<id>.md does not exist in HEAD — nothing to prune for '<id>'
+#          That rc 1 is an argument-validation refusal raised before any git
+#          write: no park is written, no `office_hours` line appears on any
+#          node, and no snapshot dir is preserved. It must NOT be misread as a
+#          second concurrent-edit conflict. The discriminator an agent can use
+#          is that message text plus the ABSENCE of any
+#          "graph-commit: parked ..." stderr line.
+#          Precondition on that guard: it tests `HEAD:intentions/<id>.md` —
+#          the LOCAL checkout's HEAD, NOT origin/main. So it only protects a
+#          retry that runs from a repo already synced past the park commit.
+#          The park path itself (park_and_exit()) leaves the writer's OWN
+#          worktree in exactly that state, since it resets to FETCH_HEAD,
+#          commits the deletion, and pushes. But a retry issued from a STALE
+#          checkout whose HEAD still contains the node's file passes this
+#          guard even though the deletion already landed on origin/main —
+#          which is exactly why the `git fetch origin main` step above is
+#          mandatory before any retry, not merely a suggestion.
+#          The stderr lines above distinguish the parked set from the landed
+#          bystander-prune set, and so does the park commit subject; those are
+#          the authoritative record of what happened. No in-repo caller
+#          currently passes --prune programmatically — pruning is agent-driven
+#          via the owed-prune census, not script-driven — so this contract is
+#          documented for the agent reading it before a retry, not enforced by
+#          a caller check.
+#   2  usage error — reserved for the paths that call `exit 2` directly: an
+#      unknown `-*` option, no node ids given at all, an id rejected by
+#      validate_id_chars (empty, containing a path separator, or exactly `.`
+#      or `..`), and `--expect <id>=...` naming a --prune id. rc 2 does NOT
+#      cover every argument problem: the die()-based validation refusals listed
+#      under rc 1 above exit 1.
 #
 # Conventions: mirrors the bounded-retry shape/logging of `gh_retry` in
 # .claude/skills/dispatch-propagate/scripts/lib.sh. Per .claude/rules/code-style.md
@@ -364,6 +450,21 @@ check_base_freshness() {
     fi
     [[ "$origin_sha" == "$sha" ]] && continue
 
+    # A prune id has no on-disk content to three-way merge, and
+    # $INTENTIONS_DIR/$id.md is absent by contract (main() refuses otherwise
+    # when a --prune id also names an ordinary edit). Handing merge-node.ts a
+    # nonexistent --ours throws ENOENT, which run_merge_node() would report as
+    # the generic "could not attempt structural merge" crash sentinel — the
+    # wrong diagnosis, and a doomed npx tsx spawn. Mirror try_layer2_resolve()'s
+    # prune early-out instead: record an accurate, prune-specific sentinel and
+    # park rather than resolve, so a stale --base on a prune id fails closed
+    # instead of resurrecting the pruned file.
+    if is_prune_id "$id"; then
+      append_conflicts "$(jq -cn --arg id "$id" '[{id: $id, note: "prune base moved — the node changed on origin/main since this writer read it"}]')"
+      STALE_BASE_UNRESOLVED=1
+      continue
+    fi
+
     # origin/main's copy of this node diverged from the blob the writer read.
     # Attempt a structural three-way merge instead of refusing. base/ours/theirs
     # map directly to plain file reads (no rebase-stage inversion):
@@ -494,8 +595,11 @@ snapshot() {
     cp -- "$INTENTIONS_DIR/$id.md" "$SNAP_DIR/$id.md"
   done
   # PRUNE_IDS are deliberately skipped: a prune id has no on-disk file to
-  # copy, and there is no writer-authored content to preserve for it — the
-  # deletion is fully recorded by the commit that lands (or fails to land).
+  # copy, and there is no writer-authored content to preserve for it. The
+  # deletion is re-applied after each re-sync to fresh origin/main instead —
+  # ensure_intentions_only_base() re-deletes every PRUNE_IDS file, and
+  # park_and_exit() re-deletes every PRUNE_IDS file NOT itself implicated in
+  # the conflict (see conflicted_ids()) — so a bystander prune still lands.
 }
 
 # --- Layer-2 conflict accumulation ------------------------------------------
@@ -1137,6 +1241,25 @@ JQ
   jq -rf "$jqprog" "$CONFLICT_FIELDS_JSON"
 }
 
+# --- Conflicted-id set -------------------------------------------------------
+# CONFLICT_FIELDS_JSON's every entry (both the {id,field,ours,theirs} shape and
+# the {id,note} sentinel shape) carries an `id` key — it is the authoritative
+# registry of which ids this invocation could not resolve. Emits the distinct
+# ids, one per line, on stdout; returns 1 (no output) when the accumulator was
+# never created or is empty, which park_and_exit() treats as "could not
+# determine the conflicted set" and falls back to parking every id.
+# `-s` alone is not emptiness: the accumulator is created holding the two-byte
+# literal `[]` (init_conflict_fields()), and an append of a zero-length array
+# leaves it that way — so the id list itself, not the file size, decides. This
+# matches park_write()'s reader, which gates on `jq 'length'` for the same file.
+conflicted_ids() {
+  [[ -n "$CONFLICT_FIELDS_JSON" && -s "$CONFLICT_FIELDS_JSON" ]] || return 1
+  local ids
+  ids="$(jq -r '.[].id' "$CONFLICT_FIELDS_JSON" | sort -u)"
+  [[ -n "$ids" ]] || return 1
+  printf '%s\n' "$ids"
+}
+
 # --- Parking fallback ------------------------------------------------------
 # A genuine semantic conflict: set office_hours on each target node via store.ts
 # (readNode → set office_hours → writeNode) so the frontmatter is serialized
@@ -1235,7 +1358,7 @@ for (let i = 0; i < nodes.length; i++) {
 }
 TS
   if ! GRAPH_COMMIT_RECOMMENDATION_FILE="$rec_file" \
-       npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "$SNAP_DIR" "$prune_csv" "${ALL_IDS[@]}" >&2; then
+       npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "$SNAP_DIR" "$prune_csv" "$@" >&2; then
     rm -f "$tmpts"
     die "failed to write the office_hours parking record"
   fi
@@ -1249,14 +1372,24 @@ TS
 # logic. Self-contained: relies only on globals (ALL_IDS, SNAP_DIR, KEEP_SNAP)
 # and the committed helpers, never on state that exists only after
 # try_land()/land() ran — it does its own fetch/reset. Always calls exit 1.
+#
+# Bystander prunes: a --prune id that is NOT itself part of the conflicted set
+# (per conflicted_ids()) is independent of whatever id(s) failed to resolve, so
+# its deletion is re-applied after the reset and lands with the park commit —
+# it does not park. A prune id that IS in the conflicted set keeps parking
+# exactly as before (Cases 17/23): re-deleting a conflicted prune would blind-
+# overwrite the other writer's just-landed edit, which is exactly the
+# fail-closed contract above forbids. When the conflicted set cannot be
+# determined (conflicted_ids() fails/empty — e.g. try_layer2_resolve() returned
+# 1 with nothing appended), or when it names no id this invocation is actually
+# committing (so the partition would park nothing at all), fall back to the
+# conservative default: every id parks, no prune is re-applied.
 park_and_exit() {
-  local park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
   # Fail closed: discard this writer's local conflicting commit, park the node as
   # it exists on fresh origin/main (the other writer's already-landed content
   # wins), and preserve this writer's unlanded content in SNAP_DIR for the
   # manual merge.
   KEEP_SNAP=1
-  echo "graph-commit: concurrent-edit conflict on ${ALL_IDS[*]}; parking node(s) — this writer's content is NOT landed" >&2
   echo "graph-commit: this writer's unlanded content is preserved at $SNAP_DIR for the manual merge" >&2
   # Sync to fresh origin/main. Both callers reach here with the writer's content
   # already captured in SNAP_DIR by snapshot() (run before check_base_freshness),
@@ -1274,7 +1407,63 @@ park_and_exit() {
   # caller concern, not resolved here.
   git fetch origin main >&2
   git reset --hard FETCH_HEAD >&2
-  park_write
+
+  # Partition: bystander prunes (re-applied and landed) vs. park_ids (parked).
+  local conflicted park_ids=() bystander_prunes=() id
+  if conflicted="$(conflicted_ids)"; then
+    declare -A _conflicted_set=()
+    while IFS= read -r id; do
+      [[ -n "$id" ]] && _conflicted_set["$id"]=1
+    done <<<"$conflicted"
+    for id in "${PRUNE_IDS[@]}"; do
+      if [[ -z "${_conflicted_set[$id]:-}" ]]; then
+        bystander_prunes+=("$id")
+      fi
+    done
+    for id in "${ALL_IDS[@]}"; do
+      local is_bystander=0 b
+      for b in "${bystander_prunes[@]}"; do
+        [[ "$b" == "$id" ]] && { is_bystander=1; break; }
+      done
+      [[ "$is_bystander" -eq 0 ]] && park_ids+=("$id")
+    done
+  else
+    # Could not determine the conflicted set — conservative fallback: every id
+    # parks, no prune is re-applied.
+    park_ids=("${ALL_IDS[@]}")
+  fi
+
+  # Degenerate partition: every id in this invocation was classified a bystander
+  # prune, so nothing would park. Reachable when the unresolved conflict is on a
+  # --base id OUTSIDE this invocation's node set — check_base_freshness()
+  # iterates every BASE key, and a batch manifest may cover more nodes than the
+  # invocation commits (see assert_expected_content()'s note on that manifest
+  # semantics) — while every id actually being committed is a bystander prune.
+  # Parking nothing while the stderr and the exit status announce a park is the
+  # silent-loss shape this whole path exists to prevent, so route it to the same
+  # conservative default as an undeterminable conflicted set: every id parks, no
+  # prune is re-applied. The prune is then re-derivable by the caller from
+  # origin/main (see the rc-1 caller contract in the header).
+  if [[ "${#park_ids[@]}" -eq 0 ]]; then
+    echo "graph-commit: the unresolved conflict names no id in this invocation's node set — parking every id and re-applying no prune (conservative fallback)" >&2
+    park_ids=("${ALL_IDS[@]}")
+    bystander_prunes=()
+  fi
+
+  local park_msg
+  if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
+    park_msg="graph: park ${park_ids[*]} (concurrent-edit conflict); prune ${bystander_prunes[*]}"
+    echo "graph-commit: concurrent-edit conflict on ${park_ids[*]}; parking node(s) — this writer's content is NOT landed" >&2
+    echo "graph-commit: re-applying and landing bystander prune(s) not implicated in the conflict: ${bystander_prunes[*]}" >&2
+    for id in "${bystander_prunes[@]}"; do
+      rm -f -- "$INTENTIONS_DIR/$id.md"
+    done
+  else
+    park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
+    echo "graph-commit: concurrent-edit conflict on ${park_ids[*]}; parking node(s) — this writer's content is NOT landed" >&2
+  fi
+
+  park_write "${park_ids[@]}"
   CURRENT_MSG="$park_msg"
   if id_files_dirty; then
     commit_files
@@ -1282,9 +1471,17 @@ park_and_exit() {
   local prc=0
   land || prc=$?
   if [[ "$prc" -eq 0 ]]; then
-    echo "graph-commit: parked ${ALL_IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
+    if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
+      echo "graph-commit: parked ${park_ids[*]} (office_hours set on the origin/main content); landed bystander prune deletion(s) for ${bystander_prunes[*]}; pushed to main" >&2
+    else
+      echo "graph-commit: parked ${ALL_IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
+    fi
   else
-    echo "error: graph-commit: could not land the parking write for ${ALL_IDS[*]} — office_hours set locally but not pushed to main" >&2
+    if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
+      echo "error: graph-commit: could not land the parking write for ${park_ids[*]} — office_hours set locally but not pushed to main; the bystander prune deletion for ${bystander_prunes[*]} also did not land — it is committed locally but unpushed, same as the park" >&2
+    else
+      echo "error: graph-commit: could not land the parking write for ${park_ids[*]} — office_hours set locally but not pushed to main" >&2
+    fi
   fi
   exit 1
 }
