@@ -5,8 +5,8 @@
 # spawns a top-level sonnet orchestrator session that invokes the phase skill
 # DIRECTLY (never a runner session that invokes a workflow). Covers the per-phase
 # skill map, the strategy/tactic lane split, and every provision-exit disposition
-# (0/10/11/12/13/2) — routed here at zero token cost with no `claude` session on
-# any non-zero path.
+# (0/10/11/12/13/14/2) — routed here at zero token cost with no `claude` session
+# on any non-zero path.
 #
 # Harness (mirrors the per-SUT test-*.sh files sharing dispatch-test-fixture.sh):
 # copy the SUT + its sourced libs
@@ -292,6 +292,30 @@ assert_eq "prov-error stdout" "parked tactic-e" "$OUT"
 assert_eq "prov-error exit 0" "0" "$RC"
 assert_eq "prov-error spawns nothing" "" "$(cat "$SPAWN_LOG")"
 assert_contains "prov-error parks the node" "tactic-e" "$(cat "$PARK_LOG")"
+
+# ============================================================================
+# Case 8b: provision exit 14 -> a worktree-residue tracked hold, born on the
+# FIRST occurrence. No strike ladder, no conflict-lane spawn, no park-node
+# write — the residue is not a content conflict and the source's own
+# office_hours is never written by this producer.
+# ============================================================================
+echo "Case 8b: provision exit 14 -> held via a worktree-residue hold, first occurrence"
+PROV_RC=14 run_exec "tactic-res:tactic:qa"
+HOLD=$(cat "$HOLD_LOG")
+assert_eq "residue stdout" "held tactic-res worktree-residue" "$OUT"
+assert_eq "residue exit 0" "0" "$RC"
+assert_eq "residue spawns nothing" "" "$(cat "$SPAWN_LOG")"
+assert_eq "residue makes no park-node write" "" "$(cat "$PARK_LOG")"
+assert_contains "residue calls hold-node with --kind worktree-residue" \
+  "tactic-res --kind worktree-residue" "$HOLD"
+
+# ============================================================================
+# Case 8c: exit 14 where hold-node itself fails -> failed, exit 1
+# ============================================================================
+echo "Case 8c: provision exit 14 with a failing hold-node -> failed, exit 1"
+PROV_RC=14 HOLD_RC=1 run_exec "tactic-resf:tactic:qa"
+assert_eq "residue hold-fail stdout" "failed tactic-resf hold-failed" "$OUT"
+assert_eq "residue hold-fail exit 1" "1" "$RC"
 
 # ============================================================================
 # Case 9: a failed spawn kick -> failed, exit 1

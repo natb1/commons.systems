@@ -31,7 +31,8 @@
 # for it.
 #
 # Usage:
-#   hold-node <source-node-id> --kind <provision-conflict|fix-attempt-cap>
+#   hold-node <source-node-id>
+#             --kind <provision-conflict|fix-attempt-cap|worktree-residue>
 #             --reason-file <f> --recommendation-file <f>
 #             [--body-file <f>] [--reset-fix-attempt]
 #
@@ -60,7 +61,7 @@ DUMP_NODE_TS="$SCRIPT_DIR/dump-node.ts"
 APPLY_FIX_TS="$SCRIPT_DIR/apply-fix-state.ts"
 GRAPH_COMMIT="$SCRIPT_DIR/graph-commit"
 
-USAGE="usage: hold-node <source-node-id> --kind <provision-conflict|fix-attempt-cap> --reason-file <f> --recommendation-file <f> [--body-file <f>] [--reset-fix-attempt]"
+USAGE="usage: hold-node <source-node-id> --kind <provision-conflict|fix-attempt-cap|worktree-residue> --reason-file <f> --recommendation-file <f> [--body-file <f>] [--reset-fix-attempt]"
 
 SOURCE_ID=""
 KIND=""

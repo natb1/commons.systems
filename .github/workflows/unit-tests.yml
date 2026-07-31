@@ -220,6 +220,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-mark-node-terminal.sh
       - name: Run dispatch-graph-execute tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh
+      - name: Run provision-node-worktree tests
+        run: .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh
       - name: Run dispatch-derive-node-target tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-derive-node-target.sh
       - name: Run dispatch-daemon-liveness sensor tests
