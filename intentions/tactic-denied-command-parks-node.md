@@ -641,3 +641,33 @@ Manual / judgment checks (not machine-checkable in CI):
 - **Confirm recovery.** Attach the frozen session, answer or cancel the prompt,
   `claude rm` the job, let `dispatch-sweep` reap the worktree, then
   `clear-park <node-id>` and confirm the node returns to the selectable set.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #2994). Verifiability triaged at record time — only
+machine/browser-verifiable items become residue here; a subjective judgment
+call stays `needs-human` and is escalated to office-hours directly instead.
+
+1. **Confirm the literal `state` value against a real Claude Code denial**
+   - URL path: current
+   - Expected outcome: A real denial-frozen session appears in the live
+     registry with exactly the `state` value the new
+     `claude_agents_list_blocked_workers` filter matches (`state: "blocked"`),
+     so the sweep's first predicate fires in production and not just against
+     faked registries.
+   - Finding: The PR's own Testing section defers real-denial confirmation to
+     judgment checks outside CI; unit tests only exercise faked `claude
+     agents` registries, so the ground-truth `state: "blocked"` literal is
+     unverified at merge. Planned deferral — verifiable only against a real
+     live denial post-merge.
+
+2. **Confirm end-to-end recovery: parked frozen node surfaces and can be cleared**
+   - URL path: current
+   - Expected outcome: The full loop closes: freeze -> detected -> parked ->
+     surfaced to a human with actionable guidance (office-hours `all-held`) ->
+     human unblocks -> park cleared -> node resumes normal routing.
+   - Finding: The PR explicitly defers office-hours surfacing and end-to-end
+     recovery verification to judgment checks outside CI; it requires a real
+     frozen session and a live human attach that no unit test can substitute
+     for. Planned deferral — verifiable only against a real frozen session
+     post-merge.
