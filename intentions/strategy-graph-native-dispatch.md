@@ -3040,6 +3040,19 @@ clarifications:
       office_hours write, and a greppable journal line following the
       `lib-reservation-ledger: reclaimed reservation <wt> (<reason>)` format
       that dispatch-reclaim-audit already mines."
+  - question: Does the exit-11 conflict-lane fix's
+      (tactic-node-worker-fresh-skill-body) correctness depend on the primary
+      checkout being CURRENT, not merely on the main branch?
+    answer: (Recorded 2026-07-31 /align-tactics round.) The exit-11 conflict-lane
+      relocation to --cwd "$PROJECT_ROOT" depends on the primary checkout being
+      current, not merely on the main branch. That currency is NOT supplied by
+      strategy-autonomous-execution's on-main condition, which explicitly
+      disclaims it; it is supplied by dispatch-select-tick Step 1, where a
+      failed fetch or failed `merge --ff-only origin/main` is terminal for the
+      tick (sync-failed / sync-broken, exit before selection), so no worker is
+      spawned on an unsynced primary checkout. Residual staleness is one
+      intra-tick window, against the 142- and 365-commit node worktrees the
+      tactic removes.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
