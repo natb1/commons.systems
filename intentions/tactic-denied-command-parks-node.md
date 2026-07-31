@@ -69,7 +69,7 @@ attention:
     and cannot compound. Finalized 2026-07-31 by /align-tactics to phase:
     implement with a full clean-session plan in the body; the boost carries over
     unchanged, since attention rank is independent of phase."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-denied-command-parks-node
   pr: 2994
@@ -80,7 +80,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T17:15:22Z
+    mergeCommitSha: 03a156232a4b3b38ccd6072da03c073bf64c558d
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
