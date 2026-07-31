@@ -17,12 +17,24 @@ code-review `Fixed` / `Informational` / `Dismissed` / `Deferred` axis.
 | Out-of-scope | security | A genuine concern, but in pre-existing code the diff did not touch; meaningful CodeQL/npm out-of-scope findings are filed as `security` follow-ups in Step 6. |
 
 For `code-review` and `security-review` sources specifically, these buckets are
-populated differently from the rest of this table: code-review's own outcome
-(`fixed` / `skipped` / `no_change_needed`, from its `--fix` run) and the residue
-phase's resolve/defer/ignore disposition fill these buckets directly — this
-pipeline's own classify/verify/fix stages never run over Lane-A findings, and
-now only classify Lane-B sources (domain security finders, cost, codeql, npm,
-erosion).
+populated differently from the rest of this table — this pipeline's own
+classify/verify/fix stages never run over Lane-A findings, and now only classify
+Lane-B sources (domain security finders, cost, codeql, npm, erosion). Lane A's
+buckets are filled directly from two inputs:
+
+- **code-review's `fixed[]` is derived from the git diff, not from any report.**
+  `dispatch-code-review` (SKILL.md Step 1b) takes a before/after `git diff`
+  around the `claude -p '/code-review low --fix'` run and emits the exact list of
+  files the built-in actually edited. The Workflow's Sonnet `parse:code-review`
+  subagent structures the run's free-form findings text against that patch, and
+  the Workflow then **mechanically** drops any claimed fix whose `touched_files`
+  is empty or not a subset of the git-derived list (an empty list ⇒ `fixed` is
+  `[]`, whatever the review text narrates). The built-in decides for itself
+  whether to apply each fix and has been observed narrating fixes it declined to
+  write, so its self-report is never credited as yield — only the diff is.
+- **Everything else the review reported becomes residue**, and the residue
+  phase's resolve/defer/ignore disposition fills the remaining buckets — the same
+  path `security-review`'s findings-only output takes.
 
 A finding is **never Dismissed/Disregarded purely because the change is small.**
 If a code-review finding is a real improvement within the PR's scope,

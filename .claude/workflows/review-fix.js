@@ -21,7 +21,11 @@
  *     deps:bool, app_or_rules:bool,
  *     prescanned_findings:[...Per-finding items, Source "codeql"|"npm",
  *       carrying their source-specific fields...],
- *     implementing_issues:[N,...], security_note?:string }
+ *     implementing_issues:[N,...], security_note?:string,
+ *     code_review:{ status:"ok", findings_path:<abs>, patch_path:<abs>,
+ *       touched_files:[...] }   // REQUIRED — the SKILL.md Step 1b
+ *       `claude -p '/code-review low --fix'` pre-stage's output; touched_files is
+ *       git-derived and is the authoritative constraint on Lane-A fixed[] }
  *
  * return OUT (the ONLY thing this script returns):
  *   { dispositions:[{id, short_desc, location, bucket, sources:[...],
@@ -178,10 +182,12 @@ const FIX_SCHEMA = {
 
 // Return shape for the trust-the-built-in review-and-fix sources (code-review,
 // security-review). These sources run the built-in skills with defaults and let
-// them apply their own edits; the finder reports the fixes they applied (`fixed`)
+// them apply their own edits; the envelope reports the fixes they applied (`fixed`)
 // and the residue they did not auto-fix (`residue`) for a later three-way
 // resolve/defer/ignore disposition. security-review has no fix capability, so it
-// always returns `fixed: []`.
+// always returns `fixed: []`. Both routes reuse this ONE schema: security-review's
+// finder agent emits it directly, and the `parse:code-review` structuring subagent
+// emits it from the Step-1b pre-stage's free-form text.
 const LANE_A_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -289,13 +295,22 @@ const RESIDUE_TREE_SCHEMA = {
 const LANE_A = new Set(['code-review', 'security-review']);
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-finders
-// Returns the AGENT finder-source set (the codeql/npm finders are NOT agents —
-// they arrive via args.prescanned_findings — so they are excluded here).
+// Returns the AGENT finder-source set. Several sources in that normative roster are
+// deliberately absent here because they are NOT agents in this Workflow's fan-out:
+//   - codeql / npm / erosion — they arrive already-normalized via
+//     args.prescanned_findings, produced by the skill's inline scans.
+//   - code-review — it is not an agent finder either. It runs as the exclusive
+//     `claude -p '/code-review low --fix'` pre-stage in SKILL.md Step 1b, BEFORE this
+//     Workflow is invoked (the `-p` user turn is the only entry point that can invoke
+//     a `disable-model-invocation` skill, and its `--fix` writes the working tree, so
+//     it must not run concurrently with this parallel fan-out). Its output reaches
+//     this Workflow as args.code_review and is structured by the `parse:code-review`
+//     subagent below — never launched from here.
 function agentFinderSet(surface, app_or_rules) {
-  // Any non-`code` surface (`empty`/`docs`/`tests`) yields only the single quality
-  // finder — the `surface === 'code'` gate below covers `tests` with no code
-  // change, since a test-only diff has no production attack surface.
-  const set = ['code-review'];
+  // Any non-`code` surface (`empty`/`docs`/`tests`) yields NO agent finders at all —
+  // the `surface === 'code'` gate below covers `tests` with no code change, since a
+  // test-only diff has no production attack surface.
+  const set = [];
   if (surface === 'code') {
     set.push('input-validation', 'secrets', 'red-team', 'security-review');
     if (app_or_rules) {
@@ -447,30 +462,63 @@ const DOMAIN_PROMPTS = {
     'Firebase-specific: Firestore rules permissiveness (overly broad `allow` conditions, missing field constraints), emulator-only code reachable on production paths, Firebase API key or config exposure.',
 };
 
+// Structuring prompt for the built-in /code-review pre-stage output. code-review
+// is NOT a finder agent in this Workflow: SKILL.md Step 1b already ran
+// `claude -p '/code-review low --fix [--comment]'` (the `-p` user turn is the only
+// entry point that can invoke a `disable-model-invocation` skill) and wrote its
+// verbatim text output plus a before/after patch to disk. This prompt drives ONE
+// cheap Sonnet subagent that turns that free-form text into the LANE_A_SCHEMA
+// { fixed, residue } envelope — mechanical structuring, not review reasoning.
+//
+// Unit 1 measured the built-in's output format across three completed runs and it
+// was DIFFERENT every time (a fenced JSON array; a flat list of `path:line` —
+// description lines; numbered prose under a "Findings (N) and fixes" heading). See
+// .claude/skills/review-fix/references/code-review-invocation.md §1.3. The prompt
+// must therefore parse free-form prose and must never anchor on a fixed shape.
+function codeReviewParsePrompt(cr) {
+  return [
+    'You are a text-structuring subagent. You perform NO review of your own — the review has',
+    'already been done by the built-in `/code-review` skill. Your only job is to turn its',
+    'free-form text output into the JSON envelope described at the end of this prompt.',
+    '',
+    `1. Read the file at \`${cr.findings_path}\` with the Read tool (absolute path, use it as given).`,
+    "   It is the verbatim text output of a `claude -p '/code-review low --fix [--comment]'` run",
+    '   against this branch. It is FREE-FORM PROSE, not a fixed schema. Across observed runs the',
+    '   built-in emitted a fenced JSON array, a flat list of `` `path:line` — description `` lines,',
+    '   and numbered prose under a "Findings (N) and fixes" heading — and it may emit something else',
+    '   entirely. Do NOT anchor on any heading, JSON fence, or keyword vocabulary. Parse whatever',
+    '   shape the file actually has. What is reliably present per finding: a `path:line` (or `path`',
+    '   plus "at line N") locator, a one-sentence description of the defect, and — when `--fix` ran —',
+    '   a statement of whether the fix was applied or skipped.',
+    `2. Read the patch at \`${cr.patch_path}\` with the Read tool (absolute path, use it as given).`,
+    '   It is the before/after diff of the edits the built-in ACTUALLY applied.',
+    '',
+    'AUTHORITATIVE CONSTRAINT — this overrides anything the review text says about itself:',
+    `The built-in's applied edits are EXACTLY these files: ${JSON.stringify(cr.touched_files || [])}.`,
+    'That list came from a mechanical before/after `git diff`, not from any report. If the list is',
+    'EMPTY, `fixed` MUST be `[]` no matter what the text claims. Never infer a fix from the review\'s',
+    'prose alone: the built-in sometimes narrates what it *would* fix or *considered* fixing without',
+    'writing anything (it has been observed reading a file\'s own comment, judging it a deliberate',
+    'vulnerability fixture, and declining to edit while still describing the fixes). Its self-report',
+    'is not a trustworthy yield signal — the diff is.',
+    '',
+    'Then partition every reported finding into exactly one of two arrays:',
+    '- A finding you can match to a hunk in the patch → `fixed[]`, with `location` (`path:line`, as',
+    '  best extractable from the text), `fix_summary` (drawn from the finding\'s own text), and',
+    '  `touched_files` — which MUST be a SUBSET of the authoritative list above.',
+    '- Every other reported finding — not fixed, or explicitly skipped/declined by `--fix` → `residue[]`,',
+    '  with `location`, `description`, `severity` (map the built-in\'s stated or implied severity;',
+    '  default "medium" when unclear), `category`, `exploit_scenario` ("" for a non-security finding —',
+    '  code-review findings are not necessarily exploits), and `recommended_fix`.',
+    '',
+    'You edit nothing, commit nothing, push nothing — you only read the two files above and structure',
+    'what they contain.',
+    LANE_A_BLURB,
+  ].join('\n');
+}
+
 function finderPrompt(name, args) {
   const ctx = diffContext(args);
-  if (name === 'code-review') {
-    return [
-      'You are a code-review-and-fix subagent. You trust the built-in review to apply its own fixes.',
-      'Invoke the built-in `/code-review` skill via the Skill tool with the `max` effort argument',
-      'AND the `--fix` flag, so it applies its own working-tree edits after reviewing.',
-      ctx,
-      '/code-review reports each finding via ReportFindings with a per-finding `outcome` of',
-      '`fixed`, `no_change_needed`, or `skipped`. Once it returns, build a `{ fixed, residue }` object:',
-      '- For every finding with outcome "fixed", append to `fixed[]`: `location` (from the finding\'s',
-      '  file/line), `fix_summary` (a one-line summary of what changed, drawn from the finding\'s',
-      '  `summary`), `touched_files` (the file(s) it edited for that finding).',
-      '- For every finding with outcome "skipped", append to `residue[]`: `location`, `description`',
-      '  (from the finding\'s `failure_scenario`/`summary`), `severity` (map code-review\'s implicit',
-      '  confidence/severity as best judged; default "medium" if unclear), `category` (from the',
-      '  finding\'s `category` field), `exploit_scenario` ("" if not a security-flavored finding —',
-      '  code-review findings are not necessarily exploits), `recommended_fix` (a specific corrective',
-      '  action).',
-      '- IGNORE every finding with outcome "no_change_needed" entirely — add it to neither array.',
-      'Return `{ fixed: [...], residue: [...] }` matching the schema below.',
-      LANE_A_BLURB,
-    ].join('\n');
-  }
   if (name === 'security-review') {
     return [
       'You are a security-review subagent for the trust-the-built-in review-and-fix lane.',
@@ -529,6 +577,21 @@ function finderPrompt(name, args) {
 const _a = typeof args === 'string' ? JSON.parse(args) : (args || {});
 log(`args type: ${typeof args}; surface=${_a.surface}; changed_files count=${(_a.changed_files || []).length}`);
 
+// Hard contract check on the Step-1b pre-stage. The built-in /code-review runs
+// BEFORE this Workflow (SKILL.md Step 1b → dispatch-code-review), and its results
+// reach us only through args.code_review. If that field is absent or not "ok" the
+// built-in did not verifiably run, and this Workflow must fail loudly rather than
+// quietly producing a review that silently omits it — the exact silent-substitution
+// defect this lane exists to prevent. Per .claude/rules/code-style.md: a clear
+// error, never a defensive fallback to an empty Lane-A contribution.
+if (!_a.code_review || _a.code_review.status !== 'ok') {
+  throw new Error(
+    'review-fix.js: args.code_review is missing or not status "ok". The Workflow must never proceed ' +
+      'as if the built-in /code-review ran without it — run SKILL.md Step 1b (dispatch-code-review) first.'
+  );
+}
+const cr = _a.code_review;
+
 // subagents_launched (source 1, this Workflow's own fan-out): a single
 // accumulator incremented at each spawn site, inside the guard that actually
 // launches the agents. A launched-but-dead agent still counts — increment at
@@ -539,32 +602,35 @@ let subagentsLaunched = 0;
 // --- 1. FINDERS (two waves, probe-gated) -------------------------------------
 phase('finders');
 const finderNames = agentFinderSet(_a.surface, _a.app_or_rules);
-// Probe-wave throttle short-circuit: the single always-on `code-review` quality
-// finder is real review work that runs on every surface, so launch it FIRST as
-// wave 1 and double it as a throttle probe. The `agent()` primitive already
+// Probe-wave throttle short-circuit: `security-review` is real review work that
+// runs whenever there are ANY agent finders at all (it is added by agentFinderSet
+// under the same `surface === 'code'` gate as the rest of the roster), so launch it
+// FIRST as wave 1 and double it as a throttle probe. The `agent()` primitive already
 // retries internally, so a `null` result means the finder failed AFTER retries —
-// a genuine outage signal, not a one-off flake. On that signal, skip the security
-// finder wave entirely rather than waste those launches on a throttled model. On
-// empty/docs/tests surfaces there are no security finders, so this degenerates to
-// a single wave (no change).
-const qualityFinders = finderNames.filter((n) => n === 'code-review');
-const securityFinders = finderNames.filter((n) => n !== 'code-review');
+// a genuine outage signal, not a one-off flake. On that signal, skip the wave-2
+// finders entirely rather than waste those launches on a throttled model.
+// On every non-`code` surface finderNames is [] — both waves are empty, nothing is
+// launched, and there is nothing to probe FOR because there is no wave 2.
+const probeFinders = finderNames.filter((n) => n === 'security-review');
+const waveTwoFinders = finderNames.filter((n) => n !== 'security-review');
 log(
-  `finders: wave 1 = ${qualityFinders.length} quality finder; ` +
-    `${securityFinders.length} security finder(s) pending for surface=${_a.surface}`
+  `finders: wave 1 = ${probeFinders.length} probe finder(s) (security-review); ` +
+    `${waveTwoFinders.length} wave-2 finder(s) pending for surface=${_a.surface}`
 );
 
 // Finders run on Opus (#2872). Finding real bugs and vulnerabilities in the diff
 // is the genuinely complex, generative subtask of this workflow — the orchestrator
 // stays on Sonnet and delegates this reasoning to Opus subagents. This covers the
-// always-on `/code-review` quality finder, the `/security-review` pass, and the
-// surface-gated security/cost domain lenses. Cheaper mechanical stages downstream
-// (dedup, classify) stay on Sonnet; fix-authoring is already Opus.
-// Lane-A finders (code-review, security-review) run the trust-the-built-in
-// review-and-fix skills and return a { fixed, residue } envelope (LANE_A_SCHEMA),
-// so they must launch with that schema — NOT the shared FINDINGS_SCHEMA. Their
-// prompts are already Lane-A-aware (finderPrompt branches on the name). Lane-B
-// finders (everything else) keep the FINDINGS_SCHEMA findings-list shape.
+// `/security-review` pass and the surface-gated security/cost domain lenses.
+// (The `/code-review` quality pass is no longer here at all: it ran as the Step-1b
+// `claude -p` pre-stage, and only its cheap Sonnet STRUCTURING call happens in this
+// phase.) Cheaper mechanical stages downstream (dedup, classify) stay on Sonnet;
+// fix-authoring is already Opus.
+// The Lane-A finder still launched here (security-review) runs the trust-the-built-in
+// review skill and returns a { fixed, residue } envelope (LANE_A_SCHEMA), so it must
+// launch with that schema — NOT the shared FINDINGS_SCHEMA. Its prompt is already
+// Lane-A-aware (finderPrompt branches on the name). Lane-B finders (everything else)
+// keep the FINDINGS_SCHEMA findings-list shape.
 const launchFinder = (name) => () =>
   agent(finderPrompt(name, _a), {
     model: 'opus',
@@ -574,68 +640,101 @@ const launchFinder = (name) => () =>
     phase: 'finders',
   });
 
-// Wave 1 — the quality finder (also the throttle probe).
-subagentsLaunched += qualityFinders.length;
-const qualityResults = await parallel(qualityFinders.map(launchFinder));
+// Wave 1 — the probe finder (security-review, also real review work).
+subagentsLaunched += probeFinders.length;
+const probeResults = await parallel(probeFinders.map(launchFinder));
 
-// Gate: the quality finder is dead → model likely throttled; skip the security
-// wave. coverage_incomplete records the degraded review for the Step 6 comment.
-let securityResults = [];
+// Gate: the probe finder is dead → model likely throttled; skip wave 2.
+// coverage_incomplete records the degraded review for the Step 6 comment.
+let waveTwoResults = [];
 let coverage_incomplete = false;
 let coverage_note = '';
-// A throttled wave 1 (qualityDead) now ALSO correctly means "no code-review
-// self-fixes were applied" — code-review is a Lane-A finder that applies its own
-// edits, so a null result contributes no fixed/residue to the Lane-A capture below.
-const qualityDead = qualityResults.filter(Boolean).length === 0;
-if (securityFinders.length && qualityDead) {
+// Guard on probeFinders.length: on every non-`code` surface there is no probe finder
+// at all, so an empty probeResults means "nothing was launched", NOT "the probe died".
+// Without this guard the throttle short-circuit would fire spuriously on those surfaces.
+const probeDead = probeFinders.length > 0 && probeResults.filter(Boolean).length === 0;
+if (waveTwoFinders.length && probeDead) {
   coverage_incomplete = true;
   coverage_note =
-    'Security finders skipped: the code-review quality finder failed (model likely throttled).';
-  log(`finders: ${coverage_note} Backing off the security wave.`);
-} else if (securityFinders.length) {
-  // Wave 2 — the surface-gated security finders.
-  log(`finders: wave 2 = launching ${securityFinders.length} security finder(s)`);
-  subagentsLaunched += securityFinders.length;
-  securityResults = await parallel(securityFinders.map(launchFinder));
+    'Security finders skipped: the security-review probe finder failed (model likely throttled).';
+  log(`finders: ${coverage_note} Backing off wave 2.`);
+} else if (waveTwoFinders.length) {
+  // Wave 2 — the remaining surface-gated security/domain lenses.
+  log(`finders: wave 2 = launching ${waveTwoFinders.length} finder(s)`);
+  subagentsLaunched += waveTwoFinders.length;
+  waveTwoResults = await parallel(waveTwoFinders.map(launchFinder));
 }
 
 // Tag each result with the finder NAME that produced it. The two results arrays
-// are parallel to their source finder-name arrays (qualityFinders/securityFinders),
+// are parallel to their source finder-name arrays (probeFinders/waveTwoFinders),
 // so zip each before concatenating. The name association is load-bearing: it lets
-// the Lane-B gather below filter out the Lane-A results by name (their shape is
-// { fixed, residue }, not { findings }) once other Lane-B finders are mixed into
-// securityResults — positional array-concat alone would lose it.
-const finderResults = qualityFinders
-  .map((name, i) => ({ name, res: qualityResults[i] }))
-  .concat(securityFinders.map((name, i) => ({ name, res: securityResults[i] })));
+// the Lane-B gather below filter out the Lane-A result by name (its shape is
+// { fixed, residue }, not { findings }) — positional array-concat alone would lose it.
+const finderResults = probeFinders
+  .map((name, i) => ({ name, res: probeResults[i] }))
+  .concat(waveTwoFinders.map((name, i) => ({ name, res: waveTwoResults[i] })));
 
 // --- Lane-A capture (code-review, security-review) ---------------------------
-// These two finders bypass the shared dedup→classify→verify→fix pipeline. Capture
-// their raw { fixed, residue } results here, separately from the Lane-B gather, so
-// a LATER unit's "residue" phase can dispose of the residue and merge the fixes.
-// code-review is wave 1 (qualityFinders has exactly one entry when present).
-const codeReviewResult = qualityResults[qualityFinders.indexOf('code-review')] || null;
-// security-review is a wave-2 finder (only launched when surface === 'code');
-// securityFinders and securityResults are parallel/same-index.
-const securityReviewIdx = securityFinders.indexOf('security-review');
-const securityReviewResult = securityReviewIdx >= 0 ? securityResults[securityReviewIdx] : null;
+// Lane-A bypasses the shared dedup→classify→verify→fix pipeline: capture its raw
+// { fixed, residue } contributions here, separately from the Lane-B gather, so the
+// "residue" phase below can dispose of the residue and merge the fixes.
+//
+// The two Lane-A sources now arrive by DIFFERENT routes:
+//   - security-review is still an agent finder — it is the wave-1 probe, so its
+//     result is read out of probeResults exactly as before.
+//   - code-review is NOT a finder anymore. Its review already ran as the Step-1b
+//     `claude -p` pre-stage; what reaches this Workflow is _a.code_review (paths +
+//     the git-derived touched-file list), structured below by one Sonnet subagent.
+const securityReviewIdx = probeFinders.indexOf('security-review');
+const securityReviewResult = securityReviewIdx >= 0 ? probeResults[securityReviewIdx] : null;
 
-// Seed fixed[] early with code-review's own applied fixes. Synthesize sequential
-// ids in array order. Unit 4 merges laneAFixed into the final fixed[] envelope;
-// this unit only builds and exposes it. security-review applies no fixes (its
-// fixed[] is always empty), so only code-review contributes here.
-const laneAFixed = ((codeReviewResult && codeReviewResult.fixed) || []).map((e, n) => ({
+// Structure the Step-1b pre-stage output. Placement note: this is sequenced AFTER
+// the finder waves purely for readability — it has no data dependency on them (it
+// needs only _a.code_review, available from the top), and it is a single Sonnet
+// call, not worth restructuring the fan-out around.
+const parsedCodeReview = await agent(codeReviewParsePrompt(cr), {
+  model: 'sonnet',
+  agentType: 'general-purpose',
+  schema: LANE_A_SCHEMA,
+  label: 'parse:code-review',
+  phase: 'finders',
+});
+subagentsLaunched += 1;
+
+// Mechanical enforcement of the authoritative touched-file list. The structuring
+// agent is INSTRUCTED to keep every fixed[] entry's touched_files a subset of the
+// git-derived list, but its compliance is not trusted — enforce it here in JS. No
+// yield is credited to the instrument that is not visible in the diff it produced:
+// an empty authoritative list means an empty fixed[], whatever the review text said.
+const allowedTouched = new Set(cr.touched_files || []);
+const rawFixed = (parsedCodeReview && parsedCodeReview.fixed) || [];
+const keptFixed =
+  allowedTouched.size === 0
+    ? []
+    : rawFixed.filter(
+        (e) =>
+          (e.touched_files || []).length > 0 &&
+          e.touched_files.every((f) => allowedTouched.has(f))
+      );
+log(
+  `code-review: parsed ${rawFixed.length} claimed fix(es), kept ${keptFixed.length} after ` +
+    `touched_files enforcement (dropped ${rawFixed.length - keptFixed.length})`
+);
+
+// Seed fixed[] with code-review's own applied fixes, synthesizing sequential ids in
+// array order. security-review applies no fixes (its fixed[] is always empty), so
+// only code-review contributes here.
+const laneAFixed = keptFixed.map((e, n) => ({
   id: `code-review-fix-${n}`,
   location: e.location,
   fix_summary: e.fix_summary,
   touched_files: e.touched_files,
 }));
 
-// Combined Lane-A residue, each item tagged with its source so Unit 3 knows which
-// finder produced it.
+// Combined Lane-A residue, each item tagged with its source, code-review first.
 const laneAResidue = []
   .concat(
-    ((codeReviewResult && codeReviewResult.residue) || []).map((r) =>
+    ((parsedCodeReview && parsedCodeReview.residue) || []).map((r) =>
       Object.assign({}, r, { source: 'code-review' })
     )
   )
@@ -645,8 +744,7 @@ const laneAResidue = []
     )
   );
 log(
-  `finders: Lane-A captured — code-review fixes=${laneAFixed.length}, ` +
-    `residue=${laneAResidue.length}`
+  `Lane-A captured — code-review fixes=${laneAFixed.length}, residue=${laneAResidue.length}`
 );
 
 // Gather: surviving Lane-B finder findings + the prescanned codeql/npm findings.
@@ -1544,7 +1642,7 @@ return {
   deviation,
   security_note: _a.security_note,
   // coverage_incomplete is independent of `deviation`: it flags a launch-efficiency
-  // back-off (security wave skipped because the code-review quality finder failed — model
+  // back-off (wave 2 skipped because the security-review probe finder failed — model
   // likely throttled), surfaced in the Step 6 partial-coverage comment line.
   coverage_incomplete,
   coverage_note,
