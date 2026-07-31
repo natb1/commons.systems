@@ -46,18 +46,45 @@ rationale: "Filed 2026-07-31 as the owed tracking node for bug-ledger rows O and
   `>/dev/null 2>&1` and exiting 0 by contract, owned by
   tactic-phase-terminal-requires-disposition; and graph-commit's exit 0 not
   being evidence anything landed, which is invariant I2. Direction for planning,
-  not a plan: promote both instruments to systemd user units, or fold the heal
-  into an existing dispatch unit, so that neither depends on an operator session
-  existing. The healer targets the very units it would itself live in, so a
+  not a plan: promote both instruments to systemd user units, so that neither
+  depends on an operator session existing. Scope boundary, and the reason this
+  node is narrower than the instruments are today — roughly half of what the
+  watcher currently polls is scaffolding standing in for fleet capabilities that
+  did not exist when it was written, and those predicates migrate INTO the tick
+  sweep rather than being rebuilt here. Specifically: the blocked-worker check
+  is superseded by frozen_session_sweep in tactic-denied-command-parks-node,
+  which is strictly better because it parks the node rather than merely
+  reporting; the terminal-without-disposition and duplicate-worker checks are
+  superseded by tactic-phase-terminal-requires-disposition and
+  tactic-router-spawn-window-duplicate-worker; and the stranded-park-marker
+  check is ELIMINATED rather than migrated, because the marker exists only as an
+  artifact of the dispatch-stop.sh backstop that
+  tactic-phase-terminal-requires-disposition deletes. Do not re-implement any of
+  those here — the plan's architectural rule is one sweep framework with several
+  predicates, and a second implementation of a predicate is the failure it
+  forbids. What endures is the part no sweep can cover: a check that runs INSIDE
+  dispatch-tick structurally cannot report that dispatch-tick has stopped
+  running, so tick staleness, daemon liveness (dispatch-daemon-liveness exists
+  as a script with a test suite and nothing whatsoever schedules it), and a
+  sustained BUSY=0 stall need an observer that is not part of what it observes
+  and that survives the fleet being down. The healer endures too, but as a LANE
+  rather than as a bug-B fixture: a standing self-heal path for any defect whose
+  permanent fix is queued, idle and no-op when nothing needs healing — as it
+  should be now that tactic-sweep-timer-unit-dir-leak has merged as #2999,
+  absent new findings. That lane carries a second job worth keeping explicit:
+  its log is the rate signal by which a queued permanent fix is judged, since
+  the heal log going quiet for a full day IS bug B's exit criterion, so the
+  stopgap is also the measuring instrument for the fix that replaces it. The
+  healer targets the very units it would itself live in, so a
   dispatch-heal.service must be resilient to its own ExecStart being rewritten —
-  that hazard is the defect tactic-sweep-timer-unit-dir-leak fixed and merged as
-  #2999 on 2026-07-31, so this work is now unblocked, but the resilience
-  requirement stands as a design constraint rather than a scheduling one. Fold
-  in the keyspace filter as a property of whatever the watcher becomes, and give
-  every such instrument the general rule this class demands: state explicitly
-  what it prints when it cannot see, and never let that equal healthy. An
-  instrument that cannot read its input must report UNKNOWN, not OK — the repo's
-  code-style rule already says prefer clear errors over defensive fallbacks.
+  that hazard is the defect #2999 fixed, so this work is now unblocked, but the
+  resilience requirement stands as a design constraint rather than a scheduling
+  one. Fold in the keyspace filter as a property of whatever the watcher
+  becomes, and give every such instrument the general rule this class demands:
+  state explicitly what it prints when it cannot see, and never let that equal
+  healthy. An instrument that cannot read its input must report UNKNOWN, not
+  OK — the repo's code-style rule already says prefer clear errors over
+  defensive fallbacks.
   Interim attention scaffolding only — tactic-attention-tier-ranking replaces
   the numeric scheme with lexicographic (tier, rank) and max-lifting, and
   tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
@@ -108,6 +135,47 @@ lifetime.
 
 Both must survive an operator session ending, a machine reboot, and their own
 findings.
+
+## Scope boundary — read this before planning
+
+About half of what the watcher polls today is scaffolding that stood in for
+fleet capabilities which did not exist when it was written. Those predicates
+**migrate into the tick sweep**; they must not be rebuilt here. The plan's
+architectural rule is *one sweep framework, several predicates*, and a second
+implementation of a predicate is precisely the failure that rule forbids.
+
+| check | disposition |
+|---|---|
+| blocked worker (`FINDING-G`) | → `frozen_session_sweep`, `tactic-denied-command-parks-node`. Strictly better: it **parks** the node; the watcher only reports |
+| terminal without disposition (`FINDING-H`, `FINDING-D/J`) | → the terminal predicate on that same sweep, `tactic-phase-terminal-requires-disposition` |
+| duplicate worker (`FINDING-F`) | → fixed in `tactic-router-spawn-window-duplicate-worker`; retain at most as a regression canary |
+| stranded park marker | **eliminated, not migrated** — the marker is an artifact of the `dispatch-stop.sh` backstop that `tactic-phase-terminal-requires-disposition` deletes. The concept ceases to exist |
+
+What endures is the part no sweep can reach. A check that runs *inside*
+`dispatch-tick` cannot report that `dispatch-tick` has stopped running — that is
+irreducible, not an implementation gap. So these need an observer that is not
+part of what it observes, and that survives the fleet being down:
+
+- **tick staleness** — no in-band check can ever cover it
+- **daemon liveness** — `dispatch-daemon-liveness` exists as a script with a
+  test suite, and nothing schedules it. The watcher is its only caller
+- **sustained `BUSY=0`** — the router logs `effective_live` every tick; nothing
+  alarms on a prolonged zero
+- **auto-merge suppression** — `dispatch-select-tick` reads the red-sync to
+  suppress, but suppression is silent; nothing reports that it happened
+
+## The healer is a lane, not a bug-B fixture
+
+The healer survives the defect that motivated it. It is the standing self-heal
+path for **any** defect whose permanent fix is queued — idle and no-op when
+nothing needs healing, which is its expected state now that
+`tactic-sweep-timer-unit-dir-leak` has merged as #2999, absent new findings.
+
+It carries a second job that should stay explicit: **its log is how a queued
+permanent fix is judged.** Bug B's exit criterion is the heal log staying quiet
+for a full day. The stopgap is therefore also the measuring instrument for the
+fix that supersedes it, which is a reason to keep the lane rather than retire it
+when it falls quiet.
 
 ## Two failure modes, and why they compound
 
@@ -160,3 +228,8 @@ cannot read its input reports UNKNOWN, never OK.
 Both instruments are systemd user units — surviving a session ending and a
 reboot — and the watcher does not flag a session that holds no node. Row O and
 row P then close together.
+
+Note what this criterion does **not** require: it does not require the watcher
+to retain the migrating predicates. A watcher reduced to the four out-of-band
+checks above, plus a healer lane sitting idle, satisfies it fully. Shrinking is
+the expected outcome, not a regression.
