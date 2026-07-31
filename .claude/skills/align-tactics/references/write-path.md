@@ -73,10 +73,26 @@ read), before `write-node.ts` or the body `Edit` touches anything, not later
 in Step 2. Do **not** re-run `dump-node.ts` in a worktree that already holds
 an edit, including during a `graph-commit` timeout/`git reset --mixed`
 recovery — a dump taken after the writer's own edit records that in-flight
-content as the base, defeating the compare-and-swap entirely. If the original
-manifest is lost, recompute the base directly with `git rev-parse
-origin/main:intentions/<id>.md` rather than re-dumping. This is not
-theoretical: on 2026-07-31 a re-dump after the edit made `base == ours`, so
+content as the base, defeating the compare-and-swap entirely.
+
+**A lost manifest is an unverifiable state — park, do not recompute.** Never
+manufacture a base from the *current* remote tip (`git rev-parse
+origin/main:intentions/<id>.md`): that records content the session never read,
+so `assert-node-fresh` compares the recorded blob against an identical
+`FETCH_HEAD` blob and always exits 0, and `graph-commit`'s
+`check_base_freshness()` sees `base == theirs` and resolves the three-way
+merge wholesale to `ours` — silently discarding anything a concurrent writer
+landed between the read and the recompute. It is the same silent revert as the
+2026-07-31 incident with the operands swapped. When the manifest is gone, park
+the node — `office_hours: {reason, since}` per the Parks section below — with
+a reason naming the lost manifest and recommending a fresh `/align-tactics
+<node-id>` round. The only admissible reconstruction is one that names the
+blob the session actually read — the provision-time sha (`git rev-parse
+<provision-time-sha>:intentions/<id>.md`) or the sha recorded in the worker's
+provisioning record — never the current tip.
+
+This is not theoretical: on 2026-07-31 a re-dump after the edit made
+`base == ours`, so
 `check_base_freshness()`'s three-way merge resolved cleanly to `theirs` and
 silently reverted a 310-line finalized plan body to a 2-line draft stub,
 reporting nothing.
@@ -135,11 +151,22 @@ author) instead of assigning ownership by proximity.
    on-disk file, so the frontmatter `write-node.ts` just landed does not
    trip it.
 
-   On a refusal naming a moved node, take **one** bounded retry: re-read that
-   node from `origin/main` (`git show origin/main:intentions/<id>.md`),
-   rebuild `args` from the fresh body, re-invoke the Workflow once, capture a
-   **new** base manifest into a **fresh `--out-dir`** (never a second dump
-   into the old one, and never a dump over an edited file), and re-run
+   On a refusal naming a moved node, take **one** bounded retry. Step 1 above
+   already rewrote the node's frontmatter on disk, and `dump-node.ts` hashes
+   the **on-disk** file — so the retry must first restore the worktree copy to
+   the remote content, or the new manifest would record this writer's own
+   in-flight frontmatter as the base. In order:
+
+   ```bash
+   git fetch origin main
+   git checkout origin/main -- intentions/<id>.md
+   ```
+
+   Then re-read that node from `origin/main`
+   (`git show origin/main:intentions/<id>.md`), rebuild `args` from the fresh
+   body, re-invoke the Workflow once, capture a **new** base manifest into a
+   **fresh `--out-dir`** (never a second dump into the old one, and never a
+   dump over an edited file), re-run `write-node.ts`, and re-run
    `assert-node-fresh`. If the second check also refuses, or the refusal is a
    fetch failure or a missing `--base` entry, **park** the node —
    `office_hours: {reason, since}` per the Parks section below — with a
