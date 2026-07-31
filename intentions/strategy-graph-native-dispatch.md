@@ -3316,6 +3316,76 @@ clarifications:
       (the dispatch-graph-execute .conflict-strikes convention), stays
       plan-level; recorded so a later round does not rediscover the pause
       interaction."
+  - question: Does an ineffective Lane 3 dispatch-conflict session accumulate
+      unbounded live-session claims (per-tick respawn), or does something else
+      happen — and does that change tactic-conflict-lane-exit11-retry-bound's
+      fix shape?
+    answer: "(Recorded 2026-07-31 /align-tactics round, resolved from landed code —
+      supersedes the 'needs production observation' note in
+      tactic-conflict-lane-exit11-retry-bound's Provenance.) A Lane 3
+      `/dispatch-conflict` session spawned by dispatch-graph-execute case 11
+      (`dispatch-spawn-job --no-verify --name \"$id\" --cwd
+      .claude/worktrees/$id`) that dies without writing a
+      `$CLAUDE_JOB_DIR/node-terminal` marker HOLDS rather than respawning.
+      dispatch-stop.sh discriminator 2 hands it to `dispatch-self-close --node
+      <id>`, which keeps the job alive; `worktree_has_live_session` now reads
+      the REGISTERED view (`claude agents --json --all` via
+      claude_agents_list_registered, lib-claude-agents.sh:796-851, landed in
+      a9df9d38 and 0f55a784) with no timeout by design; and
+      graph-select-target:684 skips any node whose own-id worktree has a
+      registered session. The node therefore becomes permanently unselectable
+      after exactly ONE kick — there is no accumulation of repeated kicks and no
+      second exit-11 observation. Consequence for
+      tactic-conflict-lane-exit11-retry-bound: its recorded Recommended fix ('N
+      consecutive exit-11 ticks ... reuse the existing
+      `.claude/worktrees/<id>.conflict-strikes` sidecar or add a sibling')
+      cannot ever fire, because exit 11 never re-fires for a frozen node. The
+      bound must be an EXTERNAL detector over registered-but-undeclared
+      node-worker sessions, never a selection-side per-tick counter. The
+      tactic's ratified scope is unchanged; only the mechanism named in its
+      Provenance was dead — its finalized plan builds the external sweep
+      (lib-conflict-lane-hold.sh) instead."
+  - question: Does tactic-graph-router-conflict-routing's future execution.conflict
+      interrupt supersede tactic-conflict-lane-exit11-retry-bound, and where
+      does the bound actually need to live?
+    answer: "(Recorded 2026-07-31 /align-tactics round.) No. Because the exit-11
+      retry bound must move out of the selection-side per-tick path,
+      tactic-graph-router-conflict-routing's `execution.conflict` interrupt does
+      NOT supersede tactic-conflict-lane-exit11-retry-bound: that interrupt is a
+      second entry path into the same Lane 3 and is itself evaluated during
+      selection, so it cannot observe a node that a registered session has
+      frozen out of selection. The 'land the cap wherever that interrupt will
+      enforce it rather than deepening the interim ladder' guidance in the
+      tactic's Provenance, and the CONVERGENCE NOTE at
+      dispatch-graph-execute:274-281, therefore do not constrain this tactic.
+      Its finalized home is an external frozen-session sweep
+      (lib-conflict-lane-hold.sh, wired into dispatch-tick on both cadences)
+      built independently of tactic-denied-command-parks-node's own in-flight
+      sweep (PR #2994, phase qa, not on origin/main as of this round — that
+      sweep's detector is scoped to `state == \"blocked\"` and does not cover a
+      stopped-but-registered undeclared exit, so no blocked_by dependency was
+      taken)."
+  - question: Which escalation primitive — hold-node or park-node — governs a frozen
+      Lane 3 session of exit-11 lineage?
+    answer: "(Recorded 2026-07-31 /align-tactics round.) `hold-node --kind
+      provision-conflict`. Two standing clarifications point at different
+      primitives for a frozen node in general (the 2026-07-25
+      mechanical-park-producers rule routes provision-conflict states to
+      `hold-node`, forbidding office_hours on the source; a later frozen-session
+      sweep precedent calls park-node directly on the source). For
+      exit-11-lineage freezes specifically, `hold-node --kind
+      provision-conflict` is the resolved choice: it is already the exit-11
+      backstop's own escalation call site in the same script
+      (dispatch-graph-execute, also used by case 14), it satisfies the
+      no-office_hours-on-source doctrine, and reusing the kind means this hold
+      and the launch-failure backstop's hold resolve to the SAME id
+      (`tactic-hold-conflict-<slug>`) rather than forking a second record.
+      Either way the escalation must NOT reap the frozen session: consistent
+      with the accepted freeze-for-debug doctrine and the standing
+      park-recommendation condition, the recommendation text must name the
+      manual `claude rm <session-id>` reap verbatim as the human's own action,
+      and must carry the mandatory RESOLUTION_SENTENCE (hold-node-decide.ts)
+      rather than a re-typed paraphrase."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
