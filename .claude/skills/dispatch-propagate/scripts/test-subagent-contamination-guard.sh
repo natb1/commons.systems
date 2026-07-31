@@ -182,4 +182,74 @@ set -e
 assert_eq "case8 baseline: exits 2 when CLAUDE_CODE_SESSION_ID is unset" "2" "$STATUS8"
 assert_contains "case8 stderr: names CLAUDE_CODE_SESSION_ID" "CLAUDE_CODE_SESSION_ID" "$(cat "$STDERR8")"
 
+# ---- Case 9: explicit worktree-path keeps the guard live from a cwd that --
+# IS the primary checkout — the regression this unit exists to prevent. If
+# CUR were derived from cwd here it would equal PRIMARY and the guard would
+# SKIP; passing WORKTREE_PATH explicitly must make it detect contamination
+# instead.
+
+run_worktree_path_guard() {
+  local primary="$1" worktree_path="$2" subcmd="$3" label="$4"
+  (
+    cd "$primary"
+    CLAUDE_CODE_SESSION_ID="test-session" DISPATCH_GRAPH_MAIN_WORKTREE="$primary" TMPDIR="$GUARD_TMPDIR" \
+      "$GUARD" "$subcmd" "$label" "$worktree_path"
+  )
+}
+
+STDOUT9B="$WORK/stdout-9-baseline"
+STDERR9B="$WORK/stderr-9-baseline"
+set +e
+run_worktree_path_guard "$PRIMARY" "$CUR" baseline wtpath9 >"$STDOUT9B" 2>"$STDERR9B"
+STATUS9B=$?
+set -e
+assert_eq "case9 baseline: exits 0" "0" "$STATUS9B"
+
+echo "contamination" >"$PRIMARY/leaked-wtpath9.txt"
+
+STDOUT9C="$WORK/stdout-9-check"
+STDERR9C="$WORK/stderr-9-check"
+set +e
+run_worktree_path_guard "$PRIMARY" "$CUR" check wtpath9 >"$STDOUT9C" 2>"$STDERR9C"
+STATUS9C=$?
+set -e
+assert_eq "case9 check: exits 1 — explicit worktree-path keeps the guard live (no false SKIP) even though cwd IS the primary checkout" "1" "$STATUS9C"
+STDERR9_CONTENT="$(cat "$STDERR9C")"
+assert_contains "case9 stderr: names INVARIANT VIOLATED" "INVARIANT VIOLATED" "$STDERR9_CONTENT"
+assert_contains "case9 stderr: names the leaked file" "leaked-wtpath9.txt" "$STDERR9_CONTENT"
+assert_contains "case9 stderr: includes Repair guidance" "Repair:" "$STDERR9_CONTENT"
+
+rm -f "$PRIMARY/leaked-wtpath9.txt"
+
+# ---- Case 10: worktree-path passed to baseline but omitted at check -------
+# The SNAP filename is keyed on the resolved CUR, so mismatched (baseline
+# with the arg, check without it) must miss the baseline entirely and exit 2
+# — pass it to both or not at all.
+
+run_worktree_path_guard "$PRIMARY" "$CUR" baseline mismatch10 >/dev/null 2>&1
+
+# Check omits worktree-path and runs from cwd=$PRIMARY, so it derives CUR as
+# $PRIMARY (via plain `git rev-parse --show-toplevel`) instead of $CUR — a
+# different SNAP key than baseline's, so it must miss the baseline.
+STDERR10C="$WORK/stderr-10-check"
+set +e
+(
+  cd "$PRIMARY"
+  CLAUDE_CODE_SESSION_ID="test-session" DISPATCH_GRAPH_MAIN_WORKTREE="$PRIMARY" TMPDIR="$GUARD_TMPDIR" \
+    "$GUARD" check mismatch10 >/dev/null 2>"$STDERR10C"
+)
+STATUS10C=$?
+set -e
+assert_eq "case10 check: exits 2 — worktree-path must be passed to BOTH baseline and check" "2" "$STATUS10C"
+
+# ---- Case 11: nonexistent explicit worktree-path -> usage-shaped exit 2 ---
+
+STDERR11="$WORK/stderr-11"
+set +e
+run_worktree_path_guard "$PRIMARY" "$WORK/does-not-exist" baseline nonexist11 >/dev/null 2>"$STDERR11"
+STATUS11=$?
+set -e
+assert_eq "case11 baseline: exits 2 on nonexistent worktree-path" "2" "$STATUS11"
+assert_contains "case11 stderr: usage-shaped error" "Usage:" "$(cat "$STDERR11")"
+
 report_results

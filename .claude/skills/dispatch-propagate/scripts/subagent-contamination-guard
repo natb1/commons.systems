@@ -14,9 +14,25 @@
 # survive across separate Bash tool calls, and the Agent-tool subagent launch
 # sits between the "before" and "after" invocations.
 #
+# An optional third positional argument names the "launching worktree" (CUR)
+# explicitly, overriding the default `git rev-parse --show-toplevel` of the
+# invoking shell's cwd. This exists because some callers' own session cwd IS
+# the primary checkout (e.g. dispatch-conflict Lane 3, whose session runs
+# with --cwd pinned to the primary checkout while it actually operates on a
+# node's own worktree) — for those callers, deriving CUR from cwd would
+# always equal PRIMARY and the guard would go permanently vacuous (SKIP)
+# exactly where the contamination hazard is highest. Pass the real worktree
+# path in that case so the guard stays live.
+#
+# `baseline` and `check` MUST be passed the identical worktree-path argument
+# (or both omit it): the snapshot filename (SNAP, below) is keyed on the
+# resolved CUR, so a mismatched or missing argument on one side makes `check`
+# look for a baseline that was never written and exit 2 (missing baseline) —
+# it does not silently fall back to cwd.
+#
 # Usage:
-#   subagent-contamination-guard baseline <label>
-#   subagent-contamination-guard check <label>
+#   subagent-contamination-guard baseline <label> [worktree-path]
+#   subagent-contamination-guard check <label> [worktree-path]
 
 set -euo pipefail
 
@@ -25,12 +41,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib-graph-worktree.sh"
 
 usage() {
-  echo "Usage: subagent-contamination-guard baseline <label>" >&2
-  echo "       subagent-contamination-guard check <label>" >&2
+  echo "Usage: subagent-contamination-guard baseline <label> [worktree-path]" >&2
+  echo "       subagent-contamination-guard check <label> [worktree-path]" >&2
+  echo "  [worktree-path] names the launching worktree explicitly when the" >&2
+  echo "  invoking shell's own cwd is the primary checkout (e.g. a session" >&2
+  echo "  --cwd-pinned there). Omitting it derives it from cwd instead. Pass" >&2
+  echo "  the SAME [worktree-path] (or omit it) to both baseline and check —" >&2
+  echo "  the snapshot is keyed on it." >&2
 }
 
 SUBCOMMAND="${1:-}"
 LABEL="${2:-}"
+WORKTREE_PATH="${3:-}"
 
 if [[ "$SUBCOMMAND" != "baseline" && "$SUBCOMMAND" != "check" ]]; then
   usage
@@ -42,7 +64,21 @@ if [[ -z "$LABEL" ]]; then
   exit 2
 fi
 
-CUR="$(git rev-parse --show-toplevel)"
+if [[ -n "$WORKTREE_PATH" ]]; then
+  if [[ ! -d "$WORKTREE_PATH" ]]; then
+    echo "subagent-contamination-guard: worktree-path '$WORKTREE_PATH' does not exist." >&2
+    usage
+    exit 2
+  fi
+  CUR="$(git -C "$WORKTREE_PATH" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -z "$CUR" ]]; then
+    echo "subagent-contamination-guard: worktree-path '$WORKTREE_PATH' is not inside a git repository." >&2
+    usage
+    exit 2
+  fi
+else
+  CUR="$(git rev-parse --show-toplevel)"
+fi
 
 # The baseline snapshot must be unique to THIS session's baseline/check pair.
 # CLAUDE_CODE_SESSION_ID is a stable UUID exported into every .claude session's
