@@ -68,7 +68,7 @@
 #   reports a false "landed" while the caller's real edit sits dirty elsewhere.
 #   Omit entirely to keep pre-assertion behavior.
 #
-# Exit status — four observable outcomes across rc 0 and rc 1:
+# Exit status — five observable outcomes across rc 0 and rc 1:
 #   0  the edit landed on main. Two sub-cases, distinguished only by a log line
 #      (same exit code):
 #        landed                 — no concurrent-edit divergence; no special log.
@@ -76,7 +76,8 @@
 #          by layer 2 (rebase-conflict field merge) or layer 3 (stale --base
 #          re-read), then landed. The final log line carries the
 #          "(layer 2/3 auto-resolved a concurrent-edit divergence)" suffix.
-#   1  push could not land. Two distinct rc-1 sub-cases:
+#   1  push could not land, OR the invocation was refused before any write.
+#      Three distinct rc-1 sub-cases:
 #        busy-main — busy main after all attempts, the required checks never
 #          stamped green within the poll window, a required check CONCLUDED
 #          non-success (deterministic content failure — no retry), or check-run
@@ -101,24 +102,60 @@
 #          subject (and, on a failed land, the unlanded-park error) names the
 #          parked set and the landed-deletion set separately, so a bystander
 #          prune is never described as parked.
+#        refused-by-die — any die() call (see `die()` below) prints
+#          `error: graph-commit: <msg>` to stderr and exits 1. This covers the
+#          existence guards (the ordinary-edit "does not exist — write the node
+#          via write-node.ts" guard and both --prune guards), the --expect
+#          wrong-repo refusal, the missing-flag-argument checks (-m/-C/--prune/
+#          --base/--expect with no value), and the not-a-git-repo refusal.
+#          These are argument/validation refusals raised BEFORE any git write:
+#          nothing is committed, nothing is pushed, and NO park is written.
 #        Caller contract: rc 1 does not mean "nothing landed". When the
 #          invocation mixed --prune ids with other ids, a bystander prune's
 #          deletion may have landed on main together with the park commit. A
-#          caller that retries after rc 1 must re-derive what is still
-#          outstanding from the current state of intentions/ on origin/main
-#          rather than replaying the same argv; re-passing --prune <id> for
-#          an already-landed deletion is rejected by the existing existence
-#          guard (the file is absent from HEAD), so the failure is loud, not
-#          silent, but a caller must not report "nothing landed" to a human
-#          on rc 1 without checking. The stderr lines above distinguish the
-#          parked set from the landed bystander-prune set, and so does the
-#          park commit subject; those are the authoritative record of what
-#          happened. No in-repo caller currently passes --prune
-#          programmatically — pruning is agent-driven via the owed-prune
-#          census, not script-driven — so this contract is documented for
-#          the agent reading it before a retry, not enforced by a caller
-#          check.
-#   2  usage error.
+#          caller that retries after rc 1 must NOT replay the same argv
+#          blindly. Per --prune id, re-derive whether the deletion is still
+#          outstanding by asking origin/main directly:
+#            git fetch origin main
+#            git cat-file -e origin/main:intentions/<id>.md
+#          rc 0 = the file is still present on origin/main, the prune is still
+#          outstanding — keep `--prune <id>` in the retry argv. rc non-zero =
+#          the deletion already landed — DROP `--prune <id>` from the retry
+#          argv. (`git cat-file -e` is the quiet existence test, and is the
+#          same idiom the script's own prune guard uses.)
+#          If an already-landed `--prune <id>` IS re-passed, that guard refuses
+#          the retry with rc 1 (not rc 2 — it goes through die()) and this
+#          exact stderr line:
+#            error: graph-commit: intentions/<id>.md does not exist in HEAD — nothing to prune for '<id>'
+#          That rc 1 is an argument-validation refusal raised before any git
+#          write: no park is written, no `office_hours` line appears on any
+#          node, and no snapshot dir is preserved. It must NOT be misread as a
+#          second concurrent-edit conflict. The discriminator an agent can use
+#          is that message text plus the ABSENCE of any
+#          "graph-commit: parked ..." stderr line.
+#          Precondition on that guard: it tests `HEAD:intentions/<id>.md` —
+#          the LOCAL checkout's HEAD, NOT origin/main. So it only protects a
+#          retry that runs from a repo already synced past the park commit.
+#          The park path itself (park_and_exit()) leaves the writer's OWN
+#          worktree in exactly that state, since it resets to FETCH_HEAD,
+#          commits the deletion, and pushes. But a retry issued from a STALE
+#          checkout whose HEAD still contains the node's file passes this
+#          guard even though the deletion already landed on origin/main —
+#          which is exactly why the `git fetch origin main` step above is
+#          mandatory before any retry, not merely a suggestion.
+#          The stderr lines above distinguish the parked set from the landed
+#          bystander-prune set, and so does the park commit subject; those are
+#          the authoritative record of what happened. No in-repo caller
+#          currently passes --prune programmatically — pruning is agent-driven
+#          via the owed-prune census, not script-driven — so this contract is
+#          documented for the agent reading it before a retry, not enforced by
+#          a caller check.
+#   2  usage error — reserved for the paths that call `exit 2` directly: an
+#      unknown `-*` option, no node ids given at all, an id rejected by
+#      validate_id_chars (empty, containing a path separator, or exactly `.`
+#      or `..`), and `--expect <id>=...` naming a --prune id. rc 2 does NOT
+#      cover every argument problem: the die()-based validation refusals listed
+#      under rc 1 above exit 1.
 #
 # Conventions: mirrors the bounded-retry shape/logging of `gh_retry` in
 # .claude/skills/dispatch-propagate/scripts/lib.sh. Per .claude/rules/code-style.md
