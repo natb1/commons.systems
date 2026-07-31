@@ -3695,6 +3695,77 @@ clarifications:
       close. So an unreadable pause state reports UNKNOWN and STILL EMITS; it
       never silently suppresses. This inversion is scoped to out-of-band
       instruments and does not weaken condition 16 anywhere it governs a gate.
+  - question: What are the expected exception lanes for fleet scheduling — how far
+      does a pace-exempt bypass reach, and what may a deliberate human dispatch
+      override?
+    answer: >-
+      (Amended 2026-07-31 /align-strategy interview, author-dictated.) Two
+      exception lanes, with one shared floor. AMENDS entry 14/76's clause that
+      pace_exempt "admits ONE gate-exempt worker": it now fills to the ceiling.
+      LANE 1 — pace_exempt lifts the pace GATE to the full
+      max_concurrent_workers headroom and never past it. Whenever effective-live
+      >= the pace target and tokens remain, the pace-exempt lane admits up to
+      (max_concurrent_workers − effective_live) workers, not one. The rule is
+      UNIFORM — it is not scoped to the paced-to-zero case — so there is no
+      discontinuity at target 1 and no second regime. Worked example the author
+      gave: weekly usage above the pace curve, queue containing only pace-exempt
+      items, max_concurrent_workers 3 => three concurrently scheduled
+      pace-exempt workers. LANE 2 — a deliberate human dispatch (bare /dispatch
+      picking the highest-ranking available node, or dispatch <node-id>,
+      including a substituted node per entry 132) launches exactly one worker
+      ignoring BOTH the pace curve AND the ceiling. This lane is unchanged:
+      entry 76 already recorded it and dispatch-select-tick already implements
+      it (the --manual branch's SPAWN_N floor-of-1 re-asserts past the ceiling
+      clamp at HEADROOM=0; the explicit-node branch skips both outright).
+      Recorded here as confirmation, not as a change; no code is owed for lane
+      2.
+
+
+      THE RESULTING INVARIANT, which is the point of the pairing:
+      max_concurrent_workers is ABSOLUTE for all autonomous scheduling —
+      pace-exempt work included — and only a conscious human act may exceed it,
+      by exactly one node. This restores entry 33's ceiling to its stated scope
+      rather than weakening it.
+
+
+      THE SHARED FLOOR IS UNCHANGED: genuine token exhaustion
+      (dispatch-target-workers --exhausted — a weekly or 5-hour window at/near
+      100% used with its reset still ahead) remains the one hard stop on EVERY
+      lane, manual included. Exhaustion is neither the pace curve nor the
+      ceiling: the curve and the ceiling are self-imposed throttles a human may
+      override, while exhaustion means there are no tokens to spend. A worker
+      launched into an exhausted window cannot complete a pass, and a pass that
+      ends without declaring a disposition freezes its node until manually
+      reaped — so overriding this floor would convert a sovereign act into a
+      stuck node.
+
+
+      LIVE DEFECT RECORDED AT RATIFICATION: dispatch-select-tick's autonomous
+      block contains ZERO references to MAX_WORKERS (verified 2026-07-31 against
+      the script at origin/main), so the at-cap pace-exempt bypass fires on
+      effective-live >= pace-target with no ceiling check at all. Today's
+      behavior is therefore BOTH narrower than this clause (one worker, via
+      graph-select-target --pace-exempt-only --top 1) and wider than entry 33
+      (it admits that worker even at live == max, yielding max+1). Both halves
+      are defects against the record rather than design choices;
+      tactic-pace-exempt-ceiling-fanout carries the fix.
+
+
+      STEELMAN CONSIDERED AND DIVERGED FROM: the rival framing is that the
+      one-worker bound was never an arbitrary throttle but a BOUND ON THE BLAST
+      RADIUS OF A MISMARKED NODE — under fill-to-ceiling, pace_exempt stops
+      meaning "one escape-hatch worker" and starts meaning "full-rate operation
+      for the marked set", so once the weekly curve closes the marking
+      discipline becomes the only remaining throttle on spend, and an
+      over-marking mistake costs the whole ceiling indefinitely rather than one
+      worker. Diverged from on the author's ruling, and a code-side bound on the
+      marked set was rejected as re-introducing the removed cap under a new name
+      with a tunable nobody can size. The risk is instead recorded as a FAILABLE
+      condition (see the pace-exempt-marked-set condition added this round),
+      reusing the machinery already carrying the maintenance-burden band: a
+      marked set that grows without bound is that condition failing — which
+      parks this strategy for an author decision — rather than a silently
+      absorbed cost.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -3944,6 +4015,19 @@ attributes:
       residue` body sections remain live, a mixed-class source node instead
       carries a per-item `Verifiability:` sub-line (MACHINE|AUTHOR|WAIT) on each
       residue bullet, a convention that retires with that section."
+    - "the pace-exempt marked set stays small enough that filling the worker
+      ceiling from it is a deliberate choice rather than the default operating
+      mode. Recorded 2026-07-31 as the adopted containment for the blast-radius
+      steelman diverged from in the fleet-scheduling exception-lanes
+      clarification of that date: pace_exempt now lifts the pace gate to the
+      full max_concurrent_workers headroom, so once the weekly curve closes the
+      marking discipline is the ONLY remaining throttle on spend, and an
+      over-marked set costs the whole ceiling indefinitely rather than a single
+      worker. A marked set growing without bound is this condition FAILING
+      (which parks the strategy for an author decision), not merely more work in
+      flight. No set-size value is declared yet, so until the author declares
+      one this condition reads as not-yet-armed rather than as holding — the
+      same posture as the maintenance-burden band condition."
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
@@ -4379,18 +4463,26 @@ what is now the derived off-path (no-`validates`-edge) demotion of entry 11 — 
 positional citations to clarifications 9 and 11 remain exactly correct, only the
 implementing mechanism it names is historical.
 
-**The legacy pace curve carries over unchanged; a deliberate human dispatch
-bypasses both the pace gate and — for exactly one node — the absolute worker
-ceiling.** Current rule (pace machinery from 2026-07-03, entry 14; ceiling
-scoping and single-node bypass from 2026-07-18, entry 76, amending entries 33 and
-49). Pace parity is full and lives outside the graph: dispatch-target-workers'
+**The legacy pace curve carries over unchanged; the worker ceiling is absolute
+for autonomous scheduling, and only a deliberate human dispatch may exceed it —
+by exactly one node.** Current rule (pace machinery from 2026-07-03, entry 14;
+ceiling scoping and single-node bypass from 2026-07-18, entry 76, amending
+entries 33 and 49; pace-exempt width amended 2026-07-31, entry 173). Pace parity
+is full and lives outside the graph: dispatch-target-workers'
 weekly cumulative pace curve stays the binary spend gate and the 5-hour linear
 ramp decides how many concurrent workers (0..max_concurrent_workers); telemetry
 and tunables stay operational config, since rate-limit state is machine state,
 not intent. The legacy priority label maps to a first-class authored
 `pace_exempt` flag on goal-layer nodes — orthogonal to attention ordering — that
-admits one gate-exempt worker past a paced-to-zero budget without overriding the
-count, the order, or genuine token exhaustion (the `--exhausted` hard floor).
+lifts the pace GATE to the full `max_concurrent_workers` headroom and never past
+it, without overriding the order or genuine token exhaustion (the `--exhausted`
+hard floor). Entry 173 (2026-07-31) amends entry 14's original "admits one
+gate-exempt worker" to this fill-to-ceiling width, and makes the rule uniform
+rather than scoped to the paced-to-zero case: whenever effective-live reaches the
+pace target and tokens remain, the lane admits up to
+(`max_concurrent_workers` − effective_live) workers. So a queue holding only
+pace-exempt items at a shut weekly curve runs the fleet at its full ceiling —
+three concurrent workers at `max_concurrent_workers: 3` — and never at four.
 Entry 33 fixed `max_concurrent_workers` (dispatch.config/target-workers.json,
 default 8) as the one true global ceiling on dispatch-managed workers live at any
 moment across all ticks, workflows, and lanes, enforced at selection so
