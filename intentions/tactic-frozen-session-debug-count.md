@@ -36,7 +36,7 @@ attention:
     follows the Wave-A write-path fixes. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-frozen-session-debug-count
   pr: 3000
@@ -47,7 +47,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T12:45:34Z
+    mergeCommitSha: 0f55a784bf7efc60ad11fb6489750daa87ea3a9a
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-graph-node-session-reap

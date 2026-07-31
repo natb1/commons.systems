@@ -61,7 +61,7 @@ attention:
     while being lifted. Finalized 2026-07-31 via /align-tactics: status ->
     codified, phase -> implement, boost preserved unchanged at 50 per the
     finalize contract (do not renumber at finalize time)."
-phase: implement
+phase: main-qa
 execution:
   branch: tactic-stopped-session-blocks-node
   pr: 2998
@@ -69,7 +69,10 @@ execution:
   markers: []
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T12:45:39Z
+    mergeCommitSha: a9df9d3891b332e8f29eeb85598755c8b54f5bbb
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
