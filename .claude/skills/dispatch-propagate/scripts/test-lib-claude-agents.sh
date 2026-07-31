@@ -640,9 +640,34 @@ ca_teardown
 
 # --- claude_session_id_is_live (tactic-standdown-winner-liveness) -----------
 # The winner-liveness predicate for the duplicate-worker stand-down protocol:
-# exact-matches a sessionId against a single claude_agents_list_all fetch,
+# exact-matches a sessionId against ONE `claude agents --json --all` query,
 # folding UNKNOWN to LIVE (return 0) — the same fail-safe inversion as
-# worktree_has_live_session, applied to a session id.
+# worktree_has_live_session, applied to a session id. `--all` is load-bearing:
+# a stopped-but-not-removed session is hidden from the default listing, and
+# reporting it absent invites a peer to take over the shared worktree its
+# uncommitted work still sits in. The granular verdict rides on
+# CLAUDE_SESSION_ID_LIVE_STATE (live | stopped | absent | unknown).
+
+# write_fake_claude_all <payload> — install a fake `claude` that is FAITHFUL to
+# the daemon's --all semantics: rows whose state is `done` (or `stopped`) are
+# returned ONLY when `--all` appears in argv, exactly as production behaves
+# (same idiom as office_hours_state_fake_claude in dispatch-test-fixture.sh).
+# A naive fake that served terminal rows regardless of --all would let an
+# --all-forgetting regression still pass.
+write_fake_claude_all() {
+  local payload="$1"
+  printf '%s' "$payload" > "$CA_DIR/payload.json"
+  cat > "$CA_FAKE" <<FAKE
+#!/usr/bin/env bash
+for arg in "\$@"; do
+  [[ "\$arg" == "--all" ]] && { cat "$CA_DIR/payload.json"; exit 0; }
+done
+jq -c 'map(select(.state != "done" and .state != "stopped"))' "$CA_DIR/payload.json"
+exit 0
+FAKE
+  chmod +x "$CA_FAKE"
+  CLAUDE_AGENTS_CMD="$CA_FAKE"
+}
 
 # --- Test 36: sid-live-exact — exact match, no substring match --------------
 echo "Test: claude_session_id_is_live exact-matches sessionId, no substring match"
@@ -695,6 +720,51 @@ if err=$(claude_session_id_is_live 2>&1 1>/dev/null) && printf '%s' "$err" | gre
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: sid-live-empty-arg: warns on stderr"
 fi
+# Called directly (NOT in a command substitution) so the state variable the
+# function sets is observable in this shell.
+CLAUDE_SESSION_ID_LIVE_STATE="sentinel"
+claude_session_id_is_live 2>/dev/null || true
+assert_eq "sid-live-empty-arg: state is unknown" "unknown" "$CLAUDE_SESSION_ID_LIVE_STATE"
+ca_teardown
+
+# --- Test 39a: sid-live-stopped — a stopped-but-present winner is NOT absent -
+# The red-team case: a winner that stopped mid-work without being `claude rm`'d
+# is hidden from the default listing while its uncommitted fix still sits in the
+# SHARED worktree. Reporting it absent makes dispatch-standdown print
+# `winner-absent`, whose documented response ("become the worker itself")
+# destroys that work. It must read as live (return 0), state `stopped`.
+echo "Test: claude_session_id_is_live reports a stopped-but-present session as live"
+ca_setup
+write_fake_claude_all '[{"sessionId":"win","pid":1,"state":"done","status":null,"name":"tactic-x"}]'
+if claude_session_id_is_live "win"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-stopped: done-state winner is not absent" "0" "$rc"
+assert_eq "sid-live-stopped: state is stopped" "stopped" "$CLAUDE_SESSION_ID_LIVE_STATE"
+ca_teardown
+
+ca_setup
+write_fake_claude_all '[{"sessionId":"win","pid":1,"state":"stopped","status":null,"name":"tactic-x"}]'
+if claude_session_id_is_live "win"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-stopped: stopped-state winner is not absent" "0" "$rc"
+assert_eq "sid-live-stopped: state is stopped" "stopped" "$CLAUDE_SESSION_ID_LIVE_STATE"
+ca_teardown
+
+# --- Test 39b: sid-live-state — the granular verdict for live and absent -----
+echo "Test: claude_session_id_is_live publishes live/absent in CLAUDE_SESSION_ID_LIVE_STATE"
+ca_setup
+write_fake_claude_all '[{"sessionId":"win","pid":1,"state":"working","status":"busy","name":"tactic-x"}]'
+if claude_session_id_is_live "win"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-state: working session is live" "0" "$rc"
+assert_eq "sid-live-state: state is live" "live" "$CLAUDE_SESSION_ID_LIVE_STATE"
+if claude_session_id_is_live "gone"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-state: unregistered sid is absent" "1" "$rc"
+assert_eq "sid-live-state: state is absent" "absent" "$CLAUDE_SESSION_ID_LIVE_STATE"
+ca_teardown
+
+ca_setup
+write_fake_claude '' 1
+if claude_session_id_is_live "any-sid"; then rc=0; else rc=$?; fi
+assert_eq "sid-live-state: daemon UNKNOWN is live" "0" "$rc"
+assert_eq "sid-live-state: state is unknown" "unknown" "$CLAUDE_SESSION_ID_LIVE_STATE"
 ca_teardown
 
 # --- claude_agents_list_duplicate_node_names (tactic-standdown-winner-liveness) --

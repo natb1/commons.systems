@@ -223,7 +223,12 @@ whichever session is actually ahead:
    <winner-sid>` and yields the turn. The script re-checks the winner's
    liveness one more time, right at the moment of decision, before writing
    anything — a stale premise (the winner already died) must not produce a
-   stand-down record naming a winner that was never actually there.
+   stand-down record naming a winner that was never actually there. **Yield
+   only on exit 0 (`stood-down`).** Exit 3 (`winner-absent`) means there is no
+   winner to stand down for — become the worker instead. Exit 4
+   (`ledger-unwritable`) means the stand-down was not recorded, so nothing will
+   ever re-check it — do not yield on it either; fix the ledger and re-run, or
+   keep working the node.
 3. It writes NO office-hours park itself. A park here would spuriously knock a
    node another session is actively working out of the dispatch lane —
    precisely the interruption this protocol exists to avoid.

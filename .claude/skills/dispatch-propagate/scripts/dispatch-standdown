@@ -70,8 +70,10 @@
 #      decision_log_append` guard, built with `jq -c -n` — never fatal to this
 #      script.
 #   4. Print exactly one stdout token and exit accordingly:
-#        stood-down       marker written.                 exit 0
-#        winner-absent    winner definitely gone; no marker written.  exit 3
+#        stood-down        marker written.                exit 0
+#        winner-absent     winner definitely gone; no marker written.  exit 3
+#        ledger-unwritable the ledger dir could not be resolved or written; no
+#                          marker written.                exit 4
 #      No other stdout output on any path — diagnostics go to stderr.
 #
 # Arguments:
@@ -83,9 +85,18 @@
 # Exit codes:
 #   0  stood-down — the ledger marker was written.
 #   2  usage error — missing/malformed <node-id>, missing --winner, or
-#      malformed <session-id>.
+#      malformed <session-id>. Retry with corrected arguments.
 #   3  winner-absent — the named winner is definitely not live; no marker
 #      written. The caller must decide what to do next (this script does not).
+#   4  ledger-unwritable — the arguments were valid and the winner was live,
+#      but the ledger dir could not be resolved or written, so NO marker
+#      exists. Distinct from 2 because the caller must act differently: the
+#      stand-down is UNRECORDED, so `standdown_recheck_sweep` will never
+#      re-check it. Do NOT yield the turn on this — a held job with no ledger
+#      marker is exactly the silent trap this protocol closes. Fix the ledger
+#      (its dir is <project-root>/tmp/dispatch-standdown unless
+#      DISPATCH_STANDDOWN_DIR overrides it) and re-run, or keep working the
+#      node yourself.
 #
 # Environment:
 #   CLAUDE_CODE_SESSION_ID  This session's own id, folded into the marker's
@@ -184,8 +195,14 @@ else
 fi
 
 if ! standdown_write "$NODE_ID" declared "$WINNER_SID" "$SESSIONS_CSV"; then
-  echo "dispatch-standdown: could not write the stand-down ledger marker for $NODE_ID (winner=$WINNER_SID)" >&2
-  exit 2
+  # Exit 4, NOT the usage-error 2: the arguments were fine, the ledger was not
+  # writable. The distinction is what the caller acts on — a usage error means
+  # retry with different arguments, while an unwritable ledger means the
+  # stand-down was NOT RECORDED, so yielding the turn now re-creates the exact
+  # silent hold this script exists to close.
+  echo "dispatch-standdown: could not write the stand-down ledger marker for $NODE_ID (winner=$WINNER_SID); the stand-down is NOT recorded — do NOT yield the turn on it" >&2
+  echo "ledger-unwritable"
+  exit 4
 fi
 
 if command -v decision_log_append >/dev/null 2>&1; then

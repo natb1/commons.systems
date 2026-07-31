@@ -113,11 +113,19 @@
 #        `observing-pair`, next.
 #     d. exactly 0 live sessions named <node> → clear the marker,
 #        `cleared-no-live-session`, next. Nobody is waiting; nothing to park.
-#     e. origin=observed AND the one surviving session's transcript idle time is
-#        under the grace → `observing`, next. The survivor is progressing, so
-#        the pair has resolved itself into ordinary single-session work. This is
-#        the ONLY idle term in this file and it gates a park, never a release;
-#        the `tactic-stopped-session-blocks-node` sweep owns the complementary
+#     e. origin=observed AND the one surviving session is still working →
+#        `observing`, next. "Still working" is TWO signals, either of which
+#        alone means keep: its transcript idle time is under the grace, OR the
+#        registry reports its status as `busy` (the same "actively working"
+#        predicate `claude_agents_count_busy_workers` uses). The status term is
+#        load-bearing: a transcript is only appended between tool calls, so a
+#        session sitting inside ONE long call (a `gh run watch` over a slow CI
+#        run, a long subagent fan-out) looks arbitrarily idle while being the
+#        healthiest possible worker — parking it is exactly the spurious
+#        interruption this protocol exists to avoid. The pair has resolved
+#        itself into ordinary single-session work. This is the ONLY idle term in
+#        this file and it gates a park, never a release; the
+#        `tactic-stopped-session-blocks-node` sweep owns the complementary
 #        "survivor stopped making progress" case.
 #     f. node id absent from origin/main's `intentions/` → `not-a-node`, keep;
 #        or the node is already parked → `already-parked`, keep. Next.
@@ -430,16 +438,29 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
     # (the duplicate query above only covers names with >= 2 sessions; a name
     # with 0 or 1 needs this). UNKNOWN from either query folds into `unknown`,
     # under which every marker is `observing` and nothing is parked or cleared.
-    local all="" sid status name
+    local all="" line rest sid status name
     declare -A live_sids=()
     declare -A live_count=()
+    declare -A sid_status=()
     if ! all=$(claude_agents_list_all); then
       unknown=1
       all=""
       printf 'lib-standdown-recheck: session registry unqueryable; observing every marker this pass\n' >&2
     fi
     if [[ -n "$all" ]]; then
-      while IFS=$'\t' read -r sid status name; do
+      while IFS= read -r line; do
+        # Split the 3-column TSV BY HAND. `IFS=$'\t' read -r sid status name`
+        # cannot be used here: TAB is IFS whitespace, so bash collapses a RUN of
+        # tabs into one delimiter, and the daemon reports `status: null` — which
+        # `@tsv` renders as an EMPTY middle field — for every held/blocked
+        # session. That is precisely the session a stand-down leaves behind, so
+        # the collapsing parse would drop the surviving loser from this index,
+        # read n_live as 0, and let rule (d) silently clear the marker.
+        [[ "$line" == *$'\t'*$'\t'* ]] || continue
+        sid="${line%%$'\t'*}"
+        rest="${line#*$'\t'}"
+        status="${rest%%$'\t'*}"
+        name="${rest#*$'\t'}"
         [[ -n "$name" && -n "$sid" ]] || continue
         if [[ -z "${live_sids[$name]:-}" ]]; then
           live_sids["$name"]="$sid"
@@ -447,6 +468,8 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
           live_sids["$name"]="${live_sids[$name]},$sid"
         fi
         live_count["$name"]=$(( ${live_count[$name]:-0} + 1 ))
+        # Keyed by sid, not name: rule (e) tests the ONE survivor's own status.
+        sid_status["$sid"]="$status"
       done <<<"$all"
     fi
 
@@ -563,6 +586,16 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
       # survivor that stopped making progress but still holds the node) belongs
       # to `tactic-stopped-session-blocks-node`, not here. An unmeasurable idle
       # is UNKNOWN → keep.
+      #
+      # TWO independent "still working" signals, either sufficient to keep:
+      # transcript idle under the grace, and a registry status of `busy`. The
+      # status term exists because the transcript is only appended BETWEEN tool
+      # calls — a session inside one long call (a `gh run watch` over a slow CI
+      # run, a long subagent fan-out) reads as arbitrarily idle while being the
+      # healthiest possible worker. A stood-down loser is never `busy`: the
+      # daemon reports it `status: null` / `state: blocked` while the Stop hook
+      # holds it, so this gate narrows the false-park window without closing the
+      # park path this sweep exists to open.
       if [[ "$m_origin" == "observed" ]] && (( n_live == 1 )); then
         if ! idle=$(_standdown_session_idle_s "$survivors" "$now"); then
           observing=$(( observing + 1 ))
@@ -574,6 +607,12 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
           observing=$(( observing + 1 ))
           printf 'lib-standdown-recheck: observing %s (survivor %s idle_seconds=%s < grace_seconds=%s; still progressing)\n' \
             "$node" "$survivors" "$idle" "$grace" >&2
+          continue
+        fi
+        if [[ "${sid_status[$survivors]:-}" == "busy" ]]; then
+          observing=$(( observing + 1 ))
+          printf 'lib-standdown-recheck: observing %s (survivor %s reports status=busy — actively working inside a long tool call; idle_seconds=%s ignored)\n' \
+            "$node" "$survivors" "$idle" >&2
           continue
         fi
       fi

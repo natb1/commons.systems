@@ -107,9 +107,17 @@ PARK
   chmod +x "$SD_PARK"
 }
 
-# sd_add_session <sid> <name> — append one live registry entry.
+# sd_add_session <sid> <name> [status] — append one live registry entry.
+# [status] defaults to "busy" (state "working"); pass the empty string for the
+# shape the daemon actually reports for a HELD/blocked session — `"status":null`
+# with `"state":"blocked"`, which `@tsv` renders as an EMPTY middle column.
 sd_add_session() {
-  SD_ENTRIES+=("{\"sessionId\":\"$1\",\"name\":\"$2\",\"state\":\"working\",\"status\":\"busy\",\"cwd\":\"/tmp/$2\"}")
+  local sid="$1" name="$2" status="${3-busy}"
+  if [[ -z "$status" ]]; then
+    SD_ENTRIES+=("{\"sessionId\":\"$sid\",\"name\":\"$name\",\"state\":\"blocked\",\"status\":null,\"cwd\":\"/tmp/$name\"}")
+  else
+    SD_ENTRIES+=("{\"sessionId\":\"$sid\",\"name\":\"$name\",\"state\":\"working\",\"status\":\"$status\",\"cwd\":\"/tmp/$name\"}")
+  fi
 }
 
 # sd_install_claude [exit-code] — install the fake `claude` emitting the
@@ -392,13 +400,18 @@ assert_eq "observed-record: stderr reports the still-live pair" "yes" \
 sd_teardown
 
 # --- Test 6: an observed pair that shrank to one idle survivor is parked -----
+# The survivor is registered the way the daemon actually registers a HELD
+# session — `"status":null` / `"state":"blocked"` — which is also the regression
+# guard for the TSV parse: `@tsv` renders that null as an empty middle column,
+# and an `IFS=$'\t' read -r sid status name` collapse would drop the row from
+# the live-name index, read n_live as 0, and clear the marker instead of parking.
 
-echo "Test: an observed pair shrunk to one idle survivor with unpushed work is parked"
+echo "Test: an observed pair shrunk to one idle HELD survivor with unpushed work is parked"
 sd_setup
 sd_write_node "tactic-shrunk-idle" unparked
 sd_commit_nodes
 sd_write_worktree "tactic-shrunk-idle" unpushed
-sd_add_session "0bb2-2222" "tactic-shrunk-idle"
+sd_add_session "0bb2-2222" "tactic-shrunk-idle" ""
 sd_install_claude 0
 sd_write_transcript "0bb2-2222" $(( SD_NOW - 1000 ))
 standdown_write "tactic-shrunk-idle" observed "" "0aa1-1111,0bb2-2222"
@@ -428,6 +441,32 @@ assert_eq "shrunk-busy: sweep returns 0" "0" "$SD_RC"
 assert_eq "shrunk-busy: park-node not invoked" "0" "$(sd_park_calls)"
 assert_eq "shrunk-busy: stderr reports observing" "yes" \
   "$(sd_contains 'observing tactic-shrunk-busy (survivor 0bb2-2222 idle_seconds=10 < grace_seconds=900')"
+sd_teardown
+
+# --- Test 7b: a busy survivor is never parked on transcript age alone --------
+# The transcript is only appended BETWEEN tool calls, so a session sitting
+# inside ONE long call (a `gh run watch` over a slow CI run, a long subagent
+# fan-out) reads as arbitrarily idle while being the healthiest possible
+# worker. Rule (e)'s second signal — the registry's own `status: busy` — is what
+# keeps that from becoming a spurious park of an actively-working session, the
+# inverse failure this node's Verification section says to fix in the predicate.
+
+echo "Test: an observed survivor the registry still reports BUSY is not parked however stale its transcript"
+sd_setup
+sd_write_node "tactic-busy-stale" unparked
+sd_commit_nodes
+sd_write_worktree "tactic-busy-stale" unpushed
+sd_add_session "0bb2-2222" "tactic-busy-stale" busy
+sd_install_claude 0
+# Ten times the grace: any transcript-only rule would park here.
+sd_write_transcript "0bb2-2222" $(( SD_NOW - 9000 ))
+standdown_write "tactic-busy-stale" observed "" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "busy-stale: sweep returns 0" "0" "$SD_RC"
+assert_eq "busy-stale: park-node not invoked" "0" "$(sd_park_calls)"
+assert_eq "busy-stale: stderr reports the busy survivor" "yes" \
+  "$(sd_contains 'observing tactic-busy-stale (survivor 0bb2-2222 reports status=busy')"
+assert_eq "busy-stale: the marker is kept" "observed" "$(sd_marker_field tactic-busy-stale origin)"
 sd_teardown
 
 # --- Test 8: no live session of that name remains → the marker is dropped ----

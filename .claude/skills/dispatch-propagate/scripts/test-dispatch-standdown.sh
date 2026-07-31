@@ -156,4 +156,22 @@ assert_eq "stdout is exactly stood-down" "stood-down" "$DS_OUT"
 assert_eq "marker sessions=<winner> only" "aaaa1111-1111-1111-1111-111111111111" "$(ds_marker_field tactic-some-node sessions)"
 ds_teardown
 
+# --- Test 6: an unwritable ledger is exit 4, NOT the usage-error 2 -----------
+# The caller must be able to tell "your arguments were wrong" (retry with
+# different ones) from "the stand-down was NOT recorded" — yielding the turn on
+# the latter re-creates the silent hold this protocol exists to close.
+echo "Test: an unwritable ledger dir -> exit 4 ledger-unwritable, no marker, distinct from usage error"
+ds_setup
+ds_add_session "aaaa1111-1111-1111-1111-111111111111" "tactic-some-node"
+ds_install_claude 0
+# A regular file where the ledger dir's PARENT must be: standdown_write's
+# `mkdir -p` cannot succeed, so the marker cannot be written.
+printf 'not a directory\n' > "$DS_DIR/blocker"
+DS_LEDGER="$DS_DIR/blocker/ledger"
+ds_run "tactic-some-node" --winner "aaaa1111-1111-1111-1111-111111111111"
+assert_eq "exit code 4" "4" "$DS_RC"
+assert_eq "stdout is exactly ledger-unwritable" "ledger-unwritable" "$DS_OUT"
+assert_eq "no marker file written" "no" "$( [[ -f "$DS_LEDGER/tactic-some-node" ]] && echo yes || echo no )"
+ds_teardown
+
 report_results

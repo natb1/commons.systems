@@ -47,6 +47,12 @@ tick_setup() {
   # invocation tests need.
   export DISPATCH_STANDDOWN_DIR="$TMPDIR_TEST/standdown"
   mkdir -p "$DISPATCH_STANDDOWN_DIR"
+  # The scratch repo root the comment above promises. Without it the sweep falls
+  # back to resolve_project_root — the developer's REAL checkout — so the moment
+  # a future test here seeds a marker, the pass would `git fetch origin main`
+  # and `git show origin/main:intentions/...` against it.
+  export DISPATCH_STANDDOWN_REPO_ROOT="$TMPDIR_TEST/standdown-repo"
+  mkdir -p "$DISPATCH_STANDDOWN_REPO_ROOT"
   chmod +x "$TMPDIR_TEST/dispatch-tick"
   # Pin the canonical main worktree so the advisory diagnose-main / jit-reminder
   # spawns get a deterministic --cwd independent of the host repo layout and the
@@ -147,7 +153,7 @@ tick_teardown() {
     TICK_SEL_PRE TICK_GRAPH_EXEC_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
     DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG \
     DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_SWEEP_NOW_EPOCH \
-    DISPATCH_STANDDOWN_DIR
+    DISPATCH_STANDDOWN_DIR DISPATCH_STANDDOWN_REPO_ROOT
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
