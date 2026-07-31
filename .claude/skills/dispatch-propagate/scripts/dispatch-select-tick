@@ -216,7 +216,11 @@ refresh_lock() {
 # name, rule (c) needs the reserving session dead), so each failed explicit
 # dispatch would permanently add 1 to LIVE_COUNT. Omitted (empty) on the
 # autonomous and manual lanes, whose claims are consumed by the same tick's
-# fan-out and are covered by rules (a)/(c).
+# fan-out: a claim that reaches a successful spawn is re-stamped
+# `origin=spawned` by dispatch-graph-execute and covered by the sweep's
+# handoff rule (released once the worker registers as live, or via the
+# bounded handoff TTL if it never does); the old rule (c) (dead-session
+# reclamation) now only reclaims claims that never reached a spawn.
 #   return 0 — decision line emitted; the caller exits 0.
 #   return 1 — stdin held no node lines; the caller falls through to the
 #              legacy selector.

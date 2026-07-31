@@ -58,8 +58,12 @@
 #                        otherwise wraps around this selector. CLAIM OBLIGATION:
 #                        each claim is a budget-consuming marker. A caller that
 #                        launches its selections hands the marker to
-#                        dispatch-graph-execute (which clears it on spawn); a
-#                        caller that does NOT launch MUST `reservation_clear <id>`
+#                        dispatch-graph-execute, which re-stamps it
+#                        `origin=spawned` on a successful spawn kick and lets
+#                        reservation_sweep release it once the worker
+#                        registers as live (or via the bounded handoff TTL if
+#                        it never does); a caller that does NOT launch MUST
+#                        `reservation_clear <id>`
 #                        for every emitted node. Markers written by this flag carry
 #                        `origin=standalone` so reservation_sweep reclaims them
 #                        once they age past DISPATCH_RESERVATION_STANDALONE_TTL_S
@@ -696,8 +700,10 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha fix_since; do
   # the failure posture of dispatch-select-tick's own emit_graph_selection call.
   #
   # The `standalone` ORIGIN stamp (4th arg) bounds the claim's lifetime. Unlike a
-  # tick claim — handed straight to dispatch-graph-execute, which clears it on
-  # spawn — a standalone claim has no guaranteed consumer: a caller that discards
+  # tick claim — handed straight to dispatch-graph-execute, which re-stamps it
+  # `origin=spawned` on a successful spawn kick and lets reservation_sweep
+  # release it once the worker registers as live (or via the bounded handoff
+  # TTL if it never does) — a standalone claim has no guaranteed consumer: a caller that discards
   # the output, crashes, or is interrupted between selection and launch leaves the
   # marker behind, and reservation_sweep's dead-session rule never reclaims it while
   # the (long-lived) calling session stays alive. Markers stamped `origin=standalone`
