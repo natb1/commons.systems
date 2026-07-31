@@ -21,8 +21,9 @@
 #   origin/main — is therefore minted as a brand-new "flake" that nobody can
 #   reproduce.
 #
-#   This fired on 2026-07-22: a shadowed `case` arm in test-dispatch-scripts.sh's
-#   fake-git stub made a dispatch-select-tick guard-halt wiring test fail
+#   This fired on 2026-07-22: a shadowed `case` arm in the (then-monolithic)
+#   test-dispatch-scripts.sh's fake-git stub made a dispatch-select-tick
+#   guard-halt wiring test fail
 #   deterministically. The arm was unified on origin/main, but four PR heads
 #   predating the unification kept emitting the signature and produced TWO
 #   separate flake tactic nodes (filed 3 minutes apart), both later pruned as

@@ -33,8 +33,9 @@
  *     deviation:bool, security_note?, coverage_incomplete:bool, coverage_note?:string }
  *
  * NORMATIVE SPECS for the three inline kernel helpers below are the pure bash/jq
- * scripts (unit-tested by test-dispatch-scripts.sh). The JS helpers are kept
- * thin so they cannot drift from their specs:
+ * scripts (unit-tested by the per-SUT test-*.sh files sharing
+ * dispatch-test-fixture.sh). The JS helpers are kept thin so they cannot drift
+ * from their specs:
  *   - agentFinderSet  ←  .claude/skills/dispatch-propagate/scripts/dispatch-review-finders
  *   - dedupMerge      ←  .claude/skills/dispatch-propagate/scripts/dispatch-review-dedup
  *   - applyVerifyDrop ←  .claude/skills/dispatch-propagate/scripts/dispatch-review-verify-drop

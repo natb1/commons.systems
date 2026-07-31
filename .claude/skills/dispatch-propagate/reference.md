@@ -659,8 +659,9 @@ regardless.
 ### Dry-run / test seam
 
 `usage-sample-writer.mjs --dry-run` does not import `@google-cloud/secret-manager`
-or `firebase-admin`, keeping the bash unit tests (`test-dispatch-scripts.sh`)
-dependency-free. In dry-run mode the member-email payload is injected via the
+or `firebase-admin`, keeping the bash unit tests (the per-SUT `test-*.sh` files
+sharing `dispatch-test-fixture.sh`) dependency-free. In dry-run mode the
+member-email payload is injected via the
 `DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE` env var (the raw comma-separated string
 the secret would return). This seam is for testing only — it is never consulted
 in real mode, which always reads Secret Manager.
