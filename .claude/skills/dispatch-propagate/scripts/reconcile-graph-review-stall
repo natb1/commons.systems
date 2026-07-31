@@ -30,6 +30,23 @@
 #              hold (hold-node): a born-parked hold tactic plus a blocked_by
 #              edge on the source, whose id is a valid /dispatch-conflict
 #              Lane 3 entry point. The `reviewed` marker is preserved.
+#   ci-stall — CI never CONCLUDES (tactic-autonomous-ci-pending-liveness-bound).
+#              A `pending` verdict is not a regression and routes nowhere
+#              (reviewStallRoute returns null for it, correctly — pending is a
+#              liveness observation, not a lane), so an armed auto-merge whose
+#              checks never started, or started and never finished, would sit
+#              here forever with no observer: the selector's reviewed-marker
+#              exclusion means graph-select-target's own CI-pending strike
+#              ladder never sees this node. This sweep therefore runs the SAME
+#              bound at its own observation point, reusing lib.sh's
+#              ci_pending_strike_bump / ci_pending_strike_clear sidecar (the
+#              counter lives outside every checkout, so below the cap it is not
+#              a graph write at all). At DISPATCH_CI_PENDING_STRIKE_CAP
+#              consecutive `pending` observations of the SAME head SHA, land a
+#              tracked `ci-pending-stalled` hold via the same hold-node
+#              primitive. NOT the CI-fix interrupt — that strips the `reviewed`
+#              marker and re-drafts the PR, discarding a completed review
+#              verdict, for the same reason the conflict route avoids it.
 #
 # A still-OPEN PR with no regression, or one whose mergeability is still
 # UNKNOWN (GitHub computes it asynchronously and self-heals), is a no-op —
@@ -46,6 +63,7 @@
 # Stdout protocol, one line per tactic acted on; NOTHING for a skip:
 #   recovered <id> -> fix (ci=<verdict> merge=<state>)
 #   held <id> -> conflict via <hold-id> (ci=<verdict> merge=<state>)
+#   held <id> -> ci-stalled via <hold-id> (sha=<sha> strikes=<n>)
 #
 # Exit codes: 0 always (including a no-op sweep and any per-node error —
 # best-effort, matching reconcile-graph-merged's doctrine); 1 only for a hard
@@ -66,8 +84,13 @@
 # LOCK_WAIT_SECONDS, default 1050s), so this sweep runs AT MOST TWO
 # graph-commits per tick: every `fix`-routed node's `--set-fix` write is
 # batched into ONE commit (exactly as reconcile-graph-merged batches its plan),
-# and at most ONE `conflict`-routed node is held per sweep (hold-node lands its
-# own commit and cannot be batched into that one). Per-tick actions are
+# and at most ONE hold is landed per sweep (hold-node lands its own commit and
+# cannot be batched into that one). That single hold slot is SHARED between the
+# `conflict` and `ci-stall` routes — whichever route records first takes it, and
+# the other is skipped this tick rather than raising the budget to three
+# commits. A skipped node still matches the enumeration next tick (and its
+# ci-stall strike count is already at the cap), so it is held on a following
+# sweep. Per-tick actions are
 # additionally capped (GRAPH_REVIEW_STALL_CAP), and the lock heartbeat is
 # refreshed between candidates so the per-PR polling loop cannot age the lock
 # out on its own.
@@ -81,7 +104,16 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+# The CI-pending strike sidecars live NEXT TO the node worktrees under the MAIN
+# checkout (<main-root>/.claude/worktrees/<id>.ci-pending-strikes), so both
+# observation surfaces — this sweep and graph-select-target's own ladder
+# (graph-select-target:445-446, whose NATIVE_ROOT is resolved identically) —
+# read and write ONE file per node. Falling back to REPO_ROOT keeps a fixture or
+# a non-worktree checkout working.
+MAIN_ROOT=$(resolve_main_worktree "$REPO_ROOT")
+MAIN_ROOT="${MAIN_ROOT:-$REPO_ROOT}"
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
 GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
 
@@ -174,6 +206,9 @@ RECOVERED_IDS=()
 RECOVERED_MSGS=()
 CONFLICT_IDS=()
 CONFLICT_NOTES=()
+CI_STALL_IDS=()
+CI_STALL_SHAS=()
+CI_STALL_STRIKES=()
 ACTED=0
 while IFS=$'\t' read -r id pr; do
   [[ -n "$id" && -n "$pr" ]] || continue
@@ -255,18 +290,53 @@ while IFS=$'\t' read -r id pr; do
       # lock budget above allows one batched commit; this adds at most one
       # more). A second conflicting node is picked up on the next tick, whose
       # enumeration still matches it.
-      [[ "${#CONFLICT_IDS[@]}" -ge 1 ]] && continue
+      #
+      # The one hold slot is SHARED with the ci-stall route below (see the lock
+      # budget header): if that route already recorded a hold this sweep, this
+      # conflict waits for the next tick rather than adding a third commit.
+      [[ "${#CONFLICT_IDS[@]}" -ge 1 || "${#CI_STALL_IDS[@]}" -ge 1 ]] && continue
       CONFLICT_IDS+=("$id")
       CONFLICT_NOTES+=("ci=$VERDICT merge=$MERGEABLE")
       ACTED=$(( ACTED + 1 ))
       ;;
     *)
-      continue   # null — no regression; nothing to route
+      # null — no regression, so nothing to ROUTE. But this is also exactly
+      # where a node whose CI never concludes lands on every single sweep
+      # (`pending` folds to VERDICT=unknown above, which routes nowhere), so the
+      # CI-pending liveness bound observes RAW_VERDICT directly here rather than
+      # widening reviewStallRoute's closed union with a non-route.
+      if [[ -z "$RAW_VERDICT" ]]; then
+        # The verdict call FAILED (line ~214 leaves it empty). An unreadable CI
+        # state is not an observation: never count it, and never clear a real
+        # count that earlier sweeps accumulated. Fail open.
+        continue
+      fi
+      if [[ "$RAW_VERDICT" != "pending" ]]; then
+        # CI concluded (and did not route) — the ladder means CONSECUTIVE
+        # pending observations, so reset it (mirrors graph-select-target's own
+        # concluded-CI reset).
+        ci_pending_strike_clear "$MAIN_ROOT" "$id"
+        continue
+      fi
+      # Pending. Count one observation. A sidecar write is FREE — it holds no
+      # lock and makes no graph write — so a below-cap observation must not
+      # consume the ACTED budget, which exists to bound lock-holding work.
+      strikes=$(ci_pending_strike_bump "$MAIN_ROOT" "$id" "$HEAD_SHA") || continue
+      [[ "$strikes" -lt "$DISPATCH_CI_PENDING_STRIKE_CAP" ]] && continue
+      # At the cap. Recorded, not landed — same reason as the conflict route
+      # (hold-node lands its own graph-commit, whose assert_clean_outside_ids
+      # guard would trip on this loop's still-uncommitted --set-fix writes), and
+      # sharing that route's single hold slot.
+      [[ "${#CONFLICT_IDS[@]}" -ge 1 || "${#CI_STALL_IDS[@]}" -ge 1 ]] && continue
+      CI_STALL_IDS+=("$id")
+      CI_STALL_SHAS+=("$HEAD_SHA")
+      CI_STALL_STRIKES+=("$strikes")
+      ACTED=$(( ACTED + 1 ))   # a hold IS lock-holding work
       ;;
   esac
 done <<<"$CANDIDATES"
 
-[[ "${#RECOVERED_IDS[@]}" -eq 0 && "${#CONFLICT_IDS[@]}" -eq 0 ]] && exit 0
+[[ "${#RECOVERED_IDS[@]}" -eq 0 && "${#CONFLICT_IDS[@]}" -eq 0 && "${#CI_STALL_IDS[@]}" -eq 0 ]] && exit 0
 
 # --- Land every staged fix-state write as ONE graph-commit -------------------
 # `-C "$REPO_ROOT"` is mandatory: graph-commit resolves the repo to commit from
@@ -284,9 +354,9 @@ if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]; then
   if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
     echo "reconcile-graph-review-stall: graph-commit failed for ${RECOVERED_IDS[*]} (write rolled back, nothing landed)" >&2
     # The EXIT trap restores every staged write, so intentions/ is left clean
-    # for the next graph writer. The conflict route is skipped this tick (a
-    # failing land means the landing path itself is unhealthy); the next tick
-    # re-detects it — the enumeration still matches.
+    # for the next graph writer. Both hold routes (conflict and ci-stall) are
+    # skipped this tick (a failing land means the landing path itself is
+    # unhealthy); the next tick re-detects them — the enumeration still matches.
     exit 0
   fi
   # Landed — disarm the rollback so the clean exit keeps the committed state.
@@ -324,6 +394,50 @@ if [[ "${#CONFLICT_IDS[@]}" -gt 0 ]]; then
     }
     HOLD_ID=$(awk '{print $2}' <<<"$HELD_LINE")
     echo "held $id -> conflict via ${HOLD_ID:-unknown} (${CONFLICT_NOTES[$i]})"
+    refresh_lock
+  done
+fi
+
+# --- Land the ci-stall route as a tracked ci-pending-stalled hold ------------
+# The CI-pending liveness bound's hold producer at THIS observation surface
+# (tactic-autonomous-ci-pending-liveness-bound). Structurally identical to the
+# conflict block above — the shared hold slot guarantees at most one of the two
+# blocks actually runs per sweep, so the two-graph-commit budget holds.
+#
+# NOT execution.fix, for the same reason the conflict route avoids it (see the
+# header and transitions.ts:272-283): the fix interrupt's `--clear-fix` strips
+# the `reviewed` marker and `gh pr ready --undo` re-drafts the PR, discarding a
+# completed review verdict and re-running the whole review pass — while the
+# stuck/never-started CI run itself stays exactly as stuck. hold-node instead
+# births a born-parked hold tactic plus a blocked_by edge on the source; the
+# source's own office_hours is never written and its `reviewed` marker survives.
+if [[ "${#CI_STALL_IDS[@]}" -gt 0 ]]; then
+  refresh_lock
+  # Reuse the scratch dir the conflict block may already have created; the
+  # single EXIT trap installed above removes it either way (never a second trap).
+  [[ -n "$TMPDIR_HOLD" ]] || TMPDIR_HOLD=$(mktemp -d) \
+    || { echo "reconcile-graph-review-stall: mktemp -d failed" >&2; exit 0; }
+  REASON_FILE="$TMPDIR_HOLD/reason"
+  RECOMMENDATION_FILE="$TMPDIR_HOLD/recommendation"
+
+  for i in "${!CI_STALL_IDS[@]}"; do
+    id="${CI_STALL_IDS[$i]}"
+    sha="${CI_STALL_SHAS[$i]}"
+    strikes="${CI_STALL_STRIKES[$i]}"
+    printf '%s\n' "This tactic completed review and its auto-merge is ARMED, so the selector's reviewed-marker exclusion means no worker lane observes it — this recovery sweep is its only observer. Its PR's CI has reported a \`pending\` verdict on head SHA $sha for $strikes consecutive sweeps: the checks either never started (an empty status-check rollup) or started and never concluded. No verdict can arrive on its own, so the armed merge can never fire and the node is stranded." > "$REASON_FILE"
+    printf '%s\n' "Inspect the PR's Checks tab. If no workflow run exists, re-trigger it (close/reopen the PR, or push an empty commit to the node's branch) — a new head SHA also resets the strike counter. If a run is stuck or was cancelled by a queue/runner problem, re-run it. Do NOT route this through the CI-fix interrupt: \`apply-fix-state --clear-fix\` strips the \`reviewed\` marker and \`gh pr ready --undo\` re-drafts the PR, discarding a completed review verdict and re-running the whole review pass while the stuck CI run stays untouched (the same reason the conflict route avoids it). Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source." > "$RECOMMENDATION_FILE"
+
+    HELD_LINE=$( (cd "$REPO_ROOT" && "$UTIL_SCRIPTS/hold-node" "$id" --kind ci-pending-stalled \
+                  --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE") ) || {
+      # Hold failed — LEAVE the sidecar in place (it is already at the cap) so
+      # the next sweep retries the hold, matching graph-select-target's own
+      # hold-failed posture.
+      echo "reconcile-graph-review-stall: hold-node --kind ci-pending-stalled failed for $id" >&2
+      continue
+    }
+    HOLD_ID=$(awk '{print $2}' <<<"$HELD_LINE")
+    ci_pending_strike_clear "$MAIN_ROOT" "$id"
+    echo "held $id -> ci-stalled via ${HOLD_ID:-unknown} (sha=$sha strikes=$strikes)"
     refresh_lock
   done
 fi
