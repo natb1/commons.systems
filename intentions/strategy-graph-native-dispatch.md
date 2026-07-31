@@ -2944,6 +2944,102 @@ clarifications:
       after at transition-node:225, and graph-commit's cleanup does `git reset
       --hard "$ORIG_HEAD"` at graph-commit:344. Nothing in this sitting changes
       code; it ratifies doctrine and reorders the queue.
+  - question: Is a classifier-denial freeze a mechanical retry state (excluded by
+      the 2026-07-25 mechanical-park-producers clarification, which forbids new
+      automated park producers for retry states) or a human-required
+      office_hours escalation?
+    answer: "(Recorded 2026-07-31 /align-tactics round, tactic-mode drift review on
+      tactic-denied-command-parks-node.) A session frozen by an auto-mode
+      classifier denial is a HUMAN-REQUIRED park, not a mechanical retry hold,
+      so it routes through park-node and not hold-node. Derivation, not a new
+      author decision: (a) park-node's own header already names
+      \"provision-failed, wrong-worktree, or any other environment error a
+      node's provisioning/dispatch can hit\" as park-eligible, and a classifier
+      denial is exactly such an environment error; (b) condition 14 requires a
+      MANUAL operator reap of a session that has not declared a terminal
+      disposition, and a denied session is blocked at a permission prompt that
+      no autonomous actor can answer — so no autonomous path forward exists,
+      which is precisely what a park asserts per the 2026-07-23 clarification;
+      (c) the node's own recorded direction excludes retry as the remedy (\"Do
+      not route around a denial. Escalation is the correct response; a standing
+      permission rule or the author running the command are the correct
+      remedies\") — both remedies are human acts. The 2026-07-25 retry-state
+      carve-out (a merge conflict against a moving main \"frequently
+      self-resolves\") does not reach this case: a denial's nondeterminism means
+      a RETRY would likely succeed, but no autonomous retry can be issued while
+      the frozen session holds the worktree. Note the residual mechanism
+      latitude left to the plan: office_hours on the affected node (park-node)
+      versus a born-parked review item plus a blocked_by edge (hold-node) are
+      both doctrinally sound surfaces for a human-required hold; the choice is
+      plan-level."
+  - question: Does fixing tactic-denied-command-parks-node also require reconciling
+      claude_agents_count_busy_workers's busy-only filter with
+      worktree_has_live_session, or is that reconciliation out of this tactic's
+      scope?
+    answer: (Recorded 2026-07-31 /align-tactics round.) Reconciling
+      claude_agents_count_busy_workers (status==busy, so a blocked/waiting
+      worker stops counting against the pace budget) with
+      worktree_has_live_session (name-keyed, so any session in the worktree
+      keeps holding the node) is FAMILY-scope work, not
+      tactic-denied-command-parks-node's scope. The node itself files it as the
+      secondary "deeper item" and instructs that
+      tactic-denied-command-parks-node,
+      tactic-phase-terminal-requires-disposition,
+      tactic-standdown-winner-liveness and
+      tactic-router-spawn-window-duplicate-worker be read together. The
+      busy-only filter is a deliberate, documented pace-budget choice
+      (lib-claude-agents.sh:596-600), so a unilateral change from this one
+      tactic would reverse recorded design intent; this tactic delivers
+      detection + escalation + a greppable journal line and leaves the pace-gate
+      predicate untouched, naming that boundary explicitly in its out-of-scope
+      section.
+  - question: When a sweep external to a frozen node's own session parks that node
+      (as tactic-denied-command-parks-node's plan does), does the park free the
+      concurrency slot or reap the frozen session?
+    answer: (Recorded 2026-07-31 /align-tactics round.) When a sweep external to a
+      frozen node's own session parks that node, the park surfaces the freeze
+      but does not resolve it — park-node's trailing mark-node-terminal call
+      no-ops under its ownership gate, so the frozen session is not reaped and
+      its worktree claim persists. This is consistent with condition 14's
+      accepted freeze-for-debug (an undeclared pass is kept until an operator
+      manually reaps it) rather than an exception to it, and it means the park's
+      office_hours.recommendation MUST name the manual reap and the denied
+      command verbatim, per the standing park-recommendation condition. It also
+      means this tactic does not by itself restore the lost concurrency slot;
+      that is the family-scope predicate reconciliation above.
+  - question: In /align-tactics tactic mode, does the plan agent receive the target
+      node's full body and rationale, or only its statement — and what does that
+      imply for plan fidelity?
+    answer: "(Recorded 2026-07-31 /align-tactics round.) /align-tactics tactic mode
+      drops the target node's authored body and rationale before the plan phase:
+      only `statement` reaches buildPlanPrompt (align-tactics.js:952-962 builds
+      planTactics from target_node.id/.statement only). Because the write path
+      then REPLACES the node body with the returned body_markdown, a plan
+      authored from the one-sentence statement silently clobbers the node's
+      recorded Context, its transcript-mtime detection recipe, its \"read this
+      with its three siblings\" family instruction, and its \"do not dedupe
+      against tactic-stopped-session-blocks-node\" caveat. Until the Workflow
+      injects target_node.body/rationale, the plan agent must read the node file
+      directly and carry that substance forward into the finalized body. This is
+      a harness gap in the align-tactics machinery (itself in scope for this
+      strategy), adjacent to but distinct from condition 7, which governs the
+      RECORDING round rather than the planning round. Tracked as
+      tactic-align-tactics-per-node-clarifications (per the 2026-07-28
+      clarification recording the same gap)."
+  - question: Does tactic-denied-command-parks-node need to add its own
+      held-for-debug session count, given tactic-frozen-session-debug-count
+      already owns one?
+    answer: "(Recorded 2026-07-31 /align-tactics round.) The held-for-debug count
+      landing under tactic-frozen-session-debug-count already sweeps a
+      denial-frozen session into its total (its predicate is the complement of
+      busy/idle, and a denied session reports status waiting).
+      tactic-denied-command-parks-node must not re-author that counter; its
+      distinct contributions are the denial-specific detector (transcript-mtime
+      staleness per the node body's own recipe, plus a last-assistant-turn
+      denial signature modeled on dispatch-detect-transient-death), the
+      office_hours write, and a greppable journal line following the
+      `lib-reservation-ledger: reclaimed reservation <wt> (<reason>)` format
+      that dispatch-reclaim-audit already mines."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
