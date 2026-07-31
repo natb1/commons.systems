@@ -7,6 +7,27 @@ FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=dispatch-test-fixture.sh
 source "$FIXTURE_DIR/dispatch-test-fixture.sh"
 
+# --- host-unit-dir leak guard (regression check for tactic-sweep-timer-unit-dir-leak) --
+# Every harness in this file must redirect DISPATCH_SWEEP_TIMER_UNIT_DIR /
+# DISPATCH_HEARTBEAT_UNIT_DIR (and their *_SYSTEMCTL_CMD pairs) into the tmp
+# sandbox. If any test path fails to do so, ensure_sweep_timer /
+# ensure_heartbeat_units (lib.sh) would write to the developer's real
+# ~/.config/systemd/user/ unit files. Snapshot their hashes now and re-check
+# at the end of the suite so a leak fails the run instead of silently
+# clobbering the host.
+_host_unit_hash() {
+  local f="$1"
+  if [[ -f "$f" ]]; then
+    sha256sum "$f" | awk '{print $1}'
+  else
+    echo "absent"
+  fi
+}
+_HOST_SWEEP_UNIT="$HOME/.config/systemd/user/dispatch-sweep-periodic.service"
+_HOST_HEARTBEAT_UNIT="$HOME/.config/systemd/user/dispatch-heartbeat.service"
+_HOST_SWEEP_HASH_BEFORE=$(_host_unit_hash "$_HOST_SWEEP_UNIT")
+_HOST_HEARTBEAT_HASH_BEFORE=$(_host_unit_hash "$_HOST_HEARTBEAT_UNIT")
+
 # >>> MOVED FROM test-dispatch-scripts.sh >>>
 # ============================================================================
 # dispatch-spawn-tick tests
@@ -70,6 +91,10 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
   export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
@@ -78,7 +103,7 @@ st_teardown() {
   TMPDIR_TEST=""
   unset DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD
   unset DISPATCH_SPAWN_TICK_MAIN_WORKTREE
-  unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
+  unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD DISPATCH_SWEEP_TIMER_UNIT_DIR DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD DISPATCH_HEARTBEAT_UNIT_DIR DISPATCH_HEARTBEAT_SYSTEMCTL_CMD
   unset DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD ST_IS_FAILED_RC
 }
 
@@ -230,5 +255,19 @@ fi
 st_teardown
 
 # <<< END MOVED <<<
+
+# --- host-unit-dir leak guard: re-check ------------------------------------
+_HOST_SWEEP_HASH_AFTER=$(_host_unit_hash "$_HOST_SWEEP_UNIT")
+_HOST_HEARTBEAT_HASH_AFTER=$(_host_unit_hash "$_HOST_HEARTBEAT_UNIT")
+TOTAL=$((TOTAL + 1))
+if [[ "$_HOST_SWEEP_HASH_AFTER" == "$_HOST_SWEEP_HASH_BEFORE" && "$_HOST_HEARTBEAT_HASH_AFTER" == "$_HOST_HEARTBEAT_HASH_BEFORE" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: host systemd unit dir untouched (no sweep/heartbeat leak)"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: host systemd unit dir untouched (no sweep/heartbeat leak)"
+  echo "FAIL: a harness in this suite leaked into the real host unit dir ($HOME/.config/systemd/user)" >&2
+  echo "  dispatch-sweep-periodic.service: before=$_HOST_SWEEP_HASH_BEFORE after=$_HOST_SWEEP_HASH_AFTER" >&2
+  echo "  dispatch-heartbeat.service:      before=$_HOST_HEARTBEAT_HASH_BEFORE after=$_HOST_HEARTBEAT_HASH_AFTER" >&2
+fi
 
 report_results
