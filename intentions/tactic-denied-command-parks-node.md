@@ -67,10 +67,21 @@ attention:
     throughput to zero on 2026-07-31 (BUSY = 1, and that one the human's
     monitoring session). blocked_by is empty, so this promotion lifts no blocker
     and cannot compound. Finalized 2026-07-31 by /align-tactics to phase:
-    implement with a full clean-session plan in the body; the boost carries
-    over unchanged, since attention rank is independent of phase."
-phase: implement
-execution: null
+    implement with a full clean-session plan in the body; the boost carries over
+    unchanged, since attention rank is independent of phase."
+phase: qa
+execution:
+  branch: tactic-denied-command-parks-node
+  pr: 2994
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-07-31
+    attempt: 1
+    pushed_sha: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
