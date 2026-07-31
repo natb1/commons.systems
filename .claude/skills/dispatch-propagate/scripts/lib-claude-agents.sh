@@ -828,14 +828,22 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # claude_agents_count_held_for_debug — emit the count of worker sessions
   # (name matches `^[0-9]+-` / `^tactic-` / `^strategy-`, the same keyspace
   # `claude_agents_count_busy_workers` counts — excluding `dispatch-*`
-  # routers) whose status is neither `busy` nor `idle` — i.e. terminal
-  # (done/error/crashed/etc) sessions a narrowed auto-close default is
-  # keeping alive instead of reaping. This makes that otherwise-invisible
-  # accumulation visible in dispatch-sweep's log. Deliberately does NOT
-  # enumerate terminal statuses (no `done`/`error`/`stopped`/`crashed`
-  # literal match): "not busy, not idle" is the total, forward-compatible
-  # predicate, so a new terminal status the daemon introduces is still
-  # counted without a code change here.
+  # routers) sitting in a TERMINAL state — sessions a narrowed auto-close
+  # default is keeping alive instead of reaping. This makes that
+  # otherwise-invisible accumulation visible in dispatch-sweep's log.
+  #
+  # The predicate keys on `(.state // .status)` and matches the SAME terminal
+  # enumeration `claude_session_id_is_live` uses
+  # (done|stopped|killed|failed|errored|error|cancelled|canceled|terminated),
+  # so the two agree on what "terminal" means. `.state` is the granular field
+  # the `--all` listing carries — a terminal row is
+  # `{"state":"done"}` with NO `.status` key at all, while a live row is
+  # `{"state":"working","status":"busy"|"idle"}`. A complement predicate
+  # ("not busy, not idle") would therefore match every non-`working` row,
+  # counting LIVE `blocked` sessions (waiting on input/permission) as held.
+  # The enumeration is deliberate, not an oversight: a new state the daemon
+  # introduces reads as live (not counted) until it is added here, which
+  # under-reports rather than inventing frozen nodes that do not exist.
   #
   # Unlike `claude_agents_count_busy_workers`, this function queries
   # `claude agents --json --all` DIRECTLY, bypassing `_claude_agents_raw` —
@@ -861,13 +869,21 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     fi
 
     # One jq pass validates the array shape and counts matches. Non-array
-    # input errors out and the result is UNKNOWN.
+    # input errors out and the result is UNKNOWN. `(.state // .status) // ""`
+    # mirrors `claude_session_id_is_live`'s resolution: the granular `.state`
+    # the --all listing carries, falling back to the coarse `.status` for a
+    # row that has no `.state`, and "" for a row with neither (which is NOT
+    # terminal → not counted).
     local count
     if ! count=$(jq -r '
+      def terminal_states:
+        ["done","stopped","killed","failed","errored","error",
+         "cancelled","canceled","terminated"];
       if type == "array"
       then [ .[]
         | select(.name | type == "string" and test("^[0-9]+-|^tactic-|^strategy-"))
-        | select(.status != "busy" and .status != "idle") ] | length
+        | select((((.state // .status) // "") | tostring) as $st
+                 | terminal_states | index($st)) ] | length
       else error("claude agents --json output is not a JSON array")
       end' <<<"$out" 2>/dev/null); then
       return 1

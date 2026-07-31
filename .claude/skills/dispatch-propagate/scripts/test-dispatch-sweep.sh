@@ -1898,10 +1898,13 @@ sweep_teardown
 # --- Test N8a: HELD_FOR_DEBUG_COUNT logs the terminal-session count ----------
 # claude_agents_count_held_for_debug (tactic-frozen-session-debug-count Unit 1)
 # counts worker-keyspace sessions (name matches ^[0-9]+-/^tactic-/^strategy-)
-# whose status is neither busy nor idle. dispatch-sweep now logs that count
-# every run. Fake payload: one tactic-* session with a terminal status
-# ("done"), one busy worker (excluded), one dispatch-* router in a terminal
-# status (excluded — not in the worker keyspace).
+# in a terminal state. dispatch-sweep now logs that count every run. The
+# payload mirrors the real `claude agents --json --all` row shapes: a terminal
+# row carries `.state` and NO `.status`; a live worker carries
+# `state:"working"` plus `status:"busy"|"idle"`; a `blocked` row is live and
+# also carries no `.status`. Rows: one terminal tactic-* session (counted),
+# one busy worker (excluded), one blocked worker (excluded — live), one
+# terminal dispatch-* router (excluded — not in the worker keyspace).
 echo "Test: N8a HELD_FOR_DEBUG_COUNT logs nonzero terminal-session count"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/61-held-for-debug"
@@ -1917,9 +1920,10 @@ cat > "$fake" <<'FAKE'
 # Ignore all args; always return the fixed payload regardless of --json/--all/--cwd.
 cat <<'JSON'
 [
-  {"sessionId":"s1","pid":1,"status":"done","name":"tactic-frozen-session-debug-count","cwd":""},
-  {"sessionId":"s2","pid":2,"status":"busy","name":"62-other-worker","cwd":""},
-  {"sessionId":"s3","pid":3,"status":"error","name":"dispatch-sweep","cwd":""}
+  {"sessionId":"s1","state":"done","name":"tactic-frozen-session-debug-count","cwd":""},
+  {"sessionId":"s2","pid":2,"state":"working","status":"busy","name":"62-other-worker","cwd":""},
+  {"sessionId":"s3","state":"blocked","name":"64-blocked-worker","cwd":""},
+  {"sessionId":"s4","state":"done","name":"dispatch-sweep","cwd":""}
 ]
 JSON
 FAKE

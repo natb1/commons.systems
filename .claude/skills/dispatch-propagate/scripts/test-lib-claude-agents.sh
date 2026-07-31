@@ -810,29 +810,70 @@ ca_teardown
 
 # --- claude_agents_count_held_for_debug (tactic-frozen-session-debug-count) --
 # Counts worker sessions (^[0-9]+-|^tactic-|^strategy-, excluding dispatch-*
-# routers) whose status is neither busy nor idle — i.e. terminal sessions a
-# narrowed auto-close default is keeping alive instead of reaping.
+# routers) in a TERMINAL state — sessions a narrowed auto-close default is
+# keeping alive instead of reaping.
+#
+# Payloads below mirror the REAL `claude agents --json --all` row shapes,
+# verified against the live daemon:
+#   terminal:  {"sessionId":..,"name":..,"state":"done"}   — NO .status key
+#   live work: {"sessionId":..,"pid":..,"name":..,"state":"working","status":"busy"|"idle"}
+#   live wait: {"sessionId":..,"name":..,"state":"blocked"} — NO .status key
+# A hand-written `"status":"done"` row is a shape the daemon never emits; the
+# only test that uses one is the coarse-`.status`-fallback case below, which
+# exists precisely to exercise the `.state`-missing branch.
 
 # --- Test 43: held-for-debug-mixed — only the terminal worker row counts ----
 echo "Test: claude_agents_count_held_for_debug counts only terminal worker rows"
 ca_setup
 write_fake_claude '[
-  {"sessionId":"s1","pid":1,"status":"busy","name":"tactic-x"},
-  {"sessionId":"s2","pid":2,"status":"idle","name":"strategy-y"},
-  {"sessionId":"s3","pid":3,"status":"done","name":"1234-slug"},
-  {"sessionId":"s4","pid":4,"status":"done","name":"dispatch-abc"}
+  {"sessionId":"s1","pid":1,"state":"working","status":"busy","name":"tactic-x"},
+  {"sessionId":"s2","pid":2,"state":"working","status":"idle","name":"strategy-y"},
+  {"sessionId":"s3","state":"done","name":"1234-slug"},
+  {"sessionId":"s4","state":"done","name":"dispatch-abc"}
 ]' 0
 if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
 assert_eq "held-for-debug-mixed: exits 0" "0" "$rc"
 assert_eq "held-for-debug-mixed: counts only the terminal worker row" "1" "$out"
 ca_teardown
 
-# --- Test 44: held-for-debug-all-live — only busy/idle rows → count 0 -------
-echo "Test: claude_agents_count_held_for_debug returns 0 when all worker rows are busy/idle"
+# --- Test 43b: held-for-debug-blocked — a blocked worker is LIVE, not held --
+# `blocked` (waiting on input/permission) is a live state: the session is
+# still there and can resume. claude_session_id_is_live classifies it live,
+# and this counter must agree — a complement predicate ("not busy, not idle")
+# would wrongly count it, since a blocked row carries no .status at all.
+echo "Test: claude_agents_count_held_for_debug does not count blocked (live) workers"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s1","state":"blocked","name":"tactic-x"},
+  {"sessionId":"s2","state":"blocked","name":"1234-slug"},
+  {"sessionId":"s3","state":"done","name":"tactic-y"}
+]' 0
+if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
+assert_eq "held-for-debug-blocked: exits 0" "0" "$rc"
+assert_eq "held-for-debug-blocked: counts only the done row, not the blocked ones" "1" "$out"
+ca_teardown
+
+# --- Test 43c: held-for-debug-status-fallback — row with no .state ----------
+# The predicate resolves `(.state // .status)`, so a row carrying only the
+# coarse `.status` still classifies correctly.
+echo "Test: claude_agents_count_held_for_debug falls back to .status when .state is absent"
 ca_setup
 write_fake_claude '[
   {"sessionId":"s1","pid":1,"status":"busy","name":"tactic-x"},
-  {"sessionId":"s2","pid":2,"status":"idle","name":"1234-slug"}
+  {"sessionId":"s2","pid":2,"status":"error","name":"tactic-y"}
+]' 0
+if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
+assert_eq "held-for-debug-status-fallback: exits 0" "0" "$rc"
+assert_eq "held-for-debug-status-fallback: counts the status-only terminal row" "1" "$out"
+ca_teardown
+
+# --- Test 44: held-for-debug-all-live — only live rows → count 0 ------------
+echo "Test: claude_agents_count_held_for_debug returns 0 when all worker rows are live"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s1","pid":1,"state":"working","status":"busy","name":"tactic-x"},
+  {"sessionId":"s2","pid":2,"state":"working","status":"idle","name":"1234-slug"},
+  {"sessionId":"s3","state":"blocked","name":"strategy-z"}
 ]' 0
 if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
 assert_eq "held-for-debug-all-live: exits 0" "0" "$rc"
@@ -866,7 +907,7 @@ echo "Test: claude_agents_count_held_for_debug proves its query passes --all"
 ca_setup
 write_fake_claude_all '[
   {"sessionId":"s1","pid":1,"state":"working","status":"busy","name":"tactic-x"},
-  {"sessionId":"s2","pid":2,"state":"done","status":null,"name":"tactic-y"}
+  {"sessionId":"s2","state":"done","name":"tactic-y"}
 ]'
 if out=$(claude_agents_count_held_for_debug); then rc=0; else rc=$?; fi
 assert_eq "held-for-debug-all-flag: exits 0" "0" "$rc"
