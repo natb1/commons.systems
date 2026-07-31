@@ -24,6 +24,18 @@
 # exactly where the contamination hazard is highest. Pass the real worktree
 # path in that case so the guard stays live.
 #
+# That argument is validated, not trusted. It must name the ROOT of a
+# registered worktree that is NOT the primary checkout; anything else is a
+# hard error (exit 2), never a SKIP. A path that merely sits *inside* the
+# primary checkout — e.g. a leftover plain directory at
+# `.claude/worktrees/<id>` after a reaped or partially-removed worktree —
+# resolves through `rev-parse --show-toplevel` to the primary checkout itself,
+# which would re-arm exactly the vacuous SKIP the argument exists to prevent
+# (red-team-3). Failing loud there is the whole point: when the caller names a
+# path that resolves to the primary checkout, the guard cannot tell
+# contamination from legitimate writes, so it must refuse rather than report a
+# clean pass.
+#
 # `baseline` and `check` MUST be passed the identical worktree-path argument
 # (or both omit it): the snapshot filename (SNAP, below) is keyed on the
 # resolved CUR, so a mismatched or missing argument on one side makes `check`
@@ -74,6 +86,38 @@ if [[ -n "$WORKTREE_PATH" ]]; then
   if [[ -z "$CUR" ]]; then
     echo "subagent-contamination-guard: worktree-path '$WORKTREE_PATH' is not inside a git repository." >&2
     usage
+    exit 2
+  fi
+
+  # An explicitly-passed path that resolves to the primary checkout is an
+  # ERROR, not a SKIP. The caller passed it precisely because its own cwd is
+  # the primary checkout and cwd-derived CUR would be vacuous; if the path
+  # resolves there too (a leftover plain directory inside the primary checkout
+  # is the common way this happens), the guard cannot distinguish subagent
+  # contamination from the session's own legitimate writes. Refuse loudly
+  # instead of silently disabling the guard for the whole run (red-team-3).
+  ARG_PRIMARY="$(resolve_main_worktree 2>/dev/null || true)"
+  if [[ -n "$ARG_PRIMARY" && -d "$ARG_PRIMARY" && "$ARG_PRIMARY" -ef "$CUR" ]]; then
+    echo "subagent-contamination-guard: worktree-path '$WORKTREE_PATH' resolves to the primary checkout '$ARG_PRIMARY' — either it IS the primary checkout, or it is a path inside it (e.g. a leftover plain directory where a worktree used to be). The guard cannot distinguish subagent contamination from legitimate writes there, so it refuses rather than reporting a clean pass. Pass the launching worktree's own root, or recreate the missing worktree." >&2
+    exit 2
+  fi
+
+  # The path must also name the ROOT of a registered worktree of this repo —
+  # not merely some directory inside one. A subdirectory resolves upward to its
+  # enclosing worktree, which silently guards a different tree than the caller
+  # named.
+  CUR_REGISTERED=""
+  while IFS= read -r wt_line; do
+    [[ "$wt_line" == "worktree "* ]] || continue
+    wt_dir="${wt_line#worktree }"
+    if [[ -d "$wt_dir" && "$wt_dir" -ef "$CUR" ]]; then
+      CUR_REGISTERED=1
+      break
+    fi
+  done < <(git -C "$CUR" worktree list --porcelain 2>/dev/null || true)
+
+  if [[ ! "$WORKTREE_PATH" -ef "$CUR" || -z "$CUR_REGISTERED" ]]; then
+    echo "subagent-contamination-guard: worktree-path '$WORKTREE_PATH' is not the root of a registered git worktree (it resolves to '$CUR'; see 'git worktree list'). Pass the launching worktree's own root." >&2
     exit 2
   fi
 else

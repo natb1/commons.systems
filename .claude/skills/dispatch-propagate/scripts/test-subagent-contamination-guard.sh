@@ -252,4 +252,54 @@ set -e
 assert_eq "case11 baseline: exits 2 on nonexistent worktree-path" "2" "$STATUS11"
 assert_contains "case11 stderr: usage-shaped error" "Usage:" "$(cat "$STDERR11")"
 
+# ---- Case 12: explicit path INSIDE the primary checkout -> exit 2 ----------
+# A leftover plain directory where a worktree used to be (a reaped or
+# partially-removed worktree) still passes the caller's `-d` precondition, but
+# `rev-parse --show-toplevel` resolves it to the primary checkout itself. That
+# must be a hard error, not the vacuous SKIP the explicit argument exists to
+# prevent (red-team-3): a SKIP would silently disable the guard for the whole
+# run while both subcommands report success.
+
+LEFTOVER="$PRIMARY/.claude/worktrees/leftover-node"
+mkdir -p "$LEFTOVER"
+
+STDERR12B="$WORK/stderr-12-baseline"
+set +e
+run_worktree_path_guard "$PRIMARY" "$LEFTOVER" baseline leftover12 >/dev/null 2>"$STDERR12B"
+STATUS12B=$?
+set -e
+assert_eq "case12 baseline: exits 2 — explicit path resolves to the primary checkout" "2" "$STATUS12B"
+STDERR12B_CONTENT="$(cat "$STDERR12B")"
+assert_contains "case12 stderr: names the primary checkout" "primary checkout" "$STDERR12B_CONTENT"
+assert_contains "case12 stderr: names the offending path" "leftover-node" "$STDERR12B_CONTENT"
+
+STDERR12C="$WORK/stderr-12-check"
+set +e
+run_worktree_path_guard "$PRIMARY" "$LEFTOVER" check leftover12 >/dev/null 2>"$STDERR12C"
+STATUS12C=$?
+set -e
+assert_eq "case12 check: exits 2 too — never a silent clean pass" "2" "$STATUS12C"
+assert_contains "case12 check stderr: names the primary checkout" "primary checkout" "$(cat "$STDERR12C")"
+
+rm -rf "$PRIMARY/.claude"
+
+# ---- Case 13: explicit path inside a NON-primary worktree -> exit 2 --------
+# Same shape, one level over: a directory inside the launching worktree (not
+# its root) resolves upward to that worktree. The guard must reject it rather
+# than silently guard a tree the caller did not name.
+
+INSIDE_CUR="$CUR/subdir/leftover"
+mkdir -p "$INSIDE_CUR"
+
+STDERR13="$WORK/stderr-13"
+set +e
+run_worktree_path_guard "$PRIMARY" "$INSIDE_CUR" baseline inside13 >/dev/null 2>"$STDERR13"
+STATUS13=$?
+set -e
+assert_eq "case13 baseline: exits 2 — path is not a worktree root" "2" "$STATUS13"
+assert_contains "case13 stderr: says not the root of a registered worktree" \
+  "not the root of a registered git worktree" "$(cat "$STDERR13")"
+
+rm -rf "$CUR/subdir"
+
 report_results

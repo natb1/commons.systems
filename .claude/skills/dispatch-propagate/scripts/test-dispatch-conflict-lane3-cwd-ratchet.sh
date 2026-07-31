@@ -79,6 +79,11 @@ if [[ -z "$LANE3" ]]; then
 fi
 
 count_matches() { grep -cE "$1" <<<"$2" || true; }
+# "at least one" — for shapes that MUST appear but may legitimately repeat.
+# Shell variables do not survive between Bash tool calls (only cwd does), so the
+# $PROJECT_ROOT/$WT bootstrap is expected to be re-derived per fenced block; an
+# exactly-one assertion would forbid the very remedy the doctrine prescribes.
+at_least_one() { [[ "$(count_matches "$1" "$2")" -ge 1 ]] && echo yes || echo no; }
 
 # --- 1. no cwd-derived worktree root ---------------------------------------
 # `git rev-parse --show-toplevel` from Lane 3's session returns $PROJECT_ROOT
@@ -144,9 +149,21 @@ RELATIVE_INVOCATIONS=$(grep -nE '(^|[|(&] *)(\.claude/skills|packages/intentions
 assert_eq "lane3: no bare relative helper-script invocation in a fenced block" \
   "" "$RELATIVE_INVOCATIONS"
 assert_eq "lane3: the \$PROJECT_ROOT bootstrap sources lib-graph-worktree.sh" \
-  "1" "$(count_matches '^PROJECT_ROOT=\$\(source \.claude/skills/dispatch-propagate/scripts/lib-graph-worktree\.sh && resolve_main_worktree\)' "$LANE3_FENCED")"
-assert_eq "lane3: \$WT is derived from \$PROJECT_ROOT and \$SOURCE_ID" \
-  "1" "$(count_matches '^WT="\$PROJECT_ROOT/\.claude/worktrees/\$SOURCE_ID"' "$LANE3_FENCED")"
+  "yes" "$(at_least_one '^PROJECT_ROOT=\$\(source \.claude/skills/dispatch-propagate/scripts/lib-graph-worktree\.sh && resolve_main_worktree\)' "$LANE3_FENCED")"
+assert_eq "lane3: \$WT is derived from \$PROJECT_ROOT and a source id" \
+  "yes" "$(at_least_one '^WT="\$PROJECT_ROOT/\.claude/worktrees/(\$SOURCE_ID|<literal-source-id>)"' "$LANE3_FENCED")"
+
+# --- 8. the bootstrap is declared non-persistent across Bash tool calls ------
+# The Bash tool persists only the WORKING DIRECTORY between calls; shell
+# variables do not. Lane 3 spans ~12 separate calls, so a $WT/$PROJECT_ROOT set
+# once in Step 1 would expand EMPTY in every later one (`git -C ""`, and helper
+# paths rooted at `/`). The skill must say so and prescribe re-derivation or
+# literal substitution — assertion 6 above deliberately allows repeats so that
+# remedy is expressible.
+assert_eq "lane3: prose states shell variables do not survive between Bash tool calls" \
+  "yes" "$(at_least_one 'do not survive between Bash tool calls' "$LANE3")"
+assert_eq "lane3: prose prescribes re-deriving or substituting literals per call" \
+  "yes" "$(at_least_one 'Re-run the bootstrap at the top of that same call' "$LANE3")"
 
 # --- 7. "Who enters each lane" records the primary-checkout --cwd -----------
 # Whitespace-normalized: the sentence legitimately wraps across source lines.

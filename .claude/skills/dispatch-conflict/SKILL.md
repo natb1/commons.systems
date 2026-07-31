@@ -91,7 +91,12 @@ node lanes — the node itself:
   known-stale tree, which caused two live incidents (an unresolved conflict from
   a skill body missing `office_hours` handling, and a full deadlock from a body
   predating the terminal-declaration contract). The session is still a
-  **graph-native node worker** — that is decided by `--name`, not by cwd. That is the lane's
+  **graph-native node worker**, but that is decided by **both** `--name` and the
+  spawn cwd: `.claude/hooks/dispatch-stop.sh:62-63` requires the job name to
+  equal the node id *and* `intentions/<name>.md` to exist under the hook's own
+  tree, which is the spawn cwd's project dir. Moving `--cwd` to the primary
+  checkout therefore moves that file requirement onto the primary checkout too,
+  which is why Step 1 asserts it explicitly. That is the lane's
   primary caller, not a hypothetical one, so Lane 3 must hold up **unattended**:
   its terminal-disposition steps (Steps 9 and 10, `mark-node-terminal`) are what
   the tick's reap contract depends on to release the node's live-session slot,
@@ -766,14 +771,53 @@ WT="$PROJECT_ROOT/.claude/worktrees/$SOURCE_ID"
 compute its own `PROJECT_ROOT`; it honors the `DISPATCH_GRAPH_MAIN_WORKTREE`
 test override.)
 
+**These variables do not survive between Bash tool calls — re-derive or
+substitute in every one.** The Bash tool persists only the *working directory*
+across calls; shell variables, exported env, and functions do not (the same fact
+`subagent-contamination-guard`'s own header records). Lane 3 spans roughly a
+dozen separate Bash tool calls, so a bare `$PROJECT_ROOT`, `$WT`, `$SOURCE_ID`
+or `$NODE_MD` written into a *later* call expands to the **empty string** —
+`git -C "$WT" merge` becomes `git -C "" merge`, and
+`"$PROJECT_ROOT/.claude/…/dispatch-mark-complete"` becomes an absolute path off
+`/`. The fenced blocks throughout this lane spell the names out for readability;
+they are **not** a promise that a value set in an earlier block is still there.
+
+Every Bash tool call in this lane must therefore do one of exactly two things:
+
+1. **Re-run the bootstrap at the top of that same call**, substituting the
+   literal `SOURCE_ID` you resolved above:
+
+   ```bash
+   PROJECT_ROOT=$(source .claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh && resolve_main_worktree)
+   WT="$PROJECT_ROOT/.claude/worktrees/<literal-source-id>"
+   ```
+
+   The relative `source` is safe *only* because the session's cwd is the primary
+   checkout and cwd is the one thing that does persist — which is also why this
+   lane never `cd`s the session.
+
+2. **Substitute the literal absolute paths** resolved here directly into the
+   command text — exactly what Step 5's subagent brief already requires for
+   `$WT`.
+
+`$NODE_MD` (read off fresh `origin/main` by the preamble) has no bootstrap: its
+one consumer is Step 6's verification pipe, so re-read it in that same call.
+
+Never carry a value forward by assuming a previous call's shell is still alive.
+
 **The two-path contract.**
 
 - **`WT` is the node's own worktree.** Every git operation on the node's branch
   targets it via `git -C "$WT" …`. Never `cd` into it, and never rely on the
   session's cwd being it — after the tick's `--cwd` change, the session's cwd is
-  the primary checkout. (`git -C <path>` on a worktrees-root path is
-  auto-approved by the sandbox's PreToolUse hook; a `cd … && …` compound is not
-  — see `.claude/rules/sandbox.md`.)
+  the primary checkout. (Do **not** assume these calls are pre-approved by
+  `.claude/hooks/approve-workflow-commands.sh`. Its `is_allowed_git_c` realpaths
+  the raw third whitespace token, so the quoted `"$WT"` form here never resolves;
+  and it derives its worktree roots as `$(dirname <git-common-dir>)/worktrees`
+  and `<git-common-dir>/.claude/worktrees`, neither of which is this repo's real
+  `<repo>/.claude/worktrees` under the standard layout. In practice `git -C
+  <path> …` reaches the auto-mode classifier and is approved there; a `cd … &&
+  …` compound is the shape that is prompt-prone — see `.claude/rules/sandbox.md`.)
 - **`PROJECT_ROOT` is the primary checkout** — this session's cwd, and the tree
   its own instructions came from. Every helper script Lane 3 invokes must be
   invoked **by absolute path under `$PROJECT_ROOT`**, never by a relative
@@ -784,8 +828,15 @@ test override.)
   leaves the worktree in place. Write the node-terminal marker **first** (see the
   terminal-marker rule below), then report and stop.
 
-**Freshness of `$PROJECT_ROOT`.** Assert the primary checkout is not behind
-`origin/main` before running any helper out of it:
+**Preconditions on `$PROJECT_ROOT` — fresh, clean, *and* carrying this node's
+file.** Every helper this lane runs is executed out of the primary checkout,
+several of them with `dangerouslyDisableSandbox: true`, and the Stop hook that
+reaps this session reads its node file from there too. The primary checkout is
+therefore an *execution source* and a *discriminator source* for this lane, not
+merely a source of reference text — **all three** properties must hold before any
+helper runs.
+
+*Fresh.* Assert the primary checkout is not behind `origin/main`:
 
 ```bash
 "$PROJECT_ROOT/.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh" "$PROJECT_ROOT"
@@ -800,14 +851,62 @@ touches the read-only `.claude/` carve-out, per `.claude/rules/sandbox.md`):
 git -C "$PROJECT_ROOT" merge --ff-only origin/main
 ```
 
-If it **still** fails, warn on stderr and **continue**. That is not an
-unprincipled fallback: Lane 3's authoritative reads are all `origin/main`-fetched
-already — the preamble's `git fetch` + `git archive origin/main` node read, and
-Step 3's live merge against a freshly fetched `origin/main` — so a primary
-checkout a few commits behind is a soft risk to helper-script *text* only, never
-to the conflict resolution itself. And a momentarily unmergeable primary checkout
-is `dispatch-select-tick`'s defect to report, not grounds to escalate this node to
-a human hold.
+If it **still** fails, take the loud stop below. Do **not** warn and continue: a
+checkout that cannot be freshened is one this session cannot vouch for, and it is
+about to run code out of it.
+
+*Clean.* `assert-worktree-fresh` compares commit counts only
+(`git rev-list --count HEAD..origin/main`); it never inspects the working tree. So
+a checkout exactly level with `origin/main` passes it while carrying uncommitted
+modifications to the very scripts this lane is about to execute. Check that
+separately:
+
+```bash
+git -C "$PROJECT_ROOT" status --porcelain
+```
+
+Any entry — modified **or** untracked — under `.claude/` or
+`packages/intentionsutil/scripts/` is a **loud stop**. That state is not
+hypothetical: it is precisely what `subagent-contamination-guard` exists to
+detect (Step 5 — stray subagent writes landing in the primary checkout), and that
+guard's repair line deliberately leaves the contaminating files **in place** until
+a human relocates them. One contaminated run would otherwise leave a payload that
+every subsequently tick-spawned Lane 3 session executes with the sandbox
+explicitly disabled — and this lane's resolver subagent is fed attacker-influenceable
+conflict hunks and commit messages as untrusted data. Entries elsewhere in the
+tree are not an execution hazard for this lane: note them on stderr and continue.
+
+*Carries this node's file.* `.claude/hooks/dispatch-stop.sh` decides whether this
+session is a graph-native node worker on **two** conditions, not one: the job
+name must equal the node id **and** `intentions/<name>.md` must exist under
+`_HOOK_ROOT` — the hook's own tree, i.e. the spawn cwd's project dir, which on
+this lane is `$PROJECT_ROOT` (`dispatch-stop.sh:62-63`). If the primary checkout
+does not carry this node's file, the Stop hook's discriminator 2 fails,
+`dispatch-self-close --node` is never invoked, and the session is neither reaped
+nor explicitly held — the exact worker-slot deadlock this lane exists to avoid.
+The freshness assertion above normally guarantees it, but assert it directly
+rather than inferring it:
+
+```bash
+test -f "$PROJECT_ROOT/intentions/$SOURCE_ID.md"
+```
+
+A non-zero exit is the same loud stop.
+
+*The loud stop* (all three failures share it). Write the node-terminal marker, report
+the reason on stderr, and take **no** further Lane 3 action — no merge, no
+subagent, no verification, no phase-completed marker:
+
+```bash
+"$PROJECT_ROOT/packages/intentionsutil/scripts/mark-node-terminal" "$SOURCE_ID" conflict-hold
+```
+
+Do **not** try to repair the primary checkout — no `stash`, `checkout --`,
+`clean`, or relocation. This session cannot distinguish a human's
+work-in-progress from a contaminating write, and both need a human. A
+momentarily unmergeable or dirty primary checkout is `dispatch-select-tick`'s and
+the contamination guard's defect to report; the node stays where it is and
+becomes selectable again once the checkout is repaired.
 
 **Never run `assert-worktree-fresh` against `$WT`.** On the exit-11 path the
 node's worktree is behind `origin/main` **by construction** — that staleness *is*
@@ -816,8 +915,10 @@ is the obvious wrong turn; do not take it.
 
 **Terminal-marker rule (applies to every exit from this lane).** Every way Lane 3
 can stop — Step 9's success, Step 10's escalation, and the loud-stop paths above
-(missing `$WT`, and the preamble's no-`ARGUMENTS`-from-the-primary-checkout guard
-where a `SOURCE_ID` is nevertheless known) — must first write:
+(missing `$WT`; a `$PROJECT_ROOT` that is unfreshenable, dirty, or missing
+`intentions/$SOURCE_ID.md`; and the preamble's
+no-`ARGUMENTS`-from-the-primary-checkout guard where a `SOURCE_ID` is
+nevertheless known) — must first write:
 
 ```bash
 "$PROJECT_ROOT/packages/intentionsutil/scripts/mark-node-terminal" "$SOURCE_ID" conflict-hold
@@ -953,6 +1054,14 @@ this session's own cwd is the primary checkout: without it the guard would deriv
 its "launching worktree" from cwd, find it equal to the primary checkout, and SKIP
 — going permanently vacuous exactly where the contamination hazard is highest.
 
+The guard validates `$WT` rather than trusting it: if the path is not the root of
+a registered worktree — e.g. a leftover plain directory at
+`.claude/worktrees/<id>` after a reaped or partially-removed worktree, which
+still passes the Step-0 `-d` existence check but resolves to the primary checkout
+— `baseline` **exits 2** instead of SKIPping. That is a loud stop on this lane,
+handled like a missing `$WT`: write the node-terminal marker first, then report
+and stop. Never treat it as a benign no-op.
+
 Launch an `opus` subagent (Agent tool, `model: opus`) under **the same contract
 Lane 1's Step 5 specifies** — same untrusted-data fence, same
 absolute-worktree-path instruction, same verdict contract. Do not invent a second
@@ -1061,6 +1170,17 @@ itself is still named by its `$PROJECT_ROOT` path:
 So: the script comes from `$PROJECT_ROOT` (the fresh tree), the blocks run in
 `$WT` (the merged node tree), and the session's cwd is unchanged either way.
 
+**This is a deliberate exception to the `cd … && …` prohibition**, and the only
+one in this lane. `.claude/rules/sandbox.md` avoids that shape because it breaks
+`allowedTools` prefix matching, so the call falls through to the auto-mode
+classifier — the same place the `git -C` calls above already land, and the
+classifier approves an unambiguous, non-destructive read-and-run against a
+worktree path. Accept the classifier round-trip here: `dispatch-run-verification`
+takes no working-directory argument, and the alternative (running the verify
+blocks in the primary checkout) would verify the **wrong tree**. Do not "fix"
+this by dropping the subshell and `cd`-ing the session — that is the cwd drift
+this whole lane is built to prevent.
+
 It extracts every fenced ` ```verify ` block sitting under an **H2**
 `## Verification` heading and runs each via `bash` in the current working
 directory. The heading level is load-bearing: the script enters the section only
@@ -1167,10 +1287,12 @@ Both write under `$CLAUDE_JOB_DIR` and are cwd-independent — only their
 evidence `dispatch-self-close` accepts before reaping this job
 (`.claude/skills/dispatch-propagate/scripts/dispatch-self-close`, invariant 2).
 This lane must declare it because `dispatch-graph-execute`'s provision-exit-11
-branch spawns the Lane 3 session with `--name "$SOURCE_ID"` — the session is a
-graph-native node worker **by NAME, wherever it is spawned** (its `--cwd` is the
-primary checkout, not the node's worktree, and that changes nothing here) — to
-`.claude/hooks/dispatch-stop.sh`. Nothing on this path calls `park-node` (the
+branch spawns the Lane 3 session with `--name "$SOURCE_ID"` and `--cwd` on the
+primary checkout, which together make it a graph-native node worker to
+`.claude/hooks/dispatch-stop.sh` — that hook's discriminator 2 needs the name to
+match **and** `intentions/$SOURCE_ID.md` to exist under its own tree, i.e. under
+the spawn cwd (`dispatch-stop.sh:62-63`); Step 1's precondition block asserts
+exactly that. Nothing on this path calls `park-node` (the
 one primitive that writes the marker for free), so with no explicit call the
 Stop hook HOLDS the job: it stays live in `claude agents --json`, and
 `graph-select-target`'s `worktree_has_live_session` check — name-keyed on the
