@@ -256,7 +256,6 @@ for spec in "$@"; do
       # expected to be replaced wholesale at that point, not extended. That
       # interrupt is simply a SECOND entry path into the same Lane 3 this
       # branch now kicks directly.
-      CONFLICT_WT="$PROJECT_ROOT/.claude/worktrees/$id"
       # The backstop ladder's sidecar counts CONSECUTIVE failures to LAUNCH the
       # lane — that is what its hold reason asserts verbatim below. A successful
       # kick therefore has to reset it, exactly as the exit-0 path resets it
@@ -264,18 +263,32 @@ for spec in "$@"; do
       # successful kicks accumulate into a hold whose stated reason ("could not
       # be launched for N consecutive ticks") is false.
       STRIKE_FILE="$PROJECT_ROOT/.claude/worktrees/$id.conflict-strikes"
-      # REAP CONTRACT: `--name "$id"` under the node's own worktree makes this
-      # session a graph-native NODE WORKER — dispatch-stop.sh's discriminator 2
-      # matches it (name == node id, `intentions/<id>.md` present) and hands it
-      # to `dispatch-self-close --node "$id"`, which reaps only on a
+      # REAP CONTRACT: `--name "$id"` alone makes this session a graph-native
+      # NODE WORKER — dispatch-stop.sh's discriminator 2 matches it (name ==
+      # node id, `intentions/<id>.md` present) and hands it to
+      # `dispatch-self-close --node "$id"`, which reaps only on a
       # `$CLAUDE_JOB_DIR/node-terminal` marker naming this node and otherwise
-      # HOLDS the job alive. A held job stays live in `claude agents --json`, and
+      # HOLDS the job alive. Both the name match and the `intentions/<id>.md`
+      # presence hold in the primary checkout (graph writes are direct-push to
+      # `main`), so this contract does not depend on which tree the session
+      # spawns in. A held job stays live in `claude agents --json`, and
       # graph-select-target's `worktree_has_live_session` check is name-keyed on
       # the node id — so a Lane 3 session that never declares its terminal
       # disposition would make the node permanently unselectable AND permanently
       # occupy a live-session slot. Lane 3 therefore declares it on BOTH terminal
       # paths (`mark-node-terminal "$SOURCE_ID" conflict-resolved` at its Step 9,
       # `... conflict-hold` at its Step 10; Step 7's park-node writes its own).
+      #
+      # The spawn cwd is PROJECT_ROOT, not the node's own worktree: that
+      # worktree is guaranteed stale on this path — its origin/main merge is
+      # what just failed and was aborted, so a session spawned there reads its
+      # own skill body and helpers out of a tree already known to be behind.
+      # This has twice landed a session running a stale skill body — once
+      # missing office_hours handling, once predating the terminal-declaration
+      # contract above, deadlocking a worker slot for over an hour. Lane 3
+      # instead drives the node worktree by absolute path (`git -C`) once it
+      # needs it.
+      #
       # Do not spawn this session under a name that is NOT the node id without
       # first teaching the selector's occupancy check about that name.
       #
@@ -283,7 +296,7 @@ for spec in "$@"; do
       # node's own phase skill, and this session runs /dispatch-conflict
       # instead — it inherits the session default.
       if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
-          --cwd "$CONFLICT_WT" --model "$ORCH_MODEL" \
+          --cwd "$PROJECT_ROOT" --model "$ORCH_MODEL" \
           "/dispatch-conflict $id" 1>&2; then
         rm -f "$STRIKE_FILE"
         reservation_clear "$id" || true
