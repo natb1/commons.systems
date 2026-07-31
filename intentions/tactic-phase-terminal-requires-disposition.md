@@ -87,7 +87,58 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-main: none of the 4 `needs-main` residue items on
+    tactic-phase-terminal-requires-disposition (design-2-grace-cap-defaults,
+    design-3-unmeasurable-keep, design-4-daemon-unknown,
+    design-5-best-effort-retry-forever, PR #3004) carry a `url_path` or name a
+    browser-observable outcome — they are all \"does dispatch-tick's new
+    terminal_without_disposition_sweep behave correctly over live production
+    tick runs\" judgment calls (grace/cap default tuning against real fleet
+    volume, rarity of the unmeasurable-keep fail-safe miss, whether a
+    daemon-UNKNOWN outage is noticed via the tick journal, whether a
+    structurally-failing park-node retries forever without accumulating). Per
+    qa-main's node-lane triage, a residue item with no url_path routes straight
+    to cannot-verify rather than through Claude-in-Chrome. This is a same-day
+    merge (PR #3004 merged 2026-07-31T20:15:44Z) so there has been no meaningful
+    live-tick observation window yet in any case."
+  since: 2026-07-31
+  recommendation: >-
+    The node's own "Manual and observe-in-production checks" section
+    (intentions/tactic-phase-terminal-requires-disposition.md, end of
+    Verification) is the checklist to run:
+
+
+    1. Live sweep, dry population — with dangerouslyDisableSandbox: true, run
+       `source .claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh; source .claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh; terminal_without_disposition_sweep`
+       and confirm one summary line, parked=0 on a healthy fleet, and that `terminal=` matches the direct `claude agents --json --all` count in the node body.
+    2. If any `~/.claude/jobs/<8-hex>/office-hours-reason` still exists for a
+    node unparked on origin/main, run the sweep and confirm
+    `office_hours.reason` on origin/main matches that file's text verbatim (not
+    the synthesized fallback) and the three marker files were removed.
+
+    3. After any park the sweep reports, `git fetch origin main && git show
+    origin/main:intentions/<id>.md | head -40` and confirm `office_hours` is
+    non-null (a park-node exit 0 alone isn't evidence per invariant I2).
+
+    4. Over a full day, confirm the tick journal carries the
+    `lib-frozen-session-park: terminal-disposition sweep complete (...)` line on
+    both cadences, `parked=` stays near 0 while the fleet is healthy, and a
+    growing `terminal=` with `parked=0, observing=0` would mean the phase gate
+    or already-parked gate is over-rejecting — investigate rather than raising
+    DISPATCH_TERMINAL_DISPOSITION_PARK_MAX.
+
+    5. Before reaping any terminal session found during this review, check its
+    node's phase/office_hours on origin/main first — reaping a done session
+    whose node never advanced is what restarts the exact churn loop this node
+    fixes.
+
+
+    Since PR #3004 merged same-day (2026-07-31T20:15:44Z), item 4 in particular
+    needs real elapsed tick history before it can be judged either way; if no
+    tick anomalies have shown up, that alone is grounds to clear-park and let
+    items 1-3 stand as satisfied from a spot-check.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
