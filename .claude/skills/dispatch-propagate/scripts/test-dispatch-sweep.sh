@@ -1895,4 +1895,78 @@ sweep_teardown
 
 # <<< END MOVED <<<
 
+# --- Test N8a: HELD_FOR_DEBUG_COUNT logs the terminal-session count ----------
+# claude_agents_count_held_for_debug (tactic-frozen-session-debug-count Unit 1)
+# counts worker-keyspace sessions (name matches ^[0-9]+-/^tactic-/^strategy-)
+# whose status is neither busy nor idle. dispatch-sweep now logs that count
+# every run. Fake payload: one tactic-* session with a terminal status
+# ("done"), one busy worker (excluded), one dispatch-* router in a terminal
+# status (excluded — not in the worker keyspace).
+echo "Test: N8a HELD_FOR_DEBUG_COUNT logs nonzero terminal-session count"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/61-held-for-debug"
+sweep_register_wt "$WT_PATH" "61-held-for-debug"
+echo "OPEN" > "$STUB_DIR/issue-state-61.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+fake="$TMPDIR_TEST/fake/claude"
+cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+# Ignore all args; always return the fixed payload regardless of --json/--all/--cwd.
+cat <<'JSON'
+[
+  {"sessionId":"s1","pid":1,"status":"done","name":"tactic-frozen-session-debug-count","cwd":""},
+  {"sessionId":"s2","pid":2,"status":"busy","name":"62-other-worker","cwd":""},
+  {"sessionId":"s3","pid":3,"status":"error","name":"dispatch-sweep","cwd":""}
+]
+JSON
+FAKE
+chmod +x "$fake"
+export CLAUDE_AGENTS_CMD="$fake"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N8a sweep exits 0" "0" "$rc"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "HELD_FOR_DEBUG_COUNT: n=1" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N8a HELD_FOR_DEBUG_COUNT logs n=1 (only the tactic-* done session counted)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N8a HELD_FOR_DEBUG_COUNT logs n=1 (only the tactic-* done session counted)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N8b: HELD_FOR_DEBUG_COUNT logs UNKNOWN when daemon is unqueryable ---
+echo "Test: N8b HELD_FOR_DEBUG_COUNT logs UNKNOWN when the daemon is unqueryable"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/63-held-unknown"
+sweep_register_wt "$WT_PATH" "63-held-unknown"
+echo "OPEN" > "$STUB_DIR/issue-state-63.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+fake="$TMPDIR_TEST/fake/claude"
+cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+# Simulate a down/unqueryable daemon: nonzero exit, no stdout.
+exit 1
+FAKE
+chmod +x "$fake"
+export CLAUDE_AGENTS_CMD="$fake"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N8b sweep exits 0" "0" "$rc"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "HELD_FOR_DEBUG_COUNT: n=UNKNOWN (daemon unqueryable)" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N8b HELD_FOR_DEBUG_COUNT logs UNKNOWN, never a literal 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N8b HELD_FOR_DEBUG_COUNT logs UNKNOWN, never a literal 0"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
 report_results

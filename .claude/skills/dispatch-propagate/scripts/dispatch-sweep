@@ -522,4 +522,21 @@ if marker_dir=$(reap_marker_dir "$PROJECT_ROOT") && [[ -d "$marker_dir" ]]; then
   shopt -u nullglob
 fi
 
+# ---- Held-for-debug session count (hygiene/observability metric) ------------
+# Log how many worker-keyspace sessions are sitting terminal (not busy/idle)
+# under the narrowed auto-close default (tactic-frozen-session-debug-count).
+# This is not a control-flow signal — nothing downstream acts on it. UNKNOWN
+# is logged distinctly from 0 because "daemon unqueryable" and "zero held
+# sessions" are different facts and must not be conflated.
+if held_out=$(claude_agents_count_held_for_debug); then
+  held_rc=0
+else
+  held_rc=$?
+fi
+if [[ "$held_rc" -eq 0 ]]; then
+  log "HELD_FOR_DEBUG_COUNT: n=$held_out"
+else
+  log "HELD_FOR_DEBUG_COUNT: n=UNKNOWN (daemon unqueryable)"
+fi
+
 exit 0
