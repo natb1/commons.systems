@@ -70,7 +70,57 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "(/align-tactics tactic-target round, 2026-07-31.) Drift review surfaced
+    two MATERIAL scope-ownership premises this tactic's own recorded \"Direction
+    for planning\" section collides with, both requiring author ratification
+    before a plan is authored. (1) GUARD OWNERSHIP — this node's own
+    Direction-for-planning section demands \"a mechanical guard that every phase
+    skill's node-lane terminal path declares a disposition, detected
+    mechanically rather than left to each skill's good behavior.\" That
+    identical guard is already homed in tactic-qa-fix-node-terminal-declaration
+    Unit 2, which carries a completed 2026-07-30 node-lane coverage audit
+    (intentions/tactic-qa-fix-node-terminal-declaration.md:118-160, including a
+    second undeclaring lane at
+    .claude/skills/dispatch-conflict/SKILL.md:530-664) and a recorded fallback
+    (\"shrinks to a documented audit\") if full mechanical coverage proves
+    infeasible. Planning this tactic now either authors a competing second
+    implementation of that guard or silently narrows this tactic's own recorded
+    scope. (2) FUSE OWNERSHIP AND ORDERING — the exact churn scenario this
+    tactic describes (a pass ends with the node at its entry phase, nothing
+    recorded, then the node is released and re-selected) is precisely the
+    residual case strategy-graph-native-dispatch's one-strike fuse breaker
+    (condition 9) is specified to cover, homed in tactic-router-failure-fuses —
+    whose own body records it should be planned only AFTER
+    tactic-claim-containment-durable-anchor and
+    tactic-terminal-declaration-verified-against-node close two containment
+    leaks (intentions/tactic-router-failure-fuses.md:33-39). All three
+    (tactic-router-failure-fuses, tactic-claim-containment-durable-anchor,
+    tactic-terminal-declaration-verified-against-node) are still status: raw /
+    phase: null on origin/main, and this tactic's own 2026-07-31 Wave-A boost of
+    50 would run it ahead of that recorded ordering. Recommend: resolve in one
+    office-hours sitting by ratifying a scope split — narrow this tactic to ONLY
+    its genuinely-new contribution, Shape 2 (make the node-lane escalation path
+    in /qa-fix, /qa-main, /review-fix, and /fix-checks call
+    packages/intentionsutil/scripts/park-node IN-SESSION, keeping the
+    $CLAUDE_JOB_DIR marker as a Stop-hook fallback only, mirroring
+    dispatch-mark-deviation's #2541 belt-and-suspenders precedent and
+    .claude/skills/dispatch-conflict/SKILL.md:948-965's call shape, applied to
+    the four marker-only call sites at .claude/skills/qa-fix/SKILL.md:189-195,
+    .claude/skills/qa-main/SKILL.md:189-204,
+    .claude/skills/review-fix/SKILL.md:154-156, and
+    .claude/skills/fix-checks/SKILL.md:104-108,217-218,320-334) — leaving the
+    mechanical coverage guard with tactic-qa-fix-node-terminal-declaration Unit
+    2 and the release-and-reselect fuse with tactic-router-failure-fuses behind
+    its recorded ordering. If the author instead wants this tactic to absorb the
+    guard and/or the fuse, say so and demote or prune the overlapping nodes in
+    the same graph-commit, and decide in the same sitting whether this tactic's
+    Wave-A boost=50 survives that ordering. Shape 2's own fix (the in-session
+    park-node call) is correct regardless of the Stop-hook root-cause question —
+    see this round's separately-landed strategy clarification on that point."
+  since: 2026-07-31
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
