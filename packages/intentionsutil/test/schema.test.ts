@@ -1606,6 +1606,42 @@ describe("validateGraph", () => {
     );
   });
 
+  it("Rule 18: strategy-main-health's own rationale narrating the ACK does not exempt it", () => {
+    // The landed node's rationale describes this very guard, quoting the token.
+    // Descriptive prose must not self-exempt the node from the must-hold half.
+    const nodes = mainHealthNodes(
+      {},
+      {
+        mainHealth: {
+          rationale:
+            "2026-07-31: no other node may author an explicit attributes.tier: 3, and this node must keep it, unless the commit carries the ACK: main-health-dominance override.",
+        },
+      },
+    );
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-main-health: must author attributes\.tier: 3/,
+    );
+  });
+
+  it("Rule 18: strategy-main-health opts out of the must-hold half via attention.rationale", () => {
+    // With no tier mark its ownTier is the implicit default 1, so rule 20
+    // requires attention.tier: 1 here.
+    const nodes = mainHealthNodes(
+      {},
+      {
+        mainHealth: {
+          attention: {
+            boost: 5,
+            override: null,
+            rationale: "Deliberately demoted. ACK: main-health-dominance",
+            tier: 1,
+          },
+        },
+      },
+    );
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
   it("Rule 18: is inert when strategy-main-health is absent from the node set", () => {
     const nodes = mainHealthNodes({ attributes: { tier: 2 } }, { mainHealth: null });
     expect(() => validateGraph(nodes)).not.toThrow();

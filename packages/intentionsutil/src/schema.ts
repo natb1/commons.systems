@@ -980,10 +980,19 @@ function checkClarificationDates(node: IntentionNode, problems: string[]): void 
  *      numeric guard's "or reduce it" half. When it is absent (partial
  *      fixtures) this half is inert.
  *
- * An author may opt out of either half with the literal substring
- * "ACK: main-health-dominance" in the node's `rationale`, or in
- * `attention.rationale` when `attention` is non-null (a node can be
- * tier-lifted with `attention: null`, so `rationale` must be accepted too).
+ * The opt-out channel for the literal substring "ACK: main-health-dominance" is
+ * deliberately ASYMMETRIC between the two halves:
+ *
+ *  - Half (a) honors it in the authoring node's `rationale` OR its
+ *    `attention.rationale`. A node can be tier-lifted with `attention: null`,
+ *    so `rationale` must be accepted too.
+ *  - Half (b) honors it ONLY in `strategy-main-health`'s own
+ *    `attention.rationale`. Its `rationale` is where the node narrates this
+ *    very guard, and prose describing the mechanism (which necessarily quotes
+ *    the token) must not exempt the node from it — that self-exemption let the
+ *    node be silently demoted with no validator signal. Requiring an
+ *    `attention` block makes a genuine opt-out a deliberate structural act
+ *    rather than an accident of wording.
  */
 function checkTierDominance(
   node: IntentionNode,
@@ -991,19 +1000,22 @@ function checkTierDominance(
   problems: string[],
 ): void {
   const ACK = "ACK: main-health-dominance";
-  const acked =
-    (node.rationale !== null && node.rationale.includes(ACK)) ||
-    (node.attention !== null && node.attention.rationale.includes(ACK));
-  if (acked) return;
+  const ackedInAttention =
+    node.attention !== null && node.attention.rationale.includes(ACK);
   if (node.id === "strategy-main-health") {
-    // (b) main-health must hold tier 3 itself.
+    // (b) main-health must hold tier 3 itself. Only `attention.rationale`
+    // overrides — see the asymmetry note above.
+    if (ackedInAttention) return;
     if (mainHealthPresent && node.attributes.tier !== 3) {
       problems.push(
-        `${node.id}: must author attributes.tier: 3 — it owns the top tier so red-main fix work outranks everything else; restore attributes.tier: 3 or add "${ACK}" to its rationale to override`,
+        `${node.id}: must author attributes.tier: 3 — it owns the top tier so red-main fix work outranks everything else; restore attributes.tier: 3 or add "${ACK}" to its attention.rationale to override (its own rationale does not count — that field narrates this guard)`,
       );
     }
     return;
   }
+  const acked =
+    ackedInAttention || (node.rationale !== null && node.rationale.includes(ACK));
+  if (acked) return;
   // (a) no other node may author an explicit tier 3.
   if (node.attributes.tier === 3) {
     problems.push(
@@ -1151,10 +1163,13 @@ function checkBlockedByCycles(
  *      `attributes.tier` field, never `ownTier`'s combined value or the
  *      effective inherited tier: INHERITING tier 3 down `parent`/`serves` is
  *      exactly how auto-created red-main fix tactics get their urgency, so
- *      only authorship is guarded. A node may opt out of either half by
- *      placing the literal substring `ACK: main-health-dominance` in its
- *      `rationale`, or in its `attention.rationale` when `attention` is
- *      non-null.
+ *      only authorship is guarded. The opt-out substring
+ *      `ACK: main-health-dominance` is honored asymmetrically: an authoring
+ *      node may place it in its `rationale` OR its `attention.rationale`
+ *      (it can be tier-lifted with `attention: null`), but demoting
+ *      `strategy-main-health` requires the token in that node's own
+ *      `attention.rationale` alone — its `rationale` narrates this very guard,
+ *      and prose describing the mechanism must not exempt the node from it.
  *  19. Tier marks are well-shaped: `attributes.bug_fix` and
  *      `attributes.security`, when present, are booleans; `attributes.tier`,
  *      when present, is the number 2 or 3. An explicit `attributes.tier: 1` is

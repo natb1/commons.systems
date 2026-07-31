@@ -20,8 +20,12 @@ rationale: "Red main halts the autonomous dispatch chain — no new work is safe
   downward parent/serves flow, and dominance is structural (this node is simply
   in the top tier) rather than numeric (highest boost). The write-path guard
   (validate-graph rule 18) is retargeted accordingly: no other node may author
-  an explicit attributes.tier: 3, and this node must keep it, unless the commit
-  carries the ACK: main-health-dominance override. Earlier clarifications on
+  an explicit attributes.tier: 3 — an author may override that half by placing
+  the ACK token in the authoring node's rationale or its attention.rationale —
+  and this node must keep tier 3, an override that requires the ACK token in
+  THIS node's own attention.rationale (its rationale, the field you are reading,
+  narrates the guard, so prose here must not exempt the node from it).
+  Earlier clarifications on
   this node narrate 'boost 100'; they are dated historical records, superseded
   in effect by this note, not rewritten."
 reading: "unreliable — signal under repair (hand-set 2026-07-23; the next
