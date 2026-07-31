@@ -152,8 +152,8 @@ On the node lane every step runs unchanged except three re-keyed seams:
 - **Deferred findings (Step 5)** — deferred/security follow-ups become **draft
   tactic nodes**, not gh issues.
 - **Escalation** — write the reason to `$CLAUDE_JOB_DIR/office-hours-reason`
-  (and best-next-steps to `.../office-hours-recommendation`); the Stop hook parks
-  via `park-node`. Also write the already-bound `PR_NUM` to
+  (and best-next-steps to `.../office-hours-recommendation`); `dispatch-tick`'s
+  `terminal_without_disposition_sweep` parks via `park-node`. Also write the already-bound `PR_NUM` to
   `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic tempfile+`mv` write) so the
   park records `execution.pr` (tactic-office-hours-pr-custody).
 

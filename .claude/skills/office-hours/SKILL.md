@@ -19,8 +19,12 @@ two ways:
    completion but surfaced a deviation from the approved plan or the acceptance
    criteria; or `/plan-issue` hit genuine ambiguity it could not resolve and
    called `dispatch-mark-deviation`. In both cases the phase skill skipped its
-   `phase-completed` marker and wrote `office-hours-reason`; the Stop hook
-   (`dispatch-stop.sh`) applied `dispatch:office-hours` to the issue.
+   `phase-completed` marker and wrote `office-hours-reason`. On this legacy issue
+   lane the label is applied IN-SESSION by `dispatch-mark-deviation` itself, via
+   its `dispatch-apply-office-hours <N>` call. On the graph-node lane there is no
+   label at all: a session that ends owing a disposition is parked to the node's
+   `office_hours` field by `dispatch-tick`'s `terminal_without_disposition_sweep`,
+   which is gh-free and skips `<N>-slug` issue workers entirely.
 
 This skill is a **review-and-recommend dispatcher**. It runs two ways: a human
 types `/office-hours` inside an existing Claude session, or the `office-hours`

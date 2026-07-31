@@ -906,6 +906,77 @@ assert_eq "lib-absent: select-tick still ran (tick was not aborted)" "1" \
   "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
 tick_teardown
 
+# --- tactic-phase-terminal-requires-disposition: terminal-disposition sweep --
+# wiring ------------------------------------------------------------------------
+# terminal_without_disposition_sweep (lib-frozen-session-park.sh, Unit 2) is
+# wired into dispatch-tick on the same two cadences as frozen_session_sweep
+# (paused early-exit, normal pre-selection). claude_agents_list_terminal_workers
+# queries CLAUDE_AGENTS_CMD DIRECTLY (bypassing the tick's ACTIVE snapshot, per
+# its own header note), so a fake `claude` that returns `[]` gives a definite
+# "no terminal workers" and the sweep completes with its own greppable summary
+# line — distinct from frozen_session_sweep's "sweep complete" line
+# ("terminal-disposition sweep complete") — sufficient to assert invocation
+# without needing a real repo/park-node fixture.
+tick_fake_claude_empty_terminal() {
+  cat > "$TMPDIR_TEST/fake-claude-terminal" <<'FAKE'
+#!/usr/bin/env bash
+printf '[]'
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-claude-terminal"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude-terminal"
+}
+
+echo "Test: dispatch-tick paused branch invokes terminal_without_disposition_sweep"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+tick_fake_claude_empty_terminal
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-terminal-disposition: exit 0" "0" "$rc"
+assert_eq "paused-terminal-disposition: terminal_without_disposition_sweep ran (summary line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'terminal-disposition sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick normal path invokes terminal_without_disposition_sweep"
+tick_setup
+tick_fake_claude_empty_terminal
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "normal-terminal-disposition: exit 0" "0" "$rc"
+assert_eq "normal-terminal-disposition: terminal_without_disposition_sweep ran (summary line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'terminal-disposition sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+# --- lib-frozen-session-park.sh fails to load → loud diagnostic, tick still ---
+# completes. Replace the copied lib with an unsourceable file (invalid bash
+# syntax) so BOTH `declare -f frozen_session_sweep` and
+# `declare -f terminal_without_disposition_sweep` come back false on both call
+# sites, and assert the terminal-disposition-specific loud line is printed
+# alongside the tick still completing.
+echo "Test: dispatch-tick lib-frozen-session-park.sh load failure → terminal-disposition loud diagnostic, tick still completes (paused)"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-frozen-session-park.sh"
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "terminal-disposition-load-fail-paused: tick still exits 0" "0" "$rc"
+assert_eq "terminal-disposition-load-fail-paused: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'dispatch-tick: lib-frozen-session-park.sh failed to load; terminal-disposition sweep NOT run this tick' && echo 1 || echo 0)"
+assert_eq "terminal-disposition-load-fail-paused: no sweep-complete line (sweep never ran)" "0" \
+  "$(printf '%s' "$err" | grep -cF 'terminal-disposition sweep complete')"
+tick_teardown
+
+echo "Test: dispatch-tick lib-frozen-session-park.sh load failure → terminal-disposition loud diagnostic, tick still completes (normal path)"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-frozen-session-park.sh"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "terminal-disposition-load-fail-normal: tick still exits 0" "0" "$rc"
+assert_eq "terminal-disposition-load-fail-normal: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'dispatch-tick: lib-frozen-session-park.sh failed to load; terminal-disposition sweep NOT run this tick' && echo 1 || echo 0)"
+tick_teardown
+
 # <<< END MOVED <<<
 
 report_results
