@@ -1009,9 +1009,9 @@ fails-open-to-dead trap this tactic records.
 5. Confirm UNKNOWN never reads as healthy — the load-bearing half of the alarm
    ruling. Run `dispatch-fleet-watch` by hand with `DISPATCH_DECISION_LOG_FILE`
    pointed at a nonexistent path: the output must name the unreadable input,
-   the exit code must be 2, and a `tactic-fleet-alarm-watch-unknown` node must
-   land. If it prints `ok`, the unit is broken in exactly the way this tactic
-   exists to fix.
+   the exit code must be 2, and a `tactic-fleet-alarm-<kind>` node (kind
+   `watch-unknown`) must land. If it prints `ok`, the unit is broken in
+   exactly the way this tactic exists to fix.
 6. Confirm pause behavior against the live mechanism. With
    `~/.local/share/commons-dispatch/paused` present and a deliberately stale
    decision log, confirm tick-staleness stays quiet while daemon-liveness still
