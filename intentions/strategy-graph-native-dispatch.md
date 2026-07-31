@@ -3100,6 +3100,67 @@ clarifications:
       only — it gates no individual member's plan — but as currently scoped no
       member will plan the family-scope predicate reconciliation, so it needs a
       home before the family is considered closed."
+  - question: In a tactic-mode (per-node) /align-tactics round, does the drift
+      phase's eligibility sanity check apply the strategy-round decomposability
+      gates (no non-draft child already on its signal path, rounds.count < 2),
+      or only the gates that bind at the per-node level?
+    answer: "(Recorded 2026-07-31 /align-tactics per-node round on
+      tactic-align-tactics-target-node-context-dropped.) In a tactic-mode
+      (per-node) /align-tactics round the drift phase's ELIGIBILITY SANITY CHECK
+      is answered against the per-node disposition, not against strategy-round
+      decomposability. Two of its clauses — 'no non-draft child tactic already
+      on its signal path' and 'rounds.count < 2' — are strategy-round concepts
+      that references/tactic-target.md:16-24 explicitly excludes from the
+      per-node flow ('no strategy decomposition, no draft sweep, and no rounds
+      bump here'), and align-tactics.js skips the decompose phase outright under
+      `mode !== 'tactic'`. Answering decomposable=false on those clauses in
+      tactic mode reproduces the defect recorded on
+      tactic-align-tactics-tactic-mode-drift-gate (PR 2982, phase review):
+      driftProceed=false zeroes planTactics for BOTH modes, so the run returns
+      body_markdown:null and disposition 'escalated' with drift.parks empty — no
+      park, no office_hours reason, an unrecoverable dead end. This round
+      therefore returned proceed=true on the strength of the applicable gates
+      only (office_hours null, reading null, last_aligned null, rounds.count 0),
+      which hold independently. Until PR 2982's mode-aware
+      computePhaseGates(mode, drift) split lands, this reading is the doctrine a
+      tactic-mode drift agent applies."
+  - question: "Do any tactics serving this strategy carry `status: raw` together
+      with a non-null `phase`, and if so what does that imply for
+      align-tactics-census.ts's open-machinery-defect count?"
+    answer: "(Observed 2026-07-31 /align-tactics per-node round.) Three tactic nodes
+      serving this strategy carry `status: raw` together with a non-null `phase`
+      — tactic-dispatch-stop-backstop-comment (raw/implement),
+      tactic-graph-commit-staleness-silent-revert (raw/done), and
+      tactic-review-sitting-fingerprint-custody-2026-07-25 (raw/done). Work
+      proceeded on these without the node ever being promoted out of draft
+      status, so they are simultaneously counted as unconsumed drafts by a
+      corpus scan and as in-flight/complete by a phase scan. This matters to
+      success_signal.sensor: align-tactics-census.ts enumerates 'the open
+      machinery-defect population serving this strategy', and a status/phase
+      inconsistency of this shape double-counts or under-counts that population
+      depending on which field the census keys on. Immaterial to any single
+      tactic's plan; recorded as an integrity observation about the census
+      instrument, not a blocker."
+  - question: Do multiple open tactics serving this strategy currently make
+      overlapping edits to the same file (.claude/workflows/align-tactics.js),
+      and if so does landing them safely require an author decision or just
+      edit-region separation?
+    answer: "(Observed 2026-07-31 /align-tactics per-node round.) Three open tactics
+      now modify overlapping regions of the single file
+      .claude/workflows/align-tactics.js:
+      tactic-align-tactics-tactic-mode-drift-gate (phase review, PR 2982)
+      rewrites the folded `driftProceed` plan gate into a mode-aware
+      computePhaseGates(mode, drift) and threads `mode` into buildDriftPrompt;
+      tactic-align-tactics-per-node-clarifications (status raw) widens
+      DRIFT_SCHEMA.clarifications_to_add from {answer} to {question, answer} and
+      edits buildDriftPrompt's instruction text; and
+      tactic-align-tactics-target-node-context-dropped (this round's target)
+      extends the tactic-mode planTactics literal and buildPlanPrompt. The three
+      edits are separable by region (plan gate / drift schema+prompt / plan
+      prompt+planTactics) but land in one file, so ordering is a merge-conflict
+      concern rather than a design question — expressible as blocked_by edges
+      among the tactics, requiring no author decision. Recorded so a later round
+      does not re-derive the overlap from scratch."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
