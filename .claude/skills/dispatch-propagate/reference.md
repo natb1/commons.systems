@@ -409,6 +409,45 @@ idling. The controller is intentionally more conservative early-week than a
 flat-cap design — it throttles whenever actual usage runs ahead of the curve,
 even when the weekly total is far below the cap.
 
+### ACTIVE vs REGISTERED session views
+
+`lib-claude-agents.sh` exposes two views of the daemon's session list, and
+consumers deliberately split across them:
+
+| view | query | question | consumers |
+|---|---|---|---|
+| REGISTERED | `claude agents --json --all` | "Is this node/worktree spoken for?" Registration IS the claim; release is `claude rm`. | `worktree_has_live_session` (node concurrency gate, worktree reuse, worktree removal) |
+| ACTIVE | `claude agents --json` | "Is a process running right now?" | pace/concurrency budget, spawn-registration race, dead-router reservation reclaim |
+
+`worktree_has_live_session` reads REGISTERED: a session that has stopped
+(gone `done`) but has not been `claude rm`'d still blocks its node's
+concurrent execution. The only release mechanism is `claude rm <id>` — an
+explicit human act. There is no timeout, and one must not be added — a
+timeout would reintroduce the silent expiry this split removes (a `done`
+session used to vanish from the ACTIVE listing and its node would go
+silently re-selectable).
+
+Permanent blocking is tolerable only because it's paired with visibility.
+On a REGISTERED match with state `done`, `worktree_has_live_session` emits a
+diagnostic to stderr naming the worktree path, the session id, and
+`claude rm <sid>` as the release act; a separate in-flight tactic,
+`tactic-frozen-session-debug-count`, adds an aggregate count of held
+sessions. Blocking + visibility + explicit human release together are the
+design — any one piece alone is incomplete.
+
+The same predicate gates worktree removal in `dispatch-sweep` and in
+`.claude/hooks/worktree-remove.sh`, so the REGISTERED flip also keeps a held
+worktree from being swept while its done-but-unreviewed session is still
+registered — not just blocking re-selection, but keeping the worktree around
+as evidence for a human to inspect.
+
+`claude rm` conventionally deletes the session registration and its
+worktree together, but `worktree_has_live_session` does not depend on that
+coupling: it's keyed on the worktree basename via the registry row's `name`
+field, not on whether the worktree directory still exists. Removing just the
+session registration is what unblocks the node; if the worktree was also
+removed, `dispatch-resolve-worktree` re-provisions it on the next selection.
+
 Weekly pace decides *whether* to spend (binary gate); the 5h ramp decides
 *how many*.
 
