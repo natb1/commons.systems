@@ -79,8 +79,8 @@ execution:
   strategy_fingerprint: null
   fix:
     since: 2026-07-31
-    attempt: 1
-    pushed_sha: null
+    attempt: 2
+    pushed_sha: 27b80fad84c5c66234ee90a5d99c021f45c16dcb
   completion: null
 validates: []
 blocked_by: []
