@@ -8,12 +8,22 @@
 #   1. Resolve the native location: <project-root>/.claude/worktrees/<node-id>,
 #      where the project root is the worktree with `main` checked out. No
 #      graph-native path assumes the legacy `.bare` common-dir layout.
-#   2. `git worktree add` from origin/main (reusing an existing worktree, a
-#      remote branch, or a local branch named <node-id> when present).
-#   3. Merge origin/main into the branch — the merged-tree guarantee every
-#      phase runs under. A conflict is NOT resolved here (exit 11; the caller
-#      routes it to /dispatch-conflict's Lane 3, which resolves it on the
-#      node's own branch — see dispatch-graph-execute's case 11).
+#   2. `git worktree prune` (clear orphan registrations whose checkout is
+#      already gone, which would otherwise make `git worktree add` refuse a
+#      path git still believes is taken), then `git worktree add` from
+#      origin/main (reusing an existing worktree, a remote branch, or a local
+#      branch named <node-id> when present).
+#   3. Assert the worktree is USABLE before touching it — the precondition
+#      guard: an in-progress rebase/merge/cherry-pick is auto-repaired
+#      (aborted) and re-checked; a detached HEAD or a dirty tracked tree is
+#      mechanical residue from a dead session and exits 14 with the tree left
+#      exactly as found. Then align the local branch to its OWN pushed tip
+#      (merge origin/<node-id> when the remote branch exists) so a stale local
+#      ref cannot shadow it, and merge origin/main into the branch — the
+#      merged-tree guarantee every phase runs under. A conflict is NOT resolved
+#      here (exit 11; the caller routes it to /dispatch-conflict's Lane 3,
+#      which resolves it on the node's own branch — see
+#      dispatch-graph-execute's case 11).
 #   4. CI-ready gate where a PR exists (dispatch-ci-ready, branch form): a
 #      draft PR whose checks have not concluded is not actionable (exit 10).
 #   5. direnv warm-up so the agent's non-interactive subshells have node on
@@ -39,6 +49,15 @@
 #       current state. (tactic-worker-start-revalidation)
 #   13  scope-stale: the tactic's scope changed after the previous phase ran.
 #       The caller demotes the node to `implement` and reports `scope-stale`.
+#   14  worktree unusable — mechanical residue from a dead session (a dirty
+#       tracked tree, or a detached HEAD / in-progress operation that could not
+#       be auto-repaired). This is NOT a content conflict: both branches merge
+#       clean the instant the residue is cleared. The tree is left EXACTLY as
+#       found (nothing is auto-discarded — the uncommitted edit may be the sole
+#       copy of unlanded work); stderr carries the condition plus the raw
+#       `git status --porcelain --untracked-files=no` and `git diff --stat`
+#       evidence. The caller routes it to a tracked hold, not to the conflict
+#       lane.
 #   2   usage or mechanical error (bad node id, unresolvable project root,
 #       failed add/fetch). The caller parks the node via the office_hours
 #       graph write (park-node) — never an office-hours label.
@@ -105,10 +124,29 @@ fi
 ORIGIN_SHA=$(git -C "$PROJECT_ROOT" rev-parse origin/main)
 printf '%s %s\n' "$GATE_FP" "$ORIGIN_SHA" >"$STAMP_PATH"
 
+# Does this node have a pushed branch? Probe (and fetch) ONCE, before the add
+# block: the pushed-tip alignment below needs origin/<node-id> on the REUSED
+# worktree path too, not just the fresh one. A fetch failure is a broken
+# environment, not a state to fall through silently (.claude/rules/code-style.md).
+REMOTE_BRANCH=0
+if git -C "$PROJECT_ROOT" ls-remote --heads --exit-code origin "$NODE_ID" >/dev/null 2>&1; then
+  REMOTE_BRANCH=1
+  if ! git -C "$PROJECT_ROOT" fetch origin "$NODE_ID" 1>&2; then
+    echo "provision-node-worktree: git fetch origin $NODE_ID failed" >&2
+    exit 2
+  fi
+fi
+
+# Clear orphan registrations: a `.git/worktrees/<name>` entry whose checkout
+# directory is gone survives forever, and git refuses to re-register a path it
+# still believes is taken. Cheap, idempotent, and it only touches registrations
+# whose checkout is already gone — safe to run unconditionally against a shared
+# repo with a live fleet.
+git -C "$PROJECT_ROOT" worktree prune 1>&2 || true
+
 if [[ ! -d "$WT" ]]; then
-  if git -C "$PROJECT_ROOT" ls-remote --heads --exit-code origin "$NODE_ID" >/dev/null 2>&1; then
-    git -C "$PROJECT_ROOT" fetch origin "$NODE_ID" 1>&2 \
-      && git -C "$PROJECT_ROOT" worktree add "$WT" "$NODE_ID" 1>&2
+  if [[ "$REMOTE_BRANCH" -eq 1 ]]; then
+    git -C "$PROJECT_ROOT" worktree add "$WT" "$NODE_ID" 1>&2
   elif git -C "$PROJECT_ROOT" rev-parse --verify --quiet "$NODE_ID" >/dev/null 2>&1; then
     git -C "$PROJECT_ROOT" worktree add "$WT" "$NODE_ID" 1>&2
   else
@@ -120,11 +158,128 @@ if [[ ! -d "$WT" ]]; then
   fi
 fi
 
+# --- Precondition guard: is this worktree USABLE? ---------------------------
+# Runs on BOTH the fresh and the reused path, before anything else touches $WT.
+# Without it, a dirty tree or a stranded rebase makes the origin/main merge
+# below fail and its `merge --abort` fail too, and the residue is reported as a
+# content conflict it is not. Assert the precondition; do not infer it from a
+# merge exit code.
+
+# Resolve a git-path (rebase-merge, MERGE_HEAD, …) as an ABSOLUTE path.
+# Modelled on graph-commit's rebase_in_progress() (packages/intentionsutil/
+# scripts/graph-commit:634-639). One caveat that helper does not face: it runs
+# with cwd inside the repo, whereas `git -C "$WT" rev-parse --git-path X` prints
+# a path relative to $WT — absolute for a linked worktree, but relative for a
+# plain repo, where a bare `[[ -d ]]` from another cwd would silently miss it.
+wt_git_path() {   # $1 = git-path name; prints an absolute path
+  local p
+  p=$(git -C "$WT" rev-parse --git-path "$1") || return 1
+  [[ "$p" == /* ]] || p="$WT/$p"
+  printf '%s\n' "$p"
+}
+
+# Exit 14: mechanical residue, NOT a content conflict. Leave the tree exactly
+# as found and hand the drain the evidence it needs without re-entering the
+# worktree.  $1 = condition slug.
+unusable_worktree() {
+  echo "provision-node-worktree: worktree unusable for $NODE_ID ($1); not a content conflict" >&2
+  git -C "$WT" status --porcelain --untracked-files=no >&2 || true
+  git -C "$WT" diff --stat >&2 || true
+  exit 14
+}
+
+check_worktree_usable() {
+  local rebase_merge rebase_apply merge_head cherry_head
+  rebase_merge=$(wt_git_path rebase-merge) || return 1
+  rebase_apply=$(wt_git_path rebase-apply) || return 1
+  merge_head=$(wt_git_path MERGE_HEAD) || return 1
+  cherry_head=$(wt_git_path CHERRY_PICK_HEAD) || return 1
+
+  # (a) An operation in progress. Auto-repair: aborting restores the
+  # pre-operation branch tip, reattaches HEAD, and is non-destructive with
+  # respect to committed work; the residue is by definition unattended (the
+  # session that created it is gone). Return 2 = "repaired, re-check".
+  if [[ -d "$rebase_merge" || -d "$rebase_apply" ]]; then
+    if git -C "$WT" rebase --abort 1>&2; then
+      echo "provision-node-worktree: auto-repaired an abandoned rebase in $WT" >&2
+      return 2
+    fi
+    unusable_worktree operation-in-progress
+  fi
+  if [[ -f "$merge_head" ]]; then
+    if git -C "$WT" merge --abort 1>&2; then
+      echo "provision-node-worktree: auto-repaired an abandoned merge in $WT" >&2
+      return 2
+    fi
+    unusable_worktree operation-in-progress
+  fi
+  if [[ -f "$cherry_head" ]]; then
+    if git -C "$WT" cherry-pick --abort 1>&2; then
+      echo "provision-node-worktree: auto-repaired an abandoned cherry-pick in $WT" >&2
+      return 2
+    fi
+    unusable_worktree operation-in-progress
+  fi
+
+  # (b) Detached HEAD with no operation in progress: do NOT repair — the
+  # commits there may be unreferenced.
+  if ! git -C "$WT" symbolic-ref -q HEAD >/dev/null; then
+    unusable_worktree detached-head
+  fi
+
+  # (c) Dirty tracked tree: NEVER auto-discard — the uncommitted edit could be
+  # the sole copy of unlanded work. --untracked-files=no is load-bearing: node
+  # worktrees routinely carry build output.
+  if [[ -n "$(git -C "$WT" status --porcelain --untracked-files=no)" ]]; then
+    unusable_worktree dirty-tracked-tree
+  fi
+  return 0
+}
+
+# One auto-repair pass, then a full re-check (the repair may reveal a second
+# condition, e.g. a dirty tree underneath an aborted rebase).
+check_worktree_usable
+GUARD_RC=$?
+if [[ "$GUARD_RC" -eq 2 ]]; then
+  check_worktree_usable
+  GUARD_RC=$?
+fi
+if [[ "$GUARD_RC" -ne 0 ]]; then
+  echo "provision-node-worktree: cannot inspect the worktree state in $WT" >&2
+  exit 2
+fi
+
+# Align the local branch to its OWN pushed tip. `git worktree add <path> <id>`
+# resolves <id> to the LOCAL branch when one exists, so a stale local ref left
+# by a failed earlier provisioning run silently shadows the fetched tip — which
+# manufactures false exit-11 dispatches. A MERGE, not `worktree add -B`: -B
+# force-moves the local ref and would silently discard genuinely-unpushed local
+# commits. The merge is a no-op fast-forward when the local ref is behind or
+# equal, preserves a local ref that is ahead, and surfaces a true divergence
+# through the ordinary conflict disposition. This also covers the REUSED
+# worktree path, which had no such check at all.
+if [[ "$REMOTE_BRANCH" -eq 1 ]]; then
+  if ! git -C "$WT" merge --no-edit "origin/$NODE_ID" 1>&2; then
+    if ! git -C "$WT" merge --abort 1>&2; then
+      echo "provision-node-worktree: worktree unusable for $NODE_ID (failed-merge-abort); not a content conflict" >&2
+      exit 14
+    fi
+    echo "provision-node-worktree: origin/$NODE_ID does not merge clean into the local $NODE_ID branch" >&2
+    exit 11
+  fi
+fi
+
 # Merged-tree guarantee: every phase runs on a tree that already contains
 # origin/main. A conflict is the caller's disposition, not ours — abort and
 # leave the tree clean.
 if ! git -C "$WT" merge --no-edit origin/main 1>&2; then
-  git -C "$WT" merge --abort 1>&2 || true
+  # A CHECKED abort: with the guard in front this is unreachable, so it is a
+  # defensive assertion at a system edge, not a fallback. A failed abort means
+  # the state was never mergeable and must not be reported as a conflict.
+  if ! git -C "$WT" merge --abort 1>&2; then
+    echo "provision-node-worktree: worktree unusable for $NODE_ID (failed-merge-abort); not a content conflict" >&2
+    exit 14
+  fi
   echo "provision-node-worktree: origin/main does not merge clean into $NODE_ID" >&2
   exit 11
 fi
