@@ -410,7 +410,7 @@ function validateAttention(value: unknown, field: string): Attention {
 export function ownTier(node: IntentionNode): number {
   const attributes = isPlainObject(node.attributes) ? node.attributes : {};
   const explicit =
-    attributes.tier === 2 || attributes.tier === 3 ? (attributes.tier as number) : 0;
+    attributes.tier === 2 || attributes.tier === 3 ? attributes.tier : 0;
   const semantic = attributes.bug_fix === true || attributes.security === true ? 2 : 0;
   return Math.max(explicit, semantic, DEFAULT_TIER);
 }
@@ -1029,7 +1029,7 @@ function checkTierMarkShape(node: IntentionNode, problems: string[]): void {
     }
   }
   const tier = node.attributes.tier;
-  if (tier !== undefined && !AUTHORABLE_TIERS.includes(tier as number)) {
+  if (tier !== undefined && (typeof tier !== "number" || !AUTHORABLE_TIERS.includes(tier))) {
     problems.push(
       `${node.id}: attributes.tier must be ${AUTHORABLE_TIERS.join(" or ")}, got ${JSON.stringify(tier)} — tier 1 is the implicit default and must never be authored`,
     );
