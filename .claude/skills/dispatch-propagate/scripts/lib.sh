@@ -2654,9 +2654,68 @@ EOF
   fi
 }
 
+# Disable a stale timer/service pair whose installed unit points at a different
+# main-worktree path than the current one. The single implementation behind
+# cleanup_stale_sweep_units (just below) and cleanup_stale_heartbeat_units
+# (further below) — they differ only in which unit names they disable and how
+# they label the warning, so the sed/compare/disable logic lives here once.
+#
+# Fires when the installed WorkingDirectory= no longer matches the current main
+# worktree (e.g. a checkout path change, or a corrupted unit pointing at a
+# deleted temp path); does nothing if no unit is installed yet or its
+# WorkingDirectory= already matches.
+#
+# Best-effort: the paired services carry no [Install] section, so `disable`
+# exits non-zero by design. Suppress that and never abort the caller (a
+# tick/reseed/worker launcher) — the subsequent unit rewrite in the calling
+# ensure_* is what actually repairs the state.
+# Args: $1 = installed service-unit path, $2 = current main worktree path,
+#       $3 = systemctl command, $4 = timer unit name, $5 = service unit name,
+#       $6 = caller name for the warning prefix, $7 = unit noun for the warning
+cleanup_stale_unit_pair() {
+  local service_path="$1"
+  local current_main_worktree="$2"
+  local systemctl_cmd="$3"
+  local timer_unit="$4"
+  local service_unit="$5"
+  local caller="$6"
+  local noun="$7"
+
+  # No prior units → nothing to clean up.
+  [ -f "$service_path" ] || return 0
+
+  local installed_workdir
+  installed_workdir=$(sed -n 's/^WorkingDirectory=//p' "$service_path" | head -1)
+
+  # No WorkingDirectory= to compare → nothing to do.
+  [ -n "$installed_workdir" ] || return 0
+
+  # Path unchanged → the timer points at the right place; leave it running.
+  [ "$installed_workdir" = "$current_main_worktree" ] && return 0
+
+  # Path changed: stop the stale timer/service before the caller rewrites the
+  # unit content. Best-effort — suppress the disable failure and warn; never
+  # abort the caller.
+  echo "WARNING: $caller: installed $noun unit points at '$installed_workdir' but current main worktree is '$current_main_worktree'; disabling stale timer/service before rewrite" >&2
+  "$systemctl_cmd" --user disable --now "$timer_unit" "$service_unit" || true
+}
+
+# Disable a stale sweep timer/service whose installed unit points at a
+# different main-worktree path than the current one, mirroring
+# cleanup_stale_heartbeat_units below. Thin wrapper over
+# cleanup_stale_unit_pair above; see that function for the full contract.
+# Args: $1 = installed service-unit path, $2 = current main worktree path,
+#       $3 = systemctl command
+cleanup_stale_sweep_units() {
+  cleanup_stale_unit_pair "$1" "$2" "$3" \
+    dispatch-sweep-periodic.timer dispatch-sweep-periodic.service \
+    cleanup_stale_sweep_units sweep
+}
+
 # Install and activate the durable `dispatch-sweep-periodic.timer` (+ its paired
 # `dispatch-sweep-periodic.service`) so the worktree garbage-collector fires on a
 # wall-clock cadence instead of only from a finishing worker's Stop hook (#2023).
+#
 # The sweep launcher currently runs only when a worker stops, so an idle or
 # drained chain never GCs its stale worktrees. A `systemd --user` timer ticks
 # regardless of chain activity, keeping the sweep durable across idle periods.
@@ -2781,6 +2840,11 @@ EOF
     return 0
   fi
 
+  # Path-change cleanup, mirroring ensure_heartbeat_units: if the installed
+  # unit names a different main worktree (or is otherwise stale), disable it
+  # before rewriting the unit content below. Best-effort; never aborts.
+  cleanup_stale_sweep_units "$SERVICE_PATH" "$main_worktree" "$SYSTEMCTL_CMD"
+
   if ! mkdir -p "$UNIT_DIR"; then
     echo "WARNING: ensure_sweep_timer: mkdir -p $UNIT_DIR failed; periodic sweep unavailable" >&2
     return 1
@@ -2892,30 +2956,14 @@ EOF
 # Best-effort: the heartbeat service has no [Install] section, so `disable` exits
 # non-zero by design. Suppress that and never abort the caller (a tick/reseed
 # launcher) — the subsequent unit rewrite is what actually repairs the state.
+# Thin wrapper over cleanup_stale_unit_pair (defined above, next to
+# cleanup_stale_sweep_units); see that function for the full contract.
 # Args: $1 = installed service-unit path, $2 = current main worktree path,
 #       $3 = systemctl command
 cleanup_stale_heartbeat_units() {
-  local service_path="$1"
-  local current_main_worktree="$2"
-  local systemctl_cmd="$3"
-
-  # No prior units → nothing to clean up.
-  [ -f "$service_path" ] || return 0
-
-  local installed_workdir
-  installed_workdir=$(sed -n 's/^WorkingDirectory=//p' "$service_path" | head -1)
-
-  # No WorkingDirectory= to compare → nothing to do.
-  [ -n "$installed_workdir" ] || return 0
-
-  # Path unchanged → the timer points at the right place; leave it running.
-  [ "$installed_workdir" = "$current_main_worktree" ] && return 0
-
-  # Path changed: stop the stale timer/service before the caller rewrites the
-  # unit content. Best-effort — disable exits non-zero (no [Install] section), so
-  # suppress the failure and warn; never abort the caller.
-  echo "WARNING: cleanup_stale_heartbeat_units: installed heartbeat unit points at '$installed_workdir' but current main worktree is '$current_main_worktree'; disabling stale timer/service before rewrite" >&2
-  "$systemctl_cmd" --user disable --now dispatch-heartbeat.timer dispatch-heartbeat.service || true
+  cleanup_stale_unit_pair "$1" "$2" "$3" \
+    dispatch-heartbeat.timer dispatch-heartbeat.service \
+    cleanup_stale_heartbeat_units heartbeat
 }
 
 # Returns 0 only when the heartbeat timer is armed with a future trigger
