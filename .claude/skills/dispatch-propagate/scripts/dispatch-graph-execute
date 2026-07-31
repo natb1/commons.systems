@@ -69,6 +69,16 @@
 #                           consecutive failure — a tracked hold tactic was
 #                           born/re-entered via hold-node; the source's own
 #                           office_hours is never written.
+#   held <id> worktree-residue
+#                           provision exit 14 (worktree unusable — mechanical
+#                           residue from a dead session, NOT a content
+#                           conflict). A `worktree-residue` tracked hold tactic
+#                           was born/re-entered via hold-node, carrying the
+#                           `git status` / `git diff --stat` evidence. Escalates
+#                           on the FIRST occurrence — no strike ladder, because
+#                           the state is steady and has no autonomous repair
+#                           path. Never routed to the conflict lane; the
+#                           source's own office_hours is never written.
 #   failed <id> <reason>    the node could neither launch nor cleanly dispose.
 #                           On exit 11 below the cap this is
 #                           `failed <id> spawn-failed (strike N/CAP)`: the
@@ -76,7 +86,8 @@
 #                           counter was bumped, and no graph write was made.
 #
 # Exit codes: 0 every node launched or cleanly disposed (launched/waiting/
-# skipped/scope-stale/parked/conflict-lane/held are all RC-0 dispositions);
+# skipped/scope-stale/parked/conflict-lane/held — including the exit-14
+# `held <id> worktree-residue` disposition — are all RC-0 dispositions);
 # 1 at least one node could neither launch nor cleanly dispose (a spawn kick
 # failed — no park is attempted, the marker is left for the sweep — or a
 # park-node/hold-node/demote call itself failed); 2 usage/configuration error.
@@ -356,6 +367,58 @@ for spec in "$@"; do
         echo "failed $id demote-failed"
         FAILURES=$(( FAILURES + 1 ))
       fi
+      ;;
+    14)
+      # worktree-residue: provision-node-worktree's precondition guard refused
+      # the worktree because it carries MECHANICAL RESIDUE from a dead session
+      # (a dirty tracked tree, or a detached HEAD / in-progress operation it
+      # could not auto-repair). This is NOT a content conflict — origin/main
+      # merges clean the instant the residue is cleared — so it must never be
+      # routed to /dispatch-conflict's Lane 3, whose whole contract assumes a
+      # clean tree with a reproducible merge conflict.
+      #
+      # NO STRIKE LADDER. Exit 14 is a steady state with no autonomous repair
+      # path: nothing a later tick does clears a dirty file or an unreferenced
+      # detached HEAD, and the one repair that IS safe (aborting an in-progress
+      # operation) already happened inside provision-node-worktree before it
+      # chose this exit. So it escalates on the FIRST occurrence — deliberately
+      # not reusing CONFLICT_STRIKE_CAP or the `.conflict-strikes` sidecar,
+      # which count consecutive failures of a thing that could have succeeded.
+      #
+      # Like the exit-11 backstop, this births a born-parked HOLD TACTIC via
+      # hold-node and adds a blocked_by edge from the source; the source's own
+      # office_hours is never written, so NO park-node call belongs here.
+      RESIDUE_WT="$PROJECT_ROOT/.claude/worktrees/$id"
+      TMPDIR_HOLD14=$(mktemp -d) || {
+        echo "failed $id hold-mktemp-failed"
+        FAILURES=$(( FAILURES + 1 ))
+        continue
+      }
+      REASON_FILE="$TMPDIR_HOLD14/reason"
+      RECOMMENDATION_FILE="$TMPDIR_HOLD14/recommendation"
+      # The evidence is captured HERE, once, so the drain has the diff in hand
+      # without re-entering the worktree. The script runs `set -uo pipefail`
+      # (no -e) and each git call is `|| echo`-guarded, so an unreadable
+      # worktree yields an explanatory line rather than a silently empty
+      # section — and cannot abort the loop.
+      {
+        printf '%s\n\n' "provision-node-worktree refused to provision this tactic's worktree: it carries mechanical residue from a dead session (exit 14), not a content conflict. \`origin/main\` merges clean once the residue is cleared."
+        printf '%s\n' "\`git -C $RESIDUE_WT status --porcelain --untracked-files=no\`:"
+        git -C "$RESIDUE_WT" status --porcelain --untracked-files=no 2>&1 \
+          || echo "(could not read the worktree at $RESIDUE_WT)"
+        printf '\n%s\n' "\`git -C $RESIDUE_WT diff --stat\`:"
+        git -C "$RESIDUE_WT" diff --stat 2>&1 \
+          || echo "(could not read the worktree at $RESIDUE_WT)"
+      } > "$REASON_FILE"
+      printf '%s\n' "Inspect the diff recorded above in \`.claude/worktrees/$id\` and decide what the uncommitted content IS. If it is unlanded work, land it — \`graph-commit\` for an intentions/ node write, or commit and push the branch for code — and never discard it sight-unseen; the uncommitted edit may be its only copy. If it is safely discardable (build output, a half-applied edit already landed elsewhere), clear it with \`git restore\`. A detached HEAD with commits on it needs a branch before anything is reset. Once the worktree is clean, the next tick provisions it normally. Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source." > "$RECOMMENDATION_FILE"
+      if "$HOLD_NODE" "$id" --kind worktree-residue \
+          --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE"; then
+        echo "held $id worktree-residue"
+      else
+        echo "failed $id hold-failed"
+        FAILURES=$(( FAILURES + 1 ))
+      fi
+      rm -rf "$TMPDIR_HOLD14"
       ;;
     *)
       # 2 / any other: a mechanical error (bad node id, unresolvable project

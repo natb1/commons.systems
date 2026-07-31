@@ -210,7 +210,22 @@ With `NODE_MD` in hand, parse the node's frontmatter and apply these four cases
    action. Do **not** call `dispatch-mark-deviation` here: this is not a deviation
    to escalate — the caller invoked `/dispatch-conflict` against a node that isn't
    in a state it handles. It is a plain "wrong tool for this node" exit; say so
-   and stop. Because the tick can reach this lane (see "Who enters each lane"),
+   and stop.
+
+   One id class lands here **deliberately and by design**: a
+   `tactic-hold-residue-*` hold, i.e. `attributes.hold_kind == "worktree-residue"`
+   (born by `dispatch-graph-execute`'s exit-14 arm). It is not a
+   `provision-conflict` hold, so case 2 does not claim it, and it has no branch
+   of its own, so case 3 does not either. That is correct: its source's worktree
+   carries **mechanical residue**, not a content conflict — there is nothing to
+   reproduce and nothing to resolve here, and `origin/main` merges clean once the
+   residue is cleared. `/dispatch-conflict` is the wrong tool for it. It is
+   drained by **office-hours**, from the hold's own recommendation text (inspect
+   the recorded `git status` / `git diff --stat`, land or discard the uncommitted
+   content, then resolve the hold tactic to `phase: done` and prune it). Say that
+   plainly and stop — do not attempt a merge.
+
+   Because the tick can reach this lane (see "Who enters each lane"),
    still declare the terminal disposition on the way out —
    `mark-node-terminal "$NODE_ID" conflict-hold` — so the session does not hold
    the node's live-session slot open.
@@ -703,6 +718,22 @@ worktree and branch **in place**, with the merge already **aborted** and the tre
 clean (`provision-node-worktree`, the merged-tree-guarantee block: on a failed
 `git merge --no-edit origin/main` it runs `git merge --abort` and exits 11). So
 the markers are gone and Lane 3 must re-create them itself (Step 3).
+
+That invariant is now **enforced**, not merely assumed. `provision-node-worktree`
+runs a precondition guard over the worktree *before* it attempts any merge: a
+worktree carrying mechanical residue from a dead session — a dirty tracked tree,
+or a detached HEAD / in-progress operation it could not auto-repair — exits **14**
+(`worktree-residue`), never 11, and so never reaches this lane. The abort on the
+exit-11 path is checked too: a failed abort also exits 14. So an exit-11 entry is
+a genuine content conflict on a clean tree.
+
+Exit 11 has a **second cause**, though: the same script now merges the node's own
+pushed tip (`origin/<id>`) into the local branch before it merges `origin/main`,
+and a conflict *there* also exits 11. If `git merge origin/$SOURCE_ID` is not
+already a no-op when you arrive, resolve **that** merge first — merge
+`origin/$SOURCE_ID` and land it — before reproducing the `origin/main` merge in
+Step 3. Otherwise you resolve `origin/main` against a stale local ref and the
+next provisioning run conflicts again on the tip you skipped.
 
 ### 2. Resolve the PR, if any
 
