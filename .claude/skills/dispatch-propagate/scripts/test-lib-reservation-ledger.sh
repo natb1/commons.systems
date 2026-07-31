@@ -42,7 +42,7 @@ rl_teardown() {
   RL_FAKE=""
   unset DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_NOW \
     DISPATCH_RESERVATION_SWEEP_NOW_EPOCH DISPATCH_RESERVATION_BOOT_GRACE_S \
-    DISPATCH_RESERVATION_STANDALONE_TTL_S
+    DISPATCH_RESERVATION_STANDALONE_TTL_S DISPATCH_RESERVATION_HANDOFF_TTL_S
 }
 
 # rl_write_fake_claude <json-array> — install a fake `claude` that prints the
@@ -409,6 +409,138 @@ if printf '%s' "$err" | grep -q 'live-worker-redundant'; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-redundant-young: note mentions live-worker-redundant"
 fi
+rl_teardown
+
+# --- Test D: reservation_mark_spawned re-stamps the claim as origin=spawned ----
+# The spawn handoff: dispatch-graph-execute calls this INSTEAD of
+# reservation_clear on a successful kick, so the claim stays in force until the
+# worker registers. The existing session=/issue= values are preserved and the
+# timestamp is refreshed to spawn time.
+# The two DISPATCH_RESERVATION_NOW values are DISTINCT on purpose: the refresh is
+# load-bearing (selection→spawn includes provision-node-worktree's fetch/
+# worktree-add and can take minutes, so carrying the selection stamp forward
+# could hand back an already-expired handoff). Pinning both writes to one value
+# would let a regression that preserved the ORIGINAL stamp pass this assertion.
+echo "Test: reservation_mark_spawned re-stamps an existing marker as origin=spawned, preserving session/issue and refreshing the timestamp"
+rl_setup
+export DISPATCH_RESERVATION_NOW="2025-12-31T23:50:00Z"   # selection time
+reservation_write "tactic-x" "tactic-x" "headless:abc"
+export DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z"   # spawn time, 10min later
+if reservation_mark_spawned "tactic-x"; then rc=0; else rc=$?; fi
+assert_eq "rl-mark-spawned-content: exits 0" "0" "$rc"
+assert_eq "rl-mark-spawned-content: marker is the 4 documented lines with origin=spawned and the SPAWN-time stamp" \
+  "$(printf 'session=headless:abc\nissue=tactic-x\norigin=spawned\ntimestamp=2026-01-01T00:00:00Z')" \
+  "$(cat "$DISPATCH_RESERVATION_DIR/tactic-x")"
+rl_teardown
+
+# --- Test D2: the refreshed stamp is what the sweep's handoff TTL measures -----
+# End-to-end guard for the refresh: a marker whose ORIGINAL (selection) stamp is
+# older than the handoff TTL, but whose spawn re-stamp is fresh, must SURVIVE the
+# sweep. A regression that carried the selection stamp forward would hand back an
+# already-expired handoff and the marker would be reclaimed here.
+echo "Test: an origin=spawned marker whose ORIGINAL stamp predates the handoff TTL survives the sweep on its refreshed stamp"
+rl_setup
+export DISPATCH_RESERVATION_NOW="2025-12-31T23:50:00Z"   # 600s before spawn time
+reservation_write "tactic-x" "tactic-x" "headless:abc"
+export DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z"   # spawn time (epoch 1767225600)
+reservation_mark_spawned "tactic-x"
+# Neither the reserving session nor a worker named tactic-x is live.
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+# 90s past SPAWN time — well inside the 300s handoff TTL, but 690s past the
+# selection stamp, i.e. past it had the refresh not happened.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 90))
+reservation_sweep 2>/dev/null
+assert_eq "rl-mark-spawned-refresh: handoff measured from the SPAWN stamp, marker kept (count 1)" "1" \
+  "$(reservation_count)"
+rl_teardown
+
+# --- Test E: reservation_mark_spawned creates a marker when none exists --------
+# A caller that reached spawn without a ledger entry must still get covered, and
+# the synthesized session= must be NON-EMPTY: reservation_write rejects an empty
+# session id, and an empty session= would land the marker on sweep rule (b),
+# which KEEPS it forever (an immortal slot).
+echo "Test: reservation_mark_spawned creates a covering marker with a non-empty session when none exists"
+rl_setup
+if reservation_mark_spawned "tactic-y"; then rc=0; else rc=$?; fi
+assert_eq "rl-mark-spawned-absent: exits 0" "0" "$rc"
+assert_eq "rl-mark-spawned-absent: marker created" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-y" ] && echo 1 || echo 0)"
+assert_eq "rl-mark-spawned-absent: origin=spawned stamped" "1" \
+  "$(grep -qx 'origin=spawned' "$DISPATCH_RESERVATION_DIR/tactic-y" && echo 1 || echo 0)"
+assert_eq "rl-mark-spawned-absent: session= line is non-empty" "1" \
+  "$([ -n "$(sed -n 's/^session=//p' "$DISPATCH_RESERVATION_DIR/tactic-y" | head -n1)" ] && echo 1 || echo 0)"
+rl_teardown
+
+# --- Test F: sweep HOLDS an origin=spawned marker with a dead reserving session -
+# The core regression guard. The tick's reserving session is the synthetic
+# `headless:<INVOCATION_ID>`, which never appears in `claude agents` — so without
+# rule (a-handoff) this marker is reclaimed as dead-session-stranded the moment
+# the 30s boot grace lapses, reopening the duplicate-worker window while the
+# spawned worker is still booting (90s registration latency observed 2026-07-30).
+echo "Test: reservation_sweep HOLDS an origin=spawned marker past the boot grace when its reserving session is dead"
+rl_setup
+reservation_write "tactic-x" "tactic-x" "headless:abc" "spawned"
+# Neither the reserving session nor a worker named tactic-x is live.
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 90))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-spawned-held: handoff marker kept at +90s (count 1)" "1" "$(reservation_count)"
+rl_teardown
+
+# --- Test G: sweep reclaims an origin=spawned marker past the handoff TTL ------
+echo "Test: reservation_sweep reclaims an origin=spawned marker once it ages past the handoff TTL"
+rl_setup
+reservation_write "tactic-x" "tactic-x" "headless:abc" "spawned"
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 301))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+assert_eq "rl-sweep-spawned-expired: aged handoff marker reclaimed (count 0)" "0" "$(reservation_count)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'spawn-handoff-expired'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-spawned-expired: note mentions spawn-handoff-expired"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-spawned-expired: note mentions spawn-handoff-expired"
+  echo "    stderr: $err"
+fi
+rl_teardown
+
+# --- Test H: a registered worker releases the handoff via rule (a) -------------
+# The handoff's intended release is an EVENT, not a timeout: the instant a live
+# session named by the worktree basename appears, rule (a) reclaims the marker.
+echo "Test: reservation_sweep releases an origin=spawned marker as soon as its worker registers (rule (a))"
+rl_setup
+reservation_write "tactic-x" "tactic-x" "headless:abc" "spawned"
+rl_write_fake_claude '[{"sessionId":"x","pid":1,"status":"busy","name":"tactic-x"}]'
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 90))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+assert_eq "rl-sweep-spawned-released: handoff released on registration (count 0)" "0" "$(reservation_count)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'live-worker-redundant'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-spawned-released: note mentions live-worker-redundant"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-spawned-released: note mentions live-worker-redundant"
+  echo "    stderr: $err"
+fi
+# A benign release is NOT a dead-strand: the launch-log diagnostic must stay off.
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'inspect tmp/dispatch-launch'; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-spawned-released: benign release stays silent (no launch-log diagnostic)"
+  echo "    stderr: $err"
+else
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-spawned-released: benign release stays silent (no launch-log diagnostic)"
+fi
+rl_teardown
+
+# --- Test I: the boot grace still short-circuits a young spawned marker --------
+# Control for Tests F/G: a handoff marker inside the boot grace is kept by the
+# grace branch, which precedes the new rule — the new rule did not disturb it.
+echo "Test: reservation_sweep keeps a young origin=spawned marker via the boot grace (unchanged)"
+rl_setup
+reservation_write "tactic-x" "tactic-x" "headless:abc" "spawned"
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 5))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-spawned-young: young handoff marker kept (count 1)" "1" "$(reservation_count)"
 rl_teardown
 
 # --- Test 13: reservation_exists tracks write/clear and guards its arg --------

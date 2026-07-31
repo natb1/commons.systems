@@ -19,6 +19,8 @@
 #   claude_agents_snapshot_capture            <path>
 #   claude_agents_snapshot_capture_registered <path>
 #   claude_job_id_for_name_all         <name>
+#   claude_session_id_is_live          <sid>
+#   claude_agents_list_duplicate_node_names
 #
 # claude_sessions_under <path>
 #   The cwd-based low-level primitive. Runs `claude agents --json --cwd <path>`,
@@ -174,6 +176,66 @@
 #     return 1 — exhaustion: the agent never appeared within the budget.
 #   Used by `dispatch-launch-worker` / `dispatch-spawn-job` Step 4 verify.
 #
+# claude_session_id_is_live <sid>
+#   The winner-liveness predicate for the duplicate-worker stand-down protocol.
+#   Queries `claude agents --json --all` DIRECTLY — with `--all`, and NOT via
+#   `claude_agents_list_all` / `_claude_agents_raw`. This is load-bearing, not a
+#   style choice: the default (active-only) listing HIDES a session that stopped
+#   but was never `claude rm`'d (`state: "done"` / `stopped`), and that is the
+#   COMMON state for a stand-down winner — a Stop-hook-held or errored session
+#   whose fix is still uncommitted in the SHARED worktree. Reading the
+#   active-only listing would report such a winner as definitely gone, and the
+#   documented `winner-absent` response ("become the worker itself") would take
+#   over that worktree and destroy the winner's uncommitted work — exactly the
+#   loss this protocol exists to prevent. The tick snapshot
+#   (DISPATCH_AGENTS_SNAPSHOT) is bypassed for the same reason
+#   `claude_sessions_with_name_all` bypasses it: it is captured without `--all`
+#   and so lacks the very rows this predicate must see.
+#   Matches `.sessionId` with jq's exact `==`, never a substring test — session
+#   ids share prefixes, so a substring match could conflate two distinct sessions.
+#   This is the SAME fail-safe posture as `worktree_has_live_session`
+#   (occupied-on-unknown), applied to a session id instead of a worktree name —
+#   the inversion is load-bearing: a caller parking a node on `return 1` must
+#   never park because the daemon hiccupped.
+#   THREE registry states are distinguished, folded into two return codes so the
+#   fail-safe direction is preserved for every existing boolean caller:
+#     return 0 — LIVE or STOPPED-BUT-PRESENT: <sid> matched a row in a
+#               successfully-queried registry (whatever its state), OR the
+#               registry could not be queried (UNKNOWN folds to live).
+#     return 1 — ABSENT: the registry was queried successfully WITH `--all` and
+#               no row's sessionId equals <sid>. The session is gone from the
+#               daemon entirely — only then is "definitely not live" true.
+#   The granular verdict is published in the global CLAUDE_SESSION_ID_LIVE_STATE,
+#   set on EVERY call to exactly one of:
+#     live     — present and in a non-terminal state (working/busy/waiting/idle/…)
+#     stopped  — present but in a terminal state (done/stopped/killed/failed/…):
+#               the session is finished yet still registered, so its worktree may
+#               still hold uncommitted work. Callers that want to report a
+#               distinct `winner-stopped` disposition read this — it must
+#               ESCALATE, never invite a peer to take over the worktree.
+#     absent   — queried successfully, no such session (the only `return 1`).
+#     unknown  — the registry could not be queried, or no <sid> was passed.
+#   Callers that ignore the variable keep byte-identical two-state behavior.
+#   Empty/missing <sid>: prints a stderr diagnostic and returns 0 (fail safe),
+#   mirroring `worktree_has_live_session`'s own empty-arg handling.
+#
+# claude_agents_list_duplicate_node_names
+#   The observed-pair detector for the duplicate-worker stand-down protocol.
+#   Takes no arguments. One `claude_agents_list_all` fetch, then keeps only rows
+#   whose name (column 3) matches the graph-node worker shape `^tactic-|^strategy-`
+#   — the same keyspace `claude_agents_count_busy_workers` counts — which
+#   excludes routers (`dispatch-<short-id>`) and legacy `<N>-slug` issue workers
+#   (those have no graph node to park). Groups by name and emits one line per
+#   name with TWO OR MORE live sessions: `name<TAB>sid1,sid2,...` — sids in the
+#   order the registry returned them, output lines sorted by name for
+#   deterministic output. Implemented as a single awk pass; no per-name
+#   shell-out.
+#     return 0 — daemon queried successfully. Stdout carries one line per
+#               duplicated name (empty when the registry holds no duplicate —
+#               a definite "no duplicates" answer, not a failure).
+#     return 1 — UNKNOWN. `claude_agents_list_all` could not be queried. Stdout
+#               is empty.
+#
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is
 # testable with no real daemon. Default: `claude`.
@@ -244,6 +306,11 @@
 # and `verify_agent_registered_under` (its bounded retry). Both back the
 # launcher's async-registration-race poll, which must observe a just-spawned
 # agent the instant the daemon registers it — a tick-old snapshot would miss it.
+# The `--all` functions (`claude_sessions_with_name_all`,
+# `claude_sessions_with_name_prefix_all`, `claude_job_id_for_name_all`,
+# `claude_session_id_is_live`) are excluded for a different reason: the snapshot
+# is captured WITHOUT `--all`, so it lacks the terminal-state rows they exist to
+# see. Reading it would silently hide them.
 #
 # Test override: LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S overrides the
 # `verify_agent_registered_under` inter-attempt sleep (default 0.2 s). Tests that
@@ -768,6 +835,136 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
 
     # The query succeeded and matched neither name: definitely free.
     return 1
+  }
+
+  # CLAUDE_SESSION_ID_LIVE_STATE — the granular verdict of the most recent
+  # `claude_session_id_is_live` call: live | stopped | absent | unknown. Every
+  # call sets it before returning; see the header comment for what each value
+  # obliges a caller to do. Initialized here so a read before the first call
+  # under `set -u` is not an unbound-variable error.
+  CLAUDE_SESSION_ID_LIVE_STATE="unknown"
+
+  # claude_session_id_is_live <sid> — fail-safe winner-liveness predicate for
+  # the duplicate-worker stand-down protocol. See the header comment for the
+  # return-code contract (the inversion is load-bearing: UNKNOWN folds to
+  # LIVE, the same fail-safe posture as `worktree_has_live_session` applied to
+  # a session id instead of a worktree name) and for why the query carries
+  # `--all` (a stopped-but-not-removed winner is HIDDEN from the default
+  # listing, and reporting it absent invites a peer to take over the shared
+  # worktree its uncommitted work still sits in).
+  claude_session_id_is_live() {
+    CLAUDE_SESSION_ID_LIVE_STATE="unknown"
+    local sid="${1:-}"
+    if [[ -z "$sid" ]]; then
+      printf 'lib-claude-agents: claude_session_id_is_live requires a <sid> argument\n' >&2
+      return 0  # fail safe: treat as live
+    fi
+
+    # --all so a session that stopped without being `claude rm`'d is still
+    # visible; queried DIRECTLY (not via _claude_agents_raw / claude_agents_list_all)
+    # to bypass the tick snapshot, which is captured without --all and lacks
+    # exactly those rows. 2>/dev/null drops daemon noise; only the exit code and
+    # a well-formed JSON array on stdout are trusted. A non-zero exit means the
+    # session state cannot be determined: UNKNOWN → fail safe: live.
+    local out
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json --all 2>/dev/null); then
+      return 0
+    fi
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 0
+    fi
+
+    # One jq pass validates the array shape and resolves <sid> to one of
+    # `absent` or `present:<state>`. Exact `==` on .sessionId — never a
+    # substring test, since session ids share prefixes. `.state` is the granular
+    # field the --all listing carries; `.status` is the coarse fallback for a
+    # row that has no `.state`; a row with neither is still PRESENT and resolves
+    # to `present:` (empty state), which classifies as live. The `present:`
+    # prefix keeps a literal state value named `absent` from being conflated
+    # with a genuine absence. Non-array input errors out → UNKNOWN → live.
+    local verdict
+    if ! verdict=$(jq -r --arg sid "$sid" '
+      if type == "array"
+      then [ .[] | select(.sessionId == $sid) ] as $m
+        | if ($m | length) == 0 then "absent"
+          else "present:" + ((($m[0].state // $m[0].status) // "") | tostring)
+          end
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 0
+    fi
+
+    # The query succeeded WITH --all and no row's sessionId equals <sid>: the
+    # session is gone from the daemon entirely — definitely not live.
+    if [[ "$verdict" == "absent" ]]; then
+      CLAUDE_SESSION_ID_LIVE_STATE="absent"
+      return 1
+    fi
+
+    # Present. A terminal state means the session finished but was never
+    # `claude rm`'d, so its worktree may still hold uncommitted work: report it
+    # as `stopped` for callers that escalate on that, and return 0 (NOT live-
+    # absent) so a boolean caller never treats it as "nobody is there".
+    case "${verdict#present:}" in
+      done|stopped|killed|failed|errored|error|cancelled|canceled|terminated)
+        CLAUDE_SESSION_ID_LIVE_STATE="stopped"
+        ;;
+      *)
+        CLAUDE_SESSION_ID_LIVE_STATE="live"
+        ;;
+    esac
+    return 0
+  }
+
+  # claude_agents_list_duplicate_node_names — emit one line per graph-node
+  # worker name with two or more live sessions. See the header comment for the
+  # return-code contract.
+  claude_agents_list_duplicate_node_names() {
+    # One machine-wide fetch — claude_agents_list_all is the fetch-once
+    # primitive.
+    local all
+    if ! all=$(claude_agents_list_all); then
+      # Unknown — the daemon could not be queried.
+      return 1
+    fi
+
+    # Single awk pass: keep only rows whose name matches the graph-node worker
+    # shape (^tactic-|^strategy-, the same keyspace claude_agents_count_busy_workers
+    # counts — excludes routers and legacy <N>-slug issue workers), group
+    # sessionIds by name in registry order, then emit name<TAB>sid1,sid2,...
+    # for every name with >= 2 sessions.
+    #
+    # POSIX awk only — no `asorti`, which is a gawk extension: under mawk (the
+    # default `awk` on ubuntu-latest runners and most Debian hosts) it is a
+    # FATAL error, and a fatal awk pass here would print nothing while this
+    # function still returned 0 — i.e. it would report a DEFINITE "the registry
+    # holds no duplicate" and silently disable the observed half of the
+    # stand-down protocol. Determinism instead comes from piping the END-block
+    # output (emitted in registry order) through `LC_ALL=C sort`.
+    #
+    # The awk status is captured and checked for the same reason: a failed pass
+    # is UNKNOWN (return 1), never a definite answer.
+    local dups
+    if ! dups=$(awk -F'\t' '
+      $3 ~ /^tactic-|^strategy-/ {
+        if (!($3 in seen)) { order[++n] = $3; seen[$3] = 1 }
+        if (sids[$3] == "") { sids[$3] = $1 } else { sids[$3] = sids[$3] "," $1 }
+        count[$3]++
+      }
+      END {
+        for (i = 1; i <= n; i++) {
+          name = order[i]
+          if (count[name] >= 2) { print name "\t" sids[name] }
+        }
+      }' <<<"$all"); then
+      return 1
+    fi
+
+    # No duplicate is a DEFINITE answer: empty stdout, return 0.
+    if [[ -n "$dups" ]]; then
+      LC_ALL=C sort <<<"$dups"
+    fi
+    return 0
   }
 
   # claude_agents_count_busy_workers — emit the count of live sessions that are
