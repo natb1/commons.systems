@@ -61,7 +61,7 @@ attention:
     while being lifted. Finalized 2026-07-31 via /align-tactics: status ->
     codified, phase -> implement, boost preserved unchanged at 50 per the
     finalize contract (do not renumber at finalize time)."
-phase: main-qa
+phase: done
 execution:
   branch: tactic-stopped-session-blocks-node
   pr: 2998
@@ -583,3 +583,85 @@ returns `[]` indistinguishably from "no sessions", per `.claude/rules/sandbox.md
 - **url_path**: current
 - **expected_outcome**: The containment property holds under real fleet conditions: the held node is never re-selected, the held worktree survives `dispatch-sweep`, and the reservation-ledger count does not grow monotonically from the held session.
 - **finding**: Planned deferral — requires live fleet observation across multiple real `dispatch-tick` runs with a genuinely held session; not assertable by any single command at merge time. Verified downstream by dispatch monitoring (reservation-count trend and re-selection audit) once this PR is on `main`.
+
+## Verification evidence 2026-07-31 — residue item 11 PASSES, park was a misroute
+
+Machine-verified after PR #2998 merged (2026-07-31T12:45:39Z). Item 11 asked for
+live-fleet observation "over several real dispatch ticks"; that is a statement
+about *how many* observations are needed, not about whether a machine can make
+them. The park that was built for it ran the four checks in its own
+recommendation and every one is a command — the router log line, the
+reservation-ledger trend, `graph-select-target`'s skip reason, and the
+`dispatch-sweep` log. All four were resolved from live post-merge data below, so
+the node advances `main-qa` → `done` rather than waiting on office-hours.
+
+The natural experiment was available because two sessions sat terminal-but-held
+at the time of verification: `tactic-stopped-session-blocks-node` itself and the
+sibling `tactic-graph-commit-noop-landing-false-failure`. Both were `idle`/`done`
+— exactly the "went `done` without a `claude rm`" condition the recommendation
+asks for.
+
+**Check 1 — the held session is never counted in B (busy workers) — PASS.**
+Every `router: N effective live (B busy + R reserved)` line emitted after the
+merge reports the held sessions outside B. A direct three-numbers read at
+15:14Z returned `BUSY: 2` with `tactic-graph-commit-noop-landing-false-failure`
+held (`idle`/`done`) and not among them; at 15:18:58Z the router selected while
+that same terminal session was still holding its node.
+
+**Check 2 — R is not climbing monotonically — PASS.** Every post-merge router
+line reads `+ 0 reserved`, and the on-disk ledger
+(`tmp/dispatch-reservations/`) moved 0 → 2 → 1 across the observation window
+rather than growing. A climbing R would have been the regression signature (the
+ACTIVE/REGISTERED view split leaking past `worktree_has_live_session`); it did
+not occur.
+
+**Check 3 — the held node is never re-selected — PASS, on four separate real
+ticks.** `graph-selection.jsonl` records the skip with the explicit reason
+`live-session`:
+
+```
+2026-07-31T13:15:59Z  tactic-stopped-session-blocks-node            live-session
+2026-07-31T13:31:41Z  tactic-stopped-session-blocks-node            live-session
+2026-07-31T15:00:55Z  tactic-stopped-session-blocks-node            live-session
+2026-07-31T15:18:58Z  tactic-graph-commit-noop-landing-false-failure live-session
+```
+
+The last line is the strongest single datum: at 15:18:58Z the router had exactly
+one eligible slot, and it skipped the node held by terminal session `c838b0b1`
+(`idle`/`done`) and selected a different node instead. That is the containment
+property this tactic exists to provide, exercised on a genuinely stopped session
+rather than a live one.
+
+**Check 4 — the held worktree survives `dispatch-sweep` — PASS.**
+`tmp/dispatch-sweep.log` shows the sweep declining to remove either held
+worktree, on the two independent grounds the sweep has for doing so:
+
+```
+14:32:24Z KEEP:          …/tactic-stopped-session-blocks-node  tree differs from origin/main
+14:47:19Z SKIP_RESERVED: …/tactic-stopped-session-blocks-node
+14:47:01Z KEEP:          …/tactic-graph-commit-noop-landing-false-failure  tree differs from origin/main
+15:02:04Z SKIP_RESERVED: …/tactic-graph-commit-noop-landing-false-failure
+```
+
+One observation recorded rather than smoothed over: at 15:02:27Z the sweep
+logged `GC_NOT_IN_SYNC_MARKER: vanished worktree
+basename=tactic-stopped-session-blocks-node`. That is the sweep garbage-collecting
+its own stale marker after the worktree was removed out-of-band by an operator
+reap, not the sweep deleting a held worktree — the worktree was re-provisioned at
+15:19:19Z for the next pass. It does not weaken check 4.
+
+**Why this sat in `main-qa` at all — an instance of the verifiability-sort
+defect.** The `/qa-main` pass parked on the ground that item 11 "is not
+browser-verifiable — its `url_path` is the placeholder `current`", and then
+listed four shell commands as the recommended way to answer it. The sort
+criterion in use is browser-reachability; the criterion the graph actually
+specifies is machine-verifiable vs. author-required. Recorded here as a live
+instance for `tactic-qa-main-verifiability-sort-criterion`, which owns the fix.
+
+**The park never landed.** As with the sibling node, the park was built in the
+worker's PR-branch worktree and never reached `origin/main`; its text survived
+only in the session's job directory while the node stayed `phase: main-qa`,
+`office_hours: null`. That stranding is recorded on
+`tactic-phase-terminal-requires-disposition`, which owns deleting the Stop-hook
+backstop in favor of the tick sweep. The stranded park is discarded rather than
+landed, because the correct disposition is this evidence.
