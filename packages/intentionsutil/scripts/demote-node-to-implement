@@ -42,6 +42,17 @@ if [[ $# -ne 1 || -z "$NODE_ID" ]]; then
   exit 2
 fi
 
+# --- Refresh origin/main before any read -------------------------------------
+# Fetch first so the provenance range below (git log against origin/main) and
+# the FRESH_BLOB resolution further down are both computed against origin/main's
+# CURRENT state, not a possibly-stale local ref. An unreachable origin/main is
+# genuine environment breakage — fail loudly, never fall back to a stale local
+# ref (code-style.md).
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "demote-node-to-implement: could not fetch origin/main to refresh $NODE_ID before demoting" >&2
+  exit 1
+fi
+
 # --- Provenance range from the phase-start stamp -----------------------------
 STAMP_FILE="$REPO_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
 PROVENANCE=""
@@ -65,10 +76,10 @@ fi
 # post-mutation failure (the write below, or the graph-commit landing it) can
 # restore the file instead of leaking a dirty intentions/*.md that trips
 # graph-commit's assert_clean_outside_ids guard for every later unrelated
-# call. Unlike park-node, this script has no prior fetch step — best-effort
-# capture against whatever origin/main ref is already known locally is fine —
-# but a node absent from origin/main is a hard pre-condition failure: there is
-# no landed content to roll back to, so refuse before mutating at all.
+# call. The fetch above means this resolves against the freshly refreshed
+# origin/main ref, not a stale local one — but a node absent from origin/main
+# is still a hard pre-condition failure: there is no landed content to roll
+# back to, so refuse before mutating at all.
 if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)" || [[ -z "$FRESH_BLOB" ]]; then
   echo "demote-node-to-implement: intentions/$NODE_ID.md does not exist on origin/main — cannot demote a node with no landed content to roll back to" >&2
   exit 1
@@ -100,7 +111,21 @@ trap '
   fi
 ' EXIT
 
+# MUTATED is set here, immediately before the refresh below, because the
+# refresh is the FIRST write to intentions/$NODE_ID.md in this script (not the
+# apply-node-transition.ts call further down) — it overwrites the local node
+# file with origin/main's content so the demotion write below lands on top of
+# origin/main's current content rather than a stale worktree copy (the
+# invocation may come from a far-behind PR-branch worktree). The EXIT trap
+# above restores from the immutable FRESH_BLOB on any non-zero exit once
+# MUTATED=1, and this refresh writes exactly that same blob, so the rollback
+# stays byte-correct even if this refresh itself is the last successful write.
 MUTATED=1
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$REPO_ROOT/intentions/$NODE_ID.md"; then
+  echo "demote-node-to-implement: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
+fi
+
 if ! RESULT="$(cd "$REPO_ROOT" && node --import tsx/esm "$APPLY" "$NODE_ID" --scope-stale)"; then
   echo "demote-node-to-implement: failed to write the demotion for $NODE_ID" >&2
   exit 1
@@ -112,7 +137,11 @@ MSG="graph: demote $NODE_ID to implement (scope drift)"
 if [[ -n "$PROVENANCE" ]]; then
   MSG="$MSG"$'\n\n'"$PROVENANCE"
 fi
-if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" -m "$MSG" "$NODE_ID"; then
+# --base pins the land to the exact origin/main blob this script read and
+# refreshed against (FRESH_BLOB): if origin/main advances again before the
+# land, graph-commit refuses the write (exit 1) rather than silently
+# reconciling through the implicit merge-base heuristic alone.
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "$MSG" "$NODE_ID"; then
   echo "demote-node-to-implement: graph-commit failed for $NODE_ID; the demotion write was rolled back" >&2
   exit 1
 fi

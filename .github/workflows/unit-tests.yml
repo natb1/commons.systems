@@ -228,6 +228,8 @@ jobs:
         run: packages/intentionsutil/scripts/test-park-node.sh
       - name: Run transition-node CAS-guard tests
         run: packages/intentionsutil/scripts/test-transition-node.sh
+      - name: Run demote-node-to-implement CAS-guard tests
+        run: packages/intentionsutil/scripts/test-demote-node-to-implement.sh
       - name: Run graph-commit tests
         run: packages/intentionsutil/scripts/test-graph-commit.sh
       - name: Run budget-config-load tests
