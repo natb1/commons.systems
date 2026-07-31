@@ -101,6 +101,23 @@
 #          subject (and, on a failed land, the unlanded-park error) names the
 #          parked set and the landed-deletion set separately, so a bystander
 #          prune is never described as parked.
+#        Caller contract: rc 1 does not mean "nothing landed". When the
+#          invocation mixed --prune ids with other ids, a bystander prune's
+#          deletion may have landed on main together with the park commit. A
+#          caller that retries after rc 1 must re-derive what is still
+#          outstanding from the current state of intentions/ on origin/main
+#          rather than replaying the same argv; re-passing --prune <id> for
+#          an already-landed deletion is rejected by the existing existence
+#          guard (the file is absent from HEAD), so the failure is loud, not
+#          silent, but a caller must not report "nothing landed" to a human
+#          on rc 1 without checking. The stderr lines above distinguish the
+#          parked set from the landed bystander-prune set, and so does the
+#          park commit subject; those are the authoritative record of what
+#          happened. No in-repo caller currently passes --prune
+#          programmatically — pruning is agent-driven via the owed-prune
+#          census, not script-driven — so this contract is documented for
+#          the agent reading it before a retry, not enforced by a caller
+#          check.
 #   2  usage error.
 #
 # Conventions: mirrors the bounded-retry shape/logging of `gh_retry` in
