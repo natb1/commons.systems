@@ -36,9 +36,21 @@
 # `hold-node --kind fix-attempt-cap --reset-fix-attempt` writes a born-parked
 # hold tactic plus a `blocked_by` edge on the source, in one graph-commit) —
 # dropping the node out of the eligible set via that edge rather than
-# re-arming another retry forever. These graph-commit writes (this script's
-# own via `_graph_commit_fix`, and hold-node's own internal commit) are the
-# only writes selection makes.
+# re-arming another retry forever.
+#
+# A SECOND hold producer lives on the qa/review CI gate
+# (tactic-autonomous-ci-pending-liveness-bound): a draft PR whose CI verdict
+# stays `pending` on the SAME head SHA for DISPATCH_CI_PENDING_STRIKE_CAP
+# consecutive autonomous ticks (its checks never started, or started and never
+# concluded) lands a `ci-pending-stalled` hold through the same `hold-node`
+# primitive. Below the cap it is NOT a graph write at all — the consecutive
+# count is a sidecar file outside every checkout (ci_pending_strike_bump /
+# ci_pending_strike_clear in lib.sh), on the same "ticks are cheap, graph
+# records are not" reasoning as dispatch-graph-execute's CONFLICT_STRIKE_CAP.
+#
+# These graph-commit writes (this script's own via `_graph_commit_fix`, and
+# hold-node's own internal commit on the fix-attempt-cap and ci-pending-stalled
+# hold paths) are the only writes selection makes.
 #
 # Usage: graph-select-target [--top <n>] [--pace-exempt-only] [--standalone] [--node <id>]
 #
@@ -508,6 +520,49 @@ _hold_node_fix_cap() {
   return $rc
 }
 
+# _hold_node_ci_pending <id> <pr> <strikes> <sha> — the CI-pending liveness
+# bound's hold producer (tactic-autonomous-ci-pending-liveness-bound). Modelled
+# on _hold_node_fix_cap above: build the reason/recommendation files hold-node
+# requires and land a `ci-pending-stalled` hold (a born-parked hold tactic plus
+# a `blocked_by` edge on <id>, in one graph-commit; the source's own
+# office_hours is never written). NO --reset-fix-attempt: this hold has nothing
+# to do with the fix ladder. rc mirrors hold-node's own exit code.
+#
+# The `>/dev/null 2>&1` redirect is load-bearing (same as _hold_node_fix_cap's):
+# sensor_gate runs inside a command substitution, so any stray stdout from
+# hold-node would be parsed as the emitted phase.
+_hold_node_ci_pending() {
+  local id="$1" pr="$2" strikes="$3" sha="$4"
+  local tmpdir reason_file rec_file rc minutes
+  tmpdir=$(mktemp -d) || return 1
+  reason_file="$tmpdir/reason.txt"
+  rec_file="$tmpdir/recommendation.txt"
+  minutes=$(( strikes * 15 ))
+  {
+    printf "This tactic's draft PR #%s has reported a \`pending\` CI verdict on head SHA " "$pr"
+    printf '%s for %s consecutive autonomous ticks (~%s minutes); its checks either ' \
+      "$sha" "$strikes" "$minutes"
+    printf 'never started (an empty status-check rollup) or started and never concluded, '
+    printf 'so no phase worker can be launched and no verdict can ever arrive on its own.\n'
+  } > "$reason_file"
+  {
+    printf "Inspect the PR's Checks tab. If no workflow run exists, re-trigger it "
+    printf '(close/reopen the PR, or push an empty commit to the node'"'"'s branch) — a new '
+    printf 'head SHA also resets the strike counter. If a run is stuck or was cancelled by '
+    printf 'a queue/runner problem, re-run it. Then resolve THIS HOLD TACTIC to '
+    printf '`phase: done` and prune it — clearing `office_hours` alone does not unblock '
+    printf 'the source.\n'
+  } > "$rec_file"
+
+  ( cd "$NATIVE_ROOT" && packages/intentionsutil/scripts/hold-node "$id" \
+      --kind ci-pending-stalled \
+      --reason-file "$reason_file" --recommendation-file "$rec_file" ) \
+    >/dev/null 2>&1
+  rc=$?
+  rm -rf "$tmpdir"
+  return $rc
+}
+
 # _read_pr_ci <pr> — one gh_pr_view_rest + one CI verdict, into globals
 # _CI_MERGED / _CI_HEAD / _CI_VERDICT. rc 1 when the PR is unreadable.
 _read_pr_ci() {
@@ -633,14 +688,58 @@ sensor_gate() {
       # state `closed`, not MERGED; the merged signal is `mergedAt != null`
       # (same field reconcile-graph-merged reads). A read failure is non-fatal:
       # fall through to the CI-verdict check rather than misclassify.
-      if merged_at=$(gh_pr_view_rest "$pr" 2>/dev/null | jq -r '.mergedAt // empty'); then
-        if [[ -n "$merged_at" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
-      fi
+      #
+      # ONE PR read serves both consumers: the merged check here and the head
+      # SHA the ci-pending strike ladder below keys on. Do NOT reach for the
+      # `_CI_HEAD` global `_gate_maybe_interrupt`/`_read_pr_ci` set — it can
+      # hold a stale value from a PREVIOUS candidate (they clear it only when
+      # they actually run a read). `<<<` never `echo | jq` (.claude/rules/
+      # shell-json.md). On a read failure `pv` is empty, `merged_at` and
+      # `head_sha` are both empty, and the gate falls through to the CI check
+      # with the strike ladder disarmed — fail open, never misclassify.
+      local pv head_sha
+      pv=$(gh_pr_view_rest "$pr" 2>/dev/null) || pv=""
+      merged_at=$(jq -r '.mergedAt // empty' <<<"$pv" 2>/dev/null)
+      head_sha=$(jq -r '.headRefOid // empty' <<<"$pv" 2>/dev/null)
+      if [[ -n "$merged_at" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
       "$SCRIPT_DIR/dispatch-ci-ready" "$id" >/dev/null 2>&1
       rc=$?
       case "$rc" in
-        0) echo "$phase"; return 0 ;;
-        1) echo "ci-pending"; return 1 ;;
+        0)
+          # CI concluded. Clear the ladder so its count always means
+          # CONSECUTIVE pending observations, not a lifetime total (mirrors
+          # dispatch-graph-execute's exit-0 conflict-strike reset, lines
+          # 230-235).
+          ci_pending_strike_clear "$NATIVE_ROOT" "$id"
+          echo "$phase"; return 0 ;;
+        1)
+          # CI verdict `pending` — the bounded arm
+          # (tactic-autonomous-ci-pending-liveness-bound). Two lanes are
+          # exempt from counting and keep the pre-bound behaviour verbatim:
+          #   - --node <id>: the explicit human lane. A human running
+          #     `dispatch <node-id>` repeatedly must not burn the AUTONOMOUS
+          #     strike budget — this bound exists for the unattended tick.
+          #   - an empty head SHA: the PR read failed, so there is no SHA to
+          #     key consecutiveness on. Fail open rather than count blind.
+          if [[ -n "$NODE_TARGET" || -z "$head_sha" ]]; then
+            echo "ci-pending"; return 1
+          fi
+          local strikes
+          strikes=$(ci_pending_strike_bump "$NATIVE_ROOT" "$id" "$head_sha") \
+            || { echo "ci-pending"; return 1; }
+          if (( strikes < DISPATCH_CI_PENDING_STRIKE_CAP )); then
+            echo "ci-pending (strike $strikes/$DISPATCH_CI_PENDING_STRIKE_CAP)"
+            return 1
+          fi
+          # At the cap: escalate to a tracked hold. On failure the sidecar is
+          # deliberately LEFT in place so the next tick retries the hold (the
+          # same posture as the fix-cap hold failure above and
+          # dispatch-graph-execute's own hold-failed path).
+          if ! _hold_node_ci_pending "$id" "$pr" "$strikes" "$head_sha"; then
+            echo "ci-pending-hold-failed"; return 1
+          fi
+          ci_pending_strike_clear "$NATIVE_ROOT" "$id"
+          echo "ci-pending-cap-held"; return 1 ;;
         *) echo "graph-select-target: dispatch-ci-ready failed (exit $rc) for $id" >&2; return 2 ;;
       esac ;;
     main-qa)

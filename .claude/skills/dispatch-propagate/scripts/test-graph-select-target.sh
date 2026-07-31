@@ -648,4 +648,207 @@ gsc_standalone_teardown
 
 # <<< END MOVED <<<
 
+# ============================================================================
+# Test: graph-select-target — the CI-pending liveness bound
+# (tactic-autonomous-ci-pending-liveness-bound Unit 2)
+# ============================================================================
+# A draft PR whose CI verdict never resolves used to stall the node forever:
+# every tick the qa/review gate skipped it as `ci-pending` with no counter and
+# no bound. The gate now counts CONSECUTIVE pending observations of the SAME
+# head SHA in a sidecar OUTSIDE every checkout
+# (<root>/.claude/worktrees/<id>.ci-pending-strikes, `<sha> <count>`), and at
+# DISPATCH_CI_PENDING_STRIKE_CAP (8) lands a `ci-pending-stalled` hold via
+# hold-node. Below the cap it makes NO graph write at all.
+#
+# Fixture shape follows the two harnesses above (real git repo + physically
+# copied script/libs — graph-select-target derives REPO_ROOT from its own
+# on-disk location, so symlinks break it). What is new:
+#   - the fake npx emits a `qa`-phase candidate WITH a pr, so sensor_gate takes
+#     the qa|review arm rather than the gh-free implement arm;
+#   - a fake `gh` on PATH answers both REST reads that arm makes — the PR
+#     object (gh_pr_view_rest) and the commit check-runs list
+#     (dispatch_ci_verdict_rest, via _gate_maybe_interrupt). The empty
+#     check-runs list classifies as `pending`, so the interrupt never fires and
+#     the gate falls through to dispatch-ci-ready;
+#   - `dispatch-ci-ready` is stubbed as a sibling in the fixture's scripts dir
+#     (graph-select-target resolves it via $SCRIPT_DIR), rc driven by
+#     CIP_CI_READY_RC;
+#   - `packages/intentionsutil/scripts/hold-node` is stubbed INSIDE the fixture
+#     repo (the producer invokes it as a path relative to NATIVE_ROOT) and
+#     records its argv to $CIP_ROOT/hold-node-argv, which is what makes
+#     "held / not held" observable.
+CIP_SHA="1111111111111111111111111111111111111111"
+CIP_OTHER_SHA="2222222222222222222222222222222222222222"
+CIP_SIDECAR_REL=".claude/worktrees/tactic-cip-fixture.ci-pending-strikes"
+
+cip_setup() {
+  CIP_ROOT=$(mktemp -d)
+  CIP_BARE=$(mktemp -d)
+  CIP_SCRIPTS="$CIP_ROOT/.claude/skills/dispatch-propagate/scripts"
+  mkdir -p "$CIP_SCRIPTS" "$CIP_ROOT/bin" "$CIP_ROOT/.claude/worktrees" \
+           "$CIP_ROOT/packages/intentionsutil/scripts"
+  cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh \
+     "$CIP_SCRIPTS/"
+  chmod +x "$CIP_SCRIPTS/graph-select-target"
+  # One qa-phase candidate carrying a PR number.
+  cat > "$CIP_ROOT/bin/npx" <<'CIPNPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-cip-fixture","kind":"tactic","phase":"qa","pr":"555","pace_exempt":false}],"events":[]}'
+exit 0
+CIPNPX
+  chmod +x "$CIP_ROOT/bin/npx"
+  # Fake gh: check-runs -> empty (classifies `pending`); anything else -> the
+  # raw REST pull object gh_pr_view_rest projects. `state` must be non-null
+  # (that projection ascii_upcases it). The head sha is driven by CIP_HEAD_SHA
+  # so a case can simulate a new push.
+  cat > "$CIP_ROOT/bin/gh" <<'CIPGH'
+#!/usr/bin/env bash
+for _a in "$@"; do
+  case "$_a" in
+    *check-runs*) echo '{"check_runs":[]}'; exit 0 ;;
+  esac
+done
+printf '{"number":555,"title":"t","body":"","state":"open","merged_at":null,"merge_commit_sha":null,"mergeable":null,"mergeable_state":"unknown","head":{"ref":"tactic-cip-fixture","sha":"%s"},"labels":[]}\n' "${CIP_HEAD_SHA:-unset}"
+exit 0
+CIPGH
+  chmod +x "$CIP_ROOT/bin/gh"
+  # dispatch-ci-ready: 1 = verdict pending (the bounded arm), 0 = concluded.
+  cat > "$CIP_SCRIPTS/dispatch-ci-ready" <<'CIPCIR'
+#!/usr/bin/env bash
+exit "${CIP_CI_READY_RC:-1}"
+CIPCIR
+  chmod +x "$CIP_SCRIPTS/dispatch-ci-ready"
+  # hold-node: record argv, succeed.
+  cat > "$CIP_ROOT/packages/intentionsutil/scripts/hold-node" <<'CIPHOLD'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+printf '%s\n' "$@" > "$_root/hold-node-argv"
+exit 0
+CIPHOLD
+  chmod +x "$CIP_ROOT/packages/intentionsutil/scripts/hold-node"
+  git init -q -b main "$CIP_ROOT"
+  git -C "$CIP_ROOT" config user.email t@t
+  git -C "$CIP_ROOT" config user.name t
+  mkdir -p "$CIP_ROOT/intentions"
+  echo '# placeholder' > "$CIP_ROOT/intentions/placeholder.md"
+  git -C "$CIP_ROOT" add -A
+  git -C "$CIP_ROOT" commit -q -m seed
+  git init -q --bare -b main "$CIP_BARE"
+  git -C "$CIP_ROOT" remote add origin "$CIP_BARE"
+  git -C "$CIP_ROOT" push -q origin main
+  git -C "$CIP_ROOT" fetch -q origin
+  cat > "$CIP_ROOT/bin/claude" <<'CIPCLAUDE'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+cat "$_root/claude-payload.json"
+exit 0
+CIPCLAUDE
+  chmod +x "$CIP_ROOT/bin/claude"
+  printf '%s' '[]' > "$CIP_ROOT/claude-payload.json"
+  CIP_GST="$CIP_SCRIPTS/graph-select-target"
+  CIP_SIDECAR="$CIP_ROOT/$CIP_SIDECAR_REL"
+}
+
+cip_teardown() {
+  rm -rf "$CIP_ROOT" "$CIP_BARE"
+  CIP_ROOT="" ; CIP_BARE="" ; CIP_SCRIPTS="" ; CIP_GST="" ; CIP_SIDECAR=""
+}
+
+# cip_run <extra args...> — one selector invocation with the fixture env.
+cip_run() {
+  PATH="$CIP_ROOT/bin:$SAVED_PATH" \
+    CLAUDE_AGENTS_CMD="$CIP_ROOT/bin/claude" \
+    DISPATCH_RESERVATION_DIR="$CIP_ROOT/reservations" \
+    DISPATCH_SELECTION_LOG_DIR="$CIP_ROOT/seldir" \
+    CIP_HEAD_SHA="$CIP_SHA" CIP_CI_READY_RC="${CIP_CI_READY_RC:-1}" \
+    "$CIP_GST" "$@" 2>/dev/null
+}
+
+cip_held() { [ -f "$CIP_ROOT/hold-node-argv" ] && echo 1 || echo 0; }
+cip_sidecar() { cat "$CIP_SIDECAR" 2>/dev/null || echo "ABSENT"; }
+
+# --- Case 1: first pending observation -> strike 1, no hold -----------------
+echo "Test: graph-select-target — a first pending-CI observation writes strike 1 and never holds"
+cip_setup
+cip1_out=$(cip_run)
+assert_eq "graph-select-target ci-pending: below the cap the node is simply skipped" \
+  "empty" "$cip1_out"
+assert_eq "graph-select-target ci-pending: the sidecar records <sha> 1" \
+  "$CIP_SHA 1" "$(cip_sidecar)"
+assert_eq "graph-select-target ci-pending: no hold is landed below the cap" "0" "$(cip_held)"
+cip_teardown
+
+# --- Case 2: same head SHA accumulates --------------------------------------
+echo "Test: graph-select-target — a pending observation on the SAME head SHA increments the strike count"
+cip_setup
+printf '%s 3\n' "$CIP_SHA" > "$CIP_SIDECAR"
+cip2_out=$(cip_run)
+assert_eq "graph-select-target ci-pending: same-SHA observation still skips" "empty" "$cip2_out"
+assert_eq "graph-select-target ci-pending: same-SHA observation bumps 3 -> 4" \
+  "$CIP_SHA 4" "$(cip_sidecar)"
+assert_eq "graph-select-target ci-pending: no hold at strike 4 of 8" "0" "$(cip_held)"
+cip_teardown
+
+# --- Case 3: a new head SHA resets the ladder -------------------------------
+# The count means "consecutive pending observations of THIS head SHA". A push
+# (new SHA) starts a fresh CI run, so the accumulated strikes must not carry
+# over — otherwise a healthy node that pushed after a stall would hold on its
+# first pending tick.
+echo "Test: graph-select-target — a changed head SHA resets the pending-CI strike ladder to 1"
+cip_setup
+printf '%s 7\n' "$CIP_OTHER_SHA" > "$CIP_SIDECAR"
+cip3_out=$(cip_run)
+assert_eq "graph-select-target ci-pending: changed-SHA observation still skips" "empty" "$cip3_out"
+assert_eq "graph-select-target ci-pending: changed SHA resets the count to 1" \
+  "$CIP_SHA 1" "$(cip_sidecar)"
+assert_eq "graph-select-target ci-pending: a reset never holds" "0" "$(cip_held)"
+cip_teardown
+
+# --- Case 4: at the cap -> tracked hold, sidecar cleared --------------------
+echo "Test: graph-select-target — the DISPATCH_CI_PENDING_STRIKE_CAP-th consecutive pending observation lands a ci-pending-stalled hold"
+cip_setup
+printf '%s 7\n' "$CIP_SHA" > "$CIP_SIDECAR"
+cip4_out=$(cip_run)
+assert_eq "graph-select-target ci-pending: the capped tick still prints empty" "empty" "$cip4_out"
+assert_eq "graph-select-target ci-pending: the cap invokes hold-node" "1" "$(cip_held)"
+assert_eq "graph-select-target ci-pending: the hold names the source node id" \
+  "1" "$(grep -qx 'tactic-cip-fixture' "$CIP_ROOT/hold-node-argv" && echo 1 || echo 0)"
+assert_eq "graph-select-target ci-pending: the hold uses --kind ci-pending-stalled" \
+  "1" "$(grep -qx 'ci-pending-stalled' "$CIP_ROOT/hold-node-argv" && echo 1 || echo 0)"
+# No --reset-fix-attempt: this hold is unrelated to the fix ladder.
+assert_eq "graph-select-target ci-pending: the hold does NOT reset the fix-attempt ladder" \
+  "0" "$(grep -qx -- '--reset-fix-attempt' "$CIP_ROOT/hold-node-argv" && echo 1 || echo 0)"
+assert_eq "graph-select-target ci-pending: a landed hold clears the sidecar" \
+  "ABSENT" "$(cip_sidecar)"
+cip_teardown
+
+# --- Case 5: the explicit --node lane is exempt -----------------------------
+# `dispatch <node-id>` is the human lane; repeated human invocations must not
+# burn the AUTONOMOUS strike budget. The sidecar must be left exactly as found
+# and no hold landed, however close to the cap it already is.
+echo "Test: graph-select-target — the explicit --node lane neither counts pending-CI strikes nor holds"
+cip_setup
+printf '%s 7\n' "$CIP_SHA" > "$CIP_SIDECAR"
+cip5_out=$(cip_run --node tactic-cip-fixture)
+assert_eq "graph-select-target ci-pending: --node still skips on a pending verdict" "empty" "$cip5_out"
+assert_eq "graph-select-target ci-pending: --node leaves the sidecar untouched" \
+  "$CIP_SHA 7" "$(cip_sidecar)"
+assert_eq "graph-select-target ci-pending: --node never lands a hold" "0" "$(cip_held)"
+cip_teardown
+
+# --- Case 6: a concluded verdict clears the ladder --------------------------
+# The count must mean CONSECUTIVE observations, so a tick whose CI verdict
+# concluded has to drop the sidecar — otherwise strikes scattered across weeks
+# and separated by healthy runs would accumulate into a false hold.
+echo "Test: graph-select-target — a concluded CI verdict selects the node and clears the pending-CI ladder"
+cip_setup
+printf '%s 4\n' "$CIP_SHA" > "$CIP_SIDECAR"
+cip6_out=$(CIP_CI_READY_RC=0 cip_run)
+assert_eq "graph-select-target ci-pending: a concluded verdict selects the candidate" \
+  "node tactic-cip-fixture tactic qa" "$cip6_out"
+assert_eq "graph-select-target ci-pending: a concluded verdict clears the sidecar" \
+  "ABSENT" "$(cip_sidecar)"
+assert_eq "graph-select-target ci-pending: a concluded verdict never holds" "0" "$(cip_held)"
+cip_teardown
+
 report_results

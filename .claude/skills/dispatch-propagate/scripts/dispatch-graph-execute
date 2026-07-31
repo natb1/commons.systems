@@ -250,6 +250,16 @@ for spec in "$@"; do
     10)
       # ci-waiting: a draft PR's checks are still in progress. Leave the
       # reservation; the next tick re-selects once the CI verdict lands.
+      #
+      # DELIBERATELY NOT COUNTED (tactic-autonomous-ci-pending-liveness-bound).
+      # Reaching here is an INTRA-TICK RACE, not a sustained state: the
+      # selector's ci-ready gate passed moments earlier and CI went pending
+      # between selection and provision. The SUSTAINED form of the same state
+      # is counted at graph-select-target's `ci-pending` arm, against
+      # DISPATCH_CI_PENDING_STRIKE_CAP, keyed on the PR's head SHA. A second
+      # independent counter here would double-count the same stalled run —
+      # both counters advancing on alternating ticks — and could fire the hold
+      # at half the intended budget. One counter, one place.
       echo "waiting $id"
       ;;
     11)

@@ -826,6 +826,66 @@ dispatch_ci_verdict_rest() {
   printf '%s\n' "$verdict"
 }
 
+# --- CI-pending liveness bound (tactic-autonomous-ci-pending-liveness-bound) ---
+# Consecutive-observation cap for a draft PR whose CI verdict stays `pending`
+# on the SAME head SHA. A baked-in constant, deliberately NOT a dispatch.config
+# tunable — parity with CONFLICT_STRIKE_CAP (dispatch-graph-execute:145) and
+# FIX_ATTEMPT_CAP (packages/intentionsutil/src/transitions.ts:101). The tick
+# fires every 15 minutes (OnCalendar=*:0/15, lib.sh:3082), so 8 consecutive
+# observations is ~2 hours of a single CI run never concluding — far past any
+# legitimate run in this repo, and cheap because every observation below the
+# cap is a file write, never a graph record.
+DISPATCH_CI_PENDING_STRIKE_CAP=8
+
+# ci_pending_strike_bump <main-root> <node-id> <head-sha> — count ONE consecutive
+# `pending` CI observation for <node-id> on <head-sha>, and print the new count.
+#
+# The counter is a sidecar file at
+# <main-root>/.claude/worktrees/<node-id>.ci-pending-strikes, holding a single
+# line `<sha> <count>`. The sidecar lives OUTSIDE every checkout — NEXT TO the
+# node's worktree, not inside it — the same convention as `.conflict-strikes`
+# (dispatch-graph-execute:289) and `.scope-fingerprint` (provision-node-worktree,
+# see dispatch-graph-scope-sweep:42). That is load-bearing: a file inside a
+# checkout would dirty that tree and trip graph-commit's assert_clean_outside_ids.
+# This helper makes NO graph write of any kind.
+#
+# Reset semantics: an absent, unreadable, or unparseable sidecar, or a recorded
+# SHA that differs from <head-sha>, resets the count to 1 — the count always
+# means "consecutive pending observations of THIS head SHA". Losing the sidecar
+# (daemon restart, reaped worktree) is deliberately fail-open: it just grants
+# more free observations before the cap.
+#
+# Returns 1 WITHOUT writing when <head-sha> is empty — an unreadable PR must
+# never burn a strike.
+ci_pending_strike_bump() { # <main-root> <node-id> <head-sha>
+  local main_root="$1" node_id="$2" head_sha="$3"
+  [[ -n "$head_sha" ]] || return 1
+  local file="$main_root/.claude/worktrees/$node_id.ci-pending-strikes"
+  mkdir -p "$main_root/.claude/worktrees" 2>/dev/null || true
+  local prev_sha="" c=0
+  read -r prev_sha c < "$file" 2>/dev/null || true
+  # Validate as a LITERAL integer before any (( )) context: bash arithmetic
+  # evaluates array-index command substitution, so an untrusted file value must
+  # never reach it unchecked (same defensive shape as dispatch-graph-execute:330
+  # and reconcile-graph-review-stall:91-95).
+  [[ "$c" =~ ^[0-9]+$ ]] || c=0
+  if [[ "$prev_sha" != "$head_sha" ]]; then
+    c=1
+  else
+    c=$(( c + 1 ))
+  fi
+  printf '%s %s\n' "$head_sha" "$c" > "$file" 2>/dev/null || true
+  printf '%s\n' "$c"
+}
+
+# ci_pending_strike_clear <main-root> <node-id> — drop the ci-pending sidecar
+# (CI concluded, or the hold landed). Always returns 0. Same
+# outside-every-checkout sidecar location as ci_pending_strike_bump above.
+ci_pending_strike_clear() { # <main-root> <node-id>
+  rm -f "$1/.claude/worktrees/$2.ci-pending-strikes" 2>/dev/null || true
+  return 0
+}
+
 # REST-backed drop-in for `gh issue view <N> --json
 # number,title,body,state,stateReason,createdAt,labels,assignees` (#2255). The
 # dispatch fleet exhausts GitHub's shared GraphQL rate-limit bucket while the
