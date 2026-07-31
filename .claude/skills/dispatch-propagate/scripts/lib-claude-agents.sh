@@ -11,11 +11,13 @@
 #   claude_sessions_under              <worktree-path>
 #   claude_sessions_with_name          <name>
 #   claude_agents_list_all
+#   claude_agents_list_registered
 #   live_session_claimed_nums
 #   worktree_has_live_session          <worktree-path> [exclude_sid]
 #   claude_agents_count_busy_workers
 #   verify_agent_registered_under      <agent-name> <cwd>
-#   claude_agents_snapshot_capture     <path>
+#   claude_agents_snapshot_capture            <path>
+#   claude_agents_snapshot_capture_registered <path>
 #   claude_job_id_for_name_all         <name>
 #
 # claude_sessions_under <path>
@@ -55,11 +57,21 @@
 #   the tick snapshot (DISPATCH_AGENTS_SNAPSHOT) is captured without `--all` and so
 #   lacks the `done` rows this helper exists to surface; reading the snapshot would
 #   silently hide them.
-#   SCOPED TO THE OFFICE-HOURS SELECTOR ONLY. The shared helpers
-#   (`claude_sessions_with_name`, `claude_agents_list_all`,
-#   `worktree_has_live_session`, `_claude_agents_raw`) stay untouched: they gate the
-#   dispatch router's worktree-occupancy decisions on the hot path, and making
-#   `done` sessions newly visible there would change those decisions.
+#   The DIRECT query (bypassing the snapshot) is a FRESHNESS requirement, not a
+#   scoping one: this helper backs the office-hours attach path, which must observe
+#   the daemon's current answer and must not read a tick-old snapshot. That is why
+#   it does not go through `_claude_agents_raw_registered` either, even though that
+#   sibling now offers a snapshot-backed REGISTERED view.
+#   Occupancy no longer borrows this helper's `--all` view: it has its own
+#   registered accessors (`_claude_agents_raw_registered` /
+#   `claude_agents_list_registered`), which `worktree_has_live_session` reads — a
+#   registered-but-done session keeps blocking its node by design. See the
+#   "ACTIVE vs REGISTERED" section below. The ACTIVE-view helpers
+#   (`claude_sessions_with_name`, `claude_agents_list_all`, `_claude_agents_raw`,
+#   `claude_agents_count_busy_workers`) stay untouched: they answer "is a process
+#   running right now?", and making `done` sessions visible there would break the
+#   pace budget, the spawn-registration race, and the dead-router reservation
+#   reclaim.
 #     return 0 — daemon queried successfully. Stdout carries one tab-separated
 #               line per matching session: sessionId<TAB>state. Zero matches →
 #               return 0 with empty stdout: definite "no sessions".
@@ -86,8 +98,12 @@
 #
 # worktree_has_live_session <path> [exclude_sid]
 #   The ergonomic fail-safe predicate. Name-keyed, two-name check against a
-#   SINGLE `claude_agents_list_all` fetch (not two `claude_sessions_with_name`
-#   calls — one daemon round-trip per worktree on dispatch-sweep's hot path).
+#   SINGLE `claude_agents_list_registered` fetch (not two
+#   `claude_sessions_with_name` calls — one daemon round-trip per worktree on
+#   dispatch-sweep's hot path). It reads the REGISTERED view (`claude agents
+#   --json --all`), so a session that has STOPPED but has not been `claude rm`'d
+#   still occupies its worktree: registration IS the claim, and releasing it is an
+#   explicit human act.
 #   Exact-matches the live-session name column against BOTH the worktree basename
 #   (matching the worker session spawned with `--name=<basename>` by
 #   `dispatch-launch-worker`) AND `office-hours-<N>`, where <N> is the basename's
@@ -106,6 +122,17 @@
 #   `dispatch-graph-execute` with `--name "$id"`) does not match its own
 #   just-spawned session as a pre-existing claim. Omitted or empty → default
 #   behavior, byte-identical to a plain `<path>` check.
+#   Worktree coupling: `claude rm <id>` deletes the session row AND its worktree;
+#   a plain `stop` deletes neither. This predicate does NOT depend on that
+#   coupling — it is keyed on the worktree basename via the registry row, not on
+#   the worktree's presence on disk. If only the session row is removed, the
+#   worktree unblocks regardless of whether the checkout itself survived;
+#   `dispatch-resolve-worktree` re-provisions it if needed.
+#   NO TIMEOUT. The block is permanent until a human releases it with
+#   `claude rm <id>`. Do NOT add an age cutoff, grace period, or auto-expiry —
+#   that would reintroduce exactly the silent expiry this design removes.
+#   Accumulation of held nodes is the intended trade: containment (the stopped
+#   session survives for inspection) over throughput.
 #
 # claude_agents_count_busy_workers
 #   Counts live sessions that are actively working: `name` matches `^[0-9]+-`
@@ -151,6 +178,41 @@
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is
 # testable with no real daemon. Default: `claude`.
 #
+# ACTIVE vs REGISTERED — two views of the daemon registry, two questions.
+#
+#   | view       | query                        | question | consumers |
+#   |---|---|---|---|
+#   | REGISTERED | `claude agents --json --all` | "Is this node/worktree spoken for?" Registration IS the claim; release is `claude rm`. | worktree_has_live_session (node concurrency gate, worktree reuse, worktree removal) |
+#   | ACTIVE     | `claude agents --json`       | "Is a process running right now?" | pace/concurrency budget, spawn-registration race, dead-router reservation reclaim |
+#
+# The REGISTERED accessors are `_claude_agents_raw_registered`,
+# `claude_agents_list_registered`, and `claude_agents_snapshot_capture_registered`
+# — siblings of the ACTIVE `_claude_agents_raw` / `claude_agents_list_all` /
+# `claude_agents_snapshot_capture`, modeled on them so the UNKNOWN contract is
+# identical. Two design rules govern the split:
+#
+#   (1) Do NOT reconstruct ACTIVE from REGISTERED client-side. A
+#       `select(.state != "done")` filter over the `--all` array guesses at the
+#       daemon's terminal-state set — which this file's own comment on
+#       `claude_job_id_for_name_all` describes as "done/stopped/etc". Ask the
+#       daemon for the view you want; do not guess at its state machine.
+#
+#   (2) Do NOT flip the shared `claude_agents_list_all` wholesale to `--all`. It
+#       also backs `reservation_sweep` (lib-reservation-ledger.sh:418) rule (c),
+#       which reclaims a marker when the reserving session id is no longer in the
+#       live set. Reserving sessions are routers (`dispatch-<short-id>`) that
+#       routinely go done, so making done rows visible there would make markers
+#       immortal: `reservation_count` would climb monotonically and
+#       `LIVE_COUNT = busy_workers + reservations` (dispatch-select-tick:640-644)
+#       would pin at the ceiling, stalling the whole fleet. The flip is therefore
+#       confined to the occupancy predicate.
+#
+# Naming trap: `claude_agents_list_all`'s `_all` suffix means MACHINE-WIDE (no
+# `--cwd` filter, no name filter) — NOT `--all`. It is the ACTIVE view. A reader
+# skimming for "the place that needs --all" will land on it wrongly. The fully
+# greenfield name is `claude_agents_list_active`; renaming it is out of scope here
+# (separate mechanical PR).
+#
 # Tick snapshot: DISPATCH_AGENTS_SNAPSHOT names a file holding one captured
 # `claude agents --json` array for the current selection tick. When it is set
 # and names a readable file, the THREE machine-wide functions — `claude_agents_
@@ -163,6 +225,19 @@
 # <path>` writes such a snapshot. When DISPATCH_AGENTS_SNAPSHOT is
 # unset / unreadable / empty, every function falls back to the live per-call
 # path and the UNKNOWN contract is preserved bit-for-bit.
+#
+# Registered tick snapshot: DISPATCH_AGENTS_SNAPSHOT_ALL is the REGISTERED-view
+# counterpart — a file holding one captured `claude agents --json --all` array for
+# the current tick. It is read by `_claude_agents_raw_registered`, and therefore by
+# `claude_agents_list_registered` and `worktree_has_live_session` (the only
+# consumers of the registered view). `claude_agents_snapshot_capture_registered
+# <path>` writes it; dispatch-tick captures it once per tick alongside
+# DISPATCH_AGENTS_SNAPSHOT, so the occupancy predicate does not issue one live
+# `--all` round-trip per candidate worktree. When DISPATCH_AGENTS_SNAPSHOT_ALL is
+# unset / unreadable, `_claude_agents_raw_registered` falls back to the live
+# `claude agents --json --all` query and the UNKNOWN contract is preserved
+# bit-for-bit. The two snapshots are DISTINCT files and are never interchangeable:
+# the ACTIVE snapshot lacks `done` rows, the REGISTERED snapshot contains them.
 #
 # The two freshness-sensitive functions are deliberately EXCLUDED from the
 # snapshot and always query live: `claude_sessions_under` (the `--cwd` variant)
@@ -217,8 +292,43 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     "${CLAUDE_AGENTS_CMD:-claude}" agents --json >"$pth" 2>/dev/null
   }
 
+  # _claude_agents_raw_registered — emit the raw `claude agents --json --all`
+  # array on stdout: the REGISTERED view, which includes sessions in a terminal
+  # state (done/stopped/etc) that have not been `claude rm`'d. Sibling of
+  # _claude_agents_raw with identical structure and fallback semantics; only the
+  # snapshot variable (DISPATCH_AGENTS_SNAPSHOT_ALL) and the `--all` flag differ.
+  # Reads the registered tick snapshot when set and readable, else a live
+  # per-call query. Returns non-zero on a live-query failure (the UNKNOWN
+  # signal); a readable snapshot is always exit 0 here, with the
+  # empty/whitespace UNKNOWN guard applied by each caller.
+  _claude_agents_raw_registered() {
+    if [[ -n "${DISPATCH_AGENTS_SNAPSHOT_ALL:-}" && -r "$DISPATCH_AGENTS_SNAPSHOT_ALL" ]]; then
+      cat "$DISPATCH_AGENTS_SNAPSHOT_ALL"
+      return 0
+    fi
+    "${CLAUDE_AGENTS_CMD:-claude}" agents --json --all 2>/dev/null
+  }
+
+  # claude_agents_snapshot_capture_registered <path> — capture one machine-wide
+  # `claude agents --json --all` to <path> for the tick to reuse via
+  # DISPATCH_AGENTS_SNAPSHOT_ALL. The REGISTERED-view sibling of
+  # claude_agents_snapshot_capture. Writes the raw array (even `[]`) and returns
+  # the command's exit status so the caller can fall back to live reads on
+  # failure.
+  claude_agents_snapshot_capture_registered() {
+    local pth="${1:-}"
+    if [[ -z "$pth" ]]; then
+      printf 'lib-claude-agents: claude_agents_snapshot_capture_registered requires a <path> argument\n' >&2
+      return 1
+    fi
+    "${CLAUDE_AGENTS_CMD:-claude}" agents --json --all >"$pth" 2>/dev/null
+  }
+
   # claude_sessions_under <path> — emit live sessions under <path> as TSV.
   # See the header comment for the return-code contract.
+  # STAYS ON THE ACTIVE VIEW: it backs the spawn-registration race, which needs a
+  # LIVE successor — matching a stale done row of the same name would falsely
+  # report a successful registration.
   claude_sessions_under() {
     local pth="${1:-}"
     if [[ -z "$pth" ]]; then
@@ -263,6 +373,9 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
 
   # claude_sessions_with_name <name> — emit live sessions matching <name> as TSV.
   # See the header comment for the return-code contract.
+  # STAYS ON THE ACTIVE VIEW: it answers "is a session by this name running now?"
+  # `claude_sessions_with_name_all` is the `--all` variant for callers that need
+  # terminal-state rows.
   claude_sessions_with_name() {
     local name="${1:-}"
     if [[ -z "$name" ]]; then
@@ -435,6 +548,11 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
 
   # claude_agents_list_all — emit every live session as a 3-column TSV.
   # See the header comment for the return-code contract.
+  # STAYS ON THE ACTIVE VIEW (`claude agents --json`, no `--all`): it backs
+  # reservation_sweep's dead-router reclaim, which must see a done router drop out
+  # of the live set or markers become immortal and the fleet stalls (header design
+  # rule 2). Occupancy uses claude_agents_list_registered instead. The `_all`
+  # suffix means machine-wide, NOT `--all`.
   claude_agents_list_all() {
     # No --cwd flag and no name filter: the caller (the reservation-ledger
     # sweep) needs the complete machine-wide live-session set in one query. The
@@ -469,6 +587,50 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     return 0
   }
 
+  # claude_agents_list_registered — emit every REGISTERED session (live AND
+  # terminal-state rows that have not been `claude rm`'d) as a 4-column TSV:
+  # sessionId<TAB>status<TAB>name<TAB>state. Columns 1-3 are byte-identical to
+  # claude_agents_list_all's projection, so any awk keyed on $1/$3 works against
+  # either; `.state` is appended purely so the occupancy predicate can name the
+  # held session's state in an operator diagnostic. `.state` is NOT defaulted —
+  # a fake or a daemon build without the field yields null, which @tsv renders as
+  # an empty field; inventing a value would be a guess.
+  # The UNKNOWN contract is identical to claude_agents_list_all.
+  claude_agents_list_registered() {
+    # No --cwd flag and no name filter: the caller (worktree_has_live_session)
+    # needs the complete machine-wide REGISTERED set in one query. The raw array
+    # comes from the registered tick snapshot when set, else a live per-call
+    # `--all` query (see _claude_agents_raw_registered). 2>/dev/null inside the
+    # helper drops daemon noise; only exit code and a well-formed JSON array on
+    # stdout are trusted.
+    local out
+    if ! out=$(_claude_agents_raw_registered); then
+      return 1
+    fi
+
+    # A zero exit with empty (or whitespace-only) output is unknown too.
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # One jq pass validates the JSON is an array and projects the 4-column TSV
+    # (sessionId, status, name, state — no pid). Non-array input errors out and
+    # the result is UNKNOWN.
+    local lines
+    if ! lines=$(jq -r '
+      if type == "array"
+      then .[] | [.sessionId, .status, .name, .state] | @tsv
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 1
+    fi
+    # `[]` → empty $lines → emit nothing (zero session lines), still return 0.
+    if [[ -n "$lines" ]]; then
+      printf '%s\n' "$lines"
+    fi
+    return 0
+  }
+
   # live_session_claimed_nums — emit the UNIQUE issue numbers claimed by live
   # sessions, one per line. The forward (in-flight) half of selection's claimed
   # set: instead of walking every registered worktree backward, derive the
@@ -488,6 +650,9 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   #               <N> values, one per line (empty for `[]` or no matches).
   #     return 1 — UNKNOWN. Stdout is empty. Callers should fail open (see
   #               claimed_issue_nums in lib-reservation-ledger.sh).
+  # STAYS ON THE ACTIVE VIEW: graph node sessions are named tactic-* / strategy-*
+  # and match neither `^[0-9]+-` nor `^office-hours-[0-9]+$`, so the registered
+  # view would contribute nothing here on the graph lane.
   live_session_claimed_nums() {
     # No --cwd flag and no name filter: the caller needs the machine-wide claimed
     # set in one query. The raw array comes from the tick snapshot when set, else
@@ -529,8 +694,12 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     return 0
   }
 
-  # worktree_has_live_session <path> — fail-safe liveness predicate.
-  # Name-keyed, two-name check against a SINGLE claude_agents_list_all fetch
+  # worktree_has_live_session <path> — fail-safe OCCUPANCY predicate.
+  # Reads the REGISTERED view (claude_agents_list_registered, `claude agents
+  # --json --all`): a session that has stopped but has not been `claude rm`'d
+  # still holds its worktree. Registration IS the claim; release is an explicit
+  # human act. No timeout — see the header contract.
+  # Name-keyed, two-name check against a SINGLE claude_agents_list_registered fetch
   # (one daemon round-trip per worktree, not two): exact-matches the live-session
   # name against both the worktree basename (the phase-worker session spawned
   # with --name=<basename> by dispatch-launch-worker) AND `office-hours-<N>`
@@ -558,27 +727,42 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     base="$(basename "$pth")"
     num="${base%%-*}"
 
-    # One machine-wide fetch covers both names — `claude_agents_list_all` is the
-    # fetch-once primitive, so we avoid two separate daemon round-trips per clean
-    # worktree on dispatch-sweep's hot path.
+    # One machine-wide fetch covers both names — `claude_agents_list_registered`
+    # is the fetch-once primitive, so we avoid two separate daemon round-trips per
+    # clean worktree on dispatch-sweep's hot path.
     local all
-    if ! all=$(claude_agents_list_all); then
+    if ! all=$(claude_agents_list_registered); then
       # Unknown — the daemon could not be queried. Fail safe: occupied.
       return 0
     fi
 
-    # `claude_agents_list_all` emits sessionId<TAB>status<TAB>name (sessionId is
-    # column 1, name is column 3). Match column 3 exactly against EITHER the
-    # phase-worker name (the worktree basename, spawned with --name=<basename>)
-    # OR the office-hours name (office-hours-<N>, renamed off the basename in
-    # #1311). Exact match — never a substring grep, which would conflate
-    # office-hours-1 with office-hours-12. When `exclude_sid` is non-empty, a row
-    # whose sessionId (column 1) equals it is skipped: the caller's own session
-    # is not "another" claim (see the second-argument contract above).
-    if awk -F'\t' -v base="$base" -v oh="office-hours-$num" -v exclude_sid="$exclude_sid" \
-        '($3 == base || $3 == oh) && (exclude_sid == "" || $1 != exclude_sid) { found = 1; exit } END { exit !found }' \
-        <<<"$all"; then
-      # A live phase-worker or office-hours session occupies this worktree.
+    # `claude_agents_list_registered` emits sessionId<TAB>status<TAB>name<TAB>state
+    # (sessionId is column 1, name is column 3, state is column 4 — columns 1-3
+    # match claude_agents_list_all byte-for-byte). Match column 3 exactly against
+    # EITHER the phase-worker name (the worktree basename, spawned with
+    # --name=<basename>) OR the office-hours name (office-hours-<N>, renamed off
+    # the basename in #1311). Exact match — never a substring grep, which would
+    # conflate office-hours-1 with office-hours-12. When `exclude_sid` is
+    # non-empty, a row whose sessionId (column 1) equals it is skipped: the
+    # caller's own session is not "another" claim (see the second-argument
+    # contract above). The matched row's sessionId and state are printed so a
+    # done-but-not-removed holder can be named in the operator diagnostic below;
+    # the exit-on-first-match short-circuit and `END { exit !found }` semantics
+    # are unchanged.
+    local matched
+    if matched=$(awk -F'\t' -v base="$base" -v oh="office-hours-$num" -v exclude_sid="$exclude_sid" \
+        '($3 == base || $3 == oh) && (exclude_sid == "" || $1 != exclude_sid) { found = 1; print $1 "\t" $4; exit } END { exit !found }' \
+        <<<"$all"); then
+      # A registered phase-worker or office-hours session occupies this worktree.
+      local msid mstate
+      IFS=$'\t' read -r msid mstate <<<"$matched"
+      # A `done` holder is the non-obvious case: nothing is running, yet the
+      # worktree stays blocked until a human releases it. Say so, once, naming
+      # the release act. Any other state (including empty) stays silent.
+      if [[ "$mstate" == "done" ]]; then
+        printf "lib-claude-agents: %s held by a done-but-not-removed session %s — release it with 'claude rm %s' (a stopped session keeps blocking its node by design)\n" \
+          "$pth" "$msid" "$msid" >&2
+      fi
       return 0
     fi
 
@@ -597,6 +781,8 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # stopped workers, because those do not consume the concurrency/token budget
   # the gate paces. An over-count from a stray busy human session is fail-safe
   # (it throttles spawning). Same UNKNOWN contract as `claude_sessions_under`.
+  # STAYS ON THE ACTIVE VIEW: a done session burns no tokens, so counting it
+  # would throttle the fleet's concurrency budget for work that has finished.
   claude_agents_count_busy_workers() {
     # No --cwd here: the router needs a machine-wide count of live workers, not
     # a per-path filter. Two checkouts on the same machine share this count —
@@ -630,6 +816,9 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # verify_agent_registered_under <agent-name> <cwd> — bounded-retry verify
   # that closes the async-registration race after `claude --bg` returns.
   # See the header comment for the return-code contract.
+  # STAYS ON THE ACTIVE VIEW (via claude_sessions_under): the registration race
+  # needs a LIVE successor; a stale done row of the same name would falsely
+  # report success.
   verify_agent_registered_under() {
     local agent_name="${1:-}"
     local cwd="${2:-}"
