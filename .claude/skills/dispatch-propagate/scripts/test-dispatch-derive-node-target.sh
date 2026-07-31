@@ -217,6 +217,16 @@ NODE_JSON_LINE=$(printf '%s\n' "$OUT" | sed -n '/=== NODE-JSON ===/{n;p}')
 JSON_PHASE=$(jq -r '.phase' <<<"$NODE_JSON_LINE")
 assert_eq "pr-mode-required-found: NODE-JSON .phase" "implement" "$JSON_PHASE"
 assert_contains "pr-mode-required-found: NODE-BODY has fixture marker" "$BODY_MARKER" "$OUT"
+assert_contains "pr-mode-required-found: stdout has BASE line" "BASE: " "$OUT"
+BASE_LINE=$(printf '%s\n' "$OUT" | grep '^BASE: ')
+BASE_VAL="${BASE_LINE#BASE: }"
+if [[ "$BASE_VAL" =~ ^[0-9a-f]{40}$ ]]; then
+  assert_eq "pr-mode-required-found: BASE value is 40-hex" "$BASE_VAL" "$BASE_VAL"
+else
+  assert_eq "pr-mode-required-found: BASE value is 40-hex" "<40-hex sha>" "$BASE_VAL"
+fi
+EXPECTED_BASE=$(git -C "$REPO" rev-parse "origin/main:intentions/tactic-pr-required-found.md")
+assert_eq "pr-mode-required-found: BASE matches origin/main blob sha" "$EXPECTED_BASE" "$BASE_VAL"
 
 # ---------------------------------------------------------------------------
 # Test 6: node present at implement, --pr-mode optional, gh returns empty ->

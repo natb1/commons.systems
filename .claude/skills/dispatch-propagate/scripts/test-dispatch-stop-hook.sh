@@ -58,7 +58,15 @@ stopnc_setup() {
 _root="$(cd "$(dirname "$0")/../../.." && pwd)"
 printf '%s\n' "$*" >> "$_root/park-calls.log"
 echo "park" >> "$_root/order.log"
-if [[ -f "$_root/park-exit" ]]; then exit "$(cat "$_root/park-exit")"; fi
+if [[ -f "$_root/park-exit" ]]; then
+  ec="$(cat "$_root/park-exit")"
+  # Exit 3 is park-node's `stale-diagnosis` refusal; the real script prints that
+  # stable marker on ITS stderr, and the hook must surface (not swallow) it.
+  if [[ "$ec" == "3" ]]; then
+    echo "park-node: stale-diagnosis — fake refusal for test" >&2
+  fi
+  exit "$ec"
+fi
 exit 0
 FAKE
   chmod +x "$ROOT/packages/intentionsutil/scripts/park-node"
@@ -187,6 +195,120 @@ rc=$(stopnc_run)
 assert_eq "stop: node park+reco → exit 0" "0" "$rc"
 assert_eq "stop: node park+reco → argv carries the recommendation" \
   "tactic-some-node needs a human decision try approach X" "$(cat "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- office-hours-base marker → --base pin precedes the node id -------------
+#
+# tactic-qa-main-park-base-cas: /qa-main's cannot-verify park has a real gap
+# (a multi-minute browser verification) between its diagnosis-time node read and
+# this hook's execution, so it writes the diagnosis-time blob sha to
+# office-hours-base and the hook threads it through as park-node --base.
+# park-node's parser is leading-flags-only, so every flag must precede the id.
+echo "Test: dispatch-stop office-hours-base marker → park-node --base <sha> <id> <reason>"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf '0123456789abcdef0123456789abcdef01234567' > "$JOB_DIR/office-hours-base"
+rc=$(stopnc_run)
+assert_eq "stop: base marker → exit 0" "0" "$rc"
+assert_eq "stop: base marker → park-node called once" "1" "$(wc -l < "$ROOT/park-calls.log")"
+assert_eq "stop: base marker → argv is --base <sha> <id> <reason>" \
+  "--base 0123456789abcdef0123456789abcdef01234567 tactic-some-node needs a human decision" \
+  "$(cat "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- base + pr markers → BOTH flags precede the node id ---------------------
+echo "Test: dispatch-stop office-hours-base + office-hours-pr → both flags before the id"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf '0123456789abcdef0123456789abcdef01234567' > "$JOB_DIR/office-hours-base"
+printf '42' > "$JOB_DIR/office-hours-pr"
+rc=$(stopnc_run)
+assert_eq "stop: base+pr → exit 0" "0" "$rc"
+assert_eq "stop: base+pr → argv is --base <sha> --pr <n> <id> <reason>" \
+  "--base 0123456789abcdef0123456789abcdef01234567 --pr 42 tactic-some-node needs a human decision" \
+  "$(cat "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- no base marker → unpinned park, argv unchanged from today --------------
+echo "Test: dispatch-stop with no office-hours-base marker → no --base in argv"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+rc=$(stopnc_run)   # no office-hours-base marker written
+assert_eq "stop: no base marker → exit 0" "0" "$rc"
+assert_eq "stop: no base marker → argv carries no --base" \
+  "tactic-some-node needs a human decision" "$(cat "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- malformed base marker → degrades to an UNPINNED park -------------------
+#
+# Deliberate: a non-40-hex value is ignored rather than passed through. Passing
+# it would make park-node itself reject the invocation as a usage error (exit 2)
+# and land no park at all — strictly worse than the unpinned park that is
+# today's behavior for every caller that writes no marker.
+echo "Test: dispatch-stop malformed office-hours-base → ignored, unpinned park, exit 0"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'not-a-valid-sha' > "$JOB_DIR/office-hours-base"
+rc=$(stopnc_run)
+assert_eq "stop: malformed base → exit 0" "0" "$rc"
+assert_eq "stop: malformed base → park-node still called once" "1" "$(wc -l < "$ROOT/park-calls.log")"
+assert_eq "stop: malformed base → argv carries no --base" \
+  "tactic-some-node needs a human decision" "$(cat "$ROOT/park-calls.log")"
+stopnc_teardown
+
+# --- park-node exit 3 (stale-diagnosis) → refusal is non-fatal, no consume ---
+#
+# The pin's whole point: park-node refused and wrote NOTHING, so the newer state
+# that landed on origin/main stands. The hook must stay best-effort (exit 0),
+# must NOT retry or re-invoke unpinned (park-node called exactly once), must
+# leave every marker in place, and must surface park-node's `stale-diagnosis`
+# marker on its own stderr rather than swallowing it.
+echo "Test: dispatch-stop park-node exit 3 (stale-diagnosis) → exit 0, markers survive, stderr surfaced"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+printf '0123456789abcdef0123456789abcdef01234567' > "$JOB_DIR/office-hours-base"
+printf '3' > "$ROOT/park-exit"   # fake park-node refuses with stale-diagnosis
+rc=$(stopnc_run)
+assert_eq "stop: stale-diagnosis → hook still exits 0" "0" "$rc"
+assert_eq "stop: stale-diagnosis → park-node called exactly once (no retry, no unpinned fallback)" \
+  "1" "$(wc -l < "$ROOT/park-calls.log")"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: stale-diagnosis → reason marker survives" "0" "$?"
+[ -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: stale-diagnosis → recommendation marker survives" "0" "$?"
+[ -e "$JOB_DIR/office-hours-base" ]
+assert_eq "stop: stale-diagnosis → base marker survives" "0" "$?"
+TOTAL=$((TOTAL + 1))
+if grep -q 'stale-diagnosis' "$ROOT/hook-stderr.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: stop: stale-diagnosis → park-node stderr reaches the hook's stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop: stale-diagnosis → park-node stderr reaches the hook's stderr"
+  echo "    hook stderr: $(cat "$ROOT/hook-stderr.log")"
+fi
+stopnc_teardown
+
+# --- successful park consumes the base marker too ---------------------------
+echo "Test: dispatch-stop successful park consumes the office-hours-base marker"
+stopnc_setup
+stopnc_state "tactic-some-node"
+: > "$ROOT/intentions/tactic-some-node.md"
+printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
+printf '0123456789abcdef0123456789abcdef01234567' > "$JOB_DIR/office-hours-base"
+rc=$(stopnc_run)
+assert_eq "stop: base marker success → exit 0" "0" "$rc"
+[ ! -e "$JOB_DIR/office-hours-base" ]
+assert_eq "stop: base marker success → base marker deleted" "0" "$?"
 stopnc_teardown
 
 # --- best-effort: park-node failure still exits 0 ---------------------------
