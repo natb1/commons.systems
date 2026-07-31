@@ -555,6 +555,28 @@ const DOMAIN_PROMPTS = {
     'Firebase-specific: Firestore rules permissiveness (overly broad `allow` conditions, missing field constraints), emulator-only code reachable on production paths, Firebase API key or config exposure.',
 };
 
+// Terminal-condition clause for a Lane-A finder that is required to invoke a
+// named built-in instrument. Invoking that instrument IS the finder's contract
+// — not a step toward its own review. A rejected/errored/unavailable
+// invocation is a terminal condition, not a retry point, and it is never
+// license to perform the review yourself and report it under the built-in's
+// name (that substitution is exactly how issue node
+// tactic-lane-instrument-substitution-guard's incident happened: four days
+// undetected).
+function instrumentClause(spec) {
+  return [
+    `Invoking ${spec.label} is this agent's ENTIRE contract.`,
+    `If that invocation is rejected, errors, or ${spec.label} is unavailable → terminal condition.`,
+    'Do NOT loop or retry.',
+    `Performing the review yourself is NOT an acceptable fallback. Output you produced yourself,`,
+    `reported under ${spec.label}'s name, is a false report.`,
+    'On that terminal condition, return exactly:',
+    `{ "fixed": [], "residue": [], "instrument": { "name": "${spec.skill}", "invoked": false, "failure_text": "<the VERBATIM error text you received, unedited>" } } and stop.`,
+    `On a successful invocation, return the normal payload with "instrument": { "name": "${spec.skill}", "invoked": true, "failure_text": "" }.`,
+    `Report "invoked": true ONLY if you received a non-error result from ${spec.label} itself — your own analysis is never that result.`,
+  ].join('\n');
+}
+
 function finderPrompt(name, args) {
   const ctx = diffContext(args);
   if (name === 'code-review') {
@@ -576,6 +598,7 @@ function finderPrompt(name, args) {
       '  action).',
       '- IGNORE every finding with outcome "no_change_needed" entirely — add it to neither array.',
       'Return `{ fixed: [...], residue: [...] }` matching the schema below.',
+      instrumentClause(INSTRUMENTS['code-review']),
       LANE_A_BLURB,
     ].join('\n');
   }
@@ -593,6 +616,7 @@ function finderPrompt(name, args) {
       '`exploit_scenario` (the concrete attack scenario from the report), `recommended_fix` (the',
       'concrete remediation from the report).',
       'Return `{ fixed: [], residue: [...] }` — `fixed` is always empty for this source.',
+      instrumentClause(INSTRUMENTS['security-review']),
       LANE_A_BLURB,
     ].join('\n');
   }
