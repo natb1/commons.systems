@@ -48,7 +48,8 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-conflict-review-code-review-invocation-contract
 office_hours: null
 pace_exempt: true
 rounds: null
