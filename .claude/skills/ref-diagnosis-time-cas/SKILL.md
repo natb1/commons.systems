@@ -43,6 +43,17 @@ the node keeps whatever newer state landed on `origin/main`; the job is **held**
 unpinned. The next `/qa-main` run against the node's current state IS the
 re-diagnosis.
 
+**Invoking the pinned form is not gated.** A 2026-07-30 measurement reported
+that the PreToolUse auto-mode classifier denied `park-node --base ...` and
+`graph-commit --base ...` Bash calls while permitting the same commands without
+`--base` — the safer pinned form harder to invoke than the unpinned one. A
+re-measurement the same day did not reproduce it: `graph-commit --help` and
+`--base`-carrying invocations of both scripts ran with no classifier prompt or
+block, failing only on their own validation. No entry was added to
+`.claude/hooks/approve-workflow-commands.sh` — with no reproducible cause, an
+allowlist change would be speculative. If the denial resurfaces, re-measure
+before adding one.
+
 ## The three-step protocol
 
 **1. Capture** — at diagnosis time, dump every node under consideration:
