@@ -133,7 +133,7 @@
 # also needs an elevated Bash `timeout` (see SKILL.md Step 0).
 #
 # Manual inspection of the autonomous tick's journal (once systemd drives it):
-#   journalctl --user -u dispatch-tick
+#   journalctl --user -t dispatch-tick
 #
 # Exit codes: 0 on a routed disposition; 2 on an internal/usage error surfaced on
 # stderr.
