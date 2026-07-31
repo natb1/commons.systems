@@ -1147,6 +1147,92 @@ assert_eq "held-for-debug-all-flag: exits 0" "0" "$rc"
 assert_eq "held-for-debug-all-flag: counts the --all-only terminal row" "1" "$out"
 ca_teardown
 
+# --- claude_agents_list_blocked_workers ---------------------------------------
+# Emits sessionId<TAB>name<TAB>cwd for live worker sessions with state ==
+# "blocked", excluding routers (dispatch-<short-id>). Reads via
+# _claude_agents_raw (snapshot-aware), never `--all` directly, since a blocked
+# session is already visible in the default listing.
+
+# --- Test 36: mixed registry — only blocked workers emitted, router excluded --
+echo "Test: claude_agents_list_blocked_workers emits only blocked worker rows, router excluded"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s-busy","pid":1,"status":"busy","state":"working","name":"tactic-foo-bar"},
+  {"sessionId":"s-blocked-tactic","pid":2,"status":"idle","state":"blocked","name":"tactic-baz-qux"},
+  {"sessionId":"s-blocked-router","pid":3,"status":"idle","state":"blocked","name":"dispatch-abc123","cwd":"/wt/router"},
+  {"sessionId":"s-blocked-num","pid":4,"status":"idle","state":"blocked","name":"123-slug","cwd":"/wt/123-slug"}
+]' 0
+if out=$(claude_agents_list_blocked_workers); then rc=0; else rc=$?; fi
+assert_eq "blocked-mixed: exits 0" "0" "$rc"
+assert_eq "blocked-mixed: only the two worker rows, router excluded" \
+  "$(printf 's-blocked-tactic\ttactic-baz-qux\t\ns-blocked-num\t123-slug\t/wt/123-slug')" "$out"
+ca_teardown
+
+# --- Test 37: no blocked rows → rc 0, empty stdout -----------------------------
+echo "Test: claude_agents_list_blocked_workers returns 0 with empty stdout when nothing is blocked"
+ca_setup
+write_fake_claude '[{"sessionId":"a","pid":1,"status":"busy","state":"working","name":"tactic-foo"}]' 0
+if out=$(claude_agents_list_blocked_workers); then rc=0; else rc=$?; fi
+assert_eq "blocked-none: exits 0" "0" "$rc"
+assert_eq "blocked-none: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 38: empty [] registry → rc 0, empty stdout (definite none) ----------
+echo "Test: claude_agents_list_blocked_workers returns 0 with empty stdout for an empty registry"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_agents_list_blocked_workers); then rc=0; else rc=$?; fi
+assert_eq "blocked-empty: exits 0 (definite zero, not UNKNOWN)" "0" "$rc"
+assert_eq "blocked-empty: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 39: daemon failure (non-zero exit) → rc 1, empty stdout -------------
+echo "Test: claude_agents_list_blocked_workers returns rc 1 on daemon failure"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_agents_list_blocked_workers); then rc=0; else rc=$?; fi
+assert_eq "blocked-daemon-fail: exits non-zero (UNKNOWN)" "1" "$rc"
+assert_eq "blocked-daemon-fail: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 40: non-array output → rc 1 -------------------------------------------
+echo "Test: claude_agents_list_blocked_workers returns rc 1 on non-array JSON output"
+ca_setup
+write_fake_claude '{}' 0
+if out=$(claude_agents_list_blocked_workers); then rc=0; else rc=$?; fi
+assert_eq "blocked-non-array: exits non-zero (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+# --- Test 41: null/absent name does not abort the pass -------------------------
+echo "Test: claude_agents_list_blocked_workers tolerates a null/absent name without aborting"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s-null","pid":1,"status":"idle","state":"blocked","name":null},
+  {"sessionId":"s-absent","pid":2,"status":"idle","state":"blocked"},
+  {"sessionId":"s-ok","pid":3,"status":"idle","state":"blocked","name":"tactic-good","cwd":"/wt/good"}
+]' 0
+if out=$(claude_agents_list_blocked_workers); then rc=0; else rc=$?; fi
+assert_eq "blocked-null-name: exits 0" "0" "$rc"
+assert_eq "blocked-null-name: only the valid-name row is emitted" \
+  "$(printf 's-ok\ttactic-good\t/wt/good')" "$out"
+ca_teardown
+
+# --- Test 42: snapshot faithfulness — reads DISPATCH_AGENTS_SNAPSHOT, not claude -
+echo "Test: claude_agents_list_blocked_workers reads DISPATCH_AGENTS_SNAPSHOT, never invoking a failing claude"
+ca_setup
+snapshot_file="$CA_DIR/snapshot.json"
+printf '%s' '[{"sessionId":"s-snap","pid":1,"status":"idle","state":"blocked","name":"tactic-from-snapshot","cwd":"/wt/snap"}]' > "$snapshot_file"
+# Point CLAUDE_AGENTS_CMD at a fake that would fail if invoked, proving the
+# snapshot path is used instead of a live daemon query.
+write_fake_claude '' 1
+export DISPATCH_AGENTS_SNAPSHOT="$snapshot_file"
+if out=$(claude_agents_list_blocked_workers); then rc=0; else rc=$?; fi
+unset DISPATCH_AGENTS_SNAPSHOT
+assert_eq "blocked-snapshot: exits 0 despite a failing claude fake" "0" "$rc"
+assert_eq "blocked-snapshot: reads the snapshot content" \
+  "$(printf 's-snap\ttactic-from-snapshot\t/wt/snap')" "$out"
+ca_teardown
+
 # <<< END MOVED <<<
 
 report_results
