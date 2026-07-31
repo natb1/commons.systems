@@ -294,6 +294,38 @@ const RESIDUE_TREE_SCHEMA = {
   },
 };
 
+// Independent instrument-invocation verification schema — the non-fabricable half
+// of the instrument gate. instrumentVerdict() below can only read a receipt the
+// finder wrote about ITSELF; `invoked: true` is fabricable. This schema carries the
+// verdict of a SEPARATE agent whose only job is to run
+// .claude/skills/dispatch-propagate/scripts/dispatch-verify-instrument-invocation,
+// which reads the actual Claude session transcript record (tool-call history). Like
+// residue-tree-verify, that agent is fed NO finding text — only a command line — so
+// a prompt-injection payload embedded in an attacker-controlled finding description
+// cannot steer it.
+const INSTRUMENT_VERIFY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['results'],
+  properties: {
+    results: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['instrument', 'verified', 'rejections', 'failure_text', 'reason'],
+        properties: {
+          instrument: { type: 'string' },
+          verified: { type: 'boolean' },
+          rejections: { type: 'integer' },
+          failure_text: { type: 'string' },
+          reason: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
 // --- inline kernel helpers (thin mirrors of the pure scripts) ----------------
 
 // The trust-the-built-in review-and-fix sources: these run the built-in review
@@ -661,6 +693,11 @@ function finderPrompt(name, args) {
 const _a = typeof args === 'string' ? JSON.parse(args) : (args || {});
 log(`args type: ${typeof args}; surface=${_a.surface}; changed_files count=${(_a.changed_files || []).length}`);
 
+// Lower bound for the instrument-invocation transcript search. Captured ONCE here,
+// before any finder is launched, so the verifier can never credit an invocation
+// recorded by an earlier run in this same worktree.
+const runStartedAt = new Date().toISOString();
+
 // subagents_launched (source 1, this Workflow's own fan-out): a single
 // accumulator incremented at each spawn site, inside the guard that actually
 // launches the agents. A launched-but-dead agent still counts — increment at
@@ -741,6 +778,71 @@ const finderResults = qualityFinders
   .map((name, i) => ({ name, res: qualityResults[i] }))
   .concat(securityFinders.map((name, i) => ({ name, res: securityResults[i] })));
 
+// --- independent instrument-invocation verification --------------------------
+// The receipt instrumentVerdict() reads is SELF-REPORTED by the same agent that
+// might fabricate it. The honest "it failed" path is trustworthy — an agent
+// narrating its own rejection is not lying in the direction that hurts — but
+// `invoked: true` is fabricable. Check it against the actual transcript record.
+//
+// Modeled on residue-tree-verify: ONE separate, minimally-scoped agent, fed ONLY
+// the command line(s) to run and the return shape. NO finding text, NO residue
+// content, NO diff context reaches it. That is load-bearing, not tidiness: it is
+// what keeps a prompt-injection payload embedded in an untrusted finding
+// description from steering the verifier into reporting a false `verified`.
+const laneAChecked = finderResults
+  .filter(({ name, res }) => INSTRUMENTS[name] && res !== null && res !== undefined)
+  .map(({ name }) => name);
+let instrumentVerifyResults = null;
+if (laneAChecked.length) {
+  const verifyLines = laneAChecked.map((name) => {
+    const spec = INSTRUMENTS[name];
+    return (
+      `.claude/skills/dispatch-propagate/scripts/dispatch-verify-instrument-invocation ` +
+      `--instrument ${name} --kind ${spec.kind} --skill ${spec.skill} ` +
+      `--since ${runStartedAt} --cwd <CWD>`
+    );
+  });
+  subagentsLaunched += 1;
+  instrumentVerifyResults = await agent(
+    [
+      'FIRST run `pwd` and note the absolute path it prints. Substitute that path',
+      'for <CWD> in every command below (the orchestrator cannot inject a literal',
+      'cwd reliably across environments, so you determine it yourself).',
+      '',
+      'Then run EACH of these commands exactly as written, from that directory:',
+      ...verifyLines,
+      '',
+      'A non-zero exit from this command is EXPECTED and NORMAL when the instrument',
+      'was not verified — this is a successful verification run reporting a negative',
+      'result, NOT a failure of your task. You MUST return the JSON printed on the',
+      "command's stdout regardless of its exit status. Do NOT treat a non-zero exit",
+      'as your own failure and do NOT retry the command.',
+      '',
+      'Make NO edits, NO commits, NO pushes; run nothing else.',
+      '',
+      'Return { "results": [ ... ] } with one object per command, each carrying the',
+      'instrument, verified, rejections, failure_text and reason values from that',
+      "command's stdout JSON. If a command printed no stdout JSON at all, return that",
+      'instrument with verified:false, rejections:0, failure_text:"" and reason set to',
+      'the stderr diagnostic.',
+    ].join('\n'),
+    {
+      model: 'sonnet',
+      agentType: 'general-purpose',
+      schema: INSTRUMENT_VERIFY_SCHEMA,
+      label: 'instrument-verify',
+      phase: 'finders',
+    }
+  );
+}
+// Index the transcript verdicts by instrument name. `null` means the verifier
+// agent itself died after retries — NOT "verification not required": every
+// checked instrument then fails the gate below (fail-closed).
+const verifyByInstrument = new Map();
+for (const r of (instrumentVerifyResults && instrumentVerifyResults.results) || []) {
+  if (r && typeof r.instrument === 'string') verifyByInstrument.set(r.instrument, r);
+}
+
 // --- instrument gate ---------------------------------------------------------
 // A stage that claims to have run a named built-in must return a receipt proving
 // it did. A missing/false/inconsistent receipt means the named review did NOT
@@ -750,10 +852,33 @@ const instrumentFailures = []; // [{ instrument, reason }]
 const instrumentFailed = new Set();
 for (const { name, res } of finderResults) {
   const v = instrumentVerdict(name, res);
-  if (v.ok) continue;
-  instrumentFailures.push({ instrument: name, reason: v.reason });
+  if (!v.ok) {
+    instrumentFailures.push({ instrument: name, reason: v.reason });
+    instrumentFailed.add(name);
+    log(`finders: INSTRUMENT GATE FAILED — ${v.reason}`);
+  }
+  // Transcript check. This runs even when the self-report already PASSED: a
+  // receipt-vs-transcript disagreement (receipt says invoked, transcript
+  // disagrees) is exactly the fabrication signature this stage exists to catch,
+  // and the transcript verdict WINS that conflict. It is skipped where the
+  // self-report gate itself does not apply (Lane-B lens, or a dead finder whose
+  // null result is the probe-wave throttle signal) OR where the self-report
+  // already failed this instrument above — a second push here would double-count
+  // the same instrument in instrumentFailures/coverage_note.
+  if (!laneAChecked.includes(name) || instrumentFailed.has(name)) continue;
+  const tv = verifyByInstrument.get(name);
+  if (tv && tv.verified === true) continue;
+  const why = tv
+    ? String(tv.reason || tv.failure_text || 'no verdict detail returned')
+        .trim()
+        .replace(/\s+/g, ' ')
+    : 'the independent transcript verifier returned no result (agent died after retries)';
+  const reason =
+    `${name}: instrument invocation not verified in the transcript record — ` +
+    (why.length <= 300 ? why : why.slice(0, 300));
+  instrumentFailures.push({ instrument: name, reason });
   instrumentFailed.add(name);
-  log(`finders: INSTRUMENT GATE FAILED — ${v.reason}`);
+  log(`finders: INSTRUMENT GATE FAILED — ${reason}`);
 }
 if (instrumentFailures.length) {
   coverage_incomplete = true;

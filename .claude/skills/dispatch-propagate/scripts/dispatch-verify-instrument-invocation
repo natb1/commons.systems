@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+# dispatch-verify-instrument-invocation — independent, non-fabricable evidence
+# that a named instrument was actually invoked.
+#
+# The instrument gate in .claude/workflows/review-fix.js checks a receipt the
+# finder agent returns about itself. The honest "it failed" path is trustworthy
+# (an agent narrating its own rejection is not lying in the direction that
+# hurts), but `invoked: true` is fabricable: nothing stops an agent from
+# claiming it invoked the instrument when it did not. This script closes that
+# gap by reading the actual Claude session transcript record — the tool-call
+# history — rather than trusting the self-report.
+#
+# USAGE
+#   dispatch-verify-instrument-invocation --instrument <name> --kind skill|command
+#            [--skill <skill-arg>] [--command-pattern <ERE>]
+#            --since <ISO8601> --cwd <abs-path>
+#            [--wait-secs <N>]
+#
+#     --instrument       the instrument's registry name (e.g. code-review). Used
+#                        in the rejection-message regex and echoed in the output.
+#     --kind             skill   → look for a Skill tool_use whose .input.skill
+#                                  equals --skill
+#                        command → look for a Bash tool_use whose .input.command
+#                                  matches --command-pattern (ERE)
+#     --since            ISO8601 lower bound; only transcript records at or after
+#                        it are considered. Claude transcript timestamps are
+#                        zero-padded ISO8601, so a lexical >= comparison is
+#                        correct — no date parsing is needed or wanted.
+#     --cwd              exact match against each record's own `.cwd` field. This
+#                        is what makes the verdict safe when several concurrent
+#                        sessions/worktrees write into the transcript tree at
+#                        once. The project directory is deliberately NOT derived
+#                        from a path slug.
+#     --wait-secs        bounded poll (default 10) used ONLY when the first pass
+#                        found no evidence either way, since transcripts can lag
+#                        a moment behind real-time writes. This is
+#                        evidence-gathering, not a substitute invocation.
+#
+# WHAT IT SCANS
+#   Projects root: ${DISPATCH_AUDIT_PROJECTS_ROOT:-$HOME/.claude/projects} — the
+#   SAME env-var seam .claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh
+#   uses, deliberately reusing the identical name so a caller can point both
+#   tools at one fixture root. A recursive find for *.jsonl picks up top-level
+#   session transcripts (<projectdir>/<sessionid>.jsonl), subagent transcripts
+#   (<projectdir>/<sessionid>/subagents/agent-*.jsonl) and the deeper
+#   workflow-subagent nesting
+#   (<projectdir>/<sessionid>/subagents/workflows/wf_<id>/agent-*.jsonl).
+#
+# WHAT IT COUNTS (over the cwd+since-filtered records)
+#   rejections   `.type == "user"` records carrying a `tool_result` content block
+#                with `.is_error == true` whose stringified `.content` matches
+#                "Skill <instrument> cannot be used with Skill tool". The first
+#                match is reported verbatim (untruncated — the caller truncates)
+#                as failure_text.
+#   invocations  `.type == "assistant"` records carrying a matching `tool_use`
+#                content block (see --kind). Their `.id`s form the pairing set.
+#   succeeded    `tool_result` blocks whose `.tool_use_id` is in that set and
+#                whose `.is_error` is not true. The tool_use and its paired
+#                tool_result always appear in the same transcript file, so
+#                per-file id-pairing is sufficient — no cross-file joins.
+#
+#   verified is true iff succeeded >= 1 AND rejections == 0.
+#
+# OUTPUT / EXIT CONTRACT (mirrors dispatch-recover-session-id's 0/1/2 style)
+#   0  verified; exactly one JSON document on stdout.
+#   1  NOT verified; exactly one JSON document on stdout. This is a normal,
+#      EXPECTED outcome for a genuinely-rejected instrument — not a script bug.
+#      A wait window that expires with no evidence either way lands here with
+#      reason "no invocation record found" (fail-closed).
+#   2  usage error (missing/invalid flag) or environment error (transcript root
+#      absent, --since unparseable). Diagnostic on stderr, NO stdout JSON — per
+#      .claude/rules/code-style.md a missing transcript root is a clear error,
+#      never masqueraded as verified:false.
+#
+#   JSON shape:
+#     {"instrument":..,"kind":..,"invocations":N,"succeeded":N,"rejections":N,
+#      "verified":bool,"failure_text":"..","reason":".."}
+#
+# Pure filesystem — never touches the Claude daemon, so it is sandbox-safe and
+# unit-testable (see test-dispatch-verify-instrument-invocation.sh).
+#
+# .claude/rules/shell-json.md: this file never pipes a captured JSON variable
+# through `echo` into jq. jq reads files directly, or takes a here-string.
+set -euo pipefail
+
+INSTRUMENT=""
+KIND=""
+SKILL_ARG=""
+COMMAND_PATTERN=""
+SINCE=""
+CWD=""
+WAIT_SECS=10
+
+usage() {
+  echo "usage: dispatch-verify-instrument-invocation --instrument <name> --kind skill|command" >&2
+  echo "         [--skill <skill-arg>] [--command-pattern <ERE>]" >&2
+  echo "         --since <ISO8601> --cwd <abs-path> [--wait-secs <N>]" >&2
+}
+
+die_usage() {
+  echo "dispatch-verify-instrument-invocation: $1" >&2
+  usage
+  exit 2
+}
+
+need_value() {
+  # $1 = flag name, $2 = remaining arg count
+  [[ "$2" -ge 2 ]] || die_usage "$1 requires a value"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --instrument)      need_value "$1" "$#"; INSTRUMENT="$2"; shift 2 ;;
+    --kind)            need_value "$1" "$#"; KIND="$2"; shift 2 ;;
+    --skill)           need_value "$1" "$#"; SKILL_ARG="$2"; shift 2 ;;
+    --command-pattern) need_value "$1" "$#"; COMMAND_PATTERN="$2"; shift 2 ;;
+    --since)           need_value "$1" "$#"; SINCE="$2"; shift 2 ;;
+    --cwd)             need_value "$1" "$#"; CWD="$2"; shift 2 ;;
+    --wait-secs)       need_value "$1" "$#"; WAIT_SECS="$2"; shift 2 ;;
+    *)                 die_usage "unexpected argument: $1" ;;
+  esac
+done
+
+[[ -n "$INSTRUMENT" ]] || die_usage "--instrument is required"
+[[ -n "$KIND" ]] || die_usage "--kind is required"
+[[ -n "$SINCE" ]] || die_usage "--since is required"
+[[ -n "$CWD" ]] || die_usage "--cwd is required"
+
+case "$KIND" in
+  skill)
+    [[ -n "$SKILL_ARG" ]] || die_usage "--kind skill requires --skill"
+    ;;
+  command)
+    [[ -n "$COMMAND_PATTERN" ]] || die_usage "--kind command requires --command-pattern"
+    ;;
+  *)
+    die_usage "--kind must be 'skill' or 'command', got: $KIND"
+    ;;
+esac
+
+[[ "$WAIT_SECS" =~ ^[0-9]+$ ]] || die_usage "--wait-secs must be a non-negative integer, got: $WAIT_SECS"
+
+# --since must be a zero-padded ISO8601 instant; the lexical >= comparison below
+# is only correct for that shape, so reject anything else loudly (environment
+# error) rather than silently comparing garbage.
+if [[ ! "$SINCE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
+  echo "dispatch-verify-instrument-invocation: --since is not a parseable ISO8601 instant: $SINCE" >&2
+  exit 2
+fi
+
+PROJECTS_ROOT="${DISPATCH_AUDIT_PROJECTS_ROOT:-${HOME:-}/.claude/projects}"
+if [[ -z "$PROJECTS_ROOT" || ! -d "$PROJECTS_ROOT" ]]; then
+  echo "dispatch-verify-instrument-invocation: transcript root '$PROJECTS_ROOT' is not a directory" >&2
+  exit 2
+fi
+
+# The rejection signature the substitution incident produced verbatim:
+#   <tool_use_error>Skill code-review cannot be used with Skill tool due to
+#   disable-model-invocation</tool_use_error>
+REJECT_RE="Skill ${INSTRUMENT} cannot be used with Skill tool"
+
+INVOCATIONS=0
+SUCCEEDED=0
+REJECTIONS=0
+FAILURE_TEXT=""
+
+# Per-file jq program. Slurps one transcript's records, filters to this cwd and
+# time window, then emits one compact object. Files are handled independently so
+# a huge tree is never slurped whole, and id-pairing stays within a session.
+JQ_PROG='
+  map(select(((.cwd? // "") == $cwd) and ((.timestamp? // "") >= $since))) as $recs
+  | [ $recs[]
+      | select(.type == "user")
+      | .message.content[]?
+      | select(.type == "tool_result" and .is_error == true)
+      | (.content | tostring)
+      | select(test($rejre))
+    ] as $rej
+  | [ $recs[]
+      | select(.type == "assistant")
+      | .message.content[]?
+      | select(.type == "tool_use")
+      | select(
+          if $kind == "skill"
+          then (.name == "Skill" and ((.input.skill? // "") == $skill))
+          else (.name == "Bash" and (((.input.command? // "") | tostring) | test($cmdre)))
+          end
+        )
+      | .id
+    ] as $ids
+  | [ $recs[]
+      | .message.content[]?
+      | select(.type == "tool_result")
+      | select((.tool_use_id? // "") as $t | ($ids | index($t)) != null)
+      | select((.is_error? // false) != true)
+    ] as $ok
+  | {
+      invocations: ($ids | length),
+      succeeded: ($ok | length),
+      rejections: ($rej | length),
+      failure_text: ($rej[0] // "")
+    }
+'
+
+scan() {
+  local per_file agg f
+  per_file="$(mktemp)"
+
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    if ! jq -s -c \
+      --arg cwd "$CWD" \
+      --arg since "$SINCE" \
+      --arg rejre "$REJECT_RE" \
+      --arg kind "$KIND" \
+      --arg skill "$SKILL_ARG" \
+      --arg cmdre "$COMMAND_PATTERN" \
+      "$JQ_PROG" "$f" >>"$per_file" 2>/dev/null
+    then
+      # A corrupt or alien transcript must not abort the verdict; report and
+      # move on (same posture as aggregate-usage.sh's files_failed tally).
+      echo "dispatch-verify-instrument-invocation: skipping unparseable transcript: $f" >&2
+    fi
+  done < <(find "$PROJECTS_ROOT" -type f -name '*.jsonl' 2>/dev/null)
+
+  # Aggregate the per-file objects. jq reads the file directly — never an
+  # echo-into-jq round-trip of a captured variable (.claude/rules/shell-json.md).
+  agg=$(jq -s -c '{
+      invocations: (map(.invocations) | add // 0),
+      succeeded:   (map(.succeeded)   | add // 0),
+      rejections:  (map(.rejections)  | add // 0),
+      failure_text: ((map(select(.failure_text != "") | .failure_text))[0] // "")
+    }' "$per_file")
+
+  INVOCATIONS=$(jq -r '.invocations' <<<"$agg")
+  SUCCEEDED=$(jq -r '.succeeded' <<<"$agg")
+  REJECTIONS=$(jq -r '.rejections' <<<"$agg")
+  FAILURE_TEXT=$(jq -r '.failure_text' <<<"$agg")
+
+  rm -f "$per_file"
+}
+
+scan
+
+# Flush lag: only when the first pass found NO evidence either way is a bounded
+# re-scan worth doing. Any rejection or any invocation is already a verdict.
+waited=0
+while [[ "$INVOCATIONS" -eq 0 && "$REJECTIONS" -eq 0 && "$waited" -lt "$WAIT_SECS" ]]; do
+  sleep 1
+  waited=$((waited + 1))
+  scan
+done
+
+REASON=""
+if [[ "$SUCCEEDED" -ge 1 && "$REJECTIONS" -eq 0 ]]; then
+  VERIFIED=true
+else
+  VERIFIED=false
+  if [[ "$INVOCATIONS" -eq 0 && "$REJECTIONS" -eq 0 ]]; then
+    # Fail-closed: absence of evidence is not evidence of invocation.
+    REASON="no invocation record found"
+  fi
+fi
+
+jq -n -c \
+  --arg instrument "$INSTRUMENT" \
+  --arg kind "$KIND" \
+  --argjson invocations "$INVOCATIONS" \
+  --argjson succeeded "$SUCCEEDED" \
+  --argjson rejections "$REJECTIONS" \
+  --argjson verified "$VERIFIED" \
+  --arg failure_text "$FAILURE_TEXT" \
+  --arg reason "$REASON" \
+  '{instrument: $instrument, kind: $kind, invocations: $invocations,
+    succeeded: $succeeded, rejections: $rejections, verified: $verified,
+    failure_text: $failure_text, reason: $reason}'
+
+[[ "$VERIFIED" == "true" ]] && exit 0
+exit 1

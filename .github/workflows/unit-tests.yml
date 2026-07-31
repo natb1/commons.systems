@@ -210,6 +210,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-align-tactics-tempref.sh
       - name: Run review-fix instrument-gate tests
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-instrument.sh
+      - name: Run dispatch-verify-instrument-invocation tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-verify-instrument-invocation.sh
       - name: Run dispatch-stop hook tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-stop-hook.sh
       - name: Run dispatch-office-hours-strip hook tests
