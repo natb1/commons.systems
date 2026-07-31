@@ -96,16 +96,21 @@ attention:
     stop; a second, tighter (6s) recurrence confirmed it 2026-07-31. blocked_by
     is empty, so this promotion lifts no blocker and cannot compound. Finalized
     to phase: implement 2026-07-31 via /align-tactics."
-phase: qa
+phase: done
 execution:
   branch: tactic-router-spawn-window-duplicate-worker
   pr: 2995
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T11:31:10Z
+    mergeCommitSha: 3ddf7858666638885a68a6f92b7069db4567fe0d
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -579,3 +584,97 @@ sessions share **one** worktree. `claude rm <session-id>` deletes the session
 handoff window (the observed 814 s case) is the sibling read-defect mechanism,
 not a regression of this fix. Record it against
 `tactic-graph-router-live-worker-read-robust`; do not reopen this work for it.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #2995). Both items are planned deferrals documented in
+the PR body's own "Observe in production" section — not code defects, not
+assertable at merge time. All 8 script-verifiable QA plan items in this pass
+PASSed (both directly-affected test suites, both neighboring test suites, the
+call-site census, syntax + primitive/env-var checks, a black-box marker
+lifecycle smoke test against the real committed library, and the prose
+linter). Drained after `review → main-qa`.
+
+### 9. No duplicate-worker recurrence in the live fleet after merge
+
+- URL path: current
+- Expected outcome: No new spawn-window duplicate-worker pair is observed in
+  the live fleet after merge (no two `launched <id>` tick-journal lines for
+  the same node id from different tick pids within the boot window).
+- Finding: Cannot be asserted at merge time — requires accumulated production
+  spawn cycles observed over time via the tick journal and
+  `graph-selection.jsonl`.
+
+### 10. Ledger occupancy and reclaim-note mix look healthy in production logs
+
+- URL path: current
+- Expected outcome: `tmp/dispatch-reservations/` is non-empty during a
+  worker's boot window post-merge; `live-worker-redundant` reclaims dominate
+  as the normal release path; `spawn-handoff-expired` stays a rare trickle
+  rather than a flood (a flood would mean the 300 s TTL needs raising, not
+  that the rule is wrong).
+- Finding: The trickle-vs-flood ratio and ledger-occupancy pattern only
+  become meaningful after the fleet accumulates real spawn cycles post-merge;
+  requires production log review over time, not a merge-time command.
+
+## Verification evidence 2026-07-31 — residue items 9 and 10 PASS, park cleared
+
+Machine-verified after PR #2995 merged (2026-07-31T11:31:10Z, sha 3ddf7858). Both
+items were resolved with `journalctl`, `ls`, `jq` and `git show` — no browser, no
+author input — so the "not browser-verifiable" park was a mis-sort against the
+criterion at `strategy-graph-native-dispatch.md:2224-2227`.
+
+**Item 10 — ledger occupancy and reclaim mix. PASS, and it is direct mechanism
+evidence.** Captured during the live 14:34:30Z spawn window, three markers held:
+
+```
+tmp/dispatch-reservations/tactic-stopped-session-blocks-node
+  session=headless:b2f404c6599f4b96ab2dd8d7124d07e7
+  issue=tactic-stopped-session-blocks-node
+  origin=spawned
+  timestamp=2026-07-31T14:34:23Z
+```
+
+Before the fix these markers were **deleted at spawn** — an empty ledger during a
+boot window was precisely this defect's signature. They are now held past spawn.
+Reclaim-note mix moved as the plan predicted: `live-worker-redundant` 2 in ~18h
+pre-merge -> **12 in 3.1h** post-merge (the expected new normal), and the new
+`spawn-handoff-expired` fired exactly once (11:47:06Z), a trickle rather than a
+flood, so the 300s handoff TTL needs no adjustment. That string did not exist in
+the codebase before this merge (`git show 3ddf7858^1:lib-reservation-ledger.sh`
+-> 0 hits; `3ddf7858` -> 3).
+
+**Item 9 — no post-merge recurrence. PASS, but record it as an UNSTRESSED pass.**
+A pairwise self-join over `launched <id>` journal lines (same node, different tick
+pid, within the boot window) finds no post-merge duplicate across 15 launches over
+8 tick pids. But every post-merge inter-tick gap following a launching tick was
+826-1808s — far outside both the boot window and the new 300s TTL. The only tight
+post-merge pair (14:17:58Z -> 14:19:08Z, 70s) had an `empty` disposition on both
+sides, so there was nothing to shadow. **The guard has not yet been exercised in
+anger.** Anyone strengthening this claim should wait for a tick pair firing <300s
+apart with a launch in the earlier one, and hold rather than park until then.
+
+**Two previously unrecorded pre-merge occurrences.** The body records three; there
+were five, four of them this mechanism. Both below predate the merge (11:31:10Z),
+so neither falsifies item 9.
+
+| # | time (EDT) | node | gap | pids |
+|---|---|---|---|---|
+| 4 | 03:01:20 -> 03:01:50 | `tactic-router-spawn-window-duplicate-worker` (itself) | **30s** | 2215829 / 2249277 |
+| 5 | 06:05:02 -> 06:06:16 | `tactic-stopped-session-blocks-node` | **74s** | 2857386 / 2901813 |
+
+Both carry the textbook signature in `graph-selection.jsonl`: sibling nodes
+correctly skipped for `live-session`, the target **not** skipped, on two
+consecutive selection records. With occurrences 1 (90s) and 3 (14s) this puts the
+spawn-window mechanism at four observations spanning 14s-90s, which is the boot
+latency the fix now covers. Occurrence 2 (816s) remains the separate live-session
+read defect tracked by `tactic-graph-router-live-worker-read-robust`.
+
+**Tooling defect found while verifying item 10, filed separately as
+`tactic-reclaim-audit-journal-unit-filter`.** `dispatch-reclaim-audit:179` queries
+`journalctl --user -u dispatch-tick`, but reclaim lines are emitted by ticks
+running under *transient* units and land under `user@1000.service` with
+`SYSLOG_IDENTIFIER=dispatch-tick`. It reports 0 against a true count of 14, and
+`:182`/`:187` fail **open** to zero counts. That audit is the tool this node's own
+park recommendation names for the item-10 check — following the recommendation as
+written would have returned a vacuous clean.

@@ -7,6 +7,14 @@ FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=dispatch-test-fixture.sh
 source "$FIXTURE_DIR/dispatch-test-fixture.sh"
 
+# The host-unit-dir leak guard that used to live here is now armed for EVERY
+# suite by dispatch-test-fixture.sh (dispatch_host_systemd_guard_check): it
+# resolves the unit dir the way lib.sh does, covers all five installable units
+# plus the timers.target.wants symlink set, records any call that reaches the
+# real `systemctl`, and re-checks from both report_results and an EXIT trap so
+# an abort under `set -e` cannot skip it. Each harness below still must wire its
+# *_UNIT_DIR / *_SYSTEMCTL_CMD pairs into the tmp sandbox (see st_setup).
+
 # >>> MOVED FROM test-dispatch-scripts.sh >>>
 # ============================================================================
 # dispatch-spawn-tick tests
@@ -70,6 +78,10 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
   export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$TMPDIR_TEST/systemd-user"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
@@ -78,7 +90,7 @@ st_teardown() {
   TMPDIR_TEST=""
   unset DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD
   unset DISPATCH_SPAWN_TICK_MAIN_WORKTREE
-  unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
+  unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD DISPATCH_SWEEP_TIMER_UNIT_DIR DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD DISPATCH_HEARTBEAT_UNIT_DIR DISPATCH_HEARTBEAT_SYSTEMCTL_CMD
   unset DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD ST_IS_FAILED_RC
 }
 
@@ -231,4 +243,6 @@ st_teardown
 
 # <<< END MOVED <<<
 
+# The host-unit-dir leak re-check runs inside report_results (and, on an early
+# abort, from the fixture's EXIT trap).
 report_results

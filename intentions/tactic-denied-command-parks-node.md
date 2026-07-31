@@ -641,3 +641,71 @@ Manual / judgment checks (not machine-checkable in CI):
 - **Confirm recovery.** Attach the frozen session, answer or cancel the prompt,
   `claude rm` the job, let `dispatch-sweep` reap the worktree, then
   `clear-park <node-id>` and confirm the node returns to the selectable set.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #2994). Verifiability triaged at record time — only
+machine/browser-verifiable items become residue here; a subjective judgment
+call stays `needs-human` and is escalated to office-hours directly instead.
+
+1. **Confirm the literal `state` value against a real Claude Code denial**
+   - URL path: current
+   - Expected outcome: A real denial-frozen session appears in the live
+     registry with exactly the `state` value the new
+     `claude_agents_list_blocked_workers` filter matches (`state: "blocked"`),
+     so the sweep's first predicate fires in production and not just against
+     faked registries.
+   - Finding: The PR's own Testing section defers real-denial confirmation to
+     judgment checks outside CI; unit tests only exercise faked `claude
+     agents` registries, so the ground-truth `state: "blocked"` literal is
+     unverified at merge. Planned deferral — verifiable only against a real
+     live denial post-merge.
+
+2. **Confirm end-to-end recovery: parked frozen node surfaces and can be cleared**
+   - URL path: current
+   - Expected outcome: The full loop closes: freeze -> detected -> parked ->
+     surfaced to a human with actionable guidance (office-hours `all-held`) ->
+     human unblocks -> park cleared -> node resumes normal routing.
+   - Finding: The PR explicitly defers office-hours surfacing and end-to-end
+     recovery verification to judgment checks outside CI; it requires a real
+     frozen session and a live human attach that no unit test can substitute
+     for. Planned deferral — verifiable only against a real frozen session
+     post-merge.
+
+## Author rulings 2026-07-31 — defaults accepted; convergence with the disposition sweep
+
+The office-hours park is cleared. Two rulings, both from the author.
+
+**Ruling 1 — item 7, the shipped defaults are ACCEPTED.**
+`DISPATCH_FROZEN_SESSION_GRACE_S=900` and `DISPATCH_FROZEN_SESSION_PARK_MAX=3`
+stand as the operational defaults; no retuning, no follow-up filed. The ruling was
+taken jointly with `tactic-standdown-winner-liveness`, whose parked residue item 2
+is the same question against `DISPATCH_STANDDOWN_IDLE_GRACE_S` and
+`DISPATCH_STANDDOWN_PARK_MAX`. One answer discharges both, and both parks are
+cleared on it. Should either number ever need revisiting, it is a fresh decision
+rather than an unresolved one.
+
+**Ruling 2 — this PR is rebased and landed; it becomes the sweep framework.**
+The author ruled that PR #2994 is rebased onto `origin/main` and merged as-is
+rather than being closed and folded into a larger generic sweep. Reasons on
+record: it is working, tested code (a 307-line library plus 621 lines of tests
+across three suites), Finding G's auto-heal goes live soonest this way, and the
+alternative would have discarded that work and grown the follow-on unit
+substantially.
+
+The consequence for the graph is a scope narrowing elsewhere, recorded here
+because it is this node's framework that absorbs it:
+`tactic-phase-terminal-requires-disposition` is now scoped to **add a
+terminal-without-disposition predicate to this node's sweep framework**, not to
+build a second parallel sweep. The intended end state is one sweep framework with
+several predicates — frozen-at-denial (this node), terminal-without-disposition
+(that node), and stand-down recheck (`tactic-standdown-winner-liveness`, whose
+`lib-standdown-recheck.sh` is the pattern all three follow) — rather than two or
+three near-duplicate implementations that a later consolidation tactic has to
+reconcile.
+
+**Known risk, stated rather than assumed:** the rebase cost was unknown at ruling
+time (GitHub reported `mergeable: UNKNOWN`, having earlier reported
+`CONFLICTING`). If the rebase turns out to be genuinely expensive, that is new
+information and the fold-into-one-sweep alternative becomes worth re-examining —
+it should not be forced through on the strength of this ruling alone.

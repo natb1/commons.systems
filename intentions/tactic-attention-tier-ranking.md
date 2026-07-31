@@ -39,7 +39,14 @@ attention:
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
 phase: implement
-execution: null
+execution:
+  branch: tactic-attention-tier-ranking
+  pr: 2997
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -684,3 +691,49 @@ sum across tier namespaces without filtering — is the resolution of a question
 the 2026-07-21 clarification explicitly left open. Flag it in the PR body as an
 author-reviewable decision, with the rival (filter to same-namespace sources) and
 the reason for divergence, so the author can overturn it cheaply if they disagree.
+
+## Author ruling 2026-07-31 — design decision (b): FILTER to same-tier-namespace
+
+The office-hours park is cleared. Design decision (b) — whether authored
+attention claims inherited down `parent`/`serves` edges from ancestors whose
+boost was authored in a *different* tier namespace keep summing unfiltered, or
+are filtered to same-tier-namespace sources before summing — is ruled by the
+author as **(B): filter to same-tier-namespace sources.**
+
+**Philosophy on record: tier is an isolation boundary.** Authored authority does
+not flow across a tier namespace; tier does not merely order within a shared
+global pool of authored claims. Any future question about cross-tier attention
+flow resolves against this statement.
+
+**Why B rather than ratifying the shipped A.** Both were measured safe — QA found
+zero tier-inversions across 186 real candidates, and structurally none is
+possible, since tier inherits down the same edges and is max-based, so a
+receiver's effective tier is always at least every source's and a tier-1-scale
+number can only reorder nodes already inside the same higher tier. The residual
+risk under A is intra-tier miscalibration, not tier inversion. So this is a
+consistency call, not a risk call, and consistency points at B:
+
+- The pathology that motivated this node in the first place was an **authored
+  term summing over distinct sources** — the fingerprint-custody cluster
+  compounding at a `blocked_by` sink, which together with a large authored boost
+  produced the attention saturation that stalled the pipeline.
+- This node already converts blocking lift from **sum to max** for exactly that
+  reason. Leaving `parent`/`serves` inheritance summing unfiltered would keep one
+  unfiltered summation path alive inside the very change that exists to remove
+  them, and would leave the door open to the same compounding reappearing along a
+  different edge set.
+- An isolation boundary is also the cheaper invariant to reason about later: it
+  can be stated in one sentence and checked locally, whereas "authored authority
+  flows globally, tier only orders" requires simulating the whole graph to
+  predict any single node's rank.
+
+**Implementation.** One place to edit, in the compose step of `resolveAttention`
+— the sum loop at `packages/intentionsutil/src/attention.ts:507-511`. Filter
+contributing authored claims to same-tier-namespace sources before summing.
+
+**This is a code change, so the park clearing routes the node back through the
+fix lane, not straight to review.** Re-QA must re-run the tier-inversion sweep
+over the live store and confirm it still reports zero, and must additionally
+confirm that at least one node whose rank changes under B changes in the
+predicted direction — a re-run that reports "no change anywhere" would mean the
+filter is not actually engaging.

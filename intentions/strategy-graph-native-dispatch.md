@@ -3100,6 +3100,379 @@ clarifications:
       only — it gates no individual member's plan — but as currently scoped no
       member will plan the family-scope predicate reconciliation, so it needs a
       home before the family is considered closed."
+  - question: In a tactic-mode (per-node) /align-tactics round, does the drift
+      phase's eligibility sanity check apply the strategy-round decomposability
+      gates (no non-draft child already on its signal path, rounds.count < 2),
+      or only the gates that bind at the per-node level?
+    answer: "(Recorded 2026-07-31 /align-tactics per-node round on
+      tactic-align-tactics-target-node-context-dropped.) In a tactic-mode
+      (per-node) /align-tactics round the drift phase's ELIGIBILITY SANITY CHECK
+      is answered against the per-node disposition, not against strategy-round
+      decomposability. Two of its clauses — 'no non-draft child tactic already
+      on its signal path' and 'rounds.count < 2' — are strategy-round concepts
+      that references/tactic-target.md:16-24 explicitly excludes from the
+      per-node flow ('no strategy decomposition, no draft sweep, and no rounds
+      bump here'), and align-tactics.js skips the decompose phase outright under
+      `mode !== 'tactic'`. Answering decomposable=false on those clauses in
+      tactic mode reproduces the defect recorded on
+      tactic-align-tactics-tactic-mode-drift-gate (PR 2982, phase review):
+      driftProceed=false zeroes planTactics for BOTH modes, so the run returns
+      body_markdown:null and disposition 'escalated' with drift.parks empty — no
+      park, no office_hours reason, an unrecoverable dead end. This round
+      therefore returned proceed=true on the strength of the applicable gates
+      only (office_hours null, reading null, last_aligned null, rounds.count 0),
+      which hold independently. Until PR 2982's mode-aware
+      computePhaseGates(mode, drift) split lands, this reading is the doctrine a
+      tactic-mode drift agent applies."
+  - question: "Do any tactics serving this strategy carry `status: raw` together
+      with a non-null `phase`, and if so what does that imply for
+      align-tactics-census.ts's open-machinery-defect count?"
+    answer: "(Observed 2026-07-31 /align-tactics per-node round.) Three tactic nodes
+      serving this strategy carry `status: raw` together with a non-null `phase`
+      — tactic-dispatch-stop-backstop-comment (raw/implement),
+      tactic-graph-commit-staleness-silent-revert (raw/done), and
+      tactic-review-sitting-fingerprint-custody-2026-07-25 (raw/done). Work
+      proceeded on these without the node ever being promoted out of draft
+      status, so they are simultaneously counted as unconsumed drafts by a
+      corpus scan and as in-flight/complete by a phase scan. This matters to
+      success_signal.sensor: align-tactics-census.ts enumerates 'the open
+      machinery-defect population serving this strategy', and a status/phase
+      inconsistency of this shape double-counts or under-counts that population
+      depending on which field the census keys on. Immaterial to any single
+      tactic's plan; recorded as an integrity observation about the census
+      instrument, not a blocker."
+  - question: Do multiple open tactics serving this strategy currently make
+      overlapping edits to the same file (.claude/workflows/align-tactics.js),
+      and if so does landing them safely require an author decision or just
+      edit-region separation?
+    answer: "(Observed 2026-07-31 /align-tactics per-node round.) Three open tactics
+      now modify overlapping regions of the single file
+      .claude/workflows/align-tactics.js:
+      tactic-align-tactics-tactic-mode-drift-gate (phase review, PR 2982)
+      rewrites the folded `driftProceed` plan gate into a mode-aware
+      computePhaseGates(mode, drift) and threads `mode` into buildDriftPrompt;
+      tactic-align-tactics-per-node-clarifications (status raw) widens
+      DRIFT_SCHEMA.clarifications_to_add from {answer} to {question, answer} and
+      edits buildDriftPrompt's instruction text; and
+      tactic-align-tactics-target-node-context-dropped (this round's target)
+      extends the tactic-mode planTactics literal and buildPlanPrompt. The three
+      edits are separable by region (plan gate / drift schema+prompt / plan
+      prompt+planTactics) but land in one file, so ordering is a merge-conflict
+      concern rather than a design question — expressible as blocked_by edges
+      among the tactics, requiring no author decision. Recorded so a later round
+      does not re-derive the overlap from scratch."
+  - question: Does the 2026-07-31 clarification's stated ground for
+      tactic-denied-command-parks-node not authoring its own held-for-debug
+      counter — that tactic-frozen-session-debug-count's counter 'already sweeps
+      a denial-frozen session in' via a busy/idle complement predicate — hold
+      against the shipped function?
+    answer: (Recorded 2026-07-31 /align-tactics tactic-target round, drift review of
+      tactic-claim-containment-durable-anchor.) The 2026-07-31 clarification
+      asserting that the held-for-debug counter landing under
+      tactic-frozen-session-debug-count already sweeps a
+      classifier-denial-frozen session into its total — 'its predicate is the
+      complement of busy/idle, and a denied session reports status waiting' — is
+      contradicted by the shipped function. claude_agents_count_held_for_debug
+      (.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:1051-1116)
+      keys on an explicit terminal-state enumeration
+      (done|stopped|killed|failed|errored|error|cancelled|canceled|terminated),
+      and its own comment at :1064-1069 records that a complement-of-busy/idle
+      predicate was REJECTED specifically because it 'would ... count LIVE
+      blocked sessions (waiting on input/permission) as held.' As shipped, a
+      denial-frozen session (state blocked / status waiting) is therefore
+      counted by NEITHER claude_agents_count_busy_workers (busy-only,
+      :1040-1048) nor the held-for-debug counter — it is invisible to both
+      surfaces. This does not reverse tactic-denied-command-parks-node's scoping
+      decision, whose distinct contributions (the denial-specific detector, the
+      office_hours write, the greppable journal line) are what make the case
+      visible at all; it corrects the stated GROUND for that decision, which as
+      recorded does not hold.
+  - question: Was the 2026-07-28 office-hours ratification's option (b) — the drain
+      skill calling mark-node-terminal with a new `park-clear` disposition
+      member — actually implemented, on either side (mark-node-terminal's enum
+      or dispatch-self-close's mirror)?
+    answer: "(Recorded 2026-07-31 /align-tactics tactic-target round.) The
+      2026-07-28 office-hours ratification records that option (b) was
+      implemented with 'a new `park-clear` member added to that script's
+      disposition enum (packages/intentionsutil/scripts/mark-node-terminal:67)'.
+      It was not. On origin/main the enum at mark-node-terminal:73-79 still
+      carries the original eight members
+      (advance|demote|park|fix-attempt|align-round|no-claim|conflict-resolved|c\
+      onflict-hold), dispatch-self-close:47-52 mirrors the same eight, and
+      `park-clear` appears nowhere in .claude/skills/ or packages/ — only in
+      intentions/*.md prose. No drain skill calls mark-node-terminal at all. So
+      the ratified fix is unimplemented on BOTH sides, and the defect it
+      resolved is still live: the office-hours drain's green-CI success path
+      declares nothing, dispatch-self-close HOLDs the job, and the node it just
+      unblocked stays frozen. A drain that called `mark-node-terminal <node>
+      park-clear` today would exit 2 on the unknown disposition and write no
+      marker at all. Condition 14 is unaffected — dispatch-self-close reads only
+      `^node=`, so a missing member changes no doctrine — which is precisely why
+      the gap went unnoticed. Carried in prose in
+      tactic-office-hours-self-modification-skill (status raw, phase null); no
+      node carries it as a planned unit."
+  - question: Between a node's selection and its first phase transition, what
+      durable evidence exists today that a pass has started — and does the
+      daemon-registry sweep preserve or erase that evidence once a live session
+      registers?
+    answer: "(Recorded 2026-07-31 /align-tactics tactic-target round, drift review
+      of tactic-claim-containment-durable-anchor.) As of this round the dispatch
+      spawn path writes NO graph-side record that a node has been claimed.
+      dispatch-graph-execute's only claim-time write is reservation_mark_spawned
+      (:159) into the file ledger under
+      <project-root>/tmp/dispatch-reservations; the node's next durable graph
+      write is its first phase transition. Between selection and that
+      transition, the only evidence a pass exists is the daemon registry plus
+      that ledger — and reservation_sweep rule (a) ('live-worker-redundant',
+      lib-reservation-ledger.sh:593-596) deliberately CLEARS the ledger marker
+      the instant a live session registers under the worktree basename, handing
+      sole authority to the registry. This is why the leak recorded in the
+      2026-07-29 containment-durability clarification is total rather than
+      partial: after a registry loss the node reads as never-claimed, not as
+      claimed-and-stale, so no reconciler can currently tell the two apart.
+      Recorded as the factual ground under that tactic's store question, not as
+      an answer to it."
+  - question: Is the drift phase's eligibility sanity check (buildDriftPrompt)
+      mode-aware, and does its 'no non-draft child tactic already on its signal
+      path' clause correctly gate a tactic-mode per-node round against this
+      strategy's 64 non-draft children?
+    answer: "(Recorded 2026-07-31 /align-tactics tactic-target round.) The drift
+      phase's eligibility sanity check is stated mode-blind: buildDriftPrompt
+      (.claude/workflows/align-tactics.js:541) receives only the strategy record
+      and the gather evidence, never `mode`, so a tactic-mode round is handed
+      the strategy-mode gate verbatim — including 'it has no non-draft child
+      tactic already on its signal path'. strategy-graph-native-dispatch carries
+      64 non-draft children, so a literal reading of that clause would park
+      every per-node finalize round run on this strategy, even though
+      align-tactics.js:907-912 skips the decompose phase entirely when mode is
+      'tactic' and the clause exists only to prevent a redundant strategy-level
+      decomposition. Read the clause as inoperative in tactic mode; the
+      operative gates there are the strategy's office_hours, the fresh-reading
+      gate, and rounds.count. This is a defect of the prompt builder, not of
+      this strategy — adjacent to the recorded align-tactics harness gaps
+      (tactic-align-tactics-target-node-context-dropped,
+      tactic-align-tactics-per-node-clarifications), and a candidate unit for
+      whichever of those owns buildDriftPrompt's inputs."
+  - question: Does the 2026-07-29 pending-CI liveness clarification's 'or whose run
+      is cancelled' case still need bounding, or is it already covered?
+    answer: "(Recorded 2026-07-31 /align-tactics round, tactic-mode drift review on
+      tactic-autonomous-ci-pending-liveness-bound.) The 2026-07-29 pending-CI
+      liveness clarification's phrase \"or whose run is cancelled\" overstates
+      the verified gap by one case. dispatch_classify_rollup already maps a
+      CANCELLED check-run conclusion to \"failing\"
+      (.claude/skills/dispatch-propagate/scripts/lib.sh:712), not to
+      \"pending\", so a cancelled run is already actionable through the existing
+      fix-interrupt path and is already bounded by FIX_ATTEMPT_CAP=3. The
+      genuinely unbounded case is narrower than the record states: an EMPTY
+      statusCheckRollup (checks never started, lib.sh:697-701) or a run that
+      stays in-progress indefinitely — both classify as \"pending\" with no time
+      dimension anywhere in the classifier. Every other gap site the 2026-07-29
+      clarification named is confirmed verbatim against current code:
+      graph-select-target:639-644 (sensor_gate qa|review arm, rc 1 -> echo
+      ci-pending, return 1, no counter), provision-node-worktree:372-384 (exit
+      10 \"not actionable yet\", no counter),
+      reconcile-graph-review-stall:214-225 (pending -> VERDICT=unknown ->
+      reviewStallRoute returns null -> silent no-op). This narrows the tactic's
+      scope; it does not change the decision to bound the state."
+  - question: Does a pending-CI liveness bound claim the reserved `no-progress`
+      hold-kind slug, or must it mint its own?
+    answer: "(Recorded 2026-07-31 /align-tactics round, tactic-mode drift review on
+      tactic-autonomous-ci-pending-liveness-bound.) hold-node-decide.ts reserves
+      an unclaimed hold-kind slug `no-progress` (RESERVED_KIND_SLUGS, ~line 87)
+      with the doc comment \"RESERVED for a different tactic's future per-node
+      no-progress fuse\". That reservation belongs to the terminal-trichotomy
+      fuse breaker of the router-failure-containment condition (tracked as
+      tactic-router-failure-fuses), not to a pending-CI liveness bound. This is
+      a derivation from the record rather than a new author decision: the
+      2026-07-29 liveness clarification already fixes that a tick-level skip
+      \"spawns no session and declares nothing, so it falls outside the terminal
+      trichotomy entirely\" and is expressly NOT redundant with the fuse
+      breaker. A pending-CI bound must therefore mint its own hold kind (e.g.
+      `ci-pending-stalled`) by extending HOLD_KINDS + KIND_SLUGS in
+      hold-node-decide.ts, reusing the existing holdIdFor / find-or-create /
+      born-parked-hold machinery, and must not claim the reserved slug."
+  - question: Must a pending-CI liveness bound keep advancing under the
+      paused-scheduling standing operating mode, and where does that constrain
+      the counter's placement?
+    answer: "(Recorded 2026-07-31 /align-tactics round, tactic-mode drift review on
+      tactic-autonomous-ci-pending-liveness-bound.) A liveness bound must keep
+      advancing in the paused-scheduling standing operating mode. This follows
+      from that condition's own framing — pause is a supported STANDING mode,
+      not a degraded or temporary state, and it gates worker spawning only —
+      extended from ledger-consuming invariants to liveness bounds generally.
+      Mechanically it constrains where the counter lives: a tick-counted
+      pending-CI bound belongs in dispatch-select-tick's unconditional
+      reconciliation sweep block (dispatch-select-tick:509-538, beside
+      reconcile-graph-merged and reconcile-graph-review-stall, best-effort and
+      not gated on OPEN_MAIN_RED), not solely in the selection gate
+      (graph-select-target sensor_gate) or the provisioning gate
+      (provision-node-worktree exit 10), neither of which runs while spawning is
+      paused — a counter that only advances when workers spawn would never fire
+      in exactly the mode where manual dispatch most needs the operator surface.
+      A wall-clock age source (the PR's updatedAt) is the alternative that is
+      pause-insensitive by construction. The choice between tick-count and
+      wall-clock, and between a graph-state counter (execution field, survives
+      worktree loss, costs a write per bump) and a fail-open sidecar counter
+      (the dispatch-graph-execute .conflict-strikes convention), stays
+      plan-level; recorded so a later round does not rediscover the pause
+      interaction."
+  - question: Does an ineffective Lane 3 dispatch-conflict session accumulate
+      unbounded live-session claims (per-tick respawn), or does something else
+      happen — and does that change tactic-conflict-lane-exit11-retry-bound's
+      fix shape?
+    answer: "(Recorded 2026-07-31 /align-tactics round, resolved from landed code —
+      supersedes the 'needs production observation' note in
+      tactic-conflict-lane-exit11-retry-bound's Provenance.) A Lane 3
+      `/dispatch-conflict` session spawned by dispatch-graph-execute case 11
+      (`dispatch-spawn-job --no-verify --name \"$id\" --cwd
+      .claude/worktrees/$id`) that dies without writing a
+      `$CLAUDE_JOB_DIR/node-terminal` marker HOLDS rather than respawning.
+      dispatch-stop.sh discriminator 2 hands it to `dispatch-self-close --node
+      <id>`, which keeps the job alive; `worktree_has_live_session` now reads
+      the REGISTERED view (`claude agents --json --all` via
+      claude_agents_list_registered, lib-claude-agents.sh:796-851, landed in
+      a9df9d38 and 0f55a784) with no timeout by design; and
+      graph-select-target:684 skips any node whose own-id worktree has a
+      registered session. The node therefore becomes permanently unselectable
+      after exactly ONE kick — there is no accumulation of repeated kicks and no
+      second exit-11 observation. Consequence for
+      tactic-conflict-lane-exit11-retry-bound: its recorded Recommended fix ('N
+      consecutive exit-11 ticks ... reuse the existing
+      `.claude/worktrees/<id>.conflict-strikes` sidecar or add a sibling')
+      cannot ever fire, because exit 11 never re-fires for a frozen node. The
+      bound must be an EXTERNAL detector over registered-but-undeclared
+      node-worker sessions, never a selection-side per-tick counter. The
+      tactic's ratified scope is unchanged; only the mechanism named in its
+      Provenance was dead — its finalized plan builds the external sweep
+      (lib-conflict-lane-hold.sh) instead."
+  - question: Does tactic-graph-router-conflict-routing's future execution.conflict
+      interrupt supersede tactic-conflict-lane-exit11-retry-bound, and where
+      does the bound actually need to live?
+    answer: "(Recorded 2026-07-31 /align-tactics round.) No. Because the exit-11
+      retry bound must move out of the selection-side per-tick path,
+      tactic-graph-router-conflict-routing's `execution.conflict` interrupt does
+      NOT supersede tactic-conflict-lane-exit11-retry-bound: that interrupt is a
+      second entry path into the same Lane 3 and is itself evaluated during
+      selection, so it cannot observe a node that a registered session has
+      frozen out of selection. The 'land the cap wherever that interrupt will
+      enforce it rather than deepening the interim ladder' guidance in the
+      tactic's Provenance, and the CONVERGENCE NOTE at
+      dispatch-graph-execute:274-281, therefore do not constrain this tactic.
+      Its finalized home is an external frozen-session sweep
+      (lib-conflict-lane-hold.sh, wired into dispatch-tick on both cadences)
+      built independently of tactic-denied-command-parks-node's own in-flight
+      sweep (PR #2994, phase qa, not on origin/main as of this round — that
+      sweep's detector is scoped to `state == \"blocked\"` and does not cover a
+      stopped-but-registered undeclared exit, so no blocked_by dependency was
+      taken)."
+  - question: Which escalation primitive — hold-node or park-node — governs a frozen
+      Lane 3 session of exit-11 lineage?
+    answer: "(Recorded 2026-07-31 /align-tactics round.) `hold-node --kind
+      provision-conflict`. Two standing clarifications point at different
+      primitives for a frozen node in general (the 2026-07-25
+      mechanical-park-producers rule routes provision-conflict states to
+      `hold-node`, forbidding office_hours on the source; a later frozen-session
+      sweep precedent calls park-node directly on the source). For
+      exit-11-lineage freezes specifically, `hold-node --kind
+      provision-conflict` is the resolved choice: it is already the exit-11
+      backstop's own escalation call site in the same script
+      (dispatch-graph-execute, also used by case 14), it satisfies the
+      no-office_hours-on-source doctrine, and reusing the kind means this hold
+      and the launch-failure backstop's hold resolve to the SAME id
+      (`tactic-hold-conflict-<slug>`) rather than forking a second record.
+      Either way the escalation must NOT reap the frozen session: consistent
+      with the accepted freeze-for-debug doctrine and the standing
+      park-recommendation condition, the recommendation text must name the
+      manual `claude rm <session-id>` reap verbatim as the human's own action,
+      and must carry the mandatory RESOLUTION_SENTENCE (hold-node-decide.ts)
+      rather than a re-typed paraphrase."
+  - question: "Does PR #2889 (tactic-align-skills-latest-graph-guard, merged
+      2026-07-18) close the phase-skill entry-gate gap that
+      tactic-phase-entry-selection-gate targets?"
+    answer: "(Recorded 2026-07-31 /align-tactics per-node round on
+      tactic-phase-entry-selection-gate.) PR #2889
+      (tactic-align-skills-latest-graph-guard, merged 2026-07-18) does NOT close
+      the phase-skill entry-gate gap, resolving the 'overlap to verify first'
+      question that clarification 1 (2026-07-19) and the draft tactic's own
+      first unit left open. Verified directly at HEAD 06c19a40: #2889's diff
+      touches only the align-family SKILL.md Step-0 text plus
+      .claude/skills/dispatch-propagate/scripts/assert-worktree-fresh, and that
+      script is detect-only freshness (git fetch + behind-count vs origin/main)
+      — it never calls check-node-selection.ts and never reads phase,
+      office_hours, or any fingerprint. A tree-wide grep confirms
+      packages/intentionsutil/scripts/check-node-selection.ts has exactly one
+      functional call site: provision-node-worktree:125 (clarification 1 and the
+      tactic body both cite ':87'; the file has grown, the call is unchanged).
+      align-tactics/SKILL.md:113 and align-strategy/SKILL.md:96 still route
+      re-entry through assert-worktree-fresh alone. So #2889 is a freshness
+      layer, not a selection-validity layer: the tactic's verification unit
+      resolves to 'no overlap — proceed with the explicit gate', and the tactic
+      is not droppable."
+  - question: What is the actual per-phase-skill-entry primitive in service today,
+      and does it already run the mechanical selection-validity gate
+      (check-node-selection.ts)?
+    answer: (Recorded 2026-07-31 /align-tactics per-node round on
+      tactic-phase-entry-selection-gate.) The per-phase-skill-entry primitive
+      actually in service today is
+      .claude/skills/dispatch-propagate/scripts/dispatch-derive-node-target,
+      wired into /implement, /qa-fix, /qa-main, /review-fix and /fix-checks via
+      --expect-phase / --expect-fix-active. Its Step-5 gate (~lines 148-163)
+      hand-rolls only a SUBSET of check-node-selection's checks — bare
+      phase-string equality, or execution.fix non-null — and checks neither
+      office_hours-parked, nor strategy_fingerprint staleness, nor
+      align-eligibility, nor scope-chain staleness. /qa-fix bolts a second
+      hand-rolled parked check on top (SKILL.md:96 and
+      references/target-resolution.md:44-67), whose own comment concedes it
+      'must agree with the canonical selection gate readParked
+      (check-node-selection.ts:90-93)'; the other four skills lack even that
+      partial copy. dispatch-derive-node-target already snapshots the node from
+      origin/main and holds NODE_JSON/COMBINED_JSON in memory — the exact inputs
+      the gate needs — so routing it through check-node-selection.ts reuses a
+      read it already performs. Any implementation of the entry-gate requirement
+      should collapse these duplicates through the canonical gate rather than
+      add a sixth partial reimplementation, and should treat align-tactics
+      separately since it uses assert-worktree-fresh, not this front door.
+  - question: What complicates binding check-node-selection.ts uniformly across
+      every align-family entry path?
+    answer: "(Recorded 2026-07-31 /align-tactics per-node round on
+      tactic-phase-entry-selection-gate.) check-node-selection.ts takes a
+      required positional <selected-phase> and exits 12 when node.phase differs,
+      so binding it to the align-family entry path requires deciding what phase
+      argument a draft-tactic finalize passes — the target node itself is phase:
+      null, and a router phase worker always has one while a manual
+      /align-tactics invocation does not. The gate already models align-tactics'
+      two selection shapes internally (strategy at null phase, frozen-tactic
+      re-eval), so this is resolvable in code rather than by new doctrine, but
+      the recorded requirement does not distinguish the draft-finalize case from
+      a re-plan of an already-phased tactic and an implementing plan must.
+      Relatedly, the gate cannot simply be folded into assert-worktree-fresh for
+      all callers: align-strategy and grounding-research invoke that script with
+      no phase concept at all. The requirement binds phase-skill entries, per
+      its own wording — freshness first, selection-validity second, and only
+      where a selected phase exists."
+  - question: Do the strategy-main-health boost-100 write-path guard and the
+      PR-title <node id> CI guard conditions have corroborating code today?
+    answer: "(Observed 2026-07-31 /align-tactics per-node round; recorded as an
+      observation, not a re-decision of an author-decided condition.) Two
+      recorded conditions describe mechanisms that targeted searches could not
+      corroborate at HEAD 06c19a40. (a) The strategy-main-health standing-boost
+      condition says validate-graph/graph-commit 'refuses a commit that authors
+      another boost or override at or above it, or that reduces it' —
+      packages/intentionsutil/scripts/validate-graph.ts contains no occurrence
+      of 'boost' at all; the only intentionsutil sources naming boost are
+      src/attention.ts, src/goals.ts, src/officeHours.ts and src/schema.ts
+      (ranking and schema) plus scripts/trace-decisions.ts (diff display). No
+      write-path refusal was found. (b) The PR-title '<node id>: <short
+      description>' condition says 'a CI guard rejects a title that is
+      non-conforming or whose id does not resolve' — no title conformance check
+      exists in .github/workflows/ or .github/scripts/, dispatch-open-pr still
+      accepts a free-form --title, and the implementing tactic
+      tactic-pr-title-node-id-convention is still status:raw / phase:null.
+      Neither is treated as a failed condition on this evidence: both read as
+      recorded doctrine awaiting implementation, and neither is a premise any
+      plan of this round depends on. Flagged so a future author sitting can
+      decide whether to arm the mechanisms or restate the conditions as target
+      state."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:

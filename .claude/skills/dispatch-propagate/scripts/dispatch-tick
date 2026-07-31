@@ -112,6 +112,15 @@
 #                            reservations are the claim. On the autonomous path a
 #                            successful execute arms a convergence reseed.
 #        anything else     → diagnostic to stderr; exit 2.
+#   3. Run the stand-down winner-liveness re-check sweep
+#      (standdown_recheck_sweep, lib-standdown-recheck.sh) on TWO cadences: on
+#      the paused branch (so a stranded stand-down marker still surfaces even
+#      while dispatch is paused — that `exit 0` is the only autonomous path
+#      that never reaches dispatch-select-tick's own sweeps), and on the
+#      normal path, after the per-tick daemon snapshot is captured and before
+#      Step 1 target selection (so it reuses the snapshot and any node it
+#      parks is already excluded from this tick's own selection). Never gates
+#      the tick — a load failure logs loudly and the tick continues.
 #
 # The legacy gh-issue lane (explicit/pr/issue decisions →
 # dispatch-materialize-spawn → dispatch-launch-worker, and the recoverable-death
@@ -310,6 +319,23 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
     echo "dispatch-tick: lib-reservation-ledger.sh failed to load; reservation ledger NOT swept this tick" >&2
   fi
 
+  # A stranded stand-down marker (winner session died mid-work, loser waiting
+  # forever) must still surface even while dispatch is paused, for the same
+  # reason the reservation sweep runs on this branch: this `exit 0` path is the
+  # ONLY autonomous tick path that never reaches dispatch-select-tick's own
+  # sweeps, so nothing else would ever re-check a stand-down marker while
+  # paused. Same conditional-source + verify + loud-failure idiom as
+  # reservation_sweep above, applied to lib-standdown-recheck.sh.
+  if ! declare -f standdown_recheck_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-standdown-recheck.sh"
+  fi
+  if declare -f standdown_recheck_sweep >/dev/null 2>&1; then
+    standdown_recheck_sweep 1>&2
+  else
+    echo "dispatch-tick: lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick" >&2
+  fi
+
   # A node frozen at a permission/classifier denial (tactic-denied-command-parks-node)
   # must still surface to office_hours even while dispatch is paused — this is the
   # same "only autonomous path that never reaches select-tick's own sweeps" reason
@@ -433,6 +459,14 @@ fi
 # (.claude/rules/sandbox.md), so this is the one place the Unix-socket-backed
 # `claude agents` call is made. The snapshot lives under the mktemp -d workspace
 # the EXIT/INT/TERM trap removes.
+#
+# The tick captures TWO independent snapshots, one per daemon view (ACTIVE below,
+# REGISTERED next) — not one query filtered client-side into both. Reconstructing
+# ACTIVE from REGISTERED (or vice versa) means guessing at the daemon's
+# terminal-state set client-side, which lib-claude-agents.sh's own header
+# ("ACTIVE vs REGISTERED", design rule 1) forbids: ask the daemon for the view you
+# want. So this is two daemon queries per tick, not one — still a fixed constant
+# instead of hundreds of live per-call round-trips.
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 # shellcheck source=/dev/null
@@ -446,7 +480,49 @@ else
   # its live per-call path and the UNKNOWN fail-safe is preserved bit-for-bit. Do
   # NOT abort the tick — degrade to the pre-#1452 behavior. (#1452)
   rm -f "$_SNAPSHOT_FILE"
+  # `unset`, not merely "don't set": the variable may be present in the INHERITED
+  # environment (a nested tick, a leftover manual export). Left set, it would
+  # point every read at a foreign/stale file instead of degrading to live.
+  unset DISPATCH_AGENTS_SNAPSHOT
   echo "dispatch-tick: claude agents snapshot capture failed; selection will use live per-call reads (#1452)" >&2
+fi
+
+# Second, independent capture: the REGISTERED (--all) view. This is what
+# worktree_has_live_session now reads (tactic-stopped-session-blocks-node Unit 1)
+# so a stopped-but-not-removed session still blocks its node/worktree. Without
+# this capture, every occupancy probe in the tick would fall through to a live
+# `claude agents --json --all` daemon round-trip — hundreds per tick instead of
+# one. Independent of the ACTIVE capture above: either may fail without affecting
+# the other.
+_SNAPSHOT_ALL_FILE="$DISPATCH_TICK_WORKSPACE/agents-snapshot-all.json"
+if claude_agents_snapshot_capture_registered "$_SNAPSHOT_ALL_FILE"; then
+  export DISPATCH_AGENTS_SNAPSHOT_ALL="$_SNAPSHOT_ALL_FILE"
+else
+  rm -f "$_SNAPSHOT_ALL_FILE"
+  # Same as the ACTIVE branch above: unset an inherited value, or a stale
+  # registered snapshot would decide occupancy — a missing row makes a genuinely
+  # held node re-selectable, the exact failure this tactic removes.
+  unset DISPATCH_AGENTS_SNAPSHOT_ALL
+  echo "dispatch-tick: registered (--all) agents snapshot capture failed; occupancy checks will use live per-call reads" >&2
+fi
+
+# --- Stand-down winner-liveness re-check sweep --------------------------------
+# Placement matters: this runs AFTER the daemon snapshot above (so the sweep's
+# machine-wide session-registry reads reuse this tick's single
+# DISPATCH_AGENTS_SNAPSHOT instead of an extra round-trip `claude agents --json`
+# call) and BEFORE Step 1 target selection below, so that any node the sweep
+# parks to `office_hours` lands on `main` before selection runs — this tick's
+# own selection already excludes whatever the sweep just parked. Same
+# conditional-source + verify + loud-failure idiom as the paused-branch call
+# above.
+if ! declare -f standdown_recheck_sweep >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-standdown-recheck.sh"
+fi
+if declare -f standdown_recheck_sweep >/dev/null 2>&1; then
+  standdown_recheck_sweep 1>&2
+else
+  echo "dispatch-tick: lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick" >&2
 fi
 
 # --- Frozen-session sweep (denied-command park, tactic-denied-command-parks-node) ---
