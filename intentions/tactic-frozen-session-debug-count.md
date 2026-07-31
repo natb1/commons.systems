@@ -307,3 +307,19 @@ Not machine-checkable in CI (confirm at review):
   which layers on top of the narrowed default; its draft framing must be
   re-scoped to the narrowed default (unrelated to this tactic's own units,
   noted here only for context continuity).
+
+## needs-main residue
+
+- **id 10** — Interim value: the count reads a stable 0 on the real fleet
+  until the narrowed auto-close mechanism exists.
+  - URL path: current
+  - Expected outcome: The operator sees `n=0` consistently in `dispatch-sweep`'s
+    log, which is the documented correct interim reading; the metric becomes
+    informative only once the blocker tactic lands.
+  - Finding: the PR description and this node body both document that
+    `HELD_FOR_DEBUG_COUNT` reads a real, stable `n=0` in production until
+    `tactic-graph-node-session-reap`'s narrowed auto-close mechanism exists at
+    all (that tactic is a `blocked_by` dependency here). The informative
+    (nonzero) reading is verifiable only downstream of that tactic landing,
+    not at this PR's merge — a planned deferral, not a defect. Verify against
+    deployed main/prod once that blocker clears.
