@@ -116,13 +116,21 @@
 #      naming "mis-pointed -C/--repo", never reaches "landed", main untouched
 #  35. --expect on a --prune id is a usage error (exit 2, origin untouched) —
 #      a deletion has no content to assert
-#  36. bystander prune lands despite a park on another id in the same
+#  36. a rebase ALREADY in progress in the target checkout: refused up front
+#      (non-zero exit naming "already in progress"), main untouched, zero gh
+#      calls — graph-commit never runs on a mid-operation worktree, so a
+#      caller's own stopped rebase is never aborted by case 37's cleanup
+#  37. a rebase THIS run stranded (a die() fires while the pull --rebase
+#      conflict is still live) is aborted by cleanup(): no rebase state dir
+#      survives, HEAD is reattached to the branch, and the checkout's local
+#      commits are intact
+#  38. bystander prune lands despite a park on another id in the same
 #      invocation: a --prune id NOT implicated in a concurrent-edit conflict
 #      is re-applied and landed with the park commit rather than resurrected
 #      and silently dropped; the conflicted id still parks exactly as before;
 #      the landed park commit's subject names the parked id and the pruned
 #      id in separate clauses, never describing the pruned id as parked
-#  37. stale --base on a --prune id parks with a prune-specific reason instead
+#  39. stale --base on a --prune id parks with a prune-specific reason instead
 #      of resurrecting the file: check_base_freshness() refuses to hand a
 #      nonexistent --ours to merge-node.ts, so a prune whose base moved on
 #      origin/main fails closed (exit 1) rather than silently landing rc 0
@@ -186,6 +194,7 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
           t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
           t-expect-happy t-expect-wrong-repo t-expect-prune \
+          t-preexist-conflict t-preexist-rebase t-strand-other t-strand-main \
           t-bystander-prune t-bystander-conflict t-prune-base-stale; do
   seed_node "$id"
 done
@@ -1297,7 +1306,88 @@ else
   no "--expect on a prune id (rc=$rc)"; printf '%s\n' "$out"
 fi
 
-# --- Case 36: bystander prune lands despite a park on another id ---------------
+# --- Case 36: a pre-existing rebase is refused up front -------------------------
+# graph-commit must not run on a mid-operation worktree. The refusal runs before
+# the EXIT trap is installed, precisely so this caller-owned rebase survives the
+# refusal untouched (case 37's cleanup abort would otherwise destroy it).
+set_mode green
+W36="$WORK/w36"; make_clone "$W36" writer-36
+sync_clone "$W36"
+OTHER36="$WORK/other36"; make_clone "$OTHER36" other36
+sync_clone "$OTHER36"
+edit_line "$OTHER36" t-preexist-conflict 1 landed-remote
+git -C "$OTHER36" commit -qam 'concurrent edit lands on origin (case 36 fixture)'
+git -C "$OTHER36" push -q origin main
+# W36 is now stale: give it a conflicting local commit and start the rebase that
+# stops on it, leaving a live rebase state dir and a detached HEAD.
+edit_line "$W36" t-preexist-conflict 1 local-side
+git -C "$W36" commit -qam 'local conflicting commit (case 36 fixture)'
+git -C "$W36" fetch -q origin main
+git -C "$W36" rebase FETCH_HEAD >/dev/null 2>&1
+rebase_started=0
+[[ -d "$W36/.git/rebase-merge" || -d "$W36/.git/rebase-apply" ]] && rebase_started=1
+# An unrelated node edit, so the invocation would otherwise be a normal landing.
+edit_line "$W36" t-preexist-rebase 1 should-never-land
+set_mode green   # resets the gh call log
+before_sha="$(origin_sha)"
+out="$(run_gc "$W36" -m 'test: pre-existing rebase' t-preexist-rebase 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ "$rebase_started" -eq 1 && $rc -ne 0 ]] \
+   && grep -q 'a rebase is already in progress' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]] \
+   && [[ "$(gh_calls)" -eq 0 ]]; then
+  ok "pre-existing rebase: refused up front, main untouched, zero gh calls"
+else
+  no "pre-existing rebase refusal (rebase_started=$rebase_started rc=$rc gh_calls=$(gh_calls))"; printf '%s\n' "$out"
+fi
+# The caller's rebase must still be there — the refusal aborts nothing.
+if [[ -d "$W36/.git/rebase-merge" || -d "$W36/.git/rebase-apply" ]]; then
+  ok "pre-existing rebase: the caller's own rebase is left in progress, not aborted"
+else
+  no "pre-existing rebase: the caller's rebase was destroyed by the refusal"
+fi
+git -C "$W36" rebase --abort >/dev/null 2>&1
+
+# --- Case 37: a rebase this run stranded is aborted by cleanup() ----------------
+# End-to-end (not the sourced-function fallback): the run is driven down a real
+# die() that fires while `git pull --rebase origin main`'s conflict is still
+# live. The lever is try_layer2_resolve()'s broken-staging-invariant die — an
+# EXTRA local commit touching a DIFFERENT node id conflicts on the rebase, and
+# that conflicted path is outside this invocation's node set, so layer 2 dies
+# instead of reaching its own explicit `git rebase --abort`. Only cleanup() can
+# clear the rebase on this path. (The extra commit is intentions/-only, so
+# ensure_intentions_only_base() leaves the worktree alone and the commit
+# survives to be replayed.)
+set_mode green
+W37="$WORK/w37"; make_clone "$W37" writer-37
+sync_clone "$W37"
+OTHER37="$WORK/other37"; make_clone "$OTHER37" other37
+sync_clone "$OTHER37"
+edit_line "$OTHER37" t-strand-other 1 landed-remote
+git -C "$OTHER37" commit -qam 'concurrent edit lands on origin (case 37 fixture)'
+git -C "$OTHER37" push -q origin main
+edit_line "$W37" t-strand-other 1 local-strand
+git -C "$W37" commit -qam 'local conflicting commit on an out-of-set node (case 37 fixture)'
+edit_line "$W37" t-strand-main 1 strand-edit   # the node actually passed to graph-commit
+before_sha="$(origin_sha)"
+out="$(run_gc "$W37" -m 'test: stranded rebase' t-strand-main 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -ne 0 ]] \
+   && grep -q 'unexpected conflicted path' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "stranded rebase: the run dies mid-rebase on the broken-staging-invariant path"
+else
+  no "stranded rebase setup (rc=$rc)"; printf '%s\n' "$out"
+fi
+if [[ ! -d "$W37/.git/rebase-merge" && ! -d "$W37/.git/rebase-apply" ]] \
+   && [[ "$(git -C "$W37" symbolic-ref -q HEAD)" == "refs/heads/main" ]] \
+   && git -C "$W37" show HEAD:intentions/t-strand-other.md | grep -q 'line1: local-strand'; then
+  ok "stranded rebase: cleanup() aborted it — no state dir, HEAD reattached, local commits intact"
+else
+  no "stranded rebase not aborted by cleanup (HEAD=$(git -C "$W37" symbolic-ref -q HEAD))"; printf '%s\n' "$out"
+fi
+
+# --- Case 38: bystander prune lands despite a park on another id ---------------
 # t-bystander-conflict races a concurrent edit (same shape as Case 4) while
 # t-bystander-prune, an unrelated node, is pruned in the SAME invocation. The
 # conflicted id still parks; the bystander prune is not implicated in the
@@ -1328,9 +1418,9 @@ if [[ $rc -eq 1 ]] \
 else
   no "bystander prune (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"; printf 'subject: %s\n' "$subject"
 fi
-# --- Case 37: stale --base on a --prune id parks, no resurrection --------------
-# A concurrent writer advances t-prune-base-stale on origin/main after W37
-# read its base blob. W37 then prunes it locally with that stale --base. Before
+# --- Case 39: stale --base on a --prune id parks, no resurrection --------------
+# A concurrent writer advances t-prune-base-stale on origin/main after W39
+# read its base blob. W39 then prunes it locally with that stale --base. Before
 # Unit 2, check_base_freshness() handed the (nonexistent, by --prune contract)
 # --ours path to the merge-node shim, which — lacking a guard for a missing
 # --ours — silently resolved from theirs alone, resurrecting the file and
@@ -1338,16 +1428,16 @@ fi
 # excluded from the merge attempt entirely and parks with a prune-specific
 # reason.
 set_mode green
-W37="$WORK/w37"
-make_clone "$W37" writer-37
-stale="$(git -C "$W37" hash-object intentions/t-prune-base-stale.md)"
-OTHER37="$WORK/other37"
-make_clone "$OTHER37" other37
-echo "line13: concurrent edit" >>"$OTHER37/intentions/t-prune-base-stale.md"
-git -C "$OTHER37" commit -qam 'concurrent edit'
-git -C "$OTHER37" push -q origin main
-rm -f "$W37/intentions/t-prune-base-stale.md"
-out="$(run_gc "$W37" -m 'test: prune stale base' --base "t-prune-base-stale=$stale" --prune t-prune-base-stale 2>&1)"; rc=$?
+W39="$WORK/w39"
+make_clone "$W39" writer-39
+stale="$(git -C "$W39" hash-object intentions/t-prune-base-stale.md)"
+OTHER39="$WORK/other39"
+make_clone "$OTHER39" other39
+echo "line13: concurrent edit" >>"$OTHER39/intentions/t-prune-base-stale.md"
+git -C "$OTHER39" commit -qam 'concurrent edit'
+git -C "$OTHER39" push -q origin main
+rm -f "$W39/intentions/t-prune-base-stale.md"
+out="$(run_gc "$W39" -m 'test: prune stale base' --base "t-prune-base-stale=$stale" --prune t-prune-base-stale 2>&1)"; rc=$?
 content="$(origin_show t-prune-base-stale 2>/dev/null)"
 snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
 [[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
