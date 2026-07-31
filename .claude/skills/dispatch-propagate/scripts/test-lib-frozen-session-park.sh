@@ -629,4 +629,518 @@ assert_eq "stdin-drain: summary counts both" "yes" \
   "$(fs_contains 'sweep complete (blocked=2 parked=2 observing=0 unmeasurable=0 deferred=0)')"
 fs_teardown
 
+echo ""
+echo "=== terminal_without_disposition_sweep ==="
+
+# The terminal-disposition sweep's own fixture. Same shape as fs_* above (fake
+# `claude` via CLAUDE_AGENTS_CMD, scratch git repo whose refs/remotes/origin/main
+# is set by hand, transcripts whose mtimes `touch -d` sets, an argv-logging fake
+# `park-node`, a fixed clock) plus one thing the frozen sweep has no use for: a
+# scratch JOBS root holding the session's own office-hours-* escalation files.
+# It is a SEPARATE pair rather than a mutation of fs_setup, so neither sweep's
+# tests can perturb the other's environment.
+TD_NOW=1700000000
+
+TD_DIR=""
+TD_FAKE=""
+TD_REPO=""
+TD_PROJ=""
+TD_JOBS=""
+TD_PARK=""
+TD_PARKLOG=""
+TD_ENTRIES=()
+TD_RC=0
+TD_ERR=""
+
+td_setup() {
+  TD_DIR=$(mktemp -d)
+  TD_FAKE="$TD_DIR/fake-claude"
+  TD_REPO="$TD_DIR/repo"
+  TD_PROJ="$TD_DIR/projects"
+  TD_JOBS="$TD_DIR/jobs"
+  TD_PARK="$TD_REPO/packages/intentionsutil/scripts/park-node"
+  TD_PARKLOG="$TD_DIR/park-node.log"
+  TD_ENTRIES=()
+  mkdir -p "$TD_REPO/intentions" "$TD_REPO/packages/intentionsutil/scripts" \
+           "$TD_PROJ/proj-a" "$TD_JOBS" "$TD_DIR/decisions"
+  : > "$TD_PARKLOG"
+
+  git -C "$TD_REPO" init -q
+  git -C "$TD_REPO" symbolic-ref HEAD refs/heads/main
+  git -C "$TD_REPO" config user.email "test@example.com"
+  git -C "$TD_REPO" config user.name "Test"
+
+  # claude_agents_list_terminal_workers queries `--all` DIRECTLY, so no snapshot
+  # is consulted — unset both anyway so a leaked value cannot matter.
+  unset DISPATCH_AGENTS_SNAPSHOT DISPATCH_AGENTS_SNAPSHOT_ALL || true
+
+  DISPATCH_TERMINAL_DISPOSITION_NOW_EPOCH="$TD_NOW"
+  DISPATCH_TERMINAL_DISPOSITION_REPO_ROOT="$TD_REPO"
+  DISPATCH_TERMINAL_DISPOSITION_PROJECTS_ROOT="$TD_PROJ"
+  DISPATCH_TERMINAL_DISPOSITION_JOBS_ROOT="$TD_JOBS"
+  DISPATCH_TERMINAL_DISPOSITION_PARK_NODE="$TD_PARK"
+  unset DISPATCH_TERMINAL_DISPOSITION_GRACE_S DISPATCH_TERMINAL_DISPOSITION_PARK_MAX || true
+
+  # Same note as fs_setup: lib-decision-log.sh resolves DECISION_LOG_FILE once at
+  # source time, so re-point the resolved variable too.
+  DISPATCH_DECISION_LOG_DIR="$TD_DIR/decisions"
+  DECISION_LOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+
+  td_write_park_node 0
+}
+
+td_teardown() {
+  rm -rf "$TD_DIR"
+  TD_DIR=""
+  unset CLAUDE_AGENTS_CMD || true
+  unset DISPATCH_TERMINAL_DISPOSITION_NOW_EPOCH DISPATCH_TERMINAL_DISPOSITION_REPO_ROOT \
+        DISPATCH_TERMINAL_DISPOSITION_PROJECTS_ROOT DISPATCH_TERMINAL_DISPOSITION_JOBS_ROOT \
+        DISPATCH_TERMINAL_DISPOSITION_PARK_NODE DISPATCH_TERMINAL_DISPOSITION_GRACE_S \
+        DISPATCH_TERMINAL_DISPOSITION_PARK_MAX DISPATCH_DECISION_LOG_DIR || true
+}
+
+# td_write_park_node <exit-code> — install the fake park-node: it logs its argc
+# and each positional argument, then exits <exit-code>.
+td_write_park_node() {
+  cat > "$TD_PARK" <<PARK
+#!/usr/bin/env bash
+{
+  printf 'ARGC=%s\n' "\$#"
+  for a in "\$@"; do printf 'ARG=%s\n' "\$a"; done
+} >> "$TD_PARKLOG"
+exit $1
+PARK
+  chmod +x "$TD_PARK"
+}
+
+# td_add_session <sid> <name> <state> — append one registry entry. A terminal row
+# carries `state` only (no `status`), the shape the real daemon emits.
+td_add_session() {
+  TD_ENTRIES+=("{\"sessionId\":\"$1\",\"name\":\"$2\",\"state\":\"$3\",\"cwd\":\"/tmp/$2\"}")
+}
+
+# td_install_claude [exit-code]
+td_install_claude() {
+  local exit_code="${1:-0}" payload
+  payload=$( IFS=,; printf '[%s]' "${TD_ENTRIES[*]}" )
+  printf '%s' "$payload" > "$TD_DIR/payload.json"
+  cat > "$TD_FAKE" <<FAKE
+#!/usr/bin/env bash
+cat "$TD_DIR/payload.json"
+exit $exit_code
+FAKE
+  chmod +x "$TD_FAKE"
+  CLAUDE_AGENTS_CMD="$TD_FAKE"
+}
+
+# td_write_node <id> <working|done|parked|bodymention>
+td_write_node() {
+  local id="$1" kind="$2"
+  local f="$TD_REPO/intentions/$id.md"
+  case "$kind" in
+    done)
+      cat > "$f" <<NODE
+---
+id: $id
+kind: tactic
+phase: done
+office_hours: null
+---
+
+Body text.
+NODE
+      ;;
+    parked)
+      cat > "$f" <<NODE
+---
+id: $id
+kind: tactic
+phase: qa
+office_hours:
+  reason: parked earlier by something else
+  recommendation: null
+---
+
+Body text.
+NODE
+      ;;
+    bodymention)
+      cat > "$f" <<NODE
+---
+id: $id
+kind: tactic
+phase: qa
+office_hours: null
+---
+
+The park record serializes as:
+
+office_hours:
+  reason: ...
+NODE
+      ;;
+    *)
+      cat > "$f" <<NODE
+---
+id: $id
+kind: tactic
+phase: qa
+office_hours: null
+---
+
+Body text.
+NODE
+      ;;
+  esac
+}
+
+td_commit_nodes() {
+  git -C "$TD_REPO" add -A
+  git -C "$TD_REPO" commit -q -m "nodes"
+  git -C "$TD_REPO" update-ref refs/remotes/origin/main HEAD
+}
+
+# td_write_transcript <sid> <mtime-epoch>
+td_write_transcript() {
+  printf '{}\n' > "$TD_PROJ/proj-a/$1.jsonl"
+  touch -d "@$2" "$TD_PROJ/proj-a/$1.jsonl"
+}
+
+# td_write_job_file <sid> <basename> <content> — write one escalation marker into
+# the session's job dir (named by the first hyphen-delimited field of the sid).
+td_write_job_file() {
+  local dir="$TD_JOBS/${1%%-*}"
+  mkdir -p "$dir"
+  printf '%s' "$3" > "$dir/$2"
+}
+
+td_run() {
+  if terminal_without_disposition_sweep 2>"$TD_DIR/err"; then TD_RC=0; else TD_RC=$?; fi
+  TD_ERR=$(cat "$TD_DIR/err")
+}
+
+td_contains() {
+  case "$TD_ERR" in *"$1"*) printf 'yes' ;; *) printf 'no' ;; esac
+}
+
+td_park_calls() {
+  local c
+  c=$(grep -c '^ARGC=' "$TD_PARKLOG" 2>/dev/null) || c=0
+  [[ -n "$c" ]] || c=0
+  printf '%s' "$c"
+}
+
+td_park_arg() {
+  # td_park_arg <n> — the nth positional argument of the FIRST park-node call.
+  grep '^ARG=' "$TD_PARKLOG" | sed -n "${1}p" | sed 's/^ARG=//'
+}
+
+td_log_dispositions() {
+  [[ -f "$DECISION_LOG_FILE" ]] || return 0
+  jq -r 'select(.site == "terminal-disposition-sweep") | .disposition' "$DECISION_LOG_FILE"
+}
+
+# --- Test 20: an aged terminal worker at a working phase is parked -----------
+
+echo "Test: an aged terminal worker whose node is at a working phase is parked"
+td_setup
+td_write_node "tactic-terminal-one" working
+td_commit_nodes
+td_write_transcript "0aa1-1111" $(( TD_NOW - 2000 ))
+td_add_session "0aa1-1111" "tactic-terminal-one" "done"
+td_install_claude 0
+td_run
+assert_eq "terminal: sweep returns 0" "0" "$TD_RC"
+assert_eq "terminal: park-node invoked exactly once" "1" "$(td_park_calls)"
+assert_eq "terminal: node id is \$1" "tactic-terminal-one" "$(td_park_arg 1)"
+assert_eq "terminal: stderr reports the park" "yes" \
+  "$(td_contains 'parked tactic-terminal-one (terminal-without-disposition after 2000s')"
+assert_eq "terminal: one decision record, disposition=parked" "parked" "$(td_log_dispositions)"
+assert_eq "terminal: summary counts one park" "yes" \
+  "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=1 observing=0 unmeasurable=0 deferred=0)')"
+td_teardown
+
+# --- Test 21: a node at phase: done is finished and never parked -------------
+
+echo "Test: a terminal worker whose node is at phase: done is not parked"
+td_setup
+td_write_node "tactic-finished" done
+td_commit_nodes
+td_write_transcript "0bb2-2222" $(( TD_NOW - 2000 ))
+td_add_session "0bb2-2222" "tactic-finished" "done"
+td_install_claude 0
+td_run
+assert_eq "phase-done: sweep returns 0" "0" "$TD_RC"
+assert_eq "phase-done: park-node not invoked" "0" "$(td_park_calls)"
+assert_eq "phase-done: stderr reports the skip" "yes" \
+  "$(td_contains 'skipping tactic-finished (phase: done')"
+td_teardown
+
+# --- Test 22: an already-parked node is skipped; frontmatter scoping holds ---
+
+echo "Test: an already-parked node is skipped, and a body-only office_hours line is not park state"
+td_setup
+td_write_node "tactic-td-already" parked
+td_write_node "tactic-td-body-mention" bodymention
+td_commit_nodes
+td_write_transcript "0cc3-3333" $(( TD_NOW - 3000 ))
+td_write_transcript "0dd4-4444" $(( TD_NOW - 3000 ))
+td_add_session "0cc3-3333" "tactic-td-already" "done"
+td_add_session "0dd4-4444" "tactic-td-body-mention" "stopped"
+td_install_claude 0
+td_run
+assert_eq "already-parked: sweep returns 0" "0" "$TD_RC"
+assert_eq "already-parked: stderr reports the skip" "yes" \
+  "$(td_contains 'skipping tactic-td-already (already parked to office_hours)')"
+assert_eq "already-parked: exactly one park-node invocation" "1" "$(td_park_calls)"
+assert_eq "already-parked: the body-mention node is the one parked" "tactic-td-body-mention" "$(td_park_arg 1)"
+td_teardown
+
+# --- Test 23: idle below the grace is observed, not parked -------------------
+
+echo "Test: a terminal worker idle below the grace is observed (the teardown window)"
+td_setup
+td_write_node "tactic-td-fresh" working
+td_commit_nodes
+td_write_transcript "0ee5-5555" $(( TD_NOW - 60 ))
+td_add_session "0ee5-5555" "tactic-td-fresh" "done"
+td_install_claude 0
+td_run
+assert_eq "grace: sweep returns 0" "0" "$TD_RC"
+assert_eq "grace: park-node not invoked" "0" "$(td_park_calls)"
+assert_eq "grace: stderr reports observing" "yes" \
+  "$(td_contains 'observing tactic-td-fresh (state=terminal, idle_seconds=60 < grace_seconds=300')"
+td_teardown
+
+# --- Test 24: a missing transcript is UNKNOWN, never a park ------------------
+
+echo "Test: a terminal worker with no transcript is kept (idle unmeasurable)"
+td_setup
+td_write_node "tactic-td-no-transcript" working
+td_commit_nodes
+td_add_session "0ff6-6666" "tactic-td-no-transcript" "done"
+td_install_claude 0
+td_run
+assert_eq "unmeasurable: sweep returns 0" "0" "$TD_RC"
+assert_eq "unmeasurable: park-node not invoked" "0" "$(td_park_calls)"
+assert_eq "unmeasurable: stderr reports the unreadable transcript" "yes" "$(td_contains 'transcript unreadable')"
+assert_eq "unmeasurable: summary counts it" "yes" \
+  "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=0 observing=0 unmeasurable=1 deferred=0)')"
+td_teardown
+
+# --- Test 25: an unqueryable daemon parks nothing ----------------------------
+
+echo "Test: an unqueryable daemon parks nothing and still returns 0"
+td_setup
+td_write_node "tactic-td-unknown" working
+td_commit_nodes
+td_write_transcript "0ab7-7777" $(( TD_NOW - 5000 ))
+td_add_session "0ab7-7777" "tactic-td-unknown" "done"
+td_install_claude 1
+td_run
+assert_eq "daemon-fail: sweep returns 0" "0" "$TD_RC"
+assert_eq "daemon-fail: park-node not invoked" "0" "$(td_park_calls)"
+assert_eq "daemon-fail: stderr reports the unqueryable daemon" "yes" "$(td_contains 'daemon unqueryable; parking nothing')"
+td_teardown
+
+# --- Test 26: legacy <N>-slug workers and invalid node ids are skipped -------
+
+echo "Test: a <N>-slug worker has no graph node and an invalid node id is never used as a path"
+td_setup
+td_write_node "tactic-td-unused" working
+td_commit_nodes
+td_write_transcript "0bc8-8888" $(( TD_NOW - 4000 ))
+td_write_transcript "0cd9-9999" $(( TD_NOW - 4000 ))
+td_add_session "0bc8-8888" "123-some-slug" "done"
+# `Bad_Id!` on its own never reaches this sweep (the keyspace filter in
+# claude_agents_list_terminal_workers drops it), so the node-id regex is
+# exercised with a name that IS in the keyspace but is not a valid id.
+td_add_session "0cd9-9999" "tactic-Bad_Id" "done"
+td_install_claude 0
+td_run
+assert_eq "skips: sweep returns 0" "0" "$TD_RC"
+assert_eq "skips: park-node not invoked" "0" "$(td_park_calls)"
+assert_eq "skips: the <N>- worker is reported as having no graph node" "yes" \
+  "$(td_contains 'terminal worker 123-some-slug has no graph node (session=0bc8-8888); not parking')"
+assert_eq "skips: the invalid node id is reported" "yes" \
+  "$(td_contains 'terminal worker tactic-Bad_Id is not a valid node id; not parking')"
+assert_eq "skips: no idle line was reached for either" "no" "$(td_contains 'idle_seconds')"
+td_teardown
+
+# --- Test 27: a name with no node file on origin/main is not parked ----------
+
+echo "Test: a terminal worker with no intentions/<name>.md on origin/main is not parked"
+td_setup
+td_write_node "tactic-td-present" working
+td_commit_nodes
+td_write_transcript "0dea-aaaa" $(( TD_NOW - 4000 ))
+td_add_session "0dea-aaaa" "tactic-td-absent" "done"
+td_install_claude 0
+td_run
+assert_eq "no-node: sweep returns 0" "0" "$TD_RC"
+assert_eq "no-node: park-node not invoked" "0" "$(td_park_calls)"
+assert_eq "no-node: stderr reports the missing node file" "yes" \
+  "$(td_contains 'keeping tactic-td-absent (no intentions/tactic-td-absent.md on origin/main')"
+td_teardown
+
+# --- Test 28: the session's own escalation text is used verbatim -------------
+
+echo "Test: the job dir's office-hours-reason/-recommendation are used verbatim and cleared on success"
+td_setup
+td_write_node "tactic-td-escalated" working
+td_commit_nodes
+td_write_transcript "0efb-bbbb" $(( TD_NOW - 4000 ))
+td_add_session "0efb-bbbb" "tactic-td-escalated" "done"
+td_write_job_file "0efb-bbbb" office-hours-reason "the worker's own reason"
+td_write_job_file "0efb-bbbb" office-hours-recommendation "the worker's own recommendation"
+td_install_claude 0
+td_run
+assert_eq "escalation: sweep returns 0" "0" "$TD_RC"
+assert_eq "escalation: park-node invoked once" "1" "$(td_park_calls)"
+assert_eq "escalation: three positional args" "ARGC=3" "$(grep '^ARGC=' "$TD_PARKLOG")"
+assert_eq "escalation: reason is the worker's own text" "the worker's own reason" "$(td_park_arg 2)"
+assert_eq "escalation: recommendation is the worker's own text" "the worker's own recommendation" "$(td_park_arg 3)"
+assert_eq "escalation: the reason marker was removed" "gone" \
+  "$([[ -e "$TD_JOBS/0efb/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+assert_eq "escalation: the recommendation marker was removed" "gone" \
+  "$([[ -e "$TD_JOBS/0efb/office-hours-recommendation" ]] && printf 'present' || printf 'gone')"
+td_teardown
+
+# --- Test 29: office-hours-pr is threaded as --pr; a non-numeric one is not --
+
+echo "Test: a numeric office-hours-pr becomes --pr <n> and a non-numeric one is ignored"
+td_setup
+td_write_node "tactic-td-pr" working
+td_commit_nodes
+td_write_transcript "0fac-cccc" $(( TD_NOW - 4000 ))
+td_add_session "0fac-cccc" "tactic-td-pr" "done"
+td_write_job_file "0fac-cccc" office-hours-reason "reason with a pr"
+td_write_job_file "0fac-cccc" office-hours-recommendation "reco with a pr"
+td_write_job_file "0fac-cccc" office-hours-pr "2994"
+td_install_claude 0
+td_run
+assert_eq "pr: sweep returns 0" "0" "$TD_RC"
+assert_eq "pr: five positional args" "ARGC=5" "$(grep '^ARGC=' "$TD_PARKLOG")"
+assert_eq "pr: --pr is first" "--pr" "$(td_park_arg 1)"
+assert_eq "pr: the number is second" "2994" "$(td_park_arg 2)"
+assert_eq "pr: the node id is third" "tactic-td-pr" "$(td_park_arg 3)"
+assert_eq "pr: the pr marker was removed on success" "gone" \
+  "$([[ -e "$TD_JOBS/0fac/office-hours-pr" ]] && printf 'present' || printf 'gone')"
+td_teardown
+
+echo "Test: a non-numeric office-hours-pr adds no --pr flag"
+td_setup
+td_write_node "tactic-td-badpr" working
+td_commit_nodes
+td_write_transcript "0abd-dddd" $(( TD_NOW - 4000 ))
+td_add_session "0abd-dddd" "tactic-td-badpr" "done"
+td_write_job_file "0abd-dddd" office-hours-reason "reason with a bad pr"
+td_write_job_file "0abd-dddd" office-hours-pr "not-a-number"
+td_install_claude 0
+td_run
+assert_eq "bad-pr: sweep returns 0" "0" "$TD_RC"
+assert_eq "bad-pr: three positional args (no --pr)" "ARGC=3" "$(grep '^ARGC=' "$TD_PARKLOG")"
+assert_eq "bad-pr: the node id is first" "tactic-td-badpr" "$(td_park_arg 1)"
+td_teardown
+
+# --- Test 30: with no job dir the reason is synthesized ----------------------
+
+echo "Test: with no job dir at all the sweep synthesizes the reason and still parks"
+td_setup
+td_write_node "tactic-td-nojob" working
+td_commit_nodes
+td_write_transcript "0bca-1010" $(( TD_NOW - 4000 ))
+td_add_session "0bca-1010" "tactic-td-nojob" "done"
+td_install_claude 0
+td_run
+assert_eq "synth: sweep returns 0" "0" "$TD_RC"
+assert_eq "synth: park-node invoked once" "1" "$(td_park_calls)"
+assert_eq "synth: the synthesized reason names the missing disposition" "yes" \
+  "$(case "$(td_park_arg 2)" in *"ended without declaring a disposition"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation warns against a bare reap" "yes" \
+  "$(case "$(td_park_arg 3)" in *"restarts the churn loop"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+td_teardown
+
+# --- Test 31: a park-node failure retains the markers for the next tick ------
+
+echo "Test: a park-node failure is non-fatal, retains the markers, and says it will retry"
+td_setup
+td_write_park_node 1
+td_write_node "tactic-td-parkfail" working
+td_commit_nodes
+td_write_transcript "0cdb-1111" $(( TD_NOW - 4000 ))
+td_add_session "0cdb-1111" "tactic-td-parkfail" "done"
+td_write_job_file "0cdb-1111" office-hours-reason "reason that must survive"
+td_install_claude 0
+td_run
+assert_eq "park-fail: sweep returns 0" "0" "$TD_RC"
+assert_eq "park-fail: stderr reports the failure" "yes" \
+  "$(td_contains 'park failed for tactic-td-parkfail (park-node exit 1); will retry next tick')"
+assert_eq "park-fail: the decision record says park-failed" "park-failed" "$(td_log_dispositions)"
+assert_eq "park-fail: the reason marker is retained" "present" \
+  "$([[ -e "$TD_JOBS/0cdb/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+assert_eq "park-fail: summary counts zero parks" "yes" \
+  "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
+td_teardown
+
+# --- Test 32: the per-sweep park cap defers the excess -----------------------
+
+echo "Test: the park cap bounds parks per sweep and defers the rest"
+td_setup
+DISPATCH_TERMINAL_DISPOSITION_PARK_MAX=2
+for n in one two three four; do
+  td_write_node "tactic-td-cap-$n" working
+done
+td_commit_nodes
+i=1
+for n in one two three four; do
+  td_write_transcript "0dcb-200$i" $(( TD_NOW - 4000 ))
+  td_add_session "0dcb-200$i" "tactic-td-cap-$n" "done"
+  i=$(( i + 1 ))
+done
+td_install_claude 0
+td_run
+assert_eq "cap: sweep returns 0" "0" "$TD_RC"
+assert_eq "cap: exactly two park-node invocations" "2" "$(td_park_calls)"
+assert_eq "cap: summary counts the deferrals" "yes" \
+  "$(td_contains 'terminal-disposition sweep complete (terminal=4 parked=2 observing=0 unmeasurable=0 deferred=2)')"
+td_teardown
+
+# --- Test 33: at most one `git fetch` per sweep ------------------------------
+#
+# The fetch is lazy AND latched: two eligible candidates must still produce
+# exactly one fetch. Counted with a `git` wrapper on PATH that logs a line for
+# every invocation carrying the `fetch` subcommand and then delegates to the
+# real binary.
+
+echo "Test: two eligible candidates trigger exactly one git fetch"
+td_setup
+TD_REAL_GIT=$(command -v git)
+mkdir -p "$TD_DIR/bin"
+cat > "$TD_DIR/bin/git" <<GITW
+#!/usr/bin/env bash
+for a in "\$@"; do
+  if [ "\$a" = "fetch" ]; then printf 'fetch\n' >> "$TD_DIR/fetch.log"; break; fi
+done
+exec "$TD_REAL_GIT" "\$@"
+GITW
+chmod +x "$TD_DIR/bin/git"
+: > "$TD_DIR/fetch.log"
+td_write_node "tactic-td-fetch-one" working
+td_write_node "tactic-td-fetch-two" working
+td_commit_nodes
+td_write_transcript "0eac-1313" $(( TD_NOW - 4000 ))
+td_write_transcript "0fbd-1314" $(( TD_NOW - 4000 ))
+td_add_session "0eac-1313" "tactic-td-fetch-one" "done"
+td_add_session "0fbd-1314" "tactic-td-fetch-two" "done"
+td_install_claude 0
+TD_OLD_PATH="$PATH"
+PATH="$TD_DIR/bin:$PATH"
+td_run
+PATH="$TD_OLD_PATH"
+assert_eq "fetch: sweep returns 0" "0" "$TD_RC"
+assert_eq "fetch: both candidates parked" "2" "$(td_park_calls)"
+assert_eq "fetch: exactly one fetch for the whole sweep" "1" "$(wc -l < "$TD_DIR/fetch.log" | tr -d ' ')"
+td_teardown
+
 report_results
