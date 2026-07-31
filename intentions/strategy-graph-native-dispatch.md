@@ -3253,6 +3253,69 @@ clarifications:
       (tactic-align-tactics-target-node-context-dropped,
       tactic-align-tactics-per-node-clarifications), and a candidate unit for
       whichever of those owns buildDriftPrompt's inputs."
+  - question: Does the 2026-07-29 pending-CI liveness clarification's 'or whose run
+      is cancelled' case still need bounding, or is it already covered?
+    answer: "(Recorded 2026-07-31 /align-tactics round, tactic-mode drift review on
+      tactic-autonomous-ci-pending-liveness-bound.) The 2026-07-29 pending-CI
+      liveness clarification's phrase \"or whose run is cancelled\" overstates
+      the verified gap by one case. dispatch_classify_rollup already maps a
+      CANCELLED check-run conclusion to \"failing\"
+      (.claude/skills/dispatch-propagate/scripts/lib.sh:712), not to
+      \"pending\", so a cancelled run is already actionable through the existing
+      fix-interrupt path and is already bounded by FIX_ATTEMPT_CAP=3. The
+      genuinely unbounded case is narrower than the record states: an EMPTY
+      statusCheckRollup (checks never started, lib.sh:697-701) or a run that
+      stays in-progress indefinitely — both classify as \"pending\" with no time
+      dimension anywhere in the classifier. Every other gap site the 2026-07-29
+      clarification named is confirmed verbatim against current code:
+      graph-select-target:639-644 (sensor_gate qa|review arm, rc 1 -> echo
+      ci-pending, return 1, no counter), provision-node-worktree:372-384 (exit
+      10 \"not actionable yet\", no counter),
+      reconcile-graph-review-stall:214-225 (pending -> VERDICT=unknown ->
+      reviewStallRoute returns null -> silent no-op). This narrows the tactic's
+      scope; it does not change the decision to bound the state."
+  - question: Does a pending-CI liveness bound claim the reserved `no-progress`
+      hold-kind slug, or must it mint its own?
+    answer: "(Recorded 2026-07-31 /align-tactics round, tactic-mode drift review on
+      tactic-autonomous-ci-pending-liveness-bound.) hold-node-decide.ts reserves
+      an unclaimed hold-kind slug `no-progress` (RESERVED_KIND_SLUGS, ~line 87)
+      with the doc comment \"RESERVED for a different tactic's future per-node
+      no-progress fuse\". That reservation belongs to the terminal-trichotomy
+      fuse breaker of the router-failure-containment condition (tracked as
+      tactic-router-failure-fuses), not to a pending-CI liveness bound. This is
+      a derivation from the record rather than a new author decision: the
+      2026-07-29 liveness clarification already fixes that a tick-level skip
+      \"spawns no session and declares nothing, so it falls outside the terminal
+      trichotomy entirely\" and is expressly NOT redundant with the fuse
+      breaker. A pending-CI bound must therefore mint its own hold kind (e.g.
+      `ci-pending-stalled`) by extending HOLD_KINDS + KIND_SLUGS in
+      hold-node-decide.ts, reusing the existing holdIdFor / find-or-create /
+      born-parked-hold machinery, and must not claim the reserved slug."
+  - question: Must a pending-CI liveness bound keep advancing under the
+      paused-scheduling standing operating mode, and where does that constrain
+      the counter's placement?
+    answer: "(Recorded 2026-07-31 /align-tactics round, tactic-mode drift review on
+      tactic-autonomous-ci-pending-liveness-bound.) A liveness bound must keep
+      advancing in the paused-scheduling standing operating mode. This follows
+      from that condition's own framing — pause is a supported STANDING mode,
+      not a degraded or temporary state, and it gates worker spawning only —
+      extended from ledger-consuming invariants to liveness bounds generally.
+      Mechanically it constrains where the counter lives: a tick-counted
+      pending-CI bound belongs in dispatch-select-tick's unconditional
+      reconciliation sweep block (dispatch-select-tick:509-538, beside
+      reconcile-graph-merged and reconcile-graph-review-stall, best-effort and
+      not gated on OPEN_MAIN_RED), not solely in the selection gate
+      (graph-select-target sensor_gate) or the provisioning gate
+      (provision-node-worktree exit 10), neither of which runs while spawning is
+      paused — a counter that only advances when workers spawn would never fire
+      in exactly the mode where manual dispatch most needs the operator surface.
+      A wall-clock age source (the PR's updatedAt) is the alternative that is
+      pause-insensitive by construction. The choice between tick-count and
+      wall-clock, and between a graph-state counter (execution field, survives
+      worktree loss, costs a write per bump) and a fail-open sidecar counter
+      (the dispatch-graph-execute .conflict-strikes convention), stays
+      plan-level; recorded so a later round does not rediscover the pause
+      interaction."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
