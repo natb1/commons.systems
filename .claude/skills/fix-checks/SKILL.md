@@ -101,9 +101,11 @@ in-session recommend step first — see
 `.claude/skills/dispatch-propagate/escalation-recommend.md`, writing the
 best-next-steps markdown to `$CLAUDE_JOB_DIR/office-hours-recommendation` (node
 lane — no gh issue, so no `dispatch-write-recommendation` comment) — then write
-the park reason to `$CLAUDE_JOB_DIR/office-hours-reason` and **stop**. The Stop
-hook (`.claude/hooks/dispatch-stop.sh`) reads those files and parks the node via
-`park-node`. Never call `dispatch-mark-deviation` here (issue-only) and never
+the park reason to `$CLAUDE_JOB_DIR/office-hours-reason` and **stop**.
+`dispatch-tick`'s `terminal_without_disposition_sweep` (in
+`.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`) reads
+those files on a later tick and parks the node via `park-node`. Never call
+`dispatch-mark-deviation` here (issue-only) and never
 write a gh label; on the node lane no gh issue is ever read or written. This is
 the same `office-hours-reason` seam the Escalation note below documents.
 
@@ -200,9 +202,10 @@ Do NOT call `transition-node` here: after the CI-blind redesign it no longer
 knows about `fix` and would force the ladder forward regardless of whether the
 fix actually worked. Do NOT clear `execution.fix`, reset `phase`, or write any
 completion marker — those are the selector's on a later green tick. The Stop hook
-(`.claude/hooks/dispatch-stop.sh`) needs nothing from this seam for a clean pass
-(it only backstops the escalation hold); chain continuation is carried by the
-systemd heartbeat and the tick's convergence reseed.
+needs nothing from this seam for a clean pass; an escalation hold is landed by
+`dispatch-tick`'s `terminal_without_disposition_sweep`, not the Stop hook. Chain
+continuation is carried by the systemd heartbeat and the tick's convergence
+reseed.
 
 **Disarm auto-merge on every push.** Whenever this worker pushes ANY commit (a
 fix or the main-already-fixed-it merge), disarm auto-merge immediately as a
@@ -215,7 +218,8 @@ gh pr ready --undo "$PR_NUM"   # idempotent no-op when the PR was not merge-arme
 ```
 
 Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
-`office-hours-recommendation`) for the Stop hook's `park-node`, never a gh label.
+`office-hours-recommendation`) for `dispatch-tick`'s
+`terminal_without_disposition_sweep` to `park-node`, never a gh label.
 Also write the already-bound `PR_NUM` to `$CLAUDE_JOB_DIR/office-hours-pr` (same
 atomic tempfile+`mv` write) so the park records `execution.pr`
 (tactic-office-hours-pr-custody).

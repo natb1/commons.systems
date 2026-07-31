@@ -8,22 +8,24 @@
 #
 #   1. In-session park (primary): resolves the issue number from the worktree
 #      branch and calls dispatch-apply-office-hours <N> "<reason>" directly, so
-#      the dispatch:office-hours label lands WITHIN this session. This no longer
-#      depends on the Stop hook firing to land the park — necessary because for
-#      Workflow-phase skills (/qa-fix, /review-fix) dispatch-stop.sh Branch A can
-#      exit early on an in-flight background task and never reach its park call,
-#      leaving a marker-only escalation that never sticks (#2541). The park runs
+#      the dispatch:office-hours label lands WITHIN this session. This does not
+#      depend on any later hook or tick firing to land the park — necessary
+#      because a Workflow-phase skill's own escalation path can exit early on
+#      an in-flight background task and never reach its park call, leaving a
+#      marker-only escalation that never sticks (#2541). The park runs
 #      unconditionally (independent of $CLAUDE_JOB_DIR). dispatch-apply-office-hours
 #      is idempotent (no-ops if the label is already present) and issue-only-
-#      targeted, so a later Stop-hook apply or a re-run posts no duplicate comment.
+#      targeted, so a later apply or a re-run posts no duplicate comment.
 #
 #   2. office-hours-reason marker (fallback): writes the dispatch
-#      office-hours-reason marker that dispatch-stop.sh's
-#      resolve_office_hours_reason() reads, atomically (tempfile + mv) under the
-#      $CLAUDE_JOB_DIR guard, exactly as the phase skills previously did inline
-#      at their Step-4 terminus. Retained as a Stop-hook fallback path.
+#      office-hours-reason marker that dispatch-tick's
+#      terminal_without_disposition_sweep (lib-frozen-session-park.sh) reads,
+#      atomically (tempfile + mv) under the $CLAUDE_JOB_DIR guard, exactly as
+#      the phase skills previously did inline at their Step-4 terminus.
+#      Retained as a per-tick fallback path.
 #
-# Marker contents (byte format MUST be preserved — read by dispatch-stop.sh):
+# Marker contents (byte format MUST be preserved — read by dispatch-tick's
+# terminal_without_disposition_sweep):
 #
 #   <reason>
 #
@@ -57,9 +59,10 @@ fi
 
 # In-session park (primary): resolve the issue number from the worktree branch
 # and apply the dispatch:office-hours label directly, so the park lands within
-# this session rather than depending on the Stop hook (which can exit early on an
-# in-flight background task and never reach its park call — #2541). This runs
-# regardless of CLAUDE_JOB_DIR, so it precedes the marker's job-dir guard below.
+# this session rather than depending on a later escalation path (which can exit
+# early on an in-flight background task and never reach its park call — #2541).
+# This runs regardless of CLAUDE_JOB_DIR, so it precedes the marker's job-dir
+# guard below.
 N="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || true)")"
 N="${N%%-*}"
 if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
@@ -67,7 +70,7 @@ if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
 else
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" "$REASON" \
-    || echo "[dispatch-mark-deviation] WARNING: in-session office-hours park failed for #$N; relying on Stop-hook marker fallback" >&2
+    || echo "[dispatch-mark-deviation] WARNING: in-session office-hours park failed for #$N; relying on the tick-sweep marker fallback" >&2
 fi
 
 # CLAUDE_JOB_DIR guard: an interactive run (no dispatch job) is a no-op.
@@ -76,7 +79,8 @@ if [[ -z "${CLAUDE_JOB_DIR:-}" || ! -d "$CLAUDE_JOB_DIR" ]]; then
   exit 0
 fi
 
-# Atomic write: tempfile + mv. The exact byte format is read by dispatch-stop.sh.
+# Atomic write: tempfile + mv. The exact byte format is read by dispatch-tick's
+# terminal_without_disposition_sweep.
 f="$CLAUDE_JOB_DIR/office-hours-reason"
 printf '%s\n' "$REASON" > "$f.tmp"
 mv "$f.tmp" "$f"

@@ -3573,7 +3573,7 @@ clarifications:
   - question: The qa-main lane needs a third outcome besides pass and park — a
       not-yet-observed deploy-lag hold that must never wake a human. What shape
       does it take, what advances it, and what caps it?
-    answer: >-
+    answer: >
       (Recorded 2026-07-31 /align-strategy interview, ratifying the office_hours
       park on tactic-qa-main-verifiability-sort-criterion.) A WAIT is a hold
       node born with `office_hours: null` and NO phase, carrying an attempt
@@ -3624,6 +3624,20 @@ clarifications:
       class (a check whose failure mode is a silent PASS on the signal that
       matters) this strategy already tracks five members of, and an instrument
       must not be built on it.
+
+
+      (Amended 2026-07-31, same-day second /align-strategy round.) ADVANCEMENT
+      above is REFINED, not replaced. "When the observation lands" presumes a
+      readable signal, and the deploy-lag case that motivated this very entry
+      has none — detecting the observation IS running the test. For a WAIT whose
+      event carries no already-readable signal the release predicate is CALENDAR
+      TIME (attributes.wait_until), and the attempt counter's survival across a
+      re-wait — which this entry left open — is settled by re-arming one node in
+      place rather than re-minting. See the calendar-release clarification of
+      this date for both, including the router.ts:343-355 exclusion this entry
+      already requires, which now must cover a RE-ARMED node too (a re-arm
+      returns the node to phase-less, so it re-enters the draft-candidate loop
+      this exclusion guards).
   - question: Promoting the fleet watchdogs to systemd units removes their only
       operator surface. What replaces it, and may a fleet-level instrument halt
       dispatch?
@@ -3695,6 +3709,198 @@ clarifications:
       close. So an unreadable pause state reports UNKNOWN and STILL EMITS; it
       never silently suppresses. This inversion is scoped to out-of-band
       instruments and does not weaken condition 16 anywhere it governs a gate.
+  - question: What are the expected exception lanes for fleet scheduling — how far
+      does a pace-exempt bypass reach, and what may a deliberate human dispatch
+      override?
+    answer: >-
+      (Amended 2026-07-31 /align-strategy interview, author-dictated.) Two
+      exception lanes, with one shared floor. AMENDS entry 14/76's clause that
+      pace_exempt "admits ONE gate-exempt worker": it now fills to the ceiling.
+      LANE 1 — pace_exempt lifts the pace GATE to the full
+      max_concurrent_workers headroom and never past it. Whenever effective-live
+      >= the pace target and tokens remain, the pace-exempt lane admits up to
+      (max_concurrent_workers − effective_live) workers, not one. The rule is
+      UNIFORM — it is not scoped to the paced-to-zero case — so there is no
+      discontinuity at target 1 and no second regime. Worked example the author
+      gave: weekly usage above the pace curve, queue containing only pace-exempt
+      items, max_concurrent_workers 3 => three concurrently scheduled
+      pace-exempt workers. LANE 2 — a deliberate human dispatch (bare /dispatch
+      picking the highest-ranking available node, or dispatch <node-id>,
+      including a substituted node per entry 132) launches exactly one worker
+      ignoring BOTH the pace curve AND the ceiling. This lane is unchanged:
+      entry 76 already recorded it and dispatch-select-tick already implements
+      it (the --manual branch's SPAWN_N floor-of-1 re-asserts past the ceiling
+      clamp at HEADROOM=0; the explicit-node branch skips both outright).
+      Recorded here as confirmation, not as a change; no code is owed for lane
+      2.
+
+
+      THE RESULTING INVARIANT, which is the point of the pairing:
+      max_concurrent_workers is ABSOLUTE for all autonomous scheduling —
+      pace-exempt work included — and only a conscious human act may exceed it,
+      by exactly one node. This restores entry 33's ceiling to its stated scope
+      rather than weakening it.
+
+
+      THE SHARED FLOOR IS UNCHANGED: genuine token exhaustion
+      (dispatch-target-workers --exhausted — a weekly or 5-hour window at/near
+      100% used with its reset still ahead) remains the one hard stop on EVERY
+      lane, manual included. Exhaustion is neither the pace curve nor the
+      ceiling: the curve and the ceiling are self-imposed throttles a human may
+      override, while exhaustion means there are no tokens to spend. A worker
+      launched into an exhausted window cannot complete a pass, and a pass that
+      ends without declaring a disposition freezes its node until manually
+      reaped — so overriding this floor would convert a sovereign act into a
+      stuck node.
+
+
+      LIVE DEFECT RECORDED AT RATIFICATION, CORRECTED 2026-07-31 (same-day
+      author correction): dispatch-select-tick's autonomous block contains ZERO
+      references to MAX_WORKERS (verified against the script at origin/main), so
+      the at-cap pace-exempt bypass fires on effective-live >= pace-target with
+      no ceiling check at all. Today's behavior is BOTH narrower than this
+      clause (one worker per firing, via graph-select-target --pace-exempt-only
+      --top 1) and wider than entry 33 (no ceiling check at all) -- but the wide
+      half is NOT bounded to "max+1": the gate is re-evaluated fresh every tick
+      with no memory of a prior bypass, and the newly spawned worker counts as
+      busy on the very next tick, so effective-live stays >= pace-target
+      (trivially so at a paced-to-zero curve, 0 >= 0) and the lane can fire
+      again, admitting one MORE worker beyond whatever is currently live. The
+      correct characterization is "one additional worker every time the gate
+      fires, regardless of the current active count" -- compounding across
+      ticks, bounded only by how many distinct selectable pace_exempt candidates
+      exist (not by max_concurrent_workers, which this code path never reads).
+      Both halves are defects against the record rather than design choices;
+      tactic-pace-exempt-ceiling-fanout carries the fix.
+
+
+      STEELMAN CONSIDERED AND DIVERGED FROM: the rival framing is that the
+      one-worker bound was never an arbitrary throttle but a BOUND ON THE BLAST
+      RADIUS OF A MISMARKED NODE — under fill-to-ceiling, pace_exempt stops
+      meaning "one escape-hatch worker" and starts meaning "full-rate operation
+      for the marked set", so once the weekly curve closes the marking
+      discipline becomes the only remaining throttle on spend, and an
+      over-marking mistake costs the whole ceiling indefinitely rather than one
+      worker. Diverged from on the author's ruling, and a code-side bound on the
+      marked set was rejected as re-introducing the removed cap under a new name
+      with a tunable nobody can size. The risk is instead recorded as a FAILABLE
+      condition (see the pace-exempt-marked-set condition added this round),
+      reusing the machinery already carrying the maintenance-burden band: a
+      marked set that grows without bound is that condition failing — which
+      parks this strategy for an author decision — rather than a silently
+      absorbed cost.
+  - question: The ratified WAIT releases "when the observation lands" — but for
+      deploy lag, detecting the observation IS running the test. What releases a
+      WAIT whose event has no readable signal, and what survives a re-wait?
+    answer: >
+      (Recorded 2026-07-31 /align-strategy interview, second round of this date,
+      extending the WAIT ratification recorded earlier the same day — read that
+      entry first.) Calendar time is the WAIT's release predicate. The
+      requirement that produced this entry ("graph nodes need a way to block on
+      calendar time similar to how they can block on other nodes") is NOT a
+      rival to the WAIT shape: it supplies the release predicate that shape left
+      underspecified.
+
+
+      SHAPE. The deadline lives as attributes.wait_until (ISO 8601) on the WAIT
+      node, read by ONE MORE PREDICATE on the existing tick sweep framework —
+      dispatch-sweep, which already reads nodeMinAgeSeconds from its config —
+      never a second sweep, per this strategy's one-framework rule. When now >=
+      wait_until the sweep sets the WAIT phase: done, which clears the source's
+      blocked_by through blockersComplete (router.ts:168-175) and returns the
+      source to selection. No schema field is added and no second selector
+      eligibility gate is introduced.
+
+
+      WHY NOT A blocked_until FIELD. A top-level blocked_until on every node,
+      checked in the selector alongside blockersComplete, was offered as the
+      literal peer of blocked_by the requirement's wording suggests, and
+      DECLINED. Recorded with its reasons so it is not re-proposed: it is a
+      second eligibility gate to maintain; it needs schema.ts and validate-graph
+      work; it is authorable on nodes that have no use for it; and — decisively
+      — it carries NO attempt counter, NO cap and NO escalation path, so a wait
+      whose event never occurs would sit forever instead of parking to the
+      author, failing condition 10's declared-finite-cap requirement. The
+      WAIT-node shape inherits all three for free.
+
+
+      THE PARENT'S BLOCKING DOCTRINE STANDS UNAMENDED, and this is load-bearing
+      rather than incidental. strategy-graph-drives-dispatch's 2026-07-02
+      clarification says the gate "releases itself as tactics close". Under the
+      WAIT-node shape that remains literally true: a tactic (the WAIT) closes,
+      and the gate releases. Wall-clock is only what the sweep READS to decide
+      that closure — it is not a new release rule and not a new edge type. The
+      declined blocked_until field WOULD have contradicted that clarification,
+      which is a further reason it was declined. No edit to
+      strategy-graph-drives-dispatch is owed by this round.
+
+
+      THE COUNTER ACROSS A RE-WAIT. One WAIT node per source, with a
+      deterministic id (tactic-wait-<source-id>), RE-ARMED IN PLACE and never
+      re-minted: on a repeat not-yet-observed verdict the lane sets phase back
+      to null, pushes wait_until forward, and increments attributes.attempts.
+      The count survives because the node does, and source.blocked_by never
+      churns. This is viable specifically because pruning is AGENT-driven via
+      the owed-prune census, not script-driven (graph-commit:179-180), so a done
+      WAIT is still present to re-arm. RECORDED RESIDUAL RISK, accepted not
+      mitigated this round: a census that prunes between release and re-arm
+      resets attempts to 1 and the cap becomes unreachable; the failure
+      direction is a wait that retries too long, which the author eventually
+      sees, not a silent pass.
+
+
+      WHO SETS THE DURATION. The INITIAL wait_until is set by the qa phase at
+      the moment it records the needs-main follow-up — birth-time metadata,
+      consistent with this strategy's standing condition that an author-lane
+      post-merge verification node carries at birth everything a fresh sitting
+      needs — defaulting to 24h. /qa-main then REVISES it on each re-arm, since
+      by then it has run the test and knows something the qa phase did not. The
+      24h default is a stipulated starting value, not derived from a measured
+      deploy cadence.
+
+
+      STEELMAN, RESOLVED AS A DIVERGENCE WITH A BOUNDED CONCESSION.
+      tradition-stoicism records the dichotomy of control as
+      adopted-but-inverted — "where Epictetus contracts concern to what the will
+      controls, the graph engineers the boundary outward". The rival reading: a
+      calendar wait contracts the dispatch loop's concern away from the
+      production behavior and back onto the clock, the one thing the loop
+      already fully controls, and the faithful design would instead INSTRUMENT
+      the observation (a deployed-version marker, a log line, a metric) and
+      release on the signal. DIVERGED, because the clock never SUBSTITUTES for
+      the observation — it only schedules when the observation is taken.
+      /qa-main still runs the real test and still produces the real verdict;
+      wait_until decides when to look, never what was seen. This strategy
+      already tracks five members of the silent-pass class (a check whose
+      failure mode is a silent PASS on the signal that matters) and a calendar
+      wait is not a sixth. CONCESSION, recorded as a binding boundary: where a
+      cheap readable signal ALREADY exists, reaching for the clock instead IS
+      the retreat the inverted dichotomy names. The calendar wait is the default
+      only for behaviors with no already-readable signal, and never licenses
+      ignoring one that is.
+
+
+      SCOPE — RECURRENCE IS OUT. A future jit engine may consume this primitive
+      (author, this round), but nothing here is designed for recurrence: this
+      round covers one-shot delay only. Recorded finding from the same round,
+      because it is otherwise invisible: the project's legacy calendar mechanism
+      is UNREACHABLE CODE. dispatch-jit-engine and dispatch-jit-calendar-import
+      are still wired into dispatch-select-tick:844 and :938, but no jit.json
+      exists in dispatch.config/ (only auto-merge.json and target-workers.json)
+      and both file GitHub ISSUES, which are disabled repo-wide. So the
+      graph-native model today has no calendar mechanism at all, and the one it
+      inherited cannot run. Whether to retire that code or re-home it on
+      wait_until is deliberately NOT decided here.
+
+
+      DELEGATION EDGE CONSIDERED AND DECLINED. delegation-communications holds
+      "calendars and scheduling" in its delegated scope, so a recovers edge was
+      evaluated per the delegation-advice step and NOT added: this round's
+      primitive is an owned timestamp in the graph with no coupling to Google
+      Calendar, and the edge would overstate. It becomes warranted only if a
+      future jit consumer re-enters that scope — the point at which
+      dispatch-jit-calendar-import's Google Calendar dependency would actually
+      be replaced rather than merely left dead.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -3944,6 +4150,19 @@ attributes:
       residue` body sections remain live, a mixed-class source node instead
       carries a per-item `Verifiability:` sub-line (MACHINE|AUTHOR|WAIT) on each
       residue bullet, a convention that retires with that section."
+    - "the pace-exempt marked set stays small enough that filling the worker
+      ceiling from it is a deliberate choice rather than the default operating
+      mode. Recorded 2026-07-31 as the adopted containment for the blast-radius
+      steelman diverged from in the fleet-scheduling exception-lanes
+      clarification of that date: pace_exempt now lifts the pace gate to the
+      full max_concurrent_workers headroom, so once the weekly curve closes the
+      marking discipline is the ONLY remaining throttle on spend, and an
+      over-marked set costs the whole ceiling indefinitely rather than a single
+      worker. A marked set growing without bound is this condition FAILING
+      (which parks the strategy for an author decision), not merely more work in
+      flight. No set-size value is declared yet, so until the author declares
+      one this condition reads as not-yet-armed rather than as holding — the
+      same posture as the maintenance-burden band condition."
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
@@ -4379,18 +4598,26 @@ what is now the derived off-path (no-`validates`-edge) demotion of entry 11 — 
 positional citations to clarifications 9 and 11 remain exactly correct, only the
 implementing mechanism it names is historical.
 
-**The legacy pace curve carries over unchanged; a deliberate human dispatch
-bypasses both the pace gate and — for exactly one node — the absolute worker
-ceiling.** Current rule (pace machinery from 2026-07-03, entry 14; ceiling
-scoping and single-node bypass from 2026-07-18, entry 76, amending entries 33 and
-49). Pace parity is full and lives outside the graph: dispatch-target-workers'
+**The legacy pace curve carries over unchanged; the worker ceiling is absolute
+for autonomous scheduling, and only a deliberate human dispatch may exceed it —
+by exactly one node.** Current rule (pace machinery from 2026-07-03, entry 14;
+ceiling scoping and single-node bypass from 2026-07-18, entry 76, amending
+entries 33 and 49; pace-exempt width amended 2026-07-31, entry 173). Pace parity
+is full and lives outside the graph: dispatch-target-workers'
 weekly cumulative pace curve stays the binary spend gate and the 5-hour linear
 ramp decides how many concurrent workers (0..max_concurrent_workers); telemetry
 and tunables stay operational config, since rate-limit state is machine state,
 not intent. The legacy priority label maps to a first-class authored
 `pace_exempt` flag on goal-layer nodes — orthogonal to attention ordering — that
-admits one gate-exempt worker past a paced-to-zero budget without overriding the
-count, the order, or genuine token exhaustion (the `--exhausted` hard floor).
+lifts the pace GATE to the full `max_concurrent_workers` headroom and never past
+it, without overriding the order or genuine token exhaustion (the `--exhausted`
+hard floor). Entry 173 (2026-07-31) amends entry 14's original "admits one
+gate-exempt worker" to this fill-to-ceiling width, and makes the rule uniform
+rather than scoped to the paced-to-zero case: whenever effective-live reaches the
+pace target and tokens remain, the lane admits up to
+(`max_concurrent_workers` − effective_live) workers. So a queue holding only
+pace-exempt items at a shut weekly curve runs the fleet at its full ceiling —
+three concurrent workers at `max_concurrent_workers: 3` — and never at four.
 Entry 33 fixed `max_concurrent_workers` (dispatch.config/target-workers.json,
 default 8) as the one true global ceiling on dispatch-managed workers live at any
 moment across all ticks, workflows, and lanes, enforced at selection so

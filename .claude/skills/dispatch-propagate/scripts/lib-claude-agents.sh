@@ -17,6 +17,7 @@
 #   claude_agents_count_busy_workers
 #   claude_agents_list_blocked_workers
 #   claude_agents_count_held_for_debug
+#   claude_agents_list_terminal_workers
 #   verify_agent_registered_under      <agent-name> <cwd>
 #   claude_agents_snapshot_capture            <path>
 #   claude_agents_snapshot_capture_registered <path>
@@ -1113,6 +1114,90 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       return 1
     fi
     printf '%s\n' "$count"
+    return 0
+  }
+
+  # claude_agents_list_terminal_workers — emit worker sessions (name matches
+  # `^[0-9]+-` / `^tactic-` / `^strategy-`, the same keyspace
+  # `claude_agents_count_held_for_debug` counts — excluding `dispatch-*`
+  # routers) sitting in a TERMINAL state, as sessionId<TAB>id<TAB>name<TAB>cwd
+  # TSV. This is `claude_agents_list_blocked_workers`'s sibling: same keyspace
+  # filter, one extra column, different state predicate (terminal instead of
+  # `blocked`). It is the lister half of `claude_agents_count_held_for_debug`
+  # (which only counts) — the per-tick disposition sweep needs the actual
+  # rows, not just a count, to find and park terminal worker sessions.
+  #
+  # `.id` is the registry's own job id, and it is a DISTINCT value from the
+  # sessionId — not a prefix of it. The managed-job dir (`~/.claude/jobs/<id>`,
+  # where a session leaves its `office-hours-*` escalation markers) is named by
+  # `.id`, while the transcript file is named by `.sessionId`; a RESUMED session
+  # keeps its original `.id` while its `.sessionId` changes. Consumers that need
+  # the job dir MUST key on this column, never on `${sessionId%%-*}`. A row with
+  # no `.id` emits an empty column (`@tsv` renders null as ""), which callers
+  # must treat as "no job dir", never as a match.
+  #
+  # Reuses `claude_agents_count_held_for_debug`'s `terminal_states` jq `def`
+  # verbatim, and its `(.state // .status) // ""` resolution: `.state` is the
+  # granular field the `--all` listing carries — a terminal row is
+  # `{"state":"done"}` with NO `.status` key at all — falling back to the
+  # coarse `.status` for a row that has no `.state`, and "" for a row with
+  # neither (which is NOT terminal → not matched).
+  #
+  # Unlike `claude_agents_list_blocked_workers`, this function queries
+  # `claude agents --json --all` DIRECTLY, bypassing `_claude_agents_raw` —
+  # the tick snapshot (DISPATCH_AGENTS_SNAPSHOT) is captured without `--all`
+  # and so lacks the terminal-state rows this function exists to find; reading
+  # the snapshot would silently hide them. `claude_agents_count_held_for_debug`
+  # already carries this same note.
+  #     return 0 — daemon queried successfully. Stdout carries one TSV line per
+  #               terminal worker: sessionId<TAB>id<TAB>name<TAB>cwd. Zero
+  #               matches (or a `[]` registry) → return 0 with empty stdout: a
+  #               definite "no terminal workers", NOT a failure.
+  #     return 1 — UNKNOWN. `claude` missing, non-zero exit, whitespace-only
+  #               stdout, or jq failure on non-array input. Stdout is empty.
+  #               Callers MUST treat UNKNOWN as "cannot reconcile", never as
+  #               "none".
+  #
+  # Sandbox: reaches the local Claude daemon over a Unix socket. Callers MUST
+  # run this with `dangerouslyDisableSandbox: true` — a sandboxed call yields
+  # `[]`, a definite "no terminal workers", which is fail-safe here (parks
+  # nothing). See `.claude/rules/sandbox.md`.
+  claude_agents_list_terminal_workers() {
+    # --all so terminal (done/error/etc) rows are visible; queried DIRECTLY
+    # (not via _claude_agents_raw) because the snapshot lacks --all and
+    # therefore lacks the very rows this function lists. 2>/dev/null drops
+    # daemon noise; only the exit code and well-formed JSON on stdout are
+    # trusted.
+    local out
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json --all 2>/dev/null); then
+      return 1
+    fi
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # One jq pass validates the array shape, filters to the worker keyspace and
+    # a terminal (.state // .status), and projects the TSV. Non-array input
+    # errors out and the result is UNKNOWN.
+    local lines
+    if ! lines=$(jq -r '
+      def terminal_states:
+        ["done","stopped","killed","failed","errored","error",
+         "cancelled","canceled","terminated"];
+      if type == "array"
+      then .[]
+        | select(.name | type == "string" and test("^[0-9]+-|^tactic-|^strategy-"))
+        | select((((.state // .status) // "") | tostring) as $st
+                 | terminal_states | index($st))
+        | [.sessionId, .id, .name, .cwd] | @tsv
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 1
+    fi
+    # `[]` or no matches → empty $lines → emit nothing, still return 0.
+    if [[ -n "$lines" ]]; then
+      printf '%s\n' "$lines"
+    fi
     return 0
   }
 
