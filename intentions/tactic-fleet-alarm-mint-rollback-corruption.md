@@ -86,12 +86,93 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "review-fix: code-review instrument not invoked (Skill code-review
+    rejected with disable-model-invocation) — deviation gate fires
+    unconditionally on an unrun instrument. PR #3014's own 6 Required findings
+    were fixed and adversarially verified (commit 1e28ef81); this park is solely
+    the missing code-review pass, a known gap tracked by
+    tactic-review-code-review-invocation-contract."
+  since: 2026-08-01
+  recommendation: >-
+    ## PR #3014 — parked review-fix: what to do next
+
+
+    **PR #3014 itself is done.** The review pass ran fully on Lane B: 16
+    findings surfaced, 6 were classified Required, survived adversarial
+    verification, and were fixed, committed, and pushed as `1e28ef81` on branch
+    `tactic-fleet-alarm-mint-rollback-corruption` (PR comment 5152290894 has the
+    disposition). 7 were refuted, 1 false-positive, 2 informational-only, 0
+    follow-ups to file. The fixes route the fail-closed
+    gate/selection/reconciliation call sites to a new strict `listNodesStrict`
+    (since the PR made `listNodes` fail-open), and harden
+    `dispatch-fleet-alarm`'s `restore_from_blob` — return status checked at all
+    3 call sites, `rm -f` rollback gated on `PRE_EXISTED` plus
+    `origin_main_ref_ok`. **Do not re-run review-fix on #3014.** There is
+    nothing left to find or fix in this diff.
+
+
+    **The park is infrastructure, not this PR.** One instrument — the
+    `code-review` Lane-A pass (`/code-review max --fix`) — could not be invoked:
+    `Skill code-review cannot be used with Skill tool due to
+    disable-model-invocation`. The pipeline's deviation gate escalates
+    unconditionally when a named instrument does not run at all, regardless of
+    severity. That is the whole reason this is parked.
+
+
+    **Do not re-diagnose the gap.** It is already tracked and already has a fix
+    in flight:
+
+    - `tactic-review-code-review-invocation-contract` — PR #3007, `phase:
+    implement`. Replaces the rejected Skill-tool call with the `claude -p`
+    user-turn entry point, restores `--fix`, adopts `--comment`, parses findings
+    from text. A 2026-07-31 investigation confirmed all 18 `Skill(code-review,
+    'max --fix')` invocations were rejected, so the built-in never ran.
+
+    - Blocked by `tactic-hold-conflict-review-code-review-invocation-contract`,
+    parked in `office_hours`. The conflict: #3007 removes the Skill-tool
+    code-review path, but sibling `tactic-lane-instrument-substitution-guard`
+    (landed on origin/main at `778a1c94`) added `test-review-fix-instrument.sh`
+    — wired into `.github/workflows/unit-tests.yml`'s hook-tests job — whose
+    grep-pinned assertion requires code-review to still run as a Skill-tool
+    agent finder inside the Workflow fan-out.
+
+
+    ### Two ways to unblock
+
+
+    **(a) Resolve the #3007 hold — fixes every future review, including a re-run
+    of this one.**
+
+    Decide the doctrine question in
+    `tactic-hold-conflict-review-code-review-invocation-contract`: either update
+    `test-review-fix-instrument.sh`'s grep-pinned assertion to match the `claude
+    -p` invocation path, or adjust #3007's Unit 4 to keep the assertion
+    satisfiable. Once #3007 lands, the instrument works and #3014 can get a real
+    code-review pass. This is the higher-value path — the gap is fleet-wide, not
+    per-PR.
+
+
+    **(b) Narrow unblock for #3014 alone.**
+
+    Confirm by hand that the 6-finding disposition in comment 5152290894 is
+    sound (this session already judged it is), clear the office-hours park on
+    `tactic-fleet-alarm-mint-rollback-corruption`, and let #3014 proceed to
+    merge without a code-review pass. This accepts the missing instrument for
+    this one PR and leaves the fleet-wide gap open — reasonable if #3014 is
+    time-sensitive relative to the #3007 hold, since #3014's diff is fleet-stall
+    infrastructure that is presumably wanted on main sooner rather than later.
+
+
+    Option (b) does not remove the need for (a); it only stops #3014 from
+    waiting on it.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
