@@ -137,6 +137,16 @@ spawn_worker_setup() {
   # Point dispatch-config-load at the test's config dir so force-opus.json is
   # under test control (absent config dir → no-config → gate off by default).
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+
+  # lib-claude-agents only trusts an exactly-`[]` registry payload when a
+  # `claude daemon` process corroborates it (CLAUDE_AGENTS_PGREP_CMD probe).
+  # The spawn fakes below emit `[]` for the pre-spawn dedup check, so without
+  # this stub that read would be UNKNOWN — occupied — on any host with no daemon
+  # running, and every spawn case would dedupe instead of spawning. Exit 0 =
+  # daemon visible, preserving the fakes' intended "registry is empty" meaning.
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$TMPDIR_TEST/fake-pgrep"
+  chmod +x "$TMPDIR_TEST/fake-pgrep"
+  export CLAUDE_AGENTS_PGREP_CMD="$TMPDIR_TEST/fake-pgrep"
 }
 
 spawn_worker_teardown() {
@@ -150,7 +160,7 @@ spawn_worker_teardown() {
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
     SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
-    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S \
+    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S CLAUDE_AGENTS_PGREP_CMD \
     DISPATCH_CONFIG_DIR CLAUDE_CODE_SUBAGENT_MODEL
 }
 
