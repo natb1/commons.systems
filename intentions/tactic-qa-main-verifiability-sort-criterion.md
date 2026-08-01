@@ -89,13 +89,14 @@ attention:
     codified and phase implement, carrying a full clean-session plan (Units 1-3)
     in the body; the boost value is preserved unchanged from the bootstrap
     re-scale."
-phase: qa
+phase: review
 execution:
   branch: tactic-qa-main-verifiability-sort-criterion
   pr: 3009
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
