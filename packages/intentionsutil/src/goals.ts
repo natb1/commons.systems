@@ -1,5 +1,6 @@
 import type { ResolvedAttention, TermContribution } from "./attention.js";
 import { resolveAttention } from "./attention.js";
+import { ownTier } from "./schema.js";
 import type { IntentionNode, Owner } from "./schema.js";
 
 /**
@@ -16,7 +17,8 @@ export interface Goal {
   /**
    * The node's derived attention, or null when the node is not goal-layer
    * eligible (no `resolveAttention` entry). Drives the primary sort key and the
-   * band marker in `renderFrontier`.
+   * band marker in `renderFrontier`; when null, both fall back to the node's
+   * own `ownTier` (never a flat tier 1) and value 0.
    */
   attention: ResolvedAttention | null;
 }
@@ -64,14 +66,21 @@ export function activeFrontier(nodes: IntentionNode[]): IntentionNode[] {
  *
  * Sort is a TOTAL order, independent of input order:
  *   1. resolved attention tier DESCENDING (the outermost key — a node with no
- *      resolver entry has tier 1, matching `resolveAttention`'s default tier);
+ *      resolver entry falls back to its OWN tier, `ownTier(node)`, NOT a flat
+ *      1: the frontier admits every non-codified leaf of any kind, while
+ *      `resolveAttention` only maps goal-layer kinds, and nothing gates
+ *      `attributes.tier`/`bug_fix`/`security` to goal-layer kinds — so a
+ *      delegation/virtue/tradition leaf can genuinely carry tier 2 or 3 and a
+ *      `?? 1` fallback would silently bury it at the bottom of the list. Same
+ *      fallback as the selector's `tierOf` (`router.ts`), so the two consumers
+ *      of this axis agree on the same node);
  *   2. then resolved attention value DESCENDING (the derived attention flow
  *      within a tier; a node with no resolver entry has value 0);
  *   3. then gap-present (non-null) before gap-absent;
  *   4. then success_signal-present (non-null) before absent;
  *   5. then `id` ascending (the unique tiebreak guaranteeing totality).
  *
- * When no node carries an injection or a tier lift anywhere, every tier is 1
+ * When no node carries an injection or a tier mark anywhere, every tier is 1
  * and every value is 0, so keys 1–2 never discriminate and the order is
  * EXACTLY the pre-attention gap/signal/id order.
  *
@@ -81,8 +90,8 @@ export function projectGoals(nodes: IntentionNode[]): Goal[] {
   const attention = resolveAttention(nodes);
   const frontier = activeFrontier(nodes);
   const sorted = [...frontier].sort((a, b) => {
-    const aTier = attention.get(a.id)?.tier ?? 1;
-    const bTier = attention.get(b.id)?.tier ?? 1;
+    const aTier = attention.get(a.id)?.tier ?? ownTier(a);
+    const bTier = attention.get(b.id)?.tier ?? ownTier(b);
     if (aTier !== bTier) return bTier - aTier;
 
     const aVal = attention.get(a.id)?.value ?? 0;
@@ -147,8 +156,12 @@ function formatTermBreakdown(terms: TermContribution[] | undefined): string {
  * trailing newline.
  *
  * Goals with `tier > 1` get a tier marker — ` [tier <tier>]` — prepended
- * immediately before the rank marker described below. Tier 1 (the default,
- * including a null `attention`) renders no tier marker.
+ * immediately before the rank marker described below. A null `attention` (a
+ * frontier leaf of a non-goal-layer kind, which `resolveAttention` does not
+ * map) falls back to the node's OWN tier, `ownTier(node)` — matching
+ * `projectGoals`' sort key, so a tier-2/3 leaf sorted near the top is also
+ * MARKED as such instead of rendering as an unexplained tier-1 line. Tier 1
+ * renders no tier marker.
  *
  * Goals with `value > 0` get a rank marker appended after the
  * `_(owner: … → …)_` segment (and after the tier marker, when present) and
@@ -165,8 +178,9 @@ export function renderFrontier(goals: Goal[]): string {
   }
   const lines = goals.map(({ node, realization, attention }) => {
     let line = `- **${node.id}** — ${node.statement} _(owner: ${node.owner} → ${renderRealization(realization)})_`;
-    if (attention !== null && attention.tier > 1) {
-      line += ` [tier ${attention.tier}]`;
+    const tier = attention !== null ? attention.tier : ownTier(node);
+    if (tier > 1) {
+      line += ` [tier ${tier}]`;
     }
     if (attention !== null && attention.value > 0) {
       const rank = formatRank(attention.value);

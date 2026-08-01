@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Execution, IntentionNode } from "../src/schema.js";
 import { PHASES } from "../src/schema.js";
-import { IntentionSchemaError } from "../src/errors.js";
 import {
   effectivePrecedence,
   frozenTacticSelectable,
@@ -996,14 +995,50 @@ describe("ordering", () => {
     expect(blocker?.precedence).toEqual({ tier: 3, rank: 6 });
   });
 
-  it("a blocked_by cycle throws IntentionSchemaError rather than looping", () => {
+  it("a blocked_by cycle degrades ordering and logs an event, never throwing or looping", () => {
     const nodes = [
       ...kinds(),
       tactic({ id: "tactic-a", phase: "implement", blocked_by: ["tactic-b"] }),
       tactic({ id: "tactic-b", phase: "implement", blocked_by: ["tactic-a"] }),
+      // An unrelated healthy node: the cycle must not cost it its candidacy.
+      tactic({ id: "tactic-healthy", phase: "implement" }),
     ];
-    expect(() => selectGraphTargets(nodes)).toThrow(IntentionSchemaError);
-    expect(() => effectivePrecedence(nodes)).toThrow(/blocking precedence cycle/);
+
+    const { precedence, events } = effectivePrecedence(nodes);
+    // Both cycle members still get a precedence pair (their own, max-folded).
+    expect(precedence.get("tactic-a")).toEqual({ tier: 1, rank: 0 });
+    expect(precedence.get("tactic-b")).toEqual({ tier: 1, rank: 0 });
+    const cycleEvents = events.filter((e) => e.event === "precedence-cycle");
+    expect(cycleEvents).toHaveLength(1);
+    expect(cycleEvents[0]?.detail).toMatch(/blocked_by cycle: tactic-a -> tactic-b -> tactic-a/);
+
+    // Selection survives: the cycle members are gated out by blockersComplete
+    // (as any blocked node is), but the rest of the store still selects.
+    const sel = selectGraphTargets(nodes);
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-healthy"]);
+    expect(sel.events.filter((e) => e.event === "precedence-cycle")).toHaveLength(1);
+  });
+
+  it("a cycle member blocking an out-of-cycle node still lifts it, and terminates", () => {
+    const nodes = [
+      ...kinds(),
+      tactic({ id: "tactic-a", phase: "implement", blocked_by: ["tactic-b"] }),
+      tactic({
+        id: "tactic-b",
+        phase: "implement",
+        attributes: { tier: 3 },
+        blocked_by: ["tactic-a"],
+      }),
+      // Blocks tactic-a, which sits in the cycle with the tier-3 tactic-b.
+      tactic({ id: "tactic-outside", phase: "implement", attributes: { tier: 1 } }),
+      tactic({ id: "tactic-a2", phase: "implement", blocked_by: ["tactic-outside"] }),
+    ];
+    const { precedence } = effectivePrecedence(nodes);
+    // tactic-b's own tier-3 pair still reaches the nodes it blocks.
+    expect(precedence.get("tactic-a")?.tier).toBe(3);
+    expect(precedence.get("tactic-outside")).toEqual({ tier: 1, rank: 0 });
+    // Out-of-cycle candidates are unaffected and selection completes.
+    expect(selectGraphTargets(nodes).candidates.map((c) => c.id)).toEqual(["tactic-outside"]);
   });
 
   it("the progression ordinal runs over the full PHASES order", () => {

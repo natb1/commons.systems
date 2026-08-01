@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
-import { IntentionSchemaError } from "./errors.js";
 import { isStrategyStale, REVIEWED_MARKER } from "./transitions.js";
 import { ownTier, PHASES } from "./schema.js";
 import type { FixState, IntentionNode, Phase } from "./schema.js";
@@ -74,7 +73,13 @@ export interface GraphCandidate {
 
 /** A structured note the wrapper writes to the selection log. */
 export interface SelectionEvent {
-  event: "freeze" | "rounds-cap" | "stale-reading";
+  event: "freeze" | "rounds-cap" | "stale-reading" | "precedence-cycle";
+  /**
+   * The node the event is about: the serving strategy for
+   * `freeze`/`rounds-cap`/`stale-reading`, and the node the cycle's back edge
+   * re-entered for `precedence-cycle` (which is a tactic as often as a
+   * strategy).
+   */
   strategy: string;
   detail: string;
 }
@@ -205,6 +210,18 @@ export interface Precedence {
   rank: number;
 }
 
+/**
+ * `effectivePrecedence`'s output: the per-node precedence map plus any
+ * `precedence-cycle` events observed while walking the blocking relation. The
+ * events travel with the map so the caller can forward them to the selection
+ * log — a cycle is a store defect worth surfacing, just not one worth halting
+ * selection over.
+ */
+export interface PrecedenceResult {
+  precedence: Map<string, Precedence>;
+  events: SelectionEvent[];
+}
+
 /** Lexicographic max: tier first, rank only when tiers are equal. */
 function maxPrecedence(a: Precedence, b: Precedence): Precedence {
   if (a.tier !== b.tier) return a.tier > b.tier ? a : b;
@@ -235,10 +252,19 @@ function maxPrecedence(a: Precedence, b: Precedence): Precedence {
  * Cycle guard: `validateGraph` rule 15 forbids `blocked_by` cycles, but the
  * selector runs over a store snapshot that was never necessarily validated, so
  * the rule is not relied on here. Re-entering a node still on the recursion
- * stack throws an `IntentionSchemaError` naming the cycle — a clear error, never
- * a silent 0 or an infinite loop.
+ * stack does NOT throw: the back edge is skipped (the re-entered node
+ * contributes only its own `(tier, rank)` pair to that branch) and a
+ * `precedence-cycle` `SelectionEvent` naming the cycle is recorded. Never a
+ * silent 0 and never an infinite loop, but also never fatal — selection is the
+ * READ path for the whole autonomous fleet, and a single malformed node file
+ * (two concurrent graph-commits each validated against a base missing the
+ * other's edge, or a hand-committed edit that skipped validation) must degrade
+ * the ORDERING of the nodes in the cycle, not empty the candidate list and halt
+ * every tick. The hard rejection stays where it belongs: `validateGraph` rule 15
+ * on the WRITE path. Ordering under a cycle stays deterministic — memoized,
+ * max-based, and entered in id order.
  */
-export function effectivePrecedence(nodes: IntentionNode[]): Map<string, Precedence> {
+export function effectivePrecedence(nodes: IntentionNode[]): PrecedenceResult {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const attention = resolveAttention(nodes);
 
@@ -253,30 +279,50 @@ export function effectivePrecedence(nodes: IntentionNode[]): Map<string, Precede
     }
   }
 
+  // The node's OWN pair. An ineligible node (not goal-layer) has no
+  // `ResolvedAttention` entry; it can still sit mid-chain, so fall back to its
+  // own authored tier and the neutral rank baseline (0) rather than dropping it.
+  const ownPair = (id: string): Precedence => {
+    const resolved = attention.get(id);
+    if (resolved !== undefined) return { tier: resolved.tier, rank: resolved.value };
+    const node = byId.get(id);
+    return { tier: node !== undefined ? ownTier(node) : 1, rank: 0 };
+  };
+
   const memo = new Map<string, Precedence>();
   const stack: string[] = [];
   const onStack = new Set<string>();
+  const events: SelectionEvent[] = [];
+  // One event per distinct back edge, not one per traversal that crosses it.
+  const reportedBackEdges = new Set<string>();
 
   const resolve = (id: string): Precedence => {
     const cached = memo.get(id);
     if (cached !== undefined) return cached;
     if (onStack.has(id)) {
-      throw new IntentionSchemaError(
-        `blocking precedence cycle: ${[...stack, id].join(" -> ")}`,
-      );
+      // Cycle: skip the back edge rather than throwing. `id` contributes only
+      // its own pair to this branch; the frame that is still resolving `id`
+      // higher up the stack folds in the rest and memoizes the full value, so
+      // every node in the cycle still ends up with the max over the cycle's own
+      // pairs — degraded ordering, not a dropped candidate list.
+      const edge = `${stack[stack.length - 1] ?? ""} -> ${id}`;
+      if (!reportedBackEdges.has(edge)) {
+        reportedBackEdges.add(edge);
+        events.push({
+          event: "precedence-cycle",
+          strategy: id,
+          detail:
+            `blocked_by cycle: ${[...stack, id].join(" -> ")}; back edge skipped, ` +
+            "precedence for these nodes degrades to the max of their own (tier, rank) pairs " +
+            "(validateGraph rule 15 rejects such a cycle at the write path)",
+        });
+      }
+      return ownPair(id);
     }
     onStack.add(id);
     stack.push(id);
 
-    // The node's OWN pair. An ineligible node (not goal-layer) has no
-    // `ResolvedAttention` entry; it can still sit mid-chain, so fall back to its
-    // own authored tier and the neutral rank baseline (0) rather than dropping it.
-    const resolved = attention.get(id);
-    const node = byId.get(id);
-    let best: Precedence =
-      resolved !== undefined
-        ? { tier: resolved.tier, rank: resolved.value }
-        : { tier: node !== undefined ? ownTier(node) : 1, rank: 0 };
+    let best: Precedence = ownPair(id);
 
     for (const blocked of reverseBlockers.get(id) ?? []) {
       if (!byId.has(blocked)) continue;
@@ -289,10 +335,11 @@ export function effectivePrecedence(nodes: IntentionNode[]): Map<string, Precede
     return best;
   };
 
-  // Deterministic entry order (id ascending), though the max-fold result is
-  // order-independent.
+  // Deterministic entry order (id ascending): the max-fold result is
+  // order-independent for an acyclic store, and pinning the order keeps the
+  // degraded cyclic case deterministic too.
   for (const id of nodes.map((n) => n.id).sort()) resolve(id);
-  return memo;
+  return { precedence: memo, events };
 }
 
 /**
@@ -380,10 +427,12 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const attention = resolveAttention(nodes);
   // Computed over the FULL node array: a blocked node is never a candidate, so
-  // its urgency reaches selection only as a lift onto the blocker.
-  const precedence = effectivePrecedence(nodes);
+  // its urgency reaches selection only as a lift onto the blocker. A malformed
+  // store with a `blocked_by` cycle degrades ordering and logs a
+  // `precedence-cycle` event; it never empties the candidate list.
+  const { precedence, events: precedenceEvents } = effectivePrecedence(nodes);
   const onPath = computeSignalPath(nodes);
-  const events: SelectionEvent[] = [];
+  const events: SelectionEvent[] = [...precedenceEvents];
 
   /** The node's OWN reported tier (never lifted). */
   const tierOf = (n: IntentionNode): number => attention.get(n.id)?.tier ?? ownTier(n);
