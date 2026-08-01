@@ -39,6 +39,34 @@ tick_setup() {
   cp "$SCRIPT_DIR/lib-standdown-recheck.sh" "$TMPDIR_TEST/lib-standdown-recheck.sh"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/lib-worktree-in-sync.sh"
   cp "$SCRIPT_DIR/lib-decision-log.sh" "$TMPDIR_TEST/lib-decision-log.sh"
+  # lib-stale-hold-recheck.sh (tactic-stale-hold-auto-resolve Unit 5 wiring) and
+  # the two of its own sourced siblings not already copied above (lib.sh,
+  # lib-claude-agents.sh, lib-reservation-ledger.sh, and lib-decision-log.sh are
+  # already copied for the sweeps above), so the tick's paused-branch and
+  # normal-path stale_hold_recheck_sweep calls genuinely run instead of
+  # source-failing.
+  cp "$SCRIPT_DIR/lib-stale-hold-recheck.sh" "$TMPDIR_TEST/lib-stale-hold-recheck.sh"
+  cp "$SCRIPT_DIR/lib-graph-worktree.sh" "$TMPDIR_TEST/lib-graph-worktree.sh"
+  cp "$SCRIPT_DIR/lib-worktree-residue.sh" "$TMPDIR_TEST/lib-worktree-residue.sh"
+  # Isolate the sweep's repo root and enumerator, mirroring the standdown
+  # sweep's ledger-dir isolation above. DISPATCH_HOLD_RECHECK_REPO_ROOT points at
+  # a scratch dir with an empty intentions/ subdirectory (never the real repo),
+  # and DISPATCH_HOLD_RECHECK_ENUM (a documented test seam — see
+  # lib-stale-hold-recheck.sh's env-override header) replaces the default
+  # `node --import tsx/esm .../list-recheckable-holds.ts` invocation, which would
+  # otherwise fail to resolve the `tsx` package from a bare scratch directory
+  # with no node_modules. The fake enumerator prints no TSV rows and exits 0, so
+  # the REAL stale_hold_recheck_sweep body runs against zero candidates and
+  # simply logs its sweep-complete summary line, which is all these invocation
+  # tests need.
+  export DISPATCH_HOLD_RECHECK_REPO_ROOT="$TMPDIR_TEST/stale-hold-repo"
+  mkdir -p "$DISPATCH_HOLD_RECHECK_REPO_ROOT/intentions"
+  export DISPATCH_HOLD_RECHECK_ENUM="$TMPDIR_TEST/fake-stale-hold-enum"
+  cat > "$DISPATCH_HOLD_RECHECK_ENUM" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+  chmod +x "$DISPATCH_HOLD_RECHECK_ENUM"
   # Isolate the sweep's own ledger dir from the host's real
   # tmp/dispatch-standdown, and give it a scratch repo root so its lazy
   # `git fetch` / `git show origin/main:...` reads never touch the real repo.
@@ -196,7 +224,8 @@ tick_teardown() {
     DISPATCH_STANDDOWN_DIR DISPATCH_STANDDOWN_REPO_ROOT \
     DISPATCH_FROZEN_SESSION_PROJECTS_ROOT DISPATCH_FROZEN_SESSION_REPO_ROOT \
     DISPATCH_FROZEN_SESSION_PARK_NODE DISPATCH_DECISION_LOG_DIR \
-    DISPATCH_FROZEN_SESSION_NOW_EPOCH TICK_PARK_NODE_RC
+    DISPATCH_FROZEN_SESSION_NOW_EPOCH TICK_PARK_NODE_RC \
+    DISPATCH_HOLD_RECHECK_REPO_ROOT DISPATCH_HOLD_RECHECK_ENUM
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -870,6 +899,64 @@ err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
 assert_eq "standdown-load-fail-normal: tick still exits 0" "0" "$rc"
 assert_eq "standdown-load-fail-normal: loud diagnostic on stderr" "1" \
   "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick' && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-stale-hold-auto-resolve Unit 5: stale_hold_recheck_sweep wiring ---
+# Both call sites run the REAL stale_hold_recheck_sweep (lib-stale-hold-recheck.sh,
+# copied into TMPDIR_TEST by tick_setup, same idiom as lib-standdown-recheck.sh
+# above) with its enumerator faked out via DISPATCH_HOLD_RECHECK_ENUM (see
+# tick_setup) to report zero candidates, so the sweep simply emits its one-line
+# "sweep complete" summary to stderr — sufficient to assert invocation. As with
+# the standdown sweep, only invocation is asserted here, not ordering.
+
+echo "Test: dispatch-tick paused branch invokes stale_hold_recheck_sweep"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-stale-hold: exit 0" "0" "$rc"
+assert_eq "paused-stale-hold: stale_hold_recheck_sweep ran (sweep-complete line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-stale-hold-recheck: sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick normal path invokes stale_hold_recheck_sweep"
+tick_setup
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "normal-stale-hold: exit 0" "0" "$rc"
+assert_eq "normal-stale-hold: stale_hold_recheck_sweep ran (sweep-complete line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-stale-hold-recheck: sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+# --- lib-stale-hold-recheck.sh fails to load → loud diagnostic, tick still completes ---
+# Replace the copied lib with an unsourceable file (invalid bash syntax) so the
+# tick's `source` fails and `declare -f stale_hold_recheck_sweep` comes back
+# false on BOTH call sites. Both must log the loud diagnostic and the tick must
+# still complete (exit 0) rather than abort, and no "sweep complete" line must
+# appear anywhere in that run's stderr.
+echo "Test: dispatch-tick lib-stale-hold-recheck.sh load failure → loud diagnostic, tick still completes"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-stale-hold-recheck.sh"
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "stale-hold-load-fail: tick still exits 0 (paused branch)" "0" "$rc"
+assert_eq "stale-hold-load-fail: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-stale-hold-recheck.sh failed to load; stale-hold re-check NOT run this tick' && echo 1 || echo 0)"
+assert_eq "stale-hold-load-fail: no sweep-complete line (sweep never ran)" "0" \
+  "$(printf '%s' "$err" | grep -cF 'lib-stale-hold-recheck: sweep complete')"
+tick_teardown
+
+echo "Test: dispatch-tick lib-stale-hold-recheck.sh load failure on normal path → loud diagnostic, tick still completes"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-stale-hold-recheck.sh"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "stale-hold-load-fail-normal: tick still exits 0" "0" "$rc"
+assert_eq "stale-hold-load-fail-normal: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-stale-hold-recheck.sh failed to load; stale-hold re-check NOT run this tick' && echo 1 || echo 0)"
+assert_eq "stale-hold-load-fail-normal: no sweep-complete line (sweep never ran)" "0" \
+  "$(printf '%s' "$err" | grep -cF 'lib-stale-hold-recheck: sweep complete')"
 tick_teardown
 
 # --- tactic-denied-command-parks-node: normal-path frozen-session sweep --------
