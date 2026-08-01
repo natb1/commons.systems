@@ -110,7 +110,7 @@ attention:
     running. blocked_by is empty, so this promotion lifts no blocker and cannot
     compound; the one candidate blocker, tactic-sweep-timer-unit-dir-leak, is
     already phase done and therefore takes no inflow from this edge."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-fleet-watchdogs-session-scoped
   pr: 3008
@@ -121,7 +121,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-01T01:15:38Z
+    mergeCommitSha: 2643b5cd41637650ae1daaa4c0c3a32ac07c0e53
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
