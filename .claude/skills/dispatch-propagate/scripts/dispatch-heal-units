@@ -16,20 +16,38 @@
 # --- What "poisoned" means --------------------------------------------------
 #
 # A managed unit is poisoned when either:
-#   (a) its installed `ExecStart=` line contains the literal substring
-#       `/tmp/tmp.` — the mktemp -d default template for a scratch worktree.
-#       A unit whose ExecStart points into a scratch dir instead of the main
-#       worktree was written while a worker's throwaway checkout was
-#       mistakenly treated as the main worktree (see
-#       tactic-node-body-stale-in-worker-worktree, PR #3005) — that scratch
-#       dir is deleted on worktree GC, so the unit silently stops firing.
+#   (a) its installed `ExecStart=` line is not EXACTLY the expected
+#       `<main-worktree>/.claude/skills/dispatch-propagate/scripts/<script>`
+#       path for that unit. This is a POSITIVE assertion, not a blocklist: any
+#       ExecStart that does not match, for any reason, is poisoned. A missing
+#       `ExecStart=` line in an existing unit file counts too.
+#
+#       An earlier revision tested only for the literal substring `/tmp/tmp.`
+#       (the mktemp -d default template). That blocklist missed every other
+#       way an ExecStart can name a directory that will be deleted: a
+#       relocated TMPDIR (this host routinely runs with TMPDIR=/tmp/claude, so
+#       `mktemp -d` yields `/tmp/claude/tmp.XXXXXX`), a `$CLAUDE_JOB_DIR/tmp/`
+#       scratch dir, or a `.claude/worktrees/<branch>` checkout — which is
+#       reaped on merge and is the most common non-main checkout here. Each of
+#       those took the clean-pass branch, logged `result=clean`, exited 0, and
+#       resolved any open heal-fired alarm that had correctly recorded the
+#       poisoning: a false all-clear that also destroyed the existing signal.
+#       The `/tmp/`-family check survives only as an extra diagnostic LABEL on
+#       the reason string (`…-scratch`), never as the detection itself.
+#
 #   (b) `systemctl --user is-failed --quiet <unit>` is true.
 #
-# The managed unit set (both conditions checked over all four):
-#   dispatch-heartbeat.service
-#   dispatch-sweep-periodic.service
-#   dispatch-heal.service
-#   dispatch-fleet-watch.service
+# The managed unit set, and the script each one's ExecStart must name (both
+# conditions checked over all four):
+#   dispatch-heartbeat.service       -> dispatch-tick
+#   dispatch-sweep-periodic.service  -> dispatch-spawn-sweep
+#   dispatch-heal.service            -> dispatch-heal-units
+#   dispatch-fleet-watch.service     -> dispatch-fleet-watch
+#
+# These mirror lib.sh's installers (ensure_heartbeat_units' TICK_SCRIPT,
+# ensure_sweep_timer's SWEEP_SCRIPT, ensure_healer_units' HEALER_SCRIPT,
+# ensure_watcher_units' WATCHER_SCRIPT) — each writes a single-token,
+# double-quoted `ExecStart="<path>"` with no arguments.
 #
 # --- Cross-healing topology -------------------------------------------------
 #
@@ -67,9 +85,23 @@
 # --- Alarms and the rate-signal log -----------------------------------------
 #
 # A heal (something was poisoned and got healed) emits
-# `dispatch-fleet-alarm --kind heal-fired` with a body naming the timestamp,
-# each poisoned unit and its prior ExecStart= value, and every installer's
-# return code.
+# `dispatch-fleet-alarm --kind heal-fired` with a body naming each poisoned
+# unit, its prior and expected ExecStart= values, and every installer's return
+# code.
+#
+# ALARM BODIES CARRY IDENTITY, NOT THE CLOCK. An alarm body lands as a graph
+# node on origin/main, and dispatch-fleet-alarm skips the commit when a
+# re-detection's body matches the body already on disk. This healer runs on a
+# 2-minute timer, so a body opening with `heal-fired at <second-resolution
+# timestamp>` differs on EVERY pass: a condition that keeps recurring would
+# fetch/rebase/push to main every two minutes — ~720 pushes a day, each arming
+# the four required CI checks, precisely while the fleet is already unwell.
+# So no body here carries a timestamp, and the poisoned-unit list is emitted in
+# $UNITS order rather than associative-array order: two passes finding the same
+# units poisoned must produce a BYTE-IDENTICAL body. The timestamp is not lost
+# — it is on the one-line-per-pass `result=` log line described below, which is
+# where a per-pass fact belongs. test-dispatch-heal-units.sh ratchets this by
+# comparing the bodies two successive healed passes emit.
 #
 # A clean pass (nothing needed healing) resolves BOTH alarm kinds this script
 # can raise — `dispatch-fleet-alarm --resolve --kind heal-fired` and
@@ -110,9 +142,36 @@
 #
 #   DISPATCH_HEAL_MAIN_WORKTREE
 #     The main worktree to cd into and source lib.sh from, and the argument
-#     passed to every installer. Default: the repo root computed from this
-#     script's own location (scripts -> dispatch-propagate -> skills ->
-#     .claude -> repo root), mirroring dispatch-fleet-alarm's REPO_ROOT.
+#     passed to every installer. An explicit value is authoritative and is NOT
+#     scratch-validated — it is the test suite's injection seam, and an
+#     operator who names a path deliberately outranks the derivation.
+#     Default: the git common-dir root (`git rev-parse --git-common-dir`, then
+#     dirname) — the same resolution lib.sh's `resolve_project_root` performs
+#     and that sibling call sites such as dispatch-schedule-reseed use. Falling
+#     back to the script-location derivation (scripts -> dispatch-propagate ->
+#     skills -> .claude -> repo root, mirroring dispatch-fleet-alarm's
+#     REPO_ROOT) only when git cannot resolve.
+#
+#     The derived value is scratch-validated before it is used (see
+#     "Self-amplifying poisoning" below).
+#
+# --- Self-amplifying poisoning ------------------------------------------------
+#
+# MAIN_WORKTREE is written verbatim into the ExecStart=/WorkingDirectory= of
+# every managed unit by the Step 5b installers, and dispatch-heal.service is
+# itself in the managed set. So a poisoned healer unit is self-amplifying: if
+# ExecStart names a scratch copy, the timer runs THAT copy, the poison check
+# correctly fires, and the heal then rewrites all five units to point at the
+# same scratch dir. One poisoned unit becomes five, and when the scratch dir is
+# GC'd the whole fleet stops firing permanently — the exact failure this script
+# exists to prevent.
+#
+# The guard: resolve through git first (a scratch *worktree* of this repo still
+# resolves to the MAIN checkout, not to itself), and refuse to heal at all when
+# the DERIVED path is a scratch location — any `/tmp` family root, a relocated
+# TMPDIR, a `$CLAUDE_JOB_DIR` subtree, a `tmp.XXXXXX` mktemp segment, or a
+# `.claude/worktrees/<branch>` checkout. Refusal is `unknown_exit` (exit 2 plus
+# a heal-unknown alarm), never a clean pass and never a heal.
 #
 #   DISPATCH_HEAL_ALARM_CMD
 #     A command line (split on whitespace — the path must not contain spaces)
@@ -146,8 +205,8 @@ usage() {
 usage: dispatch-heal-units
        dispatch-heal-units -h|--help
 
-Single pass over the managed dispatch systemd --user units: detects a
-poisoned ExecStart= (pointing into a scratch /tmp/tmp.* worktree) or an
+Single pass over the managed dispatch systemd --user units: detects an
+ExecStart= that is not exactly the expected main-worktree script path, or an
 is-failed unit, heals via lib.sh's ensure_* installers, and alarms via
 dispatch-fleet-alarm. Takes no arguments. See the header comment in this
 script for the full contract.
@@ -168,12 +227,52 @@ done
 UNIT_DIR="${DISPATCH_HEAL_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
 SYSTEMCTL_CMD="${DISPATCH_HEAL_SYSTEMCTL_CMD:-systemctl}"
 
+# path_is_scratch <path> — true when <path> names a throwaway location that
+# will be deleted out from under any unit pointing at it. Not a blocklist of
+# one literal: it covers the whole family this host actually produces.
+#   - any /tmp-family root (catches BOTH the default `/tmp/tmp.XXXXXX` and a
+#     relocated TMPDIR such as `/tmp/claude/tmp.XXXXXX`)
+#   - anything under $TMPDIR or $CLAUDE_JOB_DIR
+#   - a bare `tmp.XXXXXX` mktemp segment anywhere in the path
+#   - a `.claude/worktrees/<branch>` checkout — reaped on merge
+path_is_scratch() {
+  local p="$1"
+  case "$p" in
+    /tmp|/tmp/*|/private/tmp|/private/tmp/*|/var/tmp|/var/tmp/*) return 0 ;;
+    */tmp.??????*) return 0 ;;
+    */.claude/worktrees/*) return 0 ;;
+  esac
+  if [[ -n "${TMPDIR:-}" && "${TMPDIR%/}" != "" && "$p" == "${TMPDIR%/}"/* ]]; then
+    return 0
+  fi
+  if [[ -n "${CLAUDE_JOB_DIR:-}" && "${CLAUDE_JOB_DIR%/}" != "" && "$p" == "${CLAUDE_JOB_DIR%/}"/* ]]; then
+    return 0
+  fi
+  return 1
+}
+
 if [[ -n "${DISPATCH_HEAL_MAIN_WORKTREE:-}" ]]; then
   MAIN_WORKTREE="$DISPATCH_HEAL_MAIN_WORKTREE"
+  MAIN_WORKTREE_SOURCE="env"
 else
-  # scripts -> dispatch-propagate -> skills -> .claude -> repo root (same
-  # convention as sibling dispatch-fleet-alarm's REPO_ROOT).
-  MAIN_WORKTREE="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+  # Authoritative: the git common-dir root — the same resolution lib.sh's
+  # resolve_project_root performs, inlined because lib.sh itself lives under
+  # the path being resolved. Resolving through git means a scratch or per-branch
+  # WORKTREE copy of this script still names the MAIN checkout rather than
+  # itself, which is what must be written into the managed units.
+  MAIN_WORKTREE=""
+  MAIN_WORKTREE_SOURCE="git-common-dir"
+  HEAL_COMMON_DIR="$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+  if [[ -n "$HEAL_COMMON_DIR" ]]; then
+    MAIN_WORKTREE="$(dirname "$HEAL_COMMON_DIR")"
+  fi
+  if [[ -z "$MAIN_WORKTREE" ]]; then
+    # Fallback only when git cannot resolve: scripts -> dispatch-propagate ->
+    # skills -> .claude -> repo root (same convention as sibling
+    # dispatch-fleet-alarm's REPO_ROOT). Scratch-validated below either way.
+    MAIN_WORKTREE="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+    MAIN_WORKTREE_SOURCE="script-dir"
+  fi
 fi
 
 ALARM_CMD=()
@@ -184,6 +283,17 @@ else
 fi
 
 UNITS=(dispatch-heartbeat.service dispatch-sweep-periodic.service dispatch-heal.service dispatch-fleet-watch.service)
+
+# The script each managed unit's ExecStart= must name, relative to
+# $MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/. Mirrors the
+# installers in lib.sh (TICK_SCRIPT / SWEEP_SCRIPT / HEALER_SCRIPT /
+# WATCHER_SCRIPT). Anything else in ExecStart= is poisoned.
+declare -A UNIT_EXPECTED_SCRIPT=(
+  [dispatch-heartbeat.service]=dispatch-tick
+  [dispatch-sweep-periodic.service]=dispatch-spawn-sweep
+  [dispatch-heal.service]=dispatch-heal-units
+  [dispatch-fleet-watch.service]=dispatch-fleet-watch
+)
 
 NOW_UTC="$(date -u +%FT%TZ)"
 
@@ -211,14 +321,16 @@ unknown_exit() {
     log "result=unknown reason=\"$reason\" alarm=not-sent at $NOW_UTC"
     exit 69
   }
+  # NO TIMESTAMP IN THE BODY — see "Alarm bodies carry identity, not the clock"
+  # in the header. $NOW_UTC is on the log line above/below instead.
   {
-    echo "dispatch-heal-units UNKNOWN at $NOW_UTC"
+    echo "dispatch-heal-units UNKNOWN"
     echo
     echo "Reason: $reason"
     echo
     echo "unit_dir: $UNIT_DIR"
     echo "systemctl_cmd: $SYSTEMCTL_CMD"
-    echo "main_worktree: $MAIN_WORKTREE"
+    echo "main_worktree: $MAIN_WORKTREE (resolved via $MAIN_WORKTREE_SOURCE)"
   } > "$body_file"
 
   fire_alarm --kind heal-unknown \
@@ -229,6 +341,16 @@ unknown_exit() {
   log "result=unknown reason=\"$reason\" at $NOW_UTC"
   exit 2
 }
+
+# --- Step 0: the main worktree must not itself be a scratch location --------
+# Runs BEFORE anything else can act on MAIN_WORKTREE, because Step 5b writes it
+# verbatim into every managed unit — including this healer's own. Healing from
+# a scratch copy would turn one poisoned unit into five (see "Self-amplifying
+# poisoning" in the header). An explicitly-supplied DISPATCH_HEAL_MAIN_WORKTREE
+# is authoritative and skips the check; only the derived value is validated.
+if [[ "$MAIN_WORKTREE_SOURCE" != "env" ]] && path_is_scratch "$MAIN_WORKTREE"; then
+  unknown_exit "derived main worktree '$MAIN_WORKTREE' (resolved via $MAIN_WORKTREE_SOURCE) is a scratch/throwaway location; refusing to heal — writing it into the managed units would poison the whole fleet with a path that disappears on GC"
+fi
 
 # --- Step 1: systemctl must be resolvable -----------------------------------
 if ! command -v "$SYSTEMCTL_CMD" >/dev/null 2>&1; then
@@ -278,10 +400,30 @@ for unit in "${UNITS[@]}"; do
       unknown_exit "unit file '$unit_path' exists but is not readable"
     fi
     line="$(grep -m1 '^ExecStart=' "$unit_path" 2>/dev/null || true)"
-    if [[ -n "$line" ]]; then
+    if [[ -z "$line" ]]; then
+      # An installed unit with no ExecStart= at all cannot run. Fail closed.
+      prior=""
+      reason="execstart-missing"
+    else
       prior="$line"
-      if [[ "$line" == *'/tmp/tmp.'* ]]; then
+      # POSITIVE assertion (see header): the value must be exactly the expected
+      # main-worktree script path. lib.sh writes a single-token, double-quoted
+      # ExecStart with no arguments, so strip one optional quote pair and
+      # compare. Anything else — a different script, extra arguments, a
+      # systemd prefix character, a scratch dir, a per-branch worktree
+      # checkout — is poisoned.
+      actual="${line#ExecStart=}"
+      actual="${actual#\"}"
+      actual="${actual%\"}"
+      expected="$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/${UNIT_EXPECTED_SCRIPT[$unit]}"
+      if [[ "$actual" != "$expected" ]]; then
         reason="execstart-poisoned"
+        # Extra diagnostic LABEL only — never the detection itself.
+        if [[ "$actual" == *'/tmp/tmp.'* ]]; then
+          reason="execstart-poisoned-scratch-tmp"
+        elif path_is_scratch "$actual"; then
+          reason="execstart-poisoned-scratch"
+        fi
       fi
     fi
   fi
@@ -358,14 +500,22 @@ BODY_FILE="$(mktemp 2>/dev/null)" || {
   log "result=healed poisoned_units=\"${!UNIT_REASON[*]}\" alarm=not-sent at $NOW_UTC"
   exit 69
 }
+# NO TIMESTAMP IN THE BODY, and the unit list is emitted in $UNITS order rather
+# than associative-array hash order — see "Alarm bodies carry identity, not the
+# clock" in the header. Two passes that find the same units poisoned must
+# produce a BYTE-IDENTICAL body. $NOW_UTC is on the log line below instead.
 {
-  echo "dispatch-heal-units heal-fired at $NOW_UTC"
+  echo "dispatch-heal-units heal-fired"
+  echo
+  echo "main_worktree: $MAIN_WORKTREE (resolved via $MAIN_WORKTREE_SOURCE)"
   echo
   echo "Poisoned units:"
-  for unit in "${!UNIT_REASON[@]}"; do
+  for unit in "${UNITS[@]}"; do
+    [[ -n "${UNIT_REASON[$unit]:-}" ]] || continue
     echo "- $unit"
     echo "    reason: ${UNIT_REASON[$unit]}"
     echo "    prior ExecStart: ${UNIT_PRIOR_EXECSTART[$unit]:-<none — unit file missing or had no ExecStart= line>}"
+    echo "    expected ExecStart: ExecStart=\"$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/${UNIT_EXPECTED_SCRIPT[$unit]}\""
   done
   echo
   echo "Installer results:"

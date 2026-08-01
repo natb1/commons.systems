@@ -1957,6 +1957,66 @@ headless_sentinel_path() {
   printf '%s\n' "$dir/dispatch-tick-${slug}.live"
 }
 
+# ---- Graph-write mutex (one graph writer per checkout) ----------------------
+# Print the path of a checkout's graph-write mutex to stdout. An explicit
+# DISPATCH_GRAPH_WRITE_LOCK_FILE is authoritative and bypasses the derivation
+# (tests rely on this); otherwise the mutex lives beside the checkout it guards,
+# at <repo-root>/tmp/graph-write.lock (gitignored).
+#
+# WHY PER-CHECKOUT, not project-wide like dispatch_lock_file: the hazard this
+# mutex closes is two graph writers mutating THE SAME working tree at once.
+# graph-commit rebases the checkout it is handed and, on its busy-main /
+# far-ahead-HEAD paths, runs `git reset --hard` on it. A second writer's
+# half-written intentions/<id>.md in that same tree is then either discarded
+# (a graph write that exits 0 having landed nothing) or left dirty, tripping the
+# clean-tree assertion of every later writer in that checkout. Two writers in
+# DIFFERENT checkouts do not have that problem — graph-commit's own distributed
+# landing lock (refs/graph/landing-lock) serializes them at the remote.
+#
+# Returns non-zero (no output) when the override is unset AND no repo root was
+# supplied; the caller supplies its own error message.
+graph_write_lock_file() {
+  local repo_root="${1:-}"
+  if [[ -n "${DISPATCH_GRAPH_WRITE_LOCK_FILE:-}" ]]; then
+    printf '%s\n' "$DISPATCH_GRAPH_WRITE_LOCK_FILE"
+    return 0
+  fi
+  [[ -n "$repo_root" ]] || return 1
+  printf '%s\n' "$repo_root/tmp/graph-write.lock"
+}
+
+# graph_write_lock_acquire <repo-root> — take that checkout's graph-write mutex
+# NON-BLOCKING on fd 9 of the CALLING shell. The flock is held for the caller's
+# whole process lifetime and released when fd 9 closes (process exit), so there
+# is deliberately no release verb: an out-of-band instrument that could "release
+# early" would reopen the window this mutex exists to close.
+#
+# NON-BLOCKING ON PURPOSE. Every caller is an unattended instrument fired by a
+# systemd timer. A pass that BLOCKS on a wedged holder pins its oneshot service
+# until the next fire and stacks passes on top of each other; skipping costs
+# nothing, because these instruments re-derive their entire reading from scratch
+# on the next pass. Callers must SKIP the pass on return 1, never wait.
+#
+# fd inheritance: children (git, npx, graph-commit) inherit fd 9 and would hold
+# the flock past our exit if one of them ever daemonized. Callers that invoke a
+# child which can fork a background helper should close it there with `9>&-`.
+#
+# Return: 0 acquired; 1 another writer holds it (SKIP the pass, do not block);
+#         2 the mutex could not be established at all (no repo root, no `flock`
+#           binary, unwritable directory) — an environment error the caller must
+#           surface, NEVER silently downgrade to an unserialized graph write.
+graph_write_lock_acquire() {
+  local repo_root="${1:-}" lock_file
+  lock_file=$(graph_write_lock_file "$repo_root") || return 2
+  command -v flock >/dev/null 2>&1 || return 2
+  mkdir -p "$(dirname "$lock_file")" 2>/dev/null || return 2
+  # Append-open, never truncate: the file is a pure mutex carrier and `>` would
+  # race a concurrent holder's open.
+  exec 9>>"$lock_file" || return 2
+  flock -n 9 || return 1
+  return 0
+}
+
 # Return the project ID for Firebase emulators.
 # Appends worktree name to prevent hub file collisions across worktrees.
 get_emulator_project_id() {

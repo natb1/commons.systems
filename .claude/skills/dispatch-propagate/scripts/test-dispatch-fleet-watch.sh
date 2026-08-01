@@ -64,9 +64,13 @@ STUB
 chmod +x "$BIN/liveness"
 
 # dispatch-graph-main-red-sync stub: ALWAYS exits 0 (its real contract); the
-# signal is entirely in stdout.
+# signal is entirely in stdout. It also records its argv to $REDSYNC_ARGV_LOG so
+# cases can assert the watcher invoked it in its WRITE-FREE --read-only mode —
+# unflagged, the real script completes the open tactic-main-red-* nodes and
+# thereby re-arms the auto-merge gate from inside a watchdog pass.
 cat > "$BIN/redsync" <<'STUB'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >> "${REDSYNC_ARGV_LOG:-/dev/null}"
 [[ -n "${STUB_REDSYNC_OUT:-}" ]] && printf '%s\n' "$STUB_REDSYNC_OUT"
 exit 0
 STUB
@@ -74,10 +78,22 @@ chmod +x "$BIN/redsync"
 
 # dispatch-fleet-alarm recording stub: appends its argv to $ALARM_LOG, one
 # invocation per line, so cases can assert exactly which kinds fired and which
-# resolved.
+# resolved. When $ALARM_BODY_DIR is set it also files each --body-file under its
+# kind, so a case can compare the bodies two passes emit BYTE-FOR-BYTE (the
+# real dispatch-fleet-alarm skips its commit only when the body is unchanged,
+# so a body carrying a live span would push to origin/main every pass).
 cat > "$BIN/alarm" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$ALARM_LOG"
+if [[ -n "${ALARM_BODY_DIR:-}" ]]; then
+  mkdir -p "$ALARM_BODY_DIR"
+  kind=""; prev=""
+  for a in "$@"; do
+    [[ "$prev" == "--kind" ]] && kind="$a"
+    [[ "$prev" == "--body-file" && -n "$kind" ]] && cp "$a" "$ALARM_BODY_DIR/$kind.body"
+    prev="$a"
+  done
+fi
 exit "${STUB_ALARM_RC:-0}"
 STUB
 chmod +x "$BIN/alarm"
@@ -112,9 +128,12 @@ iso() { date -u -d "@$1" +%FT%TZ; }
 # result. Extra args (e.g. --json) are forwarded to the script.
 run_case() {
   ALARM_LOG="$WORK/alarm-$RANDOM-$RANDOM.log"; : > "$ALARM_LOG"
+  REDSYNC_ARGV_LOG="$WORK/redsync-argv-$RANDOM-$RANDOM.log"; : > "$REDSYNC_ARGV_LOG"
   set +e
   RUN_OUT="$(
     ALARM_LOG="$ALARM_LOG" \
+    ALARM_BODY_DIR="${ALARM_BODY_DIR:-}" \
+    REDSYNC_ARGV_LOG="$REDSYNC_ARGV_LOG" \
     DISPATCH_FLEET_WATCH_LIVENESS_CMD="$BIN/liveness" \
     DISPATCH_FLEET_WATCH_REDSYNC_CMD="$BIN/redsync" \
     DISPATCH_FLEET_WATCH_ALARM_CMD="$BIN/alarm" \
@@ -135,6 +154,7 @@ run_case() {
   RUN_RC=$?
   set -e
   ALARMS="$(cat "$ALARM_LOG")"
+  REDSYNC_ARGV="$(cat "$REDSYNC_ARGV_LOG")"
 }
 
 reset_stubs() {
@@ -164,6 +184,10 @@ assert_eq "case1 exit code" 0 "$RUN_RC"
 assert_eq "case1 resolve count" 4 "$(grep -c -- '--resolve' <<<"$ALARMS")"
 assert_eq "case1 finding-alarm count" 0 "$(grep -c -- '--statement' <<<"$ALARMS")"
 assert_contains "case1 reports ok" "result: ok" "$RUN_OUT"
+# The latch is READ, never completed: completing it re-arms the auto-merge gate
+# (dispatch-select-tick gates solely on the open set being empty), which is an
+# authority the tick holds and a watchdog timer does not.
+assert_contains "case1 red-sync invoked write-free (--read-only)" "--read-only" "$REDSYNC_ARGV"
 
 # ===========================================================================
 # Case 2 (ROW-O REGRESSION GUARD, the single most important case in this file):
@@ -321,7 +345,121 @@ run_case --bogus
 assert_eq "case12 usage exit code" 64 "$RUN_RC"
 
 # ===========================================================================
-# Case 13 (DOCTRINE RATCHET): the watcher must never fleet-halt. Grep the
+# Case 13 (BLINDED-WATCHDOG GUARD): the span state file cannot be WRITTEN
+# (its parent directory is read-only), with zero busy workers and no prior
+# stamp. Without this guard busy_zero_since is never persisted, the span
+# computes as NOW-NOW=0 on every pass, the verdict is `clear`, and the pass
+# resolves any live busy-stall alarm — forever, while nothing is running. The
+# predicate must instead be `unknown`, naming the unwritable file.
+reset_stubs; new_env case13
+fresh_log
+chmod 555 "$CASEDIR"
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 0)" STUB_REDSYNC_OUT="" run_case
+chmod 755 "$CASEDIR"
+assert_contains "case13 busy verdict unknown (stamp unwritable)" "busy-stall:           unknown" "$RUN_OUT"
+assert_contains "case13 detail names the state file" "$STATEFILE" "$RUN_OUT"
+assert_not_contains "case13 no busy-stall resolve" "--resolve --kind busy-stall" "$ALARMS"
+assert_not_contains "case13 no busy-stall finding" "--kind busy-stall --statement" "$ALARMS"
+assert_eq "case13 watch-unknown alarm fired" 1 "$(grep -c -- '--kind watch-unknown --statement' <<<"$ALARMS")"
+assert_not_contains "case13 does NOT report bare ok" "result: ok" "$RUN_OUT"
+assert_eq "case13 exit code (unknown)" 2 "$RUN_RC"
+
+# ===========================================================================
+# Case 14: same unwritable state dir, but with an open main-red node — the
+# suppression span stamp cannot be persisted either. Predicate 4 must be
+# `unknown` (a never-accumulating span would report clear while the latch is
+# held indefinitely), while predicate 3 stays clear (workers busy, no stamp to
+# write).
+reset_stubs; new_env case14
+fresh_log
+chmod 555 "$CASEDIR"
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 1)" STUB_REDSYNC_OUT="tactic-main-red-abcd1234" run_case
+chmod 755 "$CASEDIR"
+assert_contains "case14 automerge verdict unknown (stamp unwritable)" "automerge-suppressed: unknown" "$RUN_OUT"
+assert_not_contains "case14 no automerge resolve" "--resolve --kind automerge-suppressed" "$ALARMS"
+assert_not_contains "case14 no automerge finding" "--kind automerge-suppressed --statement" "$ALARMS"
+assert_eq "case14 busy still clear (nothing to write)" 1 "$(grep -c -- '--resolve --kind busy-stall' <<<"$ALARMS")"
+assert_eq "case14 exit code (unknown)" 2 "$RUN_RC"
+
+# ===========================================================================
+# Case 15: the state file exists but will not PARSE. state_get must report the
+# read failure rather than return "no stamp yet" — both span predicates go
+# unknown, and neither resolves its alarm.
+reset_stubs; new_env case15
+fresh_log
+printf 'not json at all\n' > "$STATEFILE"
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 2)" STUB_REDSYNC_OUT="" run_case
+assert_contains "case15 busy verdict unknown (state unparseable)" "busy-stall:           unknown" "$RUN_OUT"
+assert_contains "case15 automerge verdict unknown (state unparseable)" "automerge-suppressed: unknown" "$RUN_OUT"
+assert_not_contains "case15 no busy-stall resolve" "--resolve --kind busy-stall" "$ALARMS"
+assert_not_contains "case15 no automerge resolve" "--resolve --kind automerge-suppressed" "$ALARMS"
+assert_eq "case15 watch-unknown alarm fired" 1 "$(grep -c -- '--kind watch-unknown --statement' <<<"$ALARMS")"
+assert_eq "case15 exit code (unknown)" 2 "$RUN_RC"
+
+# ===========================================================================
+# Case 16 (BODY-STABILITY RATCHET): two passes whose READINGS all differ, but
+# whose CONDITIONS are identical, must emit byte-identical alarm bodies.
+#
+# dispatch-fleet-alarm commits a re-detection only when the body differs from
+# the one already on origin/main. A body carrying `${TICK_AGE}s old`, an elapsed
+# stall/suppression span, or the raw liveness JSON (MainPID,
+# ActiveEnterTimestamp, census pids) differs on EVERY pass, so one sustained
+# condition would fetch+rebase+push to main once per 5-minute timer fire — ~288
+# pushes a day per kind, each arming the four required CI checks, all of it
+# while the fleet is already unwell and least able to absorb it.
+#
+# Every input below is moved between the two passes: the decision-log timestamp,
+# both span stamps. Only the thresholds, paths, node ids and pause state — the
+# condition's IDENTITY — may survive into a body.
+reset_stubs; new_env case16
+printf '{"ts":"%s","site":"select-tick"}\n' "$(iso $((NOW - 99999)))" > "$LOGFILE"
+printf '{"busy_zero_since":%s,"suppression_since":%s}\n' "$((NOW - 99999))" "$((NOW - 99999))" > "$STATEFILE"
+ALARM_BODY_DIR="$CASEDIR/bodies-1"
+STUB_LIVENESS_RC=3 STUB_LIVENESS_VERDICT=down STUB_LIVENESS_REASON="unit is inactive" \
+  STUB_AGENTS_JSON="$(agents_json 0)" STUB_REDSYNC_OUT="tactic-main-red-abcd1234" run_case
+assert_eq "case16 pass 1 exit code (four findings)" 1 "$RUN_RC"
+assert_eq "case16 pass 1 raised four finding alarms" 4 "$(grep -c -- '--statement' <<<"$ALARMS")"
+CASE16_OUT_1="$RUN_OUT"
+
+printf '{"ts":"%s","site":"select-tick"}\n' "$(iso $((NOW - 88888)))" > "$LOGFILE"
+printf '{"busy_zero_since":%s,"suppression_since":%s}\n' "$((NOW - 88888))" "$((NOW - 88888))" > "$STATEFILE"
+ALARM_BODY_DIR="$CASEDIR/bodies-2"
+reset_stubs
+STUB_LIVENESS_RC=3 STUB_LIVENESS_VERDICT=down STUB_LIVENESS_REASON="unit is inactive" \
+  STUB_AGENTS_JSON="$(agents_json 0)" STUB_REDSYNC_OUT="tactic-main-red-abcd1234" run_case
+assert_eq "case16 pass 2 exit code (four findings)" 1 "$RUN_RC"
+ALARM_BODY_DIR=""
+
+for kind in tick-stale daemon-degraded busy-stall automerge-suppressed; do
+  if [[ ! -s "$CASEDIR/bodies-1/$kind.body" || ! -s "$CASEDIR/bodies-2/$kind.body" ]]; then
+    no "case16 $kind body missing from one of the passes (the ratchet would be vacuous)"
+  elif cmp -s "$CASEDIR/bodies-1/$kind.body" "$CASEDIR/bodies-2/$kind.body"; then
+    ok "case16 $kind body is identical across passes"
+  else
+    no "case16 $kind body CHURNS across passes: $(diff "$CASEDIR/bodies-1/$kind.body" "$CASEDIR/bodies-2/$kind.body" | tr '\n' ' ')"
+  fi
+done
+# The two readings really were different — otherwise the byte-comparison above
+# proves nothing (identical inputs would trivially produce identical bodies).
+# The per-pass stdout report is exactly where those live numbers belong.
+for line_kind in 'tick-stale:' 'busy-stall:' 'automerge-suppressed:'; do
+  if [[ "$(grep -F "$line_kind" <<<"$CASE16_OUT_1")" != "$(grep -F "$line_kind" <<<"$RUN_OUT")" ]]; then
+    ok "case16 $line_kind reading DID change between passes (stdout keeps the live numbers)"
+  else
+    no "case16 $line_kind reading did not change between passes — the body comparison above is vacuous"
+  fi
+done
+# The raw liveness JSON must not be embedded: it is pids and unit timestamps.
+assert_not_contains "case16 daemon body has no raw liveness JSON" '```json' \
+  "$(cat "$CASEDIR/bodies-2/daemon-degraded.body")"
+assert_not_contains "case16 busy body has no first-seen epoch stamp" "$((NOW - 88888))" \
+  "$(cat "$CASEDIR/bodies-2/busy-stall.body")"
+# ...but the offending node id IS identity and must survive.
+assert_contains "case16 automerge body still names the offending node" "tactic-main-red-abcd1234" \
+  "$(cat "$CASEDIR/bodies-2/automerge-suppressed.body")"
+
+# ===========================================================================
+# Case 17 (DOCTRINE RATCHET): the watcher must never fleet-halt. Grep the
 # finished script source and fail if it ever grows a pause-sentinel write, an
 # office-hours park field write, or a blocking-edge field write. Its only graph
 # side effect is dispatch-fleet-alarm on its own tactic-fleet-alarm-<kind> nodes.
@@ -346,6 +484,33 @@ if grep -Eq 'dispatch-(stop|pause)\b' "$SCRIPT"; then
   no "ratchet: script references a dispatch-stop/dispatch-pause mechanism"
 else
   ok "ratchet: no dispatch-stop/dispatch-pause reference"
+fi
+
+# The mirror-image rule: the watcher must never fleet-RESUME either. Every
+# predicate input must be read through a write-free path, so no command with a
+# known graph-write side effect may be invoked at all. Comment lines are
+# stripped first — the header DISCUSSES these mechanisms at length, and a
+# doctrine ratchet that forbids naming the hazard would just get the
+# explanation deleted.
+NONCOMMENT="$WORK/fleet-watch-noncomment.sh"
+grep -v '^[[:space:]]*#' "$SCRIPT" > "$NONCOMMENT"
+if grep -Eq 'graph-commit|write-node\.ts|dump-node\.ts|park-node|clear-park|transition-node|demote-node|dispatch-graph-execute|dispatch-apply-office-hours|dispatch-mark-deviation|dispatch-complete-phase' "$NONCOMMENT"; then
+  no "ratchet: script invokes a command with a known graph-write side effect (only dispatch-fleet-alarm may write)"
+else
+  ok "ratchet: no known graph-write command invoked"
+fi
+# dispatch-graph-main-red-sync is the subtle one: it LOOKS like a sensor, but
+# unflagged it completes the open tactic-main-red-* nodes once repo-health reads
+# green — which re-arms auto-merge and lands PRs on main. Every invocation must
+# carry --read-only. Counting (rather than a bare presence test) also fails if a
+# SECOND, unflagged call is ever added beside the flagged one, and the >=1 floor
+# fails if a rename silently makes this ratchet vacuous.
+REDSYNC_CALLS=$(grep -c '"\$REDSYNC_CMD"' "$NONCOMMENT")
+REDSYNC_RO_CALLS=$(grep -c '"\$REDSYNC_CMD" --read-only' "$NONCOMMENT")
+if [[ "$REDSYNC_CALLS" -ge 1 && "$REDSYNC_CALLS" -eq "$REDSYNC_RO_CALLS" ]]; then
+  ok "ratchet: every red-sync invocation is --read-only"
+else
+  no "ratchet: red-sync invoked without --read-only ($REDSYNC_CALLS call(s), $REDSYNC_RO_CALLS flagged) — that call completes the main-red latch and re-arms auto-merge"
 fi
 
 # ---------------------------------------------------------------------------

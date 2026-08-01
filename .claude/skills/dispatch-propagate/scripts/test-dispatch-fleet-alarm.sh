@@ -16,9 +16,17 @@
 # graph-commit WITHOUT --base); open + identical body -> no commit at all;
 # open + differing body -> graph-commit --base <manifest>; --resolve with a
 # non-null execution -> no write; --resolve with the node absent from
-# origin/main -> hard refusal with a stderr diagnostic and a clean tree; and the
+# origin/main -> hard refusal with a stderr diagnostic and a clean tree; the
 # named silent-PASS invariant — a graph-commit that exits 0 without landing must
-# make the SUT exit 1, not 0.
+# make the SUT exit 1, not 0; and the MINIMUM REFRESH INTERVAL — a second
+# re-detection with a DIFFERING body inside the interval must not commit, which
+# is the brake that holds when a caller's body churns every pass.
+#
+# Every run injects DISPATCH_FLEET_ALARM_STATE_DIR (so the suite never writes
+# the real ~/.local/share stamp) and pins
+# DISPATCH_FLEET_ALARM_MIN_REFRESH_INTERVAL=0, so cases that are not ABOUT the
+# rate limit are never silently gated by it. The rate-limit case sets its own
+# interval and keeps the state dir across the two runs.
 #
 # Run under bash -c, never zsh.
 
@@ -52,7 +60,14 @@ BIN="$WORK/bin"
 mkdir -p "$FR_SCRIPTS" "$FR/intentions" "$LOG" "$BIN"
 cp "$SUT" "$FR_SCRIPTS/dispatch-fleet-alarm"
 chmod +x "$FR_SCRIPTS/dispatch-fleet-alarm"
+# The SUT sources lib.sh from its own directory for the graph-write mutex
+# (graph_write_lock_file / graph_write_lock_acquire), so the fixture needs the
+# real library beside the copied SUT. It is sourced, never run.
+cp "$HARNESS_DIR/lib.sh" "$FR_SCRIPTS/lib.sh"
 FLEET_ALARM="$FR_SCRIPTS/dispatch-fleet-alarm"
+# Every run takes the graph-write mutex; point it at the fixture so the suite
+# never contends with a real fleet instrument on the developer's checkout.
+LOCK_FILE="$WORK/graph-write.lock"
 
 git -C "$FR" init -q
 git -C "$FR" config user.email fixture@test
@@ -146,14 +161,21 @@ chmod +x "$BIN"/stub-*
 # Clears the logs, then runs the SUT with every seam injected. stdout+stderr are
 # captured into $OUT; the exit code lands in $RC.
 OUT=""; RC=0
+ALARM_STATE="$WORK/alarm-state"
+KEEP_ALARM_STATE=0
 run_alarm() {
   local -a envs=()
   while [[ $# -gt 0 && "$1" != "--" ]]; do envs+=("$1"); shift; done
   shift # drop the --
   rm -f "$LOG"/*.log "$LOG/write-node-input.json"
+  # The rate-limit stamp is cross-RUN state, so it is wiped between cases
+  # unless a case is deliberately exercising it (KEEP_ALARM_STATE=1).
+  [[ "$KEEP_ALARM_STATE" == "1" ]] || rm -rf "$ALARM_STATE"
   OUT=$(env \
     STUB_LOG="$LOG" \
     STUB_INTENTIONS="$FR/intentions" \
+    DISPATCH_FLEET_ALARM_STATE_DIR="$ALARM_STATE" \
+    DISPATCH_FLEET_ALARM_MIN_REFRESH_INTERVAL=0 \
     DISPATCH_FLEET_ALARM_CLASSIFY_CMD="$BIN/stub-classify" \
     DISPATCH_FLEET_ALARM_WRITE_NODE_CMD="$BIN/stub-write-node" \
     DISPATCH_FLEET_ALARM_DUMP_NODE_CMD="$BIN/stub-dump-node" \
@@ -161,6 +183,7 @@ run_alarm() {
     DISPATCH_FLEET_ALARM_INTENTIONS_DIR="$FR/intentions" \
     DISPATCH_FLEET_ALARM_RETRY_DELAY=0 \
     DISPATCH_FLEET_ALARM_RETRIES=1 \
+    DISPATCH_GRAPH_WRITE_LOCK_FILE="$LOCK_FILE" \
     "${envs[@]}" "$FLEET_ALARM" "$@" 2>&1)
   RC=$?
 }
@@ -301,6 +324,76 @@ assert_eq "(8) write-node got phase done" "done" "$(jq -r .phase "$LOG/write-nod
 assert_contains "(8) graph-commit ran with --base" "--base" "$(log_lines graph-commit.log)"
 assert_contains "(8) resolve message" "graph: resolve fleet alarm tick-stale" "$(log_lines graph-commit.log)"
 assert_eq "(8) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+
+# --- (9) minimum refresh interval: a CHURNING body still cannot push per pass -
+# The `cmp -s` gate in case (3) only holds while the caller keeps volatile
+# values out of the body. This is the second, caller-independent brake: two
+# re-detections with DIFFERENT bodies inside the interval must produce exactly
+# one commit. Without it a body carrying a timestamp/elapsed span would
+# fetch+rebase+push to origin/main on every 2-5 minute timer pass, arming the
+# four required CI checks each time, precisely during an outage.
+git -C "$FR" checkout -- intentions 2>/dev/null
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+BODY_CHURN_1="$WORK/body-churn-1.md"
+BODY_CHURN_2="$WORK/body-churn-2.md"
+printf 'Reading at pass one.\n' > "$BODY_CHURN_1"
+printf 'Reading at pass two — a different second.\n' > "$BODY_CHURN_2"
+
+run_alarm STUB_STATE=open STUB_GC_LAND=1 DISPATCH_FLEET_ALARM_MIN_REFRESH_INTERVAL=3600 -- \
+  --kind tick-stale --statement 'dispatch-tick has not run for 90m' --body-file "$BODY_CHURN_1"
+assert_eq "(9) first refresh exits 0" "0" "$RC"
+assert_contains "(9) first refresh DID commit" "--base" "$(log_lines graph-commit.log)"
+
+KEEP_ALARM_STATE=1
+run_alarm STUB_STATE=open STUB_GC_LAND=1 DISPATCH_FLEET_ALARM_MIN_REFRESH_INTERVAL=3600 -- \
+  --kind tick-stale --statement 'dispatch-tick has not run for 90m' --body-file "$BODY_CHURN_2"
+KEEP_ALARM_STATE=0
+assert_eq "(9) rate-limited refresh exits 0" "0" "$RC"
+assert_eq "(9) rate-limited refresh made NO commit" "" "$(log_lines graph-commit.log)"
+assert_contains "(9) diagnostic names the rate limit" "rate-limited, no commit" "$OUT"
+assert_eq "(9) the churning body was NOT spliced in" "Reading at pass one." \
+  "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$MINTED")"
+assert_eq "(9) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+
+# The stamp is per KIND, not global: a different kind is not gated by it.
+KEEP_ALARM_STATE=1
+run_alarm STUB_STATE=absent STUB_GC_LAND=1 DISPATCH_FLEET_ALARM_MIN_REFRESH_INTERVAL=3600 -- \
+  --kind daemon-degraded --statement 'the daemon is down' --body-file "$BODY_CHURN_2"
+KEEP_ALARM_STATE=0
+assert_eq "(9) a different kind still commits" "0" "$RC"
+assert_contains "(9) different kind reached graph-commit" "tactic-fleet-alarm-daemon-degraded" \
+  "$(log_lines graph-commit.log)"
+
+# --- (10) graph-write mutex held by another writer -> skip, touch NOTHING ----
+# The corruption class this mutex closes is two graph writers mutating the same
+# checkout at once (graph-commit rebases it and can `git reset --hard` it), and
+# the callers are unattended timers that can fire nine alarm writes in one pass.
+# A contended pass must SKIP — not block, and above all not read-then-write
+# around the other writer. Asserted on the strongest evidence available: not one
+# of the three write-path stubs is invoked at all, so the SUT never even
+# classified the node.
+echo "Test: contended graph-write mutex -> skipped-locked, no reads, no writes"
+( exec 9>>"$LOCK_FILE"; flock 9; sleep 3 ) &
+LOCK_HOLDER=$!
+sleep 0.3   # let the holder take the flock before the SUT contends
+run_alarm STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --kind daemon-degraded --statement 'the daemon is down' --body-file "$BODY"
+assert_eq "(10) contended pass exits 0" "0" "$RC"
+assert_contains "(10) stdout says skipped-locked" "skipped-locked" "$OUT"
+assert_eq "(10) no classify"     "" "$(log_lines classify.log)"
+assert_eq "(10) no write-node"   "" "$(log_lines write-node.log)"
+assert_eq "(10) no graph-commit" "" "$(log_lines graph-commit.log)"
+assert_eq "(10) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+wait "$LOCK_HOLDER" 2>/dev/null || true
+
+# --- (11) mutex free again -> the very next pass writes normally -------------
+# The mutex must not latch: once the holder exits, the next invocation proceeds.
+# (Same shape as case (2), on a kind no earlier case has touched.)
+run_alarm STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --kind daemon-degraded --statement 'the daemon is down' --body-file "$BODY"
+assert_eq "(11) uncontended pass exits 0" "0" "$RC"
+assert_contains "(11) stdout says landed" "landed" "$OUT"
+assert_contains "(11) graph-commit ran" "tactic-fleet-alarm-daemon-degraded" "$(log_lines graph-commit.log)"
 
 # --- results -----------------------------------------------------------------
 echo ""
