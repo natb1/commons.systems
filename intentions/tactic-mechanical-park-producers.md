@@ -14,14 +14,14 @@ rationale: "Byproduct of the 2026-07-25 concurrency/serialization review,
   merge conflict against a moving main has an autonomous resolver to route to.
   At recording time roughly five of the most recent commits on main were
   provision-exit-11 parks, burying the genuinely author-required parks.
-  Finalized 2026-07-25
-  /align-tactics (per-node finalize): the plan converts both named producers to
-  a shared hold-node primitive (find-or-create a born-parked incident tactic +
-  blocked_by edge on the source, never office_hours on the source itself),
-  reusing the graph-census-debt.ts decision/land split and park-node's
-  fresh-main/rollback mechanics. Producer 1's ideal greenfield (an orthogonal
-  execution.conflict interrupt routed to /dispatch-conflict) is already specced
-  and in-flight as tactic-graph-router-conflict-routing (blocked_by
+  Finalized 2026-07-25 /align-tactics (per-node finalize): the plan converts
+  both named producers to a shared hold-node primitive (find-or-create a
+  born-parked incident tactic + blocked_by edge on the source, never
+  office_hours on the source itself), reusing the graph-census-debt.ts
+  decision/land split and park-node's fresh-main/rollback mechanics. Producer
+  1's ideal greenfield (an orthogonal execution.conflict interrupt routed to
+  /dispatch-conflict) is already specced and in-flight as
+  tactic-graph-router-conflict-routing (blocked_by
   tactic-dispatch-conflict-branch-merge-lane, repointed 2026-07-27 after
   tactic-dispatch-conflict-greenfield shipped as PR #2951 and was pruned) — this
   tactic ships the interim brownfield bridge (a free local-retry tier, then a
@@ -33,25 +33,24 @@ serves:
   - strategy-graph-native-dispatch
 recovers: []
 clarifications:
-  - question: Is "a merge conflict against a moving main frequently self-resolves"
-      a valid premise for de-parking the mechanical retry producers?
-    answer: "(Recorded 2026-08-01, author-directed.) No — the premise is
-      factually invalid and is struck from this node's text. It was already
-      superseded on 2026-07-29: `intentions/strategy-graph-native-dispatch.md`
-      clarification 134 AMENDS the 2026-07-25 park-taxonomy clarification's
-      stated premise — 'a merge conflict is not expected to self-heal ... the
-      2026-07-25 clarification's CONCLUSION survives unchanged (a conflict is
-      not an office_hours park), but its REASON is corrected: conflicts are
-      de-parked because an autonomous resolver exists to route them to, not
-      because they resolve themselves.' This node's own text simply had not
-      been updated to match until now. The correction is textual only: the
-      conclusion, the unit list, and the explicitly-out-of-scope list are
-      unchanged. Corrected in four places — the `rationale` field, the
-      `## Context` producer-1 paragraph, the out-of-scope catch-all bullet
-      ('not a self-resolving retry state' → 'no autonomous resolver to route
-      it to ... not a mechanical retry state'), and the Unit `case 0`
-      parenthetical ('the conflict self-resolved' → 'the conflict is
-      resolved')."
+  - question: Is "a merge conflict against a moving main frequently self-resolves" a
+      valid premise for de-parking the mechanical retry producers?
+    answer: "(Recorded 2026-08-01, author-directed.) No — the premise is factually
+      invalid and is struck from this node's text. It was already superseded on
+      2026-07-29: `intentions/strategy-graph-native-dispatch.md` clarification
+      134 AMENDS the 2026-07-25 park-taxonomy clarification's stated premise —
+      'a merge conflict is not expected to self-heal ... the 2026-07-25
+      clarification's CONCLUSION survives unchanged (a conflict is not an
+      office_hours park), but its REASON is corrected: conflicts are de-parked
+      because an autonomous resolver exists to route them to, not because they
+      resolve themselves.' This node's own text simply had not been updated to
+      match until now. The correction is textual only: the conclusion, the unit
+      list, and the explicitly-out-of-scope list are unchanged. Corrected in
+      four places — the `rationale` field, the `## Context` producer-1
+      paragraph, the out-of-scope catch-all bullet ('not a self-resolving retry
+      state' → 'no autonomous resolver to route it to ... not a mechanical retry
+      state'), and the Unit `case 0` parenthetical ('the conflict self-resolved'
+      → 'the conflict is resolved')."
 tooling_goals: []
 success_signal: null
 attention:
