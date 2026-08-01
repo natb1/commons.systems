@@ -89,7 +89,7 @@ attention:
     codified and phase implement, carrying a full clean-session plan (Units 1-3)
     in the body; the boost value is preserved unchanged from the bootstrap
     re-scale."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-qa-main-verifiability-sort-criterion
   pr: 3009
@@ -100,7 +100,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-01T03:17:01Z
+    mergeCommitSha: df0c436a655decfddadba7631388bdbfc36667a3
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
