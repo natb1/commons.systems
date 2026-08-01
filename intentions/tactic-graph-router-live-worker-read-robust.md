@@ -60,12 +60,13 @@ execution:
   strategy_fingerprint: null
   fix:
     since: 2026-08-01
-    attempt: 31
+    attempt: 1
     pushed_sha: null
   completion: null
 validates: []
 blocked_by:
   - tactic-graph-router-live-worker-visibility
+  - tactic-hold-fix-cap-graph-router-live-worker-read-robust
 office_hours: null
 pace_exempt: true
 rounds: null
