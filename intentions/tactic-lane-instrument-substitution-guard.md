@@ -75,38 +75,36 @@ office_hours:
     matching reality exactly. An independent, separately-running post-merge
     review-fix pass on an unrelated PR (#3008,
     tactic-fleet-watchdogs-session-scoped, session 9c892b20, workflow
-    wf_1a55760d-717, launched 2026-08-01T00:22:57Z) shows the identical
-    pattern. The gate distinguished real invocation from real rejection
-    correctly in both live occurrences found.
+    wf_1a55760d-717, launched 2026-08-01T00:22:57Z) shows the identical pattern.
+    The gate distinguished real invocation from real rejection correctly in both
+    live occurrences found.
 
     2. Induced-unavailability end-to-end — Verifiability: MACHINE (resolved).
     Not induced by us, but it genuinely occurred on a live lane in that same
     PR-#3006 review-fix pass: `instrument_failures` was non-empty, `deviation`
-    was set true, `disposition` was "escalated", and `coverage_note` carried
-    the verbatim rejection text: "Instrument not verified — code-review:
-    instrument reported NOT invoked — Skill code-review cannot be used with
-    Skill tool due to disable-model-invocation. Its output was DISCARDED, not
-    merged under the instrument's name." The session's own final check
-    confirmed office-hours job files were written
-    (office-hours-pr/-reason/-recommendation under
-    ~/.claude/jobs/20e9cbe1/, since garbage-collected). Full expected
-    end-to-end behavior confirmed on a real run, not a fixture.
+    was set true, `disposition` was "escalated", and `coverage_note` carried the
+    verbatim rejection text: "Instrument not verified — code-review: instrument
+    reported NOT invoked — Skill code-review cannot be used with Skill tool due
+    to disable-model-invocation. Its output was DISCARDED, not merged under the
+    instrument's name." The session's own final check confirmed office-hours job
+    files were written (office-hours-pr/-reason/-recommendation under
+    ~/.claude/jobs/20e9cbe1/, since garbage-collected). Full expected end-to-end
+    behavior confirmed on a real run, not a fixture.
 
     3. Transcript sweep after merge — Verifiability: MACHINE (checked,
     insufficient history yet). Only ~1h40m elapsed between merge
     (2026-07-31T22:45:49Z) and this check (2026-08-01T00:26 UTC). Grepped
     ~/.claude/projects/*/*.jsonl (excluding this reading session's own
-    transcript dir) for review-fix runs newer than the merge: found exactly
-    one, still in progress on PR #3008 as of this check, already showing the
-    correct discard pattern (code-review rejected, never merged) with zero
-    violations so far. Real data, but the window is too short to call this
-    item swept.
+    transcript dir) for review-fix runs newer than the merge: found exactly one,
+    still in progress on PR #3008 as of this check, already showing the correct
+    discard pattern (code-review rejected, never merged) with zero violations so
+    far. Real data, but the window is too short to call this item swept.
 
     4. Token-economy sensor reading — Verifiability: MACHINE (checked,
-    insufficient history yet). intentions/strategy-token-economy.md's
-    `reading` field is still null repo-wide; its sensor has produced no
-    post-merge reading, so no yield/fixes_applied data exists yet for this
-    instrument. Genuinely too soon, not a defect in the check.
+    insufficient history yet). intentions/strategy-token-economy.md's `reading`
+    field is still null repo-wide; its sensor has produced no post-merge
+    reading, so no yield/fixes_applied data exists yet for this instrument.
+    Genuinely too soon, not a defect in the check.
 
     5. Prompt-injection isolation — Verifiability: AUTHOR (unchanged). This is,
     by the node's own words, a human trust-boundary judgment call, not
@@ -114,26 +112,26 @@ office_hours:
     found and fixed during this PR's own review-fix pass — a Required+Upheld
     red-team finding that the verifier agent transcribed attacker-reachable
     transcript text was fixed by an Opus pass (commit 5d17e079) that now feeds
-    the verifier counts/booleans only, no free text. That narrows, but does
-    not close, the human judgment call.
+    the verifier counts/booleans only, no free text. That narrows, but does not
+    close, the human judgment call.
 
 
-    Separately discovered, out of scope for this node but worth attention:
-    this PR's own review-fix session found that graph-auto-merge does not
-    check for an office_hours park before merging — it only checks the
-    `reviewed` execution marker, CI, and mergeability. An office-hours park
-    written by review-fix's own deviation path (as happened here, see item 2)
-    is therefore advisory only and does not block the merge it is meant to
-    gate — which is how this PR reached main-qa carrying a live, unresolved
-    review-fix deviation. That is a gap in graph-auto-merge, not in this
-    node's guard, and is not this node's fix to make.
+    Separately discovered, out of scope for this node but worth attention: this
+    PR's own review-fix session found that graph-auto-merge does not check for
+    an office_hours park before merging — it only checks the `reviewed`
+    execution marker, CI, and mergeability. An office-hours park written by
+    review-fix's own deviation path (as happened here, see item 2) is therefore
+    advisory only and does not block the merge it is meant to gate — which is
+    how this PR reached main-qa carrying a live, unresolved review-fix
+    deviation. That is a gap in graph-auto-merge, not in this node's guard, and
+    is not this node's fix to make.
   since: 2026-07-31
   recommendation: >-
     Items 1 and 2 are resolved with direct transcript evidence — see `reason`
     above: the instrument gate and the induced-unavailability escalation path
-    were both exercised for real on this PR's own review-fix pass and
-    confirmed correct end-to-end. A human reviewer does not need to re-derive
-    that. Three items remain genuinely open:
+    were both exercised for real on this PR's own review-fix pass and confirmed
+    correct end-to-end. A human reviewer does not need to re-derive that. Three
+    items remain genuinely open:
 
 
     3. Transcript sweep — re-check after more post-merge review-fix history
