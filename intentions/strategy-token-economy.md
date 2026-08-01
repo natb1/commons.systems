@@ -391,7 +391,8 @@ clarifications:
       the quality-preservation condition added the same day, which binds this.
   - question: Are the owned domain review lenses redundant with the built-in
       /code-review and /security-review lanes?
-    answer: (Recorded 2026-07-31; measured across 18 review runs, 2026-07-27→07-31.)
+    answer: >-
+      (Recorded 2026-07-31; measured across 18 review runs, 2026-07-27→07-31.)
       No — the redundancy hypothesis was tested and refuted. Of 27
       skeptic-upheld Lane B findings, 7 were true duplicates of a Lane A residue
       item at the same location (verified by comparing descriptions, not merely
@@ -402,6 +403,21 @@ clarifications:
       carry the security signal and are not to be cut on cost grounds. The
       measured 26% duplication is real and is answered structurally by
       cross-lane deduplication, not by removing a lane.
+
+
+      (Amended 2026-07-31, second interview.) The /code-review half of this
+      comparison is void. Transcript evidence shows every one of the 18
+      Skill(code-review) calls was rejected with disable-model-invocation, so
+      the "Lane A residue" these 27 findings were compared against was produced
+      by a general-purpose Opus agent hand-rolling a review, not by the
+      built-in. Lane B's redundancy against the real /code-review is therefore
+      UNTESTED, not refuted — no measurement of it exists, and the 26%
+      duplication figure describes overlap between two owned reviews. The
+      /security-review half stands unchanged: that skill carries no
+      disable-model-invocation mark and 17 of 18 invocations succeeded, so its 1
+      finding across the window is a genuine reading. The conclusion that the
+      owned lenses carry the security signal survives on the /security-review
+      evidence alone.
   - question: Is api-cost review retained when its measured finding rate is zero?
     answer: "(Recorded 2026-07-31 interview.) Yes. The `firebase` lens is renamed
       `api-cost` and retained. A zero-finding window is read as sampling error,
@@ -438,7 +454,8 @@ clarifications:
       today — Lane B `Required` findings plus erosion `Fixed` findings, and
       nothing else."
   - question: Are the vendor's built-in review skills held constant, and on what terms?
-    answer: "(Diverged 2026-07-31 interview.) The rival conception — that holding
+    answer: >-
+      (Diverged 2026-07-31 interview.) The rival conception — that holding
       /code-review and /security-review fixed while restructuring the owned
       lenses around them is itself the capture pattern
       virtue-alignment-of-attachments names, the delegatee setting the problem —
@@ -452,10 +469,34 @@ clarifications:
       imported 'orchestration runtime semantics' — the owned review is directed
       to replicate and augment the built-in's operations rather than duplicate
       them, and adopts the built-in's `--comment` output. No `recovers` edge is
-      recorded, because this round reduces no reliance."
+      recorded, because this round reduces no reliance.
+
+
+      (Amended 2026-07-31, second interview.) The evidential basis stated above
+      is void. The "84 resolves at $2.31 per applied fix" were produced by our
+      own Opus agent, which hand-rolled a review after the built-in refused
+      invocation; the built-in produced nothing in the window. The divergence is
+      RE-DIVERGED on new grounds: /code-review is not a proven best instrument
+      but an untested one, and testing it is the reason to keep it in the design
+      rather than drop it. The expiry changes accordingly — revisited once
+      /code-review has genuinely run for one measured window, no longer keyed to
+      /security-review's yield. A stronger form of the steelman was also put and
+      diverged from this round: that the four days without the instrument are an
+      accidental natural experiment showing the owned review suffices on its
+      own. Reason for diverging: the experiment was uncontrolled and unobserved,
+      so it shows the owned review is adequate, not that the built-in adds
+      nothing. Capture-risk reading recorded per the delegation-advice step:
+      delegation-anthropic-claude is divergence low-moderate, irreversibility
+      ungated (artifacts, workflow, and evaluation context are all in-repo),
+      recovery cost only the frontier-vs-open-weight capability gap. No recovers
+      edge — this round deepens reliance rather than reducing it, and
+      virtue-alignment-of-attachments' clause that every import raises exit cost
+      applies, so the deepening is recorded here to stay visible rather than
+      silent.
   - question: What is the /code-review invocation contract, and what is known about
       its --fix flag?
-    answer: (Recorded 2026-07-31 interview; usage supplied by the author.) The
+    answer: >-
+      (Recorded 2026-07-31 interview; usage supplied by the author.) The
       documented interface is `/code-review [low|medium|high|xhigh|max|ultra]
       [--fix] [--comment] [<target>]` — both `max` and `--fix` are valid
       documented arguments. Measured across 18 runs, every invocation of `max
@@ -468,6 +509,29 @@ clarifications:
       replicates the built-in's operations as far as possible without
       duplicating its findings. A follow-up investigation of the built-in's
       usage is owed, and this clarification is to be amended with its findings.
+
+
+      (Amended 2026-07-31, second interview — the owed investigation,
+      discharged.) The cause is resolved and it is not the flag. /code-review
+      carries disable-model-invocation: true, which blocks the Skill tool for
+      any model-driven agent. All 18 finder invocations were rejected with
+      "Skill code-review cannot be used with Skill tool due to
+      disable-model-invocation" (40 rejection events across the workflow corpus;
+      CLI 2.1.220 throughout). The flag never reached the skill because the
+      skill never ran. Three consequences. (a) --fix is RESTORED, reversing the
+      drop recorded above, whose stated reason — unexplained no-op behavior — no
+      longer holds. (b) The automated entry point is a user turn, not a model
+      turn: claude -p '/code-review max --fix --comment', since only a user turn
+      can invoke a disable-model-invocation skill. (c) In a -p run findings
+      return as text, never through ReportFindings, so the per-finding outcome
+      mapping this workflow was built around is structurally unavailable and
+      must be replaced by text parsing rather than merely deleted — per the
+      vendor documentation those outcome values populate only when findings are
+      re-reported after being fixed later in the same session, which this lane
+      never does. The entry point itself is UNVERIFIED: no one has confirmed
+      that claude -p '/code-review max' runs in a dispatch worktree, what a
+      nested session costs, or how it attributes against condition 2. Verifying
+      it gates any rewiring.
   - question: Does the token audit attribute a phase worker's whole session cost to
       that phase?
     answer: "(Recorded 2026-07-31; measured.) No — condition 2's attributability
@@ -483,6 +547,38 @@ clarifications:
       decisions recorded the same day: per-lens yield was drawn from workflow
       subagent transcripts, which are fully attributed, so the blind portion is
       the parent session rather than the fan-out that grounded those decisions."
+  - question: How does the dispatch review phase invoke the built-in code review?
+    answer: "(Recorded 2026-07-31, second interview.) As an exclusive, serialized
+      stage that runs before the owned lenses — never inside the parallel finder
+      fan-out. The built-in runs first and alone, through the claude -p
+      user-turn entry point with max --fix --comment; the owned lenses then run
+      against the post-fix working tree. Serialization is what makes --fix safe:
+      the built-in writes the working tree, so it cannot run concurrently with
+      lenses reading that tree or with the Opus fix phase writing it. The
+      ordering also makes \"augment, not duplicate\" structural rather than a
+      deduplication pass — lenses reading a tree where the built-in's fixes have
+      already landed cannot re-report them, and they do see any defect those
+      fixes introduce. This trades away the judgment-step guarantee recorded in
+      clarification 22, accepted deliberately: the built-in's fixes are applied
+      unjudged, and what was actually applied is read from a before/after git
+      diff rather than from any agent's self-report. /security-review is
+      unaffected and stays in the parallel fan-out — it carries no
+      disable-model-invocation mark, invokes cleanly, and edits nothing."
+  - question: What must hold before a yield metric may be credited to a named instrument?
+    answer: (Recorded 2026-07-31, second interview.) Verified provenance — the
+      metric must be shown to have come from that instrument, not merely to have
+      appeared in a stage bearing its name. Condition 3 already required that
+      routing recommendations rest only on yield metrics whose accounting is
+      verified; it failed here for want of a check, not for want of a rule. The
+      "84 resolves at $2.31 per applied fix" credited to /code-review was an
+      agent's self-report of work it did itself under the instrument's name, and
+      it stood in the record as the stated reason for a recorded divergence
+      until transcript evidence contradicted it four days later. A stage's
+      output is attributable to an instrument only when that instrument's
+      invocation is verified to have succeeded — an exit status and an output
+      signature, never an agent's account of what it ran. This is the
+      token-economy half of the substitution invariant recorded the same day on
+      strategy-graph-native-dispatch.
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -545,5 +641,10 @@ attributes:
       allowance draw; structural restructuring (batching, deduplication, context
       reuse, trigger narrowing) is the sanctioned lever, and removing a lens
       that produces confirmed findings is not
+    - a yield metric credited to a named instrument is verified to have come
+      from that instrument — invocation success checked at the source (exit
+      status and output signature), never taken from an agent's account of what
+      it ran; an unverified instrument attribution is not admissible input to a
+      routing decision
 ---
 # The prepaid token allowance converts fully into tactic closure — utilization near 100%, closure velocity at or above arrival

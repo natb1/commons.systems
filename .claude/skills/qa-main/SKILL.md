@@ -200,9 +200,11 @@ asymmetric — when the signal is unclear, route to **cannot-verify**.
   (a gh path). Write the specific reason to `$CLAUDE_JOB_DIR/office-hours-reason`
   and the best-next-steps recommendation — **what the human must verify and how**
   (strategy clarification 30 / condition 6) — to
-  `$CLAUDE_JOB_DIR/office-hours-recommendation`. The Stop hook parks the node via
-  `park-node`, writing `office_hours` `{reason, recommendation, since}` on
-  `origin/main`. See `.claude/hooks/dispatch-stop.sh`. Then **STOP**. Always name
+  `$CLAUDE_JOB_DIR/office-hours-recommendation`. `dispatch-tick`'s
+  `terminal_without_disposition_sweep` parks the node via `park-node`, writing
+  `office_hours` `{reason, recommendation, since}` on `origin/main`. See
+  `.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`. Then
+  **STOP**. Always name
   the specific reason so the office-hours surface tells the human exactly what to
   check.
 

@@ -82,6 +82,22 @@
 #      selection already excludes it. A load failure of
 #      lib-frozen-session-park.sh is logged loudly and never aborts the tick — the
 #      sweep is observability/containment, not a gate.
+#   0.5 Terminal-without-disposition sweep (tactic-phase-terminal-requires-disposition):
+#      calls lib-frozen-session-park.sh's `terminal_without_disposition_sweep` — no
+#      args, always returns 0 — to surface any worker session whose graph node
+#      reached a terminal Claude-agent state (`state: done`/`error`) without a
+#      recorded disposition. Runs on the same two cadences as the frozen-session
+#      sweep above, immediately after it, for the same reason: the paused-branch
+#      `exit 0` is the only autonomous path that never reaches
+#      dispatch-select-tick's own sweeps. On the normal path its placement before
+#      Step 1 buys ONE thing only — any node it parks is already excluded from
+#      this tick's own selection. It does NOT share the tick's daemon snapshot:
+#      `claude_agents_list_terminal_workers` queries `claude agents --json --all`
+#      DIRECTLY, because the snapshot is captured without `--all` and so lacks the
+#      terminal rows the sweep exists to find, so the sweep costs one extra daemon
+#      round-trip (its stand-down interlock's ACTIVE-view read IS
+#      snapshot-backed). A load failure of lib-frozen-session-park.sh is logged
+#      loudly and never aborts the tick.
 #   1. Run dispatch-select-tick, echoing all of its stdout through (the
 #      jit:/calendar: passthrough lines AND the decision line) so journald and a
 #      live relay both see the narrative. The decision is its LAST stdout line.
@@ -121,6 +137,11 @@
 #      Step 1 target selection (so it reuses the snapshot and any node it
 #      parks is already excluded from this tick's own selection). Never gates
 #      the tick — a load failure logs loudly and the tick continues.
+#   4. Run the terminal-without-disposition sweep
+#      (terminal_without_disposition_sweep, lib-frozen-session-park.sh, see
+#      Behavior item 0.5 above) on the same two cadences as the frozen-session
+#      sweep it is paired with. Never gates the tick — a load failure logs
+#      loudly and the tick continues.
 #
 # The legacy gh-issue lane (explicit/pr/issue decisions →
 # dispatch-materialize-spawn → dispatch-launch-worker, and the recoverable-death
@@ -133,7 +154,7 @@
 # also needs an elevated Bash `timeout` (see SKILL.md Step 0).
 #
 # Manual inspection of the autonomous tick's journal (once systemd drives it):
-#   journalctl --user -u dispatch-tick
+#   journalctl --user -t dispatch-tick
 #
 # Exit codes: 0 on a routed disposition; 2 on an internal/usage error surfaced on
 # stderr.
@@ -353,6 +374,24 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
     echo "dispatch-tick: lib-frozen-session-park.sh failed to load; frozen-session sweep NOT run this tick" >&2
   fi
 
+  # A worker session whose graph node reached a terminal Claude-agent state
+  # without a recorded disposition (tactic-phase-terminal-requires-disposition)
+  # must still surface even while dispatch is paused — the same "only autonomous
+  # path that never reaches select-tick's own sweeps" reason the frozen-session
+  # sweep above is here. Same conditional-source idiom, same loud-failure-instead
+  # -of-swallow posture (.claude/rules/code-style.md).
+  if ! declare -f terminal_without_disposition_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-claude-agents.sh"
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-frozen-session-park.sh"
+  fi
+  if declare -f terminal_without_disposition_sweep >/dev/null 2>&1; then
+    terminal_without_disposition_sweep 1>&2
+  else
+    echo "dispatch-tick: lib-frozen-session-park.sh failed to load; terminal-disposition sweep NOT run this tick" >&2
+  fi
+
   echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick"
   exit 0
 fi
@@ -537,6 +576,22 @@ if declare -f frozen_session_sweep >/dev/null 2>&1; then
   frozen_session_sweep 1>&2
 else
   echo "dispatch-tick: lib-frozen-session-park.sh failed to load; frozen-session sweep NOT run this tick" >&2
+fi
+
+# --- Terminal-without-disposition sweep (tactic-phase-terminal-requires-disposition) ---
+# Runs here — immediately after the frozen-session sweep above, before Step 1's
+# selection below — for ONE reason: any node it parks this tick is excluded from
+# THIS tick's own selection, because park-node has already landed office_hours on
+# main by the time dispatch-select-tick runs. It does NOT ride this tick's daemon
+# snapshot: its candidate query is a DIRECT `claude agents --json --all` (the
+# snapshot is captured without `--all`, so it cannot carry the terminal rows the
+# sweep looks for), which costs one extra round-trip. Same guard posture as the
+# paused branch above: a load failure is logged loudly and never aborts or skips
+# the rest of the tick — the sweep is observability/containment, never a gate.
+if declare -f terminal_without_disposition_sweep >/dev/null 2>&1; then
+  terminal_without_disposition_sweep 1>&2
+else
+  echo "dispatch-tick: lib-frozen-session-park.sh failed to load; terminal-disposition sweep NOT run this tick" >&2
 fi
 
 # --- Step 1: select the target ------------------------------------------------

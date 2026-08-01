@@ -70,13 +70,114 @@ attention:
     codified and phase implement, with a full plan in the body; blocked_by names
     tactic-denied-command-parks-node, so the router will not select this node
     for implementation until that PR lands lib-frozen-session-park.sh."
-phase: implement
-execution: null
+phase: main-qa
+execution:
+  branch: tactic-phase-terminal-requires-disposition
+  pr: 3004
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-07-31T20:15:44Z
+    mergeCommitSha: c06c72950f96061b392dedfb05aeeb2b0ee094d8
+    graphCommitSha: null
 validates: []
-blocked_by:
-  - tactic-denied-command-parks-node
-office_hours: null
-pace_exempt: false
+blocked_by: []
+office_hours:
+  reason: >-
+    Corrected 2026-07-31 (bug L instance): the prior park's "none of the 4
+    needs-main residue items carry a url_path or name a browser-observable
+    outcome, so route to cannot-verify" reasoning was a blanket
+    not-browser-verifiable misroute. All 4 items are answerable from
+    dispatch-tick's own journal (a log/journal read, not a browser check) and
+    were actually checked, with real evidence, via `journalctl -t dispatch-tick
+    --since '-7d'` against the fleet since PR #3004 merged
+    (2026-07-31T16:15:43-04:00 = 20:15:43Z). Per-item:
+
+
+    1. design-2-grace-cap-defaults — Verifiability: MACHINE (checked,
+    inconclusive). Code confirms grace=300s and park_max=2
+    (lib-frozen-session-park.sh:686,690 — note the residue item's own text says
+    cap default "3"; the shipped default is 2, a stale-description mismatch, not
+    a code defect). In the ~4h since merge the journal shows 3 clean
+    terminal-without-disposition parks
+    (tactic-phase-terminal-requires-disposition at 748s idle,
+    tactic-lane-instrument-substitution-guard at 696s,
+    tactic-node-body-stale-in-worker-worktree at 716s) — all comfortably past
+    the 300s grace, none premature, and the park_max=2 cap was never approached
+    (max 1 park per sweep observed). No misconfiguration signal, but
+    same-day-merge means the window is too short to call the defaults validated
+    against "normal fleet volume" — needs a longer observation window (days, not
+    hours).
+
+    2. design-3-unmeasurable-keep — Verifiability: MACHINE (resolved).
+    `unmeasurable=0` on all 18 "terminal-disposition sweep complete" lines in
+    the journal since merge — zero occurrences of the fail-safe miss, no
+    accumulation.
+
+    3. design-4-daemon-unknown — Verifiability: MACHINE (checked, inconclusive).
+    Zero "daemon unqueryable" lines in the 7-day journal (no real daemon outage
+    occurred in the observed window). Confirmed via `journalctl -o json` that
+    this line, like every routine "sweep complete" line, is emitted at syslog
+    PRIORITY=6 with no elevation — so if a real outage occurs, it produces no
+    louder signal than routine ticks and would only be noticed by someone
+    actively grepping, exactly the concern the item raises. The mechanism is
+    confirmed machine-checkable; it has not yet been exercised by a genuine
+    outage.
+
+    4. design-5-best-effort-retry-forever — Verifiability: MACHINE (resolved).
+    Direct instance observed 2026-07-31: the sweep's own `park-node` call for
+    this node hit a concurrent-edit race with the /qa-main worker's own park
+    attempt and failed once at 17:32:22 ("park failed for
+    tactic-phase-terminal-requires-disposition (park-node exit 1); will retry
+    next tick"), then succeeded on the very next attempt at 18:01:34 (~29 min
+    later, "parked tactic-phase-terminal-requires-disposition
+    (terminal-without-disposition after 748s...)"). No node appears in "will
+    retry next tick" more than once across the 7-day journal —
+    retry-then-succeed, not retry-forever.
+
+
+    Net: 2 of 4 resolved clean with direct evidence (items 2, 4); 2 checked but
+    inconclusive for lack of elapsed time or a real daemon-outage occurrence
+    (items 1, 3) — not because they are unverifiable by machine, only because
+    the window since this same-day merge hasn't produced enough data yet.
+    Staying parked at main-qa; narrowing the open recommendation to items 1 and
+    3 only.
+  since: 2026-07-31
+  recommendation: >-
+    Items 2 (design-3-unmeasurable-keep) and 5
+    (design-5-best-effort-retry-forever) are resolved with direct journal
+    evidence above and do not need further review. What remains open:
+
+
+    1. design-2-grace-cap-defaults — once several days of tick history have
+    accumulated since the PR #3004 merge, re-run `journalctl -t dispatch-tick
+    --since '<merge-time>'` and grep for `lib-frozen-session-park: parked` and
+    `terminal-disposition sweep complete`; confirm the 300s grace / 2-park cap
+    still show no over-eager or too-slow parking against the fleet's real
+    terminal-worker volume over that longer window.
+
+    2. design-4-daemon-unknown — watch for (or force, in a controlled way) a
+    real `claude agents --json --all` daemon outage and confirm the resulting
+    "daemon unqueryable" line is actually noticed in practice — either because
+    someone routinely greps the journal for it, or because an alerting rule is
+    added — rather than passing unremarked among the many routine "sweep
+    complete" lines at the same log priority.
+
+    3. After either check lands real evidence, land the corresponding
+    Verifiability line above as MACHINE (resolved) and, once both are resolved,
+    clear-park this node.
+
+    Before reaping any terminal session found during this review, check its
+    node's phase/office_hours on origin/main first — reaping a done session
+    whose node never advanced is what restarts the exact churn loop this node
+    fixes.
+  session_type: other
+pace_exempt: true
 rounds: null
 attributes: {}
 ---
@@ -175,6 +276,27 @@ The framework file does not exist on `origin/main` yet — it ships in PR #2994
 4. Only **then** delete the Stop-hook backstop and reword the SKILL.md prose
    that names it (Unit 4) — the replacement must be live before the seam is
    uncovered.
+
+### Dependency note — why `blocked_by` is empty
+
+This node previously carried `blocked_by: [tactic-denied-command-parks-node]`,
+encoding "step 2 depends on step 1" from the bootstrap plan. That edge was
+removed 2026-07-31 once PR #2994 merged (17:15:22Z, `03a15623`).
+
+The real dependency is **the sweep framework must exist to add a predicate to
+it**, and `lib-frozen-session-park.sh` is on `main` — Unit 0 below asserts
+exactly that, which is the right place for it. What the `blocked_by` edge
+actually gated was the *blocker node reaching `done`*, and that node went to
+`main-qa` carrying `## needs-main` residue whose item 1 is verifiable only
+against a real live classifier denial occurring by chance. Left in place, the
+edge would have held this node until an unrelated external event happened.
+
+**The general rule, which holds beyond this node: validating a fix must not
+block progress that depends only on the fix having landed.** A node awaiting
+deferred observation is a legitimate state; propagating that wait to its
+dependents is not. Where a dependent needs merged code, gate it on the code
+(assert the file/function exists, as Unit 0 does) rather than on the producing
+node's phase.
 
 ### Unit 0 — precondition check (do this first, no code)
 
@@ -787,3 +909,37 @@ bash -c 'set -e; ! grep -q "park-node" .claude/hooks/dispatch-stop.sh; grep -q "
    its pre-session phase is what *restarts* the churn. Check the node's `phase`
    and `office_hours` on `origin/main` before reaping anything; unadvanced plus
    unparked means diagnose, not collect.
+
+## needs-main residue
+
+`/qa-fix` (PR #3004) ran the full script-verifiable + guard + lint suite green
+(178/178, 136/136, 121/121, 29/29, 83/83 tests; both `park-node`-removed and
+`dispatch-self-close`-intact guards confirmed; lint clean) and classified five
+design-judgment items through the disposition Workflow. Four downgraded to
+`needs-main` (their acceptance criterion is only observable from live post-merge
+tick behavior, per `planned_deferral: true`) and are filed here rather than as
+separate follow-up nodes, to be verified once this reaches `main-qa`:
+
+1. **id `design-2-grace-cap-defaults`** — grace default (300s,
+   `DISPATCH_TERMINAL_DISPOSITION_GRACE_S`) and park-cap default (3,
+   `DISPATCH_TERMINAL_DISPOSITION_PARK_MAX`) in `lib-frozen-session-park.sh`.
+   Expected outcome: both defaults hold up against the normal fleet's actual
+   terminal-worker volume and idle-time distribution over live tick runs; no
+   evidence of nodes parked too aggressively or too slowly.
+2. **id `design-3-unmeasurable-keep`** — a terminal worker with an
+   unreadable/rotated transcript is always kept, never parked (fail-safe
+   miss, an accepted residual per this node's own "Accepted residuals"
+   section). Expected outcome: this miss stays rare in practice and does not
+   accumulate a population of permanently-unparked terminal-without-disposition
+   nodes.
+3. **id `design-4-daemon-unknown`** — `claude_agents_list_terminal_workers`
+   returning UNKNOWN (daemon unreachable/non-array JSON) makes the sweep
+   no-op that tick, with no louder signal than the summary stderr line.
+   Expected outcome: a real daemon outage does not silently disable the sweep
+   for an extended period without being noticed via the tick journal.
+4. **id `design-5-best-effort-retry-forever`** — a structurally-failing
+   `park-node` call retries every tick indefinitely (always returns 0, no
+   escalation, no distinct signal beyond "will retry next tick" in stderr).
+   Expected outcome: no candidate is observed retrying-and-failing
+   indefinitely in production; if one does, that is itself the residue to
+   act on.

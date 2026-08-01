@@ -14,31 +14,42 @@ source "$FIXTURE_DIR/dispatch-test-fixture.sh"
 echo ""
 echo "=== dispatch-stop ==="
 #
-# dispatch-stop is now the graph-native node-worker Stop-hook: an escalation-park
-# BACKSTOP only. tactic-dispatch-legacy-rewire Unit 3 DELETED the legacy
-# <N>-<slug> issue-worker disposition (the phase-completed marker read, the
-# dispatch-phase CURRENT_PHASE derivation, the dispatch:office-hours label parks
-# via dispatch-apply-office-hours, the phase-advance self-close, and the
-# Stop-hook tick-spawn) — those paths were reachable only for a legacy issue
-# worker spawned by dispatch-materialize-spawn -> dispatch-launch-worker, both
-# deleted with the legacy gh-issue lane.
+# dispatch-stop is now the graph-native node-worker Stop-hook, reduced to a
+# single duty: marker-gated reap delegation to dispatch-self-close.
+# tactic-dispatch-legacy-rewire Unit 3 DELETED the legacy <N>-<slug>
+# issue-worker disposition (the phase-completed marker read, the dispatch-phase
+# CURRENT_PHASE derivation, the dispatch:office-hours label parks via
+# dispatch-apply-office-hours, the phase-advance self-close, and the Stop-hook
+# tick-spawn) — those paths were reachable only for a legacy issue worker
+# spawned by dispatch-materialize-spawn -> dispatch-launch-worker, both deleted
+# with the legacy gh-issue lane.
+#
+# tactic-phase-terminal-requires-disposition Unit 4 DELETED the escalation-park
+# backstop that used to live here (reading office-hours-reason/-recommendation/
+# -pr and calling park-node): measured 0/5 successes on 2026-07-31 versus 4/4
+# for in-session park-node, wrong worktree base, no landing-lock budget in a
+# teardown hook, and a swallowed failure path. The replacement is
+# dispatch-tick's terminal_without_disposition_sweep (lib-frozen-session-park.sh),
+# which runs from the tick's main checkout. This hook no longer touches the
+# office-hours-reason/-recommendation/-pr markers at all — it leaves them for
+# the sweep to read.
 #
 # Surviving contract:
 #   - CLAUDE_JOB_DIR unset, or state.json absent  -> no-op (exit 0).
 #   - The job is a graph node worker iff state.json .name is a node id AND
 #     intentions/<name>.md exists at the hook root (= <hook-dir>/../..). Only
-#     then, and only when a non-empty office-hours-reason marker is present in
-#     the job dir, park the node via
-#     packages/intentionsutil/scripts/park-node <id> <reason> [<reco>].
-#   - Any other name (a dispatch-<id> router, a stray non-node name), or a node
-#     worker with no office-hours-reason marker -> no-op (exit 0).
-#   - Best-effort: a park-node failure is logged to stderr and the hook still
-#     exits 0 (it must never block session teardown).
+#     then, delegate to dispatch-self-close --node <name>, which applies the
+#     node-terminal marker gate (reap vs hold) on its own.
+#   - Any other name (a dispatch-<id> router, a stray non-node name) -> no-op
+#     (exit 0).
+#   - Best-effort: a dispatch-self-close failure is logged to stderr and the
+#     hook still exits 0 (it must never block session teardown).
 #
 # Harness: the hook is copied to $ROOT/.claude/hooks/dispatch-stop.sh so its
 # `$(dirname)/../..` root resolves to $ROOT; the intention nodes and a fake
-# park-node (recording each invocation's argv to $ROOT/park-calls.log) sit under
-# $ROOT. The job dir carries state.json and the optional office-hours markers.
+# park-node (recording each invocation's argv to $ROOT/park-calls.log, kept so
+# the RATCHET test below can assert it is NEVER called) sit under $ROOT. The
+# job dir carries state.json and the optional office-hours markers.
 
 stopnc_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -160,46 +171,32 @@ else
 fi
 stopnc_teardown
 
-# --- node worker + office-hours-reason (no recommendation) → park ------------
-echo "Test: dispatch-stop node worker + office-hours-reason → park-node <id> <reason>"
-stopnc_setup
-stopnc_state "tactic-some-node"
-: > "$ROOT/intentions/tactic-some-node.md"
-printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
-rc=$(stopnc_run)
-assert_eq "stop: node park → exit 0" "0" "$rc"
-assert_eq "stop: node park → park-node called once" "1" "$(wc -l < "$ROOT/park-calls.log")"
-assert_eq "stop: node park → argv is <id> <reason>" \
-  "tactic-some-node needs a human decision" "$(cat "$ROOT/park-calls.log")"
-assert_eq "stop: node park → self-close called once" "1" "$(wc -l < "$ROOT/self-close-calls.log")"
-assert_eq "stop: node park → self-close runs after park-node" \
-  "$(printf 'park\nself-close')" "$(cat "$ROOT/order.log")"
-stopnc_teardown
-
-# --- node worker + reason + recommendation → park with 3rd arg ---------------
-echo "Test: dispatch-stop node worker + reason + recommendation → park-node <id> <reason> <reco>"
+# --- RATCHET: node worker + all three office-hours markers → NOT consumed ---
+#
+# tactic-phase-terminal-requires-disposition Unit 4: the hook must no longer
+# read or act on office-hours-reason/-recommendation/-pr at all. This is a
+# ratchet against the backstop creeping back in -- the markers must survive
+# untouched for dispatch-tick's terminal_without_disposition_sweep to consume
+# on a later tick.
+echo "Test: dispatch-stop node worker + all three office-hours markers → RATCHET: no park, markers untouched, self-close still delegated"
 stopnc_setup
 stopnc_state "tactic-some-node"
 : > "$ROOT/intentions/tactic-some-node.md"
 printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
 printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
+printf '42' > "$JOB_DIR/office-hours-pr"
 rc=$(stopnc_run)
-assert_eq "stop: node park+reco → exit 0" "0" "$rc"
-assert_eq "stop: node park+reco → argv carries the recommendation" \
-  "tactic-some-node needs a human decision try approach X" "$(cat "$ROOT/park-calls.log")"
-stopnc_teardown
-
-# --- best-effort: park-node failure still exits 0 ---------------------------
-echo "Test: dispatch-stop park-node failure is non-fatal (hook still exits 0)"
-stopnc_setup
-stopnc_state "tactic-some-node"
-: > "$ROOT/intentions/tactic-some-node.md"
-printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
-printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
-rc=$(stopnc_run)
-assert_eq "stop: park-node failure → hook still exits 0" "0" "$rc"
-assert_eq "stop: park-node failure → park-node was still attempted once" "1" "$(wc -l < "$ROOT/park-calls.log")"
-assert_eq "stop: park-node failure → self-close still ran" "1" "$(wc -l < "$ROOT/self-close-calls.log")"
+assert_eq "stop: ratchet → exit 0" "0" "$rc"
+assert_eq "stop: ratchet → park-node NEVER called" "0" "$(wc -l < "$ROOT/park-calls.log")"
+assert_eq "stop: ratchet → self-close called exactly once" "1" "$(wc -l < "$ROOT/self-close-calls.log")"
+assert_eq "stop: ratchet → self-close argv is '--node <job-name>'" \
+  "--node tactic-some-node" "$(cat "$ROOT/self-close-calls.log")"
+[ -e "$JOB_DIR/office-hours-reason" ]
+assert_eq "stop: ratchet → reason marker still present" "0" "$?"
+[ -e "$JOB_DIR/office-hours-recommendation" ]
+assert_eq "stop: ratchet → recommendation marker still present" "0" "$?"
+[ -e "$JOB_DIR/office-hours-pr" ]
+assert_eq "stop: ratchet → pr marker still present" "0" "$?"
 stopnc_teardown
 
 # --- best-effort: dispatch-self-close failure still exits 0 -----------------
@@ -211,74 +208,6 @@ printf '1' > "$ROOT/self-close-exit"   # make the fake dispatch-self-close exit 
 rc=$(stopnc_run)   # no office-hours-reason marker written
 assert_eq "stop: self-close failure → hook still exits 0" "0" "$rc"
 assert_eq "stop: self-close failure → self-close was still attempted once" "1" "$(wc -l < "$ROOT/self-close-calls.log")"
-stopnc_teardown
-
-# --- marker consumed after successful park (reason-only) --------------------
-echo "Test: dispatch-stop successful park consumes the reason marker"
-stopnc_setup
-stopnc_state "tactic-some-node"
-: > "$ROOT/intentions/tactic-some-node.md"
-printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
-rc=$(stopnc_run)
-assert_eq "stop: park success → exit 0" "0" "$rc"
-[ ! -e "$JOB_DIR/office-hours-reason" ]
-assert_eq "stop: park success → reason marker deleted" "0" "$?"
-stopnc_teardown
-
-# --- consumed marker prevents re-park on a later Stop event ------------------
-echo "Test: dispatch-stop does not re-park on a second Stop event after marker consumed"
-stopnc_setup
-stopnc_state "tactic-some-node"
-: > "$ROOT/intentions/tactic-some-node.md"
-printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
-rc=$(stopnc_run)
-rc2=$(stopnc_run)   # marker already consumed by the first run
-assert_eq "stop: second run → exit 0" "0" "$rc2"
-assert_eq "stop: second run → park-node still called only once total" "1" "$(wc -l < "$ROOT/park-calls.log")"
-stopnc_teardown
-
-# --- marker survives a failed park (reason-only) so a later retry can fire ---
-echo "Test: dispatch-stop failed park leaves the reason marker in place"
-stopnc_setup
-stopnc_state "tactic-some-node"
-: > "$ROOT/intentions/tactic-some-node.md"
-printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
-printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
-rc=$(stopnc_run)
-assert_eq "stop: park failure → exit 0" "0" "$rc"
-[ -e "$JOB_DIR/office-hours-reason" ]
-assert_eq "stop: park failure → reason marker survives" "0" "$?"
-stopnc_teardown
-
-# --- marker consumed after successful park (reason + recommendation) --------
-echo "Test: dispatch-stop successful park consumes both markers when a recommendation is present"
-stopnc_setup
-stopnc_state "tactic-some-node"
-: > "$ROOT/intentions/tactic-some-node.md"
-printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
-printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
-rc=$(stopnc_run)
-assert_eq "stop: park+reco success → exit 0" "0" "$rc"
-[ ! -e "$JOB_DIR/office-hours-reason" ]
-assert_eq "stop: park+reco success → reason marker deleted" "0" "$?"
-[ ! -e "$JOB_DIR/office-hours-recommendation" ]
-assert_eq "stop: park+reco success → recommendation marker deleted" "0" "$?"
-stopnc_teardown
-
-# --- both markers survive a failed park (reason + recommendation) -----------
-echo "Test: dispatch-stop failed park leaves both markers in place when a recommendation is present"
-stopnc_setup
-stopnc_state "tactic-some-node"
-: > "$ROOT/intentions/tactic-some-node.md"
-printf 'needs a human decision' > "$JOB_DIR/office-hours-reason"
-printf 'try approach X' > "$JOB_DIR/office-hours-recommendation"
-printf '1' > "$ROOT/park-exit"   # make the fake park-node exit non-zero
-rc=$(stopnc_run)
-assert_eq "stop: park+reco failure → exit 0" "0" "$rc"
-[ -e "$JOB_DIR/office-hours-reason" ]
-assert_eq "stop: park+reco failure → reason marker survives" "0" "$?"
-[ -e "$JOB_DIR/office-hours-recommendation" ]
-assert_eq "stop: park+reco failure → recommendation marker survives" "0" "$?"
 stopnc_teardown
 
 # ============================================================================

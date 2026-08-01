@@ -69,7 +69,7 @@ attention:
     and cannot compound. Finalized 2026-07-31 by /align-tactics to phase:
     implement with a full clean-session plan in the body; the boost carries over
     unchanged, since attention rank is independent of phase."
-phase: main-qa
+phase: done
 execution:
   branch: tactic-denied-command-parks-node
   pr: 2994
@@ -665,6 +665,10 @@ call stays `needs-human` and is escalated to office-hours directly instead.
      agents` registries, so the ground-truth `state: "blocked"` literal is
      unverified at merge. Planned deferral — verifiable only against a real
      live denial post-merge.
+   - **DISCHARGED 2026-07-31 — observed, not asserted.** The literal is
+     `state: "blocked"`, exactly as the filter matches; no predicate change is
+     needed. See "Forced observation" below for the full registry row and the
+     caveat on how the freeze was induced.
 
 2. **Confirm end-to-end recovery: parked frozen node surfaces and can be cleared**
    - URL path: current
@@ -676,6 +680,11 @@ call stays `needs-human` and is escalated to office-hours directly instead.
      frozen session and a live human attach that no unit test can substitute
      for. Planned deferral — verifiable only against a real frozen session
      post-merge.
+   - **DISCHARGED 2026-07-31 — observed, not asserted.** The full loop closed
+     against a real frozen session on a real node: freeze -> detected -> parked
+     on `origin/main` -> decision record written -> removed from the selectable
+     set -> session reaped -> park cleared -> node returned to the selectable
+     set. See "Forced observation" below.
 
 ## Author rulings 2026-07-31 — defaults accepted; convergence with the disposition sweep
 
@@ -714,3 +723,77 @@ time (GitHub reported `mergeable: UNKNOWN`, having earlier reported
 `CONFLICTING`). If the rebase turns out to be genuinely expensive, that is new
 information and the fold-into-one-sweep alternative becomes worth re-examining —
 it should not be forced through on the strength of this ruling alone.
+
+## Forced observation 2026-07-31 — the sweep parked and released a real node
+
+The observation was **forced rather than awaited**: this criterion closes only on
+a session freezing in production, which may never happen by chance, so it sat on
+the critical path with no clock running. A throwaway session was named for a real
+graph node (`tactic-review-cross-lane-dedup`, then at `phase: null`,
+`office_hours: null`, no worktree, nothing depending on it) and driven into the
+frozen state; the node was restored to its exact prior state afterwards.
+
+**Item 1 — the `state` literal.** The frozen session's registry row read:
+
+```
+{"status":"waiting","state":"blocked","waitingFor":"input needed"}
+```
+
+`state: "blocked"` is exactly what `claude_agents_list_blocked_workers` selects
+on, so the first predicate fires against a real registry and **no widening is
+needed**. This matters beyond confirmation: widening the filter to a
+`status != busy` complement would have collided with the sibling tactics that
+own the stopped-session and frozen-debug-count shapes.
+
+**Item 2 — the full loop.** With that session still frozen, the sweep was run
+directly with `DISPATCH_FROZEN_SESSION_GRACE_S=0` (running `dispatch-tick`
+itself from a long-lived interactive session deadlocks, so the sweep function
+was sourced and called on its own — the identical code path the tick invokes):
+
+```
+lib-frozen-session-park: parked tactic-review-cross-lane-dedup (denied-command-frozen after 151s; session=aadc2eb5-...)
+lib-frozen-session-park: sweep complete (blocked=1 parked=1 observing=0 unmeasurable=0 deferred=0)
+graph-commit: landed tactic-review-cross-lane-dedup on main
+```
+
+All four downstream effects were then read back from authoritative sources
+rather than inferred from the sweep's own exit status:
+
+- `git show origin/main:` showed non-null `office_hours` carrying the sweep's
+  reason text and `since: 2026-07-31`;
+- a decision record landed with `site: "frozen-session-sweep"`,
+  `state: "blocked"`, `idle_seconds: 151`, `disposition: "parked"`;
+- the selector dropped the node from its candidate set while parked;
+- after `claude rm` and `clear-park`, the node returned to the candidate set
+  (197 -> 198) with frontmatter byte-identical to its pre-exercise state.
+
+**A stale-working-tree trap surfaced during the read-back, and is worth
+recording.** The first post-clear selector run reported the node still absent.
+The clear had in fact landed; the run had been made from the primary checkout,
+which was one commit behind `origin/main` and whose working tree still carried
+the park. Re-running from a checkout actually at `origin/main` showed the node
+present. A selector run is only evidence about the tree it read — sync first, or
+read from an explicit `origin/main` snapshot.
+
+**Caveat, stated rather than buried: the freeze was induced by an input-needed
+wait, not by a fresh classifier denial.** Every attempt to construct a
+denial-triggering command was itself denied by the operator session's own
+classifier, and routing around that denial was declined.
+
+**Why that substitution is faithful rather than a gap.** This node's own
+`rationale` records the originating production occurrence — a sandbox-off `git
+reset --hard` denied by the auto-mode classifier at 2026-07-31T00:42:30Z — and
+records the registry row it produced: `state: blocked`, `status: waiting`,
+`waitingFor: "input needed"`. That is byte-identical to the row the forced
+session produced. A real denial and an induced input-wait are therefore the same
+input to the sweep, whose predicate is `state == "blocked"` and which never
+inspects the cause. The forced run exercised the untested half — detect, park,
+log, hide, release — against the exact registry shape the real denial is already
+known to produce.
+
+**What remains genuinely unobserved** is narrow: the sweep firing on a denial
+that arises spontaneously in production, end to end, without a human inducing
+the freeze. Whether that adds anything over the two halves now separately
+evidenced — the denial-produces-this-row half from the originating occurrence,
+the row-produces-a-park half from this forced run — is an author call, and it is
+the only thing still standing between this row and closure.

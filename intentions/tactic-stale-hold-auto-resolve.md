@@ -64,6 +64,7 @@ execution: null
 validates: []
 blocked_by: []
 office_hours: null
+pace_exempt: true
 ---
 
 # tactic-stale-hold-auto-resolve

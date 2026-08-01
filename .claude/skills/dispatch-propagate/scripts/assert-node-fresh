@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# assert-node-fresh --base <manifest-or-id=blobsha> [--worktree <path>] <node-id>... —
+# per-node, PRE-WRITE freshness guard for wholesale intention-node body writes.
+# It refuses to let a session overwrite `intentions/<id>.md` when that node has
+# MOVED on origin/main since the session read it.
+#
+# WHY it exists, and why assert-worktree-fresh does not cover it. A worker's
+# worktree is a snapshot of `intentions/` taken at provision time and nothing
+# re-syncs it mid-session, so the worker's view of its OWN node is frozen at
+# spawn. `assert-worktree-fresh` is whole-tree and once-per-session (a
+# `rev-list --count HEAD..origin/main` at entry), and is skipped outright when
+# the worktree was cut fresh from origin/main by provision-node-worktree —
+# either way it cannot see an edit that lands twenty minutes later. And the
+# `/align-tactics` body write is a WHOLESALE replacement: `body_markdown` is not
+# merged into the existing body, it replaces it, so a stale-based write does not
+# conflict, does not flag and does not preserve — it silently discards a landed
+# edit. This script is the check at the point of loss: run it immediately before
+# the body write, against the same ref the write will land on.
+#
+# THE ONE SEMANTIC THAT MUST NOT BE GOT WRONG: this compares the RECORDED BASE
+# BLOB (from --base, produced by dump-node.ts at the session's READ step)
+# against origin/main. It NEVER hashes the on-disk file. By the time this runs,
+# the on-disk node has already been rewritten by write-node.ts (frontmatter), so
+# an on-disk hash would differ for a completely benign reason and the guard
+# would refuse every round. Hashing on-disk content here would also be precisely
+# the `align-tactics-dump-node-after-edit-wipes-content` mistake — a base
+# captured from the writer's own in-flight content — one layer earlier.
+#
+# This is a DETECT-ONLY primitive: it NEVER merges, NEVER writes, and NEVER runs
+# a tree-updating git op — reconciling a moved node (re-plan once, or park) is
+# the caller's job. It also does NOT disable any sandbox: the read-only
+# `git fetch origin main` to github.com is sandbox-allowlisted and every other
+# git call here is a read (`cat-file`, `rev-parse`, `log`), so sandbox handling
+# is purely a caller concern.
+#
+# Exit-code contract:
+#   0 — every named node's recorded base still matches origin/main (fresh).
+#   2 — usage error (flag-shaped positional, un-cd-able --worktree, missing
+#       --base, no node ids, or a malformed <id>=<blobsha> pair).
+#   1 — not a git repo, fetch failure, a named node MOVED on origin/main, or a
+#       pre-existing node named with no --base entry (no compare-and-swap at all).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=./lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
+usage_error() {
+  echo "assert-node-fresh: $1" >&2
+  exit 2
+}
+
+declare -A BASE=()
+BASE_GIVEN=0
+WORKTREE=""
+IDS=()
+
+# --- --base parsing ---------------------------------------------------------
+# The <id>=<blobsha>-or-manifest-path convention's home is graph-commit:369-395
+# (add_blob_pair / parse_blob_arg). Copied, not sourced: graph-commit is an
+# executable with a main() and a process-wide EXIT trap, so sourcing it would
+# run the landing machinery.
+add_blob_pair() { # <pair>
+  local pair="$1" id sha
+  id="${pair%%=*}"
+  sha="${pair#*=}"
+  if [[ -z "$id" || "$id" == "$pair" || -z "$sha" ]]; then
+    usage_error "invalid --base entry '$pair' (expected <id>=<blobsha>)"
+  fi
+  BASE["$id"]="$sha"
+}
+
+parse_blob_arg() { # <arg>
+  local arg="$1"
+  if [[ -f "$arg" ]]; then
+    local line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -z "$line" ]] && continue
+      add_blob_pair "$line"
+    done <"$arg"
+  else
+    add_blob_pair "$arg"
+  fi
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --base)
+      [[ $# -ge 2 ]] || usage_error "--base requires a <manifest-path> or <id>=<blobsha> argument"
+      parse_blob_arg "$2"
+      BASE_GIVEN=1
+      shift 2
+      ;;
+    --worktree)
+      [[ $# -ge 2 ]] || usage_error "--worktree requires a path argument"
+      WORKTREE="$2"
+      shift 2
+      ;;
+    -*)
+      usage_error "flag-shaped argument '$1' is not a node id"
+      ;;
+    *)
+      IDS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ "$BASE_GIVEN" -eq 0 ]]; then
+  usage_error "--base <manifest-path-or-id=blobsha> is required"
+fi
+if [[ "${#IDS[@]}" -eq 0 ]]; then
+  usage_error "at least one <node-id> is required"
+fi
+
+# --worktree is optional; default to the current working directory.
+WORKTREE="${WORKTREE:-$PWD}"
+cd "$WORKTREE" || usage_error "cannot cd to '$WORKTREE'"
+
+# Clear error before the network fetch when the target is not inside a git repo.
+if ! resolve_project_root >/dev/null 2>&1; then
+  echo "assert-node-fresh: '$WORKTREE' is not inside a git repository" >&2
+  exit 1
+fi
+
+# One fetch up front, for every named id. A failed fetch is never license to
+# proceed on unverified local state.
+if ! git fetch origin main >&2; then
+  echo "assert-node-fresh: git fetch origin main failed in '$WORKTREE' — cannot verify freshness, refusing to proceed on unverified local state" >&2
+  exit 1
+fi
+
+# Per-id comparison, mirroring check_base_freshness() (graph-commit:467-477).
+# FETCH_HEAD, not origin/main: it is the ref this fetch just wrote, and it does
+# not depend on a remote-tracking ref being configured in this worktree.
+REFUSED=0
+for id in "${IDS[@]}"; do
+  path="intentions/$id.md"
+  if git cat-file -e "FETCH_HEAD:$path" 2>/dev/null; then
+    origin_sha="$(git rev-parse "FETCH_HEAD:$path")"
+  else
+    origin_sha="<absent>"
+  fi
+  recorded="${BASE[$id]:-<unrecorded>}"
+
+  if [[ "$recorded" == "$origin_sha" ]]; then
+    continue                     # fresh — the node has not moved
+  fi
+  if [[ "$recorded" == "<unrecorded>" && "$origin_sha" == "<absent>" ]]; then
+    continue                     # created this round: no origin blob, no --base entry
+  fi
+  if [[ "$recorded" == "<unrecorded>" ]]; then
+    # Pre-existing on origin/main but carrying no --base entry: the write would
+    # land with no compare-and-swap at all.
+    echo "assert-node-fresh: '$id' exists on origin/main (blob $origin_sha) but has no --base entry — the body write would land with no compare-and-swap; capture a base manifest at the read step (dump-node.ts) and pass it via --base" >&2
+    REFUSED=$((REFUSED + 1))
+    continue
+  fi
+
+  # Moved. Name the intervening commit — that is what lets the caller decide
+  # between one bounded re-plan and handing back.
+  moved_by="$(git log -1 --format='%h %ad %s' --date=short FETCH_HEAD -- "$path" 2>/dev/null || true)"
+  echo "assert-node-fresh: '$id' MOVED on origin/main since the base was captured (recorded $recorded, origin now $origin_sha) — intervening commit: ${moved_by:-<unknown>}. Do NOT write the body: re-read the node from origin/main and re-plan once, or park it." >&2
+  REFUSED=$((REFUSED + 1))
+done
+
+# Every named id is checked before exiting, so one call names them all — the
+# same reason check_base_freshness() keeps iterating (graph-commit:520-524).
+if [[ "$REFUSED" -gt 0 ]]; then
+  echo "assert-node-fresh: refusing — $REFUSED of ${#IDS[@]} node(s) are not fresh against origin/main" >&2
+  exit 1
+fi
+
+# stdout stays free for any future machine-readable output; the OK note goes to
+# stderr.
+echo "assert-node-fresh: ${#IDS[@]} node(s) are fresh against origin/main" >&2
+exit 0

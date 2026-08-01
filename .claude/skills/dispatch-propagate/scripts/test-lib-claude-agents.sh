@@ -1233,6 +1233,129 @@ assert_eq "blocked-snapshot: reads the snapshot content" \
   "$(printf 's-snap\ttactic-from-snapshot\t/wt/snap')" "$out"
 ca_teardown
 
+# --- claude_agents_list_terminal_workers --------------------------------------
+# The lister sibling of claude_agents_count_held_for_debug: same keyspace
+# filter (^[0-9]+-|^tactic-|^strategy-, routers excluded) and same terminal
+# state resolution ((.state // .status) // ""), but emits
+# sessionId<TAB>id<TAB>name<TAB>cwd rows instead of a count. Always queries
+# `--all` directly, bypassing DISPATCH_AGENTS_SNAPSHOT (captured without --all).
+# `.id` is its own column because the managed-job dir is named by `.id` while
+# the transcript is named by `.sessionId`, and the two diverge on a resumed
+# session.
+
+# --- Test 53: a done row is listed -------------------------------------------
+echo "Test: claude_agents_list_terminal_workers lists a done tactic worker"
+ca_setup
+write_fake_claude '[{"sessionId":"sid-1","id":"job-1","pid":1,"status":null,"state":"done","name":"tactic-foo","cwd":"/wt/tactic-foo"}]' 0
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+assert_eq "terminal-done: exits 0" "0" "$rc"
+assert_eq "terminal-done: one TSV line for the done row" \
+  "$(printf 'sid-1\tjob-1\ttactic-foo\t/wt/tactic-foo')" "$out"
+ca_teardown
+
+# --- Test 53b: `.id` is emitted verbatim, not derived from the sessionId ------
+# A RESUMED session keeps its original job id while its sessionId changes, so
+# `${sessionId%%-*}` is NOT the job dir. The projection must carry the real id.
+echo "Test: claude_agents_list_terminal_workers emits .id verbatim for a resumed session"
+ca_setup
+write_fake_claude '[{"sessionId":"699ca965-aaaa-bbbb-cccc-dddddddddddd","id":"c20b2f8d","pid":1,"state":"done","name":"tactic-resumed","cwd":"/wt/resumed"}]' 0
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+assert_eq "terminal-resumed: exits 0" "0" "$rc"
+assert_eq "terminal-resumed: the id column is the registry id, not the sessionId prefix" \
+  "$(printf '699ca965-aaaa-bbbb-cccc-dddddddddddd\tc20b2f8d\ttactic-resumed\t/wt/resumed')" "$out"
+ca_teardown
+
+# --- Test 53c: a row with no `.id` emits an empty id column -------------------
+echo "Test: claude_agents_list_terminal_workers emits an empty id column when .id is absent"
+ca_setup
+write_fake_claude '[{"sessionId":"sid-noid","pid":1,"state":"done","name":"tactic-noid","cwd":"/wt/noid"}]' 0
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+assert_eq "terminal-noid: exits 0" "0" "$rc"
+assert_eq "terminal-noid: the id column is empty" \
+  "$(printf 'sid-noid\t\ttactic-noid\t/wt/noid')" "$out"
+ca_teardown
+
+# --- Test 54: busy and blocked rows are excluded ------------------------------
+echo "Test: claude_agents_list_terminal_workers excludes busy and blocked rows"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"sid-busy","pid":1,"status":"busy","state":"working","name":"tactic-busy","cwd":"/wt/busy"},
+  {"sessionId":"sid-blocked","pid":2,"status":"idle","state":"blocked","name":"tactic-blocked","cwd":"/wt/blocked"}
+]' 0
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+assert_eq "terminal-non-terminal: exits 0" "0" "$rc"
+assert_eq "terminal-non-terminal: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 55: no .state falls back to .status --------------------------------
+echo "Test: claude_agents_list_terminal_workers falls back to .status when .state is absent"
+ca_setup
+write_fake_claude '[{"sessionId":"sid-2","id":"job-2","pid":1,"status":"stopped","name":"tactic-fallback","cwd":"/wt/fallback"}]' 0
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+assert_eq "terminal-fallback: exits 0" "0" "$rc"
+assert_eq "terminal-fallback: status-only stopped row is included" \
+  "$(printf 'sid-2\tjob-2\ttactic-fallback\t/wt/fallback')" "$out"
+ca_teardown
+
+# --- Test 56: neither .state nor .status is excluded --------------------------
+echo "Test: claude_agents_list_terminal_workers excludes a row with neither .state nor .status"
+ca_setup
+write_fake_claude '[{"sessionId":"sid-3","pid":1,"name":"tactic-neither","cwd":"/wt/neither"}]' 0
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+assert_eq "terminal-neither: exits 0" "0" "$rc"
+assert_eq "terminal-neither: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 57: a done router is excluded ---------------------------------------
+echo "Test: claude_agents_list_terminal_workers excludes a done router"
+ca_setup
+write_fake_claude '[{"sessionId":"sid-4","pid":1,"status":null,"state":"done","name":"dispatch-ab12cd34","cwd":"/wt/router"}]' 0
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+assert_eq "terminal-router: exits 0" "0" "$rc"
+assert_eq "terminal-router: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 58: empty [] registry → rc 0, empty stdout (definite none) ----------
+echo "Test: claude_agents_list_terminal_workers returns 0 with empty stdout for an empty registry"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+assert_eq "terminal-empty: exits 0 (definite zero, not UNKNOWN)" "0" "$rc"
+assert_eq "terminal-empty: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 59: non-array output → rc 1 -----------------------------------------
+echo "Test: claude_agents_list_terminal_workers returns rc 1 on non-array JSON output"
+ca_setup
+write_fake_claude '{}' 0
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+assert_eq "terminal-non-array: exits non-zero (UNKNOWN)" "1" "$rc"
+assert_eq "terminal-non-array: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 60: daemon failure (non-zero exit) → rc 1 ---------------------------
+echo "Test: claude_agents_list_terminal_workers returns rc 1 on daemon failure"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+assert_eq "terminal-daemon-fail: exits non-zero (UNKNOWN)" "1" "$rc"
+assert_eq "terminal-daemon-fail: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 61: bypasses DISPATCH_AGENTS_SNAPSHOT — finds a row the snapshot lacks
+echo "Test: claude_agents_list_terminal_workers bypasses DISPATCH_AGENTS_SNAPSHOT and queries --all directly"
+ca_setup
+snapshot_file="$CA_DIR/snapshot.json"
+printf '%s' '[]' > "$snapshot_file"
+write_fake_claude '[{"sessionId":"sid-5","id":"job-5","pid":1,"status":null,"state":"done","name":"tactic-snapbypass","cwd":"/wt/snapbypass"}]' 0
+export DISPATCH_AGENTS_SNAPSHOT="$snapshot_file"
+if out=$(claude_agents_list_terminal_workers); then rc=0; else rc=$?; fi
+unset DISPATCH_AGENTS_SNAPSHOT
+assert_eq "terminal-snapshot-bypass: exits 0" "0" "$rc"
+assert_eq "terminal-snapshot-bypass: finds the row absent from the empty snapshot" \
+  "$(printf 'sid-5\tjob-5\ttactic-snapbypass\t/wt/snapbypass')" "$out"
+ca_teardown
+
 # <<< END MOVED <<<
 
 report_results

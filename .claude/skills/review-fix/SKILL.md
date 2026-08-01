@@ -152,8 +152,8 @@ On the node lane every step runs unchanged except three re-keyed seams:
 - **Deferred findings (Step 5)** — deferred/security follow-ups become **draft
   tactic nodes**, not gh issues.
 - **Escalation** — write the reason to `$CLAUDE_JOB_DIR/office-hours-reason`
-  (and best-next-steps to `.../office-hours-recommendation`); the Stop hook parks
-  via `park-node`. Also write the already-bound `PR_NUM` to
+  (and best-next-steps to `.../office-hours-recommendation`); `dispatch-tick`'s
+  `terminal_without_disposition_sweep` parks via `park-node`. Also write the already-bound `PR_NUM` to
   `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic tempfile+`mv` write) so the
   park records `execution.pr` (tactic-office-hours-pr-custody).
 
@@ -261,7 +261,15 @@ command block, normalization rules, and the per-finder roster and descriptions.
 ### 2. Build `args` and invoke the Workflow
 
 Collect the fields for the Workflow invocation. Parse `Closes #N` from the pack's
-`=== PR ===` body to resolve `implementing_issues`:
+`=== PR ===` body to resolve `implementing_issues`. Workflow scripts cannot call
+`new Date()` / `Date.now()` themselves (the runtime throws — it would break
+resume), so capture the instrument-verification lower-bound timestamp here in
+bash, immediately before invoking the Workflow, and pass it through as
+`run_started_at`:
+
+```bash
+RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+```
 
 ```
 args = {
@@ -273,6 +281,7 @@ args = {
   app_or_rules:        <true|false>,
   prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
+  run_started_at:      <RUN_STARTED_AT>, // ISO8601 lower bound for the instrument-invocation transcript verifier
   security_note:       <string or omit>, // set for empty/docs/tests; omit for code
   prior_phase_log:     <string or omit> // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
 }
@@ -295,6 +304,7 @@ result = {
   security_followup_input: [ ...codeql/npm out-of-scope subset... ],
   verify_report:        [ {id, location, verdict, skeptic_votes, rationale} ],
   deviation:            <bool>,
+  instrument_failures:  [ {instrument, reason} ],
   coverage_incomplete:  <bool>,
   coverage_note?:       <string>,
   security_note?:       <string>
