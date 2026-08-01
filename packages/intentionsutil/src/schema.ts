@@ -715,7 +715,7 @@ export function validateNode(value: unknown): IntentionNode {
  * / pace_exempt — rule 11). A missing kind node is rule 1's concern, so this
  * returns false there (no goal-layer complaint on top of the missing-kind one).
  */
-function kindIsNotGoalLayer(kind: string, byId: Map<string, IntentionNode>): boolean {
+export function kindIsNotGoalLayer(kind: string, byId: Map<string, IntentionNode>): boolean {
   const kindNode = byId.get(`kind-${kind}`);
   return kindNode !== undefined && kindNode.attributes.goal_layer !== true;
 }
@@ -908,10 +908,35 @@ function checkClarificationDates(node: IntentionNode, problems: string[]): void 
 }
 
 /**
+ * The rule-18 opt-out marker: an author places this literal substring in a
+ * node's `attention.rationale` to acknowledge that the node deliberately
+ * matches or exceeds strategy-main-health's dominant boost. Exported so a
+ * boost-planning tool can emit an ACK-carrying rationale without re-typing the
+ * literal the validator matches on.
+ */
+export const MAIN_HEALTH_DOMINANCE_ACK = "ACK: main-health-dominance";
+
+/**
+ * The rule-18 threshold: `strategy-main-health`'s own live `attention.boost`,
+ * read from the passed node set — never hardcoded. Null when the node is
+ * absent, or its `attention`/`attention.boost` is null, in which case there is
+ * no dominance to protect and the guard is inert.
+ *
+ * Exported so consumers that must respect the same ceiling (e.g. the boost
+ * planner) read it through this one definition rather than re-deriving it.
+ */
+export function dominantMainHealthBoost(nodes: IntentionNode[]): number | null {
+  const mainHealthNode = nodes.find((n) => n.id === "strategy-main-health");
+  return mainHealthNode !== undefined && mainHealthNode.attention !== null
+    ? mainHealthNode.attention.boost
+    : null;
+}
+
+/**
  * Rule 18: no node other than strategy-main-health may match or exceed its
  * dominant attention.boost via either attention.boost or attention.override.
  * Threshold (`dominantBoost`) is read live by the caller; when null the guard is
- * inert. An author may opt out with "ACK: main-health-dominance" in the node's
+ * inert. An author may opt out with `MAIN_HEALTH_DOMINANCE_ACK` in the node's
  * attention.rationale.
  */
 function checkAttentionDominance(
@@ -923,19 +948,19 @@ function checkAttentionDominance(
     dominantBoost === null ||
     node.id === "strategy-main-health" ||
     node.attention === null ||
-    node.attention.rationale.includes("ACK: main-health-dominance")
+    node.attention.rationale.includes(MAIN_HEALTH_DOMINANCE_ACK)
   ) {
     return;
   }
   const { boost, override } = node.attention;
   if (boost !== null && boost >= dominantBoost) {
     problems.push(
-      `${node.id}: attention.boost (${boost}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
+      `${node.id}: attention.boost (${boost}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "${MAIN_HEALTH_DOMINANCE_ACK}" to attention.rationale to override`,
     );
   }
   if (override !== null && override >= dominantBoost) {
     problems.push(
-      `${node.id}: attention.override (${override}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
+      `${node.id}: attention.override (${override}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "${MAIN_HEALTH_DOMINANCE_ACK}" to attention.rationale to override`,
     );
   }
 }
@@ -1048,14 +1073,9 @@ export function validateGraph(nodes: IntentionNode[]): void {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const ids = new Set(byId.keys());
   const problems: string[] = [];
-  // Rule 18 threshold: strategy-main-health's own live attention.boost. Read
-  // from the same nodes array; null when the node, its attention, or its boost
-  // is absent — in which case there is no dominance to protect (guard inert).
-  const mainHealthNode = byId.get("strategy-main-health");
-  const dominantBoost =
-    mainHealthNode !== undefined && mainHealthNode.attention !== null
-      ? mainHealthNode.attention.boost
-      : null;
+  // Rule 18 threshold: strategy-main-health's own live attention.boost, read
+  // from the same nodes array (see `dominantMainHealthBoost`).
+  const dominantBoost = dominantMainHealthBoost(nodes);
   for (const node of nodes) {
     // Rules 1-4: every referenced id exists.
     checkExistenceEdges(node, ids, problems);
