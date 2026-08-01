@@ -97,13 +97,19 @@ report_results() {
 DISPATCH_HOST_UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
 # Units lib.sh writes: ensure_recover_unit (lib.sh:2585), ensure_sweep_timer
-# (lib.sh:2748), ensure_heartbeat_units (lib.sh:3023).
+# (lib.sh:2748), ensure_heartbeat_units (lib.sh:3023), ensure_healer_units and
+# ensure_watcher_units (dispatch-heal.* / dispatch-fleet-watch.*, below
+# ensure_sweep_timer in lib.sh).
 DISPATCH_HOST_UNIT_FILES=(
   dispatch-tick-recover.service
   dispatch-sweep-periodic.service
   dispatch-sweep-periodic.timer
   dispatch-heartbeat.service
   dispatch-heartbeat.timer
+  dispatch-heal.service
+  dispatch-heal.timer
+  dispatch-fleet-watch.service
+  dispatch-fleet-watch.timer
 )
 
 _dispatch_host_unit_fingerprint() (
