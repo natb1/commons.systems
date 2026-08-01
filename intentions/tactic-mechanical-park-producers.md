@@ -42,6 +42,7 @@ attention:
     they outranked strategy-main-health (101 resolved) and flooded the selector
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
+  tier: 1
 phase: main-qa
 execution:
   branch: tactic-mechanical-park-producers
