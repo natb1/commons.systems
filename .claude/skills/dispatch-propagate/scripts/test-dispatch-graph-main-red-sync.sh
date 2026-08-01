@@ -208,6 +208,44 @@ assert_eq "main-red-sync(f): non-shortsha lookalike id produces no stdout" "" "$
 assert_eq "main-red-sync(f): dump-node NOT run for lookalike" "0" "$(count_matches "$MRS_LOG/dump-node.log" "$LOOKALIKE_ID")"
 assert_eq "main-red-sync(f): graph-commit NOT run for lookalike" "0" "$(count_matches "$MRS_LOG/graph-commit.log" "$LOOKALIKE_ID")"
 
+# (g) --read-only: the SAME open+green+execution-null input as case (a), which
+# there completed the node. With the flag the recovery-completion loop must not
+# run at all — no dump-node, no write-node, no graph-commit — while the stdout
+# protocol is unchanged. This is the mode every non-tick caller must use
+# (dispatch-fleet-watch, a 5-minute systemd timer): completing these nodes
+# re-arms the auto-merge gate, so a watchdog acting on a transient green
+# repo-health reading would merge PRs onto a still-red main.
+#
+# NOTE: run_mrs cannot be reused here — its caller-supplied words land BEFORE
+# the script name in an `env` invocation, where they are parsed as further
+# NAME=value assignments, so a leading `--flag` would be taken as the command to
+# exec. Script ARGUMENTS must be passed explicitly after "$MRS_SCRIPT" (same
+# shape as case (f) above).
+run_mrs_args() { # <script args...> — same env as run_mrs, args reach the script
+  rm -f "$MRS_LOG"/*.log
+  env PATH="$MRS_ROOT/bin:$SAVED_PATH" FAKE_LOG_DIR="$MRS_LOG" \
+    FAKE_NODES="[{\"id\":\"$MRS_ID\",\"phase\":\"implement\"}]" \
+    FAKE_MAIN_BROKEN_SHA="" FAKE_EXECUTIONS='{}' \
+    "$MRS_SCRIPT" "$@" 2>/dev/null
+}
+for RO_FLAG in --read-only --no-complete; do
+  out=$(run_mrs_args "$RO_FLAG")
+  assert_eq "main-red-sync(g $RO_FLAG): stdout is still only the open id" "$MRS_ID" "$out"
+  assert_eq "main-red-sync(g $RO_FLAG): dump-node NOT run"    "0" "$(count_matches "$MRS_LOG/dump-node.log" "$MRS_ID")"
+  assert_eq "main-red-sync(g $RO_FLAG): write-node NOT run"   "0" "$(count_matches "$MRS_LOG/write-node.log" "$MRS_ID")"
+  assert_eq "main-red-sync(g $RO_FLAG): graph-commit NOT run" "0" "$(count_matches "$MRS_LOG/graph-commit.log" "$MRS_ID")"
+done
+
+# (h) an unknown argument fails CLOSED: the script's contract is always exit 0,
+# so it cannot signal a caller error through its status without risking a
+# `|| true` swallowing it as "no open node / main healthy". It prints UNKNOWN
+# instead, which every caller already treats as "do not treat main as healthy".
+out=$(run_mrs_args --bogus)
+rc=$?
+assert_eq "main-red-sync(h): unknown argument prints UNKNOWN" "UNKNOWN" "$out"
+assert_eq "main-red-sync(h): unknown argument still exits 0" "0" "$rc"
+assert_eq "main-red-sync(h): unknown argument writes nothing" "0" "$(count_matches "$MRS_LOG/graph-commit.log" "$MRS_ID")"
+
 rm -rf "$MRS_ROOT"
 
 # <<< END MOVED <<<

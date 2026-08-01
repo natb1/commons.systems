@@ -27,6 +27,13 @@ HOOK_SCRIPT_DIR="$SCRIPT_DIR/../../../hooks"
 # four levels below the repo root.
 UTIL_SCRIPT_DIR="$SCRIPT_DIR/../../../../packages/intentionsutil/scripts"
 
+# Routing-decision-log leak guard: redirects DISPATCH_DECISION_LOG_DIR into a
+# per-run tmp sandbox at source time and defines
+# dispatch_decision_log_guard_check. Sourced here — alongside the host systemd
+# leak guard below — so EVERY suite inherits it.
+# shellcheck source=lib-test-decision-log-guard.sh
+source "$SCRIPT_DIR/lib-test-decision-log-guard.sh"
+
 # --- test helpers -----------------------------------------------------------
 
 PASS=0
@@ -52,6 +59,10 @@ report_results() {
   # leak shows up in the tally and turns report_results non-zero. The guard is
   # idempotent — the EXIT trap re-call is a no-op after this one.
   dispatch_host_systemd_guard_check || true
+  # Same treatment for the routing-decision-log leak guard: count it as a real
+  # assertion of THIS suite so a leak turns report_results non-zero. Idempotent
+  # — the EXIT trap re-call is a no-op after this one.
+  dispatch_decision_log_guard_check || true
   echo ""
   echo "================================"
   echo "Results: $PASS/$TOTAL passed, $FAIL failed"
@@ -97,13 +108,19 @@ report_results() {
 DISPATCH_HOST_UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
 # Units lib.sh writes: ensure_recover_unit (lib.sh:2585), ensure_sweep_timer
-# (lib.sh:2748), ensure_heartbeat_units (lib.sh:3023).
+# (lib.sh:2748), ensure_heartbeat_units (lib.sh:3023), ensure_healer_units and
+# ensure_watcher_units (dispatch-heal.* / dispatch-fleet-watch.*, below
+# ensure_sweep_timer in lib.sh).
 DISPATCH_HOST_UNIT_FILES=(
   dispatch-tick-recover.service
   dispatch-sweep-periodic.service
   dispatch-sweep-periodic.timer
   dispatch-heartbeat.service
   dispatch-heartbeat.timer
+  dispatch-heal.service
+  dispatch-heal.timer
+  dispatch-fleet-watch.service
+  dispatch-fleet-watch.timer
 )
 
 _dispatch_host_unit_fingerprint() (
@@ -1375,11 +1392,12 @@ teardown() {
   # override would otherwise poison the next test's baseline.
   unset DISPATCH_RANK_MAP_JSON
 }
-# EXIT trap: tmp cleanup PLUS the host-systemd leak guard. The guard runs here
-# too (not only in report_results) so a suite that aborts early under `set -e`
-# still reports a leak instead of skipping the check; the guard is idempotent,
-# so the normal path (report_results ran) does not double-count. A leak forces a
-# non-zero exit even when the suite otherwise ended clean.
+# EXIT trap: tmp cleanup PLUS the leak guards (host systemd, routing-decision
+# log). The guards run here too (not only in report_results) so a suite that
+# aborts early under `set -e` still reports a leak instead of skipping the
+# check; each guard is idempotent, so the normal path (report_results ran) does
+# not double-count. A leak forces a non-zero exit even when the suite otherwise
+# ended clean.
 _dispatch_test_exit_trap() {
   local rc=$?
   if [ -n "${TMPDIR_TEST:-}" ]; then
@@ -1388,7 +1406,11 @@ _dispatch_test_exit_trap() {
   if ! dispatch_host_systemd_guard_check; then
     rc=1
   fi
+  if ! dispatch_decision_log_guard_check; then
+    rc=1
+  fi
   rm -rf "$DISPATCH_GUARD_BIN_DIR"
+  rm -rf "$DISPATCH_TEST_DECISION_LOG_DIR"
   exit "$rc"
 }
 trap _dispatch_test_exit_trap EXIT
