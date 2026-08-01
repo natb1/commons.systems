@@ -38,14 +38,14 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-  tier: 1
-phase: qa
+phase: review
 execution:
   branch: tactic-attention-tier-ranking
   pr: 2997
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -739,3 +739,17 @@ over the live store and confirm it still reports zero, and must additionally
 confirm that at least one node whose rank changes under B changes in the
 predicted direction — a re-run that reports "no change anywhere" would mean the
 filter is not actually engaging.
+
+## needs-main residue
+
+QA pass (attempt 2, PR #2997) triaged one item as `needs-human-judgment` with a
+`planned-deferral` flag; the Step 3.5 disposition Workflow routed it to class
+`needs-main` (a planned deferral is non-assertable at merge time by definition,
+so it is not opus-fixable now and is deferred to post-merge verification rather
+than an immediate office-hours escalation).
+
+- **id**: 11
+- **title**: strategy-graph-native-dispatch soft-freeze of open child tactics is the intended blast radius, not an accident
+- **url_path**: current
+- **expected_outcome**: A human confirms the soft-freeze scope (the open child tactics of `strategy-graph-native-dispatch` that re-surface for `align-tactics` re-evaluation due to this tactic's amended `attributes.conditions` bullet) is proportionate and intended, not an accidental over-broad blast radius.
+- **finding**: Design/scope judgment call, not machine-verifiable: amending the strategy's `attributes.conditions` bullet intentionally changes its substance fingerprint (`strategyFingerprint` hashes `attributes.conditions`) and soft-freezes every open child tactic serving `strategy-graph-native-dispatch` for `align-tactics` re-evaluation. This PR's body asserts the freeze is designed/intended behavior (a necessary consequence of any condition edit), but which and how many tactics get swept in, and whether that fleet cost is proportionate, is an author judgment call to make once the freeze is observable post-merge, not something a script can decide at QA time.

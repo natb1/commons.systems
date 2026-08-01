@@ -110,11 +110,149 @@ attention:
     running. blocked_by is empty, so this promotion lifts no blocker and cannot
     compound; the one candidate blocker, tactic-sweep-timer-unit-dir-leak, is
     already phase done and therefore takes no inflow from this edge."
-phase: implement
-execution: null
+phase: main-qa
+execution:
+  branch: tactic-fleet-watchdogs-session-scoped
+  pr: 3008
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-01T01:15:38Z
+    mergeCommitSha: 2643b5cd41637650ae1daaa4c0c3a32ac07c0e53
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "CORRECTED 2026-08-01. The prior park cited Item 7 as
+    not-browser-verifiable and routed straight to cannot-verify per qa-main Step
+    4·0. That citation is itself the bug-ledger row L misroute the bootstrap
+    plan (ruling 7) names by construction: a park citing browser-reachability
+    must be rejected by the lane, because a git/journal/log/shell/filesystem
+    check no browser can perform is MACHINE, not AUTHOR. Item 7's own nine-step
+    checklist is entirely shell/systemd/journald checks against the operator
+    host; none needs a browser. Verifiability: MACHINE. The checks below were
+    actually run on the operator host (dangerouslyDisableSandbox: true), not
+    asserted. Result: MACHINE, checked, INCONCLUSIVE — the exit criterion is not
+    met, and the checks surfaced a concrete, present-tense defect in the host's
+    real state, not merely an absence of observation. The node stays parked at
+    main-qa; do not transition to done. Full evidence and per-step verdicts in
+    the recommendation."
+  since: 2026-08-01
+  recommendation: >-
+    **Re-verified 2026-08-01, on-host, sandbox-off.**
+    `tactic-fleet-watchdogs-session-scoped` (PR #3008, merged `2643b5cd`)
+    shipped `dispatch-heal-units`, `dispatch-fleet-watch`, and the
+    `ensure_healer_units`/`ensure_watcher_units` installers. Two separate
+    questions, kept distinct per the fleet-scheduling plan's own discriminator:
+    is the delivered CODE correct on `origin/main` (yes), and has this HOST
+    actually cut over to it (no — and it is currently in a broken half-installed
+    state).
+
+    **Code-level checks (origin/main, no host dependency) — all PASS:**
+
+    - `git show
+    origin/main:.claude/skills/dispatch-propagate/scripts/dispatch-fleet-watch |
+    grep -c 'FINDING-'`
+      → `0`. Row P is closed at the code level: none of the four superseded session
+      predicates were ported.
+    - `git show origin/main:.../dispatch-test-fixture.sh | grep
+    DISPATCH_HOST_UNIT_FILES -A10`
+      confirms all four new unit filenames (`dispatch-heal.service`, `dispatch-heal.timer`,
+      `dispatch-fleet-watch.service`, `dispatch-fleet-watch.timer`) are in the host-unit-leak
+      guard.
+    - Both reseed launchers (`dispatch-schedule-reseed:421-422`,
+      `dispatch-schedule-convergence-reseed:211-212`) call
+      `ensure_healer_units "$MAIN_WORKTREE"` / `ensure_watcher_units "$MAIN_WORKTREE"`
+      exactly as specified.
+
+    **Host-level checks — FAILED / INCONCLUSIVE, with a new concrete finding:**
+
+    1. **Install — MACHINE, checked, FAILED as currently installed.**
+       `systemctl --user list-unit-files | grep -iE 'heal|watch|dispatch'` shows all
+       four new files present (`dispatch-heal.service`/`.timer`,
+       `dispatch-fleet-watch.service`/`.timer`), but both **timers read `disabled`**
+       and `systemctl --user is-active` on all four reads **`inactive`**;
+       `systemctl --user list-timers --all` lists only `dispatch-heartbeat.timer` and
+       `dispatch-sweep-periodic.timer` — the new two are **absent**, i.e. not armed
+       with a next-fire time. Worse: `grep ExecStart ~/.config/systemd/user/dispatch-heal.service`
+       reads `ExecStart="/tmp/tmp.SkDg3J1bKf/main/.claude/skills/dispatch-propagate/scripts/dispatch-heal-units"`
+       (same pattern on `dispatch-fleet-watch.service`) — `ls /tmp/tmp.SkDg3J1bKf`
+       confirms that path no longer exists. **This is the exact `/tmp/tmp.*` poisoning
+       shape the healer itself exists to detect and repair** — but the currently-live
+       scratch `heal-units.sh` (its `is_poisoned` check greps only
+       `dispatch-heartbeat.service`/`dispatch-sweep-periodic.service`, not the two new
+       units) does not watch these units, so nothing is repairing this.
+       **Root cause, traced in the code:** `dispatch-schedule-reseed` resolves
+       `MAIN_WORKTREE` via `git rev-parse --show-toplevel` at the invoking shell's cwd
+       (lines 394-399) unless `DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE` is set. The
+       poisoned `ExecStart`/`WorkingDirectory` value (`/tmp/tmp.SkDg3J1bKf/main`) means
+       the reseed script was run for real (not under a test seam — the unit directory
+       itself isn't seamed by default) from a since-deleted worker/test worktree rather
+       than the durable main checkout at `/home/n8/natb1/commons.systems`, sometime
+       before the 19:49 EDT mtime on these files (i.e. before the 21:15 EDT merge).
+       Whether that reflects a one-off operational mistake or a gap worth hardening
+       (e.g. pinning reseed's `MAIN_WORKTREE` resolution) is a judgment call for a
+       human — **Verifiability: AUTHOR** on that sub-question only.
+    2. **Survival — MACHINE, checked, FAILED (not merely unproven).** Since the
+    timers
+       were never enabled, there is nothing to have survived: `journalctl --user
+       --since -24h -t dispatch-heal-units` and `-t dispatch-fleet-watch` both return
+       **zero entries**; `-u dispatch-heal.service` / `-u dispatch-fleet-watch.service`
+       are likewise empty. The systemd path has fired **zero times, ever**.
+    3. **Rate source — MACHINE, checked, INCONCLUSIVE.** With zero firings under
+    either
+       selector, a `SyslogIdentifier=` misconfiguration is indistinguishable from
+       "never ran." (The unit files' `SyslogIdentifier=` lines do read correctly —
+       `dispatch-heal-units` / `dispatch-fleet-watch` — so this is likely fine, but
+       cannot be confirmed by observing a real firing yet.)
+    4. **Alarm surface end-to-end — MACHINE, NOT attempted.** Requires a live
+    enabled
+       timer; would first require fixing the poisoned/disabled install, which is a
+       host-mutating decision out of scope for a verification pass.
+    5. **UNKNOWN-never-healthy — MACHINE, NOT attempted**, same reason as (4).
+    6. **Pause behavior — MACHINE, NOT attempted**, same reason as (4). 7.
+    **Never-fleet-halt — MACHINE, checked, trivially true so far** (zero writes,
+       because zero firings) — not a meaningful confirmation given (2).
+    8. **Row P closed — MACHINE, RESOLVED.** See the code-level check above
+       (`grep -c 'FINDING-'` = 0). This sub-item is genuinely done, independent of
+       host cutover.
+    9. **Retire the scratch instruments — MACHINE, checked, correctly NOT done,
+    and
+       must stay that way for now.** `ps -eo pid,lstart,args | grep heal-units.sh`
+       shows the scratch healer (PID 2663508, launched 2026-07-31T18:03:46 EDT under
+       job `c20b2f8d`) **still running** right now. The scratch watcher is *not*
+       running: `fleet-health-watch.log`'s last line is a `VIOLATION` at
+       `2026-08-01T02:32:03Z` and, per its own by-design behavior (exits non-zero on
+       the first violation), the process has exited and nothing has relaunched it —
+       confirmed by `ps` finding no `fleet-health-watch.sh` process. **This is a live,
+       present-moment instance of exactly the row O/P gap this tactic exists to
+       close**: the fleet is unwatched right now, precisely because the systemd
+       cutover never actually took effect, so retiring the still-functioning half of
+       the scratch pair (the healer) would remove real protection with no working
+       replacement behind it. Do not retire either scratch script until step 1 is
+       fixed and steps 2-3 are re-observed clean.
+
+    **Recommended next action (for the human/operator, not auto-executable from
+    a QA session):** re-run `ensure_healer_units`/`ensure_watcher_units` (or the
+    full `dispatch-schedule-reseed`) invoked **from the real main worktree**
+    (`/home/n8/natb1/commons.systems`, or with
+    `DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE` pinned), confirm both timers read
+    `enabled`/`active` and appear in `list-timers`, then let steps 2-6 run for
+    real across a session boundary (multi-interval firing and survival cannot
+    complete inside one sitting), and only then execute step 9. **On
+    completion,** if all nine checks pass clean, close residue Item 7 and
+    advance `main-qa → done` (`transition-node
+    tactic-fleet-watchdogs-session-scoped`, sandbox-off). If a step fails
+    against a *correctly installed* unit (as opposed to the known-poisoned one
+    found here), that is a genuine regression against merged PR #3008 — file it
+    as an implement-chain bug (`serves` the same strategy,
+    `strategy-graph-native-dispatch`) rather than re-parking this node.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
@@ -1034,3 +1172,47 @@ fails-open-to-dead trap this tactic records.
    hazard — one instance's `disable --now` cancels the other's `start`. Verify
    the process is gone with `ps` run **unsandboxed**; a sandboxed `ps` returns
    nothing and would falsely confirm.
+
+## needs-main residue
+
+Filed by `/qa-fix` pass 1 on PR #3008. This item is a planned deferral — its
+own acceptance criterion, as documented above, is non-assertable at merge
+time and is verified downstream against the deployed host/main, per the
+disposition workflow (class: `needs-main`).
+
+### Item 7 — Host-level timer wiring behaves under real systemd
+
+- **URL path:** current
+- **Expected outcome:** `dispatch-heal.timer` and `dispatch-fleet-watch.timer`
+  install, enable, fire, and complete cleanly on the real operator host; both
+  instruments survive their launching operator session ending; the healer
+  genuinely un-poisons a deliberately poisoned unit; the watcher's alarm
+  graph-nodes read as legible/actionable.
+- **Finding:** real host systemd state, real timer firing across multiple
+  intervals, and the "are these alarms actually useful" judgment cannot be
+  asserted at merge time from a scratch env-seamed script run. The PR body's
+  own Verification section scopes "Manual host verification" out of this PR
+  and defers it to this node's own "Manual verification on the host (after
+  merge)" checklist (9 numbered steps, above): unit install via
+  `dispatch-schedule-reseed`, session-end survival, the `-t` vs `-u` journald
+  rate-source check, an end-to-end alarm-surface run via deliberate
+  poisoning, the UNKNOWN-never-healthy check via an unreadable pause dir,
+  live pause-state behavior, never-fleet-halt via `git log` inspection, row-P
+  closure, and retiring the two scratch shell instruments still running
+  under `/home/n8/.claude/jobs/c20b2f8d/tmp/`. All of it requires
+  `dangerouslyDisableSandbox` and un-sandboxed `systemctl`/`ps`, and several
+  steps (session survival, multi-interval firing) cannot complete inside a
+  single QA session at all.
+
+**Script-verifiable QA (pass 1) covered instead, all PASS:** all three new
+scripts executable/syntax-clean; both one-shot instruments run with no
+required args and never touch the real host unit directory when fully
+env-seamed; the pause tri-state reader returns `unknown` (not `not-paused`)
+on an unsearchable sentinel directory, and the watcher propagates that
+`unknown` rather than silencing it; a multi-fault run confirmed the watcher
+evaluates all four predicates and does not exit early on the first violation
+(the row-O regression guard); grep across all four new/touched files found no
+write path onto `blocked_by`, `office_hours`, or the pause sentinel other than
+an alarm node's own initial field values; the host-unit-leak test-fixture
+guard lists all four new unit filenames and the systemd-units suite (109/109)
+leaves the real host directory byte-identical before/after.

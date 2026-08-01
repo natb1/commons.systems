@@ -38,18 +38,18 @@ attention:
     Part of the interim 50/20/10 scale's inventory — convert to a tier/bug_fix
     mark when tactic-attention-tier-ranking and tactic-attention-boost-scripts
     retire the interim scale; do not orphan this boost."
-phase: qa
+phase: implement
 execution:
   branch: tactic-review-code-review-invocation-contract
   pr: 3007
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-conflict-review-code-review-invocation-contract
 office_hours: null
 pace_exempt: true
 rounds: null
@@ -753,3 +753,33 @@ Manual and observe-in-production:
   attribution share against the pre-change baseline recorded in Unit 1. A nested session
   is a new cost line; record whether it materially moves `strategy-token-economy`
   condition 2. Do not tune it in this node — file a follow-up if it does.
+
+## needs-main residue
+
+QA pass on PR #3007 (2026-07-31): 7 of 10 triaged items were script-verifiable and
+all PASSED (primitive executable + `low`-effort default; real reject-pattern
+`Unknown command: ` in active use, not the originally-predicted string; `fixed[]`
+mechanically constrained to git-derived `touched_files`; zero surviving Skill-tool
+`code-review` instructions or `no_change_needed` vocabulary; Step 1b documented as
+an exclusive hard-stopping pre-stage; `review-fix.js` throws loudly when
+`args.code_review` is missing; `test-dispatch-code-review.sh` 21/21 and the full
+`--pr-scripts` bucket pass — a sandboxed run mass-false-failed
+`test-dispatch-select-tick.sh` via the known `$CLAUDE_JOB_DIR`/mktemp sandbox
+artifact, confirmed not a regression by a `dangerouslyDisableSandbox` re-run going
+green). The remaining 3 items require a live nested `claude -p` session, real PR
+activity, or multi-pass production observation the node's own Verification section
+already scopes as manual/observe-in-production — the disposition Workflow
+classified all three `needs-main`:
+
+1. **A real nested `claude -p '/code-review low --fix'` run actually completes and
+   writes the working tree on this PR's diff.** Not walked in the QA session:
+   requires a live multi-minute nested session with real spend. Best verified when
+   `/review-fix` actually runs on this PR (post-merge or on a subsequent real
+   review pass), not synchronously inside `qa-fix`.
+2. **`--comment` actually posts the review as a PR comment.** Planned deferral —
+   the PR's own "Out of scope" section defers this to this PR's first real
+   `/review-fix` pass (no PR existed during Unit 1's investigation).
+3. **Effort level `low` is the right cost/quality point for the review phase.**
+   Planned deferral — the PR's own "Out of scope" section defers effort-level
+   tuning to the `strategy-token-economy` follow-up; needs 3-5 real passes plus a
+   `/dispatch-token-audit` run to inform.

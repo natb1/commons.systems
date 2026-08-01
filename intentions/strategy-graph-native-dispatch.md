@@ -3901,6 +3901,80 @@ clarifications:
       future jit consumer re-enters that scope — the point at which
       dispatch-jit-calendar-import's Google Calendar dependency would actually
       be replaced rather than merely left dead.
+  - question: Are the line-number citations that sibling nodes (e.g.
+      tactic-qa-main-verifiability-sort-criterion) make into this strategy file
+      durable across later same-day /align-strategy rounds?
+    answer: "(Recorded 2026-07-31 /align-tactics tactic-target round on
+      tactic-qa-main-verifiability-sort-criterion.) Line citations into this
+      strategy file are NOT durable and must not be trusted by a planner. The
+      citations tactic-qa-main-verifiability-sort-criterion makes in its
+      rationale and its `## The seam` section -- :2224-2227, :2221, :2195-2200,
+      :2192-2194, :2212-2229 and :3182-3188 -- are all stale; the file has grown
+      through the later same-day /align-strategy rounds and every cited passage
+      has shifted. Anchors verified in the worktree at this round: the
+      VERIFIABILITY-cannot-verify vs deploy-lag distinction is at :2166; the
+      corrected-predicate ruling and its list of live edit sites is at :3567,
+      inside the :3511-3572 clarification; the WAIT ratification mechanics are
+      at :3583-3616; the calendar-release amendment is at :3798 onward.
+      Substance is unaffected -- every cited claim was found intact at its new
+      location -- so this is a navigation correction, not a design change.
+      Planning against this strategy re-greps for the text; it does not resolve
+      a recorded line number. The same caution applies to the citations recorded
+      inside sibling nodes, which were written against earlier revisions of this
+      file."
+  - question: Is the WAIT hold mechanism that
+      tactic-qa-main-verifiability-sort-criterion's third outcome routes into
+      already implemented, and what does that mean for sequencing?
+    answer: "(Recorded 2026-07-31 /align-tactics tactic-target round on
+      tactic-qa-main-verifiability-sort-criterion.) The WAIT hold mechanism this
+      tactic's third outcome routes into is OWNED by
+      tactic-wait-calendar-release, as already ratified -- but at this round it
+      is not yet IMPLEMENTED, and the distinction matters for sequencing.
+      Verified: tactic-wait-calendar-release is status raw, phase null,
+      blocked_by [], office_hours null -- an unplanned draft; and the
+      router.ts:343-355 draft-candidate exclusion that the WAIT design calls
+      mandatory is confirmed ABSENT, the loop still gating only on office_hours
+      null, blockersComplete and subtreeParentIds. The two mechanisms the WAIT
+      shape relies on are live exactly as recorded: officeHours.ts:44 (`if
+      (n.office_hours === null) continue`) keeps an office_hours-null WAIT out
+      of the human queue by construction, and router.ts:168-175 blockersComplete
+      returns false for any non-done blocker so a phase-less WAIT genuinely
+      holds its source. Consequence for planning, not a change of scope:
+      tactic-qa-main-verifiability-sort-criterion lands the MARK -- the
+      per-bullet `Verifiability: WAIT` value on a `## needs-main residue` item,
+      and the lane rule that a WAIT is never written as an office_hours park --
+      while the node shape, attempt counter, cap, wait_until and release
+      predicate remain tactic-wait-calendar-release's entire surface. A WAIT
+      mark emitted before the sibling lands has no consumer, so the sort
+      tactic's plan states the ordering between the two nodes explicitly rather
+      than assuming the hold is already live."
+  - question: Is there a live end-to-end fixture for the corrected
+      verifiability-sort predicate, and does the lane's current state expose the
+      mis-sort this round closes?
+    answer: "(Recorded 2026-07-31 /align-tactics tactic-target round on
+      tactic-qa-main-verifiability-sort-criterion.) The mis-sort class this
+      tactic closes has a live instance standing in the office-hours queue right
+      now, and it is the best available end-to-end fixture for the corrected
+      predicate. tactic-mechanical-park-producers -- one of the four siblings
+      the tactic names as carrying the same misroute -- is at phase main-qa with
+      an office_hours park opened 2026-07-28 whose reason states that residue
+      item #15 'is not browser-verifiable', that 'its url_path is the literal
+      string \"current\", not a real page', and then describes the actual check
+      as a week-over-week count of tactic-hold-conflict-* /
+      tactic-hold-fix-cap-* node creations on origin/main against the ~5/week
+      exit-11 baseline -- i.e. 'a graph/git-history query'. Under the corrected
+      predicate that is MACHINE, not AUTHOR: git and graph history are
+      machine-checkable at all, and no browser is needed. The same park
+      additionally records that the plan's own week-long observation window does
+      not close until 2026-08-02, which is a calendar WAIT, not an author
+      interrupt. So this single park is simultaneously a browser-reachability
+      mis-sort AND a deploy-lag/observation-window WAIT, and the corrected lane
+      must re-sort it to MACHINE plus a calendar hold with no author woken. Two
+      consequences recorded: use it as a replay fixture alongside the seven
+      residue items already recorded on
+      tactic-qa-main-verifiability-sort-criterion; and note that the lane is not
+      quiescent -- at least one in-flight main-qa node is being evaluated under
+      the old wording while the predicate sites are edited."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:

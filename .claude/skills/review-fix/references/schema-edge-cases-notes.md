@@ -125,3 +125,45 @@ This is a launch-efficiency change only; genuine worker *death* on a transient
 rate-limit (and its backed-off resume) remains #1733's responsibility via the Stop
 hook, not this gate. `coverage_incomplete` is independent of the `deviation`
 criterion.
+
+**Unverified instrument — NOT the same path as the throttle short-circuit.** A
+Lane-A finder (`code-review`, `security-review`) names a built-in instrument it
+must actually invoke. Two independent checks run: the finder's own
+`instrument: {name, invoked, failure_text}` receipt, and a separate agent's read
+of the actual Claude session transcript record (via
+`.claude/skills/dispatch-propagate/scripts/dispatch-verify-instrument-invocation`).
+Either one failing discards that instrument's payload entirely — never merged
+under the instrument's name, never dispositioned, never credited to
+`fixes_applied` — records the reason in `result.instrument_failures`, sets
+`coverage_incomplete` with a human `coverage_note`, **and sets `deviation`**, so
+Step 7 escalates to office-hours via `dispatch-mark-deviation`. The transcript
+verdict wins any disagreement with the receipt: a receipt claiming `invoked:true`
+against a transcript that shows no successful invocation is exactly the
+fabrication signature the check exists to catch, and a verifier agent that died
+fails the gate too (fail-closed). That verifier agent sees counts and booleans
+only: the verify script's verbatim transcript rejection text is
+attacker-influenceable (it is transcript content — the error body of this
+instrument's own failed tool call, quoted verbatim), so each command it runs
+projects the verdict down to
+`{instrument, verified, invocations, succeeded, rejections}` with `jq` and drops
+stderr before the output reaches the agent, and the schema has no free-text field.
+The "why not verified" phrase in `coverage_note` is rebuilt from those integers by
+the orchestrator, never transcribed by the agent.
+
+Do not conflate this with the throttle path above. They look superficially alike
+— both set `coverage_incomplete` — but they end differently and deliberately so:
+
+| | throttle short-circuit | unverified instrument |
+|---|---|---|
+| trigger | finder returned `null` (died after retries) | receipt or transcript check failed |
+| payload | there was none | discarded |
+| `deviation` | unchanged (usually false) | **true** |
+| terminal action | applies `dispatch:reviewed`, writes the marker | escalates to office-hours |
+
+The reason for the split: a `null` finder contributed no payload, so nothing is
+attributed to the instrument and there is nothing to guard — turning that into a
+lane failure would park the node on every rate-limit. An unverified instrument,
+by contrast, means a review was reported under a name that did not run. That is
+not a degraded review, it is a false one, and it escalates unconditionally
+(never severity-scaled — the failure is that the review did not happen, not that
+a finding went unfixed).

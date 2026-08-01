@@ -81,7 +81,7 @@ attention:
     leaves a plan built on superseded intent, with the node reading as
     successfully planned. blocked_by is empty, so this promotion lifts no
     blocker and cannot compound."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-node-body-stale-in-worker-worktree
   pr: 3005
@@ -89,12 +89,80 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T23:17:19Z
+    mergeCommitSha: 881a64948e606a97b0b88a86715e7af6b9f07891
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: '/qa-main: needs-main residue item "item-8-scope-and-incident-claim"
+    bundled two distinct claims. The live-incident claim (would
+    assert-node-fresh have caught the 2026-07-31 incident in a live run) has
+    since been resolved by a code trace against the actual shipped script —
+    Verifiability: MACHINE, answer: yes, it would have refused. The remaining
+    claim — whether the narrowed interim scope (not extending the guard to
+    transition-node/qa-fix/park-node-clear-park; no PreToolUse hook) is the
+    right trade given tactic-graph-ref-split is weeks out — is a genuine design
+    judgment with url_path the literal string "current" (not a real URL), not
+    observable by navigating a page in Chrome. Per Step 4·0 of /qa-main this
+    still routes to cannot-verify on that remaining claim.'
+  since: 2026-07-31
+  recommendation: >-
+    Read intentions/tactic-node-body-stale-in-worker-worktree.md's "##
+    needs-main residue" item item-8-scope-and-incident-claim and the merged PR
+    #3005 it describes (merged 2026-07-31T23:17:19Z, mergeCommitSha
+    881a64948e606a97b0b88a86715e7af6b9f07891). This item bundled two claims;
+    only one remains open.
+
+
+    1. RESOLVED — Verifiability: MACHINE (resolved via code trace, no
+    re-derivation needed). The live-incident claim: that a live /align-tactics
+    run where a node moves mid-session (the recorded 2026-07-31 timeline — filed
+    12:42:45 at 9980d695, worktree provisioned 12:47:22 pinning the base
+    manifest to 9980d695's blob, corrected scope landed 13:02:43 at e2b2198b,
+    worker stopped ~13:14 just before the body write) would in fact have been
+    caught by assert-node-fresh had it existed at the time. Traced against the
+    actual shipped script
+    (.claude/skills/dispatch-propagate/scripts/assert-node-fresh, merged in
+    881a64948e606a97b0b88a86715e7af6b9f07891): per Unit 2's mandate the guard
+    runs immediately before the body Edit, i.e. in the ~13:11-13:14 window —
+    after the 13:02:43 correction. Its per-id loop's `git fetch origin main` at
+    that point pulls e2b2198b, so `origin_sha` (FETCH_HEAD:intentions/<id>.md)
+    resolves to e2b2198b's blob, which differs from `recorded` (9980d695's blob,
+    captured at the 12:47:22 read/provisioning step). Neither is the
+    `<unrecorded>` nor `<absent>` sentinel, so this hits the script's "Moved"
+    branch verbatim — it prints "MOVED on origin/main ... Do NOT write the
+    body", names e2b2198b as the intervening commit, and exits 1. Confirmed: the
+    guard as actually shipped would have refused, with roughly 8-9 minutes of
+    margin between the correction landing and the check point — not a close
+    call. No further verification needed on this part.
+
+
+    2. STILL OPEN — Verifiability: AUTHOR (genuine scope/trade-off judgment
+    against tactic-graph-ref-split's timeline; not machine-decidable). Agree or
+    disagree only: is declining to extend assert-node-fresh to transition-node,
+    qa-fix's needs-main residue write, and park-node/clear-park (each has its
+    own sibling tracking tactic:
+    tactic-transition-node-needs-main-residue-clobbered,
+    tactic-qa-fix-node-terminal-declaration), and declining a PreToolUse hook
+    (rejected in the node's Context section as too heavy — network fetch on
+    every graph edit, false-fires on legitimate divergent-content flows, and
+    superseded by the in-flight tactic-graph-ref-split migration), the right
+    interim trade given tactic-graph-ref-split is weeks out? This is the only
+    open question — the live-incident claim above is already settled in this
+    node's favor and needs no re-checking.
+
+
+    If claim 2 holds, this residue item can be manually resolved (no code change
+    needed — it was a scope/design-judgment QA deferral, not a defect). If it
+    does not, comment on PR #3005's tactic node describing which additional
+    writer(s) should be brought under the guard, or whether a PreToolUse hook
+    should be reconsidered.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}

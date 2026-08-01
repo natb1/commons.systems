@@ -43,7 +43,8 @@ It inherits along two axes, each with a part it deliberately does **not** take:
   target is the `<strategy-node-id>` argument; sequencing is `blocked_by`
   frontmatter edges, not a PR-precondition scan.
 - **From `/align-strategy` (`.claude/skills/align-strategy/SKILL.md`)** — take
-  the write path (`write-node.ts` → body `Edit` → `graph-commit`), the
+  the write path (`write-node.ts` → `assert-node-fresh` → body `Edit` →
+  `graph-commit`), the
   citation of `validateGraph` rules by number, and the register. Invert the
   interaction model: `/align-strategy` is interview-driven; **`/align-tactics`
   is autonomous and never calls `AskUserQuestion`**. This inversion is the
@@ -193,6 +194,9 @@ and its existing non-draft children — the Idempotency section's census script
 finds both, and its `classification` field tells a draft (`phase` absent **and**
 `office_hours` unset) from a born-parked child (`phase` absent **with** `office_hours` set,
 which is decided human-owned work, **not** a draft — leave it out of the input).
+Dump the base manifest for every pre-existing node this round will edit
+**here**, at this read, before any write — see `references/write-path.md`'s
+"Capture a base manifest" section for the recipe.
 
 **Build `args`.**
 
@@ -290,8 +294,10 @@ The Workflow authored no files; this session lands every graph write. The
 shape of the work, in order: **mint** real node ids for the Workflow's
 `temp_ref`s and rewrite edges, **dump** a base manifest for every
 pre-existing node this round touches (`dump-node.ts`), write each node's
-**frontmatter** (`write-node.ts`), `Edit` in each planned tactic's **body**
-(the Workflow's `body_markdown`), **land** the whole round in one or a few
+**frontmatter** (`write-node.ts`), **assert** freshness against
+`origin/main` for every id about to receive a body write
+(`assert-node-fresh`), `Edit` in each planned tactic's **body** (the
+Workflow's `body_markdown`), **land** the whole round in one or a few
 `graph-commit --base` calls, then **validate**
 (`validate-graph.ts`). Parks (`result.parks`) are written the same way, as
 `office_hours: {reason, since}` on the target node. `graph-commit` has two
@@ -299,10 +305,11 @@ distinct exit-1 cases — a parking message (a concurrent writer landed first;
 this session's content is unlanded but preserved on disk) versus a
 busy-main-exhaustion error (nothing landed, no park) — either way, report and
 stop rather than retry automatically. See `references/write-path.md` for the
-full write-node.ts/dump-node.ts/graph-commit mechanics, exit-1 discrimination,
-park-writing, and the fingerprint/round-accounting details (per-strategy
-`execution.strategy_fingerprint` map via `strategy-fingerprint.ts`, and the
-strategy's `rounds.count`/`last_completed`/`last_aligned` bookkeeping).
+full write-node.ts/dump-node.ts/assert-node-fresh/graph-commit mechanics,
+exit-1 discrimination, park-writing, and the fingerprint/round-accounting
+details (per-strategy `execution.strategy_fingerprint` map via
+`strategy-fingerprint.ts`, and the strategy's
+`rounds.count`/`last_completed`/`last_aligned` bookkeeping).
 
 Once the round has landed and `validate-graph.ts` is clean, record the
 terminal disposition:
