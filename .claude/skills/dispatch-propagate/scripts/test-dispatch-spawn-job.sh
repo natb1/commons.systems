@@ -371,6 +371,43 @@ else
 fi
 spawn_worker_teardown
 
+# --- Test 3b: uncorroborated empty registry read dedupes (tactic-graph-router-
+# live-worker-read-robust) -----------------------------------------------------
+# `claude agents --json --cwd <path>` can exit 0 and print exactly `[]` on a
+# blocked read (sandbox / network-namespace isolation) — byte-identical to a
+# genuine "no sessions here". Step 2's `claude_sessions_under` call must fold
+# that ambiguity into UNKNOWN (return 1), not "zero sessions", so this test
+# must FAIL on a pre-tactic-graph-router-live-worker-read-robust tree and PASS
+# now: this is the last-line defense the 2026-07-21 incident bypassed, when an
+# uncorroborated `[]` let a manual dispatch tick launch a duplicate
+# `/implement` worker onto an already-occupied worktree.
+
+echo "Test: an uncorroborated empty registry read dedupes the spawn (fails safe)"
+spawn_worker_setup
+# spawn_worker_setup already primes SPAWN_WORKER_REGISTRY with '[]' and points
+# CLAUDE_AGENTS_PGREP_CMD at a "daemon visible" stub — override the probe here
+# so this test's `[]` read is uncorroborated (the ambiguous case) instead.
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMPDIR_TEST/fake-pgrep-unreachable"
+chmod +x "$TMPDIR_TEST/fake-pgrep-unreachable"
+export CLAUDE_AGENTS_PGREP_CMD="$TMPDIR_TEST/fake-pgrep-unreachable"
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-uncorroborated-empty: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-uncorroborated-empty: stdout is 'deduped' (UNKNOWN, not zero sessions)" \
+  "deduped" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-uncorroborated-empty: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-uncorroborated-empty: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_worker_teardown
+
 # --- Test 4: usage errors ----------------------------------------------------
 
 echo "Test: missing --name, --cwd, or <prompt> each exit 2"

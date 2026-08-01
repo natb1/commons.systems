@@ -675,4 +675,44 @@ assert_eq "not-a-node: stderr reports it" "yes" "$(sd_contains 'not-a-node tacti
 assert_eq "not-a-node: the marker is kept" "declared" "$(sd_marker_field tactic-not-a-node origin)"
 sd_teardown
 
+# --- Test 17: an uncorroborated empty registry read is the SAME unknown branch
+# as Test 4's outright-failing daemon (tactic-graph-router-live-worker-live-
+# worker-read-robust). `claude agents --json --all` can exit 0 and print
+# exactly `[]` on a blocked read (sandbox / network-namespace isolation) —
+# byte-identical to a genuine empty registry. `claude_session_id_is_live`
+# (lib-claude-agents.sh) only trusts that `[]` when a `claude daemon` process
+# corroborates it; here the probe reports unreachable, so the winner's
+# liveness must fold to "unknown" (winner treated as live) — the sweep must
+# observe and park nothing, exactly like Test 4, never read the empty array as
+# "winner absent" and hand the worktree to a peer.
+
+echo "Test: an uncorroborated empty registry read observes every marker and parks nothing"
+sd_setup
+sd_write_node "tactic-uncorroborated-empty" unparked
+sd_commit_nodes
+sd_write_worktree "tactic-uncorroborated-empty" unpushed
+# No sd_add_session calls: SD_ENTRIES stays empty, so sd_install_claude emits
+# exactly `[]` — the ambiguous payload — at exit 0.
+sd_install_claude 0
+standdown_write "tactic-uncorroborated-empty" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+# This file's own sd_setup/sd_teardown do not stub CLAUDE_AGENTS_PGREP_CMD (it
+# is unset by default here) — set an unreachable probe explicitly so this
+# ambiguous-`[]` case is deterministic rather than depending on whether the
+# HOST happens to be running a `claude daemon` process.
+CLAUDE_AGENTS_PGREP_CMD="$SD_DIR/pgrep-unreachable"
+cat > "$CLAUDE_AGENTS_PGREP_CMD" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$CLAUDE_AGENTS_PGREP_CMD"
+sd_run
+unset CLAUDE_AGENTS_PGREP_CMD
+assert_eq "uncorroborated-empty: sweep returns 0" "0" "$SD_RC"
+assert_eq "uncorroborated-empty: park-node not invoked" "0" "$(sd_park_calls)"
+assert_eq "uncorroborated-empty: the marker is kept" "declared" \
+  "$(sd_marker_field tactic-uncorroborated-empty origin)"
+assert_eq "uncorroborated-empty: stderr reports the unknown liveness" "yes" \
+  "$(sd_contains 'observing tactic-uncorroborated-empty (liveness unknown this pass')"
+sd_teardown
+
 report_results

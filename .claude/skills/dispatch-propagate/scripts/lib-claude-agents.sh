@@ -192,10 +192,18 @@
 #   a blocked read can no longer manufacture spawn headroom.
 #     return 0 — daemon queried successfully. Stdout is a single integer (>=0)
 #               line: the count of matching sessions.
-#     return 1 — UNKNOWN. Stdout is empty. Callers that gate on the count must
-#               decide deliberately what UNKNOWN means for them — the
-#               per-worktree dedup inside `dispatch-spawn-job` is the last-line
-#               defense.
+#     return 1 — UNKNOWN. Stdout is empty. Callers MUST defer rather than
+#               assume headroom: `dispatch-select-tick` and `graph-select-target`
+#               both fail CLOSED on this return (concurrency-cap disposition),
+#               not fail open. `dispatch-spawn-job`'s per-worktree dedup is NOT
+#               an independent backstop here — it calls `claude_sessions_under`,
+#               which shares the same daemon-read ambiguity this function does,
+#               so it cannot be trusted to catch what an UNKNOWN busy-count
+#               read let through. (This is the 2026-07-21 incident this
+#               contract closes: an uncorroborated empty `claude agents --json`
+#               read was indistinguishable from a genuine "no live sessions",
+#               so a manual tick fell through to GAP=1 and launched a duplicate
+#               `/implement` worker onto an already-occupied worktree.)
 #
 # verify_agent_registered_under <agent-name> <cwd>
 #   Bounded retry of `claude_sessions_under` that closes the async-registration
