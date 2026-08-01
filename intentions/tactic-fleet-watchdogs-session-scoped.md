@@ -128,36 +128,40 @@ execution:
 validates: []
 blocked_by: []
 office_hours:
-  reason: 'CORRECTED 2026-08-01. The prior park cited Item 7 as
-    not-browser-verifiable and routed straight to cannot-verify per qa-main
-    Step 4·0. That citation is itself the bug-ledger row L misroute the
-    bootstrap plan (ruling 7) names by construction: a park citing
-    browser-reachability must be rejected by the lane, because a
-    git/journal/log/shell/filesystem check no browser can perform is MACHINE,
-    not AUTHOR. Item 7''s own nine-step checklist is entirely
-    shell/systemd/journald checks against the operator host; none needs a
-    browser. Verifiability: MACHINE. The checks below were actually run on the
-    operator host (dangerouslyDisableSandbox: true), not asserted. Result:
-    MACHINE, checked, INCONCLUSIVE — the exit criterion is not met, and the
-    checks surfaced a concrete, present-tense defect in the host''s real
-    state, not merely an absence of observation. The node stays parked at
+  reason: "CORRECTED 2026-08-01. The prior park cited Item 7 as
+    not-browser-verifiable and routed straight to cannot-verify per qa-main Step
+    4·0. That citation is itself the bug-ledger row L misroute the bootstrap
+    plan (ruling 7) names by construction: a park citing browser-reachability
+    must be rejected by the lane, because a git/journal/log/shell/filesystem
+    check no browser can perform is MACHINE, not AUTHOR. Item 7's own nine-step
+    checklist is entirely shell/systemd/journald checks against the operator
+    host; none needs a browser. Verifiability: MACHINE. The checks below were
+    actually run on the operator host (dangerouslyDisableSandbox: true), not
+    asserted. Result: MACHINE, checked, INCONCLUSIVE — the exit criterion is not
+    met, and the checks surfaced a concrete, present-tense defect in the host's
+    real state, not merely an absence of observation. The node stays parked at
     main-qa; do not transition to done. Full evidence and per-step verdicts in
-    the recommendation.'
+    the recommendation."
   since: 2026-08-01
   recommendation: >-
-    **Re-verified 2026-08-01, on-host, sandbox-off.** `tactic-fleet-watchdogs-session-scoped`
-    (PR #3008, merged `2643b5cd`) shipped `dispatch-heal-units`, `dispatch-fleet-watch`,
-    and the `ensure_healer_units`/`ensure_watcher_units` installers. Two separate
-    questions, kept distinct per the fleet-scheduling plan's own discriminator: is the
-    delivered CODE correct on `origin/main` (yes), and has this HOST actually cut over
-    to it (no — and it is currently in a broken half-installed state).
+    **Re-verified 2026-08-01, on-host, sandbox-off.**
+    `tactic-fleet-watchdogs-session-scoped` (PR #3008, merged `2643b5cd`)
+    shipped `dispatch-heal-units`, `dispatch-fleet-watch`, and the
+    `ensure_healer_units`/`ensure_watcher_units` installers. Two separate
+    questions, kept distinct per the fleet-scheduling plan's own discriminator:
+    is the delivered CODE correct on `origin/main` (yes), and has this HOST
+    actually cut over to it (no — and it is currently in a broken half-installed
+    state).
 
     **Code-level checks (origin/main, no host dependency) — all PASS:**
 
-    - `git show origin/main:.claude/skills/dispatch-propagate/scripts/dispatch-fleet-watch | grep -c 'FINDING-'`
+    - `git show
+    origin/main:.claude/skills/dispatch-propagate/scripts/dispatch-fleet-watch |
+    grep -c 'FINDING-'`
       → `0`. Row P is closed at the code level: none of the four superseded session
       predicates were ported.
-    - `git show origin/main:.../dispatch-test-fixture.sh | grep DISPATCH_HOST_UNIT_FILES -A10`
+    - `git show origin/main:.../dispatch-test-fixture.sh | grep
+    DISPATCH_HOST_UNIT_FILES -A10`
       confirms all four new unit filenames (`dispatch-heal.service`, `dispatch-heal.timer`,
       `dispatch-fleet-watch.service`, `dispatch-fleet-watch.timer`) are in the host-unit-leak
       guard.
@@ -194,27 +198,31 @@ office_hours:
        Whether that reflects a one-off operational mistake or a gap worth hardening
        (e.g. pinning reseed's `MAIN_WORKTREE` resolution) is a judgment call for a
        human — **Verifiability: AUTHOR** on that sub-question only.
-    2. **Survival — MACHINE, checked, FAILED (not merely unproven).** Since the timers
+    2. **Survival — MACHINE, checked, FAILED (not merely unproven).** Since the
+    timers
        were never enabled, there is nothing to have survived: `journalctl --user
        --since -24h -t dispatch-heal-units` and `-t dispatch-fleet-watch` both return
        **zero entries**; `-u dispatch-heal.service` / `-u dispatch-fleet-watch.service`
        are likewise empty. The systemd path has fired **zero times, ever**.
-    3. **Rate source — MACHINE, checked, INCONCLUSIVE.** With zero firings under either
+    3. **Rate source — MACHINE, checked, INCONCLUSIVE.** With zero firings under
+    either
        selector, a `SyslogIdentifier=` misconfiguration is indistinguishable from
        "never ran." (The unit files' `SyslogIdentifier=` lines do read correctly —
        `dispatch-heal-units` / `dispatch-fleet-watch` — so this is likely fine, but
        cannot be confirmed by observing a real firing yet.)
-    4. **Alarm surface end-to-end — MACHINE, NOT attempted.** Requires a live enabled
+    4. **Alarm surface end-to-end — MACHINE, NOT attempted.** Requires a live
+    enabled
        timer; would first require fixing the poisoned/disabled install, which is a
        host-mutating decision out of scope for a verification pass.
     5. **UNKNOWN-never-healthy — MACHINE, NOT attempted**, same reason as (4).
-    6. **Pause behavior — MACHINE, NOT attempted**, same reason as (4).
-    7. **Never-fleet-halt — MACHINE, checked, trivially true so far** (zero writes,
+    6. **Pause behavior — MACHINE, NOT attempted**, same reason as (4). 7.
+    **Never-fleet-halt — MACHINE, checked, trivially true so far** (zero writes,
        because zero firings) — not a meaningful confirmation given (2).
     8. **Row P closed — MACHINE, RESOLVED.** See the code-level check above
        (`grep -c 'FINDING-'` = 0). This sub-item is genuinely done, independent of
        host cutover.
-    9. **Retire the scratch instruments — MACHINE, checked, correctly NOT done, and
+    9. **Retire the scratch instruments — MACHINE, checked, correctly NOT done,
+    and
        must stay that way for now.** `ps -eo pid,lstart,args | grep heal-units.sh`
        shows the scratch healer (PID 2663508, launched 2026-07-31T18:03:46 EDT under
        job `c20b2f8d`) **still running** right now. The scratch watcher is *not*
@@ -229,19 +237,20 @@ office_hours:
        replacement behind it. Do not retire either scratch script until step 1 is
        fixed and steps 2-3 are re-observed clean.
 
-    **Recommended next action (for the human/operator, not auto-executable from a QA
-    session):** re-run `ensure_healer_units`/`ensure_watcher_units` (or the full
-    `dispatch-schedule-reseed`) invoked **from the real main worktree**
+    **Recommended next action (for the human/operator, not auto-executable from
+    a QA session):** re-run `ensure_healer_units`/`ensure_watcher_units` (or the
+    full `dispatch-schedule-reseed`) invoked **from the real main worktree**
     (`/home/n8/natb1/commons.systems`, or with
     `DISPATCH_SCHEDULE_RESEED_MAIN_WORKTREE` pinned), confirm both timers read
-    `enabled`/`active` and appear in `list-timers`, then let steps 2-6 run for real
-    across a session boundary (multi-interval firing and survival cannot complete
-    inside one sitting), and only then execute step 9. **On completion,** if all
-    nine checks pass clean, close residue Item 7 and advance `main-qa → done`
-    (`transition-node tactic-fleet-watchdogs-session-scoped`, sandbox-off). If a
-    step fails against a *correctly installed* unit (as opposed to the
-    known-poisoned one found here), that is a genuine regression against merged PR
-    #3008 — file it as an implement-chain bug (`serves` the same strategy,
+    `enabled`/`active` and appear in `list-timers`, then let steps 2-6 run for
+    real across a session boundary (multi-interval firing and survival cannot
+    complete inside one sitting), and only then execute step 9. **On
+    completion,** if all nine checks pass clean, close residue Item 7 and
+    advance `main-qa → done` (`transition-node
+    tactic-fleet-watchdogs-session-scoped`, sandbox-off). If a step fails
+    against a *correctly installed* unit (as opposed to the known-poisoned one
+    found here), that is a genuine regression against merged PR #3008 — file it
+    as an implement-chain bug (`serves` the same strategy,
     `strategy-graph-native-dispatch`) rather than re-parking this node.
   session_type: other
 pace_exempt: true
