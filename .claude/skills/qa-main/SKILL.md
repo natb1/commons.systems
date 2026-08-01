@@ -170,8 +170,9 @@ command if present; otherwise derive the cheapest command that decides its
   `[]` — indistinguishable from a genuine empty result, so a sandboxed run of it
   is worthless evidence.
 - **Bounded.** At most a couple of commands per item. If the check cannot be
-  decided that cheaply, the item is `WAIT` (its event has not accumulated) or a
-  barrier → cannot-verify. **Never** open-ended investigation.
+  decided that cheaply, the item is `WAIT` (its event has not accumulated) or the
+  environment blocked it → the **BARRIER (cannot-verify)** branch below.
+  **Never** open-ended investigation.
 - **Record per item**: the exact command(s) run, an excerpt of their output, and
   PASS / FAIL / undecided. This record is what the park's `recommendation`
   carries below.
@@ -185,8 +186,25 @@ re-check just above applies to Lane B items and to any item whose expected
 outcome depends on the prod deploy; it stays a signal that can only demote.
 
 **Verdict & outcome writes (supersede Step 5) — every write via `graph-commit`,
-no gh label or issue touched.** Apply the Step 5 decision tree **per item**, then
-aggregate across the node, **first match wins**:
+no gh label or issue touched.** Do **not** consult the Step 5 decision tree — it
+is browser-framed and superseded here. Score each item with the per-item rule
+below, then aggregate across the node, **first match wins**.
+
+**Per-item verdict.** Judge each `MACHINE` item on the check that ran, and on
+nothing else. Its verdict is one of:
+
+- `match` — the Lane-M command output, or the Lane-B observation, agrees with
+  the item's `expected_outcome`.
+- `contradicted` — that output or observation unambiguously and reproducibly
+  disagrees with `expected_outcome`.
+- `undecided` — the check could not be run, or its result is ambiguous. That is
+  an **environment barrier** (see the BARRIER branch below), never a statement
+  about how the item is verifiable.
+
+The presence, absence, or `current`-placeholder value of `url_path` **never**
+contributes to a per-item verdict. It only picked the lane.
+
+Aggregate across the node:
 
 1. Every item `MACHINE` and every one observed to match → **pass**.
 2. Any `MACHINE` item unambiguously and reproducibly contradicted, with no
@@ -195,8 +213,9 @@ aggregate across the node, **first match wins**:
    *after* every `MACHINE` item on the node has been run to a verdict.
 4. Any item `WAIT` and no `AUTHOR` item → the **WAIT branch** below.
 
-Anything else (barrier / ambiguity / deploy-lag) → **cannot-verify**. The costs
-stay asymmetric — when the signal is unclear, route to **cannot-verify**.
+Anything else (barrier / ambiguity / deploy-lag) → the **BARRIER
+(cannot-verify)** branch below. The costs stay asymmetric — when the signal is
+unclear, route there.
 
 - **pass** → advance the source `main-qa → done` through the graph transition
   writer (which prunes the node at `done`, per the transitions machinery):
@@ -287,6 +306,41 @@ stay asymmetric — when the signal is unclear, route to **cannot-verify**.
   `.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`. Then
   **STOP**. Always name the specific reason so the office-hours surface tells the
   human exactly what to check.
+
+- **BARRIER (cannot-verify)** → the *environment* failed, so a check that is
+  otherwise sound could not be run to a result. This is **not** a verifiability
+  sort — the item stays `MACHINE`; only this session's environment fell short.
+  The cases: `ToolSearch` or the browser tools are unavailable, no connected
+  browser reaches public prod, an auth wall stands between the session and the
+  page, the page will not load after one retry, or a `gh` / `journalctl` failure
+  blocked a Lane-M check. Same script as the two park branches, same terminal
+  shape — and do **not** call `dispatch-mark-deviation` (a gh path, forbidden on
+  this lane):
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-node-park \
+    "<reason: the environment failure and its locus>" \
+    "<recommendation: what remains to check, plus every Lane-M result already obtained>"
+  ```
+
+  Two hard requirements:
+  - The **reason** states the environment failure and where it hit — *"auth wall
+    at `https://…` blocked observing `<expected>`"*, *"no connected browser
+    reaches public prod"*, *"`journalctl -u dispatch-tick` exited 1: <excerpt>"*.
+    Do **not** write a reason whose operative claim is browser reachability: the
+    script matches `claude-in-chrome[^.]*(cannot|can not|can't|is unable|has
+    no)`, `non-browser`, `no url_path` and `browser[- ]verifiab`
+    case-insensitively and **refuses (exit 3, nothing written)**. So *"the auth
+    wall at `https://…` blocked the check"* passes where *"Claude-in-Chrome
+    cannot load the page"* is refused. On exit 3, do **not** reword to evade it —
+    re-sort the item and take the matching branch.
+  - The **recommendation** carries every Lane-M result already obtained (the
+    commands and outputs for every `MACHINE` item on the node), exactly as the
+    AUTHOR park does, so the re-run starts from what is already known.
+
+  Downstream mechanics are the same as the AUTHOR park:
+  `terminal_without_disposition_sweep` reads the markers and parks the node. Then
+  **STOP**.
 
 - **WAIT branch (interim)** → the item's check is sound but its event has not
   occurred yet. Same script, same terminal shape:
