@@ -1144,15 +1144,70 @@ assert_eq "under-cap: gap drives the graph fan-out width (4 − 1 = 3)" "--top 3
   "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
 sel_tick_teardown
 
-# --- daemon UNKNOWN → fail open, gap=1 ---------------------------------------
-echo "Test: select-tick daemon UNKNOWN → fail open, gap=1"
+# --- daemon UNKNOWN → fails CLOSED to concurrency-cap, reseed armed ----------
+# (tactic-graph-router-live-worker-read-robust Unit 2 flips this from the
+# prior fail-OPEN "gap stays 1" behavior.) The busy-worker read failing means
+# true live occupancy cannot be determined — per lib-claude-agents.sh's
+# EMPTY-READ CORROBORATION, this now includes an uncorroborated `[]` payload,
+# not just a hard error. Assuming headroom here risks a duplicate worker on an
+# already-occupied worktree, so the gate defers via the at-cap path: release
+# the lock, schedule the reseed, and emit concurrency-cap — never a `graph`
+# selection.
+echo "Test: select-tick daemon UNKNOWN → fails closed to concurrency-cap, reseed armed"
 sel_tick_setup
 export SEL_LIVE_COUNT_FAIL=1 SEL_TARGET_N=4
 export SEL_GRAPH_TARGET="node t1 tactic implement"
 out=$(run_sel_tick) || true
-assert_eq "fail-open: decision line" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "fail-open: gap=1 drives the graph fan-out width" "--top 1" \
-  "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+assert_eq "fail-closed: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "fail-closed: normal graph selection did NOT run" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+assert_eq "fail-closed: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "fail-closed: reseed scheduled" "called" \
+  "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "fail-closed: decision log records skip_reason live-read-unverified" "live-read-unverified" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+sel_tick_teardown
+
+# --- uncorroborated empty [] registry read → same fail-closed disposition ---
+# Paired with the SEL_LIVE_COUNT_FAIL case above, and the shape that actually
+# matches the originating incident (#lib-claude-agents EMPTY-READ
+# CORROBORATION): a blocked socket read (sandbox, network-namespace isolation)
+# still exits 0 and prints `[]` — byte-identical to a genuine "no live
+# sessions" — unless corroborated by a `claude daemon` process probe. This
+# test's own sel_tick_setup fake for lib-claude-agents.sh is a hand-written
+# stand-in (SEL_LIVE_COUNT/SEL_LIVE_COUNT_FAIL) that never exercises the real
+# corroboration logic at all, so this case swaps in the REAL
+# lib-claude-agents.sh and drives it end to end: a fake `claude` prints the
+# exact string `[]` (exit 0) while CLAUDE_AGENTS_PGREP_CMD is stubbed to fail
+# (daemon unreachable), so claude_agents_count_busy_workers genuinely returns
+# 1 (UNKNOWN) via its own corroboration check — not a test-only override.
+echo "Test: select-tick uncorroborated empty [] registry read → fails closed to concurrency-cap, same as a hard failure"
+sel_tick_setup
+cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
+cat > "$TMPDIR_TEST/fake-claude-empty" <<'FAKE'
+#!/usr/bin/env bash
+echo '[]'
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude-empty"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude-empty"
+cat > "$TMPDIR_TEST/pgrep-daemon-unreachable" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/pgrep-daemon-unreachable"
+export CLAUDE_AGENTS_PGREP_CMD="$TMPDIR_TEST/pgrep-daemon-unreachable"
+export SEL_TARGET_N=4 SEL_GRAPH_TARGET="node t1 tactic implement"
+out=$(run_sel_tick) || true
+assert_eq "uncorroborated-empty: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "uncorroborated-empty: normal graph selection did NOT run" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+assert_eq "uncorroborated-empty: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "uncorroborated-empty: reseed scheduled" "called" \
+  "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log" 2>/dev/null)"
+DLOG_FILE2="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "uncorroborated-empty: decision log records skip_reason live-read-unverified" "live-read-unverified" \
+  "$(tail -n1 "$DLOG_FILE2" | jq -r '.skip_reason')"
 sel_tick_teardown
 
 # --- effective_live = busy + reservations drives the gap --------------------
@@ -1295,13 +1350,60 @@ assert_eq "manual-exhausted: no reseed" "0" \
 sel_tick_teardown
 
 # Case 6: daemon-UNKNOWN. The busy-worker read fails → the manual math block is
-# skipped (gated on that read succeeding) and GAP stays 1 (fail open) → --top 1.
-echo "Test: select-tick --manual daemon-UNKNOWN → graph --top 1 (fail open)"
+# skipped (gated on that read succeeding). Unit 2 flips this from the prior
+# fail-OPEN "GAP stays 1" to fail CLOSED: this deliberately overrides
+# human-dispatch-is-sovereign's floor-of-1 (Case 1/4 above) — sovereignty is
+# meant to override a KNOWN ceiling, not license spawning while blind to true
+# occupancy. No reseed (a manual run is one-shot; the autonomous chain owns
+# reseeds) — only the disposition/skip_reason and the absence of a graph
+# selection or spawn distinguish this from the autonomous fail-closed path.
+echo "Test: select-tick --manual daemon-UNKNOWN → fails closed to concurrency-cap, no reseed"
 sel_tick_setup
 export SEL_LIVE_COUNT_FAIL=1 SEL_GRAPH_TARGET="node t1 tactic implement"
 out=$(run_sel_tick --manual)
-assert_eq "manual-daemon-unknown: graph decision" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "manual-daemon-unknown: graph selector called --top 1 (fail open)" "--top 1" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+assert_eq "manual-daemon-unknown: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-daemon-unknown: normal graph selection did NOT run" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+assert_eq "manual-daemon-unknown: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-daemon-unknown: no reseed" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "manual-daemon-unknown: decision log records skip_reason manual-live-read-unverified" \
+  "manual-live-read-unverified" "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+sel_tick_teardown
+
+# Case 6b: --manual paired uncorroborated-empty [] case (mirrors the
+# autonomous pairing above). Real lib-claude-agents.sh, fake claude prints
+# `[]`, CLAUDE_AGENTS_PGREP_CMD stubbed unreachable -> genuinely UNKNOWN via
+# the real corroboration check, not a test-only override. Must fail closed
+# the same as the hard-failure Case 6, and still arm NO reseed (manual is
+# one-shot).
+echo "Test: select-tick --manual uncorroborated empty [] registry read → fails closed to concurrency-cap, no reseed"
+sel_tick_setup
+cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
+cat > "$TMPDIR_TEST/fake-claude-empty" <<'FAKE'
+#!/usr/bin/env bash
+echo '[]'
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude-empty"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude-empty"
+cat > "$TMPDIR_TEST/pgrep-daemon-unreachable" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/pgrep-daemon-unreachable"
+export CLAUDE_AGENTS_PGREP_CMD="$TMPDIR_TEST/pgrep-daemon-unreachable"
+export SEL_GRAPH_TARGET="node t1 tactic implement"
+out=$(run_sel_tick --manual)
+assert_eq "manual-uncorroborated-empty: decision line" "concurrency-cap" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-uncorroborated-empty: normal graph selection did NOT run" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+assert_eq "manual-uncorroborated-empty: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "manual-uncorroborated-empty: no reseed" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo 1 || echo 0)"
+DLOG_FILE3="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "manual-uncorroborated-empty: decision log records skip_reason manual-live-read-unverified" \
+  "manual-live-read-unverified" "$(tail -n1 "$DLOG_FILE3" | jq -r '.skip_reason')"
 sel_tick_teardown
 
 # --- autonomous no-arg at cap, not exhausted, no priority item → concurrency-cap ---

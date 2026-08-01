@@ -70,21 +70,37 @@ cat "$_root/claude-payload.json"
 exit 0
 GSCCLAUDE
 chmod +x "$GSC_ROOT/bin/claude"
+# Empty-read corroboration stub (#lib-claude-agents EMPTY-READ CORROBORATION,
+# landed alongside tactic-graph-router-live-worker-read-robust Unit 1): the
+# real (physically copied) lib-claude-agents.sh now only trusts an exactly-`[]`
+# registry payload as a genuine "no live sessions" when a `claude daemon`
+# process corroborates it. Default this probe to "daemon visible" (exit 0) so
+# Case 2's `[]` payload below keeps meaning what it always meant — otherwise
+# the probe would fall through to the REAL host `pgrep`, making the test
+# depend on whether the developer's machine happens to be running a daemon.
+cat > "$GSC_ROOT/bin/pgrep-daemon-visible" <<'GSCPGREP'
+#!/usr/bin/env bash
+exit 0
+GSCPGREP
+chmod +x "$GSC_ROOT/bin/pgrep-daemon-visible"
 GSC_GST="$GSC_SCRIPTS/graph-select-target"
 # Case 1 — a live session named after the node id owns the worktree -> skipped.
 printf '%s' '[{"sessionId":"s1","pid":1,"status":"busy","name":"tactic-fixture","cwd":""}]' \
   > "$GSC_ROOT/claude-payload.json"
 gsc_skip=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
-  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
+  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSC_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
   DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
 assert_eq "graph-select-target: live-session-owned human node-id worktree is skipped" "empty" "$gsc_skip"
-# Case 2 (negative control) — same fixture, daemon reports NO sessions ([]).
+# Case 2 (negative control) — same fixture, daemon reports NO sessions ([]),
+# corroborated as definite by the pgrep stub above.
 # The worktree dir still exists, so this pins that existence alone does not
 # claim: the node IS selected.
 echo "Test: graph-select-target — orphan node-id worktree (no live session) stays selectable (Unit 3 negative control)"
 printf '%s' '[]' > "$GSC_ROOT/claude-payload.json"
 gsc_sel=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
-  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
+  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSC_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
   DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
 assert_eq "graph-select-target: orphan node-id worktree (no session) is selected" "node tactic-fixture tactic implement" "$gsc_sel"
 rm -rf "$GSC_ROOT" "$GSC_BARE"
@@ -167,12 +183,26 @@ exit 0
 GSCSCLAUDE
   chmod +x "$GSCS_ROOT/bin/claude"
   printf '%s' '[]' > "$GSCS_ROOT/claude-payload.json"
+  # Empty-read corroboration stub (#lib-claude-agents EMPTY-READ
+  # CORROBORATION): default the daemon-visibility probe to "reachable" (exit
+  # 0) so the default `[]` registry payload above keeps meaning genuinely "no
+  # sessions", as every pre-existing case in this fixture expects. `export`ed
+  # (rather than passed inline per-invocation) so it silently covers every
+  # case below without touching each command line; a case that wants the
+  # uncorroborated-empty shape overrides it locally.
+  cat > "$GSCS_ROOT/bin/pgrep-daemon-visible" <<'GSCSPGREP'
+#!/usr/bin/env bash
+exit 0
+GSCSPGREP
+  chmod +x "$GSCS_ROOT/bin/pgrep-daemon-visible"
+  export CLAUDE_AGENTS_PGREP_CMD="$GSCS_ROOT/bin/pgrep-daemon-visible"
   GSCS_GST="$GSCS_SCRIPTS/graph-select-target"
 }
 
 gsc_standalone_teardown() {
   rm -rf "$GSCS_ROOT" "$GSCS_BARE"
   GSCS_ROOT="" ; GSCS_BARE="" ; GSCS_SCRIPTS="" ; GSCS_GST=""
+  unset CLAUDE_AGENTS_PGREP_CMD
 }
 
 # --- Case 1: headroom available -> selects, claims, releases the lock --------
@@ -291,39 +321,37 @@ else
 fi
 gsc_standalone_teardown
 
-# --- Case 6: busy-read UNKNOWN -> headroom skipped, TOP clamped to 1 ---------
-# The `else` branch of the --standalone headroom block: when
-# claude_agents_count_busy_workers returns non-zero (daemon UNKNOWN), the
-# headroom computation is skipped entirely and the selector fails OPEN with
-# `(( TOP > 1 )) && TOP=1` — the standalone analogue of dispatch-select-tick's
-# "GAP stays 1". A regression dropping that clamp would let a manual tick fan
-# out unbounded while the live-worker count is unknown, which is exactly the
-# double-dispatch race the --standalone wrapping exists to prevent.
+# --- Case 6: busy-read UNKNOWN -> fails CLOSED to concurrency-cap `empty` ----
+# (tactic-graph-router-live-worker-read-robust Unit 2 flips this from the
+# prior fail-OPEN `(( TOP > 1 )) && TOP=1` clamp.) The `else` branch of the
+# --standalone headroom block: when claude_agents_count_busy_workers returns
+# non-zero (daemon UNKNOWN — read failed OR an uncorroborated `[]`, per
+# lib-claude-agents.sh's EMPTY-READ CORROBORATION), true live occupancy cannot
+# be determined, so this is no longer treated as "assume headroom, clamp to
+# one" — it degrades to the SAME concurrency-cap-style `empty` disposition as
+# HEADROOM==0 (Case 2) or an exhausted window (Case 5). A regression reverting
+# to the old TOP=1 clamp would let an unattended --standalone caller select
+# and claim a node while blind to whether a live worker already owns the
+# worktree — exactly the duplicate-worker race this tactic exists to close.
 #
 # Why an appended function override instead of a corrupt claude-payload.json:
 # claude_agents_count_busy_workers and claude_agents_list_all both read the
 # SAME _claude_agents_raw query in lib-claude-agents.sh, and
 # worktree_has_live_session folds an UNKNOWN list_all into "occupied" as a
 # fail-safe. A corrupt payload therefore makes EVERY candidate skip as
-# `live-session` and the run print `empty`, so the TOP clamp becomes
-# unobservable. Splitting the fake `claude` on its args does not help either —
-# neither call passes --cwd. Instead, since the fixture already works on
-# physical COPIES of the libs inside $GSCS_SCRIPTS, append a redefinition to
-# the COPY of lib-claude-agents.sh AFTER its terminating `fi` (the whole
-# library body sits inside a source-once guard whose `fi` is the last line, so
-# an appended definition executes on every source and wins over the original).
-# That makes only the busy-read UNKNOWN, leaving claude_agents_list_all /
+# `live-session` and the run print `empty` for an unrelated reason, so the
+# deliberate hard-failure path this case targets would be unobservable.
+# Splitting the fake `claude` on its args does not help either — neither call
+# passes --cwd. Instead, since the fixture already works on physical COPIES of
+# the libs inside $GSCS_SCRIPTS, append a redefinition to the COPY of
+# lib-claude-agents.sh AFTER its terminating `fi` (the whole library body sits
+# inside a source-once guard whose `fi` is the last line, so an appended
+# definition executes on every source and wins over the original). That makes
+# only the busy-read UNKNOWN, leaving claude_agents_list_all /
 # worktree_has_live_session healthy against the default `[]` registry so
-# candidates stay selectable. Do NOT "simplify" this back into a payload edit.
-#
-# Making the clamp observable: the default fake npx emits ONE candidate, so
-# TOP=1 and TOP=3 look identical. Case 6 rewrites the fake npx with TWO
-# candidates (rewriting fixture files per case is the existing convention —
-# Cases 2 and 3 rewrite claude-payload.json) and asks for --top 3 with ample
-# SEL_MAX_WORKERS=8. TOP is enforced in the selection loop
-# (`(( SELECTED_COUNT >= TOP )) && continue`), so a working clamp yields
-# exactly ONE `node ...` line and exactly ONE reservation marker.
-echo "Test: graph-select-target --standalone with an UNKNOWN busy-worker read skips the headroom check and clamps TOP to 1"
+# candidates stay selectable up to the point the busy-read gate itself is
+# consulted. Do NOT "simplify" this back into a payload edit.
+echo "Test: graph-select-target --standalone with a hard busy-worker read failure fails closed to empty (no selection, no claim)"
 gsc_standalone_setup
 cat >> "$GSCS_SCRIPTS/lib-claude-agents.sh" <<'GSCS6LIB'
 
@@ -342,35 +370,83 @@ gsc6_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
   CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
   DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
   CLAUDE_CODE_SESSION_ID="gsc-standalone-6" SEL_MAX_WORKERS=8 \
-  "$GSCS_GST" --standalone --top 3 2>/dev/null)
-# Exactly one selection line, and it is the first candidate in the fake npx
-# order (candidate order IS selection order — the selector emits pre-ordered
-# candidates and only environmental gates remain).
-assert_eq "graph-select-target --standalone: UNKNOWN busy read clamps TOP to 1 (one selection line)" \
-  "node tactic-standalone-fixture tactic implement" "$gsc6_out"
-# The reservation ledger is the load-bearing half of the assertion: a marker
-# for the second candidate would mean the clamp did not hold and the stdout
-# above was merely truncated.
-assert_eq "graph-select-target --standalone: UNKNOWN busy read claims the first candidate" \
-  "1" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
-assert_eq "graph-select-target --standalone: UNKNOWN busy read claims NO second candidate" \
+  "$GSCS_GST" --standalone --top 3 2>"$GSCS_ROOT/gsc6.err")
+assert_eq "graph-select-target --standalone: hard busy-read failure prints empty (fail closed)" \
+  "empty" "$gsc6_out"
+assert_eq "graph-select-target --standalone: hard busy-read failure claims NO candidate" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: hard busy-read failure claims NO second candidate either" \
   "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture-2" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: hard busy-read failure writes a distinguishing stderr diagnostic" \
+  "1" "$(grep -q "busy-worker read unverified" "$GSCS_ROOT/gsc6.err" && echo 1 || echo 0)"
 gsc6_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ -z "$gsc6_lock" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (UNKNOWN busy read) releases the lock (file emptied)"
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (hard busy-read failure) releases the lock (file emptied)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (UNKNOWN busy read) releases the lock (file emptied)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (hard busy-read failure) releases the lock (file emptied)"
   echo "    lock file: '$gsc6_lock'"
 fi
 gsc_standalone_teardown
 
+# --- Case 6b: uncorroborated-empty `[]` -> same fail-closed disposition -----
+# Case 6's sibling on the OTHER shape of daemon-UNKNOWN, and the one that
+# actually matches the originating incident (#lib-claude-agents EMPTY-READ
+# CORROBORATION): a socket read that is blocked (sandbox, network-namespace
+# isolation) still exits 0 and prints `[]` — byte-identical to a genuine "no
+# live sessions" — UNLESS corroborated by a `claude daemon` process probe.
+# Here the fake `claude` prints the default `[]` (no override needed) but the
+# corroboration probe itself is overridden to report the daemon UNREACHABLE
+# (exit 1), so claude_agents_count_busy_workers must return 1 (UNKNOWN) via the
+# real, un-overridden library code path — proving the fail-closed disposition
+# is reached through actual corroboration logic, not just the Case 6 hard
+# function stub.
+echo "Test: graph-select-target --standalone with an uncorroborated empty [] registry read fails closed to empty, same as a hard failure"
+gsc_standalone_setup
+cat > "$GSCS_ROOT/bin/pgrep-daemon-unreachable" <<'GSCS6BPGREP'
+#!/usr/bin/env bash
+exit 1
+GSCS6BPGREP
+chmod +x "$GSCS_ROOT/bin/pgrep-daemon-unreachable"
+cat > "$GSCS_ROOT/bin/npx" <<'GSCS6BNPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSCS6BNPX
+chmod +x "$GSCS_ROOT/bin/npx"
+gsc6b_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCS_ROOT/bin/claude" \
+  CLAUDE_AGENTS_PGREP_CMD="$GSCS_ROOT/bin/pgrep-daemon-unreachable" \
+  DISPATCH_RESERVATION_DIR="$GSCS_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
+  CLAUDE_CODE_SESSION_ID="gsc-standalone-6b" SEL_MAX_WORKERS=8 \
+  "$GSCS_GST" --standalone --top 3 2>"$GSCS_ROOT/gsc6b.err")
+assert_eq "graph-select-target --standalone: uncorroborated empty [] prints empty (fail closed)" \
+  "empty" "$gsc6b_out"
+assert_eq "graph-select-target --standalone: uncorroborated empty [] claims NO candidate" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: uncorroborated empty [] claims NO second candidate either" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture-2" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: uncorroborated empty [] writes a distinguishing stderr diagnostic" \
+  "1" "$(grep -q "busy-worker read unverified" "$GSCS_ROOT/gsc6b.err" && echo 1 || echo 0)"
+gsc6b_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$gsc6b_lock" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (uncorroborated empty []) releases the lock (file emptied)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (uncorroborated empty []) releases the lock (file emptied)"
+  echo "    lock file: '$gsc6b_lock'"
+fi
+gsc_standalone_teardown
+
 # --- Case 7: control for Case 6 — same two candidates, HEALTHY busy read -----
-# Without this control, Case 6 would pass even if the fixture could only ever
-# return a single node for some unrelated reason. Identical two-candidate npx,
-# identical SEL_MAX_WORKERS=8 / --top 3, but NO count_busy_workers override:
-# BUSY=0, RESV=0 -> HEADROOM=8, TOP stays 3, so BOTH candidates are selected
-# and claimed. That makes the Case 6 clamp provably load-bearing.
+# Without this control, Case 6/6b would pass even if the fixture could only
+# ever return a single node for some unrelated reason. Identical two-candidate
+# npx, identical SEL_MAX_WORKERS=8 / --top 3, but NO count_busy_workers
+# override: BUSY=0, RESV=0 -> HEADROOM=8, TOP stays 3, so BOTH candidates are
+# selected and claimed. That makes the Case 6/6b fail-closed disposition
+# provably load-bearing (it degrades from this healthy two-candidate baseline,
+# not from an unrelated fixture limitation).
 # SEL_TARGET_N=8 as well: the pace-curve gap (TARGET_N - LIVE_COUNT) is the
 # SECOND ceiling --standalone honors, so "ample headroom" now means ample on both
 # axes — the fixture's default SEL_TARGET_N=1 would otherwise clamp TOP to 1 for
