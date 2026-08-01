@@ -46,12 +46,18 @@ export function realizationForOwner(owner: Owner): Realization {
  * Leaf-ness is resolved against a Set of all non-null parent ids built once up
  * front, so the whole pass is O(n) rather than O(n²) (a per-node scan over all
  * nodes).
+ *
+ * Mounted nodes (those with `mount` set — the author's model of a counterparty
+ * intention) are never on the frontier: mount structure is audit structure, not
+ * work to be dispatched. See strategy-graph-mounts.
  */
 export function activeFrontier(nodes: IntentionNode[]): IntentionNode[] {
   const parentIds = new Set(
     nodes.map((n) => n.parent).filter((p): p is string => p !== null),
   );
-  return nodes.filter((node) => node.status !== "codified" && !parentIds.has(node.id));
+  return nodes.filter(
+    (node) => node.mount == null && node.status !== "codified" && !parentIds.has(node.id),
+  );
 }
 
 /**

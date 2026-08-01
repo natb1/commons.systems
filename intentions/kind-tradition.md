@@ -95,6 +95,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
+mount: null
+grafts: []
 attributes:
   fields:
     - "adopted: doctrines taken, each with source text and the graph locus it
@@ -115,5 +117,16 @@ attributes:
       are the author's, the scholarship is borrowed
     codified: the author has personally verified the record's
       adopted/diverged/chosen_over content against the cited texts
+  mount_anchor: true
 ---
 # Tradition — an examined intellectual attachment; where philosophical alignment and divergence stay auditable
+
+## Records anchor mounts
+
+A tradition record is a mount anchor (`attributes.mount_anchor: true`): adopting
+a tradition grafts its vocabulary and problem-framings onto this graph, and that
+graft lives as a mounted subgraph this record anchors — mounted nodes whose
+`mount` field names this record. The prose lists this kind documents —
+`adopted`, `diverged`, `chosen_over` — migrate into that mounted structure over
+time (tactic-mount-tradition-migration); until the migration lands they and the
+mounted nodes coexist.

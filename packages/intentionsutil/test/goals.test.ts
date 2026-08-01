@@ -33,6 +33,8 @@ function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
     office_hours: partial.office_hours ?? null,
     pace_exempt: partial.pace_exempt ?? false,
     rounds: partial.rounds ?? null,
+    mount: partial.mount ?? null,
+    grafts: partial.grafts ?? [],
     attributes: partial.attributes ?? {},
   };
 }
@@ -60,6 +62,15 @@ describe("activeFrontier", () => {
     const b = node({ id: "b", status: "raw" });
     const frontier = activeFrontier([b, a]);
     expect(frontier.map((n) => n.id)).toEqual(["b", "a"]);
+  });
+
+  it("excludes mounted nodes — mount structure is audit structure, not work", () => {
+    // A mounted node that would otherwise qualify (non-codified, childless leaf)
+    // is still never on the frontier.
+    const native = node({ id: "native-leaf", status: "raw" });
+    const mounted = node({ id: "virtue-vendor-1", status: "raw", mount: "delegation-1" });
+    const frontier = activeFrontier([native, mounted]);
+    expect(frontier.map((n) => n.id)).toEqual(["native-leaf"]);
   });
 });
 

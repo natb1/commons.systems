@@ -47,6 +47,8 @@ describe("store round-trip", () => {
       office_hours: null,
       pace_exempt: false,
       rounds: null,
+      mount: null,
+      grafts: [],
       attributes: { source: "github:natb1/commons.systems#1", weight: 3 },
     };
 
@@ -84,6 +86,8 @@ describe("store round-trip", () => {
       office_hours: null,
       pace_exempt: false,
       rounds: null,
+      mount: null,
+      grafts: [],
       attributes: {},
     };
 
@@ -134,6 +138,8 @@ describe("store round-trip", () => {
       office_hours: null,
       pace_exempt: false,
       rounds: null,
+      mount: null,
+      grafts: [],
       attributes: {},
     };
 
@@ -177,8 +183,47 @@ describe("store round-trip", () => {
       office_hours: null,
       pace_exempt: false,
       rounds: null,
+      mount: null,
+      grafts: [],
       attributes: {},
     });
+  });
+
+  it("round-trips a mounted node preserving mount and grafts", () => {
+    const dir = tempDir();
+    const node: IntentionNode = {
+      id: "virtue-attention-services-growth",
+      kind: "virtue",
+      statement: "The vendor's growth disposition, modeled inside the mount.",
+      owner: "human",
+      status: "codified",
+      parent: null,
+      serves: [],
+      recovers: [],
+      rationale: null,
+      reading: null,
+      gap: null,
+      clarifications: [],
+      tooling_goals: [],
+      success_signal: null,
+      attention: null,
+      phase: null,
+      execution: null,
+      validates: [],
+      blocked_by: [],
+      office_hours: null,
+      pace_exempt: false,
+      rounds: null,
+      mount: "delegation-attention-services",
+      grafts: ["virtue-attention-services-other"],
+      attributes: {},
+    };
+
+    writeNode(dir, node);
+    const read = readNode(dir, node.id);
+    expect(read).toEqual(node);
+    expect(read.mount).toBe("delegation-attention-services");
+    expect(read.grafts).toEqual(["virtue-attention-services-other"]);
   });
 });
 
@@ -208,6 +253,8 @@ describe("writeNode body preservation", () => {
       office_hours: null,
       pace_exempt: false,
       rounds: null,
+      mount: null,
+      grafts: [],
       attributes: {},
     };
     writeNode(dir, original);

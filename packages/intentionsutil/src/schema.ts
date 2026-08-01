@@ -170,6 +170,14 @@ export interface IntentionNode {
   pace_exempt: boolean; // authored pace-gate bypass; goal-layer kinds only
   rounds: Rounds | null; // /align-tactics round accounting; strategies only
 
+  // Mount structure (see strategy-graph-mounts). A node with `mount` set is a
+  // MOUNTED node — the author's model of a counterparty intention, grafted onto
+  // this graph as explorable structure. Mounted nodes keep their NATIVE kind (a
+  // mounted virtue is `kind: virtue`). `grafts` is the ONLY relation permitted
+  // to cross the mount boundary; `serves`/`parent` never do (validateGraph).
+  mount: string | null; // id of the anchoring record node (kind-delegation/kind-tradition today); null = native
+  grafts: string[]; // ids of mounted nodes whose motivation this node partly carries across the boundary
+
   attributes: Record<string, unknown>; // kind-specific fields; semantics defined by the kind-<kind> node
 }
 
@@ -202,6 +210,8 @@ export interface IntentionNodeInput {
   office_hours?: OfficeHours | null;
   pace_exempt?: boolean;
   rounds?: Rounds | null;
+  mount?: string | null;
+  grafts?: string[];
   attributes?: Record<string, unknown>;
 }
 
@@ -700,6 +710,12 @@ export function validateNode(value: unknown): IntentionNode {
       value.pace_exempt == null ? false : requireBoolean(value.pace_exempt, "pace_exempt"),
     rounds: value.rounds == null ? null : validateRounds(value.rounds, "rounds"),
 
+    // Mount structure — absent/null tolerated, defaults null / []. `mount` is a
+    // nullable node id; `grafts` uses the same id-array validation as
+    // `validates`/`blocked_by`.
+    mount: optionalString(value.mount, "mount"),
+    grafts: value.grafts == null ? [] : validateIdArray(value.grafts, "grafts"),
+
     attributes:
       value.attributes == null
         ? {}
@@ -941,6 +957,85 @@ function checkAttentionDominance(
 }
 
 /**
+ * Rule 19: a non-null mount resolves to an existing mount-anchor node (its kind
+ * node sets attributes.mount_anchor — same gate mechanism as rule 11's
+ * goal_layer). The mount edge itself may cross onto an un-mounted anchor and may
+ * even land on a node that itself carries mount (recursion) — allowed by
+ * construction; rule 21 does NOT judge the mount edge.
+ */
+function checkMountAnchor(
+  node: IntentionNode,
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  if (node.mount === null) return;
+  const anchor = byId.get(node.mount);
+  if (anchor === undefined) {
+    problems.push(`${node.id}: mount "${node.mount}" does not resolve to a node`);
+    return;
+  }
+  const anchorKind = byId.get(`kind-${anchor.kind}`);
+  if (anchorKind !== undefined && anchorKind.attributes.mount_anchor !== true) {
+    problems.push(
+      `${node.id}: mount "${node.mount}" resolves to kind "${anchor.kind}", which is not a mount anchor — kind-${anchor.kind} does not set attributes.mount_anchor`,
+    );
+  }
+}
+
+/**
+ * Rule 20: every grafts entry resolves to an existing MOUNTED node (one with
+ * mount set) — a graft edge always lands inside a mount.
+ */
+function checkGraftTargets(
+  node: IntentionNode,
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  for (const target of node.grafts) {
+    const targetNode = byId.get(target);
+    if (targetNode === undefined) {
+      problems.push(`${node.id}: grafts "${target}" does not resolve to a node`);
+      continue;
+    }
+    if (targetNode.mount === null) {
+      problems.push(
+        `${node.id}: grafts "${target}" must resolve to a mounted node (one with mount set), got an un-mounted node`,
+      );
+    }
+  }
+}
+
+/**
+ * Rule 21: parent and serves never cross a mount boundary. An un-mounted node's
+ * parent/serves targets are un-mounted; a mounted node's targets carry the same
+ * mount anchor (the modeled graph's internal structure). Only judges edges whose
+ * target resolves (rules 2-3 own the dangling case). grafts (rule 20) is the
+ * ONLY relation permitted to cross.
+ */
+function checkMountBoundary(
+  node: IntentionNode,
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  if (node.parent !== null) {
+    const parentNode = byId.get(node.parent);
+    if (parentNode !== undefined && parentNode.mount !== node.mount) {
+      problems.push(
+        `${node.id}: parent "${node.parent}" crosses a mount boundary — parent mount "${parentNode.mount}" does not match "${node.mount}"`,
+      );
+    }
+  }
+  for (const target of node.serves) {
+    const targetNode = byId.get(target);
+    if (targetNode !== undefined && targetNode.mount !== node.mount) {
+      problems.push(
+        `${node.id}: serves "${target}" crosses a mount boundary — target mount "${targetNode.mount}" does not match "${node.mount}"`,
+      );
+    }
+  }
+}
+
+/**
  * Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
  * flags every node that participates in a cycle (a tactic transitively blocked
  * by itself). Dangling edges are reported by rule 13, not traversed.
@@ -1033,9 +1128,19 @@ function checkBlockedByCycles(
  *      `attention`/`attention.boost` is null there is no dominance to protect
  *      and the guard is inert. A node may opt out by placing the literal
  *      substring `ACK: main-health-dominance` in its `attention.rationale`.
+ *  19. Every non-null `mount` resolves to an existing node whose kind node sets
+ *      `attributes.mount_anchor` (the same kind-attribute gate rule 11 uses for
+ *      `goal_layer`). A mounted node anchors on a mount-anchor record.
+ *  20. Every `grafts` entry resolves to an existing node with `mount` set — a
+ *      graft edge always lands on a mounted node.
+ *  21. `serves` and non-null `parent` never cross a mount boundary: an
+ *      un-mounted node's parent/serves targets are un-mounted, and a mounted
+ *      node's targets carry the SAME `mount` anchor (the modeled graph's own
+ *      internal structure). `grafts` (rule 20) is the only relation that may
+ *      cross. Rules 6-8 still apply inside a mount.
  *
- * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
- * report the dangling case); this avoids double-reporting the same broken
+ * Rules 6-9 and 21 only judge edges whose target already resolves (rules 2-4
+ * above report the dangling case); this avoids double-reporting the same broken
  * edge under two different messages.
  *
  * Deliberately NOT enforced: `serves` on delegation or kind nodes — a
@@ -1083,6 +1188,12 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkClarificationDates(node, problems);
     // Rule 18: main-health attention dominance.
     checkAttentionDominance(node, dominantBoost, problems);
+    // Rule 19: mount resolves to a mount-anchor record.
+    checkMountAnchor(node, byId, problems);
+    // Rule 20: grafts land on mounted nodes.
+    checkGraftTargets(node, byId, problems);
+    // Rule 21: parent/serves never cross a mount boundary.
+    checkMountBoundary(node, byId, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkBlockedByCycles(nodes, byId, problems);
