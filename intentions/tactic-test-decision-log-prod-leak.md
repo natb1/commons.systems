@@ -95,52 +95,7 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/review-fix: code-review instrument not invoked (Skill code-review
-    rejected with disable-model-invocation) — deviation gate fires
-    unconditionally on an unrun instrument. PR #3013's own 3 Required findings
-    were fixed and adversarially verified (commit c5db3ab9); this park is solely
-    the missing code-review pass, a known gap tracked by
-    tactic-review-code-review-invocation-contract."
-  since: 2026-08-01
-  recommendation: >-
-    ## Next steps — `tactic-test-decision-log-prod-leak` (PR #3013)
-
-
-    **Only open item:** the Lane A `code-review` (quality/style) pass never ran.
-    The `/code-review` skill cannot be invoked from a nested subagent
-    (`disable-model-invocation`), so its payload was discarded. Per the
-    `/review-fix` contract, a failed instrument is a false review and parks
-    unconditionally — not a judgment about the code.
-
-
-    **Everything else is done and green:** 3 upheld security findings fixed in
-    commit `c5db3ab9` (guard didn't clear the higher-precedence
-    `DISPATCH_DECISION_LOG_FILE`; ratchet's unanchored `grep -qF` passed two
-    suites on comment prose alone). New `test-decision-log-isolation.sh` passes
-    175/175. Full dispatch suite clean except `test-dispatch-select-tick.sh`,
-    confirmed a pre-existing flake by re-running at pre-fix HEAD. Lint clean.
-    Disposition comment posted.
-
-
-    **Pick one:**
-
-    - **(a)** Run `/code-review max --fix` yourself against #3013's diff (or
-    read it — two files, ~135 lines, test/harness only, no production code),
-    then merge.
-
-    - **(b)** Clear the park and let it merge. That's you deciding the diff is
-    low-risk enough to skip code-review — the automation did not decide it.
-
-
-    Do not re-run `/review-fix`; it will fail the same way.
-
-
-    **Pattern:** #3014 (`tactic-fleet-alarm-mint-rollback-corruption`) parked
-    minutes earlier for the same cause. On a third occurrence, prioritize
-    `tactic-review-code-review-invocation-contract` over clearing parks one at a
-    time.
-  session_type: other
+office_hours: null
 pace_exempt: true
 rounds: null
 attributes: {}
