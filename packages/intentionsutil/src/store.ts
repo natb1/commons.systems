@@ -1,5 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { parse, stringify } from "yaml";
 import { isPlainObject, validateNode, type IntentionNode, type IntentionNodeInput } from "./schema.js";
 import { IntentionSchemaError } from "./errors.js";
@@ -51,7 +59,36 @@ export function writeNode(dir: string, node: IntentionNodeInput): void {
   // `stringify` already ends its output with a newline, so the closing fence
   // lands on its own line.
   const content = `---\n${stringify(validated)}---\n${body}`;
-  writeFileSync(filePath, content);
+  writeFileAtomic(filePath, content);
+}
+
+/**
+ * Publish `content` at `finalPath` atomically: write a collision-safe temp
+ * file in the SAME directory (rename(2) cannot cross filesystems), then
+ * rename it over the final path. An interrupted write (SIGKILL, OOM, ENOSPC)
+ * can then only ever leave the temp file behind — never a partial or 0-byte
+ * `<id>.md` that `listNodes` would choke on. Mirrors the established
+ * `> "$f.tmp" && mv "$f.tmp" "$f"` convention already used in bash at
+ * dispatch-fleet-alarm's splice_body/refresh_stamp_write and in TypeScript at
+ * office-hours-snapshot/src/persist.ts.
+ */
+function writeFileAtomic(finalPath: string, content: string): void {
+  const dir = dirname(finalPath);
+  const tmp = join(
+    dir,
+    `.${basename(finalPath)}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`,
+  );
+  try {
+    writeFileSync(tmp, content);
+    renameSync(tmp, finalPath);
+  } catch (err) {
+    try {
+      rmSync(tmp, { force: true });
+    } catch {
+      // best-effort cleanup; the original error is rethrown below
+    }
+    throw err;
+  }
 }
 
 /**
@@ -132,19 +169,83 @@ export function readNodeBody(dir: string, id: string): string {
   return extractBody(raw, id);
 }
 
+/** One node file that could not be read or validated during enumeration. */
+export interface NodeReadFailure {
+  id: string;
+  error: unknown;
+}
+
+/**
+ * Enumerate every node, isolating per-file read failures. One malformed file
+ * (a 0-byte or partially-written `<id>.md`) costs exactly one node, never the
+ * whole directory — the fleet-wide blast radius observed on 2026-08-01.
+ *
+ * `README.md` is a non-node companion doc kept alongside the node files — it
+ * has no frontmatter, so it is excluded from the scan entirely rather than
+ * reported as a failure.
+ */
+export function listNodesResilient(dir: string): {
+  nodes: IntentionNode[];
+  failures: NodeReadFailure[];
+} {
+  const nodes: IntentionNode[] = [];
+  const failures: NodeReadFailure[] = [];
+  const ids = readdirSync(dir)
+    .filter((name) => name.endsWith(".md") && name !== "README.md")
+    .map((name) => name.slice(0, -".md".length))
+    .sort();
+  for (const id of ids) {
+    try {
+      nodes.push(readNode(dir, id));
+    } catch (error) {
+      failures.push({ id, error });
+    }
+  }
+  return { nodes, failures };
+}
+
+function failureMessage(failure: NodeReadFailure): string {
+  return failure.error instanceof Error ? failure.error.message : String(failure.error);
+}
+
 /**
  * Read every `*.md` node file in `dir`, validating each, sorted by id for a
  * stable result.
  *
+ * Tolerant by contract: a file that cannot be read or validated is skipped
+ * with a warning on stderr, so one corrupt node file costs exactly one node
+ * rather than crashing every caller that enumerates the store. Integrity
+ * gates that must refuse loudly instead of skipping should call
+ * `listNodesStrict`.
+ *
  * `README.md` is a non-node companion doc kept alongside the node files — it
- * has no frontmatter, so it is excluded here. Without this, `listNodes` on
- * the real store directory throws on the README's missing fence.
+ * has no frontmatter, so it is excluded here.
  */
 export function listNodes(dir: string): IntentionNode[] {
-  return readdirSync(dir)
-    .filter((name) => name.endsWith(".md") && name !== "README.md")
-    .map((name) => name.slice(0, -".md".length))
-    .sort()
-    .map((id) => readNode(dir, id));
+  const { nodes, failures } = listNodesResilient(dir);
+  for (const failure of failures) {
+    process.stderr.write(
+      `warning: skipping unreadable node file ${failure.id}.md: ${failureMessage(failure)}\n`
+    );
+  }
+  return nodes;
+}
+
+/**
+ * Strict enumeration: throw `IntentionSchemaError` naming EVERY unreadable
+ * file. For integrity gates (validate-graph) where silently skipping a
+ * corrupt tracked node would turn a required CI check into a false pass.
+ * Every failing file is reported, so one run surfaces all corruption rather
+ * than only the first file.
+ */
+export function listNodesStrict(dir: string): IntentionNode[] {
+  const { nodes, failures } = listNodesResilient(dir);
+  if (failures.length > 0) {
+    const detail = failures.map((f) => `  ${f.id}.md: ${failureMessage(f)}`).join("\n");
+    throw new IntentionSchemaError(
+      `${failures.length} unreadable node file(s) in "${dir}":\n${detail}`
+    );
+  }
+  return nodes;
 }
 

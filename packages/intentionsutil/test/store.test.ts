@@ -1,12 +1,38 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
-import { assertNoBodyLoss, listNodes, readNode, writeNode } from "../src/store.js";
+import {
+  assertNoBodyLoss,
+  listNodes,
+  listNodesResilient,
+  listNodesStrict,
+  readNode,
+  writeNode,
+} from "../src/store.js";
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "intentions-"));
+}
+
+/**
+ * Collect what `fn` writes to stderr. The chunks are gathered inside the mock
+ * because `mockRestore()` clears `mock.calls` along with the spy.
+ */
+function captureStderr<T>(fn: () => T): { result: T; warnings: string } {
+  const chunks: string[] = [];
+  const spy = vi.spyOn(process.stderr, "write").mockImplementation(((chunk: unknown) => {
+    chunks.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write);
+  let result: T;
+  try {
+    result = fn();
+  } finally {
+    spy.mockRestore();
+  }
+  return { result, warnings: chunks.join("") };
 }
 
 describe("store round-trip", () => {
@@ -422,6 +448,48 @@ describe("assertNoBodyLoss guard", () => {
   });
 });
 
+describe("writeNode atomicity", () => {
+  function probe(id: string): IntentionNodeInput {
+    return { id, kind: "tactic", statement: "First statement.", owner: "ai", status: "raw" };
+  }
+
+  it("publishes by rename, not in-place truncate", () => {
+    const dir = tempDir();
+    writeNode(dir, probe("atomic-1"));
+    const filePath = join(dir, "atomic-1.md");
+    const firstIno = statSync(filePath).ino;
+
+    writeNode(dir, { ...probe("atomic-1"), statement: "Second statement." });
+
+    expect(statSync(filePath).ino).not.toBe(firstIno);
+    expect(readNode(dir, "atomic-1").statement).toBe("Second statement.");
+  });
+
+  it("leaves no temp residue on success", () => {
+    const dir = tempDir();
+    writeNode(dir, probe("atomic-2"));
+    expect(readdirSync(dir)).toEqual(["atomic-2.md"]);
+  });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "leaves no residue and no partial file when the publish fails",
+    () => {
+      const dir = tempDir();
+      writeNode(dir, probe("atomic-3"));
+      try {
+        chmodSync(dir, 0o555);
+        expect(() =>
+          writeNode(dir, { ...probe("atomic-3"), statement: "Second statement." }),
+        ).toThrow();
+        expect(readdirSync(dir)).toEqual(["atomic-3.md"]);
+        expect(readNode(dir, "atomic-3").statement).toBe("First statement.");
+      } finally {
+        chmodSync(dir, 0o755);
+      }
+    },
+  );
+});
+
 describe("listNodes", () => {
   it("returns every node sorted by id", () => {
     const dir = tempDir();
@@ -456,6 +524,81 @@ describe("listNodes", () => {
 
     const nodes = listNodes(dir);
     expect(nodes.map((n) => n.id)).toEqual(["leaf-1"]);
+  });
+
+  /** Seed two readable nodes, `good-a` and `good-b`. */
+  function seedGoodNodes(dir: string): void {
+    for (const id of ["good-a", "good-b"]) {
+      writeNode(dir, {
+        id,
+        kind: "tactic",
+        statement: `Statement for ${id}`,
+        owner: "ai",
+        status: "raw",
+      });
+    }
+  }
+
+  /**
+   * Write a node, then truncate its file just past the opening fence — an
+   * opening `---` with no closing one, the shape a partially-written file has.
+   */
+  function seedTruncatedNode(dir: string, id: string): void {
+    writeNode(dir, { id, kind: "tactic", statement: `Statement for ${id}`, owner: "ai", status: "raw" });
+    const filePath = join(dir, `${id}.md`);
+    const raw = readFileSync(filePath, "utf8");
+    const closeIndex = raw.indexOf("\n---\n");
+    writeFileSync(filePath, raw.slice(0, closeIndex));
+  }
+
+  it("skips a 0-byte node file and warns", () => {
+    const dir = tempDir();
+    seedGoodNodes(dir);
+    // A 0-byte `<id>.md` is exactly what an interrupted non-atomic write left
+    // behind on 2026-08-01, stalling the whole fleet.
+    writeFileSync(join(dir, "corrupt.md"), "");
+
+    const { result, warnings } = captureStderr(() => listNodes(dir));
+    expect(result.map((n) => n.id)).toEqual(["good-a", "good-b"]);
+    expect(warnings).toContain("corrupt.md");
+  });
+
+  it("skips a truncated node file", () => {
+    const dir = tempDir();
+    seedGoodNodes(dir);
+    seedTruncatedNode(dir, "truncated");
+
+    const { result, warnings } = captureStderr(() => listNodes(dir));
+    expect(result.map((n) => n.id)).toEqual(["good-a", "good-b"]);
+    expect(warnings).toContain("truncated.md");
+  });
+
+  it("listNodesResilient reports the failures", () => {
+    const dir = tempDir();
+    seedGoodNodes(dir);
+    writeFileSync(join(dir, "corrupt.md"), "");
+    seedTruncatedNode(dir, "truncated");
+
+    const { nodes, failures } = listNodesResilient(dir);
+    expect(nodes.map((n) => n.id)).toEqual(["good-a", "good-b"]);
+    expect(failures.map((f) => f.id)).toEqual(["corrupt", "truncated"]);
+  });
+
+  it("listNodesStrict throws and names every unreadable file", () => {
+    const dir = tempDir();
+    seedGoodNodes(dir);
+    writeFileSync(join(dir, "corrupt.md"), "");
+    seedTruncatedNode(dir, "truncated");
+
+    let message = "";
+    try {
+      listNodesStrict(dir);
+      throw new Error("listNodesStrict should have thrown");
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    expect(message).toContain("corrupt.md");
+    expect(message).toContain("truncated.md");
   });
 });
 
