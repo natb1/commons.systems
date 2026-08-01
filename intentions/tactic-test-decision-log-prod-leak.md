@@ -81,13 +81,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-test-decision-log-prod-leak
   pr: 3013
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -333,3 +334,12 @@ grep -c '"node":"tactic-some-node"' ~/.local/share/commons-dispatch/routing-deci
 ```
 
 Record the count at merge time, run `run-unit-tests.sh --pr-scripts` a few times, and confirm it is unchanged. Only then consider the optional cleanup (filter those rows out of the log with `jq`/`grep -v` against a backup copy), as a separate operator action.
+
+## needs-main residue
+
+- **id 13 — Post-merge: production fixture rows stop growing**
+  - URL path: current
+  - Expected outcome: the `"node":"tactic-some-node"` fixture-row count in `~/.local/share/commons-dispatch/routing-decisions.jsonl` holds steady (no further growth) some time after this PR merges.
+  - Finding: the PR's own Verification section documents this as an explicit out-of-scope post-merge operator observation — it requires elapsed fleet runtime after merge and is not assertable at merge time. During this qa-fix pass (2026-08-01, ~10:54–11:31 EDT) the count was confirmed unchanged at 42 rows across the whole QA run, with the log's mtime showing the live fleet still actively appending non-fixture rows in that window — so the isolation fix is holding at QA time; only the post-merge persistence over elapsed fleet runtime remains unverified.
+  - Verifiability: WAIT — awaiting: this PR's merge, plus elapsed fleet runtime afterward, before the count can be re-checked for growth.
+  - Check: `grep -c '"node":"tactic-some-node"' ~/.local/share/commons-dispatch/routing-decisions.jsonl` — compare against the 42-row baseline recorded above; count must not increase.

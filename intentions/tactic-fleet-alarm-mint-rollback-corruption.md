@@ -78,8 +78,17 @@ success_signal:
     /align-tactics)
   is_proxy: false
 attention: null
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-fleet-alarm-mint-rollback-corruption
+  pr: 3014
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
