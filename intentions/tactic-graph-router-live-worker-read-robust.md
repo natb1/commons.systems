@@ -50,8 +50,16 @@ attention:
     they outranked strategy-main-health (101 resolved) and flooded the selector
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-graph-router-live-worker-read-robust
+  pr: 3010
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by:
   - tactic-graph-router-live-worker-visibility
