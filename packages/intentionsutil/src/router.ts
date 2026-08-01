@@ -164,6 +164,13 @@ export function readingDate(reading: string): string | null {
  * which must skip a node already held by an open blocker (e.g. the
  * `provision-conflict` hold it just landed) rather than re-holding it every
  * tick — the same completeness rule the selector applies.
+ *
+ * PRECONDITION — `byId` must come from a STRICT enumeration
+ * (`listNodesStrict`, never the tolerant `listNodes`). Absence is read as
+ * completion here, so a blocker file the tolerant reader silently drops (0-byte,
+ * truncated, conflict-markered, schema-invalid) would unblock its dependent and
+ * let the selector dispatch it — a fail-open gate. Every caller of this function
+ * and of `selectGraphTargets` therefore enumerates strictly.
  */
 export function blockersComplete(tactic: IntentionNode, byId: Map<string, IntentionNode>): boolean {
   for (const blockerId of tactic.blocked_by) {

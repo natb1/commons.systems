@@ -73,9 +73,16 @@
 #       degrades to journald-only for that pass — but must still report this
 #       graph-write failure in its own output.
 #   64  usage error / unknown kind.
-#   69  environment error (missing node/npx/git/jq/flock, or the graph-write
-#       mutex could not be established at all — never downgrade that to an
-#       unserialized write).
+#   69  environment error (missing node/npx/git/jq/flock, the graph-write mutex
+#       could not be established at all — never downgrade that to an
+#       unserialized write — or refs/remotes/origin/main does not resolve in this
+#       checkout, which makes the pre-write blob capture meaningless; nothing is
+#       mutated in that case).
+#   70  the graph write failed AND its rollback could not complete, so a dirty
+#       intentions/<id>.md is LEFT IN THE CHECKOUT. Distinct from 1 because the
+#       residue trips graph-commit's unrelated-dirty-tracked-file pre-flight for
+#       every later graph writer here: the caller must escalate (the log line
+#       names the exact `git checkout --` that clears it), never retry.
 #
 # graph-commit exiting 0 is NOT evidence anything landed (a named invariant in
 # this codebase: a check whose failure mode is a silent PASS — graph-commit has
@@ -186,7 +193,8 @@ tactic-fleet-alarm-<kind> (find-or-create; body refreshed on re-detection).
 --resolve completes an open alarm node to phase: "done" when its condition has
 definitively cleared.
 
-exit: 0 landed / no-op, 1 graph write failed, 64 usage, 69 environment.
+exit: 0 landed / no-op, 1 graph write failed (rolled back), 64 usage,
+      69 environment, 70 write failed and the rollback left a dirty node file.
 USAGE
 }
 
@@ -330,15 +338,47 @@ classify() {
 # otherwise be mistaken for a real blob and route a failed mint's rollback
 # into restore_from_blob (which correctly refuses to guess and leaves the
 # file as-is) instead of the rm -f cleanup for a node with nothing to restore.
+#
+# A FAILURE HERE IS AMBIGUOUS ON ITS OWN, and the ambiguity is load-bearing:
+# `2>/dev/null` silences BOTH "origin/main carries no such path" (an expected
+# state — nothing to restore) AND "origin/main itself is unresolvable in this
+# checkout" (an unfetched clone, a pruned or stale remote-tracking ref, a
+# concurrent gc/fetch --prune, any git error — an ENVIRONMENT fault that says
+# nothing about the graph). Callers whose next move depends on which one it was
+# must gate on origin_main_ref_ok FIRST; see its note.
 origin_blob() {
   local out
   out=$(git -C "$REPO_ROOT" rev-parse "origin/main:$NODE_REL" 2>/dev/null) || return 1
   printf '%s' "$out"
 }
 
+# origin_main_ref_ok -> 0 when refs/remotes/origin/main resolves in this
+# checkout. Disambiguates origin_blob's two failure modes before any rollback
+# decision is made from an empty blob: an empty PRE_BLOB is only evidence that
+# "this node is absent from origin/main" when origin/main itself resolves.
+# Without this gate an unfetched/pruned/stale remote-tracking ref reads as
+# "nothing landed, nothing to restore" — and the mint rollback would then delete
+# a tracked node file that origin/main actually carries, leaving a dirty TRACKED
+# deletion that trips graph-commit's unrelated-dirty-file pre-flight for every
+# later graph writer in this checkout. That is the fleet-halt the header forbids,
+# arriving precisely during an outage (the alarm mints when main is red and the
+# network is flaky), so the ref fault is an exit-69 environment error that
+# touches nothing, never a rollback input.
+origin_main_ref_ok() {
+  git -C "$REPO_ROOT" rev-parse --verify --quiet origin/main >/dev/null 2>&1
+}
+
 # restore_from_blob <sha> — put the node file back to its origin/main content so
 # a failed write never leaks a dirty intentions/ file (which would trip
 # graph-commit's clean-tree assertion for every later writer).
+#
+# EVERY CALL SITE MUST CHECK THE STATUS. Returning 1 leaves the mutated file in
+# place on purpose (better than manufacturing a 0-byte node), so a caller that
+# invokes this bare and then logs "the write was rolled back" asserts a rollback
+# that did not happen — while a dirty intentions/<id>.md sits in the checkout
+# blocking every later graph write, and the alarm's own log (the only record of
+# the incident) points investigators away from the cause. A failed rollback exits
+# 70, not 1, so the caller can escalate instead of retrying.
 restore_from_blob() {
   local tmp="$NODE_FILE.tmp"
   # `git show <sha> > "$NODE_FILE"` truncated the node file BEFORE git ran, so
@@ -535,7 +575,13 @@ if [[ "$RESOLVE" == "1" ]]; then
   # Guard 2: capture the pre-mutation origin/main blob BEFORE mutating. A node
   # absent from origin/main at this instant is a HARD refusal: with no landed
   # blob there is nothing to roll back to, so mutating anyway would leak exactly
-  # the dirty file the rollback exists to prevent.
+  # the dirty file the rollback exists to prevent. Resolve the REF first so that
+  # refusal names the right fault: an unresolvable origin/main is an environment
+  # error (exit 69), not a statement about this node.
+  if ! origin_main_ref_ok; then
+    log "origin/main does not resolve in $REPO_ROOT (unfetched clone, or a pruned/stale remote-tracking ref) — refusing to mutate $ID without a trustworthy pre-write blob"
+    exit 69
+  fi
   if ! FRESH_BLOB=$(origin_blob) || [[ -z "$FRESH_BLOB" ]]; then
     log "$NODE_REL does not exist on origin/main — refusing to mutate a node with no landed content to roll back to"
     exit 1
@@ -548,8 +594,12 @@ if [[ "$RESOLVE" == "1" ]]; then
     "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.patched.json" || exit 1
   ) 1>&2 || ! run_graph_commit --base "$MANIFEST" -m "graph: resolve fleet alarm $KIND" "$ID"; then
     # Guard 3: restore from the captured blob FIRST, then log. Never swallow the
-    # failure with `|| true` — emit a greppable stderr diagnostic.
-    restore_from_blob "$FRESH_BLOB"
+    # failure with `|| true` — emit a greppable stderr diagnostic. And never
+    # log a rollback that did not happen: branch on restore_from_blob's status.
+    if ! restore_from_blob "$FRESH_BLOB"; then
+      log "resolve of $ID failed AND THE ROLLBACK FAILED — $NODE_REL was NOT restored and must be assumed dirty; a dirty node file blocks every later graph write in this checkout, so check git -C $REPO_ROOT status --porcelain -- $NODE_REL and restore it with git -C $REPO_ROOT checkout -- $NODE_REL"
+      exit 70
+    fi
     log "resolve of $ID failed; the write was rolled back to origin/main"
     exit 1
   fi
@@ -569,6 +619,22 @@ case "$STATE" in
     # Nothing to compare-and-swap against — mint fresh, no --base. A "closed"
     # node is a since-resolved condition that has recurred: mint over it rather
     # than reopening a completed record by hand.
+    #
+    # The rollback below deletes the node file when this pass created it, so the
+    # two inputs that decision rests on are established here, BEFORE any
+    # mutation, and neither may be inferred from an ambiguous failure:
+    #   * origin/main must resolve at all, or an empty PRE_BLOB is meaningless
+    #     (see origin_main_ref_ok). In the `closed` case especially, the node
+    #     file is real tracked content with a landed history — deleting it on a
+    #     transient ref fault is a fleet-halt, not a rollback.
+    #   * whether the file already existed. Only a file THIS pass created may be
+    #     rm -f'd; anything pre-existing is someone else's content.
+    if ! origin_main_ref_ok; then
+      log "origin/main does not resolve in $REPO_ROOT (unfetched clone, or a pruned/stale remote-tracking ref) — refusing to mint $ID without a trustworthy pre-write blob"
+      exit 69
+    fi
+    PRE_EXISTED=0
+    [[ -e "$NODE_FILE" ]] && PRE_EXISTED=1
     PRE_BLOB="$(origin_blob || true)"
     jq -n \
       --arg id "$ID" \
@@ -612,10 +678,24 @@ case "$STATE" in
       cd "$REPO_ROOT" || exit 1
       "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.json" || exit 1
     ) 1>&2 || ! splice_body || ! run_graph_commit -m "graph: fleet alarm $KIND" "$ID"; then
+      # Scratch first — it is always ours, on every branch below.
+      rm -f "$NODE_FILE.tmp"
       if [[ -n "$PRE_BLOB" ]]; then
-        restore_from_blob "$PRE_BLOB"
+        if ! restore_from_blob "$PRE_BLOB"; then
+          log "minting $ID failed AND THE ROLLBACK FAILED — $NODE_REL was NOT restored and must be assumed dirty; a dirty node file blocks every later graph write in this checkout, so check git -C $REPO_ROOT status --porcelain -- $NODE_REL and restore it with git -C $REPO_ROOT checkout -- $NODE_REL"
+          exit 70
+        fi
+      elif [[ "$PRE_EXISTED" == "1" ]]; then
+        # origin/main resolves and carries no blob for this path, yet the file
+        # was already on disk before this pass — a local-only or not-yet-fetched
+        # node. There is nothing to restore it TO, and deleting content this pass
+        # did not create is exactly the tracked-deletion fleet-halt the rollback
+        # exists to prevent. Leave it and say so plainly.
+        log "minting $ID failed and $NODE_REL pre-existed this pass with no origin/main blob to restore — it was left as-is (NOT deleted) and may be dirty, which will block every later graph write in this checkout; inspect it, then restore or remove it by hand"
+        exit 70
       else
-        rm -f "$NODE_FILE" "$NODE_FILE.tmp"
+        # Created by this pass, nothing landed: removing it is the whole rollback.
+        rm -f "$NODE_FILE"
       fi
       log "minting $ID failed; the write was rolled back"
       exit 1
@@ -668,11 +748,26 @@ case "$STATE" in
         fi
       fi
     fi
+    # Same disambiguation as the mint path: an empty PRE_BLOB only means "no
+    # landed content" when origin/main itself resolves. Nothing has been mutated
+    # yet at this point, so a ref fault costs only this pass.
+    if ! origin_main_ref_ok; then
+      log "origin/main does not resolve in $REPO_ROOT (unfetched clone, or a pruned/stale remote-tracking ref) — refusing to refresh $ID without a trustworthy pre-write blob"
+      exit 69
+    fi
     PRE_BLOB="$(origin_blob || true)"
     refresh_stamp_write
     if ! splice_body || ! run_graph_commit --base "$MANIFEST" -m "graph: refresh fleet alarm $KIND" "$ID"; then
-      if [[ -n "$PRE_BLOB" ]]; then
-        restore_from_blob "$PRE_BLOB"
+      if [[ -z "$PRE_BLOB" ]]; then
+        # An open node with no origin/main blob: the body splice may already have
+        # rewritten the on-disk file and there is nothing to restore it to. Never
+        # claim a rollback that could not run.
+        log "refreshing $ID failed and origin/main carries no blob for $NODE_REL to roll back to — the on-disk node was left as-is and may be dirty, which will block every later graph write in this checkout; inspect it before the next graph write"
+        exit 70
+      fi
+      if ! restore_from_blob "$PRE_BLOB"; then
+        log "refreshing $ID failed AND THE ROLLBACK FAILED — $NODE_REL was NOT restored and must be assumed dirty; a dirty node file blocks every later graph write in this checkout, so check git -C $REPO_ROOT status --porcelain -- $NODE_REL and restore it with git -C $REPO_ROOT checkout -- $NODE_REL"
+        exit 70
       fi
       log "refreshing $ID failed; the write was rolled back"
       exit 1

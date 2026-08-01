@@ -30,7 +30,14 @@
 # exit alone short-circuits into rollback and graph-commit is never invoked;
 # (16) a doctrine ratchet asserting the SUT source no longer contains the
 # swallowed-status or truncate-before-write idioms the earlier three cases were
-# written to catch.
+# written to catch. Rollback-honesty cases: (17) a node file that PRE-EXISTED
+# the pass, with no origin/main blob, is never deleted by the rollback — it
+# exits 70 (dirty residue) instead of claiming a clean rollback; (18) a rollback
+# that cannot run (restore_from_blob returning non-zero) exits 70 and says
+# ROLLBACK FAILED rather than logging a rollback that never happened; (19) an
+# unresolvable refs/remotes/origin/main is an environment error (exit 69,
+# nothing read or written), not an empty pre-write blob; (20) a ratchet against
+# reintroducing an unchecked restore_from_blob call.
 #
 # Every run injects DISPATCH_FLEET_ALARM_STATE_DIR (so the suite never writes
 # the real ~/.local/share stamp) and pins
@@ -515,6 +522,72 @@ assert_eq "(16) no swallowed-status idiom in $SUT (tactic-fleet-alarm-mint-rollb
   "0" "${SWALLOWED_STATUS_HITS:-0}"
 assert_eq "(16) no truncate-before-write idiom in $SUT (tactic-fleet-alarm-mint-rollback-corruption)" \
   "0" "${TRUNCATE_BEFORE_WRITE_HITS:-0}"
+
+# --- (17) mint rollback NEVER deletes a file this pass did not create --------
+# The rollback's `rm -f "$NODE_FILE"` is only correct for a file this pass
+# minted. Here the node file already exists on disk and origin/main carries no
+# blob for it, so there is nothing to restore it TO — and deleting it would
+# leave a dirty deletion that trips graph-commit's unrelated-dirty-file
+# pre-flight for every later graph writer in the checkout (the fleet-halt the
+# SUT header forbids). The file must survive, and the exit must be the dirty-
+# residue code 70, not the "rolled back cleanly" 1.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+MINT17="$FR/intentions/tactic-fleet-alarm-heal-unknown.md"
+printf -- '---\nid: tactic-fleet-alarm-heal-unknown\nkind: tactic\nphase: null\n---\npre-existing content\n' \
+  > "$MINT17"
+run_alarm STUB_STATE=closed STUB_WN_SHAPE=none STUB_GC_EXIT=1 -- \
+  --kind heal-unknown --statement 'heal outcome unknown' --body-file "$BODY"
+assert_eq "(17) pre-existing node file with no origin/main blob exits 70" "70" "$RC"
+if [[ -e "$MINT17" ]]; then ok "(17) the pre-existing node file was NOT deleted"; else no "(17) the pre-existing node file was deleted"; fi
+assert_contains "(17) diagnostic says the file was left as-is" "left as-is (NOT deleted)" "$OUT"
+assert_not_contains "(17) does NOT claim a rollback happened" "the write was rolled back" "$OUT"
+rm -f "$MINT17"
+
+# --- (18) a rollback that CANNOT run must not claim it did -------------------
+# restore_from_blob returns non-zero and leaves the file alone when it cannot
+# write its staging tmp; every call site must branch on that instead of logging
+# "the write was rolled back" over a tree it never restored. Injected by making
+# $NODE_FILE.tmp a DIRECTORY, so both splice_body's and restore_from_blob's
+# redirections into it fail.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+TMP_BLOCKER="$MINTED.tmp"
+mkdir -p "$TMP_BLOCKER"
+BODY18="$WORK/body18.md"
+printf 'A reading that differs from whatever is on disk.\n' > "$BODY18"
+run_alarm STUB_STATE=open STUB_GC_LAND=1 -- \
+  --kind tick-stale --statement 'dispatch-tick has not run for 90m' --body-file "$BODY18"
+assert_eq "(18) unrunnable rollback exits 70, not 1" "70" "$RC"
+assert_contains "(18) diagnostic names the failed rollback" "ROLLBACK FAILED" "$OUT"
+assert_not_contains "(18) does NOT claim the write was rolled back" "the write was rolled back" "$OUT"
+rmdir "$TMP_BLOCKER"
+
+# --- (19) an unresolvable origin/main is an environment error, not a rollback -
+# origin_blob fails both when origin/main lacks the path and when origin/main
+# itself does not resolve (unfetched clone, pruned/stale remote-tracking ref,
+# concurrent gc). Only the first means "nothing to restore". Treating the second
+# as an empty pre-write blob is what would route a mint failure into deleting a
+# tracked node file, so the ref fault must exit 69 having touched nothing.
+git -C "$FR" checkout -- intentions
+SAVED_ORIGIN_MAIN="$(git -C "$FR" rev-parse refs/remotes/origin/main)"
+git -C "$FR" update-ref -d refs/remotes/origin/main
+run_alarm STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --kind busy-stall --statement 'the queue is stalled' --body-file "$BODY"
+assert_eq "(19) unresolvable origin/main exits 69" "69" "$RC"
+assert_contains "(19) diagnostic names the unresolvable ref" "origin/main does not resolve" "$OUT"
+assert_eq "(19) no write-node"   "" "$(log_lines write-node.log)"
+assert_eq "(19) no graph-commit" "" "$(log_lines graph-commit.log)"
+assert_eq "(19) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+git -C "$FR" update-ref refs/remotes/origin/main "$SAVED_ORIGIN_MAIN"
+
+# --- (20) doctrine ratchet: no bare restore_from_blob call -------------------
+# A bare call discards the status that distinguishes "restored" from "left
+# dirty", which is precisely the lie cases (17) and (18) pin. Every call site
+# must be status-checked (`if ! restore_from_blob ...` / `if restore_from_blob
+# ...`), so no line may START with the call.
+BARE_RESTORE_HITS=$(grep -cE '^[[:space:]]*restore_from_blob ' "$SUT" || true)
+assert_eq "(20) no unchecked restore_from_blob call in $SUT" "0" "${BARE_RESTORE_HITS:-0}"
 
 # --- results -----------------------------------------------------------------
 echo ""

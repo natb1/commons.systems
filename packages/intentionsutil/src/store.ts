@@ -214,9 +214,16 @@ function failureMessage(failure: NodeReadFailure): string {
  *
  * Tolerant by contract: a file that cannot be read or validated is skipped
  * with a warning on stderr, so one corrupt node file costs exactly one node
- * rather than crashing every caller that enumerates the store. Integrity
- * gates that must refuse loudly instead of skipping should call
- * `listNodesStrict`.
+ * rather than crashing every caller that enumerates the store.
+ *
+ * FOR REPORT AND TELEMETRY CONSUMERS ONLY — census, digest, sensor, view, and
+ * render callers, where a missing node degrades a report rather than changing a
+ * decision. Every gate, selection, and reconciliation caller MUST use
+ * `listNodesStrict` instead: absence from the enumerated set is load-bearing
+ * "pass" semantics in those paths (`blockersComplete` in `router.ts` reads an
+ * absent `blocked_by` id as COMPLETE; `check-node-selection.ts`'s soft-freeze
+ * gate `continue`s past a serving strategy missing from its `byId` map), so a
+ * silently dropped file would weaken a gate instead of being rejected.
  *
  * `README.md` is a non-node companion doc kept alongside the node files — it
  * has no frontmatter, so it is excluded here.
