@@ -50,7 +50,47 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Where should a provision-conflict hold's office-hours queue
+      priority be computed — snapshotted into the hold at birth, or resolved
+      live from its source at queue time?
+    answer: "Live at queue time (2026-08-01). Two implementation sites were
+      considered. (1) buildHoldNode
+      (packages/intentionsutil/scripts/hold-node-decide.ts:161-196) could write
+      an attention.override computed from the source's own
+      resolveAttention(...).value at hold-creation time — simpler, one write, no
+      read-path cost. Rejected on two grounds: it is a point-in-time SNAPSHOT
+      that goes stale the moment the source's own attention changes (an
+      authored boost, a serves re-parent, or any strategy-level distribution
+      shift), and it is already ruled out by this node's own 'What is explicitly
+      NOT in scope' section, which excludes changes to hold-node-decide.ts's
+      hold birth. (2) officeHoursQueue
+      (packages/intentionsutil/src/officeHours.ts:48-75) should instead, for a
+      queue member carrying attributes.hold_for, substitute the LIVE resolved
+      (tier, value) of the named source node for the hold's own — always
+      current, never stale, at the cost of one extra map lookup per hold in the
+      queue. Preferred. attributes.hold_for is currently WRITE-ONLY: set at
+      hold-node-decide.ts:188 and read nowhere in production code (grep finds it
+      only in test/hold-node-decide.test.ts and scripts/test-hold-node.sh), so
+      no existing mechanism propagates it and nothing depends on its present
+      semantics."
+  - question: Does inheriting the source's attention for queue priority reverse
+      tactic-mechanical-park-producers' decision to park an ambiguous conflict
+      via a separate hold node?
+    answer: "No (2026-08-01). tactic-mechanical-park-producers decided that an
+      ambiguous provision conflict is recorded as a NEW sibling hold node
+      carrying attributes.hold_for/hold_kind, born parked with no phase, with
+      the source holding a blocked_by edge on it — rather than by writing the
+      source's own office_hours. That rationale is entirely about PHASE and
+      cross-branch-remediation mechanics (a source already at a phase must not
+      have that phase overwritten by a park; the remediation happens on a
+      different branch than the source's), and it stands unchanged here. The
+      hold still exists as a separate node, still born parked, still carries the
+      edge. Only its QUEUE PRIORITY changes — a concern
+      tactic-mechanical-park-producers never discusses; its record contains no
+      treatment of attention, ranking, or office-hours ordering at all. This is
+      an oversight in how two correct decisions compose, not a considered
+      tradeoff being reopened."
 tooling_goals: []
 success_signal:
   observable: "A hold node that is (a) office_hours non-null, (b)
@@ -129,6 +169,18 @@ run `/office-hours`.
   surfacing/selection layer, not to resolved attention.
 - Any change to `hold-node`, `hold-node-decide.ts`'s hold birth, or
   `resolve-hold`.
+- **`tactic-mechanical-park-producers`' phase/edge-mechanics decision.** That
+  node ruled that an ambiguous provision conflict is recorded as a separate
+  sibling hold node — born parked, no phase, `attributes.hold_for` naming the
+  source, with the source carrying the `blocked_by` edge — rather than by
+  writing the source's own `office_hours`. Its rationale is entirely about
+  phase preservation and cross-branch remediation, and it is correct. This node
+  changes none of it: the hold still exists as its own node, still born parked,
+  still holds the edge. Only the hold's **queue priority** is at issue — a
+  subject `tactic-mechanical-park-producers` never addresses (its record has no
+  treatment of attention, ranking, or office-hours ordering). This is an
+  oversight in how two individually-correct decisions compose, not a reopening
+  of either.
 
 ## Relationship to bug M (`tactic-stale-hold-auto-resolve`)
 
@@ -163,3 +215,46 @@ and never a fleet halt.
 Open questions for decomposition: whether the fix belongs in `officeHoursQueue`'s
 ordering, in `office-hours-select --list`, in a dedicated fleet-health detect, or
 in some combination; and what age bound (if any) the author declares.
+
+## Concrete fix locations for the priority half (recorded 2026-08-01)
+
+The ordering question above is narrowed by a second, code-cited measurement of
+the same defect. Two sites can carry the priority inheritance; the second is
+preferred. See `clarifications` for the full reasoning.
+
+- **`buildHoldNode`** — `packages/intentionsutil/scripts/hold-node-decide.ts:161-196`.
+  Set an `attention` block (an `override`) on the born hold, computed from the
+  source's own `resolveAttention(...).value` at hold-creation time. Simpler: one
+  write, zero read-path cost, and every downstream consumer of resolved
+  attention picks it up for free. **Not preferred.** It is a point-in-time
+  snapshot that goes stale as soon as the source's own attention moves, and it
+  is already excluded by this node's own out-of-scope list above (no changes to
+  hold birth).
+- **`officeHoursQueue`** — `packages/intentionsutil/src/officeHours.ts:48-75`.
+  When a queue member carries `attributes.hold_for`, substitute the LIVE
+  resolved `(tier, value)` of the named source node in place of the hold's own
+  `attention.get(n.id)` result at `officeHours.ts:59-60`, leaving
+  `resolveAttention` itself untouched. **Preferred** — always current, no
+  staleness window, and it keeps the change inside the surfacing layer exactly
+  as the settled `attention.ts` doctrine directs ("blocking precedence is a
+  separate, structural concern of the selector"). Cost: one extra map lookup per
+  hold in the queue.
+
+`attributes.hold_for` is today **write-only** — set at `hold-node-decide.ts:188`
+and read by no production code (grep 2026-08-01 finds it only in
+`packages/intentionsutil/test/hold-node-decide.test.ts` and
+`packages/intentionsutil/scripts/test-hold-node.sh`). Nothing currently
+propagates it, so reading it in the surfacing layer breaks no existing
+contract. Note it is a single forward pointer, whereas the candidate shape
+above keys on the inbound `blocked_by` edges naming the hold; the inbound form
+generalizes to a hold blocking more than one source, `hold_for` is the O(1)
+authoritative key for the provision-conflict case. Decomposition picks one, or
+uses `hold_for` with an inbound-edge fallback.
+
+Measured live 2026-08-01 on the same pair as above: source
+`tactic-review-code-review-invocation-contract` resolved to **60.33**, its hold
+`tactic-hold-conflict-review-code-review-invocation-contract` to **5.33** —
+15th of 119 in the passive queue. The hold's `parent` is always `null` and
+`buildHoldNode` authors no `attention` of its own, so all it inherits is what
+its copied `serves` distributes; the 60.33 behind it is structurally invisible
+to `officeHoursQueue`.
