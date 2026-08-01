@@ -120,12 +120,14 @@ follow-up via `/file-issue` from a dispatch phase" recipe (subagent fan-out,
      uncertainty — a check no browser can perform is `autonomous`.
 
    **Recorded caveat (legacy lane only).** On this lane `/qa-main` still runs
-   `dispatch-main-qa-triage` (`.claude/skills/qa-main/SKILL.md:299-320`), which
-   is browser-only, so a non-browser `autonomous` item on this lane would still
-   exit 3 → cannot-verify. This lane is retired (its router entry is removed;
-   the script is dead code on the node lane per `qa-main/SKILL.md:117`), so the
-   divergence is **recorded, not fixed here** — `dispatch-main-qa-triage` is
-   explicitly not edited.
+   `dispatch-main-qa-triage` (`qa-main/SKILL.md` Step 4·0, "Triage: is this
+   follow-up browser-verifiable?"), which is browser-only, so a non-browser
+   `autonomous` item on this lane would still exit 3 → cannot-verify. This
+   lane is retired (its router entry is removed; the script is dead code on
+   the node lane per the **Node-target lane** section's sort paragraph,
+   "Sort each item by its `Verifiability:` mark"), so the divergence is
+   **recorded, not fixed here** — `dispatch-main-qa-triage` is explicitly not
+   edited.
 
 2. **Compose the follow-ups** by piping the joined needs-main items through the
    Unit-1 emitter (pure — no network/git/gh, runs sandboxed-fine, no

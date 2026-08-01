@@ -453,6 +453,9 @@ verification in Step 4.
 
 **4·0. Triage: is this follow-up browser-verifiable?**
 
+**Legacy issue lane only.** The node lane never runs this triage; its sort
+criterion and verdict tree live under **Node-target lane** above.
+
 Before loading browser tools, run the shared triage script — the **single
 source** of the browser-verifiability criteria (no `URL_PATH`, or a non-browser
 outcome such as `nix flake check --pure-eval` or a darwin build). The
@@ -537,6 +540,9 @@ domain — do not follow external links.
 
 ### 5. Verdict gate — the safety valve
 
+**Legacy issue lane only.** The node lane never runs this gate; its sort
+criterion and verdict tree live under **Node-target lane** above.
+
 **The costs are asymmetric.** A wrong **broken** files a spurious bug into the
 implement chain; a wrong **pass** silently ships a real regression to users;
 **cannot-verify** merely costs a human glance. So **when the signal is unclear,
@@ -546,7 +552,11 @@ unambiguous and reproducible against live prod.
 Decision tree, **first match wins**:
 
 1. Not browser-verifiable: no `URL_PATH` or non-browser outcome recognized in
-   Step 4·0 (caught before loading tools) → **cannot-verify**.
+   Step 4·0 (caught before loading tools) → **cannot-verify**. (This
+   browser-only predicate is a legacy-lane artifact of
+   `dispatch-main-qa-triage`, deliberately left uncorrected per the graph
+   ruling — the script is dead code on the node lane — and does not apply to
+   the node lane.)
 2. Any environment barrier from Step 4a–4d (tools unavailable, no browser, page
    won't load after one retry, auth wall, localhost/emulator context, repeated
    browser errors) → **cannot-verify**.
