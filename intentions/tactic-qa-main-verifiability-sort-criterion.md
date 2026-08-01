@@ -731,3 +731,21 @@ Manual / judgment:
 - **If the auto-mode classifier blocks Units 2/3**, park naming the file class
   and request a narrow scoped grant; do not attempt workarounds. Confirm before
   parking that Unit 1 landed on its own (scripts commit fine).
+
+## needs-main residue
+
+- id: item-15
+  title: Re-sort the four named sibling nodes under the amended prose
+  url_path: current
+  expected_outcome: Each of `tactic-drain-disposition-diagnosis-cas`, `tactic-mechanical-park-producers`, `tactic-main-post-merge-validation`, and `tactic-execution-pr-merge-verification`, if still parked/live at merge time, sorts correctly under this PR's amended `qa-main`/`needs-main-followups.md` prose; any sibling that has already drained under the old prose by the time this checks is excluded rather than reported as a discrepancy.
+  finding: Not checkable at PR-diff time — requires each sibling's live current state on `origin/main` *after* this PR merges (the amended prose only governs a node once merged). The plan itself flags the live-state check as a prerequisite to avoid manufacturing a false discrepancy against an already-drained sibling.
+  Verifiability: MACHINE
+  Check: For each of the four sibling ids, `git show origin/main:intentions/<sibling-id>.md | grep -A5 '^phase:'` (or `jq` against the node's frontmatter) to read its current `phase`/`office_hours` state; if still parked citing browser-reachability, that is itself evidence the amended prose has not yet propagated (expected — this PR had not merged when the park was written) rather than a defect in this PR.
+
+- id: item-16
+  title: Mis-sort rate stays at or below 1/20 across the next `/qa-main` node-lane drains
+  url_path: current
+  expected_outcome: Over the coming `/qa-main` node-lane drains, no park's reason cites browser reachability, and the mis-sort rate (cannot-verify parks on `owner: ai` nodes / all `owner: ai` main-qa nodes) stays at or below 1/20 (`intentions/strategy-graph-native-dispatch.md:3530-3533`).
+  finding: Not checkable at merge time — this is the strategy's own downstream measurement, an accumulation over N future `/qa-main` drains that have not happened yet, not a single-visit check.
+  Verifiability: WAIT
+  Check: Tally `/qa-main` node-lane park reasons across subsequent drains (e.g. `journalctl` / dispatch decision logs for `dispatch-mark-node-park` exit-3 refusals, which are a **success** signal per this node's own design, vs. legitimate `AUTHOR`/`WAIT` parks) once enough drains have accumulated to compute a meaningful ratio; re-check later rather than at this single visit.

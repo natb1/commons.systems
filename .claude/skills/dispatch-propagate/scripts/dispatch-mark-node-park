@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# dispatch-mark-node-park — node-lane office-hours park marker writer.
+#
+# Usage: dispatch-mark-node-park [--pr <n>] <reason> <recommendation>
+#
+# Writes the office-hours park markers the graph node lane reads
+# ($CLAUDE_JOB_DIR/office-hours-reason, office-hours-recommendation, and
+# optionally office-hours-pr) atomically (tempfile + mv), mirroring
+# dispatch-mark-deviation's marker-write pattern. Unlike dispatch-mark-deviation,
+# this script does NOT touch gh or apply any label in-session — the node lane
+# forbids gh entirely; a later graph-native step reads these markers instead.
+#
+# The core of this script is a REJECTION gate: qa-main's node lane has been
+# parking residue items to office_hours whenever Claude-in-Chrome cannot reach
+# them (a browser-reachability check). Per the graph's ratified ruling, an item
+# is author-required ONLY IF it cannot be machine-checked AT ALL — a git,
+# journal, log, shell or filesystem check that no browser can perform is
+# MACHINE, not AUTHOR. This script refuses (exit 3, no write) any <reason>
+# whose operative claim is browser-reachability, so a misclassified item can
+# never reach the park markers. There is no override flag: a bypass would
+# defeat the point of the check.
+#
+# Validation (arg shape, then the reason-rejection gate) ALWAYS runs before the
+# CLAUDE_JOB_DIR guard — a rejected reason exits 3 even when CLAUDE_JOB_DIR is
+# unset (interactive run). Only a well-formed, ACCEPTED reason falls through to
+# the CLAUDE_JOB_DIR guard, which is a no-op (exit 0) for interactive runs.
+#
+# Byte format (one trailing newline, exact per-file contents):
+#   office-hours-reason:         <reason>\n
+#   office-hours-recommendation: <recommendation>\n
+#   office-hours-pr (--pr only): <n>\n
+set -euo pipefail
+
+usage() {
+  echo "usage: dispatch-mark-node-park [--pr <n>] <reason> <recommendation>" >&2
+}
+
+PR_NUM=""
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pr)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-mark-node-park: --pr requires a value" >&2
+        usage
+        exit 2
+      fi
+      PR_NUM="$2"
+      shift 2
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ ${#ARGS[@]} -ne 2 ]]; then
+  echo "dispatch-mark-node-park: exactly two positional arguments are required (reason, recommendation)" >&2
+  usage
+  exit 2
+fi
+
+REASON="${ARGS[0]}"
+RECOMMENDATION="${ARGS[1]}"
+
+if [[ -z "$REASON" ]]; then
+  echo "dispatch-mark-node-park: reason must be non-empty" >&2
+  usage
+  exit 2
+fi
+
+if [[ -z "$RECOMMENDATION" ]]; then
+  echo "dispatch-mark-node-park: recommendation must be non-empty" >&2
+  usage
+  exit 2
+fi
+
+if [[ -n "$PR_NUM" && ! "$PR_NUM" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-mark-node-park: --pr value must be a non-negative integer, got: $PR_NUM" >&2
+  usage
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# Reason-rejection gate: refuse any reason whose operative claim is
+# browser-reachability. Matched case-insensitively (ERE, bash =~ with
+# nocasematch) against the reason text.
+# ---------------------------------------------------------------------------
+BROWSER_REACHABILITY_PATTERNS=(
+  'browser[- ]verifiab'
+  'non-browser'
+  'no url_path'
+  "url_path[^.]*(placeholder|'current'|\"current\"|repo script|not a (real )?(web )?page|not a route)"
+  "claude-in-chrome[^.]*(cannot|can not|can't|is unable|has no)"
+)
+
+shopt -s nocasematch
+MATCHED_PATTERN=""
+for pattern in "${BROWSER_REACHABILITY_PATTERNS[@]}"; do
+  if [[ "$REASON" =~ $pattern ]]; then
+    MATCHED_PATTERN="$pattern"
+    break
+  fi
+done
+shopt -u nocasematch
+
+if [[ -n "$MATCHED_PATTERN" ]]; then
+  cat >&2 <<EOF
+dispatch-mark-node-park: refusing a park reason whose operative claim is
+browser-reachability (matched: $MATCHED_PATTERN). An item is author-required ONLY
+IF it cannot be machine-checked AT ALL — a git, journal, log, shell or
+filesystem check that no browser can perform is MACHINE, not AUTHOR
+(intentions/strategy-graph-native-dispatch.md, 2026-07-31 corrected
+predicate). Re-sort the item: MACHINE -> run the check and verify it here;
+WAIT -> name the awaited event and the earliest useful re-check; AUTHOR ->
+state the credential, subjective-judgment or product-intent barrier that
+makes it uncheckable by any tool. Nothing was written.
+EOF
+  exit 3
+fi
+
+# CLAUDE_JOB_DIR guard: an interactive run (no dispatch job) is a no-op. This
+# runs AFTER validation/rejection above, so a rejected reason still exits 3
+# even with CLAUDE_JOB_DIR unset.
+if [[ -z "${CLAUDE_JOB_DIR:-}" || ! -d "$CLAUDE_JOB_DIR" ]]; then
+  echo "dispatch-mark-node-park: CLAUDE_JOB_DIR unset or not a directory; interactive run, skipping marker write" >&2
+  exit 0
+fi
+
+# Atomic writes: tempfile + mv, one trailing newline each.
+f="$CLAUDE_JOB_DIR/office-hours-reason"
+printf '%s\n' "$REASON" > "$f.tmp"
+mv "$f.tmp" "$f"
+
+f="$CLAUDE_JOB_DIR/office-hours-recommendation"
+printf '%s\n' "$RECOMMENDATION" > "$f.tmp"
+mv "$f.tmp" "$f"
+
+if [[ -n "$PR_NUM" ]]; then
+  f="$CLAUDE_JOB_DIR/office-hours-pr"
+  printf '%s\n' "$PR_NUM" > "$f.tmp"
+  mv "$f.tmp" "$f"
+fi
