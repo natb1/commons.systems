@@ -353,7 +353,12 @@ each fork site.
    **Node-target lane (`TARGET_KIND=node`):** files **nothing anywhere**. Instead
    append a `## needs-main residue` section to the tactic's **own body**
    (`intentions/<node-id>.md`), one entry per `needs-main` item (`id`, `title`,
-   `url_path`, `expected_outcome`, `finding`). That append rides in the Step-4
+   `url_path`, `expected_outcome`, `finding`, `Verifiability:`). An item becomes
+   residue when it is machine-checkable **at all** — by any tool the autonomous
+   lane can run, browser **or** shell/git/journal/log/filesystem — not merely
+   when the browser can reach it; only an item that cannot be machine-checked at
+   all is author-required. See the reference for the `Verifiability:` values and
+   full rules. That append rides in the Step-4
    `transition-node` commit, which still advances `qa → review` — the residue
    section does **not** divert the phase. The residue is drained later, after
    review merges the PR, when `review → main-qa` fires and `tactic-main-qa-phase`
