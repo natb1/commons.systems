@@ -11,9 +11,10 @@ parent: null
 rationale: "Byproduct of the 2026-07-25 concurrency/serialization review,
   implementing the park-taxonomy clarification recorded the same day. A park
   asserts that no autonomous path forward exists and a human is required, but a
-  merge conflict against a moving main frequently self-resolves. At recording
-  time roughly five of the most recent commits on main were provision-exit-11
-  parks, burying the genuinely author-required parks. Finalized 2026-07-25
+  merge conflict against a moving main has an autonomous resolver to route to.
+  At recording time roughly five of the most recent commits on main were
+  provision-exit-11 parks, burying the genuinely author-required parks.
+  Finalized 2026-07-25
   /align-tactics (per-node finalize): the plan converts both named producers to
   a shared hold-node primitive (find-or-create a born-parked incident tactic +
   blocked_by edge on the source, never office_hours on the source itself),
@@ -31,7 +32,26 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Is "a merge conflict against a moving main frequently self-resolves"
+      a valid premise for de-parking the mechanical retry producers?
+    answer: "(Recorded 2026-08-01, author-directed.) No — the premise is
+      factually invalid and is struck from this node's text. It was already
+      superseded on 2026-07-29: `intentions/strategy-graph-native-dispatch.md`
+      clarification 134 AMENDS the 2026-07-25 park-taxonomy clarification's
+      stated premise — 'a merge conflict is not expected to self-heal ... the
+      2026-07-25 clarification's CONCLUSION survives unchanged (a conflict is
+      not an office_hours park), but its REASON is corrected: conflicts are
+      de-parked because an autonomous resolver exists to route them to, not
+      because they resolve themselves.' This node's own text simply had not
+      been updated to match until now. The correction is textual only: the
+      conclusion, the unit list, and the explicitly-out-of-scope list are
+      unchanged. Corrected in four places — the `rationale` field, the
+      `## Context` producer-1 paragraph, the out-of-scope catch-all bullet
+      ('not a self-resolving retry state' → 'no autonomous resolver to route
+      it to ... not a mechanical retry state'), and the Unit `case 0`
+      parenthetical ('the conflict self-resolved' → 'the conflict is
+      resolved')."
 tooling_goals: []
 success_signal: null
 attention:
@@ -127,9 +147,14 @@ itself** rather than an incident:
 1. **provision-exit-11** — `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:197-204`
    calls `park-node` when `provision-node-worktree` (`:118-123`) cannot merge
    `origin/main` into the tactic's own persistent worktree branch. A conflict
-   against a moving main frequently self-resolves within a tick or two. At
-   recording time roughly five of the most recent commits on main were
-   exit-11 parks, burying genuinely author-required parks beneath them.
+   against a moving main is not expected to self-heal — but it has an
+   autonomous resolver to route it to (the conflict-resolution lane), which is
+   why it is not a park (`intentions/strategy-graph-native-dispatch.md`,
+   clarification 134, 2026-07-29 interview: *"conflicts are de-parked because
+   an autonomous resolver exists to route them to, not because they resolve
+   themselves"*). At recording time roughly five of the most recent commits on
+   main were exit-11 parks, burying genuinely author-required parks beneath
+   them.
 2. **fix-attempt-cap** — `packages/intentionsutil/scripts/apply-fix-state.ts:259-285`
    (`applyParkCheck`, mode `--park-if-capped`), called from
    `.claude/skills/dispatch-propagate/scripts/graph-select-target:306-320`,
@@ -247,8 +272,9 @@ leaves the source blocked forever. Every hold recommendation text must say:
 - `dispatch-graph-execute`'s default catch-all case (any `provision-node-worktree`
   exit other than 0/10/11/12/13 — bad node id, unresolvable project root,
   failed git fetch/worktree-add) stays an `office_hours` park. It is a genuine
-  environment/infra failure, not a self-resolving retry state, and the
-  doctrine names only the merge-conflict case (11).
+  environment/infra failure with no autonomous resolver to route it to, not a
+  mechanical retry state, and the doctrine names only the merge-conflict case
+  (11).
 - `packages/intentionsutil/scripts/graph-commit`'s own concurrent-edit-conflict
   park (`graph-commit:900`) and `.claude/skills/dispatch-conflict/SKILL.md`'s
   Lane 2 (which already autonomously resolves and clears most of these via an
@@ -437,7 +463,7 @@ Replace the `$PARK_NODE` call at `:199-204` with a two-tier disposition:
   hold-failed` and bump `FAILURES` (identical shape to today's `park-failed`
   branch at `:203-206`). Reset the strike file after a successful hold.
 - `case 0`: delete the strike sidecar on a successful provision (the
-  conflict self-resolved). This reset is what makes the counter mean
+  conflict is resolved). This reset is what makes the counter mean
   "consecutive".
 - Update the `case 11` comment block at `:198-201` to record the convergence
   note: this strike/hold branch is the interim step and is **replaced** by
