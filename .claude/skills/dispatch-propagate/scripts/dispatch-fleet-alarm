@@ -321,9 +321,19 @@ classify() {
   ' "$INTENTIONS_DIR" "$1")
 }
 
-# origin_blob -> prints the origin/main blob sha of the node file, or fails.
+# origin_blob -> prints the origin/main blob sha of the node file, or fails
+# with NO stdout. `git rev-parse <unresolvable-rev>` prints the literal
+# unresolved arg to stdout even as it exits non-zero (a git quirk, not an
+# error case we can rely on stderr alone to signal) — captured and discarded
+# here so callers like `PRE_BLOB="$(origin_blob || true)"` see a genuinely
+# empty string on failure instead of that echoed-back garbage, which would
+# otherwise be mistaken for a real blob and route a failed mint's rollback
+# into restore_from_blob (which correctly refuses to guess and leaves the
+# file as-is) instead of the rm -f cleanup for a node with nothing to restore.
 origin_blob() {
-  git -C "$REPO_ROOT" rev-parse "origin/main:$NODE_REL" 2>/dev/null
+  local out
+  out=$(git -C "$REPO_ROOT" rev-parse "origin/main:$NODE_REL" 2>/dev/null) || return 1
+  printf '%s' "$out"
 }
 
 # restore_from_blob <sha> — put the node file back to its origin/main content so
