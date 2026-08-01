@@ -1,0 +1,437 @@
+#!/usr/bin/env bash
+# boost-node — the author's "boost this node to the top of the frontier"
+# operation, landed on main (tactic-attention-boost-scripts, unit 3).
+#
+# The bash landing half of the boost tool. The planner
+# (packages/intentionsutil/src/boost.ts) and the store-level CLI
+# (packages/intentionsutil/scripts/boost-node.ts) do all the thinking; this
+# script does the git: fetch origin/main, refresh the node from it, delegate the
+# mutation to the CLI's `--write` mode, land through `graph-commit`, then
+# re-read origin/main and assert the write actually achieved what it promised.
+#
+# It authors no node content — the CLI's readNode → validateNode → writeNode
+# path is the single validation gate — and it never edits any node but the one
+# named on the command line.
+#
+# Why a wrapper at all: the boost the author wants is a claim about the CURRENT
+# landed graph. Computing it against a stale worktree copy sizes it against a
+# frontier that no longer exists, and writing it from a stale copy reverts
+# whatever landed in between. So both the plan and the write run against
+# origin/main's content, and the land carries a `--base` compare-and-swap token
+# pinned to the blob that was read (same guarantee park-node gives).
+#
+# REPO_ROOT is derived from this script's OWN on-disk location, never cwd. A
+# caller invoking the main checkout's copy by absolute path from inside a
+# worktree therefore targets the main checkout — deliberate, and the reason the
+# `graph-commit -C "$REPO_ROOT"` below is mandatory rather than cosmetic.
+#
+# Usage:
+#   boost-node [--base <blobsha>|<id>=<blobsha>|<manifest-file>]
+#              [--boost <n>] [--rank <n>] [--include-exempt] [--ack]
+#              [--preview] <node-id> [<rationale>]
+#
+# Preview mode — no <rationale>, or an explicit `--preview` — snapshots
+# origin/main into a temp dir, prints the plan (what own boost the node needs,
+# the top of the ranking, whether rule 18's ACK is implicated), and writes
+# nothing anywhere. This is the default because a boost is an authored claim on
+# scarce attention: the author should see the sizing before it lands.
+#
+# Landing mode — <rationale> supplied, no `--preview` — writes
+# `attention.boost` with that verbatim rationale and lands it on main.
+# <rationale> is mandatory for a write and is never synthesized here or by the
+# CLI: `attention.rationale` is the record of WHY the author spent the
+# attention, and an unexplained boost is unreviewable. A call that carries a
+# write-only flag (`--boost`/`--ack`) but no <rationale> is a usage error (exit
+# 2), not a silent preview — the flag says a write was intended, so the missing
+# rationale is named rather than discarded.
+#
+# Flags, all passed through to boost-node.ts:
+#   --boost <n>       write this own-boost verbatim instead of the planner's
+#                     recommendation. Post-land rank verification is REPORTED
+#                     but not asserted for an explicit value — the author chose
+#                     the number, so the planner made no promise about it.
+#   --rank <n>        target a named composed rank instead of "top candidate".
+#   --include-exempt  bring strategy-main-health's subtree into the contest
+#                     (by default the always-on trunk-health signal is not
+#                     something discretionary work has to out-rank).
+#   --ack             opt in to validateGraph rule 18 when the sized boost
+#                     matches or exceeds strategy-main-health's dominant boost;
+#                     the CLI appends the acknowledgement clause to the
+#                     rationale. Without it such a write is refused (exit 4).
+#
+# --base <blobsha>|<id>=<blobsha>|<manifest-file>: the diagnosis-time
+# compare-and-swap pin, identical in contract to park-node's — the blob the
+# caller diagnosed against, compared against origin/main's CURRENT blob before
+# any mutation. A mismatch exits 3 (`stale-diagnosis`) with nothing written, so
+# the decision can be re-made against what is actually landed rather than
+# silently absorbing a concurrent write. See
+# .claude/skills/ref-diagnosis-time-cas/SKILL.md for the caller loop.
+#
+# Post-land verification: after graph-commit succeeds, origin/main is re-read
+# into a fresh snapshot and the CLI is re-run against it in preview mode. The
+# assertion is the CLI's OWN ranking and exemption computation — the target is
+# the top contested candidate (or has reached `--rank <n>`) — never a
+# re-derivation of either in bash/jq. A failed assertion exits 6 and reports the
+# landed state. It does NOT roll back: the write is already on main, and undoing
+# it here would be a second unreviewed graph-commit, worse than an honest
+# visible state.
+#
+# NOT in scope, deliberately: the tier-aware default (what boost a node of a
+# given tier should carry without an author naming a number) and the
+# tier-change script are follow-up work gated on `tactic-attention-tier-ranking`
+# — an unmerged, parked tactic. This script implements only the ungated "boost
+# to top rank" operation.
+#
+# Unlike park-node this script never calls mark-node-terminal: a boost is an
+# author's attention write, not a node worker's terminal disposition.
+#
+# Exit codes:
+#   0  landed on main and verified (or a clean preview)
+#   1  the write, graph-commit, or a git/schema operation failed
+#   2  usage error (bad flags, missing node-id, unresolvable --base)
+#   3  stale-diagnosis — the supplied --base no longer matches origin/main;
+#      nothing was written
+#   4  boost-node.ts refused the write: no reachable boost, or rule 18's ACK is
+#      required and --ack was not given. Nothing was written.
+#   6  the boost LANDED on main but post-land verification failed — the node is
+#      not where the plan said it would be. Nothing is rolled back; re-plan
+#      against the now-landed state.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+BOOST_TS="$SCRIPT_DIR/boost-node.ts"
+
+USAGE="usage: boost-node [--base <blobsha>|<id>=<blobsha>|<manifest-file>] [--boost <n>] [--rank <n>] [--include-exempt] [--ack] [--preview] <node-id> [<rationale>]"
+
+# Leading-flags-only parse: consume flags while the current arg starts with
+# `--`; the first non-flag argument ends flag parsing and every remaining
+# argument is positional VERBATIM (no re-scan for flags — <rationale> is free
+# text that may start with `-`).
+BASE_ARG=""
+BOOST_ARG=""
+RANK_ARG=""
+INCLUDE_EXEMPT=0
+ACK=0
+PREVIEW=0
+# Flag PRESENCE is tracked separately from the flag's VALUE: an explicitly
+# supplied but empty base (`--base ''` / `--base=`) must be a usage error, not a
+# silent degradation to an unpinned write. Gating the resolver on
+# `-n "$BASE_ARG"` alone would make that case indistinguishable from omitting
+# the flag, quietly dropping the compare-and-swap guarantee the caller asked for
+# (.claude/skills/ref-diagnosis-time-cas/SKILL.md).
+BASE_SUPPLIED=0
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --base)
+      shift
+      if [[ $# -eq 0 ]]; then echo "$USAGE" >&2; exit 2; fi
+      BASE_ARG="$1"; BASE_SUPPLIED=1; shift
+      ;;
+    --base=*)
+      BASE_ARG="${1#--base=}"; BASE_SUPPLIED=1; shift
+      ;;
+    --boost)
+      shift
+      if [[ $# -eq 0 ]]; then echo "$USAGE" >&2; exit 2; fi
+      BOOST_ARG="$1"
+      if [[ ! "$BOOST_ARG" =~ ^-?[0-9]+$ ]]; then
+        echo "$USAGE (--boost must be an integer)" >&2
+        exit 2
+      fi
+      shift
+      ;;
+    --rank)
+      shift
+      if [[ $# -eq 0 ]]; then echo "$USAGE" >&2; exit 2; fi
+      RANK_ARG="$1"
+      if [[ ! "$RANK_ARG" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "$USAGE (--rank must be a number)" >&2
+        exit 2
+      fi
+      shift
+      ;;
+    --include-exempt) INCLUDE_EXEMPT=1; shift ;;
+    --ack) ACK=1; shift ;;
+    --preview) PREVIEW=1; shift ;;
+    --*)
+      echo "$USAGE" >&2
+      exit 2
+      ;;
+    *)
+      # First non-flag argument: stop flag parsing, take everything verbatim.
+      ARGS=("$@")
+      break
+      ;;
+  esac
+done
+
+NODE_ID="${ARGS[0]:-}"
+RATIONALE="${ARGS[1]:-}"
+if [[ ${#ARGS[@]} -lt 1 || ${#ARGS[@]} -gt 2 || -z "$NODE_ID" ]]; then
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+# A write-only flag with no <rationale> is a usage error, not a silent preview.
+# Bare `<node-id>` IS the documented preview form, so an absent rationale
+# ordinarily selects preview mode — but `--boost`/`--ack` only mean anything to
+# a write, so a call carrying one of them plainly intended to land something.
+# Previewing it would silently discard the author's stated intent; refusing
+# names the missing piece instead.
+if [[ ${#ARGS[@]} -lt 2 && $PREVIEW -eq 0 && ( -n "$BOOST_ARG" || $ACK -eq 1 ) ]]; then
+  echo "boost-node: --boost/--ack are write-only flags, but no <rationale> was given — a rationale is mandatory for a write and is never synthesized. Supply one to land, or drop the flag to preview." >&2
+  exit 2
+fi
+
+# Flags the preview/verification invocations of boost-node.ts share with the
+# write invocation. `--boost`/`--ack` are write-only and deliberately absent.
+PLAN_FLAGS=()
+[[ -n "$RANK_ARG" ]] && PLAN_FLAGS+=(--rank "$RANK_ARG")
+[[ $INCLUDE_EXEMPT -eq 1 ]] && PLAN_FLAGS+=(--include-exempt)
+
+# Resolve --base (if supplied) to a 40-hex blob sha, before any network call,
+# so a malformed base is a cheap usage error rather than a mid-flight failure.
+PINNED_BASE=""
+if [[ $BASE_SUPPLIED -eq 1 && -z "$BASE_ARG" ]]; then
+  echo "boost-node: --base requires a non-empty <blobsha>|<id>=<blobsha>|<manifest-file> value" >&2
+  exit 2
+fi
+if [[ $BASE_SUPPLIED -eq 1 ]]; then
+  if [[ -f "$BASE_ARG" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -z "$line" ]] && continue
+      line_id="${line%%=*}"
+      line_sha="${line#*=}"
+      if [[ "$line_id" == "$NODE_ID" ]]; then
+        PINNED_BASE="$line_sha"
+        break
+      fi
+    done <"$BASE_ARG"
+    if [[ -z "$PINNED_BASE" ]]; then
+      echo "boost-node: manifest '$BASE_ARG' has no entry for node id '$NODE_ID'" >&2
+      exit 2
+    fi
+  elif [[ "$BASE_ARG" == *=* ]]; then
+    pair_id="${BASE_ARG%%=*}"
+    pair_sha="${BASE_ARG#*=}"
+    if [[ "$pair_id" != "$NODE_ID" ]]; then
+      echo "boost-node: --base id '$pair_id' does not match node id '$NODE_ID'" >&2
+      exit 2
+    fi
+    PINNED_BASE="$pair_sha"
+  else
+    PINNED_BASE="$BASE_ARG"
+  fi
+  if [[ ! "$PINNED_BASE" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "boost-node: --base resolved to '$PINNED_BASE', not a full 40-hex blob sha" >&2
+    exit 2
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Preview mode: snapshot origin/main and print the plan. No writes anywhere.
+# ---------------------------------------------------------------------------
+if [[ $PREVIEW -eq 1 || ${#ARGS[@]} -lt 2 ]]; then
+  if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+    echo "boost-node: could not fetch origin/main to plan a boost for $NODE_ID" >&2
+    exit 1
+  fi
+  SNAPSHOT_DIR="$(mktemp -d)" \
+    || { echo "boost-node: mktemp failed for the origin/main snapshot" >&2; exit 1; }
+  # Same primitive graph-select-target uses: selection and planning read
+  # origin/main's store, never a branch or the working tree.
+  if ! git -C "$REPO_ROOT" archive origin/main intentions | tar -x -C "$SNAPSHOT_DIR"; then
+    rm -rf "$SNAPSHOT_DIR"
+    echo "boost-node: failed to snapshot intentions/ from origin/main" >&2
+    exit 1
+  fi
+  (cd "$REPO_ROOT" && npx tsx "$BOOST_TS" "$NODE_ID" --dir "$SNAPSHOT_DIR/intentions" "${PLAN_FLAGS[@]+"${PLAN_FLAGS[@]}"}")
+  rc=$?
+  rm -rf "$SNAPSHOT_DIR"
+  # boost-node.ts's own exit code is the answer — a preview that reports
+  # "unreachable" is still a successful preview (exit 0), and a schema error
+  # is still exit 1.
+  exit $rc
+fi
+
+# ---------------------------------------------------------------------------
+# Landing mode.
+# ---------------------------------------------------------------------------
+# Refresh the LOCAL node file from origin/main BEFORE the write, so the
+# attention mutation lands on top of the current landed content rather than a
+# stale worktree copy. An unreachable origin/main or a node absent from
+# origin/main is genuine environment breakage — fail with a clear error, never
+# fall back to the local copy (code-style.md).
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "boost-node: could not fetch origin/main to refresh $NODE_ID before boosting" >&2
+  exit 1
+fi
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)"; then
+  # Absent-on-origin/main stays exit 1 UNCHANGED even when --base was supplied
+  # — the pin check below never runs in this branch. This is a hard "cannot
+  # boost a node that is not landed" state, not a staleness condition: a
+  # re-diagnosis retry loop would spin forever rather than converge.
+  echo "boost-node: intentions/$NODE_ID.md does not exist on origin/main — cannot boost a node that is not landed" >&2
+  exit 1
+fi
+
+# The pin check runs before ANY mutation — before the local-file overwrite,
+# before MUTATED is set, before the EXIT trap is installed — so a stale pin has
+# zero side effects and nothing to roll back.
+if [[ -n "$PINNED_BASE" && "$PINNED_BASE" != "$FRESH_BLOB" ]]; then
+  echo "boost-node: stale-diagnosis — intentions/$NODE_ID.md on origin/main is now $FRESH_BLOB but the pinned --base is $PINNED_BASE; the node changed between diagnosis and execution. Re-read the node, re-plan the boost, and retry with a freshly captured base. Nothing was written." >&2
+  exit 3
+fi
+
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$INTENTIONS_DIR/$NODE_ID.md"; then
+  echo "boost-node: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
+fi
+
+# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md if this
+# script actually changed it. It is set HERE, immediately after the origin/main
+# refresh — that overwrite is already a content change relative to whatever the
+# working tree held — so the trap covers every downstream failure, including a
+# refused boost-node.ts --write and a failed graph-commit. It is cleared again
+# once graph-commit has landed, so a post-land verification failure never rolls
+# main's own content back out of the working tree.
+MUTATED=0
+VERIFY_DIR=""
+trap '
+  rc=$?
+  [[ -n "$VERIFY_DIR" ]] && rm -rf "$VERIFY_DIR"
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    # Restore from the immutable blob SHA captured before the mutation, not the
+    # moving origin/main ref (a concurrent fetch may have pruned/relocated the
+    # node). Write to a temp file and mv into place only on success, so a failed
+    # git-show never truncates the node file to zero bytes.
+    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$INTENTIONS_DIR/$NODE_ID.md.rollback"; then
+      mv "$INTENTIONS_DIR/$NODE_ID.md.rollback" "$INTENTIONS_DIR/$NODE_ID.md"
+    else
+      rm -f "$INTENTIONS_DIR/$NODE_ID.md.rollback"
+    fi
+  fi
+' EXIT
+MUTATED=1
+
+WRITE_FLAGS=()
+[[ -n "$BOOST_ARG" ]] && WRITE_FLAGS+=(--boost "$BOOST_ARG")
+[[ $ACK -eq 1 ]] && WRITE_FLAGS+=(--ack)
+
+(cd "$REPO_ROOT" && npx tsx "$BOOST_TS" "$NODE_ID" \
+  --dir "$INTENTIONS_DIR" --write --rationale "$RATIONALE" \
+  "${PLAN_FLAGS[@]+"${PLAN_FLAGS[@]}"}" "${WRITE_FLAGS[@]+"${WRITE_FLAGS[@]}"}" >&2)
+write_rc=$?
+if [[ $write_rc -ne 0 ]]; then
+  # Propagate boost-node.ts's own exit code faithfully — a 2 (usage / blank
+  # rationale) or 4 (unreachable, or ACK required and not given) is a REFUSAL,
+  # and the caller must be able to tell it from a landing failure. Nothing
+  # reaches graph-commit in any of these cases; the trap restores the file.
+  echo "boost-node: boost-node.ts refused or failed the write for $NODE_ID (exit $write_rc); nothing was landed" >&2
+  exit $write_rc
+fi
+
+# EXPECT_BLOB captures the blob just written to intentions/$NODE_ID.md under
+# this script's OWN REPO_ROOT, for graph-commit's --expect guard. Hashing
+# failure is genuine environment breakage — fail loudly rather than omitting
+# --expect (code-style.md).
+if ! EXPECT_BLOB="$(git -C "$REPO_ROOT" hash-object -- "intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "boost-node: could not hash intentions/$NODE_ID.md after the attention write" >&2
+  exit 1
+fi
+
+# One-line commit subject: the rationale's first line, bounded.
+SUMMARY="${RATIONALE%%$'\n'*}"
+if [[ ${#SUMMARY} -gt 72 ]]; then
+  SUMMARY="${SUMMARY:0:69}..."
+fi
+
+# -C "$REPO_ROOT" is mandatory, not cosmetic: this script's REPO_ROOT is derived
+# from SCRIPT_DIR (its own on-disk location), and the attention write above
+# targets "$INTENTIONS_DIR" under THAT repo, while graph-commit resolves its own
+# repo from -C if given, else from cwd. Callers routinely invoke the main
+# checkout's copy of this script by absolute path from inside a worktree, so
+# without -C the two would resolve to DIFFERENT checkouts.
+#
+# --expect is a race guard here rather than an independent repo check:
+# EXPECT_BLOB is hashed under the same "$REPO_ROOT" passed as -C. What it buys
+# is (1) asserting graph-commit's `git rev-parse --show-toplevel` resolution of
+# -C lands on the tree this script wrote (they can differ if REPO_ROOT is not
+# itself a git toplevel), and (2) catching a concurrent writer that touched
+# intentions/$NODE_ID.md between the hash above and graph-commit's staging.
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" \
+     --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" \
+     -m "graph: boost $NODE_ID ($SUMMARY)" "$NODE_ID"; then
+  echo "boost-node: graph-commit failed for $NODE_ID; the attention write was rolled back" >&2
+  exit 1
+fi
+
+# Landed. From here on the working-tree file matches what is on main, so the
+# rollback must not fire — a post-land failure is reported, never undone.
+MUTATED=0
+
+# ---------------------------------------------------------------------------
+# Post-land verification: did the write achieve what the plan promised?
+# ---------------------------------------------------------------------------
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "boost-node: boost LANDED but origin/main could not be re-fetched to verify it" >&2
+  exit 6
+fi
+VERIFY_DIR="$(mktemp -d)" \
+  || { echo "boost-node: boost LANDED but mktemp failed for the verification snapshot" >&2; exit 6; }
+if ! git -C "$REPO_ROOT" archive origin/main intentions | tar -x -C "$VERIFY_DIR"; then
+  echo "boost-node: boost LANDED but intentions/ could not be snapshotted from origin/main to verify it" >&2
+  exit 6
+fi
+
+echo "boost-node: post-land frontier (top 5) as landed on origin/main:" >&2
+(cd "$REPO_ROOT" && npx tsx "$BOOST_TS" "$NODE_ID" --dir "$VERIFY_DIR/intentions" --top 5 \
+  "${PLAN_FLAGS[@]+"${PLAN_FLAGS[@]}"}") >&2
+
+if ! VERIFY_JSON="$(cd "$REPO_ROOT" && npx tsx "$BOOST_TS" "$NODE_ID" \
+     --dir "$VERIFY_DIR/intentions" --json "${PLAN_FLAGS[@]+"${PLAN_FLAGS[@]}"}")"; then
+  echo "boost-node: boost LANDED but the post-land plan could not be recomputed against origin/main" >&2
+  exit 6
+fi
+
+LANDED_RANK="$(jq -r '.target_current_rank // "null"' <<<"$VERIFY_JSON")"
+LANDED_BOOST="$(jq -r --arg id "$NODE_ID" 'first(.ranking[] | select(.id == $id) | .own_boost) // "null"' <<<"$VERIFY_JSON")"
+echo "boost-node: $NODE_ID landed with own boost $LANDED_BOOST, composed rank $LANDED_RANK" >&2
+
+if [[ -n "$BOOST_ARG" ]]; then
+  # An explicit --boost is the author's own number; the planner promised
+  # nothing about where it lands, so the state is REPORTED, not asserted.
+  echo "boost-node: --boost was explicit, so the ranking outcome above is reported, not asserted" >&2
+  exit 0
+fi
+
+# The assertion reuses boost-node.ts's OWN ranking and exemption computation
+# (the `exempt` flag on each row comes from src/boost.ts's main-health
+# derivation) rather than re-deriving either here.
+if [[ -n "$RANK_ARG" ]]; then
+  if ! jq -e --argjson want "$RANK_ARG" '.target_current_rank != null and .target_current_rank >= $want' \
+       <<<"$VERIFY_JSON" >/dev/null; then
+    echo "boost-node: post-land verification FAILED — $NODE_ID's composed rank on origin/main is $LANDED_RANK, below the requested --rank $RANK_ARG. The boost IS landed; nothing was rolled back. Re-plan against the landed state." >&2
+    exit 6
+  fi
+  echo "boost-node: verified — $NODE_ID reached the requested rank ($LANDED_RANK >= $RANK_ARG) on origin/main" >&2
+  exit 0
+fi
+
+if [[ $INCLUDE_EXEMPT -eq 1 ]]; then
+  TOP_ID="$(jq -r 'first(.ranking[].id) // "none"' <<<"$VERIFY_JSON")"
+  CONTEST="candidate (exempt included)"
+else
+  TOP_ID="$(jq -r 'first(.ranking[] | select(.exempt | not) | .id) // "none"' <<<"$VERIFY_JSON")"
+  CONTEST="non-exempt candidate"
+fi
+if [[ "$TOP_ID" != "$NODE_ID" ]]; then
+  echo "boost-node: post-land verification FAILED — the top $CONTEST on origin/main is '$TOP_ID', not '$NODE_ID' (landed rank $LANDED_RANK). The boost IS landed; nothing was rolled back. Re-plan against the landed state." >&2
+  exit 6
+fi
+
+echo "boost-node: verified — $NODE_ID is the top $CONTEST on origin/main (rank $LANDED_RANK)" >&2
+exit 0
