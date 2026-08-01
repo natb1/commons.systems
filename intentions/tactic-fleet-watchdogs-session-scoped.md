@@ -110,13 +110,14 @@ attention:
     running. blocked_by is empty, so this promotion lifts no blocker and cannot
     compound; the one candidate blocker, tactic-sweep-timer-unit-dir-leak, is
     already phase done and therefore takes no inflow from this edge."
-phase: qa
+phase: review
 execution:
   branch: tactic-fleet-watchdogs-session-scoped
   pr: 3008
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -1042,3 +1043,47 @@ fails-open-to-dead trap this tactic records.
    hazard — one instance's `disable --now` cancels the other's `start`. Verify
    the process is gone with `ps` run **unsandboxed**; a sandboxed `ps` returns
    nothing and would falsely confirm.
+
+## needs-main residue
+
+Filed by `/qa-fix` pass 1 on PR #3008. This item is a planned deferral — its
+own acceptance criterion, as documented above, is non-assertable at merge
+time and is verified downstream against the deployed host/main, per the
+disposition workflow (class: `needs-main`).
+
+### Item 7 — Host-level timer wiring behaves under real systemd
+
+- **URL path:** current
+- **Expected outcome:** `dispatch-heal.timer` and `dispatch-fleet-watch.timer`
+  install, enable, fire, and complete cleanly on the real operator host; both
+  instruments survive their launching operator session ending; the healer
+  genuinely un-poisons a deliberately poisoned unit; the watcher's alarm
+  graph-nodes read as legible/actionable.
+- **Finding:** real host systemd state, real timer firing across multiple
+  intervals, and the "are these alarms actually useful" judgment cannot be
+  asserted at merge time from a scratch env-seamed script run. The PR body's
+  own Verification section scopes "Manual host verification" out of this PR
+  and defers it to this node's own "Manual verification on the host (after
+  merge)" checklist (9 numbered steps, above): unit install via
+  `dispatch-schedule-reseed`, session-end survival, the `-t` vs `-u` journald
+  rate-source check, an end-to-end alarm-surface run via deliberate
+  poisoning, the UNKNOWN-never-healthy check via an unreadable pause dir,
+  live pause-state behavior, never-fleet-halt via `git log` inspection, row-P
+  closure, and retiring the two scratch shell instruments still running
+  under `/home/n8/.claude/jobs/c20b2f8d/tmp/`. All of it requires
+  `dangerouslyDisableSandbox` and un-sandboxed `systemctl`/`ps`, and several
+  steps (session survival, multi-interval firing) cannot complete inside a
+  single QA session at all.
+
+**Script-verifiable QA (pass 1) covered instead, all PASS:** all three new
+scripts executable/syntax-clean; both one-shot instruments run with no
+required args and never touch the real host unit directory when fully
+env-seamed; the pause tri-state reader returns `unknown` (not `not-paused`)
+on an unsearchable sentinel directory, and the watcher propagates that
+`unknown` rather than silencing it; a multi-fault run confirmed the watcher
+evaluates all four predicates and does not exit early on the first violation
+(the row-O regression guard); grep across all four new/touched files found no
+write path onto `blocked_by`, `office_hours`, or the pause sentinel other than
+an alarm node's own initial field values; the host-unit-leak test-fixture
+guard lists all four new unit filenames and the systemd-units suite (109/109)
+leaves the real host directory byte-identical before/after.
