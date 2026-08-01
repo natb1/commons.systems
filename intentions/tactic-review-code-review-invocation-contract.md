@@ -38,6 +38,7 @@ attention:
     Part of the interim 50/20/10 scale's inventory — convert to a tier/bug_fix
     mark when tactic-attention-tier-ranking and tactic-attention-boost-scripts
     retire the interim scale; do not orphan this boost."
+  tier: 1
 phase: implement
 execution:
   branch: tactic-review-code-review-invocation-contract
@@ -48,8 +49,7 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-conflict-review-code-review-invocation-contract
+blocked_by: []
 office_hours: null
 pace_exempt: true
 rounds: null
