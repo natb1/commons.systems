@@ -118,12 +118,14 @@ assert_accepted "negative control: product intent" \
   "needs the author's product intent on whether the default should be opt-in"
 
 # ----- interactive run (CLAUDE_JOB_DIR unset), rejected reason: still exit 3 -----
-d=$(mktemp -d)
+# Exit code only: with CLAUDE_JOB_DIR unset the script has no job dir to write
+# to, so a "no files written" assertion here would be vacuous. The rejection
+# gate's own no-write behavior is covered by assert_rejected above, which runs
+# with CLAUDE_JOB_DIR set to a real dir and asserts both marker files absent.
 err=$( (unset CLAUDE_JOB_DIR; "$MARK_NODE_PARK" "not browser-verifiable: no way to check" "recommendation") 2>&1 1>/dev/null ) && ec=0 || ec=$?
 assert_eq "interactive + rejected reason: exit 3 (validation precedes guard)" "3" "$ec"
-assert_eq "interactive + rejected reason: no files written" "0" \
-  "$([ -f "$d/office-hours-reason" ] && echo 1 || echo 0)"
-rm -rf "$d"
+assert_contains_local "interactive + rejected reason: stderr is the rejection, not the interactive note" \
+  "cannot be machine-checked AT ALL" "$err"
 
 # ----- interactive run (CLAUDE_JOB_DIR unset), good reason: exit 0, no write, stderr note -----
 err=$( (unset CLAUDE_JOB_DIR; "$MARK_NODE_PARK" "auth wall prevented observing the expected banner" "recommendation") 2>&1 1>/dev/null ) && ec=0 || ec=$?
