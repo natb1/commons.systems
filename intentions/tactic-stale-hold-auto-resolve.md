@@ -74,11 +74,12 @@ execution:
   strategy_fingerprint: null
   fix:
     since: 2026-08-01
-    attempt: 29
+    attempt: 1
     pushed_sha: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-fix-cap-stale-hold-auto-resolve
 office_hours: null
 pace_exempt: true
 rounds: null
