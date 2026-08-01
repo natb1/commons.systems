@@ -110,7 +110,7 @@ attention:
     running. blocked_by is empty, so this promotion lifts no blocker and cannot
     compound; the one candidate blocker, tactic-sweep-timer-unit-dir-leak, is
     already phase done and therefore takes no inflow from this edge."
-phase: review
+phase: main-qa
 execution:
   branch: tactic-fleet-watchdogs-session-scoped
   pr: 3008
@@ -121,10 +121,109 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-01T01:15:38Z
+    mergeCommitSha: 2643b5cd41637650ae1daaa4c0c3a32ac07c0e53
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-main: needs-main residue Item 7 (\"Host-level timer wiring behaves
+    under real systemd\") on tactic-fleet-watchdogs-session-scoped (PR #3008,
+    merged) is not browser-verifiable. Its url_path is \"current\" — not a
+    navigable prod page — and its expected outcome (systemd timer
+    install/enable/multi-interval firing, an instrument surviving its launching
+    operator session ending, an unsandboxed `ps`/`systemctl` check, live
+    poisoning-and-heal cycle, journald -t rate-source check) is host-process
+    state, unreachable via Claude-in-Chrome against commons.systems. The PR body
+    itself scopes this out of automated QA and defers it to the node's own
+    \"Manual verification on the host (after merge)\" checklist. Routed straight
+    to cannot-verify per qa-main Step 4·0 (non-browser outcome), without loading
+    browser tools."
+  since: 2026-08-01
+  recommendation: >-
+    **What to check.** `tactic-fleet-watchdogs-session-scoped` (source PR #3008,
+
+    merged) shipped `dispatch-heal-units`, `dispatch-fleet-watch`, and the
+
+    `ensure_healer_units`/`ensure_watcher_units` systemd-unit installers. Pass-1
+
+    `/qa-fix` verified everything script-testable (all suites green, env-seamed
+    so
+
+    no host unit was touched); it deliberately deferred host-level systemd
+
+    behavior to this node's own `## Manual verification on the host (after
+    merge)`
+
+    checklist (`intentions/tactic-fleet-watchdogs-session-scoped.md`),
+    reproduced
+
+    here as the concrete steps to run, in order, on the real operator host with
+
+    `dangerouslyDisableSandbox: true` (a sandboxed `ps`/`systemctl` reaches
+    nothing
+
+    and fails open to "looks clean" — the exact trap this tactic exists to
+    close):
+
+
+    1. **Install.** Run `dispatch-schedule-reseed` (or wait for the next
+    reseed),
+       then confirm `~/.config/systemd/user/dispatch-heal.{service,timer}` and
+       `dispatch-fleet-watch.{service,timer}` exist and
+       `systemctl --user list-timers` shows both armed with a next-fire time.
+    2. **Survival (exit-criterion half 1).** Note the healer's `MainPID`, end
+    the
+       session that triggered install, and confirm after the next interval both
+       units still fire (`systemctl --user show dispatch-heal.service -p NRestarts
+       -p ExecMainStartTimestamp`). A reboot is the stronger form.
+    3. **Rate source.** `journalctl --user -t dispatch-heal-units -o short-iso
+       --since -1h` should show this pass's lines. If empty while `-u
+       dispatch-heal.service` is not, `SyslogIdentifier=` is wrong (the `-t` vs
+       `-u` trap already documented at `dispatch-reclaim-audit:19-30`).
+    4. **Alarm surface end-to-end.** Deliberately poison
+       `dispatch-sweep-periodic.service`'s `ExecStart=` to a `/tmp/tmp.*` path,
+       `daemon-reload`, wait one healer interval, confirm: unit repaired, a
+       `heal-fired` journal line, and `intentions/tactic-fleet-alarm-heal-fired.md`
+       present on `origin/main` carrying the prior `ExecStart`. After the next
+       clean pass, confirm that node's `phase` flips to `done`.
+    5. **UNKNOWN-never-healthy (load-bearing half of the ALARM ruling).** Run
+       `dispatch-fleet-watch` by hand with `DISPATCH_DECISION_LOG_FILE` pointed at
+       a nonexistent path: output must name the unreadable input, exit code must
+       be `2`, and a `tactic-fleet-alarm-watch-unknown` node must land. A bare `ok`
+       means the unit is broken exactly the way this tactic exists to prevent.
+    6. **Pause behavior.** With the pause sentinel present and a stale decision
+       log, confirm tick-staleness stays quiet while daemon-liveness still
+       evaluates. Then `chmod 000` the `commons-dispatch` state dir and confirm the
+       pass still emits, tagged `pause=unknown`. Restore the mode afterward.
+    7. **Never-fleet-halt (by inspection).** After several passes,
+       `git log --oneline --name-only -20 -- intentions/` should show writes only
+       to `tactic-fleet-alarm-*` ids; the pause sentinel is unchanged;
+       `dispatch-select-tick` still fans out normally.
+    8. **Row P closed.** With an ordinary human session under a non-node name
+       sitting at a permission prompt, confirm `dispatch-fleet-watch` flags no
+       predicate for it. `grep -c 'FINDING-' dispatch-fleet-watch` must be `0`.
+    9. **Retire the scratch instruments.** Kill the still-running `bash
+       /home/n8/.claude/jobs/c20b2f8d/tmp/heal-units.sh` (and the watcher scratch
+       script) and do not relaunch either — two heal loops racing is a documented
+       hazard (one instance's `disable --now` cancels the other's `start`). Verify
+       the process is gone with **unsandboxed** `ps`; a sandboxed `ps` returns zero
+       rows and would falsely confirm it's gone.
+
+    **On completion.** If all nine pass, close residue Item 7 and let the node
+
+    advance `main-qa → done` (`transition-node
+    tactic-fleet-watchdogs-session-scoped`,
+
+    sandbox-off). If any step fails, that failure is a genuine regression
+    against
+
+    merged PR #3008 — file it as an implement-chain bug (`serves` the same
+
+    strategy, `strategy-graph-native-dispatch`) rather than re-parking this
+    node.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
