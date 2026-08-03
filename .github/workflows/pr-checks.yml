@@ -50,9 +50,19 @@ jobs:
             FUSER_OK=0
             echo 'WARNING: fuser not installed (psmisc missing) - dpkg lock state UNKNOWN, skipping lock probes'
           fi
+          # apt-get takes the locks in this order (lock-frontend, lists/lock,
+          # dpkg/lock); a bare `dpkg` takes only /var/lib/dpkg/lock. Probe, kill
+          # and wait on all three so a non-apt holder is not invisible to us.
+          set -- /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/lib/dpkg/lock
           if [ "$FUSER_OK" -eq 1 ]; then
-            echo 'dpkg lock-frontend holders at step start:'
-            sudo fuser -v /var/lib/dpkg/lock-frontend || echo 'dpkg lock-frontend: no holders at step start'
+            for lock in "$@"; do
+              if [ ! -e "$lock" ]; then
+                echo "$lock: absent, nothing to probe"
+                continue
+              fi
+              echo "$lock holders at step start:"
+              sudo fuser -v "$lock" || echo "$lock: no holders at step start"
+            done
           fi
           if stop_err=$(sudo systemctl stop apt-daily.service apt-daily-upgrade.service apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service 2>&1); then
             echo 'systemctl stop: ok'
@@ -78,26 +88,50 @@ jobs:
           else
             echo 'no apt.systemd.daily process to kill'
           fi
+          # --- SIGKILL stage ---------------------------------------------------
+          # Everything above targets named units / known argv patterns. The
+          # original flake's holder was a bare `apt-get` reparented out of its
+          # unit's cgroup, which none of those reach. `fuser -k` is the
+          # holder-agnostic last resort: it SIGKILLs whoever holds the file,
+          # whatever it is and whoever started it.
           if [ "$FUSER_OK" -eq 1 ]; then
-            if ! sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
-              echo 'dpkg lock-frontend: already free, no wait needed'
-            else
-              waited=0
+            for lock in "$@"; do
+              [ -e "$lock" ] || continue
+              if sudo fuser -k "$lock" >/dev/null 2>&1; then
+                echo "fuser -k: killed holder(s) of $lock"
+              else
+                echo "fuser -k: no holders of $lock"
+              fi
+            done
+          fi
+          # Bounded wait: ONE shared 120s wall-clock deadline across all three
+          # lock files, not 120s each — the job's total budget is fixed.
+          if [ "$FUSER_OK" -eq 1 ]; then
+            wait_deadline=$(( $(date +%s) + 120 ))
+            for lock in "$@"; do
+              if [ ! -e "$lock" ]; then
+                echo "$lock: absent, no wait needed"
+                continue
+              fi
+              if ! sudo fuser "$lock" >/dev/null 2>&1; then
+                echo "$lock: already free, no wait needed"
+                continue
+              fi
+              wait_start=$(date +%s)
               expired=0
-              while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-                if [ "$waited" -ge 120 ]; then
-                  echo "dpkg lock-frontend still held after 120s; holders:" >&2
-                  sudo fuser -v /var/lib/dpkg/lock-frontend >&2 || true
+              while sudo fuser "$lock" >/dev/null 2>&1; do
+                if [ "$(date +%s)" -ge "$wait_deadline" ]; then
+                  echo "$lock still held at the shared 120s deadline; holders:" >&2
+                  sudo fuser -v "$lock" >&2 || true
                   expired=1
                   break
                 fi
                 sleep 1
-                waited=$((waited + 1))
               done
               if [ "$expired" -eq 0 ]; then
-                echo "dpkg lock-frontend freed after ${waited}s"
+                echo "$lock freed after $(( $(date +%s) - wait_start ))s"
               fi
-            fi
+            done
           fi
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

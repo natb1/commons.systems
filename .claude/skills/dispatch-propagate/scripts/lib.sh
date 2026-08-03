@@ -1658,6 +1658,16 @@ ensure_deps() {
 # returns 0 so it never fails the caller.
 # Tunables (env): DPKG_LOCK_FILE (default /var/lib/dpkg/lock-frontend),
 # DPKG_LOCK_WAIT_TIMEOUT (default 120 seconds).
+# Deliberately single-file, unlike the pr-checks.yml `Disable
+# unattended-upgrades / free dpkg lock` step, which probes all three of
+# lock-frontend, /var/lib/apt/lists/lock and /var/lib/dpkg/lock. That step runs
+# before any job work and must survive an arbitrary holder — including a bare
+# `dpkg`, which takes only /var/lib/dpkg/lock. This helper runs in one narrow
+# spot: the post-failure retry backstop inside playwright_install_with_deps,
+# where the holder is always the previous attempt's own apt-get tree. apt-get
+# takes lock-frontend first and holds it for the whole run, so waiting on
+# lock-frontend alone is sufficient there; DPKG_LOCK_FILE remains available if a
+# future caller needs a different one.
 wait_for_dpkg_lock() {
   local lockfile="${DPKG_LOCK_FILE:-/var/lib/dpkg/lock-frontend}"
   local deadline="${DPKG_LOCK_WAIT_TIMEOUT:-120}"
