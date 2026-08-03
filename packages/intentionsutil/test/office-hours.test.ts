@@ -58,7 +58,7 @@ function kinds(): IntentionNode[] {
 }
 
 function boost(amount: number): Attention {
-  return { boost: amount, override: null, rationale: "because" };
+  return { boost: amount, override: null, rationale: "because", tier: 1 };
 }
 
 function parked(recommendation: string | null = null): OfficeHours {
@@ -171,6 +171,31 @@ describe("officeHoursQueue", () => {
 
     expect(queue.find((m) => m.nodeId === "tactic-other")?.rank).toBe(8);
     expect(queue.find((m) => m.nodeId === "tactic-currev")?.rank).toBe(8 * SESSION_TYPE_PENALTY);
+  });
+
+  it("puts a tier-2 parked node ahead of a higher-raw-rank tier-1 node (hard outer axis)", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-tier1-high",
+        kind: "tactic",
+        attention: boost(100),
+        office_hours: parked(),
+      }),
+      anode({
+        id: "tactic-tier2-low",
+        kind: "tactic",
+        attention: boost(1),
+        attributes: { tier: 2 },
+        office_hours: parked(),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+
+    expect(queue.map((m) => m.nodeId)).toEqual(["tactic-tier2-low", "tactic-tier1-high"]);
+    expect(queue.find((m) => m.nodeId === "tactic-tier2-low")?.tier).toBe(2);
+    expect(queue.find((m) => m.nodeId === "tactic-tier1-high")?.tier).toBe(1);
   });
 
   it("exposes sessionType on every QueueMember and filters by sessionType when given", () => {
@@ -448,6 +473,7 @@ describe("formatQueueRow", () => {
     const row = formatQueueRow({
       nodeId: "tactic-a",
       rank: 12.5,
+      tier: 1,
       sessionType: "curriculum-review",
       since: "2026-07-01",
     });
