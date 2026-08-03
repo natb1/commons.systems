@@ -154,6 +154,54 @@ describe("listHoldCandidates", () => {
     expect(result.map((c) => c.cls)).toEqual(["predicate"]);
   });
 
+  it("excludes a hold whose own id is not the canonical derivation", () => {
+    // The enumeration key is the hold NODE ID; resolve-hold's key is
+    // (source, kind). A node carrying hold attributes under any other id would
+    // have ITS classification applied to whatever hold the derivation lands on.
+    const decoy = hold("tactic-decoy-x", "tactic-victim", "provision-conflict", {
+      phase: "done",
+      office_hours: null,
+    });
+    expect(listHoldCandidates([decoy, source("tactic-victim", [decoy.id])])).toEqual([]);
+  });
+
+  it("keeps a victim's genuine hold manual when a terminal decoy shares its hold_for", () => {
+    // The attack shape: a terminal decoy would classify as `edge-residue`,
+    // skipping the manual re-check policy, and force-resolve the genuine hold.
+    const decoy = hold("tactic-decoy-x", "tactic-victim", "provision-conflict", {
+      phase: "done",
+      office_hours: null,
+    });
+    const genuine = hold("tactic-hold-conflict-victim", "tactic-victim", "provision-conflict", {
+      phase: "implement",
+      office_hours: PARKED,
+    });
+    const result = listHoldCandidates([
+      decoy,
+      genuine,
+      source("tactic-victim", [decoy.id, genuine.id]),
+    ]);
+    expect(result).toEqual([
+      {
+        holdId: "tactic-hold-conflict-victim",
+        sourceId: "tactic-victim",
+        kind: "provision-conflict",
+        cls: "manual",
+      },
+    ]);
+  });
+
+  it("excludes a hold whose hold_for cannot derive a valid node-id slug", () => {
+    // holdIdFor throws on a derivation that fails the slug shape; a throw is a
+    // non-match here, never a sweep-wide failure.
+    const h = hold("tactic-hold-residue-bad", "Tactic-BAD", "worktree-residue", {
+      phase: "implement",
+      office_hours: PARKED,
+    });
+    const src = anode({ id: "Tactic-BAD", kind: "tactic", blocked_by: [h.id] });
+    expect(listHoldCandidates([h, src])).toEqual([]);
+  });
+
   it("sorts multiple candidates by hold id ascending", () => {
     const c = hold("tactic-hold-residue-c", "tactic-c", "worktree-residue", {
       phase: "implement",

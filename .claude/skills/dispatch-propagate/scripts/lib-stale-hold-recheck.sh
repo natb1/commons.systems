@@ -76,16 +76,28 @@
 #     b. class == `manual` → `skip-manual-policy`, counted, never acted on. The
 #        kind has no machine-checkable predicate (KIND_RECHECK in
 #        packages/intentionsutil/src/holds.ts records why, per kind).
-#     c. class == `edge-residue` → straight to (f). No predicate applies: the
-#        hold is already terminal, so the tracked condition is definitionally
-#        gone and the surviving edge is the dropped-removal shape.
-#     d. CLAIMED — `reservation_exists <source-id>` (the ledger marker basename
-#        for a node-lane source IS its node id) OR `worktree_has_live_session
-#        "$ROOT/.claude/worktrees/<source-id>"` → `observing-claimed`, skip. A
-#        session may be actively clearing the residue right now; never mutate a
-#        node another session holds. `worktree_has_live_session` is fail-safe by
-#        construction — an unqueryable daemon reports OCCUPIED — which is
-#        precisely the posture this rule wants. Do not "fix" that.
+#     c. CLAIMED — for the SOURCE node and for the HOLD node alike:
+#        `reservation_exists <id>` (the ledger marker basename for a node-lane
+#        node IS its node id) OR `worktree_has_live_session
+#        "$ROOT/.claude/worktrees/<id>"` → `observing-claimed`, skip. Both ids
+#        are checked because `resolve-hold` writes BOTH nodes: write A clears the
+#        hold's own park and drives it to `phase: done`, write B removes the
+#        source's edge. A hold is a born-parked `kind: tactic` node, and the
+#        graph office-hours lane (`packages/intentionsutil/scripts/
+#        office-hours-graph`) provisions `<root>/.claude/worktrees/<node-id>` and
+#        launches a `--bg` session named after the node id for exactly such
+#        nodes — so a human reviewing `tactic-hold-<kind>-<src>` right now must
+#        not have that review gate cleared underneath them. The source check has
+#        the mirror rationale: a session may be actively clearing the residue.
+#        Never mutate a node another session holds.
+#        `worktree_has_live_session` is fail-safe by construction — an
+#        unqueryable daemon reports OCCUPIED — which is precisely the posture
+#        this rule wants. Do not "fix" that. This gate applies to EVERY class
+#        that reaches it, `edge-residue` included: (d) exempts that class from
+#        the PREDICATE only, never from the claim check.
+#     d. class == `edge-residue` → skip (e), straight to (f). No predicate
+#        applies: the hold is already terminal, so the tracked condition is
+#        definitionally gone and the surviving edge is the dropped-removal shape.
 #     e. PREDICATE (class == `predicate`, i.e. the kind's re-check policy is
 #        `auto` — today only `worktree-residue`) —
 #        `worktree_residue_condition "$ROOT/.claude/worktrees/<source-id>"
@@ -97,10 +109,25 @@
 #     f. RESOLVE — the per-pass cap is checked FIRST: at
 #        `DISPATCH_HOLD_RECHECK_MAX` attempts already spent → `deferred
 #        (cap=<n>)`, skip. Otherwise `$ROOT/packages/intentionsutil/scripts/
-#        resolve-hold <source-id> --kind <kind>`. Exit 0 → `resolved`. Non-zero
-#        → `resolve-failed (rc=<n>)`, the hold is KEPT and retried next tick, and
-#        the sweep CONTINUES to the next candidate. It never aborts, never parks
-#        anything, and never touches a node file directly.
+#        resolve-hold <source-id> --kind <kind> --hold-id <hold-id>`. Exit 0 →
+#        `resolved`. Non-zero → `resolve-failed (rc=<n>)`, the hold is KEPT and
+#        retried next tick, and the sweep CONTINUES to the next candidate. It
+#        never aborts, never parks anything, and never touches a node file
+#        directly.
+#
+#        `--hold-id` is LOAD-BEARING, not decoration. This sweep enumerates and
+#        classifies BY hold node id, while `resolve-hold` re-derives the hold id
+#        from (source, kind) — two different keys for the same thing. Passing
+#        the enumerated id makes resolve-hold assert the two agree and refuse
+#        (exit 2, nothing landed) when they do not, so the hold that was
+#        inspected here is provably the hold that gets resolved there. Without
+#        it, any node carrying `attributes.hold_kind`/`hold_for` under a
+#        NON-canonical id — nothing in validate-graph forbids one — would have
+#        its own classification applied to whatever hold the derivation lands
+#        on, i.e. some other node's genuine, still-open hold. The enumerator
+#        (`listHoldCandidates`, packages/intentionsutil/src/hold-sweep.ts) drops
+#        non-canonical ids for the same reason; this is the second half of that
+#        binding, on the write side.
 #
 #   The cap exists for the same reason lib-standdown-recheck.sh caps its parks:
 #   `resolve-hold` pushes to `main` through graph-commit's landing lock, so an
@@ -141,7 +168,7 @@
 # ledgers and land through unrelated primitives; a merged file would couple two
 # independent fail-safe postures.
 #
-# Sandbox: rule (d)'s liveness query reaches the local Claude daemon over a Unix
+# Sandbox: rule (c)'s liveness query reaches the local Claude daemon over a Unix
 # socket, so callers must run this with `dangerouslyDisableSandbox: true` — see
 # `.claude/rules/sandbox.md`. A sandboxed call yields `[]`; because
 # `worktree_has_live_session` fails safe toward OCCUPIED only on an UNKNOWN (not
@@ -281,7 +308,7 @@ if [[ -z "${_LIB_STALE_HOLD_RECHECK_LOADED:-}" ]]; then
     local resolve_cmd="${DISPATCH_HOLD_RECHECK_RESOLVE:-$root/packages/intentionsutil/scripts/resolve-hold}"
 
     # --- Step 3: the per-candidate ladder ------------------------------------
-    local hold_id source_id kind cls wt slug cond_rc rc do_resolve
+    local hold_id source_id kind cls wt hold_wt claimed_id slug cond_rc rc do_resolve
     while IFS=$'\t' read -r hold_id source_id kind cls; do
       [[ -n "$hold_id" || -n "$source_id" ]] || continue
       candidates=$(( candidates + 1 ))
@@ -302,27 +329,40 @@ if [[ -z "${_LIB_STALE_HOLD_RECHECK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (c) An edge-residue candidate goes straight to the resolve step: the
-      # hold is already terminal, so there is no tracked condition left to
-      # predicate on — only the survived `blocked_by` edge to clear.
+      wt="$root/.claude/worktrees/$source_id"
+      hold_wt="$root/.claude/worktrees/$hold_id"
+
+      # (c) Claimed — EITHER node. Checked before everything else, and for every
+      # class that reaches here (edge-residue included): `resolve-hold` mutates
+      # BOTH nodes, so a live claim on either one is a claim on this write. On
+      # the source, a session actively clearing the residue would momentarily
+      # read as clean and get resolved out from under. On the hold, the graph
+      # office-hours lane provisions a worktree and a bg session named after the
+      # hold's own node id, so an in-flight human review would have its park
+      # cleared and the node driven to done underneath it.
+      claimed_id=""
+      if reservation_exists "$source_id" 2>/dev/null || worktree_has_live_session "$wt"; then
+        claimed_id="$source_id"
+      elif reservation_exists "$hold_id" 2>/dev/null || worktree_has_live_session "$hold_wt"; then
+        claimed_id="$hold_id"
+      fi
+      if [[ -n "$claimed_id" ]]; then
+        printf 'lib-stale-hold-recheck: observing-claimed (%s has a live session or reservation)\n' "$claimed_id" >&2
+        observing=$(( observing + 1 ))
+        _stale_hold_log_decision "$hold_id" "$source_id" "$kind" "$cls" "observing-claimed"
+        continue
+      fi
+
+      # (d) An edge-residue candidate skips the predicate — and ONLY the
+      # predicate: the hold is already terminal, so there is no tracked
+      # condition left to predicate on, only the survived `blocked_by` edge to
+      # clear. The claim gate above still governed it.
       do_resolve=0
       if [[ "$cls" == "edge-residue" ]]; then
         do_resolve=1
       fi
 
-      wt="$root/.claude/worktrees/$source_id"
-
       if (( do_resolve == 0 )); then
-        # (d) Claimed. Checked BEFORE the predicate: a session actively clearing
-        # the residue would momentarily read as clean, and resolving under it
-        # would mutate a node that session holds.
-        if reservation_exists "$source_id" 2>/dev/null || worktree_has_live_session "$wt"; then
-          printf 'lib-stale-hold-recheck: observing-claimed (%s has a live session or reservation)\n' "$source_id" >&2
-          observing=$(( observing + 1 ))
-          _stale_hold_log_decision "$hold_id" "$source_id" "$kind" "$cls" "observing-claimed"
-          continue
-        fi
-
         # (e) The predicate. Read-only by construction — this sweep does not own
         # the worktree and must never abort, check out, or write in it.
         cond_rc=0
@@ -351,8 +391,14 @@ if [[ -z "${_LIB_STALE_HOLD_RECHECK_LOADED:-}" ]]; then
       fi
       resolve_attempts=$(( resolve_attempts + 1 ))
 
+      # `--hold-id` binds the write to the candidate that was classified: the
+      # enumeration key is the hold NODE ID, resolve-hold's key is (source,
+      # kind), and a node carrying hold attributes under a non-canonical id
+      # would otherwise steer this candidate's disposition onto a different
+      # hold. resolve-hold asserts the two agree and exits 2 without landing
+      # anything on a mismatch (see its header).
       rc=0
-      "$resolve_cmd" "$source_id" --kind "$kind" >/dev/null || rc=$?
+      "$resolve_cmd" "$source_id" --kind "$kind" --hold-id "$hold_id" >/dev/null || rc=$?
       if (( rc == 0 )); then
         printf 'lib-stale-hold-recheck: resolved %s (unblocked %s)\n' "$hold_id" "$source_id" >&2
         resolved=$(( resolved + 1 ))

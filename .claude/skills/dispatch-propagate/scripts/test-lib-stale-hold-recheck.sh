@@ -47,6 +47,14 @@
 #   13. unresolvable repo root -> status=repo-unresolvable, return 0
 #   14. EVERY case: return value 0 and EXACTLY ONE `sweep complete` line
 #       (asserted by run_sweep, which every case goes through)
+#   15. a live session under the HOLD node's own name -> observing-claimed
+#       (resolve-hold writes the hold node too, so a claim on it is a claim on
+#       this write)
+#   16. edge-residue candidates with a claimed source / a claimed hold -> both
+#       observing-claimed (the class skips the predicate, never the claim gate)
+#   17. a terminal node carrying hold attributes under a NON-CANONICAL id, named
+#       in a victim's blocked_by -> not enumerated at all; the victim's genuine
+#       open manual-policy hold is the only candidate and is never resolved
 #
 # No network needed; requires bash + git + jq + a real node with tsx resolvable
 # through a read-only node_modules symlink to this repo's own.
@@ -265,8 +273,8 @@ assert_contains "case1: summary reports one resolution" \
 assert_contains "case1: names the resolved hold" \
   "resolved tactic-hold-residue-src-a (unblocked tactic-src-a)" "$ERR"
 assert_eq "case1: resolve-hold invoked exactly once" "1" "$(resolve_log_lines)"
-assert_eq "case1: invoked with the source id and the hold's kind" \
-  "tactic-src-a --kind worktree-residue" "$(cat "$RESOLVE_LOG")"
+assert_eq "case1: invoked with the source id, the hold's kind, and the enumerated hold id" \
+  "tactic-src-a --kind worktree-residue --hold-id tactic-hold-residue-src-a" "$(cat "$RESOLVE_LOG")"
 
 # ============================================================================
 # Case 2: no worktree directory at all -> `absent` is not residue -> resolved
@@ -385,8 +393,8 @@ DISPATCH_HOLD_RECHECK_REPO_ROOT="$R7" run_sweep "case7"
 assert_contains "case7: summary reports one resolution" \
   "candidates=1 resolved=1 observing=0" "$SUMMARY"
 assert_eq "case7: resolve-hold invoked exactly once" "1" "$(resolve_log_lines)"
-assert_eq "case7: invoked with the source id and kind" \
-  "tactic-src-a --kind worktree-residue" "$(cat "$RESOLVE_LOG")"
+assert_eq "case7: invoked with the source id, kind, and the enumerated hold id" \
+  "tactic-src-a --kind worktree-residue --hold-id tactic-hold-residue-src-a" "$(cat "$RESOLVE_LOG")"
 
 # ============================================================================
 # Case 8: an open provision-conflict hold -> manual policy, never acted on
@@ -503,5 +511,84 @@ assert_contains "case13: status is repo-unresolvable" \
 assert_contains "case13: prints a diagnostic naming the unresolvable root" \
   "repo root unresolvable" "$ERR"
 assert_eq "case13: resolve-hold never invoked" "0" "$(resolve_log_lines)"
+
+# ============================================================================
+# Case 15: a live session under the HOLD's own worktree name -> claimed. A hold
+# is a born-parked `kind: tactic` node, and the graph office-hours lane
+# provisions a worktree and a bg session named after it — so a human review in
+# flight must not have its park cleared underneath it by this sweep.
+# ============================================================================
+echo "Case 15: a live session on the hold node itself keeps the hold"
+reset_env
+R15="$(new_repo case15)"
+write_source "$R15" tactic-src-a "[tactic-hold-residue-src-a]"
+write_open_hold "$R15" tactic-hold-residue-src-a tactic-src-a worktree-residue
+mk_wt "$R15" tactic-src-a   # CLEAN: only the hold's own claim can keep it
+jq -n '[{sessionId:"sess-oh",status:"busy",name:"tactic-hold-residue-src-a",state:"running"}]' \
+  >"$DISPATCH_AGENTS_SNAPSHOT_ALL"
+DISPATCH_HOLD_RECHECK_REPO_ROOT="$R15" run_sweep "case15"
+
+assert_contains "case15: reports the claim on the hold node" \
+  "observing-claimed (tactic-hold-residue-src-a has a live session or reservation)" "$ERR"
+assert_contains "case15: summary counts it as observing" \
+  "candidates=1 resolved=0 observing=1" "$SUMMARY"
+assert_eq "case15: resolve-hold never invoked" "0" "$(resolve_log_lines)"
+
+# ============================================================================
+# Case 16: an edge-residue candidate is subject to the claim gate too. The class
+# skips the PREDICATE only — a claimed source (or hold) still keeps it, since
+# resolve-hold writes both nodes.
+# ============================================================================
+echo "Case 16: an edge-residue candidate with a claimed node is kept"
+reset_env
+R16="$(new_repo case16)"
+write_source "$R16" tactic-src-a "[tactic-hold-residue-src-a]"
+write_done_hold "$R16" tactic-hold-residue-src-a tactic-src-a worktree-residue
+write_source "$R16" tactic-src-b "[tactic-hold-residue-src-b]"
+write_done_hold "$R16" tactic-hold-residue-src-b tactic-src-b worktree-residue
+mk_wt "$R16" tactic-src-a
+mk_wt "$R16" tactic-src-b
+jq -n '[{sessionId:"sess-a",status:"busy",name:"tactic-src-a",state:"running"},
+        {sessionId:"sess-b",status:"busy",name:"tactic-hold-residue-src-b",state:"running"}]' \
+  >"$DISPATCH_AGENTS_SNAPSHOT_ALL"
+DISPATCH_HOLD_RECHECK_REPO_ROOT="$R16" run_sweep "case16"
+
+assert_contains "case16: the claimed source keeps its edge-residue hold" \
+  "observing-claimed (tactic-src-a has a live session or reservation)" "$ERR"
+assert_contains "case16: the claimed hold node keeps its own edge-residue hold" \
+  "observing-claimed (tactic-hold-residue-src-b has a live session or reservation)" "$ERR"
+assert_contains "case16: summary counts both as observing" \
+  "candidates=2 resolved=0 observing=2 manual=0 unknown=0 failed=0 deferred=0 status=ok" "$SUMMARY"
+assert_eq "case16: resolve-hold never invoked" "0" "$(resolve_log_lines)"
+
+# ============================================================================
+# Case 17: a node carrying hold attributes under a NON-CANONICAL id is not a
+# hold. Nothing in validate-graph requires a node with
+# `attributes.hold_kind`/`hold_for` to use the derived id
+# `tactic-hold-<kindSlug>-<src>`, so without the enumerator's canonical-id check
+# a decoy node — terminal (`phase: done`, `office_hours: null`) and named in the
+# victim's `blocked_by` — would classify as `edge-residue`, skip the predicate,
+# and drive `resolve-hold <victim> --kind provision-conflict`, force-resolving
+# the victim's GENUINE still-open manual-policy hold. The decoy must not be
+# enumerated at all, and the genuine hold must still be reported as manual.
+# ============================================================================
+echo "Case 17: a hold-attributed node under a non-canonical id is not enumerated"
+reset_env
+R17="$(new_repo case17)"
+write_source "$R17" tactic-victim "[tactic-decoy-x, tactic-hold-conflict-victim]"
+# The genuine hold: open, manual policy, canonical id.
+write_open_hold "$R17" tactic-hold-conflict-victim tactic-victim provision-conflict
+# The decoy: terminal, same hold_kind/hold_for, id NOT the canonical derivation.
+write_done_hold "$R17" tactic-decoy-x tactic-victim provision-conflict
+mk_wt "$R17" tactic-victim
+DISPATCH_HOLD_RECHECK_REPO_ROOT="$R17" run_sweep "case17"
+
+assert_contains "case17: only the genuine hold is a candidate, and it is manual" \
+  "candidates=1 resolved=0 observing=0 manual=1 unknown=0 failed=0 deferred=0 status=ok" "$SUMMARY"
+assert_contains "case17: the genuine hold is reported under its manual policy" \
+  "skip-manual-policy (provision-conflict has no machine-checkable predicate) for tactic-hold-conflict-victim" "$ERR"
+assert_eq "case17: the decoy is never named in the sweep output" "0" \
+  "$(grep -cF 'tactic-decoy-x' "$WORK/stderr.log")"
+assert_eq "case17: resolve-hold never invoked" "0" "$(resolve_log_lines)"
 
 report_results

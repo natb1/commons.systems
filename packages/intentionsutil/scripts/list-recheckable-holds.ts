@@ -20,7 +20,7 @@
 // Exit 0 on success; exit 2 on a usage error or a malformed store.
 
 import { pathToFileURL } from "node:url";
-import { listNodes } from "../src/store.js";
+import { listNodesStrict } from "../src/store.js";
 import { listHoldCandidates } from "../src/hold-sweep.js";
 
 export interface HoldSweepOpts {
@@ -48,7 +48,14 @@ function parseArgs(argv: string[]): HoldSweepOpts {
 
 function main(argv: string[]): void {
   const { dir } = parseArgs(argv);
-  const nodes = listNodes(dir);
+  // STRICT by contract: this enumerator is a decision-making caller — its
+  // output drives `resolve-hold`'s graph writes. The tolerant `listNodes`
+  // would drop an unreadable `<id>.md` with only a stderr warning while still
+  // exiting 0, so the sweep would report `status=ok` for an enumeration that
+  // silently lost holds. `listNodesStrict` throws instead, which the CLI
+  // wrapper turns into exit 2 and lib-stale-hold-recheck.sh reports as
+  // `status=enumeration-failed`.
+  const nodes = listNodesStrict(dir);
   for (const c of listHoldCandidates(nodes)) {
     process.stdout.write(`${c.holdId}\t${c.sourceId}\t${c.kind}\t${c.cls}\n`);
   }
