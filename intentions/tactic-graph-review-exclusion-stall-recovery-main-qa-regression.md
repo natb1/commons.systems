@@ -30,6 +30,8 @@ attributes: {}
 ---
 # reconcile-graph-review-stall's fix-interrupt entry has no cross-cycle attempt cap: FIX_ATTEMPT_CAP only bounds attempts within one execution.fix episode, so a node that repeatedly enters the interrupt, resolves it (--clear-fix wipes execution.fix to null), and re-stalls gets a fresh attempt:1 budget every cycle and can thrash indefinitely
 
+## Context
+
 **Expected outcome (needs-main residue item 9 on
 `tactic-graph-review-exclusion-stall-recovery`)**: a node that cycles through
 `enter-fix -> clear-fix -> re-stall` repeatedly eventually stops retrying
@@ -69,3 +71,22 @@ instead of re-entering the interrupt.
 
 **Source**: needs-main residue item 9,
 `tactic-graph-review-exclusion-stall-recovery` (merged PR #2920).
+
+**Recommended model**: sonnet — a bounded, well-specified addition to an
+existing sidecar/state-tracking pattern (`ci_pending_strike_bump`/
+`ci_pending_strike_clear` in `lib.sh` is a directly reusable template) plus a
+cap check mirroring `apply-fix-state.ts`'s existing `--check-cap`.
+
+## Verification
+
+No fixture reproduces a multi-cycle review-stall thrash today, so verify by
+code inspection: after the fix, confirm a node that enters and clears the
+fix-interrupt twice in a row (via two `--set-fix`/`--clear-fix` pairs in a
+unit test) is routed to a hold on the second (or configured Nth) re-entry
+instead of getting a fresh `attempt: 1` budget, and that
+`packages/intentionsutil/test/transitions.test.ts` /
+`test-reconcile-graph-review-stall.sh` gain a case covering it.
+
+```verify
+npx vitest run --project packages/intentionsutil --root .
+```
