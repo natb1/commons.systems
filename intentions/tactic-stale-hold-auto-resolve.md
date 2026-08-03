@@ -655,3 +655,30 @@ Manual / observe-in-production, after merge (not auto-runnable):
   dirty main checkout makes a resolution fail. Expected and by design: the sweep
   logs `resolve-failed` and retries next tick. Confirm on first observation that a
   transiently dirty main produces a retry line, not a park and not a partial write.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #3011). Items 7 and 8 of the QA triage plan require
+observation against real post-merge behavior — no pre-merge fixture or unit
+test can reproduce steady-state fleet conditions or a real `graph-commit`
+refusal against a genuinely dirty `main`. Both are drawn verbatim from this
+node's own "Manual / observe-in-production" section above; QA confirmed the
+other two items in that section (the two historical hold ids, and the no-new-
+sandboxed-call-path check) directly against the live `intentions/` store and
+code, so only these two remain.
+
+- id: 7
+  title: First live tick emits exactly one summary line per cadence, with zero unknown=/failed=
+  url_path: current
+  expected_outcome: On the first real post-merge tick (both paused and normal cadence), dispatch-tick's stderr carries exactly one `lib-stale-hold-recheck: sweep complete (...)` line per cadence, with `status=ok` and `unknown=0`, `failed=0` on a steady-state fleet.
+  finding: Requires a live tick against the real fleet with real worktrees in real states — no pre-merge fixture or unit test can reproduce steady-state fleet conditions.
+  Verifiability: MACHINE
+  Check: `journalctl --user -u dispatch-claude-daemon --since -2h | grep 'lib-stale-hold-recheck: sweep complete'` (or the tick job log) — confirm exactly one line per cadence and `unknown=0 failed=0`.
+
+- id: 8
+  title: Transiently dirty main produces resolve-failed + next-tick retry, not a park or partial write
+  url_path: current
+  expected_outcome: When `resolve-hold`'s inherited `assert_clean_outside_ids` rule refuses a resolution against a transiently dirty `main`, the sweep logs `resolve-failed`, the tick's summary line shows `failed>=1` with `status=ok`, no `office_hours` park is written, and no partial graph write lands — confirmed by the following tick retrying the same candidate.
+  finding: The pre-merge test harness stubs `resolve-hold` rather than exercising `graph-commit`'s actual `assert_clean_outside_ids` refusal against a real dirty checkout, so this specific failure path can only be observed against a real occurrence post-merge.
+  Verifiability: MACHINE
+  Check: On a tick log showing `resolve-failed`, confirm via `git log -- intentions/` that no partial/half-applied write landed for the named hold, and confirm the following tick's log retries the same hold id (`lib-stale-hold-recheck: resolve-failed` followed later by `resolved` or another `resolve-failed`, never silence).
