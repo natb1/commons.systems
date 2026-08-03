@@ -120,25 +120,42 @@ author) instead of assigning ownership by proximity.
    non-null `body_markdown` and is not a park target lands
    `phase: "implement"`; a born-parked tactic or gate (in `result.parks`,
    or carrying `office_hours`, or a gate) **omits** `phase` and sets
-   `office_hours` (see Parks, below). Leave `execution: null` — the
-   execution object is the router's live in-flight record, populated when
-   it launches the worker in a worktree, not plan-time state. These are
-   **first-class** frontmatter fields (`schema.ts` promoted
+   `office_hours` (see Parks, below). Leave `execution: null` in the JSON
+   payload — the execution object is the router's live in-flight record,
+   populated when it launches the worker in a worktree, not plan-time
+   state. These are **first-class** frontmatter fields (`schema.ts`
+   promoted
    `phase`/`execution`/`validates`/`blocked_by`/`office_hours`/`rounds`);
    write them at top level, not squatted under `attributes` —
    `validateNode` silently drops unknown top-level keys, so a mistyped
-   field vanishes. Leaving `execution: null` here is correct, not merely
-   provisional: the live router now seeds this tactic's
-   `execution.strategy_fingerprint` map itself, at the tactic's first
-   forward (non-stale) transition, via `transition-node`'s `APPLY_FLAGS`
-   construction (`.claude/skills/dispatch-propagate/scripts/transition-node`,
-   the `STRATEGY_STALE == "false"` branch around lines 249-254) — this
-   session does not, and should not, hand-stamp a map onto a node it is
-   minting at `execution: null`. Pipe or `--file` the JSON into
-   `write-node.ts`:
+   field vanishes.
+
+   **Stamp the mint-time strategy fingerprint on this same call.** For
+   every *tactic* this session mints, pass the mint-time flags —
+   `--strategy-fingerprint <strategy-id>=<hash>` (repeatable, and always
+   the keyed form) plus the single shared `--strategy-sha
+   <origin/main-sha>` — so the stamp lands with the node rather than
+   waiting for its first transition; see "Closed: the
+   mint-to-first-transition window" below for the full flag contract, and
+   the "At mint time" rule above it for how the values are obtained
+   (`hash` is printed by `npx tsx
+   packages/intentionsutil/scripts/strategy-fingerprint.ts <strategy-id>`
+   run against a fresh `origin/main`; `sha` is `git rev-parse
+   origin/main`). The flags seed the `execution` record themselves, which
+   is why the payload still carries `execution: null`. They are valid on
+   **tactics only** — a gate or other non-tactic node mints with no stamp,
+   so drop both flags for it. Later forward (non-stale) transitions still
+   refresh the map, via `transition-node`'s `APPLY_FLAGS` construction
+   (`.claude/skills/dispatch-propagate/scripts/transition-node`, the
+   `STRATEGY_STALE == "false"` branch around lines 249-254); that refresh
+   is complementary to the mint-time stamp, never a reason to skip it.
+
+   Pipe or `--file` the JSON into `write-node.ts`:
 
    ```bash
-   npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/tactic.json"
+   npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/tactic.json" \
+     --strategy-fingerprint <strategy-id>=<hash> \
+     --strategy-sha <origin/main-sha>
    ```
 
 2. **Freshness assertion before the body write.** The body write is a
