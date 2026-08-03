@@ -80,9 +80,13 @@ fi
 # marker is the label-free replacement for dispatch-auto-merge's
 # index("dispatch:reviewed") label check; a phase:review node without it is
 # review-in-progress, not a candidate.
+#
+# Enumeration is STRICT (`listNodesStrict`): this drives an autonomous merge, so
+# a corrupt node file must abort the pass loudly rather than silently vanish
+# from the candidate set (or, via a dropped blocker, silently qualify one).
 CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
-  const { listNodes } = await import("./packages/intentionsutil/src/store.js");
-  for (const n of listNodes("./intentions")) {
+  const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
+  for (const n of listNodesStrict("./intentions")) {
     if (n.kind !== "tactic") continue;
     if (n.phase !== "review") continue;
     const pr = n.execution && n.execution.pr;

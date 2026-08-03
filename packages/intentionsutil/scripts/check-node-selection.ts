@@ -41,7 +41,7 @@
 
 import { pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
-import { listNodes, readNode, readNodeBody } from "../src/store.js";
+import { listNodesStrict, readNode, readNodeBody } from "../src/store.js";
 import {
   frozenTacticSelectable,
   servingStrategyIds,
@@ -176,8 +176,15 @@ function readFixState(node: IntentionNode): FixState | null {
  * Run the five re-validation checks against a store the caller guarantees is at
  * fresh origin/main. Pure: reads files, returns a result — no process exit, no
  * direct stdio. Throws only on a genuinely malformed store (a node file that
- * fails schema validation), which is a config-class error the caller maps to
- * exit 2, distinct from the staleness verdicts.
+ * cannot be read or fails schema validation), which is a config-class error the
+ * caller maps to exit 2, distinct from the staleness verdicts.
+ *
+ * Store enumeration is deliberately STRICT (`listNodesStrict`, not the tolerant
+ * `listNodes`): this is a fail-closed integrity gate, so one unreadable node
+ * file must abort it loudly rather than silently shrink the graph the
+ * align-eligibility and fingerprint-staleness checks reason over — a corrupt
+ * strategy file under tolerant enumeration would turn the gate into a pass for
+ * every tactic serving it.
  */
 export function evaluateSelection(opts: SelectionOpts): SelectionResult {
   const { nodeId, selectedPhase, dir, stamp } = opts;
@@ -270,7 +277,7 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
   //     defers wholesale to the pure selector (single source of truth).
   if (selectedPhase === "align-tactics") {
     if (node.kind === "strategy") {
-      if (!strategyAlignSelectable(node, listNodes(dir))) {
+      if (!strategyAlignSelectable(node, listNodesStrict(dir))) {
         return fail(
           EXIT_STALE_SELECTION,
           "phase",
@@ -278,7 +285,7 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
             `(signal validated, rounds cap, on-path child, or soft-frozen out)`,
         );
       }
-    } else if (!frozenTacticSelectable(node, listNodes(dir))) {
+    } else if (!frozenTacticSelectable(node, listNodesStrict(dir))) {
       return fail(
         EXIT_STALE_SELECTION,
         "phase",
@@ -300,10 +307,16 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
   //    re-evaluation worker at exit 12.
   const stampedFp = selectedPhase === "align-tactics" ? null : readStrategyFingerprint(node);
   if (stampedFp !== null) {
-    const byId = new Map(listNodes(dir).map((n) => [n.id, n]));
+    const byId = new Map(listNodesStrict(dir).map((n) => [n.id, n]));
     for (const sid of servingStrategyIds(node, byId)) {
       const strategy = byId.get(sid);
-      if (strategy === undefined) continue; // a dangling serves edge is validateGraph's failure, not this gate's
+      // Strict enumeration above guarantees an absent id means the node is
+      // genuinely not in the store — a dangling serves edge, which is
+      // validateGraph's failure, not this gate's. (Under the tolerant
+      // `listNodes` a corrupt strategy file would also land here, silently
+      // turning this required staleness gate into a pass for the whole
+      // subtree serving it.)
+      if (strategy === undefined) continue;
       if (isFingerprintStale(stampedFp, sid, strategyFingerprint(strategy))) {
         return fail(
           EXIT_STALE_SELECTION,
