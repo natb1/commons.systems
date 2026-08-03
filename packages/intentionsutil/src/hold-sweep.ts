@@ -47,7 +47,7 @@ function isHoldKindValue(value: unknown): value is HoldKind {
  * Load-bearing, not cosmetic. The sweep enumerates BY hold node id but the
  * downstream `resolve-hold` re-derives the hold id from (source, kind) — so a
  * node whose id is NOT the canonical derivation would have its classification
- * applied to a DIFFERENT node: any `kind: tactic` node may carry
+ * applied to a DIFFERENT node — any `kind: tactic` node may carry
  * `attributes.hold_kind` + `hold_for` (nothing in validate-graph constrains the
  * id), so a `phase: done`, `office_hours: null` decoy named in a victim's
  * `blocked_by` would classify as `edge-residue` — bypassing both the manual
