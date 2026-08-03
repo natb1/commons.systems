@@ -42,7 +42,7 @@ success_signal:
     bug-B/bug-O healing behavior must be unaffected)
   is_proxy: false
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-ensure-units-respect-manual-disable
   pr: 3015
@@ -53,7 +53,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T06:31:12Z
+    mergeCommitSha: 80677332ee92f1084a85f85f346bd14fd4eac6ed
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
