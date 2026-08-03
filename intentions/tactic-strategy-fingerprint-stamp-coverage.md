@@ -45,13 +45,12 @@ attention:
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
   tier: 1
-phase: qa
+phase: implement
 execution:
   branch: tactic-strategy-fingerprint-stamp-coverage
   pr: 3023
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint:
     strategy-graph-native-dispatch:
       hash: d5f6cfce402ebd1ddaf07b5969a9696072bc544eb269274b9ec9eb0481f80738
@@ -61,63 +60,10 @@ execution:
 validates: []
 blocked_by: []
 office_hours:
-  reason: "/qa-fix: planner scope-deviation on 2 needs-human-judgment residue
-    items (14, 15) — Step 3.5's gated fix-plan agent returned deviation=true
-    with 0 units: 'Both residue items are human-acceptance design reviews with
-    no code defect: acting on either would require narrowing the
-    every-serving-strategy stamp (a behavior change the node body deliberately
-    chose) or closing the documented mint-to-first-transition laundering gap
-    (explicitly deferred follow-up scope) — decisions the issue does not
-    authorize.' All 12 script-verifiable QA items passed; no code defect found;
-    this is a design/scope sign-off park, not a bug. See the qa-summary PR
-    comment on PR #3023 for the full disposition."
+  reason: provision-node-worktree failed for this tactic (exit 2)
   since: 2026-08-03
-  recommendation: >-
-    # Recommendation: sign off, no code changes needed
-
-
-    **Nothing is broken.** The autonomous QA pass ran 15 triage items. All 12
-    mechanically verifiable ones passed independently — census script re-run,
-    transition-node flag gating and jq usage, doctrine docs, CI wiring, and full
-    suites (vitest 776/776, typecheck, lint, `test-transition-node.sh` 5/5,
-    `test-park-node.sh` 21/21, `test-strategy-stamp-doctrine.sh` 6/6). No defect
-    was found. This park exists only because a QA pass is not allowed to ratify
-    design/scope decisions on its own. Your job here is a sign-off, not a fix.
-
-
-    ## Recommended disposition
-
-
-    1. **Approve the broader stamping rule (item 14).** Unit 2 stamps every
-    strategy a tactic serves, including inherited ones — wider than
-    `write-path.md`'s old hand-stamp rule. Approve it. `isFingerprintStale`
-    treats a null or absent key as not stale by design, so extra entries can
-    only turn a permanently inert null into a real freeze; they cannot fabricate
-    a false stale. The narrow alternative returns coverage to zero, which is
-    what this tactic exists to fix.
-
-    2. **Accept the mint-to-first-transition gap (item 15).** It is written
-    down, deliberate, and deferred to a future `--strategy-fingerprint-sha` flag
-    on `write-node.ts`. Do not ask this PR to close it.
-
-
-    ## What to skim (2-3 minutes)
-
-
-    - The node body's **"Judgment call, for review"** paragraph in its
-    Verification section.
-
-    - `write-path.md`, section **"Residual gap: the mint-to-first-transition
-    window"**.
-
-
-    ## Next step
-
-
-    Once you agree, move the node to `review`, its next phase. No further QA
-    action. The one remaining `needs-main` item — proof that a real transition
-    stamps a previously-null tactic — is already filed as residue on the node
-    body and drains automatically after #3023 merges. Nothing to do for it now.
+  recommendation: Inspect the provisioning failure (git fetch/worktree add,
+    direnv) in the tick journal, fix the environment, and re-run the phase.
   session_type: other
 pace_exempt: false
 rounds: null

@@ -65,7 +65,7 @@ attention:
     left unchanged at 20; blocked_by remains empty so this promotion still lifts
     no blocker and cannot compound."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-stale-hold-auto-resolve
   pr: 3011
@@ -75,8 +75,14 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: null
-  fix: null
-  completion: null
+  fix:
+    since: 2026-08-03
+    attempt: 2
+    pushed_sha: e99304c0b345c6582eee98fe7f505aad61188435
+  completion:
+    mergedAt: 2026-08-03T19:00:41Z
+    mergeCommitSha: 190777100263403e404da68ce458cfd813f8f7d3
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
