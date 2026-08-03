@@ -769,3 +769,10 @@ disposition Workflow rather than dropped as already-satisfied. Drained by
   restores items 13/14/15, not only item-12.
 - Verifiability: MACHINE
 - Check: `grep -c '^### item-1[2345]-' intentions/tactic-review-skill-body-decomposition.md` — expect `4`.
+
+### item-16-post-reimplementation-reconfirm — needs-main residue (items 12/13/14/15) survives the scope-drift demotion and re-implementation cycle
+- URL path: current
+- Expected outcome: items 13 (context reduction), 14 (resume parity), 15 (detection parity), and 12 (their prior survival confirmation) remain present, unmodified, and discoverable in this section after the node was demoted to `implement` for scope drift and fully re-implemented, so `tactic-main-qa-phase` still finds all four post-merge.
+- Finding: confirmed present and unmodified at `origin/main` as of this qa-fix pass (a fresh 15-item triage authored against the re-implemented code, same three units/design as the original filing). This pass's own independent triage separately verified: the two new scan scripts (`dispatch-review-codeql`, `dispatch-review-npm-audit`) match the pre-change `inline-scans.md` prose with no detected narrowing, and the Workflow's own detection machinery (instrument gate, adversarial-verify vote counts, disposition buckets) is unchanged — both were classified `already-satisfied` by the Step 3.5 disposition Workflow and dropped as PASS, so neither required a new needs-main entry. Only the live-run context-reduction measurement (this pass's own triage item, re-classified `needs-main`) remains genuinely un-verifiable pre-merge, and it duplicates item-13 above rather than warranting a sixth distinct entry.
+- Verifiability: MACHINE
+- Check: `grep -c '^### item-1[23456]-' intentions/tactic-review-skill-body-decomposition.md` — expect `5`.
