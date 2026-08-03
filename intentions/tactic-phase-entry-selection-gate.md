@@ -311,4 +311,13 @@ bash -n .claude/skills/dispatch-propagate/scripts/assert-node-selection && bash 
 
 **Judgment call to confirm at review time.** Unit 3 changes exit 3's routing in five skills from `exit 1` to `exit 0`. Read each skill's surrounding prose after the edit and confirm nothing downstream treats "the preamble bash exited 0" as "the target was successfully derived" — every one of them must have the model stop on the printed reason rather than continue into Step 1 with unbound `NODE_JSON`. This is prose-level, not mechanically checkable.
 
+## needs-main residue
+
+### 1. Watch post-merge dispatch ticks for a burst of exit-3 stops from `/review-fix` caused by the new reviewed-marker guard
+- URL path: current
+- Expected outcome: A small trickle of exit-3 stops from `/review-fix` is expected after merge (the gate legitimately catching a hand-run/re-entry). A burst would instead signal nodes being re-selected for review after the `reviewed` marker landed — a selector-side issue worth its own tactic, not a reason to weaken this gate.
+- Finding: Not assertable at merge time by any mechanical check available now — this PR's own "Observe in production" section names it as requiring live post-merge dispatch tick traffic that does not exist yet. QA's Opus disposition pass (this PR's qa-fix run) classified it `needs-main` given `Flag: planned-deferral` in the triage plan.
+- Verifiability: WAIT — awaiting several dispatch ticks after this PR merges, so `/review-fix` front-door exits can accumulate.
+- Check: grep dispatch session transcripts / journal for `/review-fix` sessions whose front door emitted `selection no longer valid at origin/main (front door exit 3)` (the exact stderr line `review-fix/SKILL.md`'s exit-3 arm prints); count occurrences over the ticks following this PR's merge and judge trickle vs. burst.
+
 **Observe in production.** After merge, the first `/align-tactics` re-invocation against an already-finalized node should stop at Step 0 with a `stale-selection` line instead of reasoning its way to a no-op through the skill body's Idempotency prose — the 2026-07-18 incident class this tactic exists to close. Watch the next few dispatch ticks for an unexpected rise in exit-3 stops from `/review-fix`: that is the new `reviewed`-marker guard firing, and a burst of it means nodes are being re-selected for review after the marker landed, which is a selector-side signal worth a separate tactic rather than a reason to weaken this gate.
