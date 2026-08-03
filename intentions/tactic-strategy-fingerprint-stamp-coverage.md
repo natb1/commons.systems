@@ -56,7 +56,10 @@ execution:
     strategy-graph-native-dispatch:
       hash: d5f6cfce402ebd1ddaf07b5969a9696072bc544eb269274b9ec9eb0481f80738
       sha: 2aad2dc4106804ebcc55cf7b805868b5fdfff4d2
-  fix: null
+  fix:
+    since: 2026-08-03
+    attempt: 2
+    pushed_sha: null
   completion: null
 validates: []
 blocked_by: []
