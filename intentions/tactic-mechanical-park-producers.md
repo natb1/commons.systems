@@ -51,8 +51,8 @@ clarifications:
       state' → 'no autonomous resolver to route it to ... not a mechanical retry
       state'), and the Unit `case 0` parenthetical ('the conflict self-resolved'
       → 'the conflict is resolved')."
-  - question: Does the provision-conflict producer keep the hold-node shape once
-      the greenfield conflict interrupt lands, as this node's convergence note
+  - question: Does the provision-conflict producer keep the hold-node shape once the
+      greenfield conflict interrupt lands, as this node's convergence note
       directs?
     answer: "(Recorded 2026-08-03, author-confirmed.) No — that direction is
       SUPERSEDED for the conflict producer, and the supersession runs the
