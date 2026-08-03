@@ -69,11 +69,23 @@ case "$BRANCH" in
     rc=$?
     if [ "$rc" -ne 0 ]; then
       case "$rc" in
-        1|2) echo "/qa-main: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2 ;;
-        3) echo "/qa-main: node '$NODE_ID' phase is not 'main-qa' at origin/main (front door exit 3)" >&2 ;;
-        *) echo "/qa-main: dispatch-derive-node-target failed for '$NODE_ID' (exit $rc)" >&2 ;;
+        1|2) echo "/qa-main: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2; exit 1 ;;
+        3)
+          # The mechanical selection gate rejected the selection (phase/interrupt
+          # mismatch, office_hours park, stale serving-strategy fingerprint, no
+          # longer align-eligible, or an already-reviewed node re-selected). This
+          # is a stale selection, not a defect. End the session; make no graph
+          # write and open no PR.
+          echo "/qa-main: node '$NODE_ID' selection no longer valid at origin/main (front door exit 3) — stale selection, not a defect; ending with no graph write and no PR" >&2
+          exit 0 ;;
+        5)
+          # Scope changed since the previous phase ran — the node wants demoting
+          # to implement, not a defect. End the session; make no graph write and
+          # open no PR.
+          echo "/qa-main: node '$NODE_ID' is scope-stale at origin/main (front door exit 5) — wants demoting to implement, not a defect; ending with no graph write and no PR" >&2
+          exit 0 ;;
+        *) echo "/qa-main: dispatch-derive-node-target failed for '$NODE_ID' (exit $rc)" >&2; exit 1 ;;
       esac
-      exit 1
     fi
     TARGET_KIND=node
     N="$NODE_ID"

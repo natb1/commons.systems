@@ -68,12 +68,24 @@ case "$BRANCH" in
     fi
     if [ "$rc" -ne 0 ]; then
       case "$rc" in
-        1) echo "/implement: node '$NODE_ID' not found at origin/main (intentions/$NODE_ID.md)" >&2 ;;
-        2) echo "/implement: '$NODE_ID' is not a valid node id, or does not match the current worktree branch" >&2 ;;
-        3) echo "/implement: node '$NODE_ID' is not at phase 'implement' at origin/main" >&2 ;;
-        *) echo "/implement: dispatch-derive-node-target failed (exit $rc)" >&2 ;;
+        1) echo "/implement: node '$NODE_ID' not found at origin/main (intentions/$NODE_ID.md)" >&2; exit 1 ;;
+        2) echo "/implement: '$NODE_ID' is not a valid node id, or does not match the current worktree branch" >&2; exit 1 ;;
+        3)
+          # The mechanical selection gate rejected the selection (phase/interrupt
+          # mismatch, office_hours park, stale serving-strategy fingerprint, no
+          # longer align-eligible, or an already-reviewed node re-selected). This
+          # is a stale selection, not a defect. End the session; make no graph
+          # write and open no PR.
+          echo "/implement: node '$NODE_ID' selection no longer valid at origin/main (front door exit 3) — stale selection, not a defect; ending with no graph write and no PR" >&2
+          exit 0 ;;
+        5)
+          # Scope changed since the previous phase ran — the node wants demoting
+          # to implement, not a defect. End the session; make no graph write and
+          # open no PR.
+          echo "/implement: node '$NODE_ID' is scope-stale at origin/main (front door exit 5) — wants demoting to implement, not a defect; ending with no graph write and no PR" >&2
+          exit 0 ;;
+        *) echo "/implement: dispatch-derive-node-target failed (exit $rc)" >&2; exit 1 ;;
       esac
-      exit 1
     fi
     # Parse the front door's stdout: PR line (<num>|none), NODE-JSON section
     # (compact single-line frontmatter JSON), NODE-BODY section (raw markdown).

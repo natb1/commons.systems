@@ -74,12 +74,34 @@ case "$BRANCH" in
     rc=$?
     if [ "$rc" -ne 0 ]; then
       case "$rc" in
-        1) echo "/qa-fix: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2 ;;
-        3) echo "/qa-fix: node '$NODE_ID' phase is not 'qa' at origin/main (front door exit 3)" >&2 ;;
-        4) echo "/qa-fix: node '$BRANCH' has no open PR — qa-fix requires one" >&2 ;;
-        *) echo "/qa-fix: dispatch-derive-node-target failed for '$NODE_ID' (exit $rc)" >&2 ;;
+        1) echo "/qa-fix: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2; exit 1 ;;
+        3)
+          # The mechanical selection gate rejected the selection (phase/interrupt
+          # mismatch, office_hours park, stale serving-strategy fingerprint, no
+          # longer align-eligible, or an already-reviewed node re-selected). This
+          # is a stale selection, not a defect. End the session; make no graph
+          # write and open no PR. Record the terminal disposition FIRST so the
+          # Stop hook may reap this job — without the marker
+          # `dispatch-self-close --node` HOLDs the job alive and
+          # `dispatch-tick`'s `terminal_without_disposition_sweep` misreads this
+          # legitimate yield as an undeclared session and office_hours-PARKS the
+          # node. `no-claim` is the correct disposition: this session held no
+          # claim and did nothing.
+          packages/intentionsutil/scripts/mark-node-terminal "$NODE_ID" no-claim
+          echo "/qa-fix: node '$NODE_ID' selection no longer valid at origin/main (front door exit 3) — stale selection, not a defect; ending with no graph write and no PR" >&2
+          exit 0 ;;
+        4) echo "/qa-fix: node '$BRANCH' has no open PR — qa-fix requires one" >&2; exit 1 ;;
+        5)
+          # Scope changed since the previous phase ran — the node wants demoting
+          # to implement, not a defect. End the session; make no graph write and
+          # open no PR. Same reap contract as exit 3 above: write the terminal
+          # disposition before returning, or the Stop hook holds the job and the
+          # per-tick sweep office_hours-parks the node.
+          packages/intentionsutil/scripts/mark-node-terminal "$NODE_ID" no-claim
+          echo "/qa-fix: node '$NODE_ID' is scope-stale at origin/main (front door exit 5) — wants demoting to implement, not a defect; ending with no graph write and no PR" >&2
+          exit 0 ;;
+        *) echo "/qa-fix: dispatch-derive-node-target failed for '$NODE_ID' (exit $rc)" >&2; exit 1 ;;
       esac
-      exit 1
     fi
     N="$NODE_ID"; TARGET_KIND=node
     # Parse the front door's structured stdout into the seams the rest of the
@@ -89,21 +111,10 @@ case "$BRANCH" in
     [ "$PR_NUM" = none ] && PR_NUM=""
     NODE_JSON=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-JSON ===$/,/^=== NODE-BODY ===$/p' | sed '1d;$d')
     NODE_BODY=$(printf '%s\n' "$FRONT_DOOR" | sed -n '/^=== NODE-BODY ===$/,$p' | sed '1d')
-    # Parked-node re-entry guard. Parking sets office_hours without changing
-    # phase, so a stale self-scheduled wakeup re-firing mid-session (bypassing the
-    # selector's office_hours-null gate) must not re-run qa-fix against a node
-    # already handed to a human. Mirror the canonical selection gate `readParked`
-    # (packages/intentionsutil/scripts/check-node-selection.ts:90-93): a node is
-    # parked iff the first-class `office_hours` is non-null OR a populated
-    # `attributes.office_hours` squatter block is present (the squatter convention
-    # is live until tactic-schema-migration-backfill lands). The front door's
-    # structured NODE-JSON makes this a two-part jq OR instead of a frontmatter
-    # scrape.
-    PARKED=$(jq -r 'if (.office_hours != null) or ((.attributes.office_hours // null) != null) then "1" else "" end' <<<"$NODE_JSON")
-    if [ -n "$PARKED" ]; then
-      echo "/qa-fix: node '$NODE_ID' is already office_hours-parked at origin/main — nothing to do" >&2
-      exit 0
-    fi
+    # The front door's selection gate owns the parked check — first-class
+    # `office_hours` and the `attributes.office_hours` squatter alike
+    # (packages/intentionsutil/scripts/check-node-selection.ts:90-94, applied at
+    # :268-270). A parked node exits 3 above; there is nothing to re-check here.
     .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --phase-log --pr-is-number
     ;;
 esac
