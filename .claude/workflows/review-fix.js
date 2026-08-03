@@ -1588,27 +1588,35 @@ const requiredFindings = deduped.filter(
 const votesById = {};
 const rationalesById = {};
 if (requiredFindings.length) {
+  // Batch the skeptics per (brief × file) instead of per finding: one agent
+  // reads a file ONCE and judges every finding on it. Per-finding vote counts
+  // are unchanged — skeptic count still scales with finding confidence: a
+  // high-confidence Required finding (the only tier that can trigger the
+  // deviation gate) gets 2 votes; medium/low get 1. The floor is 1, NEVER 0 —
+  // a Required finding given 0 votes is treated as "Unverified" by
+  // applyVerifyDrop (dropped + filed, not fixed), so 1 vote is the minimum that
+  // preserves the existing verify-drop semantics. skepticBatchJobs slices each
+  // group by replica index so an item appears in exactly replicasOf(item) jobs.
+  //
+  // The brief is part of the group key: the erosion and security briefs are
+  // mutually contradictory, so a file holding both kinds of finding yields TWO
+  // groups (two prompts), never one merged prompt. The literal
+  // `Source === 'erosion'` test is erosion-scoped per issue #2064 — do NOT
+  // generalize it.
+  const verifyJobs = skepticBatchJobs(requiredFindings, {
+    keyOf: (f) => `${f.Source === 'erosion' ? 'erosion' : 'security'} ${filePath(f.Location)}`,
+    fileOf: (f) => filePath(f.Location),
+    replicasOf: (f) => (f.Confidence === 'high' ? 2 : 1),
+  });
+  const groupCount = new Set(verifyJobs.map((job) => job.key)).size;
   log(
-    `verify: ${requiredFindings.length} Required finding(s), severity-scaled ` +
-      `skeptics (2 for high-confidence, 1 for medium/low) at high effort`
+    `verify: ${requiredFindings.length} Required finding(s) across ${groupCount} ` +
+      `(brief × file) group(s) → ${verifyJobs.length} batched skeptic agent(s); ` +
+      `severity-scaled (2 votes for high-confidence, 1 for medium/low) at high effort`
   );
-  // Flat thunk list across (finding × skeptic) so the barrier covers all votes.
-  // Skeptic count scales with finding confidence: a high-confidence Required
-  // finding (the only tier that can trigger the deviation gate) gets 2 skeptics;
-  // medium/low get 1. The floor is 1, NEVER 0 — a Required finding given 0 votes
-  // is treated as "Unverified" by applyVerifyDrop (dropped + filed, not fixed),
-  // so 1 vote is the minimum that preserves the existing verify-drop semantics.
-  const verifyJobs = [];
-  for (const f of requiredFindings) {
-    const skepticCount = f.Confidence === 'high' ? 2 : 1;
-    for (let k = 0; k < skepticCount; k++) {
-      verifyJobs.push({ id: f.id, k, finding: f });
-    }
-  }
   subagentsLaunched += verifyJobs.length;
   const verifyResults = await parallel(
     verifyJobs.map((job) => () => {
-      const f = job.finding;
       // Erosion findings (Source "erosion", issue #2064) are a QUALITY concern, not
       // a vulnerability — the "false positive / not-exploitable" framing below is
       // wrong for them (erosion is NEVER "exploitable", so an exploitability skeptic
@@ -1616,56 +1624,86 @@ if (requiredFindings.length) {
       // erosion-aware brief instead: argue the structural METRIC MISFIRED rather than
       // that the finding is non-exploitable. Keep the security framing for all other
       // sources. This branch is erosion-scoped on a literal `Source === 'erosion'`.
-      const prompt =
-        f.Source === 'erosion'
-          ? [
-              'You are an adversarial skeptic reviewing a code-quality net-erosion finding (a structural',
-              'metric — complexity and/or duplication — increased on this diff). Build the STRONGEST possible',
-              'case that the METRIC MISFIRED and there is no genuine net erosion here:',
-              '- the complexity delta is spurious (a measurement artifact, not a real branching/nesting increase);',
-              '- the "new duplication" is coincidental, boilerplate, or generated code, not extractable shared logic;',
-              '- the increase is a rename / move / file-boundary artifact (code relocated, not added) rather than net growth.',
-              'Default to verdict="refuted" under uncertainty — this gate guards spending an expensive Opus refactor',
-              'on a metric false positive. (Do NOT argue exploitability — this is a quality finding, never a vulnerability.)',
-              `Finding location: ${f.Location}`,
-              `Description: ${f.Description}`,
-              `Confidence: ${f.Confidence}`,
-              `Recommended fix: ${f['Recommended fix']}`,
-              'Return { "verdict": "refuted" | "upheld", "rationale": "..." }.',
-            ].join('\n')
-          : [
-              'You are an adversarial skeptic. Build the STRONGEST possible case that the finding below',
-              'is a FALSE POSITIVE / not-exploitable. Default to verdict="refuted" under uncertainty —',
-              'this gate guards spending an expensive Opus fix and a false "required" deviation that marks',
-              'the PR ready without review.',
-              `Finding location: ${f.Location}`,
-              `Description: ${f.Description}`,
-              `OWASP: ${f.OWASP}  STRIDE: ${f.STRIDE}  Confidence: ${f.Confidence}`,
-              `Recommended fix: ${f['Recommended fix']}`,
-              'Return { "verdict": "refuted" | "upheld", "rationale": "..." }.',
-            ].join('\n');
+      const isErosion = job.items[0] && job.items[0].Source === 'erosion';
+      const independence = [
+        'Judge each finding INDEPENDENTLY. A weak or obviously-false finding in this list is NO',
+        'evidence about any other finding on this file. Return a verdict for every id listed and',
+        'for no other id.',
+      ].join('\n');
+      const outputContract =
+        'Return { "votes": [ { "id", "verdict", "rationale" }, ... ] } with exactly one entry per finding id listed above.';
+      const prompt = isErosion
+        ? [
+            'You are an adversarial skeptic reviewing code-quality net-erosion findings (a structural',
+            'metric — complexity and/or duplication — increased on this diff). Build the STRONGEST possible',
+            'case that the METRIC MISFIRED and there is no genuine net erosion here:',
+            '- the complexity delta is spurious (a measurement artifact, not a real branching/nesting increase);',
+            '- the "new duplication" is coincidental, boilerplate, or generated code, not extractable shared logic;',
+            '- the increase is a rename / move / file-boundary artifact (code relocated, not added) rather than net growth.',
+            'Default to verdict="refuted" under uncertainty — this gate guards spending an expensive Opus refactor',
+            'on a metric false positive. (Do NOT argue exploitability — this is a quality finding, never a vulnerability.)',
+            `Finding location: ${job.file}`,
+            'Findings to judge:',
+            job.items
+              .map(
+                (f) =>
+                  `- [${f.id}] ${f.Location}: ${f.Description}\n  Confidence: ${f.Confidence}\n  Recommended fix: ${f['Recommended fix']}`
+              )
+              .join('\n'),
+            independence,
+            outputContract,
+          ].join('\n')
+        : [
+            'You are an adversarial skeptic. Build the STRONGEST possible case that the findings below',
+            'are FALSE POSITIVES / not-exploitable. Default to verdict="refuted" under uncertainty —',
+            'this gate guards spending an expensive Opus fix and a false "required" deviation that marks',
+            'the PR ready without review.',
+            `Finding location: ${job.file}`,
+            'Findings to judge:',
+            job.items
+              .map(
+                (f) =>
+                  `- [${f.id}] ${f.Location}: ${f.Description}\n  OWASP: ${f.OWASP}  STRIDE: ${f.STRIDE}  Confidence: ${f.Confidence}\n  Recommended fix: ${f['Recommended fix']}`
+              )
+              .join('\n'),
+            independence,
+            outputContract,
+          ].join('\n');
       return agent(prompt, {
         model: 'sonnet',
         effort: 'high',
         agentType: 'general-purpose',
-        schema: VERDICT_SCHEMA,
-        label: `verify:${job.id}#${job.k}`,
+        schema: BATCH_VERDICT_SCHEMA,
+        label: `verify:${job.file}#${job.replica}`,
         phase: 'verify',
       });
     })
   );
-  // Collect votes per id. A dead skeptic (null) contributes no vote, so a
-  // finding whose every skeptic died gets [] → handled by applyVerifyDrop as
-  // "Unverified": dropped (not auto-fixed) and surfaced as verdict "unverified"
-  // in verify_report, matching the skeptic prompt's "refute under uncertainty"
+  // Collect votes per id. A dead skeptic (null) — or one that returned no entry
+  // for a given id — contributes no vote for that finding, so a finding whose
+  // every skeptic died gets [] → handled by applyVerifyDrop as "Unverified":
+  // dropped (not auto-fixed) and surfaced as verdict "unverified" in
+  // verify_report, matching the skeptic prompt's "refute under uncertainty"
   // bias. (A finding is only Upheld when at least one skeptic ran and voted.)
+  // Votes are looked up per job item, and any returned id NOT in this job's
+  // items is discarded — a boundary guard so a hallucinated or injected id
+  // cannot pollute another finding's tally.
   verifyResults.forEach((res, i) => {
     const job = verifyJobs[i];
-    if (!votesById[job.id]) votesById[job.id] = [];
-    if (!rationalesById[job.id]) rationalesById[job.id] = [];
-    if (res && res.verdict) {
-      votesById[job.id].push(res.verdict);
-      if (res.rationale) rationalesById[job.id].push(res.rationale);
+    const byId = new Map();
+    if (res && Array.isArray(res.votes)) {
+      for (const vote of res.votes) {
+        if (vote && vote.id) byId.set(vote.id, vote);
+      }
+    }
+    for (const f of job.items) {
+      if (!votesById[f.id]) votesById[f.id] = [];
+      if (!rationalesById[f.id]) rationalesById[f.id] = [];
+      const vote = byId.get(f.id);
+      if (vote && vote.verdict) {
+        votesById[f.id].push(vote.verdict);
+        if (vote.rationale) rationalesById[f.id].push(vote.rationale);
+      }
     }
   });
 }
