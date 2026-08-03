@@ -763,6 +763,23 @@ gsc_interrupt_setup() {
   cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/dispatch-ci-ready \
      "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh "$GSCI_SCRIPTS/"
   chmod +x "$GSCI_SCRIPTS/graph-select-target" "$GSCI_SCRIPTS/dispatch-ci-ready"
+  # Empty-read corroboration stub (#lib-claude-agents EMPTY-READ CORROBORATION),
+  # same shape and reason as gsc_standalone_setup's. The fixture's fake `claude`
+  # returns `[]`, and since 09e22848 graph-select-target DEFERS (emits nothing)
+  # on an unverified live-worker read rather than failing open. Without this
+  # stub the probe reads the real host: a developer box with a live `claude
+  # daemon` corroborates the `[]` and all 13 interrupt cases pass, while a
+  # daemon-less CI runner leaves it uncorroborated, the selector defers, and
+  # every case fails with `actual: 'empty'` — the cascade never runs, so even
+  # `node-calls.log`/`apply-fix-calls.log` are absent. These cases assert
+  # INTERRUPT ROUTING, so the liveness input must be pinned, not read off the
+  # ambient host.
+  cat > "$GSCI_ROOT/bin/pgrep-daemon-visible" <<'GSCIPGREP'
+#!/usr/bin/env bash
+exit 0
+GSCIPGREP
+  chmod +x "$GSCI_ROOT/bin/pgrep-daemon-visible"
+  export CLAUDE_AGENTS_PGREP_CMD="$GSCI_ROOT/bin/pgrep-daemon-visible"
   # graph-commit stub: _graph_commit_fix runs it from NATIVE_ROOT on the `fix`
   # route, so the control case exercises the clean emission path rather than
   # `fix-write-failed`.
@@ -876,6 +893,7 @@ gsci_checks() { printf '%s\n' "$1" > "$GSCI_ROOT/check-runs.json"; }
 gsc_interrupt_teardown() {
   rm -rf "$GSCI_ROOT" "$GSCI_BARE"
   GSCI_ROOT="" ; GSCI_BARE="" ; GSCI_SCRIPTS="" ; GSCI_GST=""
+  unset CLAUDE_AGENTS_PGREP_CMD
 }
 
 # gsci_run — invoke the selector with the fixture's env, stderr to gsci.err.
