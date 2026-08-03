@@ -220,6 +220,12 @@ export function incrementAttempt(execution: Execution, phase: string): Execution
 export type Mergeable = "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
 
 /**
+ * The recovery lane `interruptRoute`'s ordered cascade resolves to, or `null`
+ * when no interrupt is due. See `interruptRoute` for the cascade itself.
+ */
+export type InterruptRoute = "fix" | "conflict" | null;
+
+/**
  * The recovery lane a stalled `phase: review` + `reviewed` tactic must be
  * routed to, or `null` when nothing has regressed.
  *
@@ -229,7 +235,7 @@ export type Mergeable = "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
  *    `provision-conflict` hold via `hold-node`), which resolves an
  *    origin/main merge conflict on the node's own branch.
  */
-export type ReviewStallRoute = "fix" | "conflict" | null;
+export type ReviewStallRoute = InterruptRoute;
 
 /**
  * Which recovery lane an armed `phase: review` tactic carrying the `reviewed`
@@ -268,10 +274,53 @@ export type ReviewStallRoute = "fix" | "conflict" | null;
  * GitHub computes mergeability asynchronously and self-heals `UNKNOWN` to a
  * real value on a later sweep — the same no-op posture
  * `dispatch-reconcile-ready` takes on an `UNKNOWN` read.
+ *
+ * The CONFLICTING-outranks-failing ordering documented above now lives in
+ * `interruptRoute`, which this function delegates to at the fixed phase
+ * `"review"` — see `interruptRoute` for the single documented home of the
+ * precedence rule.
  */
 export function reviewStallRoute(ci: CiVerdict, mergeable: Mergeable): ReviewStallRoute {
+  return interruptRoute("review", ci, mergeable);
+}
+
+/**
+ * The single ordered cascade over `(mergeable, ci)` for whether an interrupt is
+ * due at `phase`, and which lane it enters. This is the ONE documented home of
+ * the CONFLICTING-outranks-failing-CI precedence rule described above on
+ * `reviewStallRoute` (see that comment for the full rationale — not restated
+ * here) — consumed by BOTH:
+ *
+ *  - the review-stall sweep (`reviewStallRoute`, which delegates here at the
+ *    fixed phase `"review"`); and
+ *  - the normal selection gate (`graph-select-target`'s
+ *    `_gate_maybe_interrupt`), wired to call this function in a later,
+ *    separate follow-up unit.
+ *
+ * That normal path is CURRENTLY merge-blind: it only checks `ci === "failing"`
+ * before writing a fix-attempt state, so a PR that is BOTH `CONFLICTING` and
+ * red gets a fix-attempt state written and burns one of a limited attempt
+ * budget (`FIX_ATTEMPT_CAP`) against a CI verdict that actually describes
+ * stale pre-merge code — and the fix lane cannot even run until the conflict
+ * clears, since fixing requires merging origin/main first. Routing that case
+ * to `"conflict"` instead avoids spending both a graph write and an attempt on
+ * a verdict the conflict will invalidate anyway.
+ *
+ * `UNKNOWN` mergeability is deliberately NOT treated as a conflict: GitHub
+ * computes mergeability asynchronously and self-heals `UNKNOWN` to a real
+ * value on a later check. Treating `UNKNOWN` as `CONFLICTING` would suppress
+ * every fix interrupt during GitHub's compute window.
+ *
+ * A `null` return means no interrupt is due. The only two conditions that can
+ * produce a non-null route are `ci === "failing"` and `mergeable ===
+ * "CONFLICTING"` — a superset invariant a shell caller may exploit as a cheap
+ * pre-filter (`ci === "failing" || mergeable === "CONFLICTING"`) before paying
+ * for a full call, and which a later test pins so that optimization stays
+ * correct.
+ */
+export function interruptRoute(phase: string, ci: CiVerdict, mergeable: Mergeable): InterruptRoute {
   if (mergeable === "CONFLICTING") return "conflict";
-  if (ci === "failing") return "fix";
+  if (fixInterrupt(phase, ci)) return "fix";
   return null;
 }
 
