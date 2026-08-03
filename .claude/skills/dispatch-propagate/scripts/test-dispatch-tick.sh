@@ -61,6 +61,19 @@ tick_setup() {
   # lib-frozen-session-park.sh also sources lib-decision-log.sh non-fatally at
   # load time (best-effort decision-log sink); the stand-down block above
   # already copies it, so a single copy serves both sweeps.
+  # lib-conflict-lane-hold.sh (Unit 3 wiring) and its own sourced sibling
+  # lib-graph-worktree.sh, so the tick's paused-branch and normal-path
+  # conflict_lane_hold_sweep calls genuinely run instead of source-failing.
+  # lib-claude-agents.sh and lib-decision-log.sh are already copied above.
+  cp "$SCRIPT_DIR/lib-conflict-lane-hold.sh" "$TMPDIR_TEST/lib-conflict-lane-hold.sh"
+  cp "$SCRIPT_DIR/lib-graph-worktree.sh" "$TMPDIR_TEST/lib-graph-worktree.sh"
+  # Point the sweep at an empty scratch marker dir, used VERBATIM (no
+  # main-worktree resolution needed) so the sweep finds zero `.conflict-lane`
+  # candidates and simply logs its one-line "swept 0 marker(s)" summary —
+  # sufficient to assert invocation, and it costs no daemon query per the
+  # library's own zero-candidate fast path.
+  export DISPATCH_CONFLICT_LANE_ROOT="$TMPDIR_TEST/conflict-lanes"
+  mkdir -p "$DISPATCH_CONFLICT_LANE_ROOT"
   chmod +x "$TMPDIR_TEST/dispatch-tick"
   # Pin the canonical main worktree so the advisory diagnose-main / jit-reminder
   # spawns get a deterministic --cwd independent of the host repo layout and the
@@ -196,7 +209,8 @@ tick_teardown() {
     DISPATCH_STANDDOWN_DIR DISPATCH_STANDDOWN_REPO_ROOT \
     DISPATCH_FROZEN_SESSION_PROJECTS_ROOT DISPATCH_FROZEN_SESSION_REPO_ROOT \
     DISPATCH_FROZEN_SESSION_PARK_NODE \
-    DISPATCH_FROZEN_SESSION_NOW_EPOCH TICK_PARK_NODE_RC
+    DISPATCH_FROZEN_SESSION_NOW_EPOCH TICK_PARK_NODE_RC \
+    DISPATCH_CONFLICT_LANE_ROOT
   export DISPATCH_DECISION_LOG_DIR="$DISPATCH_TEST_DECISION_LOG_DIR"
 }
 
@@ -871,6 +885,67 @@ err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
 assert_eq "standdown-load-fail-normal: tick still exits 0" "0" "$rc"
 assert_eq "standdown-load-fail-normal: loud diagnostic on stderr" "1" \
   "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick' && echo 1 || echo 0)"
+tick_teardown
+
+# --- Unit 3 (tick wiring): conflict_lane_hold_sweep wiring --------------------
+# Both call sites run the REAL conflict_lane_hold_sweep (lib-conflict-lane-hold.sh,
+# copied into TMPDIR_TEST by tick_setup) against an empty scratch marker dir
+# (DISPATCH_CONFLICT_LANE_ROOT), so the sweep finds zero `.conflict-lane`
+# candidates and emits its one-line "swept 0 marker(s)" summary to stderr —
+# sufficient to assert invocation, same posture as the standdown_recheck_sweep
+# tests above. The normal-path placement (immediately after
+# standdown_recheck_sweep, before Step 1's dispatch-select-tick) was verified by
+# code inspection when the call was inserted, not by an ordering assertion here:
+# unlike the frozen-session sweep, this sweep's zero-candidate fast path writes
+# nothing to order.log, so there is no observable ordering signal to assert
+# against — only invocation (exactly once) is asserted, mirroring the sibling
+# standdown_recheck_sweep tests' documented limitation.
+
+echo "Test: dispatch-tick paused branch invokes conflict_lane_hold_sweep"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-conflict-lane: exit 0" "0" "$rc"
+assert_eq "paused-conflict-lane: conflict_lane_hold_sweep ran exactly once (swept-summary line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -cF 'lib-conflict-lane-hold: swept 0 marker(s)')"
+tick_teardown
+
+echo "Test: dispatch-tick normal path invokes conflict_lane_hold_sweep exactly once, before dispatch-select-tick"
+tick_setup
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "normal-conflict-lane: exit 0" "0" "$rc"
+assert_eq "normal-conflict-lane: conflict_lane_hold_sweep ran exactly once (swept-summary line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -cF 'lib-conflict-lane-hold: swept 0 marker(s)')"
+tick_teardown
+
+# --- lib-conflict-lane-hold.sh fails to load → loud diagnostic, tick still ----
+# completes. Replace the copied lib with an unsourceable file (invalid bash
+# syntax) so `declare -f conflict_lane_hold_sweep` comes back false on both call
+# sites. Both must log the loud diagnostic and the tick must still complete
+# (exit 0) rather than abort.
+echo "Test: dispatch-tick lib-conflict-lane-hold.sh load failure → loud diagnostic, tick still completes (paused)"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-conflict-lane-hold.sh"
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "conflict-lane-load-fail-paused: tick still exits 0" "0" "$rc"
+assert_eq "conflict-lane-load-fail-paused: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'dispatch-tick: lib-conflict-lane-hold.sh failed to load; stuck conflict lanes NOT swept this tick' && echo 1 || echo 0)"
+assert_eq "conflict-lane-load-fail-paused: no swept-summary line (sweep never ran)" "0" \
+  "$(printf '%s' "$err" | grep -cF 'lib-conflict-lane-hold: swept')"
+tick_teardown
+
+echo "Test: dispatch-tick lib-conflict-lane-hold.sh load failure → loud diagnostic, tick still completes (normal path)"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-conflict-lane-hold.sh"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "conflict-lane-load-fail-normal: tick still exits 0" "0" "$rc"
+assert_eq "conflict-lane-load-fail-normal: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'dispatch-tick: lib-conflict-lane-hold.sh failed to load; stuck conflict lanes NOT swept this tick' && echo 1 || echo 0)"
 tick_teardown
 
 # --- tactic-denied-command-parks-node: normal-path frozen-session sweep --------

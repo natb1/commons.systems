@@ -142,6 +142,19 @@
 #      Behavior item 0.5 above) on the same two cadences as the frozen-session
 #      sweep it is paired with. Never gates the tick — a load failure logs
 #      loudly and the tick continues.
+#   5. Run the stuck conflict-lane hold sweep (conflict_lane_hold_sweep,
+#      lib-conflict-lane-hold.sh) on the same two cadences as the stand-down
+#      re-check sweep (item 3), immediately after it on both: on the paused
+#      branch (so a /dispatch-conflict Lane 3 session stuck at a
+#      `.conflict-lane` marker still surfaces to a tracked hold while dispatch
+#      is paused — that `exit 0` is the only autonomous path that never reaches
+#      dispatch-select-tick's own sweeps; no per-tick snapshot exists yet on
+#      this branch, so its registry reads fall back to live per-call queries,
+#      bounded by the marker count, which is normally zero), and on the normal
+#      path, after the per-tick daemon snapshot is captured and before Step 1
+#      target selection (so it reuses the snapshot and any node it holds is
+#      already excluded from this tick's own selection). Never gates the tick —
+#      a load failure logs loudly and the tick continues.
 #
 # The legacy gh-issue lane (explicit/pr/issue decisions →
 # dispatch-materialize-spawn → dispatch-launch-worker, and the recoverable-death
@@ -357,6 +370,25 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
     echo "dispatch-tick: lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick" >&2
   fi
 
+  # A /dispatch-conflict Lane 3 session that died without declaring a terminal
+  # disposition (provision-conflict, .conflict-lane sidecar marker) must still
+  # surface even while dispatch is paused — the same "only autonomous path that
+  # never reaches select-tick's own sweeps" reason the sweeps above are here. On
+  # this branch no per-tick daemon snapshot exists yet (that capture happens
+  # further below, on the normal path only), so this sweep's registry reads fall
+  # back to live per-call `claude agents` queries — bounded by the marker count,
+  # which is normally zero. Same conditional-source + verify + loud-failure idiom
+  # as standdown_recheck_sweep above.
+  if ! declare -f conflict_lane_hold_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-conflict-lane-hold.sh"
+  fi
+  if declare -f conflict_lane_hold_sweep >/dev/null 2>&1; then
+    conflict_lane_hold_sweep 1>&2
+  else
+    echo "dispatch-tick: lib-conflict-lane-hold.sh failed to load; stuck conflict lanes NOT swept this tick" >&2
+  fi
+
   # A node frozen at a permission/classifier denial (tactic-denied-command-parks-node)
   # must still surface to office_hours even while dispatch is paused — this is the
   # same "only autonomous path that never reaches select-tick's own sweeps" reason
@@ -562,6 +594,24 @@ if declare -f standdown_recheck_sweep >/dev/null 2>&1; then
   standdown_recheck_sweep 1>&2
 else
   echo "dispatch-tick: lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick" >&2
+fi
+
+# --- Stuck conflict-lane hold sweep -------------------------------------------
+# Placement matters: runs AFTER the stand-down re-check sweep above and BEFORE
+# Step 1 target selection below, for the same two reasons as the stand-down
+# sweep's own placement — it reuses this tick's daemon snapshot(s) captured
+# above instead of an extra round-trip, and any node this sweep holds lands on
+# `main` before selection runs, so this tick's own selection already excludes
+# it. Same conditional-source + verify + loud-failure idiom as the paused-branch
+# call above.
+if ! declare -f conflict_lane_hold_sweep >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-conflict-lane-hold.sh"
+fi
+if declare -f conflict_lane_hold_sweep >/dev/null 2>&1; then
+  conflict_lane_hold_sweep 1>&2
+else
+  echo "dispatch-tick: lib-conflict-lane-hold.sh failed to load; stuck conflict lanes NOT swept this tick" >&2
 fi
 
 # --- Frozen-session sweep (denied-command park, tactic-denied-command-parks-node) ---
