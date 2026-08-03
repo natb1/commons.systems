@@ -143,7 +143,11 @@ assert_eq "the fix-phase file-grouping loop still calls filePath" "1" \
 assert_eq "BATCH_VERDICT_SCHEMA is defined exactly once in review-fix.js" "1" \
   "$(grep -c '^const BATCH_VERDICT_SCHEMA = {' "$REVIEW_FIX_JS" || true)"
 
-assert_eq "VERDICT_SCHEMA is NOT deleted (later units migrate call sites)" "1" \
+# Every skeptic call site (verify phase and the code-review residue pre-gate) now
+# uses BATCH_VERDICT_SCHEMA, so the per-finding VERDICT_SCHEMA is deleted. knip
+# does not cover .claude/**, so pin its absence here — a reintroduced declaration
+# means a call site regressed to one agent per finding.
+assert_eq "the per-finding VERDICT_SCHEMA is deleted (all call sites batched)" "0" \
   "$(grep -c '^const VERDICT_SCHEMA = {' "$REVIEW_FIX_JS" || true)"
 
 report_results
