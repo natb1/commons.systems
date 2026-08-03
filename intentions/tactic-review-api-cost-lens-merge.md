@@ -30,59 +30,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Requirement ambiguity blocking finalize: the lens merge forces a
-    security-classification decision the record does not answer. Live code:
-    `firebase` is a SEC_SOURCE (review-fix.js:1354-1364), OWASP/STRIDE-filled
-    (:775-781), so its findings can classify `Required`, are verify-eligible
-    (:1398-1400), can reach the deviation gate, and fall back to `Out-of-scope`;
-    `cost` is not a SEC_SOURCE, sets OWASP ''/STRIDE '' (:754-774), is never
-    `Required`, never verify-eligible, and falls back to `Deferred` (:1374-1381)
-    -- an invariant also documented at
-    .claude/skills/review-fix/references/disposition-table.md:54-62. Collapsing
-    both under one Source name forces one answer at all three sites, and each
-    available answer is a change the author has not ruled on: (a) wholly
-    advisory -- what this tactic's Scope line implies -- demotes firebase's
-    Firestore-rules-permissiveness, emulator-code-on-production-paths, and
-    API-key-exposure checks from merge-blocking security findings to
-    non-blocking follow-ups, a detection and escalation reduction that the
-    strategy's quality-preservation condition forbids as an efficiency lever;
-    (b) wholly security-classified makes cost/scaling findings merge-blocking
-    and verify-eligible, breaking cost's documented non-escalation invariant
-    exactly as the trigger widens the lens's fire rate. Clarification 18
-    authorizes retaining and widening the lens on expense and sampling grounds
-    only and is silent on classification, so this is a record-completeness
-    defect of the /align-strategy round that produced the strategy, not
-    something this session should guess. Recommended resolution to ratify: keep
-    the merge at the lens/trigger level and split classification by sub-pattern
-    -- one api-cost finder emitting security-classified findings (OWASP/STRIDE
-    filled, Required-eligible, verify-eligible) for rules-permissiveness /
-    emulator-reachability / key-exposure, and advisory findings (OWASP/STRIDE
-    empty, always Deferred, never verify-eligible) for query-cost / amplifier /
-    N+1 -- preserving both detection and the cost non-escalation invariant. The
-    'known defect to fix while here' (an api-cost-specific adversarial-skeptic
-    brief, since the exploitability brief systematically refutes a cost finding)
-    only becomes live under a classification that makes any api-cost finding
-    verify-eligible, so it hangs on the same ruling. Filed on this tactic and
-    not on strategy-token-economy per
-    .claude/skills/align-tactics/references/tactic-target.md -- a per-node
-    tactic-target session never edits the serving strategy. Everything else in
-    the round is clean: office_hours null, signal unvalidated, rounds.count 0
-    (no round-cap issue), no recorded condition failed, and the merge is
-    confirmed unimplemented (agentFinderSet still pushes both 'firebase' and
-    'cost' at review-fix.js:495). Recommend: get the author's classification
-    ruling in office hours, land it as a new clarification on
-    strategy-token-economy via an /align-strategy pass, then re-run
-    /align-tactics tactic-review-api-cost-lens-merge to finalize -- and when
-    planning, re-derive anchors, since the draft body's 489-511 / 513-517 /
-    915-925 are stale after PR #3007; live sites are agentFinderSet
-    review-fix.js:487-499, DOMAIN_PROMPTS :632-645, cost finderPrompt :754-774,
-    skeptic briefs :1423-1461, plus the lockstep normative spec
-    .claude/skills/dispatch-propagate/scripts/dispatch-review-finders and its
-    test."
-  since: 2026-08-03
-  recommendation: null
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
