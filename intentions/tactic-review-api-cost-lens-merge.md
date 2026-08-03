@@ -21,10 +21,11 @@ success_signal: null
 attention:
   boost: 20
   override: null
-  rationale: "Author-directed 2026-08-01: prioritize review-phase token/agent-
-    cost reduction. Puts this tactic ahead of the undecomposed baseline and on
-    par with other tier-2 improvement work, without contending with active
+  rationale: "Author-directed 2026-08-01: prioritize review-phase token/agent-cost
+    reduction. Puts this tactic ahead of the undecomposed baseline and on par
+    with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
+  tier: 1
 phase: null
 execution: null
 validates: []

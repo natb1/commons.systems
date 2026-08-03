@@ -39,6 +39,9 @@
  *     security_followup_input:[...codeql/npm out-of-scope subset...],
  *     verify_report:[{id, location, verdict, skeptic_votes, rationale}],
  *     deviation:bool, security_note?, coverage_incomplete:bool, coverage_note?:string,
+ *       // coverage_note is a space-joined composition of EVERY degraded-coverage
+ *       // cause this run hit (wave back-off, instrument failures, undispositioned
+ *       // Lane-A residue) — never a single cause's message.
  *     instrument_failures:[{instrument, reason}] }
  *
  * NORMATIVE SPECS for the three inline kernel helpers below are the pure bash/jq
@@ -484,19 +487,29 @@ function transcriptVerdictDetail(tv) {
 //     it must not run concurrently with this parallel fan-out). Its output reaches
 //     this Workflow as args.code_review and is structured by the `parse:code-review`
 //     subagent below — never launched from here.
+//
+// The names returned here are AGENT names, and the agent→finding-source mapping is
+// no longer 1:1: `domain-sweep` is ONE agent that reads the diff once and covers
+// THREE finding sources (secrets / auth / data-exposure) as labelled brief sections
+// (see sweepDomains/sweepSections below). It sits where `secrets` sat — unconditional
+// on `surface === 'code'` — and its brief widens to include the auth and
+// data-exposure sections only when `app_or_rules` is true, exactly reproducing the
+// trigger asymmetry those three sources had as separate agents.
+// >>> domain sweep gate: sliced + eval'd by review-fix-domain-sweep-probe.mjs >>>
 function agentFinderSet(surface, app_or_rules) {
   // Any non-`code` surface (`empty`/`docs`/`tests`) yields NO agent finders at all —
   // the `surface === 'code'` gate below covers `tests` with no code change, since a
   // test-only diff has no production attack surface.
   const set = [];
   if (surface === 'code') {
-    set.push('input-validation', 'secrets', 'red-team', 'security-review');
+    set.push('input-validation', 'domain-sweep', 'red-team', 'security-review');
     if (app_or_rules) {
-      set.push('auth', 'data-exposure', 'firebase', 'cost');
+      set.push('firebase', 'cost');
     }
   }
   return set;
 }
+// <<< domain sweep gate <<<
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-dedup
 // Collapse one partition subgroup of same-root findings into one representative.
@@ -629,6 +642,7 @@ function diffContext(args) {
 }
 
 // Direct security-domain reviewer descriptions — mirror SKILL.md §1c.
+// >>> domain sweep brief: sliced + eval'd by review-fix-domain-sweep-probe.mjs >>>
 const DOMAIN_PROMPTS = {
   'input-validation':
     'Input validation: hunt injection in the changed code — SQL/NoSQL injection, XSS, command injection, path traversal. Check that external input is validated and escaped at every boundary it crosses.',
@@ -643,6 +657,23 @@ const DOMAIN_PROMPTS = {
   firebase:
     'Firebase-specific: Firestore rules permissiveness (overly broad `allow` conditions, missing field constraints), emulator-only code reachable on production paths, Firebase API key or config exposure.',
 };
+
+// The domain lenses the single `domain-sweep` agent carries, and the labelled brief
+// it is given. Pure: no diff, no args, no Workflow globals — the sections are just
+// DOMAIN_PROMPTS entries tagged with the Source each section's findings must carry.
+// The `app_or_rules` split reproduces the pre-fold trigger asymmetry exactly:
+// `secrets` fired on every code surface; `auth`/`data-exposure` fired only when
+// app_or_rules was also true.
+function sweepDomains(app_or_rules) {
+  return app_or_rules ? ['secrets', 'auth', 'data-exposure'] : ['secrets'];
+}
+
+function sweepSections(app_or_rules) {
+  return sweepDomains(app_or_rules)
+    .map((d) => `Section "${d}" (set Source "${d}" on findings from this section): ${DOMAIN_PROMPTS[d]}`)
+    .join('\n');
+}
+// <<< domain sweep brief <<<
 
 // Structuring prompt for the built-in /code-review pre-stage output. code-review
 // is NOT a finder agent in this Workflow: SKILL.md Step 1b already ran
@@ -772,7 +803,27 @@ function finderPrompt(name, args) {
       SCHEMA_BLURB,
     ].join('\n');
   }
-  // input-validation | secrets | red-team | auth | data-exposure | firebase
+  if (name === 'domain-sweep') {
+    return [
+      'You are a findings-only security reviewer running the domain lenses listed below in ONE',
+      'pass over the same diff. Work the sections in order and report on each independently —',
+      'a clean result in one section is never a reason to shorten another.',
+      sweepSections(args.app_or_rules),
+      ctx,
+      // Enumerate the BRIEFED lenses only: on the non-app path just `secrets` is
+      // briefed, and naming auth/data-exposure there would invite findings from a
+      // lens this run never ran — corrupting the per-lens yield measurement. The
+      // harness clamps Source to this same set on the way back in (gather loop).
+      `Set "Source" on EACH finding to the section it came from — exactly one of ${sweepDomains(
+        args.app_or_rules
+      )
+        .map((d) => `"${d}"`)
+        .join(', ')}. Never invent a combined source name and never use a source that is`,
+      'not one of those sections. Fill OWASP and STRIDE for every finding.',
+      SCHEMA_BLURB,
+    ].join('\n');
+  }
+  // input-validation | red-team | firebase
   return [
     `You are a findings-only security reviewer. Domain: ${DOMAIN_PROMPTS[name]}`,
     ctx,
@@ -1185,13 +1236,68 @@ log(
 // Gather: surviving Lane-B finder findings + the prescanned codeql/npm findings.
 // Lane-A results (code-review, security-review) are EXCLUDED — their { fixed,
 // residue } shape carries no `findings`, and they are disposed of separately.
+//
+// Source is CLAMPED harness-side, never trusted from the agent. FINDINGS_SCHEMA's
+// `Source` enum is the union of every finder's source across the whole roster, so
+// schema validation alone lets any agent label its output as any other lens — and
+// downstream stages branch on that label (a `cost` Source is ADVISORY and can never
+// be Required; `erosion` is Informational). An agent steered by diff text into
+// labelling a real auth or hardcoded-credential finding `cost` would therefore
+// downgrade a merge-blocking finding to a follow-up filing. Since the launching
+// harness knows exactly which lenses each finder was briefed for, it re-imposes
+// that set here: a Source outside the finder's briefed set is relabelled to the
+// finder's primary lens rather than honoured. The fold makes this load-bearing —
+// `domain-sweep` carries THREE sources chosen by the agent itself, and on the
+// non-app path only `secrets` is briefed at all.
+const laneBAllowedSources = (name) =>
+  name === 'domain-sweep' ? sweepDomains(_a.app_or_rules) : [name];
 let allFindings = [];
 for (const { name, res } of finderResults) {
   if (LANE_A.has(name)) continue;
   if (!res) continue;
-  for (const f of res.findings || []) allFindings.push(f);
+  const allowedList = laneBAllowedSources(name);
+  const allowed = new Set(allowedList);
+  for (const f of res.findings || []) {
+    if (allowed.has(f.Source)) {
+      allFindings.push(f);
+      continue;
+    }
+    log(
+      `finders: SOURCE CLAMP — ${name} returned Source "${f.Source}" outside its briefed ` +
+        `set [${allowedList.join(', ')}]; relabelled to "${allowedList[0]}".`
+    );
+    allFindings.push(Object.assign({}, f, { Source: allowedList[0] }));
+  }
 }
 for (const f of _a.prescanned_findings || []) allFindings.push(f);
+
+// Dead Lane-B finders. `agent()` retries internally, so a null result means the
+// finder failed AFTER retries and contributed nothing — and unlike Lane A, nothing
+// else records that loss: the gather loop above just skips it, and instrumentVerdict
+// reports `{ ok: true, checked: false }` for any finder that is not a named
+// instrument, so no instrument_failures entry is pushed either. Without this the run
+// reports a full, clean pass while a security lens silently did not run.
+//
+// Skipped when the probe wave already backed off: in that case wave 2 was never
+// launched, every wave-2 result is undefined by construction, and coverage_note
+// already says so.
+if (!probeDead) {
+  const deadLaneB = finderResults
+    .filter(({ name, res }) => !LANE_A.has(name) && !res)
+    .map(({ name }) => name);
+  if (deadLaneB.length) {
+    coverage_incomplete = true;
+    // Expand `domain-sweep` to the lenses it actually carried — one dead agent now
+    // costs three lenses, and the comment must name every one of them.
+    const lostLenses = deadLaneB.map((n) => laneBAllowedSources(n).join('/'));
+    const deadNote =
+      `Security lenses lost: ${lostLenses.join(', ')} — the finder(s) returned no result ` +
+      `after retries, so those lenses did not run.`;
+    // Preserve any note the throttle / instrument-gate paths already set.
+    coverage_note = [coverage_note, deadNote].filter(Boolean).join(' ');
+    log(`finders: COVERAGE DEGRADED — ${deadNote}`);
+  }
+}
 
 // Assign a unique id and a global input index (_idx) to every finding.
 {
@@ -1613,9 +1719,63 @@ const upheldErosionIds = new Set(
 // fan-out fully resolves so no two agents edit the working tree concurrently.
 phase('residue');
 
+// >>> residue death coverage: sliced + eval'd by review-fix-residue-death-probe.mjs >>>
 // Local truncation — inlined to avoid an ordering dependency on the `truncate`
 // function declaration defined later in file-prep.
 const residueTruncate = (text) => (text || '').trim().replace(/\s+/g, ' ').slice(0, 140);
+
+// Records for Lane-A residue items the disposition phase never triaged — the
+// disposition subagent died after retries (agent() already retries internally, so a
+// null result is a genuine outage), returned a short items list, or echoed refs that
+// mapped to no original item. Without this, those findings are dropped silently:
+// laneADispositions/laneADeferred stay empty, so they reach neither the PR comment
+// nor a follow-up. Mirrors the quality-finder-death and instrument-gate fail-safes.
+//
+// `dispositionedIdx` is read via `.has(idx)` ONLY — pass residueResolvedByIdx (a Map
+// keyed by original residue index); presence, not value, means "was triaged".
+// Pure: no injected globals, no I/O. Slice-tested by
+// .claude/skills/dispatch-propagate/scripts/review-fix-residue-death-probe.mjs.
+function undispositionedResidueRecords(residue, dispositionedIdx, opts) {
+  const list = residue || [];
+  const prNum = (opts && opts.pr_num) || '';
+  const blockerNums = opts && opts.blocker_issue_nums;
+  const dispositions = [];
+  const deferred = [];
+  list.forEach((orig, idx) => {
+    if (!orig) return;
+    if (dispositionedIdx && dispositionedIdx.has(idx)) return;
+    dispositions.push({
+      id: `residue-${idx}`,
+      short_desc: residueTruncate(orig.description),
+      location: orig.location,
+      bucket: 'Deferred',
+      sources: [orig.source],
+    });
+    deferred.push({
+      title: residueTruncate(orig.description).slice(0, 80),
+      body: [
+        orig.description,
+        '',
+        `Recommended fix: ${orig.recommended_fix}`,
+        '',
+        'Rationale: the review-fix residue-disposition agent died after retries, so ' +
+          'this Lane-A finding was never triaged (resolve/defer/ignore). Filed ' +
+          'unconditionally so it is not lost — triage it here.',
+        '',
+        `Backlink: #${prNum}`,
+      ].join('\n'),
+      blocker_issue_nums: blockerNums,
+    });
+  });
+  const note = dispositions.length
+    ? `Lane-A residue disposition degraded: ${dispositions.length} of ${list.length} ` +
+      'finding(s) were never triaged because the residue-disposition agent died after ' +
+      'retries. Each is listed under Deferred and filed as a follow-up.'
+    : '';
+  return { dispositions, deferred, note };
+}
+// <<< residue death coverage <<<
+
 // Blocker-issue attribution for defer filings — mirrors the Lane-B `blockerNums`
 // computation (defined later in file-prep); duplicated here since that const is
 // out of scope at this insertion point.
@@ -1945,6 +2105,24 @@ if (laneAResidue.length === 0) {
     }
     laneADispositions.push(entry);
   }
+  // Any laneAResidue index absent from residueResolvedByIdx got no valid disposition —
+  // total agent death, a short items list, or a ref that mapped to no original. Surface
+  // + file each so it is not silently dropped, and flag degraded coverage.
+  const undisposed = undispositionedResidueRecords(laneAResidue, residueResolvedByIdx, {
+    pr_num: _a.pr_num,
+    blocker_issue_nums: residueBlockerNums,
+  });
+  if (undisposed.dispositions.length) {
+    laneADispositions.push(...undisposed.dispositions);
+    laneADeferred.push(...undisposed.deferred);
+    coverage_incomplete = true;
+    // Preserve any note the throttle / instrument-gate paths already set.
+    coverage_note = [coverage_note, undisposed.note].filter(Boolean).join(' ');
+    log(
+      `residue: ${undisposed.dispositions.length} undispositioned item(s) surfaced as ` +
+        'Deferred and filed as follow-ups (disposition agent died after retries).'
+    );
+  }
   log(
     `residue: ${items.length} dispositioned — fixed=${laneAResidueFixed.length}, ` +
       `deferred=${laneADeferred.length}, audit=${laneADispositions.length}`
@@ -2073,7 +2251,11 @@ const security_followup_input = deduped
 //   - "resolved" means residueResolvedByIdx === true, a working-tree-VERIFIED applied
 //     resolve — an ignore/defer/phantom-resolve leaves the item unresolved and escalates.
 // A high-severity original item with no returned disposition (agent dropped it) has no
-// map entry (!== true) and therefore also escalates.
+// map entry (!== true) and therefore also escalates. Such an item now ALSO gets a
+// Deferred audit entry and a filed follow-up from undispositionedResidueRecords, so
+// escalation and durable capture are independent: capture happens for every dropped
+// residue item regardless of severity or source, and escalation still fires here only
+// for high-severity security-review ones.
 //
 // An unverified instrument escalates UNCONDITIONALLY — it is not severity-scaled,
 // because the failure is not "a finding went unfixed" but "the named review did
@@ -2182,9 +2364,17 @@ return {
   verify_report,
   deviation,
   security_note: _a.security_note,
-  // coverage_incomplete is independent of `deviation`: it flags a launch-efficiency
-  // back-off (wave 2 skipped because the security-review probe finder failed — model
-  // likely throttled), surfaced in the Step 6 partial-coverage comment line.
+  // coverage_incomplete is independent of `deviation`: it flags any way this run's
+  // review coverage came out degraded, surfaced in the Step 6 partial-coverage comment
+  // line. Four causes set it:
+  //   - the security wave was skipped because the quality finder died (a
+  //     launch-efficiency back-off — the model was likely throttled);
+  //   - a named instrument's receipt failed verification, so that stage's payload was
+  //     discarded;
+  //   - a Lane-B finder died after retries, so its lens (or, for `domain-sweep`, all
+  //     three of its lenses) did not run and contributed no findings;
+  //   - Lane-A residue was left undispositioned because the residue-disposition agent
+  //     died after retries (those items are surfaced as Deferred and filed anyway).
   coverage_incomplete,
   coverage_note,
   // One entry per stage whose named-instrument receipt failed verification. A

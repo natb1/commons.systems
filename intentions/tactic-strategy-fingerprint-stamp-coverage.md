@@ -45,11 +45,80 @@ attention:
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-strategy-fingerprint-stamp-coverage
+  pr: 3023
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint:
+    strategy-graph-native-dispatch:
+      hash: d5f6cfce402ebd1ddaf07b5969a9696072bc544eb269274b9ec9eb0481f80738
+      sha: bbb229fc695294c3942bcbf857fe16ae815a1582
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: planner scope-deviation on 2 needs-human-judgment residue
+    items (14, 15) — Step 3.5's gated fix-plan agent returned deviation=true
+    with 0 units: 'Both residue items are human-acceptance design reviews with
+    no code defect: acting on either would require narrowing the
+    every-serving-strategy stamp (a behavior change the node body deliberately
+    chose) or closing the documented mint-to-first-transition laundering gap
+    (explicitly deferred follow-up scope) — decisions the issue does not
+    authorize.' All 12 script-verifiable QA items passed; no code defect found;
+    this is a design/scope sign-off park, not a bug. See the qa-summary PR
+    comment on PR #3023 for the full disposition."
+  since: 2026-08-03
+  recommendation: >-
+    # Recommendation: sign off, no code changes needed
+
+
+    **Nothing is broken.** The autonomous QA pass ran 15 triage items. All 12
+    mechanically verifiable ones passed independently — census script re-run,
+    transition-node flag gating and jq usage, doctrine docs, CI wiring, and full
+    suites (vitest 776/776, typecheck, lint, `test-transition-node.sh` 5/5,
+    `test-park-node.sh` 21/21, `test-strategy-stamp-doctrine.sh` 6/6). No defect
+    was found. This park exists only because a QA pass is not allowed to ratify
+    design/scope decisions on its own. Your job here is a sign-off, not a fix.
+
+
+    ## Recommended disposition
+
+
+    1. **Approve the broader stamping rule (item 14).** Unit 2 stamps every
+    strategy a tactic serves, including inherited ones — wider than
+    `write-path.md`'s old hand-stamp rule. Approve it. `isFingerprintStale`
+    treats a null or absent key as not stale by design, so extra entries can
+    only turn a permanently inert null into a real freeze; they cannot fabricate
+    a false stale. The narrow alternative returns coverage to zero, which is
+    what this tactic exists to fix.
+
+    2. **Accept the mint-to-first-transition gap (item 15).** It is written
+    down, deliberate, and deferred to a future `--strategy-fingerprint-sha` flag
+    on `write-node.ts`. Do not ask this PR to close it.
+
+
+    ## What to skim (2-3 minutes)
+
+
+    - The node body's **"Judgment call, for review"** paragraph in its
+    Verification section.
+
+    - `write-path.md`, section **"Residual gap: the mint-to-first-transition
+    window"**.
+
+
+    ## Next step
+
+
+    Once you agree, move the node to `review`, its next phase. No further QA
+    action. The one remaining `needs-main` item — proof that a real transition
+    stamps a previously-null tactic — is already filed as residue on the node
+    body and drains automatically after #3023 merges. Nothing to do for it now.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -234,3 +303,11 @@ Manual / observe-in-production checks:
 2. **Post-merge, after the first real transition (`needs-main`).** This is the only check that proves the producer fires in production and cannot be run pre-merge. After any tactic serving any strategy completes a phase through `transition-node` on `origin/main`, re-run the census and confirm that node moved from the `null` bucket to the `keyed` bucket with a `{hash, sha}` entry whose `hash` equals `npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <serving-strategy-id>` and whose `sha` is a real `origin/main` commit (`git cat-file -t <sha>` → `commit`, not `blob`).
 3. **Freeze non-regression, by inspection.** Confirm the graph-wide `bareString` count is unchanged by this PR (29 as of the baseline) — the legacy branch of `isFingerprintStale` must keep working untouched. Confirm no `intentions/*.md` file is modified by the PR diff: `git diff --stat origin/main -- intentions/` must be empty. Any stamp appearing on a node file in this PR's diff is the forbidden bulk backfill.
 4. **Judgment call, for review.** Unit 2 stamps *every* serving strategy at transition time, which extends `write-path.md:311-321`'s mint-time rule of stamping only the decomposed strategy. Rationale to confirm at review: recording the current hash is honest (it never fabricates a *stale* stamp), and stamping only one strategy would leave a multi-serves tactic permanently un-freezable against its other parents — the exact inertness this tactic exists to fix. If the author rejects this, the fallback is to stamp only strategies already keyed in the map, which restores zero coverage and would mean parking this tactic rather than shipping a partial fix.
+
+## needs-main residue
+
+- **id 13 — Post-merge production proof that the producer actually fires and stamps a real node.**
+  - Expected outcome: at least one previously-`nullStamp` tactic reads `keyed` after the first post-merge forward `transition-node` run on `origin/main`, with a `{hash, sha}` entry whose `hash` matches `strategy-fingerprint.ts` output for that serving strategy and whose `sha` resolves to a real commit (`git cat-file -t <sha>` → `commit`, not `blob`).
+  - Finding: this is the node body's own Manual check 2 — explicitly documented as the only check that proves the producer fires in production, and it cannot run pre-merge (it depends on a real post-merge `transition-node` invocation on `origin/main`). All 12 pre-merge script-verifiable QA items passed independently in this qa-fix pass: the census runs correctly and reads plausible numbers (`47` open / `1` keyed — this tactic's own mint-time hand-stamp — / `0` bare-string / `46` null / `0` stale for `strategy-graph-native-dispatch`; graph-wide `bareString` unchanged at `30`), `transition-node`'s flag construction and `STRATEGY_STALE`-gating are correct by grep, the doctrine docs and CI wiring are correct by grep, and the full test suites are green (vitest 776/776, typecheck, lint, `test-transition-node.sh` 5/5 including both new stamp cases, `test-park-node.sh` 21/21, `test-strategy-stamp-doctrine.sh` 6/6). The Step 3.5 disposition Workflow's adversarial verify pass independently confirmed both design judgment calls (items 14/15 in the QA plan) are already resolved by the node body's own text and doctrine and required no human sign-off; this item alone remains genuinely non-assertable before merge.
+  - Verifiability: WAIT — a valid machine check whose event (the first post-merge forward `transition-node` transition of any tactic serving any strategy) has not occurred yet.
+  - Check: `node --import tsx/esm packages/intentionsutil/scripts/strategy-stamp-census.ts` (graph-wide, or `--strategy <sid>` scoped) against a freshly-fetched `origin/main`, after any tactic has advanced through a forward `transition-node` transition post-merge; confirm that tactic moved `nullStamp → keyed` and that its recorded `sha` is a real commit (`git cat-file -t <sha>`).

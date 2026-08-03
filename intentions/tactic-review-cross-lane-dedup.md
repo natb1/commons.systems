@@ -40,72 +40,76 @@ validates: []
 blocked_by: []
 office_hours:
   reason: "2026-08-03 /align-tactics finalize attempt (tactic-mode Workflow, run
-    wf_5ee0b8b7-437): the gate is eligible (not a strategy-round cap issue) but
-    the two-sided drift review surfaced two MATERIAL unrecorded premises that
-    both need an author ruling before this tactic's plan can be authored. Both
-    amendments would land on strategy-token-economy clarification 20 and both
-    touch the detection-quality tradeoff condition 5 reserves to the author. (1)
-    MERGED-ENTRY LANE IDENTITY. Clarification 20's lane-tag mechanism presumes
-    each finding carries exactly one lane, but cross-lane dedup's whole purpose
-    is producing entries that are both Lane-A- and Lane-B-derived.
-    review-fix.js:507-544's dedupMerge collapses a same-root group to ONE
-    representative (`rep = ordered[0]` by Confidence desc, _idx asc;
-    `Object.assign({}, rep, ...)`), so one lane's Source/id/bucket survives and
-    the other's is discarded into the `sources` union. Unrecorded: which lane
-    wins the slot, and whether an absorbed Lane-A item still appears in the
-    residue-disposition ledger (:1727-1812). Lane-A-wins silently NARROWS
-    skeptic coverage (a Lane-B Required finding loses its bucket and drops out
-    of verify) — a detection reduction condition 5 forbids, and a direction the
-    draft body never considered, guarding only against widening. Proposed for
-    ratification: the Lane-B record is always the surviving representative, so
-    verify eligibility (:566, :1399) is bit-for-bit unchanged and no
-    Lane-A-derived entry can acquire bucket 'Required'; the absorbed item is
-    recorded in `sources` and suppressed from the residue list so it is fixed
-    exactly once. (2) THE SKEPTIC PRE-GATE POST-DATES THE RULING. Clarification
-    20's ruling rests on 'the built-ins already apply their own internal
-    verification' plus a ~100-extra-agent cost argument. Commit 7c772829
-    (2026-08-02, after the 2026-07-31 ruling) states the opposite for
-    code-review residue at review-fix.js:1637-1650 — 'no instrument receipt, no
-    internal verification survives the parse' — and now routes every code-review
-    residue item through one adversarial skeptic with the same
-    refute-under-uncertainty bias Lane-B Required findings get, dropping refuted
-    items at :1723. Both the trust premise and the cost premise the author ruled
-    on are therefore partly spent. Proposed for ratification: 'never routed into
-    the adversarial skeptic stage' means the VERIFY stage only; dedup runs at or
-    after the :1723 filter so it never merges refuted items; a pre-gate-upheld
-    item stays non-verify-eligible, keeping the merge asymmetric and the
-    arithmetic intact. Parked on the node rather than the strategy deliberately:
-    the ambiguity is local to this tactic's plan, and parking
-    strategy-token-economy would freeze its seven other raw drafts for it. Note
-    for whoever resumes: the draft body's line anchors (:636, :655-661, :676,
-    :761, :858, :988, :1081, :1121-1130) have all drifted and must be
-    re-anchored to :1169-1183, :1186-1194, :1211-1287, :1293-1388, :1392-1420,
-    :1520-1538, :1727-1812; laneAResidue also uses lowercase
-    location/description/severity fields against allFindings' capitalized
-    Location/Description/Confidence/Source, so an explicit normalizer is new
-    code. RECORD-COMPLETENESS NOTE (this tactic-target session never edits the
-    serving strategy): the same Workflow run also surfaced three immaterial
-    observations that should land as dated clarifications on
-    strategy-token-economy in a future strategy-target /align-tactics round or
-    an /align-strategy session — (a) clarification 24's 'removes part of the
-    overlap structurally' claim is half pre-existing: the residue phase has run
-    sequenced AFTER the fix fan-out since 2026-07-18 (commit d8937946), so only
-    the fixed-finding half is newly attributable to clarification 24, not the
-    concurrent-edit-avoidance half; (b) the routing condition's no-auto-apply
-    half is now structurally satisfied outside any decomposition (PR #2872
-    retired the learned/adaptive phase-model policy; dispatch-phase-model is a
-    static map with an explicit no-auto-write invariant; /dispatch-token-audit
-    is report-only) — no round should re-derive the auto-apply prohibition as
-    new scope; (c) tactic-mainqa-review-cost-finder serves this strategy but is
-    owner:human/status:delegated, so it never registers in the success signal's
-    claude-eligible closure-velocity count — whether a claude-eligible
-    counterpart is still needed is an open question for a future round, not a
-    defect in the current signal definition. Recommend: run /office-hours
-    tactic-review-cross-lane-dedup for the author to rule on both material
-    premises (and, separately, land the three record-completeness notes above
-    onto strategy-token-economy), then re-invoke /align-tactics
-    tactic-review-cross-lane-dedup to finalize the plan under the ratified
-    rules."
+    wf_7002ef10-a60): the gate was eligible (drift eligibility.decomposable=true
+    — not a round-cap issue) and this run supplied clarifications 26 and 27,
+    which ratified the two premises that parked this node's prior attempt
+    (commit ea045077, cleared a15c52dd). But the two-sided drift review found
+    those two clarifications do not fully settle the plan: a NEW material
+    unrecorded premise blocks authoring. WHICH LANE-B TERMINAL DISPOSITIONS
+    QUALIFY A FINDING TO ABSORB ITS LANE-A RESIDUE TWIN. Clarification 27 places
+    the cross-lane merge at or after the code-review residue skeptic pre-gate;
+    verified against the live file this round, that pre-gate sits at
+    review-fix.js ~1694-1781, INSIDE the residue phase (phase('residue') ~1617),
+    which is downstream of the shared pipeline's verify phase (~1394,
+    applyVerifyDrop ~1489 splitting keptFindings vs refuted/unverified) and fix
+    phase (~1524). So by the time the merge runs, every Lane-B finding already
+    carries a terminal disposition — fixed, refuted, unverified, or (later, at
+    ~2054) queued for deferred filing — and clarification 26 only rules that the
+    Lane-B record is 'fixed exactly once', which presumes the twin was actually
+    fixed. It is silent on the refuted/unverified case and the deferred case.
+    Matching Lane-A residue against the full deduped pool would let a REFUTED
+    Lane-B twin suppress a real Lane-A item, deleting it from the
+    residue-disposition ledger — a detection loss condition 5 forbids. Matching
+    only against actually-fixed Lane-B findings is detection-safe but leaves the
+    Lane-A residue item double-handled against a Lane-B deferred follow-up on
+    the same root, exactly the duplication clarification 20's dedup exists to
+    remove — and honoring the deferred case requires computing deferred_filings
+    (currently ~2054) before or during the residue phase instead of after it.
+    PROPOSED FOR RATIFICATION: only a Lane-B finding that survived verify and
+    was actually fixed absorbs its Lane-A twin (a Refuted/Unverified-dropped
+    finding never absorbs — the Lane-A item stays in the residue ledger); the
+    deferred case is the genuinely open half and needs an explicit author call —
+    dedup-wins (absorb, at the cost of reordering/duplicating the
+    deferred-filing computation) or ledger-completeness-wins (do not absorb,
+    accepting one duplicate). Recommend co-scheduling this sitting with the
+    still-parked sibling tactic-review-verify-per-file-batching, parked on the
+    same commit-7c772829 fact and naming this tactic by id — clarifications 26
+    and 27 settled only the cross-lane half of that coupling, not this
+    terminal-disposition question. RECORD-COMPLETENESS NOTE (a tactic-target
+    session never edits the serving strategy): this round's drift review also
+    surfaced two immaterial observations that should land as dated
+    clarifications on strategy-token-economy in a future strategy-target
+    /align-tactics round or an /align-strategy session — (a) clarifications 26
+    and 27 are NOT in tension: 27 fixes placement (the cross-lane pass is a
+    late, one-directional suppression spliced between the pre-gate's
+    laneAResidue filter at ~1780 and the residue-disposition prompt build at
+    ~1784+), and under that placement 26's 'Lane-B record always survives'
+    guarantee holds by construction — dedupMerge (~511-547) stays a Lane-B-only
+    pre-classify collapse and needs no lane-aware tie-break; (b) condition 3's
+    'the audit-written policy loop surfaces recommendations, it never
+    auto-applies' describes a mechanism that no longer exists — PR #2872 (commit
+    7fcbb7dd, 2026-07-14) deleted generate-phase-model-policy.sh and the live
+    phase-model-policy.json; dispatch-phase-model is now a static map and
+    routing is applied by hand per dispatch-token-audit/SKILL.md — condition 3
+    is not failed, it holds more strongly (no auto-apply path exists at all);
+    read it going forward as two live requirements (verified-yield-only
+    grounding, explicit author approval) plus a historical reference to a
+    retired loop. REUSE EVIDENCE (do not re-hunt):
+    residueLocationFile/residueLocationInDiff (review-fix.js ~1144-1160) is a
+    directly reusable path-normalization primitive for the cross-lane location
+    key; the sentinel-delimited slice-and-probe convention used by
+    review-fix-residue-death-probe.mjs / test-review-fix-residue-death.sh (and
+    review-fix-instrument-probe.mjs / test-review-fix-instrument.sh) is the
+    confirmed pattern for a new cross-lane-dedup unit's own pure
+    merge/suppression function and its CI-wired probe/test pair. LIVE LINE
+    ANCHORS as verified this round (re-confirm before use, code moves): dedup
+    phase review-fix.js:1212, classify:1297, verify:1394 (applyVerifyDrop:1489),
+    fix:1524, residue phase:1617, code-review residue skeptic
+    pre-gate:~1694-1781, file phase:2030, deferred_filings computed:~2054.
+    Recommend: run /office-hours tactic-review-cross-lane-dedup for the author
+    to rule on the terminal-disposition-absorption premise, then re-invoke
+    /align-tactics tactic-review-cross-lane-dedup to finalize the plan under the
+    ratified rule."
   since: 2026-08-03
   recommendation: null
   session_type: other

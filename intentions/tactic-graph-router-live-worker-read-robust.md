@@ -51,13 +51,12 @@ attention:
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
   tier: 1
-phase: qa
+phase: implement
 execution:
   branch: tactic-graph-router-live-worker-read-robust
   pr: 3010
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -432,3 +431,12 @@ reaches the probe (non-empty array), so this risk is confined to cold starts.
 `concurrency-cap` instead of spawning its one sovereign node. Confirm the stderr diagnostic
 makes the remedy obvious (re-run unsandboxed) — a silent `concurrency-cap` here would read as
 "fleet saturated" and is the main usability risk of this change.
+
+## needs-main residue
+
+### 1. Observe cold-start autonomous ticks on a fully idle fleet after merge
+- URL path: current
+- Expected outcome: Cold-start autonomous ticks on a genuinely idle fleet reach a normal `graph <count> …` decision rather than repeatedly emitting `concurrency-cap` with `skip_reason=live-read-unverified`.
+- Finding: Not assertable at merge time — every test suite in this PR injects `CLAUDE_AGENTS_PGREP_CMD`, so the real `pgrep -f 'claude daemon'` invocation is exercised for the first time only in production, against a real idle fleet and process table. The author documents this as an explicit observe-in-production acceptance criterion (a planned deferral, not a merge-blocking check).
+- Verifiability: WAIT — awaited event: the fleet reaching a genuinely idle state after this PR merges, so an autonomous `dispatch-select-tick` invocation actually exercises the corroboration probe against the real daemon/process table for the first time.
+- Check: `journalctl --user -u dispatch-tick* --since -6h | grep -E 'graph [0-9]+ |concurrency-cap.*live-read-unverified'` — confirm cold-start ticks reach a `graph <count> …` decision, not a repeated `live-read-unverified` skip.
