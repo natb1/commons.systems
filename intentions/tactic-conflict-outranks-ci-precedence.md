@@ -36,8 +36,17 @@ attention:
     follows the Wave-A write-path fixes. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
-phase: implement
-execution: null
+  tier: 1
+phase: qa
+execution:
+  branch: tactic-conflict-outranks-ci-precedence
+  pr: 3019
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
