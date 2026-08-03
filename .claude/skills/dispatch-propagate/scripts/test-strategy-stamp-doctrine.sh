@@ -29,6 +29,7 @@ echo "=== strategy_fingerprint stamp-coverage doctrine guard ==="
 GUARD_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 TRANSITION_NODE="$GUARD_ROOT/.claude/skills/dispatch-propagate/scripts/transition-node"
 WRITE_PATH="$GUARD_ROOT/.claude/skills/align-tactics/references/write-path.md"
+WRITE_NODE="$GUARD_ROOT/packages/intentionsutil/scripts/write-node.ts"
 
 # --- 1. transition-node constructs --strategy-fingerprint in APPLY_FLAGS ----
 #
@@ -104,6 +105,52 @@ else
   actual=$(tr '\n' ' ' < "$WRITE_PATH" | grep -coE -- 'bare-string form is deprecated-legacy — never emit' || true)
   if [[ "$actual" -gt 0 ]]; then actual="present"; else actual="absent"; fi
   assert_eq "write-path.md still forbids emitting the bare-string stamp form" "present" "$actual"
+fi
+
+# --- 5. write-node.ts implements the MINT-time stamp flags ------------------
+#
+# The mint-to-first-transition window is closed by write-node.ts accepting the
+# same keyed flag pair as apply-node-transition.ts. Bind to the parseArgs
+# switch specifically, so deleting the flag cases (leaving only the prose
+# header comment) fails this.
+
+if [[ ! -f "$WRITE_NODE" ]]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: write-node.ts implements the mint-time stamp flags: file missing: packages/intentionsutil/scripts/write-node.ts"
+else
+  actual=$(awk '
+    /^export function parseArgs\(/ { insec = 1 }
+    insec && /case "--strategy-fingerprint":/ { has_fp = 1 }
+    insec && /case "--strategy-sha":/ { has_sha = 1 }
+    insec && /^}/ && NR > 1 { insec = 0 }
+    END { if (has_fp && has_sha) { print "present" } else { print "absent" } }
+  ' "$WRITE_NODE")
+  assert_eq "write-node.ts parseArgs accepts --strategy-fingerprint and --strategy-sha" \
+    "present" "$actual"
+fi
+
+# --- 6. write-path.md documents the window as CLOSED, not deferred ----------
+#
+# The doc previously described the gap as deferred future work. It now must
+# name write-node.ts's mint-time flags as the closure. Guards against a
+# revert-by-doc-edit that leaves the code in place but tells sessions the stamp
+# is somebody else's job.
+
+if [[ ! -f "$WRITE_PATH" ]]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: write-path.md documents the mint-time stamp: file missing"
+else
+  actual=$(awk '
+    /Closed: the mint-to-first-transition window/ { closed = 1 }
+    /write-node\.ts/ && /--strategy-fingerprint/ { names_flag = 1 }
+    /--strategy-fingerprint <strategy-id>=<hash>/ { names_flag = 1 }
+    /Closing this window is deferred/ { still_deferred = 1 }
+    END {
+      if (closed && names_flag && !still_deferred) { print "closed" } else { print "open" }
+    }
+  ' "$WRITE_PATH")
+  assert_eq "write-path.md documents the mint-to-first-transition window as closed by write-node.ts's flags" \
+    "closed" "$actual"
 fi
 
 report_results

@@ -84,6 +84,13 @@ build_seed_repo() {
   cp "$UTIL_SCRIPTS_SRC/hold-node-decide.ts" "$dst/packages/intentionsutil/scripts/hold-node-decide.ts"
   cp "$UTIL_SCRIPTS_SRC/dump-node.ts" "$dst/packages/intentionsutil/scripts/dump-node.ts"
   cp "$UTIL_SCRIPTS_SRC/write-node.ts" "$dst/packages/intentionsutil/scripts/write-node.ts"
+  # Sibling script-level libraries the copied scripts import relatively — e.g.
+  # write-node.ts → ./lib-strategy-stamp.js, the one implementation of the
+  # --strategy-fingerprint/--strategy-sha flags and the stamp merge. Copy the
+  # whole `lib-*.ts` glob rather than cherry-picking names: a missing sibling
+  # surfaces only as an ERR_MODULE_NOT_FOUND deep inside a case, which reads as
+  # a behavior failure rather than a fixture gap.
+  cp "$UTIL_SCRIPTS_SRC"/lib-*.ts "$dst/packages/intentionsutil/scripts/"
   chmod +x "$dst/packages/intentionsutil/scripts/resolve-hold"
 }
 

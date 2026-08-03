@@ -162,6 +162,13 @@ cp "$RP_SCRIPT" "$SEED/packages/intentionsutil/scripts/resolve-park"
 cp "$CP_SCRIPT" "$SEED/packages/intentionsutil/scripts/clear-park"
 cp "$DEMOTE_SCRIPT" "$SEED/packages/intentionsutil/scripts/demote-node-to-implement"
 cp "$APPLY_TS" "$SEED/packages/intentionsutil/scripts/apply-node-transition.ts"
+# Sibling script-level libraries the copied scripts import relatively — e.g.
+# apply-node-transition.ts → ./lib-strategy-stamp.js, the one implementation of
+# the --strategy-fingerprint/--strategy-sha flags and the stamp merge, shared
+# with write-node.ts. Copy the whole `lib-*.ts` glob rather than cherry-picking
+# names: a missing sibling surfaces only as an ERR_MODULE_NOT_FOUND deep inside
+# a case, which reads as a behavior failure rather than a fixture gap.
+cp "$HARNESS_DIR"/lib-*.ts "$SEED/packages/intentionsutil/scripts/"
 chmod +x "$SEED/packages/intentionsutil/scripts/park-node" \
          "$SEED/packages/intentionsutil/scripts/graph-commit" \
          "$SEED/packages/intentionsutil/scripts/resolve-park" \
