@@ -42,13 +42,14 @@ success_signal:
     bug-B/bug-O healing behavior must be unaffected)
   is_proxy: false
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-ensure-units-respect-manual-disable
   pr: 3015
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
