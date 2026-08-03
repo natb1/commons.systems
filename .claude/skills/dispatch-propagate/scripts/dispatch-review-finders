@@ -45,6 +45,16 @@
 # `agentFinderSet` in review-fix.js excludes code-review, alongside codeql/npm/
 # erosion (which were never agents either — they arrive as prescanned findings).
 # Nothing about this script's emitted stdout changes.
+#
+# NOTE — domain-sweep fold (tactic-review-domain-lens-consolidation): the JS agent
+# fan-out (`agentFinderSet` in review-fix.js) now maps the `secrets` + `auth` +
+# `data-exposure` SOURCES onto ONE agent called `domain-sweep`, whose brief carries
+# each source's section under the same `app_or_rules` gating this script's SOURCE
+# roster already encodes above (`secrets` unconditional on `surface=code`; `auth`/
+# `data-exposure` only when `app_or_rules=true`). So the SOURCE roster this script
+# emits and the AGENT roster in review-fix.js are now deliberately NOT 1:1 — three
+# sources, one agent. Nothing about this script's own stdout output changes as a
+# result; it remains the normative SOURCE-name spec, not an agent-name spec.
 set -euo pipefail
 
 # --- parse stdin ----------------------------------------------------------------

@@ -64,6 +64,11 @@ sweep_setup() {
   # dispatch-sweep sources lib-worktree-reap.sh (marker ledger + quarantine) from
   # its SCRIPT_DIR — required for the not-in-sync reap path.
   cp "$SCRIPT_DIR/lib-worktree-reap.sh" "$TMPDIR_TEST/scripts/lib-worktree-reap.sh"
+  # dispatch-sweep sources lib-session-reap.sh (the SESSION arm) from its
+  # SCRIPT_DIR. Without this copy the `source` fails, `session_reap_sweep` is
+  # undefined, the call site's `|| true` swallows the command-not-found, and the
+  # arm silently never runs while every test still passes — a vacuous green.
+  cp "$SCRIPT_DIR/lib-session-reap.sh" "$TMPDIR_TEST/scripts/lib-session-reap.sh"
   # dispatch-sweep resolves the grace window by shelling out to dispatch-config-load
   # ("$SCRIPT_DIR/dispatch-config-load" sweep). Without this copy the binary is
   # absent, the call exits non-zero, and the whole config branch (config-file
@@ -278,6 +283,14 @@ FAKE
 
   # Defaults for dispatch-sweep env overrides.
   export CLAUDE_AGENTS_CMD="$default_fake"
+  # lib-claude-agents only trusts an exactly-`[]` registry payload when a
+  # `claude daemon` process corroborates it (CLAUDE_AGENTS_PGREP_CMD probe).
+  # $default_fake emits exactly that payload, so without this stub the default
+  # "no live session, safe to remove" state would read UNKNOWN — occupied — on
+  # any host with no daemon running. Exit 0 = daemon visible.
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$TMPDIR_TEST/fake/pgrep"
+  chmod +x "$TMPDIR_TEST/fake/pgrep"
+  export CLAUDE_AGENTS_PGREP_CMD="$TMPDIR_TEST/fake/pgrep"
   export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
   export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
   export GH_RETRY_BASE_DELAY=0
@@ -293,6 +306,18 @@ FAKE
   # config-path test opts in by writing sweep.json into this dir.
   mkdir -p "$STUB_DIR/config"
   export DISPATCH_CONFIG_DIR="$STUB_DIR/config"
+
+  # SESSION-arm leak guard. lib-session-reap.sh defaults its job/transcript roots
+  # to $HOME/.claude/{jobs,projects} — the developer's REAL managed jobs. A fake
+  # registry row whose `.id` happened to match a real job dir would be read, and
+  # (if it passed the marker gate) the suite would issue a real `claude rm`
+  # against the operator's own session. Redirect all three roots into the tmp
+  # sandbox so that is impossible by construction, in the same spirit as the
+  # host-systemd and decision-log guards.
+  mkdir -p "$STUB_DIR/session-reap/jobs" "$STUB_DIR/session-reap/projects"
+  export DISPATCH_SESSION_REAP_JOBS_ROOT="$STUB_DIR/session-reap/jobs"
+  export DISPATCH_SESSION_REAP_PROJECTS_ROOT="$STUB_DIR/session-reap/projects"
+  export DISPATCH_SESSION_REAP_WORKTREES_ROOT="$TMPDIR_TEST/project/worktrees"
 }
 
 sweep_teardown() {
@@ -300,7 +325,7 @@ sweep_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
-  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
+  unset CLAUDE_AGENTS_CMD CLAUDE_AGENTS_PGREP_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
   # DISPATCH_CONFIG_DIR / DISPATCH_SWEEP_WORKTREES_ROOT are sweep-local — never
   # leak them into later non-sweep tests.
   unset DISPATCH_CONFIG_DIR DISPATCH_SWEEP_WORKTREES_ROOT
@@ -308,6 +333,9 @@ sweep_teardown() {
   unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
   # NODE-arm seams (minimum age, origin/main availability) — same no-leak rule.
   unset DISPATCH_SWEEP_NODE_MIN_AGE_S SWEEP_NO_ORIGIN_MAIN
+  # SESSION-arm roots — never leak the tmp-sandbox redirection into later suites.
+  unset DISPATCH_SESSION_REAP_JOBS_ROOT DISPATCH_SESSION_REAP_PROJECTS_ROOT \
+        DISPATCH_SESSION_REAP_WORKTREES_ROOT
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -1970,6 +1998,85 @@ if grep -q "HELD_FOR_DEBUG_COUNT: n=UNKNOWN (daemon unqueryable)" "$DISPATCH_SWE
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: N8b HELD_FOR_DEBUG_COUNT logs UNKNOWN, never a literal 0"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N9a: the SESSION arm is wired in and runs -------------------------
+#
+# Guards the wiring, not the arm's own logic (that is test-lib-session-reap.sh).
+# The failure mode this catches is a silent one: if the `source
+# lib-session-reap.sh` line is dropped or the file is missing, dispatch-sweep
+# (which is `set -uo pipefail`, NOT `set -e`) keeps going, `session_reap_sweep`
+# is undefined, and the call site's `|| true` swallows the command-not-found —
+# leaving every other test green with the arm never running. A summary line in
+# the log is the proof it ran.
+echo "Test: N9a the session-reap arm runs and logs its summary"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/65-session-arm"
+sweep_register_wt "$WT_PATH" "65-session-arm"
+echo "OPEN" > "$STUB_DIR/issue-state-65.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>"$STUB_DIR/sweep-stderr.txt"); rc=$?
+assert_eq "N9a sweep exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'SESSION_REAP_COMPLETE:' "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N9a the session arm logged its summary"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N9a the session arm logged its summary"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# The command-not-found diagnostic goes to STDERR, not the log file — check it
+# there, or the assertion is vacuous.
+TOTAL=$((TOTAL + 1))
+if grep -q 'session_reap_sweep' "$STUB_DIR/sweep-stderr.txt" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: N9a session_reap_sweep resolved (lib-session-reap.sh sourced)"
+  echo "    stderr:"; sed 's/^/      /' "$STUB_DIR/sweep-stderr.txt" 2>/dev/null
+else
+  PASS=$((PASS + 1)); echo "  PASS: N9a session_reap_sweep resolved (lib-session-reap.sh sourced)"
+fi
+# Ordering: the arm must log AFTER the worktree loop and BEFORE the
+# held-for-debug metric — see the placement comment at its call site.
+# `|| true` on the greps: an absent line must FAIL this assertion, not abort the
+# suite via set -e/pipefail on the assignment.
+TOTAL=$((TOTAL + 1))
+SESSION_LINE=$(grep -n 'SESSION_REAP_COMPLETE:' "$DISPATCH_SWEEP_LOG_FILE" | head -n1 | cut -d: -f1) || SESSION_LINE=""
+HELD_LINE=$(grep -n 'HELD_FOR_DEBUG_COUNT:' "$DISPATCH_SWEEP_LOG_FILE" | head -n1 | cut -d: -f1) || HELD_LINE=""
+if [[ -n "$SESSION_LINE" && -n "$HELD_LINE" && "$SESSION_LINE" -lt "$HELD_LINE" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N9a the session arm runs before HELD_FOR_DEBUG_COUNT"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N9a the session arm runs before HELD_FOR_DEBUG_COUNT"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N9b: an unqueryable daemon aborts the SESSION arm, not the sweep ---
+echo "Test: N9b an unqueryable daemon leaves the session arm saying it cannot see"
+sweep_setup
+fake="$TMPDIR_TEST/fake/claude"
+cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+chmod +x "$fake"
+export CLAUDE_AGENTS_CMD="$fake"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N9b sweep exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'SESSION_REAP_UNKNOWN: daemon unqueryable' "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N9b the session arm reports it cannot see the registry"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N9b the session arm reports it cannot see the registry"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'SESSION_REAP_COMPLETE:' "$DISPATCH_SWEEP_LOG_FILE"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: N9b UNKNOWN never degrades into a zero-candidate summary"
+else
+  PASS=$((PASS + 1)); echo "  PASS: N9b UNKNOWN never degrades into a zero-candidate summary"
 fi
 sweep_teardown
 

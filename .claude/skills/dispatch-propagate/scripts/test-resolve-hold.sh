@@ -36,6 +36,9 @@
 #      exit 1 before Write B, source left blocked.
 #   8. An open hold whose source already lost the edge -> Write A only.
 #   9. --kind fix-attempt-cap targets the fix-cap hold id instead.
+#  10. --hold-id asserts the derivation: a matching id is a no-change happy
+#      path, a mismatching one exits 2 with NO graph-commit and a clean tree,
+#      and a malformed/empty value is a usage error.
 #
 # No network needed; requires bash + git + jq + a real node with tsx resolvable
 # through a read-only node_modules symlink to this repo's own.
@@ -522,5 +525,54 @@ assert_eq "fix-attempt-cap makes two graph-commit calls" "2" \
   "$(wc -l <"$GC_LOG" | tr -d ' ')"
 assert_eq "fix-attempt-cap leaves the tree clean" "" \
   "$(git -C "$C9" status --porcelain intentions/)"
+
+# ============================================================================
+# Case 10: --hold-id is an ASSERTION, not an override. A caller that enumerated
+# a hold by node id (lib-stale-hold-recheck.sh's sweep) hands the id over so the
+# derivation from (source, kind) is checked against it. A mismatch means the
+# enumerated node is not the canonical hold for that pair — acting on the
+# derivation would resolve a DIFFERENT hold than the one the caller inspected —
+# so it exits 2 having landed nothing at all.
+# ============================================================================
+echo "Case 10: --hold-id asserts the derivation and refuses on a mismatch"
+T10="$WORK/t10-seed"; build_seed_repo "$T10"
+write_source_node "$T10/intentions/$SOURCE_ID.md" "[$HOLD_ID]"
+write_open_hold_node "$T10/intentions/$HOLD_ID.md"
+new_origin t10; init_and_push "$T10"
+C10="$WORK/t10-clone"; clone_with_node_modules "$C10"; install_graph_commit_stub "$C10"
+
+# 10a — a matching assertion changes nothing about the happy path.
+GC_NOOP_IDS="" GC_STRICT_CLEAN=1 run_sut "$C10" "$SOURCE_ID" --hold-id "$HOLD_ID"
+assert_eq "matching --hold-id exit 0" "0" "$RC"
+assert_eq "matching --hold-id resolves the hold" \
+  "resolved $HOLD_ID (unblocked $SOURCE_ID)" "$OUT"
+assert_eq "matching --hold-id makes two graph-commit calls" "2" \
+  "$(wc -l <"$GC_LOG" | tr -d ' ')"
+
+# 10b — a mismatched assertion refuses before any write, and leaves the tree
+# clean (the source refresh it already performed is rolled back by the trap).
+T10B="$WORK/t10b-seed"; build_seed_repo "$T10B"
+write_source_node "$T10B/intentions/$SOURCE_ID.md" "[$HOLD_ID]"
+write_open_hold_node "$T10B/intentions/$HOLD_ID.md"
+new_origin t10b; init_and_push "$T10B"
+C10B="$WORK/t10b-clone"; clone_with_node_modules "$C10B"; install_graph_commit_stub "$C10B"
+
+GC_NOOP_IDS="" run_sut "$C10B" "$SOURCE_ID" --hold-id "tactic-decoy-x"
+assert_eq "mismatched --hold-id -> exit 2" "2" "$RC"
+assert_contains "mismatched --hold-id names both ids" \
+  "does not match the hold id derived from" "$ERR"
+assert_eq "mismatched --hold-id makes no graph-commit call" "0" \
+  "$(wc -l <"$GC_LOG" | tr -d ' ')"
+assert_eq "mismatched --hold-id leaves the tree clean" "" \
+  "$(git -C "$C10B" status --porcelain intentions/)"
+
+# 10c — a malformed or missing value is a usage error in its own right.
+GC_NOOP_IDS="" run_sut "$C10B" "$SOURCE_ID" --hold-id "../../etc/passwd"
+assert_eq "path-traversal --hold-id -> exit 2" "2" "$RC"
+assert_contains "path-traversal --hold-id names the offending value" \
+  "invalid --hold-id" "$ERR"
+
+GC_NOOP_IDS="" run_sut "$C10B" "$SOURCE_ID" --hold-id ""
+assert_eq "empty --hold-id -> exit 2" "2" "$RC"
 
 report_results

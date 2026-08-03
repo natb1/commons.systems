@@ -629,20 +629,20 @@ clarifications:
       findings (OWASP/STRIDE empty, always Deferred, never verify-eligible) for
       query-cost, amplifier and N+1. Both collapsed alternatives were put to the
       author and declined, because each breaks something the record already
-      protects: wholly-advisory demotes firebase's Firestore-rules-permissiveness,
-      emulator-code-on-production-paths and API-key-exposure checks from
-      merge-blocking security findings to non-blocking follow-ups — a detection
-      AND escalation reduction the quality-preservation condition forbids as an
-      efficiency lever; wholly-security-classified makes cost/scaling findings
-      merge-blocking and verify-eligible, breaking cost's documented
-      non-escalation invariant (disposition-table.md:54-62) exactly as the merge
-      widens the lens's fire rate. Clarification 18 authorized retaining and
-      widening the lens on expense and sampling grounds and was simply SILENT on
-      classification, so this fills a record-completeness gap rather than
-      overturning a ruling. Consequence: the api-cost-specific
-      adversarial-skeptic brief (the exploitability brief systematically refutes
-      a cost finding) becomes live only for the security-classified
-      sub-pattern."
+      protects: wholly-advisory demotes firebase's
+      Firestore-rules-permissiveness, emulator-code-on-production-paths and
+      API-key-exposure checks from merge-blocking security findings to
+      non-blocking follow-ups — a detection AND escalation reduction the
+      quality-preservation condition forbids as an efficiency lever;
+      wholly-security-classified makes cost/scaling findings merge-blocking and
+      verify-eligible, breaking cost's documented non-escalation invariant
+      (disposition-table.md:54-62) exactly as the merge widens the lens's fire
+      rate. Clarification 18 authorized retaining and widening the lens on
+      expense and sampling grounds and was simply SILENT on classification, so
+      this fills a record-completeness gap rather than overturning a ruling.
+      Consequence: the api-cost-specific adversarial-skeptic brief (the
+      exploitability brief systematically refutes a cost finding) becomes live
+      only for the security-classified sub-pattern."
   - question: Does per-file skeptic batching cover the code-review residue
       pre-gate's per-item fan-out, or is it verify-phase-local?
     answer: "(Recorded 2026-08-03, author interview; amends clarification 20.) It
@@ -650,35 +650,99 @@ clarifications:
       Scope extends to review-fix.js:1707-1775. Clarification 20 rejected
       re-skepticizing Lane-A residue on an explicit cost premise — roughly 103
       residue items per window would add roughly 100 agents and cancel the
-      batching gain. Commit 7c772829 (2026-08-02, after that ruling) does exactly
-      that for code-review-sourced residue: one Sonnet/effort-high adversarial
-      skeptic per item, un-batched, one file read per item. Those agents run
-      under phase 'residue' rather than 'verify', so clarification 19's
-      131-agent / 41-file-group / 3.2x arithmetic is untouched — but the
-      review-fix-wide agent-count reduction the tactic is JUSTIFIED by is not, and
-      an un-batched per-item fan-out is the same defect the tactic exists to
-      remove. Declined: keeping the batching verify-phase-local, which would have
-      required restating the benefit claim as verify-local and spinning the
+      batching gain. Commit 7c772829 (2026-08-02, after that ruling) does
+      exactly that for code-review-sourced residue: one Sonnet/effort-high
+      adversarial skeptic per item, un-batched, one file read per item. Those
+      agents run under phase 'residue' rather than 'verify', so clarification
+      19's 131-agent / 41-file-group / 3.2x arithmetic is untouched — but the
+      review-fix-wide agent-count reduction the tactic is JUSTIFIED by is not,
+      and an un-batched per-item fan-out is the same defect the tactic exists to
+      remove. Declined: keeping the batching verify-phase-local, which would
+      have required restating the benefit claim as verify-local and spinning the
       residue fan-out out into separate scope."
-  - question: Can "each file read once" and the preserved severity-scaled
-      2-skeptic tier both hold?
+  - question: Can "each file read once" and the preserved severity-scaled 2-skeptic
+      tier both hold?
     answer: "(Recorded 2026-08-03, author interview; corrects clarification 19's
-      arithmetic, not its behavior.) They cannot — clarification 19's 3.2x derives
-      from 131 agents over 41 file groups 'with each file read once', which holds
-      only at exactly one agent per file group, while the preserved tier gives a
-      high-confidence finding 2 skeptics so its file group is read twice. Author
-      ruling: KEEP the 2-skeptic tier and restate the arithmetic. 3.2x becomes an
-      UPPER BOUND, and `tactic-review-verify-per-file-batching`'s Verification
-      threshold (41/18 ~= 2.3, unreachable by construction) is restated to a
-      measured figure once the high-confidence-per-file-group distribution is
-      recorded — that distribution has never been measured, so the realized
-      reduction is genuinely unknown until it is. Declined: one skeptic per group
-      regardless of confidence. It would restore a clean 3.2x, but applyVerifyDrop
+      arithmetic, not its behavior.) They cannot — clarification 19's 3.2x
+      derives from 131 agents over 41 file groups 'with each file read once',
+      which holds only at exactly one agent per file group, while the preserved
+      tier gives a high-confidence finding 2 skeptics so its file group is read
+      twice. Author ruling: KEEP the 2-skeptic tier and restate the arithmetic.
+      3.2x becomes an UPPER BOUND, and
+      `tactic-review-verify-per-file-batching`'s Verification threshold (41/18
+      ~= 2.3, unreachable by construction) is restated to a measured figure once
+      the high-confidence-per-file-group distribution is recorded — that
+      distribution has never been measured, so the realized reduction is
+      genuinely unknown until it is. Declined: one skeptic per group regardless
+      of confidence. It would restore a clean 3.2x, but applyVerifyDrop
       (review-fix.js:565-583) drops on refutedCount >= 1, so halving the
       high-confidence tier's votes makes drops strictly less likely, sends more
       Required findings to the Opus fix stage, and moves the refutation rate off
       its 69% baseline (91 refuted / 37 upheld) for structural reasons —
-      corrupting the very signal that node names as its own regression detector."
+      corrupting the very signal that node names as its own regression
+      detector."
+  - question: Which Lane-B terminal dispositions qualify a finding to absorb its
+      Lane-A residue twin?
+    answer: "(Recorded 2026-08-03, author interview; completes clarifications 26 and
+      27.) Only a Lane-B finding that survived verify AND was actually fixed
+      absorbs its Lane-A twin. A Refuted or Unverified-dropped finding NEVER
+      absorbs — its Lane-A twin stays in the residue-disposition ledger. And on
+      the genuinely open half, the author ruled LEDGER-COMPLETENESS WINS: a
+      Lane-B finding merely queued for DEFERRED filing does not absorb either,
+      accepting one duplicate on that root. Context: clarification 27 places the
+      cross-lane merge at or after the code-review residue skeptic pre-gate
+      (review-fix.js ~1694-1781, inside phase('residue') ~1617), which is
+      downstream of verify (~1394, applyVerifyDrop ~1489) and fix (~1524) — so
+      by merge time every Lane-B finding already carries a terminal disposition,
+      a case clarification 26's 'fixed exactly once' presumed away. Matching
+      Lane-A residue against the full deduped pool would let a REFUTED Lane-B
+      twin suppress a real Lane-A item, deleting it from the ledger — a
+      detection loss condition 5 forbids. Rationale for the deferred half
+      specifically: a duplicate is recoverable and a deleted ledger item is not,
+      and condition 5 forbids detection loss while saying nothing about
+      tolerating redundancy; the absorb alternative would additionally require
+      moving the deferred_filings computation (currently ~2054, AFTER the
+      residue phase) to before or during it — a structural pipeline reordering
+      outside this tactic's scope, and a re-plan rather than a plan. Declined:
+      dedup-wins (absorb + reorder), and deferring the whole
+      terminal-disposition question to a wholesale /align-strategy sitting. NOT
+      MEASURED, and worth measuring before trusting the cost estimate: how often
+      a deferred Lane-B finding actually shares a root with a Lane-A residue
+      item — the duplicate rate this ruling accepts could be near zero or
+      material, and nobody has counted."
+  - question: Is the draft body of tactic-review-api-cost-lens-merge still accurate
+      against the 2026-08-03 split-classification clarification and current
+      review-fix.js line anchors?
+    answer: "(Recorded 2026-08-03 /align-tactics round.) No — the draft body dates
+      from the 2026-07-31 interview and still states the wholly-advisory
+      disposition that the 2026-08-03 split-classification clarification
+      declined; finalizing it must carry the split (security-classified
+      rules-permissiveness / emulator-reachability / key-exposure; advisory
+      query-cost / amplifier / N+1) rather than the body's current text. Every
+      code anchor in that body is stale after the domain-sweep fold (commit
+      7deaf80b): at HEAD, agentFinderSet is review-fix.js:498-511 inside the
+      `>>> domain sweep gate` sentinels that review-fix-domain-sweep-probe.mjs
+      slices, DOMAIN_PROMPTS.firebase is 646-659, the `cost` finderPrompt branch
+      is 785-805, the generic fallback comment naming 'firebase' is 824-830,
+      SEC_SOURCES is 1460-1470, the verify skeptic ternary is 1538-1564, and the
+      code-review residue pre-gate is 1797-1885. The sibling
+      tactic-review-domain-lens-consolidation's claim that this node is
+      office_hours-parked on the classification question is stale — office_hours
+      is null and the split ruling discharged it."
+  - question: Does the strategy's structured reading/gap/rounds bookkeeping reflect
+      the two completed /align-tactics rounds (2026-07-04, 2026-07-16) and the
+      round-2 sensor reading?
+    answer: (Recorded 2026-08-03 /align-tactics round.) No — record-completeness
+      gap, no plan depends on it. The strategy's structured `reading` and `gap`
+      fields are still null and `rounds` still reads count 0 with null
+      last_completed/last_aligned, although two /align-tactics rounds completed
+      (2026-07-04, 2026-07-16) and round 2 narrates a live read-sensors reading
+      in prose — weekly allowance utilization ~7%, 28-day claude-eligible
+      tactics 231 created / 91 closed, net +140, i.e. both failing states
+      active. The consequence is that the mechanical eligibility gates read this
+      strategy as never-aligned and never-read; correct the structured fields at
+      the next sensor pass so the round cap and the fresh-reading gate operate
+      on the real history.
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance

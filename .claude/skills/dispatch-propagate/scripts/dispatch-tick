@@ -357,6 +357,23 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
     echo "dispatch-tick: lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick" >&2
   fi
 
+  # A tracked hold that outlived the condition it tracks (tactic-stale-hold-auto-resolve)
+  # must still get re-checked even while dispatch is paused — the same reason the
+  # stand-down sweep above is here: this `exit 0` path is the ONLY autonomous tick
+  # path that never reaches dispatch-select-tick's own sweeps, so nothing else
+  # would ever re-check a stale hold while dispatch is paused. Same
+  # conditional-source + verify + loud-failure idiom as the sweeps above, applied
+  # to lib-stale-hold-recheck.sh.
+  if ! declare -f stale_hold_recheck_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-stale-hold-recheck.sh"
+  fi
+  if declare -f stale_hold_recheck_sweep >/dev/null 2>&1; then
+    stale_hold_recheck_sweep 1>&2
+  else
+    echo "dispatch-tick: lib-stale-hold-recheck.sh failed to load; stale-hold re-check NOT run this tick" >&2
+  fi
+
   # A node frozen at a permission/classifier denial (tactic-denied-command-parks-node)
   # must still surface to office_hours even while dispatch is paused — this is the
   # same "only autonomous path that never reaches select-tick's own sweeps" reason
@@ -562,6 +579,24 @@ if declare -f standdown_recheck_sweep >/dev/null 2>&1; then
   standdown_recheck_sweep 1>&2
 else
   echo "dispatch-tick: lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick" >&2
+fi
+
+# --- Stale-hold re-check sweep (tactic-stale-hold-auto-resolve) ---------------
+# Placement matters, same reasons as the stand-down sweep just above: it runs
+# AFTER the daemon snapshot (so the sweep's session-registry reads reuse this
+# tick's snapshot instead of an extra round-trip) and BEFORE Step 1 target
+# selection, so a hold resolved here has already landed its source's
+# `blocked_by` removal on `main` before selection runs — this tick's own
+# selection can pick up the just-unblocked source. Same conditional-source +
+# verify + loud-failure idiom as the sweep above.
+if ! declare -f stale_hold_recheck_sweep >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-stale-hold-recheck.sh"
+fi
+if declare -f stale_hold_recheck_sweep >/dev/null 2>&1; then
+  stale_hold_recheck_sweep 1>&2
+else
+  echo "dispatch-tick: lib-stale-hold-recheck.sh failed to load; stale-hold re-check NOT run this tick" >&2
 fi
 
 # --- Frozen-session sweep (denied-command park, tactic-denied-command-parks-node) ---

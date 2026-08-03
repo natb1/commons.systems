@@ -193,3 +193,50 @@ existing detect doubles as the heal's own success criterion: a marker surviving
 one sweep interval is a heal that failed, and says so. Tracked primarily under
 `tactic-phase-terminal-requires-disposition`; recorded here because the two heals
 share a supervisor, a cadence, and a verify-the-post-state discipline.
+
+## Brownfield step 1 IMPLEMENTED -- PR #3026 (2026-08-03)
+
+`lib-session-reap.sh` adds `session_reap_sweep` to `dispatch-sweep`, exactly as
+the greenfield design above specifies: every gate fails toward KEEP,
+`git worktree remove` runs FIRST (that is what makes the daemon accept), and the
+post-state is verified by re-querying rather than by trusting `claude rm`'s exit
+code. The verification distinguishes THREE outcomes -- removed, `REAP_DECLINED`,
+and `SESSION_REAP_UNVERIFIED` when the daemon cannot be reached. Collapsing
+UNVERIFIED into success would have reproduced this very defect inside its own
+fix.
+
+`dispatch-self-close` is deliberately untouched. Step 2 -- deleting its
+`exec claude rm` -- lands only once this arm is observed reaping within one sweep
+interval, per the brownfield order above.
+
+One correction to the design as recorded: the reap-safety gate is a CONTENT diff
+(`git diff origin/main HEAD -- . ':!intentions'`), never a commit count. GitHub
+squash-merges, so a branch's individual commits are never ancestors of `main` --
+only their content is. Both sessions reaped by hand on 2026-08-03 read 11 and 12
+commits "ahead" yet were entirely safe. A commit-count gate fails toward a false
+"do not touch", stranding slots while looking conservative.
+
+### Coverage: this heals the silent-decline class, NOT every stranded session
+
+Stated plainly because the measured proportion runs the other way. Of the 8
+sessions cleared by hand on 2026-08-03, **3** were bug AH (valid `node-terminal`
+marker, `disposition=align-round`, no remote branch) and **5** were the marker
+gap tracked by `tactic-qa-fix-node-terminal-declaration` -- no marker at all, so
+`dispatch-self-close` HOLDs them, correctly. A ninth instance
+(`tactic-review-domain-lens-consolidation`, 2026-08-03T19:40Z) was also the
+marker gap.
+
+The new arm requires a valid marker, because Invariant 2 is unchanged: reaping a
+session that never declared a disposition would destroy the very signal that its
+node still owes the author a park. So the arm covers the minority of observed
+instances by construction, and the marker-gap class still needs a human.
+
+The follow-up this suggests -- and it is a design call, not an implementation
+detail, so it is recorded rather than taken: once
+`terminal_without_disposition_sweep` has PARKED a marker-less terminal session's
+node and that park is proven landed on `origin/main`, the park is itself a
+disposition -- one supplied by the supervisor instead of by the session. Reaping
+on that proof would close the remaining class without weakening Invariant 2,
+since the evidence the invariant protects has by then been produced and verified.
+Whether the terminal-disposition contract should admit a supervisor-supplied
+disposition is exactly the kind of premise that belongs in an author ruling.

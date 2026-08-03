@@ -58,6 +58,26 @@ exit 0
 STUB
   chmod +x "$TMPDIR_TEST/bin/noop"
 
+  # Corroboration probe for lib-claude-agents.sh's empty-read guard. These cases
+  # assert ARGV FORWARDING, not liveness semantics, so the liveness input must
+  # be pinned rather than read off the ambient host.
+  #
+  # `claude_session_id_is_live` queries the daemon DIRECTLY (no snapshot seam to
+  # trust), so an empty read there is always probe-corroborated. Its UNKNOWN
+  # fold is deliberately INVERTED — unknown means LIVE, never absent, so a
+  # caller never takes over a worktree a session may still hold. Correct in
+  # production; fatal here: with no daemon visible the worker reads as already
+  # live, dispatch-resume-worker skips the spawn, and no --bg argv is ever
+  # logged. The three argv assertions then fail for a reason unrelated to what
+  # they test — which is exactly how they failed in CI while passing on a
+  # developer box with the daemon up.
+  cat > "$TMPDIR_TEST/bin/pgrep" <<'STUB'
+#!/usr/bin/env bash
+exit "${STUB_PGREP_RC:-0}"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/pgrep"
+  export CLAUDE_AGENTS_PGREP_CMD="$TMPDIR_TEST/bin/pgrep"
+
   export DISPATCH_RESUME_WORKER_CLAUDE_CMD="$TMPDIR_TEST/bin/fake-claude"
   export DISPATCH_RESUME_WORKER_TICK_CMD="$TMPDIR_TEST/bin/noop"
   export DISPATCH_RESUME_WORKER_OFFICE_HOURS_CMD="$TMPDIR_TEST/bin/noop"
@@ -71,6 +91,7 @@ drw_teardown() {
   unset DISPATCH_RESUME_WORKER_TICK_CMD
   unset DISPATCH_RESUME_WORKER_OFFICE_HOURS_CMD
   unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+  unset CLAUDE_AGENTS_PGREP_CMD
 }
 
 # --- Test A: <model> + <effort> both present → --model M --effort E adjacency --

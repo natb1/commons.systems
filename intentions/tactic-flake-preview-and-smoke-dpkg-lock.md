@@ -18,88 +18,24 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: main-qa
 execution:
   branch: tactic-flake-preview-and-smoke-dpkg-lock
   pr: 3020
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T21:31:12Z
+    mergeCommitSha: cadb2e5b848666f211c292dab06f73a1a8ed3fac
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA needs a human — the bounded auto-fix attempt cap has been
-    reached (ATTEMPT_N=3 >= CAP=3, dispatch:qa-fix-attempt-3 label). This 4th QA
-    pass's triage found 6 new residue items (5 script-verifiable FAILs on the CI
-    dpkg-lock mitigation's own robustness/consistency, plus 1
-    needs-human-judgment item), all classified opus-fixable/needs-human by the
-    disposition Workflow, but no auto-fix ran since the cap was already reached
-    (plan_fix pre-gate false, result.fix_plan === null). Escalating to
-    office-hours for human review/fix rather than a 4th autonomous attempt."
-  since: 2026-08-03
-  recommendation: >-
-    # Recommendation — PR #3020 dpkg-lock mitigation (parked at attempt cap)
-
-
-    ## Do these together: findings 1 + 2 + 3 are one bug
-
-
-    They are three symptoms of "the step's worst case isn't actually bounded."
-    Fix in one edit to `.github/workflows/pr-checks.yml:45-219`:
-
-
-    1. **Bound the unbounded calls.** Wrap every `sudo systemctl` / `sudo fuser`
-    call in `timeout` — `sudo timeout 20 systemctl mask --now …` (line 97), same
-    on `systemctl kill` (line 104) and the `fuser -v`/`fuser -k` probes. This
-    kills finding 3 outright: derived worst case becomes
-    20+20+10(grace)+120(wait)+120(dpkg) = 290s, genuinely under the 300s cap,
-    and the "~50s of slack" claim in the comment becomes true instead of
-    aspirational.
-
-    2. **Add `continue-on-error: true`** next to `timeout-minutes: 5` (line 64).
-    Every internal path already exits 0 by design; without this, the step cap is
-    the one way this best-effort step can block a PR. Once (1) makes the cap
-    unreachable in normal operation, `continue-on-error` costs nothing and
-    closes the new failure mode.
-
-    3. **Rewrite the budget comment (lines 39-63) to state additivity
-    explicitly.** The two budgets *are* additive in the worst case (5 + ~11 work
-    + up to 12 min of `wait_for_dpkg_lock` = ~28 min > the 20-min cap), but
-    near-mutually-exclusive in practice — the helper only waits after a failed
-    attempt, which the pre-step exists to prevent. Say exactly that, and either
-    raise `timeout-minutes` to 30 (matching `acceptance`) or record the accepted
-    residual risk. Do not leave it ambiguous.
-
-
-    ## Finding 4 — fix, it's small
-
-
-    At line 213, capture rc and branch: `if [ "$rc" -eq 124 ]` → log `dpkg
-    --configure -a: TIMED OUT (may have left dpkg interrupted)` and retry once
-    with `timeout 120`. A 124 is the failure the recovery was meant to prevent;
-    logging it as a benign no-op is the defect.
-
-
-    ## Finding 5 — in scope; extract, don't copy
-
-
-    The node's scope note excludes only the office-hours app and smoke
-    build/deploy internals; the sibling `acceptance` job (line 12) is fair game,
-    uses the same helper, and this PR's 30s revert leaves it undefended. Extract
-    the run block to `.github/scripts/free-dpkg-lock.sh` and call it from both
-    jobs — a 180-line copy-paste is the only reason to defer. If deferring, file
-    it as a blocked follow-up rather than silently shipping the gap.
-
-
-    ## Finding 6 — just do it
-
-
-    Update the PR body: default stays 30s (not raised to 120s), and the step
-    probes three lock files.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -217,3 +153,17 @@ recurred on PR #3002 / run https://github.com/natb1/commons.systems/actions/runs
   expected_outcome: Subsequent `preview-and-smoke` runs' "Disable unattended-upgrades / free dpkg lock" step logs never show a lock holder surviving past the fuser -k stage that originated from a unit outside the masked/killed allowlist (`apt-daily.service`, `apt-daily-upgrade.service`, both timers, `unattended-upgrades.service`) — e.g. `dpkg-db-backup.timer`, `apt-news.service`, `esm-cache.service`, `man-db.timer`.
   finding: The step's unit mask/kill and `fuser -k` calls are point-in-time (t=0, immediately after checkout); the original flake's window extended roughly 8 minutes into the job. A holder started after t=0 by a unit outside the masked allowlist would not be pre-emptively caught by the mask/kill stage (though it would still be visible to and killed by the per-lock `fuser -k` pass and waited on by the shared 120s deadline). Whether any such unit is a plausible mid-job lock holder on the GitHub runner image is only observable from post-merge `preview-and-smoke` run logs, so this folds into the existing recurrence-watch observation rather than being resolvable at QA time.
   Verifiability: WAIT — awaiting N subsequent `preview-and-smoke` CI runs post-merge; check the mitigation step's holder-diagnostic log lines (`<lock> holders at step start:`, `<lock> still held at the shared 120s deadline; holders:`) for a process from a unit outside the masked allowlist.
+
+- id: cap-design-tradeoff-acceptance
+  title: Confirm the mitigation step's 5-minute best-effort cap does not truncate the dpkg-configure retry in practice
+  url_path: current
+  expected_outcome: Subsequent `preview-and-smoke`/`acceptance` runs never show the "Disable unattended-upgrades / free dpkg lock" step killed by its own `timeout-minutes: 5` cap while the `dpkg --configure -a` rc=124 retry is in flight — i.e. the documented worst-case overrun (the retry can push the step past the derived 290s budget, up to +120s more) never actually manifests as a truncated, interrupted-dpkg exit in a real run.
+  finding: A QA pass (post office-hours re-verification, PR #3020) confirmed `free-dpkg-lock.sh`'s own header comment already documents and accepts this tradeoff — the step is `continue-on-error: true`, so the 300s step cap is a safety stop rather than a correctness bound, and a truncation there would be non-fatal to the job. Whether the cap is actually exercised (i.e. whether the retry path is hit often enough in practice to matter) is only observable from post-merge run logs, not resolvable at QA time. This is a planned-deferral acceptance check, not an actionable defect: the design has already been made and documented, this residue only confirms it holds up in production.
+  Verifiability: WAIT — awaiting N subsequent `preview-and-smoke`/`acceptance` CI runs post-merge; check the mitigation step's logs for `dpkg --configure -a: TIMED OUT on retry` co-occurring with the step being marked failed/cancelled by its own timeout (rather than continuing past it via `continue-on-error`).
+
+- id: escalation-ladder-design-soundness
+  title: Confirm the escalation ladder (mask/kill/grace/SIGKILL/re-escalation) actually stops the flake against a real external lock holder
+  url_path: current
+  expected_outcome: Subsequent `preview-and-smoke`/`acceptance` runs show the ladder (unit mask+kill, grace window, pkill/fuser -k SIGKILL stage, the re-escalation round added in the latest commit) successfully clearing an external lock holder before the job's own apt-get/playwright-install attempt, with no need for `wait_for_dpkg_lock`'s post-failure backstop to intervene.
+  finding: A QA pass (this attempt, post office-hours fix landing the bounded re-escalation round) re-verified all 6 prior opus-fixable findings plus the acceptance-job-unprotected/timeout-minutes-no-continue-on-error findings via 7 fresh script-verifiable checks against the current code — all 7 passed (mode/syntax, re-escalation not gated by the SKIP_SIGKILL latch, lock-file/budget-constant/lib.sh-default claims match code, both playwright-install call sites protected, continue-on-error+timeout-minutes present on both, every systemctl call externally timeout-wrapped, dpkg --configure -a rc=124 distinct-handled+retried-once with reconciled budget comments). What remains is not a code defect but whether the ladder's design is actually sufficient against a holder this repo cannot simulate locally — that is only observable from live GitHub-hosted runner behavior across subsequent CI runs, which is exactly what `recurrence-watch` and `holder-allowlist-incomplete` above already watch for. This item folds into those two rather than being a distinct new observation.
+  Verifiability: WAIT — awaiting N subsequent `preview-and-smoke`/`acceptance` CI runs post-merge; same check as `recurrence-watch` (fingerprint absence) and `holder-allowlist-incomplete` (holder-diagnostic log lines) above — no separate check needed.
