@@ -20,7 +20,24 @@
 # named silent-PASS invariant — a graph-commit that exits 0 without landing must
 # make the SUT exit 1, not 0; and the MINIMUM REFRESH INTERVAL — a second
 # re-detection with a DIFFERING body inside the interval must not commit, which
-# is the brake that holds when a caller's body churns every pass.
+# is the brake that holds when a caller's body churns every pass. Fault
+# injection on the mint rollback path (splice_body / restore_from_blob): (12) a
+# writer that reports success but never creates the file rolls back cleanly;
+# (13) the same with a 0-byte body file, reproducing the live incident's exact
+# artifact; (14) a writer that creates a file with no frontmatter is caught by
+# splice_body's positive shape assertion and rolled back; (15) a writer killed
+# mid-write (0-byte file, non-zero exit) is a regression pin — the write-node
+# exit alone short-circuits into rollback and graph-commit is never invoked;
+# (16) a doctrine ratchet asserting the SUT source no longer contains the
+# swallowed-status or truncate-before-write idioms the earlier three cases were
+# written to catch. Rollback-honesty cases: (17) a node file that PRE-EXISTED
+# the pass, with no origin/main blob, is never deleted by the rollback — it
+# exits 70 (dirty residue) instead of claiming a clean rollback; (18) a rollback
+# that cannot run (restore_from_blob returning non-zero) exits 70 and says
+# ROLLBACK FAILED rather than logging a rollback that never happened; (19) an
+# unresolvable refs/remotes/origin/main is an environment error (exit 69,
+# nothing read or written), not an empty pre-write blob; (20) a ratchet against
+# reintroducing an unchecked restore_from_blob call.
 #
 # Every run injects DISPATCH_FLEET_ALARM_STATE_DIR (so the suite never writes
 # the real ~/.local/share stamp) and pins
@@ -50,6 +67,20 @@ assert_contains() { # <label> <needle> <haystack>
 }
 assert_not_contains() { # <label> <needle> <haystack>
   if [[ "$3" != *"$2"* ]]; then ok "$1"; else no "$1 (expected NOT to contain '$2', got '$3')"; fi
+}
+# assert_absent_or_valid <label> <node-file> — the tactic's success invariant:
+# after a failed mint the node file is EITHER fully absent OR fully valid
+# double-fenced frontmatter. Never partial, never 0-byte.
+assert_absent_or_valid() {
+  local label="$1" f="$2"
+  if [[ ! -e "$f" ]]; then ok "$label (absent)"; return; fi
+  if [[ ! -s "$f" ]]; then no "$label (file exists but is 0 bytes)"; return; fi
+  if [[ "$(head -n 1 "$f")" == "---" ]] \
+     && awk '/^---$/{c++} END{exit (c>=2)?0:1}' "$f"; then
+    ok "$label (valid frontmatter)"
+  else
+    no "$label (file exists with malformed frontmatter)"
+  fi
 }
 
 # --- fixture repo root -------------------------------------------------------
@@ -97,6 +128,15 @@ cat > "$BIN/stub-write-node" <<'STUB'
 # `npx tsx write-node.ts --file`: records the JSON it was handed, then writes
 # the node markdown the real writeNode would produce — YAML frontmatter between
 # two `---` fences plus the generated `# <statement>` placeholder body.
+#
+# STUB_WN_SHAPE selects a fault-injection shape instead of the normal write
+# (unset/default leaves the normal path byte-identical to before):
+#   none     — write NOTHING and exit 0. Models a writer that reported success
+#              without creating the file.
+#   zero     — truncate the node file to 0 bytes and exit 1. Models a writer
+#              killed mid-write.
+#   no-fence — write a fence-less file and exit 0. Models a file that exists
+#              but has no frontmatter.
 echo "write-node $*" >> "$STUB_LOG/write-node.log"
 file=""
 while [[ $# -gt 0 ]]; do
@@ -106,6 +146,19 @@ cp "$file" "$STUB_LOG/write-node-input.json"
 id=$(jq -r .id "$file")
 statement=$(jq -r .statement "$file")
 phase=$(jq -r '.phase // "null"' "$file")
+case "${STUB_WN_SHAPE:-}" in
+  none)
+    exit 0
+    ;;
+  zero)
+    : > "$STUB_INTENTIONS/$id.md"
+    exit 1
+    ;;
+  no-fence)
+    printf 'garbage\n' > "$STUB_INTENTIONS/$id.md"
+    exit 0
+    ;;
+esac
 {
   printf -- '---\n'
   printf 'id: %s\n' "$id"
@@ -394,6 +447,147 @@ run_alarm STUB_STATE=absent STUB_GC_LAND=1 -- \
 assert_eq "(11) uncontended pass exits 0" "0" "$RC"
 assert_contains "(11) stdout says landed" "landed" "$OUT"
 assert_contains "(11) graph-commit ran" "tactic-fleet-alarm-daemon-degraded" "$(log_lines graph-commit.log)"
+
+# --- (12) mint rollback: writer reports success but wrote nothing -----------
+# Models a writer that reported success (exit 0) but never created the file —
+# the exact swallowed-status defect: awk's fatal "cannot open" used to be
+# masked by the old `{ awk ...; cat ...; } > tmp` grouping, publishing a
+# malformed tmp anyway.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+run_alarm STUB_STATE=absent STUB_WN_SHAPE=none -- \
+  --kind automerge-suppressed --statement 'auto-merge suppressed' --body-file "$BODY"
+assert_eq "(12) mint with a no-op writer exits 1" "1" "$RC"
+assert_contains "(12) diagnostic says the write was rolled back" "the write was rolled back" "$OUT"
+MINT12="$FR/intentions/tactic-fleet-alarm-automerge-suppressed.md"
+assert_absent_or_valid "(12) node file" "$MINT12"
+if [[ -e "$MINT12.tmp" ]]; then no "(12) no .tmp residue (found $MINT12.tmp)"; else ok "(12) no .tmp residue"; fi
+assert_eq "(12) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+
+# --- (13) mint rollback: 0-byte body file (the live incident's exact shape) -
+# The SUT only requires -f on --body-file, so a 0-byte body is a valid
+# argument. Under the OLD code this combination — awk failing on the absent
+# write, cat of an empty body still succeeding — is exactly what published a
+# 0-byte intentions/<id>.md fleet-wide.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+BODY_EMPTY="$WORK/body-empty.md"
+: > "$BODY_EMPTY"
+run_alarm STUB_STATE=absent STUB_WN_SHAPE=none -- \
+  --kind watch-unknown --statement 'watch state unknown' --body-file "$BODY_EMPTY"
+assert_eq "(13) mint with a no-op writer + 0-byte body exits 1" "1" "$RC"
+assert_contains "(13) diagnostic says the write was rolled back" "the write was rolled back" "$OUT"
+MINT13="$FR/intentions/tactic-fleet-alarm-watch-unknown.md"
+assert_absent_or_valid "(13) node file" "$MINT13"
+if [[ -e "$MINT13.tmp" ]]; then no "(13) no .tmp residue (found $MINT13.tmp)"; else ok "(13) no .tmp residue"; fi
+assert_eq "(13) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+
+# --- (14) mint rollback: node file exists but has no frontmatter ------------
+# awk exits 0 here (there is no failure to catch via status alone), so only
+# splice_body's positive shape assertion (added alongside the Unit-2 fix)
+# catches this and rolls back.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+run_alarm STUB_STATE=absent STUB_WN_SHAPE=no-fence STUB_GC_LAND=1 -- \
+  --kind heal-fired --statement 'heal fired' --body-file "$BODY"
+assert_eq "(14) mint with a fence-less write exits 1" "1" "$RC"
+assert_contains "(14) diagnostic says the write was rolled back" "the write was rolled back" "$OUT"
+MINT14="$FR/intentions/tactic-fleet-alarm-heal-fired.md"
+assert_absent_or_valid "(14) node file" "$MINT14"
+assert_eq "(14) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+
+# --- (15) regression pin: writer killed mid-write ----------------------------
+# This case passes even without the Unit-2 fix: write-node's non-zero exit
+# short-circuits the `||` chain straight into the existing rollback, before
+# splice_body or graph-commit are ever reached.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+run_alarm STUB_STATE=absent STUB_WN_SHAPE=zero -- \
+  --kind heal-unknown --statement 'heal outcome unknown' --body-file "$BODY"
+assert_eq "(15) mint with a killed writer exits 1" "1" "$RC"
+assert_contains "(15) diagnostic says the write was rolled back" "the write was rolled back" "$OUT"
+MINT15="$FR/intentions/tactic-fleet-alarm-heal-unknown.md"
+assert_absent_or_valid "(15) node file" "$MINT15"
+assert_eq "(15) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+assert_eq "(15) graph-commit never invoked" "" "$(log_lines graph-commit.log)"
+
+# --- (16) doctrine ratchet: the two rewritten functions cannot regress ------
+# Pins the Unit-2 fix so a later edit cannot silently reintroduce either
+# defect: the swallowed-status `{ awk ...; cat ...; } > tmp` grouping in
+# splice_body, or the truncate-before-write `show "$1" > "$NODE_FILE"` in
+# restore_from_blob. Ratchet for tactic-fleet-alarm-mint-rollback-corruption.
+SWALLOWED_STATUS_HITS=$(grep -Fc '; cat "$BODY_FILE"; } >' "$SUT" || true)
+TRUNCATE_BEFORE_WRITE_HITS=$(grep -Fc 'show "$1" > "$NODE_FILE"' "$SUT" || true)
+assert_eq "(16) no swallowed-status idiom in $SUT (tactic-fleet-alarm-mint-rollback-corruption)" \
+  "0" "${SWALLOWED_STATUS_HITS:-0}"
+assert_eq "(16) no truncate-before-write idiom in $SUT (tactic-fleet-alarm-mint-rollback-corruption)" \
+  "0" "${TRUNCATE_BEFORE_WRITE_HITS:-0}"
+
+# --- (17) mint rollback NEVER deletes a file this pass did not create --------
+# The rollback's `rm -f "$NODE_FILE"` is only correct for a file this pass
+# minted. Here the node file already exists on disk and origin/main carries no
+# blob for it, so there is nothing to restore it TO — and deleting it would
+# leave a dirty deletion that trips graph-commit's unrelated-dirty-file
+# pre-flight for every later graph writer in the checkout (the fleet-halt the
+# SUT header forbids). The file must survive, and the exit must be the dirty-
+# residue code 70, not the "rolled back cleanly" 1.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+MINT17="$FR/intentions/tactic-fleet-alarm-heal-unknown.md"
+printf -- '---\nid: tactic-fleet-alarm-heal-unknown\nkind: tactic\nphase: null\n---\npre-existing content\n' \
+  > "$MINT17"
+run_alarm STUB_STATE=closed STUB_WN_SHAPE=none STUB_GC_EXIT=1 -- \
+  --kind heal-unknown --statement 'heal outcome unknown' --body-file "$BODY"
+assert_eq "(17) pre-existing node file with no origin/main blob exits 70" "70" "$RC"
+if [[ -e "$MINT17" ]]; then ok "(17) the pre-existing node file was NOT deleted"; else no "(17) the pre-existing node file was deleted"; fi
+assert_contains "(17) diagnostic says the file was left as-is" "left as-is (NOT deleted)" "$OUT"
+assert_not_contains "(17) does NOT claim a rollback happened" "the write was rolled back" "$OUT"
+rm -f "$MINT17"
+
+# --- (18) a rollback that CANNOT run must not claim it did -------------------
+# restore_from_blob returns non-zero and leaves the file alone when it cannot
+# write its staging tmp; every call site must branch on that instead of logging
+# "the write was rolled back" over a tree it never restored. Injected by making
+# $NODE_FILE.tmp a DIRECTORY, so both splice_body's and restore_from_blob's
+# redirections into it fail.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+TMP_BLOCKER="$MINTED.tmp"
+mkdir -p "$TMP_BLOCKER"
+BODY18="$WORK/body18.md"
+printf 'A reading that differs from whatever is on disk.\n' > "$BODY18"
+run_alarm STUB_STATE=open STUB_GC_LAND=1 -- \
+  --kind tick-stale --statement 'dispatch-tick has not run for 90m' --body-file "$BODY18"
+assert_eq "(18) unrunnable rollback exits 70, not 1" "70" "$RC"
+assert_contains "(18) diagnostic names the failed rollback" "ROLLBACK FAILED" "$OUT"
+assert_not_contains "(18) does NOT claim the write was rolled back" "the write was rolled back" "$OUT"
+rmdir "$TMP_BLOCKER"
+
+# --- (19) an unresolvable origin/main is an environment error, not a rollback -
+# origin_blob fails both when origin/main lacks the path and when origin/main
+# itself does not resolve (unfetched clone, pruned/stale remote-tracking ref,
+# concurrent gc). Only the first means "nothing to restore". Treating the second
+# as an empty pre-write blob is what would route a mint failure into deleting a
+# tracked node file, so the ref fault must exit 69 having touched nothing.
+git -C "$FR" checkout -- intentions
+SAVED_ORIGIN_MAIN="$(git -C "$FR" rev-parse refs/remotes/origin/main)"
+git -C "$FR" update-ref -d refs/remotes/origin/main
+run_alarm STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --kind busy-stall --statement 'the queue is stalled' --body-file "$BODY"
+assert_eq "(19) unresolvable origin/main exits 69" "69" "$RC"
+assert_contains "(19) diagnostic names the unresolvable ref" "origin/main does not resolve" "$OUT"
+assert_eq "(19) no write-node"   "" "$(log_lines write-node.log)"
+assert_eq "(19) no graph-commit" "" "$(log_lines graph-commit.log)"
+assert_eq "(19) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+git -C "$FR" update-ref refs/remotes/origin/main "$SAVED_ORIGIN_MAIN"
+
+# --- (20) doctrine ratchet: no bare restore_from_blob call -------------------
+# A bare call discards the status that distinguishes "restored" from "left
+# dirty", which is precisely the lie cases (17) and (18) pin. Every call site
+# must be status-checked (`if ! restore_from_blob ...` / `if restore_from_blob
+# ...`), so no line may START with the call.
+BARE_RESTORE_HITS=$(grep -cE '^[[:space:]]*restore_from_blob ' "$SUT" || true)
+assert_eq "(20) no unchecked restore_from_blob call in $SUT" "0" "${BARE_RESTORE_HITS:-0}"
 
 # --- results -----------------------------------------------------------------
 echo ""

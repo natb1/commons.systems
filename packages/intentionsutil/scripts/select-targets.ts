@@ -16,13 +16,20 @@
 // tree). Without --dir it falls back to the repo-local `intentions/` for
 // manual dry-runs, resolved relative to this file, never cwd.
 //
-// Determinism: `listNodes` returns nodes in id-sorted order and
+// Determinism: `listNodesStrict` returns nodes in id-sorted order and
 // `selectGraphTargets` orders with a unique `id` final tiebreak, so two runs
 // on the same store emit byte-identical stdout.
+//
+// Enumeration is deliberately STRICT (`listNodesStrict`, not the tolerant
+// `listNodes`): absence from the enumerated set is load-bearing "pass"
+// semantics in the selector's gates — `blockersComplete` (../src/router.ts)
+// treats a `blocked_by` id that is ABSENT from the store as COMPLETE, so a
+// corrupt/truncated/0-byte blocker file read tolerantly would silently unblock
+// its dependent and dispatch it. Refusing loudly is the only safe reading.
 
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listNodes } from "../src/store.js";
+import { listNodesStrict } from "../src/store.js";
 import { selectGraphTargets } from "../src/router.js";
 
 // --- Paths -----------------------------------------------------------------
@@ -48,7 +55,7 @@ function main(argv: string[]): void {
     }
   }
 
-  const selection = selectGraphTargets(listNodes(intentionsDir));
+  const selection = selectGraphTargets(listNodesStrict(intentionsDir));
   process.stdout.write(`${JSON.stringify(selection)}\n`);
 }
 

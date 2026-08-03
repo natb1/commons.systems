@@ -39,7 +39,197 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/review-fix: the code-review quality instrument could not be invoked
+    this pass (Skill tool rejects nested code-review invocation under
+    disable-model-invocation) -- the pass carries no Lane-A code-quality review,
+    a coverage gap rather than a diff defect. All surfaced findings were
+    otherwise resolved (2 fixed, 4 refuted, 4 out-of-scope, 12 informational);
+    see PR comment 5161572240 and fix commit 4e979107."
+  since: 2026-08-03
+  recommendation: >-
+    # Next steps: `tactic-office-hours-snapshot-wire-contract` (PR #2805)
+
+
+    ## Short version
+
+
+    The PR's own content is done. What parked it is a harness defect in
+    `/review-fix` that is (a) confirmed systemic, (b) already tracked by a
+    sibling node whose fix PR is green and mergeable right now. The
+    highest-value action is **not** on this PR — it is merging the instrument
+    fix, which stops every future review-fix pass from parking for the same
+    reason.
+
+
+    Suggested order: land the instrument fix, then clear this park. Both are
+    short.
+
+
+    ---
+
+
+    ## 1. The defect is systemic — confirmed, and already measured
+
+
+    Not a one-off. Grepping the session transcripts under
+    `/home/n8/.claude/projects/` for the literal rejection `Skill code-review
+    cannot be used`:
+
+
+    | Date | Files with the rejection |
+
+    |---|---|
+
+    | 2026-07-19 | 1 |
+
+    | 2026-07-21 | 5 |
+
+    | 2026-07-22 | 10 |
+
+    | 2026-07-23 | 8 |
+
+    | 2026-07-25 | 8 |
+
+    | 2026-07-28 | 5 |
+
+    | 2026-07-30 | 5 |
+
+    | 2026-07-31 | 114 |
+
+    | 2026-08-01 | 14 |
+
+    | 2026-08-02 | 16 |
+
+
+    186 files total, spread across dozens of distinct worktree project
+    directories. Every review-fix pass since at least 07-19 has run with zero
+    Lane-A code-quality coverage.
+
+
+    **The mechanism, confirmed.** There is no `.claude/skills/code-review/` in
+    this repo — `code-review` is a Claude Code **built-in**, and it ships with
+    `disable-model-invocation`. So there is no repo-side frontmatter to flip; a
+    `Skill(skill: "code-review", …)` call from inside a subagent is structurally
+    never invocable, regardless of what the workflow asks for. The call site is:
+
+
+    - `.claude/workflows/review-fix.js:648-668` — `finderPrompt`'s `code-review`
+    branch: *"Invoke the built-in `/code-review` skill via the Skill tool with
+    the `max` effort argument AND the `--fix` flag."*
+
+    - `security-review` (same file, `:670-690`) survives because that built-in
+    does not carry the flag, not because it is invoked differently in any
+    structural sense.
+
+
+    This was already measured and written down on 07-31: the tracked node's
+    `rationale` records *"all 18 invocations of Skill(code-review, 'max --fix')
+    were rejected with disable-model-invocation, so the built-in never ran and
+    the finder hand-rolled a review in its place."*
+
+
+    ## 2. It is already tracked — file nothing new
+
+
+    `intentions/tactic-review-code-review-invocation-contract.md` covers exactly
+    this defect. Current state:
+
+
+    - `phase: review`, PR #3007, `attention.boost: 55`, `tier: 1`, `pace_exempt:
+    true`
+
+    - Statement: *"replace the rejected Skill-tool call with the `claude -p`
+    user-turn entry point, restore `--fix`, adopt `--comment`, and parse
+    findings from text"*
+
+    - `blocked_by: []` — its former blocker,
+    `tactic-hold-conflict-review-code-review-invocation-contract`, is at `phase:
+    done`
+
+    - PR #3007: `MERGEABLE`, `mergeStateStatus: CLEAN`, **all 20 checks green**
+    (including `hook-tests`, which is where the doctrine conflict lived)
+
+
+    So the conflict that stalled it is behind it and the PR is ready to go. Do
+    not file a new node or issue for this.
+
+
+    **The loop worth breaking.** #3007 sits at `phase: review` with markers
+    `[planned, qa-done]` and no `reviewed` marker. The next router tick will
+    send it through the same `/review-fix` pass, which will hit the same
+    rejection and escalate it to office-hours — the instrument fix parks on the
+    instrument it fixes. That is the concrete reason to act on it by hand:
+
+
+    ```
+
+    # from a main-based checkout
+
+    .claude/skills/dispatch-propagate/scripts/transition-node \
+      tactic-review-code-review-invocation-contract --set-pr 3007
+    ```
+
+
+    If you want real review coverage on it first (reasonable — it rewrites the
+    review harness), run `/code-review max --fix` yourself in a top-level
+    session on that branch. Typed directly it works; only the nested Skill-tool
+    path is refused.
+
+
+    ## 3. Clearing this park (PR #2805)
+
+
+    **Spot-check, don't re-derive.** Two things:
+
+
+    - PR comment id `5161572240` (marker `<!-- dispatch:review-fix -->`) — the
+    disposition table for all 22 findings.
+
+    - Commit `4e979107` — two changes only: `"scope"` added to `LOCAL_ONLY_KEYS`
+    in `office-hours-snapshot/src/parity.ts`, and `memberEmails` dropped from
+    the offline wire in `office-hours/src/snapshot-wire.ts` (reader gains
+    `requireMemberEmails: false` for the file-import path). Both verified green
+    on merged head `b98bbea9`.
+
+
+    Then:
+
+
+    ```
+
+    # from a main-based checkout
+
+    .claude/skills/dispatch-propagate/scripts/transition-node \
+      tactic-office-hours-snapshot-wire-contract --set-pr 2805
+    ```
+
+
+    Two gotchas:
+
+
+    - **Run it from a main-based checkout**, not from the PR-branch worktree —
+    from a PR worktree you have to apply the reset-dance `graph-commit` needs.
+
+    - **Scope-freshness gate.** If `compute-freshness` reads the node's scope
+    stamp as stale against current `origin/main`, `transition-node` **demotes
+    the node to `implement`** instead of transitioning — losing the review work.
+    Check freshness first, and restamp with `restamp-scope-fingerprint.ts` if
+    the only delta is this PR's own fix commit.
+
+
+    If you'd rather have genuine Lane-A coverage on this PR before clearing it,
+    run `/code-review max --fix` directly against
+    `tactic-office-hours-snapshot-wire-contract` first. Doing so on every parked
+    PR is the expensive path — fixing the instrument (step 2) is the cheap one.
+
+
+    References:
+
+    - #2805: https://github.com/natb1/commons.systems/pull/2805
+
+    - #3007: https://github.com/natb1/commons.systems/pull/3007
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes:

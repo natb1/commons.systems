@@ -81,7 +81,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: main-qa
+phase: done
 execution:
   branch: tactic-test-decision-log-prod-leak
   pr: 3013
