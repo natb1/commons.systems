@@ -270,8 +270,18 @@ Workflow's parallel finder fan-out, which would race concurrent writers
 against the same tree. This is why it is its own serialized step between
 Step 1 and Step 2, not a finder inside the Workflow.
 
-`MERGE_BASE` is already bound by Step 1 above — reuse it as `<target>`; do not
-recompute or hand-roll a second target formatter.
+`MERGE_BASE` is already bound by Step 1 above — reuse it; do not recompute or
+hand-roll a second target formatter. Pass it as the **rev-range**
+`"$MERGE_BASE..HEAD"`, never as the bare `"$MERGE_BASE"` SHA. The built-in
+resolves a bare SHA to *that single commit's* diff, not to the diff from that
+commit to `HEAD`: measured live, `claude -p '/code-review low <bare-sha>'`
+reviewed only the one commit at that SHA (a 1-file graph phase-bump), while
+`claude -p '/code-review low <sha>..HEAD'` reviewed the PR's full accumulated
+diff (9 non-test files, 3 findings). A bare SHA therefore reviews the
+phase-transition commit that *started* the review phase and returns
+`status=ok` with vacuous findings — the exact silently-reviews-nothing defect
+this stage exists to eliminate. `dispatch-code-review` now rejects a
+non-range `--target` with exit 2, so this is enforced, not just documented.
 
 Do **not** pass `--effort` to `dispatch-code-review` here — leave it at the
 script's own default (`low`). This is deliberate, not an oversight: Unit 1's
@@ -290,7 +300,7 @@ local Claude daemon; see `.claude/rules/sandbox.md`):
 
 ```bash
 CR_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-code-review \
-  --target "$MERGE_BASE" --out-dir "tmp/code-review-$N" 2>"tmp/code-review-$N.err")
+  --target "$MERGE_BASE..HEAD" --out-dir "tmp/code-review-$N" 2>"tmp/code-review-$N.err")
 CR_RC=$?
 ```
 
@@ -300,27 +310,78 @@ case-on-exit-code idiom this file already uses for the front door
 (Step 3):
 
 ```bash
+CR_ERR="tmp/code-review-$N.err"
+CR_LOG="tmp/code-review-$N/output.txt"
 case $CR_RC in
   0) ;;
-  1) echo "/review-fix: 'claude -p /code-review' exited non-zero: $(cat "tmp/code-review-$N.err")" >&2; exit 1 ;;
-  2) echo "/review-fix: dispatch-code-review argument/empty-output error: $(cat "tmp/code-review-$N.err")" >&2; exit 1 ;;
-  3) echo "/review-fix: /code-review is unavailable — rejection signature in output: $(cat "tmp/code-review-$N.err")" >&2; exit 1 ;;
-  4) echo "/review-fix: 'claude -p /code-review' timed out" >&2; exit 1 ;;
+  1) echo "/review-fix: 'claude -p /code-review' exited non-zero (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  2) echo "/review-fix: dispatch-code-review argument/empty-output error (see $CR_ERR)" >&2; exit 1 ;;
+  3) echo "/review-fix: /code-review is unavailable — rejection signature in output (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  4) echo "/review-fix: 'claude -p /code-review' timed out (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  *) echo "/review-fix: dispatch-code-review exited unexpectedly ($CR_RC) — script missing, non-executable, sandbox-denied, signalled, or aborted under 'set -euo pipefail' (see $CR_ERR)" >&2; exit 1 ;;
 esac
 ```
+
+The `*)` catch-all is **load-bearing, not defensive padding**. The script's
+documented exit codes are 0/1/2/3/4, but a stale worktree checked out before
+this node landed yields 127 (missing script), a lost `+x` bit or a sandbox
+denial yields 126, a signal yields 128+n (130 on SIGINT), and a `set -euo
+pipefail` abort inside the script (e.g. `mkdir -p` on an unwritable
+`--out-dir`) yields whatever the failing builtin returned. Every one of those
+leaves `CR_OUT` **empty**. Without the catch-all they fall through the `case`
+untouched, Step 2 builds `code_review` from empty parses, and the Workflow's
+hard contract check passes on a review that never ran — reinstating the exact
+silent substitution this node exists to eliminate. Never delete this branch,
+and never replace it with a warning that continues.
+
+The failure messages deliberately name the artifact **paths** rather than
+`cat`-ing them. The captured text is a code review of the pending diff and
+routinely quotes the reviewed lines verbatim — including anything the roster's
+`secrets` finder exists to catch. Keep it on disk; see the redaction rule
+below before any of it reaches a durable record.
 
 **A failure here fails the phase.** This pass never degrades to an
 agent-performed review, never retries with a substitute, and never reports
 substituted output under the built-in's name — that is the exact four-day
 silent-substitution defect this node's Context section documents and exists
-to fix. Exit 3 in particular means the instrument itself is unavailable — the
-office-hours park reason must carry the verbatim stderr captured above, not a
-paraphrase.
+to fix. Exit 3 in particular means the instrument itself is unavailable.
+
+**Redaction rule for the office-hours park reason.** Never copy the nested
+session's captured output verbatim into the park reason. On the node lane the
+reason is written to `$CLAUDE_JOB_DIR/office-hours-reason`, persisted by
+`park-node` into the graph node file, and pushed to `origin/main` in this
+**public** repository — permanently, in git history. The captured text is a
+review *of the pending diff* and routinely quotes the reviewed lines; a diff
+that carries a credential (the reason the finder roster has a dedicated
+`secrets` lens) would publish that credential on any exit-1/3/4 path.
+
+The reason must instead carry, in this order:
+
+1. The exit code and what it means (`3` = instrument unavailable, `4` =
+   timeout, `1` = nested session exited non-zero, `2` = argument/empty output,
+   anything else = unexpected exit — see the catch-all above).
+2. The `--target` passed above and the effort level (`low`).
+3. The on-disk paths of the full, unredacted evidence — `tmp/code-review-$N.err`
+   and `tmp/code-review-$N/output.txt` — so the human reviewer can read it in
+   the worktree, where it never leaves the machine.
+4. A **bounded, redacted excerpt** — at most a few lines, enough to identify
+   the failure mode. Apply the same redaction discipline
+   `dispatch-diagnose-main` applies to its "redacted likely-cause summary"
+   (`.claude/skills/dispatch-diagnose-main/SKILL.md`, "Redaction rule"): quote
+   only the error category and the matched rejection signature, never raw diff
+   lines, environment-variable values, or any string that looks like a token,
+   credential, or key — even one that appears already masked. Also neutralize
+   any `close`/`fix`/`resolve` keyword adjacent to a `#N`, per
+   `.claude/rules/issue-references.md`, before the text reaches the node file.
+
+Fidelity is preserved by the paths in (3), not by pasting the payload into a
+pushed record.
 
 Parse the summary with the same `sed -n 's/^key=//p'` idiom Step 1 uses for
 `SURFACE_OUT`:
 
 ```bash
+CR_STATUS=$(printf '%s\n' "$CR_OUT" | sed -n 's/^status=//p')
 CR_FINDINGS=$(printf '%s\n' "$CR_OUT" | sed -n 's/^findings_path=//p')
 CR_PATCH=$(printf '%s\n' "$CR_OUT" | sed -n 's/^patch_path=//p')
 CR_TOUCHED=$(printf '%s\n' "$CR_OUT" | sed -n 's/^touched_file=//p')
@@ -332,6 +393,27 @@ potentially multiple `touched_file=` lines — one per file the built-in's
 `--fix` actually touched, derived by `dispatch-code-review` from a
 before/after `git diff`, never from the review's own self-report of what it
 fixed.
+
+**Then gate on what the script actually emitted, not on `CR_RC` alone.** The
+exit-code `case` above cannot see a truncated or empty `CR_OUT` — a killed
+pipeline, a redirect that lost stdout, or any of the undocumented exits the
+`*)` branch now catches leaves the parses empty while `CR_RC` may still be
+absent or zero. `dispatch-code-review` emits `status=ok` as the **first** line
+of its summary and only ever on the success path (Step 7 of the script), so
+that line, plus a non-empty `findings_path=` and `patch_path=`, is the
+evidence that the built-in ran:
+
+```bash
+if [ "$CR_STATUS" != ok ] || [ -z "$CR_FINDINGS" ] || [ -z "$CR_PATCH" ]; then
+  echo "/review-fix: dispatch-code-review summary is incomplete (status='$CR_STATUS' findings='$CR_FINDINGS' patch='$CR_PATCH') — the built-in /code-review did not verifiably run (see $CR_ERR)" >&2
+  exit 1
+fi
+```
+
+`$CR_STATUS` — never the literal string `ok` — is what Step 2 puts in
+`args.code_review.status`. Hardcoding the literal would make the Workflow's
+hard contract check (`review-fix.js`: `_a.code_review.status !== 'ok'`) a
+tautology that passes on a review that never ran.
 
 Do **not** recompute `surface` or `changed_files` after this pre-stage. The
 built-in's `--fix` edits are uncommitted working-tree changes to files
@@ -367,7 +449,7 @@ args = {
   security_note:       <string or omit>, // set for empty/docs/tests; omit for code
   prior_phase_log:     <string or omit>, // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
   code_review: {
-    status:         "ok",
+    status:         <CR_STATUS>,          // the parsed `status=` line — NEVER a hardcoded "ok"
     findings_path:  <CR_FINDINGS>,        // absolute path; the Workflow's reader subagent reads it
     patch_path:     <CR_PATCH>,           // absolute path to the before/after patch
     touched_files:  [ <CR_TOUCHED lines> ] // git-derived; the AUTHORITATIVE fixed[] constraint

@@ -57,7 +57,16 @@ claude -p '/code-review max c06c7295~1..c06c7295' --permission-mode acceptEdits
   terminated. `exit=143` (SIGTERM), `stdout+stderr` captured to a file was
   **0 bytes**.
 - A rev-range target (`<sha>~1..<sha>`) is accepted — the run proceeded normally
-  against it, so `--target "$MERGE_BASE"` in Unit 2 is a valid target form.
+  against it. **This says nothing about a bare SHA.** An earlier revision of this
+  line generalized from it to "so `--target "$MERGE_BASE"` in Unit 2 is a valid
+  target form"; that inference was wrong and shipped a live defect. Measured
+  directly (2026-08-02, two runs): `claude -p '/code-review low <bare-sha>'`
+  reviews **only the single commit at that SHA** — the run under test scoped
+  itself to a 1-file/3-line graph phase-bump commit and returned no findings —
+  while `claude -p '/code-review low <sha>..HEAD'` reviews the accumulated diff
+  (9 non-test files, 3 findings). Only the **range** form is a valid target for
+  the Step 1b pre-stage; `dispatch-code-review` now rejects a non-range
+  `--target` with exit 2.
 - Structure of the run, read off the transcripts
   (`~/.claude/projects/<slug>/<sid>/subagents/agent-*.meta.json`): the top-level
   `-p` session spawns one `general-purpose` root review subagent, which fans out

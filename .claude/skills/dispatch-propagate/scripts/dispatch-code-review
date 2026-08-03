@@ -6,16 +6,67 @@
 #   dispatch-code-review --target <rev-range> --out-dir <dir> \
 #     [--effort low|medium|high|xhigh|max|ultra] [--no-comment]
 #
-#   --target      the diff target passed through to /code-review (the SKILL
-#                 passes $MERGE_BASE). Validated against
+#   --target      the diff target passed through to /code-review. MUST be a
+#                 rev-RANGE ("<a>..<b>" or "<a>...<b>"); the SKILL passes
+#                 "$MERGE_BASE..HEAD". Validated against
 #                 ^[A-Za-z0-9._/@^~-]+$ before being spliced into the prompt
-#                 string, so it cannot inject additional CLI arguments.
+#                 string, so it cannot inject additional CLI arguments, and
+#                 then against the range shape — see "Why --target must be a
+#                 range" below. A non-range target exits 2.
 #   --out-dir     directory for the durable artifacts (output.txt, fix.patch,
 #                 touched-files.txt, summary.txt); created if absent.
 #   --effort      default "low". See "Effort level" below — do not raise this
 #                 default without new measurement.
 #   --no-comment  omit --comment (used by the test suite; the SKILL never
 #                 passes it).
+#
+# Resume cache — why it does NOT live in --out-dir
+# -----------------------------------------------------------------------------
+# The nested `claude -p` session is expensive, so a completed review is cached
+# and replayed on a resumed pass. That cache is a security boundary: replaying
+# it means the built-in `/code-review` never runs, yet the caller (SKILL.md
+# Step 1b) sees exit 0 + status=ok and labels the PR `dispatch:reviewed`.
+#
+# --out-dir is `tmp/code-review-$N` inside the reviewed worktree — a
+# deterministic, gitignored path that the implement/qa phases, and any PR whose
+# content this script is reviewing, can write. Keying the resume there let an
+# attacker pre-plant `summary.txt` with `status=ok` and skip the review
+# entirely (and dictate the findings_path/patch_path the caller then reads).
+# So the cache lives OUTSIDE the reviewed worktree:
+#
+#   $DISPATCH_CODE_REVIEW_CACHE_DIR (test seam / explicit override), else
+#   $CLAUDE_JOB_DIR/dispatch-code-review, else
+#   ${XDG_STATE_HOME:-$HOME/.local/state}/dispatch-code-review
+#
+# and it is self-authenticating: a cached summary is replayed only when the
+# cache-schema version, out-dir, --target, the resolved target commit, HEAD,
+# --effort and the --comment flag ALL match this invocation, and the artifacts
+# it points at are the ones this run computed and still exist. Anything else —
+# an advanced target, a new HEAD (the review phase is legitimately re-entered
+# after qa-fix / fix-checks pushes), a different effort, a target that does not
+# resolve to a single commit — re-runs the review rather than replaying a
+# summary that describes a diff nobody reviewed.
+#
+# summary.txt under --out-dir is still written, as a durable artifact for
+# humans and for the caller's own reading. It is NEVER read back as the resume
+# key — it lives in attacker-writable space.
+#
+# Why --target must be a range, not a bare SHA
+# -----------------------------------------------------------------------------
+# The built-in resolves a bare commit SHA to THAT SINGLE COMMIT's diff, not to
+# the diff from that commit to HEAD. Measured live (two runs, 2026-08-02):
+#   - `claude -p '/code-review low <bare-sha>'` reviewed only the one commit at
+#     that SHA — a 1-file/3-line graph phase-bump — and returned no findings.
+#   - `claude -p '/code-review low <sha>..HEAD'` reviewed the same PR's full
+#     accumulated diff: 9 non-test files, 3 concrete findings.
+# Unit 1's investigation (references/code-review-invocation.md §1.2) only ever
+# tested the RANGE form `<sha>~1..<sha>` and wrongly generalized from it that a
+# bare `$MERGE_BASE` was a valid target. It is not: with a bare merge-base SHA
+# this stage silently reviews the phase-transition commit that triggered the
+# review phase and reports status=ok on vacuous findings — the very
+# reviews-nothing-but-claims-success defect this script exists to prevent.
+# Hence the hard range check below: a wrong target is a caller bug, and a clear
+# exit-2 error beats a green run over the wrong diff (.claude/rules/code-style.md).
 #
 # Effort level — why the default is "low", not "max" or "medium"
 # -----------------------------------------------------------------------------
@@ -40,9 +91,10 @@
 #
 # Exit codes
 # -----------------------------------------------------------------------------
-#   0  invoked, verified, summary on stdout
+#   0  invoked, verified, summary on stdout (fresh run, or an authenticated
+#      resume of an identical earlier run — see "Resume cache")
 #   1  `claude -p` exited non-zero
-#   2  invalid arguments, or empty output
+#   2  invalid arguments, unusable resume-cache location, or empty output
 #   3  output carries a rejection / unavailability signature
 #   4  timed out
 set -euo pipefail
@@ -95,6 +147,15 @@ if ! [[ "$TARGET" =~ ^[A-Za-z0-9._/@^~-]+$ ]]; then
   exit 2
 fi
 
+# The target must be a rev-RANGE with both endpoints present. A bare SHA makes
+# the built-in review that ONE commit instead of the accumulated diff (see "Why
+# --target must be a range" above), which silently reviews the wrong thing and
+# still reports status=ok.
+if ! [[ "$TARGET" =~ ^[A-Za-z0-9._/@^~-]+\.\.\.?[A-Za-z0-9._/@^~-]+$ ]]; then
+  echo "$PROG: --target '$TARGET' is not a rev-range — pass '<base>..<head>' (e.g. \"\$MERGE_BASE..HEAD\"), not a bare commit-ish; a bare SHA reviews only that single commit" >&2
+  exit 2
+fi
+
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
@@ -125,11 +186,86 @@ UNTRACKED_BEFORE_FILE="$OUT_DIR/untracked-before.txt"
 # suite can stub the CLI.
 CLAUDE_CMD="${DISPATCH_CODE_REVIEW_CLAUDE_CMD:-claude}"
 
+# --- Step 1a: the run identity the resume cache is keyed on -------------------
+# Bump CACHE_VERSION whenever the meaning of a summary line changes, so summaries
+# written by an older copy of this script are never replayed by a newer one.
+CACHE_VERSION=2
+
+COMMENT_FLAG=1
+[[ -n "$NO_COMMENT" ]] && COMMENT_FLAG=0
+
+# Resolve BOTH range endpoints to commit SHAs. The --target string alone is not
+# an identity: "$MERGE_BASE..HEAD" names a different diff after every push, and
+# a symbolic endpoint ("origin/main..HEAD") moves under a fixed string.
+TARGET_BASE_REV="${TARGET%%..*}"
+TARGET_HEAD_REV="${TARGET##*..}"
+TARGET_BASE_SHA="$(git rev-parse --verify --quiet "${TARGET_BASE_REV}^{commit}" 2>/dev/null || true)"
+TARGET_HEAD_SHA="$(git rev-parse --verify --quiet "${TARGET_HEAD_REV}^{commit}" 2>/dev/null || true)"
+HEAD_SHA="$(git rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null || true)"
+
+# Cache location — deliberately OUTSIDE the reviewed worktree (see "Resume cache"
+# in the header). --out-dir is attacker-writable space; a resume key placed there
+# lets a planted status=ok file skip the built-in entirely.
+CACHE_DIR="${DISPATCH_CODE_REVIEW_CACHE_DIR:-}"
+if [[ -z "$CACHE_DIR" ]]; then
+  if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
+    CACHE_DIR="$CLAUDE_JOB_DIR/dispatch-code-review"
+  else
+    CACHE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dispatch-code-review"
+  fi
+fi
+mkdir -p "$CACHE_DIR"
+CACHE_DIR="$(cd "$CACHE_DIR" && pwd)"
+if [[ -n "$GIT_ROOT" && ( "$CACHE_DIR" == "$GIT_ROOT" || "$CACHE_DIR" == "$GIT_ROOT"/* ) ]]; then
+  echo "$PROG: resume-cache dir '$CACHE_DIR' is inside the reviewed worktree ('$GIT_ROOT') — it must live outside it, or a planted cache entry can skip the review entirely" >&2
+  exit 2
+fi
+
+# One cache entry per out-dir, named by a hash of the out-dir's absolute path so
+# distinct PRs/nodes never collide and no path character has to be escaped.
+if command -v sha256sum >/dev/null 2>&1; then
+  CACHE_KEY="$(printf '%s' "$OUT_DIR" | sha256sum | cut -d' ' -f1)"
+elif command -v shasum >/dev/null 2>&1; then
+  CACHE_KEY="$(printf '%s' "$OUT_DIR" | shasum -a 256 | cut -d' ' -f1)"
+else
+  echo "$PROG: neither sha256sum nor shasum is available to key the resume cache" >&2
+  exit 2
+fi
+CACHE_FILE="$CACHE_DIR/$CACHE_KEY.summary"
+
 # --- Step 2: idempotent resume ------------------------------------------------
 # The nested session is expensive; re-running a completed review on a resumed
-# pass would double the cost and re-post duplicate --comment comments.
-if [[ -f "$SUMMARY_FILE" ]] && grep -q '^status=ok$' "$SUMMARY_FILE"; then
-  cat "$SUMMARY_FILE"
+# pass would double the cost and re-post duplicate --comment comments. But a
+# replayed summary means the built-in never ran, so every field of the run
+# identity must match before one is served — a mismatch re-runs the review.
+summary_field() {
+  sed -n "s/^$2=//p" "$1" | head -1
+}
+
+cache_is_current() {
+  local f="$1"
+  grep -q '^status=ok$' "$f" || return 1
+  [[ "$(summary_field "$f" cache_version)"  == "$CACHE_VERSION"  ]] || return 1
+  [[ "$(summary_field "$f" out_dir)"        == "$OUT_DIR"        ]] || return 1
+  [[ "$(summary_field "$f" target)"         == "$TARGET"         ]] || return 1
+  [[ "$(summary_field "$f" target_base_sha)" == "$TARGET_BASE_SHA" ]] || return 1
+  [[ "$(summary_field "$f" target_head_sha)" == "$TARGET_HEAD_SHA" ]] || return 1
+  [[ "$(summary_field "$f" head_sha)"       == "$HEAD_SHA"       ]] || return 1
+  [[ "$(summary_field "$f" effort)"         == "$EFFORT"         ]] || return 1
+  [[ "$(summary_field "$f" comment)"        == "$COMMENT_FLAG"   ]] || return 1
+  # The artifacts a resumed summary points at must be the ones THIS run
+  # computed, and must still exist — never a caller-chosen path.
+  [[ "$(summary_field "$f" findings_path)"  == "$OUTPUT_FILE"    ]] || return 1
+  [[ "$(summary_field "$f" patch_path)"     == "$PATCH_FILE"     ]] || return 1
+  [[ -f "$OUTPUT_FILE" && -f "$PATCH_FILE" ]] || return 1
+  return 0
+}
+
+# An unresolvable endpoint (a range this worktree cannot resolve to commits)
+# leaves the cache unauthenticatable — re-run rather than replay.
+if [[ -n "$TARGET_BASE_SHA" && -n "$TARGET_HEAD_SHA" && -n "$HEAD_SHA" && -f "$CACHE_FILE" ]] \
+   && cache_is_current "$CACHE_FILE"; then
+  cat "$CACHE_FILE"
   exit 0
 fi
 
@@ -260,9 +396,19 @@ TOUCHED_COUNT=$(grep -c . "$TOUCHED_FILE" 2>/dev/null || true)
 [[ -z "$TOUCHED_COUNT" ]] && TOUCHED_COUNT=0
 
 # --- Step 7: emit the compact summary -----------------------------------------
+# The identity block (cache_version .. comment) is what Step 2 authenticates a
+# resume against; the caller reads only findings_path/patch_path/touched_file.
 {
   echo "status=ok"
   echo "exit_code=0"
+  echo "cache_version=$CACHE_VERSION"
+  echo "out_dir=$OUT_DIR"
+  echo "target=$TARGET"
+  echo "target_base_sha=$TARGET_BASE_SHA"
+  echo "target_head_sha=$TARGET_HEAD_SHA"
+  echo "head_sha=$HEAD_SHA"
+  echo "effort=$EFFORT"
+  echo "comment=$COMMENT_FLAG"
   echo "findings_path=$OUTPUT_FILE"
   echo "patch_path=$PATCH_FILE"
   echo "touched_files_count=$TOUCHED_COUNT"
@@ -271,6 +417,10 @@ TOUCHED_COUNT=$(grep -c . "$TOUCHED_FILE" 2>/dev/null || true)
     echo "touched_file=$f"
   done <"$TOUCHED_FILE"
 } >"$SUMMARY_FILE"
+
+# The out-dir copy is a durable artifact only — Step 2 resumes off the copy
+# outside the worktree, which nothing in the reviewed tree can write.
+cp "$SUMMARY_FILE" "$CACHE_FILE"
 
 cat "$SUMMARY_FILE"
 exit 0

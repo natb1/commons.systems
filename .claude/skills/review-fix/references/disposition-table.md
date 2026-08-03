@@ -9,7 +9,7 @@ code-review `Fixed` / `Informational` / `Dismissed` / `Deferred` axis.
 |---|---|---|
 | Fixed | code-review | A concrete, in-scope code change applicable to this PR — applied by the Workflow's Opus fix agents. |
 | Required | security | A real vulnerability or weakness in the changed code. Adversarially verified; upheld Required findings applied by the Workflow's Opus fix agents. |
-| Refuted | security | A Required finding refuted by the adversarial-verify step — dropped before any Opus fix, recorded in verify_report. |
+| Refuted | security, code-review residue | A Required finding refuted by the adversarial-verify step — dropped before any Opus fix, recorded in verify_report. Also a code-review residue item refuted by the residue phase's skeptic gate — dropped before the residue agent can edit for it. |
 | Informational | code-review | FYIs, notes, observations surfaced for human reference; no change required. |
 | Dismissed | code-review | Nits, incorrect findings, or not applicable; no change, each with a one-line rationale. |
 | False-positive | security | Not an actual vulnerability — a misread of the code or a non-issue; each with a one-line rationale. |
@@ -34,7 +34,14 @@ buckets are filled directly from two inputs:
   write, so its self-report is never credited as yield — only the diff is.
 - **Everything else the review reported becomes residue**, and the residue
   phase's resolve/defer/ignore disposition fills the remaining buckets — the same
-  path `security-review`'s findings-only output takes.
+  path `security-review`'s findings-only output takes. Provenance differs by
+  source, so code-review residue is gated before it reaches that disposition
+  agent (which edits the working tree): its text is a free-text parse of the
+  pre-stage report, carrying no instrument receipt, so the Workflow **drops any
+  item whose `location` is outside `changed_files`** and runs **one adversarial
+  skeptic** per surviving item, dropping refuted (or unvoted) ones as `Refuted`.
+  `security-review` residue skips both gates — it arrives with a verified
+  instrument receipt and the built-in's own confidence>=8 false-positive filter.
 
 A finding is **never Dismissed/Disregarded purely because the change is small.**
 If a code-review finding is a real improvement within the PR's scope,
