@@ -679,6 +679,34 @@ clarifications:
       Required findings to the Opus fix stage, and moves the refutation rate off
       its 69% baseline (91 refuted / 37 upheld) for structural reasons —
       corrupting the very signal that node names as its own regression detector."
+  - question: Which Lane-B terminal dispositions qualify a finding to absorb its
+      Lane-A residue twin?
+    answer: "(Recorded 2026-08-03, author interview; completes clarifications 26
+      and 27.) Only a Lane-B finding that survived verify AND was actually fixed
+      absorbs its Lane-A twin. A Refuted or Unverified-dropped finding NEVER
+      absorbs — its Lane-A twin stays in the residue-disposition ledger. And on
+      the genuinely open half, the author ruled LEDGER-COMPLETENESS WINS: a
+      Lane-B finding merely queued for DEFERRED filing does not absorb either,
+      accepting one duplicate on that root. Context: clarification 27 places the
+      cross-lane merge at or after the code-review residue skeptic pre-gate
+      (review-fix.js ~1694-1781, inside phase('residue') ~1617), which is
+      downstream of verify (~1394, applyVerifyDrop ~1489) and fix (~1524) — so by
+      merge time every Lane-B finding already carries a terminal disposition, a
+      case clarification 26's 'fixed exactly once' presumed away. Matching Lane-A
+      residue against the full deduped pool would let a REFUTED Lane-B twin
+      suppress a real Lane-A item, deleting it from the ledger — a detection loss
+      condition 5 forbids. Rationale for the deferred half specifically: a
+      duplicate is recoverable and a deleted ledger item is not, and condition 5
+      forbids detection loss while saying nothing about tolerating redundancy;
+      the absorb alternative would additionally require moving the
+      deferred_filings computation (currently ~2054, AFTER the residue phase) to
+      before or during it — a structural pipeline reordering outside this
+      tactic's scope, and a re-plan rather than a plan. Declined: dedup-wins
+      (absorb + reorder), and deferring the whole terminal-disposition question
+      to a wholesale /align-strategy sitting. NOT MEASURED, and worth measuring
+      before trusting the cost estimate: how often a deferred Lane-B finding
+      actually shares a root with a Lane-A residue item — the duplicate rate this
+      ruling accepts could be near zero or material, and nobody has counted."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
