@@ -68,12 +68,19 @@ jobs:
               sudo fuser -v "$lock" || echo "$lock: no holders at step start"
             done
           fi
-          if stop_err=$(sudo systemctl stop apt-daily.service apt-daily-upgrade.service apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service 2>&1); then
-            echo 'systemctl stop: ok'
+          # Mask (not stop) all five units: both timers ship Persistent=true,
+          # so a daemon-reload later in this job (e.g. triggered by a package
+          # postinst during playwright's `install --with-deps`) would
+          # otherwise re-arm them and fire a missed run immediately, possibly
+          # re-acquiring the dpkg lock mid-job. mask --now survives
+          # daemon-reload and also stops the units, so the separate stop is
+          # dropped. The runner is ephemeral/single-use, so no unmask needed.
+          if mask_err=$(sudo systemctl mask --now apt-daily.service apt-daily-upgrade.service apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service 2>&1); then
+            echo 'systemctl mask: ok'
           else
             rc=$?
-            echo "systemctl stop: failed (rc=$rc)"
-            echo "$stop_err" >&2
+            echo "systemctl mask: failed (rc=$rc)"
+            echo "$mask_err" >&2
           fi
           if kill_err=$(sudo systemctl kill --kill-who=all apt-daily.service apt-daily-upgrade.service unattended-upgrades.service 2>&1); then
             echo 'systemctl kill: ok'
