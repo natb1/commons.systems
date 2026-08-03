@@ -73,10 +73,11 @@ mkdir -p "$MAIN_WT/.claude/worktrees"
 
 export DISPATCH_GRAPH_MAIN_WORKTREE="$MAIN_WT"
 
-# Copy the SUT and its sourced lib so "$SCRIPT_DIR/<name>" inside the copy
+# Copy the SUT and its sourced libs so "$SCRIPT_DIR/<name>" inside the copy
 # resolves to the stub sibling below.
 cp "$SCRIPT_DIR/provision-node-worktree" "$SUT_DIR/provision-node-worktree"
 cp "$SCRIPT_DIR/lib-graph-worktree.sh" "$SUT_DIR/lib-graph-worktree.sh"
+cp "$SCRIPT_DIR/lib-worktree-residue.sh" "$SUT_DIR/lib-worktree-residue.sh"
 chmod +x "$SUT_DIR/provision-node-worktree"
 
 # dispatch-ci-ready stub: the CI gate is not under test here.
