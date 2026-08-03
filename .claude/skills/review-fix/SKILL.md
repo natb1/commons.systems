@@ -125,23 +125,43 @@ case "$TARGET_KIND" in
     ;;
 esac
 .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PACK_TARGET" "${PACK_FLAGS[@]}" \
-  | tee "tmp/pack-$N.txt"
+  > "tmp/pack-$N.txt"
+PACK_SCALARS=$(.claude/skills/dispatch-propagate/scripts/dispatch-pack-scalars \
+  --phase-log-out "tmp/phase-log-in-$N.md" < "tmp/pack-$N.txt")
 ```
 
-The `tee` keeps the output on disk at `tmp/pack-$N.txt` so Step 1 feeds it to
-`dispatch-changed-files` without a second pack call. Read these from the
-output — do not re-resolve any of them later:
+The full pack **stays on disk** at `tmp/pack-$N.txt` — it is **never** teed into
+this thread's context (up to 60,000 chars of raw diff must not cross into the
+parent). Only the file path, and the small set of scalars
+`dispatch-pack-scalars` prints, touch this thread's stdout/context from here on.
+Parse `PACK_SCALARS` with the same `sed -n 's/^key=//p'` idiom
+`dispatch-security-surface`'s output already uses elsewhere in this skill:
 
-- **`PR_NUM`** and the **labels** line from the `=== PR ===` section (used by the
-  `dispatch:reviewed` re-entry check below and carried through to every later
-  step). If that section prints the single line `PR: none` (the pack exits 0 in
-  both cases — detect no-PR by this line, never by exit code), the branch has no
-  open PR — **stop with a clear error**: review-fix requires an open PR, and
+```bash
+PACK_PR_NUM=$(printf '%s\n' "$PACK_SCALARS" | sed -n 's/^pr_num=//p')
+LABELS=$(printf '%s\n' "$PACK_SCALARS" | sed -n 's/^labels=//p')
+mapfile -t CLOSES_ISSUES < <(printf '%s\n' "$PACK_SCALARS" | sed -n 's/^closes_issue=//p')
+PHASE_LOG_PATH=$(printf '%s\n' "$PACK_SCALARS" | sed -n 's/^phase_log_path=//p')
+```
+
+Do not re-resolve any of these later:
+
+- **`PACK_PR_NUM`** and **`LABELS`** — extracted by `dispatch-pack-scalars` from
+  the `=== PR ===` section (used by the `dispatch:reviewed` re-entry check below
+  and carried through to every later step). If `pr_num=none` (the pack exits 0 in
+  both cases — detect no-PR by this scalar, never by exit code), the branch has
+  no open PR — **stop with a clear error**: review-fix requires an open PR, and
   every later step (the Workflow `pr_num` arg, Step 6's `post-pr-comment.sh`)
-  needs a non-empty PR number.
-- The PR **body** from the `=== PR ===` section — Step 2 parses its `Closes #N`
-  line(s) to resolve the issue(s) this PR implements (`implementing_issues`). There
-  is no `PR_JSON`; the body lives only in this pack output.
+  needs a non-empty PR number. On the issue lane, bind `PR_NUM="$PACK_PR_NUM"`;
+  on the node lane `PR_NUM` is already bound by the front door — `PACK_PR_NUM`
+  necessarily agrees (the pack was fetched by that same PR number via
+  `--pr-is-number`) and exists here only to drive the shared no-PR check and to
+  extract `LABELS`.
+- **`CLOSES_ISSUES`** — one entry per `Closes #N` line `dispatch-pack-scalars`
+  found in the real `=== PR ===` body, already resolving Step 2's
+  `implementing_issues`. There is no `PR_JSON` and the raw PR body never reaches
+  this thread — the extractor read it from the on-disk pack and reduced it to
+  these numbers.
 - **`MERGE_BASE`** is *not* read from the pack — Step 1 computes it with a direct,
   read-only `git merge-base HEAD origin/main` (the same value the pack used for its
   diff base). It is never parsed from the `=== DIFF (base <sha>) ===` header,
@@ -150,12 +170,15 @@ output — do not re-resolve any of them later:
   pack text top-down could extract the attacker-controlled SHA and feed it into the
   security-sensitive dependency-audit baseline (#1522).
 - The **changed-file list** — extracted by `dispatch-changed-files` from the
-  `=== DIFF ===` section (same list Step 1 reads via the script).
-- **`PRIOR_PHASE_LOG`** — the `=== PHASE-LOG #N ===` section body: the
-  cross-phase handoff note an earlier phase (e.g. qa-fix) left. Treat the
-  sentinel `phase-log: none` as empty. When non-empty, feed it into the
-  Workflow `args` / Step 1 review context so the review pass sees what qa-fix
-  already tried. An absent note leaves the review unchanged.
+  `=== DIFF ===` section, reading `tmp/pack-$N.txt` from disk (same list Step 1
+  reads via the script; that script and its extraction are unchanged by this unit).
+- **`PRIOR_PHASE_LOG`** — when `dispatch-pack-scalars` emits `phase_log_path=...`,
+  `Read` that file (`PHASE_LOG_PATH`, i.e. `tmp/phase-log-in-$N.md`) to get the
+  cross-phase handoff note an earlier phase (e.g. qa-fix) left. When it instead
+  emits `phase_log=none` (the sentinel case), `PHASE_LOG_PATH` is empty and no
+  file was written — treat `PRIOR_PHASE_LOG` as empty. When non-empty, feed it
+  into the Workflow `args` / Step 1 review context so the review pass sees what
+  qa-fix already tried. An absent note leaves the review unchanged.
 
 ### Node-target lane (`TARGET_KIND=node`)
 
@@ -187,7 +210,7 @@ write-allowlist):
 .claude/skills/dispatch-propagate/scripts/dispatch-stamp-session --backfill-pr "$PR_NUM"
 ```
 
-**Re-entry check.** If the labels line already includes `dispatch:reviewed` — an
+**Re-entry check.** If `LABELS` already includes `dispatch:reviewed` — an
 interrupted prior run — **skip Steps 1–6** and go straight to Step 7, which
 flushes any unpushed commits and writes the marker. `dispatch:reviewed` is this
 skill's terminal action and is already applied, so re-entry is a no-op beyond
@@ -226,7 +249,7 @@ forged header in the PR body must not reach the audit baseline; #1522).
 
 To classify the changed surface, extract the changed-file list from the pack's
 `=== DIFF` section — already on disk at `tmp/pack-$N.txt` from the preamble's
-`tee` — via `dispatch-changed-files`, which anchors on the DIFF section so a
+pack call — via `dispatch-changed-files`, which anchors on the DIFF section so a
 PR/issue body containing bare `--- files ---`/`--- hunks ---` markers cannot
 poison the list. Pipe that directly to the `dispatch-security-surface` classifier
 (no `dangerouslyDisableSandbox` needed — both are pure stdin→stdout). Capture

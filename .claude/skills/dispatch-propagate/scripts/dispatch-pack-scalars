@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+# Extract the handful of scalars review-fix's parent thread needs from a
+# dispatch-context-pack output, so the parent never has to hold the full pack
+# (up to 60,000 chars of raw diff) in its own context.
+#
+# Usage: dispatch-context-pack <N> --pr --phase-log [--diff ...] \
+#          | dispatch-pack-scalars --phase-log-out <path>
+#
+# Reads a full dispatch-context-pack output on stdin. Prints key=value lines
+# to stdout, one per scalar, in the same convention dispatch-security-surface
+# uses and SKILL.md parses with `sed -n 's/^key=//p'`:
+#
+#   pr_num=<N>                 — or pr_num=none when the PR section's first
+#                                 line is the sentinel "PR: none".
+#   labels=<comma-separated>   — omitted when pr_num=none (no labels line).
+#   closes_issue=<N>           — zero or more lines, one per "Closes #<N>" in
+#                                 the PR body.
+#   phase_log=none             — when the PHASE-LOG section body is the
+#                                 sentinel "phase-log: none".
+#   phase_log_path=<path>      — otherwise: the section body is written to
+#                                 the --phase-log-out path and this line names
+#                                 it. Exactly one of phase_log= / phase_log_path=
+#                                 is ever emitted.
+#   changed_file_count=<N>     — a count only, sanity-check use; omitted when
+#                                 no "=== DIFF (base ...) ===" section is
+#                                 present in the input (--diff was not
+#                                 requested when the pack was built).
+#
+# No network access, no git, no gh — pure stdin extraction. Does not source
+# lib.sh: this script needs none of its gh/git wrappers.
+#
+# --- Anchoring rules (security-relevant — do not simplify) -------------------
+#
+# The pack's canonical section order is PR -> PHASE-LOG -> DIFF, and the PR
+# *body* is untrusted attacker-controllable text sitting inside the PR
+# section. A forged section header pasted into that body can only appear
+# AFTER the real PR header (which is always first) and BEFORE the real
+# PHASE-LOG header (which is always last, since PHASE-LOG follows PR in
+# canonical order and nothing legitimate follows it into the body). So:
+#
+#   - the PR section is anchored on the FIRST '^=== PR ===' line — a forged
+#     one inside the PR body can only appear later, after the real one;
+#   - the PHASE-LOG section is anchored on the LAST '^=== PHASE-LOG #' line —
+#     a forged one inside the PR body appears earlier than the real,
+#     script-generated one.
+#
+# This mirrors dispatch-changed-files' "last DIFF header wins" reasoning for
+# its own section. pr_num and labels are read POSITIONALLY from the two lines
+# immediately after the real PR header, never by grepping the whole input —
+# grepping for e.g. '^PR #' anywhere would happily return a decoy planted in
+# the PR body. This is the #1522 defect class: a forged header/line inside an
+# untrusted PR body must never be read as the real one.
+set -euo pipefail
+
+# --- parse args ----------------------------------------------------------
+
+PHASE_LOG_OUT=""
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --phase-log-out)
+      PHASE_LOG_OUT="${2:-}"
+      shift 2
+      ;;
+    *)
+      echo "dispatch-pack-scalars: error: unknown argument '$1'" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$PHASE_LOG_OUT" ]]; then
+  echo "dispatch-pack-scalars: error: usage: dispatch-pack-scalars --phase-log-out <path>" >&2
+  exit 2
+fi
+
+# --- read stdin once -------------------------------------------------------
+
+input=$(cat)
+
+# --- trim helper: strip leading/trailing blank lines, preserve interior ----
+# ones (a phase-log body can legitimately contain blank lines between
+# paragraphs — only the pack's own header/separator blank lines are noise).
+trim_blank_edges() {
+  local s="$1"
+  s=$(printf '%s\n' "$s" | sed -e '/./,$!d')
+  s=$(printf '%s\n' "$s" | tac | sed -e '/./,$!d' | tac)
+  printf '%s' "$s"
+}
+
+# ============================================================================
+# === PR section: pr_num, labels, closes_issue ===
+# ============================================================================
+
+first_pr_line=$(grep -n '^=== PR ===$' <<<"$input" | head -n1 | cut -d: -f1 || true)
+if [[ -z "$first_pr_line" ]]; then
+  echo "dispatch-pack-scalars: error: no '=== PR ===' section found in input" >&2
+  echo "dispatch-pack-scalars: pass --pr to dispatch-context-pack to include the PR section" >&2
+  exit 1
+fi
+
+first_content_line_no=$((first_pr_line + 1))
+first_content_line=$(sed -n "${first_content_line_no}p" <<<"$input")
+
+PR_NUM=""
+LABELS=""
+CLOSES_ISSUES=()
+
+if [[ "$first_content_line" == "PR: none" ]]; then
+  PR_NUM="none"
+else
+  if [[ "$first_content_line" =~ ^PR\ \#([0-9]+)$ ]]; then
+    PR_NUM="${BASH_REMATCH[1]}"
+  else
+    echo "dispatch-pack-scalars: error: expected 'PR #<N>' or 'PR: none' immediately after '=== PR ===', got: $first_content_line" >&2
+    exit 1
+  fi
+
+  labels_line_no=$((first_content_line_no + 1))
+  labels_line=$(sed -n "${labels_line_no}p" <<<"$input")
+  if [[ "$labels_line" =~ ^labels:\ (.*)$ ]]; then
+    LABELS="${BASH_REMATCH[1]}"
+  else
+    echo "dispatch-pack-scalars: error: expected 'labels: ...' on the line after 'PR #$PR_NUM', got: $labels_line" >&2
+    exit 1
+  fi
+
+  # PR body: everything from 3 lines after the header (PR #N / labels: / ci:)
+  # to the section end, terminated by the next line starting a new section
+  # ('^=== ') or EOF. Scan for 'Closes #<N>' lines within that bounded body —
+  # bounding matters so a decoy 'Closes #<N>' pasted after a forged section
+  # header elsewhere in the pack is never read as part of THIS PR's body.
+  body_start=$((first_content_line_no + 3))
+  pr_body=$(awk -v start="$body_start" 'NR>=start { if ($0 ~ /^=== /) exit; print }' <<<"$input")
+
+  while IFS= read -r closes_num; do
+    [[ -n "$closes_num" ]] && CLOSES_ISSUES+=("$closes_num")
+  done < <(grep -oiE '^closes #[0-9]+' <<<"$pr_body" | grep -oE '[0-9]+' || true)
+fi
+
+# ============================================================================
+# === PHASE-LOG section: phase_log / phase_log_path ===
+# ============================================================================
+
+last_phaselog_line=$(grep -n '^=== PHASE-LOG #' <<<"$input" | tail -n1 | cut -d: -f1 || true)
+if [[ -z "$last_phaselog_line" ]]; then
+  echo "dispatch-pack-scalars: error: no '=== PHASE-LOG #' section found in input" >&2
+  echo "dispatch-pack-scalars: pass --phase-log to dispatch-context-pack to include the phase-log section" >&2
+  exit 1
+fi
+
+phaselog_start=$((last_phaselog_line + 1))
+phaselog_body_raw=$(awk -v start="$phaselog_start" 'NR>=start { if ($0 ~ /^=== /) exit; print }' <<<"$input")
+phaselog_body=$(trim_blank_edges "$phaselog_body_raw")
+
+PHASE_LOG_LINE=""
+if [[ "$phaselog_body" == "phase-log: none" ]]; then
+  PHASE_LOG_LINE="phase_log=none"
+else
+  printf '%s\n' "$phaselog_body" > "$PHASE_LOG_OUT"
+  PHASE_LOG_LINE="phase_log_path=$PHASE_LOG_OUT"
+fi
+
+# ============================================================================
+# === DIFF section (optional): changed_file_count ===
+# ============================================================================
+#
+# Same anchoring as dispatch-changed-files: the LAST '^=== DIFF (base ' line,
+# so neither a bare '=== DIFF' line nor a forged '=== DIFF (base <hex>) ==='
+# pasted into the PR body can be read as the real, script-generated section.
+# Omitted (not an error) when the pack was built without --diff.
+
+CHANGED_FILE_COUNT_LINE=""
+last_diff_line=$(grep -n '^=== DIFF (base ' <<<"$input" | tail -n1 | cut -d: -f1 || true)
+if [[ -n "$last_diff_line" ]]; then
+  file_count=$(tail -n +"$last_diff_line" <<<"$input" \
+    | sed -n '/^--- files ---$/,/^--- hunks ---$/p' \
+    | sed '1d;$d' \
+    | grep -c . || true)
+  CHANGED_FILE_COUNT_LINE="changed_file_count=$file_count"
+fi
+
+# --- emit --------------------------------------------------------------------
+
+printf 'pr_num=%s\n' "$PR_NUM"
+if [[ "$PR_NUM" != "none" ]]; then
+  printf 'labels=%s\n' "$LABELS"
+  for n in "${CLOSES_ISSUES[@]+"${CLOSES_ISSUES[@]}"}"; do
+    printf 'closes_issue=%s\n' "$n"
+  done
+fi
+printf '%s\n' "$PHASE_LOG_LINE"
+[[ -n "$CHANGED_FILE_COUNT_LINE" ]] && printf '%s\n' "$CHANGED_FILE_COUNT_LINE"
+
+exit 0
