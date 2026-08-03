@@ -25,7 +25,16 @@
 //
 // Stdout: one JSON object
 //   { "scopeStale": bool, "strategyStale": bool, "stampMissing": bool,
-//     "nodeOnMain": bool }
+//     "nodeOnMain": bool, "strategyFingerprints": { "<strategy-id>": "<hash>" } }
+//
+// `strategyFingerprints` carries the CURRENT substance hash of EVERY serving
+// strategy that resolves in the snapshot — the same `strategyFingerprint(...)`
+// values the staleness comparison above consumes, surfaced rather than
+// discarded so the `transition-node` wrapper can seed/refresh the tactic's
+// per-strategy `execution.strategy_fingerprint` stamp map on a forward
+// transition. It is a pure report of current state: it says nothing about
+// whether the node's stamp matches (that is `strategyStale`), and it is `{}`
+// when the node is absent from the snapshot.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -69,6 +78,8 @@ export interface FreshnessResult {
   strategyStale: boolean;
   stampMissing: boolean;
   nodeOnMain: boolean;
+  /** Serving-strategy id → that strategy's CURRENT substance hash. */
+  strategyFingerprints: Record<string, string>;
 }
 
 export function computeFreshness(args: Args): FreshnessResult {
@@ -76,7 +87,13 @@ export function computeFreshness(args: Args): FreshnessResult {
   // yet landed (fresh implement PR before its state-only landing) has nothing
   // to compare against — neither gate fires.
   if (!existsSync(join(args.snapshot, `${args.id}.md`))) {
-    return { scopeStale: false, strategyStale: false, stampMissing: true, nodeOnMain: false };
+    return {
+      scopeStale: false,
+      strategyStale: false,
+      stampMissing: true,
+      nodeOnMain: false,
+      strategyFingerprints: {},
+    };
   }
 
   const nodes = listNodes(args.snapshot);
@@ -94,17 +111,29 @@ export function computeFreshness(args: Args): FreshnessResult {
   // in the per-strategy stamp map — a mismatch on any one freezes the subtree.
   // A serving strategy absent from the map is not stale (per-strategy null); a
   // legacy bare-string stamp still compares against every serving strategy.
+  //
+  // The loop does NOT break on the first stale strategy: `strategyStale` keeps
+  // its exact meaning (true iff ANY serving strategy is stale), but the current
+  // hash of EVERY resolvable serving strategy is collected so the wrapper can
+  // seed/refresh the whole per-strategy stamp map, not just the prefix examined
+  // before the first mismatch.
   let strategyStale = false;
+  const strategyFingerprints: Record<string, string> = {};
   for (const sid of servingStrategyIds(tactic, byId)) {
     const strategy = byId.get(sid);
     if (strategy === undefined) continue;
-    if (isStrategyStale(tactic.execution, sid, strategyFingerprint(strategy))) {
-      strategyStale = true;
-      break;
-    }
+    const current = strategyFingerprint(strategy);
+    strategyFingerprints[sid] = current;
+    if (isStrategyStale(tactic.execution, sid, current)) strategyStale = true;
   }
 
-  return { scopeStale, strategyStale, stampMissing: stamp === null, nodeOnMain: true };
+  return {
+    scopeStale,
+    strategyStale,
+    stampMissing: stamp === null,
+    nodeOnMain: true,
+    strategyFingerprints,
+  };
 }
 
 function main(argv: string[]): void {
