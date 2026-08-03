@@ -579,6 +579,45 @@ clarifications:
       signature, never an agent's account of what it ran. This is the
       token-economy half of the substitution invariant recorded the same day on
       strategy-graph-native-dispatch.
+  - question: When a review finding is derived from BOTH Lane A and Lane B, which
+      lane's record survives cross-lane deduplication?
+    answer: "(Recorded 2026-08-03, author interview; amends clarification 20.) The
+      Lane-B record is ALWAYS the surviving representative. Clarification 20's
+      lane-tag mechanism presumed each finding carries exactly one lane, but
+      cross-lane dedup's whole purpose is producing entries derived from both.
+      dedupMerge collapses a same-root group to one representative ordered by
+      Confidence desc then _idx asc, so one lane's Source/id/bucket survives and
+      the other's is discarded into the sources union. Under that ordering a
+      Lane-A win silently NARROWS skeptic coverage — a Lane-B Required finding
+      loses its bucket and drops out of verify — which condition 5 forbids, and
+      which the draft body never considered because it guards only against
+      widening. Pinning Lane B as the representative leaves verify eligibility
+      bit-for-bit unchanged and makes it structurally impossible for a
+      Lane-A-derived entry to acquire bucket Required. The absorbed Lane-A item
+      is recorded in sources and suppressed from the residue-disposition ledger,
+      so it is fixed exactly once. Two alternatives were put to the author and
+      declined: keeping the Confidence-desc winner while unioning buckets (a
+      smaller change, but the merged entry's Source/id then no longer indicates
+      which lane found it, making residue attribution ambiguous), and ratifying
+      the current behavior as tolerable."
+  - question: Does clarification 20's "never routed into the adversarial skeptic
+      stage" still hold now that a skeptic pre-gate post-dates the ruling?
+    answer: "(Recorded 2026-08-03, author interview; amends clarification 20.) It
+      holds, read as the VERIFY stage ONLY. Clarification 20's ruling rested on
+      two premises that are now partly spent: that the built-ins already apply
+      their own internal verification, and a roughly-100-extra-agent cost
+      argument. Commit 7c772829 (2026-08-02, after the 2026-07-31 ruling) states
+      the opposite for code-review residue — no instrument receipt, no internal
+      verification survives the parse — and now routes every code-review residue
+      item through one adversarial skeptic carrying the same
+      refute-under-uncertainty bias Lane-B Required findings get, dropping
+      refuted items. The author's ruling: the exclusion names the verify stage,
+      not the pre-gate. Dedup therefore runs at or after the refute filter so it
+      can never merge an already-refuted item, and a pre-gate-upheld item stays
+      non-verify-eligible — keeping the merge asymmetric and clarification 20's
+      cost arithmetic intact. The alternative offered was re-ratifying
+      clarification 20 wholesale in an /align-strategy round; declined as it
+      would freeze this strategy's seven other raw drafts for the duration."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance

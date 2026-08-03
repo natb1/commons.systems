@@ -26,7 +26,7 @@ attention:
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-phase-entry-selection-gate
   pr: 3021
@@ -34,12 +34,32 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T15:01:11Z
+    mergeCommitSha: bd133fd96387dabbd82c4019c4affe6721850a1e
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main WAIT item 1: awaiting several dispatch ticks post-merge (PR
+    #3021 merged 2026-08-03T15:01:11Z) for /review-fix front-door exit-3
+    occurrences to accumulate so trickle-vs-burst can be judged; journal shows
+    ~18 minutes elapsed and zero dispatch-tick activity since merge (journalctl
+    --user -u dispatch-claude-daemon.service since merge: 1 header line, 0
+    review-fix matches) — the awaited event has not begun accumulating. Re-check
+    after several dispatch ticks have run post-merge."
+  since: 2026-08-03
+  recommendation: "No author decision needed — re-selection only, once
+    dispatch-tick traffic has accumulated post-merge. Re-derive the count via:
+    journalctl --user -u dispatch-claude-daemon.service --since
+    '2026-08-03T15:01:11Z' | grep -c '/review-fix'; and specifically grep for
+    the exact stderr line review-fix/SKILL.md's exit-3 arm prints ('selection no
+    longer valid at origin/main (front door exit 3)') to distinguish expected
+    trickle from a burst signaling a selector-side re-selection issue."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

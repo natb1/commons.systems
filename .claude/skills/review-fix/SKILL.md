@@ -66,18 +66,35 @@ case "$BRANCH" in
     DERIVE_ERR="tmp/derive-$NODE_ID.err"
     DERIVE_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-derive-node-target \
       "$NODE_ID" --expect-phase review --pr-mode required 2>"$DERIVE_ERR")
-    case $? in
+    DERIVE_RC=$?
+    case "$DERIVE_RC" in
       0) ;;
       1|2)
         echo "/review-fix: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
         exit 1 ;;
       3)
-        # Phase mismatch — the front door's stderr already names the persisted phase.
-        echo "/review-fix: node '$NODE_ID' is not at phase 'review' at origin/main: $(cat "$DERIVE_ERR")" >&2
-        exit 1 ;;
+        # The mechanical selection gate rejected the selection (phase/interrupt
+        # mismatch, office_hours park, stale serving-strategy fingerprint, no
+        # longer align-eligible, or an already-reviewed node re-selected — the
+        # front door's stderr names the specifics). This is a stale selection,
+        # not a defect. End the session; make no graph write and open no PR.
+        echo "/review-fix: node '$NODE_ID' selection no longer valid at origin/main (front door exit 3): $(cat "$DERIVE_ERR") — stale selection, not a defect; ending with no graph write and no PR" >&2
+        exit 0 ;;
       4)
         # --pr-mode required found no open PR — preserve review-fix's plain hard stop.
         echo "/review-fix: node '$NODE_ID' has no open PR — review-fix requires one" >&2
+        exit 1 ;;
+      5)
+        # Scope changed since the previous phase ran — the node wants demoting
+        # to implement, not a defect. End the session; make no graph write and
+        # open no PR.
+        echo "/review-fix: node '$NODE_ID' is scope-stale at origin/main (front door exit 5) — wants demoting to implement, not a defect; ending with no graph write and no PR" >&2
+        exit 0 ;;
+      *)
+        # Any exit code not otherwise handled above — a real error. Hard-stop
+        # rather than silently falling through with an empty DERIVE_OUT and
+        # unbound PR_NUM/NODE_JSON.
+        echo "/review-fix: dispatch-derive-node-target failed for '$NODE_ID' (exit $DERIVE_RC): $(cat "$DERIVE_ERR")" >&2
         exit 1 ;;
     esac
     PR_NUM=$(printf '%s\n' "$DERIVE_OUT" | sed -n 's/^PR: *//p' | head -1)
@@ -488,6 +505,13 @@ result = {
   security_note?:       <string>
 }
 ```
+
+`coverage_incomplete` / `coverage_note` are the generic degraded-coverage
+signal, covering three causes: (1) the security probe wave skipped because
+both quality finders died, (2) an unverified instrument, and (3) Lane-A
+residue left undispositioned because the residue-disposition agent died;
+when more than one co-occurs in the same run, `coverage_note` is a
+space-joined composition of the causes.
 
 The Workflow's fix-authoring agents (non-isolated, Opus) have already edited the
 working tree by the time `result` is returned — this includes THREE sources
