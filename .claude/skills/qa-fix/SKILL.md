@@ -80,14 +80,24 @@ case "$BRANCH" in
           # mismatch, office_hours park, stale serving-strategy fingerprint, no
           # longer align-eligible, or an already-reviewed node re-selected). This
           # is a stale selection, not a defect. End the session; make no graph
-          # write and open no PR.
+          # write and open no PR. Record the terminal disposition FIRST so the
+          # Stop hook may reap this job — without the marker
+          # `dispatch-self-close --node` HOLDs the job alive and
+          # `dispatch-tick`'s `terminal_without_disposition_sweep` misreads this
+          # legitimate yield as an undeclared session and office_hours-PARKS the
+          # node. `no-claim` is the correct disposition: this session held no
+          # claim and did nothing.
+          packages/intentionsutil/scripts/mark-node-terminal "$NODE_ID" no-claim
           echo "/qa-fix: node '$NODE_ID' selection no longer valid at origin/main (front door exit 3) — stale selection, not a defect; ending with no graph write and no PR" >&2
           exit 0 ;;
         4) echo "/qa-fix: node '$BRANCH' has no open PR — qa-fix requires one" >&2; exit 1 ;;
         5)
           # Scope changed since the previous phase ran — the node wants demoting
           # to implement, not a defect. End the session; make no graph write and
-          # open no PR.
+          # open no PR. Same reap contract as exit 3 above: write the terminal
+          # disposition before returning, or the Stop hook holds the job and the
+          # per-tick sweep office_hours-parks the node.
+          packages/intentionsutil/scripts/mark-node-terminal "$NODE_ID" no-claim
           echo "/qa-fix: node '$NODE_ID' is scope-stale at origin/main (front door exit 5) — wants demoting to implement, not a defect; ending with no graph write and no PR" >&2
           exit 0 ;;
         *) echo "/qa-fix: dispatch-derive-node-target failed for '$NODE_ID' (exit $rc)" >&2; exit 1 ;;
