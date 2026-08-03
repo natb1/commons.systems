@@ -1679,8 +1679,9 @@ ensure_deps() {
 #                   = up to 24 waits.
 # acceptance:         2 attempts x 1 invocation x 6 apps with
 #                     e2e/playwright.config.ts = up to 12 waits.
-# At 120s that is 48 min (preview-and-smoke, budget 20 min) and 24 min
-# (acceptance, budget 30 min) of pure lock waiting. At 30s it is 12 min / 6 min.
+# At 120s that is 48 min (preview-and-smoke, budget 30 min, raised from 20 by
+# this same PR) and 24 min (acceptance, budget 30 min) of pure lock waiting.
+# At 30s it is 12 min / 6 min.
 # The long wait belongs in the pr-checks.yml pre-step, which waits up to 120s
 # ONCE before any job work and escalates to `fuser -k`; this helper is only a
 # post-failure backstop, and its holder is the previous attempt's own apt-get
