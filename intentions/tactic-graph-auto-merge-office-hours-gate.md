@@ -45,7 +45,15 @@ success_signal:
   threshold: "new test case passes; existing test-graph-auto-merge.sh suite
     unaffected"
   is_proxy: false
-attention: null
+attention:
+  boost: 12
+  override: null
+  rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
+    BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
+    inbound distributor adds 5.33 — under that cluster's 20.00 and above the
+    5.33 undecomposed baseline. Simulated over the live store before writing:
+    0 tier changes, 0 value drift onto non-target nodes."
+  tier: 1
 phase: null
 execution: null
 validates: []
