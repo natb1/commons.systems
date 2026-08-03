@@ -45,13 +45,12 @@ attention:
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
   tier: 1
-phase: qa
+phase: implement
 execution:
   branch: tactic-strategy-fingerprint-stamp-coverage
   pr: 3023
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint:
     strategy-graph-native-dispatch:
       hash: d5f6cfce402ebd1ddaf07b5969a9696072bc544eb269274b9ec9eb0481f80738
@@ -60,7 +59,12 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: provision-node-worktree failed for this tactic (exit 2)
+  since: 2026-08-03
+  recommendation: Inspect the provisioning failure (git fetch/worktree add,
+    direnv) in the tick journal, fix the environment, and re-run the phase.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

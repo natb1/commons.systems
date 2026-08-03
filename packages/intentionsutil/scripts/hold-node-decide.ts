@@ -31,68 +31,25 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodesStrict } from "../src/store.js";
 import type { IntentionNode } from "../src/schema.js";
+import {
+  HOLD_KINDS,
+  holdIdFor,
+  isHoldKind,
+  RESERVED_KIND_SLUGS,
+  RESOLUTION_SENTENCE,
+  type HoldKind,
+} from "../src/holds.js";
 
-/**
- * Hold-kind vocabulary: HOLD_KINDS is the source of truth for the producer
- * kinds this tool implements; KIND_SLUGS and HoldKind both derive from it.
- *
- * Reserved slugs (the id scheme is deliberately extensible; a slug reserved here
- * is documentation of the namespace, not an implemented producer):
- *
- *  - `conflict`    — provision-conflict: a merge-conflict retry against a
- *                    moving main. IMPLEMENTED.
- *  - `fix-cap`     — fix-attempt-cap: the CI-fix interrupt exhausted
- *                    FIX_ATTEMPT_CAP attempts (see src/transitions.ts).
- *                    IMPLEMENTED.
- *  - `residue`     — worktree-residue: provision-node-worktree refused to
- *                    provision the node's worktree because it carries
- *                    mechanical residue from a dead session (exit 14 — a dirty
- *                    tracked tree, or a detached HEAD / in-progress operation
- *                    that could not be auto-repaired). NOT a content conflict:
- *                    origin/main merges clean once the residue is cleared, so
- *                    it never reaches the /dispatch-conflict lane. It is a
- *                    steady state with no autonomous repair path, so the
- *                    producer escalates on the FIRST occurrence — there is no
- *                    strike ladder in front of it. IMPLEMENTED.
- *  - `no-progress` — RESERVED for a different tactic's future per-node
- *                    no-progress fuse. Deliberately NOT wired to a producer
- *                    kind or a CLI case here; the name is reserved so the id
- *                    scheme (`tactic-hold-no-progress-<source>`) is documented
- *                    and cannot be claimed for something else.
- */
-export const HOLD_KINDS = [
-  "provision-conflict",
-  "fix-attempt-cap",
-  "worktree-residue",
-] as const;
-
-export type HoldKind = (typeof HOLD_KINDS)[number];
-
-const KIND_SLUGS: Record<HoldKind, string> = {
-  "provision-conflict": "conflict",
-  "fix-attempt-cap": "fix-cap",
-  "worktree-residue": "residue",
+// The hold-kind vocabulary now lives in ../src/holds.ts so re-check consumers
+// can import it without pulling in this producer CLI. Re-exported here under
+// its original names, so this module's public surface is unchanged.
+export {
+  HOLD_KINDS,
+  holdIdFor,
+  RESERVED_KIND_SLUGS,
+  RESOLUTION_SENTENCE,
+  type HoldKind,
 };
-
-/**
- * Type guard narrowing a raw CLI string to `HoldKind`. Derived from HOLD_KINDS
- * (the single source of truth) rather than an enumerated `||` chain, so adding
- * a kind above cannot leave a stale second list behind here.
- */
-function isHoldKind(k: string): k is HoldKind {
-  return (HOLD_KINDS as readonly string[]).includes(k);
-}
-
-/** Reserved-but-unimplemented kind slugs (see KIND_SLUGS' doc comment). */
-export const RESERVED_KIND_SLUGS: readonly string[] = ["no-progress"];
-
-/** The node-id slug shape provision-node-worktree:79 enforces. */
-const NODE_ID_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
-
-/** The load-bearing closing sentence of every hold body's "How to resolve". */
-export const RESOLUTION_SENTENCE =
-  "resolve the hold tactic to `phase: done` (then prune) — clearing " +
-  "`office_hours` alone does not unblock the source.";
 
 export type Disposition = "NONE" | "EXISTING" | "REOPENED";
 
@@ -113,28 +70,6 @@ export interface HoldInput {
   recommendation: string;
   diagnosis: string | null;
   now: string;
-}
-
-/**
- * Derive the deterministic hold id and assert it matches the node-id slug shape
- * enforced at .claude/skills/dispatch-propagate/scripts/provision-node-worktree:79.
- * Throws (the CLI turns this into a non-zero exit + stderr) rather than emitting
- * an id the provisioner would later reject.
- */
-export function holdIdFor(kind: HoldKind, sourceId: string): string {
-  const slug = KIND_SLUGS[kind];
-  if (slug === undefined) {
-    throw new Error(`hold-node-decide: unknown kind "${kind}"`);
-  }
-  const id = `tactic-hold-${slug}-${sourceId.replace(/^tactic-/, "")}`;
-  if (!NODE_ID_RE.test(id)) {
-    throw new Error(
-      `hold-node-decide: derived hold id "${id}" does not match the node-id slug ` +
-        `shape ${NODE_ID_RE.source} (from source "${sourceId}") — ` +
-        `provision-node-worktree would reject it`,
-    );
-  }
-  return id;
 }
 
 /** The dated occurrence stanza appended on a re-entry (EXISTING/REOPENED). */

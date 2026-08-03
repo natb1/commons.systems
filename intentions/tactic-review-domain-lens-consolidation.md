@@ -30,7 +30,7 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-review-domain-lens-consolidation
   pr: 3024
@@ -41,10 +41,31 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T18:15:42Z
+    mergeCommitSha: 7deaf80b09354c578bb2aeb8462b5110047e1df1
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Both needs-main items await events that have not occurred yet: item 15
+    awaits the next live /review-fix run on an app_or_rules code-surface diff
+    post-merge (source PR #3024 merged 2026-08-03T18:15:42Z, ~1h ago) —
+    journalctl for dispatch-claude-daemon.service since the merge shows no
+    activity, and the one PR merged after (#3011, 19:00:41Z) carries no
+    'domain-sweep'/'find:domain'/'wave 2' mention in its 11 review comments, so
+    no post-merge run with the new finder has happened yet; item 16 awaits the
+    next /dispatch-token-audit window with post-merge runs, which needs a
+    comparable audit window (the baseline was 18 runs over 5 days) and cannot
+    exist after only ~1h. Earliest useful re-check: after the next app_or_rules
+    PR clears /review-fix post-merge for item 15, and after the next multi-day
+    /dispatch-token-audit window for item 16."
+  since: 2026-08-03
+  recommendation: No author decision needed for either item — both are WAIT holds
+    on elapsed time/events, not judgment calls. Re-select this node once the
+    awaited events have occurred; no research beyond this session's re-assert is
+    required.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
