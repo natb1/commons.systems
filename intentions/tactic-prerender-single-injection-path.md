@@ -37,7 +37,100 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/fix-checks: PR #3016 (tactic-prerender-single-injection-path) fails
+    test-integrity (Signal 2: 12 net test declarations removed in
+    packages/blog/test/prerender.test.ts and prerender-static.test.ts) for
+    legitimate dead-code cleanup — the deleted legacy injector functions
+    (injectMain/injectInfoPanel/injectNav/injectFooter/injectHomeExtra/stripHom\
+    eExtra) were never directly imported by those test files, so the check's
+    import-based co-deletion exemption can't detect they're gone. Same residual
+    class as tactic-test-integrity-waiver (still status:raw, no check-side
+    lookup implemented). Needs an author decision: approve via override-merge
+    once review is clean, or direct the tests be restored (reverting Unit 2).
+    type-safety-sensor also fails on prerender.ts:65 (doc-comment false
+    positive, \"as SoftwareApplication\" inside a /** */ block) — trivial, left
+    for a later fix-checks pass since the PR is blocked on the test-integrity
+    call regardless."
+  since: 2026-08-03
+  recommendation: >-
+    # Office-hours recommendation: `tactic-prerender-single-injection-path` (PR
+    #3016)
+
+
+    ## The decision you need to make
+
+
+    PR #3016 deletes 12 net test declarations across
+    `packages/blog/test/prerender.test.ts` and
+    `packages/blog/test/prerender-static.test.ts`. Those tests exercised the
+    legacy regex/string injectors (`injectMain`, `injectInfoPanel`, `injectNav`,
+    `injectFooter`, `injectHomeExtra`, `stripHomeExtra`) that Unit 2 removes
+    from `packages/blog/src/prerender.ts` as part of migrating `fellspiral` onto
+    the PageShell single-root path. The `test-integrity` check fires on the
+    deletion and cannot be talked out of it mechanically.
+
+
+    Two options, and only these two:
+
+
+    1. **Approve the deletions as legitimate dead-code cleanup.** The tests
+    cover behavior that no longer exists. There is no live mechanical waiver
+    path today, so the supported resolution is an author override-merge once the
+    rest of review is clean.
+
+    2. **Direct that the tests be restored.** This means reverting Unit 2's
+    dead-code removal — the legacy injectors stay in
+    `packages/blog/src/prerender.ts` so their tests have something to test. That
+    undoes the point of the tactic.
+
+
+    ## Why the check can't decide this itself
+
+
+    `check-test-integrity.sh` has a co-deletion exemption for exactly this case,
+    but it only fires when every symbol a test file *directly imported* is gone.
+    The deleted injectors were internal helpers reached through config fields
+    (`homeExtraHtml`, `footerHtml`, `panelHtml`, `stripHero`), never imported by
+    name — so the test files' `import { ... } from "../src/prerender"` line is
+    textually identical before and after, the removed-import set is empty, and
+    the exemption is structurally unreachable. Not a bug in the diff; a gap in
+    the exemption's shape.
+
+
+    This class is already named in the graph:
+    `intentions/tactic-test-integrity-waiver.md` (first case: PR #2835 on
+    `tactic-analytics-vitals-delivery`). It sketches an `execution.waivers`
+    field the check would look up, but it's still `status: raw` — the check-side
+    lookup isn't wired up. So even if you approve, there's nothing to record the
+    approval *into* that the script would honor. Worth noting: this is the
+    second instance of the class, which is a decent argument for promoting that
+    tactic out of `raw`.
+
+
+    ## What to look at
+
+
+    - `packages/blog/src/prerender.ts` — confirm the deleted injectors have no
+    remaining callers and the PageShell path covers what they did.
+
+    - `packages/blog/test/prerender.test.ts`,
+    `packages/blog/test/prerender-static.test.ts` — spot-check that the removed
+    cases are all legacy-injector behavior, and that nothing testing surviving
+    behavior went out with them. That's the real question behind the approval.
+
+
+    ## Secondary, no action needed
+
+
+    `type-safety-sensor` also fails, flagging
+    `packages/blog/src/prerender.ts:65` for a net-new `as <Type>` cast. It's a
+    false positive: line 65 is a `/** */` doc comment containing the phrase "as
+    SoftwareApplication", and the sensor's regex only strips trailing `//`
+    comments, not block comments. A later automated fix-checks pass will reword
+    the comment or add a `// type-safety-ok:` marker. It was left alone because
+    the PR is stuck on the test-integrity call regardless.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes:
