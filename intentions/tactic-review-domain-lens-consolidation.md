@@ -30,7 +30,7 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-review-domain-lens-consolidation
   pr: 3024
@@ -41,7 +41,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T18:15:42Z
+    mergeCommitSha: 7deaf80b09354c578bb2aeb8462b5110047e1df1
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
