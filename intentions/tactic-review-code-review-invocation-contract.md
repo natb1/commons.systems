@@ -39,7 +39,7 @@ attention:
     mark when tactic-attention-tier-ranking and tactic-attention-boost-scripts
     retire the interim scale; do not orphan this boost."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-review-code-review-invocation-contract
   pr: 3007
@@ -50,7 +50,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T03:00:25Z
+    mergeCommitSha: 7c7728296e47420017e4e9949dffc26fba7d3e62
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
