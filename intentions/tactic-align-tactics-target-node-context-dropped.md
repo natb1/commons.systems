@@ -85,7 +85,33 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Both needs-main residue items on PR #3017 (merged) require subjective
+    judgment on LLM-generated plan quality that no tool can decide: id 12 asks
+    whether a live /align-tactics finalize round's authored body_markdown
+    'visibly carries forward' the target node's prior rationale/body evidence
+    rather than reading as statement-only, and id 13 asks whether a live re-plan
+    round reconciles the whole node without silent content loss (units preserved
+    verbatim, ## Context states what changed, no unit left contradicting the
+    amendment, phase not relabeled). Both are judgment calls on generated prose
+    against a doctrine bar (tactic-target.md clarification 32), not
+    deterministic checks — no MACHINE item exists on this node to run first."
+  since: 2026-08-03
+  recommendation: "Author: on the next live /align-tactics <tactic-id> run for a
+    finalize, confirm the authored body_markdown carries forward the target
+    node's prior root-cause analysis, path:line anchors, and caveats rather than
+    reading as authored from the bare statement alone (id 12). On the next
+    re-plan of a soft-frozen tactic, confirm every unit the current strategy
+    substance does not invalidate is preserved verbatim, ## Context explicitly
+    states what changed and why, no sibling unit or verification step is left
+    contradicting the amendment, and the in-flight phase is not
+    relabeled/renumbered (id 13). All 11 machine-verifiable QA items on PR #3017
+    already PASSed (node --check, the new target-context probe and driver, the
+    sibling tempref probe, prose-rule lint, sentinel-count/wiring/call-site
+    greps — see the PR's dispatch:qa-summary comment). No code defect is
+    suspected; this is planned deferral to the first live run, per the node's
+    own ## Verification 'End-to-end, observe in production' note."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
