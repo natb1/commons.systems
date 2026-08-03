@@ -23,23 +23,39 @@
 #   + 20s  timeout 20 systemctl kill         (SYSTEMCTL_TIMEOUT)
 #   + 10s  GRACE_SECONDS grace window        (deadline-bounded loop)
 #   + 120s WAIT_SECONDS                      (ONE shared deadline across all
-#                                             three lock files, not 120s each)
+#                                             three lock files, not 120s each;
+#                                             split into a 90s first pass plus a
+#                                             30s REESCALATE_SECONDS tail that
+#                                             the re-escalation round re-waits
+#                                             in — a reserved slice of the 120s,
+#                                             NOT an addition to it)
 #   + 120s timeout 120 dpkg --configure -a   (DPKG_TIMEOUT)
 #   ------
 #   = 290s, under the callers' 300s (`timeout-minutes: 5`) step cap.
 #
-# The `fuser` probes and the `pkill` calls each carry a 5s timeout
+# The `fuser` probes, the `fuser -k` calls (both the SIGKILL stage's and the
+# re-escalation round's) and the `pkill` calls each carry a 5s timeout
 # (FUSER_TIMEOUT / PKILL_TIMEOUT). They are sub-second in practice and only
 # consume their 5s if a single call genuinely hangs, so they are charged against
-# the 10s of margin above rather than added as their own line. Two paths can
-# still exceed 290s: several probes hanging at once, and the rc=124 retry of
-# `dpkg --configure -a` (up to +120s, see below). That is exactly why callers
-# pair the 5-minute cap with `continue-on-error: true` — the cap is a safety
-# stop on a best-effort step, never a PR gate.
+# the 10s of margin above rather than added as their own line. Three paths can
+# still exceed 290s: several probes hanging at once, the rc=124 retry of
+# `dpkg --configure -a` (up to +120s, see below), and the first-pass-expired
+# path. That last one is new: a wait that expired used to skip
+# `dpkg --configure -a` outright, so the 120s wait line and the 120s dpkg line
+# were mutually exclusive and 290s carried a full 120s of hidden slack. The
+# re-escalation round can now free the locks and let the recovery run, so both
+# lines can be spent in one run, the sum is genuinely tight, and the only
+# remaining cushion is the same 10s of margin the round's extra `fuser -k` calls
+# are also charged against. That is exactly why callers pair the 5-minute cap
+# with `continue-on-error: true` — the cap is a safety stop on a best-effort
+# step, never a PR gate.
 set -uo pipefail
 
 GRACE_SECONDS=10        # SIGTERM -> SIGKILL grace window
 WAIT_SECONDS=120        # shared post-kill wall-clock wait for the locks to free
+REESCALATE_SECONDS=30   # tail of WAIT_SECONDS reserved for one re-escalation
+                        # round; a RESERVED SLICE of WAIT_SECONDS, never an
+                        # addition to it (first pass gets the other 90s)
 SYSTEMCTL_TIMEOUT=20    # per `systemctl` invocation
 FUSER_TIMEOUT=5         # per `fuser` invocation
 PKILL_TIMEOUT=5         # per `pkill` invocation
@@ -121,6 +137,20 @@ fi
 # apt-get in this job (playwright's `install --with-deps`) then fails
 # non-retryably. If every lock clears during the grace window, skip the SIGKILL
 # stage entirely.
+#
+# That latch is a POINT-IN-TIME reading, and it is worth being blunt about what
+# it does and does not cover. It says "no process held any of the three locks at
+# some instant inside the grace window". It says nothing about the future: a
+# holder that acquires a lock AFTER the window — a `apt-daily` run re-armed
+# despite the mask, or the reparented bare `apt-get` that caused the original
+# flake — never existed while the check was running, so SKIP_SIGKILL=1 was
+# latched without ever having seen it. Because the latch gates BOTH the `pkill`
+# stage and the holder-agnostic `fuser -k` stage for the rest of the run, a
+# late-arriving holder would otherwise be waited on and then simply given up on,
+# with `fuser -k` never fired at it at all. The wait-deadline re-escalation round
+# added below is the backstop for exactly that case: if the first wait pass
+# expires with holders still present, it re-fires `fuser -k` regardless of this
+# latch and re-waits in the reserved REESCALATE_SECONDS tail.
 SKIP_SIGKILL=0
 if [ "$FUSER_OK" -eq 1 ]; then
   grace_deadline=$(( $(date +%s) + GRACE_SECONDS ))
@@ -184,9 +214,18 @@ fi
 
 # Bounded wait: ONE shared WAIT_SECONDS wall-clock deadline across all three
 # lock files, not WAIT_SECONDS each — the job's total budget is fixed.
+#
+# WAIT_SECONDS is split into two deadlines derived from a SINGLE clock read, so
+# the two passes cannot drift apart: `wait_deadline` ends the first pass
+# REESCALATE_SECONDS early, and `final_wait_deadline` is the true end of the
+# whole 120s. The tail is reserved, not extra — if the first pass expires with
+# holders present, the re-escalation round below spends the tail; if it does
+# not, the tail is simply never used.
 wait_expired=0
 if [ "$FUSER_OK" -eq 1 ]; then
-  wait_deadline=$(( $(date +%s) + WAIT_SECONDS ))
+  wait_now=$(date +%s)
+  wait_deadline=$(( wait_now + WAIT_SECONDS - REESCALATE_SECONDS ))
+  final_wait_deadline=$(( wait_now + WAIT_SECONDS ))
   for lock in "${LOCKS[@]}"; do
     if [ ! -e "$lock" ]; then
       echo "$lock: absent, no wait needed"
@@ -200,7 +239,7 @@ if [ "$FUSER_OK" -eq 1 ]; then
     expired=0
     while lock_held "$lock"; do
       if [ "$(date +%s)" -ge "$wait_deadline" ]; then
-        echo "$lock still held at the shared ${WAIT_SECONDS}s deadline; holders:" >&2
+        echo "$lock still held at the shared $(( WAIT_SECONDS - REESCALATE_SECONDS ))s first-pass deadline; holders:" >&2
         sudo timeout "$FUSER_TIMEOUT" fuser -v "$lock" >&2 || true
         expired=1
         wait_expired=1
@@ -214,12 +253,79 @@ if [ "$FUSER_OK" -eq 1 ]; then
   done
 fi
 
+# --- re-escalation round (fires AT MOST ONCE) --------------------------------
+# Reaching here with wait_expired=1 means a lock was still held after the whole
+# first-pass wait. The most likely reason the ladder did not already deal with
+# that holder is SKIP_SIGKILL: it may have latched during the grace window,
+# before this holder ever existed, and it gates every rung below it for the rest
+# of the run. So re-fire the one rung that is holder-agnostic and therefore
+# still meaningful against a holder nobody has looked at yet.
+#
+# Only `fuser -k` is repeated. The `pkill` patterns and the `systemctl` rungs
+# target named units and known argv patterns that the first pass already
+# addressed (and that `systemctl mask --now` keeps disarmed); re-running them
+# would kill nothing new. `fuser -k` SIGKILLs whoever holds the file, whatever
+# it is and whoever started it — which is precisely the gap.
+#
+# This runs once. An unbounded ladder is worse than a one-shot one: it would
+# turn a bounded best-effort step into an open-ended kill loop.
+if [ "$FUSER_OK" -eq 1 ] && [ "$wait_expired" -eq 1 ]; then
+  echo "wait deadline expired with holders still present; re-escalating the ladder once (SKIP_SIGKILL=${SKIP_SIGKILL} may have latched during the ${GRACE_SECONDS}s grace window, before this holder existed)"
+  for lock in "${LOCKS[@]}"; do
+    [ -e "$lock" ] || continue
+    lock_held "$lock" || continue
+    sudo timeout "$FUSER_TIMEOUT" fuser -k "$lock" >/dev/null 2>&1
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+      echo "re-escalation fuser -k: killed holder(s) of $lock"
+    elif [ "$rc" -eq 124 ]; then
+      echo "re-escalation fuser -k: TIMED OUT after ${FUSER_TIMEOUT}s on $lock (holders may survive)"
+    else
+      echo "re-escalation fuser -k: no holders of $lock"
+    fi
+  done
+
+  # Re-wait in the reserved tail. Clear wait_expired first and re-raise it only
+  # if a lock is still held at final_wait_deadline: if the round did free every
+  # lock, `dpkg --configure -a` below SHOULD run — a holder SIGKILLed mid
+  # `dpkg --unpack` leaves exactly the interrupted-dpkg state that recovery
+  # clears, so the recovery is MORE valuable on this path, not less.
+  wait_expired=0
+  for lock in "${LOCKS[@]}"; do
+    [ -e "$lock" ] || continue
+    if ! lock_held "$lock"; then
+      echo "$lock: free after re-escalation"
+      continue
+    fi
+    wait_start=$(date +%s)
+    expired=0
+    while lock_held "$lock"; do
+      if [ "$(date +%s)" -ge "$final_wait_deadline" ]; then
+        echo "$lock still held at the final ${WAIT_SECONDS}s deadline after re-escalation; holders:" >&2
+        sudo timeout "$FUSER_TIMEOUT" fuser -v "$lock" >&2 || true
+        expired=1
+        wait_expired=1
+        break
+      fi
+      sleep 1
+    done
+    if [ "$expired" -eq 0 ]; then
+      echo "$lock freed $(( $(date +%s) - wait_start ))s after re-escalation"
+    fi
+  done
+  if [ "$wait_expired" -eq 0 ]; then
+    echo 'all locks free after re-escalation; proceeding with dpkg recovery'
+  fi
+fi
+
 # Non-fatal dpkg recovery. Must come AFTER the wait loop, since
 # `dpkg --configure -a` takes the locks itself. Run unconditionally rather than
 # only when the SIGKILL stage fired: it is a fast no-op on a clean system, and
 # one unconditional call reads more simply than gating on which rung of the
-# ladder ran. The one exception is a wait loop that expired with holders still
-# present, where it would only block on the held lock.
+# ladder ran. The one exception is a wait that expired with holders still
+# present, where it would only block on the held lock — and that now means
+# expired AFTER the re-escalation round above had its turn, not merely at the
+# first-pass deadline.
 #
 # rc=124 (the `timeout` timed-out status) is NOT a benign failure and must not
 # be logged as one: a `dpkg --configure -a` killed part-way through is the exact
