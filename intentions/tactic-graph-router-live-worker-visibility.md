@@ -42,7 +42,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: main-qa
+phase: done
 execution:
   branch: tactic-graph-router-live-worker-visibility
   pr: 2918
@@ -293,3 +293,8 @@ Manual/observational:
   finding: Planned deferral — this is a process change for future
     manual/emulated-tick launcher runs, not mechanically verifiable at this
     PR's merge; note it for the author at the next emulated tick.
+  disposition: skipped — author directed /qa-main (2026-07-28) to close
+    without live-prod verification instead of escalating to office-hours;
+    not machine/browser-verifiable by design (url_path n/a). The manual-tick
+    launcher migration itself remains a downstream process change to apply
+    at the next emulated tick.

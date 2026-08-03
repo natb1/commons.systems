@@ -279,14 +279,21 @@ resolve_directive() {
     echo "office-hours: selector --list failed" >&2
     exit 1
   fi
-  local score nid date
+  # Column order is the `--list` contract: `<rank>\t<sessionType>\t<nodeId>\t
+  # <since>`. Its canonical statement is the `--list output columns` comment
+  # block in office-hours-select.ts (search for that phrase — do not trust a
+  # line number), rendered by that file's exported `formatQueueRow` and pinned
+  # by its unit test in test/office-hours.test.ts. A field count that disagrees
+  # with it silently shifts $nid onto the wrong column and every node lookup
+  # fails, which surfaces as a false "empty" queue — keep this read in sync.
+  local score sessiontype nid date
   local nid_job reserved_session
   # Count nodes skipped because a live session holds them, so the caller can
   # distinguish a genuinely empty queue from "parked work exists but every
   # candidate is claimed" — reporting the latter as `empty` would be a false
   # statement about work that needs human attention.
   local held_count=0
-  while IFS=$'\t' read -r score nid date; do
+  while IFS=$'\t' read -r score sessiontype nid date; do
     [[ -z "$nid" ]] && continue
     if ! park_live_on_main "$nid"; then
       echo "office-hours: skipping $nid — park already cleared on origin/main (stale-worktree false positive)." >&2

@@ -377,6 +377,372 @@ clarifications:
       prefer the site that performs a check once inside a script over the site
       that forces callers to repeat it, even when that means widening a module's
       declared dependencies."
+  - question: What does 'optimize token usage' mean for the review phase, and what
+      is the binding constraint on it?
+    answer: (Recorded 2026-07-31 interview.) Throughput, not savings — restated at
+      phase level. The review phase was measured at ~20% of all dispatch spend
+      in the 2026-07-27→07-31 window, with 31% of its own allowance draw
+      concentrated in a single stage. Freeing that draw is valuable because it
+      reallocates allowance to non-review work (chiefly implementation), which
+      is where closure velocity is actually produced; a saving that does not
+      become a closed tactic is worth nothing on prepaid terms. The sanctioned
+      lever is structural — batching, deduplication, context reuse, trigger
+      narrowing — never removing a lens that produces confirmed findings. See
+      the quality-preservation condition added the same day, which binds this.
+  - question: Are the owned domain review lenses redundant with the built-in
+      /code-review and /security-review lanes?
+    answer: >-
+      (Recorded 2026-07-31; measured across 18 review runs, 2026-07-27→07-31.)
+      No — the redundancy hypothesis was tested and refuted. Of 27
+      skeptic-upheld Lane B findings, 7 were true duplicates of a Lane A residue
+      item at the same location (verified by comparing descriptions, not merely
+      locations), 2 shared a source line but were distinct issues, and 18 (67%)
+      were at locations Lane A never flagged. Over the same window
+      /security-review produced 1 finding in total, while the owned red-team and
+      input-validation lenses produced 27 confirmed findings; the owned lenses
+      carry the security signal and are not to be cut on cost grounds. The
+      measured 26% duplication is real and is answered structurally by
+      cross-lane deduplication, not by removing a lane.
+
+
+      (Amended 2026-07-31, second interview.) The /code-review half of this
+      comparison is void. Transcript evidence shows every one of the 18
+      Skill(code-review) calls was rejected with disable-model-invocation, so
+      the "Lane A residue" these 27 findings were compared against was produced
+      by a general-purpose Opus agent hand-rolling a review, not by the
+      built-in. Lane B's redundancy against the real /code-review is therefore
+      UNTESTED, not refuted — no measurement of it exists, and the 26%
+      duplication figure describes overlap between two owned reviews. The
+      /security-review half stands unchanged: that skill carries no
+      disable-model-invocation mark and 17 of 18 invocations succeeded, so its 1
+      finding across the window is a genuine reading. The conclusion that the
+      owned lenses carry the security signal survives on the /security-review
+      evidence alone.
+  - question: Is api-cost review retained when its measured finding rate is zero?
+    answer: "(Recorded 2026-07-31 interview.) Yes. The `firebase` lens is renamed
+      `api-cost` and retained. A zero-finding window is read as sampling error,
+      not as zero yield: the lens fired on only 5 of 18 runs, so an absence of
+      findings is uninformative about its value. Because an api-cost overrun has
+      high impact on overall goals, the lens earns its expense even when
+      findings are rare, and the correct response to a zero-finding window is
+      more sampling rather than less. The lens therefore merges with the `cost`
+      lens into a single `api-cost` lens and widens its trigger, deliberately
+      raising its draw from ~$14 toward ~$25-30 proxy per 4-day window. This is
+      the standing exception to the yield-per-draw ranking that governs every
+      other lens."
+  - question: Must the adversarial skeptic gate stay independent of finding
+      classification?
+    answer: "(Recorded 2026-07-31 interview.) Yes — independence is the invariant,
+      agent count is not. The gate's value is an independent adversarial read of
+      the code, which is what makes its refutation rate trustworthy; folding the
+      skeptic call into the `classify` agent would have that agent grade its own
+      bucketing, and the gate exists precisely to stop bad Opus fixes landing.
+      Efficiency in this stage instead comes from batching skeptics per (run,
+      file): the 131 skeptic agents measured in the window spanned only 41
+      distinct file groups, a 3.2x reduction available with each file read once
+      and one independent adversarial judgment per file preserved."
+  - question: What is the scope of cross-lane deduplication between the built-in
+      lane and the owned lens lane?
+    answer: "(Recorded 2026-07-31 interview.) Deduplication merges Lane A residue
+      and Lane B findings into one pool for duplicate elimination and fix
+      assignment ONLY. Verify eligibility is unchanged by the merge: Lane A
+      residue is never routed into the adversarial skeptic stage, because the
+      built-ins already apply their own internal verification and
+      re-skepticizing the ~103 residue items measured per window would add
+      roughly 100 agents and cancel the batching gain entirely. Findings carry a
+      lane tag through the merged pool so skeptic eligibility stays exactly as
+      today — Lane B `Required` findings plus erosion `Fixed` findings, and
+      nothing else."
+  - question: Are the vendor's built-in review skills held constant, and on what terms?
+    answer: >-
+      (Diverged 2026-07-31 interview.) The rival conception — that holding
+      /code-review and /security-review fixed while restructuring the owned
+      lenses around them is itself the capture pattern
+      virtue-alignment-of-attachments names, the delegatee setting the problem —
+      was put and diverged from for this round. Reason: /code-review applied 84
+      resolves per 4-day window at $2.31 per applied fix, the highest yield of
+      any stage measured, so on the evidence it is the best available instrument
+      rather than a captured attachment. The divergence carries an explicit
+      expiry: it is revisited if /security-review's yield stays near zero,
+      measured at 1 finding across 18 runs. Note that this round deepens rather
+      than unwinds the reliance recorded in delegation-anthropic-claude's
+      imported 'orchestration runtime semantics' — the owned review is directed
+      to replicate and augment the built-in's operations rather than duplicate
+      them, and adopts the built-in's `--comment` output. No `recovers` edge is
+      recorded, because this round reduces no reliance.
+
+
+      (Amended 2026-07-31, second interview.) The evidential basis stated above
+      is void. The "84 resolves at $2.31 per applied fix" were produced by our
+      own Opus agent, which hand-rolled a review after the built-in refused
+      invocation; the built-in produced nothing in the window. The divergence is
+      RE-DIVERGED on new grounds: /code-review is not a proven best instrument
+      but an untested one, and testing it is the reason to keep it in the design
+      rather than drop it. The expiry changes accordingly — revisited once
+      /code-review has genuinely run for one measured window, no longer keyed to
+      /security-review's yield. A stronger form of the steelman was also put and
+      diverged from this round: that the four days without the instrument are an
+      accidental natural experiment showing the owned review suffices on its
+      own. Reason for diverging: the experiment was uncontrolled and unobserved,
+      so it shows the owned review is adequate, not that the built-in adds
+      nothing. Capture-risk reading recorded per the delegation-advice step:
+      delegation-anthropic-claude is divergence low-moderate, irreversibility
+      ungated (artifacts, workflow, and evaluation context are all in-repo),
+      recovery cost only the frontier-vs-open-weight capability gap. No recovers
+      edge — this round deepens reliance rather than reducing it, and
+      virtue-alignment-of-attachments' clause that every import raises exit cost
+      applies, so the deepening is recorded here to stay visible rather than
+      silent.
+  - question: What is the /code-review invocation contract, and what is known about
+      its --fix flag?
+    answer: >-
+      (Recorded 2026-07-31 interview; usage supplied by the author.) The
+      documented interface is `/code-review [low|medium|high|xhigh|max|ultra]
+      [--fix] [--comment] [<target>]` — both `max` and `--fix` are valid
+      documented arguments. Measured across 18 runs, every invocation of `max
+      --fix` produced zero working-tree edits and returned an empty `fixed[]`
+      array; the cause is unresolved and is NOT established to be a flag that
+      the built-in ignores. `--fix` is therefore dropped from the invocation for
+      now, and the Opus residue phase remains the fix path so every applied fix
+      stays behind a judgment step. The built-in's `--comment` output is
+      adopted. The standing intent is that the owned review augments and
+      replicates the built-in's operations as far as possible without
+      duplicating its findings. A follow-up investigation of the built-in's
+      usage is owed, and this clarification is to be amended with its findings.
+
+
+      (Amended 2026-07-31, second interview — the owed investigation,
+      discharged.) The cause is resolved and it is not the flag. /code-review
+      carries disable-model-invocation: true, which blocks the Skill tool for
+      any model-driven agent. All 18 finder invocations were rejected with
+      "Skill code-review cannot be used with Skill tool due to
+      disable-model-invocation" (40 rejection events across the workflow corpus;
+      CLI 2.1.220 throughout). The flag never reached the skill because the
+      skill never ran. Three consequences. (a) --fix is RESTORED, reversing the
+      drop recorded above, whose stated reason — unexplained no-op behavior — no
+      longer holds. (b) The automated entry point is a user turn, not a model
+      turn: claude -p '/code-review max --fix --comment', since only a user turn
+      can invoke a disable-model-invocation skill. (c) In a -p run findings
+      return as text, never through ReportFindings, so the per-finding outcome
+      mapping this workflow was built around is structurally unavailable and
+      must be replaced by text parsing rather than merely deleted — per the
+      vendor documentation those outcome values populate only when findings are
+      re-reported after being fixed later in the same session, which this lane
+      never does. The entry point itself is UNVERIFIED: no one has confirmed
+      that claude -p '/code-review max' runs in a dispatch worktree, what a
+      nested session costs, or how it attributes against condition 2. Verifying
+      it gates any rewiring.
+  - question: Does the token audit attribute a phase worker's whole session cost to
+      that phase?
+    answer: "(Recorded 2026-07-31; measured.) No — condition 2's attributability
+      requirement is currently breached for review workers. Per-turn attribution
+      is derived from the harness's `attributionSkill` field; across 19
+      review-worker sessions, 2,241 of 2,992 turns (75%) carried no value and
+      fell to the `<none>` bucket, which was the single largest line in the
+      window at $1,319 across all phases. Attribution covers a session's opening
+      turns and then drops, so a phase's measured cost understates its true cost
+      — review-fix measured $614 phase-tagged against $754 true. The requirement
+      is that phase attribution cover a phase session's whole cost, not only its
+      skill-framed turns. Per author ruling this does NOT gate the model-routing
+      decisions recorded the same day: per-lens yield was drawn from workflow
+      subagent transcripts, which are fully attributed, so the blind portion is
+      the parent session rather than the fan-out that grounded those decisions."
+  - question: How does the dispatch review phase invoke the built-in code review?
+    answer: "(Recorded 2026-07-31, second interview.) As an exclusive, serialized
+      stage that runs before the owned lenses — never inside the parallel finder
+      fan-out. The built-in runs first and alone, through the claude -p
+      user-turn entry point with max --fix --comment; the owned lenses then run
+      against the post-fix working tree. Serialization is what makes --fix safe:
+      the built-in writes the working tree, so it cannot run concurrently with
+      lenses reading that tree or with the Opus fix phase writing it. The
+      ordering also makes \"augment, not duplicate\" structural rather than a
+      deduplication pass — lenses reading a tree where the built-in's fixes have
+      already landed cannot re-report them, and they do see any defect those
+      fixes introduce. This trades away the judgment-step guarantee recorded in
+      clarification 22, accepted deliberately: the built-in's fixes are applied
+      unjudged, and what was actually applied is read from a before/after git
+      diff rather than from any agent's self-report. /security-review is
+      unaffected and stays in the parallel fan-out — it carries no
+      disable-model-invocation mark, invokes cleanly, and edits nothing."
+  - question: What must hold before a yield metric may be credited to a named instrument?
+    answer: (Recorded 2026-07-31, second interview.) Verified provenance — the
+      metric must be shown to have come from that instrument, not merely to have
+      appeared in a stage bearing its name. Condition 3 already required that
+      routing recommendations rest only on yield metrics whose accounting is
+      verified; it failed here for want of a check, not for want of a rule. The
+      "84 resolves at $2.31 per applied fix" credited to /code-review was an
+      agent's self-report of work it did itself under the instrument's name, and
+      it stood in the record as the stated reason for a recorded divergence
+      until transcript evidence contradicted it four days later. A stage's
+      output is attributable to an instrument only when that instrument's
+      invocation is verified to have succeeded — an exit status and an output
+      signature, never an agent's account of what it ran. This is the
+      token-economy half of the substitution invariant recorded the same day on
+      strategy-graph-native-dispatch.
+  - question: When a review finding is derived from BOTH Lane A and Lane B, which
+      lane's record survives cross-lane deduplication?
+    answer: "(Recorded 2026-08-03, author interview; amends clarification 20.) The
+      Lane-B record is ALWAYS the surviving representative. Clarification 20's
+      lane-tag mechanism presumed each finding carries exactly one lane, but
+      cross-lane dedup's whole purpose is producing entries derived from both.
+      dedupMerge collapses a same-root group to one representative ordered by
+      Confidence desc then _idx asc, so one lane's Source/id/bucket survives and
+      the other's is discarded into the sources union. Under that ordering a
+      Lane-A win silently NARROWS skeptic coverage — a Lane-B Required finding
+      loses its bucket and drops out of verify — which condition 5 forbids, and
+      which the draft body never considered because it guards only against
+      widening. Pinning Lane B as the representative leaves verify eligibility
+      bit-for-bit unchanged and makes it structurally impossible for a
+      Lane-A-derived entry to acquire bucket Required. The absorbed Lane-A item
+      is recorded in sources and suppressed from the residue-disposition ledger,
+      so it is fixed exactly once. Two alternatives were put to the author and
+      declined: keeping the Confidence-desc winner while unioning buckets (a
+      smaller change, but the merged entry's Source/id then no longer indicates
+      which lane found it, making residue attribution ambiguous), and ratifying
+      the current behavior as tolerable."
+  - question: Does clarification 20's "never routed into the adversarial skeptic
+      stage" still hold now that a skeptic pre-gate post-dates the ruling?
+    answer: "(Recorded 2026-08-03, author interview; amends clarification 20.) It
+      holds, read as the VERIFY stage ONLY. Clarification 20's ruling rested on
+      two premises that are now partly spent: that the built-ins already apply
+      their own internal verification, and a roughly-100-extra-agent cost
+      argument. Commit 7c772829 (2026-08-02, after the 2026-07-31 ruling) states
+      the opposite for code-review residue — no instrument receipt, no internal
+      verification survives the parse — and now routes every code-review residue
+      item through one adversarial skeptic carrying the same
+      refute-under-uncertainty bias Lane-B Required findings get, dropping
+      refuted items. The author's ruling: the exclusion names the verify stage,
+      not the pre-gate. Dedup therefore runs at or after the refute filter so it
+      can never merge an already-refuted item, and a pre-gate-upheld item stays
+      non-verify-eligible — keeping the merge asymmetric and clarification 20's
+      cost arithmetic intact. The alternative offered was re-ratifying
+      clarification 20 wholesale in an /align-strategy round; declined as it
+      would freeze this strategy's seven other raw drafts for the duration."
+  - question: When the api-cost lens merge collapses a SEC_SOURCE lens (firebase)
+      and a non-SEC_SOURCE lens (cost) under one Source name, how are the merged
+      lens's findings classified?
+    answer: "(Recorded 2026-08-03, author interview; fills a gap clarification 18
+      left open.) Merge at the lens/trigger level, and SPLIT classification by
+      sub-pattern. One api-cost finder emits security-classified findings
+      (OWASP/STRIDE filled, Required-eligible, verify-eligible) for
+      rules-permissiveness, emulator-reachability and key-exposure, and advisory
+      findings (OWASP/STRIDE empty, always Deferred, never verify-eligible) for
+      query-cost, amplifier and N+1. Both collapsed alternatives were put to the
+      author and declined, because each breaks something the record already
+      protects: wholly-advisory demotes firebase's
+      Firestore-rules-permissiveness, emulator-code-on-production-paths and
+      API-key-exposure checks from merge-blocking security findings to
+      non-blocking follow-ups — a detection AND escalation reduction the
+      quality-preservation condition forbids as an efficiency lever;
+      wholly-security-classified makes cost/scaling findings merge-blocking and
+      verify-eligible, breaking cost's documented non-escalation invariant
+      (disposition-table.md:54-62) exactly as the merge widens the lens's fire
+      rate. Clarification 18 authorized retaining and widening the lens on
+      expense and sampling grounds and was simply SILENT on classification, so
+      this fills a record-completeness gap rather than overturning a ruling.
+      Consequence: the api-cost-specific adversarial-skeptic brief (the
+      exploitability brief systematically refutes a cost finding) becomes live
+      only for the security-classified sub-pattern."
+  - question: Does per-file skeptic batching cover the code-review residue
+      pre-gate's per-item fan-out, or is it verify-phase-local?
+    answer: "(Recorded 2026-08-03, author interview; amends clarification 20.) It
+      covers the pre-gate too, and `tactic-review-verify-per-file-batching`'s
+      Scope extends to review-fix.js:1707-1775. Clarification 20 rejected
+      re-skepticizing Lane-A residue on an explicit cost premise — roughly 103
+      residue items per window would add roughly 100 agents and cancel the
+      batching gain. Commit 7c772829 (2026-08-02, after that ruling) does
+      exactly that for code-review-sourced residue: one Sonnet/effort-high
+      adversarial skeptic per item, un-batched, one file read per item. Those
+      agents run under phase 'residue' rather than 'verify', so clarification
+      19's 131-agent / 41-file-group / 3.2x arithmetic is untouched — but the
+      review-fix-wide agent-count reduction the tactic is JUSTIFIED by is not,
+      and an un-batched per-item fan-out is the same defect the tactic exists to
+      remove. Declined: keeping the batching verify-phase-local, which would
+      have required restating the benefit claim as verify-local and spinning the
+      residue fan-out out into separate scope."
+  - question: Can "each file read once" and the preserved severity-scaled 2-skeptic
+      tier both hold?
+    answer: "(Recorded 2026-08-03, author interview; corrects clarification 19's
+      arithmetic, not its behavior.) They cannot — clarification 19's 3.2x
+      derives from 131 agents over 41 file groups 'with each file read once',
+      which holds only at exactly one agent per file group, while the preserved
+      tier gives a high-confidence finding 2 skeptics so its file group is read
+      twice. Author ruling: KEEP the 2-skeptic tier and restate the arithmetic.
+      3.2x becomes an UPPER BOUND, and
+      `tactic-review-verify-per-file-batching`'s Verification threshold (41/18
+      ~= 2.3, unreachable by construction) is restated to a measured figure once
+      the high-confidence-per-file-group distribution is recorded — that
+      distribution has never been measured, so the realized reduction is
+      genuinely unknown until it is. Declined: one skeptic per group regardless
+      of confidence. It would restore a clean 3.2x, but applyVerifyDrop
+      (review-fix.js:565-583) drops on refutedCount >= 1, so halving the
+      high-confidence tier's votes makes drops strictly less likely, sends more
+      Required findings to the Opus fix stage, and moves the refutation rate off
+      its 69% baseline (91 refuted / 37 upheld) for structural reasons —
+      corrupting the very signal that node names as its own regression
+      detector."
+  - question: Which Lane-B terminal dispositions qualify a finding to absorb its
+      Lane-A residue twin?
+    answer: "(Recorded 2026-08-03, author interview; completes clarifications 26 and
+      27.) Only a Lane-B finding that survived verify AND was actually fixed
+      absorbs its Lane-A twin. A Refuted or Unverified-dropped finding NEVER
+      absorbs — its Lane-A twin stays in the residue-disposition ledger. And on
+      the genuinely open half, the author ruled LEDGER-COMPLETENESS WINS: a
+      Lane-B finding merely queued for DEFERRED filing does not absorb either,
+      accepting one duplicate on that root. Context: clarification 27 places the
+      cross-lane merge at or after the code-review residue skeptic pre-gate
+      (review-fix.js ~1694-1781, inside phase('residue') ~1617), which is
+      downstream of verify (~1394, applyVerifyDrop ~1489) and fix (~1524) — so
+      by merge time every Lane-B finding already carries a terminal disposition,
+      a case clarification 26's 'fixed exactly once' presumed away. Matching
+      Lane-A residue against the full deduped pool would let a REFUTED Lane-B
+      twin suppress a real Lane-A item, deleting it from the ledger — a
+      detection loss condition 5 forbids. Rationale for the deferred half
+      specifically: a duplicate is recoverable and a deleted ledger item is not,
+      and condition 5 forbids detection loss while saying nothing about
+      tolerating redundancy; the absorb alternative would additionally require
+      moving the deferred_filings computation (currently ~2054, AFTER the
+      residue phase) to before or during it — a structural pipeline reordering
+      outside this tactic's scope, and a re-plan rather than a plan. Declined:
+      dedup-wins (absorb + reorder), and deferring the whole
+      terminal-disposition question to a wholesale /align-strategy sitting. NOT
+      MEASURED, and worth measuring before trusting the cost estimate: how often
+      a deferred Lane-B finding actually shares a root with a Lane-A residue
+      item — the duplicate rate this ruling accepts could be near zero or
+      material, and nobody has counted."
+  - question: Is the draft body of tactic-review-api-cost-lens-merge still accurate
+      against the 2026-08-03 split-classification clarification and current
+      review-fix.js line anchors?
+    answer: "(Recorded 2026-08-03 /align-tactics round.) No — the draft body dates
+      from the 2026-07-31 interview and still states the wholly-advisory
+      disposition that the 2026-08-03 split-classification clarification
+      declined; finalizing it must carry the split (security-classified
+      rules-permissiveness / emulator-reachability / key-exposure; advisory
+      query-cost / amplifier / N+1) rather than the body's current text. Every
+      code anchor in that body is stale after the domain-sweep fold (commit
+      7deaf80b): at HEAD, agentFinderSet is review-fix.js:498-511 inside the
+      `>>> domain sweep gate` sentinels that review-fix-domain-sweep-probe.mjs
+      slices, DOMAIN_PROMPTS.firebase is 646-659, the `cost` finderPrompt branch
+      is 785-805, the generic fallback comment naming 'firebase' is 824-830,
+      SEC_SOURCES is 1460-1470, the verify skeptic ternary is 1538-1564, and the
+      code-review residue pre-gate is 1797-1885. The sibling
+      tactic-review-domain-lens-consolidation's claim that this node is
+      office_hours-parked on the classification question is stale — office_hours
+      is null and the split ruling discharged it."
+  - question: Does the strategy's structured reading/gap/rounds bookkeeping reflect
+      the two completed /align-tactics rounds (2026-07-04, 2026-07-16) and the
+      round-2 sensor reading?
+    answer: (Recorded 2026-08-03 /align-tactics round.) No — record-completeness
+      gap, no plan depends on it. The strategy's structured `reading` and `gap`
+      fields are still null and `rounds` still reads count 0 with null
+      last_completed/last_aligned, although two /align-tactics rounds completed
+      (2026-07-04, 2026-07-16) and round 2 narrates a live read-sensors reading
+      in prose — weekly allowance utilization ~7%, 28-day claude-eligible
+      tactics 231 created / 91 closed, net +140, i.e. both failing states
+      active. The consequence is that the mechanical eligibility gates read this
+      strategy as never-aligned and never-read; correct the structured fields at
+      the next sensor pass so the round cap and the fresh-reading gate operate
+      on the real history.
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -434,5 +800,15 @@ attributes:
     - pace machinery stays operational config outside the graph
       (strategy-graph-native-dispatch clarification 14); this strategy records
       requirements, not machinery
+    - efficiency changes to review and QA phases preserve finding quality — a
+      change that reduces detection is not a throughput gain even if it reduces
+      allowance draw; structural restructuring (batching, deduplication, context
+      reuse, trigger narrowing) is the sanctioned lever, and removing a lens
+      that produces confirmed findings is not
+    - a yield metric credited to a named instrument is verified to have come
+      from that instrument — invocation success checked at the source (exit
+      status and output signature), never taken from an agent's account of what
+      it ran; an unverified instrument attribution is not admissible input to a
+      routing decision
 ---
 # The prepaid token allowance converts fully into tactic closure — utilization near 100%, closure velocity at or above arrival

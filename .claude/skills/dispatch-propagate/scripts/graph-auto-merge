@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+# graph-auto-merge — the graph-native, marker-keyed PR auto-merger. The
+# graph-lane analog of the legacy label-gated dispatch-auto-merge, and the ONLY
+# code that merges a node-lane PR.
+#
+# For every graph-native tactic at phase:review that carries an execution.pr AND
+# the `reviewed` completion marker in execution.markers, it senses the PR and —
+# when it is OPEN, MERGEABLE, green on CI, and the node's scope fingerprint is
+# fresh — squash-merges it label-free. The `reviewed` marker is the label-free
+# replacement for dispatch-auto-merge's `dispatch:reviewed` label check: a
+# phase:review node WITHOUT the marker is review-in-progress, not a candidate.
+#
+# The human has authorized this reconciler to squash-merge reviewed, green,
+# conflict-free node-lane PRs; the commands it runs to do so are `gh pr ready`
+# and `gh api -X PUT .../pulls/<n>/merge --squash` (via gh_pr_merge_rest). It is
+# a single owned-shell sweep with no agent turn inside the merge loop.
+#
+# Merge gates, in order (a failed gate SKIPS silently, it never demotes):
+#   - PR state OPEN. MERGED/CLOSED are absorbed by reconcile-graph-merged, not
+#     here.
+#   - mergeable MERGEABLE. A CONFLICTING/UNKNOWN PR is the provision-time
+#     conflict path's job, not this sweep's.
+#   - CI passing. `pending` retries next tick; `failing` belongs to the fix
+#     interrupt (do NOT merge, do NOT route the fix here — the next
+#     transition-node / selection tick routes it).
+#
+# Fail-closed freshness gate: before merging, re-check the node's tactic-scope
+# fingerprint against origin/main (compute-freshness.ts). scopeStale==true OR a
+# missing stamp file HOLDS the node (emits `held <id> (...)`, no merge). A held
+# node stays at phase:review — this script only declines to merge, it never
+# demotes.
+#
+# Doctrine: run from a main-based checkout. Sandbox: the CALLER wraps every
+# invocation with dangerouslyDisableSandbox — gh needs network + TLS, and
+# node --import tsx/esm needs the npm cache (see .claude/rules/sandbox.md). This
+# script sets NOTHING sandbox-related; that is the caller's responsibility.
+#
+# Stdout protocol: exactly `merged #<pr> (<id>)` per PR merged, and
+# `held <id> (<reason>)` per fail-closed freshness hold; NOTHING for a plain
+# skip (an ineligible PR is silently passed over).
+#
+# Exit codes: 0 (including a no-op sweep); 1 if any item hard-errored (node
+# enumeration failure, a gh sense/merge error, or a freshness computation
+# crash). NOT set -e: a per-PR hard error must not abort the sweep — each is
+# captured with `|| rc=$?`, logged to stderr, sets HARD_ERROR=1, and `continue`s.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+
+# The scope-fingerprint stamp lives at the MAIN checkout root
+# (provision-node-worktree writes it there). resolve_project_root resolves the
+# shared main project root for the stamp path. GRAPH_AUTO_MERGE_MAIN_ROOT is a
+# test seam (mirrors reconcile-graph-merged's GRAPH_RECONCILE_NOW idiom).
+MAIN_ROOT="${GRAPH_AUTO_MERGE_MAIN_ROOT:-}"
+if [[ -z "$MAIN_ROOT" ]]; then
+  MAIN_ROOT="$(resolve_project_root)" || {
+    echo "graph-auto-merge: could not resolve the main project root" >&2; exit 1; }
+fi
+
+# ---- Step 1: config gate (no-op when off) -----------------------------------
+# Default ON: an absent config file arms auto-merging. The file exists only as an
+# opt-OUT kill-switch (incident response). When present, enabled:false turns the
+# reconciler off; enabled:true (the redundant explicit form) keeps it on. This is
+# the same auto-merge kill-switch dispatch-auto-merge honors.
+CFG=$("$SCRIPT_DIR/dispatch-config-load" auto-merge) || {
+  echo "graph-auto-merge: error: dispatch-config-load auto-merge failed" >&2
+  exit 1
+}
+if [[ "$CFG" != "no-config" ]]; then
+  ENABLED=$(jq -r '.enabled' <<<"$CFG")
+  [[ "$ENABLED" == "false" ]] && exit 0
+fi
+
+# ---- Step 2: enumerate merge candidates from the graph ----------------------
+# One node pass: print `<id>\t<pr>` for every kind:tactic node at phase:review
+# whose execution.pr is non-null AND execution.markers includes "reviewed". The
+# marker is the label-free replacement for dispatch-auto-merge's
+# index("dispatch:reviewed") label check; a phase:review node without it is
+# review-in-progress, not a candidate.
+#
+# Enumeration is STRICT (`listNodesStrict`): this drives an autonomous merge, so
+# a corrupt node file must abort the pass loudly rather than silently vanish
+# from the candidate set (or, via a dropped blocker, silently qualify one).
+CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+  const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
+  for (const n of listNodesStrict("./intentions")) {
+    if (n.kind !== "tactic") continue;
+    if (n.phase !== "review") continue;
+    const pr = n.execution && n.execution.pr;
+    if (pr === null || pr === undefined) continue;
+    const markers = (n.execution && n.execution.markers) || [];
+    if (!markers.includes("reviewed")) continue;
+    process.stdout.write(n.id + "\t" + pr + "\n");
+  }
+') )" || { echo "graph-auto-merge: node enumeration failed" >&2; exit 1; }
+
+[[ -z "$CANDIDATES" ]] && exit 0
+
+# ---- Step 3: one origin/main intentions snapshot for the freshness gate ------
+# The fingerprint re-check compares each candidate's node against origin/main;
+# archive that tree once and reuse it for every candidate (mirror transition-node).
+SNAP_DIR="$(mktemp -d)" || { echo "graph-auto-merge: mktemp failed" >&2; exit 1; }
+trap 'rm -rf "$SNAP_DIR"' EXIT
+# Do NOT fall back to an empty snapshot: compute-freshness against an empty
+# origin/main tree finds every candidate absent and returns scopeStale:false,
+# which would silently disable the fail-closed freshness gate for the whole
+# tick (a fail-open degradation). A transient git failure or missing/unfetched
+# origin/main ref must hard-error, not merge.
+if ! (cd "$REPO_ROOT" && git archive origin/main intentions 2>/dev/null | tar -x -C "$SNAP_DIR"); then
+  echo "graph-auto-merge: git archive origin/main intentions failed (cannot build freshness snapshot)" >&2
+  exit 1
+fi
+
+# ---- Step 4: per-candidate sense + fail-closed freshness gate + merge --------
+HARD_ERROR=0
+while IFS=$'\t' read -r id pr; do
+  [[ -n "$id" && -n "$pr" ]] || continue
+
+  # ---- Sense the PR (REST) --------------------------------------------------
+  rc=0
+  PR_JSON=$(gh_pr_view_rest "$pr" 2>/dev/null) || rc=$?
+  if [[ "$rc" -ne 0 || -z "$PR_JSON" ]]; then
+    echo "graph-auto-merge: gh_pr_view_rest #$pr for $id failed (rc=$rc)" >&2
+    HARD_ERROR=1
+    continue
+  fi
+
+  STATE=$(jq -r '.state' <<<"$PR_JSON")
+  [[ "$STATE" == "OPEN" ]] || continue          # MERGED/CLOSED → reconcile-graph-merged
+
+  MERGEABLE=$(jq -r '.mergeable' <<<"$PR_JSON")
+  [[ "$MERGEABLE" == "MERGEABLE" ]] || continue # CONFLICTING/UNKNOWN → conflict path
+
+  # ---- CI verdict (REST, memoized) — merge only on passing ------------------
+  # pending → in progress, retry next tick; failing → the fix interrupt owns red
+  # CI (do NOT merge, do NOT route the fix here). Both skip silently.
+  rc=0
+  VERDICT=$(dispatch_ci_verdict_rest "$(jq -r '.headRefOid' <<<"$PR_JSON")") || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "graph-auto-merge: dispatch_ci_verdict_rest #$pr for $id failed (rc=$rc)" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  [[ "$VERDICT" == "passing" ]] || continue
+
+  # ---- Fail-closed tactic-scope fingerprint re-check ------------------------
+  # A missing stamp or a scope-stale node HOLDS (declines to merge); it never
+  # demotes — the node stays at phase:review for the next selection tick.
+  STAMP_FILE="$MAIN_ROOT/.claude/worktrees/$id.scope-fingerprint"
+  if [[ ! -f "$STAMP_FILE" ]]; then
+    echo "held $id (missing-stamp)"
+    continue
+  fi
+  rc=0
+  FRESH=$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/compute-freshness.ts" \
+    "$id" --snapshot "$SNAP_DIR/intentions" --stamp "$STAMP_FILE") ) || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "graph-auto-merge: freshness computation failed for $id" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  # Hold whenever the freshness comparison did not actually run against a real
+  # origin/main node: a missing/empty stamp (stampMissing) or a node absent from
+  # the snapshot (nodeOnMain!=true) both leave scopeStale:false without any real
+  # chain-of-custody check. Fail closed — these must HOLD, not merge.
+  if [[ "$(jq -r '.stampMissing' <<<"$FRESH")" == "true" \
+     || "$(jq -r '.nodeOnMain' <<<"$FRESH")" != "true" ]]; then
+    echo "held $id (missing-stamp)"
+    continue
+  fi
+  if [[ "$(jq -r '.scopeStale' <<<"$FRESH")" == "true" ]]; then
+    echo "held $id (scope-stale)"
+    continue
+  fi
+
+  # ---- Merge label-free -----------------------------------------------------
+  # `gh pr ready` is idempotent (no need to gate on draft state — gh_pr_view_rest
+  # returns no isDraft field). Then squash-merge via the REST helper with explicit
+  # --subject/--body so the non-TTY squash is deterministic and the PR body lands
+  # in the squash commit message. No --delete-branch: the repo's
+  # delete_branch_on_merge reaps the remote ref.
+  gh pr ready "$pr" >/dev/null 2>&1 || true
+  TITLE=$(jq -r '.title' <<<"$PR_JSON")
+  BODY=$(jq -r '.body // ""' <<<"$PR_JSON")
+  rc=0
+  out=$(gh_pr_merge_rest "$pr" --squash --subject "$TITLE" --body "$BODY" 2>&1) || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "graph-auto-merge: error: gh_pr_merge_rest #$pr failed: $out" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  echo "merged #$pr ($id)"
+done <<<"$CANDIDATES"
+
+[[ "$HARD_ERROR" -ne 0 ]] && exit 1
+exit 0

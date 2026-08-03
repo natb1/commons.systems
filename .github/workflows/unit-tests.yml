@@ -195,10 +195,45 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
       - name: Run approve-workflow-commands hook tests
         run: .claude/hooks/test-approve-workflow-commands.sh
-      - name: Run dispatch script tests
-        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+      # The suites below guard SUTs that live OUTSIDE
+      # .claude/skills/dispatch-propagate/scripts/ — .claude/workflows/*.js,
+      # .claude/hooks/*.sh, packages/intentionsutil/scripts/*, and the doctrine
+      # prose of other skills' SKILL.md. run-unit-tests.sh only sets
+      # RUN_PR_SCRIPTS=true when a changed path matches
+      # .claude/skills/dispatch-propagate/scripts/*, so its test-*.sh glob is NOT
+      # a CI vector for them: a PR touching only the SUT would run nothing and
+      # merge green. They are wired unconditionally here instead. Keep this list
+      # in sync when adding a suite whose SUT is outside that scripts dir.
+      - name: Run qa-fix partitionDispositions tests
+        run: .claude/skills/dispatch-propagate/scripts/test-qa-fix-partition.sh
+      - name: Run align-tactics resolveTempRefs tests
+        run: .claude/skills/dispatch-propagate/scripts/test-align-tactics-tempref.sh
+      - name: Run review-fix instrument-gate tests
+        run: .claude/skills/dispatch-propagate/scripts/test-review-fix-instrument.sh
+      - name: Run review-fix residue-death coverage tests
+        run: .claude/skills/dispatch-propagate/scripts/test-review-fix-residue-death.sh
+      - name: Run review-fix domain-sweep tests
+        run: .claude/skills/dispatch-propagate/scripts/test-review-fix-domain-sweep.sh
+      - name: Run dispatch-verify-instrument-invocation tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-verify-instrument-invocation.sh
+      - name: Run dispatch-stop hook tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-stop-hook.sh
+      - name: Run dispatch-office-hours-strip hook tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-office-hours-strip-hook.sh
+      - name: Run fix-checks node-lane doctrine ratchet
+        run: .claude/skills/dispatch-propagate/scripts/test-fix-checks-cas-guard.sh
+      - name: Run align-tactics write-path freshness doctrine ratchet
+        run: .claude/skills/dispatch-propagate/scripts/test-align-tactics-write-path-freshness.sh
+      - name: Run dispatch-chain worktree doctrine ratchet
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-chain-worktree-ratchet.sh
+      - name: Run dispatch-conflict Lane 3 cwd doctrine ratchet
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-conflict-lane3-cwd-ratchet.sh
+      - name: Run mark-node-terminal tests
+        run: .claude/skills/dispatch-propagate/scripts/test-mark-node-terminal.sh
       - name: Run dispatch-graph-execute tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh
+      - name: Run provision-node-worktree tests
+        run: .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh
       - name: Run dispatch-derive-node-target tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-derive-node-target.sh
       - name: Run dispatch-daemon-liveness sensor tests
@@ -233,6 +268,8 @@ jobs:
         run: .github/scripts/test-check-test-integrity.sh
       - name: Run graph fast-path guard script tests
         run: .github/scripts/test-check-graph-fast-path.sh
+      - name: Run align-tactics tactic-mode target-node context tests
+        run: .claude/skills/dispatch-propagate/scripts/test-align-tactics-target-context.sh
 
   test-integrity:
     runs-on: ubuntu-latest

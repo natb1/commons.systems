@@ -1,4 +1,4 @@
-# Step 0 — Node-lane target resolution and parked re-entry guard
+# Step 0 — Node-lane target resolution
 
 Node-lane target resolution runs **once**, in `SKILL.md`'s Idempotency preamble,
 through the shared front door `dispatch-derive-node-target`. Step 0 re-derives
@@ -32,8 +32,9 @@ Exit-code routing (`rc`), preserving qa-fix's existing behavior on each path:
 | 0 | success | continue; parse the structured stdout |
 | 1 | node absent from `origin/main` / read failure | hard stop, `exit 1` |
 | 2 | usage error or branch/node-id mismatch | hard stop, `exit 1` |
-| 3 | phase is not `qa` | hard stop, `exit 1` (stderr names the persisted phase) |
+| 3 | the mechanical selection gate rejected the selection (phase, park, fingerprint, align-eligibility, reviewed marker) | clean stop, `exit 0` — a stale selection, not a defect; no graph write, no PR |
 | 4 | `--pr-mode required` and no open PR | hard stop, `exit 1` |
+| 5 | scope-stale — the tactic's scope changed after the previous phase ran | clean stop, `exit 0` — not a defect, the node wants demoting to `implement` |
 
 The stdout sections bind the seams the rest of the skill keys off: the `PR:` line
 → `PR_NUM` (`none` → empty), `=== NODE-JSON ===` → `NODE_JSON` (the full
@@ -41,30 +42,12 @@ frontmatter as one compact JSON line), `=== NODE-BODY ===` → `NODE_BODY` (raw
 markdown, replacing the former whole-file frontmatter-plus-body read everywhere
 downstream).
 
-## Parked re-entry guard
+## Parked re-entry guard — retired
 
-Parking sets `office_hours` without changing `phase`, so a stale self-scheduled
-wakeup re-firing mid-session (bypassing the selector's `office_hours`-null gate)
-must not re-run qa-fix against a node already handed to a human. The guard must
-agree with the canonical selection gate `readParked`
-(`packages/intentionsutil/scripts/check-node-selection.ts:90-93`): a node is
-parked iff the first-class `office_hours` is non-null **OR** a populated
-`attributes.office_hours` squatter block is present (the squatter convention is
-live until `tactic-schema-migration-backfill` lands, and a squatter-parked node
-keeps the literal top-level `office_hours: null` alongside the populated block —
-so a top-level-only check would miss it).
-
-Against the front door's `NODE_JSON` this is a two-part `jq` OR on typed paths,
-not a frontmatter scrape — which also retires the scrape's own hazard of a prose
-body line reading exactly `office_hours: null` being mistaken for state:
-
-```bash
-PARKED=$(jq -r 'if (.office_hours != null) or ((.attributes.office_hours // null) != null) then "1" else "" end' <<<"$NODE_JSON")
-if [ -n "$PARKED" ]; then
-  echo "/qa-fix: node '$NODE_ID' is already office_hours-parked at origin/main — nothing to do" >&2
-  exit 0
-fi
-```
+The front door's selection gate owns the parked check — first-class
+`office_hours` and the `attributes.office_hours` squatter alike
+(`packages/intentionsutil/scripts/check-node-selection.ts:90-94`, applied at
+`:268-270`). A parked node exits 3 above; there is nothing to re-check here.
 
 `$N` keys the remaining steps' `tmp/` filenames (the issue number on the legacy
 lane, the node id on the node lane). `$TARGET_KIND` selects the lane at the seams

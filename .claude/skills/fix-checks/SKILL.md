@@ -76,10 +76,23 @@ case "$BRANCH" in
           # block (recommend step + $CLAUDE_JOB_DIR/office-hours-reason write).
           echo "ESCALATE-NO-PR: /fix-checks node '$NODE_ID' has no open PR — escalate to office-hours" >&2
           exit 1 ;;
+        3)
+          # The mechanical selection gate rejected the selection (phase/interrupt
+          # mismatch, office_hours park, stale serving-strategy fingerprint, no
+          # longer align-eligible, or an already-reviewed node re-selected). This
+          # is a stale selection, not a defect. End the session; make no graph
+          # write and open no PR.
+          echo "/fix-checks: node '$NODE_ID' selection no longer valid at origin/main (front door exit 3) — stale selection, not a defect; ending with no graph write and no PR" >&2
+          exit 0 ;;
+        5)
+          # Scope changed since the previous phase ran — the node wants demoting
+          # to implement, not a defect. End the session; make no graph write and
+          # open no PR.
+          echo "/fix-checks: node '$NODE_ID' is scope-stale at origin/main (front door exit 5) — wants demoting to implement, not a defect; ending with no graph write and no PR" >&2
+          exit 0 ;;
         *)
           # exit 1 (node not found / read failure), exit 2 (branch mismatch /
-          # bad node id), exit 3 (no active CI-fix interrupt — execution.fix is
-          # null): all real errors for this lane. Stop with a clear message.
+          # bad node id): real errors for this lane. Stop with a clear message.
           echo "/fix-checks: '$BRANCH' is not an actionable fix-checks node target: $DERIVE_OUT" >&2
           exit 1 ;;
       esac
@@ -101,9 +114,11 @@ in-session recommend step first — see
 `.claude/skills/dispatch-propagate/escalation-recommend.md`, writing the
 best-next-steps markdown to `$CLAUDE_JOB_DIR/office-hours-recommendation` (node
 lane — no gh issue, so no `dispatch-write-recommendation` comment) — then write
-the park reason to `$CLAUDE_JOB_DIR/office-hours-reason` and **stop**. The Stop
-hook (`.claude/hooks/dispatch-stop.sh`) reads those files and parks the node via
-`park-node`. Never call `dispatch-mark-deviation` here (issue-only) and never
+the park reason to `$CLAUDE_JOB_DIR/office-hours-reason` and **stop**.
+`dispatch-tick`'s `terminal_without_disposition_sweep` (in
+`.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`) reads
+those files on a later tick and parks the node via `park-node`. Never call
+`dispatch-mark-deviation` here (issue-only) and never
 write a gh label; on the node lane no gh issue is ever read or written. This is
 the same `office-hours-reason` seam the Escalation note below documents.
 
@@ -200,9 +215,10 @@ Do NOT call `transition-node` here: after the CI-blind redesign it no longer
 knows about `fix` and would force the ladder forward regardless of whether the
 fix actually worked. Do NOT clear `execution.fix`, reset `phase`, or write any
 completion marker — those are the selector's on a later green tick. The Stop hook
-(`.claude/hooks/dispatch-stop.sh`) needs nothing from this seam for a clean pass
-(it only backstops the escalation hold); chain continuation is carried by the
-systemd heartbeat and the tick's convergence reseed.
+needs nothing from this seam for a clean pass; an escalation hold is landed by
+`dispatch-tick`'s `terminal_without_disposition_sweep`, not the Stop hook. Chain
+continuation is carried by the systemd heartbeat and the tick's convergence
+reseed.
 
 **Disarm auto-merge on every push.** Whenever this worker pushes ANY commit (a
 fix or the main-already-fixed-it merge), disarm auto-merge immediately as a
@@ -215,7 +231,8 @@ gh pr ready --undo "$PR_NUM"   # idempotent no-op when the PR was not merge-arme
 ```
 
 Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
-`office-hours-recommendation`) for the Stop hook's `park-node`, never a gh label.
+`office-hours-recommendation`) for `dispatch-tick`'s
+`terminal_without_disposition_sweep` to `park-node`, never a gh label.
 Also write the already-bound `PR_NUM` to `$CLAUDE_JOB_DIR/office-hours-pr` (same
 atomic tempfile+`mv` write) so the park records `execution.pr`
 (tactic-office-hours-pr-custody).
@@ -379,9 +396,51 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
         runs).** The fingerprint is `<failing-check-name> — <stable-id>`, where
         `<stable-id>` is chosen by this **fixed precedence** (use the first the
         failure excerpt provides):
-        1. the **test node id** — e.g. `path/to/test.spec.ts:LINE:COL test title`;
-        2. else the **file path:line**;
-        3. else the **CI workflow name**.
+        1. the failing **test name / assertion label exactly as the suite prints
+           it**, verbatim — a Jest/Mocha/vitest/pytest test title, a shell
+           test's assertion description, or any comparable human-readable label
+           the test runner itself emits. This is **not** a `file:line` pointer.
+        2. **only when the excerpt contains no such label**, the failing **file
+           path with NO line number** — e.g.
+           `.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh`,
+           never `…:412`. Line numbers drift whenever an unrelated edit lands
+           above that line in the file, so a line-number-bearing id
+           re-fingerprints the *same* failure differently across unrelated
+           commits — dedup then misses and mints a second tracking node for one
+           flake. That is why the `file:line` form is **disallowed**, not merely
+           a different-but-acceptable spelling.
+        3. **only when the excerpt provides neither** — the reachable case is a
+           CI-infrastructure hiccup (Step 4's "a CI-infrastructure hiccup"
+           flake diagnosis) whose log carries no runner-emitted test label and
+           names no failing file — the failing **CI workflow / job name exactly
+           as CI reports it**. The stable-id half then repeats the check-name
+           half; that redundancy is deliberate. It makes every label-less,
+           path-less failure under one check collapse to one deterministic
+           fingerprint, which is strictly better than leaving the worker to
+           improvise a string — improvised strings are the nondeterminism this
+           precedence exists to eliminate.
+
+        The precedence is **total**: tier 3 always applies when tiers 1 and 2
+        do not, so there is never a case where `<stable-id>` is undefined and
+        the worker must invent one.
+
+        **Never** include any of these in `<stable-id>`: a **line number**, a
+        **run id**, a **timestamp**, or a **PR number**. Each of them varies
+        across recurrences of one defect, so including one defeats dedup by
+        construction.
+
+        Worked example (2026-07-22 incident). One assertion failure produced two
+        divergent fingerprints under the old rule:
+        `hook-tests — .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh:22026`
+        (keyed on `file:line`) and
+        `hook-tests — select-tick on-main but primary checkout off-main → guard halts (exit 2)`
+        (keyed on the test name) — dedup missed and two nodes were minted for one
+        flake. Under this rule both collapse to the test-name form,
+        `hook-tests — select-tick on-main but primary checkout off-main → guard halts (exit 2)`.
+        (The quoted path is historical: `test-dispatch-scripts.sh` has since been
+        split into per-SUT `test-*.sh` files — that assertion now lives in
+        `test-dispatch-select-tick.sh`.)
+
         Read `<stable-id>` from the excerpt strictly by this precedence and
         **never paraphrase or summarize it** — the same flake must yield a
         byte-identical fingerprint string on every run, or dedup silently fails in
@@ -520,6 +579,49 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
                re-run CI — the head is simply missing a fix that already landed.
              - **`CURRENT`** — proceed with the node write below, unchanged.
 
+             **Near-miss advisory check (`CURRENT` only, never blocks).**
+             `dispatch-flake-dedup-node` matched nothing because it greps the
+             **full** `Fingerprint: <fingerprint>` line as a fixed string, so a
+             stable-id that diverges even slightly from an existing node's
+             spelling reads as `NONE` and mints a second node with no signal to
+             a human. Before writing, grep for the **mechanical half alone** —
+             the failing check name and the ` — ` separator, not the full
+             fingerprint. Anchor the glob at the repo root (the same reason
+             `dispatch-flake-dedup-node` `cd`s to `git rev-parse
+             --show-toplevel`): if cwd is not the worktree root the glob matches
+             nothing, zsh aborts the command, `|| true` swallows it, and an
+             empty `NEARMISS` is indistinguishable from a genuine no-hit.
+             ```bash
+             ROOT=$(git rev-parse --show-toplevel)
+             NEARMISS=$(grep -rlF -- "Fingerprint: <failing-check-name> — " "$ROOT"/intentions/tactic-*.md 2>/dev/null || true)
+             ```
+             `NEARMISS` holds absolute paths; take each tactic id from the
+             basename with the `.md` suffix stripped. This is a plain `grep`,
+             not a new script — this step introduces no script surface and no
+             new test file.
+             - **No hit** — proceed silently; add no accumulator bullet.
+             - **Hit** — before naming any match, **confirm it is actually a
+               flake-tracking tactic** (a node whose body records a flake
+               fingerprint, reproduce command, and failure excerpt). Matching
+               only the mechanical half drops the stable-id anchoring that
+               `dispatch-flake-dedup-node` relies on to keep a coincidental
+               quote of a `Fingerprint:` line in an unrelated node's prose — a
+               planning or meta node, of which this repo has several — from
+               reading as a flake tracker. Discard every non-tracker match; if
+               none survive, treat it as **No hit**.
+
+               The surviving node(s) share this failing check but carry a
+               different stable-id. **Still mint the new node exactly as below** —
+               two distinct flakes under one check (e.g. two different assertions
+               both failing under `hook-tests`) is a normal, expected case, so
+               this must never block or delay filing. The only difference: carry
+               an advisory note into the accumulator alongside the flake-tracking
+               id bullet (the same mechanism the `STALE-SUPPRESSED` /
+               `STALE-HEAD-SUPPRESSED` notes use), naming the matched tactic
+               id(s) — e.g. `possible duplicate of <tactic-id>[, <tactic-id>…]:
+               same failing check, different stable-id` — so a human reviewing
+               flake tracking can judge whether to collapse them by hand.
+
              On `CURRENT`, write a **new** flake
              tactic node. Construct its frontmatter JSON and pass it to
              `write-node.ts` (same recipe as `align-tactics/SKILL.md`'s
@@ -557,10 +659,14 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
            - **`EXISTING <tactic-id>` / `REOPENED <tactic-id>`** — a matching
              flake tactic already exists. First dump a `--base` manifest for it
              (pre-existing node — same optimistic-concurrency guard
-             `align-tactics` Step 5 uses):
+             `align-tactics` Step 5 uses). Note the `--out-dir`: this dump feeds
+             its own `graph-commit`, so it gets its own directory, separate from
+             sub-step 4's dump of `$N` below. One out-dir per `graph-commit` —
+             sharing one leaves a manifest whose entries the later commit never
+             meant to guard:
              ```bash
              BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
-               --out-dir /tmp/claude-<uid>/dump <tactic-id>)
+               --out-dir /tmp/claude-<uid>/dump-flake-tactic <tactic-id>)
              ```
              `Edit` the existing tactic's body to **append** the recurrence
              content (`tmp/flake-recurrence.md`'s content) — never replace the
@@ -619,10 +725,13 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
         Read `$N`'s current `blocked_by` array (`dump-node.ts`/reading
         `intentions/$N.md`'s frontmatter). If the flake tactic's id is already
         present, this is a no-op (idempotent re-run) — skip the write. Otherwise
-        append it and land the one-field frontmatter change:
+        append it and land the one-field frontmatter change. This is a second,
+        separate `graph-commit`, so it takes its own `--out-dir` — never
+        sub-step 3's `dump-flake-tactic` directory, whose entry the flake
+        `graph-commit` has already consumed and landed:
         ```bash
         BASE_N=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
-          --out-dir /tmp/claude-<uid>/dump "$N")
+          --out-dir /tmp/claude-<uid>/dump-source-tactic "$N")
         npx tsx packages/intentionsutil/scripts/write-node.ts --file <updated-N.json>
         packages/intentionsutil/scripts/graph-commit --base "$BASE_N" "$N"
         ```
@@ -731,12 +840,21 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
    ```
 
    **Node lane** (`TARGET_KIND=node`): write NO `dispatch-mark-complete` marker
-   (it is a gh-label vehicle, issue-only). The node lane's completion is the
-   `apply-fix-state --spend-attempt` (+ `--record-push` when this iteration
-   pushed) + `graph-commit` write from the completion seam above — every
-   outcome that reaches Step 9 spends one attempt unit there. The Stop hook
-   (`.claude/hooks/dispatch-stop.sh`) needs no marker from a clean node pass —
-   it only backstops the escalation park.
+   (it is a gh-label vehicle, issue-only). Write the node lane's own
+   terminal-disposition marker instead:
+
+   ```bash
+   packages/intentionsutil/scripts/mark-node-terminal "$N" fix-attempt
+   ```
+
+   This is the node lane's terminal-disposition evidence. The completion write
+   is still `apply-fix-state --spend-attempt` (+ `--record-push` when this
+   iteration pushed) + `graph-commit` from the completion seam above — every
+   outcome that reaches Step 9 spends one attempt unit there (retry by design;
+   the selector re-routes on a later tick). This marker only tells the Stop hook
+   (`.claude/hooks/dispatch-stop.sh`) that the pass *ended*: `Stop` fires on
+   every turn yield, not only on terminal exit, so without the marker the hook
+   leaves the job alive rather than reaping it mid-flight.
 
    Then **stop**. The `/dispatch-propagate` background-job chain drives the
    next iteration — the selector observes the pushed sha's CI verdict on a later
@@ -774,6 +892,11 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
     does not reproduce at `origin/main`, so **no node was created at all** and
     there is no id to name. Record alongside it that the remedy is to merge
     `origin/main` and re-run.
+    On the node lane's `CREATED` path, the near-miss advisory check (Step 4's
+    Flake sub-path) may append a trailing advisory clause to this same bullet:
+    `<tactic-id> (CREATED) — possible duplicate of <tactic-id>[, <tactic-id>…]:
+    same failing check, different stable-id`. The clause is advisory only — it
+    never changes the parenthesized disposition and never suppresses the write.
     Omit for every other outcome.
   - **Fingerprint** — *`flake` outcome only* — the dedupe key computed in the
     Flake sub-path (the failing check name plus the stable identifier). Omit for

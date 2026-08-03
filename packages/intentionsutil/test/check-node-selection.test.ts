@@ -165,7 +165,7 @@ describe("evaluateSelection", () => {
         id: "tactic-p",
         kind: "tactic",
         phase: "implement",
-        office_hours: { reason: "author park", since: "2026-07-07", recommendation: null },
+        office_hours: { reason: "author park", since: "2026-07-07", recommendation: null, session_type: "other" },
       }),
     );
     const r = evaluateSelection({ nodeId: "tactic-p", selectedPhase: "implement", dir, stamp: null });
@@ -205,6 +205,31 @@ describe("evaluateSelection", () => {
     const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/fingerprint:.*strategy-x substance changed/);
+  });
+
+  it("throws (fails closed) when a serving strategy's file is corrupt rather than passing the gate", () => {
+    // Regression: the gate enumerates the store STRICTLY. Under the tolerant
+    // `listNodes` a corrupt strategy file is skipped with a warning, the
+    // `byId.get(sid) === undefined → continue` shortcut fires, and this
+    // soft-frozen tactic gets a silent exit-0 pass — a required staleness gate
+    // turned into a no-op for every tactic serving that strategy.
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-x", kind: "strategy", statement: "Own the substrate." }));
+    seed(
+      dir,
+      anode({
+        id: "tactic-x",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-x"],
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: "0".repeat(64) },
+      }),
+    );
+    // Simulate the partially-written / truncated node file.
+    writeFileSync(join(dir, "strategy-x.md"), "");
+    expect(() => evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null })).toThrow(
+      /strategy-x\.md/,
+    );
   });
 
   it("passes when the stamped strategy fingerprint matches the current substance", () => {
@@ -437,7 +462,7 @@ describe("evaluateSelection", () => {
         anode({
           id: "strategy-a",
           kind: "strategy",
-          office_hours: { reason: "author park", since: "2026-07-11", recommendation: null },
+          office_hours: { reason: "author park", since: "2026-07-11", recommendation: null, session_type: "other" },
         }),
       );
       const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
@@ -554,7 +579,7 @@ describe("evaluateSelection", () => {
           id: "tactic-draft-p",
           kind: "tactic",
           phase: null,
-          office_hours: { reason: "author park", since: "2026-07-16", recommendation: null },
+          office_hours: { reason: "author park", since: "2026-07-16", recommendation: null, session_type: "other" },
         }),
       );
       const r = evaluateSelection({ nodeId: "tactic-draft-p", selectedPhase: "align-tactics", dir, stamp: null });

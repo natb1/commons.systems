@@ -47,7 +47,11 @@ stands in for the security buckets):
   one-line rationale.
 - **False-positive (security)** — each with a one-line rationale.
 - **Deferred** — out-of-scope code-review findings; each references its
-  follow-up issue `#<N>` from Step 5a.
+  follow-up issue `#<N>` from Step 5a. A Deferred entry may also be an
+  *untriaged* Lane-A residue item the residue phase never reached (the
+  residue-disposition agent died before triaging it) rather than a
+  deliberate defer decision — its follow-up is filed the same way, via
+  Step 5.
 - **Out-of-scope (security)** — pre-existing CodeQL/npm findings; each meaningful
   one references its follow-up issue `#<N>` from Step 5b. CodeQL-sourced findings
   are identified by their `rule.id` and alert number (from `codeql_ref`), linked
@@ -56,8 +60,10 @@ stands in for the security buckets):
 If a security reviewer or inline scan could not run (re-launch / retry exhausted),
 note partial coverage here — name the reviewer or scan whose domain could not be
 reviewed. When `result.coverage_incomplete` is true, include `result.coverage_note`
-in this partial-coverage line (the probe-wave skipped the security finders because
-both quality finders died — the model was likely throttled). If every bucket is
+in this partial-coverage line — the note names the cause: a throttled
+probe wave, an unverified instrument, or Lane-A residue left undispositioned
+by a dead residue-disposition agent — and may name more than one, when
+multiple causes co-occur in the same run. If every bucket is
 empty and there was no security note, the comment is still well-formed (render
 empty buckets as `_None._`).
 

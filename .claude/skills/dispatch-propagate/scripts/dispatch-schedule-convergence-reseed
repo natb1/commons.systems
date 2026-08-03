@@ -207,6 +207,10 @@ ensure_sweep_timer "$MAIN_WORKTREE" || true
 # common-case recovery path.
 ensure_heartbeat_units "$MAIN_WORKTREE" || true
 
+# Install+enable the durable unit-poisoning healer and fleet watchdog timers.
+ensure_healer_units "$MAIN_WORKTREE" || true
+ensure_watcher_units "$MAIN_WORKTREE" || true
+
 # ---- Step 6: schedule the transient timer -----------------------------------
 #
 # The unit name embeds the epoch fire time — a repeated call with the same FIRE

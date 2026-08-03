@@ -20,6 +20,20 @@ export type Status = string;
 
 export const STATUSES: readonly string[] = ["raw", "refining", "delegated", "codified"];
 
+/**
+ * The tier axis: the outer, lexicographically-dominant ranking key. Tier 1 is
+ * the default; tier 2 is a bug-fix/security mark or an explicit authored lift;
+ * tier 3 is production/main work. Tier is never authored as `1` — 1 is the
+ * implicit default (rule 19 rejects an explicit `attributes.tier: 1`).
+ */
+export const TIERS: readonly number[] = [1, 2, 3];
+
+/** The default tier every unmarked node sits in. */
+export const DEFAULT_TIER = 1;
+
+/** The tiers an author may name explicitly via `attributes.tier`. */
+export const AUTHORABLE_TIERS: readonly number[] = [2, 3];
+
 /** What kind of tooling a goal codifies. */
 export type ToolingKind = "actuator" | "sensor";
 
@@ -50,6 +64,34 @@ export const PHASES: readonly Phase[] = [
   "review",
   "main-qa",
   "done",
+];
+
+/**
+ * What kind of office-hours attention a parked node needs, keyed to the
+ * criterion actually used to backfill this field:
+ *
+ * - `"requirement-discovery"`: the park needs the author to decide or
+ *   clarify a requirement/intent before work can proceed (e.g.
+ *   `strategy-recover-attention`).
+ * - `"curriculum-review"`: the park is a reading/dialog demonstration
+ *   sitting the author runs with the text in hand (e.g. the
+ *   `tactic-reading-chunk-*` / `tactic-dialog-review-*` parks, which
+ *   `/reading-review` drives).
+ * - `"other"`: the default for every park with no natural type —
+ *   including machine-authored parks such as `apply-fix-state.ts`'s
+ *   `applyParkCheck` retry-budget park — and the value `validateOfficeHours`
+ *   substitutes when `session_type` is absent, which keeps the field
+ *   additive over the existing store.
+ *
+ * `"requirement-discovery"` and `"curriculum-review"` are the two types
+ * soft-penalized in `officeHours.ts` (`SESSION_TYPE_PENALTY`), so
+ * classifying a park as typed lowers its default rank versus `"other"`.
+ */
+export type SessionType = "requirement-discovery" | "curriculum-review" | "other";
+export const SESSION_TYPES: readonly SessionType[] = [
+  "requirement-discovery",
+  "curriculum-review",
+  "other",
 ];
 
 // --- Structured optional fields --------------------------------------------
@@ -84,6 +126,13 @@ export interface ToolingGoal {
  *    branch).
  *  - `override` REPLACES this node's outgoing set with `{(self, override)}` —
  *    an ABSOLUTE cap on this node's own branch. Must be finite and `>= 0`.
+ *  - `tier` is the per-tier boost NAMESPACE tag: the tier whose scale the value
+ *    was chosen in — NOT the node's tier (that is derived by `ownTier`, and the
+ *    effective tier is derived by `resolveAttention`). Defaults to 1 when
+ *    absent, so every pre-tier boost is implicitly a tier-1 boost. Rule 20 in
+ *    `validateGraph` requires it to equal the node's OWN tier, which is what
+ *    forces an author to re-select a boost value when a node's tier changes:
+ *    a value meaningful on the tier-1 scale means nothing on the tier-2 scale.
  *
  * Valid only on goal-layer kinds (those whose kind node sets
  * `attributes.goal_layer: true`) — enforced by `validateGraph`, not here. The
@@ -94,6 +143,7 @@ export interface Attention {
   boost: number | null; // finite, > 0 when present
   override: number | null; // finite, >= 0 when present
   rationale: string; // required, non-empty
+  tier: number; // 1 | 2 | 3; the tier whose scale the value was chosen in (default 1)
 }
 
 // --- Node ------------------------------------------------------------------
@@ -325,7 +375,44 @@ function validateAttention(value: unknown, field: string): Attention {
     throw new IntentionSchemaError(`${field}.rationale must be a non-empty string`);
   }
 
-  return { boost, override, rationale };
+  // Absent/null defaults to 1: every boost authored before the tier axis existed
+  // was chosen on the tier-1 scale, so the default keeps the field additive over
+  // the whole existing store with no node-file edits.
+  let tier = 1;
+  if (value.tier != null) {
+    if (typeof value.tier !== "number" || !Number.isInteger(value.tier) || !TIERS.includes(value.tier)) {
+      throw new IntentionSchemaError(
+        `${field}.tier must be one of ${TIERS.join(", ")}, got ${JSON.stringify(value.tier)}`,
+      );
+    }
+    tier = value.tier;
+  }
+
+  return { boost, override, rationale, tier };
+}
+
+/**
+ * A node's OWN tier — what its own marks say, ignoring anything inherited from
+ * ancestors (`resolveAttention` derives the effective, inherited tier over the
+ * parent/serves relation on top of this).
+ *
+ * `max(explicit, semantic, 1)`:
+ *  - explicit: `attributes.tier` when it is the number 2 or 3. Any other value
+ *    contributes nothing here — rule 19 is what rejects it, and normalizing it
+ *    away silently would hide the violation from the validator.
+ *  - semantic: 2 when `attributes.bug_fix === true` or `attributes.security ===
+ *    true` — the marks that mean "this is a defect/security fix", which sit in
+ *    tier 2 without the author naming a tier at all.
+ *
+ * One implementation, shared by `attention.ts`'s effective-tier fixpoint and by
+ * `validateGraph`'s rule 20.
+ */
+export function ownTier(node: IntentionNode): number {
+  const attributes = isPlainObject(node.attributes) ? node.attributes : {};
+  const explicit =
+    attributes.tier === 2 || attributes.tier === 3 ? attributes.tier : 0;
+  const semantic = attributes.bug_fix === true || attributes.security === true ? 2 : 0;
+  return Math.max(explicit, semantic, DEFAULT_TIER);
 }
 
 // --- Dispatch-state structured fields --------------------------------------
@@ -420,6 +507,7 @@ export interface OfficeHours {
   reason: string;
   since: string;
   recommendation: string | null;
+  session_type: SessionType;
 }
 
 /**
@@ -576,6 +664,10 @@ function validateOfficeHours(value: unknown, field: string): OfficeHours {
     reason: requireString(value.reason, `${field}.reason`),
     since: requireDateString(value.since, `${field}.since`),
     recommendation: optionalString(value.recommendation, `${field}.recommendation`),
+    session_type:
+      value.session_type == null
+        ? "other"
+        : requireOneOf(value.session_type, SESSION_TYPES, `${field}.session_type`),
   };
 }
 
@@ -875,34 +967,104 @@ function checkClarificationDates(node: IntentionNode, problems: string[]): void 
 }
 
 /**
- * Rule 18: no node other than strategy-main-health may match or exceed its
- * dominant attention.boost via either attention.boost or attention.override.
- * Threshold (`dominantBoost`) is read live by the caller; when null the guard is
- * inert. An author may opt out with "ACK: main-health-dominance" in the node's
- * attention.rationale.
+ * Rule 18: `strategy-main-health` owns tier 3 (the top tier) exclusively.
+ *
+ *  (a) No node other than `strategy-main-health` may AUTHOR an explicit
+ *      `attributes.tier: 3`. The check reads the RAW `attributes.tier` field —
+ *      not `ownTier`, and not `resolveAttention`'s effective tier — because
+ *      INHERITING tier 3 down `parent`/`serves` is exactly how auto-created
+ *      red-main fix tactics get their urgency. Authorship is guarded; the
+ *      derived value never is.
+ *  (b) When `strategy-main-health` is present in the node set, it must itself
+ *      carry `attributes.tier: 3` — the structural successor to the old
+ *      numeric guard's "or reduce it" half. When it is absent (partial
+ *      fixtures) this half is inert.
+ *
+ * The opt-out channel for the literal substring "ACK: main-health-dominance" is
+ * deliberately ASYMMETRIC between the two halves:
+ *
+ *  - Half (a) honors it in the authoring node's `rationale` OR its
+ *    `attention.rationale`. A node can be tier-lifted with `attention: null`,
+ *    so `rationale` must be accepted too.
+ *  - Half (b) honors it ONLY in `strategy-main-health`'s own
+ *    `attention.rationale`. Its `rationale` is where the node narrates this
+ *    very guard, and prose describing the mechanism (which necessarily quotes
+ *    the token) must not exempt the node from it — that self-exemption let the
+ *    node be silently demoted with no validator signal. Requiring an
+ *    `attention` block makes a genuine opt-out a deliberate structural act
+ *    rather than an accident of wording.
  */
-function checkAttentionDominance(
+function checkTierDominance(
   node: IntentionNode,
-  dominantBoost: number | null,
+  mainHealthPresent: boolean,
   problems: string[],
 ): void {
-  if (
-    dominantBoost === null ||
-    node.id === "strategy-main-health" ||
-    node.attention === null ||
-    node.attention.rationale.includes("ACK: main-health-dominance")
-  ) {
+  const ACK = "ACK: main-health-dominance";
+  const ackedInAttention =
+    node.attention !== null && node.attention.rationale.includes(ACK);
+  if (node.id === "strategy-main-health") {
+    // (b) main-health must hold tier 3 itself. Only `attention.rationale`
+    // overrides — see the asymmetry note above.
+    if (ackedInAttention) return;
+    if (mainHealthPresent && node.attributes.tier !== 3) {
+      problems.push(
+        `${node.id}: must author attributes.tier: 3 — it owns the top tier so red-main fix work outranks everything else; restore attributes.tier: 3 or add "${ACK}" to its attention.rationale to override (its own rationale does not count — that field narrates this guard)`,
+      );
+    }
     return;
   }
-  const { boost, override } = node.attention;
-  if (boost !== null && boost >= dominantBoost) {
+  const acked =
+    ackedInAttention || (node.rationale !== null && node.rationale.includes(ACK));
+  if (acked) return;
+  // (a) no other node may author an explicit tier 3.
+  if (node.attributes.tier === 3) {
     problems.push(
-      `${node.id}: attention.boost (${boost}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
+      `${node.id}: authors attributes.tier: 3, the tier reserved for strategy-main-health — use attributes.tier: 2 (or inherit tier 3 via serves/parent), or add "${ACK}" to its rationale to override`,
     );
   }
-  if (override !== null && override >= dominantBoost) {
+}
+
+/**
+ * Rule 19: tier-mark shape. `attributes.bug_fix` and `attributes.security` are
+ * booleans when present; `attributes.tier` is the number 2 or 3 when present.
+ * An explicit `attributes.tier: 1` is REJECTED — 1 is the implicit default that
+ * every unmarked node already carries, so authoring it is redundant noise that
+ * would make "no tier key" and "tier 1" two spellings of one state.
+ */
+function checkTierMarkShape(node: IntentionNode, problems: string[]): void {
+  for (const mark of ["bug_fix", "security"] as const) {
+    const value = node.attributes[mark];
+    if (value !== undefined && typeof value !== "boolean") {
+      problems.push(
+        `${node.id}: attributes.${mark} must be a boolean, got ${typeof value}`,
+      );
+    }
+  }
+  const tier = node.attributes.tier;
+  if (tier !== undefined && (typeof tier !== "number" || !AUTHORABLE_TIERS.includes(tier))) {
     problems.push(
-      `${node.id}: attention.override (${override}) matches or exceeds strategy-main-health's dominant boost (${dominantBoost}) — add "ACK: main-health-dominance" to attention.rationale to override`,
+      `${node.id}: attributes.tier must be ${AUTHORABLE_TIERS.join(" or ")}, got ${JSON.stringify(tier)} — tier 1 is the implicit default and must never be authored`,
+    );
+  }
+}
+
+/**
+ * Rule 20: the per-tier boost namespace. A non-null `attention` must tag the
+ * tier its value was chosen in, and that tag must equal the node's OWN tier
+ * (`ownTier`) — never its effective/inherited tier. An effective-tier check
+ * would cascade: marking one ancestor tier 2 would instantly invalidate every
+ * boosted descendant, none of whose authors did anything wrong. Checking the
+ * node's own tier localizes the obligation to the node whose tier actually
+ * changed.
+ */
+function checkAttentionTierNamespace(node: IntentionNode, problems: string[]): void {
+  if (node.attention === null) return;
+  const own = ownTier(node);
+  if (node.attention.tier !== own) {
+    problems.push(
+      `${node.id}: attention.tier is ${node.attention.tier} but the node's own tier is ${own} — ` +
+        `a boost value is only meaningful within one tier's scale, so pick a fresh boost/override ` +
+        `value on the tier-${own} scale and set attention.tier: ${own} to match`,
     );
   }
 }
@@ -992,14 +1154,35 @@ function checkBlockedByCycles(
  *      uniform across every kind). This is the convention `readingDate()`
  *      (router.ts) and `coverage.ts`'s `lastReviewedOf` parse to date a
  *      clarification; a dateless answer silently breaks those consumers.
- *  18. `strategy-main-health` holds a dominant attention: no OTHER node's
- *      `attention.boost` or `attention.override` may match or exceed
- *      `strategy-main-health`'s own live `attention.boost`. This keeps red-main
- *      fix work outranking everything else. The threshold is read live from the
- *      graph (never hardcoded); if `strategy-main-health` is absent or its
- *      `attention`/`attention.boost` is null there is no dominance to protect
- *      and the guard is inert. A node may opt out by placing the literal
- *      substring `ACK: main-health-dominance` in its `attention.rationale`.
+ *  18. `strategy-main-health` owns tier 3 exclusively — dominance is now
+ *      structural (top tier) rather than numeric (highest boost). No node
+ *      other than `strategy-main-health` may AUTHOR an explicit
+ *      `attributes.tier: 3`, and `strategy-main-health`, when present in the
+ *      node set, must carry `attributes.tier: 3` itself (that half is inert
+ *      when it is absent, e.g. partial fixtures). The check reads the RAW
+ *      `attributes.tier` field, never `ownTier`'s combined value or the
+ *      effective inherited tier: INHERITING tier 3 down `parent`/`serves` is
+ *      exactly how auto-created red-main fix tactics get their urgency, so
+ *      only authorship is guarded. The opt-out substring
+ *      `ACK: main-health-dominance` is honored asymmetrically: an authoring
+ *      node may place it in its `rationale` OR its `attention.rationale`
+ *      (it can be tier-lifted with `attention: null`), but demoting
+ *      `strategy-main-health` requires the token in that node's own
+ *      `attention.rationale` alone — its `rationale` narrates this very guard,
+ *      and prose describing the mechanism must not exempt the node from it.
+ *  19. Tier marks are well-shaped: `attributes.bug_fix` and
+ *      `attributes.security`, when present, are booleans; `attributes.tier`,
+ *      when present, is the number 2 or 3. An explicit `attributes.tier: 1` is
+ *      rejected — 1 is the implicit default every unmarked node already
+ *      carries, so authoring it would give one state two spellings.
+ *  20. Per-tier boost namespace: a node with non-null `attention` must set
+ *      `attention.tier` equal to its OWN tier (`ownTier` — its own marks, NOT
+ *      the effective tier it inherits down parent/serves). A boost value is
+ *      only meaningful within one tier's scale, so when a node's tier changes
+ *      the author must re-select the value in the new tier's namespace. The
+ *      check deliberately uses the own tier, not the effective one: an
+ *      effective-tier check would cascade, invalidating every boosted
+ *      descendant the moment any ancestor gained a mark.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -1015,14 +1198,10 @@ export function validateGraph(nodes: IntentionNode[]): void {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const ids = new Set(byId.keys());
   const problems: string[] = [];
-  // Rule 18 threshold: strategy-main-health's own live attention.boost. Read
-  // from the same nodes array; null when the node, its attention, or its boost
-  // is absent — in which case there is no dominance to protect (guard inert).
-  const mainHealthNode = byId.get("strategy-main-health");
-  const dominantBoost =
-    mainHealthNode !== undefined && mainHealthNode.attention !== null
-      ? mainHealthNode.attention.boost
-      : null;
+  // Rule 18: is strategy-main-health part of the set being validated? When it
+  // is absent (a partial fixture) the "main-health must hold tier 3" half of
+  // the guard is inert — there is no node to hold it.
+  const mainHealthPresent = byId.has("strategy-main-health");
   for (const node of nodes) {
     // Rules 1-4: every referenced id exists.
     checkExistenceEdges(node, ids, problems);
@@ -1048,8 +1227,12 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkStatusVocabulary(node, byId, problems);
     // Rule 17: clarification answers carry a dated provenance clause.
     checkClarificationDates(node, problems);
-    // Rule 18: main-health attention dominance.
-    checkAttentionDominance(node, dominantBoost, problems);
+    // Rule 18: strategy-main-health owns tier 3 exclusively.
+    checkTierDominance(node, mainHealthPresent, problems);
+    // Rule 19: tier marks are well-shaped.
+    checkTierMarkShape(node, problems);
+    // Rule 20: attention.tier tags the node's own tier namespace.
+    checkAttentionTierNamespace(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkBlockedByCycles(nodes, byId, problems);

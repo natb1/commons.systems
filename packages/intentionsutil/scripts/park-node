@@ -92,6 +92,13 @@ USAGE="usage: park-node [--pr <n>] [--base <blobsha>|<id>=<blobsha>|<manifest-fi
 # <recommendation> are free text that may start with `-`).
 PR_ARG=""
 BASE_ARG=""
+# Flag PRESENCE is tracked separately from the flag's VALUE: an explicitly
+# supplied but empty base (`--base ''` / `--base=`) must be a usage error, not
+# a silent degradation to an unpinned park. Gating the resolver on
+# `-n "$BASE_ARG"` alone would make that case indistinguishable from omitting
+# the flag, quietly dropping the compare-and-swap guarantee the caller asked
+# for (.claude/skills/ref-diagnosis-time-cas/SKILL.md).
+BASE_SUPPLIED=0
 ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -115,10 +122,12 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       BASE_ARG="$1"
+      BASE_SUPPLIED=1
       shift
       ;;
     --base=*)
       BASE_ARG="${1#--base=}"
+      BASE_SUPPLIED=1
       shift
       ;;
     --*)
@@ -147,7 +156,11 @@ fi
 # Resolve --base (if supplied) to a 40-hex blob sha, before any network call,
 # so a malformed base is a cheap usage error rather than a mid-flight failure.
 PINNED_BASE=""
-if [[ -n "$BASE_ARG" ]]; then
+if [[ $BASE_SUPPLIED -eq 1 && -z "$BASE_ARG" ]]; then
+  echo "park-node: --base requires a non-empty <blobsha>|<id>=<blobsha>|<manifest-file> value" >&2
+  exit 2
+fi
+if [[ $BASE_SUPPLIED -eq 1 ]]; then
   if [[ -f "$BASE_ARG" ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do
       [[ -z "$line" ]] && continue
@@ -260,9 +273,47 @@ if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SI
   exit 1
 fi
 
-if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
+# EXPECT_BLOB captures the blob this script just wrote to intentions/$NODE_ID.md
+# under its OWN REPO_ROOT, for graph-commit's --expect guard below. Hashing
+# failure is genuine environment breakage — fail loudly rather than omitting
+# --expect (code-style.md).
+if ! EXPECT_BLOB="$(git -C "$REPO_ROOT" hash-object -- "intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "park-node: could not hash intentions/$NODE_ID.md after the office_hours write" >&2
+  exit 1
+fi
+
+# -C "$REPO_ROOT" is mandatory, not cosmetic: this script's REPO_ROOT is derived
+# from SCRIPT_DIR (its own on-disk location), and the office_hours write above
+# targets "$INTENTIONS_DIR" under THAT repo, while graph-commit resolves its own
+# repo from -C if given, else from cwd. Callers routinely invoke the main
+# checkout's copy of this script by absolute path from inside a worktree, so
+# without -C the two would resolve to DIFFERENT checkouts.
+#
+# --expect does NOT add a second, independent check on -C from this call site:
+# EXPECT_BLOB is hashed under the same "$REPO_ROOT" that is passed as -C, so
+# for these three wrappers the assertion is self-satisfying whenever -C
+# resolves to the tree this script wrote. What it does buy here is narrower and
+# still worth the two lines: (1) it asserts graph-commit's
+# `git rev-parse --show-toplevel` resolution of -C lands on the same tree this
+# script wrote to — which can differ if REPO_ROOT is not itself a git toplevel
+# — and (2) it is a race guard, catching a concurrent writer that touched
+# intentions/$NODE_ID.md between the hash above and graph-commit's staging.
+# The wrong-repo case --expect exists for (graph-commit's header) is reached by
+# callers that pass -C and the hash from different trees, not by this one.
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
   echo "park-node: graph-commit failed for $NODE_ID; the office_hours write was rolled back" >&2
   exit 1
 fi
+
+# A landed park is a terminal disposition: record it so this node worker's Stop
+# hook may reap the job (dispatch-self-close's node-worker invariant). Called
+# unconditionally — mark-node-terminal's own ownership gate makes it a silent
+# no-op when this session is parking some OTHER node (an office-hours drain).
+# Best-effort: a marker write must never turn a landed park into a failure.
+# This also covers the Stop-hook backstop, which calls park-node
+# (dispatch-stop.sh) BEFORE dispatch-self-close, so the marker exists by the
+# time the gate reads it. Note the hook `rm -f`s office-hours-reason on success
+# — which is exactly why park evidence must be a separate marker.
+"$SCRIPT_DIR/mark-node-terminal" "$NODE_ID" park >/dev/null 2>&1 || true
 
 exit 0

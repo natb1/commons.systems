@@ -50,21 +50,26 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 96
+  boost: 50
   override: null
-  rationale: "Author-directed 2026-07-26: boost to top ranking. This is a
-    data-loss defect in a backward-transition primitive on the sole write path
-    to main -- a demotion silently discards landed body content and
-    completed-phase markers, and the loss is invisible (no conflict, no park,
-    exit 0), so it is only ever caught by a human noticing missing sections
-    after the fact. Sized at 96 (own claim) so that composed with the +5
-    inherited from strategy-graph-native-dispatch it reaches an authored 101,
-    above the current live selectable composed max of 100.33
-    (tactic-transition-node-stamp-landed-body and
-    tactic-phase-evidence-fingerprint-bound, both at own boost 95), while
-    staying strictly below strategy-main-health's standing 100 boost value so no
-    schema rule 18 dominance ACK is required and the main-health signal keeps
-    its recorded dominance."
+  rationale: "Bootstrap re-scale 2026-07-30: the SOLE attention anchor for the
+    fingerprint-custody chain. The 2026-07-30 re-serialization (d2b161a3) turned
+    the cluster from a tree into a linear chain -
+    tactic-demote-node-stale-local-read ->
+    tactic-phase-evidence-fingerprint-bound ->
+    tactic-scope-fingerprint-plan-substance ->
+    tactic-transition-node-stamp-landed-body - so a single anchor on this, the
+    most-downstream node, lifts every blocker upstream of it and the whole chain
+    resolves to a flat 55.33. Attention flows backward along blocked_by and SUMS
+    over distinct sources, so a second anchor anywhere in the chain
+    double-counts: the interim 50 briefly also sat on
+    tactic-scope-fingerprint-plan-substance and that node resolved to 105.33 -
+    back above strategy-main-health 101, the exact failure this re-scale exists
+    to remove. That second anchor was removed; do not reintroduce one while the
+    chain is linear. Note validate-graph rule 18 does NOT catch this - it checks
+    the authored boost (50), not the resolved rank. Interim scaffolding only;
+    tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
+    numeric scheme."
 phase: null
 execution: null
 validates: []

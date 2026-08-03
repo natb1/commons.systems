@@ -22,23 +22,11 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Needs a repo admin: remove the preview-and-smoke required status check
-    from the main branch ruleset BEFORE tactic-preview-deploy-on-demand can land
-    (its PR deletes the job, so the required context would never report and the
-    PR could not merge; the graph fast path stamps exactly the required set).
-    Roughly 5 author-minutes."
-  since: 2026-07-11
-  recommendation: "GitHub → Settings → Rules → the main ruleset → required status
-    checks: delete preview-and-smoke, keeping acceptance, lint, unit-tests. CLI
-    alternative: gh api /repos/natb1/commons.systems/rulesets to find the
-    ruleset id, then gh api -X PUT with the required_status_checks list minus
-    preview-and-smoke. Then clear this park — the blocked code tactic becomes
-    selectable."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
