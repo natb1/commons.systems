@@ -39,13 +39,14 @@ attention:
     mark when tactic-attention-tier-ranking and tactic-attention-boost-scripts
     retire the interim scale; do not orphan this boost."
   tier: 1
-phase: qa
+phase: review
 execution:
   branch: tactic-review-code-review-invocation-contract
   pr: 3007
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
