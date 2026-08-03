@@ -3,11 +3,24 @@
 Referenced from Step 6. Post exactly **one** PR comment covering **every** finding
 in `.dispositions` and its bucket. This procedure is executed by the **Step-6
 subagent**, not the main thread: it Reads the JSON at `result.result_path`
-(absolute path, used exactly as given) and takes `.dispositions`,
+(absolute path, used exactly as given) and takes `.dispositions`, `.fixed`,
 `.verify_report`, `.security_note`, `.coverage_incomplete`, and `.coverage_note`
-from it. Every `result.<field>` named below is a field of that file. `PR_NUM` and
-the Step-3 fix commit SHA(s) are handed to the subagent by the main thread — it
-does not re-resolve them.
+from it. Every `result.<field>` named below is a field of that file.
+
+Three inputs come from the **main thread**, not from that file — the subagent
+re-resolves none of them:
+
+- `PR_NUM`.
+- the Step-3 fix commit SHA(s), or the note that `--merge-only` ran and there is
+  no fix commit.
+- the **Step-5 follow-up references**, keyed to the finding each covers: the
+  follow-up issue numbers filed in 5a/5b on the issue lane, or the draft-node ids
+  written on the node lane. `result.json` carries only the prepared filing inputs
+  (`.deferred_filings`, `.security_followup_input`) — the records are filed after
+  the Workflow returns, so the filed numbers/ids exist only in the main thread.
+  Step 5 therefore runs to completion before this subagent is forked. When a
+  bucket entry has no handed-in reference, say so in its line rather than
+  inventing a number.
 
 ## Compose once, post or edit in place
 
@@ -30,7 +43,11 @@ What must hold (the durability mechanism, unchanged):
   body=@tmp/<file>` (use `dangerouslyDisableSandbox: true`) — rather than posting
   a duplicate. Never call `post-pr-comment.sh` a second time for the same PR;
   that stacks a duplicate comment.
-- Return the comment ID (`{ comment_id }`) to the main thread.
+- Return the comment ID and a one-line digest (`{ comment_id, digest_line }`) to
+  the main thread. `digest_line` is a single terse "what the review found /
+  fixed" line drawn from the buckets just composed — the main thread never reads
+  `result.json`, so this return is its only per-finding source for the Step-7
+  phase-log entry.
 
 ## Body organization
 
@@ -53,13 +70,17 @@ stands in for the security buckets):
   one-line rationale.
 - **False-positive (security)** — each with a one-line rationale.
 - **Deferred** — out-of-scope code-review findings; each references its
-  follow-up issue `#<N>` from Step 5a. A Deferred entry may also be an
+  follow-up issue `#<N>` from Step 5a — taken from the Step-5 follow-up
+  references the main thread handed in (on the node lane the reference is the
+  draft-node id, since that lane files no gh issue). A Deferred entry may also be an
   *untriaged* Lane-A residue item the residue phase never reached (the
   residue-disposition agent died before triaging it) rather than a
   deliberate defer decision — its follow-up is filed the same way, via
   Step 5.
 - **Out-of-scope (security)** — pre-existing CodeQL/npm findings; each meaningful
-  one references its follow-up issue `#<N>` from Step 5b. CodeQL-sourced findings
+  one references its follow-up issue `#<N>` from Step 5b — again from the handed-in
+  Step-5 references (matched by the security `identifier`; a draft-node id on the
+  node lane), never from `result.json`. CodeQL-sourced findings
   are identified by their `rule.id` and alert number (from `codeql_ref`), linked
   via their `html_url`.
 
@@ -92,4 +113,5 @@ REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 gh api "repos/${REPO}/issues/comments/${CID}" -X PATCH --field body=@tmp/<file>
 ```
 
-Return `{ comment_id: <CID> }` to the main thread.
+Return `{ comment_id: <CID>, digest_line: "<one-line found/fixed summary>" }` to
+the main thread.

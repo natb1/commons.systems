@@ -679,8 +679,15 @@ empty.
   `graph-commit`** — `graph-commit` is worktree-sensitive and overlapping or
   mis-rooted invocations corrupt graph state, so the risky commit stays in this
   single-threaded parent while the bulky read + write-node work moves out. It
-  returns `{ node_ids: [...], count: <N> }` (`count` = NEW draft nodes created).
-  Then run the single `graph-commit` here.
+  returns `{ node_ids: [...], count: <N> }` (`count` = NEW draft nodes created),
+  each id keyed to the finding it covers. Then run the single `graph-commit`
+  here.
+
+Keep the follow-up references this step produced — the 5a/5b issue numbers on the
+issue lane, the `node_ids` on the node lane — keyed to their source finding. They
+are Step 6's only source for the **Deferred** and **Out-of-scope (security)**
+bucket references, and they exist nowhere else: `result.json` holds the filing
+inputs, not the filed records.
 
 Track how many follow-ups were ACTUALLY filed this run (count only NEW records)
 for the Step 7 `--followups-filed` total — do not use `result.followups_deferred`.
@@ -699,21 +706,37 @@ Step 5 (Agent tool, `subagent_type: general-purpose`, `model: sonnet` set
 explicitly on the Agent call). Hand it:
 
 - `result.result_path` (absolute) — it Reads that file itself and takes
-  `.dispositions`, `.verify_report`, `.security_note`, `.coverage_incomplete`,
-  and `.coverage_note` from it.
+  `.dispositions`, `.fixed`, `.verify_report`, `.security_note`,
+  `.coverage_incomplete`, and `.coverage_note` from it.
 - `PR_NUM` (reuse the value captured in the preamble — do not re-resolve).
 - the fix commit SHA(s) captured at Step 3 (or the note that `--merge-only` ran
   and there is no fix commit).
+- **the Step-5 follow-up references**, keyed to the finding each covers: on the
+  issue lane the follow-up issue numbers the 5a/5b subagents returned (the
+  "Capture each `<N>`" lines in `references/followup-filing.md`); on the node
+  lane the draft-node ids the Step-5 subagent returned. Key them by finding id
+  where the Step-5 return carries one, otherwise by the follow-up's title or
+  security `identifier`. These are **not** in `result.json` — it holds the
+  prepared filing *inputs* (`.deferred_filings`, `.security_followup_input`),
+  filed only after the Workflow returned — so the subagent cannot recover them,
+  and the **Deferred** and **Out-of-scope (security)** buckets reference them.
+  Hand an empty set when Step 5 filed nothing.
 - the worktree root as an absolute path, with the instruction to use only
   absolute paths under it — except the comment body file, which must be written
   under the repo's `tmp/` directory because `post-pr-comment.sh` restricts paths
   to that directory.
 
+Step 5 must have returned before this fork starts — its follow-up references are
+a required input here, and a Step-6 fork run in parallel with Step 5 would render
+`#<N>` placeholders it cannot fill.
+
 It composes the full body once, from the complete `result.json`, gives it the
 first-line marker `<!-- dispatch:review-fix -->`, then posts it via
 `post-pr-comment.sh` or — when a resumed run already has a marker comment
 (`dispatch_marker_comment_id`, `lib.sh`) — PATCHes that same comment in place, so
-a duplicate is never stacked. It returns `{ comment_id }`.
+a duplicate is never stacked. It returns `{ comment_id, digest_line }` —
+`digest_line` is a one-line "what the review found / fixed" summary Step 7 may
+use in the phase-log entry, so the parent never has to read `result.json` for it.
 
 **See `references/pr-comment.md`** for the compose-and-post procedure, the
 per-bucket body organization, the partial-coverage line, and the create/edit
