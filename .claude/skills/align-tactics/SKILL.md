@@ -119,6 +119,70 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    origin/main`) before proceeding. Never treat a failed fetch as license to
    proceed on unverified state.
 
+   **Then, unconditionally, on both entry paths — run the shared mechanical
+   selection-validity gate**, in the worktree, after `assert-worktree-fresh`
+   and **before any graph read** (before any `readNode` call or drift grep
+   below). This includes the `provision-node-worktree` path too, even though
+   `provision-node-worktree` already ran `check-node-selection.ts` itself
+   moments earlier: the re-run here is a redundant, idempotent ~0.7s check,
+   and paying it uniformly is the point — a session that provisioned once via
+   `provision-node-worktree` but re-enters later (e.g. a resumed session)
+   would otherwise slip through on re-entry with no fresh gate check at all.
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/assert-node-selection "<target-node-id>" align-tactics
+   ```
+
+   `align-tactics` is the correct `<selected-phase>` literal for **both**
+   target kinds this skill handles. For a `strategy-<slug>` target,
+   `check-node-selection.ts` requires the node still be `kind: strategy` at
+   its native null phase and defers wholesale to a helper predicate,
+   `strategyAlignSelectable`. For a `tactic-<slug>` target — draft/raw
+   finalize or soft-frozen re-plan alike — the gate skips the phase-literal
+   comparison and defers wholesale to `frozenTacticSelectable`, which is
+   membership in the selector's own candidate list
+   (`packages/intentionsutil/src/router.ts`). The selector emits an
+   uncapped, fully-sorted candidate list, so a low-ranked draft is still
+   admitted — ranking never causes a false exit 12.
+
+   Route on the exit code:
+
+   - `0` — proceed; stdout is the node's scope fingerprint (discard it here,
+     Step 0 does not consume it).
+   - `12` — the selection is no longer valid: the node advanced past draft
+     and is not soft-frozen, was parked to `office_hours`, was resolved or
+     pruned, or has incomplete blockers. **STOP.** Make **no** graph write,
+     open no PR, and record the terminal disposition so the Stop hook can
+     reap the job, reusing the same call this Step 0 already uses for the
+     held-claim case above:
+     ```bash
+     packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
+     ```
+     `no-claim` is already a validated disposition value in
+     `mark-node-terminal`'s vocabulary (it is the same value the held-claim
+     case above uses) — this is not a new value.
+   - `13` — not reachable at this phase: the gate's scope-chained-phase
+     check only applies to the `fix`/`qa`/`review` phases, not
+     `align-tactics`. Treat it as a mechanical error: report and stop.
+   - any other non-zero — mechanical error (unresolvable project root,
+     failed fetch, malformed store): report and stop. A stale selection
+     (`12`) is NOT an `office_hours` park and NOT a defect; a mechanical
+     error is neither of those either — it is a broken environment to report
+     plainly, per this repo's code-style convention of clear errors over
+     defensive fallbacks.
+
+   **Deliberately not gated by `assert-node-selection`** — each of these has
+   a shape this gate cannot express, so a future session should not "finish
+   the rollout" by wiring it in:
+
+   - `/office-hours` — operates on an **office_hours-parked** node by
+     definition; the gate's park check would reject every legitimate run.
+   - `/align-strategy` — may target a strategy that doesn't exist yet (a
+     new-strategy interview), and strategies carry no phase to gate on.
+   - `/align-init` — has no node target at all.
+   - `/grounding-research` — walks many nodes; there is no single selected
+     target to gate.
+
 ## Tactic target — per-node finalize or re-plan
 
 When the argument is a `tactic-<slug>` (not a `strategy-<slug>`), this
