@@ -708,12 +708,30 @@ td_teardown() {
         DISPATCH_STANDDOWN_DIR || true
 }
 
-# td_write_park_node <exit-code> [sleep-seconds] — install the fake park-node: it
-# logs its argc, each positional argument and the inherited
+# td_write_park_node <exit-code> [sleep-seconds] [landing-mode] — install the fake
+# park-node: it logs its argc, each positional argument and the inherited
 # GRAPH_COMMIT_LOCK_WAIT_SECONDS, optionally sleeps (to exercise the `timeout`
-# bound), then exits <exit-code>.
+# bound), then LANDS the park on origin/main and exits <exit-code>.
+#
+# The landing half exists because the sweep's step (13) confirms every rc-0 park
+# by re-reading the node from origin/main: marker deletion is the PROOF the park
+# landed, not a cleanup step that trusts an exit code. A fake that only exits 0
+# would therefore model a park-node that returned success without landing — the
+# real defect — so the DEFAULT fake lands, and each not-landed shape is an
+# explicit opt-in:
+#   land    (default) rewrite the node's frontmatter `office_hours: null` into a
+#           park block and republish origin/main — a park that really landed.
+#   none    exit 0 and change nothing — `graph-commit` exit 0 with no write on
+#           origin/main, the shape this suite regression-tests.
+#   delete  remove the node file and republish — the node unreadable at
+#           origin/main after an rc-0 park.
+#   body    append a column-0 `office_hours:` block to the markdown BODY while
+#           the frontmatter stays `null` — the frontmatter-scoping trap.
+# Landing is skipped entirely for a non-zero <exit-code>: a park-node that fails
+# does not land, and a hang killed by `timeout` never reaches this code at all
+# (the sleep comes first).
 td_write_park_node() {
-  local sleep_s="${2:-0}"
+  local rc="$1" sleep_s="${2:-0}" mode="${3:-land}"
   cat > "$TD_PARK" <<PARK
 #!/usr/bin/env bash
 {
@@ -722,7 +740,21 @@ td_write_park_node() {
   printf 'LOCK=%s\n' "\${GRAPH_COMMIT_LOCK_WAIT_SECONDS:-unset}"
 } >> "$TD_PARKLOG"
 sleep $sleep_s
-exit $1
+if [ "$rc" = 0 ] && [ "$mode" != none ]; then
+  # The sweep may prefix the positionals with '--pr <n>'.
+  node="\$1"
+  [ "\$node" = "--pr" ] && node="\$3"
+  f="$TD_REPO/intentions/\$node.md"
+  case "$mode" in
+    land)   sed -i 's/^office_hours: null\$/office_hours:\n  reason: landed by the fake park-node\n  recommendation: null/' "\$f" ;;
+    body)   printf '\noffice_hours:\n  reason: a BODY line, not frontmatter\n' >> "\$f" ;;
+    delete) rm -f "\$f" ;;
+  esac
+  git -C "$TD_REPO" add -A
+  git -C "$TD_REPO" commit -q -m 'fake park-node: $mode'
+  git -C "$TD_REPO" update-ref refs/remotes/origin/main HEAD
+fi
+exit $rc
 PARK
   chmod +x "$TD_PARK"
 }
@@ -1166,6 +1198,9 @@ assert_eq "park-fail: stderr reports the failure" "yes" \
 assert_eq "park-fail: the decision record says park-failed" "park-failed" "$(td_log_dispositions)"
 assert_eq "park-fail: the reason marker is retained" "present" \
   "$([[ -e "$TD_JOBS/cdb0aaaa/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+# A non-zero exit is a park FAILURE, not an unlanded park: the two have different
+# causes and different operator responses, so their lines must stay distinct.
+assert_eq "park-fail: it is not reported as an unlanded park" "no" "$(td_contains 'park-not-landed')"
 assert_eq "park-fail: summary counts zero parks" "yes" \
   "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
 td_teardown
@@ -1193,14 +1228,17 @@ assert_eq "cap: summary counts the deferrals" "yes" \
   "$(td_contains 'terminal-disposition sweep complete (terminal=4 parked=2 observing=0 unmeasurable=0 deferred=2)')"
 td_teardown
 
-# --- Test 33: at most one `git fetch` per sweep ------------------------------
+# --- Test 33: the fetch budget — one lazy pre-flight + one per confirmed park --
 #
-# The fetch is lazy AND latched: two eligible candidates must still produce
-# exactly one fetch. Counted with a `git` wrapper on PATH that logs a line for
-# every invocation carrying the `fetch` subcommand and then delegates to the
-# real binary.
+# The pre-flight fetch is lazy AND latched: two eligible candidates still produce
+# exactly ONE of it. Step (13)'s confirmation fetch is a second kind and is NOT
+# latched — the park itself is what makes origin/main stale, so a confirmation
+# read against the pre-park ref would report every park as not-landed. Two parks
+# therefore cost 1 + 2 = 3 fetches, bounded by the park cap. Counted with a `git`
+# wrapper on PATH that logs a line for every invocation carrying the `fetch`
+# subcommand and then delegates to the real binary.
 
-echo "Test: two eligible candidates trigger exactly one git fetch"
+echo "Test: two eligible candidates cost one pre-flight fetch plus one confirmation fetch each"
 td_setup
 TD_REAL_GIT=$(command -v git)
 mkdir -p "$TD_DIR/bin"
@@ -1227,7 +1265,8 @@ td_run
 PATH="$TD_OLD_PATH"
 assert_eq "fetch: sweep returns 0" "0" "$TD_RC"
 assert_eq "fetch: both candidates parked" "2" "$(td_park_calls)"
-assert_eq "fetch: exactly one fetch for the whole sweep" "1" "$(wc -l < "$TD_DIR/fetch.log" | tr -d ' ')"
+assert_eq "fetch: one pre-flight fetch plus one confirmation fetch per park" "3" \
+  "$(wc -l < "$TD_DIR/fetch.log" | tr -d ' ')"
 td_teardown
 
 # --- Test 34: each park is bounded — short lock wait, and a hang is killed ----
@@ -1264,6 +1303,9 @@ assert_eq "td-timeout: stderr reports the timeout" "yes" \
 assert_eq "td-timeout: the decision record names the timeout" "park-timeout" "$(td_log_dispositions)"
 assert_eq "td-timeout: the marker survives for the retry" "present" \
   "$([[ -e "$TD_JOBS/fcb0aaaa/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+# A killed park is a park-timeout, never an unlanded park — the timeout branch
+# does no confirmation read at all.
+assert_eq "td-timeout: it is not reported as an unlanded park" "no" "$(td_contains 'park-not-landed')"
 assert_eq "td-timeout: summary counts zero parks" "yes" \
   "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
 td_teardown
@@ -1430,6 +1472,132 @@ assert_eq "td-nullid: park-node invoked once" "1" "$(td_park_calls)"
 assert_eq "td-nullid: the node id survived the parse" "tactic-td-nullid" "$(td_park_arg 1)"
 assert_eq "td-nullid: stderr reports the unusable job id" "yes" \
   "$(td_contains 'terminal worker tactic-td-nullid has no usable job id')"
+td_teardown
+
+# --- Test 42: rc 0 with nothing landed retains the markers -------------------
+#
+# THE regression test. `park-node` lands through `graph-commit`, which pushes to
+# a contended `refs/graph/landing-lock` and can exit 0 in situations where the
+# write never reached origin/main (invariant I2: a graph-commit exit 0 is never
+# evidence anything landed). The old code deleted the session's escalation
+# markers on that exit code alone — destroying the ONLY copy of the session's own
+# escalation text while leaving the node held-and-unparked, i.e. turning a
+# recoverable failure into an unrecoverable one on the path whose job is to
+# prevent exactly that. The park must now be PROVEN landed on origin/main before
+# a single marker is removed.
+
+echo "Test: park-node exits 0 but origin/main still shows office_hours: null → markers retained"
+td_setup
+td_write_park_node 0 0 none
+td_write_node "tactic-td-notlanded" working
+td_commit_nodes
+td_write_transcript "0aae-3030" $(( TD_NOW - 4000 ))
+td_add_session "0aae-3030" "tactic-td-notlanded" "done" "aae03030"
+td_write_job_file "aae03030" "tactic-td-notlanded" office-hours-reason "reason that must survive an unlanded park"
+td_write_job_file "aae03030" "tactic-td-notlanded" office-hours-recommendation "recommendation that must survive"
+td_write_job_file "aae03030" "tactic-td-notlanded" office-hours-pr "3117"
+td_install_claude 0
+td_run
+assert_eq "not-landed: sweep returns 0" "0" "$TD_RC"
+assert_eq "not-landed: park-node was invoked" "1" "$(td_park_calls)"
+assert_eq "not-landed: stderr carries the loud, distinctly greppable line" "yes" \
+  "$(td_contains 'park-not-landed for tactic-td-notlanded — park-node exited 0 but origin/main still shows no office_hours')"
+assert_eq "not-landed: the decision record says park-not-landed" "park-not-landed" "$(td_log_dispositions)"
+assert_eq "not-landed: the reason marker is retained" "present" \
+  "$([[ -e "$TD_JOBS/aae03030/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+assert_eq "not-landed: the recommendation marker is retained" "present" \
+  "$([[ -e "$TD_JOBS/aae03030/office-hours-recommendation" ]] && printf 'present' || printf 'gone')"
+assert_eq "not-landed: the pr marker is retained" "present" \
+  "$([[ -e "$TD_JOBS/aae03030/office-hours-pr" ]] && printf 'present' || printf 'gone')"
+assert_eq "not-landed: the success line is NOT logged" "no" \
+  "$(td_contains 'parked tactic-td-notlanded (terminal-without-disposition')"
+assert_eq "not-landed: the sweep counts no park" "yes" \
+  "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
+td_teardown
+
+# --- Test 43: a park confirmed on origin/main is counted and clears the markers -
+#
+# The other half of the same gate: a park that genuinely landed still behaves
+# exactly as before. The final assertion reads origin/main directly, so a fixture
+# that silently stopped landing could not make this test vacuous.
+
+echo "Test: a park proven non-null on origin/main is counted and clears the markers"
+td_setup
+td_write_node "tactic-td-landed" working
+td_commit_nodes
+td_write_transcript "0bbf-3131" $(( TD_NOW - 4000 ))
+td_add_session "0bbf-3131" "tactic-td-landed" "done" "bbf03131"
+td_write_job_file "bbf03131" "tactic-td-landed" office-hours-reason "the worker's own reason"
+td_install_claude 0
+td_run
+assert_eq "landed: sweep returns 0" "0" "$TD_RC"
+assert_eq "landed: park-node invoked once" "1" "$(td_park_calls)"
+assert_eq "landed: stderr reports the park" "yes" \
+  "$(td_contains 'parked tactic-td-landed (terminal-without-disposition after 4000s')"
+assert_eq "landed: the decision record says parked" "parked" "$(td_log_dispositions)"
+assert_eq "landed: no unlanded-park line" "no" "$(td_contains 'park-not-landed')"
+assert_eq "landed: the reason marker was removed" "gone" \
+  "$([[ -e "$TD_JOBS/bbf03131/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+assert_eq "landed: the sweep counts the park" "yes" \
+  "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=1 observing=0 unmeasurable=0 deferred=0)')"
+assert_eq "landed: origin/main really carries the park (the fixture is not vacuous)" "1" \
+  "$(git -C "$TD_REPO" show 'origin/main:intentions/tactic-td-landed.md' | grep -c '^office_hours:$')"
+td_teardown
+
+# --- Test 44: an unreadable node after an rc-0 park is NOT landed -------------
+#
+# UNKNOWN is never "landed". If the node file cannot be read from origin/main at
+# all after the park returned 0, the sweep has no evidence the park landed, so
+# the markers stay.
+
+echo "Test: a node absent from origin/main after an rc-0 park is treated as not landed"
+td_setup
+td_write_park_node 0 0 delete
+td_write_node "tactic-td-vanished" working
+td_commit_nodes
+td_write_transcript "0ccf-3232" $(( TD_NOW - 4000 ))
+td_add_session "0ccf-3232" "tactic-td-vanished" "done" "ccf03232"
+td_write_job_file "ccf03232" "tactic-td-vanished" office-hours-reason "reason that must survive an unreadable node"
+td_install_claude 0
+td_run
+assert_eq "vanished: sweep returns 0" "0" "$TD_RC"
+assert_eq "vanished: stderr reports the unlanded park" "yes" \
+  "$(td_contains 'park-not-landed for tactic-td-vanished')"
+assert_eq "vanished: the decision record says park-not-landed" "park-not-landed" "$(td_log_dispositions)"
+assert_eq "vanished: the reason marker is retained" "present" \
+  "$([[ -e "$TD_JOBS/ccf03232/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+assert_eq "vanished: the sweep counts no park" "yes" \
+  "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
+td_teardown
+
+# --- Test 45: the confirmation read is frontmatter-scoped ---------------------
+#
+# The trap step (8)'s idiom exists to prevent, read in the opposite polarity: a
+# column-0 `office_hours:` line in the markdown BODY (documentation of the
+# serialization) must never be mistaken for park state — here, must never certify
+# a park that never landed and so authorize deleting the session's only copy of
+# its escalation text.
+
+echo "Test: a body-only office_hours line never certifies a park (frontmatter scoping)"
+td_setup
+td_write_park_node 0 0 body
+td_write_node "tactic-td-bodyonly" working
+td_commit_nodes
+td_write_transcript "0ddb-3333" $(( TD_NOW - 4000 ))
+td_add_session "0ddb-3333" "tactic-td-bodyonly" "done" "ddb03333"
+td_write_job_file "ddb03333" "tactic-td-bodyonly" office-hours-reason "reason that must survive a body-only office_hours"
+td_install_claude 0
+td_run
+assert_eq "body-only: sweep returns 0" "0" "$TD_RC"
+assert_eq "body-only: the body line did not certify the park" "yes" \
+  "$(td_contains 'park-not-landed for tactic-td-bodyonly')"
+assert_eq "body-only: the decision record says park-not-landed" "park-not-landed" "$(td_log_dispositions)"
+assert_eq "body-only: the reason marker is retained" "present" \
+  "$([[ -e "$TD_JOBS/ddb03333/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+assert_eq "body-only: origin/main really carries the body line (the fixture is not vacuous)" "1" \
+  "$(git -C "$TD_REPO" show 'origin/main:intentions/tactic-td-bodyonly.md' | grep -c '^office_hours:$')"
+assert_eq "body-only: the sweep counts no park" "yes" \
+  "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
 td_teardown
 
 report_results

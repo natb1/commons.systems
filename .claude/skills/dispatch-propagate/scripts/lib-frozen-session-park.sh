@@ -612,6 +612,38 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
   # session ids). `standdown_recheck_sweep` owns those nodes and parks them itself
   # once the winner is definitely gone.
   #
+  # Marker deletion is the PROOF that the park landed — not a cleanup step that
+  # trusts an exit code. `park-node` lands through `graph-commit`, which pushes to
+  # a contended `refs/graph/landing-lock`, and invariant I2 is explicit that a
+  # `graph-commit` exit 0 is NEVER evidence that anything reached `origin/main`.
+  # The session's `office-hours-reason` / `-recommendation` / `-pr` files are the
+  # ONLY surviving copy of its own escalation text, so deleting them on a bare
+  # exit 0 converts a RECOVERABLE failure — a node held-and-unparked, retryable on
+  # the next tick from the text still on disk — into an UNRECOVERABLE one, on the
+  # very path whose whole job is to prevent that state. That is the worst outcome
+  # available to this function, so an exit code alone does not get to authorize
+  # it.
+  #
+  # Step (13) therefore re-reads the node from a freshly fetched `origin/main`
+  # after every rc-0 park and deletes the markers ONLY when `office_hours` is
+  # non-null there — the park is then PROVEN landed, counted, and logged as
+  # before. `office_hours: null`, an absent `office_hours` key, a node file that
+  # is gone, or a read that fails at all all mean the park did NOT land despite
+  # the exit 0: the markers are KEPT, one loud `park-not-landed` line goes to
+  # stderr, a `park-not-landed` decision record is written (deliberately distinct
+  # from `park-failed` — a park that exited non-zero and a park that exited 0
+  # without landing have different causes and want different operator responses),
+  # and the park is NOT counted. The next tick retries with the session's own text
+  # intact. The confirmation read reuses step (8)'s frontmatter-scoped idiom
+  # verbatim, in the opposite polarity, and the frontmatter scoping is just as
+  # load-bearing here: a column-0 `office_hours:` line in the markdown BODY must
+  # never be able to certify a park that never landed.
+  #
+  # This makes the project's bug-J detect — `find $CLAUDE_JOB_DIR -maxdepth 2
+  # -name office-hours-reason`, where ANY hit is by definition a park that did not
+  # land — double as this heal's OWN success criterion: a marker that survives one
+  # sweep interval is a heal that failed, and it now says so in its own words.
+  #
   # Accepted residuals:
   #   - A session that DID declare but whose `claude rm` reap itself failed
   #     lingers as a terminal row and could be parked spuriously. This is rare;
@@ -636,10 +668,25 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
   #     skill wrote both.
   #
   # Two daemon queries (the `--all` candidate listing, which cannot come from the
-  # tick snapshot, and the snapshot-backed ACTIVE view behind the interlock) and
-  # at most one `git fetch` per invocation; the fetch is LAZY (only once a
-  # candidate has actually aged past the grace). One greppable stderr line per
-  # disposition, and exactly one summary line.
+  # tick snapshot, and the snapshot-backed ACTIVE view behind the interlock).
+  #
+  # The `git fetch` budget is ONE lazy pre-flight fetch per invocation — it runs
+  # only once a candidate has actually aged past the grace, so a sweep with no
+  # aged candidate does no network I/O at all — PLUS one confirmation fetch per
+  # park that returned rc 0. The second kind is not optional and not foldable into
+  # the first: the park itself just pushed, so by construction this checkout's
+  # `origin/main` is stale exactly when step (13) needs it to be current, and a
+  # confirmation read against a pre-park ref would report EVERY park as
+  # not-landed. The budget is therefore `1 + park_max` fetches (3 by default),
+  # bounded by the same park cap that bounds the `park-node` calls the extra
+  # fetches follow — and a `git fetch origin main` is negligible beside the
+  # `park-node` invocation it confirms. This paragraph, not the older "at most one
+  # `git fetch` per invocation" wording, is the contract; `frozen_session_sweep`
+  # (which does not confirm) still holds to the single-fetch form.
+  #
+  # A failed confirmation fetch is non-fatal and reads as NOT LANDED, which is the
+  # fail-safe direction: markers kept, park uncounted, retry next tick. One
+  # greppable stderr line per disposition, and exactly one summary line.
   #
   # Bounded and provenance-checked exactly as `frozen_session_sweep` is, and for
   # the same reasons (see that function's header): this sweep also runs INLINE on
@@ -1059,17 +1106,61 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       GRAPH_COMMIT_LOCK_WAIT_SECONDS="$lock_wait" \
         "$timeout_bin" "$park_timeout" "$park_node" "${park_args[@]}" >/dev/null </dev/null || rc=$?
       if (( rc == 0 )); then
-        parked_count=$(( parked_count + 1 ))
-        printf 'lib-frozen-session-park: parked %s (terminal-without-disposition after %ss; session=%s)\n' "$name" "$idle" "$sid" >&2
-        _terminal_disposition_log_decision "$name" "$sid" "$idle" "parked"
-        # Clear the session's escalation markers so a later sweep cannot re-land
-        # stale text — mirroring dispatch-stop.sh's on-success cleanup, the one
-        # behaviour of the deleted backstop worth keeping. ONLY for a job dir
-        # this node actually owns: deleting another session's pending escalation
-        # markers would destroy its park evidence.
-        if (( job_owned )); then
-          rm -f "$job_dir/office-hours-reason" "$job_dir/office-hours-recommendation" \
-                "$job_dir/office-hours-pr" 2>/dev/null || true
+        # (13) Confirm the park actually LANDED. `park-node` lands through
+        # `graph-commit`, and invariant I2 says a `graph-commit` exit 0 is never
+        # evidence that anything reached `origin/main` — so the exit code alone
+        # does not get to authorize deleting the session's escalation markers,
+        # which are the only surviving copy of its own escalation text. Re-read
+        # the node from origin/main and require `office_hours` to be non-null
+        # there; marker deletion is the PROOF the park landed, not a cleanup step
+        # that trusts an exit code (see the header).
+        #
+        # The fetch is mandatory here, not latched with step (6)'s: the park we
+        # just ran is exactly what made this checkout's `origin/main` stale, so a
+        # confirmation read against the pre-park ref would report every park as
+        # not-landed. A failed fetch is non-fatal and falls through to a stale
+        # read, which reads as NOT LANDED — the fail-safe direction.
+        git -C "$repo_root" fetch origin main --quiet 2>/dev/null || true
+
+        # Same frontmatter-scoped idiom as step (8), in the OPPOSITE polarity:
+        # there it answers "was this already parked before we touched it", here
+        # "did OUR park land". Non-null under the YAML fences is the only thing
+        # that counts as landed; a null value, a missing `office_hours` key, and
+        # an unreadable/absent node file are all NOT landed. The frontmatter
+        # scoping is load-bearing for the same reason it is there: a column-0
+        # `office_hours:` line in the markdown BODY must never certify a park.
+        local landed=0 confirm_body confirm_frontmatter
+        if confirm_body=$(git -C "$repo_root" show "origin/main:intentions/${name}.md" 2>/dev/null); then
+          confirm_frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$confirm_body")
+          if grep -q '^office_hours:' <<<"$confirm_frontmatter"; then
+            if ! grep -qE '^office_hours:[[:space:]]*null[[:space:]]*$' <<<"$confirm_frontmatter"; then
+              landed=1
+            fi
+          fi
+        fi
+
+        if (( landed )); then
+          parked_count=$(( parked_count + 1 ))
+          printf 'lib-frozen-session-park: parked %s (terminal-without-disposition after %ss; session=%s)\n' "$name" "$idle" "$sid" >&2
+          _terminal_disposition_log_decision "$name" "$sid" "$idle" "parked"
+          # Clear the session's escalation markers so a later sweep cannot re-land
+          # stale text — mirroring dispatch-stop.sh's on-success cleanup, the one
+          # behaviour of the deleted backstop worth keeping. Reached ONLY with the
+          # park proven landed on origin/main, and ONLY for a job dir this node
+          # actually owns: deleting another session's pending escalation markers
+          # would destroy its park evidence.
+          if (( job_owned )); then
+            rm -f "$job_dir/office-hours-reason" "$job_dir/office-hours-recommendation" \
+                  "$job_dir/office-hours-pr" 2>/dev/null || true
+          fi
+        else
+          # Exit 0, but nothing landed. Loud and distinctly greppable, because
+          # this is the shape that used to destroy the evidence silently: the
+          # markers are KEPT so the next tick retries with the session's own
+          # text, and the park is NOT counted.
+          printf 'lib-frozen-session-park: park-not-landed for %s — park-node exited 0 but origin/main still shows no office_hours on intentions/%s.md; graph-commit exit 0 is not evidence a write landed (I2). KEEPING the escalation markers; will retry next tick\n' \
+            "$name" "$name" >&2
+          _terminal_disposition_log_decision "$name" "$sid" "$idle" "park-not-landed"
         fi
       elif (( rc == 124 )); then
         # A timeout is just another park failure — same non-fatal handling, the
