@@ -212,6 +212,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-instrument.sh
       - name: Run review-fix residue-death coverage tests
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-residue-death.sh
+      - name: Run review-fix cross-lane dedup tests
+        run: .claude/skills/dispatch-propagate/scripts/test-review-fix-xlane-dedup.sh
       - name: Run review-fix domain-sweep tests
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-domain-sweep.sh
       - name: Run dispatch-verify-instrument-invocation tests
