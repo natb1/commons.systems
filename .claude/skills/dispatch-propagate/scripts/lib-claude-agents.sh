@@ -428,15 +428,48 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # registry read as definite or uncorroborated.
   #     return 0 — DEFINITE: the payload is not an empty array (a non-empty
   #               array is self-corroborating — a blocked read cannot invent
-  #               rows), or it IS `[]` and a `claude daemon` process is visible.
+  #               rows); or it came from a snapshot for <view>, whose emptiness
+  #               was corroborated at capture time; or it IS `[]` from a live
+  #               read and a `claude daemon` process is visible.
   #     return 1 — UNCORROBORATED `[]`: the caller must fold it into UNKNOWN.
   # Always pass the RAW payload, never a projection: `claude_sessions_under`'s
   # `--cwd` filter and the client-side jq filters legitimately project zero rows
   # from a NON-empty array, and keying on the projection would flip healthy
   # reads to UNKNOWN.
+  # WHERE CORROBORATION HAPPENS: at CAPTURE, not at every read. A snapshot is
+  # written by `claude_agents_snapshot_capture`, which performs the live socket
+  # read and corroborates it there — refusing to write an uncorroborated `[]`
+  # at all. So by the time a reader sees a snapshot, its emptiness has already
+  # been established as real, and re-probing here would be both redundant and
+  # WRONG: a caller that deliberately supplied an empty snapshot (the tick
+  # reusing one capture across a selection pass; a test injecting "no
+  # sessions") would have its own explicit input overridden by a probe of the
+  # ambient host. That is why `<view>` exists — when the snapshot backing that
+  # view is in effect, the payload is the caller's assertion and is definite by
+  # construction.
+  #
+  # `<view>` is `active` (DISPATCH_AGENTS_SNAPSHOT, backing `_claude_agents_raw`)
+  # or `registered` (DISPATCH_AGENTS_SNAPSHOT_ALL, backing
+  # `_claude_agents_raw_registered`). The two are INDEPENDENT: a site reading
+  # the registered view must not be excused by an active-view snapshot, so the
+  # view is passed explicitly rather than inferred. Omit it for a site that
+  # queries the daemon DIRECTLY, bypassing both snapshots — such a read is
+  # always live and always corroborated.
+  _claude_agents_snapshot_in_effect() {
+    case "${1:-}" in
+      active)     [[ -n "${DISPATCH_AGENTS_SNAPSHOT:-}"     && -r "${DISPATCH_AGENTS_SNAPSHOT:-}"     ]] ;;
+      registered) [[ -n "${DISPATCH_AGENTS_SNAPSHOT_ALL:-}" && -r "${DISPATCH_AGENTS_SNAPSHOT_ALL:-}" ]] ;;
+      *)          return 1 ;;
+    esac
+  }
+
   _claude_agents_empty_read_is_definite() {
-    local raw="${1:-}"
+    local raw="${1:-}" view="${2:-}"
     if [[ "${raw//[[:space:]]/}" != "[]" ]]; then
+      return 0
+    fi
+    # A snapshot-sourced `[]` was corroborated when the snapshot was captured.
+    if _claude_agents_snapshot_in_effect "$view"; then
       return 0
     fi
     claude_agents_registry_reachable
@@ -451,15 +484,33 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
 
   # claude_agents_snapshot_capture <path> — capture one machine-wide
   # `claude agents --json` to <path> for the tick to reuse via
-  # DISPATCH_AGENTS_SNAPSHOT. Writes the raw array (even `[]`) and returns the
-  # command's exit status so the caller can fall back to live reads on failure.
+  # DISPATCH_AGENTS_SNAPSHOT.
+  #
+  # THIS IS WHERE THE EMPTY READ IS CORROBORATED. The capture is the one place
+  # the live socket read actually happens, so it is the one place the
+  # blocked-read ambiguity exists. An uncorroborated `[]` is NOT written: the
+  # file is removed and a non-zero status returned, so the caller falls back to
+  # live per-call reads (each of which corroborates on its own) instead of
+  # seeding every reader in the pass with a snapshot that says "no sessions"
+  # when it means "could not see". Writing it and re-probing at each read would
+  # spread one ambiguous read across the whole tick AND override any caller
+  # that legitimately supplied an empty snapshot.
+  #     return 0 — a snapshot was written and its contents are trustworthy.
+  #     return non-zero — nothing usable was written; fall back to live reads.
   claude_agents_snapshot_capture() {
     local pth="${1:-}"
     if [[ -z "$pth" ]]; then
       printf 'lib-claude-agents: claude_agents_snapshot_capture requires a <path> argument\n' >&2
       return 1
     fi
-    "${CLAUDE_AGENTS_CMD:-claude}" agents --json >"$pth" 2>/dev/null
+    "${CLAUDE_AGENTS_CMD:-claude}" agents --json >"$pth" 2>/dev/null || return 1
+    # No <view> argument: this classifies the LIVE read that just happened, so
+    # it must probe, never excuse itself via a snapshot that does not exist yet.
+    if ! _claude_agents_empty_read_is_definite "$(cat "$pth" 2>/dev/null)"; then
+      _claude_agents_warn_uncorroborated_empty claude_agents_snapshot_capture
+      rm -f "$pth"
+      return 1
+    fi
   }
 
   # _claude_agents_raw_registered — emit the raw `claude agents --json --all`
@@ -482,16 +533,21 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # claude_agents_snapshot_capture_registered <path> — capture one machine-wide
   # `claude agents --json --all` to <path> for the tick to reuse via
   # DISPATCH_AGENTS_SNAPSHOT_ALL. The REGISTERED-view sibling of
-  # claude_agents_snapshot_capture. Writes the raw array (even `[]`) and returns
-  # the command's exit status so the caller can fall back to live reads on
-  # failure.
+  # claude_agents_snapshot_capture, including its capture-time corroboration:
+  # an uncorroborated `[]` is not written, and non-zero is returned so the
+  # caller falls back to live reads.
   claude_agents_snapshot_capture_registered() {
     local pth="${1:-}"
     if [[ -z "$pth" ]]; then
       printf 'lib-claude-agents: claude_agents_snapshot_capture_registered requires a <path> argument\n' >&2
       return 1
     fi
-    "${CLAUDE_AGENTS_CMD:-claude}" agents --json --all >"$pth" 2>/dev/null
+    "${CLAUDE_AGENTS_CMD:-claude}" agents --json --all >"$pth" 2>/dev/null || return 1
+    if ! _claude_agents_empty_read_is_definite "$(cat "$pth" 2>/dev/null)"; then
+      _claude_agents_warn_uncorroborated_empty claude_agents_snapshot_capture_registered
+      rm -f "$pth"
+      return 1
+    fi
   }
 
   # claude_sessions_under <path> — emit live sessions under <path> as TSV.
@@ -748,7 +804,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     fi
 
     # An uncorroborated `[]` is UNKNOWN, not a definite empty registry.
-    if ! _claude_agents_empty_read_is_definite "$out"; then
+    if ! _claude_agents_empty_read_is_definite "$out" active; then
       _claude_agents_warn_uncorroborated_empty claude_agents_list_all
       return 1
     fi
@@ -800,7 +856,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     # An uncorroborated `[]` is UNKNOWN, not a definite empty registry — and
     # `worktree_has_live_session` folds that UNKNOWN into OCCUPIED, so a blocked
     # read can no longer report a claimed worktree as free.
-    if ! _claude_agents_empty_read_is_definite "$out"; then
+    if ! _claude_agents_empty_read_is_definite "$out" registered; then
       _claude_agents_warn_uncorroborated_empty claude_agents_list_registered
       return 1
     fi
@@ -1163,7 +1219,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
 
     # An uncorroborated `[]` is UNKNOWN, not a definite count of 0 — a blocked
     # read must not manufacture spawn headroom.
-    if ! _claude_agents_empty_read_is_definite "$out"; then
+    if ! _claude_agents_empty_read_is_definite "$out" active; then
       _claude_agents_warn_uncorroborated_empty claude_agents_count_busy_workers
       return 1
     fi
