@@ -1657,10 +1657,10 @@ ensure_deps() {
 # (mirrors the lib-decision-log.sh `command -v flock` guard), and always
 # returns 0 so it never fails the caller.
 # Tunables (env): DPKG_LOCK_FILE (default /var/lib/dpkg/lock-frontend),
-# DPKG_LOCK_WAIT_TIMEOUT (default 30 seconds).
+# DPKG_LOCK_WAIT_TIMEOUT (default 120 seconds).
 wait_for_dpkg_lock() {
   local lockfile="${DPKG_LOCK_FILE:-/var/lib/dpkg/lock-frontend}"
-  local deadline="${DPKG_LOCK_WAIT_TIMEOUT:-30}"
+  local deadline="${DPKG_LOCK_WAIT_TIMEOUT:-120}"
   [ -e "$lockfile" ] || return 0
   command -v flock >/dev/null 2>&1 || return 0
 
