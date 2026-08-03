@@ -1918,6 +1918,146 @@ const residueResolvedByIdx = new Map();
   }
 }
 
+// --- CROSS-LANE ABSORPTION ---------------------------------------------------
+// The two review lanes never saw each other before this point: Lane A's residue
+// skips the gather loop that builds allFindings, so a defect BOTH lanes found is
+// fixed once by the Lane-B Opus fix fan-out and then handed AGAIN to the Opus
+// residue-disposition agent, which may edit the same file a second time. This
+// block merges each such Lane-A twin into the Lane-B finding that already covers
+// it, and drops it from laneAResidue before the disposition agent sees it.
+//
+// AUDIT-RECORD SEMANTICS: an absorbed Lane-A item gets NO new disposition entry
+// in laneADispositions. Its record is fully carried by the `sources` union on the
+// surviving Lane-B `deduped` entry — the dispositions-building code below renders
+// `sources: f.sources && f.sources.length ? f.sources : [f.Source]`, so the merged
+// entry surfaces under the Lane-B id/Source/bucket with BOTH lanes listed in
+// `sources`. Deliberately do NOT emit a `Fixed`-bucket disposition for the
+// absorbed item: `fixes_applied` is computed as `fixed.length` later in this file,
+// and an extra Fixed disposition with no matching `fixed[]` entry would break the
+// invariant `fixes_applied === count of Fixed-bucket dispositions` documented in
+// .claude/docs/outcome-envelope.md. Absorption therefore drops total
+// findings-surfaced by one per duplicate while leaving fixes_applied unchanged —
+// nothing is appended to fixed[], laneADispositions, or allFindings here; the only
+// mutations are an in-place replacement inside `deduped` and a shrink of
+// laneAResidue.
+{
+  const laneAResidueBefore = laneAResidue.length;
+
+  // Only a Lane-B finding that survived verify AND was actually fixed may absorb
+  // a Lane-A twin. `fixedIds` is exactly that predicate already: it is built from
+  // `fixed`, which holds only findings the fix agent resolved out of `fixSet`,
+  // itself drawn from applyVerifyDrop's survivors (Upheld-verified Required
+  // findings, or Fixed-bucket erosion findings). A Refuted or Unverified finding
+  // never reaches `fixed`; a Deferred-bucket finding never enters `fixSet`. So
+  // membership in fixedIds excludes Refuted/Unverified/Deferred with no extra
+  // predicate — do not add one.
+  const laneBEligible = deduped.filter((f) => fixedIds.has(f.id));
+
+  // Every surviving Lane-A residue item is an absorption candidate EXCEPT
+  // high-severity security-review items. Those are the only Lane-A items wired to
+  // the `deviation` escalation gate below (it walks laneAResidue by index and
+  // checks `source === 'security-review' && severity === 'high'` against
+  // residueResolvedByIdx). Lane-B `fixed[]` entries come from the fix agent's
+  // self-reported resolved_ids with NO working-tree verification — unlike the
+  // residue path, which verifies its own applied resolves. Absorbing a
+  // high-severity security-review item against an unverified Lane-B fix claim
+  // would silently suppress a human escalation. Leaving them unabsorbed costs at
+  // most one duplicate disposition and preserves the gate.
+  const laneACandidates = laneAResidue
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => !(r.source === 'security-review' && r.severity === 'high'));
+
+  // Project each candidate into finding shape NON-DESTRUCTIVELY — the original
+  // laneAResidue objects must still reach the disposition prompt unchanged, and
+  // they keep the `category`/`exploit_scenario` fields that have no Lane-B analog
+  // (never read by dedupMerge or the grouping below, so simply absent here).
+  // `_idx` uses the ORIGINAL laneAResidue index offset past every Lane-B _idx, so
+  // a Lane-A record can never win dedupMerge's _idx tie-break either — belt and
+  // braces alongside the lane term in dedupMerge's comparator.
+  const laneAProjected = laneACandidates.map(({ r, i }) => ({
+    id: `laneA-residue-${i}`,
+    _laneAIdx: i,
+    _idx: allFindings.length + 1 + i,
+    Location: (r.location || '').trim(),
+    Description: r.description,
+    Confidence: r.severity, // same high|medium|low enum as Lane-B Confidence
+    'Recommended fix': r.recommended_fix,
+    Source: r.source,
+    OWASP: '',
+    STRIDE: '',
+  }));
+
+  // Group the union by trimmed Location, then keep only CONTESTED groups — those
+  // holding at least one Lane-A member and at least one non-Lane-A member. A
+  // single-lane group has nothing to absorb and must never reach dedupMerge here.
+  const xlaneGroups = new Map();
+  for (const f of [...laneBEligible, ...laneAProjected]) {
+    const loc = (f.Location || '').trim();
+    if (!xlaneGroups.has(loc)) xlaneGroups.set(loc, []);
+    xlaneGroups.get(loc).push(f);
+  }
+  const contested = [...xlaneGroups.entries()].filter(
+    ([, group]) =>
+      group.some((f) => LANE_A.has(f.Source)) && group.some((f) => !LANE_A.has(f.Source))
+  );
+
+  const absorbedIdx = new Set();
+  for (const [loc, group] of contested) {
+    // Bounded naturally by min(|laneBEligible|, |laneA candidates|) and in practice
+    // by the number of exact path:line collisions, so no agent-count cap is needed.
+    // The `xlane-dedup:` label prefix separates these agents from the dedup phase's
+    // own `dedup:<loc>` labels in the audit / token-usage log.
+    const partition = await partitionSameRoot(loc, group, {
+      label: `xlane-dedup:${loc}`,
+      phase: 'residue',
+    });
+    const byId = new Map(group.map((f) => [f.id, f]));
+    for (const sub of partition) {
+      const members = sub.map((id) => byId.get(id)).filter(Boolean);
+      const laneAMembers = members.filter((f) => LANE_A.has(f.Source));
+      const laneBMembers = members.filter((f) => !LANE_A.has(f.Source));
+      // Subgroups the partition split into a single lane are no-ops.
+      if (!laneAMembers.length || !laneBMembers.length) continue;
+      const merged = dedupMerge(members);
+      // Cheap structural check that the Lane-B representative pinning in
+      // dedupMerge actually held — it is the only thing standing between a
+      // dedupMerge regression and a narrowed verify ledger. Fail closed.
+      if (LANE_A.has(merged.Source)) {
+        log(
+          `xlane-dedup: WARNING — dedupMerge did not preserve Lane-B representative for group at ${loc}; ` +
+            'skipping absorption (fail-closed)'
+        );
+        continue;
+      }
+      // merged.id equals a Lane-B member's id, which is already present in
+      // `deduped` — replace it at the same array position under the same id.
+      const at = deduped.findIndex((f) => f.id === merged.id);
+      if (at === -1) {
+        log(
+          `xlane-dedup: WARNING — merged representative ${merged.id} not found in deduped at ${loc}; ` +
+            'skipping absorption (fail-closed)'
+        );
+        continue;
+      }
+      deduped[at] = merged;
+      for (const a of laneAMembers) absorbedIdx.add(a._laneAIdx);
+    }
+  }
+
+  // Drop the absorbed twins. Every downstream consumer re-derives its indices from
+  // THIS filtered array — the residueForAgent mapping immediately below, and
+  // everything keyed off laneAResidue's array order later in the file including the
+  // `deviation` gate — so no index remapping is needed anywhere else. That is a
+  // real dependency a future edit could silently break: if any consumer ever
+  // captures laneAResidue indices BEFORE this point, it must be remapped here.
+  laneAResidue = laneAResidue.filter((r, i) => !absorbedIdx.has(i));
+
+  log(
+    `xlane-dedup: ${contested.length} contested location(s), ${absorbedIdx.size} Lane-A item(s) absorbed; ` +
+      `laneAResidue ${laneAResidueBefore} → ${laneAResidue.length}`
+  );
+}
+
 if (laneAResidue.length === 0) {
   log('residue: no Lane-A residue to disposition — skipping the subagent.');
 } else {
