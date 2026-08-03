@@ -67,8 +67,17 @@ attention:
     the Workflow. Finalized 2026-07-31 via a tactic-target /align-tactics round:
     status is now codified and phase implement, carrying a full clean-session
     plan (Units 1-2) in the body."
-phase: implement
-execution: null
+  tier: 1
+phase: qa
+execution:
+  branch: tactic-align-tactics-target-node-context-dropped
+  pr: 3017
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
