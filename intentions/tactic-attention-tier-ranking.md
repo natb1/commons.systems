@@ -56,7 +56,32 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: Item 11 asks a human to confirm the strategy-graph-native-dispatch
+    soft-freeze blast radius is proportionate and intended -- a subjective
+    scope/product judgment call, not something any tool can decide; the finding
+    text itself says so explicitly.
+  since: 2026-08-03
+  recommendation: "Machine research already done: ran 'npx tsx
+    packages/intentionsutil/scripts/select-targets.ts' (sandbox-off) against the
+    live 400+ node store and filtered its emitted freeze events to
+    strategy-graph-native-dispatch. Result: currently ZERO open tactics carry a
+    stale strategy_fingerprint stamp against this strategy, so the observed
+    blast radius right now is zero re-surfaced tactics, not the dozens one might
+    assume from the plan prose. (163 tactics serve this strategy total, 123 of
+    them open by phase, but none of the open ones hold a strategy_fingerprint
+    map entry for this strategy id predating the 2026-07-31
+    attributes.conditions amendment -- most never got a per-strategy stamp at
+    all.) The graph-wide freeze mechanism itself is confirmed live and working:
+    it correctly reported 5 unrelated freeze events on other strategies
+    (strategy-autonomous-execution x3, strategy-explicit-intent x1,
+    strategy-reversible-institution x1) in the same run. Ask: given the
+    currently-measured blast radius is zero, confirm this (rather than the
+    larger hypothetical set) is the intended/acceptable outcome -- note the
+    count is a live snapshot and will grow as more tactics serving
+    strategy-graph-native-dispatch get planned/stamped over time, so re-check if
+    the concern is about future growth rather than the current state."
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
