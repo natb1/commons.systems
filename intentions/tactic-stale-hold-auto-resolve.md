@@ -64,6 +64,7 @@ attention:
     Finalized 2026-07-31 (/align-tactics) to phase: implement with the boost
     left unchanged at 20; blocked_by remains empty so this promotion still lifts
     no blocker and cannot compound."
+  tier: 1
 phase: qa
 execution:
   branch: tactic-stale-hold-auto-resolve
@@ -72,14 +73,10 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix:
-    since: 2026-08-01
-    attempt: 1
-    pushed_sha: null
+  fix: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-fix-cap-stale-hold-auto-resolve
+blocked_by: []
 office_hours: null
 pace_exempt: true
 rounds: null
