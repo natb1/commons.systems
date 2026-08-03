@@ -82,6 +82,20 @@ jobs:
         # inside the script exits 0 by design, so the step cap below is the ONE
         # way this mitigation could itself block a PR. A mitigation that fails
         # the job it exists to protect is worse than no mitigation.
+        #
+        # Note: .github/workflows/unit-tests.yml also calls `sudo apt-get
+        # update && sudo apt-get install -y zsh` (no pre-step like this one, no
+        # raised timeout) — a third apt-get call site in this repo's CI left
+        # deliberately unmitigated. It has no observed dpkg-lock flake history,
+        # and it's a plain `apt-get install`, not the `playwright install
+        # --with-deps` path whose timed-out apt-get tree is what strands the
+        # lock for this job's kind of failure (see `playwright_install_with_deps`
+        # / `wait_for_dpkg_lock` in
+        # .claude/skills/dispatch-propagate/scripts/lib.sh). Adding this 5-min
+        # best-effort step to a fast, frequently-run unit-test job costs more
+        # than the unobserved risk is currently worth. If the flake is ever
+        # observed there too, harden it the same way with
+        # .github/scripts/free-dpkg-lock.sh.
         timeout-minutes: 5
         continue-on-error: true
         run: .github/scripts/free-dpkg-lock.sh
