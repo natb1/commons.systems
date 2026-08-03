@@ -68,14 +68,12 @@ attention:
     status is now codified and phase implement, carrying a full clean-session
     plan (Units 1-2) in the body."
   tier: 1
-phase: review
+phase: implement
 execution:
   branch: tactic-align-tactics-target-node-context-dropped
   pr: 3017
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
