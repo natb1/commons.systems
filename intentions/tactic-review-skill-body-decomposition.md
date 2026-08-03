@@ -46,13 +46,12 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: qa
+phase: implement
 execution:
   branch: tactic-review-skill-body-decomposition
   pr: 3025
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -711,8 +710,10 @@ the Workflow return should now be a few hundred bytes.
 
 ## needs-main residue
 
-Filed by `/qa-fix` on PR #3025 (2026-08-03). Three items could not be verified
-in-session because they require post-merge live-run data. Drained by
+Filed by `/qa-fix` on PR #3025 (2026-08-03). Four items could not be verified
+in-session: three require post-merge live-run data, and the fourth (item-12) is
+a planned-deferral re-confirmation classified `needs-main` by the Step 3.5
+disposition Workflow rather than dropped as already-satisfied. Drained by
 `tactic-main-qa-phase` after `review → main-qa` fires (post-merge).
 
 ### item-13-context-reduction-materializes — Parent-session context reduction actually materializes on live runs
@@ -754,3 +755,16 @@ in-session because they require post-merge live-run data. Drained by
 - Verifiability: WAIT — awaiting a post-merge `/review-fix` run on a PR with
   real CodeQL alerts and/or a real dependency-lockfile change.
 - Check: on the next such run, diff the findings the two scripts emit against what the pre-decomposition inline blocks would have produced on the same alerts/advisories (manual comparison; no automated pre/post harness exists).
+
+### item-12-live-run-parity-reconfirm — needs-main residue filing (items 13/14/15) survives through the qa-fix attempt-2 commits
+- URL path: current
+- Expected outcome: the three items above remain present, unmodified, and
+  discoverable in this section through any later commit on this PR, so
+  `tactic-main-qa-phase` finds all three post-merge.
+- Finding: confirmed present and unmodified in the qa-fix session's own working
+  tree as of attempt 2/3 — but this recovery commit is the first time the
+  section actually lands on `origin/main`: the original filing (local commit
+  91862e5a) was never pushed/merged to `origin/main`, so this append also
+  restores items 13/14/15, not only item-12.
+- Verifiability: MACHINE
+- Check: `grep -c '^### item-1[2345]-' intentions/tactic-review-skill-body-decomposition.md` — expect `4`.
