@@ -579,6 +579,106 @@ clarifications:
       signature, never an agent's account of what it ran. This is the
       token-economy half of the substitution invariant recorded the same day on
       strategy-graph-native-dispatch.
+  - question: When a review finding is derived from BOTH Lane A and Lane B, which
+      lane's record survives cross-lane deduplication?
+    answer: "(Recorded 2026-08-03, author interview; amends clarification 20.) The
+      Lane-B record is ALWAYS the surviving representative. Clarification 20's
+      lane-tag mechanism presumed each finding carries exactly one lane, but
+      cross-lane dedup's whole purpose is producing entries derived from both.
+      dedupMerge collapses a same-root group to one representative ordered by
+      Confidence desc then _idx asc, so one lane's Source/id/bucket survives and
+      the other's is discarded into the sources union. Under that ordering a
+      Lane-A win silently NARROWS skeptic coverage — a Lane-B Required finding
+      loses its bucket and drops out of verify — which condition 5 forbids, and
+      which the draft body never considered because it guards only against
+      widening. Pinning Lane B as the representative leaves verify eligibility
+      bit-for-bit unchanged and makes it structurally impossible for a
+      Lane-A-derived entry to acquire bucket Required. The absorbed Lane-A item
+      is recorded in sources and suppressed from the residue-disposition ledger,
+      so it is fixed exactly once. Two alternatives were put to the author and
+      declined: keeping the Confidence-desc winner while unioning buckets (a
+      smaller change, but the merged entry's Source/id then no longer indicates
+      which lane found it, making residue attribution ambiguous), and ratifying
+      the current behavior as tolerable."
+  - question: Does clarification 20's "never routed into the adversarial skeptic
+      stage" still hold now that a skeptic pre-gate post-dates the ruling?
+    answer: "(Recorded 2026-08-03, author interview; amends clarification 20.) It
+      holds, read as the VERIFY stage ONLY. Clarification 20's ruling rested on
+      two premises that are now partly spent: that the built-ins already apply
+      their own internal verification, and a roughly-100-extra-agent cost
+      argument. Commit 7c772829 (2026-08-02, after the 2026-07-31 ruling) states
+      the opposite for code-review residue — no instrument receipt, no internal
+      verification survives the parse — and now routes every code-review residue
+      item through one adversarial skeptic carrying the same
+      refute-under-uncertainty bias Lane-B Required findings get, dropping
+      refuted items. The author's ruling: the exclusion names the verify stage,
+      not the pre-gate. Dedup therefore runs at or after the refute filter so it
+      can never merge an already-refuted item, and a pre-gate-upheld item stays
+      non-verify-eligible — keeping the merge asymmetric and clarification 20's
+      cost arithmetic intact. The alternative offered was re-ratifying
+      clarification 20 wholesale in an /align-strategy round; declined as it
+      would freeze this strategy's seven other raw drafts for the duration."
+  - question: When the api-cost lens merge collapses a SEC_SOURCE lens (firebase)
+      and a non-SEC_SOURCE lens (cost) under one Source name, how are the merged
+      lens's findings classified?
+    answer: "(Recorded 2026-08-03, author interview; fills a gap clarification 18
+      left open.) Merge at the lens/trigger level, and SPLIT classification by
+      sub-pattern. One api-cost finder emits security-classified findings
+      (OWASP/STRIDE filled, Required-eligible, verify-eligible) for
+      rules-permissiveness, emulator-reachability and key-exposure, and advisory
+      findings (OWASP/STRIDE empty, always Deferred, never verify-eligible) for
+      query-cost, amplifier and N+1. Both collapsed alternatives were put to the
+      author and declined, because each breaks something the record already
+      protects: wholly-advisory demotes firebase's Firestore-rules-permissiveness,
+      emulator-code-on-production-paths and API-key-exposure checks from
+      merge-blocking security findings to non-blocking follow-ups — a detection
+      AND escalation reduction the quality-preservation condition forbids as an
+      efficiency lever; wholly-security-classified makes cost/scaling findings
+      merge-blocking and verify-eligible, breaking cost's documented
+      non-escalation invariant (disposition-table.md:54-62) exactly as the merge
+      widens the lens's fire rate. Clarification 18 authorized retaining and
+      widening the lens on expense and sampling grounds and was simply SILENT on
+      classification, so this fills a record-completeness gap rather than
+      overturning a ruling. Consequence: the api-cost-specific
+      adversarial-skeptic brief (the exploitability brief systematically refutes
+      a cost finding) becomes live only for the security-classified
+      sub-pattern."
+  - question: Does per-file skeptic batching cover the code-review residue
+      pre-gate's per-item fan-out, or is it verify-phase-local?
+    answer: "(Recorded 2026-08-03, author interview; amends clarification 20.) It
+      covers the pre-gate too, and `tactic-review-verify-per-file-batching`'s
+      Scope extends to review-fix.js:1707-1775. Clarification 20 rejected
+      re-skepticizing Lane-A residue on an explicit cost premise — roughly 103
+      residue items per window would add roughly 100 agents and cancel the
+      batching gain. Commit 7c772829 (2026-08-02, after that ruling) does exactly
+      that for code-review-sourced residue: one Sonnet/effort-high adversarial
+      skeptic per item, un-batched, one file read per item. Those agents run
+      under phase 'residue' rather than 'verify', so clarification 19's
+      131-agent / 41-file-group / 3.2x arithmetic is untouched — but the
+      review-fix-wide agent-count reduction the tactic is JUSTIFIED by is not, and
+      an un-batched per-item fan-out is the same defect the tactic exists to
+      remove. Declined: keeping the batching verify-phase-local, which would have
+      required restating the benefit claim as verify-local and spinning the
+      residue fan-out out into separate scope."
+  - question: Can "each file read once" and the preserved severity-scaled
+      2-skeptic tier both hold?
+    answer: "(Recorded 2026-08-03, author interview; corrects clarification 19's
+      arithmetic, not its behavior.) They cannot — clarification 19's 3.2x derives
+      from 131 agents over 41 file groups 'with each file read once', which holds
+      only at exactly one agent per file group, while the preserved tier gives a
+      high-confidence finding 2 skeptics so its file group is read twice. Author
+      ruling: KEEP the 2-skeptic tier and restate the arithmetic. 3.2x becomes an
+      UPPER BOUND, and `tactic-review-verify-per-file-batching`'s Verification
+      threshold (41/18 ~= 2.3, unreachable by construction) is restated to a
+      measured figure once the high-confidence-per-file-group distribution is
+      recorded — that distribution has never been measured, so the realized
+      reduction is genuinely unknown until it is. Declined: one skeptic per group
+      regardless of confidence. It would restore a clean 3.2x, but applyVerifyDrop
+      (review-fix.js:565-583) drops on refutedCount >= 1, so halving the
+      high-confidence tier's votes makes drops strictly less likely, sends more
+      Required findings to the Opus fix stage, and moves the refutation rate off
+      its 69% baseline (91 refuted / 37 upheld) for structural reasons —
+      corrupting the very signal that node names as its own regression detector."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
