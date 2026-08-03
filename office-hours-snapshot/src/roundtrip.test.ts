@@ -5,8 +5,11 @@
 // from the shared module, so a producer/reader shape drift fails it. It would
 // have caught all three original breaks:
 //   - a missing `version` → decodeSnapshot throws "Unsupported snapshot version".
-//   - samples missing `memberEmails` → toUsageSample/toIssueSample reject them
-//     and the series decode to length 0.
+//   - the `memberEmails` mismatch: the reader's sample parsers used to reject
+//     every serialized sample over that Firestore auth field, dropping both
+//     series to length 0. The wire does NOT carry the group ACL (see
+//     office-hours/src/snapshot-wire.ts) — the decoder opts out of the
+//     requirement instead — and this test proves the series still survive.
 //   - any field-shape drift between what the producer writes and what the reader
 //     parses.
 import { describe, it, expect } from "vitest";
@@ -100,7 +103,6 @@ function realInput(): SnapshotInput {
     computedAt: COMPUTED_AT,
     chainHealth: { liveSessions: 2, lastTickAgeSeconds: 30 },
     scope: "full",
-    memberEmails: ["nathan@natb1.com"],
     window: { samples: 500, issueSamples: 500 },
   };
 }
@@ -112,8 +114,8 @@ describe("producer→reader round-trip (no mocks)", () => {
 
     const { data, computedAt } = decodeSnapshot(plaintext);
 
-    // Series survive — proves samples carried memberEmails (else the parsers
-    // would have dropped every element to length 0).
+    // Series survive — proves the decoder parses ACL-free samples (else the
+    // parsers would have dropped every element to length 0).
     expect(data.samples).toHaveLength(1);
     expect(data.issueSamples).toHaveLength(1);
     expect(data.reminders).toHaveLength(1);
@@ -138,13 +140,32 @@ describe("producer→reader round-trip (no mocks)", () => {
     expect(() => decodeSnapshot(withoutVersion)).toThrow("Unsupported snapshot version");
   });
 
-  it("a series sample missing `memberEmails` decodes to an empty series", () => {
+  it("never exports the group `memberEmails` ACL onto a series sample", () => {
+    // The offline snapshot's only protection is the Drive share + passphrase,
+    // and `--plaintext` writes it unencrypted, so the member list (the auth
+    // field the Firestore rules evaluate) must not ride the wire at all.
     const snapshot = serializeSnapshot(realInput());
-    const stripped = {
+    for (const s of snapshot.samples) {
+      expect(s).not.toHaveProperty("memberEmails");
+    }
+    for (const s of snapshot.issueSamples) {
+      expect(s).not.toHaveProperty("memberEmails");
+    }
+    expect(JSON.stringify(snapshot.samples)).not.toContain("nathan@natb1.com");
+    expect(JSON.stringify(snapshot.issueSamples)).not.toContain("nathan@natb1.com");
+  });
+
+  it("a series sample that still carries `memberEmails` decodes and drops it", () => {
+    // Back-compat: a snapshot written before the ACL was removed from the wire
+    // must still decode, and the field must not reach the dashboard's domain
+    // objects.
+    const snapshot = serializeSnapshot(realInput());
+    const legacy = {
       ...snapshot,
-      samples: snapshot.samples.map(({ memberEmails: _drop, ...rest }) => rest),
+      samples: snapshot.samples.map((s) => ({ ...s, memberEmails: ["nathan@natb1.com"] })),
     };
-    const { data } = decodeSnapshot(JSON.stringify(stripped));
-    expect(data.samples).toHaveLength(0);
+    const { data } = decodeSnapshot(JSON.stringify(legacy));
+    expect(data.samples).toHaveLength(1);
+    expect(data.samples[0]).not.toHaveProperty("memberEmails");
   });
 });

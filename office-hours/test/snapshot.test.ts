@@ -33,7 +33,6 @@ const fixtureSnapshot: OfficeHoursSnapshotV1 = {
       activeWorkers: 3,
       targetWorkers: 8,
       groupId: "natb1",
-      memberEmails: ["nathan@natb1.com"],
     },
   ],
   issueSamples: [
@@ -44,7 +43,6 @@ const fixtureSnapshot: OfficeHoursSnapshotV1 = {
       openEnhancement: 12,
       openOther: 7,
       groupId: "natb1",
-      memberEmails: ["nathan@natb1.com"],
     },
   ],
   topicUsage: [

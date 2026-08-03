@@ -50,7 +50,6 @@ function fakeInput(scope: SnapshotScope = "full"): SnapshotInput {
     computedAt: NOW,
     chainHealth: {},
     scope,
-    memberEmails: [],
   };
 }
 

@@ -89,7 +89,11 @@ export interface ProduceDeps {
   namespace: string;
   /** Owning group id, denormalized into each written doc. */
   groupId: string;
-  /** Member emails, denormalized into each written doc. */
+  /**
+   * Member emails, denormalized into the docs the cores write (the auth field
+   * the Firestore rules read). NOT stamped onto the serialized series samples —
+   * the offline wire deliberately omits the ACL (see snapshot-wire.ts).
+   */
   memberEmails: string[];
   /** Repos scanned for queue metrics + parked office-hours work. */
   queueRepos: string[];
@@ -336,7 +340,6 @@ export async function produceSnapshot(
       computedAt: now,
       chainHealth,
       scope,
-      memberEmails: deps.memberEmails,
       window: { samples: windowSize, issueSamples: windowSize },
     };
   }
@@ -437,7 +440,6 @@ export async function produceSnapshot(
     computedAt: now,
     chainHealth,
     scope,
-    memberEmails: deps.memberEmails,
     window: { samples: windowSize, issueSamples: windowSize },
   };
 }

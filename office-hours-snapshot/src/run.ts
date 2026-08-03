@@ -207,10 +207,10 @@ async function defaultReadPriorSnapshot(
  * `toUsageSample`/`toIssueSample` parsers are NOT reused here: the serialized
  * series carries ISO-string dates, but those parsers require a Firestore
  * `.toDate()` Timestamp, so they would reject every serialized point and
- * silently truncate the series to one point. (The snapshot now DOES carry the
- * `memberEmails` those parsers also require — see
- * ../../office-hours/src/snapshot-wire.ts — but the ISO/Timestamp mismatch
- * alone still precludes reuse.) These bespoke deserializers read the ISO
+ * silently truncate the series to one point. (The serialized samples also omit
+ * the `memberEmails` auth field — the offline wire never carries the group ACL,
+ * see ../../office-hours/src/snapshot-wire.ts — but the ISO/Timestamp mismatch
+ * alone already precludes reuse.) These bespoke deserializers read the ISO
  * strings back into Dates directly.
  */
 async function defaultReadPriorHistory(

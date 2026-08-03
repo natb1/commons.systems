@@ -103,7 +103,6 @@ function cleanSnapshot(): OfficeHoursSnapshot {
     computedAt: NOW,
     chainHealth: { liveSessions: 3 },
     scope: "full",
-    memberEmails: MEMBERS,
     window: { samples: 100, issueSamples: 100 },
   };
   return serializeSnapshot(input);
@@ -250,7 +249,29 @@ describe("checkParity — clean parity", () => {
       computedAt: NOW,
       chainHealth: { liveSessions: 3 },
       scope: "full",
-      memberEmails: MEMBERS,
+      window: { samples: 100, issueSamples: 100 },
+    };
+    const result = await checkParity(serializeSnapshot(input), { reader: readerFor(cleanFixtures()), namespace: NS });
+    expect(result.divergences.filter((d) => d.kind === "extra-key")).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not report the parked-only queueMetrics.scope marker as an extra-key divergence", async () => {
+    // A `--scope parked-only` capture stamps queueMetrics.scope = "parked-only"
+    // to mark the fabricated depth/rate/runway placeholders. The hosted
+    // Firestore producer never writes `scope` (fixture doc has none), so parity
+    // must exclude it — otherwise every parked-only --parity run reports a
+    // permanent divergence and the check becomes known-red noise.
+    const input: SnapshotInput = {
+      samples: [USAGE_SAMPLE],
+      reminders: [REMINDER],
+      queueMetrics: { ...QUEUE, scope: "parked-only" },
+      issueSamples: [ISSUE_SAMPLE],
+      topicUsage: [TOPIC],
+      projectSignals: SIGNALS,
+      computedAt: NOW,
+      chainHealth: { liveSessions: 3 },
+      scope: "full",
       window: { samples: 100, issueSamples: 100 },
     };
     const result = await checkParity(serializeSnapshot(input), { reader: readerFor(cleanFixtures()), namespace: NS });

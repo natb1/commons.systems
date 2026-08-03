@@ -7,11 +7,22 @@
 // Why this module exists: the producer used to define its own write shape and
 // the reader its own read shape, each deep-importing the other's internals via
 // `../../office-hours/src/*.js`. The two shapes drifted (the producer never
-// emitted `version`, and dropped the `memberEmails` auth field every sample
-// parser requires), and mock runners / hand-built fixtures kept both isolated
-// suites green around a pipeline that could not actually work end-to-end. A
-// single serialize→decode contract, exercised by a no-mock round-trip test, is
-// the structural fix.
+// emitted `version`, and the reader's sample parsers rejected every serialized
+// sample over the `memberEmails` auth field they demanded of a Firestore doc),
+// and mock runners / hand-built fixtures kept both isolated suites green around
+// a pipeline that could not actually work end-to-end. A single serialize→decode
+// contract, exercised by a no-mock round-trip test, is the structural fix.
+//
+// The `memberEmails` ACL is deliberately NOT on the series wire. It is the
+// group's real member list — the denormalized auth field the
+// `office-hours/{env}/*` Firestore rules evaluate — and the offline snapshot's
+// only protection is the Drive share plus a passphrase (a `--plaintext` debug
+// run writes the whole document UNENCRYPTED into that shared dir). The sample
+// parsers validate the field and then discard it, so the reader never needed it:
+// `decodeSnapshot` parses samples with `requireMemberEmails: false` instead, and
+// nothing in this module exports the ACL per sample. This matches the repo's
+// existing convention (vite-plugin-*-seed.ts strip `memberEmails` from every
+// artifact leaving the auth-gated store).
 //
 // Loadability: this module is imported at runtime by the firebase-admin
 // producer, so every import here must be node-loadable. It reuses the
@@ -50,14 +61,15 @@ type IsoDates<T> =
 
 /**
  * A serialized usage/issue SERIES sample carries the office-hours domain fields
- * (Dates → ISO strings) PLUS the denormalized `memberEmails` auth field. The
- * domain `UsageSample`/`IssueSample` types STRIP `memberEmails` (it is a
- * Firestore security-rule field, not a dashboard field), but the reader's
- * `toUsageSample`/`toIssueSample` parsers REJECT a doc that lacks it. So the wire
- * MUST carry it on every sample even though the reader then drops it again.
+ * (Dates → ISO strings) and NOTHING else — in particular NOT the denormalized
+ * `memberEmails` auth field. That field is the group's real ACL; it is a
+ * Firestore security-rule field, not a dashboard field, and replicating it onto
+ * every sample of an offline artifact would export the member list. The reader's
+ * `toUsageSample`/`toIssueSample` parsers discard it anyway, so `decodeSnapshot`
+ * parses these samples with `requireMemberEmails: false` (see the module header).
  */
-export type SerializedUsageSample = IsoDates<UsageSample> & { memberEmails: string[] };
-export type SerializedIssueSample = IsoDates<IssueSample> & { memberEmails: string[] };
+export type SerializedUsageSample = IsoDates<UsageSample>;
+export type SerializedIssueSample = IsoDates<IssueSample>;
 export type SerializedReminder = IsoDates<Reminder>;
 export type SerializedQueueMetrics = IsoDates<QueueMetricsSnapshot>;
 export type SerializedProjectSignals = IsoDates<ProjectSignalsSnapshot>;
@@ -109,7 +121,7 @@ export interface SnapshotWindow {
  *
  * Field provenance (mirrors PanelData in panel-equality.ts exactly):
  *   - `samples`, `issueSamples` — append-only SERIES, carried as bounded
- *     windows (see `window`); each element carries `memberEmails`.
+ *     windows (see `window`); no element carries the `memberEmails` ACL.
  *   - `reminders`, `queueMetrics`, `topicUsage`, `projectSignals` — current
  *     single snapshots (queueMetrics/projectSignals mutate in place).
  */
@@ -142,8 +154,9 @@ export type OfficeHoursSnapshotV1 = OfficeHoursSnapshot;
 
 /**
  * The assembled in-memory payload handed to `serializeSnapshot`: the six
- * dashboard fields in their core-emitted form (Dates / firebase Timestamps)
- * plus producer metadata and the group's `memberEmails`.
+ * dashboard fields in their core-emitted form (Dates / firebase Timestamps) plus
+ * producer metadata. Deliberately NO group `memberEmails` — the serializer has no
+ * use for the ACL (see the module header).
  */
 export interface SnapshotInput {
   samples: UsageSample[];
@@ -157,13 +170,6 @@ export interface SnapshotInput {
   chainHealth: ChainHealth;
   scope: SnapshotScope;
   window?: SnapshotWindow;
-  /**
-   * The group's denormalized member emails. Stamped onto every serialized
-   * series sample so the reader's `toUsageSample`/`toIssueSample` parsers
-   * (which require the field) accept them. A single group-level list — samples
-   * do not carry it individually in the domain types.
-   */
-  memberEmails: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -200,11 +206,7 @@ export function toIso(value: unknown, now: string): string {
 // Per-field serializers
 // ---------------------------------------------------------------------------
 
-function serializeUsageSample(
-  s: UsageSample,
-  now: string,
-  memberEmails: string[],
-): SerializedUsageSample {
+function serializeUsageSample(s: UsageSample, now: string): SerializedUsageSample {
   return {
     sampledAt: toIso(s.sampledAt, now),
     fiveHourUsedPct: s.fiveHourUsedPct,
@@ -214,15 +216,10 @@ function serializeUsageSample(
     activeWorkers: s.activeWorkers,
     targetWorkers: s.targetWorkers,
     groupId: s.groupId,
-    memberEmails,
   };
 }
 
-function serializeIssueSample(
-  s: IssueSample,
-  now: string,
-  memberEmails: string[],
-): SerializedIssueSample {
+function serializeIssueSample(s: IssueSample, now: string): SerializedIssueSample {
   return {
     sampledAt: toIso(s.sampledAt, now),
     openSecurity: s.openSecurity,
@@ -230,7 +227,6 @@ function serializeIssueSample(
     openEnhancement: s.openEnhancement,
     openOther: s.openOther,
     groupId: s.groupId,
-    memberEmails,
   };
 }
 
@@ -289,9 +285,9 @@ function serializeProjectSignals(
 /**
  * Serializes the assembled in-memory payload to the plain-JSON-safe snapshot
  * document. All timestamps become ISO strings (via `toIso`); the producer's
- * `computedAt` is the fallback for any unresolved serverTimestamp sentinel. Every
- * series sample is stamped with the group's `memberEmails`, and the document
- * carries `version: 1` — both required by the reader's parsers.
+ * `computedAt` is the fallback for any unresolved serverTimestamp sentinel. The
+ * document carries `version: 1` (the reader hard-rejects anything else) and no
+ * series sample carries the group's `memberEmails` ACL.
  */
 export function serializeSnapshot(input: SnapshotInput): OfficeHoursSnapshot {
   const now = toIso(input.computedAt, new Date().toISOString());
@@ -304,11 +300,11 @@ export function serializeSnapshot(input: SnapshotInput): OfficeHoursSnapshot {
     // Omit `window` entirely when absent — undefined would be dropped by
     // JSON.stringify and break a deep round-trip equality check.
     ...(input.window !== undefined ? { window: input.window } : {}),
-    samples: input.samples.map((s) => serializeUsageSample(s, now, input.memberEmails)),
+    samples: input.samples.map((s) => serializeUsageSample(s, now)),
     reminders: input.reminders.map((r) => serializeReminder(r, now)),
     queueMetrics:
       input.queueMetrics === null ? null : serializeQueueMetricsToIso(input.queueMetrics, now),
-    issueSamples: input.issueSamples.map((s) => serializeIssueSample(s, now, input.memberEmails)),
+    issueSamples: input.issueSamples.map((s) => serializeIssueSample(s, now)),
     topicUsage: input.topicUsage,
     projectSignals:
       input.projectSignals === null ? null : serializeProjectSignals(input.projectSignals, now),
@@ -450,12 +446,17 @@ export function decodeSnapshot(plaintext: string): { data: PanelData; computedAt
     .map((d, i) => toReminder(`reminder-${i}`, d))
     .filter((r): r is Reminder => r !== null);
 
+  // The two series parsers run with `requireMemberEmails: false`: the serialized
+  // samples deliberately omit the group's ACL (module header), and the parsers
+  // discard the field even when a live Firestore doc supplies it. Their Firestore
+  // callers keep the default (strict) mode, so real auth-field drift there still
+  // rejects.
   const samples = asDocArray(raw.samples, "samples")
-    .map((d, i) => toUsageSample(`sample-${i}`, d))
+    .map((d, i) => toUsageSample(`sample-${i}`, d, { requireMemberEmails: false }))
     .filter((s): s is UsageSample => s !== null);
 
   const issueSamples = asDocArray(raw.issueSamples, "issueSamples")
-    .map((d, i) => toIssueSample(`issue-sample-${i}`, d))
+    .map((d, i) => toIssueSample(`issue-sample-${i}`, d, { requireMemberEmails: false }))
     .filter((s): s is IssueSample => s !== null);
 
   const topicUsage = asDocArray(raw.topicUsage, "topicUsage")
