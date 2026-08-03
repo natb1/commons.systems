@@ -34,6 +34,7 @@ attention:
     they outranked strategy-main-health (101 resolved) and flooded the selector
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
+  tier: 1
 phase: qa
 execution:
   branch: tactic-manual-path-reservation-sweep
@@ -45,7 +46,8 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-conflict-manual-path-reservation-sweep
 office_hours: null
 pace_exempt: false
 rounds: null
