@@ -37,12 +37,13 @@ attention:
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
   tier: 1
-phase: implement
+phase: qa
 execution:
   branch: tactic-conflict-outranks-ci-precedence
   pr: 3019
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
   fix: null
   completion: null
