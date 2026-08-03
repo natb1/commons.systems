@@ -16,7 +16,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-review-fix-residue-death-coverage
   pr: 3022
@@ -27,7 +27,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T16:00:23Z
+    mergeCommitSha: cf913deae9fd43e2bdc52c95d805145899746e23
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
