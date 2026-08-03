@@ -294,17 +294,27 @@ export function reviewStallRoute(ci: CiVerdict, mergeable: Mergeable): ReviewSta
  *  - the review-stall sweep (`reviewStallRoute`, which delegates here at the
  *    fixed phase `"review"`); and
  *  - the normal selection gate (`graph-select-target`'s
- *    `_gate_maybe_interrupt`), wired to call this function in a later,
- *    separate follow-up unit.
+ *    `_gate_maybe_interrupt`), which calls this function through a
+ *    `node --import tsx/esm -e` bridge before writing any fix-attempt state.
  *
- * That normal path is CURRENTLY merge-blind: it only checks `ci === "failing"`
- * before writing a fix-attempt state, so a PR that is BOTH `CONFLICTING` and
- * red gets a fix-attempt state written and burns one of a limited attempt
- * budget (`FIX_ATTEMPT_CAP`) against a CI verdict that actually describes
- * stale pre-merge code — and the fix lane cannot even run until the conflict
- * clears, since fixing requires merging origin/main first. Routing that case
- * to `"conflict"` instead avoids spending both a graph write and an attempt on
- * a verdict the conflict will invalidate anyway.
+ * That normal path WAS merge-blind before that gate was wired: it only
+ * checked `ci === "failing"` before writing a fix-attempt state, so a PR that
+ * was BOTH `CONFLICTING` and red would get a fix-attempt state written and
+ * burn one of a limited attempt budget (`FIX_ATTEMPT_CAP`) against a CI
+ * verdict that actually describes stale pre-merge code — and the fix lane
+ * cannot even run until the conflict clears, since fixing requires merging
+ * origin/main first. Routing that case to `"conflict"` instead is what
+ * `_gate_maybe_interrupt` now does: it declines the interrupt (no
+ * `execution.fix` write, no graph-commit, no attempt consumed) and lets the
+ * candidate fall through to provisioning's conflict lane, avoiding spending
+ * both a graph write and an attempt on a verdict the conflict will
+ * invalidate anyway.
+ *
+ * The sibling arm for a candidate that ALREADY carries an active interrupt
+ * (`graph-select-target`'s `_gate_fix_active`) does NOT consume
+ * `interruptRoute` and stays conflict-blind by design — see the comment
+ * above `_gate_fix_active` in that file for the scope rationale; the two
+ * sites are meant to agree.
  *
  * `UNKNOWN` mergeability is deliberately NOT treated as a conflict: GitHub
  * computes mergeability asynchronously and self-heals `UNKNOWN` to a real
