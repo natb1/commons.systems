@@ -29,7 +29,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listNodes } from "../src/store.js";
+import { listNodesStrict } from "../src/store.js";
 import type { IntentionNode } from "../src/schema.js";
 import {
   HOLD_KINDS,
@@ -271,7 +271,11 @@ function parseArgs(argv: string[]): Args {
 
 function main(): void {
   const { intentionsDir, ...input } = parseArgs(process.argv.slice(2));
-  const nodes = listNodes(intentionsDir);
+  // STRICT enumeration: the hold decision is a gate (find-or-create an existing
+  // hold, then wire the source's blocked_by edge). A hold node dropped by the
+  // tolerant reader would look absent, minting a duplicate hold and losing the
+  // existing edge — so a corrupt file must refuse loudly instead of vanishing.
+  const nodes = listNodesStrict(intentionsDir);
   let decision: HoldDecision;
   try {
     decision = decideHold(nodes, input);

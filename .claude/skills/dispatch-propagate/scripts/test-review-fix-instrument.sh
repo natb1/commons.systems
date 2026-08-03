@@ -30,31 +30,50 @@ assert_eq "instrument gate: lane-b checked" "false" "$(printf '%s' "$out" | jq -
 assert_eq "instrument gate: null-res ok" "true" "$(printf '%s' "$out" | jq -r '."null-res".ok')"
 assert_eq "instrument gate: null-res checked" "false" "$(printf '%s' "$out" | jq -r '."null-res".checked')"
 
+# 'code-review' is no longer a registered instrument (tactic-review-code-review-
+# invocation-contract moved its invocation out of this gate entirely). Every
+# code-review-keyed fixture below is now a permanent regression check that an
+# UNREGISTERED instrument name is always inert, never blocking — NOT stale
+# coverage of the old gate. security-review's own negative paths, further down,
+# carry the real gate coverage now.
+assert_eq "instrument gate: no-receipt (unregistered code-review) ok" "true" "$(printf '%s' "$out" | jq -r '."no-receipt".ok')"
+assert_eq "instrument gate: no-receipt (unregistered code-review) checked" "false" "$(printf '%s' "$out" | jq -r '."no-receipt".checked')"
+
+assert_eq "instrument gate: wrong-name (unregistered code-review) ok" "true" "$(printf '%s' "$out" | jq -r '."wrong-name".ok')"
+assert_eq "instrument gate: wrong-name (unregistered code-review) checked" "false" "$(printf '%s' "$out" | jq -r '."wrong-name".checked')"
+
+assert_eq "instrument gate: not-invoked (unregistered code-review) ok" "true" "$(printf '%s' "$out" | jq -r '."not-invoked".ok')"
+assert_eq "instrument gate: not-invoked (unregistered code-review) checked" "false" "$(printf '%s' "$out" | jq -r '."not-invoked".checked')"
+
+# payload-signature checks do not even apply to an unregistered name — must
+# still pass through inert regardless of payload shape.
+assert_eq "instrument gate: sig-no-touched-files (unregistered code-review) ok" "true" "$(printf '%s' "$out" | jq -r '."sig-no-touched-files".ok')"
+assert_eq "instrument gate: sig-no-touched-files (unregistered code-review) checked" "false" "$(printf '%s' "$out" | jq -r '."sig-no-touched-files".checked')"
+
+# payload-signature mismatch: security-review (edits_nothing:true) reports a
+# non-empty fixed[] — must fail. security-review is the sole remaining gated
+# instrument, so this check still applies for real.
+assert_eq "instrument gate: sig-security-edited ok" "false" "$(printf '%s' "$out" | jq -r '."sig-security-edited".ok')"
+
+# clean receipts — unregistered code-review passes through inert (never
+# "checked"); clean security-review is a real checked pass.
+assert_eq "instrument gate: clean-code-review (unregistered) ok" "true" "$(printf '%s' "$out" | jq -r '."clean-code-review".ok')"
+assert_eq "instrument gate: clean-code-review (unregistered) checked" "false" "$(printf '%s' "$out" | jq -r '."clean-code-review".checked')"
+assert_eq "instrument gate: clean-security-review ok" "true" "$(printf '%s' "$out" | jq -r '."clean-security-review".ok')"
+assert_eq "instrument gate: clean-security-review checked" "true" "$(printf '%s' "$out" | jq -r '."clean-security-review".checked')"
+
+# --- security-review negative paths (the sole remaining gated instrument) ---
 # no instrument receipt at all — schema violation, must fail.
-assert_eq "instrument gate: no-receipt ok" "false" "$(printf '%s' "$out" | jq -r '."no-receipt".ok')"
+assert_eq "instrument gate: no-receipt-security ok" "false" "$(printf '%s' "$out" | jq -r '."no-receipt-security".ok')"
 
 # instrument receipt names the wrong stage — must fail.
-assert_eq "instrument gate: wrong-name ok" "false" "$(printf '%s' "$out" | jq -r '."wrong-name".ok')"
+assert_eq "instrument gate: wrong-name-security ok" "false" "$(printf '%s' "$out" | jq -r '."wrong-name-security".ok')"
 
 # instrument reported not invoked — must fail, and the reason must carry the
 # verbatim failure text so a human/agent reading it sees why the skill refused.
-assert_eq "instrument gate: not-invoked ok" "false" "$(printf '%s' "$out" | jq -r '."not-invoked".ok')"
-assert_eq "instrument gate: not-invoked reason contains failure text" "true" \
-  "$(printf '%s' "$out" | jq -r '."not-invoked".reason | contains("Skill code-review cannot be used with Skill tool due to disable-model-invocation")')"
-
-# payload-signature mismatch: code-review (edits_nothing:false) reports a fix
-# with no touched_files — must fail.
-assert_eq "instrument gate: sig-no-touched-files ok" "false" "$(printf '%s' "$out" | jq -r '."sig-no-touched-files".ok')"
-
-# payload-signature mismatch: security-review (edits_nothing:true) reports a
-# non-empty fixed[] — must fail.
-assert_eq "instrument gate: sig-security-edited ok" "false" "$(printf '%s' "$out" | jq -r '."sig-security-edited".ok')"
-
-# clean receipts — must pass and be marked checked.
-assert_eq "instrument gate: clean-code-review ok" "true" "$(printf '%s' "$out" | jq -r '."clean-code-review".ok')"
-assert_eq "instrument gate: clean-code-review checked" "true" "$(printf '%s' "$out" | jq -r '."clean-code-review".checked')"
-assert_eq "instrument gate: clean-security-review ok" "true" "$(printf '%s' "$out" | jq -r '."clean-security-review".ok')"
-assert_eq "instrument gate: clean-security-review checked" "true" "$(printf '%s' "$out" | jq -r '."clean-security-review".checked')"
+assert_eq "instrument gate: not-invoked-security ok" "false" "$(printf '%s' "$out" | jq -r '."not-invoked-security".ok')"
+assert_eq "instrument gate: not-invoked-security reason contains failure text" "true" \
+  "$(printf '%s' "$out" | jq -r '."not-invoked-security".reason | contains("security-review invocation failed")')"
 
 # --- call-site / doctrine coverage (anti-regression teeth) ------------------
 # A future edit that keeps instrumentVerdict but stops calling it would
@@ -65,8 +84,10 @@ assert_eq "instrument gate: clean-security-review checked" "true" "$(printf '%s'
 assert_eq "instrument gate: call site present in review-fix.js" "1" \
   "$(grep -c 'const v = instrumentVerdict(name, res);' "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
 
-# code-review capture const is guarded by instrumentFailed.
-assert_eq "instrument gate: codeReviewResult guarded by instrumentFailed" "1" \
+# code-review's own instrumentFailed guard was removed along with
+# codeReviewResult — INSTRUMENTS no longer names 'code-review', so nothing may
+# reference it here.
+assert_eq "instrument gate: instrumentFailed.has('code-review') removed" "0" \
   "$(grep -c "instrumentFailed.has('code-review')" "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
 
 # security-review capture const is guarded by instrumentFailed.
@@ -82,11 +103,12 @@ assert_eq "instrument gate: instrument_failures in returned object" "1" \
 assert_eq "instrument gate: instrumentFailures.length referenced" "2" \
   "$(grep -c 'instrumentFailures.length' "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
 
-# instrumentClause(...) is CALLED in BOTH Lane-A prompt branches (code-review,
-# security-review). Match the call sites (instrumentClause(INSTRUMENTS[...]))
+# instrumentClause(...) is CALLED in the ONE remaining Lane-A prompt branch
+# (security-review) — the code-review branch was removed along with its
+# Skill-tool finder. Match the call site (instrumentClause(INSTRUMENTS[...]))
 # rather than the bare substring, which would also match the one-line function
-# definition (`function instrumentClause(spec) {`) and over-count to 3.
-assert_eq "instrument gate: instrumentClause used in both Lane-A prompt branches" "2" \
+# definition (`function instrumentClause(spec) {`) and over-count.
+assert_eq "instrument gate: instrumentClause used in the remaining Lane-A prompt branch" "1" \
   "$(grep -c 'instrumentClause(INSTRUMENTS' "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
 
 # LANE_A_SCHEMA requires 'instrument' in its payload.

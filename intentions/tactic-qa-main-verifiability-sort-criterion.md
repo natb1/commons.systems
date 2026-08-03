@@ -89,7 +89,8 @@ attention:
     codified and phase implement, carrying a full clean-session plan (Units 1-3)
     in the body; the boost value is preserved unchanged from the bootstrap
     re-scale."
-phase: review
+  tier: 1
+phase: main-qa
 execution:
   branch: tactic-qa-main-verifiability-sort-criterion
   pr: 3009
@@ -100,10 +101,31 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-01T03:17:01Z
+    mergeCommitSha: df0c436a655decfddadba7631388bdbfc36667a3
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-main node lane on tactic-qa-main-verifiability-sort-criterion:
+    item-16 (mis-sort rate stays <=1/20 across the next /qa-main node-lane
+    drains) is an accumulation over future drains that has not happened yet --
+    source PR #3009 merged 2026-08-01T03:17:01Z, only hours ago, so no /qa-main
+    node-lane drain has run under the amended prose yet. Re-check once a
+    meaningful sample of node-lane drains has accumulated (no fixed date; this
+    is an ongoing rate measurement, not a single-visit check)."
+  since: 2026-08-01
+  recommendation: "Re-check after a meaningful sample of /qa-main node-lane drains
+    has accumulated under the amended (PR #3009) prose: grep worker transcripts
+    for mis-sort occurrences (a park citing browser-unverifiability for a
+    machine-checkable item) across several drains, and confirm the rate stays
+    <=1/20. No fixed date -- this is an ongoing rate measurement, not a
+    single-visit check. This park was originally built by the /qa-main session
+    (c8ad3138) but stranded unlanded (marker at
+    /home/n8/.claude/jobs/c8ad3138/office-hours-reason, PR #3009 already MERGED,
+    session terminal idle/done) -- landed here from origin/main per I1."
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}

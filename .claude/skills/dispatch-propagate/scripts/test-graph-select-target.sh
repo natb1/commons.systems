@@ -646,6 +646,272 @@ fi
 unset gsc13_rc
 gsc_standalone_teardown
 
+# ============================================================================
+# Test: graph-select-target — the fix interrupt routes through interruptRoute
+# (tactic-conflict-outranks-ci-precedence Unit 2)
+# ============================================================================
+# _gate_maybe_interrupt no longer decides on `ci == failing` alone: it reads the
+# PR's `.mergeable` off the SAME gh_pr_view_rest call and delegates the decision
+# to interruptRoute (packages/intentionsutil/src/transitions.ts), where
+# CONFLICTING outranks failing CI. A PR that is BOTH conflicted and red must
+# therefore make NO graph write and burn NO fix attempt — it is emitted at its
+# ladder phase and reaches the conflict lane through provision-node-worktree's
+# exit 11 (out of scope here; unchanged).
+#
+# The cascade's own ordering is unit-tested in TypeScript
+# (packages/intentionsutil/test/transitions.test.ts). This fixture pins the
+# SHELL seam only: that the selector hands the cascade the right sensors, honors
+# whatever route comes back, and never writes on the decline path. `node` is
+# therefore a stub that logs its argv and replays a route from a file.
+#
+# Hermetic: fake `npx` (select-targets.ts AND apply-fix-state.ts), fake `gh`
+# (the two REST shapes gh_pr_view_rest and dispatch_ci_verdict_rest fetch),
+# fake `claude`, fake `node`, and a no-op graph-commit stub. No network.
+#
+# NOTE on the `mergeable-unreadable` rc-3 branch in _gate_maybe_interrupt: it is
+# unreachable by construction against the current lib.sh projection.
+# gh_pr_view_rest's `mergeable:` jq branch (lib.sh:1137-1141) is a total
+# if/elif/else over REST's boolean — true -> MERGEABLE, false -> CONFLICTING,
+# EVERYTHING else (including null and an absent key) -> UNKNOWN — so no PR REST
+# response can yield a fourth value. The branch is kept as an edge guard against
+# a future projection change (mirroring reconcile-graph-review-stall's identical
+# guard) and is deliberately not covered here rather than covered by stubbing
+# gh_pr_view_rest itself, which would test the stub, not the script.
+gsc_interrupt_setup() {
+  GSCI_ROOT=$(mktemp -d)
+  GSCI_BARE=$(mktemp -d)
+  GSCI_SCRIPTS="$GSCI_ROOT/.claude/skills/dispatch-propagate/scripts"
+  mkdir -p "$GSCI_SCRIPTS" "$GSCI_ROOT/bin" "$GSCI_ROOT/packages/intentionsutil/scripts"
+  # Physical copies (not symlinks): graph-select-target derives REPO_ROOT from
+  # its own on-disk location, and dispatch-ci-ready resolves lib.sh as a sibling.
+  cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/dispatch-ci-ready \
+     "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh "$GSCI_SCRIPTS/"
+  chmod +x "$GSCI_SCRIPTS/graph-select-target" "$GSCI_SCRIPTS/dispatch-ci-ready"
+  # graph-commit stub: _graph_commit_fix runs it from NATIVE_ROOT on the `fix`
+  # route, so the control case exercises the clean emission path rather than
+  # `fix-write-failed`.
+  cat > "$GSCI_ROOT/packages/intentionsutil/scripts/graph-commit" <<'GSCIGC'
+#!/usr/bin/env bash
+exit 0
+GSCIGC
+  chmod +x "$GSCI_ROOT/packages/intentionsutil/scripts/graph-commit"
+  # Fake npx: serves BOTH tsx entry points the selector shells out to —
+  # select-targets.ts (the candidate list, from a per-case file) and
+  # apply-fix-state.ts (the interrupt write, whose invocation is logged; the
+  # log's presence/absence is the load-bearing assertion below).
+  cat > "$GSCI_ROOT/bin/npx" <<'GSCINPX'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+for _a in "$@"; do
+  case "$_a" in
+    *apply-fix-state*)
+      printf '%s\n' "$*" >> "$_root/apply-fix-calls.log"
+      echo '{}'
+      exit 0 ;;
+  esac
+done
+cat "$_root/candidates.json"
+exit 0
+GSCINPX
+  chmod +x "$GSCI_ROOT/bin/npx"
+  # Fake gh: the two REST calls the sensor path makes, each served from a
+  # per-case file. `gh api repos/{owner}/{repo}/pulls/2999` returns the RAW REST
+  # PR shape (gh_pr_view_rest applies its own jq projection over it — same
+  # byte-compat shape test-lib-gh-rest.sh pins); the check-runs path feeds
+  # dispatch_ci_verdict_rest. Anything else fails, keeping the case offline.
+  cat > "$GSCI_ROOT/bin/gh" <<'GSCIGH'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+for _a in "$@"; do
+  case "$_a" in
+    */pulls/2999) cat "$_root/pr-2999.json"; exit 0 ;;
+    */commits/deadbee/check-runs) cat "$_root/check-runs.json"; exit 0 ;;
+  esac
+done
+exit 1
+GSCIGH
+  chmod +x "$GSCI_ROOT/bin/gh"
+  # Fake node: records the TRAILING three positional args — phase, ci verdict,
+  # mergeable, i.e. exactly the sensors handed to interruptRoute — then replays
+  # the route from route.txt (no trailing newline, like the real one-liner's
+  # process.stdout.write). `node-fail` makes the eval fail instead.
+  cat > "$GSCI_ROOT/bin/node" <<'GSCINODE'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+printf '%s %s %s\n' "${@: -3}" >> "$_root/node-calls.log"
+if [[ -e "$_root/node-fail" ]]; then
+  echo "fake node: forced failure" >&2
+  exit 1
+fi
+printf '%s' "$(cat "$_root/route.txt")"
+exit 0
+GSCINODE
+  chmod +x "$GSCI_ROOT/bin/node"
+  # Fake `claude agents --json`: empty registry (no live session claims the id).
+  cat > "$GSCI_ROOT/bin/claude" <<'GSCICLAUDE'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+cat "$_root/claude-payload.json"
+exit 0
+GSCICLAUDE
+  chmod +x "$GSCI_ROOT/bin/claude"
+  printf '%s' '[]' > "$GSCI_ROOT/claude-payload.json"
+  # Per-case defaults: one implement-phase candidate WITH a pr, a CONFLICTING
+  # red PR, and the `conflict` route. Cases rewrite whichever of these they vary
+  # (rewriting fixture files per case is this file's existing convention).
+  gsci_candidate implement
+  gsci_pr false
+  gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+  printf 'conflict' > "$GSCI_ROOT/route.txt"
+  # A git repo whose origin/main carries an intentions/ tree, main checked out
+  # at the fixture root so NATIVE_ROOT resolves there.
+  git init -q -b main "$GSCI_ROOT"
+  git -C "$GSCI_ROOT" config user.email t@t
+  git -C "$GSCI_ROOT" config user.name t
+  mkdir -p "$GSCI_ROOT/intentions"
+  echo '# placeholder' > "$GSCI_ROOT/intentions/placeholder.md"
+  git -C "$GSCI_ROOT" add -A
+  git -C "$GSCI_ROOT" commit -q -m seed
+  git init -q --bare -b main "$GSCI_BARE"
+  git -C "$GSCI_ROOT" remote add origin "$GSCI_BARE"
+  git -C "$GSCI_ROOT" push -q origin main
+  git -C "$GSCI_ROOT" fetch -q origin
+  GSCI_GST="$GSCI_SCRIPTS/graph-select-target"
+}
+
+# gsci_candidate <phase> — rewrite the select-targets.ts candidate list.
+gsci_candidate() {
+  printf '%s\n' "{\"candidates\":[{\"id\":\"tactic-fixture\",\"kind\":\"tactic\",\"phase\":\"$1\",\"pr\":\"2999\",\"pace_exempt\":false}],\"events\":[]}" \
+    > "$GSCI_ROOT/candidates.json"
+}
+
+# gsci_pr <mergeable-json> — rewrite the RAW REST PR object. `false` =>
+# CONFLICTING, `true` => MERGEABLE, `null` => UNKNOWN (lib.sh's projection).
+gsci_pr() {
+  local m="$1" state="dirty"
+  [[ "$m" == "true" ]] && state="clean"
+  printf '%s\n' "{\"number\":2999,\"state\":\"open\",\"merged_at\":null,\"merge_commit_sha\":null,\"mergeable\":$m,\"mergeable_state\":\"$state\",\"title\":\"t\",\"body\":\"\",\"head\":{\"sha\":\"deadbee\",\"ref\":\"tactic-fixture\"},\"labels\":[]}" \
+    > "$GSCI_ROOT/pr-2999.json"
+}
+
+# gsci_checks <json> — rewrite the single check-runs page.
+gsci_checks() { printf '%s\n' "$1" > "$GSCI_ROOT/check-runs.json"; }
+
+gsc_interrupt_teardown() {
+  rm -rf "$GSCI_ROOT" "$GSCI_BARE"
+  GSCI_ROOT="" ; GSCI_BARE="" ; GSCI_SCRIPTS="" ; GSCI_GST=""
+}
+
+# gsci_run — invoke the selector with the fixture's env, stderr to gsci.err.
+# Env needed only for this one invocation is passed as a command PREFIX (this
+# file's convention), with every ledger/log dir pointed inside the fixture.
+gsci_run() {
+  PATH="$GSCI_ROOT/bin:$SAVED_PATH" \
+    CLAUDE_AGENTS_CMD="$GSCI_ROOT/bin/claude" \
+    DISPATCH_RESERVATION_DIR="$GSCI_ROOT/reservations" \
+    DISPATCH_SELECTION_LOG_DIR="$GSCI_ROOT/seldir" \
+    DISPATCH_PR_LIST_FILE="$GSCI_ROOT/pr-list.json" \
+    "$GSCI_GST" "$@" 2>"$GSCI_ROOT/gsci.err"
+}
+
+# --- Case 1: CONFLICTING + red declines the interrupt (the defect) -----------
+echo "Test: graph-select-target — a CONFLICTING red PR declines the fix interrupt and is emitted at its ladder phase"
+gsc_interrupt_setup
+gsci1_out=$(gsci_run)
+assert_eq "graph-select-target interrupt: CONFLICTING + red emits the ladder phase, not fix" \
+  "node tactic-fixture tactic implement" "$gsci1_out"
+# The load-bearing half: no apply-fix-state call at all, so no execution.fix
+# write and no fix attempt consumed against a verdict the conflict invalidates.
+assert_eq "graph-select-target interrupt: CONFLICTING + red makes NO apply-fix-state --set-fix call" \
+  "0" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target interrupt: the decline is reported on stderr" \
+  "1" "$(grep -q "declining the fix interrupt" "$GSCI_ROOT/gsci.err" && echo 1 || echo 0)"
+# Case 3 (first half): the sensors handed to the cascade.
+assert_eq "graph-select-target interrupt: the cascade receives phase/ci/mergeable" \
+  "implement failing CONFLICTING" "$(tail -n 1 "$GSCI_ROOT/node-calls.log")"
+gsc_interrupt_teardown
+
+# --- Case 2: control — red but MERGEABLE still enters the fix interrupt ------
+# Without this, Case 1 would pass vacuously if the gate broke entirely.
+echo "Test: graph-select-target — a red but MERGEABLE PR still enters the fix interrupt (Case 1 control)"
+gsc_interrupt_setup
+gsci_pr true
+printf 'fix' > "$GSCI_ROOT/route.txt"
+gsci2_out=$(gsci_run)
+assert_eq "graph-select-target interrupt: red + MERGEABLE emits fix" \
+  "node tactic-fixture tactic fix" "$gsci2_out"
+assert_eq "graph-select-target interrupt: red + MERGEABLE calls apply-fix-state" \
+  "1" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target interrupt: the apply-fix-state call carries --set-fix" \
+  "1" "$(grep -q -- "--set-fix" "$GSCI_ROOT/apply-fix-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target interrupt: red + MERGEABLE hands the cascade MERGEABLE" \
+  "implement failing MERGEABLE" "$(tail -n 1 "$GSCI_ROOT/node-calls.log")"
+gsc_interrupt_teardown
+
+# --- Case 3 (second half): pending CI normalizes to `unknown` ----------------
+# dispatch_ci_verdict_rest emits passing|failing|pending; CiVerdict's third
+# member is `unknown`. This also pins that a CONFLICTING-but-not-red candidate
+# still REACHES the cascade — the cost guard is a superset of interruptRoute's
+# non-null conditions, so it must not filter this one out.
+echo "Test: graph-select-target — pending CI on a CONFLICTING PR reaches the cascade as 'unknown'"
+gsc_interrupt_setup
+gsci_checks '{"check_runs":[{"status":"in_progress","conclusion":null}]}'
+gsci3_out=$(gsci_run)
+assert_eq "graph-select-target interrupt: pending CI is normalized to unknown at the cascade edge" \
+  "implement unknown CONFLICTING" "$(tail -n 1 "$GSCI_ROOT/node-calls.log")"
+assert_eq "graph-select-target interrupt: pending + CONFLICTING still emits the ladder phase" \
+  "node tactic-fixture tactic implement" "$gsci3_out"
+assert_eq "graph-select-target interrupt: pending + CONFLICTING makes no apply-fix-state call" \
+  "0" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 4: the cost guard holds (green + MERGEABLE spawns no subprocess) ---
+# interruptRoute is null unless CI is failing or the PR is CONFLICTING, so the
+# common case must never pay for the node subprocess at all.
+echo "Test: graph-select-target — a green MERGEABLE PR never spawns the interruptRoute subprocess"
+gsc_interrupt_setup
+gsci_pr true
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"success"}]}'
+gsci4_out=$(gsci_run)
+assert_eq "graph-select-target interrupt: green + MERGEABLE emits the ladder phase" \
+  "node tactic-fixture tactic implement" "$gsci4_out"
+assert_eq "graph-select-target interrupt: green + MERGEABLE spawns no node subprocess" \
+  "0" "$([ -f "$GSCI_ROOT/node-calls.log" ] && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 5: declining at `qa` routes onward instead of stranding the node ---
+# The qa arm's normal gate runs after the declined interrupt: the merged check
+# passes (mergedAt null), then dispatch-ci-ready short-circuits READY for a
+# CONFLICTING draft even with CI unresolved (dispatch-ci-ready:72-76), so the
+# node is emitted at `qa` and provisioning takes it to the conflict lane.
+echo "Test: graph-select-target — declining the interrupt at qa still emits qa (no stranding)"
+gsc_interrupt_setup
+gsci_candidate qa
+printf '%s\n' '[{"number":2999,"headRefName":"tactic-fixture","isDraft":true,"headRefOid":"deadbee","labels":[],"mergeable":"CONFLICTING"}]' \
+  > "$GSCI_ROOT/pr-list.json"
+gsci5_out=$(gsci_run)
+assert_eq "graph-select-target interrupt: a declined qa candidate is emitted at qa" \
+  "node tactic-fixture tactic qa" "$gsci5_out"
+assert_eq "graph-select-target interrupt: a declined qa candidate makes no apply-fix-state call" \
+  "0" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target interrupt: the qa cascade call carries the qa phase" \
+  "qa failing CONFLICTING" "$(tail -n 1 "$GSCI_ROOT/node-calls.log")"
+gsc_interrupt_teardown
+
+# --- Case 6: an interruptRoute eval failure fails SAFE -----------------------
+# rc 3 (`route-eval-failed`) skips the candidate rather than guessing a lane:
+# no write, no emission. With one candidate the run prints `empty`.
+echo "Test: graph-select-target — an interruptRoute eval failure skips the candidate without writing"
+gsc_interrupt_setup
+touch "$GSCI_ROOT/node-fail"
+gsci6_out=$(gsci_run)
+assert_eq "graph-select-target interrupt: a failed cascade eval degrades to empty" "empty" "$gsci6_out"
+assert_eq "graph-select-target interrupt: a failed cascade eval makes no apply-fix-state call" \
+  "0" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target interrupt: a failed cascade eval is reported on stderr" \
+  "1" "$(grep -q "interruptRoute eval failed" "$GSCI_ROOT/gsci.err" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
 # <<< END MOVED <<<
 
 report_results

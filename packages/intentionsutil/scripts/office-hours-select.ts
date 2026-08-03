@@ -48,7 +48,7 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listNodes } from "../src/store.js";
+import { listNodesStrict } from "../src/store.js";
 import {
   selectOfficeHours,
   officeHoursQueue,
@@ -237,7 +237,11 @@ function main(): void {
     process.exit(2);
   }
 
-  const nodes = listNodes(intentionsDir);
+  // STRICT enumeration: selection gates on open blockers, and a blocker that is
+  // ABSENT from the enumerated set reads as "not blocking". The tolerant reader
+  // would turn a corrupt blocker file into a dispatchable park — a corrupt file
+  // must refuse loudly instead.
+  const nodes = listNodesStrict(intentionsDir);
 
   if (wantList) {
     for (const m of officeHoursQueue(nodes, sessionType)) {

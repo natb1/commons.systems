@@ -81,31 +81,24 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-test-decision-log-prod-leak
+  pr: 3013
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-01T16:46:03Z
+    mergeCommitSha: 0b496cf0364870be7f36f53a18869567e399ee08
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
-    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
-  since: 2026-08-01
-  recommendation: >-
-    A concurrent writer landed an overlapping edit to this node while this
-    session's edit was in flight; this writer's content was NOT landed. This
-    session's unlanded content is preserved at
-    /tmp/tmp.sEmNM7Gkb3/tactic-test-decision-log-prod-leak.md (this machine only
-    — may not survive past this session). Recommended: the losing writer
-    re-reads the current origin/main content, manually merges in its intended
-    edit, and re-runs graph-commit on the merged result — that same commit
-    clears this office_hours park. A third session encountering this park while
-    the loser is still working should wait rather than attempt its own merge
-    (the mailbox discipline).
-
-
-    Diverged field 'office_hours' on tactic-test-decision-log-prod-leak:
-      this session's value: {"reason":"phase session ended without declaring a disposition — `claude agents --all` reports the session for this node in a terminal state and it has had no transcript activity for `1795`s, while `origin/main` still shows the node at a working phase with `office_hours: null`; the node is therefore both re-selectable and held, so the dispatch-tick terminal-without-disposition sweep parked it","since":"2026-08-01","recommendation":"Read the session's transcript or attach the held job (`claude agents --all`, `claude attach <job-id>`) to see what it concluded. Decide the judgment item it stopped on, then either answer it here and `clear-park <node-id>`, or stop the session (`claude stop <job-id>`), let `dispatch-sweep` reap the worktree, and `clear-park <node-id>` to return the node to the lane. Do NOT simply reap the terminal session and release the node — that is what restarts the churn loop.","session_type":"other"}
-      origin/main's value: null
-  session_type: other
+office_hours: null
 pace_exempt: true
 rounds: null
 attributes: {}
@@ -345,3 +338,12 @@ grep -c '"node":"tactic-some-node"' ~/.local/share/commons-dispatch/routing-deci
 ```
 
 Record the count at merge time, run `run-unit-tests.sh --pr-scripts` a few times, and confirm it is unchanged. Only then consider the optional cleanup (filter those rows out of the log with `jq`/`grep -v` against a backup copy), as a separate operator action.
+
+## needs-main residue
+
+- **id 13 — Post-merge: production fixture rows stop growing**
+  - URL path: current
+  - Expected outcome: the `"node":"tactic-some-node"` fixture-row count in `~/.local/share/commons-dispatch/routing-decisions.jsonl` holds steady (no further growth) some time after this PR merges.
+  - Finding: the PR's own Verification section documents this as an explicit out-of-scope post-merge operator observation — it requires elapsed fleet runtime after merge and is not assertable at merge time. During this qa-fix pass (2026-08-01, ~10:54–11:31 EDT) the count was confirmed unchanged at 42 rows across the whole QA run, with the log's mtime showing the live fleet still actively appending non-fixture rows in that window — so the isolation fix is holding at QA time; only the post-merge persistence over elapsed fleet runtime remains unverified.
+  - Verifiability: WAIT — awaiting: this PR's merge, plus elapsed fleet runtime afterward, before the count can be re-checked for growth.
+  - Check: `grep -c '"node":"tactic-some-node"' ~/.local/share/commons-dispatch/routing-decisions.jsonl` — compare against the 42-row baseline recorded above; count must not increase.

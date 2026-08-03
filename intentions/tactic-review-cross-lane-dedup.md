@@ -26,12 +26,89 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 20
+  override: null
+  rationale: "Author-directed 2026-08-01: prioritize review-phase token/agent-cost
+    reduction. Puts this tactic ahead of the undecomposed baseline and on par
+    with other tier-2 improvement work, without contending with active
+    reliability fixes (top-of-band ~55-61)."
+  tier: 1
 phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "2026-08-03 /align-tactics finalize attempt (tactic-mode Workflow, run
+    wf_5ee0b8b7-437): the gate is eligible (not a strategy-round cap issue) but
+    the two-sided drift review surfaced two MATERIAL unrecorded premises that
+    both need an author ruling before this tactic's plan can be authored. Both
+    amendments would land on strategy-token-economy clarification 20 and both
+    touch the detection-quality tradeoff condition 5 reserves to the author. (1)
+    MERGED-ENTRY LANE IDENTITY. Clarification 20's lane-tag mechanism presumes
+    each finding carries exactly one lane, but cross-lane dedup's whole purpose
+    is producing entries that are both Lane-A- and Lane-B-derived.
+    review-fix.js:507-544's dedupMerge collapses a same-root group to ONE
+    representative (`rep = ordered[0]` by Confidence desc, _idx asc;
+    `Object.assign({}, rep, ...)`), so one lane's Source/id/bucket survives and
+    the other's is discarded into the `sources` union. Unrecorded: which lane
+    wins the slot, and whether an absorbed Lane-A item still appears in the
+    residue-disposition ledger (:1727-1812). Lane-A-wins silently NARROWS
+    skeptic coverage (a Lane-B Required finding loses its bucket and drops out
+    of verify) — a detection reduction condition 5 forbids, and a direction the
+    draft body never considered, guarding only against widening. Proposed for
+    ratification: the Lane-B record is always the surviving representative, so
+    verify eligibility (:566, :1399) is bit-for-bit unchanged and no
+    Lane-A-derived entry can acquire bucket 'Required'; the absorbed item is
+    recorded in `sources` and suppressed from the residue list so it is fixed
+    exactly once. (2) THE SKEPTIC PRE-GATE POST-DATES THE RULING. Clarification
+    20's ruling rests on 'the built-ins already apply their own internal
+    verification' plus a ~100-extra-agent cost argument. Commit 7c772829
+    (2026-08-02, after the 2026-07-31 ruling) states the opposite for
+    code-review residue at review-fix.js:1637-1650 — 'no instrument receipt, no
+    internal verification survives the parse' — and now routes every code-review
+    residue item through one adversarial skeptic with the same
+    refute-under-uncertainty bias Lane-B Required findings get, dropping refuted
+    items at :1723. Both the trust premise and the cost premise the author ruled
+    on are therefore partly spent. Proposed for ratification: 'never routed into
+    the adversarial skeptic stage' means the VERIFY stage only; dedup runs at or
+    after the :1723 filter so it never merges refuted items; a pre-gate-upheld
+    item stays non-verify-eligible, keeping the merge asymmetric and the
+    arithmetic intact. Parked on the node rather than the strategy deliberately:
+    the ambiguity is local to this tactic's plan, and parking
+    strategy-token-economy would freeze its seven other raw drafts for it. Note
+    for whoever resumes: the draft body's line anchors (:636, :655-661, :676,
+    :761, :858, :988, :1081, :1121-1130) have all drifted and must be
+    re-anchored to :1169-1183, :1186-1194, :1211-1287, :1293-1388, :1392-1420,
+    :1520-1538, :1727-1812; laneAResidue also uses lowercase
+    location/description/severity fields against allFindings' capitalized
+    Location/Description/Confidence/Source, so an explicit normalizer is new
+    code. RECORD-COMPLETENESS NOTE (this tactic-target session never edits the
+    serving strategy): the same Workflow run also surfaced three immaterial
+    observations that should land as dated clarifications on
+    strategy-token-economy in a future strategy-target /align-tactics round or
+    an /align-strategy session — (a) clarification 24's 'removes part of the
+    overlap structurally' claim is half pre-existing: the residue phase has run
+    sequenced AFTER the fix fan-out since 2026-07-18 (commit d8937946), so only
+    the fixed-finding half is newly attributable to clarification 24, not the
+    concurrent-edit-avoidance half; (b) the routing condition's no-auto-apply
+    half is now structurally satisfied outside any decomposition (PR #2872
+    retired the learned/adaptive phase-model policy; dispatch-phase-model is a
+    static map with an explicit no-auto-write invariant; /dispatch-token-audit
+    is report-only) — no round should re-derive the auto-apply prohibition as
+    new scope; (c) tactic-mainqa-review-cost-finder serves this strategy but is
+    owner:human/status:delegated, so it never registers in the success signal's
+    claude-eligible closure-velocity count — whether a claude-eligible
+    counterpart is still needed is an open question for a future round, not a
+    defect in the current signal definition. Recommend: run /office-hours
+    tactic-review-cross-lane-dedup for the author to rule on both material
+    premises (and, separately, land the three record-completeness notes above
+    onto strategy-token-economy), then re-invoke /align-tactics
+    tactic-review-cross-lane-dedup to finalize the plan under the ratified
+    rules."
+  since: 2026-08-03
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

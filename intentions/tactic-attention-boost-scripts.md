@@ -27,10 +27,22 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-attention-boost-scripts
+  pr: 3012
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-08-01
+    attempt: 1
+    pushed_sha: null
+  completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-fix-cap-attention-boost-scripts
 office_hours: null
 pace_exempt: true
 rounds: null

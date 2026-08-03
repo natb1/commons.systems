@@ -96,17 +96,26 @@ to pass to the Workflow.
 ## Finder agents (when `surface=code`)
 
 The Workflow fans out agent finders based on `surface` and `app_or_rules`. The
-`code-review` quality finder always runs — via `/code-review max --fix`,
-applying its own working-tree edits directly; only its un-auto-fixed residue is
-dispositioned (resolve/defer/ignore) by the new residue phase. When `surface === 'code'`, the following
-domain finders also run. Four are gated on `surface=code` alone; four additionally
-require `app_or_rules=true` (application/functions/rules source):
+Workflow's own agent fan-out contains only the surface-gated security/domain
+lenses plus `security-review` — **`code-review` is not among them.** It runs as
+the exclusive `claude -p '/code-review low --fix'` pre-stage in SKILL.md Step 1b,
+BEFORE the Workflow is invoked at all: the `-p` user turn is the only entry point
+that can invoke a `disable-model-invocation` skill, and its `--fix` writes the
+working tree, so it must run to completion rather than concurrently with the
+fan-out. The Workflow receives its output as `args.code_review` (paths plus the
+git-derived `touched_files` list) and structures it with one Sonnet
+`parse:code-review` subagent. On a non-`code` surface the Workflow launches no
+agent finders at all. When `surface === 'code'`, the following domain finders
+run. Four are gated on `surface=code` alone; four additionally require
+`app_or_rules=true` (application/functions/rules source):
 
-`code-review` and `security-review` are Lane A: they trust the built-in
+`code-review` and `security-review` are still Lane A: they trust the built-in
 `/code-review` and `/security-review` skills to do their own review-and-fix
 rather than feeding the shared dedup/classify/verify/fix pipeline below — see
 the "Disposition table" (Step 4) and the Model split note for how their output
-reaches this skill's disposition set.
+reaches this skill's disposition set. They differ only in how they are invoked:
+`security-review` is an agent finder inside the Workflow (and doubles as its
+throttle probe, launched as wave 1); `code-review` is the Step-1b pre-stage.
 
 **`surface === 'code'`** (any code-surface diff):
 - **input-validation** — Hunt injection in the changed code: SQL/NoSQL injection, XSS,

@@ -11,6 +11,7 @@ import {
   reconcileMergedPhase,
   reconcileClosedPhase,
   reviewStallRoute,
+  interruptRoute,
   hasNeedsMainResidue,
   stampRound,
   inboundBlockers,
@@ -228,6 +229,59 @@ describe("reviewStallRoute", () => {
 
   it("self-heals: an UNKNOWN mergeability with passing CI is not a regression", () => {
     expect(reviewStallRoute("passing", "UNKNOWN")).toBe(null);
+  });
+});
+
+describe("interruptRoute", () => {
+  const INTERRUPTIBLE = ["implement", "qa", "review"] as const;
+
+  it("routes to conflict over fix when both a failing verdict and CONFLICTING hold (the defect case)", () => {
+    for (const phase of INTERRUPTIBLE) {
+      expect(interruptRoute(phase, "failing", "CONFLICTING")).toBe("conflict");
+    }
+  });
+
+  it("routes to fix on a failing verdict at an interruptible phase when mergeable or unknown", () => {
+    for (const phase of INTERRUPTIBLE) {
+      expect(interruptRoute(phase, "failing", "MERGEABLE")).toBe("fix");
+      expect(interruptRoute(phase, "failing", "UNKNOWN")).toBe("fix");
+    }
+  });
+
+  it("routes to conflict regardless of CI verdict when CONFLICTING", () => {
+    for (const phase of INTERRUPTIBLE) {
+      expect(interruptRoute(phase, "passing", "CONFLICTING")).toBe("conflict");
+      expect(interruptRoute(phase, "unknown", "CONFLICTING")).toBe("conflict");
+    }
+  });
+
+  it("returns null when CI is not failing and mergeability is not CONFLICTING", () => {
+    for (const phase of INTERRUPTIBLE) {
+      expect(interruptRoute(phase, "passing", "MERGEABLE")).toBe(null);
+      expect(interruptRoute(phase, "passing", "UNKNOWN")).toBe(null);
+      expect(interruptRoute(phase, "unknown", "MERGEABLE")).toBe(null);
+      expect(interruptRoute(phase, "unknown", "UNKNOWN")).toBe(null);
+    }
+  });
+
+  it("on a non-interruptible phase, a failing+MERGEABLE verdict is null but CONFLICTING still routes to conflict", () => {
+    // The conflict arm is phase-independent by construction: mergeable ===
+    // "CONFLICTING" short-circuits before fixInterrupt (and its phase check)
+    // is ever consulted.
+    for (const phase of ["done", "main-qa"]) {
+      expect(interruptRoute(phase, "failing", "MERGEABLE")).toBe(null);
+      expect(interruptRoute(phase, "failing", "CONFLICTING")).toBe("conflict");
+    }
+  });
+
+  it("returns null whenever neither a failing verdict nor CONFLICTING holds (the shell pre-filter's superset invariant)", () => {
+    for (const phase of ["implement", "qa", "review", "done"]) {
+      for (const ci of ["passing", "unknown"] as const) {
+        for (const mergeable of ["MERGEABLE", "UNKNOWN"] as const) {
+          expect(interruptRoute(phase, ci, mergeable)).toBe(null);
+        }
+      }
+    }
   });
 });
 
