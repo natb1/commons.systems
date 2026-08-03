@@ -51,6 +51,45 @@ clarifications:
       state' → 'no autonomous resolver to route it to ... not a mechanical retry
       state'), and the Unit `case 0` parenthetical ('the conflict self-resolved'
       → 'the conflict is resolved')."
+  - question: Does the provision-conflict producer keep the hold-node shape once
+      the greenfield conflict interrupt lands, as this node's convergence note
+      directs?
+    answer: "(Recorded 2026-08-03, author-confirmed.) No — that direction is
+      SUPERSEDED for the conflict producer, and the supersession runs the
+      opposite way from what this node's `## Context` convergence note states.
+      That note says [[tactic-graph-router-conflict-routing]]'s
+      `execution.conflict.attempt` cap will call `hold-node` instead of parking;
+      the target design is the reverse — that cap calls `park-node` on the
+      SOURCE node, and the two interim provision-conflict hold producers
+      (`/dispatch-conflict` Lane 3's `hold-node --kind provision-conflict`, and
+      `dispatch-graph-execute` case 11's strike/hold ladder) collapse into the
+      same direct park. WHY: a conflict is handled exactly like a failing CI
+      check — detecting it interrupts phase progression and launches the
+      resolution skill directly; the worker is selected by normal ranking on the
+      source; it assesses mechanical-vs-author-intention; and only when author
+      attention is required does it park, on the source's own `office_hours`,
+      with the reason and recommended next step. That is precisely
+      `/fix-checks`' and `/qa-fix`' existing escalation shape, and the hold
+      indirection buys nothing over it here while costing the source's real
+      queue priority (the defect [[tactic-unclaimed-hold-alerting]] measured:
+      hold 5.33 vs source 60.33). Of this node's five original reasons for
+      hold-over-direct-park, three no longer bear on the conflict producer:
+      reason 1 (conflicts self-resolve) was struck in the clarification above;
+      reasons 2 and 5 (no autonomous ladder can execute cross-branch
+      remediation; a laundered retry loop) describe a generic unattended re-run,
+      which the shipped first-responder design never does — case 11 already
+      dispatches a real resolver against the node's own branch. WHAT SURVIVES:
+      `hold-node` is NOT deleted. It stays for the `fix-attempt-cap` producer
+      and any future kind, on a reason specific to those: `blocked_by` is a
+      LIST, so a hold node can represent a source blocked by several
+      independent, separately-resolvable things at once, and resolving one
+      auto-resumes the source through `blockersComplete` with zero writes on the
+      source. The conflict producer needs neither property — a conflict is a
+      single condition whose resolution is the resolver's own terminal state.
+      Retiring it for conflicts is therefore a narrowing of this node's scope,
+      not a reversal of its doctrine. This node's `## Context` convergence note
+      and Unit 3's in-code comment both need updating to match when the
+      greenfield lands; until then this clarification is the authority."
 tooling_goals: []
 success_signal: null
 attention:
