@@ -44,10 +44,30 @@ jobs:
           fetch-depth: 0
       - name: Disable unattended-upgrades / free dpkg lock
         run: |
-          echo 'dpkg lock-frontend holders at step start:'
-          sudo fuser -v /var/lib/dpkg/lock-frontend || echo 'dpkg lock-frontend: no holders at step start'
-          sudo systemctl stop apt-daily.service apt-daily-upgrade.service apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service 2>/dev/null || true
-          sudo systemctl kill --kill-who=all apt-daily.service apt-daily-upgrade.service unattended-upgrades.service 2>/dev/null || true
+          if command -v fuser >/dev/null 2>&1; then
+            FUSER_OK=1
+          else
+            FUSER_OK=0
+            echo 'WARNING: fuser not installed (psmisc missing) - dpkg lock state UNKNOWN, skipping lock probes'
+          fi
+          if [ "$FUSER_OK" -eq 1 ]; then
+            echo 'dpkg lock-frontend holders at step start:'
+            sudo fuser -v /var/lib/dpkg/lock-frontend || echo 'dpkg lock-frontend: no holders at step start'
+          fi
+          if stop_err=$(sudo systemctl stop apt-daily.service apt-daily-upgrade.service apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service 2>&1); then
+            echo 'systemctl stop: ok'
+          else
+            rc=$?
+            echo "systemctl stop: failed (rc=$rc)"
+            echo "$stop_err" >&2
+          fi
+          if kill_err=$(sudo systemctl kill --kill-who=all apt-daily.service apt-daily-upgrade.service unattended-upgrades.service 2>&1); then
+            echo 'systemctl kill: ok'
+          else
+            rc=$?
+            echo "systemctl kill: failed (rc=$rc)"
+            echo "$kill_err" >&2
+          fi
           if sudo pkill -9 -f '[u]nattended-upgrade' 2>/dev/null; then
             echo 'killed unattended-upgrade process(es)'
           else
@@ -58,23 +78,25 @@ jobs:
           else
             echo 'no apt.systemd.daily process to kill'
           fi
-          if ! sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
-            echo 'dpkg lock-frontend: already free, no wait needed'
-          else
-            waited=0
-            expired=0
-            while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-              if [ "$waited" -ge 120 ]; then
-                echo "dpkg lock-frontend still held after 120s; holders:" >&2
-                sudo fuser -v /var/lib/dpkg/lock-frontend >&2 || true
-                expired=1
-                break
+          if [ "$FUSER_OK" -eq 1 ]; then
+            if ! sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+              echo 'dpkg lock-frontend: already free, no wait needed'
+            else
+              waited=0
+              expired=0
+              while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+                if [ "$waited" -ge 120 ]; then
+                  echo "dpkg lock-frontend still held after 120s; holders:" >&2
+                  sudo fuser -v /var/lib/dpkg/lock-frontend >&2 || true
+                  expired=1
+                  break
+                fi
+                sleep 1
+                waited=$((waited + 1))
+              done
+              if [ "$expired" -eq 0 ]; then
+                echo "dpkg lock-frontend freed after ${waited}s"
               fi
-              sleep 1
-              waited=$((waited + 1))
-            done
-            if [ "$expired" -eq 0 ]; then
-              echo "dpkg lock-frontend freed after ${waited}s"
             fi
           fi
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
