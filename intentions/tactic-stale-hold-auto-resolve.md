@@ -77,7 +77,92 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA found no code defects (5/5 script-verifiable items PASS
+    against the live repo and graph store; 2 needs-human-judgment items filed as
+    needs-main residue). One item (#6, the stale-hold sweep's claimed-check
+    fail-safe direction on an unreadable session-liveness signal) asks for a
+    human risk-tolerance sign-off, not a code fix -- the tradeoff is already
+    explicitly documented (lib-stale-hold-recheck.sh contract item 3 \"FAIL-SAFE
+    MEANS KEEP\", rule (d), and the sandbox note); no bug is evident, and
+    changing the direction is a behavior decision the tactic node does not
+    authorize. The gated fix-planner declared this a scope-deviation (no units);
+    escalating to office-hours for the sign-off."
+  since: 2026-08-03
+  recommendation: >-
+    # Recommendation — `tactic-stale-hold-auto-resolve` (#3011)
+
+
+    ## What's being asked
+
+
+    A **sign-off, not a bug fix**. QA found no defect. One triage item (#6) asks
+    you to explicitly confirm a design default; everything else on this PR
+    passed or is already routed.
+
+
+    **The question:** when the stale-hold sweep cannot determine whether a
+    hold's source node is claimed — `worktree_has_live_session` can't reach the
+    local Claude daemon, or the caller is sandboxed — should it fail toward
+    **OCCUPIED** (skip resolving this pass, retry next tick), which is what's
+    implemented?
+
+
+    ## Why the current answer looks right
+
+
+    The costs are asymmetric:
+
+
+    - Wrong "unclaimed" → resolves a hold on a worktree in active use,
+    unblocking a source node whose session may be mid-repair. Destructive, not
+    self-correcting.
+
+    - Wrong "claimed" → one tick of delay. Cheap, self-corrects on the next
+    sweep.
+
+
+    QA confirmed by direct code read that fail-toward-OCCUPIED is what's
+    implemented and that it's documented in the sweep's header comment. Two
+    automated skeptics both argued this doesn't even need human judgment — the
+    answer follows from the cost asymmetry alone. It reached you because the QA
+    fix-planner had no code to change and no plan authorization to act, so it
+    parked rather than guessing.
+
+
+    ## To check it yourself (~2 min)
+
+
+    - `lib-stale-hold-recheck.sh` — rule (d), the claimed-check wrapping the
+    `worktree_has_live_session` call, plus the header comment documenting the
+    direction.
+
+    - `lib-claude-agents.sh` — `worktree_has_live_session`, for the documented
+    fails-safe-to-OCCUPIED contract it relies on.
+
+
+    ## If you agree (expected)
+
+
+    No code change. Un-park the node; the QA session completes and merges. Item
+    #6 was the only thing holding it — the other two `needs-human-judgment`
+    items were classified `needs-main` and filed as a `## needs-main residue`
+    section on this node's body, and they drain automatically post-merge. No
+    further QA-side blockers.
+
+
+    ## If you disagree
+
+
+    Say so on this item and name the intended direction. The change lands in
+    `lib-stale-hold-recheck.sh` at rule (d) — invert the claimed-check so an
+    indeterminate `worktree_has_live_session` result is treated as unclaimed and
+    the hold resolves anyway. This PR's own suite
+    `test-lib-stale-hold-recheck.sh` needs a new case covering the alternate
+    direction, and the sweep's header comment needs updating to match. That is a
+    scope change beyond the tactic's current plan, so it wants a re-plan rather
+    than an in-QA patch.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
