@@ -65,13 +65,12 @@ attention:
     left unchanged at 20; blocked_by remains empty so this promotion still lifts
     no blocker and cannot compound."
   tier: 1
-phase: qa
+phase: implement
 execution:
   branch: tactic-stale-hold-auto-resolve
   pr: 3011
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
