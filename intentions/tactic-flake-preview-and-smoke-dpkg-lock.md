@@ -18,88 +18,18 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-flake-preview-and-smoke-dpkg-lock
   pr: 3020
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA needs a human — the bounded auto-fix attempt cap has been
-    reached (ATTEMPT_N=3 >= CAP=3, dispatch:qa-fix-attempt-3 label). This 4th QA
-    pass's triage found 6 new residue items (5 script-verifiable FAILs on the CI
-    dpkg-lock mitigation's own robustness/consistency, plus 1
-    needs-human-judgment item), all classified opus-fixable/needs-human by the
-    disposition Workflow, but no auto-fix ran since the cap was already reached
-    (plan_fix pre-gate false, result.fix_plan === null). Escalating to
-    office-hours for human review/fix rather than a 4th autonomous attempt."
-  since: 2026-08-03
-  recommendation: >-
-    # Recommendation — PR #3020 dpkg-lock mitigation (parked at attempt cap)
-
-
-    ## Do these together: findings 1 + 2 + 3 are one bug
-
-
-    They are three symptoms of "the step's worst case isn't actually bounded."
-    Fix in one edit to `.github/workflows/pr-checks.yml:45-219`:
-
-
-    1. **Bound the unbounded calls.** Wrap every `sudo systemctl` / `sudo fuser`
-    call in `timeout` — `sudo timeout 20 systemctl mask --now …` (line 97), same
-    on `systemctl kill` (line 104) and the `fuser -v`/`fuser -k` probes. This
-    kills finding 3 outright: derived worst case becomes
-    20+20+10(grace)+120(wait)+120(dpkg) = 290s, genuinely under the 300s cap,
-    and the "~50s of slack" claim in the comment becomes true instead of
-    aspirational.
-
-    2. **Add `continue-on-error: true`** next to `timeout-minutes: 5` (line 64).
-    Every internal path already exits 0 by design; without this, the step cap is
-    the one way this best-effort step can block a PR. Once (1) makes the cap
-    unreachable in normal operation, `continue-on-error` costs nothing and
-    closes the new failure mode.
-
-    3. **Rewrite the budget comment (lines 39-63) to state additivity
-    explicitly.** The two budgets *are* additive in the worst case (5 + ~11 work
-    + up to 12 min of `wait_for_dpkg_lock` = ~28 min > the 20-min cap), but
-    near-mutually-exclusive in practice — the helper only waits after a failed
-    attempt, which the pre-step exists to prevent. Say exactly that, and either
-    raise `timeout-minutes` to 30 (matching `acceptance`) or record the accepted
-    residual risk. Do not leave it ambiguous.
-
-
-    ## Finding 4 — fix, it's small
-
-
-    At line 213, capture rc and branch: `if [ "$rc" -eq 124 ]` → log `dpkg
-    --configure -a: TIMED OUT (may have left dpkg interrupted)` and retry once
-    with `timeout 120`. A 124 is the failure the recovery was meant to prevent;
-    logging it as a benign no-op is the defect.
-
-
-    ## Finding 5 — in scope; extract, don't copy
-
-
-    The node's scope note excludes only the office-hours app and smoke
-    build/deploy internals; the sibling `acceptance` job (line 12) is fair game,
-    uses the same helper, and this PR's 30s revert leaves it undefended. Extract
-    the run block to `.github/scripts/free-dpkg-lock.sh` and call it from both
-    jobs — a 180-line copy-paste is the only reason to defer. If deferring, file
-    it as a blocked follow-up rather than silently shipping the gap.
-
-
-    ## Finding 6 — just do it
-
-
-    Update the PR body: default stays 30s (not raised to 120s), and the step
-    probes three lock files.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
