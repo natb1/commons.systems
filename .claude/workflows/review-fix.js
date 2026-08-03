@@ -177,6 +177,31 @@ const VERDICT_SCHEMA = {
   },
 };
 
+// Batched form of VERDICT_SCHEMA: one skeptic agent reads a file ONCE and
+// returns a verdict per finding on that file, instead of one agent per
+// (finding, skeptic-replica). VERDICT_SCHEMA is left in place (not deleted)
+// until later units migrate every call site off it.
+const BATCH_VERDICT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['votes'],
+  properties: {
+    votes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'verdict', 'rationale'],
+        properties: {
+          id: { type: 'string' },
+          verdict: { enum: ['refuted', 'upheld'] },
+          rationale: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
 const FIX_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -1493,6 +1518,62 @@ if (deduped.length) {
   });
 }
 
+// >>> skeptic batching: sliced + eval'd by review-fix-skeptic-batch-probe.mjs >>>
+// Group by file path (Location before the last ':'). Module-scope so both the
+// verify phase (skeptic batching) and the fix phase (file-group fan-out)
+// share ONE definition.
+function filePath(location) {
+  const loc = location || '';
+  const idx = loc.lastIndexOf(':');
+  return idx >= 0 ? loc.slice(0, idx) : loc;
+}
+
+// Pure. Groups `items` by `keyOf(item)` (first-appearance order) and slices
+// each group into replica-indexed jobs so that adversarial skeptics can be
+// batched per (group, replica) instead of per (item, replica) — one
+// independent agent reads a file once and returns a verdict per finding on
+// that file, rather than re-reading the file once per finding.
+//
+// items      — array of things to be adversarially judged
+// keyOf      — item -> group key string (callers compose brief x file here)
+// fileOf     — item -> the file path, used for the prompt and agent label
+// replicasOf — item -> integer >= 1, how many independent votes this item needs
+//
+// Returns [ { key, file, replica, items:[...] }, ... ]:
+//   - one entry per (group, replica index k), k ascending from 0;
+//   - a group emits max(replicasOf over its items) jobs, floor 1;
+//   - the job at replica k contains EXACTLY the group's items whose
+//     replicasOf(item) > k. This is load-bearing: each item must appear in
+//     exactly replicasOf(item) jobs total, NEVER a group-wide max(replicas)
+//     applied to every item (that would give a low-confidence item extra
+//     votes just for sharing a file with a high-confidence one).
+//   - group order = first-appearance order of the key in `items`; item order
+//     inside a job = input order.
+function skepticBatchJobs(items, { keyOf, fileOf, replicasOf }) {
+  const groupOrder = [];
+  const groups = new Map();
+  for (const item of items) {
+    const key = keyOf(item);
+    if (!groups.has(key)) {
+      groups.set(key, { file: fileOf(item), items: [] });
+      groupOrder.push(key);
+    }
+    groups.get(key).items.push(item);
+  }
+
+  const jobs = [];
+  for (const key of groupOrder) {
+    const group = groups.get(key);
+    const maxReplicas = Math.max(1, ...group.items.map((item) => replicasOf(item)));
+    for (let k = 0; k < maxReplicas; k++) {
+      const jobItems = group.items.filter((item) => replicasOf(item) > k);
+      jobs.push({ key, file: group.file, replica: k, items: jobItems });
+    }
+  }
+  return jobs;
+}
+// <<< skeptic batching <<<
+
 // --- 4. VERIFY (parallel) ----------------------------------------------------
 phase('verify');
 // Verify-eligible set: security `Required` findings AND (erosion-scoped, per
@@ -1630,12 +1711,8 @@ const fixSet = keptFindings.filter(
   (f) => f.bucket === 'Fixed' || (f.bucket === 'Required' && f.verify === 'Upheld')
 );
 
-// Group by file path (Location before the last ':').
-function filePath(location) {
-  const loc = location || '';
-  const idx = loc.lastIndexOf(':');
-  return idx >= 0 ? loc.slice(0, idx) : loc;
-}
+// Group by file path (Location before the last ':'). filePath is defined at
+// module scope above (see "skeptic batching" sentinel block).
 const fileGroups = new Map();
 for (const f of fixSet) {
   const file = filePath(f.Location);
