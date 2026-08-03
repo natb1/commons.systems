@@ -38,7 +38,81 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "2026-08-03 /align-tactics finalize attempt (tactic-mode Workflow, run
+    wf_7002ef10-a60): the gate was eligible (drift eligibility.decomposable=true
+    — not a round-cap issue) and this run supplied clarifications 26 and 27,
+    which ratified the two premises that parked this node's prior attempt
+    (commit ea045077, cleared a15c52dd). But the two-sided drift review found
+    those two clarifications do not fully settle the plan: a NEW material
+    unrecorded premise blocks authoring. WHICH LANE-B TERMINAL DISPOSITIONS
+    QUALIFY A FINDING TO ABSORB ITS LANE-A RESIDUE TWIN. Clarification 27 places
+    the cross-lane merge at or after the code-review residue skeptic pre-gate;
+    verified against the live file this round, that pre-gate sits at
+    review-fix.js ~1694-1781, INSIDE the residue phase (phase('residue') ~1617),
+    which is downstream of the shared pipeline's verify phase (~1394,
+    applyVerifyDrop ~1489 splitting keptFindings vs refuted/unverified) and fix
+    phase (~1524). So by the time the merge runs, every Lane-B finding already
+    carries a terminal disposition — fixed, refuted, unverified, or (later, at
+    ~2054) queued for deferred filing — and clarification 26 only rules that the
+    Lane-B record is 'fixed exactly once', which presumes the twin was actually
+    fixed. It is silent on the refuted/unverified case and the deferred case.
+    Matching Lane-A residue against the full deduped pool would let a REFUTED
+    Lane-B twin suppress a real Lane-A item, deleting it from the
+    residue-disposition ledger — a detection loss condition 5 forbids. Matching
+    only against actually-fixed Lane-B findings is detection-safe but leaves the
+    Lane-A residue item double-handled against a Lane-B deferred follow-up on
+    the same root, exactly the duplication clarification 20's dedup exists to
+    remove — and honoring the deferred case requires computing deferred_filings
+    (currently ~2054) before or during the residue phase instead of after it.
+    PROPOSED FOR RATIFICATION: only a Lane-B finding that survived verify and
+    was actually fixed absorbs its Lane-A twin (a Refuted/Unverified-dropped
+    finding never absorbs — the Lane-A item stays in the residue ledger); the
+    deferred case is the genuinely open half and needs an explicit author call —
+    dedup-wins (absorb, at the cost of reordering/duplicating the
+    deferred-filing computation) or ledger-completeness-wins (do not absorb,
+    accepting one duplicate). Recommend co-scheduling this sitting with the
+    still-parked sibling tactic-review-verify-per-file-batching, parked on the
+    same commit-7c772829 fact and naming this tactic by id — clarifications 26
+    and 27 settled only the cross-lane half of that coupling, not this
+    terminal-disposition question. RECORD-COMPLETENESS NOTE (a tactic-target
+    session never edits the serving strategy): this round's drift review also
+    surfaced two immaterial observations that should land as dated
+    clarifications on strategy-token-economy in a future strategy-target
+    /align-tactics round or an /align-strategy session — (a) clarifications 26
+    and 27 are NOT in tension: 27 fixes placement (the cross-lane pass is a
+    late, one-directional suppression spliced between the pre-gate's
+    laneAResidue filter at ~1780 and the residue-disposition prompt build at
+    ~1784+), and under that placement 26's 'Lane-B record always survives'
+    guarantee holds by construction — dedupMerge (~511-547) stays a Lane-B-only
+    pre-classify collapse and needs no lane-aware tie-break; (b) condition 3's
+    'the audit-written policy loop surfaces recommendations, it never
+    auto-applies' describes a mechanism that no longer exists — PR #2872 (commit
+    7fcbb7dd, 2026-07-14) deleted generate-phase-model-policy.sh and the live
+    phase-model-policy.json; dispatch-phase-model is now a static map and
+    routing is applied by hand per dispatch-token-audit/SKILL.md — condition 3
+    is not failed, it holds more strongly (no auto-apply path exists at all);
+    read it going forward as two live requirements (verified-yield-only
+    grounding, explicit author approval) plus a historical reference to a
+    retired loop. REUSE EVIDENCE (do not re-hunt):
+    residueLocationFile/residueLocationInDiff (review-fix.js ~1144-1160) is a
+    directly reusable path-normalization primitive for the cross-lane location
+    key; the sentinel-delimited slice-and-probe convention used by
+    review-fix-residue-death-probe.mjs / test-review-fix-residue-death.sh (and
+    review-fix-instrument-probe.mjs / test-review-fix-instrument.sh) is the
+    confirmed pattern for a new cross-lane-dedup unit's own pure
+    merge/suppression function and its CI-wired probe/test pair. LIVE LINE
+    ANCHORS as verified this round (re-confirm before use, code moves): dedup
+    phase review-fix.js:1212, classify:1297, verify:1394 (applyVerifyDrop:1489),
+    fix:1524, residue phase:1617, code-review residue skeptic
+    pre-gate:~1694-1781, file phase:2030, deferred_filings computed:~2054.
+    Recommend: run /office-hours tactic-review-cross-lane-dedup for the author
+    to rule on the terminal-disposition-absorption premise, then re-invoke
+    /align-tactics tactic-review-cross-lane-dedup to finalize the plan under the
+    ratified rule."
+  since: 2026-08-03
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
