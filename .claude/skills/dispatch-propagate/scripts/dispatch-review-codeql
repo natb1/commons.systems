@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# CodeQL alert finder: fetch a PR's open GitHub code-scanning alerts and emit
+# them ALREADY NORMALIZED to the review-fix Per-finding schema.
+# Usage: dispatch-review-codeql <pr-num>
+#
+# Replaces the raw `gh api --paginate .../code-scanning/alerts` block that used
+# to run inline in the /review-fix parent thread (see
+# .claude/skills/review-fix/references/inline-scans.md). The parent used to read
+# the raw alert JSON and hand-normalize it; now only the normalized
+# {"findings":[...]} document crosses into its context.
+#
+# OUTPUT
+#   {"findings":[ ... ]} on stdout — each entry in the Per-finding schema of
+#   .claude/workflows/review-fix.js (FINDING_ITEM_SCHEMA), with Source="codeql".
+#   Zero open alerts is NORMAL, not an error → {"findings":[]}, exit 0.
+#   No PR number → {"findings":[],"status":"skipped-no-pr"}, exit 0 (mirrors the
+#   inline version's "could not run (no PR ref)" case).
+#
+# SANDBOX: `gh` needs network — callers must use dangerouslyDisableSandbox: true.
+#
+# TEST SEAM
+#   DISPATCH_REVIEW_CODEQL_FIXTURE — path to a JSON file holding what
+#   `gh api --paginate ...` would have returned (one or more JSON array
+#   documents). When set, the file is read instead of shelling out to `gh`, so
+#   the test suite runs offline. Mirrors DISPATCH_AUDIT_PROJECTS_ROOT in
+#   .claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh.
+#
+# NORMALIZATION NOTES
+#   - Location: most_recent_instance.location.path:start_line.
+#   - Description: rule.description / most_recent_instance.message.text, plus the
+#     alert number, rule.id and html_url so the finding stays traceable.
+#   - Confidence: rule.security_severity_level (critical/high→high, medium→medium,
+#     low→low); for non-security rules (security_severity_level null) fall back to
+#     rule.severity (error→medium, warning/note→low). The fallback preserves
+#     signal from non-security rules instead of collapsing them all to `low`.
+#   - Recommended fix: the alerts LIST endpoint's `rule` object does not reliably
+#     carry the full remediation text (`rule.help` / `rule.full_description` only
+#     appear on some responses), so take the first non-empty of
+#     rule.help / rule.full_description / rule.description and append
+#     rule.help_uri when present. Deterministic, and never empty.
+#   - OWASP/STRIDE: inferred deterministically from the rule's `external/cwe/cwe-NNN`
+#     tags via the table below — no LLM call. An unmapped security-tagged rule
+#     gets OWASP "" and the conservative STRIDE default "Tampering"; a
+#     non-security rule gets "" for both (matching the cost lens convention).
+set -euo pipefail
+
+PR_NUM="${1:-}"
+
+# No PR ref → nothing to fetch. Not an error.
+if [[ -z "$PR_NUM" || "$PR_NUM" == "none" ]]; then
+  echo '{"findings":[],"status":"skipped-no-pr"}'
+  exit 0
+fi
+
+RAW=""
+if [[ -n "${DISPATCH_REVIEW_CODEQL_FIXTURE:-}" ]]; then
+  if [[ ! -f "$DISPATCH_REVIEW_CODEQL_FIXTURE" ]]; then
+    echo "dispatch-review-codeql: fixture not found: $DISPATCH_REVIEW_CODEQL_FIXTURE" >&2
+    exit 1
+  fi
+  RAW="$(cat "$DISPATCH_REVIEW_CODEQL_FIXTURE")"
+else
+  # {owner}/{repo} are resolved by gh itself from the current repo (the same
+  # placeholders the inline version used, and the form used throughout the
+  # dispatch scripts).
+  RAW="$(gh api --paginate \
+    "repos/{owner}/{repo}/code-scanning/alerts?state=open&ref=refs/pull/${PR_NUM}/head")"
+fi
+
+# `gh api --paginate` emits one JSON array document PER PAGE; `jq -s 'add // []'`
+# concatenates them into a single array (and yields [] for empty input).
+# Per .claude/rules/shell-json.md: here-string, never `echo "$RAW" | jq`.
+jq -s -c '
+  def pages: (add // []);
+
+  # CWE numbers carried on the rule as external/cwe/cwe-NNN tags.
+  def cwes:
+    [ (.rule.tags // [])[]
+      | select(type == "string" and startswith("external/cwe/cwe-"))
+      | sub("^external/cwe/cwe-"; "")
+      | sub("^0+"; "") ];
+
+  def is_security:
+    ((.rule.security_severity_level // null) != null)
+    or (((.rule.tags // []) | index("security")) != null);
+
+  # Deterministic CWE -> {OWASP Top 10 (2021), STRIDE} table.
+  def owasp_stride_for($cwe):
+    if   ["79","89","78","94","611","116","643","90","917","74","77","564"] | index($cwe)
+    then {owasp: "A03:2021 Injection", stride: "Tampering"}
+    elif ["22","23","36","35","99"] | index($cwe)
+    then {owasp: "A01:2021 Broken Access Control", stride: "Information Disclosure"}
+    elif ["862","863","285","639","732","352","425","566"] | index($cwe)
+    then {owasp: "A01:2021 Broken Access Control", stride: "Elevation of Privilege"}
+    elif ["200","209","532","201","359"] | index($cwe)
+    then {owasp: "A01:2021 Broken Access Control", stride: "Information Disclosure"}
+    elif ["287","306","798","259","321","384","522","640"] | index($cwe)
+    then {owasp: "A07:2021 Identification and Authentication Failures", stride: "Spoofing"}
+    elif ["327","328","326","330","338","916","757"] | index($cwe)
+    then {owasp: "A02:2021 Cryptographic Failures", stride: "Information Disclosure"}
+    elif ["502","345","353","494","829"] | index($cwe)
+    then {owasp: "A08:2021 Software and Data Integrity Failures", stride: "Tampering"}
+    elif ["918"] | index($cwe)
+    then {owasp: "A10:2021 Server-Side Request Forgery", stride: "Information Disclosure"}
+    elif ["1104","937"] | index($cwe)
+    then {owasp: "A06:2021 Vulnerable and Outdated Components", stride: "Tampering"}
+    elif ["16","1004","614","942","1275"] | index($cwe)
+    then {owasp: "A05:2021 Security Misconfiguration", stride: "Information Disclosure"}
+    elif ["117","778"] | index($cwe)
+    then {owasp: "A09:2021 Security Logging and Monitoring Failures", stride: "Repudiation"}
+    elif ["400","770","1333","834"] | index($cwe)
+    then {owasp: "", stride: "Denial of Service"}
+    else null
+    end;
+
+  def classify:
+    ( [ cwes[] | owasp_stride_for(.) | select(. != null) ] | first ) as $hit
+    | if $hit != null then $hit
+      elif is_security then {owasp: "", stride: "Tampering"}
+      else {owasp: "", stride: ""}
+      end;
+
+  def confidence:
+    if (.rule.security_severity_level // null) != null then
+      ( .rule.security_severity_level
+        | if . == "critical" or . == "high" then "high"
+          elif . == "medium" then "medium"
+          else "low" end )
+    else
+      ( (.rule.severity // "note")
+        | if . == "error" then "medium" else "low" end )
+    end;
+
+  def nonempty($s): ($s // "") | if (. | type) == "string" and . != "" then . else null end;
+
+  def recommended_fix:
+    ( [ nonempty(.rule.help),
+        nonempty(.rule.full_description),
+        nonempty(.rule.description) ] | map(select(. != null)) | first
+      // "See the CodeQL rule documentation for remediation guidance." ) as $body
+    | ( nonempty(.rule.help_uri) ) as $uri
+    | if $uri != null then "\($body) (\($uri))" else $body end;
+
+  {
+    findings: [
+      pages[]
+      | select(type == "object")
+      | . as $a
+      | classify as $c
+      | {
+          Location: "\($a.most_recent_instance.location.path // "unknown"):\($a.most_recent_instance.location.start_line // 0)",
+          Description: "\($a.rule.description // $a.most_recent_instance.message.text // "CodeQL alert") — \($a.most_recent_instance.message.text // "") [codeql alert #\($a.number // 0), rule \($a.rule.id // "unknown"), \($a.html_url // "")]",
+          Source: "codeql",
+          OWASP: $c.owasp,
+          STRIDE: $c.stride,
+          Confidence: ($a | confidence),
+          "Recommended fix": ($a | recommended_fix),
+          Disposition: "skipped"
+        }
+    ]
+  }
+' <<<"$RAW"

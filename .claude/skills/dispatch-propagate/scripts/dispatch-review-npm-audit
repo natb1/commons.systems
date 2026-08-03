@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Dependency-audit differential finder: audit HEAD against the merge base's
+# lockfile and emit ONLY the normalized differential, already in the review-fix
+# Per-finding schema.
+# Usage: dispatch-review-npm-audit <MERGE_BASE>
+#
+# Replaces the two raw `npm audit --json` blocks that used to run inline in the
+# /review-fix parent thread (see
+# .claude/skills/review-fix/references/inline-scans.md). The parent used to read
+# BOTH raw audit documents and diff them by hand; now only the normalized
+# {"findings":[...]} document crosses into its context. Raw npm audit JSON never
+# reaches stdout.
+#
+# MERGE_BASE IS TRUSTED AS GIVEN. It arrives as a positional argument computed by
+# the caller with a direct `git merge-base HEAD origin/main`, and is used AS-IS.
+# It is NEVER recomputed here and NEVER derived from pack text, a PR body, or a
+# `=== DIFF (base <sha>) ===` header — a forged header must not be able to steer
+# the dependency-audit baseline (#1522 defect class). Positional arg, not an
+# inline `VAR=val` prefix, per .claude/rules/sandbox.md.
+#
+# DIFFERENTIAL RULES (transcribed from inline-scans.md, unchanged):
+#   - advisory at HEAD but not at MERGE_BASE  -> emitted, introduced_by_diff=true
+#     (in-scope; the orchestrator classifies it `required`)
+#   - advisory in BOTH, severity high|critical -> emitted, introduced_by_diff=false
+#     (out-of-scope; feeds follow-up filing)
+#   - advisory in BOTH, severity moderate|low  -> OMITTED entirely (below the
+#     meaningfulness threshold)
+#   The introduced_by_diff flag rides in the Description text (the literal token
+#   `introduced_by_diff=true|false`), NOT as an extra schema field: the
+#   Per-finding schema is `additionalProperties: false` and this script must not
+#   extend it.
+#
+# "SKIPS A PUBLISHED SECURITY-PATCH RELEASE" SUB-CASE — PARTIALLY COVERED.
+#   inline-scans.md also asks to flag "any dependency the PR adds or upgrades
+#   whose resolved version skips a published security-patch release".
+#   `npm audit --json` reports advisories affecting the INSTALLED version only;
+#   it carries no published-version list, so the general form of that question
+#   ("was there a newer patch release the PR could have taken?") is not answerable
+#   from the audit document alone — it needs a registry query per package, which
+#   is materially more machinery than this script should carry.
+#   What IS answerable, and is covered here: an advisory the diff newly exposes
+#   whose containing vulnerability reports `fixAvailable` truthy means the PR
+#   landed a version that is still vulnerable even though npm knows of a fixed
+#   release — i.e. the resolved version skipped the published security patch.
+#   Those findings lead their Description with `skipped_published_patch=true` so
+#   the orchestrator can see the sub-case, and are emitted as part of the
+#   introduced set rather than duplicated as a second finding for the same
+#   advisory. The un-answerable remainder (a version bump that skipped a patch
+#   release with NO advisory affecting the head version) is a known gap, called
+#   out here rather than silently dropped.
+#
+# SANDBOX: `npm audit` writes the npm cache and reaches the registry — callers
+# must use dangerouslyDisableSandbox: true.
+#
+# TEST SEAMS (mirror DISPATCH_AUDIT_PROJECTS_ROOT in aggregate-usage.sh)
+#   DISPATCH_REVIEW_NPM_AUDIT_HEAD_FIXTURE     — path to a JSON file holding what
+#                                                `npm audit --json` at HEAD would
+#                                                have emitted.
+#   DISPATCH_REVIEW_NPM_AUDIT_BASELINE_FIXTURE — same, for the MERGE_BASE audit.
+#   When BOTH are set, no `npm` and no `git show` runs at all, so the test suite
+#   is fully offline.
+set -euo pipefail
+
+MERGE_BASE="${1:-}"
+if [[ -z "$MERGE_BASE" ]]; then
+  echo "dispatch-review-npm-audit: MERGE_BASE required (positional arg)" >&2
+  exit 1
+fi
+
+HEAD_FIXTURE="${DISPATCH_REVIEW_NPM_AUDIT_HEAD_FIXTURE:-}"
+BASE_FIXTURE="${DISPATCH_REVIEW_NPM_AUDIT_BASELINE_FIXTURE:-}"
+
+AUDIT_DIR="$(mktemp -d)"
+trap 'rm -rf "$AUDIT_DIR"' EXIT
+
+HEAD_JSON="$AUDIT_DIR/audit-head.json"
+BASE_JSON="$AUDIT_DIR/audit-baseline.json"
+
+if [[ -n "$HEAD_FIXTURE" && -n "$BASE_FIXTURE" ]]; then
+  for f in "$HEAD_FIXTURE" "$BASE_FIXTURE"; do
+    if [[ ! -f "$f" ]]; then
+      echo "dispatch-review-npm-audit: fixture not found: $f" >&2
+      exit 1
+    fi
+  done
+  cp "$HEAD_FIXTURE" "$HEAD_JSON"
+  cp "$BASE_FIXTURE" "$BASE_JSON"
+else
+  # Audit HEAD (current working tree). npm audit exits non-zero whenever it finds
+  # any vulnerability, so tolerate the exit code and validate the document instead.
+  npm audit --json > "$HEAD_JSON" 2>/dev/null || true
+
+  # Audit the MERGE_BASE lockfile without touching the working tree.
+  mkdir -p "$AUDIT_DIR/baseline"
+  git show "$MERGE_BASE":package-lock.json > "$AUDIT_DIR/baseline/package-lock.json"
+  git show "$MERGE_BASE":package.json      > "$AUDIT_DIR/baseline/package.json"
+  npm audit --package-lock-only --json --prefix "$AUDIT_DIR/baseline" \
+    > "$BASE_JSON" 2>/dev/null || true
+
+  for f in "$HEAD_JSON" "$BASE_JSON"; do
+    if ! jq -e . "$f" >/dev/null 2>&1; then
+      echo "dispatch-review-npm-audit: npm audit produced no parseable JSON at $f" >&2
+      exit 1
+    fi
+  done
+fi
+
+# Normalize. `npm audit --json` (auditReportVersion 2) nests each advisory as an
+# OBJECT entry in .vulnerabilities[<pkg>].via[]; string entries there are just
+# transitive back-references to another package's entry, not advisories.
+jq -n -c --slurpfile head "$HEAD_JSON" --slurpfile base "$BASE_JSON" '
+  def advisories:
+    [ (.vulnerabilities // {}) | to_entries[] as $e
+      | ($e.value.via // [])[]
+      | select(type == "object")
+      | { id: (.source // .url // .title),
+          name: (.name // $e.key),
+          title: (.title // "npm advisory"),
+          url: (.url // ""),
+          severity: (.severity // "low"),
+          range: (.range // ""),
+          fix_available: (($e.value.fixAvailable // false) != false) } ];
+
+  # Collapse duplicate advisory rows (the same advisory is repeated once per
+  # affected package entry); keep fix_available true if ANY row reports it.
+  def dedupe:
+    group_by(.id) | map(.[0] + {fix_available: (map(.fix_available) | any)});
+
+  ($head[0] // {} | advisories | dedupe) as $h
+  | ($base[0] // {} | advisories | dedupe | map(.id)) as $bids
+  | def confidence_of($sev):
+      if $sev == "critical" or $sev == "high" then "high"
+      elif $sev == "moderate" then "medium"
+      else "low" end;
+    [ $h[]
+      | . as $a
+      | ($bids | index($a.id)) as $pre
+      | if $pre == null then
+          {kind: "introduced", a: $a}
+        elif ($a.severity == "high" or $a.severity == "critical") then
+          {kind: "pre-existing", a: $a}
+        else
+          empty
+        end
+    ]
+  | {
+      findings: [
+        .[]
+        | .a as $a
+        | (.kind == "introduced") as $new
+        | ($new and $a.fix_available) as $skipped
+        | {
+            Location: "package-lock.json (\($a.name))",
+            Description: (
+              (if $skipped then "skipped_published_patch=true — the resolved version of \($a.name) is still vulnerable although npm reports a fixed release is available. " else "" end)
+              + "introduced_by_diff=\(if $new then "true" else "false" end) — \($a.title) (\($a.name)\(if $a.range != "" then " " + $a.range else "" end), severity \($a.severity), advisory \($a.id)\(if $a.url != "" then ", " + $a.url else "" end))."
+              + (if $new then " The PR'"'"'s dependency changes newly expose this advisory." else " Pre-existing at the merge base — the diff did not introduce it." end)
+            ),
+            Source: "npm",
+            OWASP: "A06:2021 Vulnerable and Outdated Components",
+            STRIDE: "Tampering",
+            Confidence: confidence_of($a.severity),
+            "Recommended fix": (
+              if $a.fix_available then
+                "Upgrade \($a.name) past \($a.range) — npm reports a fixed release is published (`npm audit fix`, or bump the direct dependency that pulls it in)."
+              else
+                "No fixed release is published for \($a.name) \($a.range) yet — pin or replace the dependency, or accept and track the advisory."
+              end
+            ),
+            Disposition: "skipped"
+          }
+      ]
+    }
+'

@@ -9,69 +9,73 @@ Workflow.
 
 Run inline in this parent thread — not a subagent — when `deps=true`. The `deps`
 gate already confirms the diff touches `package.json` / `package-lock.json`, so
-produce the differential audit directly (use a private temp dir):
+produce the differential audit directly. `dispatch-review-npm-audit` does the
+whole thing — its own temp dir, the HEAD audit, the `git show`-materialized
+`MERGE_BASE` baseline, and the differential — and emits ONLY the normalized
+result (use `dangerouslyDisableSandbox: true` — `npm` writes the npm cache, see
+`.claude/rules/sandbox.md`):
 
 ```bash
-AUDIT_DIR=$(mktemp -d)
-trap 'rm -rf "$AUDIT_DIR"' EXIT
 # MERGE_BASE is already set above — reuse it here.
-
-# Audit HEAD (current working tree)
-npm audit --json > "$AUDIT_DIR/audit-head.json"
-
-# Audit MERGE_BASE lockfile without modifying the working tree
-mkdir -p "$AUDIT_DIR/baseline"
-git show "$MERGE_BASE":package-lock.json > "$AUDIT_DIR/baseline/package-lock.json"
-git show "$MERGE_BASE":package.json      > "$AUDIT_DIR/baseline/package.json"
-npm audit --package-lock-only --json --prefix "$AUDIT_DIR/baseline" \
-  > "$AUDIT_DIR/audit-baseline.json"
+# Pass as positional arg (not an inline VAR=val prefix — breaks allowlist matching).
+NPM_AUDIT_JSON=$(.claude/skills/dispatch-propagate/scripts/dispatch-review-npm-audit "$MERGE_BASE")
 ```
 
-Advisories whose ID appears in `$AUDIT_DIR/audit-head.json` but **not** in
-`$AUDIT_DIR/audit-baseline.json` are CVEs the PR's dependency changes newly
-expose — normalize each into the **Per-finding schema** with
-`introduced_by_diff=true`; these are in-scope and classify `required`. Also flag
-any dependency the PR adds or upgrades whose resolved version skips a published
-security-patch release.
+The script emits `{"findings":[...]}` with `Source="npm"` already in the
+per-finding schema. Raw `npm audit` JSON never reaches this thread. Extract the
+`findings` array for `prescanned_findings`.
 
-Advisories whose ID appears in **both** head and baseline rated `high` or
-`critical` are pre-existing — the diff did not introduce them. Normalize each into
-the **Per-finding schema** with `introduced_by_diff=false` and classify
-`out-of-scope`: they feed the follow-up-filing step (Step 6), not the PR's
-required-fix set. Pre-existing advisories rated `moderate` or `low` are below the
-meaningfulness threshold — do not surface them.
+The differential rules the script applies, unchanged: advisories present at head
+but **not** at `MERGE_BASE` are CVEs the PR's dependency changes newly expose —
+emitted with `introduced_by_diff=true` in the Description; these are in-scope and
+classify `required`. Where such an advisory reports a published fix, the
+Description also leads with `skipped_published_patch=true` — the resolved version
+skipped a published security-patch release. Advisories present in **both** head
+and baseline rated `high` or `critical` are pre-existing — emitted with
+`introduced_by_diff=false` and classified `out-of-scope`: they feed the
+follow-up-filing step (Step 6), not the PR's required-fix set. Pre-existing
+advisories rated `moderate` or `low` are below the meaningfulness threshold and
+the script omits them entirely.
 
 ## CodeQL alerts (inline, when `surface=code`)
 
 Run inline in this parent thread — not a subagent — whenever `surface=code`.
-Fetch the PR's open code-scanning alerts from GitHub Advanced Security (use
+`dispatch-review-codeql` fetches the PR's open code-scanning alerts from GitHub
+Advanced Security and returns them already normalized (use
 `dangerouslyDisableSandbox: true` — `gh` needs network):
 
 ```bash
-gh api --paginate "repos/{owner}/{repo}/code-scanning/alerts?state=open&ref=refs/pull/<pr-num>/head"
+CODEQL_JSON=$(.claude/skills/dispatch-propagate/scripts/dispatch-review-codeql "<pr-num>")
 ```
 
-`<pr-num>` is the PR number from the idempotency preamble; `{owner}/{repo}`
-resolve automatically. `--paginate` covers repos with many alerts; the `ref`
-filter scopes to the PR — it includes pre-existing alerts in code the PR did not
-change. Normalize each alert to the **Per-finding schema**:
+`<pr-num>` is the PR number from the idempotency preamble. The script runs
+`gh api --paginate "repos/{owner}/{repo}/code-scanning/alerts?state=open&ref=refs/pull/<pr-num>/head"`
+— `{owner}/{repo}` resolve automatically, `--paginate` covers repos with many
+alerts, and the `ref` filter scopes to the PR (it includes pre-existing alerts in
+code the PR did not change). Raw alert JSON never reaches this thread.
+
+The script emits `{"findings":[...]}` with `Source="codeql"` already in the
+per-finding schema. Extract the `findings` array for `prescanned_findings`. The
+normalization it applies, unchanged:
 
 - **Location** — from `most_recent_instance.location` (path and lines).
 - **Description** — from `rule.description` / `most_recent_instance.message`;
-  include the alert `number`, `rule.id`, and `html_url` so the finding is
+  includes the alert `number`, `rule.id`, and `html_url` so the finding is
   traceable.
-- **OWASP** and **STRIDE** — inferred from `rule` (id, tags, description).
+- **OWASP** and **STRIDE** — inferred from `rule` (its `external/cwe/cwe-NNN`
+  tags, via a deterministic table in the script).
 - **Confidence** — from `rule.security_severity_level`: `critical`/`high` →
   `high`, `medium` → `medium`, `low` → `low`. For non-security rules
-  (`security_severity_level` is null), fall back to `rule.severity` (always
+  (`security_severity_level` is null), falls back to `rule.severity` (always
   present): `error` → `medium`, `warning`/`note` → `low`. This preserves signal
   from non-security rules instead of collapsing them all to `low`.
 - **Recommended fix** — the rule's remediation guidance.
 
 If the branch has no open PR (the pack's `=== PR ===` section printed `PR: none`),
-skip the fetch and record the CodeQL scan as "could not run (no PR
-ref)" with no findings. An empty alert array is normal — no open CodeQL alerts —
-and is not an error.
+pass `""` (or `none`) as `<pr-num>`: the script skips the fetch and returns
+`{"findings":[],"status":"skipped-no-pr"}` — record the CodeQL scan as "could not
+run (no PR ref)" with no findings. An empty alert array is normal — no open
+CodeQL alerts — and is not an error.
 
 ## Erosion metrics (inline, when `surface=code`)
 
@@ -91,7 +95,11 @@ The script emits `{"findings":[...]}` with `Source="erosion"` already in the
 per-finding schema. Extract the `findings` array for `prescanned_findings`.
 
 Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
-to pass to the Workflow.
+to pass to the Workflow. All three scans now return the same shape — a
+`{"findings":[...]}` document with the per-finding schema and `Source` already
+set — so assembling `prescanned_findings` is just concatenating the `.findings`
+array from each of the three script outputs. No raw API, audit, or metric JSON
+crosses this thread.
 
 ## Finder agents (when `surface=code`)
 
