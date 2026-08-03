@@ -11,41 +11,26 @@ vi.mock(import("node:fs"), async (importOriginal) => ({
   mkdirSync: vi.fn(),
 }));
 
+// The single injection path: the template ships an empty `<div id="root">`
+// PageShell mount, into which prerender injects renderToString(<BlogPageShell…>).
 const TEMPLATE = `<!DOCTYPE html>
 <html>
 <head>
   <title>My Blog</title>
 </head>
 <body>
-  <nav><app-nav id="nav"></app-nav></nav>
-  <main id="app"></main>
-  <aside id="info-panel" class="sidebar"></aside>
+  <div id="root"></div>
 </body>
 </html>`;
 
-const TEMPLATE_WITH_HERO = `<!DOCTYPE html>
+// No `<div id="root">` mount — used for the missing-mount-marker case.
+const TEMPLATE_NO_MOUNT = `<!DOCTYPE html>
 <html>
 <head>
   <title>My Blog</title>
 </head>
 <body>
-  <nav><app-nav id="nav"></app-nav></nav>
-  <section class="landing-hero">default hero marker</section>
-  <main id="app"></main>
-  <aside id="info-panel" class="sidebar"></aside>
-</body>
-</html>`;
-
-const TEMPLATE_WITH_FOOTER = `<!DOCTYPE html>
-<html>
-<head>
-  <title>My Blog</title>
-</head>
-<body>
-  <nav><app-nav id="nav"></app-nav></nav>
-  <main id="app"></main>
-  <aside id="info-panel" class="sidebar"></aside>
-  <footer></footer>
+  <div id="other"></div>
 </body>
 </html>`;
 
@@ -89,6 +74,12 @@ function makeConfig(overrides: Partial<PrerenderConfig> = {}): PrerenderConfig {
       rssFeedUrl: "/feed.xml",
       opmlUrl: "/blogroll.opml",
     },
+    shell: {
+      mount: "root",
+      wordmark: "commons.systems",
+      hero: createElement(Hero, { headline: "Build with commons.systems", cards: [] }),
+      panelAriaLabel: "Context",
+    },
     ...overrides,
   };
 }
@@ -96,7 +87,7 @@ function makeConfig(overrides: Partial<PrerenderConfig> = {}): PrerenderConfig {
 function mockReadFileSync(postDir: string, markdownByFilename: Record<string, string>) {
   return (path: string | URL) => {
     const p = String(path);
-    if (p.endsWith("index.html")) return TEMPLATE_WITH_HERO;
+    if (p.endsWith("index.html")) return TEMPLATE;
     for (const [filename, content] of Object.entries(markdownByFilename)) {
       if (p === `${postDir}/${filename}`) return content;
     }
@@ -151,7 +142,7 @@ describe("prerenderPosts", () => {
   });
 
   it("replaces template meta description with post-specific description", async () => {
-    const templateWithDesc = TEMPLATE_WITH_HERO.replace(
+    const templateWithDesc = TEMPLATE.replace(
       "<title>",
       '<meta name="description" content="Site description" />\n  <title>',
     );
@@ -279,7 +270,7 @@ describe("prerenderPosts", () => {
   it("throws when </head> marker is missing from template", async () => {
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
       if (String(path).endsWith("index.html"))
-        return '<html><body><app-nav id="nav"></app-nav><main id="app"></main><aside id="info-panel" class="sidebar"></aside></body></html>';
+        return '<html><body><div id="root"></div></body></html>';
       return MARKDOWN_HELLO;
     }) as typeof fs.readFileSync);
     await expect(prerenderPosts(makeConfig())).rejects.toThrow("</head> marker not found");
@@ -288,10 +279,21 @@ describe("prerenderPosts", () => {
   it("throws when <title> tag is missing from template", async () => {
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
       if (String(path).endsWith("index.html"))
-        return '<html><head></head><body><app-nav id="nav"></app-nav><main id="app"></main><aside id="info-panel" class="sidebar"></aside></body></html>';
+        return '<html><head></head><body><div id="root"></div></body></html>';
       return MARKDOWN_HELLO;
     }) as typeof fs.readFileSync);
     await expect(prerenderPosts(makeConfig())).rejects.toThrow("<title> tag not found");
+  });
+
+  it("throws when the #root mount marker is absent from the template", async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_NO_MOUNT;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await expect(prerenderPosts(makeConfig())).rejects.toThrow(
+      '<div id="root"> mount marker not found in template',
+    );
   });
 
   it("escapes HTML in title and description", async () => {
@@ -330,7 +332,7 @@ describe("prerenderPosts", () => {
     expect(html).toContain('id="post-hello-world"');
     expect(html).toContain('id="post-second-post"');
     expect(html).toContain('data-hydrated');
-    expect(html).toContain('<main id="app"><div id="posts">');
+    expect(html).toContain('<div id="posts">');
     expect(html).toContain("hello world");
   });
 
@@ -380,12 +382,11 @@ describe("prerenderPosts", () => {
       (c) => String(c[0]) === "/dist/index.html",
     );
     const html = rootCall![1] as string;
-    expect(html).toContain('<aside id="info-panel" class="sidebar">');
+    expect(html).toContain('<aside id="info-panel"');
     expect(html).toContain("Top Posts");
     expect(html).toContain("Blogroll");
     expect(html).toContain("Source");
     expect(html).toContain("test-blog");
-    expect(html).not.toContain('<aside id="info-panel" class="sidebar"></aside>');
   });
 
   it("extracts h1 from markdown as post title", async () => {
@@ -413,23 +414,21 @@ describe("prerenderPosts", () => {
     expect(html).toContain("Hello World");
   });
 
-  it("injects nav links into app-nav element", async () => {
+  it("renders the shell nav with the configured links", async () => {
     await prerenderPosts(makeConfig({ showHomeLink: true }));
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
     );
     const html = rootCall![1] as string;
-    // The <app-nav> wrapper survives as an inert tag; inside it the ds Nav
-    // renders the nav links (crawlers still see them) plus the home link.
-    expect(html).toContain('<app-nav id="nav">');
+    // The PageShell's ds Nav renders the nav links (crawlers still see them)
+    // plus the home link.
     expect(html).toContain("cs-nav");
     expect(html).toContain('href="/"');
     expect(html).toContain("Home");
     // Anonymous prerender: home link present, no auth "Login" control.
     expect(html).toContain('href="https://commons.systems/"');
     expect(html).not.toContain("Login");
-    expect(html).not.toContain('<app-nav id="nav"></app-nav>');
   });
 
   it("omits home link from nav when showHomeLink is false (default)", async () => {
@@ -440,7 +439,6 @@ describe("prerenderPosts", () => {
     );
     const html = rootCall![1] as string;
     // Nav still renders with cs-nav and the configured nav links.
-    expect(html).toContain('<app-nav id="nav">');
     expect(html).toContain("cs-nav");
     expect(html).toContain('href="/"');
     expect(html).toContain("Home");
@@ -456,7 +454,8 @@ describe("prerenderPosts", () => {
     );
     expect(rootCall).toBeDefined();
     const html = rootCall![1] as string;
-    expect(html).toContain('<main id="app"><div id="posts">');
+    expect(html).toContain('<div id="root"><div class="page">');
+    expect(html).toContain('<div id="posts">');
   });
 
   it("injects OG tags into root index.html when siteDefaults provided", async () => {
@@ -683,202 +682,60 @@ describe("prerenderPosts", () => {
     expect(html).not.toContain("SoftwareApplication");
   });
 
-  it("replaces <section class=\"landing-hero\"> with homeExtraHtml on root", async () => {
-    await prerenderPosts(makeConfig({ homeExtraHtml: "<div class=\"showcase-injected\">SHOWCASE</div>" }));
-    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
-      (c) => String(c[0]) === "/dist/index.html",
-    );
-    const html = rootCall![1] as string;
-    expect(html).toContain('<div class="showcase-injected">SHOWCASE</div>');
-    expect(html).not.toContain("default hero marker");
-    expect(html).not.toContain('<section class="landing-hero">');
-  });
-
-  it("strips <section class=\"landing-hero\"> from post pages when homeExtraHtml is set", async () => {
-    await prerenderPosts(makeConfig({ homeExtraHtml: "<div class=\"showcase-injected\">SHOWCASE</div>" }));
-    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
-      (c) => String(c[0]).includes("post/hello-world"),
-    );
-    const html = perPostCall![1] as string;
-    expect(html).not.toContain('<section class="landing-hero">');
-    expect(html).not.toContain("default hero marker");
-    expect(html).not.toContain("SHOWCASE");
-  });
-
-  it("does not strip <section class=\"landing-hero\"> from post pages when homeExtraHtml is not set", async () => {
-    await prerenderPosts(makeConfig());
-    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
-      (c) => String(c[0]).includes("post/hello-world"),
-    );
-    const html = perPostCall![1] as string;
-    expect(html).toContain('<section class="landing-hero">');
-  });
-
-  it("does not throw when homeExtraHtml is not set and template lacks <section class=\"landing-hero\">", async () => {
-    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-      if (String(path).endsWith("index.html")) return TEMPLATE;
-      return MARKDOWN_HELLO;
-    }) as typeof fs.readFileSync);
-
-    await expect(prerenderPosts(makeConfig())).resolves.toBeUndefined();
-  });
-
-  it("injects footerHtml into <footer> on root and post pages when provided", async () => {
-    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
-      return MARKDOWN_HELLO;
-    }) as typeof fs.readFileSync);
-
-    await prerenderPosts(makeConfig({ footerHtml: "<p>FOOTER MARKER</p>" }));
-
-    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
-      (c) => String(c[0]) === "/dist/index.html",
-    );
-    const rootHtml = rootCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
-    expect(rootHtml).toContain("<footer><p>FOOTER MARKER</p></footer>");
-    expect(rootHtml).not.toContain("<footer></footer>");
-
-    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
-      (c) => String(c[0]).includes("post/hello-world"),
-    );
-    const perPostHtml = perPostCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
-    expect(perPostHtml).toContain("<footer><p>FOOTER MARKER</p></footer>");
-    expect(perPostHtml).not.toContain("<footer></footer>");
-  });
-
-  it("leaves <footer> untouched when footerHtml is not provided", async () => {
-    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
-      return MARKDOWN_HELLO;
-    }) as typeof fs.readFileSync);
-
+  // ── PageShell rendering (the single injection path) ────────────────────────
+  // The template ships an empty `<div id="root">` PageShell mount; prerender
+  // injects a renderToString(<BlogPageShell…>) there. The <head> SEO injectors
+  // run on top.
+  it("injects the ds PageShell at the mount on the home (/) page with the hero", async () => {
     await prerenderPosts(makeConfig());
 
-    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
-      (c) => String(c[0]) === "/dist/index.html",
+    const html = getRootHtml();
+    // The PageShell chrome was injected into the #root mount.
+    expect(html).toContain('<div id="root"><div class="page">');
+    expect(html).toContain('class="content-grid"');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('<aside id="info-panel"');
+    // Hero shows on home.
+    expect(html).toContain("hero-band-section");
+    expect(html).toContain("Build with commons.systems");
+    // The empty mount placeholder is gone.
+    expect(html).not.toContain('<div id="root"></div>');
+  });
+
+  it("omits the hero from per-post pages (off the home gate)", async () => {
+    await prerenderPosts(makeConfig());
+
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
     );
-    const rootHtml = rootCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
-    expect(rootHtml).toContain("<footer></footer>");
+    const html = perPostCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
+    // Shell chrome still injected, but no hero on a post page.
+    expect(html).toContain('<div id="root"><div class="page">');
+    expect(html).toContain('class="content-grid"');
+    expect(html).not.toContain("hero-band-section");
   });
 
-  it("throws when footerHtml is set but <footer> is absent", async () => {
-    // The default TEMPLATE_WITH_HERO has no <footer> element.
-    await expect(
-      prerenderPosts(makeConfig({ footerHtml: "<p>FOOTER MARKER</p>" })),
-    ).rejects.toThrow("<footer> marker not found in template");
-  });
+  it("keeps the <head> SEO intact (canonical + title) on home and post pages", async () => {
+    await prerenderPosts(
+      makeConfig({
+        siteDefaults: { title: "My Site", description: "Site description", image: "/og.png" },
+        organization: { name: "Example Org", url: "https://example.com", logo: "https://example.com/logo.svg", sameAs: [] },
+        author: { name: "Alice" },
+      }),
+    );
 
-  it("throws when homeExtraHtml is set but <section class=\"landing-hero\"> is absent", async () => {
-    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-      if (String(path).endsWith("index.html")) return TEMPLATE;
-      return MARKDOWN_HELLO;
-    }) as typeof fs.readFileSync);
+    const rootHtml = getRootHtml();
+    expect(rootHtml).toContain('<link rel="canonical" href="https://example.com/">');
+    expect(rootHtml).toContain('<meta property="og:title" content="My Site">');
+    expect(rootHtml).toContain('"@type":"Organization"');
 
-    await expect(
-      prerenderPosts(makeConfig({ homeExtraHtml: '<div class="showcase">SHOWCASE</div>' })),
-    ).rejects.toThrow('<section class="landing-hero"> marker not found in template');
-  });
-
-  // ── Shell path (opt-in ds-chrome seam — landing) ───────────────────────────
-  // The template ships an empty `<div id="root">` PageShell mount; shell mode
-  // injects a renderToString(<BlogPageShell…>) there instead of the legacy
-  // injectMain/injectNav/injectInfoPanel injectors. The <head> SEO injectors run
-  // regardless. The legacy cases above are untouched (fellspiral guard).
-  describe("shell path", () => {
-    const TEMPLATE_WITH_ROOT = `<!DOCTYPE html>
-<html>
-<head>
-  <title>My Blog</title>
-</head>
-<body>
-  <div id="root"></div>
-</body>
-</html>`;
-
-    function mockRootTemplate() {
-      vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-        if (String(path).endsWith("index.html")) return TEMPLATE_WITH_ROOT;
-        return MARKDOWN_HELLO;
-      }) as typeof fs.readFileSync);
-    }
-
-    function shellOverride(): Partial<PrerenderConfig> {
-      return {
-        shell: {
-          mount: "root",
-          wordmark: "commons.systems",
-          hero: createElement(Hero, { headline: "Build with commons.systems", cards: [] }),
-          panelAriaLabel: "Context",
-        },
-      };
-    }
-
-    it("injects the ds PageShell at the mount on the home (/) page with the hero", async () => {
-      mockRootTemplate();
-      await prerenderPosts(makeConfig(shellOverride()));
-
-      const html = getRootHtml();
-      // The PageShell chrome was injected into the #root mount.
-      expect(html).toContain('<div id="root"><div class="page">');
-      expect(html).toContain('class="content-grid"');
-      expect(html).toContain("cs-nav");
-      expect(html).toContain('<aside id="info-panel"');
-      // Hero shows on home.
-      expect(html).toContain("hero-band-section");
-      expect(html).toContain("Build with commons.systems");
-      // The empty mount placeholder is gone.
-      expect(html).not.toContain('<div id="root"></div>');
-    });
-
-    it("omits the hero from per-post pages (off the home gate)", async () => {
-      mockRootTemplate();
-      await prerenderPosts(makeConfig(shellOverride()));
-
-      const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
-        (c) => String(c[0]).includes("post/hello-world"),
-      );
-      const html = perPostCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
-      // Shell chrome still injected, but no hero on a post page.
-      expect(html).toContain('<div id="root"><div class="page">');
-      expect(html).toContain('class="content-grid"');
-      expect(html).not.toContain("hero-band-section");
-    });
-
-    it("keeps the <head> SEO intact (canonical + title) on home and post pages", async () => {
-      mockRootTemplate();
-      await prerenderPosts(
-        makeConfig({
-          ...shellOverride(),
-          siteDefaults: { title: "My Site", description: "Site description", image: "/og.png" },
-          organization: { name: "Example Org", url: "https://example.com", logo: "https://example.com/logo.svg", sameAs: [] },
-          author: { name: "Alice" },
-        }),
-      );
-
-      const rootHtml = getRootHtml();
-      expect(rootHtml).toContain('<link rel="canonical" href="https://example.com/">');
-      expect(rootHtml).toContain('<meta property="og:title" content="My Site">');
-      expect(rootHtml).toContain('"@type":"Organization"');
-
-      const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
-        (c) => String(c[0]).includes("post/hello-world"),
-      );
-      const perPostHtml = perPostCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
-      expect(perPostHtml).toContain('<link rel="canonical" href="https://example.com/post/hello-world">');
-      expect(perPostHtml).toContain("<title>My Blog - Hello World</title>");
-      expect(perPostHtml).toContain('"@type":"BlogPosting"');
-    });
-
-    it("throws when the #root mount marker is absent from the template", async () => {
-      vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-        if (String(path).endsWith("index.html")) return TEMPLATE; // no #root div
-        return MARKDOWN_HELLO;
-      }) as typeof fs.readFileSync);
-
-      await expect(prerenderPosts(makeConfig(shellOverride()))).rejects.toThrow(
-        '<div id="root"> mount marker not found in template',
-      );
-    });
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const perPostHtml = perPostCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
+    expect(perPostHtml).toContain('<link rel="canonical" href="https://example.com/post/hello-world">');
+    expect(perPostHtml).toContain("<title>My Blog - Hello World</title>");
+    expect(perPostHtml).toContain('"@type":"BlogPosting"');
   });
 
   function getRootHtml(): string {
@@ -888,3 +745,4 @@ describe("prerenderPosts", () => {
     return rootCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
   }
 });
+
