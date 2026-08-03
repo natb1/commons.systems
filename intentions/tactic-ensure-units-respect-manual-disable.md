@@ -59,7 +59,31 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main residue id 12 (Live-host observation: a real 'disable --now'
+    survives at least two reseed cycles) is Verifiability: WAIT. The code landed
+    on origin/main (PR #3015, merged 2026-08-03T06:31:12Z; lib.sh:3166,3417 both
+    call unit_manually_disabled; lib-unit-disable-state.sh present) and this
+    host runs the live
+    dispatch-fleet-watch.timer/dispatch-heal.timer/dispatch-sweep-periodic.time\
+    r/dispatch-heartbeat.timer, but no operator has yet started the awaited
+    event: no sentinel exists at ~/.local/share/commons-dispatch/disabled/ (dir
+    absent), so the deliberate disable-and-wait experiment has not begun.
+    Earliest useful re-check: after an operator creates the sentinel, disables
+    dispatch-fleet-watch.timer, and lets >=2 reseed cycles (~30-60 min) elapse,
+    then confirms via 'systemctl --user is-active/is-enabled' and 'journalctl
+    --user -t dispatch-schedule-reseed' that the disable stuck and the skip line
+    appeared."
+  since: 2026-08-03
+  recommendation: "No author decision needed, only re-selection once the live-host
+    manual procedure (documented in the tactic body under 'Manual /
+    observe-on-the-operator-host checks', steps 1-6) has been run and its
+    wall-clock window has elapsed. Lane-M already confirmed: guard code present
+    in lib.sh (both ensure_healer_units and ensure_watcher_units call
+    unit_manually_disabled), lib-unit-disable-state.sh exists, source PR #3015
+    is merged, and this host's dispatch timers are live. No contradicted MACHINE
+    item and no AUTHOR item on this node."
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
