@@ -50,6 +50,10 @@ jobs:
             FUSER_OK=0
             echo 'WARNING: fuser not installed (psmisc missing) - dpkg lock state UNKNOWN, skipping lock probes'
           fi
+          # Bounded grace window between the SIGTERM stage and the SIGKILL
+          # stage. Counts against the step's overall time budget, so keep it
+          # short.
+          GRACE_SECONDS=10
           # apt-get takes the locks in this order (lock-frontend, lists/lock,
           # dpkg/lock); a bare `dpkg` takes only /var/lib/dpkg/lock. Probe, kill
           # and wait on all three so a non-apt holder is not invisible to us.
@@ -78,15 +82,51 @@ jobs:
             echo "systemctl kill: failed (rc=$rc)"
             echo "$kill_err" >&2
           fi
-          if sudo pkill -9 -f '[u]nattended-upgrade' 2>/dev/null; then
-            echo 'killed unattended-upgrade process(es)'
+          # --- grace interval --------------------------------------------------
+          # Everything above is SIGTERM; everything below is SIGKILL. Give the
+          # signalled processes a short bounded window to exit on their own
+          # first: SIGKILLing a process that is mid `dpkg --unpack` leaves dpkg
+          # interrupted, and the next apt-get in this job (playwright's
+          # `install --with-deps`) then fails non-retryably. If every lock
+          # clears during the grace window, skip the SIGKILL stage entirely.
+          SKIP_SIGKILL=0
+          if [ "$FUSER_OK" -eq 1 ]; then
+            grace_deadline=$(( $(date +%s) + GRACE_SECONDS ))
+            while :; do
+              held=0
+              for lock in "$@"; do
+                [ -e "$lock" ] || continue
+                if sudo fuser "$lock" >/dev/null 2>&1; then
+                  held=1
+                  break
+                fi
+              done
+              if [ "$held" -eq 0 ]; then
+                SKIP_SIGKILL=1
+                break
+              fi
+              [ "$(date +%s)" -lt "$grace_deadline" ] || break
+              sleep 1
+            done
+            if [ "$SKIP_SIGKILL" -eq 1 ]; then
+              echo "holders cleared during ${GRACE_SECONDS}s grace, skipping SIGKILL escalation"
+            else
+              echo "holders still present after ${GRACE_SECONDS}s grace, escalating to SIGKILL"
+            fi
           else
-            echo 'no unattended-upgrade process to kill'
+            echo 'fuser unavailable: lock state UNKNOWN, skipping grace check and escalating to SIGKILL'
           fi
-          if sudo pkill -9 -f 'apt[.]systemd[.]daily' 2>/dev/null; then
-            echo 'killed apt.systemd.daily process(es)'
-          else
-            echo 'no apt.systemd.daily process to kill'
+          if [ "$SKIP_SIGKILL" -eq 0 ]; then
+            if sudo pkill -9 -f '[u]nattended-upgrade' 2>/dev/null; then
+              echo 'killed unattended-upgrade process(es)'
+            else
+              echo 'no unattended-upgrade process to kill'
+            fi
+            if sudo pkill -9 -f 'apt[.]systemd[.]daily' 2>/dev/null; then
+              echo 'killed apt.systemd.daily process(es)'
+            else
+              echo 'no apt.systemd.daily process to kill'
+            fi
           fi
           # --- SIGKILL stage ---------------------------------------------------
           # Everything above targets named units / known argv patterns. The
@@ -94,7 +134,7 @@ jobs:
           # unit's cgroup, which none of those reach. `fuser -k` is the
           # holder-agnostic last resort: it SIGKILLs whoever holds the file,
           # whatever it is and whoever started it.
-          if [ "$FUSER_OK" -eq 1 ]; then
+          if [ "$FUSER_OK" -eq 1 ] && [ "$SKIP_SIGKILL" -eq 0 ]; then
             for lock in "$@"; do
               [ -e "$lock" ] || continue
               if sudo fuser -k "$lock" >/dev/null 2>&1; then
@@ -106,6 +146,7 @@ jobs:
           fi
           # Bounded wait: ONE shared 120s wall-clock deadline across all three
           # lock files, not 120s each — the job's total budget is fixed.
+          wait_expired=0
           if [ "$FUSER_OK" -eq 1 ]; then
             wait_deadline=$(( $(date +%s) + 120 ))
             for lock in "$@"; do
@@ -124,6 +165,7 @@ jobs:
                   echo "$lock still held at the shared 120s deadline; holders:" >&2
                   sudo fuser -v "$lock" >&2 || true
                   expired=1
+                  wait_expired=1
                   break
                 fi
                 sleep 1
@@ -132,6 +174,21 @@ jobs:
                 echo "$lock freed after $(( $(date +%s) - wait_start ))s"
               fi
             done
+          fi
+          # Non-fatal dpkg recovery. Must come AFTER the wait loop, since
+          # `dpkg --configure -a` takes the locks itself. Run unconditionally
+          # rather than only when the SIGKILL stage fired: it is a fast no-op on
+          # a clean system, and one unconditional call reads more simply than
+          # gating on which rung of the ladder ran. The one exception is a
+          # wait loop that expired with holders still present, where it would
+          # only block on the held lock. Never allowed to fail the step.
+          if [ "$wait_expired" -eq 1 ]; then
+            echo 'dpkg --configure -a: skipped (lock still held at the wait deadline)'
+          elif sudo timeout 120 dpkg --configure -a; then
+            echo 'dpkg --configure -a: ok'
+          else
+            rc=$?
+            echo "dpkg --configure -a: failed (rc=$rc)"
           fi
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
