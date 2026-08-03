@@ -41,8 +41,7 @@ execution:
     pushed_sha: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-fix-cap-attention-boost-scripts
+blocked_by: []
 office_hours: null
 pace_exempt: true
 rounds: null
