@@ -85,6 +85,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-graph-worktree.sh"
+# The read-only worktree inspection half (identity assertion + residue
+# condition), shared with the stale-hold sweep. The REPAIR half stays here.
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-worktree-residue.sh"
 
 NODE_ID="${1:-}"
 SELECTED_PHASE="${2:-}"
@@ -193,15 +197,17 @@ fi
 # so the caller parks it via park-node — the exit-14 route would re-enter the
 # directory with git and serialize the MAIN checkout's status into a hold node
 # committed to origin/main.
-WT_REAL=$(cd "$WT" && pwd -P)
-WT_TOP=$(git -C "$WT" rev-parse --show-toplevel 2>/dev/null)
-WT_TOP_REAL=""
-if [[ -n "$WT_TOP" && -d "$WT_TOP" ]]; then
-  WT_TOP_REAL=$(cd "$WT_TOP" && pwd -P)
-fi
-WT_GITDIR=$(git -C "$WT" rev-parse --absolute-git-dir 2>/dev/null)
-if [[ -z "$WT_REAL" || "$WT_TOP_REAL" != "$WT_REAL" || "$WT_GITDIR" != */worktrees/"$NODE_ID" ]]; then
-  echo "provision-node-worktree: $WT is not the linked worktree for $NODE_ID (orphan-directory: toplevel='${WT_TOP_REAL:-<none>}', git-dir='${WT_GITDIR:-<none>}')" >&2
+#
+# The assertion itself lives in lib-worktree-residue.sh (worktree_identity_ok),
+# shared read-only with the stale-hold sweep. On mismatch it prints
+# `toplevel=<t> git-dir=<g>` — the two values this message reports.
+IDENT_OUT=$(worktree_identity_ok "$WT" "$NODE_ID")
+IDENT_RC=$?
+if [[ "$IDENT_RC" -ne 0 ]]; then
+  IDENT_TOP="${IDENT_OUT%% git-dir=*}"
+  IDENT_TOP="${IDENT_TOP#toplevel=}"
+  IDENT_GITDIR="${IDENT_OUT##* git-dir=}"
+  echo "provision-node-worktree: $WT is not the linked worktree for $NODE_ID (orphan-directory: toplevel='${IDENT_TOP:-<none>}', git-dir='${IDENT_GITDIR:-<none>}')" >&2
   echo "provision-node-worktree: refusing to run any git command there — it would resolve to the enclosing checkout at $PROJECT_ROOT. Inspect the directory by hand: if it holds unlanded work, land it; otherwise remove it so the next tick re-adds the worktree." >&2
   exit 2
 fi
@@ -213,27 +219,10 @@ fi
 # content conflict it is not. Assert the precondition; do not infer it from a
 # merge exit code.
 
-# Resolve a git-path (rebase-merge, MERGE_HEAD, …) as an ABSOLUTE path.
-# Modelled on graph-commit's rebase_in_progress() (packages/intentionsutil/
-# scripts/graph-commit:634-639). One caveat that helper does not face: it runs
-# with cwd inside the repo, whereas `git -C "$WT" rev-parse --git-path X` prints
-# a path relative to $WT — absolute for a linked worktree, but relative for a
-# plain repo, where a bare `[[ -d ]]` from another cwd would silently miss it.
-wt_git_path() {   # $1 = git-path name; prints an absolute path
-  local p
-  p=$(git -C "$WT" rev-parse --git-path "$1") || return 1
-  [[ "$p" == /* ]] || p="$WT_REAL/$p"
-  # Reject a resolved path that escapes this worktree's OWN git dir. An orphan
-  # directory yields the relative `../.git/<name>`, which the prefixing above
-  # turns into the MAIN checkout's operation state — and `[[ -d ]]` on it is
-  # true whenever main is mid-rebase. The identity assertion above already
-  # makes that unreachable; this is the boundary assertion that keeps it so.
-  if [[ "$p" != "$WT_GITDIR"/* ]]; then
-    echo "provision-node-worktree: git-path '$1' resolved to '$p', outside this worktree's git dir ($WT_GITDIR)" >&2
-    return 1
-  fi
-  printf '%s\n' "$p"
-}
+# The INSPECTION half — which condition (if any) the worktree is in — lives in
+# lib-worktree-residue.sh (worktree_residue_condition), read-only by
+# construction and shared with the stale-hold sweep. The REPAIR half stays
+# here: a sweep that does not own the worktree must never abort a rebase in it.
 
 # Exit 14: mechanical residue, NOT a content conflict. Leave the tree exactly
 # as found and hand the drain the evidence it needs without re-entering the
@@ -246,65 +235,65 @@ unusable_worktree() {
 }
 
 check_worktree_usable() {
-  local rebase_merge rebase_apply merge_head cherry_head
-  rebase_merge=$(wt_git_path rebase-merge) || return 1
-  rebase_apply=$(wt_git_path rebase-apply) || return 1
-  merge_head=$(wt_git_path MERGE_HEAD) || return 1
-  cherry_head=$(wt_git_path CHERRY_PICK_HEAD) || return 1
+  local cond
+  cond=$(worktree_residue_condition "$WT" "$NODE_ID")
 
-  # (a) An operation in progress. Auto-repair: aborting restores the
-  # pre-operation branch tip, reattaches HEAD, and is non-destructive with
-  # respect to committed work; the residue is by definition unattended (the
-  # session that created it is gone). Return 2 = "repaired, re-check".
-  if [[ -d "$rebase_merge" || -d "$rebase_apply" ]]; then
-    if git -C "$WT" rebase --abort 1>&2; then
-      echo "provision-node-worktree: auto-repaired an abandoned rebase in $WT" >&2
-      return 2
-    fi
-    unusable_worktree operation-in-progress
-  fi
-  if [[ -f "$merge_head" ]]; then
-    if git -C "$WT" merge --abort 1>&2; then
-      echo "provision-node-worktree: auto-repaired an abandoned merge in $WT" >&2
-      return 2
-    fi
-    unusable_worktree operation-in-progress
-  fi
-  if [[ -f "$cherry_head" ]]; then
-    if git -C "$WT" cherry-pick --abort 1>&2; then
-      echo "provision-node-worktree: auto-repaired an abandoned cherry-pick in $WT" >&2
-      return 2
-    fi
-    unusable_worktree operation-in-progress
-  fi
-
-  # (b) Detached HEAD with no operation in progress: do NOT repair — the
-  # commits there may be unreferenced.
-  if ! git -C "$WT" symbolic-ref -q HEAD >/dev/null; then
-    unusable_worktree detached-head
-  fi
-
-  # (b2) Attached, but to some OTHER branch. The identity assertion above
-  # proves the directory IS this node's linked worktree; it does not prove
-  # `<node-id>` is what the worktree has checked out. Left unchecked, the
-  # pushed-tip merge below merges `origin/<node-id>` into an unrelated branch,
-  # the origin/main merge lands on that branch too, and the phase agent is
-  # handed a cwd whose derived BRANCH is not the node's. Mechanical residue of
-  # the same class as a detached HEAD: do NOT repair (a checkout would strand
-  # whatever put it there, and the other branch may carry unpushed commits).
-  local wt_branch
-  wt_branch=$(git -C "$WT" symbolic-ref --short HEAD) || return 1
-  if [[ "$wt_branch" != "$NODE_ID" ]]; then
-    unusable_worktree "wrong-branch (checked out: $wt_branch)"
-  fi
-
-  # (c) Dirty tracked tree: NEVER auto-discard — the uncommitted edit could be
-  # the sole copy of unlanded work. --untracked-files=no is load-bearing: node
-  # worktrees routinely carry build output.
-  if [[ -n "$(git -C "$WT" status --porcelain --untracked-files=no)" ]]; then
-    unusable_worktree dirty-tracked-tree
-  fi
-  return 0
+  case "$cond" in
+    clean)
+      return 0
+      ;;
+    # (a) An operation in progress. Auto-repair: aborting restores the
+    # pre-operation branch tip, reattaches HEAD, and is non-destructive with
+    # respect to committed work; the residue is by definition unattended (the
+    # session that created it is gone). Return 2 = "repaired, re-check".
+    rebase-in-progress)
+      if git -C "$WT" rebase --abort 1>&2; then
+        echo "provision-node-worktree: auto-repaired an abandoned rebase in $WT" >&2
+        return 2
+      fi
+      unusable_worktree operation-in-progress
+      ;;
+    merge-in-progress)
+      if git -C "$WT" merge --abort 1>&2; then
+        echo "provision-node-worktree: auto-repaired an abandoned merge in $WT" >&2
+        return 2
+      fi
+      unusable_worktree operation-in-progress
+      ;;
+    cherry-pick-in-progress)
+      if git -C "$WT" cherry-pick --abort 1>&2; then
+        echo "provision-node-worktree: auto-repaired an abandoned cherry-pick in $WT" >&2
+        return 2
+      fi
+      unusable_worktree operation-in-progress
+      ;;
+    # (b) Detached HEAD with no operation in progress: do NOT repair — the
+    # commits there may be unreferenced.
+    detached-head)
+      unusable_worktree detached-head
+      ;;
+    # (b2) Attached, but to some OTHER branch. The identity assertion above
+    # proves the directory IS this node's linked worktree; it does not prove
+    # `<node-id>` is what the worktree has checked out. Left unchecked, the
+    # pushed-tip merge below merges `origin/<node-id>` into an unrelated branch,
+    # the origin/main merge lands on that branch too, and the phase agent is
+    # handed a cwd whose derived BRANCH is not the node's. Mechanical residue of
+    # the same class as a detached HEAD: do NOT repair (a checkout would strand
+    # whatever put it there, and the other branch may carry unpushed commits).
+    wrong-branch:*)
+      unusable_worktree "wrong-branch (checked out: ${cond#wrong-branch:})"
+      ;;
+    # (c) Dirty tracked tree: NEVER auto-discard — the uncommitted edit could be
+    # the sole copy of unlanded work.
+    dirty-tracked-tree)
+      unusable_worktree dirty-tracked-tree
+      ;;
+    # `absent` / `unknown`: the inspection could not reach a verdict. Fall into
+    # the caller's "cannot inspect the worktree state" exit-2 path.
+    *)
+      return 1
+      ;;
+  esac
 }
 
 # Auto-repair, then a full re-check — and a repair can reveal a SECOND
