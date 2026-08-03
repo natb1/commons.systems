@@ -51,7 +51,7 @@ attention:
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-router-live-worker-read-robust
   pr: 3010
@@ -62,7 +62,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T22:01:11Z
+    mergeCommitSha: dd56eb369aa6cfad23cc2219686ea1e747383c5f
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-graph-router-live-worker-visibility
