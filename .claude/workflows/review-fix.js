@@ -514,16 +514,37 @@ function agentFinderSet(surface, app_or_rules) {
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-dedup
 // Collapse one partition subgroup of same-root findings into one representative.
 // Each finding must carry an `_idx` (its global input index) for tie-breaking.
+//
+// Ordering is (laneA-last, Confidence desc, _idx asc): a member sourced from a
+// Lane A built-in (code-review/security-review) sorts AFTER every non-Lane-A
+// member, so when a same-root group spans both lanes, the representative —
+// and the first-non-empty OWASP/STRIDE pick — always comes from Lane B.
+// Binding author ruling: a Lane-A win would make it structurally possible for
+// a Lane-A-derived entry to acquire bucket `Required`, narrowing verify
+// eligibility (only `Required` findings go through adversarial verify). This
+// is a no-op on the CURRENT dedup phase — `allFindings` never contains a
+// Lane-A-sourced finding, since the gather loop skips Lane A entirely
+// (review-fix.js:1256, `if (LANE_A.has(name)) continue;`) — it only takes
+// effect at a later unit's new cross-lane absorption call site.
+// >>> dedup merge: sliced + eval'd by review-fix-xlane-dedup-probe.mjs >>>
 const CONF_RANK = { high: 3, medium: 2, low: 1 };
 function rankConf(c) {
   return CONF_RANK[c] || 0;
 }
+// Sliced copy of the LANE_A membership test (review-fix.js:355). Kept as a
+// local Set rather than referencing LANE_A directly so this sentinel-bounded
+// region can be sliced out and eval'd standalone by the probe without pulling
+// in the rest of the module. Keep in sync with LANE_A by hand.
+const LANE_A_SOURCES = new Set(['code-review', 'security-review']);
 function dedupMerge(groupFindings) {
-  // Order by (Confidence desc, _idx asc) — used for representative + first
-  // non-empty OWASP/STRIDE selection.
-  const ordered = groupFindings
-    .slice()
-    .sort((a, b) => rankConf(b.Confidence) - rankConf(a.Confidence) || a._idx - b._idx);
+  // Order by (laneA-last, Confidence desc, _idx asc) — used for representative
+  // + first non-empty OWASP/STRIDE selection.
+  const ordered = groupFindings.slice().sort((a, b) => {
+    const aLaneA = LANE_A_SOURCES.has(a.Source) ? 1 : 0;
+    const bLaneA = LANE_A_SOURCES.has(b.Source) ? 1 : 0;
+    if (aLaneA !== bLaneA) return aLaneA - bLaneA;
+    return rankConf(b.Confidence) - rankConf(a.Confidence) || a._idx - b._idx;
+  });
   const rep = ordered[0];
 
   // Max confidence across the group.
@@ -555,6 +576,7 @@ function dedupMerge(groupFindings) {
     sources,
   });
 }
+// <<< dedup merge <<<
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-verify-drop
 // For each VERIFY-ELIGIBLE finding — a security `Required` finding OR (erosion-
