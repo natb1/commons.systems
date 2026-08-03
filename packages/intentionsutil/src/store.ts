@@ -221,9 +221,10 @@ function failureMessage(failure: NodeReadFailure): string {
  * decision. Every gate, selection, and reconciliation caller MUST use
  * `listNodesStrict` instead: absence from the enumerated set is load-bearing
  * "pass" semantics in those paths (`blockersComplete` in `router.ts` reads an
- * absent `blocked_by` id as COMPLETE; `check-node-selection.ts`'s soft-freeze
- * gate `continue`s past a serving strategy missing from its `byId` map), so a
- * silently dropped file would weaken a gate instead of being rejected.
+ * absent `blocked_by` id to mean COMPLETE; `check-node-selection.ts`'s
+ * soft-freeze gate `continue`s past a serving strategy missing from its
+ * `byId` map), so a silently dropped file would weaken a gate instead of
+ * being rejected.
  *
  * `README.md` is a non-node companion doc kept alongside the node files — it
  * has no frontmatter, so it is excluded here.
