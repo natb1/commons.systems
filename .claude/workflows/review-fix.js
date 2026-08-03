@@ -39,6 +39,9 @@
  *     security_followup_input:[...codeql/npm out-of-scope subset...],
  *     verify_report:[{id, location, verdict, skeptic_votes, rationale}],
  *     deviation:bool, security_note?, coverage_incomplete:bool, coverage_note?:string,
+ *       // coverage_note is a space-joined composition of EVERY degraded-coverage
+ *       // cause this run hit (wave back-off, instrument failures, undispositioned
+ *       // Lane-A residue) — never a single cause's message.
  *     instrument_failures:[{instrument, reason}] }
  *
  * NORMATIVE SPECS for the three inline kernel helpers below are the pure bash/jq
@@ -1613,9 +1616,63 @@ const upheldErosionIds = new Set(
 // fan-out fully resolves so no two agents edit the working tree concurrently.
 phase('residue');
 
+// >>> residue death coverage: sliced + eval'd by review-fix-residue-death-probe.mjs >>>
 // Local truncation — inlined to avoid an ordering dependency on the `truncate`
 // function declaration defined later in file-prep.
 const residueTruncate = (text) => (text || '').trim().replace(/\s+/g, ' ').slice(0, 140);
+
+// Records for Lane-A residue items the disposition phase never triaged — the
+// disposition subagent died after retries (agent() already retries internally, so a
+// null result is a genuine outage), returned a short items list, or echoed refs that
+// mapped to no original item. Without this, those findings are dropped silently:
+// laneADispositions/laneADeferred stay empty, so they reach neither the PR comment
+// nor a follow-up. Mirrors the quality-finder-death and instrument-gate fail-safes.
+//
+// `dispositionedIdx` is read via `.has(idx)` ONLY — pass residueResolvedByIdx (a Map
+// keyed by original residue index); presence, not value, means "was triaged".
+// Pure: no injected globals, no I/O. Slice-tested by
+// .claude/skills/dispatch-propagate/scripts/review-fix-residue-death-probe.mjs.
+function undispositionedResidueRecords(residue, dispositionedIdx, opts) {
+  const list = residue || [];
+  const prNum = (opts && opts.pr_num) || '';
+  const blockerNums = opts && opts.blocker_issue_nums;
+  const dispositions = [];
+  const deferred = [];
+  list.forEach((orig, idx) => {
+    if (!orig) return;
+    if (dispositionedIdx && dispositionedIdx.has(idx)) return;
+    dispositions.push({
+      id: `residue-${idx}`,
+      short_desc: residueTruncate(orig.description),
+      location: orig.location,
+      bucket: 'Deferred',
+      sources: [orig.source],
+    });
+    deferred.push({
+      title: residueTruncate(orig.description).slice(0, 80),
+      body: [
+        orig.description,
+        '',
+        `Recommended fix: ${orig.recommended_fix}`,
+        '',
+        'Rationale: the review-fix residue-disposition agent died after retries, so ' +
+          'this Lane-A finding was never triaged (resolve/defer/ignore). Filed ' +
+          'unconditionally so it is not lost — triage it here.',
+        '',
+        `Backlink: #${prNum}`,
+      ].join('\n'),
+      blocker_issue_nums: blockerNums,
+    });
+  });
+  const note = dispositions.length
+    ? `Lane-A residue disposition degraded: ${dispositions.length} of ${list.length} ` +
+      'finding(s) were never triaged because the residue-disposition agent died after ' +
+      'retries. Each is listed under Deferred and filed as a follow-up.'
+    : '';
+  return { dispositions, deferred, note };
+}
+// <<< residue death coverage <<<
+
 // Blocker-issue attribution for defer filings — mirrors the Lane-B `blockerNums`
 // computation (defined later in file-prep); duplicated here since that const is
 // out of scope at this insertion point.
@@ -1945,6 +2002,24 @@ if (laneAResidue.length === 0) {
     }
     laneADispositions.push(entry);
   }
+  // Any laneAResidue index absent from residueResolvedByIdx got no valid disposition —
+  // total agent death, a short items list, or a ref that mapped to no original. Surface
+  // + file each so it is not silently dropped, and flag degraded coverage.
+  const undisposed = undispositionedResidueRecords(laneAResidue, residueResolvedByIdx, {
+    pr_num: _a.pr_num,
+    blocker_issue_nums: residueBlockerNums,
+  });
+  if (undisposed.dispositions.length) {
+    laneADispositions.push(...undisposed.dispositions);
+    laneADeferred.push(...undisposed.deferred);
+    coverage_incomplete = true;
+    // Preserve any note the throttle / instrument-gate paths already set.
+    coverage_note = [coverage_note, undisposed.note].filter(Boolean).join(' ');
+    log(
+      `residue: ${undisposed.dispositions.length} undispositioned item(s) surfaced as ` +
+        'Deferred and filed as follow-ups (disposition agent died after retries).'
+    );
+  }
   log(
     `residue: ${items.length} dispositioned — fixed=${laneAResidueFixed.length}, ` +
       `deferred=${laneADeferred.length}, audit=${laneADispositions.length}`
@@ -2073,7 +2148,11 @@ const security_followup_input = deduped
 //   - "resolved" means residueResolvedByIdx === true, a working-tree-VERIFIED applied
 //     resolve — an ignore/defer/phantom-resolve leaves the item unresolved and escalates.
 // A high-severity original item with no returned disposition (agent dropped it) has no
-// map entry (!== true) and therefore also escalates.
+// map entry (!== true) and therefore also escalates. Such an item now ALSO gets a
+// Deferred audit entry and a filed follow-up from undispositionedResidueRecords, so
+// escalation and durable capture are independent: capture happens for every dropped
+// residue item regardless of severity or source, and escalation still fires here only
+// for high-severity security-review ones.
 //
 // An unverified instrument escalates UNCONDITIONALLY — it is not severity-scaled,
 // because the failure is not "a finding went unfixed" but "the named review did
@@ -2182,9 +2261,15 @@ return {
   verify_report,
   deviation,
   security_note: _a.security_note,
-  // coverage_incomplete is independent of `deviation`: it flags a launch-efficiency
-  // back-off (wave 2 skipped because the security-review probe finder failed — model
-  // likely throttled), surfaced in the Step 6 partial-coverage comment line.
+  // coverage_incomplete is independent of `deviation`: it flags any way this run's
+  // review coverage came out degraded, surfaced in the Step 6 partial-coverage comment
+  // line. Three causes set it:
+  //   - the security wave was skipped because the quality finder died (a
+  //     launch-efficiency back-off — the model was likely throttled);
+  //   - a named instrument's receipt failed verification, so that stage's payload was
+  //     discarded;
+  //   - Lane-A residue was left undispositioned because the residue-disposition agent
+  //     died after retries (those items are surfaced as Deferred and filed anyway).
   coverage_incomplete,
   coverage_note,
   // One entry per stage whose named-instrument receipt failed verification. A
