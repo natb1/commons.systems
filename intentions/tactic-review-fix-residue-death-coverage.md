@@ -16,11 +16,43 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: main-qa
+execution:
+  branch: tactic-review-fix-residue-death-coverage
+  pr: 3022
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-03T16:00:23Z
+    mergeCommitSha: cf913deae9fd43e2bdc52c95d805145899746e23
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main item 7 awaits a live /review-fix Workflow run whose Lane-A
+    residue-disposition subagent dies after retries (total death, short items
+    list, or refs mapping to no original item); checked journalctl and recent PR
+    history since PR #3022 merged (2026-08-03T16:00:23Z) for the 'Lane-A residue
+    disposition degraded' coverage note or any residue-disposition failure
+    signal — none found in the ~17 minutes elapsed, consistent with this being a
+    rare failure mode by design; re-check after several more /review-fix runs
+    have occurred naturally"
+  since: 2026-08-03
+  recommendation: No author decision needed — this item needs only re-selection
+    once the awaited production event occurs. The helper
+    (undispositionedResidueRecords) is already covered offline by the
+    qa-fix-time shell-test fixtures (all-triaged, total-death, partial-drop,
+    empty-residue, fields, independent-blockers), all of which passed. When a
+    real disposition-agent death is next observed, check that run's PR comment
+    for a Deferred-bucket entry per untriaged finding, the partial-coverage note
+    naming the residue-disposition cause, and the corresponding filed follow-up
+    issues with expected Backlink and blocker linkage.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes:
@@ -504,3 +536,27 @@ implementer session to weigh — not itself a plan step:
   are stale against the current checkout (re-read at commit `8522942d`); the plan's
   own anchors were re-verified fresh this round, but an implementer should still grep
   the quoted text rather than trust bare line numbers if the file has moved again.
+
+## needs-main residue
+
+### 7. Production observation — a real dying disposition agent is caught downstream
+
+- URL path: current
+- Expected outcome: A genuine review-fix Lane-A residue-disposition subagent
+  death in production surfaces every untriaged finding as a `Deferred`-bucket
+  PR-comment entry with a filed follow-up, rather than dropping it silently.
+- Finding: Not walked at qa-fix time — the failure mode (the Opus
+  residue-disposition subagent dying after retries inside a live `/review-fix`
+  Workflow run) cannot be reproduced from the working tree. The helper
+  (`undispositionedResidueRecords`) is already covered offline by the shell-test
+  fixtures (`total-death`, `partial-drop` cases), which passed during qa-fix.
+  This is the tactic's own plan-designated "observe in production" verification
+  item.
+- Verifiability: WAIT — awaiting the next live `/review-fix` run whose Lane-A
+  residue-disposition subagent dies (returns null after retries, a short
+  `items` list, or refs mapping to no original item).
+- Check: once that event occurs, check that run's PR comment for a
+  `Deferred`-bucket entry per untriaged finding and a partial-coverage line
+  naming the residue-disposition cause (`Lane-A residue disposition degraded:
+  ... were never triaged`), and confirm the corresponding follow-up issues were
+  filed with the expected `Backlink:` and blocker linkage.

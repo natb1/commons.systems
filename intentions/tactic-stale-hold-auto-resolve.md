@@ -64,6 +64,7 @@ attention:
     Finalized 2026-07-31 (/align-tactics) to phase: implement with the boost
     left unchanged at 20; blocked_by remains empty so this promotion still lifts
     no blocker and cannot compound."
+  tier: 1
 phase: qa
 execution:
   branch: tactic-stale-hold-auto-resolve
@@ -72,15 +73,96 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix:
-    since: 2026-08-01
-    attempt: 1
-    pushed_sha: null
+  fix: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-fix-cap-stale-hold-auto-resolve
-office_hours: null
+blocked_by: []
+office_hours:
+  reason: "/qa-fix: QA found no code defects (5/5 script-verifiable items PASS
+    against the live repo and graph store; 2 needs-human-judgment items filed as
+    needs-main residue). One item (#6, the stale-hold sweep's claimed-check
+    fail-safe direction on an unreadable session-liveness signal) asks for a
+    human risk-tolerance sign-off, not a code fix -- the tradeoff is already
+    explicitly documented (lib-stale-hold-recheck.sh contract item 3 \"FAIL-SAFE
+    MEANS KEEP\", rule (d), and the sandbox note); no bug is evident, and
+    changing the direction is a behavior decision the tactic node does not
+    authorize. The gated fix-planner declared this a scope-deviation (no units);
+    escalating to office-hours for the sign-off."
+  since: 2026-08-03
+  recommendation: >-
+    # Recommendation — `tactic-stale-hold-auto-resolve` (#3011)
+
+
+    ## What's being asked
+
+
+    A **sign-off, not a bug fix**. QA found no defect. One triage item (#6) asks
+    you to explicitly confirm a design default; everything else on this PR
+    passed or is already routed.
+
+
+    **The question:** when the stale-hold sweep cannot determine whether a
+    hold's source node is claimed — `worktree_has_live_session` can't reach the
+    local Claude daemon, or the caller is sandboxed — should it fail toward
+    **OCCUPIED** (skip resolving this pass, retry next tick), which is what's
+    implemented?
+
+
+    ## Why the current answer looks right
+
+
+    The costs are asymmetric:
+
+
+    - Wrong "unclaimed" → resolves a hold on a worktree in active use,
+    unblocking a source node whose session may be mid-repair. Destructive, not
+    self-correcting.
+
+    - Wrong "claimed" → one tick of delay. Cheap, self-corrects on the next
+    sweep.
+
+
+    QA confirmed by direct code read that fail-toward-OCCUPIED is what's
+    implemented and that it's documented in the sweep's header comment. Two
+    automated skeptics both argued this doesn't even need human judgment — the
+    answer follows from the cost asymmetry alone. It reached you because the QA
+    fix-planner had no code to change and no plan authorization to act, so it
+    parked rather than guessing.
+
+
+    ## To check it yourself (~2 min)
+
+
+    - `lib-stale-hold-recheck.sh` — rule (d), the claimed-check wrapping the
+    `worktree_has_live_session` call, plus the header comment documenting the
+    direction.
+
+    - `lib-claude-agents.sh` — `worktree_has_live_session`, for the documented
+    fails-safe-to-OCCUPIED contract it relies on.
+
+
+    ## If you agree (expected)
+
+
+    No code change. Un-park the node; the QA session completes and merges. Item
+    #6 was the only thing holding it — the other two `needs-human-judgment`
+    items were classified `needs-main` and filed as a `## needs-main residue`
+    section on this node's body, and they drain automatically post-merge. No
+    further QA-side blockers.
+
+
+    ## If you disagree
+
+
+    Say so on this item and name the intended direction. The change lands in
+    `lib-stale-hold-recheck.sh` at rule (d) — invert the claimed-check so an
+    indeterminate `worktree_has_live_session` result is treated as unclaimed and
+    the hold resolves anyway. This PR's own suite
+    `test-lib-stale-hold-recheck.sh` needs a new case covering the alternate
+    direction, and the sweep's header comment needs updating to match. That is a
+    scope change beyond the tactic's current plan, so it wants a re-plan rather
+    than an in-QA patch.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
@@ -658,3 +740,30 @@ Manual / observe-in-production, after merge (not auto-runnable):
   dirty main checkout makes a resolution fail. Expected and by design: the sweep
   logs `resolve-failed` and retries next tick. Confirm on first observation that a
   transiently dirty main produces a retry line, not a park and not a partial write.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #3011). Items 7 and 8 of the QA triage plan require
+observation against real post-merge behavior — no pre-merge fixture or unit
+test can reproduce steady-state fleet conditions or a real `graph-commit`
+refusal against a genuinely dirty `main`. Both are drawn verbatim from this
+node's own "Manual / observe-in-production" section above; QA confirmed the
+other two items in that section (the two historical hold ids, and the no-new-
+sandboxed-call-path check) directly against the live `intentions/` store and
+code, so only these two remain.
+
+- id: 7
+  title: First live tick emits exactly one summary line per cadence, with zero unknown=/failed=
+  url_path: current
+  expected_outcome: On the first real post-merge tick (both paused and normal cadence), dispatch-tick's stderr carries exactly one `lib-stale-hold-recheck: sweep complete (...)` line per cadence, with `status=ok` and `unknown=0`, `failed=0` on a steady-state fleet.
+  finding: Requires a live tick against the real fleet with real worktrees in real states — no pre-merge fixture or unit test can reproduce steady-state fleet conditions.
+  Verifiability: MACHINE
+  Check: `journalctl --user -u dispatch-claude-daemon --since -2h | grep 'lib-stale-hold-recheck: sweep complete'` (or the tick job log) — confirm exactly one line per cadence and `unknown=0 failed=0`.
+
+- id: 8
+  title: Transiently dirty main produces resolve-failed + next-tick retry, not a park or partial write
+  url_path: current
+  expected_outcome: When `resolve-hold`'s inherited `assert_clean_outside_ids` rule refuses a resolution against a transiently dirty `main`, the sweep logs `resolve-failed`, the tick's summary line shows `failed>=1` with `status=ok`, no `office_hours` park is written, and no partial graph write lands — confirmed by the following tick retrying the same candidate.
+  finding: The pre-merge test harness stubs `resolve-hold` rather than exercising `graph-commit`'s actual `assert_clean_outside_ids` refusal against a real dirty checkout, so this specific failure path can only be observed against a real occurrence post-merge.
+  Verifiability: MACHINE
+  Check: On a tick log showing `resolve-failed`, confirm via `git log -- intentions/` that no partial/half-applied write landed for the named hold, and confirm the following tick's log retries the same hold id (`lib-stale-hold-recheck: resolve-failed` followed later by `resolved` or another `resolve-failed`, never silence).
