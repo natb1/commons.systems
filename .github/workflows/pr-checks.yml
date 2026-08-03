@@ -16,6 +16,17 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
+      - name: Disable unattended-upgrades / free dpkg lock
+        # Same mitigation the preview-and-smoke job runs, from the same script —
+        # see that job's copy below for the budget derivation. This job shells
+        # out to apt-get through playwright's `install --with-deps` too, and it
+        # shares the lib.sh `wait_for_dpkg_lock` backstop whose default this PR
+        # left at 30s, so leaving it undefended would just move the flake.
+        # Budget: 5 min here on top of this job's existing work, against the
+        # 30-min job cap; the helper adds up to 12 waits x 30s = 6 min.
+        timeout-minutes: 5
+        continue-on-error: true
+        run: .github/scripts/free-dpkg-lock.sh
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
@@ -37,185 +48,43 @@ jobs:
 
   preview-and-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Raised 20 -> 30 to match the sibling `acceptance` job above. See the
+    # additivity note on the dpkg-lock step below: 20 min could not hold the
+    # worst case once the mitigation step's own cap is counted, and an
+    # ambiguous budget is what let the original flake hide.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
       - name: Disable unattended-upgrades / free dpkg lock
-        # Budget derivation (job cap above is 20 min; the original flake's real
-        # work was ~11 min of it, leaving ~9 min of headroom).
-        # This step's own bounded stages sum to 250s = 4.2 min:
-        #   GRACE_SECONDS=10  +  shared 120s wait deadline (ONE deadline across
-        #   all three lock files, not 120s each)  +  `timeout 120` on the
-        #   `dpkg --configure -a` recovery.
-        # The systemctl/fuser/pkill calls have no timeout of their own, so the
-        # 250s is not enforceable from inside the script — hence this 5-minute
-        # step cap: ~50s of slack over the derived bound, so it fires only if a
-        # `sudo systemctl`/`fuser` call genuinely hangs. When it fires the job
-        # fails at 5 min instead of grinding to the 20-min job cap and failing
-        # anyway, with a step-scoped signal instead of a job-scoped one.
-        # Worst case 4.2 min here + ~11 min of real work = 15.2 min < 20, so no
-        # job-timeout raise is needed. The other half of fitting the budget is
-        # DPKG_LOCK_WAIT_TIMEOUT (lib.sh `wait_for_dpkg_lock`), lowered back to
-        # 30s in this PR: its call site fans out to 2 attempts x 2 smoke runs
-        # x 6 hosting apps = up to 24 waits, which at 120s would be 48 min of
-        # lock waiting alone. See that function's comment for the full sum.
+        # Budget derivation. The two budgets in play are ADDITIVE in the worst
+        # case, and this comment used to imply they were alternatives:
+        #   5 min   this step's own cap (below)
+        # + ~11 min the original flake's real job work
+        # + up to 12 min of lib.sh `wait_for_dpkg_lock` (DPKG_LOCK_WAIT_TIMEOUT
+        #   is 30s and this job's call site fans out to 2 attempts x 2 smoke
+        #   runs x 6 hosting apps = up to 24 waits = 12 min)
+        #   ------
+        #   = ~28 min, which does NOT fit the old 20-min job cap.
+        # In practice the two are near-mutually-exclusive: `wait_for_dpkg_lock`
+        # only waits AFTER a failed apt-get attempt, and preventing that failed
+        # attempt is the entire point of this pre-step — when this step does its
+        # job the helper waits ~0s, and when the helper is burning 12 min this
+        # step has already lost. But "near-mutually-exclusive" is not a bound,
+        # and the ambiguity is resolved rather than argued: the job cap above is
+        # raised to 30 min, matching the sibling `acceptance` job, so even the
+        # fully-additive worst case fits.
+        # The step's own internal worst case (290s, under this 300s cap) is
+        # derived in .github/scripts/free-dpkg-lock.sh, where every external
+        # call is wrapped in `timeout`.
+        # `continue-on-error: true` because this step is best-effort: every path
+        # inside the script exits 0 by design, so the step cap below is the ONE
+        # way this mitigation could itself block a PR. A mitigation that fails
+        # the job it exists to protect is worse than no mitigation.
         timeout-minutes: 5
-        run: |
-          if command -v fuser >/dev/null 2>&1; then
-            FUSER_OK=1
-          else
-            FUSER_OK=0
-            echo 'WARNING: fuser not installed (psmisc missing) - dpkg lock state UNKNOWN, skipping lock probes'
-          fi
-          # Bounded grace window between the SIGTERM stage and the SIGKILL
-          # stage. Counts against the step's overall time budget, so keep it
-          # short.
-          GRACE_SECONDS=10
-          # apt-get takes the locks in this order (lock-frontend, lists/lock,
-          # dpkg/lock); a bare `dpkg` takes only /var/lib/dpkg/lock. Probe, kill
-          # and wait on all three so a non-apt holder is not invisible to us.
-          set -- /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/lib/dpkg/lock
-          if [ "$FUSER_OK" -eq 1 ]; then
-            for lock in "$@"; do
-              if [ ! -e "$lock" ]; then
-                echo "$lock: absent, nothing to probe"
-                continue
-              fi
-              echo "$lock holders at step start:"
-              sudo fuser -v "$lock" || echo "$lock: no holders at step start"
-            done
-          fi
-          # Mask (not stop) all five units: both timers ship Persistent=true,
-          # so a daemon-reload later in this job (e.g. triggered by a package
-          # postinst during playwright's `install --with-deps`) would
-          # otherwise re-arm them and fire a missed run immediately, possibly
-          # re-acquiring the dpkg lock mid-job. mask --now survives
-          # daemon-reload and also stops the units, so the separate stop is
-          # dropped. The runner is ephemeral/single-use, so no unmask needed.
-          if mask_err=$(sudo systemctl mask --now apt-daily.service apt-daily-upgrade.service apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service 2>&1); then
-            echo 'systemctl mask: ok'
-          else
-            rc=$?
-            echo "systemctl mask: failed (rc=$rc)"
-            echo "$mask_err" >&2
-          fi
-          if kill_err=$(sudo systemctl kill --kill-who=all apt-daily.service apt-daily-upgrade.service unattended-upgrades.service 2>&1); then
-            echo 'systemctl kill: ok'
-          else
-            rc=$?
-            echo "systemctl kill: failed (rc=$rc)"
-            echo "$kill_err" >&2
-          fi
-          # --- grace interval --------------------------------------------------
-          # Everything above is SIGTERM; everything below is SIGKILL. Give the
-          # signalled processes a short bounded window to exit on their own
-          # first: SIGKILLing a process that is mid `dpkg --unpack` leaves dpkg
-          # interrupted, and the next apt-get in this job (playwright's
-          # `install --with-deps`) then fails non-retryably. If every lock
-          # clears during the grace window, skip the SIGKILL stage entirely.
-          SKIP_SIGKILL=0
-          if [ "$FUSER_OK" -eq 1 ]; then
-            grace_deadline=$(( $(date +%s) + GRACE_SECONDS ))
-            while :; do
-              held=0
-              for lock in "$@"; do
-                [ -e "$lock" ] || continue
-                if sudo fuser "$lock" >/dev/null 2>&1; then
-                  held=1
-                  break
-                fi
-              done
-              if [ "$held" -eq 0 ]; then
-                SKIP_SIGKILL=1
-                break
-              fi
-              [ "$(date +%s)" -lt "$grace_deadline" ] || break
-              sleep 1
-            done
-            if [ "$SKIP_SIGKILL" -eq 1 ]; then
-              echo "holders cleared during ${GRACE_SECONDS}s grace, skipping SIGKILL escalation"
-            else
-              echo "holders still present after ${GRACE_SECONDS}s grace, escalating to SIGKILL"
-            fi
-          else
-            echo 'fuser unavailable: lock state UNKNOWN, skipping grace check and escalating to SIGKILL'
-          fi
-          if [ "$SKIP_SIGKILL" -eq 0 ]; then
-            if sudo pkill -9 -f '[u]nattended-upgrade' 2>/dev/null; then
-              echo 'killed unattended-upgrade process(es)'
-            else
-              echo 'no unattended-upgrade process to kill'
-            fi
-            if sudo pkill -9 -f 'apt[.]systemd[.]daily' 2>/dev/null; then
-              echo 'killed apt.systemd.daily process(es)'
-            else
-              echo 'no apt.systemd.daily process to kill'
-            fi
-          fi
-          # --- SIGKILL stage ---------------------------------------------------
-          # Everything above targets named units / known argv patterns. The
-          # original flake's holder was a bare `apt-get` reparented out of its
-          # unit's cgroup, which none of those reach. `fuser -k` is the
-          # holder-agnostic last resort: it SIGKILLs whoever holds the file,
-          # whatever it is and whoever started it.
-          if [ "$FUSER_OK" -eq 1 ] && [ "$SKIP_SIGKILL" -eq 0 ]; then
-            for lock in "$@"; do
-              [ -e "$lock" ] || continue
-              if sudo fuser -k "$lock" >/dev/null 2>&1; then
-                echo "fuser -k: killed holder(s) of $lock"
-              else
-                echo "fuser -k: no holders of $lock"
-              fi
-            done
-          fi
-          # Bounded wait: ONE shared 120s wall-clock deadline across all three
-          # lock files, not 120s each — the job's total budget is fixed.
-          wait_expired=0
-          if [ "$FUSER_OK" -eq 1 ]; then
-            wait_deadline=$(( $(date +%s) + 120 ))
-            for lock in "$@"; do
-              if [ ! -e "$lock" ]; then
-                echo "$lock: absent, no wait needed"
-                continue
-              fi
-              if ! sudo fuser "$lock" >/dev/null 2>&1; then
-                echo "$lock: already free, no wait needed"
-                continue
-              fi
-              wait_start=$(date +%s)
-              expired=0
-              while sudo fuser "$lock" >/dev/null 2>&1; do
-                if [ "$(date +%s)" -ge "$wait_deadline" ]; then
-                  echo "$lock still held at the shared 120s deadline; holders:" >&2
-                  sudo fuser -v "$lock" >&2 || true
-                  expired=1
-                  wait_expired=1
-                  break
-                fi
-                sleep 1
-              done
-              if [ "$expired" -eq 0 ]; then
-                echo "$lock freed after $(( $(date +%s) - wait_start ))s"
-              fi
-            done
-          fi
-          # Non-fatal dpkg recovery. Must come AFTER the wait loop, since
-          # `dpkg --configure -a` takes the locks itself. Run unconditionally
-          # rather than only when the SIGKILL stage fired: it is a fast no-op on
-          # a clean system, and one unconditional call reads more simply than
-          # gating on which rung of the ladder ran. The one exception is a
-          # wait loop that expired with holders still present, where it would
-          # only block on the held lock. Never allowed to fail the step.
-          if [ "$wait_expired" -eq 1 ]; then
-            echo 'dpkg --configure -a: skipped (lock still held at the wait deadline)'
-          elif sudo timeout 120 dpkg --configure -a; then
-            echo 'dpkg --configure -a: ok'
-          else
-            rc=$?
-            echo "dpkg --configure -a: failed (rc=$rc)"
-          fi
+        continue-on-error: true
+        run: .github/scripts/free-dpkg-lock.sh
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
