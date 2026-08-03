@@ -73,10 +73,16 @@ Workflow's tactic-mode job, not this thread's:
   `execution.strategy_fingerprint` to the `{hash: strategyFingerprint(strategy),
   sha: <origin/main sha>}` object form (item 3 below) and leave every
   other serving strategy's entry untouched (a tactic still at
-  `execution: null` has no map to re-stamp — but it is no longer permanently
-  unstampable: the live router now SEEDS that map the first time this tactic
-  makes a forward, non-stale transition, via `transition-node`'s
-  `APPLY_FLAGS` construction
+  `execution: null` has no map to re-stamp — but that is now the legacy
+  case, not the normal outcome of minting: `write-node.ts` accepts a
+  repeatable `--strategy-fingerprint <strategy-id>=<hash>` plus one required
+  shared `--strategy-sha <origin/main sha>`, so a tactic minted going
+  forward is stamped at mint time and lands with its
+  `execution.strategy_fingerprint` entry already populated. A tactic minted
+  before this mechanism, or minted without those flags, is no longer
+  permanently unstampable either: the live router SEEDS that map the first
+  time this tactic makes a forward, non-stale transition, via
+  `transition-node`'s `APPLY_FLAGS` construction
   (`.claude/skills/dispatch-propagate/scripts/transition-node`) calling
   `apply-node-transition.ts` — so a draft/raw tactic finalized at
   `execution: null` picks up its first stamp automatically once it advances,
@@ -196,8 +202,11 @@ re-evaluation session (strategy clarification 10) — the session does
    `apply-node-transition.ts --strategy-sha` under a live router — leaving
    every other serving strategy's entry untouched, which unfreezes the
    subtree against this strategy without disturbing the others. (A tactic
-   still at `execution: null` has no map to re-stamp until the machinery
-   seeds one.)
+   still at `execution: null` has no map to re-stamp — that is now the
+   legacy case: `write-node.ts`'s `--strategy-fingerprint`/`--strategy-sha`
+   flags stamp a tactic at mint time going forward, and for a tactic minted
+   before this mechanism, or minted without those flags, the machinery seeds
+   one the next time it advances.)
 4. Lands the amendments via `graph-commit`.
 5. **Scope-inert re-stamp — protect each amended tactic's own scope
    custody.** Step 4's amendment edits the **body** of open (non-`draft`,

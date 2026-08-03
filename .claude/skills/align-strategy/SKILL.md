@@ -654,9 +654,14 @@ never on its rank.
   in the **same** `graph-commit` as this strategy edit, so no freeze fires for
   this child. (If this child has no entry yet — still at `execution: null`,
   or an `execution` object with no key for this strategy — there is nothing
-  to re-stamp here; the live router SEEDS that entry itself the next time
-  this child makes a forward, non-stale transition, via `transition-node`'s
-  `APPLY_FLAGS` construction — see the hash/sha paragraph below.)
+  to re-stamp here. That is now the legacy case, not the normal outcome of
+  minting: `write-node.ts`'s `--strategy-fingerprint`/`--strategy-sha` flags
+  stamp a tactic at mint time going forward, so most newly minted children
+  already carry an entry. For a child minted before this mechanism, or
+  minted without those flags, the live router still SEEDS that entry itself
+  the next time this child makes a forward, non-stale transition, via
+  `transition-node`'s `APPLY_FLAGS` construction — see the hash/sha
+  paragraph below.)
 - **Materially affected** — the edit changes something this child's plan
   depends on. Leave its stamp untouched/stale: the freeze fires and it
   re-evaluates later at its own rank via the existing re-evaluation mechanism
@@ -684,6 +689,19 @@ than requiring a human/session hand-stamp for the common case. This is why a
 child with no entry yet is no longer permanently unstamped: it picks one up
 automatically the next time it advances, independent of this round's
 classification pass.
+
+A tactic minted going forward does not have to wait for that first
+transition, either: `write-node.ts` accepts a repeatable
+`--strategy-fingerprint <strategy-id>=<hash>` (keyed form only, bare hash
+rejected) plus one required shared `--strategy-sha <origin/main sha>`. The
+flags merge into `execution.strategy_fingerprint`, seed the `execution`
+record when the payload has none, and preserve sibling-strategy keys not
+named in the invocation; they are valid on tactics only. `write-node.ts` and
+`apply-node-transition.ts` share one implementation,
+`packages/intentionsutil/scripts/lib-strategy-stamp.ts`, so the two
+callsites cannot drift. So a null/absent entry is now the legacy case — the
+pre-existing state for a tactic minted before this mechanism, or minted
+without the flags — not the normal outcome of minting a new tactic.
 
 Dropping the legacy bare-string form entirely, and making `validate-graph`
 **reject** bare strings, is sequenced future work (migration step 4), **not**
