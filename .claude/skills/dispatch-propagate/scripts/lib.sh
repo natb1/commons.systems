@@ -1657,7 +1657,7 @@ ensure_deps() {
 # (mirrors the lib-decision-log.sh `command -v flock` guard), and always
 # returns 0 so it never fails the caller.
 # Tunables (env): DPKG_LOCK_FILE (default /var/lib/dpkg/lock-frontend),
-# DPKG_LOCK_WAIT_TIMEOUT (default 120 seconds).
+# DPKG_LOCK_WAIT_TIMEOUT (default 30 seconds).
 # Deliberately single-file, unlike the pr-checks.yml `Disable
 # unattended-upgrades / free dpkg lock` step, which probes all three of
 # lock-frontend, /var/lib/apt/lists/lock and /var/lib/dpkg/lock. That step runs
@@ -1668,9 +1668,28 @@ ensure_deps() {
 # takes lock-frontend first and holds it for the whole run, so waiting on
 # lock-frontend alone is sufficient there; DPKG_LOCK_FILE remains available if a
 # future caller needs a different one.
+#
+# Why the default is 30s and NOT the pre-step's 120s — this multiplies out. The
+# call site (below, after each FAILED attempt) fans out as:
+#   attempts x invocations-per-app x apps
+# preview-and-smoke:  PLAYWRIGHT_INSTALL_ATTEMPTS=2 attempts
+#                   x 2 smoke runs per app (run-all-preview-deploy-smoke.sh
+#                     re-deploys and re-smokes once on smoke failure)
+#                   x 6 apps with a hosting target (firebase.json)
+#                   = up to 24 waits.
+# acceptance:         2 attempts x 1 invocation x 6 apps with
+#                     e2e/playwright.config.ts = up to 12 waits.
+# At 120s that is 48 min (preview-and-smoke, budget 20 min) and 24 min
+# (acceptance, budget 30 min) of pure lock waiting. At 30s it is 12 min / 6 min.
+# The long wait belongs in the pr-checks.yml pre-step, which waits up to 120s
+# ONCE before any job work and escalates to `fuser -k`; this helper is only a
+# post-failure backstop, and its holder is the previous attempt's own apt-get
+# tree that kill_tree just SIGTERM'd + SIGKILL'd (see kill_tree below) — it
+# frees within seconds or not at all, so 30s is ample and 120s only burns the
+# job budget 24x over. Callers needing longer set DPKG_LOCK_WAIT_TIMEOUT.
 wait_for_dpkg_lock() {
   local lockfile="${DPKG_LOCK_FILE:-/var/lib/dpkg/lock-frontend}"
-  local deadline="${DPKG_LOCK_WAIT_TIMEOUT:-120}"
+  local deadline="${DPKG_LOCK_WAIT_TIMEOUT:-30}"
   [ -e "$lockfile" ] || return 0
   command -v flock >/dev/null 2>&1 || return 0
 

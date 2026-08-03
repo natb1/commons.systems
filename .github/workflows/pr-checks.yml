@@ -43,6 +43,25 @@ jobs:
         with:
           fetch-depth: 0
       - name: Disable unattended-upgrades / free dpkg lock
+        # Budget derivation (job cap above is 20 min; the original flake's real
+        # work was ~11 min of it, leaving ~9 min of headroom).
+        # This step's own bounded stages sum to 250s = 4.2 min:
+        #   GRACE_SECONDS=10  +  shared 120s wait deadline (ONE deadline across
+        #   all three lock files, not 120s each)  +  `timeout 120` on the
+        #   `dpkg --configure -a` recovery.
+        # The systemctl/fuser/pkill calls have no timeout of their own, so the
+        # 250s is not enforceable from inside the script — hence this 5-minute
+        # step cap: ~50s of slack over the derived bound, so it fires only if a
+        # `sudo systemctl`/`fuser` call genuinely hangs. When it fires the job
+        # fails at 5 min instead of grinding to the 20-min job cap and failing
+        # anyway, with a step-scoped signal instead of a job-scoped one.
+        # Worst case 4.2 min here + ~11 min of real work = 15.2 min < 20, so no
+        # job-timeout raise is needed. The other half of fitting the budget is
+        # DPKG_LOCK_WAIT_TIMEOUT (lib.sh `wait_for_dpkg_lock`), lowered back to
+        # 30s in this PR: its call site fans out to 2 attempts x 2 smoke runs
+        # x 6 hosting apps = up to 24 waits, which at 120s would be 48 min of
+        # lock waiting alone. See that function's comment for the full sum.
+        timeout-minutes: 5
         run: |
           if command -v fuser >/dev/null 2>&1; then
             FUSER_OK=1
