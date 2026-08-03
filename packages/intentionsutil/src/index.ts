@@ -29,6 +29,7 @@ export {
   LADDER,
   forwardPhase,
   fixInterrupt,
+  interruptRoute,
   decideTransition,
   addMarker,
   incrementAttempt,
@@ -43,7 +44,7 @@ export {
   isStrategyStale,
   isFingerprintStale,
 } from "./transitions.js";
-export type { CiVerdict, TransitionDecision, ScopeStamp } from "./transitions.js";
+export type { CiVerdict, TransitionDecision, ScopeStamp, InterruptRoute } from "./transitions.js";
 export { IntentionSchemaError } from "./errors.js";
 export { lintTacticBodies, loadPlanBodyBaseline } from "./planlint.js";
 export type { PlanBodyMarker, PlanBodyBaselineEntry } from "./planlint.js";
