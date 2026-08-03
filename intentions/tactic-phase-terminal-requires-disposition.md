@@ -70,6 +70,7 @@ attention:
     codified and phase implement, with a full plan in the body; blocked_by names
     tactic-denied-command-parks-node, so the router will not select this node
     for implementation until that PR lands lib-frozen-session-park.sh."
+  tier: 1
 phase: main-qa
 execution:
   branch: tactic-phase-terminal-requires-disposition

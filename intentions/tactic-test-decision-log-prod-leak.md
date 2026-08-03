@@ -81,7 +81,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-test-decision-log-prod-leak
   pr: 3013
@@ -89,9 +89,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-01T16:46:03Z
+    mergeCommitSha: 0b496cf0364870be7f36f53a18869567e399ee08
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

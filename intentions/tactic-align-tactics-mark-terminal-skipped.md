@@ -62,7 +62,74 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    Requirement ambiguity (autonomous /align-tactics tactic-mode round,
+    2026-08-01) — the round's central scope decision depends on an unratified
+    author premise. This tactic's own `gap` field defers to an /align-tactics
+    round the choice between (1) a session-level fix hardening /align-tactics
+    Step 2's `mark-node-terminal align-round` call and (2) a sweep-level fix in
+    which the terminal-without-disposition sweep itself reaps the dead job.
+    Option (2) would REVERSE a recorded standing decision: the reap condition
+    (intentions/strategy-graph-native-dispatch.md, condition ~14) keeps every
+    UNDECLARED terminal exit — job entry and node-id worktree both held — "until
+    an operator manually reaps it", accepted freeze-for-debug over silent
+    auto-retry, and the 2026-07-31 externally-parked-freeze clarification
+    reaffirms that a park neither reaps nor restores the concurrency slot and
+    must instead NAME the manual reap. The same condition carves out this
+    tactic's exact class ("a lane that completed its pass and merely omitted the
+    declaration freezes its node with no failure to debug, which is a defect of
+    that lane") but records no runtime discriminator: at sweep time only
+    "terminal + no marker" is visible, indistinguishable from a genuine crash
+    whose live session IS the debugging artifact. Whether to trade that artifact
+    away for an automated release is a human decision, not one derivable from
+    the record.
+
+
+    Three record-derivable findings from this drift review (immaterial to the
+    park, provided for context — NOT landed as strategy clarifications, since a
+    tactic-target /align-tactics round never edits the serving strategy's
+    frontmatter): (a) the sibling tactic-phase-terminal-requires-disposition's
+    Units 0-4 are already landed on origin/main
+    (terminal_without_disposition_sweep at
+    .claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh:659,
+    wired into dispatch-tick at :390 and :592, Stop-hook escalation-park
+    backstop deleted per dispatch-stop.sh header:17-20) — so only the reap half
+    is open, and no round should re-plan the park half; (b) the shipped
+    terminal-without-disposition park recommendation
+    (lib-frozen-session-park.sh:1034) tells the operator to `claude stop` the
+    job and let dispatch-sweep reap the worktree, but neither can release an
+    already-terminal job — worktree_has_live_session
+    (lib-claude-agents.sh:798-880) has no timeout and treats any row still
+    present in `claude agents --json --all` as occupying the worktree, so the
+    shipped recommendation text needs correcting independent of how this park
+    resolves; (c) the 2026-07-31 Stop-hook root-cause clarification's
+    dispatch-stop.sh:56-98 citation no longer resolves against current
+    origin/main (that backstop was deleted outright per finding (a)), though its
+    conclusion stands.
+  since: 2026-08-01
+  recommendation: "Hold an office-hours sitting to ratify how an un-reaped,
+    undeclared-terminal node-worker job may be released: (a) automation stays
+    out — scope this tactic to hardening /align-tactics Step 2 alone (move the
+    `mark-node-terminal <node> align-round` call into the same code block as the
+    graph-commit it follows, mirroring
+    packages/intentionsutil/scripts/park-node:310-317 and
+    .claude/skills/dispatch-propagate/scripts/transition-node:61-63's
+    `mark_terminal()` helper) plus correct the terminal-without-disposition
+    park's recommendation text (lib-frozen-session-park.sh:1034) since neither
+    `claude stop` nor dispatch-sweep can release an already-terminal job; (b)
+    license a NARROWED auto-reap and name its safety discriminator (e.g.
+    terminal AND already-parked AND no unpushed commits AND worktree in sync),
+    honoring the standing \"NEVER `claude rm` when a session may be live or hold
+    unpushed work\" doctrine at
+    .claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh:696-712;
+    or (c) a third home entirely (e.g. the still-unowned four-member \"held vs
+    being worked\" family-scope predicate reconciliation). Every candidate fix
+    site sits under .claude/skills/**, so any resulting units must be
+    born-parked per the recorded self-modification doctrine. Once ratified:
+    `clear-park tactic-align-tactics-mark-terminal-skipped` and re-run
+    `/align-tactics tactic-align-tactics-mark-terminal-skipped` to finalize."
+  session_type: requirement-discovery
 pace_exempt: true
 rounds: null
 attributes: {}

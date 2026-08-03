@@ -89,6 +89,7 @@ attention:
     codified and phase implement, carrying a full clean-session plan (Units 1-3)
     in the body; the boost value is preserved unchanged from the bootstrap
     re-scale."
+  tier: 1
 phase: main-qa
 execution:
   branch: tactic-qa-main-verifiability-sort-criterion
