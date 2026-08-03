@@ -108,3 +108,88 @@ nothing acts on.
 Out of scope: changing when `claude rm` is called, the terminal-disposition
 invariant, or the held-for-debug default. In scope: making self-close verify
 that the removal actually happened, and making a decline loud.
+
+## Auto-heal design (recorded 2026-08-03, author-directed)
+
+Measured the same day: the fleet ran at `effective_live` 1-2 against
+`max_concurrent_workers: 3` for an entire window, with two of three slots held
+by terminal sessions doing no work. `dispatch-tick` was healthy throughout
+(`target_n: 3`, firing every ~15 min). Throughput was never limited by the cap,
+the router, or attention ranking. It was limited by this defect, and by a failed
+park (the `office-hours-*` marker class) holding a second slot. Both slots were
+cleared by hand -- the fifth such hand-reap sitting recorded, with no change in
+the underlying rate. Hand-reaping is the absence of an auto-heal, not one.
+
+### Greenfield: one reaper, and it verifies its own post-state
+
+The reap belongs to `dispatch-sweep` -- it already runs on a timer and already
+owns `lib-worktree-reap.sh` / `lib-worktree-in-sync.sh`. `dispatch-self-close`
+writes the terminal marker and exits; it does not call `claude rm` at all.
+
+The reason this is a structural fix rather than a patch: self-close's last line
+is `exec "$CLAUDE_CMD" rm "$JOB_ID"`. `exec` replaces the process, so nothing
+survives to verify whether the reap happened. The silent no-op is not an
+accident of that line -- it is entailed by it. Any fix that keeps self-close as
+the reaper must first stop it exec'ing, which changes its termination contract
+anyway. A supervisor that outlives the session removes the class.
+
+The sweep's session arm, in order. Every gate fails toward KEEP:
+
+- An UNCORROBORATED empty `claude agents --json --all` read means "cannot see",
+  not "none" (the EMPTY-READ CORROBORATION contract in `lib-claude-agents.sh`).
+  Abort the arm; never reap on it.
+- Skip unless the session name matches `^tactic-|^strategy-` and the session is
+  terminal (`state` in done/stopped/killed/failed/error).
+- Require a valid `$CLAUDE_JOB_DIR/node-terminal` naming that node -- the
+  existing Invariant 2 gate, unchanged.
+- Reap-safety, all of: worktree clean; `git diff origin/main HEAD -- . ':!intentions'`
+  EMPTY; no OPEN PR whose head is this branch (never delete such a branch).
+- `git worktree remove <path>` FIRST -- this is what makes `claude rm` accept.
+- `claude rm <session-id>`.
+- Re-list. If the session id is STILL PRESENT, log a loud `REAP_DECLINED` and
+  leave it for the operator.
+
+Two elements are load-bearing and are exactly what the current path lacks:
+`worktree remove` before `claude rm`, and verifying the post-state instead of
+trusting exit 0.
+
+**The reap-safety gate must be a content check, not a commit count.** Measured
+2026-08-03: both sessions reaped by hand were 11 and 12 commits "ahead" of
+`origin/main` and one was 12 ahead of its own remote branch, yet both were fully
+safe -- GitHub squash-merges, so a branch's individual commits are never
+ancestors of `main`, only their content is. A commit-count gate produces false
+positives in both directions: it refuses a safe reap after a squash merge (which
+is precisely the stranded-slot case this tactic exists to fix), and it counts
+landed graph commits riding on a node branch as unpushed work.
+
+### Brownfield migration
+
+The greenfield is backwards-incompatible with self-close's termination contract,
+so it does not land in one step:
+
+1. Add the sweep session arm. This heals the defect immediately, changes no
+   existing contract, and is safe to run alongside self-close's `exec claude rm`
+   -- a session self-close already removed simply is not in the listing.
+2. Only then delete `exec claude rm` from `dispatch-self-close`, once the sweep
+   is observed reaping within one interval.
+
+### Amendment to the scope note above
+
+The scope note excludes "changing when `claude rm` is called". The greenfield
+design deliberately amends that exclusion: moving the call to the sweep is the
+fix, not an expansion of it, because verification is impossible on the far side
+of an `exec`. The exclusion stands for the brownfield step 1, which adds the
+sweep arm without touching self-close.
+
+### Companion: the failed-park class (bug J)
+
+A surviving `$CLAUDE_JOB_DIR/*/office-hours-reason` is by definition a park that
+did not land -- that is why the detect reads "ANY hit is a FAILED park". The heal
+has the same shape as the reap heal: the tick-side sweep re-drives `park-node`
+from the main checkout (so invariant I1 holds), re-reads `office_hours` from
+`origin/main`, and deletes the markers ONLY on a non-null read. Marker deletion
+becomes the proof that the park landed rather than a cleanup step, and the
+existing detect doubles as the heal's own success criterion: a marker surviving
+one sweep interval is a heal that failed, and says so. Tracked primarily under
+`tactic-phase-terminal-requires-disposition`; recorded here because the two heals
+share a supervisor, a cadence, and a verify-the-post-state discipline.
