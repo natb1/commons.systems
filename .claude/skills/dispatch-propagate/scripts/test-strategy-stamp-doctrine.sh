@@ -4,10 +4,17 @@
 # to seed/refresh each tactic's execution.strategy_fingerprint map on every
 # forward (not strategy-stale) transition, via apply-node-transition.ts, and
 # Unit 3 reconciled the align-tactics/align-strategy doctrine that previously
-# described this as an unimplemented "bootstrap-interim hand-stamp" gap. This
-# suite guards both halves so neither can silently regress: the router-side
-# mechanism (assertions 1-2) and the doctrine that describes it (assertions
-# 3-4).
+# described this as an unimplemented "bootstrap-interim hand-stamp" gap. A
+# later fix pass closed two further gaps that let the mint-time doctrine
+# regress silently: write-path.md's earlier step-1 mint passage could drift
+# out of sync with its own "Closed: the mint-to-first-transition window"
+# section (commit 307fac5e reconciled it), and tactic-target.md /
+# align-strategy/SKILL.md never mentioned the mint-time flags at all (commit
+# 0d4c09a8 added them). This suite guards all of it so no part can silently
+# regress: the router-side mechanism (assertions 1-2), the write-path.md
+# doctrine that describes it (assertions 3-4, 6-7), write-node.ts's
+# implementation of the mint-time flags (assertion 5), and the sibling
+# doctrine docs that reference them (assertions 8-9).
 #
 # Modeled on test-align-tactics-write-path-freshness.sh: a prose/fenced-block
 # guard over skill doctrine and script text, not a functional test harness —
@@ -30,6 +37,8 @@ GUARD_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 TRANSITION_NODE="$GUARD_ROOT/.claude/skills/dispatch-propagate/scripts/transition-node"
 WRITE_PATH="$GUARD_ROOT/.claude/skills/align-tactics/references/write-path.md"
 WRITE_NODE="$GUARD_ROOT/packages/intentionsutil/scripts/write-node.ts"
+TACTIC_TARGET="$GUARD_ROOT/.claude/skills/align-tactics/references/tactic-target.md"
+ALIGN_STRATEGY_SKILL="$GUARD_ROOT/.claude/skills/align-strategy/SKILL.md"
 
 # --- 1. transition-node constructs --strategy-fingerprint in APPLY_FLAGS ----
 #
@@ -151,6 +160,74 @@ else
   ' "$WRITE_PATH")
   assert_eq "write-path.md documents the mint-to-first-transition window as closed by write-node.ts's flags" \
     "closed" "$actual"
+fi
+
+# --- 7. write-path.md's step-1 mint instruction agrees with the mint-time-stamp section ----
+#
+# Binds to the step-1 region specifically — the block from "1. **Frontmatter
+# via `write-node.ts`.**" up to (not including) "2. **Freshness assertion" —
+# so a file-global --strategy-fingerprint mention elsewhere (e.g. the
+# "Closed" section itself) cannot satisfy this: the step-1 passage must
+# itself point to the mint-time flags. Also requires the absence of the
+# negative instruction ("should not, hand-stamp") that previously told the
+# session to skip the stamp and defer it to the first transition.
+
+if [[ ! -f "$WRITE_PATH" ]]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: write-path.md's step-1 mint instruction agrees with the mint-time-stamp section: file missing"
+else
+  actual=$(awk '
+    /^1\. \*\*Frontmatter via `write-node\.ts`\.\*\*/ { insec = 1 }
+    insec { buf = buf $0 "\n" }
+    insec && /^2\. \*\*Freshness assertion/ { insec = 0 }
+    END {
+      has_flag = (index(buf, "--strategy-fingerprint") > 0 || index(buf, "mint-time stamp") > 0)
+      has_negative = (index(buf, "should not, hand-stamp") > 0)
+      if (has_flag && !has_negative) { print "agrees" } else { print "disagrees" }
+    }
+  ' "$WRITE_PATH")
+  assert_eq "write-path.md's step-1 mint instruction directs the session to pass the mint-time flags, not skip them" \
+    "agrees" "$actual"
+fi
+
+# --- 8. tactic-target.md mentions the mint-time flags ------------------------
+#
+# tactic-target.md previously never mentioned write-node.ts's mint-time
+# --strategy-fingerprint/--strategy-sha flags at all. Guards against that
+# silently regressing back out.
+
+if [[ ! -f "$TACTIC_TARGET" ]]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: tactic-target.md mentions the mint-time flags: file missing: .claude/skills/align-tactics/references/tactic-target.md"
+else
+  actual=$(awk '
+    /write-node\.ts/ { has_write_node = 1 }
+    /--strategy-fingerprint/ || /mint-time stamp/ { has_flag = 1 }
+    END {
+      if (has_write_node && has_flag) { print "present" } else { print "absent" }
+    }
+  ' "$TACTIC_TARGET")
+  assert_eq "tactic-target.md mentions write-node.ts's mint-time stamp flags" \
+    "present" "$actual"
+fi
+
+# --- 9. align-strategy/SKILL.md mentions the mint-time flags -----------------
+#
+# Same gap as assertion 8, in the sibling align-strategy/SKILL.md doctrine.
+
+if [[ ! -f "$ALIGN_STRATEGY_SKILL" ]]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: align-strategy/SKILL.md mentions the mint-time flags: file missing: .claude/skills/align-strategy/SKILL.md"
+else
+  actual=$(awk '
+    /write-node\.ts/ { has_write_node = 1 }
+    /--strategy-fingerprint/ || /mint-time stamp/ { has_flag = 1 }
+    END {
+      if (has_write_node && has_flag) { print "present" } else { print "absent" }
+    }
+  ' "$ALIGN_STRATEGY_SKILL")
+  assert_eq "align-strategy/SKILL.md mentions write-node.ts's mint-time stamp flags" \
+    "present" "$actual"
 fi
 
 report_results
