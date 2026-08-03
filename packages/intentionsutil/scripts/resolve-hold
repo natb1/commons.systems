@@ -1,0 +1,452 @@
+#!/usr/bin/env bash
+# resolve-hold — resolve one tracked hold and unblock its source node. The
+# scripted inverse of `hold-node`, in exactly the sense `clear-park` is the
+# scripted inverse of `park-node`.
+#
+# WHY THIS EXISTS. `hold-node` lands a born-parked hold tactic plus a
+# `blocked_by` edge from the source to it. Nothing reverses that today: a hold is
+# cleared only by an incidental commit side-effect or a hand-rolled inline
+# sequence (dump → mutate → write → commit, twice, against a moving origin/main),
+# which is exactly the unreliable shape clear-park's header records for park-node
+# (clear-park:2-15). The `/dispatch-conflict` Lane-3 branch-merge lane needs a
+# deterministic terminal disposition once it has actually resolved the conflict
+# the hold was tracking, so the reversal is scripted here rather than re-derived
+# per session.
+#
+# WHAT "RESOLVED" MEANS. Setting `office_hours = null` on the hold is NOT enough.
+# hold-node-decide.ts's RESOLUTION_SENTENCE — the load-bearing closing sentence
+# of every hold body it generates — says so verbatim: "resolve the hold tactic to
+# `phase: done` (then prune) — clearing `office_hours` alone does not unblock the
+# source." So this script writes BOTH (`office_hours = null` AND
+# `phase = "done"`), and then removes the hold id from the source's `blocked_by`.
+#
+# HOLD-ID DERIVATION. The hold id is deterministic
+# (`tactic-hold-<kindSlug>-<source minus a leading "tactic-">`,
+# hold-node-decide.ts:105-119) but the kind→slug map (`KIND_SLUGS`,
+# hold-node-decide.ts:57-60) lives in that tool. Duplicating it here would be a
+# second source of truth — the exact reason hold-node:138-146 asks
+# hold-node-decide.ts for the id instead of computing it. So this script asks the
+# same tool. Its `--reason-file`/`--recommendation-file` inputs are required by
+# that CLI but irrelevant to the id, so placeholder files are passed; only
+# `.hold_id` is read from the decision.
+#
+# TWO COMMITS, NOT ONE — DELIBERATE. hold-node lands the hold node and the
+# source's edge in ONE graph-commit (hold-node:17-19, 301-323). This script
+# deliberately does NOT mirror that. graph-commit's layer-2 structural field
+# merge treats every `LIST_FIELDS` entry — `blocked_by` among them
+# (src/node-merge.ts:35-42) — with a base-free union-dedup rule
+# (`unionList`, src/node-merge.ts:102-112, applied at :161-166). A union can only
+# ADD: an entry this writer REMOVED but that still exists on the other side is
+# silently re-added, the merge reports `resolved: true`, and graph-commit reports
+# a successful land while the removal has been dropped. Removing a `blocked_by`
+# entry is precisely that shape. So:
+#
+#   Write A (hold: office_hours=null, phase=done) — its own graph-commit, then
+#     re-read off origin/main and assert it actually landed.
+#   Write B (source: blocked_by minus the hold id) — its own graph-commit, then
+#     re-read off origin/main and assert the edge is actually GONE.
+#
+# Splitting keeps the removal isolated in a commit of its own, and the post-land
+# re-read is what actually catches a silently-dropped removal (a reported-success
+# land whose edge survives exits 1 here instead of being believed). Do NOT
+# "simplify" this into a single graph-commit — that reintroduces the bug.
+#
+# The split has one obligation attached: graph-commit refuses to start when a
+# tracked file OUTSIDE the id set of that call is dirty
+# (assert_clean_outside_ids, graph-commit:1253-1307), so exactly ONE node file
+# may be mutated at a time. clean_node_file() below enforces that between the
+# two stages — see its comment.
+#
+# Fresh-origin/main invariant (mirrors clear-park:17-28 and hold-node:21-31):
+# every read-modify-write below operates on origin/main's CURRENT content, never
+# the possibly-stale local worktree copy — the invocation typically comes from a
+# far-behind PR-branch worktree. This script fetches origin/main, overwrites the
+# local node file(s) from it, THEN reads/mutates/writes, and passes graph-commit
+# a `--base <id>=<blobsha>` compare-and-swap token pinned to the blob it read.
+#
+# Write-failure rollback (mirrors clear-park:37-45 and hold-node:184-215): every
+# exit path that does not complete restores each `intentions/<id>.md` to the
+# state this script FOUND it in — from the pre-refresh copies captured below, so
+# the restore is exact even in a far-behind worktree. A leaked dirty node file
+# would trip graph-commit's assert_clean_outside_ids guard for every other
+# unrelated node in that worktree.
+#
+# Out of scope: pruning the resolved hold node. A prune while an inbound
+# `blocked_by` still names the hold is rejected by validate-graph, so prune
+# ordering is a separate concern (the owed-prune census), not this script's.
+#
+# Usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap|worktree-residue>]
+#
+# --kind defaults to `provision-conflict` (the Lane-3 case). It selects which
+#   hold id is resolved, since a source can in principle carry one hold per kind.
+#   The list must stay in sync with hold-node-decide.ts's HOLD_KINDS — a kind
+#   missing from it here is silently undrainable in practice: a human reading
+#   the usage omits --kind and resolves a hold that does not exist (an
+#   idempotent no-op), leaving the real hold in place.
+#
+# Stdout on success: exactly one line — `resolved <hold-id> (unblocked <source-id>)`.
+#
+# Idempotent no-op (exit 0, an informative stderr note, no graph-commit —
+# mirroring clear-park:30-35): the hold does not exist on origin/main, OR it is
+# already `office_hours: null` + `phase: done` AND the source carries no
+# `blocked_by` edge naming it. As in clear-park, the origin/main refresh itself
+# rewrites local files, so the no-op path restores them before exiting.
+#
+# Exit codes (hold-node's scheme, hold-node:49-51): 0 resolved and landed on main
+# (or an idempotent no-op); 1 a write, a compare-and-swap, or a post-land
+# verification failed (including an unreachable origin/main or a source absent
+# from it); 2 usage error.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+DECIDE_TS="$SCRIPT_DIR/hold-node-decide.ts"
+DUMP_NODE_TS="$SCRIPT_DIR/dump-node.ts"
+WRITE_NODE_TS="$SCRIPT_DIR/write-node.ts"
+GRAPH_COMMIT="$SCRIPT_DIR/graph-commit"
+
+USAGE="usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap|worktree-residue>]"
+
+SOURCE_ID=""
+KIND="provision-conflict"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --kind) KIND="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
+    -*) echo "resolve-hold: unknown option \"$1\"" >&2; echo "$USAGE" >&2; exit 2 ;;
+    *)
+      if [[ -n "$SOURCE_ID" ]]; then
+        echo "resolve-hold: unexpected extra positional argument \"$1\"" >&2
+        echo "$USAGE" >&2
+        exit 2
+      fi
+      SOURCE_ID="$1"; shift
+      ;;
+  esac
+done
+
+if [[ -z "$SOURCE_ID" || -z "$KIND" ]]; then
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+# Validate the node-id slug BEFORE it reaches a filesystem path or a git
+# pathspec. Everything below interpolates it into "$INTENTIONS_DIR/$id.md",
+# "$TMPD/orig/$id.md" and `origin/main:intentions/$id.md`, and restore_node's
+# `rm -f` targets the first of those — so a value containing `/` or `..` would
+# read and delete outside the intentions store. hold-node-decide.ts validates
+# only the DERIVED hold id, and only after this script's capture/refresh have
+# already used the raw value. Same guard the sibling id-taking scripts apply up
+# front (provision-node-worktree:61, dispatch-graph-execute:144).
+if [[ ! "$SOURCE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  echo "resolve-hold: invalid node id \"$SOURCE_ID\" (expected a lowercase slug like tactic-foo-bar)" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+TMPD="$(mktemp -d)" || { echo "resolve-hold: mktemp -d failed" >&2; exit 1; }
+
+# --- Pre-refresh copies + rollback ------------------------------------------
+# ORIG_<id> files hold each node file exactly as this script found it, captured
+# BEFORE the origin/main refresh overwrites it. Every non-completing exit path
+# (and the idempotent no-op) restores from them, so a failed or no-op invocation
+# leaves `git status --porcelain intentions/` as it was. Captured per id into
+# $TMPD/orig/, with a marker for "did not exist" so the restore is a delete.
+mkdir -p "$TMPD/orig"
+
+capture_orig() { # <id> — snapshot the pre-refresh copy of intentions/<id>.md
+  local id="$1"
+  if [[ -f "$INTENTIONS_DIR/$id.md" ]]; then
+    if ! cp "$INTENTIONS_DIR/$id.md" "$TMPD/orig/$id.md"; then
+      echo "resolve-hold: could not capture the pre-refresh copy of intentions/$id.md" >&2
+      exit 1
+    fi
+  else
+    : >"$TMPD/orig/$id.absent"
+  fi
+}
+
+# restore_node — put intentions/<id>.md back to its pre-refresh state. Copies to
+# a temp sibling and mv's into place only on success, so a failed copy never
+# truncates the node file to zero bytes (clear-park:85-99). A node this script
+# never captured is left alone.
+restore_node() {
+  local id="$1"
+  if [[ -f "$TMPD/orig/$id.md" ]]; then
+    if cp "$TMPD/orig/$id.md" "$INTENTIONS_DIR/$id.md.rollback"; then
+      mv "$INTENTIONS_DIR/$id.md.rollback" "$INTENTIONS_DIR/$id.md"
+    else
+      rm -f "$INTENTIONS_DIR/$id.md.rollback"
+    fi
+  elif [[ -f "$TMPD/orig/$id.absent" ]]; then
+    rm -f "$INTENTIONS_DIR/$id.md"
+  fi
+}
+
+# MUTATED — the set of ids whose intentions/<id>.md this run has written and
+# still owes a rollback for. An id is armed INSIDE refresh_from_origin, before
+# the redirection that overwrites the file (clear-park:127-128 arms its MUTATED
+# flag in the same position, and for the same reason: a failure part-way through
+# the `git show >` write must still be rolled back, and arming after the
+# function returns leaves exactly that window unguarded). An id is disarmed by
+# clean_node_file, which leaves the file matching HEAD and therefore owing
+# nothing.
+declare -A MUTATED=()
+HOLD_ID=""
+
+# restore_all — roll every node file this run still owes a rollback for back to
+# its pre-refresh state. Used by the EXIT trap and by the idempotent no-op paths.
+restore_all() {
+  local id
+  for id in "${!MUTATED[@]}"; do
+    restore_node "$id"
+  done
+  return 0
+}
+
+# Bash traps REPLACE (not stack) on the same signal, so this single EXIT trap
+# owns both the temp cleanup and the rollback. The MUTATED gate means a
+# pre-mutation failure never restores a file this script never wrote.
+trap '
+  rc=$?
+  if [[ $rc -ne 0 ]]; then
+    restore_all
+  fi
+  rm -rf "$TMPD"
+' EXIT
+
+# refresh_from_origin <id> — set REFRESHED_BLOB to origin/main's blob sha for
+# intentions/<id>.md and overwrite the local file with that content. Returns 1
+# (quietly) when the node does not exist on origin/main; the caller decides
+# whether that is an error or the idempotent no-op.
+REFRESHED_BLOB=""
+refresh_from_origin() {
+  local id="$1"
+  REFRESHED_BLOB=""
+  git -C "$REPO_ROOT" rev-parse -q --verify "origin/main:intentions/$id.md" >/dev/null 2>&1 || return 1
+  REFRESHED_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$id.md")"
+  # Arm the rollback BEFORE the redirection below truncates the file, not after
+  # this function returns: `> "$INTENTIONS_DIR/$id.md"` empties the file before
+  # `git show` writes a byte, so a failure here leaves a truncated or partial
+  # node file that the EXIT trap must restore.
+  MUTATED["$id"]=1
+  if ! git -C "$REPO_ROOT" show "origin/main:intentions/$id.md" > "$INTENTIONS_DIR/$id.md"; then
+    echo "resolve-hold: could not refresh intentions/$id.md from origin/main" >&2
+    exit 1
+  fi
+  return 0
+}
+
+# clean_node_file <id> — return intentions/<id>.md to whatever THIS worktree's
+# HEAD holds, so the file is not dirty, and disarm its rollback.
+#
+# WHY THIS EXISTS. graph-commit's assert_clean_outside_ids pre-flight
+# (graph-commit:1253-1307, invoked at :1413 before any tree mutation) refuses to
+# start when ANY tracked file outside the id set of THAT call is dirty. This
+# script deliberately lands its two writes in two SEPARATE graph-commit calls
+# (see the header), and it refreshes BOTH node files from origin/main before
+# either write — so without this, Write A (ids = the hold) starts with the
+# source file dirty and Write B (ids = the source) starts with the hold file
+# dirty. That is invisible from the main checkout, where HEAD tracks
+# origin/main, and fatal from the far-behind PR-branch worktree this script
+# normally runs in. So exactly ONE node file is left mutated at a time.
+#
+# `git checkout` — not the pre-refresh restore — is the correct target: once a
+# stage has landed, HEAD may already carry the new content, and putting the
+# pre-refresh copy back would itself leave the file dirty.
+clean_node_file() {
+  local id="$1"
+  if git -C "$REPO_ROOT" cat-file -e "HEAD:intentions/$id.md" 2>/dev/null; then
+    if ! git -C "$REPO_ROOT" checkout -- "intentions/$id.md"; then
+      echo "resolve-hold: could not restore intentions/$id.md to HEAD before the next graph-commit" >&2
+      exit 1
+    fi
+  else
+    rm -f "$INTENTIONS_DIR/$id.md"
+  fi
+  unset 'MUTATED[$id]'
+}
+
+# read_node_json <id> <tag> — dump the node through dump-node.ts (readNode, the
+# canonical reader) into $TMPD/<tag>/ and set NODE_JSON to the dumped JSON path.
+# Each call gets its own out-dir so repeated reads of the same id never collide.
+#
+# Deliberately NOT a command-substitution helper: it exits on failure, and an
+# `exit` inside `$(...)` would only kill the substitution subshell, leaving the
+# caller running with an EMPTY path — every downstream `jq` would then read
+# nothing, both the "yes"/"no" state flags would come out empty, both writes
+# would be skipped, and the script would print its success line and exit 0.
+# hold-node:102-104 records the same trap for its own decision helper.
+NODE_JSON=""
+read_node_json() {
+  local id="$1" tag="$2"
+  NODE_JSON=""
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --out-dir "$TMPD/$tag" "$id") >/dev/null; then
+    echo "resolve-hold: dump-node failed for $id" >&2
+    exit 1
+  fi
+  if [[ ! -f "$TMPD/$tag/$id.json" ]]; then
+    echo "resolve-hold: dump-node reported success for $id but wrote no JSON at $TMPD/$tag/$id.json" >&2
+    exit 1
+  fi
+  NODE_JSON="$TMPD/$tag/$id.json"
+}
+
+# --- Fresh-origin/main refresh (source) --------------------------------------
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "resolve-hold: could not fetch origin/main to refresh $SOURCE_ID before resolving" >&2
+  exit 1
+fi
+capture_orig "$SOURCE_ID"
+if ! refresh_from_origin "$SOURCE_ID"; then
+  echo "resolve-hold: intentions/$SOURCE_ID.md does not exist on origin/main — cannot resolve a hold on a node that is not landed" >&2
+  exit 1
+fi
+SOURCE_BLOB="$REFRESHED_BLOB"
+
+# --- Derive the hold id (via hold-node-decide.ts, never a local KIND_SLUGS) ---
+# The decision tool needs a reason and a recommendation file; neither influences
+# the derived id, so placeholders suffice. Only `.hold_id` is read.
+printf 'resolve-hold: placeholder (hold-id derivation only)\n' >"$TMPD/reason.txt"
+printf 'resolve-hold: placeholder (hold-id derivation only)\n' >"$TMPD/recommendation.txt"
+DECIDE_OUT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$DECIDE_TS" \
+  --source "$SOURCE_ID" --kind "$KIND" \
+  --reason-file "$TMPD/reason.txt" --recommendation-file "$TMPD/recommendation.txt") )"
+decide_rc=$?
+if [[ $decide_rc -ne 0 ]]; then
+  # hold-node-decide.ts exits 2 on its own usage errors (a bad --kind, a missing
+  # flag); anything else is an environment/read failure. Preserve the
+  # 2-means-usage contract (hold-node:108-115).
+  echo "resolve-hold: hold-node-decide failed for $SOURCE_ID (rc=$decide_rc)" >&2
+  exit $(( decide_rc == 2 ? 2 : 1 ))
+fi
+HOLD_ID="$(jq -r '.hold_id' <<<"$DECIDE_OUT")"
+[[ -n "$HOLD_ID" && "$HOLD_ID" != "null" ]] || {
+  echo "resolve-hold: could not derive the hold id for $SOURCE_ID" >&2; exit 1; }
+
+# --- Fresh-origin/main refresh (hold) ----------------------------------------
+capture_orig "$HOLD_ID"
+if ! refresh_from_origin "$HOLD_ID"; then
+  # Idempotent no-op: there is no hold to resolve. Nothing lands, so undo the
+  # source refresh before exiting 0 (the EXIT trap only restores on non-zero).
+  restore_all
+  echo "resolve-hold: no $KIND hold ($HOLD_ID) on origin/main for $SOURCE_ID; nothing to do" >&2
+  exit 0
+fi
+HOLD_BLOB="$REFRESHED_BLOB"
+
+# --- Current state -----------------------------------------------------------
+read_node_json "$HOLD_ID" read-hold;     HOLD_JSON="$NODE_JSON"
+read_node_json "$SOURCE_ID" read-source; SOURCE_JSON="$NODE_JSON"
+if ! HOLD_RESOLVED="$(jq -r 'if (.office_hours == null and .phase == "done") then "yes" else "no" end' "$HOLD_JSON")"; then
+  echo "resolve-hold: could not read the resolution state of $HOLD_ID from $HOLD_JSON" >&2
+  exit 1
+fi
+if ! SOURCE_HAS_EDGE="$(jq -r --arg h "$HOLD_ID" 'if (.blocked_by | index($h)) != null then "yes" else "no" end' "$SOURCE_JSON")"; then
+  echo "resolve-hold: could not read the blocked_by state of $SOURCE_ID from $SOURCE_JSON" >&2
+  exit 1
+fi
+
+if [[ "$HOLD_RESOLVED" == "yes" && "$SOURCE_HAS_EDGE" == "no" ]]; then
+  restore_all
+  echo "resolve-hold: $HOLD_ID is already resolved (office_hours null, phase done) and $SOURCE_ID carries no edge to it; nothing to do" >&2
+  exit 0
+fi
+
+# --- Write A: resolve the hold ------------------------------------------------
+# office_hours = null AND phase = "done" — both, per RESOLUTION_SENTENCE
+# (hold-node-decide.ts:73-76). Landed in its OWN graph-commit (see the header).
+#
+# Both node files are read by now, so put the SOURCE file back to HEAD first:
+# this graph-commit's id set is the hold alone, and its assert_clean_outside_ids
+# pre-flight refuses to start on any dirty tracked file outside that set (see
+# clean_node_file). The source is re-written from SOURCE_JSON in Write B below.
+clean_node_file "$SOURCE_ID"
+
+if [[ "$HOLD_RESOLVED" == "no" ]]; then
+  if ! jq '.office_hours = null | .phase = "done"' "$HOLD_JSON" >"$TMPD/hold-resolved.json"; then
+    echo "resolve-hold: could not compose the resolution edit for $HOLD_ID" >&2
+    exit 1
+  fi
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPD/hold-resolved.json") >/dev/null; then
+    echo "resolve-hold: write-node failed for $HOLD_ID (office_hours/phase resolution)" >&2
+    exit 1
+  fi
+  if ! (cd "$REPO_ROOT" && "$GRAPH_COMMIT" --base "$HOLD_ID=$HOLD_BLOB" \
+          -m "graph: resolve hold $HOLD_ID (office_hours cleared, phase done)" "$HOLD_ID"); then
+    echo "resolve-hold: graph-commit failed for $HOLD_ID; the resolution write was rolled back" >&2
+    exit 1
+  fi
+
+  # --- Verify A: re-read the hold off a FRESH origin/main --------------------
+  if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+    echo "resolve-hold: could not fetch origin/main to verify the resolution of $HOLD_ID" >&2
+    exit 1
+  fi
+  if ! refresh_from_origin "$HOLD_ID"; then
+    echo "resolve-hold: $HOLD_ID is absent from origin/main after its resolution landed — the write did not survive" >&2
+    exit 1
+  fi
+  read_node_json "$HOLD_ID" verify-hold; VERIFY_HOLD_JSON="$NODE_JSON"
+  if [[ "$(jq -r 'if (.office_hours == null and .phase == "done") then "yes" else "no" end' "$VERIFY_HOLD_JSON")" != "yes" ]]; then
+    echo "resolve-hold: post-land verification failed for $HOLD_ID — origin/main still does not carry office_hours: null AND phase: done (got office_hours=$(jq -c '.office_hours' "$VERIFY_HOLD_JSON") phase=$(jq -c '.phase' "$VERIFY_HOLD_JSON"))" >&2
+    exit 1
+  fi
+fi
+
+# --- Write B: drop the hold id from the source's blocked_by -------------------
+# The inverse of hold-node:281-299 (dump-node → jq → write-node → graph-commit),
+# in its OWN graph-commit so the removal is never co-merged — see the header's
+# layer-2 union caveat.
+#
+# The hold file is either still carrying Write A's origin/main refresh or, when
+# Write A was skipped, the refresh from the state read above. Either way this
+# graph-commit's id set is the SOURCE alone, so the hold must be back at HEAD
+# before it starts (see clean_node_file). Nothing below reads the hold file —
+# HOLD_JSON and the verification are already in hand.
+clean_node_file "$HOLD_ID"
+
+if [[ "$SOURCE_HAS_EDGE" == "yes" ]]; then
+  if ! jq --arg h "$HOLD_ID" '.blocked_by = (.blocked_by | map(select(. != $h)))' \
+        "$SOURCE_JSON" >"$TMPD/src-edge.json"; then
+    echo "resolve-hold: could not compose the blocked_by removal for $SOURCE_ID" >&2
+    exit 1
+  fi
+  # Re-arm the source's rollback: clean_node_file above disarmed it, and the
+  # write below dirties the file again.
+  MUTATED["$SOURCE_ID"]=1
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPD/src-edge.json") >/dev/null; then
+    echo "resolve-hold: write-node failed for $SOURCE_ID (blocked_by removal)" >&2
+    exit 1
+  fi
+  if ! (cd "$REPO_ROOT" && "$GRAPH_COMMIT" --base "$SOURCE_ID=$SOURCE_BLOB" \
+          -m "graph: unblock $SOURCE_ID (drop blocked_by $HOLD_ID)" "$SOURCE_ID"); then
+    echo "resolve-hold: graph-commit failed for $SOURCE_ID; the blocked_by removal was rolled back" >&2
+    exit 1
+  fi
+
+  # --- Verify B: re-read the source off a FRESH origin/main ------------------
+  # This is the check that catches a layer-2 union silently re-adding the removed
+  # entry while graph-commit reported a successful land.
+  if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+    echo "resolve-hold: could not fetch origin/main to verify the unblocking of $SOURCE_ID" >&2
+    exit 1
+  fi
+  if ! refresh_from_origin "$SOURCE_ID"; then
+    echo "resolve-hold: $SOURCE_ID is absent from origin/main after the blocked_by removal landed — the write did not survive" >&2
+    exit 1
+  fi
+  read_node_json "$SOURCE_ID" verify-source; VERIFY_SOURCE_JSON="$NODE_JSON"
+  if [[ "$(jq -r --arg h "$HOLD_ID" 'if (.blocked_by | index($h)) != null then "yes" else "no" end' "$VERIFY_SOURCE_JSON")" == "yes" ]]; then
+    echo "resolve-hold: post-land verification failed for $SOURCE_ID — origin/main still carries the blocked_by edge to $HOLD_ID (a reported-success land whose field REMOVAL was dropped; see this script's header)" >&2
+    exit 1
+  fi
+fi
+
+# Verify B's refresh left the source file carrying origin/main's content, which
+# in a far-behind PR-branch worktree is a dirty tracked file — the exact leak
+# this script's header says it must never produce. Put it back to HEAD.
+clean_node_file "$SOURCE_ID"
+
+echo "resolved $HOLD_ID (unblocked $SOURCE_ID)"
+exit 0

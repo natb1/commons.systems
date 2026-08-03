@@ -10,8 +10,11 @@ not hook-enforced — so no hook alternative is proposed.
 The plan must be self-contained: a fresh session with no memory of the planning
 session must be able to execute it from the plan text alone.
 
-Required sections match the `/plan-issue` plan-comment schema
-(`.claude/skills/plan-issue/SKILL.md`, "Plan-comment output schema", lines 500–527):
+Required sections match the `/align-tactics` plan schema — the `PLAN BODY
+SCHEMA` block inlined in `buildPlanPrompt`
+(`.claude/workflows/align-tactics.js`), summarized in
+`.claude/skills/align-tactics/SKILL.md` under the "Plan each claude-eligible
+tactic" bullet of "Step 1 — Build `args` and invoke the Workflow":
 
 - **Context** — why the change is being made (problem, need, intended outcome).
 - **Scope** per unit — what files/behavior change, what is explicitly out of

@@ -30,6 +30,15 @@ Run `gh` commands (directly or via `post-pr-comment.sh` / `dispatch-complete-pha
 and `npx`-backed scans (CodeQL, the dependency audit) with
 `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
+## Parameters
+
+The caller supplies:
+
+| Parameter | Meaning |
+|---|---|
+| `node_id` | The intention node id this review pass operates on (also the worktree branch name). Passed to `dispatch-derive-node-target` as the front-door target. On the legacy issue lane this is the `<N>-…` branch instead, and the node front door is not used. |
+| `pr_num` | The open PR under review. Required — review-fix never runs without an open PR; a miss is a hard stop. |
+
 ## Idempotency preamble
 
 Before running any step, hydrate the PR and diff context in **one** call. This
@@ -46,17 +55,36 @@ case "$BRANCH" in
     N="${BRANCH%%-*}"; TARGET_KIND=issue ;;
   *)
     # Graph-native node lane: worktree named after the intention node id.
+    # The shared front door validates the id, confirms the branch matches, snapshots
+    # the node from origin/main, gates on phase: review, and resolves the open PR
+    # (--pr-mode required — review-fix never runs without one). It emits the node
+    # phase, PR number, the full frontmatter as compact JSON, and the raw body.
     NODE_ID="$BRANCH"
-    git fetch origin main --quiet
-    NODE_MD=$(git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -xO 2>/dev/null) || {
-      echo "/review-fix: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
-      exit 1
-    }
-    NODE_PHASE=$(printf '%s\n' "$NODE_MD" | sed -n 's/^phase: *//p' | head -1)
-    if [ "$NODE_PHASE" != "review" ]; then
-      echo "/review-fix: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'review'" >&2
-      exit 1
-    fi
+    # Capture the front door's stdout (the success payload) separately from its
+    # stderr (its detailed failure message, which names the actual phase on a
+    # gate mismatch — stdout is empty on any non-zero exit).
+    DERIVE_ERR="tmp/derive-$NODE_ID.err"
+    DERIVE_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-derive-node-target \
+      "$NODE_ID" --expect-phase review --pr-mode required 2>"$DERIVE_ERR")
+    case $? in
+      0) ;;
+      1|2)
+        echo "/review-fix: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
+        exit 1 ;;
+      3)
+        # Phase mismatch — the front door's stderr already names the persisted phase.
+        echo "/review-fix: node '$NODE_ID' is not at phase 'review' at origin/main: $(cat "$DERIVE_ERR")" >&2
+        exit 1 ;;
+      4)
+        # --pr-mode required found no open PR — preserve review-fix's plain hard stop.
+        echo "/review-fix: node '$NODE_ID' has no open PR — review-fix requires one" >&2
+        exit 1 ;;
+    esac
+    PR_NUM=$(printf '%s\n' "$DERIVE_OUT" | sed -n 's/^PR: *//p' | head -1)
+    [ "$PR_NUM" = none ] && PR_NUM=""
+    NODE_JSON=$(printf '%s\n' "$DERIVE_OUT" | sed -n '/^=== NODE-JSON ===$/,/^=== NODE-BODY ===$/p' \
+      | sed '1d;$d')
+    NODE_BODY=$(printf '%s\n' "$DERIVE_OUT" | sed -n '/^=== NODE-BODY ===$/,$p' | sed '1d')
     N="$NODE_ID"; TARGET_KIND=node ;;
 esac
 ```
@@ -72,15 +100,9 @@ case "$TARGET_KIND" in
     ;;
   node)
     # The branch IS the node id, not an issue-prefixed name — dispatch-find-pr's
-    # issue→PR branch-prefix lookup does not apply. Resolve the PR by branch
-    # head instead (same primitive dispatch-sweep and /office-hours use for a
-    # node-id worktree; review never runs without an open PR, so a miss here is
-    # a real error).
-    PR_NUM=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
-    if [ -z "$PR_NUM" ]; then
-      echo "/review-fix: node '$N' has no open PR — review-fix requires one" >&2
-      exit 1
-    fi
+    # issue→PR branch-prefix lookup does not apply. `PR_NUM` is already bound by the
+    # front door above (`--pr-mode required`), which resolved the open PR by branch
+    # head and already hard-stopped on a miss — so no branch-head lookup happens here.
     PACK_TARGET="$PR_NUM"
     PACK_FLAGS=(--pr --phase-log --diff --pr-is-number)
     ;;
@@ -123,14 +145,17 @@ output — do not re-resolve any of them later:
 On the node lane every step runs unchanged except three re-keyed seams:
 
 - **Completion** — invoke `transition-node "$N" --set-pr "$PR_NUM"` (records the
-  `reviewed` marker in `execution.markers` and arms gh auto-merge as one
-  state-only graph-commit), **not** `dispatch-complete-phase` /
-  `dispatch-mark-complete` / `dispatch-finalize-phase`.
+  `reviewed` marker in `execution.markers` as one state-only graph-commit; it does
+  **not** arm or perform any merge), **not** `dispatch-complete-phase` /
+  `dispatch-mark-complete` / `dispatch-finalize-phase`. Merging is deferred to the
+  tick's `graph-auto-merge` reconciler, keyed off the `reviewed` marker.
 - **Deferred findings (Step 5)** — deferred/security follow-ups become **draft
   tactic nodes**, not gh issues.
 - **Escalation** — write the reason to `$CLAUDE_JOB_DIR/office-hours-reason`
-  (and best-next-steps to `.../office-hours-recommendation`); the Stop hook parks
-  via `park-node`.
+  (and best-next-steps to `.../office-hours-recommendation`); `dispatch-tick`'s
+  `terminal_without_disposition_sweep` parks via `park-node`. Also write the already-bound `PR_NUM` to
+  `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic tempfile+`mv` write) so the
+  park records `execution.pr` (tactic-office-hours-pr-custody).
 
 **See `references/node-lane.md`** for the full re-keyed seams and the scoped
 node-lane re-entry marker check.
@@ -154,12 +179,12 @@ left stranded — the flush that lets the router resolve `mergeable == MERGEABLE
 and promote the PR to ready).
 
 On the node lane there is no `dispatch:reviewed` label — check instead for a
-`reviewed` item in the node's `execution.markers` (a **scoped** match, not a
-naive `grep`; see `references/node-lane.md`). If present, this is an interrupted
-prior run — skip Steps 1–6 to Step 7's terminal flush, exactly as the label check
-routes the issue lane. On either re-entry path the Workflow has not run, so Step 7
-skips the phase-log write and the outcome-envelope emit and writes the marker.
-Otherwise run all steps in order.
+`reviewed` item in the node's `execution.markers`, via a `jq` query against the
+front door's structured `NODE_JSON` (see `references/node-lane.md`). If present,
+this is an interrupted prior run — skip Steps 1–6 to Step 7's terminal flush,
+exactly as the label check routes the issue lane. On either re-entry path the
+Workflow has not run, so Step 7 skips the phase-log write and the
+outcome-envelope emit and writes the marker. Otherwise run all steps in order.
 
 ## Steps
 
@@ -236,7 +261,15 @@ command block, normalization rules, and the per-finder roster and descriptions.
 ### 2. Build `args` and invoke the Workflow
 
 Collect the fields for the Workflow invocation. Parse `Closes #N` from the pack's
-`=== PR ===` body to resolve `implementing_issues`:
+`=== PR ===` body to resolve `implementing_issues`. Workflow scripts cannot call
+`new Date()` / `Date.now()` themselves (the runtime throws — it would break
+resume), so capture the instrument-verification lower-bound timestamp here in
+bash, immediately before invoking the Workflow, and pass it through as
+`run_started_at`:
+
+```bash
+RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+```
 
 ```
 args = {
@@ -248,6 +281,7 @@ args = {
   app_or_rules:        <true|false>,
   prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
+  run_started_at:      <RUN_STARTED_AT>, // ISO8601 lower bound for the instrument-invocation transcript verifier
   security_note:       <string or omit>, // set for empty/docs/tests; omit for code
   prior_phase_log:     <string or omit> // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
 }
@@ -270,6 +304,7 @@ result = {
   security_followup_input: [ ...codeql/npm out-of-scope subset... ],
   verify_report:        [ {id, location, verdict, skeptic_votes, rationale} ],
   deviation:            <bool>,
+  instrument_failures:  [ {instrument, reason} ],
   coverage_incomplete:  <bool>,
   coverage_note?:       <string>,
   security_note?:       <string>

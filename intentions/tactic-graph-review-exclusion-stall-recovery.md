@@ -23,18 +23,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-graph-review-exclusion-stall-recovery
   pr: 2920
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-22
-    attempt: 1
-    pushed_sha: 6fd600c3ad07ddc35d63a6497cb94d7019ef3465
+  fix: null
+  completion:
+    mergedAt: 2026-07-29T14:06:46Z
+    mergeCommitSha: 3b62fbd5d087158e354a9fa0460b59ba0b6d5a74
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -317,4 +320,25 @@ posture the sibling reconcilers were verified under.
   (`origin/main` moves it to `CONFLICTING`, or a required re-run turns CI
   persistently red), confirm `dispatch-select-tick`'s next tick emits a
   `review-stall: recovered <id> -> fix (...)` line and that the node lands
-  with `execution.fix` set.
+  with `execution.fix` set. **QA reconfirmation (2026-07-25, `/qa-fix`)**:
+  re-verified this item is still unassertable at merge time; no live fixture
+  exists to drive it in CI.
+
+- id: 9; title: Fix/re-arm cycle is bounded — no thrash on a node that keeps
+  regressing; url_path: current; expected_outcome: A node that cycles through
+  `enter-fix -> clear-fix -> re-stall` repeatedly (e.g. a PR whose CI stays
+  red for a cause the fix lane cannot resolve) eventually stops retrying
+  rather than spamming state commits on `main` indefinitely; finding
+  (surfaced by `/qa-fix` code inspection, 2026-07-25): neither
+  `reconcile-graph-review-stall` nor `needsReviewStallRecovery` carries an
+  attempt cap of its own — the `execution.fix != null` skip in the
+  enumeration only prevents double-entering an interrupt that is already
+  active, it does not bound how many times a single node can cycle through
+  the interrupt over its lifetime. Whether this needs its own cap or is
+  already bounded by the existing `/fix-checks` attempt-cap machinery
+  (`dispatch:fix-checks-attempt-<n>` / `--park-if-capped`) that the fix lane
+  already enters through is not verifiable without a real multi-cycle
+  production case. After this PR lands, watch for `main` commit spam from
+  repeated `review-stall: recovered <id> -> fix (...)` lines on the same
+  `<id>`; if the existing fix-lane attempt cap does not catch it, add one to
+  the reconciler.

@@ -122,7 +122,7 @@ run_sut() {
   prev_dir=$(pwd)
   cd "$REPO"
   set +e
-  OUT=$(PATH="$SHIM_BIN:$PATH" "$SUT" 2>&1)
+  OUT=$(PATH="$SHIM_BIN:$PATH" "$SUT" "$@" 2>&1)
   RC=$?
   set -e
   cd "$prev_dir"
@@ -232,5 +232,64 @@ assert_eq "deletion: exit 0" "0" "$RC"
 assert_eq "deletion: working tree clean after run (nothing resurrected/staged)" "" "$(git -C "$REPO" status --porcelain)"
 [ ! -f "$REPO/ws/src/extra.ts" ] && _t6_extra=absent || _t6_extra=present
 assert_eq "deletion: deleted file not left on disk" "absent" "$_t6_extra"
+
+# --- Test 7: addition branch — HEAD adds a file origin/main does not have -----
+# Mirror image of Test 6. `git checkout origin/main -- <ws>` reverts the files
+# origin/main has but cannot delete one it lacks, so a branch-new file used to
+# survive into the baseline probe at HEAD content while everything it depends on
+# reverted. The baseline then failed on the branch's own new code and the whole
+# workspace was skipped as "pre-existing errors" — so ANY branch that added a
+# file silently disabled typechecking for that workspace, and a real error in it
+# was reported as a pass. Here the added file is the one carrying the error: it
+# must surface as a regression, not a skip.
+echo "Test 7: addition branch -> error in a branch-new file is detected, not skipped"
+make_repo ws clean clean
+write_state dirty "$REPO/ws/src/added.ts"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "head (add added.ts carrying the error)"
+make_shims "$REPO"
+run_sut
+[ "$RC" -ne 0 ] && _t7_rc=nonzero || _t7_rc=zero
+assert_eq "addition: exit non-zero" "nonzero" "$_t7_rc"
+assert_contains "addition: reported as a regression" "Typecheck regressions" "$OUT"
+case "$OUT" in
+  *pre-existing*) _t7_skip=skipped ;;
+  *) _t7_skip=not-skipped ;;
+esac
+assert_eq "addition: baseline not poisoned by the added file" "not-skipped" "$_t7_skip"
+assert_eq "addition: working tree clean after run" "" "$(git -C "$REPO" status --porcelain)"
+[ -f "$REPO/ws/src/added.ts" ] && _t7_added=present || _t7_added=absent
+assert_eq "addition: added file restored after baseline probe" "present" "$_t7_added"
+
+# --- Test 8: --app with a non-existent workspace dir ---
+# Regression guard. `--app` takes a repo-root-relative workspace DIRECTORY, but
+# the natural typo is the bare package name (`--app intentionsutil` instead of
+# `--app packages/intentionsutil`). A non-existent dir has no tsconfig.json, so
+# it used to land in the "no tsconfig.json — skipping (non-TS workspace)" branch
+# and the run exited 0 reporting a benign non-TS skip — indistinguishable from a
+# real pass, silently verifying nothing about the workspace the caller named.
+echo "Test 8: --app with a non-existent dir -> hard error, not a silent skip"
+make_repo ws clean clean
+make_shims "$REPO"
+run_sut --app definitely-not-a-workspace
+[ "$RC" -ne 0 ] && _t8_rc=nonzero || _t8_rc=zero
+assert_eq "bad --app: exit non-zero" "nonzero" "$_t8_rc"
+assert_contains "bad --app: error names the bad value" "definitely-not-a-workspace" "$OUT"
+assert_contains "bad --app: error explains the expected form" "repo-root-relative" "$OUT"
+case "$OUT" in
+  *"non-TS workspace"*) _t8_silent=silently-skipped ;;
+  *) _t8_silent=errored ;;
+esac
+assert_eq "bad --app: not misreported as a non-TS workspace" "errored" "$_t8_silent"
+
+# --- Test 9: --app with a real workspace dir still works ---
+# Pins the guard to rejecting only paths that do not exist: the valid explicit
+# form must still run a full baseline-vs-HEAD check.
+echo "Test 9: --app with a real dir -> still typechecks normally"
+make_repo ws clean clean
+make_shims "$REPO"
+run_sut --app ws
+assert_eq "good --app: exit 0" "0" "$RC"
+assert_contains "good --app: workspace reported as passing" "ws: typecheck passed" "$OUT"
 
 report_results

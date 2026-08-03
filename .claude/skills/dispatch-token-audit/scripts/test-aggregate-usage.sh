@@ -661,7 +661,7 @@ assert_eq 'sessions[sess-router].outcome_rates.fix_rate is null' 'null' \
 # ---------------------------------------------------------------------------
 # Persist-wiring tests (Unit 2).  These use a fake writer stub controlled via
 # DISPATCH_AUDIT_AGGREGATES_WRITER, mirroring the DISPATCH_USAGE_SAMPLES_WRITER
-# pattern from test-dispatch-scripts.sh.
+# pattern from the per-SUT test-*.sh files sharing dispatch-test-fixture.sh.
 # ---------------------------------------------------------------------------
 
 echo ""

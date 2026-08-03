@@ -37,6 +37,7 @@ office_hours:
     apex question; create tradition-macintyre."
   since: 2026-07-07
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

@@ -62,8 +62,9 @@
 //     take the member-email list from DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE,
 //     assemble the doc with Timestamps rendered as ISO strings, print it as
 //     pretty JSON to stdout, exit 0. Neither firebase-admin nor
-//     @google-cloud/secret-manager is imported, so the bash unit tests
-//     (test-dispatch-scripts.sh) stay dependency-free.
+//     @google-cloud/secret-manager is imported, so the bash unit tests (the
+//     per-SUT test-*.sh files sharing dispatch-test-fixture.sh) stay
+//     dependency-free.
 //   real mode (no --dry-run): dynamically import @google-cloud/secret-manager and
 //     fetch the member-email list from the OFFICE_HOURS_MEMBER_EMAILS secret
 //     (fail-fast, before any firebase-admin init), then dynamically import

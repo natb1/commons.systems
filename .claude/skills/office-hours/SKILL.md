@@ -19,8 +19,12 @@ two ways:
    completion but surfaced a deviation from the approved plan or the acceptance
    criteria; or `/plan-issue` hit genuine ambiguity it could not resolve and
    called `dispatch-mark-deviation`. In both cases the phase skill skipped its
-   `phase-completed` marker and wrote `office-hours-reason`; the Stop hook
-   (`dispatch-stop.sh`) applied `dispatch:office-hours` to the issue.
+   `phase-completed` marker and wrote `office-hours-reason`. On this legacy issue
+   lane the label is applied IN-SESSION by `dispatch-mark-deviation` itself, via
+   its `dispatch-apply-office-hours <N>` call. On the graph-node lane there is no
+   label at all: a session that ends owing a disposition is parked to the node's
+   `office_hours` field by `dispatch-tick`'s `terminal_without_disposition_sweep`,
+   which is gh-free and skips `<N>-slug` issue workers entirely.
 
 This skill is a **review-and-recommend dispatcher**. It runs two ways: a human
 types `/office-hours` inside an existing Claude session, or the `office-hours`
@@ -315,6 +319,21 @@ selecting the parked node from the graph. A parked node is one whose
 Read-only and kind-aware: surface the node's parked context, review-and-recommend,
 report where to engage, and stop. No graph write, no label, no phase action.
 
+For a tactic node, `office-hours-graph` provisions (reuse-then-create) the
+node-id worktree itself before launch and launches the session named after the
+bare node id (not `office-hours-<node-id>`), the same name convention
+worker/phase sessions use. Provisioning does **not** guarantee freshness: it
+reuses an existing worktree as-is, else checks out the remote `<node-id>` branch
+at its own head, and only falls back to a fresh branch off `origin/main` when
+neither exists. The first two arms can be arbitrarily far behind main — a park
+reason of merge conflict or stale scope makes that the likely case — so the
+freshness check in step 5 applies to every session, freshly launched or not.
+This makes the session visible to liveness detection: an untargeted
+`/office-hours` launch skips a parked node that already has a live session
+(office-hours or worker) and selects the next-ranking parked node instead, and
+an explicit `/office-hours <node-id>` naming an already-live node errors (the
+`held` directive) rather than falling through or double-launching.
+
 1. **Read the node.** Read `intentions/<node-id>.md` frontmatter with the Read
    tool — offline, no `gh`. If `office_hours` is null the node is not parked:
    report that and **stop**.
@@ -366,12 +385,20 @@ report where to engage, and stop. No graph write, no label, no phase action.
 5. **Report where to engage (kind-aware).**
 
    - **Strategy node** — no worktree, no PR. Engage by refining the node itself:
-     `/align-strategy` or `/align-tactics` on `<node-id>`.
+     `/align-strategy` or `/align-tactics` on `<node-id>`. `office-hours-graph`
+     provisions no worktree for a strategy node (nor for any other non-tactic
+     kind) and launches it at the repo root — only the bare node-id session name
+     is shared with the tactic lane.
    - **Tactic node** — name the item's worktree `.claude/worktrees/<node-id>`
      ("engage here" when the current session's cwd is already it) and
-     `execution.pr` when non-null. Advise the human that a parked worktree may
-     have gone stale while parked, so before resuming analysis there they
-     should run `assert-worktree-fresh`
+     `execution.pr` when non-null. `office-hours-graph` provisions/reuses this
+     worktree before launch, but that is **not** a freshness guarantee — it
+     reuses an existing worktree as-is and otherwise prefers the remote
+     `<node-id>` branch at its own head; only the last fallback branches off
+     `origin/main`. A parked worktree is therefore stale by default (parked on a
+     merge conflict or stale scope, or idle while main moved on). Before
+     resuming analysis there — always, freshly launched or not — advise the
+     human to run `assert-worktree-fresh`
      (`.claude/skills/dispatch-propagate/scripts/assert-worktree-fresh`) or
      freshen via `git fetch origin main && git merge origin/main` — a non-zero
      exit (stale checkout **or** failed fetch) means freshen first. This is
@@ -379,7 +406,14 @@ report where to engage, and stop. No graph write, no label, no phase action.
 
    Un-parking is an explicit human graph edit — clear `office_hours` via
    `write-node` + `graph-commit`. There is no strip hook in this lane, and this
-   skill never un-parks.
+   skill never un-parks. When the item has a PR, name the disposition command
+   the human can run once they decide (tactic-office-hours-pr-custody):
+   `packages/intentionsutil/scripts/resolve-park <node-id> --ratify` (promote
+   the PR out of draft and un-park) or `... --reject [note]` (close the PR and
+   un-park). This skill stays **read-only** — it names the command, never runs
+   it; the human runs it themselves at a terminal (or asks this session to run
+   it on their behalf, which then needs `dangerouslyDisableSandbox: true` for
+   its `gh` calls, consistent with the `gh pr diff` call above).
 
 6. **Stop.** No phase transition, no un-park, no fix, no label, no graph write.
 

@@ -20,17 +20,60 @@ another class.
 A node target files **nothing anywhere**. Instead, append a `## needs-main
 residue` section to the tactic's **own body** (`intentions/<node-id>.md` —
 bodies are authoritative for tactics), one entry per `needs-main` item with
-its `id`, `title`, `url_path`, `expected_outcome`, and `finding`. That append
-rides in the Step-4 state-only completion commit (the `transition-node` write);
-the reconciler then routes the merged tactic to its `main-qa` phase (the
-transition writer picks `qa → main-qa` because the residue section is present),
-where `tactic-main-qa-phase`'s handler owns verification. Only
-machine/browser-verifiable items become residue: verifiability is triaged here
-at record time (the `route` computation below already classifies every item),
-and a prod observation needing human judgment stays `needs-human` →
-`office_hours` (the Escalation seam), never residue. This makes the legacy
-boot-then-reject waste structurally impossible on the node lane. Skip the rest
-of this step; the legacy lane (`TARGET_KIND=issue`) runs it unchanged.
+its `id`, `title`, `url_path`, `expected_outcome`, `finding`, and a
+`Verifiability:` sub-line (see below). That append rides in the Step-4
+state-only completion commit (the `transition-node` write),
+which still advances `qa → review` — the residue section does **not** divert the
+phase, and there is no `qa → main-qa` edge. `main-qa` is post-merge by
+definition, so the residue is drained only after review merges the PR: the
+`review → main-qa` edge fires (`forwardPhase` in
+`packages/intentionsutil/src/transitions.ts`, or the reconciler's
+`reconcileMergedPhase` when the merge lands out of band), and
+`tactic-main-qa-phase`'s handler owns verification there.
+
+Verifiability is triaged here at record time (the `route` computation below
+already classifies every item). Machine-verifiable means checkable by **any**
+tool the autonomous lane can run — a deployed-URL browser observation, but
+equally a `git`, `journalctl`, log, `jq`, `grep`, `ls`, filesystem or test-run
+check. Reachability by Claude-in-Chrome is **not** the criterion: an item whose
+check is a repo/journal/log/shell observation — and whose `url_path` is
+therefore a placeholder such as `current` rather than a route — **is**
+machine-verifiable and **does** become residue. An item is author-required
+(`needs-human` → `office_hours`, the Escalation seam, never residue) **only if
+it cannot be machine-checked at all**: it needs private credentials/accounts
+Claude lacks, a subjective product/UX judgment, or the user's product intent.
+This makes the legacy boot-then-reject waste structurally impossible on the
+node lane.
+
+### The `Verifiability:` sub-line (interim convention)
+
+Each residue bullet carries a `Verifiability:` sub-line alongside its expected
+outcome and finding. It is valued exactly one of:
+
+- `MACHINE` — settleable by a check the autonomous lane can run (browser **or**
+  shell/git/journal/log/filesystem).
+- `AUTHOR` — cannot be machine-checked at all (private credentials/accounts,
+  subjective product/UX judgment, the user's product intent).
+- `WAIT` — a valid machine check whose event has not occurred yet (deploy lag,
+  an accumulation that needs N more ticks). State the awaited event.
+
+**Default:** `MACHINE`. `AUTHOR` requires naming which of the three barriers
+applies. "The browser cannot reach it" is never a barrier.
+
+**Optional `Check:` sub-line** for a `MACHINE` item — the concrete command or
+observation recipe (e.g. `journalctl -u dispatch-tick --since -2h | grep
+'sweep'`), so the drain runs it rather than re-deriving it. Optional because
+residue already on `origin/main` predates this convention; a lane that finds no
+`Check:` derives one from the expected outcome.
+
+**Retirement:** this sub-line retires **with** the `## needs-main residue` body
+section itself, when the standalone `tactic-mainqa-*` node shape
+(`intentions/tactic-mainqa-record-time-routing.md`) is live and `owner: ai` /
+`owner: human` carries the sort per node. It is an interim convention, not a
+second permanent mechanism.
+
+Skip the rest of this step; the legacy lane (`TARGET_KIND=issue`) runs it
+unchanged.
 
 ## Legacy lane (`TARGET_KIND=issue`)
 
@@ -60,12 +103,12 @@ follow-up via `/file-issue` from a dispatch phase" recipe (subagent fan-out,
 
    - `autonomous` (apply `main-qa` only; **withhold** `dispatch:office-hours`
      so the router routes the follow-up to `/qa-main`) — when verification is
-     an **objective check observable on public deployed prod** that
-     `/qa-main`'s read-only Claude-in-Chrome flow can perform: hitting a
-     deployed public URL and checking deployed behavior, element-or-text
-     presence, console errors, network responses, or public analytics. **No**
-     auth wall, **no** private credentials/accounts, **no** subjective
-     product/UX judgment.
+     an **objective check any tool the autonomous lane can run** can settle:
+     hitting a public deployed URL and checking deployed behavior,
+     element-or-text presence, console errors, network responses, or public
+     analytics, **or** a repo/journal/log/shell/filesystem check (`git`,
+     `journalctl`, `jq`, `grep`, `ls`, a test run). **No** auth wall, **no**
+     private credentials/accounts, **no** subjective product/UX judgment.
    - `human` (apply `main-qa` + `dispatch:office-hours`, unchanged) — when
      verification needs private credentials/accounts Claude lacks (an
      auth-walled view), subjective product/UX judgment, or the user's product
@@ -73,7 +116,18 @@ follow-up via `/file-issue` from a dispatch phase" recipe (subagent fan-out,
    - **Uncertain → `human`** (conservative default). The asymmetry is
      explicit: a wrongly-`autonomous` item is recoverable via `/qa-main`'s
      cannot-verify valve, but a verification that needs the user must never be
-     silently skipped.
+     silently skipped. Not reachable by the browser is never a source of that
+     uncertainty — a check no browser can perform is `autonomous`.
+
+   **Recorded caveat (legacy lane only).** On this lane `/qa-main` still runs
+   `dispatch-main-qa-triage` (`qa-main/SKILL.md` Step 4·0, "Triage: is this
+   follow-up browser-verifiable?"), which is browser-only, so a non-browser
+   `autonomous` item on this lane would still exit 3 → cannot-verify. This
+   lane is retired (its router entry is removed; the script is dead code on
+   the node lane per the **Node-target lane** section's sort paragraph,
+   "Sort each item by its `Verifiability:` mark"), so the divergence is
+   **recorded, not fixed here** — `dispatch-main-qa-triage` is explicitly not
+   edited.
 
 2. **Compose the follow-ups** by piping the joined needs-main items through the
    Unit-1 emitter (pure — no network/git/gh, runs sandboxed-fine, no

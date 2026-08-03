@@ -1,9 +1,10 @@
 ---
 id: tactic-router-failure-fuses
 kind: tactic
-statement: "router failure fuses: sweep-written per-node no-progress counter
-  (cap 2 → office_hours park) and systemic breaker (correlated-dead-claim quorum
-  → born-parked incident tactic gating all selection)"
+statement: "router failure fuses, re-scoped to the terminal trichotomy: a
+  reap-without-declaration fires a ONE-strike fuse parking the node to
+  office_hours, and a correlated-dead-claim quorum trips a born-parked breaker
+  incident tactic gating all selection"
 owner: ai
 status: raw
 parent: null
@@ -16,7 +17,27 @@ rationale: "Surfaced in the 2026-07-07 /align-strategy fuse-breaker interview:
   look dead at once, which a naive per-node fuse would convert into a false
   mass-park of the whole queue). Doctrine recorded in the strategy's
   fuse-breaker clarification and failure-containment condition; this draft
-  carries the implementation design."
+  carries the implementation design. RE-SCOPED 2026-07-29 (/align-strategy
+  interview, author-specified): the original draft's per-node no-progress
+  counter with cap 2 is superseded. Containment is no longer a strike counter at
+  all — a pass that declares none of progression / bounded retry / park has not
+  ended, so its session is not reaped, and the node freezes behind the
+  concurrency controls with the held session as the debugging artifact.
+  dispatch-self-close already implements that direction (it HOLDs absent a
+  matching marker). What remains for this tactic is the residual backstop only:
+  a pass that ends undeclared AND is reaped anyway, leaving the node selectable
+  with nothing recorded. That fires on the FIRST occurrence, because every
+  recognized transient class is already contained without a second chance (an
+  undeclared mid-pass death is not reaped; a failed launch consumes nothing),
+  making a reap-without-declaration always a defect of the reaping path. The
+  systemic-breaker limb is unchanged. Two leaks must be closed for this fuse to
+  be sound, and are tracked separately: tactic-claim-containment-durable-anchor
+  (the freeze depends on the daemon-backed session registry, so a registry loss
+  frees the node without firing the fuse) and
+  tactic-terminal-declaration-verified-against-node (the declaration is a
+  job-dir marker decoupled from the graph write, so a marker-without-write reaps
+  while the fuse sees a valid declaration). This tactic should be planned after
+  both."
 reading: null
 gap: null
 serves:
@@ -25,7 +46,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 20
+  override: null
+  rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
+    scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
+    follows the Wave-A write-path fixes. Interim scaffolding only;
+    tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
+    numeric scheme."
 phase: null
 execution: null
 validates: []
@@ -85,14 +113,25 @@ Per-node fuse (node-local gate):
   `attempts.no_progress`) — frontmatter state, written via graph-commit,
   never entering the tactic-scope hash (parity with attempts/markers/park
   writes).
-- Cap 2 (legacy CAP=2 parity): the second consecutive strike parks that
-  node to `office_hours` with the failure history (dispositions,
-  timestamps) as reason plus a next-steps recommendation (condition 6
-  contract). Any successful transition resets the counter to 0.
+- Cap 2 (legacy CAP=2 parity): the second consecutive strike converts to a
+  tracked hold, not a park. `hold-node <id> --kind no-progress` mints (or
+  reopens) that node's hold tactic — carrying the failure history
+  (dispositions, timestamps) as reason plus a next-steps recommendation
+  (condition 6 contract) — and appends `blocked_by: [<hold-id>]` to the
+  struck node in the same graph-commit. The struck node's own `office_hours`
+  stays null: per the 2026-07-25 park-taxonomy clarification
+  (`tactic-mechanical-park-producers`), a mechanical hold is a `blocked_by`
+  edge against a tracked fix tactic, never a park on the work item; the
+  born-parked hold tactic is what enters the office-hours queue. Any
+  successful transition resets the counter to 0.
 - Non-strikes: the start-gate `skipped` disposition (correct yield to a
   freeze/park/phase change) and a worker that parked its own node.
-- Scope: a tripped node fuse blocks only that node — blocked on
-  office-hours like any parked node; selection elsewhere proceeds.
+- Scope: a tripped node fuse blocks only that node — held on a `blocked_by`
+  edge against its hold tactic, exactly like any node with an unresolved
+  blocker; selection elsewhere proceeds. Resolving the hold tactic (phase →
+  done, then prune, which repairs the inbound edge) re-admits the node on
+  the very next tick with no write on the node itself (`blockersComplete`,
+  `packages/intentionsutil/src/router.ts`).
 
 Systemic breaker (the only global gate):
 
@@ -130,3 +169,34 @@ Integration points:
   fanning out.
 - No recovers edge (clarification 26 precedent): the fuse bounds
   executor-failure blast radius; it does not reduce executor reliance.
+
+## Landing-order constraint (recorded 2026-07-30 by the dispatch bootstrap)
+
+**This tactic may not land until node-lane terminal-disposition declaration
+coverage is complete.** It is a one-strike fuse that parks a node on
+reap-without-declaration, so landing it while any phase-skill lane still drops
+its `mark-node-terminal` call converts what is today a session freeze into a
+mass park — and one transient fault already produces several at once (the
+2026-07-28 16-wide fan-out turned a single `git worktree add` failure at
+`provision-node-worktree:118` into three invalid mechanical parks in one tick).
+
+Coverage as of 2026-07-30, after the bootstrap's audit:
+
+- `/qa-fix`'s fix-finalize path — **fixed** (PR #2986 added
+  `mark-node-terminal "$N" fix-attempt` as the last durable action; both
+  `.claude/skills/qa-fix/references/auto-fix-lane.md` and the condensed
+  `SKILL.md` mirror).
+- `/dispatch-conflict` **Lane 2** (`SKILL.md:530-606` `resolved`, and its
+  sibling `ambiguous` path at `:608-664`) — **still undeclaring.** It calls only
+  `dispatch-mark-complete --phase fix-conflicts`, whose legacy `phase-completed`
+  marker `dispatch-self-close --node` never reads. It strands nothing today
+  because no dispatch tick enters Lane 2 (`SKILL.md:80-81`, `:454-455`; only
+  Lane 3 is auto-spawned, by `dispatch-graph-execute:226-276`) — but
+  `dispatch-stop.sh:56-63` gates purely on the job name matching an
+  `intentions/<id>.md` id regardless of which skill ran inside it, so a human or
+  a future router running Lane 2 as a managed `--node` job deadlocks.
+
+So the ordering gate is: **Lane 2 declares (or is proven unreachable by
+construction, not by convention) before this fuse arms.** Rank alone does not
+enforce this — the interim 20-band puts several Wave-C nodes at the same rank —
+so the constraint lives here, in prose, deliberately.

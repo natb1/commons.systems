@@ -36,6 +36,7 @@ execution:
       hash: 99227b632204950956b9eb8f36c3837b121261ccba95dd830e863947c12a3802
       sha: c64859d398cbebfdabfa69c97e527b27f3ed71be
   fix: null
+  completion: null
 validates:
   - strategy-graph-drives-dispatch
 blocked_by: []

@@ -10,8 +10,10 @@
 # clarifications 10, 18, 22. The DECISION (unconditional forward ladder edge,
 # residue→main-qa, freshness holds) lives in the pure `transitions` module,
 # applied via apply-node-transition.ts; this wrapper owns only the environmental
-# parts: the origin/main snapshot, the fingerprint gates, arming gh auto-merge,
-# and refreshing the phase-start stamp.
+# parts: the origin/main snapshot, the fingerprint gates, and refreshing the
+# phase-start stamp. Arming/merge of a reviewed node-lane PR is owned by the tick
+# reconciler (graph-auto-merge); this script only records the `reviewed` execution
+# marker via apply-node-transition — it never merges.
 #
 # The forward transition is CI-BLIND: it never reads a CI verdict and never
 # routes a tactic into `fix`. A CI-fix interrupt is carried orthogonally on
@@ -28,14 +30,15 @@
 #     transition owns its own provenance commit + PR comment).
 #   - strategy-stale → hold at the completed phase (the selector queues the
 #     re-evaluation; a confirm re-stamps and the next tick advances).
-#   - missing stamp at the review→merge ARMING point → fail closed: hold, do
-#     NOT arm merge. Elsewhere a missing stamp fails open.
+#   - missing/stale stamp at the review→merge point is re-checked and fails
+#     closed by the tick reconciler (graph-auto-merge) immediately before
+#     merging, not here.
 #
 # Usage: transition-node <node-id> [--set-pr <n>]
 #
 # Stdout: exactly one outcome line —
 #   transitioned <id> <prev> -> <new>
-#   armed-merge <id> (review complete)
+#   review-complete <id> (merge deferred to tick)
 #   demoted <id> -> implement (scope drift)
 #   held <id> at <phase> (<reason>)
 #
@@ -51,6 +54,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 MAIN_ROOT="$(resolve_project_root)" || { echo "transition-node: could not resolve the main project root" >&2; exit 2; }
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
 GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
+
+# Record a terminal disposition for this node worker's pass, so its Stop hook
+# may reap the job (dispatch-self-close's node-worker invariant). Best-effort:
+# a marker write must never turn a landed transition into a failure.
+# mark-node-terminal's own ownership gate makes it a no-op when this session is
+# transitioning some OTHER node.
+mark_terminal() { "$UTIL_SCRIPTS/mark-node-terminal" "$NODE_ID" "$1" >/dev/null 2>&1 || true; }
 
 NODE_ID="${1:-}"
 if [[ -z "$NODE_ID" ]]; then
@@ -72,6 +82,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Refresh the LOCAL node file from origin/main BEFORE any read (read_node_json,
+# PHASE/PR extraction, and apply-node-transition's read-modify-write all consume
+# the on-disk copy), so the phase write lands on top of origin/main's current
+# content rather than a stale worktree copy (the invocation may come from a
+# far-behind PR-branch worktree). This fetch also freshens the origin/main ref
+# the freshness snapshot (git archive origin/main) reads below. An unreachable
+# origin/main or a node absent from origin/main is genuine environment breakage —
+# fail with a clear error, never fall back to the local copy (code-style.md).
+# FRESH_BLOB is the compare-and-swap token passed to graph-commit at the land.
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "transition-node: could not fetch origin/main to refresh $NODE_ID before transitioning" >&2
+  exit 1
+fi
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "transition-node: intentions/$NODE_ID.md does not exist on origin/main — cannot transition a node that is not landed" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$REPO_ROOT/intentions/$NODE_ID.md"; then
+  echo "transition-node: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
+fi
+
 # Read the whole local node frontmatter as JSON once, for field extraction.
 read_node_json() {
   (cd "$REPO_ROOT" && node --import tsx/esm -e '
@@ -80,32 +112,73 @@ read_node_json() {
   ' "$NODE_ID")
 }
 
-# Refresh the phase-start stamp to the post-write scope fingerprint + the new
-# origin/main sha, so machinery body appends do not later trip the custody gate.
+# Refresh the phase-start stamp to the fingerprint of what ACTUALLY LANDED on
+# origin/main, plus that same sha — so a machinery body edit that reached
+# origin/main during the phase does not later read as scope drift and trip
+# dispatch-graph-scope-sweep's demotion.
+#
+# The content MUST come from git, never from the local worktree, for two
+# independent reasons:
+#   1. graph-commit's cleanup()
+#      (packages/intentionsutil/scripts/graph-commit:335-359; the
+#      `git reset --hard "$ORIG_HEAD"` at :344) resets this worktree back to
+#      the PR-branch tip after landing, so by the time we get here REPO_ROOT's
+#      intentions/<id>.md is the PR-branch copy, not what landed.
+#   2. That PR-branch copy can be arbitrarily far behind origin/main — the
+#      invocation routinely comes from a long-lived node worktree.
+# NOTE: an UNCOMMITTED worktree body edit is not a content source here and
+# never was — the origin/main refresh above (the `git show origin/main:... >`
+# at the top of this script) overwrites intentions/<id>.md before anything
+# reads it. A caller that wants a body edit to ride into this transition must
+# land it on origin/main itself (via graph-commit) first.
+#
+# Best-effort by design: the transition always continues (the caller never
+# aborts or changes exit code on a restamp failure) — but fail-open is not
+# fail-silent. The primitive itself fails LOUD with a `restamp-scope-
+# fingerprint: <message>` stderr line; on a non-zero exit we forward that
+# message here (prefixed) so a silently-missing/stale stamp — the exact
+# demotion bug this seam exists to prevent — is diagnosable in worker logs.
 refresh_stamp() {
-  local stamp_file="$MAIN_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
-  local sha fp
-  sha="$( (cd "$REPO_ROOT" && git rev-parse origin/main 2>/dev/null) )" || return 0
-  fp="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
-    const { readNode, readNodeBody } = await import("./packages/intentionsutil/src/store.js");
-    const { tacticScopeFingerprint } = await import("./packages/intentionsutil/src/router.js");
-    const id = process.argv[1];
-    process.stdout.write(tacticScopeFingerprint(readNode("./intentions", id).statement, readNodeBody("./intentions", id)));
-  ' "$NODE_ID" 2>/dev/null) )" || return 0
-  [[ -n "$fp" && -n "$sha" ]] || return 0
-  mkdir -p "$(dirname "$stamp_file")" 2>/dev/null || true
-  printf '%s %s\n' "$fp" "$sha" > "$stamp_file" 2>/dev/null || true
+  local err rc
+  err="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/restamp-scope-fingerprint.ts" \
+    --repo-root "$REPO_ROOT" --main-root "$MAIN_ROOT" --from-rev origin/main \
+    "$NODE_ID") 2>&1 >/dev/null )"
+  rc=$?
+  if [[ $rc -ne 0 ]]; then
+    echo "transition-node: refresh_stamp failed for $NODE_ID (best-effort, continuing): ${err:-no diagnostic}" >&2
+  fi
+  return 0
 }
 
-# --- Read the current phase + PR --------------------------------------------
+# --- Read the current phase --------------------------------------------------
+# The PR number reaches the graph via --set-pr (SET_PR → apply-node-transition);
+# this script no longer resolves or acts on the PR itself — merging is the tick
+# reconciler's job (graph-auto-merge).
 NODE_JSON="$(read_node_json)" || { echo "transition-node: could not read node $NODE_ID" >&2; exit 2; }
 PHASE="$(jq -r '.phase // "implement"' <<<"$NODE_JSON")"
-PR="$SET_PR"
-[[ -z "$PR" ]] && PR="$(jq -r '.execution.pr // empty' <<<"$NODE_JSON")"
 
 # --- Freshness gates over an origin/main snapshot ----------------------------
 SNAP_DIR="$(mktemp -d)" || { echo "transition-node: mktemp failed" >&2; exit 2; }
-trap 'rm -rf "$SNAP_DIR"' EXIT
+# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md from
+# origin/main if this script actually wrote to it (the apply-node-transition.ts
+# call further down). A pre-mutation failure (freshness gate computation, node
+# read, etc.) must not trigger a restore of a file this script never touched.
+MUTATED=0
+trap '
+  rc=$?
+  rm -rf "$SNAP_DIR"
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    # Restore from the immutable blob SHA captured before the mutation, not the
+    # moving origin/main ref (a concurrent fetch may have pruned/relocated the
+    # node). Write to a temp file and mv into place only on success, so a failed
+    # git-show never truncates the node file to zero bytes.
+    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$REPO_ROOT/intentions/$NODE_ID.md.rollback"; then
+      mv "$REPO_ROOT/intentions/$NODE_ID.md.rollback" "$REPO_ROOT/intentions/$NODE_ID.md"
+    else
+      rm -f "$REPO_ROOT/intentions/$NODE_ID.md.rollback"
+    fi
+  fi
+' EXIT
 if ! (cd "$REPO_ROOT" && git archive origin/main intentions 2>/dev/null | tar -x -C "$SNAP_DIR"); then
   mkdir -p "$SNAP_DIR/intentions"
 fi
@@ -115,7 +188,6 @@ FRESH="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/compute-fresh
   echo "transition-node: freshness gate computation failed for $NODE_ID" >&2; exit 2; }
 SCOPE_STALE="$(jq -r '.scopeStale' <<<"$FRESH")"
 STRATEGY_STALE="$(jq -r '.strategyStale' <<<"$FRESH")"
-STAMP_MISSING="$(jq -r '.stampMissing' <<<"$FRESH")"
 
 # --- Scope-stale → delegate to the demotion primitive ------------------------
 # main-qa is post-merge by definition (check-node-selection.ts:242), so scope
@@ -124,6 +196,7 @@ STAMP_MISSING="$(jq -r '.stampMissing' <<<"$FRESH")"
 # demote a scope-stale main-qa node — fall through to the normal transition below.
 if [[ "$SCOPE_STALE" == "true" && "$PHASE" != "main-qa" ]]; then
   if "$UTIL_SCRIPTS/demote-node-to-implement" "$NODE_ID"; then
+    mark_terminal demote
     echo "demoted $NODE_ID -> implement (scope drift)"
     exit 0
   fi
@@ -135,6 +208,11 @@ fi
 APPLY_FLAGS=("$NODE_ID")
 [[ "$STRATEGY_STALE" == "true" ]] && APPLY_FLAGS+=("--strategy-stale")
 [[ -n "$SET_PR" ]] && APPLY_FLAGS+=("--set-pr" "$SET_PR")
+# FRESH_BLOB was already captured by the refresh-before-read block above (same
+# fetch, same blob) -- reused here rather than re-resolved, so the rollback
+# target and the --base CAS token below are pinned to the exact same
+# origin/main snapshot the read-modify-write below started from.
+MUTATED=1
 if ! RESULT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/apply-node-transition.ts" "${APPLY_FLAGS[@]}") )"; then
   echo "transition-node: apply-node-transition failed for $NODE_ID" >&2
   exit 1
@@ -143,28 +221,32 @@ NEW_PHASE="$(jq -r '.phase' <<<"$RESULT")"
 ARM_MERGE="$(jq -r '.armMerge' <<<"$RESULT")"
 HOLD="$(jq -r '.hold' <<<"$RESULT")"
 
-# Missing-stamp fail-closed at the arming point (worker-start has landed).
-if [[ "$ARM_MERGE" == "true" && "$STAMP_MISSING" == "true" ]]; then
-  echo "transition-node: $NODE_ID review complete but the phase-start stamp is missing — holding (arming requires the stamp)" >&2
-  echo "held $NODE_ID at review (missing-stamp)"
-  exit 0
-fi
-
 # --- Land the state-only write on main ---------------------------------------
-if ! "$GRAPH_COMMIT" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
+# --base pins the land to the FRESH_BLOB read above: if origin/main's copy of
+# this node advanced again between the refresh and this call (a concurrent
+# writer), graph-commit refuses rather than silently clobbering the advance.
+# -C resolves the target repo from this worktree (tactic-graph-commit-cwd-repo-resolution)
+# rather than the script's own on-disk location.
+if ! "$GRAPH_COMMIT" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
   echo "transition-node: graph-commit failed for $NODE_ID" >&2
   exit 1
 fi
 
+# The write landed: this pass is terminal. Marked HERE rather than at each exit
+# so it covers all three downstream exit-0 outcomes (transitioned, armed-merge,
+# held … (freeze)). Deliberately NOT marked: the missing-stamp hold above (it
+# lands nothing — a genuine stall, correctly left visible) and every exit-1 /
+# exit-2 path.
+mark_terminal advance
+
 refresh_stamp
 
-# --- Arm auto-merge at clean review completion -------------------------------
+# --- Clean review completion: defer merge to the tick reconciler -------------
+# The worker records the `reviewed` marker (written above by apply-node-transition);
+# the tick's graph-auto-merge sweep does the label-free, CI-validated,
+# fingerprint-fresh merge. This script never merges.
 if [[ "$ARM_MERGE" == "true" ]]; then
-  if [[ -n "$PR" ]]; then
-    gh pr ready "$PR" >/dev/null 2>&1 || true
-    "$SCRIPT_DIR/dispatch-auto-merge" >/dev/null 2>&1 || true
-  fi
-  echo "armed-merge $NODE_ID (review complete)"
+  echo "review-complete $NODE_ID (merge deferred to tick)"
   exit 0
 fi
 

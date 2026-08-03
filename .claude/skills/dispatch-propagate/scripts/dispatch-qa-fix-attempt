@@ -50,7 +50,7 @@
 #     Override the `gh` binary used for label reads/edits. Default: `gh`.
 #
 #   DISPATCH_QA_FIX_ATTEMPT_CAP
-#     Override the attempt cap (positive integer). Default: 2.
+#     Override the attempt cap (positive integer). Default: 3.
 #
 # Sandbox: label reads/edits use `gh` (macOS Security-framework TLS); this
 # script is not sandbox-safe and callers must invoke it with
@@ -104,7 +104,18 @@ fi
 
 # ---- Step 3: cap check ------------------------------------------------------
 
-CAP="${DISPATCH_QA_FIX_ATTEMPT_CAP:-2}"
+# Default 3, not 2: the cap counts fixing PASSES, not finding severity, so two
+# passes spent on cosmetic residue (a stale comment, a usage string) used to
+# exhaust the budget before the first behavioural defect surfaced — turning a
+# fixable bug into an office-hours park. A third pass buys one substantive fix
+# after that kind of shallow start — that is the whole justification for the
+# raise. The secondary bound below is a partial backstop, not a second guarantee:
+# dispatch-qa-noprogress escalates only an attempt that resolves NONE of the ids
+# the prior attempt was failing on, and it is deliberately fail-open (any gh/jq
+# error, or an unresolvable author id, returns `progress`). It therefore bounds
+# the pathological loop that fixes nothing, but a lane resolving one trivial id
+# per pass is never flagged and runs to this ceiling.
+CAP="${DISPATCH_QA_FIX_ATTEMPT_CAP:-3}"
 if [[ ! "$CAP" =~ ^[0-9]+$ ]] || (( CAP < 1 )); then
   echo "error: dispatch-qa-fix-attempt: CAP must be a positive integer, got '$CAP'; aborting" >&2
   exit 2

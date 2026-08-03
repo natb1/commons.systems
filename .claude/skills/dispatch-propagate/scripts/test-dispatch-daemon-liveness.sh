@@ -10,7 +10,8 @@
 # transient), the linger-unqueryable path, and the --json shape.
 #
 # House pattern mirrors packages/intentionsutil/scripts/test-graph-commit.sh and
-# .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh. Run under
+# the per-SUT test-*.sh files sharing
+# .claude/skills/dispatch-propagate/scripts/dispatch-test-fixture.sh. Run under
 # bash -c, never zsh.
 
 set -uo pipefail

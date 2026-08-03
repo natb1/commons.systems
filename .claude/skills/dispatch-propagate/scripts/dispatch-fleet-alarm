@@ -1,0 +1,650 @@
+#!/usr/bin/env bash
+#
+# dispatch-fleet-alarm — the shared alarm surface for out-of-band fleet-health
+# readings.
+#
+# A fleet instrument (a watcher that reads the tick journal / daemon liveness,
+# or a healer that fired a recovery action) turns its reading into a GRAPH NODE
+# through this script, never into journald alone: journald is not a work queue
+# and nothing in the fleet reads it back. One node per condition kind, found or
+# created idempotently, its body refreshed on re-detection, completed when the
+# condition definitively clears.
+#
+# Usage:
+#   dispatch-fleet-alarm --kind <kind> --statement <text> --body-file <path>
+#   dispatch-fleet-alarm --resolve --kind <kind>
+#   dispatch-fleet-alarm -h|--help
+#
+# <kind> is a CLOSED enum (see KINDS below). Anything else exits 64 — an alarm
+# surface with an open-ended id space would mint unbounded node ids from a
+# caller typo.
+#
+# Node id: tactic-fleet-alarm-<kind>. Stable per condition kind, so find-or-
+# create is idempotent: one open node per ongoing condition. The id shape is
+# guarded by an ANCHORED regex built from the enum, never a bare prefix test —
+# a bare `tactic-main-red-` startsWith test in dispatch-graph-main-red-sync once
+# matched an unrelated hand-authored node and mechanically auto-completed it to
+# phase:"done" (see that script's lines 52-58).
+#
+# Find-or-create follows the canonical recipe in
+# .claude/skills/dispatch-diagnose-main/SKILL.md (lines 84-218): readNode
+# classification (frontmatter only, never the body), then either the
+# write-node.ts --file -> awk body-splice -> graph-commit mint path (absent or
+# closed), or the dump-node.ts -> cmp -s -> graph-commit --base re-detection
+# path (open), which SKIPS the commit entirely when the fresh body matches the
+# on-disk body — a re-detection that finds the same condition must not churn a
+# no-op commit.
+#
+# TWO INDEPENDENT BRAKES ON THE RE-DETECTION PATH. Every commit here is a
+# fetch + rebase + push to origin/main that arms the four required CI checks,
+# and the callers re-detect on a 2-5 minute timer for as long as a condition
+# persists. One brake is not enough:
+#
+#   1. The `cmp -s` body-identity gate above. It only holds if the CALLER keeps
+#      volatile values (wall-clock timestamps, elapsed spans, pids, raw
+#      liveness JSON) OUT of the body — an alarm body states the STABLE
+#      IDENTITY of the condition (predicate, threshold, offending unit/node
+#      ids) and the volatile reading goes to the caller's log line instead.
+#      dispatch-fleet-watch and dispatch-heal-units are written to that
+#      contract, and their suites assert it by comparing the bodies two
+#      successive passes emit.
+#   2. The MINIMUM REFRESH INTERVAL enforced here, which does not trust the
+#      caller. A body that churns anyway (a new caller, a reworded reading, an
+#      offending-id set that flaps) still cannot push more often than
+#      DISPATCH_FLEET_ALARM_MIN_REFRESH_INTERVAL seconds per kind. The stamp is
+#      written when a refresh REACHES graph-commit — success or failure — so a
+#      failing push cannot retry-storm either. This matters most during an
+#      outage (tick dead, daemon down, main red), i.e. exactly when the fleet
+#      can least absorb a push per pass and when the load could itself keep
+#      main red.
+#
+# The interval gates ONLY the re-detection refresh. Minting a first record of a
+# condition, and resolving a cleared one, are once-per-episode transitions and
+# are never delayed — an alarm that arrives an hour late is not an alarm.
+#
+# Exit codes:
+#   0   the alarm landed; or a re-detection found no body diff (no commit); or
+#       a re-detection was inside the minimum refresh interval (no commit); or
+#       --resolve found nothing open to resolve; or the pass was skipped because
+#       another graph writer holds this checkout's mutex (stdout disambiguates —
+#       see the stdout protocol below).
+#   1   the graph write failed (after retries), or the post-write blob
+#       verification did not confirm the write on origin/main. The caller
+#       degrades to journald-only for that pass — but must still report this
+#       graph-write failure in its own output.
+#   64  usage error / unknown kind.
+#   69  environment error (missing node/npx/git/jq/flock, or the graph-write
+#       mutex could not be established at all — never downgrade that to an
+#       unserialized write).
+#
+# graph-commit exiting 0 is NOT evidence anything landed (a named invariant in
+# this codebase: a check whose failure mode is a silent PASS — graph-commit has
+# a documented "nothing to push" rc-0 sub-case, and a wrong-repo invocation can
+# exit 0 having landed nothing). Every successful commit here is followed by a
+# blob comparison of intentions/<id>.md on origin/main against the local
+# `git hash-object`; a mismatch is exit 1, not exit 0.
+#
+# NEVER FLEET-HALT: this script writes exactly intentions/<id>.md for its own
+# alarm id and nothing else. It does not write blocked_by on any other node, it
+# does not touch the pause sentinel, and it does not write office_hours on any
+# node. A fleet instrument's job is to record a finding, not to stop the fleet.
+#
+# ONE GRAPH WRITER PER CHECKOUT. Every caller is an unattended systemd timer —
+# the fleet watchdog (every 5min) and the unit healer (every 2min) — and a
+# single watcher pass can invoke this script up to nine times. They all write
+# through graph-commit against the SAME checkout, and graph-commit rebases that
+# checkout and, on its busy-main / far-ahead-HEAD paths, runs `git reset --hard`
+# on it. Overlapping invocations in one worktree are a known corruption class:
+# a graph write that exits 0 having landed NOTHING, a dirty intentions/<id>.md
+# that trips every later writer's clean-tree assertion, or a `reset --hard`
+# discarding an unrelated in-flight tree in the shared main worktree.
+#
+# So the ENTIRE region below — classify, dump-node, write-node, body splice,
+# graph-commit, post-write verification, and the rollback paths — runs holding
+# the checkout's graph-write mutex (lib.sh's graph_write_lock_acquire, at
+# <repo-root>/tmp/graph-write.lock). It is taken NON-BLOCKING and held to
+# process exit: a contended pass SKIPS (exit 0, stdout `skipped-locked`) instead
+# of waiting, because a oneshot that blocks on a wedged holder pins its service
+# until the next fire and stacks passes, whereas a skipped pass costs only
+# latency — the caller re-derives its whole reading from scratch next pass, and
+# a still-true condition is simply recorded then. The mutex is per-checkout on
+# purpose: cross-checkout writers are already serialized at the remote by
+# graph-commit's own refs/graph/landing-lock.
+#
+# Stdout protocol — exactly one word on a successful exit, so a caller can budget
+# its graph writes without parsing log prose:
+#   landed          a commit was made AND verified on origin/main.
+#   noop            nothing needed writing (identical re-detection, a
+#                   rate-limited refresh, nothing open to resolve, or a guard
+#                   that declined to mutate).
+#   skipped-locked  another graph writer holds this checkout's mutex; nothing
+#                   was read and nothing was written on this pass.
+# Nothing is printed on a failure exit — the non-zero rc is the whole signal.
+#
+# Dependency-injection seams (unset in production; used by
+# test-dispatch-fleet-alarm.sh so the suite never touches the real graph or a
+# real git remote). Each holds a command line, split on whitespace — the paths
+# must not contain spaces:
+#   DISPATCH_FLEET_ALARM_GRAPH_COMMIT_CMD  default: <repo>/packages/intentionsutil/scripts/graph-commit
+#   DISPATCH_FLEET_ALARM_WRITE_NODE_CMD    default: npx tsx <repo>/packages/intentionsutil/scripts/write-node.ts
+#   DISPATCH_FLEET_ALARM_DUMP_NODE_CMD     default: npx tsx <repo>/packages/intentionsutil/scripts/dump-node.ts
+#   DISPATCH_FLEET_ALARM_CLASSIFY_CMD      default: the node --import tsx/esm readNode one-liner below
+#   DISPATCH_FLEET_ALARM_INTENTIONS_DIR    default: <repo>/intentions
+#   DISPATCH_FLEET_ALARM_RETRIES           default: 3   (graph-commit attempts)
+#   DISPATCH_FLEET_ALARM_RETRY_DELAY       default: 5   (seconds between attempts)
+#
+# Rate-limit seams (also production-tunable):
+#   DISPATCH_FLEET_ALARM_STATE_DIR
+#       Where the per-kind last-refresh stamp lives. Default:
+#       ${XDG_DATA_HOME:-$HOME/.local/share}/commons-dispatch/fleet-alarm
+#       A stamp is host-local scratch, deliberately NOT graph state: losing it
+#       costs at most one extra refresh commit.
+#   DISPATCH_FLEET_ALARM_MIN_REFRESH_INTERVAL
+#       Seconds. Default 3600. 0 disables the brake (used by the test suite,
+#       which asserts the gate separately with an explicit interval).
+#
+# Graph-write mutex seam (lib.sh):
+#   DISPATCH_GRAPH_WRITE_LOCK_FILE
+#       Overrides the mutex path, which otherwise derives from the resolved
+#       repo root as <repo-root>/tmp/graph-write.lock. There is no "disable"
+#       switch by design — an unserialized alarm write is the defect.
+#
+# NOT set -e: every risky step is guarded explicitly so the script always
+# reaches an intentional exit (same convention as sibling
+# dispatch-graph-main-red-sync).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# scripts -> dispatch-propagate -> skills -> .claude -> repo root (same
+# convention as sibling dispatch-graph-main-red-sync lines 44-46).
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+
+# lib.sh supplies the graph-write mutex (graph_write_lock_file /
+# graph_write_lock_acquire) taken below. It is pure function definitions plus a
+# handful of `${VAR:-default}` assignments, so sourcing it under `set -u` is
+# safe (same pattern as sibling dispatch-acquire-lock).
+# shellcheck source=/dev/null
+if ! source "$SCRIPT_DIR/lib.sh"; then
+  echo "dispatch-fleet-alarm: cannot source $SCRIPT_DIR/lib.sh" >&2
+  exit 69
+fi
+
+# The closed enum of alarm kinds. Extending it is a deliberate edit here.
+KINDS=(tick-stale daemon-degraded busy-stall automerge-suppressed watch-unknown heal-fired heal-unknown)
+
+usage() {
+  cat <<'USAGE'
+usage: dispatch-fleet-alarm --kind <kind> --statement <text> --body-file <path>
+       dispatch-fleet-alarm --resolve --kind <kind>
+       dispatch-fleet-alarm -h|--help
+
+kinds: tick-stale daemon-degraded busy-stall automerge-suppressed
+       watch-unknown heal-fired heal-unknown
+
+Records an out-of-band fleet-health reading as the graph node
+tactic-fleet-alarm-<kind> (find-or-create; body refreshed on re-detection).
+--resolve completes an open alarm node to phase: "done" when its condition has
+definitively cleared.
+
+exit: 0 landed / no-op, 1 graph write failed, 64 usage, 69 environment.
+USAGE
+}
+
+log() { printf 'dispatch-fleet-alarm: %s\n' "$*" >&2; }
+
+# --- Argument parsing --------------------------------------------------------
+KIND=""
+STATEMENT=""
+BODY_FILE=""
+RESOLVE=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --kind)
+      [[ $# -ge 2 ]] || { log "--kind requires a value"; usage >&2; exit 64; }
+      KIND="$2"; shift 2 ;;
+    --statement)
+      [[ $# -ge 2 ]] || { log "--statement requires a value"; usage >&2; exit 64; }
+      STATEMENT="$2"; shift 2 ;;
+    --body-file)
+      [[ $# -ge 2 ]] || { log "--body-file requires a value"; usage >&2; exit 64; }
+      BODY_FILE="$2"; shift 2 ;;
+    --resolve) RESOLVE=1; shift ;;
+    *) log "unknown argument: $1"; usage >&2; exit 64 ;;
+  esac
+done
+
+[[ -n "$KIND" ]] || { log "--kind is required"; usage >&2; exit 64; }
+
+# Closed-enum membership check.
+KIND_OK=0
+for k in "${KINDS[@]}"; do [[ "$k" == "$KIND" ]] && KIND_OK=1; done
+if [[ "$KIND_OK" != "1" ]]; then
+  log "unknown kind '$KIND' (allowed: ${KINDS[*]})"
+  exit 64
+fi
+
+ID="tactic-fleet-alarm-$KIND"
+
+# Anchored id guard built from the enum — NOT a prefix test. Belt-and-braces
+# with the membership check above: nothing but an exact enum id may ever reach
+# the write paths below.
+KIND_ALT="$(IFS='|'; printf '%s' "${KINDS[*]}")"
+ID_RE="^tactic-fleet-alarm-(${KIND_ALT})$"
+if [[ ! "$ID" =~ $ID_RE ]]; then
+  log "refusing to act on id '$ID' — it does not match the anchored alarm-id shape $ID_RE"
+  exit 64
+fi
+
+if [[ "$RESOLVE" == "1" ]]; then
+  if [[ -n "$STATEMENT" || -n "$BODY_FILE" ]]; then
+    log "--resolve takes only --kind (no --statement / --body-file)"
+    exit 64
+  fi
+else
+  [[ -n "$STATEMENT" ]] || { log "--statement is required (or pass --resolve)"; usage >&2; exit 64; }
+  [[ -n "$BODY_FILE" ]] || { log "--body-file is required (or pass --resolve)"; usage >&2; exit 64; }
+  [[ -f "$BODY_FILE" ]] || { log "--body-file '$BODY_FILE' does not exist"; exit 64; }
+fi
+
+# --- Environment -------------------------------------------------------------
+for bin in date flock git jq node npx; do
+  command -v "$bin" >/dev/null 2>&1 || { log "required command '$bin' not found on PATH"; exit 69; }
+done
+
+INTENTIONS_DIR="${DISPATCH_FLEET_ALARM_INTENTIONS_DIR:-$REPO_ROOT/intentions}"
+NODE_FILE="$INTENTIONS_DIR/$ID.md"
+# The path git sees. graph-commit stages exactly `intentions/<id>.md` relative
+# to the repo it resolves, so origin/main lookups always use that spelling.
+NODE_REL="intentions/$ID.md"
+
+RETRIES="${DISPATCH_FLEET_ALARM_RETRIES:-3}"
+RETRY_DELAY="${DISPATCH_FLEET_ALARM_RETRY_DELAY:-5}"
+
+# Minimum seconds between two re-detection refreshes of the SAME kind. See the
+# "TWO INDEPENDENT BRAKES" note in the header.
+STATE_DIR="${DISPATCH_FLEET_ALARM_STATE_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/commons-dispatch/fleet-alarm}"
+MIN_REFRESH_INTERVAL="${DISPATCH_FLEET_ALARM_MIN_REFRESH_INTERVAL:-3600}"
+if [[ ! "$MIN_REFRESH_INTERVAL" =~ ^[0-9]+$ ]]; then
+  log "DISPATCH_FLEET_ALARM_MIN_REFRESH_INTERVAL must be a non-negative integer, got '$MIN_REFRESH_INTERVAL'"
+  exit 64
+fi
+STAMP_FILE="$STATE_DIR/$KIND.last-refresh"
+
+# Command seams. `read -r -a` splits on whitespace; production defaults contain
+# no spaces (see the header note).
+declare -a GRAPH_COMMIT_CMD WRITE_NODE_CMD DUMP_NODE_CMD CLASSIFY_CMD
+if [[ -n "${DISPATCH_FLEET_ALARM_GRAPH_COMMIT_CMD:-}" ]]; then
+  read -r -a GRAPH_COMMIT_CMD <<<"$DISPATCH_FLEET_ALARM_GRAPH_COMMIT_CMD"
+else
+  GRAPH_COMMIT_CMD=("$REPO_ROOT/packages/intentionsutil/scripts/graph-commit")
+fi
+# write-node.ts / dump-node.ts resolve intentions/ from import.meta.url, NOT
+# cwd — so the copies invoked must be the ones inside the checkout being
+# mutated. Hence the absolute $REPO_ROOT-anchored paths.
+if [[ -n "${DISPATCH_FLEET_ALARM_WRITE_NODE_CMD:-}" ]]; then
+  read -r -a WRITE_NODE_CMD <<<"$DISPATCH_FLEET_ALARM_WRITE_NODE_CMD"
+else
+  WRITE_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/write-node.ts")
+fi
+if [[ -n "${DISPATCH_FLEET_ALARM_DUMP_NODE_CMD:-}" ]]; then
+  read -r -a DUMP_NODE_CMD <<<"$DISPATCH_FLEET_ALARM_DUMP_NODE_CMD"
+else
+  DUMP_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/dump-node.ts")
+fi
+if [[ -n "${DISPATCH_FLEET_ALARM_CLASSIFY_CMD:-}" ]]; then
+  read -r -a CLASSIFY_CMD <<<"$DISPATCH_FLEET_ALARM_CLASSIFY_CMD"
+else
+  CLASSIFY_CMD=()
+fi
+
+# --- Helpers -----------------------------------------------------------------
+
+# classify <id> -> prints absent | open | closed
+# readNode reads only the YAML frontmatter, so classification never touches the
+# body. done, or parked in office_hours, is a since-resolved node -> closed; a
+# throw (no such file) -> absent.
+classify() {
+  if [[ ${#CLASSIFY_CMD[@]} -gt 0 ]]; then
+    "${CLASSIFY_CMD[@]}" "$1"
+    return
+  fi
+  (cd "$REPO_ROOT" && node --import tsx/esm -e '
+    const { readNode } = await import("./packages/intentionsutil/src/store.js");
+    try {
+      const n = readNode(process.argv[1], process.argv[2]);
+      process.stdout.write((n.phase === "done" || n.office_hours !== null) ? "closed\n" : "open\n");
+    } catch {
+      process.stdout.write("absent\n");
+    }
+  ' "$INTENTIONS_DIR" "$1")
+}
+
+# origin_blob -> prints the origin/main blob sha of the node file, or fails.
+origin_blob() {
+  git -C "$REPO_ROOT" rev-parse "origin/main:$NODE_REL" 2>/dev/null
+}
+
+# restore_from_blob <sha> — put the node file back to its origin/main content so
+# a failed write never leaks a dirty intentions/ file (which would trip
+# graph-commit's clean-tree assertion for every later writer).
+restore_from_blob() {
+  git -C "$REPO_ROOT" show "$1" > "$NODE_FILE"
+}
+
+# splice_body — replace everything after the closing frontmatter fence with the
+# reading. write-node.ts gives a brand-new file the generated `# <statement>`
+# placeholder body; bodies are durable and preserved on every later rewrite, so
+# the splice is what puts the reading in. (The two-fence awk idiom, verbatim
+# from dispatch-diagnose-main/SKILL.md:178-187.)
+splice_body() {
+  { awk '{print} /^---$/{c++; if(c==2) exit}' "$NODE_FILE"; cat "$BODY_FILE"; } > "$NODE_FILE.tmp" \
+    && mv "$NODE_FILE.tmp" "$NODE_FILE"
+}
+
+# refresh_stamp_read -> prints the epoch second of the last refresh that
+# reached graph-commit for this kind, or nothing. An unreadable/garbage stamp
+# prints nothing, which fails OPEN (the refresh proceeds): the brake exists to
+# bound a churning caller, not to swallow a genuine reading because a scratch
+# file went missing.
+refresh_stamp_read() {
+  local v
+  [[ -r "$STAMP_FILE" ]] || return 0
+  v=$(<"$STAMP_FILE") || return 0
+  v="${v//[$'\t\r\n ']/}"
+  [[ "$v" =~ ^[0-9]+$ ]] || return 0
+  printf '%s' "$v"
+}
+
+# refresh_stamp_write — record NOW as this kind's last refresh attempt. Called
+# when a refresh REACHES graph-commit, before the outcome is known, so a
+# failing push cannot retry-storm. A write failure is logged, never fatal.
+refresh_stamp_write() {
+  local now
+  now=$(date -u +%s) || { log "could not read the clock; the refresh rate-limit stamp was not updated"; return 0; }
+  mkdir -p "$STATE_DIR" 2>/dev/null || { log "could not create the alarm state dir $STATE_DIR; the refresh rate-limit stamp was not updated"; return 0; }
+  printf '%s\n' "$now" > "$STAMP_FILE.tmp" 2>/dev/null \
+    && mv -f "$STAMP_FILE.tmp" "$STAMP_FILE" 2>/dev/null \
+    || log "could not write the refresh rate-limit stamp $STAMP_FILE"
+  return 0
+}
+
+# run_graph_commit <args...> — bounded retry around the landing primitive. All
+# of graph-commit's chatter goes to stderr; this script's stdout carries only
+# the one-word outcome (see the stdout protocol in the header).
+#
+# `9>&-` closes the graph-write mutex fd in the child. The flock lives on the
+# open file description and is released only when the LAST referencing fd
+# closes, so any background helper the push path ever forks (a git credential
+# daemon, say) would inherit fd 9 and pin the mutex past our exit — silently
+# skipping every later alarm pass on this host. Cost of the defense: one redir.
+run_graph_commit() {
+  local attempt=1
+  while :; do
+    if "${GRAPH_COMMIT_CMD[@]}" -C "$REPO_ROOT" "$@" 1>&2 9>&-; then
+      return 0
+    fi
+    if (( attempt >= RETRIES )); then
+      log "graph-commit failed after $attempt attempt(s)"
+      return 1
+    fi
+    attempt=$((attempt + 1))
+    [[ "$RETRY_DELAY" == "0" ]] || sleep "$RETRY_DELAY"
+  done
+}
+
+# verify_landed — graph-commit exit 0 is not evidence anything landed. Confirm
+# by comparing the node's blob on origin/main against the local file's hash.
+verify_landed() {
+  # Refresh the remote-tracking ref where possible; the comparison itself is
+  # authoritative, so a fetch failure is reported, not fatal.
+  # `9>&-` for the same reason as run_graph_commit: a network-touching git that
+  # forks a credential helper must not inherit — and pin — the mutex fd.
+  if ! git -C "$REPO_ROOT" fetch --quiet origin main 2>/dev/null 9>&-; then
+    log "could not fetch origin/main before verification; comparing against the local remote-tracking ref"
+  fi
+  local local_blob remote_blob
+  if ! local_blob=$(git -C "$REPO_ROOT" hash-object -- "$NODE_FILE"); then
+    log "could not hash $NODE_FILE for post-write verification"
+    return 1
+  fi
+  if ! remote_blob=$(origin_blob) || [[ -z "$remote_blob" ]]; then
+    log "post-write verification failed: $NODE_REL is absent from origin/main after a graph-commit that exited 0"
+    return 1
+  fi
+  if [[ "$remote_blob" != "$local_blob" ]]; then
+    log "post-write verification failed: origin/main:$NODE_REL is $remote_blob but the local write hashes to $local_blob — graph-commit exited 0 without landing this content"
+    return 1
+  fi
+  return 0
+}
+
+# --- Graph-write mutex --------------------------------------------------------
+# Taken BEFORE the first graph read, so the classification this pass acts on and
+# the write it derives from that classification cannot be split by another
+# writer's rebase / `git reset --hard` in this same checkout (see "ONE GRAPH
+# WRITER PER CHECKOUT" in the header). Everything above this point is pure
+# argument validation with no side effect, so a usage error still exits 64
+# without contending for the mutex.
+#
+# Held on fd 9 until this process exits — there is no release verb, and none is
+# wanted: releasing early would reopen the window. Non-blocking: a contended
+# pass skips rather than stacking behind a holder.
+LOCK_FILE_PATH="$(graph_write_lock_file "$REPO_ROOT" 2>/dev/null || printf '<unresolved>')"
+graph_write_lock_acquire "$REPO_ROOT"
+LOCK_RC=$?
+case "$LOCK_RC" in
+  0) ;;
+  1)
+    log "another graph writer holds $LOCK_FILE_PATH — skipping this alarm pass (nothing read, nothing written); the condition is re-derived on the caller's next pass"
+    printf 'skipped-locked\n'
+    exit 0
+    ;;
+  *)
+    # Never downgrade to an unserialized write: an unusable mutex is an
+    # environment error, and writing anyway is exactly the corruption the mutex
+    # exists to prevent.
+    log "could not establish the graph-write mutex at $LOCK_FILE_PATH (graph_write_lock_acquire rc=$LOCK_RC) — refusing to write unserialized"
+    exit 69
+    ;;
+esac
+
+TMP_DIR=""
+cleanup() { [[ -n "$TMP_DIR" ]] && rm -rf "$TMP_DIR"; }
+trap cleanup EXIT
+TMP_DIR=$(mktemp -d) || { log "mktemp failed"; exit 69; }
+
+STATE=$(classify "$ID") || {
+  log "graph read of $ID failed — cannot classify the alarm node"
+  exit 1
+}
+STATE="${STATE//[$'\t\r\n ']/}"
+
+# --- --resolve ---------------------------------------------------------------
+# Complete an open alarm node to phase: "done" when its condition has
+# definitively cleared, so alarms do not accumulate. Only a DEFINITE clear
+# resolves — the caller decides that; this script has no notion of an
+# "unknown" reading, so an unknown reading simply never calls --resolve.
+# Structure copied from dispatch-graph-main-red-sync lines 95-160, including its
+# three load-bearing guards.
+if [[ "$RESOLVE" == "1" ]]; then
+  if [[ "$STATE" != "open" ]]; then
+    log "no open $ID to resolve (state: $STATE) — nothing to do"
+    printf 'noop\n'
+    exit 0
+  fi
+
+  MANIFEST=$( (cd "$REPO_ROOT" && "${DUMP_NODE_CMD[@]}" --out-dir "$TMP_DIR" "$ID") ) || {
+    log "dump-node of $ID failed; cannot resolve"
+    exit 1
+  }
+
+  # Guard 1: only when execution is null. A node past draft with a live
+  # execution is an in-flight fix owning its own PR/qa/review lifecycle;
+  # mechanical completion must never preempt it.
+  if ! jq -e '.execution == null' "$TMP_DIR/$ID.json" >/dev/null 2>&1; then
+    log "$ID has a non-null execution (an in-flight fix owns its lifecycle) — refusing to complete it mechanically"
+    printf 'noop\n'
+    exit 0
+  fi
+
+  # Guard 2: capture the pre-mutation origin/main blob BEFORE mutating. A node
+  # absent from origin/main at this instant is a HARD refusal: with no landed
+  # blob there is nothing to roll back to, so mutating anyway would leak exactly
+  # the dirty file the rollback exists to prevent.
+  if ! FRESH_BLOB=$(origin_blob) || [[ -z "$FRESH_BLOB" ]]; then
+    log "$NODE_REL does not exist on origin/main — refusing to mutate a node with no landed content to roll back to"
+    exit 1
+  fi
+
+  if ! (
+    set -o pipefail
+    jq '.phase = "done"' "$TMP_DIR/$ID.json" > "$TMP_DIR/$ID.patched.json" || exit 1
+    cd "$REPO_ROOT" || exit 1
+    "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.patched.json" || exit 1
+  ) 1>&2 || ! run_graph_commit --base "$MANIFEST" -m "graph: resolve fleet alarm $KIND" "$ID"; then
+    # Guard 3: restore from the captured blob FIRST, then log. Never swallow the
+    # failure with `|| true` — emit a greppable stderr diagnostic.
+    restore_from_blob "$FRESH_BLOB"
+    log "resolve of $ID failed; the write was rolled back to origin/main"
+    exit 1
+  fi
+
+  if ! verify_landed; then
+    log "resolve of $ID could not be verified on origin/main"
+    exit 1
+  fi
+  log "resolved $ID (phase: done)"
+  printf 'landed\n'
+  exit 0
+fi
+
+# --- Alarm: find-or-create ---------------------------------------------------
+case "$STATE" in
+  absent|closed)
+    # Nothing to compare-and-swap against — mint fresh, no --base. A "closed"
+    # node is a since-resolved condition that has recurred: mint over it rather
+    # than reopening a completed record by hand.
+    PRE_BLOB="$(origin_blob || true)"
+    jq -n \
+      --arg id "$ID" \
+      --arg statement "$STATEMENT" \
+      '{
+        id: $id,
+        kind: "tactic",
+        statement: $statement,
+        owner: "ai",
+        status: "raw",
+        parent: null,
+        serves: ["strategy-autonomous-execution"],
+        recovers: [],
+        rationale: "Auto-created by dispatch-fleet-alarm from an out-of-band fleet instrument reading. See the body for the reading.",
+        reading: null,
+        gap: null,
+        clarifications: [],
+        tooling_goals: [],
+        success_signal: null,
+        attention: null,
+        phase: null,
+        execution: null,
+        validates: [],
+        blocked_by: [],
+        office_hours: null,
+        pace_exempt: true,
+        rounds: null,
+        attributes: {}
+      }' > "$TMP_DIR/$ID.json" || { log "failed to build the node JSON for $ID"; exit 1; }
+    # Field notes: serves -> strategy-autonomous-execution (rank is inherited
+    # through that edge). success_signal null — these nodes are not registered
+    # in read-sensors.ts. attention null — rank is never machine-injected.
+    # pace_exempt true — a fleet-down finding must not be pace-gated.
+    # phase null + status raw + execution null is the draft shape.
+
+    # Minting is never rate-GATED (a first record must not be delayed), but it
+    # does set the stamp, so the interval is measured from the mint and a
+    # churning caller cannot mint at t and refresh at t+2min.
+    refresh_stamp_write
+    if ! (
+      cd "$REPO_ROOT" || exit 1
+      "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.json" || exit 1
+    ) 1>&2 || ! splice_body || ! run_graph_commit -m "graph: fleet alarm $KIND" "$ID"; then
+      if [[ -n "$PRE_BLOB" ]]; then
+        restore_from_blob "$PRE_BLOB"
+      else
+        rm -f "$NODE_FILE" "$NODE_FILE.tmp"
+      fi
+      log "minting $ID failed; the write was rolled back"
+      exit 1
+    fi
+    if ! verify_landed; then
+      log "minting $ID could not be verified on origin/main"
+      exit 1
+    fi
+    log "landed new alarm node $ID"
+    printf 'landed\n'
+    exit 0
+    ;;
+
+  open)
+    # Re-detection during an ongoing condition. Capture the CAS token first,
+    # then refresh the body ONLY if it actually changed — skip the commit
+    # entirely when it did not, so a re-detection tick that finds the same
+    # condition does not churn a no-op commit.
+    MANIFEST=$( (cd "$REPO_ROOT" && "${DUMP_NODE_CMD[@]}" --out-dir "$TMP_DIR/base" "$ID") ) || {
+      log "dump-node of $ID failed; cannot refresh the alarm body"
+      exit 1
+    }
+    ONDISK_BODY="$TMP_DIR/$ID.ondisk-body"
+    awk 'p; /^---$/{c++; if(c==2) p=1}' "$NODE_FILE" > "$ONDISK_BODY" || {
+      log "could not read the on-disk body of $NODE_FILE"
+      exit 1
+    }
+    if cmp -s "$BODY_FILE" "$ONDISK_BODY"; then
+      log "$ID is already open with an identical reading — no commit"
+      printf 'noop\n'
+      exit 0
+    fi
+    # Second brake (see "TWO INDEPENDENT BRAKES" in the header): the body did
+    # change, but a caller whose body churns every pass must still not push to
+    # origin/main every pass. Refuse the refresh while inside the interval.
+    if (( MIN_REFRESH_INTERVAL > 0 )); then
+      LAST_REFRESH="$(refresh_stamp_read)"
+      if [[ -n "$LAST_REFRESH" ]]; then
+        NOW_EPOCH=$(date -u +%s) || NOW_EPOCH=""
+        if [[ "$NOW_EPOCH" =~ ^[0-9]+$ ]]; then
+          SINCE_REFRESH=$(( NOW_EPOCH - LAST_REFRESH ))
+          # A stamp from the future (clock step) is treated as "just refreshed"
+          # rather than as an infinitely old one.
+          if (( SINCE_REFRESH < 0 )); then SINCE_REFRESH=0; fi
+          if (( SINCE_REFRESH < MIN_REFRESH_INTERVAL )); then
+            log "$ID was refreshed ${SINCE_REFRESH}s ago (minimum interval ${MIN_REFRESH_INTERVAL}s) — rate-limited, no commit; the reading is in this pass's log only"
+            printf 'noop\n'
+            exit 0
+          fi
+        fi
+      fi
+    fi
+    PRE_BLOB="$(origin_blob || true)"
+    refresh_stamp_write
+    if ! splice_body || ! run_graph_commit --base "$MANIFEST" -m "graph: refresh fleet alarm $KIND" "$ID"; then
+      if [[ -n "$PRE_BLOB" ]]; then
+        restore_from_blob "$PRE_BLOB"
+      fi
+      log "refreshing $ID failed; the write was rolled back"
+      exit 1
+    fi
+    if ! verify_landed; then
+      log "refreshing $ID could not be verified on origin/main"
+      exit 1
+    fi
+    log "refreshed alarm node $ID"
+    printf 'landed\n'
+    exit 0
+    ;;
+
+  *)
+    log "unexpected classification '$STATE' for $ID"
+    exit 1
+    ;;
+esac
