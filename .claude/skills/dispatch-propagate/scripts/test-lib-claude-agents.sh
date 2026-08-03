@@ -24,16 +24,41 @@ source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 CA_DIR=""
 CA_FAKE=""
+# Path to the "no daemon process visible" probe stub for the case in scope; set
+# by ca_install_probe_stubs alongside the default (visible) stub.
+CA_PROBE_ABSENT=""
+
+# ca_install_probe_stubs <dir> — install both empty-read corroboration probe
+# stubs in <dir> and DEFAULT the seam to "daemon visible".
+#
+# The library only trusts an exactly-`[]` registry payload when a `claude
+# daemon` process corroborates it. Without an override the probe would shell out
+# to the HOST's real pgrep, so every `write_fake_claude '[]' 0` case would pass
+# or fail depending on whether this machine happens to run a daemon. Defaulting
+# to exit 0 preserves the pre-existing meaning of every `[]` fake: a definite
+# "no sessions". A case that wants the blocked-read shape points the seam at
+# $CA_PROBE_ABSENT.
+ca_install_probe_stubs() {
+  local dir="$1"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$dir/pgrep-daemon-visible"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$dir/pgrep-daemon-absent"
+  chmod +x "$dir/pgrep-daemon-visible" "$dir/pgrep-daemon-absent"
+  CA_PROBE_ABSENT="$dir/pgrep-daemon-absent"
+  export CLAUDE_AGENTS_PGREP_CMD="$dir/pgrep-daemon-visible"
+}
 
 ca_setup() {
   CA_DIR=$(mktemp -d)
   CA_FAKE="$CA_DIR/fake-claude"
+  ca_install_probe_stubs "$CA_DIR"
 }
 
 ca_teardown() {
   rm -rf "$CA_DIR"
   CA_DIR=""
   CA_FAKE=""
+  CA_PROBE_ABSENT=""
+  unset CLAUDE_AGENTS_PGREP_CMD
   # DISPATCH_AGENTS_SNAPSHOT_ALL is unset here too so the registered-view
   # snapshot set by a ca_all_* case can never leak into a case using this
   # (older) pair — a stale snapshot would shadow the fake daemon entirely.
@@ -690,10 +715,19 @@ ca_teardown
 # with a `bin/` exactly one level under it, the layout the fake's relative
 # payload lookup requires.
 
-ca_all_setup() { TMPDIR_TEST=$(mktemp -d); mkdir -p "$TMPDIR_TEST/bin"; }
+ca_all_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/bin"
+  # Same empty-read corroboration default as ca_setup — the `--all`-faithful
+  # fake serves `[]` on the ACTIVE view whenever every row is `done`, so these
+  # cases hit the corroboration path too.
+  ca_install_probe_stubs "$TMPDIR_TEST"
+}
 ca_all_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
+  CA_PROBE_ABSENT=""
+  unset CLAUDE_AGENTS_PGREP_CMD
   unset CLAUDE_AGENTS_CMD OFFICE_HOURS_CLAUDE_CMD DISPATCH_AGENTS_SNAPSHOT_ALL
 }
 
@@ -1357,5 +1391,190 @@ assert_eq "terminal-snapshot-bypass: finds the row absent from the empty snapsho
 ca_teardown
 
 # <<< END MOVED <<<
+
+# --- empty-read corroboration (tactic-graph-router-live-worker-read-robust) ---
+# `claude agents --json` reaches the daemon over a Unix socket. A blocked read
+# (sandbox / network-namespace isolation) exits 0 and prints `[]` — byte-
+# identical to a genuine "no live sessions". The five hardened functions
+# corroborate an exactly-`[]` payload with a socket-independent process probe
+# (`pgrep -f 'claude daemon'`, seam: CLAUDE_AGENTS_PGREP_CMD) and fold an
+# uncorroborated `[]` into their own UNKNOWN. Every case below asserts BOTH
+# halves — unreachable probe → UNKNOWN, reachable probe → today's definite
+# answer — so a stub that never runs cannot make the pair vacuous.
+
+# --- Test 62: claude_sessions_under ------------------------------------------
+echo "Test: claude_sessions_under folds an uncorroborated [] into UNKNOWN"
+ca_setup
+write_fake_claude '[]' 0
+CLAUDE_AGENTS_PGREP_CMD="$CA_PROBE_ABSENT"
+if out=$(claude_sessions_under "$CA_DIR" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "uncorroborated-empty sessions_under: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "uncorroborated-empty sessions_under: prints nothing" "" "$out"
+if err=$(claude_sessions_under "$CA_DIR" 2>&1 >/dev/null); then :; fi
+assert_contains_local "uncorroborated-empty sessions_under: names the remedy on stderr" \
+  "dangerouslyDisableSandbox" "$err"
+ca_teardown
+
+echo "Test: claude_sessions_under still reports a corroborated [] as a definite no-sessions"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_sessions_under "$CA_DIR"); then rc=0; else rc=$?; fi
+assert_eq "corroborated-empty sessions_under: exits 0 (definite)" "0" "$rc"
+assert_eq "corroborated-empty sessions_under: prints no session lines" "" "$out"
+ca_teardown
+
+# --- Test 63: the --cwd filter legitimately yields zero rows ------------------
+# The classifier keys on the RAW payload, never the projection — but for the
+# --cwd variant the daemon filters SERVER-side, so an empty result IS `[]`. With
+# the probe reachable that stays a definite answer: the corroboration gate must
+# not turn an ordinary "nothing under this path" into UNKNOWN.
+echo "Test: claude_sessions_under returns a definite empty for a --cwd-filtered result"
+ca_setup
+cat > "$CA_FAKE" <<'FAKE'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  [[ "$arg" == "--cwd" ]] && { echo '[]'; exit 0; }
+done
+echo '[{"sessionId":"s-elsewhere","pid":1,"status":"busy","name":"other-wt"}]'
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+if out=$(claude_sessions_under "$CA_DIR"); then rc=0; else rc=$?; fi
+assert_eq "cwd-filtered empty: exits 0 (definite, not UNKNOWN)" "0" "$rc"
+assert_eq "cwd-filtered empty: prints no session lines" "" "$out"
+ca_teardown
+
+# --- Test 64: claude_agents_list_all -----------------------------------------
+echo "Test: claude_agents_list_all folds an uncorroborated [] into UNKNOWN"
+ca_setup
+write_fake_claude '[]' 0
+CLAUDE_AGENTS_PGREP_CMD="$CA_PROBE_ABSENT"
+if out=$(claude_agents_list_all 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "uncorroborated-empty list_all: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "uncorroborated-empty list_all: prints nothing" "" "$out"
+ca_teardown
+
+echo "Test: claude_agents_list_all still reports a corroborated [] as a definite empty registry"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_agents_list_all); then rc=0; else rc=$?; fi
+assert_eq "corroborated-empty list_all: exits 0 (definite)" "0" "$rc"
+assert_eq "corroborated-empty list_all: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 65: claude_agents_list_registered + worktree_has_live_session -------
+# The occupancy consequence: an uncorroborated `[]` must report the worktree as
+# OCCUPIED, never free — this is the read that let a duplicate /implement worker
+# launch into a worktree another session already owned.
+echo "Test: claude_agents_list_registered folds an uncorroborated [] into UNKNOWN, and occupancy fails safe"
+ca_setup
+write_fake_claude '[]' 0
+CLAUDE_AGENTS_PGREP_CMD="$CA_PROBE_ABSENT"
+if out=$(claude_agents_list_registered 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "uncorroborated-empty list_registered: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "uncorroborated-empty list_registered: prints nothing" "" "$out"
+if worktree_has_live_session "$CA_DIR" 2>/dev/null; then live=occupied; else live=free; fi
+assert_eq "uncorroborated-empty: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+echo "Test: a corroborated [] still reports the worktree free"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_agents_list_registered); then rc=0; else rc=$?; fi
+assert_eq "corroborated-empty list_registered: exits 0 (definite)" "0" "$rc"
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "corroborated-empty: worktree_has_live_session reports free" "free" "$live"
+ca_teardown
+
+# --- Test 66: claude_agents_count_busy_workers -------------------------------
+# The spawn-headroom consequence: an uncorroborated `[]` must NOT report a count
+# of 0, which would inflate the router's remaining concurrency budget.
+echo "Test: claude_agents_count_busy_workers folds an uncorroborated [] into UNKNOWN"
+ca_setup
+write_fake_claude '[]' 0
+CLAUDE_AGENTS_PGREP_CMD="$CA_PROBE_ABSENT"
+if out=$(claude_agents_count_busy_workers 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "uncorroborated-empty count_busy: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "uncorroborated-empty count_busy: prints no count" "" "$out"
+ca_teardown
+
+echo "Test: claude_agents_count_busy_workers still counts 0 for a corroborated []"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_agents_count_busy_workers); then rc=0; else rc=$?; fi
+assert_eq "corroborated-empty count_busy: exits 0 (definite)" "0" "$rc"
+assert_eq "corroborated-empty count_busy: counts 0" "0" "$out"
+ca_teardown
+
+# --- Test 67: claude_session_id_is_live — the INVERTED fold ------------------
+# This function's UNKNOWN folds to LIVE, not to rc 1: returning "absent" would
+# tell dispatch-standdown the winner is gone and invite a peer to take over the
+# shared worktree its uncommitted work still sits in.
+echo "Test: claude_session_id_is_live folds an uncorroborated [] to LIVE with state unknown"
+ca_setup
+write_fake_claude '[]' 0
+CLAUDE_AGENTS_PGREP_CMD="$CA_PROBE_ABSENT"
+CLAUDE_SESSION_ID_LIVE_STATE="sentinel"
+if claude_session_id_is_live "win" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "uncorroborated-empty sid_is_live: returns 0 (folds to live, NOT absent)" "0" "$rc"
+assert_eq "uncorroborated-empty sid_is_live: state is unknown" "unknown" "$CLAUDE_SESSION_ID_LIVE_STATE"
+ca_teardown
+
+echo "Test: claude_session_id_is_live still reports absent for a corroborated []"
+ca_setup
+write_fake_claude '[]' 0
+CLAUDE_SESSION_ID_LIVE_STATE="sentinel"
+if claude_session_id_is_live "win"; then rc=0; else rc=$?; fi
+assert_eq "corroborated-empty sid_is_live: returns 1 (absent)" "1" "$rc"
+assert_eq "corroborated-empty sid_is_live: state is absent" "absent" "$CLAUDE_SESSION_ID_LIVE_STATE"
+ca_teardown
+
+# --- Test 68: a NON-empty array is self-corroborating ------------------------
+# The probe must gate ONLY the exactly-`[]` payload. A blocked read cannot
+# invent rows, so a populated array stays a definite answer even with the probe
+# reporting no daemon — otherwise every healthy read on a host whose daemon
+# pattern does not match would flip to UNKNOWN and stall the fleet.
+echo "Test: a non-empty array stays definite even when the corroboration probe is unreachable"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"s-1\",\"pid\":1,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
+CLAUDE_AGENTS_PGREP_CMD="$CA_PROBE_ABSENT"
+if out=$(claude_agents_list_all); then rc=0; else rc=$?; fi
+assert_eq "non-empty unreachable-probe: list_all exits 0" "0" "$rc"
+assert_eq "non-empty unreachable-probe: list_all projects the row" \
+  "$(printf 's-1\tbusy\t%s' "$ca_basename")" "$out"
+if out=$(claude_agents_count_busy_workers); then rc=0; else rc=$?; fi
+assert_eq "non-empty unreachable-probe: count_busy exits 0" "0" "$rc"
+if out=$(claude_sessions_under "$CA_DIR"); then rc=0; else rc=$?; fi
+assert_eq "non-empty unreachable-probe: sessions_under exits 0" "0" "$rc"
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "non-empty unreachable-probe: occupancy still answered from the row" "occupied" "$live"
+ca_teardown
+
+# --- Test 69: a client-side name filter yielding zero rows stays definite -----
+# The classifier keys on the RAW payload, never the projection. A non-empty
+# array whose rows simply do not match the requested name must stay a definite
+# "no such session" — keying on the projected TSV would flip it to UNKNOWN.
+echo "Test: a non-matching name filter over a non-empty array stays definite under an unreachable probe"
+ca_setup
+write_fake_claude '[{"sessionId":"s-a","pid":111,"status":"busy","name":"other-worktree"}]' 0
+CLAUDE_AGENTS_PGREP_CMD="$CA_PROBE_ABSENT"
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "projection-not-raw: exits 0 (definite no-match)" "0" "$rc"
+assert_eq "projection-not-raw: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 70: claude_agents_registry_reachable — the probe seam itself -------
+echo "Test: claude_agents_registry_reachable keys only on the probe's exit status"
+ca_setup
+if claude_agents_registry_reachable; then rc=0; else rc=$?; fi
+assert_eq "probe: visible stub (exit 0) reports reachable" "0" "$rc"
+CLAUDE_AGENTS_PGREP_CMD="$CA_PROBE_ABSENT"
+if claude_agents_registry_reachable; then rc=0; else rc=$?; fi
+assert_eq "probe: absent stub (exit 1) reports unreachable" "1" "$rc"
+CLAUDE_AGENTS_PGREP_CMD="$CA_DIR/no-such-pgrep"
+if claude_agents_registry_reachable 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "probe: a missing pgrep reports unreachable (no corroboration)" "127" "$rc"
+ca_teardown
 
 report_results

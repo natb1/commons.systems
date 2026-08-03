@@ -24,6 +24,34 @@
 #   claude_job_id_for_name_all         <name>
 #   claude_session_id_is_live          <sid>
 #   claude_agents_list_duplicate_node_names
+#   claude_agents_registry_reachable
+#
+# EMPTY-READ CORROBORATION. `claude agents --json` reaches the daemon over a
+# Unix socket. A blocked read (sandbox, network-namespace isolation) exits 0 and
+# prints `[]` — byte-identical to a genuine "no live sessions". Five functions
+# therefore refuse to trust an exactly-`[]` payload on its own: they corroborate
+# it with `claude_agents_registry_reachable` (a `pgrep -f 'claude daemon'`
+# process probe, a mechanism the socket failure does not share) and fold an
+# uncorroborated `[]` into UNKNOWN, with one stderr line naming the remedy:
+#   claude_sessions_under, claude_agents_list_all, claude_agents_list_registered,
+#   claude_agents_count_busy_workers  → UNKNOWN (return 1)
+#   claude_session_id_is_live         → UNKNOWN folds to LIVE (return 0 with
+#                                       CLAUDE_SESSION_ID_LIVE_STATE=unknown),
+#                                       this function's inverted contract
+# The probe runs AFTER the `claude agents` invocation, never before: the daemon
+# is spawned on demand by the first `claude` call, so probing first would report
+# "no daemon" on a genuinely idle host and defer forever. A NON-empty array is
+# self-corroborating (a blocked read cannot invent rows) and is never gated by
+# the probe. The RAW payload is classified, never a projection — a `--cwd` or
+# name filter legitimately yields zero rows from a non-empty array.
+# Deliberately NOT hardened: claude_sessions_with_name,
+# claude_sessions_with_name_all, claude_sessions_with_name_prefix_all,
+# claude_job_id_for_name_all, claude_agents_count_held_for_debug, and
+# claude_agents_list_duplicate_node_names (covered transitively via
+# claude_agents_list_all); and the two snapshot writers
+# (claude_agents_snapshot_capture / _capture_registered), since an
+# uncorroborated `[]` snapshot is re-classified on every read — refusing to
+# write it would only force extra live round-trips without changing a verdict.
 #
 # claude_sessions_under <path>
 #   The cwd-based low-level primitive. Runs `claude agents --json --cwd <path>`,
@@ -33,11 +61,11 @@
 #               Zero sessions (`[]`) → return 0 with empty stdout: this is a
 #               definite "no sessions", NOT a failure.
 #     return 1 — UNKNOWN. The daemon could not be queried: `claude` missing,
-#               non-zero exit, or output that is not a JSON array. Stdout is
+#               non-zero exit, output that is not a JSON array, or an
+#               exactly-`[]` payload no visible `claude daemon` process
+#               corroborates (see EMPTY-READ CORROBORATION above). Stdout is
 #               empty. Callers MUST treat unknown as occupied/active, never as
-#               free — a `[]` from a down daemon is indistinguishable from a
-#               `[]` of genuinely no sessions, so the detectable failures fail
-#               safe here and the rest is mitigated operationally (see below).
+#               free.
 #   Used by `dispatch-launch-worker` / `dispatch-spawn-job` to filter on
 #   SPAWN_CWD — callers that want cwd-based semantics.
 #
@@ -97,8 +125,9 @@
 #               `claude_sessions_with_name`). Zero sessions (`[]`) → return 0
 #               with empty stdout: a definite "no sessions", NOT a failure.
 #     return 1 — UNKNOWN. Same contract as `claude_sessions_under`: `claude`
-#               missing, non-zero exit, non-array output, or zero exit with
-#               whitespace-only output. Stdout is empty. Callers MUST treat
+#               missing, non-zero exit, non-array output, zero exit with
+#               whitespace-only output, or an uncorroborated `[]` (EMPTY-READ
+#               CORROBORATION above). Stdout is empty. Callers MUST treat
 #               unknown as "cannot reconcile" and reclaim nothing (fail safe).
 #
 # worktree_has_live_session <path> [exclude_sid]
@@ -158,12 +187,23 @@
 #   spawning). Used by the dispatch router's concurrency gate before deciding
 #   whether to spawn one more. Same UNKNOWN contract as `claude_sessions_under`:
 #   a count of `0` is a definite "no matches", non-zero return is "could not
-#   determine".
+#   determine" — and an exactly-`[]` read counts as definite only when a visible
+#   `claude daemon` process corroborates it (EMPTY-READ CORROBORATION above), so
+#   a blocked read can no longer manufacture spawn headroom.
 #     return 0 — daemon queried successfully. Stdout is a single integer (>=0)
 #               line: the count of matching sessions.
-#     return 1 — UNKNOWN. Stdout is empty. Callers that gate on the count
-#               should fail open (proceed to spawn) — the per-worktree dedup
-#               inside `dispatch-spawn-job` is the last-line defense.
+#     return 1 — UNKNOWN. Stdout is empty. Callers MUST defer rather than
+#               assume headroom: `dispatch-select-tick` and `graph-select-target`
+#               both fail CLOSED on this return (concurrency-cap disposition),
+#               not fail open. `dispatch-spawn-job`'s per-worktree dedup is NOT
+#               an independent backstop here — it calls `claude_sessions_under`,
+#               which shares the same daemon-read ambiguity this function does,
+#               so it cannot be trusted to catch what an UNKNOWN busy-count
+#               read let through. (This is the 2026-07-21 incident this
+#               contract closes: an uncorroborated empty `claude agents --json`
+#               read was indistinguishable from a genuine "no live sessions",
+#               so a manual tick fell through to GAP=1 and launched a duplicate
+#               `/implement` worker onto an already-occupied worktree.)
 #
 # verify_agent_registered_under <agent-name> <cwd>
 #   Bounded retry of `claude_sessions_under` that closes the async-registration
@@ -223,7 +263,10 @@
 #               distinct `winner-stopped` disposition read this — it must
 #               ESCALATE, never invite a peer to take over the worktree.
 #     absent   — queried successfully, no such session (the only `return 1`).
-#     unknown  — the registry could not be queried, or no <sid> was passed.
+#     unknown  — the registry could not be queried, no <sid> was passed, or the
+#               read returned an exactly-`[]` array no visible `claude daemon`
+#               process corroborates (EMPTY-READ CORROBORATION above). An
+#               uncorroborated `[]` must never resolve to `absent`.
 #   Callers that ignore the variable keep byte-identical two-state behavior.
 #   Empty/missing <sid>: prints a stderr diagnostic and returns 0 (fail safe),
 #   mirroring `worktree_has_live_session`'s own empty-arg handling.
@@ -325,10 +368,17 @@
 # `verify_agent_registered_under` inter-attempt sleep (default 0.2 s). Tests that
 # exercise the full exhaustion path set it to 0 to skip the real sleeps.
 #
+# Test override: CLAUDE_AGENTS_PGREP_CMD replaces the `pgrep` invocation in
+# `claude_agents_registry_reachable`, so the corroboration probe is testable
+# without a real daemon. Default: `pgrep`. A stub exiting 0 models "daemon
+# visible"; one exiting 1 models the blocked-read case.
+#
 # Sandbox: `claude agents --json` reaches the local daemon over a Unix socket;
-# a sandboxed call returns `[]` indistinguishable from "no sessions". Callers
-# must run this helper with `dangerouslyDisableSandbox: true` — see
-# `.claude/rules/sandbox.md`.
+# a sandboxed call returns `[]` at exit 0, which the raw read cannot distinguish
+# from "no sessions". The five hardened functions above now detect that case via
+# the process probe and report UNKNOWN rather than a false empty — but the probe
+# is a backstop, not a licence: callers must still run this helper with
+# `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 #
 # Safe to source multiple times. Does NOT use set -e (must return, not exit).
 #
@@ -355,17 +405,112 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     "${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null
   }
 
+  # claude_agents_registry_reachable — socket-INDEPENDENT corroboration probe.
+  # `claude agents --json` reaches the daemon over a Unix socket; when that
+  # socket is unreachable (a sandboxed call, a namespace-isolated shell) the
+  # command still exits 0 and prints `[]` — byte-identical to a genuine "no live
+  # sessions". This probe answers the same question by a different mechanism: is
+  # a `claude daemon` process visible to THIS process? Same technique as
+  # `dispatch-daemon-liveness` (its DAEMON_PATTERN / PGREP_CMD), but a SEPARATE
+  # env seam (CLAUDE_AGENTS_PGREP_CMD) — the two are independent overrides.
+  # Only the exit status is used; stdout/stderr are discarded.
+  #     return 0 — at least one `claude daemon` process is visible: an empty
+  #               array from the socket read is corroborated as definite.
+  #     return 1 — no daemon process visible (or pgrep itself unavailable).
+  # NOT memoized on purpose: it only runs on the empty-array path (one pgrep on
+  # an otherwise idle machine), and a cached verdict would go stale across a
+  # daemon start and leak between cases inside one test shell.
+  claude_agents_registry_reachable() {
+    "${CLAUDE_AGENTS_PGREP_CMD:-pgrep}" -f 'claude daemon' >/dev/null 2>&1
+  }
+
+  # _claude_agents_empty_read_is_definite <raw-json> — classify a successful
+  # registry read as definite or uncorroborated.
+  #     return 0 — DEFINITE: the payload is not an empty array (a non-empty
+  #               array is self-corroborating — a blocked read cannot invent
+  #               rows); or it came from a snapshot for <view>, whose emptiness
+  #               was corroborated at capture time; or it IS `[]` from a live
+  #               read and a `claude daemon` process is visible.
+  #     return 1 — UNCORROBORATED `[]`: the caller must fold it into UNKNOWN.
+  # Always pass the RAW payload, never a projection: `claude_sessions_under`'s
+  # `--cwd` filter and the client-side jq filters legitimately project zero rows
+  # from a NON-empty array, and keying on the projection would flip healthy
+  # reads to UNKNOWN.
+  # WHERE CORROBORATION HAPPENS: at CAPTURE, not at every read. A snapshot is
+  # written by `claude_agents_snapshot_capture`, which performs the live socket
+  # read and corroborates it there — refusing to write an uncorroborated `[]`
+  # at all. So by the time a reader sees a snapshot, its emptiness has already
+  # been established as real, and re-probing here would be both redundant and
+  # WRONG: a caller that deliberately supplied an empty snapshot (the tick
+  # reusing one capture across a selection pass; a test injecting "no
+  # sessions") would have its own explicit input overridden by a probe of the
+  # ambient host. That is why `<view>` exists — when the snapshot backing that
+  # view is in effect, the payload is the caller's assertion and is definite by
+  # construction.
+  #
+  # `<view>` is `active` (DISPATCH_AGENTS_SNAPSHOT, backing `_claude_agents_raw`)
+  # or `registered` (DISPATCH_AGENTS_SNAPSHOT_ALL, backing
+  # `_claude_agents_raw_registered`). The two are INDEPENDENT: a site reading
+  # the registered view must not be excused by an active-view snapshot, so the
+  # view is passed explicitly rather than inferred. Omit it for a site that
+  # queries the daemon DIRECTLY, bypassing both snapshots — such a read is
+  # always live and always corroborated.
+  _claude_agents_snapshot_in_effect() {
+    case "${1:-}" in
+      active)     [[ -n "${DISPATCH_AGENTS_SNAPSHOT:-}"     && -r "${DISPATCH_AGENTS_SNAPSHOT:-}"     ]] ;;
+      registered) [[ -n "${DISPATCH_AGENTS_SNAPSHOT_ALL:-}" && -r "${DISPATCH_AGENTS_SNAPSHOT_ALL:-}" ]] ;;
+      *)          return 1 ;;
+    esac
+  }
+
+  _claude_agents_empty_read_is_definite() {
+    local raw="${1:-}" view="${2:-}"
+    if [[ "${raw//[[:space:]]/}" != "[]" ]]; then
+      return 0
+    fi
+    # A snapshot-sourced `[]` was corroborated when the snapshot was captured.
+    if _claude_agents_snapshot_in_effect "$view"; then
+      return 0
+    fi
+    claude_agents_registry_reachable
+  }
+
+  # _claude_agents_warn_uncorroborated_empty <caller> — one stderr line per
+  # uncorroborated classification, naming the remedy.
+  _claude_agents_warn_uncorroborated_empty() {
+    printf "lib-claude-agents: %s: empty 'claude agents --json' result could not be corroborated (no 'claude daemon' process visible); treating as UNKNOWN. Run unsandboxed (dangerouslyDisableSandbox) and check dispatch-daemon-liveness.\n" \
+      "${1:-registry read}" >&2
+  }
+
   # claude_agents_snapshot_capture <path> — capture one machine-wide
   # `claude agents --json` to <path> for the tick to reuse via
-  # DISPATCH_AGENTS_SNAPSHOT. Writes the raw array (even `[]`) and returns the
-  # command's exit status so the caller can fall back to live reads on failure.
+  # DISPATCH_AGENTS_SNAPSHOT.
+  #
+  # THIS IS WHERE THE EMPTY READ IS CORROBORATED. The capture is the one place
+  # the live socket read actually happens, so it is the one place the
+  # blocked-read ambiguity exists. An uncorroborated `[]` is NOT written: the
+  # file is removed and a non-zero status returned, so the caller falls back to
+  # live per-call reads (each of which corroborates on its own) instead of
+  # seeding every reader in the pass with a snapshot that says "no sessions"
+  # when it means "could not see". Writing it and re-probing at each read would
+  # spread one ambiguous read across the whole tick AND override any caller
+  # that legitimately supplied an empty snapshot.
+  #     return 0 — a snapshot was written and its contents are trustworthy.
+  #     return non-zero — nothing usable was written; fall back to live reads.
   claude_agents_snapshot_capture() {
     local pth="${1:-}"
     if [[ -z "$pth" ]]; then
       printf 'lib-claude-agents: claude_agents_snapshot_capture requires a <path> argument\n' >&2
       return 1
     fi
-    "${CLAUDE_AGENTS_CMD:-claude}" agents --json >"$pth" 2>/dev/null
+    "${CLAUDE_AGENTS_CMD:-claude}" agents --json >"$pth" 2>/dev/null || return 1
+    # No <view> argument: this classifies the LIVE read that just happened, so
+    # it must probe, never excuse itself via a snapshot that does not exist yet.
+    if ! _claude_agents_empty_read_is_definite "$(cat "$pth" 2>/dev/null)"; then
+      _claude_agents_warn_uncorroborated_empty claude_agents_snapshot_capture
+      rm -f "$pth"
+      return 1
+    fi
   }
 
   # _claude_agents_raw_registered — emit the raw `claude agents --json --all`
@@ -388,16 +533,21 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # claude_agents_snapshot_capture_registered <path> — capture one machine-wide
   # `claude agents --json --all` to <path> for the tick to reuse via
   # DISPATCH_AGENTS_SNAPSHOT_ALL. The REGISTERED-view sibling of
-  # claude_agents_snapshot_capture. Writes the raw array (even `[]`) and returns
-  # the command's exit status so the caller can fall back to live reads on
-  # failure.
+  # claude_agents_snapshot_capture, including its capture-time corroboration:
+  # an uncorroborated `[]` is not written, and non-zero is returned so the
+  # caller falls back to live reads.
   claude_agents_snapshot_capture_registered() {
     local pth="${1:-}"
     if [[ -z "$pth" ]]; then
       printf 'lib-claude-agents: claude_agents_snapshot_capture_registered requires a <path> argument\n' >&2
       return 1
     fi
-    "${CLAUDE_AGENTS_CMD:-claude}" agents --json --all >"$pth" 2>/dev/null
+    "${CLAUDE_AGENTS_CMD:-claude}" agents --json --all >"$pth" 2>/dev/null || return 1
+    if ! _claude_agents_empty_read_is_definite "$(cat "$pth" 2>/dev/null)"; then
+      _claude_agents_warn_uncorroborated_empty claude_agents_snapshot_capture_registered
+      rm -f "$pth"
+      return 1
+    fi
   }
 
   # claude_sessions_under <path> — emit live sessions under <path> as TSV.
@@ -424,6 +574,14 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     # A zero exit with empty (or whitespace-only) output is unknown too — not a
     # definite "no sessions".
     if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # An exactly-`[]` payload is only a definite "no sessions" when a daemon
+    # process corroborates it; otherwise it is a blocked read wearing the same
+    # clothes, and folds into UNKNOWN.
+    if ! _claude_agents_empty_read_is_definite "$out"; then
+      _claude_agents_warn_uncorroborated_empty claude_sessions_under
       return 1
     fi
 
@@ -645,6 +803,12 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       return 1
     fi
 
+    # An uncorroborated `[]` is UNKNOWN, not a definite empty registry.
+    if ! _claude_agents_empty_read_is_definite "$out" active; then
+      _claude_agents_warn_uncorroborated_empty claude_agents_list_all
+      return 1
+    fi
+
     # One jq pass validates the JSON is an array and projects the 3-column TSV
     # (sessionId, status, name — no pid). Non-array input errors out and the
     # result is UNKNOWN.
@@ -686,6 +850,14 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
 
     # A zero exit with empty (or whitespace-only) output is unknown too.
     if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # An uncorroborated `[]` is UNKNOWN, not a definite empty registry — and
+    # `worktree_has_live_session` folds that UNKNOWN into OCCUPIED, so a blocked
+    # read can no longer report a claimed worktree as free.
+    if ! _claude_agents_empty_read_is_definite "$out" registered; then
+      _claude_agents_warn_uncorroborated_empty claude_agents_list_registered
       return 1
     fi
 
@@ -914,6 +1086,17 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       return 0
     fi
 
+    # An uncorroborated `[]` is UNKNOWN — and this function's UNKNOWN fold is
+    # INVERTED by design: unknown folds to LIVE (return 0), never to `absent`.
+    # Returning 1 here would tell a caller the winner is gone and invite it to
+    # take over the shared worktree, which is precisely the loss the fail-safe
+    # posture exists to prevent.
+    if ! _claude_agents_empty_read_is_definite "$out"; then
+      _claude_agents_warn_uncorroborated_empty claude_session_id_is_live
+      CLAUDE_SESSION_ID_LIVE_STATE="unknown"
+      return 0
+    fi
+
     # One jq pass validates the array shape and resolves <sid> to one of
     # `absent` or `present:<state>`. Exact `==` on .sessionId — never a
     # substring test, since session ids share prefixes. `.state` is the granular
@@ -1031,6 +1214,13 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       return 1
     fi
     if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # An uncorroborated `[]` is UNKNOWN, not a definite count of 0 — a blocked
+    # read must not manufacture spawn headroom.
+    if ! _claude_agents_empty_read_is_definite "$out" active; then
+      _claude_agents_warn_uncorroborated_empty claude_agents_count_busy_workers
       return 1
     fi
 
