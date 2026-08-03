@@ -743,6 +743,52 @@ clarifications:
       strategy as never-aligned and never-read; correct the structured fields at
       the next sensor pass so the round cap and the fresh-reading gate operate
       on the real history.
+  - question: Which trigger predicate must the widened api-cost lens use, given that
+      the classifier gating it reads file paths only and can never express
+      "touches an API or query call site"?
+    answer: "(Recorded 2026-08-03, author interview; fills the mechanism gap
+      clarifications 18 and 28 left open.) The lens gets its OWN diff-content
+      gate, decoupled from the shared `app_or_rules` boolean. Compute a new
+      `api_call_site` flag at the review-fix args-build site
+      (.claude/skills/review-fix/SKILL.md:240), where MERGE_BASE is already in
+      scope, by scanning the diff for API/query call-site patterns
+      (fetch/axios/getDocs/query/collection), and gate api-cost on that flag
+      inside `agentFinderSet` (review-fix.js:499-511, within the `>>> domain
+      sweep gate` sentinels sliced by review-fix-domain-sweep-probe.mjs).
+      Measured this round: `dispatch-security-surface` receives a path list on
+      stdin (`dispatch-changed-files | dispatch-security-surface`) and gates on
+      extension/name regexes alone (APP_RE, RULES_RE at
+      dispatch-security-surface:26-35) — it never inspects diff content, so the
+      statement's requirement is not expressible there and a content probe
+      belongs at the args-build site rather than inside that script. Two
+      alternatives were put to the author and declined. Relaxing the shared
+      `app_or_rules` predicate was declined primarily because that boolean ALSO
+      selects the auth and data-exposure domain-sweep sections
+      (`sweepDomains`, review-fix.js:667-672), so relaxing it would silently
+      widen SECURITY review scope to every code diff including `.claude/`
+      tooling — a larger and less visible consequence than the ~3.6x draw
+      overshoot; a per-lens gate keyed on a widened PATH rule was declined
+      because it still does not express the call-site requirement and
+      re-approximates it by path, inheriting the same overshoot without the
+      simplicity. UNMEASURED, and flagged as such: nobody has counted how many
+      of the 18 measured runs contain such a call site, so the resulting fire
+      rate is a tunable design property of the pattern list, not a measurement.
+      The decomposition must record the realized fire rate once observed."
+  - question: Is clarification 18's "~$14 toward ~$25-30 proxy per 4-day window" a
+      gate the api-cost tactic's Verification block must assert, or an expected
+      consequence of the widening?
+    answer: "(Recorded 2026-08-03, author interview.) An expected range, not a
+      gate. The binding constraint is the statement's semantics — the lens fires
+      on diffs touching an API or query call site — and the realized draw is
+      measured and recorded afterward rather than asserted as a threshold. The
+      figure was derived from an assumed widening, so treating it as binding
+      would let a derived estimate constrain the mechanism it was derived from.
+      Same correction shape as the 2026-08-03 ruling that restated
+      tactic-review-verify-per-file-batching's 3.2x as an upper bound once the
+      arithmetic no longer supported it as a target. Consequence for
+      decomposition: Verification asserts that the merged lens fires on
+      materially more than 5 of 18 comparable runs and records the realized
+      draw, and does NOT assert a dollar ceiling or floor."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance

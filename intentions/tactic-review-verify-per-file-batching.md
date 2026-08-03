@@ -27,12 +27,13 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: implement
+phase: qa
 execution:
   branch: tactic-review-verify-per-file-batching
   pr: 3027
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
   fix: null
   completion: null

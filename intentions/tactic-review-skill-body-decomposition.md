@@ -46,14 +46,20 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: implement
+phase: review
 execution:
   branch: tactic-review-skill-body-decomposition
   pr: 3025
   attempts: {}
-  markers: []
+  markers:
+    - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
-  fix: null
+  fix:
+    since: 2026-08-03
+    attempt: 2
+    pushed_sha: null
   completion: null
 validates: []
 blocked_by: []
