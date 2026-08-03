@@ -87,6 +87,16 @@ const instrumentVerdict = (function () {
 const NOT_INVOKED_FAILURE_TEXT =
   'Skill code-review cannot be used with Skill tool due to disable-model-invocation';
 
+// 'code-review' is no longer a registered instrument (tactic-review-code-review-
+// invocation-contract moved its invocation out of this gate entirely, into a
+// claude -p pre-stage with its own hard args.code_review contract check, tested
+// elsewhere). The 'code-review'-keyed cases above/below this comment now exist
+// solely to pin the invariant that an UNREGISTERED instrument name is always
+// inert; security-review is the sole remaining gated instrument, and gets its
+// own dedicated negative-path fixtures below.
+const NOT_INVOKED_FAILURE_TEXT_SECURITY_REVIEW =
+  'security-review invocation failed: skill unavailable in this session';
+
 const cases = [
   { id: 'lane-b', name: 'cost', res: {} },
   { id: 'null-res', name: 'code-review', res: null },
@@ -151,6 +161,33 @@ const cases = [
       instrument: { name: 'security-review', invoked: true, failure_text: '' },
       fixed: [],
       residue: [{ title: 'y' }],
+    },
+  },
+  {
+    id: 'no-receipt-security',
+    name: 'security-review',
+    res: { fixed: [], residue: [] },
+  },
+  {
+    id: 'wrong-name-security',
+    name: 'security-review',
+    res: {
+      instrument: { name: 'code-review', invoked: true, failure_text: '' },
+      fixed: [],
+      residue: [],
+    },
+  },
+  {
+    id: 'not-invoked-security',
+    name: 'security-review',
+    res: {
+      instrument: {
+        name: 'security-review',
+        invoked: false,
+        failure_text: NOT_INVOKED_FAILURE_TEXT_SECURITY_REVIEW,
+      },
+      fixed: [],
+      residue: [],
     },
   },
 ];
