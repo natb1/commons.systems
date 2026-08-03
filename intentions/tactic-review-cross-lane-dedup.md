@@ -46,8 +46,16 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-review-cross-lane-dedup
+  pr: 3028
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
