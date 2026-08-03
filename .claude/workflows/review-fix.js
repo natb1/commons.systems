@@ -487,19 +487,29 @@ function transcriptVerdictDetail(tv) {
 //     it must not run concurrently with this parallel fan-out). Its output reaches
 //     this Workflow as args.code_review and is structured by the `parse:code-review`
 //     subagent below — never launched from here.
+//
+// The names returned here are AGENT names, and the agent→finding-source mapping is
+// no longer 1:1: `domain-sweep` is ONE agent that reads the diff once and covers
+// THREE finding sources (secrets / auth / data-exposure) as labelled brief sections
+// (see sweepDomains/sweepSections below). It sits where `secrets` sat — unconditional
+// on `surface === 'code'` — and its brief widens to include the auth and
+// data-exposure sections only when `app_or_rules` is true, exactly reproducing the
+// trigger asymmetry those three sources had as separate agents.
+// >>> domain sweep gate: sliced + eval'd by review-fix-domain-sweep-probe.mjs >>>
 function agentFinderSet(surface, app_or_rules) {
   // Any non-`code` surface (`empty`/`docs`/`tests`) yields NO agent finders at all —
   // the `surface === 'code'` gate below covers `tests` with no code change, since a
   // test-only diff has no production attack surface.
   const set = [];
   if (surface === 'code') {
-    set.push('input-validation', 'secrets', 'red-team', 'security-review');
+    set.push('input-validation', 'domain-sweep', 'red-team', 'security-review');
     if (app_or_rules) {
-      set.push('auth', 'data-exposure', 'firebase', 'cost');
+      set.push('firebase', 'cost');
     }
   }
   return set;
 }
+// <<< domain sweep gate <<<
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-dedup
 // Collapse one partition subgroup of same-root findings into one representative.
@@ -632,6 +642,7 @@ function diffContext(args) {
 }
 
 // Direct security-domain reviewer descriptions — mirror SKILL.md §1c.
+// >>> domain sweep brief: sliced + eval'd by review-fix-domain-sweep-probe.mjs >>>
 const DOMAIN_PROMPTS = {
   'input-validation':
     'Input validation: hunt injection in the changed code — SQL/NoSQL injection, XSS, command injection, path traversal. Check that external input is validated and escaped at every boundary it crosses.',
@@ -646,6 +657,23 @@ const DOMAIN_PROMPTS = {
   firebase:
     'Firebase-specific: Firestore rules permissiveness (overly broad `allow` conditions, missing field constraints), emulator-only code reachable on production paths, Firebase API key or config exposure.',
 };
+
+// The domain lenses the single `domain-sweep` agent carries, and the labelled brief
+// it is given. Pure: no diff, no args, no Workflow globals — the sections are just
+// DOMAIN_PROMPTS entries tagged with the Source each section's findings must carry.
+// The `app_or_rules` split reproduces the pre-fold trigger asymmetry exactly:
+// `secrets` fired on every code surface; `auth`/`data-exposure` fired only when
+// app_or_rules was also true.
+function sweepDomains(app_or_rules) {
+  return app_or_rules ? ['secrets', 'auth', 'data-exposure'] : ['secrets'];
+}
+
+function sweepSections(app_or_rules) {
+  return sweepDomains(app_or_rules)
+    .map((d) => `Section "${d}" (set Source "${d}" on findings from this section): ${DOMAIN_PROMPTS[d]}`)
+    .join('\n');
+}
+// <<< domain sweep brief <<<
 
 // Structuring prompt for the built-in /code-review pre-stage output. code-review
 // is NOT a finder agent in this Workflow: SKILL.md Step 1b already ran
@@ -775,7 +803,20 @@ function finderPrompt(name, args) {
       SCHEMA_BLURB,
     ].join('\n');
   }
-  // input-validation | secrets | red-team | auth | data-exposure | firebase
+  if (name === 'domain-sweep') {
+    return [
+      'You are a findings-only security reviewer running the domain lenses listed below in ONE',
+      'pass over the same diff. Work the sections in order and report on each independently —',
+      'a clean result in one section is never a reason to shorten another.',
+      sweepSections(args.app_or_rules),
+      ctx,
+      'Set "Source" on EACH finding to the section it came from — exactly one of "secrets",',
+      '"auth", "data-exposure". Never invent a combined source name. Fill OWASP and STRIDE for',
+      'every finding.',
+      SCHEMA_BLURB,
+    ].join('\n');
+  }
+  // input-validation | red-team | firebase
   return [
     `You are a findings-only security reviewer. Domain: ${DOMAIN_PROMPTS[name]}`,
     ctx,
