@@ -489,6 +489,13 @@ result = {
 }
 ```
 
+`coverage_incomplete` / `coverage_note` are the generic degraded-coverage
+signal, covering three causes: (1) the security probe wave skipped because
+both quality finders died, (2) an unverified instrument, and (3) Lane-A
+residue left undispositioned because the residue-disposition agent died;
+when more than one co-occurs in the same run, `coverage_note` is a
+space-joined composition of the causes.
+
 The Workflow's fix-authoring agents (non-isolated, Opus) have already edited the
 working tree by the time `result` is returned — this includes THREE sources
 of edits merged into the one envelope above: the shared Lane-B Opus fix fan-out,
