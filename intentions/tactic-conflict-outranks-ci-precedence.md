@@ -37,7 +37,7 @@ attention:
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-conflict-outranks-ci-precedence
   pr: 3019
@@ -48,10 +48,28 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T10:16:05Z
+    mergeCommitSha: 72683cbaaaf8d32aeb3d9b1b7e8f3f60c5e11f16
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main item 10 awaits a live tick episode where some PR is
+    simultaneously CONFLICTING and CI-red post-merge (source PR #3019 merged
+    2026-08-03T10:16:05Z); re-checked git log origin/main and the dispatch-tick
+    journal since the merge — zero 'enter fix-interrupt' commits and zero
+    'declining the fix interrupt' journal lines, i.e. no such episode has
+    occurred yet. Re-check after such an episode occurs (earliest useful
+    re-check: after a future conflicted-and-red tick episode, or after ~1 week
+    of ticks if none arises sooner)."
+  since: 2026-08-03
+  recommendation: No author decision needed — re-selection only, once a live
+    CONFLICTING+red episode has occurred. All 8 script-verifiable QA items and
+    the 71/71 hermetic bash-fixture suite already passed per the node's
+    Manual/observe-in-production section; this residue item is the one
+    end-to-end real-world confirmation the hermetic fixtures could not simulate.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

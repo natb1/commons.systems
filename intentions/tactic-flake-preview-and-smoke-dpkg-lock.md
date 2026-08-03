@@ -18,13 +18,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-flake-preview-and-smoke-dpkg-lock
   pr: 3020
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -132,3 +131,12 @@ designed to survive an external process holding the lock for the runner's
 entire lifetime.
 
 recurred on PR #3002 / run https://github.com/natb1/commons.systems/actions/runs/30637085583/job/91177292699
+
+## needs-main residue
+
+- id: recurrence-watch
+  title: Confirm the dpkg-lock-frontend fingerprint does not recur on subsequent preview-and-smoke runs
+  url_path: current
+  expected_outcome: Subsequent `preview-and-smoke` CI runs after PR #3020 merges do not reproduce the `playwright_install_with_deps: failed after 2 attempts` / `E: Could not get lock /var/lib/dpkg/lock-frontend` fingerprint.
+  finding: PR #3020 landed two mitigations in `preview-and-smoke` (a step that stops/kills apt-daily/unattended-upgrades units and self-excluding `pkill -f` patterns, plus a bounded 120s wait with a holder diagnostic on expiry) and raised `wait_for_dpkg_lock`'s default timeout from 30s to 120s. This is the node's own stated verification (watch subsequent runs for recurrence before resolving to `phase: done`) and cannot be settled within the QA session that authored the fix — it requires observing CI runs over time after merge.
+  Verifiability: WAIT — awaiting N subsequent `preview-and-smoke` CI runs post-merge; check via `gh run list --workflow pr-checks.yml -e push -b main --json conclusion,createdAt` or by grepping recent run logs for the fingerprint string `E: Could not get lock /var/lib/dpkg/lock-frontend`.
