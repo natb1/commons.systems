@@ -44,8 +44,8 @@ jobs:
           fetch-depth: 0
       - name: Disable unattended-upgrades / free dpkg lock
         run: |
-          sudo systemctl stop apt-daily.service apt-daily-upgrade.timer apt-daily.timer unattended-upgrades.service 2>/dev/null || true
-          sudo systemctl kill --kill-who=all apt-daily.service 2>/dev/null || true
+          sudo systemctl stop apt-daily.service apt-daily-upgrade.service apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service 2>/dev/null || true
+          sudo systemctl kill --kill-who=all apt-daily.service apt-daily-upgrade.service unattended-upgrades.service 2>/dev/null || true
           sudo pkill -9 -f '[u]nattended-upgrade' 2>/dev/null || true
           sudo pkill -9 -f 'apt[.]systemd[.]daily' 2>/dev/null || true
           waited=0
