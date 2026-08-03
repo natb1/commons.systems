@@ -26,7 +26,7 @@ attention:
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-phase-entry-selection-gate
   pr: 3021
@@ -34,9 +34,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T15:01:11Z
+    mergeCommitSha: bd133fd96387dabbd82c4019c4affe6721850a1e
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

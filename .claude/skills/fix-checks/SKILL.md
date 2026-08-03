@@ -76,10 +76,23 @@ case "$BRANCH" in
           # block (recommend step + $CLAUDE_JOB_DIR/office-hours-reason write).
           echo "ESCALATE-NO-PR: /fix-checks node '$NODE_ID' has no open PR — escalate to office-hours" >&2
           exit 1 ;;
+        3)
+          # The mechanical selection gate rejected the selection (phase/interrupt
+          # mismatch, office_hours park, stale serving-strategy fingerprint, no
+          # longer align-eligible, or an already-reviewed node re-selected). This
+          # is a stale selection, not a defect. End the session; make no graph
+          # write and open no PR.
+          echo "/fix-checks: node '$NODE_ID' selection no longer valid at origin/main (front door exit 3) — stale selection, not a defect; ending with no graph write and no PR" >&2
+          exit 0 ;;
+        5)
+          # Scope changed since the previous phase ran — the node wants demoting
+          # to implement, not a defect. End the session; make no graph write and
+          # open no PR.
+          echo "/fix-checks: node '$NODE_ID' is scope-stale at origin/main (front door exit 5) — wants demoting to implement, not a defect; ending with no graph write and no PR" >&2
+          exit 0 ;;
         *)
           # exit 1 (node not found / read failure), exit 2 (branch mismatch /
-          # bad node id), exit 3 (no active CI-fix interrupt — execution.fix is
-          # null): all real errors for this lane. Stop with a clear message.
+          # bad node id): real errors for this lane. Stop with a clear message.
           echo "/fix-checks: '$BRANCH' is not an actionable fix-checks node target: $DERIVE_OUT" >&2
           exit 1 ;;
       esac
