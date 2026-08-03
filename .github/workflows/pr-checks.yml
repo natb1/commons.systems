@@ -48,7 +48,16 @@ jobs:
           sudo systemctl kill --kill-who=all apt-daily.service 2>/dev/null || true
           sudo pkill -9 -f '[u]nattended-upgrade' 2>/dev/null || true
           sudo pkill -9 -f 'apt[.]systemd[.]daily' 2>/dev/null || true
-          while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 1; done
+          waited=0
+          while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+            if [ "$waited" -ge 120 ]; then
+              echo "dpkg lock-frontend still held after 120s; holders:" >&2
+              sudo fuser -v /var/lib/dpkg/lock-frontend >&2 || true
+              break
+            fi
+            sleep 1
+            waited=$((waited + 1))
+          done
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
