@@ -158,6 +158,11 @@ chmod +x "$DISPATCH_GUARD_BIN_DIR/systemctl"
 # Prepend BEFORE SAVED_PATH is captured, so teardown's PATH restore keeps it.
 export PATH="$DISPATCH_GUARD_BIN_DIR:$PATH"
 
+# Every suite reads the unit-disable sentinel through lib-unit-disable-state.sh.
+# Pin it at a path that is never created, so no suite can be perturbed by a
+# timer the developer running the suite has genuinely disabled on this host.
+export DISPATCH_UNIT_DISABLE_DIR="$DISPATCH_GUARD_BIN_DIR/no-disabled-units"
+
 _DISPATCH_HOST_UNIT_FINGERPRINT_BEFORE="$(_dispatch_host_unit_fingerprint)"
 _DISPATCH_HOST_GUARD_DONE=0
 
