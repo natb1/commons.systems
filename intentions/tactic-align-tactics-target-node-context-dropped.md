@@ -68,7 +68,7 @@ attention:
     status is now codified and phase implement, carrying a full clean-session
     plan (Units 1-2) in the body."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-align-tactics-target-node-context-dropped
   pr: 3017
@@ -79,7 +79,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T05:46:04Z
+    mergeCommitSha: 64ec89dce3e81cfe562c478b16cfcbc569bbd285
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
