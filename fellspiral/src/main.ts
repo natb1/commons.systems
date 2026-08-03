@@ -1,7 +1,10 @@
 import "missing.css";
+import "@commons-systems/ds/tokens/colors.css";
+import "@commons-systems/ds/tokens/typography.css";
+import "@commons-systems/ds/tokens/spacing.css";
+import "@commons-systems/ds/tokens/effects.css";
+import "@commons-systems/ds/context-panel.css";
 import "./style/theme.css";
-
-import "@commons-systems/components/footer";
 
 import { createBlogApp } from "@commons-systems/blog/create-blog-app";
 import { ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
@@ -29,6 +32,14 @@ createBlogApp({
   strategies: createStrategies(),
   firebase: { db, namespace: NAMESPACE, trackPageView, initAppCheck, signIn, signOut, onAuthStateChanged },
   adminGroupId: ADMIN_GROUP_ID,
+  // Single PageShell root (the ds chrome seam). Must stay byte-identical to the
+  // `shell` config in fellspiral/scripts/prerender.ts, or hydrateRoot mismatches.
+  // No tagline and no hero: fellspiral has neither.
+  shell: {
+    mount: "root",
+    wordmark: "fellspiral",
+    panelAriaLabel: "Info",
+  },
   useScrollIndicator: true,
   rehydrateOnAppCheck: true,
 });
