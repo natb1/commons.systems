@@ -90,8 +90,8 @@ execution:
   strategy_fingerprint: null
   fix:
     since: 2026-08-01
-    attempt: 1
-    pushed_sha: null
+    attempt: 2
+    pushed_sha: 0f907409486ebab29008069e86a63aeecc799bfc
   completion: null
 validates: []
 blocked_by: []
