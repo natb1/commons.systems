@@ -58,11 +58,12 @@ execution:
       sha: 2aad2dc4106804ebcc55cf7b805868b5fdfff4d2
   fix:
     since: 2026-08-03
-    attempt: 4
+    attempt: 1
     pushed_sha: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-fix-cap-strategy-fingerprint-stamp-coverage
 office_hours: null
 pace_exempt: false
 rounds: null
