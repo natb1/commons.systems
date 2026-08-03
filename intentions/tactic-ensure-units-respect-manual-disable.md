@@ -42,13 +42,14 @@ success_signal:
     bug-B/bug-O healing behavior must be unaffected)
   is_proxy: false
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-ensure-units-respect-manual-disable
   pr: 3015
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -603,3 +604,23 @@ live `systemd --user` session and a real reseed cycle):
    `WorkingDirectory=` in the installed unit names the current main worktree).
    This closes the loop: the guard suppresses re-arming only while the operator
    asks for it.
+
+## needs-main residue
+
+- id: 12
+  title: Live-host observation: a real `disable --now` survives at least two reseed cycles
+  url_path: current
+  expected_outcome: On the dispatch host, a deliberate `systemctl --user disable --now` of a dispatch timer with the sentinel present survives at least two real reseed cycles (~30-60 min) without being silently re-enabled, and re-arms cleanly once the sentinel is removed.
+  finding: Not walked during qa-fix — requires a live `systemd --user` session and real reseed-cycle wall-clock time, not available to the autonomous QA session. The PR's own Verification section already documents this identical check under a "Manual (needs a live systemd --user session and a real reseed cycle — not auto-runnable)" heading, mirroring the six-step manual procedure already recorded above under "Manual / observe-on-the-operator-host checks".
+  Verifiability: WAIT — a fully machine-executable check (create the sentinel, `systemctl --user disable --now`, wait, `systemctl --user is-active`/`is-enabled` + `journalctl --user` grep for the informational skip line and absence of `WARNING`, then remove the sentinel and confirm re-arm) whose event has not occurred yet: at least two `dispatch-schedule-reseed` cycles (~30-60 min wall clock) must elapse after the sentinel is created and the timer disabled.
+  Check: |
+    mkdir -p ~/.local/share/commons-dispatch/disabled
+    touch ~/.local/share/commons-dispatch/disabled/dispatch-fleet-watch.timer
+    systemctl --user disable --now dispatch-fleet-watch.timer
+    # wait >= 2 reseed cycles (~30-60 min)
+    systemctl --user is-active dispatch-fleet-watch.timer   # expect inactive
+    systemctl --user is-enabled dispatch-fleet-watch.timer  # expect disabled
+    journalctl --user -t dispatch-schedule-reseed --since '-1h' | grep 'skipping enable --now'  # present, no WARNING for this unit
+    rm ~/.local/share/commons-dispatch/disabled/dispatch-fleet-watch.timer
+    # wait one more reseed cycle, then confirm re-arm:
+    systemctl --user is-active dispatch-fleet-watch.timer   # expect active
