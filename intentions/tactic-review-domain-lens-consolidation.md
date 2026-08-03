@@ -30,13 +30,14 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: qa
+phase: review
 execution:
   branch: tactic-review-domain-lens-consolidation
   pr: 3024
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
