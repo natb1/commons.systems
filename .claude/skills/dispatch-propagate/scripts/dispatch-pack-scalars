@@ -22,34 +22,77 @@
 #                                 it. Exactly one of phase_log= / phase_log_path=
 #                                 is ever emitted.
 #   changed_file_count=<N>     — a count only, sanity-check use; omitted when
-#                                 no "=== DIFF (base ...) ===" section is
+#                                 no REAL "=== DIFF (base ...) ===" section is
 #                                 present in the input (--diff was not
-#                                 requested when the pack was built).
+#                                 requested when the pack was built). "Real" is
+#                                 defined by the anchoring rules below — a
+#                                 body-pasted DIFF header does not count.
 #
 # No network access, no git, no gh — pure stdin extraction. Does not source
 # lib.sh: this script needs none of its gh/git wrappers.
 #
 # --- Anchoring rules (security-relevant — do not simplify) -------------------
 #
-# The pack's canonical section order is PR -> PHASE-LOG -> DIFF, and the PR
-# *body* is untrusted attacker-controllable text sitting inside the PR
-# section. A forged section header pasted into that body can only appear
-# AFTER the real PR header (which is always first) and BEFORE the real
-# PHASE-LOG header (which is always last, since PHASE-LOG follows PR in
-# canonical order and nothing legitimate follows it into the body). So:
+# The pack's canonical section order is PR -> PHASE-LOG -> DIFF. TWO regions of
+# it are untrusted attacker-controllable text:
+#
+#   1. the PR *body*, inside the PR section — anything a PR author types;
+#   2. the DIFF section — both the raw, UNPREFIXED file list under
+#      '--- files ---' (a PR may add a file literally named
+#      '=== PHASE-LOG #999 ===') and the hunk text under '--- hunks ---'.
+#
+# Region 1 sits BEFORE the real PHASE-LOG header; region 2 sits AFTER it. A
+# naive "first header wins" loses to region 1 and a naive "last header wins"
+# loses to region 2, so each section is anchored against the region that can
+# forge it:
 #
 #   - the PR section is anchored on the FIRST '^=== PR ===' line — a forged
 #     one inside the PR body can only appear later, after the real one;
-#   - the PHASE-LOG section is anchored on the LAST '^=== PHASE-LOG #' line —
-#     a forged one inside the PR body appears earlier than the real,
-#     script-generated one.
+#   - the PHASE-LOG section is anchored on the LAST '^=== PHASE-LOG #' line
+#     STRICTLY BEFORE the real DIFF section — later than any body-pasted
+#     decoy (region 1), earlier than any file-list decoy (region 2).
 #
-# This mirrors dispatch-changed-files' "last DIFF header wins" reasoning for
-# its own section. pr_num and labels are read POSITIONALLY from the two lines
-# immediately after the real PR header, never by grepping the whole input —
-# grepping for e.g. '^PR #' anywhere would happily return a decoy planted in
-# the PR body. This is the #1522 defect class: a forged header/line inside an
-# untrusted PR body must never be read as the real one.
+# Deriving "the real DIFF section start" is itself the security-critical step,
+# because the obvious rule — "the FIRST '^=== DIFF (base ' line" — is forgeable
+# from region 1: pasting
+#
+#     === PHASE-LOG #9 ===
+#     evil
+#     === DIFF (base 0000000) ===
+#
+# into the PR body moves that bound in FRONT of the real PHASE-LOG header and
+# re-opens the body-forgery hole. The bound must come from a marker the
+# attacker cannot place after the real one. That marker is '--- hunks ---':
+#
+#   a. last_hunks_line = the LAST '^--- hunks ---$' line. Everything the pack
+#      emits after the real '--- hunks ---' marker is `git diff` output, whose
+#      lines always carry a prefix ('diff --git ', 'index ', '--- a/',
+#      '+++ b/', '@@', and content lines prefixed with a space / '+' / '-'),
+#      plus an optional 'truncated: N files omitted' line — none of which can
+#      produce a bare '^--- hunks ---$'. A file literally NAMED '--- hunks ---'
+#      shows up only in the earlier '--- files ---' list, i.e. BEFORE the real
+#      marker, so tail -n1 still lands on the real one.
+#   b. real_diff_start = the LAST '^=== DIFF (base ' line occurring BEFORE
+#      last_hunks_line. Body-pasted decoys are earlier than the real header;
+#      the only pack-generated region between the real header and
+#      '--- files ---' is the `git diff --stat` block, whose lines are
+#      space-indented and so cannot match either.
+#   c. no '^--- hunks ---$' line at all => the pack has NO real DIFF section
+#      (a '=== DIFF (base ' line without one can only be body forgery). The
+#      PHASE-LOG search then runs to EOF — safe, because with no diff section
+#      nothing attacker-controlled follows the real PHASE-LOG header — and
+#      changed_file_count is omitted, exactly as when --diff was not requested.
+#
+# changed_file_count uses the same real_diff_start (an unbounded "last DIFF
+# header" would be hijacked by the very same forged filename), counting the
+# non-empty lines between the first '^--- files ---$' at/after real_diff_start
+# and last_hunks_line.
+#
+# pr_num and labels are read POSITIONALLY from the two lines immediately after
+# the real PR header, never by grepping the whole input — grepping for e.g.
+# '^PR #' anywhere would happily return a decoy planted in the PR body. This is
+# the #1522 defect class: a forged header/line inside untrusted PR-authored
+# content (body OR diff) must never be read as the real one.
 set -euo pipefail
 
 # --- parse args ----------------------------------------------------------
@@ -138,10 +181,34 @@ else
 fi
 
 # ============================================================================
+# === Real DIFF section start (bounds the PHASE-LOG search) ===
+# ============================================================================
+#
+# See "Anchoring rules" above: derive the bound from the LAST '--- hunks ---'
+# marker (unforgeable after the fact), then take the LAST '=== DIFF (base '
+# header before it. Empty result = this pack has no real DIFF section.
+
+last_hunks_line=$(grep -n '^--- hunks ---$' <<<"$input" | tail -n1 | cut -d: -f1 || true)
+
+real_diff_start=""
+if [[ -n "$last_hunks_line" ]]; then
+  real_diff_start=$(grep -n '^=== DIFF (base ' <<<"$input" \
+    | awk -F: -v bound="$last_hunks_line" '$1 < bound { n = $1 } END { if (n) print n }' || true)
+fi
+
+# ============================================================================
 # === PHASE-LOG section: phase_log / phase_log_path ===
 # ============================================================================
 
-last_phaselog_line=$(grep -n '^=== PHASE-LOG #' <<<"$input" | tail -n1 | cut -d: -f1 || true)
+if [[ -n "$real_diff_start" ]]; then
+  # The LAST '=== PHASE-LOG #' header strictly before the real DIFF section.
+  last_phaselog_line=$(grep -n '^=== PHASE-LOG #' <<<"$input" \
+    | awk -F: -v bound="$real_diff_start" '$1 < bound { n = $1 } END { if (n) print n }' || true)
+else
+  # No real DIFF section: nothing attacker-controlled can follow the real
+  # PHASE-LOG header, so the unbounded "last header wins" rule is safe.
+  last_phaselog_line=$(grep -n '^=== PHASE-LOG #' <<<"$input" | tail -n1 | cut -d: -f1 || true)
+fi
 if [[ -z "$last_phaselog_line" ]]; then
   echo "dispatch-pack-scalars: error: no '=== PHASE-LOG #' section found in input" >&2
   echo "dispatch-pack-scalars: pass --phase-log to dispatch-context-pack to include the phase-log section" >&2
@@ -164,18 +231,22 @@ fi
 # === DIFF section (optional): changed_file_count ===
 # ============================================================================
 #
-# Same anchoring as dispatch-changed-files: the LAST '^=== DIFF (base ' line,
-# so neither a bare '=== DIFF' line nor a forged '=== DIFF (base <hex>) ==='
-# pasted into the PR body can be read as the real, script-generated section.
-# Omitted (not an error) when the pack was built without --diff.
+# Reuses real_diff_start / last_hunks_line derived above rather than an
+# unbounded "last '^=== DIFF (base ' line wins": the same forged filename in
+# the file list ('=== DIFF (base 0000000) ===' as a path) would hijack that,
+# and a body-pasted decoy after the real section is likewise ignored here.
+# Count the non-empty lines strictly between the first '^--- files ---$' at or
+# after real_diff_start and the real '--- hunks ---' marker. Omitted (not an
+# error) when the pack has no real DIFF section — i.e. built without --diff.
 
 CHANGED_FILE_COUNT_LINE=""
-last_diff_line=$(grep -n '^=== DIFF (base ' <<<"$input" | tail -n1 | cut -d: -f1 || true)
-if [[ -n "$last_diff_line" ]]; then
-  file_count=$(tail -n +"$last_diff_line" <<<"$input" \
-    | sed -n '/^--- files ---$/,/^--- hunks ---$/p' \
-    | sed '1d;$d' \
-    | grep -c . || true)
+if [[ -n "$real_diff_start" ]]; then
+  file_count=$(awk -v start="$real_diff_start" -v stop="$last_hunks_line" '
+    NR >= start && NR < stop {
+      if (!infiles) { if ($0 == "--- files ---") infiles = 1; next }
+      if ($0 ~ /./) n++
+    }
+    END { print n + 0 }' <<<"$input")
   CHANGED_FILE_COUNT_LINE="changed_file_count=$file_count"
 fi
 
