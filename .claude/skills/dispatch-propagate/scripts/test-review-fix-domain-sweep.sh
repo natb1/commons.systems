@@ -94,39 +94,72 @@ assert_eq "domain sweep: sections_app carries set Source data-exposure" "true" \
 # fixture case above. These greps pin the call sites and the enum/roster
 # shapes that must stay in lockstep.
 
+REVIEW_FIX_JS="$REPO_ROOT/.claude/workflows/review-fix.js"
+
 assert_eq "domain-sweep branch present in finderPrompt" "1" \
-  "$(grep -c "if (name === 'domain-sweep')" "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
+  "$(grep -c "if (name === 'domain-sweep')" "$REVIEW_FIX_JS" || true)"
 
 assert_eq "sweepSections is called with args.app_or_rules" "1" \
-  "$(grep -c 'sweepSections(args.app_or_rules)' "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
+  "$(grep -c 'sweepSections(args.app_or_rules)' "$REVIEW_FIX_JS" || true)"
+
+# The gate function itself is only coverage if the run actually calls it with
+# the run's own surface/app_or_rules. Without this pin, replacing the call with
+# a narrowed literal or a hardcoded surface (turning the security fan-out off)
+# leaves every probe/roster assertion above passing — the probe evals the
+# untouched function, not the call site.
+assert_eq "agentFinderSet is called with the run's surface/app_or_rules" "1" \
+  "$(grep -c 'agentFinderSet(_a.surface, _a.app_or_rules)' "$REVIEW_FIX_JS" || true)"
+
+# The roster the gate pushes on a code surface — pinned as a literal so a
+# silent narrowing (dropping a finder from the push) fails here as well as in
+# the probe's roster assertions.
+assert_eq "agentFinderSet pushes the full code-surface roster" "1" \
+  "$(grep -c "set.push('input-validation', 'domain-sweep', 'red-team', 'security-review')" "$REVIEW_FIX_JS" || true)"
 
 # domain-sweep is NOT a member of LANE_A (it is a Lane-B finder like the other
 # domain reviewers) — pins that LANE_A's literal definition is unchanged and
 # does not list domain-sweep.
 assert_eq "domain-sweep is not a member of LANE_A" "1" \
-  "$(grep -c "LANE_A = new Set(\['code-review', 'security-review'\])" "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
+  "$(grep -c "LANE_A = new Set(\['code-review', 'security-review'\])" "$REVIEW_FIX_JS" || true)"
 
-# Source-name-count anti-regression. Exact counts verified against the current
-# file (not guessed):
-#   - 'data-exposure', (WITH trailing comma) appears exactly TWICE: the Source
-#     enum entry and the SEC_SOURCES entry. Its DOMAIN_PROMPTS key line reads
-#     `'data-exposure':` (colon, no comma) and its sweepDomains occurrence is
-#     the LAST array element before `]` (`..., 'data-exposure']`, no trailing
-#     comma) — neither matches the comma-suffixed pattern.
-#   - 'auth', and 'secrets', each appear exactly THREE times: the Source enum
-#     entry, the SEC_SOURCES entry, AND the sweepDomains array entry — both
-#     sit mid-array followed by another element, so both DO carry a trailing
-#     comma there (`['secrets', 'auth', 'data-exposure']`).
-assert_eq "'data-exposure', appears exactly twice (Source enum + SEC_SOURCES)" "2" \
-  "$(grep -c "'data-exposure'," "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
+# Structural (not line-count) membership pins for the two source enumerations
+# the fold has to keep in lockstep: the Source enum and SEC_SOURCES. A
+# `grep -c 'name',` count is satisfiable without the real entry — `grep -c`
+# counts matching LINES, so deleting a real entry (e.g. dropping 'auth' from
+# SEC_SOURCES, which silently reroutes unclassified auth findings from
+# Out-of-scope to Deferred) while adding any comment line containing the same
+# text keeps the count unchanged. Instead, slice the block itself and compare
+# its entry list exactly. `block_entries` keeps only lines that are a bare
+# quoted entry with a trailing comma, so a comment line (`// 'auth',`) or any
+# prose cannot stand in for a real entry.
+block_entries() {
+  # $1 — awk ERE matching the block's opening line. Entries are the lines
+  # after it, up to (not including) the first line containing `]`.
+  awk -v start="$1" '
+    $0 ~ start { inblock = 1; next }
+    inblock && /\]/ { exit }
+    inblock { print }
+  ' "$REVIEW_FIX_JS" |
+    sed -n "s/^[[:space:]]*'\([a-z-][a-z-]*\)',[[:space:]]*$/\1/p" |
+    paste -sd, -
+}
 
-assert_eq "'auth', appears exactly three times (Source enum + SEC_SOURCES + sweepDomains array)" "3" \
-  "$(grep -c "'auth'," "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
+# The Source enum: every finding source the schema admits, in file order.
+assert_eq "Source enum membership is exact" \
+  "code-review,input-validation,secrets,red-team,security-review,auth,data-exposure,firebase,codeql,npm,erosion,cost" \
+  "$(block_entries '^ +Source: [{]')"
 
-assert_eq "'secrets', appears exactly three times (Source enum + SEC_SOURCES + sweepDomains array)" "3" \
-  "$(grep -c "'secrets'," "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
+# SEC_SOURCES: the sources whose unclassified findings fall back to
+# Out-of-scope rather than Deferred. All three folded domain-sweep sources
+# ('secrets', 'auth', 'data-exposure') must stay members.
+assert_eq "SEC_SOURCES membership is exact" \
+  "input-validation,secrets,red-team,security-review,auth,data-exposure,firebase,codeql,npm" \
+  "$(block_entries 'SEC_SOURCES = new Set')"
 
-assert_eq "'domain-sweep' appears exactly twice (agentFinderSet push + finderPrompt branch)" "2" \
-  "$(grep -c "'domain-sweep'" "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
+# The sweepDomains array literal — its behavior is already pinned by the probe
+# assertions above; this pins the literal so the trigger asymmetry cannot be
+# rewritten into an equivalent-looking but different expression unnoticed.
+assert_eq "sweepDomains returns the three folded domains under app_or_rules" "1" \
+  "$(grep -c "app_or_rules ? \['secrets', 'auth', 'data-exposure'\] : \['secrets'\]" "$REVIEW_FIX_JS" || true)"
 
 report_results

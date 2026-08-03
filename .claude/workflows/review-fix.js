@@ -810,9 +810,16 @@ function finderPrompt(name, args) {
       'a clean result in one section is never a reason to shorten another.',
       sweepSections(args.app_or_rules),
       ctx,
-      'Set "Source" on EACH finding to the section it came from — exactly one of "secrets",',
-      '"auth", "data-exposure". Never invent a combined source name. Fill OWASP and STRIDE for',
-      'every finding.',
+      // Enumerate the BRIEFED lenses only: on the non-app path just `secrets` is
+      // briefed, and naming auth/data-exposure there would invite findings from a
+      // lens this run never ran — corrupting the per-lens yield measurement. The
+      // harness clamps Source to this same set on the way back in (gather loop).
+      `Set "Source" on EACH finding to the section it came from — exactly one of ${sweepDomains(
+        args.app_or_rules
+      )
+        .map((d) => `"${d}"`)
+        .join(', ')}. Never invent a combined source name and never use a source that is`,
+      'not one of those sections. Fill OWASP and STRIDE for every finding.',
       SCHEMA_BLURB,
     ].join('\n');
   }
@@ -1229,13 +1236,68 @@ log(
 // Gather: surviving Lane-B finder findings + the prescanned codeql/npm findings.
 // Lane-A results (code-review, security-review) are EXCLUDED — their { fixed,
 // residue } shape carries no `findings`, and they are disposed of separately.
+//
+// Source is CLAMPED harness-side, never trusted from the agent. FINDINGS_SCHEMA's
+// `Source` enum is the union of every finder's source across the whole roster, so
+// schema validation alone lets any agent label its output as any other lens — and
+// downstream stages branch on that label (a `cost` Source is ADVISORY and can never
+// be Required; `erosion` is Informational). An agent steered by diff text into
+// labelling a real auth or hardcoded-credential finding `cost` would therefore
+// downgrade a merge-blocking finding to a follow-up filing. Since the launching
+// harness knows exactly which lenses each finder was briefed for, it re-imposes
+// that set here: a Source outside the finder's briefed set is relabelled to the
+// finder's primary lens rather than honoured. The fold makes this load-bearing —
+// `domain-sweep` carries THREE sources chosen by the agent itself, and on the
+// non-app path only `secrets` is briefed at all.
+const laneBAllowedSources = (name) =>
+  name === 'domain-sweep' ? sweepDomains(_a.app_or_rules) : [name];
 let allFindings = [];
 for (const { name, res } of finderResults) {
   if (LANE_A.has(name)) continue;
   if (!res) continue;
-  for (const f of res.findings || []) allFindings.push(f);
+  const allowedList = laneBAllowedSources(name);
+  const allowed = new Set(allowedList);
+  for (const f of res.findings || []) {
+    if (allowed.has(f.Source)) {
+      allFindings.push(f);
+      continue;
+    }
+    log(
+      `finders: SOURCE CLAMP — ${name} returned Source "${f.Source}" outside its briefed ` +
+        `set [${allowedList.join(', ')}]; relabelled to "${allowedList[0]}".`
+    );
+    allFindings.push(Object.assign({}, f, { Source: allowedList[0] }));
+  }
 }
 for (const f of _a.prescanned_findings || []) allFindings.push(f);
+
+// Dead Lane-B finders. `agent()` retries internally, so a null result means the
+// finder failed AFTER retries and contributed nothing — and unlike Lane A, nothing
+// else records that loss: the gather loop above just skips it, and instrumentVerdict
+// reports `{ ok: true, checked: false }` for any finder that is not a named
+// instrument, so no instrument_failures entry is pushed either. Without this the run
+// reports a full, clean pass while a security lens silently did not run.
+//
+// Skipped when the probe wave already backed off: in that case wave 2 was never
+// launched, every wave-2 result is undefined by construction, and coverage_note
+// already says so.
+if (!probeDead) {
+  const deadLaneB = finderResults
+    .filter(({ name, res }) => !LANE_A.has(name) && !res)
+    .map(({ name }) => name);
+  if (deadLaneB.length) {
+    coverage_incomplete = true;
+    // Expand `domain-sweep` to the lenses it actually carried — one dead agent now
+    // costs three lenses, and the comment must name every one of them.
+    const lostLenses = deadLaneB.map((n) => laneBAllowedSources(n).join('/'));
+    const deadNote =
+      `Security lenses lost: ${lostLenses.join(', ')} — the finder(s) returned no result ` +
+      `after retries, so those lenses did not run.`;
+    // Preserve any note the throttle / instrument-gate paths already set.
+    coverage_note = [coverage_note, deadNote].filter(Boolean).join(' ');
+    log(`finders: COVERAGE DEGRADED — ${deadNote}`);
+  }
+}
 
 // Assign a unique id and a global input index (_idx) to every finding.
 {
@@ -2304,11 +2366,13 @@ return {
   security_note: _a.security_note,
   // coverage_incomplete is independent of `deviation`: it flags any way this run's
   // review coverage came out degraded, surfaced in the Step 6 partial-coverage comment
-  // line. Three causes set it:
+  // line. Four causes set it:
   //   - the security wave was skipped because the quality finder died (a
   //     launch-efficiency back-off — the model was likely throttled);
   //   - a named instrument's receipt failed verification, so that stage's payload was
   //     discarded;
+  //   - a Lane-B finder died after retries, so its lens (or, for `domain-sweep`, all
+  //     three of its lenses) did not run and contributed no findings;
   //   - Lane-A residue was left undispositioned because the residue-disposition agent
   //     died after retries (those items are surfaced as Deferred and filed anyway).
   coverage_incomplete,
