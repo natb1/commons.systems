@@ -78,7 +78,7 @@ success_signal:
     /align-tactics)
   is_proxy: false
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-fleet-alarm-mint-rollback-corruption
   pr: 3014
@@ -92,7 +92,10 @@ execution:
     since: 2026-08-01
     attempt: 2
     pushed_sha: 0f907409486ebab29008069e86a63aeecc799bfc
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T02:45:58Z
+    mergeCommitSha: 6fcfd6931c2143334598a0fbdcd1d9025cdd8645
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
