@@ -31,7 +31,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { listNodes, readNodeBody } from "../src/store.js";
+import { listNodesStrict, readNodeBody } from "../src/store.js";
 import { validateGraph, validateGraphProseRefs } from "../src/schema.js";
 import { lintTacticBodies, loadPlanBodyBaseline } from "../src/planlint.js";
 import { deletedNodeIds } from "./lib-deleted-node-ids.js";
@@ -63,7 +63,7 @@ function loadBaseline(): Set<string> {
 
 function main(): void {
   const intentionsDir = process.argv[2] ?? "intentions";
-  const nodes = listNodes(intentionsDir);
+  const nodes = listNodesStrict(intentionsDir);
 
   validateGraph(nodes);
 

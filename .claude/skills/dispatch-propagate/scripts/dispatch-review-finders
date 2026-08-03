@@ -34,6 +34,17 @@
 #
 # Consumer: .claude/workflows/review-fix.js mirrors this mapping in JS;
 # this script is the normative spec for that inline JS logic.
+#
+# NOTE — code-review is still always-on regardless of surface (this roster is
+# unchanged and remains normative for that), but it is no longer invoked as an
+# AGENT in the Workflow's parallel finder fan-out. It runs as the serialized
+# `claude -p '/code-review low --fix'` pre-stage in /review-fix SKILL.md Step 1b,
+# before the Workflow is invoked at all — the `-p` user turn is the only entry
+# point that can invoke a `disable-model-invocation` skill, and its `--fix` writes
+# the working tree, so it must not run concurrently with the fan-out. That is why
+# `agentFinderSet` in review-fix.js excludes code-review, alongside codeql/npm/
+# erosion (which were never agents either — they arrive as prescanned findings).
+# Nothing about this script's emitted stdout changes.
 set -euo pipefail
 
 # --- parse stdin ----------------------------------------------------------------

@@ -2760,6 +2760,45 @@ cleanup_stale_unit_pair() {
   "$systemctl_cmd" --user disable --now "$timer_unit" "$service_unit" || true
 }
 
+# Report whether a dispatch-managed timer has been marked manually-disabled by
+# the operator, so an installer can skip its `enable --now` instead of silently
+# undoing a deliberate `systemctl --user disable --now` on the next reseed.
+#
+# One implementation, called from thin per-installer sites — the same shape as
+# cleanup_stale_unit_pair above — so the check cannot be fixed for one timer and
+# missed for its structurally identical twin.
+#
+# Args: $1 = timer unit name, $2 = caller name for message prefixes
+# Returns 0 when the unit is marked manually-disabled (caller must skip enable),
+#         1 otherwise.
+# An indeterminate state (unreadable sentinel dir, or an unsourceable reader)
+# returns 1 — proceed with enable — after a WARNING naming the cause. Failing
+# the other way would tear the fleet's own watchdog down on an unreadable file,
+# and the watchdog is what would otherwise report its own absence.
+unit_manually_disabled() {
+  local unit="$1"
+  local caller="$2"
+
+  if ! declare -f dispatch_unit_disable_state >/dev/null 2>&1; then
+    # shellcheck source=lib-unit-disable-state.sh
+    if ! source "$(dirname "${BASH_SOURCE[0]}")/lib-unit-disable-state.sh" 2>/dev/null; then
+      echo "WARNING: $caller: cannot source lib-unit-disable-state.sh; a manual disable of $unit cannot be honored; proceeding to enable" >&2
+      return 1
+    fi
+  fi
+
+  local state
+  state=$(dispatch_unit_disable_state "$unit")
+  case "$state" in
+    disabled)     return 0 ;;
+    not-disabled) return 1 ;;
+    *)
+      echo "WARNING: $caller: unit-disable sentinel state for $unit is unknown ($(dispatch_unit_disable_sentinel_path "$unit") is unreadable); proceeding to enable — a manual disable may not be honored" >&2
+      return 1
+      ;;
+  esac
+}
+
 # Disable a stale sweep timer/service whose installed unit points at a
 # different main-worktree path than the current one, mirroring
 # cleanup_stale_heartbeat_units below. Thin wrapper over
@@ -3008,6 +3047,12 @@ cleanup_stale_healer_units() {
 # launcher), so we warn to stderr and return non-zero — never `exit`. A missing
 # timer just means the unit-poisoning healer falls back to on-demand-only
 # invocation.
+#
+# Honors the per-unit manual-disable sentinel: when it is set for
+# dispatch-heal.timer the unit files are still kept current on disk but
+# `enable --now` is skipped, so a deliberate `systemctl --user disable --now`
+# survives every reseed — see lib-unit-disable-state.sh for the sentinel path
+# and the operator procedure.
 # Args: $1 = main worktree path
 ensure_healer_units() {
   local main_worktree="$1"
@@ -3114,11 +3159,22 @@ WantedBy=timers.target
 EOF
 )
 
+  # Read the manual-disable marker ONCE per call: it is consulted twice below
+  # (steady-state short-circuit, and the enable decision) and must not disagree
+  # with itself between them.
+  local manually_disabled=0
+  if unit_manually_disabled dispatch-heal.timer ensure_healer_units; then
+    manually_disabled=1
+  fi
+
   # Steady-state hot path: if BOTH installed units already match byte-for-byte
-  # AND the timer is active (armed), skip the write/reload/enable entirely.
+  # AND the timer is active (armed) — or the operator has manually disabled it,
+  # in which case an inactive timer IS the requested steady state — skip the
+  # write/reload/enable entirely. The manually-disabled test comes first so a
+  # disabled timer costs zero `systemctl` invocations in steady state.
   if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
      && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
-     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-heal.timer; then
+     && { [ "$manually_disabled" -eq 1 ] || "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-heal.timer; }; then
     return 0
   fi
 
@@ -3187,6 +3243,15 @@ EOF
     return 1
   fi
 
+  # Honor a deliberate operator disable: the unit files above are kept current,
+  # but arming the timer is skipped. NOT a WARNING and NOT an error — this is
+  # the requested state, and the caller's `|| true` must not be the only thing
+  # separating "we did what you asked" from "something went wrong".
+  if [ "$manually_disabled" -eq 1 ]; then
+    echo "ensure_healer_units: dispatch-heal.timer is marked manually disabled ($(dispatch_unit_disable_sentinel_path dispatch-heal.timer)); unit files updated, skipping enable --now" >&2
+    return 0
+  fi
+
   # Install + activate the TIMER (not the oneshot service): enable symlinks it
   # under WantedBy=timers.target (so it re-arms on every user-session start) and
   # --now arms it immediately. A .timer does nothing until this enable --now;
@@ -3231,6 +3296,12 @@ cleanup_stale_watcher_units() {
 # Best-effort: a failure here must not abort the caller (a tick/reseed
 # launcher), so we warn to stderr and return non-zero — never `exit`. A missing
 # timer just means the fleet watchdog falls back to on-demand-only invocation.
+#
+# Honors the per-unit manual-disable sentinel: when it is set for
+# dispatch-fleet-watch.timer the unit files are still kept current on disk but
+# `enable --now` is skipped, so a deliberate `systemctl --user disable --now`
+# survives every reseed — see lib-unit-disable-state.sh for the sentinel path
+# and the operator procedure.
 # Args: $1 = main worktree path
 ensure_watcher_units() {
   local main_worktree="$1"
@@ -3339,11 +3410,22 @@ WantedBy=timers.target
 EOF
 )
 
+  # Read the manual-disable marker ONCE per call: it is consulted twice below
+  # (steady-state short-circuit, and the enable decision) and must not disagree
+  # with itself between them.
+  local manually_disabled=0
+  if unit_manually_disabled dispatch-fleet-watch.timer ensure_watcher_units; then
+    manually_disabled=1
+  fi
+
   # Steady-state hot path: if BOTH installed units already match byte-for-byte
-  # AND the timer is active (armed), skip the write/reload/enable entirely.
+  # AND the timer is active (armed) — or the operator has manually disabled it,
+  # in which case an inactive timer IS the requested steady state — skip the
+  # write/reload/enable entirely. The manually-disabled test comes first so a
+  # disabled timer costs zero `systemctl` invocations in steady state.
   if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
      && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
-     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-fleet-watch.timer; then
+     && { [ "$manually_disabled" -eq 1 ] || "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-fleet-watch.timer; }; then
     return 0
   fi
 
@@ -3410,6 +3492,15 @@ EOF
   if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
     echo "WARNING: ensure_watcher_units: systemctl --user daemon-reload failed; fleet watchdog unavailable" >&2
     return 1
+  fi
+
+  # Honor a deliberate operator disable: the unit files above are kept current,
+  # but arming the timer is skipped. NOT a WARNING and NOT an error — this is
+  # the requested state, and the caller's `|| true` must not be the only thing
+  # separating "we did what you asked" from "something went wrong".
+  if [ "$manually_disabled" -eq 1 ]; then
+    echo "ensure_watcher_units: dispatch-fleet-watch.timer is marked manually disabled ($(dispatch_unit_disable_sentinel_path dispatch-fleet-watch.timer)); unit files updated, skipping enable --now" >&2
+    return 0
   fi
 
   # Install + activate the TIMER (not the oneshot service): enable symlinks it

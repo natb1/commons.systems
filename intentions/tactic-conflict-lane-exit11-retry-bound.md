@@ -55,11 +55,69 @@ attention:
     follows the Wave-A write-path fixes. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
-phase: implement
-execution: null
+  tier: 1
+phase: qa
+execution:
+  branch: tactic-conflict-lane-exit11-retry-bound
+  pr: 3018
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA found no defect (8/8 script-verifiable checks pass), but
+    the disposition Workflow's gated fix-planner refused a scope-deviating fix
+    for 2 opus-fixable-classified needs-human-judgment items
+    (idle-grace/hold-cap tunable calibration, and the
+    never-auto-reap/never-office_hours autonomy-contract boundary) in
+    lib-conflict-lane-hold.sh: \"Both residue items are human design-judgment
+    calls with no defect: any responsive change would either re-pick the
+    grace/cap defaults (a fleet-cadence calibration the tactic never authorized)
+    or mint a distinct hold kind, which the acceptance criteria explicitly place
+    out of scope.\" Escalating for a human design sign-off."
+  since: 2026-08-03
+  recommendation: >-
+    # tactic-conflict-lane-exit11-retry-bound (PR #3018) — design sign-off, not
+    a fix
+
+
+    The code is done and merge-ready. All 8 machine checks passed (5 test
+    suites, syntax, lint, CI and call-site wiring). No defect was found. The
+    park exists only because three choices need a human's sign-off; no
+    autonomous session should re-pick them, since the tactic's acceptance
+    criteria never authorized changing them.
+
+
+    Read `.claude/skills/dispatch-propagate/scripts/lib-conflict-lane-hold.sh`:
+
+
+    1. **Tunables** (documented lines 92-93, defaults lines 212/214): is a 1800s
+    idle/registration grace and a 3-holds-per-sweep cap right for the fleet's
+    real tick cadence and stuck-lane volume?
+
+    2. **Hold-kind reuse** (rationale line 79; invoked line 422): reusing
+    `provision-conflict` for the new "stuck Lane-3 session" mode — one kind, or
+    two triage-distinguishable kinds?
+
+    3. **Autonomy boundary** (header lines 23-28): the sweep never calls `claude
+    rm` and never writes the source node's `office_hours` — it only raises a
+    tracked hold, leaving the reap to a human. Correct contract?
+
+
+    Disposition:
+
+
+    - **Looks right as shipped** — resolve the park; let the tactic go to
+    review/merge unchanged.
+
+    - **Want a change** — resolve the park and file a follow-up tactic
+    (grace/cap tuning, or a distinct hold kind). Do not expect this session to
+    have made that change.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

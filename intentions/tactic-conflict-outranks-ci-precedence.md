@@ -36,11 +36,40 @@ attention:
     follows the Wave-A write-path fixes. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
-phase: implement
-execution: null
+  tier: 1
+phase: main-qa
+execution:
+  branch: tactic-conflict-outranks-ci-precedence
+  pr: 3019
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-03T10:16:05Z
+    mergeCommitSha: 72683cbaaaf8d32aeb3d9b1b7e8f3f60c5e11f16
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main item 10 awaits a live tick episode where some PR is
+    simultaneously CONFLICTING and CI-red post-merge (source PR #3019 merged
+    2026-08-03T10:16:05Z); re-checked git log origin/main and the dispatch-tick
+    journal since the merge — zero 'enter fix-interrupt' commits and zero
+    'declining the fix interrupt' journal lines, i.e. no such episode has
+    occurred yet. Re-check after such an episode occurs (earliest useful
+    re-check: after a future conflicted-and-red tick episode, or after ~1 week
+    of ticks if none arises sooner)."
+  since: 2026-08-03
+  recommendation: No author decision needed — re-selection only, once a live
+    CONFLICTING+red episode has occurred. All 8 script-verifiable QA items and
+    the 71/71 hermetic bash-fixture suite already passed per the node's
+    Manual/observe-in-production section; this residue item is the one
+    end-to-end real-world confirmation the hermetic fixtures could not simulate.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -354,3 +383,12 @@ Autonomous verification stops at the seam: the bash tests use a fake `node`, so 
 - After the conflict resolves and CI is re-read against post-merge code, a genuinely red PR still enters the interrupt normally (the case-2 control's behavior, in production).
 
 A judgment call left to the reviewer, not to the implementer: whether the per-candidate `node --import tsx/esm` boot in the selection hot path is acceptable in practice. The pre-filter bounds it to red-or-conflicted candidates only, but if tick latency regresses noticeably, the fallback is to inline the two-branch cascade in bash and file a follow-up tactic to re-unify — do not silently drop the `CONFLICTING` check.
+
+## needs-main residue
+
+- id: 10 — Real-world confirmation that a CONFLICTING + red PR declines the interrupt in the live fleet
+  - URL path: current
+  - Expected outcome: zero fix-interrupt writes against a conflicted-and-red PR on `main`, with the conflict lane still picking it up — the end-to-end behavior the hermetic fixtures only simulate (real `gh` mergeable state + real `provision-node-worktree` exit-11 handoff, not stubbed sensors).
+  - Finding: all 8 script-verifiable QA items passed (including the full 71/71 hermetic bash-fixture suite covering the decline path, the mergeable-red control, sensor wiring, the cost guard, `qa`-phase non-stranding, and eval-failure fail-safe). The node body's own "Manual / observe-in-production" section above already names the exact checks: `git log --oneline origin/main -- intentions/<id>.md` shows no `graph: enter fix-interrupt on <id>` commit for the episode; the tick journal / selector stderr carries the `declining the fix interrupt` line; the node's `execution.fix` stays `null` and it reaches `/dispatch-conflict` Lane 3.
+  - Verifiability: WAIT — awaits a future tick episode where some tactic's PR is simultaneously `CONFLICTING` and CI-red post-merge; no such episode has occurred yet against this PR's merged code.
+  - Check: `git log --oneline origin/main -- 'intentions/*.md' | xargs -I{} git log -1 --format='%H %s' {} 2>/dev/null | grep 'graph: enter fix-interrupt'` cross-referenced against a concurrently `CONFLICTING` PR at the same commit, plus a `journalctl`/tick-log grep for `declining the fix interrupt`.

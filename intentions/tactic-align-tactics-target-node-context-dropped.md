@@ -67,11 +67,51 @@ attention:
     the Workflow. Finalized 2026-07-31 via a tactic-target /align-tactics round:
     status is now codified and phase implement, carrying a full clean-session
     plan (Units 1-2) in the body."
-phase: implement
-execution: null
+  tier: 1
+phase: main-qa
+execution:
+  branch: tactic-align-tactics-target-node-context-dropped
+  pr: 3017
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-03T05:46:04Z
+    mergeCommitSha: 64ec89dce3e81cfe562c478b16cfcbc569bbd285
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Both needs-main residue items on PR #3017 (merged) require subjective
+    judgment on LLM-generated plan quality that no tool can decide: id 12 asks
+    whether a live /align-tactics finalize round's authored body_markdown
+    'visibly carries forward' the target node's prior rationale/body evidence
+    rather than reading as statement-only, and id 13 asks whether a live re-plan
+    round reconciles the whole node without silent content loss (units preserved
+    verbatim, ## Context states what changed, no unit left contradicting the
+    amendment, phase not relabeled). Both are judgment calls on generated prose
+    against a doctrine bar (tactic-target.md clarification 32), not
+    deterministic checks — no MACHINE item exists on this node to run first."
+  since: 2026-08-03
+  recommendation: "Author: on the next live /align-tactics <tactic-id> run for a
+    finalize, confirm the authored body_markdown carries forward the target
+    node's prior root-cause analysis, path:line anchors, and caveats rather than
+    reading as authored from the bare statement alone (id 12). On the next
+    re-plan of a soft-frozen tactic, confirm every unit the current strategy
+    substance does not invalidate is preserved verbatim, ## Context explicitly
+    states what changed and why, no sibling unit or verification step is left
+    contradicting the amendment, and the in-flight phase is not
+    relabeled/renumbered (id 13). All 11 machine-verifiable QA items on PR #3017
+    already PASSed (node --check, the new target-context probe and driver, the
+    sibling tempref probe, prose-rule lint, sentinel-count/wiring/call-site
+    greps — see the PR's dispatch:qa-summary comment). No code defect is
+    suspected; this is planned deferral to the first live run, per the node's
+    own ## Verification 'End-to-end, observe in production' note."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -690,3 +730,42 @@ Manual checks:
   or the commit is denied, park to office-hours naming the file-edit block
   rather than hunting a workaround. Do not attempt any edit under
   `.claude/skills/align-tactics/` — nothing there needs to change.
+
+## needs-main residue
+
+`/qa-fix` PR #3017, first pass: all 11 script-verifiable QA items PASSed
+(`node --check`, the new target-context probe and its driver, the sibling
+tempref probe, the prose-rule lint, sentinel-count/wiring/call-site greps —
+see the `<!-- dispatch:qa-summary -->` PR comment for the full list). The
+remaining 2 QA plan items are the two production-observation checks this
+node's own `## Verification` section already named; the disposition Workflow
+classified both `needs-main` (no code defect — planned deferral, not
+autonomously fixable now).
+
+- **id 12** — A live `/align-tactics <tactic-id>` finalize round produces a
+  plan reflecting the node's prior body.
+  - Expected outcome: the finalized `body_markdown` visibly carries forward
+    the target node's prior `rationale`/`body` evidence (root-cause analysis,
+    path:line anchors, caveats) where still valid, rather than reading as if
+    authored from the bare `statement` alone.
+  - Finding: not machine-checkable — judging whether generated prose
+    "visibly carries forward" prior evidence vs. reads as statement-only is a
+    subjective quality call on LLM output, not a deterministic pass/fail.
+  - Verifiability: AUTHOR — barrier: subjective judgment on LLM-generated
+    plan-quality/faithfulness; no deterministic check exists.
+- **id 13** — A live `/align-tactics <tactic-id>` re-plan round reconciles
+  the whole node without content loss.
+  - Expected outcome: every unit the current strategy substance does not
+    invalidate is preserved verbatim, `## Context` states explicitly what
+    changed and why, no sibling unit or verification step is left
+    contradicting the amendment, and the in-flight phase is not
+    relabeled/renumbered.
+  - Finding: not machine-checkable — judging "whole-node reconciliation" /
+    absence of silent content loss against the doctrine bar is a subjective
+    completeness call on generated prose, not a deterministic check.
+  - Verifiability: AUTHOR — barrier: subjective judgment on LLM-generated
+    plan-quality/faithfulness; no deterministic check exists.
+
+Both items are drained at `main-qa` (post-merge, `review → main-qa`), where
+`office_hours` review is the correct venue for an AUTHOR-only judgment call —
+neither is autonomously verifiable.

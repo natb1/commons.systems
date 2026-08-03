@@ -89,19 +89,43 @@ attention:
     codified and phase implement, carrying a full clean-session plan (Units 1-3)
     in the body; the boost value is preserved unchanged from the bootstrap
     re-scale."
-phase: qa
+  tier: 1
+phase: main-qa
 execution:
   branch: tactic-qa-main-verifiability-sort-criterion
   pr: 3009
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-01T03:17:01Z
+    mergeCommitSha: df0c436a655decfddadba7631388bdbfc36667a3
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-main node lane on tactic-qa-main-verifiability-sort-criterion:
+    item-16 (mis-sort rate stays <=1/20 across the next /qa-main node-lane
+    drains) is an accumulation over future drains that has not happened yet --
+    source PR #3009 merged 2026-08-01T03:17:01Z, only hours ago, so no /qa-main
+    node-lane drain has run under the amended prose yet. Re-check once a
+    meaningful sample of node-lane drains has accumulated (no fixed date; this
+    is an ongoing rate measurement, not a single-visit check)."
+  since: 2026-08-01
+  recommendation: "Re-check after a meaningful sample of /qa-main node-lane drains
+    has accumulated under the amended (PR #3009) prose: grep worker transcripts
+    for mis-sort occurrences (a park citing browser-unverifiability for a
+    machine-checkable item) across several drains, and confirm the rate stays
+    <=1/20. No fixed date -- this is an ongoing rate measurement, not a
+    single-visit check. This park was originally built by the /qa-main session
+    (c8ad3138) but stranded unlanded (marker at
+    /home/n8/.claude/jobs/c8ad3138/office-hours-reason, PR #3009 already MERGED,
+    session terminal idle/done) -- landed here from origin/main per I1."
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
@@ -729,3 +753,21 @@ Manual / judgment:
 - **If the auto-mode classifier blocks Units 2/3**, park naming the file class
   and request a narrow scoped grant; do not attempt workarounds. Confirm before
   parking that Unit 1 landed on its own (scripts commit fine).
+
+## needs-main residue
+
+- id: item-15
+  title: Re-sort the four named sibling nodes under the amended prose
+  url_path: current
+  expected_outcome: Each of `tactic-drain-disposition-diagnosis-cas`, `tactic-mechanical-park-producers`, `tactic-main-post-merge-validation`, and `tactic-execution-pr-merge-verification`, if still parked/live at merge time, sorts correctly under this PR's amended `qa-main`/`needs-main-followups.md` prose; any sibling that has already drained under the old prose by the time this checks is excluded rather than reported as a discrepancy.
+  finding: Not checkable at PR-diff time — requires each sibling's live current state on `origin/main` *after* this PR merges (the amended prose only governs a node once merged). The plan itself flags the live-state check as a prerequisite to avoid manufacturing a false discrepancy against an already-drained sibling.
+  Verifiability: MACHINE
+  Check: For each of the four sibling ids, `git show origin/main:intentions/<sibling-id>.md | grep -A5 '^phase:'` (or `jq` against the node's frontmatter) to read its current `phase`/`office_hours` state; if still parked citing browser-reachability, that is itself evidence the amended prose has not yet propagated (expected — this PR had not merged when the park was written) rather than a defect in this PR.
+
+- id: item-16
+  title: Mis-sort rate stays at or below 1/20 across the next `/qa-main` node-lane drains
+  url_path: current
+  expected_outcome: Over the coming `/qa-main` node-lane drains, no park's reason cites browser reachability, and the mis-sort rate (cannot-verify parks on `owner: ai` nodes / all `owner: ai` main-qa nodes) stays at or below 1/20 (`intentions/strategy-graph-native-dispatch.md:3530-3533`).
+  finding: Not checkable at merge time — this is the strategy's own downstream measurement, an accumulation over N future `/qa-main` drains that have not happened yet, not a single-visit check.
+  Verifiability: WAIT
+  Check: Tally `/qa-main` node-lane park reasons across subsequent drains (e.g. `journalctl` / dispatch decision logs for `dispatch-mark-node-park` exit-3 refusals, which are a **success** signal per this node's own design, vs. legitimate `AUTHOR`/`WAIT` parks) once enough drains have accumulated to compute a meaningful ratio; re-check later rather than at this single visit.

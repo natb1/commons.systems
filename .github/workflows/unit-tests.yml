@@ -264,6 +264,8 @@ jobs:
         run: .github/scripts/test-check-test-integrity.sh
       - name: Run graph fast-path guard script tests
         run: .github/scripts/test-check-graph-fast-path.sh
+      - name: Run align-tactics tactic-mode target-node context tests
+        run: .claude/skills/dispatch-propagate/scripts/test-align-tactics-target-context.sh
 
   test-integrity:
     runs-on: ubuntu-latest

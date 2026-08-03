@@ -23,7 +23,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: main-qa
+phase: done
 execution:
   branch: tactic-graph-review-exclusion-stall-recovery
   pr: 2920
