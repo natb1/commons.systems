@@ -318,15 +318,18 @@ if [[ -n "$STANDALONE" ]]; then
   # prevent. It likewise does NOT inherit that branch's pace-curve OVERRIDE: the
   # pace-curve gap (TARGET_N - LIVE_COUNT) is applied as a second ceiling below,
   # for the same non-sovereignty reason. LIVE_COUNT = busy workers + reservations.
-  # All four
-  # environmental reads fail OPEN, each to its own safe default: EXHAUSTED → `ok`
-  # on missing telemetry; MAX_WORKERS → headroom UNKNOWN on an unreadable or
-  # non-numeric ceiling; TARGET_N → pace budget UNKNOWN on the same; daemon UNKNOWN
-  # (busy-worker read failed) → skip the
-  # headroom computation outright. UNKNOWN on any of those reads converges on
-  # the same fail-open floor, TOP=1 (the standalone analogue of
-  # dispatch-select-tick's "GAP stays 1"), never leaving TOP unclamped when the
-  # live-worker count or the ceiling is unknown.
+  # Three of the four environmental reads fail OPEN, each to its own safe
+  # default: EXHAUSTED → `ok` on missing telemetry; MAX_WORKERS → headroom
+  # UNKNOWN on an unreadable or non-numeric ceiling; TARGET_N → pace budget
+  # UNKNOWN on the same — converging on the fail-open floor, TOP=1 (the
+  # standalone analogue of dispatch-select-tick's "GAP stays 1"), never leaving
+  # TOP unclamped when the ceiling is unknown. The FOURTH read — daemon
+  # UNKNOWN, busy-worker count failed/uncorroborated — is different: it means
+  # true live occupancy can't be determined, not that a config ceiling is
+  # unreadable, so it does NOT fail open to TOP=1. It fails CLOSED to the
+  # concurrency-cap-style `live-read-unverified` disposition instead (see the
+  # busy-read branch below) — assuming headroom while blind to occupancy risks
+  # selecting a target an already-running worker owns.
   #
   # The ledger is SWEPT before it is counted, mirroring dispatch-select-tick's
   # autonomous gate. Since the spawn handoff landed, a launched claim is no
@@ -402,7 +405,17 @@ if [[ -n "$STANDALONE" ]]; then
       (( TOP > 1 )) && TOP=1
     fi
   else
-    (( TOP > 1 )) && TOP=1
+    # daemon UNKNOWN (busy-worker read failed/uncorroborated, #lib-claude-agents
+    # EMPTY-READ CORROBORATION). Unlike the MAX_WORKERS/TARGET_N config reads
+    # above, this is NOT a "ceiling unreadable" case that can safely fail open to
+    # TOP=1 — it means true live occupancy is unknown, so assuming any headroom
+    # risks selecting a target an already-running worker owns (a duplicate
+    # worker). Fail CLOSED: mirror the concurrency-cap disposition above rather
+    # than fall through to the TOP=1 floor.
+    DISPOSITION="live-read-unverified"
+    echo "graph-select-target: busy-worker read unverified (daemon unreachable/uncorroborated); deferring rather than assuming headroom" >&2
+    echo "empty"
+    exit 0
   fi
 fi
 

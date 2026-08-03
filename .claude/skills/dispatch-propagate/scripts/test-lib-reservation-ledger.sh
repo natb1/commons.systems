@@ -267,6 +267,40 @@ assert_eq "rl-sweep-unknown: returns 0 (fail safe)" "0" "$rc"
 assert_eq "rl-sweep-unknown: marker survives (count unchanged)" "1" "$cnt"
 rl_teardown
 
+# --- Test 6b: sweep reclaims NOTHING on an uncorroborated empty read ---------
+# (tactic-graph-router-live-worker-read-robust) — distinct from Test 6's
+# missing-binary UNKNOWN: here `claude agents --json` exits 0 and prints
+# exactly `[]`, the payload a blocked/sandboxed read is indistinguishable from
+# a genuine empty registry. claude_agents_list_all (lib-claude-agents.sh) only
+# trusts that `[]` when a `claude daemon` process corroborates it; with the
+# probe unreachable it must fold to UNKNOWN (return 1), and reservation_sweep's
+# rule (c) branch must therefore reclaim nothing — the outstanding marker must
+# NOT collapse alongside a (falsely) zero busy-worker count.
+
+echo "Test: reservation_sweep reclaims nothing on an uncorroborated empty registry read"
+rl_setup
+reservation_write "945-slug" "945" "dead-sess"
+rl_write_fake_claude '[]'
+# rl_setup/rl_write_fake_claude set no default corroboration probe stub in this
+# file — point it at an explicit unreachable stub so this ambiguous-`[]` case
+# is deterministic rather than depending on whether the HOST happens to be
+# running a `claude daemon` process.
+printf '#!/usr/bin/env bash\nexit 1\n' > "$RL_DIR/fake-pgrep-unreachable"
+chmod +x "$RL_DIR/fake-pgrep-unreachable"
+CLAUDE_AGENTS_PGREP_CMD="$RL_DIR/fake-pgrep-unreachable"
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+unset CLAUDE_AGENTS_PGREP_CMD
+assert_eq "rl-sweep-uncorroborated-empty: marker survives (count unchanged)" "1" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'daemon unqueryable; reclaiming nothing'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-uncorroborated-empty: stderr reports the daemon-unqueryable fail-safe path"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-uncorroborated-empty: stderr reports the daemon-unqueryable fail-safe path"
+  echo "    stderr: $err"
+fi
+rl_teardown
+
 # --- Test 7: sweep is a no-op on an empty/absent ledger ----------------------
 
 echo "Test: reservation_sweep is a no-op on an empty or absent ledger"
