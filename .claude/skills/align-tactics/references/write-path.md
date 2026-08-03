@@ -127,7 +127,15 @@ author) instead of assigning ownership by proximity.
    `phase`/`execution`/`validates`/`blocked_by`/`office_hours`/`rounds`);
    write them at top level, not squatted under `attributes` —
    `validateNode` silently drops unknown top-level keys, so a mistyped
-   field vanishes. Pipe or `--file` the JSON into `write-node.ts`:
+   field vanishes. Leaving `execution: null` here is correct, not merely
+   provisional: the live router now seeds this tactic's
+   `execution.strategy_fingerprint` map itself, at the tactic's first
+   forward (non-stale) transition, via `transition-node`'s `APPLY_FLAGS`
+   construction (`.claude/skills/dispatch-propagate/scripts/transition-node`,
+   the `STRATEGY_STALE == "false"` branch around lines 249-254) — this
+   session does not, and should not, hand-stamp a map onto a node it is
+   minting at `execution: null`. Pipe or `--file` the JSON into
+   `write-node.ts`:
 
    ```bash
    npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/tactic.json"
@@ -307,22 +315,49 @@ run against a fresh `origin/main` at stamp time — the single runnable
 callsite for `strategyFingerprint(strategy)`
 (`packages/intentionsutil/src/router.ts`); never hand-compute the hash, and
 never re-derive the recipe inline — always run this command. `sha` is the
-origin/main commit the hash was taken against, obtained with `git rev-parse
-origin/main` in the bootstrap-interim hand-stamp path (a live router passes
-it through `apply-node-transition.ts --strategy-sha`).
+origin/main commit the hash was taken against.
+
+The live router now does this automatically for the ordinary case: at every
+non-held (not-stale) forward transition, `transition-node`
+(`.claude/skills/dispatch-propagate/scripts/transition-node`) calls
+`compute-freshness.ts` to get the current `strategyFingerprints` map for
+every serving strategy, then passes one `--strategy-fingerprint <sid>=<hash>`
+per entry plus the shared `--strategy-sha <origin/main-sha>` to
+`apply-node-transition.ts` (the `APPLY_FLAGS` construction, transition-node
+lines ~234-254), seeding a null map or refreshing an existing one on every
+such transition. This session's hand-run of `strategy-fingerprint.ts` above
+is still the mechanism for the decompose/re-evaluate-time stamp this session
+itself lands (the entry for the strategy it is actively decomposing or
+re-evaluating) — the router's transition-time seeding is a separate,
+complementary write that keeps the map current in between align-tactics
+rounds, not a replacement for this session's own stamp.
 
 A serving strategy absent from the map is never stale (per-strategy null),
 so an honest multi-serves tactic is not born frozen against its other
 serving strategies; those entries are filled by whichever session decomposes
-or re-evaluates each of them. Untouched sibling-strategy entries in the same
-map are left as-is — this session converts only the key it is re-stamping,
-never a key it is not touching (opportunistic conversion, not bulk
-migration). A tactic not yet advanced still carries `execution: null` (no
-map to stamp); the map is seeded the first time an `execution` object
-exists. The bare-string form is deprecated-legacy — never emit it. In the
-bootstrap interim with no live router, the mint-time stamp is made by hand
-at completion; the freeze-on-mismatch rule is otherwise discharged by
-running re-evaluation in the same session as the strategy edit.
+or re-evaluates each of them, or by the router's own transition-time seeding
+once the tactic advances. Untouched sibling-strategy entries in the same map
+are left as-is — this session converts only the key it is re-stamping, never
+a key it is not touching (opportunistic conversion, not bulk migration). A
+tactic not yet advanced (still at `execution: null`) has no map for this
+session to stamp — the map is seeded the first time an `execution` object
+exists, whether that is this session's own re-stamp or the router's first
+forward transition. The bare-string form is deprecated-legacy — never emit
+it.
+
+**Residual gap: the mint-to-first-transition window.** Transition-time
+seeding does not cover the interval between mint (`execution: null`) and the
+tactic's first forward transition. A tactic typically sits at `implement` —
+its longest phase — before that first transition ever fires. If the serving
+strategy is edited while the tactic is still in that window, the edit is
+effectively laundered: when the first forward transition finally runs, it
+seeds a **fresh** hash (computed against the strategy as it is at transition
+time), not the pre-edit hash the tactic was actually planned against — so the
+freeze that should have caught the drift never fires, because there was
+never a stale stamp to compare against. Closing this window is deferred,
+out-of-scope future work — a mint-time stamp via a
+`--strategy-fingerprint-sha`-style flag on `write-node.ts` — not something
+this change does.
 
 Dropping the bare-string form entirely, and making `validate-graph`
 **reject** it, is sequenced future work (migration step 4), not this change

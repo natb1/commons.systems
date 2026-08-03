@@ -73,7 +73,14 @@ Workflow's tactic-mode job, not this thread's:
   `execution.strategy_fingerprint` to the `{hash: strategyFingerprint(strategy),
   sha: <origin/main sha>}` object form (item 3 below) and leave every
   other serving strategy's entry untouched (a tactic still at
-  `execution: null` has no map to re-stamp).
+  `execution: null` has no map to re-stamp — but it is no longer permanently
+  unstampable: the live router now SEEDS that map the first time this tactic
+  makes a forward, non-stale transition, via `transition-node`'s
+  `APPLY_FLAGS` construction
+  (`.claude/skills/dispatch-propagate/scripts/transition-node`) calling
+  `apply-node-transition.ts` — so a draft/raw tactic finalized at
+  `execution: null` picks up its first stamp automatically once it advances,
+  without needing a hand-run of `strategy-fingerprint.ts` for that purpose).
 
 **Build `args`.** Assemble the Workflow input in `mode: "tactic"`:
 

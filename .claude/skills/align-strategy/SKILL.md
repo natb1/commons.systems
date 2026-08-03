@@ -626,7 +626,13 @@ key line itself, so a null-valued stamp (`strategy_fingerprint: null` — not
 stale, per `isFingerprintStale`) is indistinguishable from a real one in the
 grep count and inflates the estimate. A cost estimate that drives a recording
 or materiality decision must come from the same predicate the router uses, not
-a text search.
+a text search. `packages/intentionsutil/scripts/strategy-stamp-census.ts`
+(invoked as `npx tsx packages/intentionsutil/scripts/strategy-stamp-census.ts
+[--strategy <strategy-id>]`) is the runnable, repeatable form of this same
+measurement — it applies `isFingerprintStale` over every open tactic (scoped
+to one strategy with `--strategy`) and reports how many carry a stamp for
+each serving strategy and how many of those are currently stale; prefer it to
+re-deriving the predicate call by hand when the measurement is the whole ask.
 
 **Materiality-scoped freeze — classify each open child.** If this is an edit
 to a strategy that has open (non-draft, non-`done`) child tactics with an
@@ -646,7 +652,11 @@ never on its rank.
   Re-stamp its `execution.strategy_fingerprint` entry for this strategy to
   `{hash: strategyFingerprint(strategy), sha: <origin/main sha at edit time>}`
   in the **same** `graph-commit` as this strategy edit, so no freeze fires for
-  this child.
+  this child. (If this child has no entry yet — still at `execution: null`,
+  or an `execution` object with no key for this strategy — there is nothing
+  to re-stamp here; the live router SEEDS that entry itself the next time
+  this child makes a forward, non-stale transition, via `transition-node`'s
+  `APPLY_FLAGS` construction — see the hash/sha paragraph below.)
 - **Materially affected** — the edit changes something this child's plan
   depends on. Leave its stamp untouched/stale: the freeze fires and it
   re-evaluates later at its own rank via the existing re-evaluation mechanism
@@ -661,10 +671,19 @@ never on its rank.
 
 `hash` is always `strategyFingerprint(strategy)` from
 `packages/intentionsutil/src/router.ts` — always that helper, never a
-hand-computed hash. In the bootstrap-interim hand-stamp path (no live router
-yet), get `sha` with `git rev-parse origin/main`. The live-router path instead
-passes it through `apply-node-transition.ts --strategy-sha <sha>` rather than
-shelling git itself.
+hand-computed hash. When this session hand-stamps a re-stamp above, get `sha`
+with `git rev-parse origin/main`. Separately from this session's own
+re-stamp, the live router now also seeds or refreshes this same
+`execution.strategy_fingerprint` map on its own: `transition-node`
+(`.claude/skills/dispatch-propagate/scripts/transition-node`) computes each
+serving strategy's current fingerprint via `compute-freshness.ts` and passes
+it, plus `--strategy-sha <origin/main sha>`, to `apply-node-transition.ts` on
+every forward (non-strategy-stale) transition of the tactic — SEEDING a
+`null`/absent entry the first time, or refreshing an existing one, rather
+than requiring a human/session hand-stamp for the common case. This is why a
+child with no entry yet is no longer permanently unstamped: it picks one up
+automatically the next time it advances, independent of this round's
+classification pass.
 
 Dropping the legacy bare-string form entirely, and making `validate-graph`
 **reject** bare strings, is sequenced future work (migration step 4), **not**
