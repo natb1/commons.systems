@@ -283,6 +283,14 @@ FAKE
 
   # Defaults for dispatch-sweep env overrides.
   export CLAUDE_AGENTS_CMD="$default_fake"
+  # lib-claude-agents only trusts an exactly-`[]` registry payload when a
+  # `claude daemon` process corroborates it (CLAUDE_AGENTS_PGREP_CMD probe).
+  # $default_fake emits exactly that payload, so without this stub the default
+  # "no live session, safe to remove" state would read UNKNOWN — occupied — on
+  # any host with no daemon running. Exit 0 = daemon visible.
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$TMPDIR_TEST/fake/pgrep"
+  chmod +x "$TMPDIR_TEST/fake/pgrep"
+  export CLAUDE_AGENTS_PGREP_CMD="$TMPDIR_TEST/fake/pgrep"
   export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
   export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
   export GH_RETRY_BASE_DELAY=0
@@ -317,7 +325,7 @@ sweep_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
-  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
+  unset CLAUDE_AGENTS_CMD CLAUDE_AGENTS_PGREP_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
   # DISPATCH_CONFIG_DIR / DISPATCH_SWEEP_WORKTREES_ROOT are sweep-local — never
   # leak them into later non-sweep tests.
   unset DISPATCH_CONFIG_DIR DISPATCH_SWEEP_WORKTREES_ROOT

@@ -18,7 +18,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-flake-preview-and-smoke-dpkg-lock
   pr: 3020
@@ -29,7 +29,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T21:31:12Z
+    mergeCommitSha: cadb2e5b848666f211c292dab06f73a1a8ed3fac
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

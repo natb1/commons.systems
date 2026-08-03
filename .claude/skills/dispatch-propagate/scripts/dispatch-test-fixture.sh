@@ -350,6 +350,19 @@ STUB
   # select_target_fake_claude override this to model live or orphan worktrees.
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
 
+  # Default the empty-read corroboration probe to "daemon visible". The library
+  # only trusts an exactly-`[]` registry payload when a `claude daemon` process
+  # corroborates it; without this stub the probe would shell out to the HOST's
+  # real pgrep, making every `[]`-payload case depend on whether the developer's
+  # machine happens to be running a daemon. Exiting 0 preserves the pre-existing
+  # meaning of every `[]` fake: a definite "no sessions".
+  cat > "$TMPDIR_TEST/pgrep-daemon-visible" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/pgrep-daemon-visible"
+  export CLAUDE_AGENTS_PGREP_CMD="$TMPDIR_TEST/pgrep-daemon-visible"
+
   # Point the reservation ledger (#1046) at a scratch dir that is absent by
   # default — no marker files, so reservation_exists is false for every row and
   # the reserved-skip is inert. Every existing select-target / trace-leaf test
@@ -1384,6 +1397,10 @@ teardown() {
   unset GH_RETRY_BASE_DELAY
   # Per-test exports for the liveness gate must not leak across tests.
   unset CLAUDE_AGENTS_CMD
+  # The empty-read corroboration probe override must not leak either — its stub
+  # lives under the just-removed TMPDIR_TEST, so a leaked value would point at a
+  # deleted path and silently classify every `[]` as uncorroborated.
+  unset CLAUDE_AGENTS_PGREP_CMD
   unset CLAUDE_CODE_SESSION_ID
   # The #1452 tick-snapshot / trace-cache exports must not leak across tests
   # either — both default OFF so existing tests keep the live/uncached path.
