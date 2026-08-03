@@ -29,9 +29,13 @@ through to the unified set — has these fields:
 ## Edge cases
 
 - **Empty, docs-only, or test-only diff** — `surface` is `empty`, `docs`, or
-  `tests`; the Workflow launches no security finders and no security agents. The
-  code-review agent still runs. The skill still applies
-  `dispatch:reviewed` and writes the marker.
+  `tests`; the Workflow launches **no agent finders at all** (`agentFinderSet`
+  returns `[]`). code-review is no longer an agent in the Workflow — it already
+  ran as the Step 1b `claude -p` pre-stage, which is always-on regardless of
+  surface, so its findings still reach the disposition set via the Sonnet
+  `parse:code-review` structuring subagent. With no wave-2 finders there is
+  nothing to probe for, so `coverage_incomplete` stays `false`. The skill still
+  applies `dispatch:reviewed` and writes the marker.
 - **A finder finds nothing** — record that source as clean; it contributes no
   findings to the Workflow.
 - **A finder agent fails** — the Workflow retries once. If it fails again, partial
@@ -70,35 +74,50 @@ dispatch chain runs this `review` phase orchestrator on **Sonnet** (via
 learned policy that can promote the orchestrator to Opus. The model tiering is
 owned by the Workflow's per-`agent()` `model:` settings, and Opus is reserved
 for the genuinely complex, generative subtasks: **finder agents run on Opus**
-(`model: opus`) — the always-on `code-review` finder now runs `/code-review max
---fix` and applies its own working-tree edits directly (no longer
-detection-only — this is the tactic-review-phase-trust-builtin-review reversal
-of the prior #1172 doctrine), the `/security-review` pass stays findings-only
-(no `--fix` flag), and the surface-gated security/cost domain lenses run
-detection-only as before, since finding real bugs and vulnerabilities in the
-diff is the core reasoning of the phase. **Fix-authoring agents run on Opus**
-(`model: opus`), writing all working-tree changes: this now includes both the
-shared Lane-B fix fan-out over classified/verified findings AND the new
+(`model: opus`) — the `/security-review` pass stays findings-only (no `--fix`
+flag), and the surface-gated security/cost domain lenses run detection-only as
+before, since finding real bugs and vulnerabilities in the diff is the core
+reasoning of the phase. The `code-review` quality pass is **not a Workflow agent
+at all**: it runs OUTSIDE this model split, as the `claude -p '/code-review low
+--fix'` pre-stage in SKILL.md Step 1b — its own nested session, with its own
+model and context window, applying its own working-tree edits directly (the
+tactic-review-phase-trust-builtin-review reversal of the prior #1172
+detection-only doctrine, now invoked through the entry point that actually
+runs). Effort is `low`, not `max`: `max` was measured at >39 min and ~$372 of
+price proxy on a real diff without completing (see
+`code-review-invocation.md` §1.2, §5.4, §7). **Fix-authoring agents run on
+Opus** (`model: opus`), writing all working-tree changes: this includes both the
+shared Lane-B fix fan-out over classified/verified findings AND the
 **residue phase** subagent (also Opus), which additionally applies
 resolve-dispositioned fixes for Lane-A's (code-review's and security-review's)
-un-auto-fixed residue. The cheaper mechanical stages — dedup, classify, and the
-adversarial verify skeptics — run on **Sonnet**, and now scope only to Lane-B
-findings. The orchestrator (this skill) authors no product code.
+un-auto-fixed residue. The cheaper mechanical stages run on **Sonnet**: dedup,
+classify, the adversarial verify skeptics (all Lane-B-scoped only), and the
+`parse:code-review` structuring subagent — which reads the pre-stage's
+free-form findings text plus its patch and emits the `LANE_A_SCHEMA`
+`{ fixed, residue }` envelope. That last one is Sonnet for the same reason as
+dedup/classify: it is mechanical text→JSON structuring, because the *reasoning*
+was already done by the built-in. The orchestrator (this skill) authors no
+product code.
 
 **Probe-wave throttle short-circuit (#1857).** On a `code` surface the Workflow
 splits the finder fan-out into two waves instead of one barrier. Wave 1 launches
-only the single always-on `code-review` quality finder — real review work that
-runs on every surface — and doubles it as a throttle probe. If it returns `null`,
-the Workflow skips the security finder wave entirely rather than waste those
+only `security-review` — real review work, and the finder always present whenever
+there are any agent finders at all — and doubles it as a throttle probe. If it
+returns `null`, the Workflow skips wave 2 entirely rather than waste those
 launches on a throttled model, and sets `result.coverage_incomplete = true` with a
 human `result.coverage_note` (surfaced in the Step 6 partial-coverage line). The
 `agent()` primitive already retries internally, so a `null` result is a repeated
 failure after retries — a genuine outage signal, not a one-off flake. This
 deliberately accepts the reduced throttle-probe robustness of a single finder
 (versus the prior two): the internal retry means `null` already means "failed
-after retries". Otherwise wave 2 launches the surface-gated security finders. On
-`empty`/`docs`/`tests` surfaces there are no security finders, so this degenerates
-to a single wave (no change). **Marker/label behavior is intentionally unchanged:**
+after retries". Otherwise wave 2 launches the remaining surface-gated
+security/domain lenses. On `empty`/`docs`/`tests` surfaces there are no agent
+finders at all — both waves are empty, nothing is launched, and the dead-probe
+gate is explicitly guarded on `probeFinders.length > 0` so it cannot fire
+spuriously; `coverage_incomplete` stays `false`, because with no wave 2 there is
+nothing to probe *for*. (`code-review` was the wave-1 probe before it moved to the
+Step-1b pre-stage; it is not an agent finder anymore, so the probe re-pointed to
+`security-review`.) **Marker/label behavior is intentionally unchanged:**
 a throttled run
 still applies `dispatch:reviewed` and writes the marker — this matches today's
 behavior when all finders return `null`, producing a degraded quality-only review.

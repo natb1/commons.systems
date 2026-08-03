@@ -43,9 +43,9 @@ assert_eq "phase-effort: empty-string-arg → exit 2" "2" "$pe_rc"
 # Opus subagent. The review-fix.js `--fix` guard below is INTENTIONALLY
 # INVERTED from the original #1172 doctrine ("code-review is detection-only,
 # no --fix"): tactic-review-phase-trust-builtin-review deliberately reverses
-# this — code-review now runs `/code-review max --fix` and applies its own
+# this — code-review now runs `/code-review <effort> --fix` and applies its own
 # fixes directly (Lane-A trust-the-built-in doctrine), with only its
-# un-auto-fixed residue dispositioned by the new residue phase.
+# un-auto-fixed residue dispositioned by the residue phase.
 #
 # The Opus fix-authoring guard below targets review-fix.js (the RUNTIME file
 # that actually enforces the pin at its fix fan-out `agent()` call), NOT the
@@ -55,15 +55,32 @@ assert_eq "phase-effort: empty-string-arg → exit 2" "2" "$pe_rc"
 # string again. Per .claude/rules/test-integrity.md, re-pointing this guard at
 # the mechanism that enforces the invariant strengthens it (the "Opus
 # fix-authoring" invariant still holds); it is not weakening a red test.
+#
+# The `--fix` guard was re-pointed a SECOND time by
+# tactic-review-code-review-invocation-contract, for the same reason and under the
+# same rule. The invariant it protects — "the built-in /code-review runs WITH
+# --fix and applies its own edits" — is unchanged and still asserted. What moved
+# is the mechanism: the old review-fix.js prompt told a subagent to call the
+# built-in via the Skill tool, and that call was ALWAYS rejected
+# (disable-model-invocation), so the string it grepped for described an
+# invocation that never actually happened. The invocation now lives in
+# `dispatch-code-review`, which builds the literal `/code-review <effort> --fix`
+# prompt for a `claude -p` user turn — a real call site, not prompt prose. The
+# guard therefore points at that script, and a second assertion pins the removal
+# of the dead Skill-tool instruction. Strictly stronger, not weaker.
 REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 RF_WORKFLOW="$REPO_ROOT/.claude/workflows/review-fix.js"
+CR_SCRIPT="$SCRIPT_DIR/dispatch-code-review"
 
 echo "Test: review-fix.js pins fix-authoring to Opus (model: 'opus' present in the runtime)"
 if grep -q "model: 'opus'" "$RF_WORKFLOW"; then rf_opus=yes; else rf_opus=no; fi
 assert_eq "review-fix: Opus fix-authoring pinned" "yes" "$rf_opus"
 
-echo "Test: review-fix.js invokes /code-review with --fix (Lane-A trust-the-built-in doctrine, tactic-review-phase-trust-builtin-review)"
-assert_eq "review-fix.js: /code-review --fix call site present" "1" "$(grep -c -- "AND the \`--fix\` flag" "$RF_WORKFLOW" || true)"
+echo "Test: dispatch-code-review invokes /code-review with --fix (Lane-A trust-the-built-in doctrine, tactic-review-code-review-invocation-contract)"
+assert_eq "dispatch-code-review: /code-review --fix call site present" "1" "$(grep -c -F -- 'PROMPT="/code-review $EFFORT --fix"' "$CR_SCRIPT" || true)"
+
+echo "Test: review-fix.js no longer carries a Skill-tool /code-review invocation (it was always rejected with disable-model-invocation)"
+assert_eq "review-fix.js: no Skill-tool code-review instruction" "0" "$(grep -i -- "skill tool" "$RF_WORKFLOW" | grep -ci -- "code-review" || true)"
 
 echo "Test: review-fix.js contains the residue phase (tactic-review-phase-trust-builtin-review)"
 assert_eq "review-fix.js: residue phase present" "1" "$(grep -c -- "title: 'residue'" "$RF_WORKFLOW" || true)"
