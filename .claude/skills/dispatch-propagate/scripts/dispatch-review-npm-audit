@@ -49,6 +49,14 @@
 #   release with NO advisory affecting the head version) is a known gap, called
 #   out here rather than silently dropped.
 #
+# FAILED AUDIT IS AN ERROR, NEVER AN EMPTY DIFFERENTIAL. Both documents are
+#   validated as actual audit reports before differencing (see
+#   `validate_audit_doc`). npm's JSON error document parses fine and would
+#   otherwise normalize to zero advisories — indistinguishable from a clean
+#   audit — so the script exits non-zero with npm's own error text on stderr.
+#   Callers must treat a non-zero exit as "dependency audit could not run",
+#   NOT as "no new advisories".
+#
 # SANDBOX: `npm audit` writes the npm cache and reaches the registry — callers
 # must use dangerouslyDisableSandbox: true.
 #
@@ -75,6 +83,45 @@ trap 'rm -rf "$AUDIT_DIR"' EXIT
 
 HEAD_JSON="$AUDIT_DIR/audit-head.json"
 BASE_JSON="$AUDIT_DIR/audit-baseline.json"
+HEAD_ERR="$AUDIT_DIR/audit-head.err"
+BASE_ERR="$AUDIT_DIR/audit-baseline.err"
+
+# A document that parses as JSON is NOT yet an audit report. When npm cannot
+# audit the tree (desynchronized/hand-edited package-lock.json, a downgraded
+# lockfileVersion, an unresolvable workspace, an unreachable registry in
+# .npmrc) it still writes a well-formed JSON ERROR document —
+# {"error":{"code":"EUSAGE","summary":...,"detail":...}} — which has no
+# .vulnerabilities key. Differencing it yields an empty advisory set, i.e. a
+# clean bill of health byte-identical to a genuinely clean audit. That is a
+# silent suppression an author can trigger, so reject it loudly instead
+# (.claude/rules/code-style.md: clear errors over defensive fallbacks).
+validate_audit_doc() {
+  local f="$1" label="$2" errf="${3:-}"
+  if ! jq -e . "$f" >/dev/null 2>&1; then
+    echo "dispatch-review-npm-audit: $label audit produced no parseable JSON at $f" >&2
+    emit_npm_stderr "$errf"
+    exit 1
+  fi
+  if jq -e 'has("error")' "$f" >/dev/null 2>&1; then
+    echo "dispatch-review-npm-audit: $label dependency audit could not run — npm returned an error document, so the dependency differential is UNKNOWN (NOT clean)." >&2
+    jq -r '.error | "  npm error code: \(.code // "?")\n  npm error summary: \(.summary // "")\n  npm error detail: \(.detail // "")"' "$f" >&2
+    emit_npm_stderr "$errf"
+    exit 1
+  fi
+  if ! jq -e 'has("auditReportVersion") or has("vulnerabilities")' "$f" >/dev/null 2>&1; then
+    echo "dispatch-review-npm-audit: $label audit document is not an npm audit report (no auditReportVersion and no vulnerabilities key) — the dependency differential is UNKNOWN (NOT clean)." >&2
+    emit_npm_stderr "$errf"
+    exit 1
+  fi
+}
+
+emit_npm_stderr() {
+  local errf="${1:-}"
+  if [[ -n "$errf" && -s "$errf" ]]; then
+    echo "  npm stderr:" >&2
+    sed 's/^/    /' "$errf" >&2
+  fi
+}
 
 if [[ -n "$HEAD_FIXTURE" && -n "$BASE_FIXTURE" ]]; then
   for f in "$HEAD_FIXTURE" "$BASE_FIXTURE"; do
@@ -85,24 +132,26 @@ if [[ -n "$HEAD_FIXTURE" && -n "$BASE_FIXTURE" ]]; then
   done
   cp "$HEAD_FIXTURE" "$HEAD_JSON"
   cp "$BASE_FIXTURE" "$BASE_JSON"
+  # Fixtures go through the SAME validation as real audits — a fixture is a
+  # stand-in for an npm audit document, so the test suite exercises the guard.
+  validate_audit_doc "$HEAD_JSON" "HEAD"
+  validate_audit_doc "$BASE_JSON" "MERGE_BASE"
 else
   # Audit HEAD (current working tree). npm audit exits non-zero whenever it finds
-  # any vulnerability, so tolerate the exit code and validate the document instead.
-  npm audit --json > "$HEAD_JSON" 2>/dev/null || true
+  # any vulnerability, so tolerate the exit code and validate the document
+  # instead. npm's stderr is CAPTURED (not discarded) so a failed audit can be
+  # reported with npm's own diagnostics.
+  npm audit --json > "$HEAD_JSON" 2>"$HEAD_ERR" || true
 
   # Audit the MERGE_BASE lockfile without touching the working tree.
   mkdir -p "$AUDIT_DIR/baseline"
   git show "$MERGE_BASE":package-lock.json > "$AUDIT_DIR/baseline/package-lock.json"
   git show "$MERGE_BASE":package.json      > "$AUDIT_DIR/baseline/package.json"
   npm audit --package-lock-only --json --prefix "$AUDIT_DIR/baseline" \
-    > "$BASE_JSON" 2>/dev/null || true
+    > "$BASE_JSON" 2>"$BASE_ERR" || true
 
-  for f in "$HEAD_JSON" "$BASE_JSON"; do
-    if ! jq -e . "$f" >/dev/null 2>&1; then
-      echo "dispatch-review-npm-audit: npm audit produced no parseable JSON at $f" >&2
-      exit 1
-    fi
-  done
+  validate_audit_doc "$HEAD_JSON" "HEAD" "$HEAD_ERR"
+  validate_audit_doc "$BASE_JSON" "MERGE_BASE" "$BASE_ERR"
 fi
 
 # Normalize. `npm audit --json` (auditReportVersion 2) nests each advisory as an

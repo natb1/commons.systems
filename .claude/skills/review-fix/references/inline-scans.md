@@ -25,6 +25,16 @@ The script emits `{"findings":[...]}` with `Source="npm"` already in the
 per-finding schema. Raw `npm audit` JSON never reaches this thread. Extract the
 `findings` array for `prescanned_findings`.
 
+**A non-zero exit means the dependency audit could not run — it does NOT mean
+"no new advisories".** When `npm audit` cannot audit the tree (desynchronized or
+hand-edited `package-lock.json`, a downgraded `lockfileVersion`, an unresolvable
+workspace, an unreachable registry) npm emits a well-formed JSON *error*
+document; the script rejects it and exits non-zero with npm's error text on
+stderr rather than differencing it to an empty finding set. Check the exit code
+and, on failure, report "dependency audit could not run" (with the stderr text)
+as the outcome of this scan — never treat the empty `NPM_AUDIT_JSON` as a clean
+audit.
+
 The differential rules the script applies, unchanged: advisories present at head
 but **not** at `MERGE_BASE` are CVEs the PR's dependency changes newly expose —
 emitted with `introduced_by_diff=true` in the Description; these are in-scope and

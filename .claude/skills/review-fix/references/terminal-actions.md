@@ -153,6 +153,28 @@ instructions). The parent stays out of the arrays and the recommendation stays
 grounded in what actually went unfixed. Pass the park reason and the phase as
 usual; the `gh pr diff` gathering step in that contract is unchanged.
 
+**Carry the redaction rule to the subagent.** The recommendation it returns is
+persisted by `dispatch-write-recommendation` into the graph node file and pushed
+to `origin/main` in this **public** repository — permanently, in git history.
+`result.json` holds each finder's verbatim `Description`, including the roster's
+dedicated `secrets` lens, whose text can quote the credential material it found
+in the diff. So the "untrusted data" framing above is a prompt-injection guard
+only; it is not a redaction guard, and the subagent must also be given the same
+redaction discipline the office-hours park reason carries — see
+`.claude/skills/review-fix/SKILL.md`, "Redaction rule for the office-hours park
+reason" (its one home; do not restate the bullets). Instruct the subagent
+explicitly to:
+
+- Reference each unresolved finding by `file:line` and failure category only.
+- Never copy a finding's `Description` (or any `result.json` field) verbatim
+  into the recommendation.
+- Never emit any string that looks like a token, credential, or key — even one
+  that appears already masked.
+
+Fidelity is preserved by `result.result_path` itself, which stays on disk in the
+worktree for the human reviewer, not by pasting finding text into a pushed
+record.
+
 Call `dispatch-mark-deviation` instead of the completion marker:
 
 ```bash

@@ -124,4 +124,43 @@ out=$(DISPATCH_REVIEW_NPM_AUDIT_HEAD_FIXTURE="$WORK/clean.json" \
       "$SUT" 2>/dev/null) || rc=$?
 assert_eq "npm-audit: missing MERGE_BASE argument → non-zero exit" "1" "$rc"
 
+# 8. A FAILED AUDIT IS AN ERROR, NEVER AN EMPTY DIFFERENTIAL. When npm cannot
+#    audit the tree it still writes a well-formed JSON ERROR document, which has
+#    no .vulnerabilities key and would normalize to {"findings":[]} — a clean
+#    bill of health byte-identical to a genuinely clean audit. Reject it loudly.
+cat > "$WORK/error-doc.json" <<'EOF'
+{"error":{"code":"EUSAGE","summary":"The package-lock.json file was created with an old version of npm","detail":"npm audit needs a lockfile it can read"}}
+EOF
+rc=0
+err=$(DISPATCH_REVIEW_NPM_AUDIT_HEAD_FIXTURE="$WORK/error-doc.json" \
+      DISPATCH_REVIEW_NPM_AUDIT_BASELINE_FIXTURE="$WORK/clean.json" \
+      "$SUT" deadbeefdeadbeef 2>&1 >/dev/null) || rc=$?
+assert_eq "npm-audit: HEAD npm error document → non-zero exit (not empty findings)" "1" "$rc"
+has_code=no
+[[ "$err" == *"EUSAGE"* ]] && has_code=yes
+assert_eq "npm-audit: npm error text reaches stderr" "yes" "$has_code"
+says_unknown=no
+[[ "$err" == *"could not run"* ]] && says_unknown=yes
+assert_eq "npm-audit: error names the audit as un-run, not clean" "yes" "$says_unknown"
+
+# 8b. Same guard on the BASELINE side (which previously skipped validation on
+#     the fixture path entirely).
+rc=0
+err=$(DISPATCH_REVIEW_NPM_AUDIT_HEAD_FIXTURE="$WORK/clean.json" \
+      DISPATCH_REVIEW_NPM_AUDIT_BASELINE_FIXTURE="$WORK/error-doc.json" \
+      "$SUT" deadbeefdeadbeef 2>&1 >/dev/null) || rc=$?
+assert_eq "npm-audit: MERGE_BASE npm error document → non-zero exit" "1" "$rc"
+names_base=no
+[[ "$err" == *"MERGE_BASE"* ]] && names_base=yes
+assert_eq "npm-audit: error names which side failed" "yes" "$names_base"
+
+# 8c. Valid JSON that is not an audit report at all (no auditReportVersion, no
+#     vulnerabilities) is likewise rejected rather than differenced to empty.
+printf '{"totally":"unrelated"}\n' > "$WORK/not-a-report.json"
+rc=0
+DISPATCH_REVIEW_NPM_AUDIT_HEAD_FIXTURE="$WORK/not-a-report.json" \
+  DISPATCH_REVIEW_NPM_AUDIT_BASELINE_FIXTURE="$WORK/clean.json" \
+  "$SUT" deadbeefdeadbeef >/dev/null 2>&1 || rc=$?
+assert_eq "npm-audit: non-audit JSON document → non-zero exit" "1" "$rc"
+
 report_results

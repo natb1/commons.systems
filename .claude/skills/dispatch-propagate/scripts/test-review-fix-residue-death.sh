@@ -99,12 +99,14 @@ assert_eq "residue death: results pushed into laneADispositions" "1" \
 assert_eq "residue death: results pushed into laneADeferred" "1" \
   "$(grep -c 'laneADeferred.push(...undisposed.deferred)' "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
 
-# coverage_incomplete = true appears at five sites in the current file: the
+# coverage_incomplete = true appears at six sites in the current file: the
 # throttle path, the instrument gate, an interior residue-processing site, the
-# dead-Lane-B-finder accounting after the gather loop, and this residue-death
-# wire-in. A future edit that drops any site's flag (or adds an unrelated one)
-# should be investigated, not silently absorbed.
-assert_eq "residue death: coverage_incomplete = true site count" "5" \
+# dead-Lane-B-finder accounting after the gather loop, this residue-death
+# wire-in, and the result-dump size check (an unverifiable write degrades
+# coverage rather than discarding a completed review). A future edit that drops
+# any site's flag (or adds an unrelated one) should be investigated, not
+# silently absorbed.
+assert_eq "residue death: coverage_incomplete = true site count" "6" \
   "$(grep -c 'coverage_incomplete = true' "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
 
 report_results
