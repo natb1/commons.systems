@@ -229,7 +229,7 @@ outcome-envelope emit and writes the marker. Otherwise run all steps in order.
 ## Steps
 
 **Resume from durable state.** A run that finds an existing review comment
-already carrying recorded dispositions (Step 6's incremental comment), or fix
+already carrying recorded dispositions (Step 6's marker comment), or fix
 commits beyond the branch base (`git merge-base HEAD origin/main`), treats them
 as resume input, not an error: read the prior comment's dispositions and diff
 the committed fixes against the base, then continue from there — never
@@ -475,6 +475,18 @@ bash, immediately before invoking the Workflow, and pass it through as
 RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
 ```
 
+The Workflow no longer returns the bulky per-finding arrays inline — it writes them
+to `result.json` in a directory this skill creates and passes in as
+`result_out_dir`. Create it here, resolved to an absolute path (the same
+`mkdir -p` + `cd && pwd` convention `dispatch-code-review` uses for `--out-dir`),
+immediately before invoking the Workflow:
+
+```bash
+RESULT_OUT_DIR="tmp/review-result-$N"
+mkdir -p "$RESULT_OUT_DIR"
+RESULT_OUT_DIR=$(cd "$RESULT_OUT_DIR" && pwd)
+```
+
 ```
 args = {
   pr_num:              <PR_NUM>,
@@ -493,7 +505,9 @@ args = {
     findings_path:  <CR_FINDINGS>,        // absolute path; the Workflow's reader subagent reads it
     patch_path:     <CR_PATCH>,           // absolute path to the before/after patch
     touched_files:  [ <CR_TOUCHED lines> ] // git-derived; the AUTHORITATIVE fixed[] constraint
-  }
+  },
+  result_out_dir:      <RESULT_OUT_DIR>  // absolute; created just above. The Workflow's
+                                         // dump agent writes <RESULT_OUT_DIR>/result.json
 }
 ```
 
@@ -515,19 +529,31 @@ The Workflow runs in the background and returns one compact disposition summary:
 
 ```
 result = {
-  dispositions:         [ {id, short_desc, location, bucket, sources:[...],
-                            recommended_fix?, codeql_ref?:{rule_id,alert_number,html_url}} ],
-  fixed:                [ {id, location, fix_summary, touched_files:[...]} ],
-  deferred_filings:     [ {title, body, blocker_issue_nums:[N,...]|"independent"} ],
-  security_followup_input: [ ...codeql/npm out-of-scope subset... ],
-  verify_report:        [ {id, location, verdict, skeptic_votes, rationale} ],
+  result_path:          <abs path to result.json>,
   deviation:            <bool>,
-  instrument_failures:  [ {instrument, reason} ],
+  security_note?:       <string>,
   coverage_incomplete:  <bool>,
   coverage_note?:       <string>,
-  security_note?:       <string>
+  instrument_failures:  [ {instrument, reason} ],
+  findings_surfaced:    <int>,
+  findings_actionable:  <int>,
+  fixes_applied:        <int>,
+  followups_deferred:   <int>,
+  subagents_launched:   <int>,
+  disposition:          <string>
 }
 ```
+
+Everything above is bounded and small. The bulky per-finding arrays —
+`dispositions`, `fixed`, `deferred_filings`, `security_followup_input`,
+`verify_report` — are NOT returned: the Workflow's final dump agent writes them,
+alongside every scalar above, as one JSON object at `result_path`. **Never read
+that file in this thread.** Steps 5 and 6 each fork a subagent that reads it
+itself; keeping it out of the parent's context is the whole point of the split
+(this thread's peak context is the phase's dominant cost). Where this file writes
+`result.dispositions`, `result.deferred_filings`, `result.verify_report`, etc.
+below, it names a field of the JSON at `result_path` that a forked subagent reads
+— not a field of the returned object.
 
 `coverage_incomplete` / `coverage_note` are the generic degraded-coverage
 signal, covering three causes: (1) the security probe wave skipped because
@@ -620,9 +646,10 @@ population rules, the smallness rule, and the cost-advisory disposition.
 
 Two follow-up paths, both filing `blocked_by` tracking issues so meaningful
 out-of-scope findings do not evaporate when the PR merges. The Workflow has
-prepared filing structures in `result.deferred_filings` and
-`result.security_followup_input`; this skill executes the actual `gh` calls.
-Skip a path when its bucket is empty.
+prepared filing structures under `.deferred_filings` and
+`.security_followup_input` **in the JSON at `result.result_path`** — this thread
+never reads them; the executor reads them itself. Skip a path when its bucket is
+empty.
 
 - **`TARGET_KIND=issue` (legacy lane)** — run 5a (deferred code-review findings →
   `/file-issue` with a blocked-by link) and 5b (meaningful out-of-scope CodeQL /
@@ -632,30 +659,63 @@ Skip a path when its bucket is empty.
   marker and that static label.
 - **`TARGET_KIND=node`** — supersedes 5a/5b entirely: file **no gh issue**; write
   the prepared structures as **draft tactic nodes** (`status: raw`, no `phase`,
-  `serves` this tactic's strategy) via one `write-node.ts` build + body-edit +
-  `graph-commit`.
+  `serves` this tactic's strategy) via one `write-node.ts` build + body-edit, then
+  one `graph-commit`. **Fork one subagent for the read + write-node + body-edit
+  work; run `graph-commit` in THIS thread after it returns.** Use the canonical
+  fork recipe (`/implement-unit` Step 2b): Agent tool, `subagent_type:
+  general-purpose` — never a skill name — with `model: sonnet` set explicitly on
+  the Agent call. Hand it:
+  - `result.result_path` (absolute) — "Read that file with the Read tool, using
+    the path exactly as given, and extract `.deferred_filings` and
+    `.security_followup_input`."
+  - the worktree root as an absolute path (`git rev-parse --show-toplevel`),
+    with the instruction to use ONLY absolute paths under that root for every
+    Read/Write/Edit — a subagent's working directory is not reliably this
+    thread's, and a relative path silently lands the write in another checkout.
+  - the strategy this tactic serves, and `PR_NUM` (for `execution.pr`).
+
+  Tell it to perform the whole node-lane procedure in
+  `references/followup-filing.md` ("Node-target lane") and to **NOT run
+  `graph-commit`** — `graph-commit` is worktree-sensitive and overlapping or
+  mis-rooted invocations corrupt graph state, so the risky commit stays in this
+  single-threaded parent while the bulky read + write-node work moves out. It
+  returns `{ node_ids: [...], count: <N> }` (`count` = NEW draft nodes created).
+  Then run the single `graph-commit` here.
 
 Track how many follow-ups were ACTUALLY filed this run (count only NEW records)
 for the Step 7 `--followups-filed` total — do not use `result.followups_deferred`.
+On the node lane that number is the Step-5 subagent's returned `count`.
 
 **See `references/followup-filing.md`** for the full node-lane draft-node
 procedure, the static-label guarantee block, the follow-ups-filed counting rule,
 and the complete 5a/5b subagent recipes. Then continue to Step 6.
 
-### 6. Post exactly one PR comment — composed incrementally
+### 6. Post exactly one PR comment — composed by a forked subagent
 
-Reuse the `PR_NUM` captured in the preamble — do not re-resolve. There is exactly
-**one** comment covering **every** finding from `result.dispositions` and its
-bucket — but **compose it incrementally**, not only at phase end, so a dead
-session leaves the resolved-so-far dispositions already on the PR (condition 9:
-phase progress whose only home is the session is a defect). Give the comment a
-first-line marker `<!-- dispatch:review-fix -->`; create it via `post-pr-comment.sh`
-as soon as the first disposition resolves, edit it in place as each subsequent
-disposition resolves, and finalize it at phase end with the complete bucket set. A
-resumed run re-finds the same comment by its marker (`dispatch_marker_comment_id`,
-`lib.sh`) rather than posting a duplicate.
+There is exactly **one** comment covering **every** finding and its bucket. Its
+content lives in the JSON at `result.result_path`, which this thread must not
+read — **fork one subagent to compose and post it.** Same canonical recipe as
+Step 5 (Agent tool, `subagent_type: general-purpose`, `model: sonnet` set
+explicitly on the Agent call). Hand it:
 
-**See `references/pr-comment.md`** for the incremental-compose bullets, the
+- `result.result_path` (absolute) — it Reads that file itself and takes
+  `.dispositions`, `.verify_report`, `.security_note`, `.coverage_incomplete`,
+  and `.coverage_note` from it.
+- `PR_NUM` (reuse the value captured in the preamble — do not re-resolve).
+- the fix commit SHA(s) captured at Step 3 (or the note that `--merge-only` ran
+  and there is no fix commit).
+- the worktree root as an absolute path, with the instruction to use only
+  absolute paths under it — except the comment body file, which must be written
+  under the repo's `tmp/` directory because `post-pr-comment.sh` restricts paths
+  to that directory.
+
+It composes the full body once, from the complete `result.json`, gives it the
+first-line marker `<!-- dispatch:review-fix -->`, then posts it via
+`post-pr-comment.sh` or — when a resumed run already has a marker comment
+(`dispatch_marker_comment_id`, `lib.sh`) — PATCHes that same comment in place, so
+a duplicate is never stacked. It returns `{ comment_id }`.
+
+**See `references/pr-comment.md`** for the compose-and-post procedure, the
 per-bucket body organization, the partial-coverage line, and the create/edit
 flush commands.
 

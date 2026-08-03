@@ -29,20 +29,30 @@
  *     code_review:{ status:"ok", findings_path:<abs>, patch_path:<abs>,
  *       touched_files:[...] }   // REQUIRED — the SKILL.md Step 1b
  *       `claude -p '/code-review low --fix'` pre-stage's output; touched_files is
- *       git-derived and is the authoritative constraint on Lane-A fixed[] }
+ *       git-derived and is the authoritative constraint on Lane-A fixed[],
+ *     result_out_dir:<abs path> } // absolute directory (already created by the
+ *       skill) the final dump agent writes result.json into
  *
  * return OUT (the ONLY thing this script returns):
+ *   { result_path,            // absolute path to the full JSON, written by the dump agent
+ *     deviation, security_note?, coverage_incomplete, coverage_note?,
+ *     instrument_failures,    // small, bounded — one entry per failed instrument receipt; kept inline
+ *     findings_surfaced, findings_actionable, fixes_applied, followups_deferred,
+ *     subagents_launched, disposition }
+ *
+ * The bulky per-finding arrays are NOT returned inline — they live in the JSON at
+ * `result_path`, which the SKILL body's Step-5 / Step-6 subagents read themselves so
+ * the parent review thread never holds them:
  *   { dispositions:[{id, short_desc, location, bucket, sources:[...],
  *       recommended_fix?, codeql_ref?:{rule_id,alert_number,html_url}}],
  *     fixed:[{id, location, fix_summary, touched_files:[...]}],
  *     deferred_filings:[{title, body, blocker_issue_nums:[N,...]|"independent"}],
  *     security_followup_input:[...codeql/npm out-of-scope subset...],
  *     verify_report:[{id, location, verdict, skeptic_votes, rationale}],
- *     deviation:bool, security_note?, coverage_incomplete:bool, coverage_note?:string,
- *       // coverage_note is a space-joined composition of EVERY degraded-coverage
- *       // cause this run hit (wave back-off, instrument failures, undispositioned
- *       // Lane-A residue) — never a single cause's message.
- *     instrument_failures:[{instrument, reason}] }
+ *     ...plus every scalar field listed in `return OUT` above }
+ * coverage_note is a space-joined composition of EVERY degraded-coverage cause this
+ * run hit (wave back-off, instrument failures, undispositioned Lane-A residue) —
+ * never a single cause's message.
  *
  * NORMATIVE SPECS for the three inline kernel helpers below are the pure bash/jq
  * scripts (unit-tested by the per-SUT test-*.sh files sharing
@@ -304,6 +314,20 @@ const RESIDUE_TREE_SCHEMA = {
   required: ['modified_files'],
   properties: {
     modified_files: { type: 'array', items: { type: 'string' } },
+  },
+};
+
+// Result-dump schema — the confirmation receipt of the final dump agent, which
+// writes the full result JSON (the bulky per-finding arrays) to disk so the SKILL
+// body's Step-5/Step-6 subagents can read it instead of the parent thread holding
+// it in context. Deliberately tiny: a path and a byte count, never the payload.
+const DUMP_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['path', 'bytes'],
+  properties: {
+    path: { type: 'string' },
+    bytes: { type: 'number' },
   },
 };
 
@@ -857,6 +881,21 @@ if (!_a.code_review || _a.code_review.status !== 'ok') {
   );
 }
 const cr = _a.code_review;
+
+// Hard contract check on the result out-dir. The full result never comes back
+// inline any more — it is written to `${result_out_dir}/result.json` by the final
+// dump agent, and the SKILL body's Step-5/Step-6 subagents read it from there. A
+// missing out-dir would only be discovered at the very end of the run, after every
+// finder, fix, and verify subagent has already burned its tokens, so check it here.
+// Per .claude/rules/code-style.md: a clear error, never a silent fallback to an
+// inline return (which would restore exactly the context payload this contract
+// removes, undetectably).
+if (typeof _a.result_out_dir !== 'string' || !_a.result_out_dir.trim()) {
+  throw new Error(
+    'review-fix.js: args.result_out_dir is missing or empty. The skill must create the ' +
+      'directory (mkdir -p, resolved to an absolute path) and pass it before invoking this Workflow.'
+  );
+}
 
 // Lower bound for the instrument-invocation transcript search. The skill
 // captures this in bash (via `date -u`) immediately before invoking this
@@ -2356,12 +2395,86 @@ const disposition = deviation
     ? 'completed_with_fixes'
     : 'completed';
 
+// --- result dump (Unit 2, tactic-review-skill-body-decomposition) ------------
+// The five bulky per-finding arrays used to return inline into the /review-fix
+// parent session's context (measured 26k–63k chars in 11 of 19 runs). They now go
+// to disk: one Sonnet agent writes the full result JSON verbatim, and only the
+// path plus the bounded scalars come back. The SKILL body's Step-5 and Step-6
+// subagents Read that file themselves, so the parent thread never holds it.
+const fullResult = {
+  dispositions: dispositions,
+  fixed: fixed,
+  deferred_filings: deferred_filings,
+  security_followup_input: security_followup_input,
+  verify_report: verify_report,
+  deviation: deviation,
+  security_note: _a.security_note,
+  coverage_incomplete: coverage_incomplete,
+  coverage_note: coverage_note,
+  instrument_failures: instrumentFailures,
+  findings_surfaced: findings_surfaced,
+  findings_actionable: findings_actionable,
+  fixes_applied: fixes_applied,
+  followups_deferred: followups_deferred,
+  subagents_launched: subagentsLaunched,
+  disposition: disposition,
+};
+
+const resultJson = JSON.stringify(fullResult);
+// Byte length is informational (it is echoed to the log and returned by the dump
+// agent's receipt), so a runtime without TextEncoder falls back to the char count
+// rather than throwing away a completed review at the last step.
+const resultBytes =
+  typeof TextEncoder !== 'undefined'
+    ? new TextEncoder().encode(resultJson).length
+    : resultJson.length;
+const resultPathWanted = `${_a.result_out_dir}/result.json`;
+
+subagentsLaunched += 1;
+const dumpRes = await agent(
+  [
+    'Write a JSON file to disk. This is a mechanical write — do NOT reformat,',
+    'summarize, pretty-print, validate, or otherwise alter the content in any way.',
+    '',
+    `Target path (absolute, use it EXACTLY as given): ${resultPathWanted}`,
+    'The directory already exists; do not create, move, or rename anything else.',
+    '',
+    'Write the following text VERBATIM as the entire file content, using the Write',
+    'tool. It is one line of JSON; reproduce it character for character:',
+    '',
+    resultJson,
+    '',
+    `Then return { "path": "${resultPathWanted}", "bytes": ${resultBytes} } —`,
+    'the path exactly as given above, and that byte count exactly as given above.',
+    'Make no edits to any other file; run no git, gh, or shell commands.',
+  ].join('\n'),
+  {
+    model: 'sonnet',
+    agentType: 'general-purpose',
+    schema: DUMP_SCHEMA,
+    label: 'dump',
+    phase: 'dump',
+  }
+);
+
+// Fail loud. `agent()` returns null when a subagent dies on a terminal API error
+// after its retries; a wrong path means the result is not where the SKILL body's
+// Step-5/Step-6 subagents will look. Either way the run's entire output is
+// unreachable. Per .claude/rules/code-style.md: never fall back to returning the
+// arrays inline — that would silently restore the payload this change removes.
+if (!dumpRes || dumpRes.path !== resultPathWanted) {
+  throw new Error(
+    `review-fix.js: the result-dump agent did not confirm the write to ${resultPathWanted} ` +
+      `(got ${dumpRes ? JSON.stringify(dumpRes.path) : 'a dead subagent'}). The full result is ` +
+      'unreachable, so the review cannot be reported — rerun the phase.'
+  );
+}
+log(`dump: wrote ${resultBytes} bytes of result JSON to ${resultPathWanted}`);
+
 return {
-  dispositions,
-  fixed,
-  deferred_filings,
-  security_followup_input,
-  verify_report,
+  // Absolute path to the full result JSON (the five per-finding arrays plus every
+  // scalar below). Read by the Step-5 and Step-6 subagents, never by the parent.
+  result_path: resultPathWanted,
   deviation,
   security_note: _a.security_note,
   // coverage_incomplete is independent of `deviation`: it flags any way this run's
