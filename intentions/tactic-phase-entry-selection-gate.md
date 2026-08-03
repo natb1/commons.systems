@@ -26,13 +26,14 @@ attention:
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
   tier: 1
-phase: qa
+phase: review
 execution:
   branch: tactic-phase-entry-selection-gate
   pr: 3021
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
