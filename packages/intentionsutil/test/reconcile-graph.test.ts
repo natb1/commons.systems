@@ -108,7 +108,7 @@ describe("reconcileGraph", () => {
       reason: "parked",
       since: "2026-08-01",
       recommendation: null,
-      session_type: "other",
+      session_type: "other" as const,
     };
     node(dir, {
       id: "tactic-parked",
