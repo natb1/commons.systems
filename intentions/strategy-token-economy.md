@@ -763,23 +763,23 @@ clarifications:
       belongs at the args-build site rather than inside that script. Two
       alternatives were put to the author and declined. Relaxing the shared
       `app_or_rules` predicate was declined primarily because that boolean ALSO
-      selects the auth and data-exposure domain-sweep sections
-      (`sweepDomains`, review-fix.js:667-672), so relaxing it would silently
-      widen SECURITY review scope to every code diff including `.claude/`
-      tooling — a larger and less visible consequence than the ~3.6x draw
-      overshoot; a per-lens gate keyed on a widened PATH rule was declined
-      because it still does not express the call-site requirement and
-      re-approximates it by path, inheriting the same overshoot without the
-      simplicity. UNMEASURED, and flagged as such: nobody has counted how many
-      of the 18 measured runs contain such a call site, so the resulting fire
-      rate is a tunable design property of the pattern list, not a measurement.
-      The decomposition must record the realized fire rate once observed."
+      selects the auth and data-exposure domain-sweep sections (`sweepDomains`,
+      review-fix.js:667-672), so relaxing it would silently widen SECURITY
+      review scope to every code diff including `.claude/` tooling — a larger
+      and less visible consequence than the ~3.6x draw overshoot; a per-lens
+      gate keyed on a widened PATH rule was declined because it still does not
+      express the call-site requirement and re-approximates it by path,
+      inheriting the same overshoot without the simplicity. UNMEASURED, and
+      flagged as such: nobody has counted how many of the 18 measured runs
+      contain such a call site, so the resulting fire rate is a tunable design
+      property of the pattern list, not a measurement. The decomposition must
+      record the realized fire rate once observed."
   - question: Is clarification 18's "~$14 toward ~$25-30 proxy per 4-day window" a
       gate the api-cost tactic's Verification block must assert, or an expected
       consequence of the widening?
-    answer: "(Recorded 2026-08-03, author interview.) An expected range, not a
-      gate. The binding constraint is the statement's semantics — the lens fires
-      on diffs touching an API or query call site — and the realized draw is
+    answer: "(Recorded 2026-08-03, author interview.) An expected range, not a gate.
+      The binding constraint is the statement's semantics — the lens fires on
+      diffs touching an API or query call site — and the realized draw is
       measured and recorded afterward rather than asserted as a threshold. The
       figure was derived from an assumed widening, so treating it as binding
       would let a derived estimate constrain the mechanism it was derived from.
@@ -789,6 +789,68 @@ clarifications:
       decomposition: Verification asserts that the merged lens fires on
       materially more than 5 of 18 comparable runs and records the realized
       draw, and does NOT assert a dollar ceiling or floor."
+  - question: (Recorded 2026-08-03 /align-tactics round; re-verifies a 2026-07-31
+      draft-body claim on tactic-token-audit-whole-session-phase-attribution.)
+      Does the session-type classifier still type phase-worker sessions
+      correctly, and are subagent transcripts still attributed correctly, after
+      tactic-align-tactics-workflow made /align-tactics Workflow-shaped?
+    answer: "Yes, still reliable. The draft body's Scope asserted the session-type
+      classifier already types phase-worker sessions correctly and that subagent
+      transcripts are attributed correctly today — a claim made 2026-07-31,
+      before sibling tactic-align-tactics-workflow reached phase:done and made
+      /align-tactics Workflow-shaped. Re-checked at HEAD: the $type classifier's
+      worker alternation
+      (.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh:319)
+      already lists align-tactics and review-fix, and Workflow fan-out subagents
+      are typed 'subagent' by transcript path (/subagents/, line 308) rather
+      than falling to 'other' — so a Workflow-shaped phase's parent session
+      still types worker and its fan-out still types subagent. The
+      whole-session-attribution design holds unchanged for the newer session
+      shape; no scope change follows."
+  - question: "(Recorded 2026-08-03 /align-tactics round.)
+      tactic-token-audit-whole-session-phase-attribution's draft Verification
+      asserted review-fix should rise toward its measured $754 true cost and
+      made the plan contingent on sequencing against
+      tactic-review-skill-body-decomposition. That sibling is stuck
+      (phase:review, blocked_by an office-hours-parked fix-attempt-cap hold on
+      PR #3025). Does the attribution fix wait for it?"
+    answer: No — re-baseline; do not assert the 2026-07-31 figures as gates.
+      Sequencing this measurement fix behind an office-hours-parked node would
+      stall it indefinitely, so it proceeds now and re-measures its own
+      baseline. Consistent with the same-day rulings that restated
+      tactic-review-verify-per-file-batching's 3.2x as an upper bound and
+      clarification 18's ~$14 toward ~$25-30 as an expected range rather than a
+      gate, the tactic's Verification asserts the structural outcome — a
+      single-phase worker session's phase map resolves to exactly one key, and
+      the <none> share of worker-session turns falls materially against a
+      freshly re-run baseline — and records the realized figures rather than
+      asserting the stale $614/$754/75% numbers as thresholds.
+  - question: (Recorded 2026-08-03 /align-tactics round; measured against HEAD.)
+      tactic-token-audit-whole-session-phase-attribution promotes the token
+      audit's worker-skill enumeration from a session-typing input to a
+      cost-attribution input. The phase-to-skill correspondence is actually
+      enumerated three times in non-identical form in aggregate-usage.sh. Does
+      whole-session attribution need to reconcile all three, or single-source
+      only the one it consumes?
+    answer: (Recorded 2026-08-03 /align-tactics round; measured against HEAD.)
+      Single-source only the one it consumes; reconciling all three is out of
+      scope for that tactic. The $type classifier's worker alternation
+      (aggregate-usage.sh:319) carries a superset — plan-issue, implement,
+      qa-fix, review-fix, fix-checks, fix-conflicts, dispatch-conflict, qa-main,
+      budget-parse-job, resolve-epic, office-hours, align-strategy,
+      align-tactics, align-init — while the stage-2 $phase_skill map (882-883)
+      and the shell _phase_map loop (108-113) each carry only the five-phase set
+      (implement/fix/qa/review/main-qa). Today a skill missing from the
+      alternation only mistypes a session as 'other'; once the whole session's
+      cost is attributed from that alternation, a missing entry would silently
+      park an entire worker session's spend in <none> — reproducing exactly the
+      condition-2 blindness the tactic exists to remove. Per
+      .claude/rules/code-style.md the failure must be loud rather than a silent
+      fallback, so the tactic's Unit 1 single-sources the classifier's own
+      alternation into a named jq def rather than adding a fourth independent
+      list; reconciling the other two enumerations remains explicitly out of
+      scope for that tactic and is a separate concern if it becomes
+      load-bearing.
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
