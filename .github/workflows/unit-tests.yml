@@ -232,6 +232,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-chain-worktree-ratchet.sh
       - name: Run dispatch-conflict Lane 3 cwd doctrine ratchet
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-conflict-lane3-cwd-ratchet.sh
+      - name: Run node-lane terminal-declaration coverage ratchet
+        run: .claude/skills/dispatch-propagate/scripts/test-node-terminal-coverage.sh
       - name: Run mark-node-terminal tests
         run: .claude/skills/dispatch-propagate/scripts/test-mark-node-terminal.sh
       - name: Run dispatch-graph-execute tests
