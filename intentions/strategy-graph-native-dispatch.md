@@ -825,13 +825,14 @@ clarifications:
       if its re-entry routing re-runs check-node-selection — the draft tactic's
       first unit verifies that overlap before implementing. Recorded 2026-07-19
       /align-strategy interview."
-  - question: The 2026-07-16 reaping clarification reaps a node-worker session on
-      EVERY terminal exit, and its edge case (c) reaps a mid-phase-dead
-      (crashed) worker's orphaned job via the tick/sweep pass. But a session
-      that terminated WITHOUT a clean phase-transition and WITHOUT an
-      escalation-park has no durable record anywhere — it was not parked to the
-      office-hours queue, so nothing carries its failure context except the live
-      session itself. Should auto-close really fire on those exits?
+  - question: Clarification `strategy-graph-native-dispatch#reaping`
+      (2026-07-16) reaps a node-worker session on EVERY terminal exit, and its
+      edge case (c) reaps a mid-phase-dead (crashed) worker's orphaned job via
+      the tick/sweep pass. But a session that terminated WITHOUT a clean
+      phase-transition and WITHOUT an escalation-park has no durable record
+      anywhere — it was not parked to the office-hours queue, so nothing carries
+      its failure context except the live session itself. Should auto-close
+      really fire on those exits?
     answer: "No — auto-close (reap) is narrowed to fire ONLY on a clean
       phase-transition or an escalation-park; every OTHER terminal exit — a hard
       crash, an error exit, or a clean-but-no-transition/no-progress exit —
@@ -844,15 +845,15 @@ clarifications:
       parked to office-hours (so it never reaches the PARKED panel, the
       office-hours-debuggable channel) and it did not advance the phase, so the
       live session is the only artifact of the failure. Reaping it would
-      silently erase the one thing a debugger has. This DIVERGES from the
-      2026-07-16 clarification's edge case (c) (which reaped the crashed job via
-      the sweep) and narrows 'reaped on every terminal exit' (its main body, and
-      edge case (b)'s
+      silently erase the one thing a debugger has. This DIVERGES from
+      `strategy-graph-native-dispatch#reaping`'s edge case (c) (which reaped the
+      crashed job via the sweep) and narrows 'reaped on every terminal exit'
+      (its main body, and edge case (b)'s
       reap-then-fuse-re-selects-after-a-silent-no-transition-exit) to 'reaped
       iff the exit transitioned or parked the node'. It does NOT re-open the
-      session-as-observability coupling the 2026-07-16 clarification rejected: a
-      kept failed session is a DEBUGGING ARTIFACT a human inspects, not a
-      recovery substrate (session attach/resume is still not a supported
+      session-as-observability coupling `strategy-graph-native-dispatch#reaping`
+      rejected: a kept failed session is a DEBUGGING ARTIFACT a human inspects,
+      not a recovery substrate (session attach/resume is still not a supported
       recovery path — the router never resumes from a kept session; the human
       reaps it and the node re-selects fresh or is fixed forward) and not the
       escalation channel (real escalations still park to office-hours).
@@ -873,10 +874,11 @@ clarifications:
       minimal count' over 'no new surface', this round]. Retained as draft
       tactic-frozen-session-debug-count. (d) COMPOSITION with the 2026-07-19
       keep-all toggle — the DEFAULT itself narrows to 'reap iff
-      transitioned-or-parked' (this amends all three recorded sites: the
-      2026-07-16 reaping clarification, the 2026-07-19 configurable-auto-close
-      clarification, and the reap condition); the keep-all toggle
-      (tactic-worker-self-close-configurable) layers ON TOP — when ON it
+      transitioned-or-parked' (this amends all three recorded sites:
+      `strategy-graph-native-dispatch#reaping`, the 2026-07-19
+      configurable-auto-close clarification, and the reap condition); the
+      keep-all toggle (tactic-worker-self-close-configurable) layers ON TOP —
+      when ON it
       additionally keeps the transitioned/parked sessions the narrowed default
       would otherwise reap; both the transition-or-park check and the toggle
       live in the shared self-close primitive [author chose 'narrow default;
