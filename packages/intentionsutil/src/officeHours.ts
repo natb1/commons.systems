@@ -6,6 +6,7 @@
 // so this module needs nothing beyond the nodes to decide what to launch.
 
 import type { IntentionNode, SessionType } from "./schema.js";
+import type { ResolvedAttention } from "./attention.js";
 import { resolveAttention } from "./attention.js";
 
 /** Soft rank multiplier for penalized session types; author-tunable. */
@@ -73,9 +74,60 @@ export interface QueueMember {
  */
 export function officeHoursQueue(nodes: IntentionNode[], sessionType?: SessionType): QueueMember[] {
   const attention = resolveAttention(nodes);
-  // reverse.get(id) = the nodes that list `id` in their own blocked_by — i.e.
-  // the nodes `id` blocks. Same shape as `reverseBlockers` in
-  // `computeSignalPath` (attention.ts), which is private to that module.
+  const reverse = reverseBlockers(nodes);
+  const members: QueueMember[] = [];
+  for (const n of nodes) {
+    // A `continue` guard narrows office_hours to non-null for the body below —
+    // no cast, and `.since` type-checks.
+    if (n.office_hours === null) continue;
+    const st = n.office_hours.session_type;
+    if (sessionType !== undefined && st !== sessionType) continue;
+    const penalty = sessionTypePenalty(st);
+    const own = attentionKeyOf(attention, n.id);
+    // The penalty is applied AFTER the surfacing key is chosen: it is a
+    // property of this park's session type, not of where the value came from,
+    // and it must never affect the tier comparison.
+    const key = surfacingKey(n, own, reverse, attention);
+    members.push({
+      nodeId: n.id,
+      rank: key.value * penalty,
+      tier: key.tier,
+      ownTier: own.tier,
+      ownRank: own.value * penalty,
+      liftedFrom: key.liftedFrom,
+      sessionType: st,
+      since: n.office_hours.since,
+    });
+  }
+  return members.sort(compareQueueMembers);
+}
+
+/** A resolved `(tier, value)` attention pair, with map-absent defaults applied. */
+interface AttentionKey {
+  tier: number;
+  value: number;
+}
+
+/**
+ * `id`'s resolved attention key. A node absent from the map defaults to
+ * `(tier 1, value 0)` — tier 1 matching `resolveAttention`'s default tier.
+ */
+function attentionKeyOf(attention: Map<string, ResolvedAttention>, id: string): AttentionKey {
+  const resolved = attention.get(id);
+  return { tier: resolved?.tier ?? 1, value: resolved?.value ?? 0 };
+}
+
+/** The soft rank multiplier a parked node earns from its session type. */
+function sessionTypePenalty(st: SessionType): number {
+  return st === "requirement-discovery" || st === "curriculum-review" ? SESSION_TYPE_PENALTY : 1;
+}
+
+/**
+ * `result.get(id)` = the nodes that list `id` in their own `blocked_by` — i.e.
+ * the nodes `id` blocks. Same shape as `reverseBlockers` in `computeSignalPath`
+ * (attention.ts), which is private to that module.
+ */
+function reverseBlockers(nodes: IntentionNode[]): Map<string, IntentionNode[]> {
   const reverse = new Map<string, IntentionNode[]>();
   for (const n of nodes) {
     for (const b of n.blocked_by) {
@@ -84,58 +136,55 @@ export function officeHoursQueue(nodes: IntentionNode[], sessionType?: SessionTy
       else reverse.set(b, [n]);
     }
   }
-  const members: QueueMember[] = [];
-  for (const n of nodes) {
-    // A `continue` guard narrows office_hours to non-null for the body below —
-    // no cast, and `.since` type-checks.
-    if (n.office_hours === null) continue;
-    const st = n.office_hours.session_type;
-    if (sessionType !== undefined && st !== sessionType) continue;
-    const penalty =
-      st === "requirement-discovery" || st === "curriculum-review" ? SESSION_TYPE_PENALTY : 1;
-    const rawRank = attention.get(n.id)?.value ?? 0;
-    const ownTier = attention.get(n.id)?.tier ?? 1;
-    // Lexicographic (tier, value) max over {own} ∪ blocked sources. The penalty
-    // is applied AFTER the key is chosen: it is a property of this park's
-    // session type, not of where the value came from, and it must never affect
-    // the tier comparison.
-    let keyTier = ownTier;
-    let keyValue = rawRank;
-    let liftedFrom: string | null = null;
-    for (const src of reverse.get(n.id) ?? []) {
-      if (src.phase === "done") continue;
-      const srcValue = attention.get(src.id)?.value ?? 0;
-      const srcTier = attention.get(src.id)?.tier ?? 1;
-      const better =
-        srcTier > keyTier ||
-        (srcTier === keyTier &&
-          (srcValue > keyValue ||
-            // Ties among sources break by id ascending; a source can never tie
-            // its way past the member's own key (liftedFrom stays null).
-            (srcValue === keyValue && liftedFrom !== null && src.id < liftedFrom)));
-      if (better) {
-        keyTier = srcTier;
-        keyValue = srcValue;
-        liftedFrom = src.id;
-      }
+  return reverse;
+}
+
+/** A surfacing key: the lifted `(tier, value)` plus the source that supplied it. */
+interface SurfacingKey extends AttentionKey {
+  liftedFrom: string | null;
+}
+
+/**
+ * True when a blocked source's key should replace the key held so far:
+ * lexicographically greater on `(tier, value)`, or — among sources already tied
+ * with an earlier lift — ordered ahead by id. A source can never tie its way
+ * past the member's OWN key, since `liftedFrom` is still null in that case.
+ */
+function liftsKey(src: AttentionKey, srcId: string, key: SurfacingKey): boolean {
+  if (src.tier !== key.tier) return src.tier > key.tier;
+  if (src.value !== key.value) return src.value > key.value;
+  return key.liftedFrom !== null && srcId < key.liftedFrom;
+}
+
+/**
+ * The lexicographic `(tier, value)` max over `{own}` ∪ the not-yet-`done` nodes
+ * that `node` blocks, and the id of the source that supplied it (`null` when
+ * `own` won). Monotone-up: the returned key is never below `own`.
+ */
+function surfacingKey(
+  node: IntentionNode,
+  own: AttentionKey,
+  reverse: Map<string, IntentionNode[]>,
+  attention: Map<string, ResolvedAttention>,
+): SurfacingKey {
+  const key: SurfacingKey = { tier: own.tier, value: own.value, liftedFrom: null };
+  for (const src of reverse.get(node.id) ?? []) {
+    if (src.phase === "done") continue;
+    const srcKey = attentionKeyOf(attention, src.id);
+    if (liftsKey(srcKey, src.id, key)) {
+      key.tier = srcKey.tier;
+      key.value = srcKey.value;
+      key.liftedFrom = src.id;
     }
-    members.push({
-      nodeId: n.id,
-      rank: keyValue * penalty,
-      tier: keyTier,
-      ownTier,
-      ownRank: rawRank * penalty,
-      liftedFrom,
-      sessionType: st,
-      since: n.office_hours.since,
-    });
   }
-  return members.sort(
-    (a, b) =>
-      b.tier - a.tier ||
-      b.rank - a.rank ||
-      (a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0),
-  );
+  return key;
+}
+
+/** Queue order: tier descending, then penalized rank descending, then id ascending. */
+function compareQueueMembers(a: QueueMember, b: QueueMember): number {
+  if (a.tier !== b.tier) return b.tier - a.tier;
+  if (a.rank !== b.rank) return b.rank - a.rank;
+  return a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0;
 }
 
 /** An unresolved `blocked_by` edge of a parked node. */

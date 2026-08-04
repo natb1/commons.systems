@@ -105,6 +105,12 @@ export function listUnclaimedHoldAlerts(
   nodes: IntentionNode[],
   opts: HoldAlertOpts,
 ): UnclaimedHoldAlert[] {
+  // top-K of zero means zero sources are "important" — nothing can qualify.
+  // (Not the same as "no cutoff": an absent cutoff below means "fewer than K
+  // eligible nodes exist, so every one of them qualifies" — a positive K that
+  // the pool falls short of, not a K of zero.)
+  if (opts.topK <= 0) return [];
+
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const attention = resolveAttention(nodes);
 
@@ -119,7 +125,7 @@ export function listUnclaimedHoldAlerts(
   }
   pool.sort(compareRankDesc);
   // Fewer than K entries ⇒ no cutoff ⇒ every source qualifies.
-  const cutoff = pool.length >= opts.topK && opts.topK > 0 ? pool[opts.topK - 1] : null;
+  const cutoff = pool.length >= opts.topK ? pool[opts.topK - 1] : null;
 
   const alerts: UnclaimedHoldAlert[] = [];
   for (const candidate of listHoldCandidates(nodes)) {

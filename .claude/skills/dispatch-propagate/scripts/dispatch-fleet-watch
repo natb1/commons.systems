@@ -31,26 +31,35 @@
 #   5. unclaimed-hold        a tracked hold blocking top-ranked work that no
 #                            session and no reservation claims
 #
-# WHY ONE SNAPSHOT, CAPTURED AT THE INPUT BOUNDARY:
+# WHY TWO SNAPSHOTS, BOTH CAPTURED AT THE INPUT BOUNDARY:
 #   Predicate 3 reads the live session array through
 #   claude_agents_count_busy_workers, which already applies the worker keyspace
 #   filter (`^[0-9]+-|^tactic-|^strategy-`, lib-claude-agents.sh:1043), and
 #   predicate 5 reads it through worktree_has_live_session, one probe per
-#   candidate hold/source worktree. This script captures ONE machine-wide
-#   snapshot per pass via claude_agents_snapshot_capture and exports it as
-#   DISPATCH_AGENTS_SNAPSHOT.
+#   candidate hold/source worktree.
+#   THE TWO PREDICATES DO NOT READ THE SAME VIEW. Predicate 3 reads the ACTIVE
+#   view (`claude agents --json`, DISPATCH_AGENTS_SNAPSHOT, backing
+#   `_claude_agents_raw`); worktree_has_live_session reads the REGISTERED view
+#   (`claude agents --json --all`, DISPATCH_AGENTS_SNAPSHOT_ALL, backing
+#   `_claude_agents_raw_registered`) — the two are documented as INDEPENDENT at
+#   lib-claude-agents.sh:451-461. So this script captures BOTH machine-wide
+#   snapshots per pass, via claude_agents_snapshot_capture and
+#   claude_agents_snapshot_capture_registered, and exports both variables.
+#   Without the registered capture, predicate 5 would still issue up to two live
+#   `--all` round-trips PER CANDIDATE ROW.
 #   History: the session-keyspace exclusion used to be bolted onto individual
 #   predicates one at a time, and the bug recurred every single time a new
 #   predicate was added — the new test read the raw array, forgot the filter,
 #   and counted routers/human sessions as workers. The filter must be a PROPERTY
 #   OF THE INPUT, captured once at the boundary, not a rule each test restates.
-#   Predicate 5 inherited both the single daemon query and the filter for free,
-#   without knowing either exists — exactly as this note predicted a fifth
-#   predicate would.
+#   Predicate 5 inherited the filter for free, without knowing it exists —
+#   exactly as this note predicted a fifth predicate would.
 #   It does NOT inherit the fail direction, though, and that is the one thing a
 #   later predicate must reason about for itself: see "FAIL DIRECTION" on
-#   predicate 5 below. The snapshot's READABILITY is therefore recorded at the
-#   capture site (SNAPSHOT_OK) and consumed by predicate 5.
+#   predicate 5 below. Each snapshot's READABILITY is therefore recorded at its
+#   capture site (SNAPSHOT_OK for the active view, SNAPSHOT_ALL_OK for the
+#   registered one), and predicate 5 gates on SNAPSHOT_ALL_OK — the bit for the
+#   view its claim ladder actually reads.
 #
 # TWO DETAIL STRINGS PER PREDICATE, ON PURPOSE:
 #   D_<P>  the READING — carries the live numbers (elapsed spans, ages, counts,
@@ -276,16 +285,17 @@ state_set() { # <key> <epoch|null>
   return 0
 }
 
-# --- one snapshot at the input boundary --------------------------------------
-# See the header ("WHY ONE SNAPSHOT"). Capture failure is NOT fatal: the library
+# --- both snapshots at the input boundary ------------------------------------
+# See the header ("WHY TWO SNAPSHOTS"). Capture failure is NOT fatal: the library
 # falls back to a live per-call query, which carries its own UNKNOWN contract.
 # shellcheck source=/dev/null
 if ! source "$SCRIPT_DIR/lib-claude-agents.sh" 2>/dev/null; then
   log "cannot source lib-claude-agents.sh"
   exit 69
 fi
-# Predicate 5 additionally needs to know whether the snapshot READ succeeded —
-# see "FAIL DIRECTION" on that predicate. SNAPSHOT_OK is that one bit.
+# Predicate 5 additionally needs to know whether the REGISTERED-view read
+# succeeded — see "FAIL DIRECTION" on that predicate. SNAPSHOT_ALL_OK is that
+# bit; SNAPSHOT_OK is the ACTIVE-view sibling, which predicate 5 never reads.
 # shellcheck source=/dev/null
 if ! source "$SCRIPT_DIR/lib-graph-worktree.sh" 2>/dev/null; then
   log "cannot source lib-graph-worktree.sh"
@@ -301,6 +311,15 @@ SNAPSHOT_OK=0
 if claude_agents_snapshot_capture "$SNAPSHOT_PATH" 2>/dev/null; then
   export DISPATCH_AGENTS_SNAPSHOT="$SNAPSHOT_PATH"
   SNAPSHOT_OK=1
+fi
+# The REGISTERED view is a SEPARATE daemon query (`--all`) over a SEPARATE
+# variable. Predicate 5's claim ladder reads only this one, so its readability
+# is a separate bit — SNAPSHOT_OK says nothing about it.
+SNAPSHOT_ALL_PATH="$WORK_DIR/agents-snapshot-all.json"
+SNAPSHOT_ALL_OK=0
+if claude_agents_snapshot_capture_registered "$SNAPSHOT_ALL_PATH" 2>/dev/null; then
+  export DISPATCH_AGENTS_SNAPSHOT_ALL="$SNAPSHOT_ALL_PATH"
+  SNAPSHOT_ALL_OK=1
 fi
 
 # --- pause state, read ONCE --------------------------------------------------
@@ -582,9 +601,18 @@ fi
 #   backwards: an unreadable daemon would read as "someone is on it" and
 #   SUPPRESS the alarm — a false all-clear, the one failure this whole script
 #   exists to prevent. worktree_has_live_session cannot report unknown
-#   separately (occupied IS its unknown), so the readability of the pass's one
-#   daemon snapshot is captured at the input boundary instead and consumed here:
+#   separately (occupied IS its unknown), so the readability of the daemon view
+#   it reads is captured at the input boundary instead and consumed here:
 #   no snapshot, no verdict. `unknown` raises watch-unknown and resolves nothing.
+#   WHICH VIEW: the ladder below calls worktree_has_live_session, which reads the
+#   REGISTERED view (`claude agents --json --all`), NOT the active view predicate
+#   3 uses. The gate is therefore SNAPSHOT_ALL_OK. Gating on SNAPSHOT_OK (the
+#   active view) would certify an input this predicate never reads: a registered
+#   query that fails at probe time folds every candidate to "claimed", HOLD_COUNT
+#   stays 0, and the pass reports `clear` — which does not merely suppress the
+#   alarm, it sends `--resolve --kind unclaimed-hold` and closes an already-open
+#   alarm node. Exporting DISPATCH_AGENTS_SNAPSHOT_ALL also pins the ladder to
+#   the same bytes the gate certified, instead of re-querying per candidate row.
 #
 # Not quiet under pause — see the PAUSE block in the header.
 V_HOLD="unknown"; D_HOLD=""; B_HOLD=""
@@ -594,10 +622,12 @@ HOLD_READINGS=""   # reading: the same pairs with ages and resolved attention
 HOLD_ROOT="$(resolve_main_worktree 2>/dev/null)" || HOLD_ROOT=""
 if [[ -z "$HOLD_ROOT" ]]; then
   D_HOLD="repo root unresolvable (no worktree has main checked out and DISPATCH_GRAPH_MAIN_WORKTREE is unset) — unclaimed holds could not be enumerated"
-elif [[ "$SNAPSHOT_OK" -ne 1 ]]; then
-  # See FAIL DIRECTION above: without a readable snapshot every candidate would
-  # read as claimed and this predicate would report a silent all-clear.
-  D_HOLD="the machine-wide claude agents daemon snapshot could not be captured — whether a session claims a hold is unreadable, and an unreadable claim must NOT be folded into 'claimed' here (that would suppress this alarm)"
+elif [[ "$SNAPSHOT_ALL_OK" -ne 1 || ! -r "$SNAPSHOT_ALL_PATH" ]]; then
+  # See FAIL DIRECTION above: without a readable REGISTERED snapshot every
+  # candidate would read as claimed and this predicate would report a silent
+  # all-clear that ALSO resolves the alarm node. SNAPSHOT_OK is deliberately not
+  # consulted — it certifies the active view, which this ladder never reads.
+  D_HOLD="the machine-wide claude agents daemon snapshot (registered view, 'claude agents --json --all') could not be captured or is no longer readable — whether a session claims a hold is unreadable, and an unreadable claim must NOT be folded into 'claimed' here (that would suppress this alarm)"
 else
   HOLD_OUT=""; HOLD_RC=0
   if [[ -n "${DISPATCH_FLEET_WATCH_HOLDALERT_CMD:-}" ]]; then
@@ -693,7 +723,7 @@ note_verdict "$V_AUTOMERGE" "automerge-suppressed: $B_AUTOMERGE"
 note_verdict "$V_HOLD"      "unclaimed-hold: $B_HOLD"
 
 # An unreadable PAUSE state is itself an unreadable input — it must raise
-# watch-unknown even when all four predicates happened to read cleanly.
+# watch-unknown even when all five predicates happened to read cleanly.
 if [[ "$PAUSE_UNKNOWN" -eq 1 ]]; then
   UNKNOWN_COUNT=$((UNKNOWN_COUNT + 1))
   UNKNOWN_REASONS+="- pause-state: dispatch_pause_state returned unknown — the sentinel's parent directory exists but is not searchable, so pause state could not be determined. Every predicate was evaluated anyway (pause silences nothing when pause itself is unreadable)."$'\n'

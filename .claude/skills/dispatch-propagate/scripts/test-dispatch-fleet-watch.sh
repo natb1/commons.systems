@@ -117,12 +117,23 @@ STUB
 chmod +x "$BIN/holdalert"
 
 # `claude` stub — lib-claude-agents.sh's own CLAUDE_AGENTS_CMD seam. Handles
-# both `agents --json` (the snapshot capture) and the busy count that reads it.
+# both `agents --json` (the ACTIVE view: the snapshot capture and the busy count
+# that reads it) and `agents --json --all` (the REGISTERED view, which is what
+# worktree_has_live_session — predicate 5's claim ladder — actually reads).
 # STUB_AGENTS_FAIL=1 makes the daemon query fail, which is exactly how the real
 # library produces its UNKNOWN busy count.
+# THE TWO VIEWS MUST BE INDEPENDENTLY FAILABLE. They are separate daemon queries
+# over separate snapshot variables, and a stub that answers both from one fixture
+# cannot see a predicate gating on the wrong one: STUB_AGENTS_ALL_FAIL=1 fails
+# ONLY the `--all` query, leaving the active view healthy.
 cat > "$BIN/claude" <<'STUB'
 #!/usr/bin/env bash
 [[ "${STUB_AGENTS_FAIL:-0}" == "1" ]] && exit 1
+for a in "$@"; do
+  if [[ "$a" == "--all" ]]; then
+    [[ "${STUB_AGENTS_ALL_FAIL:-0}" == "1" ]] && exit 1
+  fi
+done
 printf '%s\n' "${STUB_AGENTS_JSON:-[]}"
 STUB
 chmod +x "$BIN/claude"
@@ -171,6 +182,7 @@ run_case() {
     STUB_REDSYNC_OUT="${STUB_REDSYNC_OUT:-}" \
     STUB_AGENTS_JSON="${STUB_AGENTS_JSON:-[]}" \
     STUB_AGENTS_FAIL="${STUB_AGENTS_FAIL:-0}" \
+    STUB_AGENTS_ALL_FAIL="${STUB_AGENTS_ALL_FAIL:-0}" \
     STUB_ALARM_RC="${STUB_ALARM_RC:-0}" \
     bash "$SCRIPT" "$@" 2>/dev/null
   )"
@@ -182,7 +194,7 @@ run_case() {
 
 reset_stubs() {
   unset STUB_LIVENESS_RC STUB_LIVENESS_VERDICT STUB_LIVENESS_REASON STUB_LIVENESS_NOJSON
-  unset STUB_REDSYNC_OUT STUB_AGENTS_JSON STUB_AGENTS_FAIL STUB_ALARM_RC
+  unset STUB_REDSYNC_OUT STUB_AGENTS_JSON STUB_AGENTS_FAIL STUB_AGENTS_ALL_FAIL STUB_ALARM_RC
   unset STUB_HOLDALERT_OUT STUB_HOLDALERT_RC
 }
 
@@ -612,6 +624,29 @@ assert_contains "case23 verdict tagged with the pause state" "Pause state: pause
   "$(cat "$CASEDIR/bodies/unclaimed-hold.body")"
 # Predicate 1 is still quiet under pause — pause did not stop meaning anything.
 assert_contains "case23 tick-stale still quiet under pause" "tick-stale:           quiet" "$RUN_OUT"
+
+# ===========================================================================
+# Case 24 (WRONG-INPUT GUARD, the false-all-clear this predicate exists to
+# prevent): the ACTIVE view reads fine but the REGISTERED view (`--all`) — the
+# only view predicate 5's claim ladder reads — is unreadable, with a genuine
+# unclaimed candidate present. Gating on the active view's readability would let
+# every `--all` probe return UNKNOWN, fold every candidate to "claimed", and
+# report `clear` — which does not merely suppress the alarm, it RESOLVES an
+# already-open unclaimed-hold node. The verdict must be unknown: no finding, no
+# resolve, watch-unknown raised.
+reset_stubs; new_env case24
+fresh_log
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 1)" STUB_AGENTS_ALL_FAIL=1 STUB_REDSYNC_OUT="" \
+  STUB_HOLDALERT_OUT="$(hold_row tactic-hold-review-alpha tactic-alpha review 90000 A 12.5)" run_case
+assert_contains "case24 verdict unknown (registered view unreadable)" "unclaimed-hold:       unknown" "$RUN_OUT"
+assert_not_contains "case24 verdict is NOT a false clear" "unclaimed-hold:       clear" "$RUN_OUT"
+assert_not_contains "case24 no unclaimed-hold resolve" "--resolve --kind unclaimed-hold" "$ALARMS"
+assert_not_contains "case24 no unclaimed-hold finding" "--kind unclaimed-hold --statement" "$ALARMS"
+assert_eq "case24 watch-unknown alarm fired" 1 "$(grep -c -- '--kind watch-unknown --statement' <<<"$ALARMS")"
+assert_eq "case24 exit code (unknown)" 2 "$RUN_RC"
+# The ACTIVE view really was healthy, or the case proves nothing about WHICH
+# view the gate consults: predicate 3 read it and produced a definite verdict.
+assert_not_contains "case24 busy-stall still read the active view" "busy-stall:           unknown" "$RUN_OUT"
 
 # ===========================================================================
 # Case 17 (DOCTRINE RATCHET): the watcher must never fleet-halt. Grep the
