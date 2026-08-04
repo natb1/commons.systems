@@ -19,7 +19,26 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Item-13 — does a persistently unreadable max_concurrent_workers
+      need a durable operator-visible signal, and is the TARGET_N/MAX_WORKERS
+      severity asymmetry intentional?
+    answer: "(Ruled 2026-08-04 /align interview, author-ratified.) Follow-up
+      recommended: the durable graph latch — a find-or-create
+      tactic-config-unreadable-<key> node with stand-down-once-open semantics
+      (the tactic-main-red-* shape) — retained as draft
+      tactic-config-unreadable-latch, which owns routing all three config-read
+      sites (dispatch-select-tick:643, :707, :814) through one signal path. On
+      THIS PR (#3034): option 1 — a comment at :707 documenting that log-only
+      is deliberate because the main-broken probe and reseed below the at-cap
+      block must stay reachable, pointing at the follow-up node; land item-9's
+      crashed-stub test; then qa proceeds with no further residue. Asymmetry
+      ruling: the divergence in degradation scope is intentional functionality
+      (TARGET_N is load-bearing for the whole tick, so an unreadable value
+      halts; MAX_WORKERS bounds one bypass lane, so failing closed on that lane
+      alone is proportionate), but the divergence in signal durability is not —
+      the latch unifies signaling while each site keeps its own blast radius.
+      Park cleared on this ruling."
 tooling_goals: []
 success_signal: null
 attention:
@@ -43,132 +62,7 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA needs a human (gated fix-planner refused with a
-    scope-deviation on item-13 — at-cap-ceiling-unreadable signal durability, an
-    operator-signal doctrine decision outside this PR's authorized scope;
-    item-9's test-coverage gap was assessed independently fixable but the
-    planner declined to author a partial plan, so both escalate together);
-    escalating to office-hours"
-  since: 2026-08-04
-  recommendation: >-
-    # Office-hours recommendation — `tactic-pace-exempt-ceiling-fanout` (PR
-    #3034)
-
-
-    The code is landed and correct. CI is green, 10/11 QA checks pass. Two
-    things are left: one trivial test to land, and one decision to make.
-
-
-    ## Land item-9 first — no decision needed
-
-
-    `test-dispatch-select-tick.sh` only covers the "ceiling prints garbage" case
-    (`SEL_MAX_WORKERS="not-a-number"`, line ~599). It never covers "the command
-    fails outright" (nonzero exit / empty stdout). Production already handles
-    both identically — `MAX_WORKERS=$(... --max 2>/dev/null) || MAX_WORKERS=""`
-    at `dispatch-select-tick:700` means an empty string fails the same
-    `^[0-9]+$` regex and lands on the same branch — so this is a coverage gap,
-    not a defect.
-
-
-    Mirror the crashed-stub pattern at `test-dispatch-select-tick.sh:1122-1140`
-    (which overwrites the fake `dispatch-target-workers` to emit nothing while
-    keeping `--exhausted` intact) into the at-cap section beside the existing
-    non-numeric test at line ~599. Assert: exit 0, decision line
-    `concurrency-cap`, `graph-select-pace-exempt.log` never created,
-    `.skip_reason == "at-cap-ceiling-unreadable"`. Ten minutes of work; just do
-    it.
-
-
-    ## The one decision — item-13
-
-
-    **Does a persistently unreadable `max_concurrent_workers` need a durable
-    operator-visible signal?** Today it emits a stderr line
-    (`dispatch-select-tick:707`) and a `skip_reason` in the routing-decision
-    log. Nothing reads either back. The failure mode is silent and permanent:
-    every subsequent tick closes the pace-exempt priority lane until a human
-    happens to notice the config is broken.
-
-
-    **Correction to the skeptics' framing you were handed.** The claim that
-    log-only already matches this file's convention does not hold. Every other
-    non-numeric config read in this file exits hard:
-
-
-    - autonomous branch, non-numeric `TARGET_N` →
-    `DLOG_DISPOSITION="internal-error"`, exit 2 (`dispatch-select-tick:643-649`)
-
-    - `--manual` branch, non-numeric `TARGET_N` **or** `MAX_WORKERS` →
-    `internal-error`, exit 2 (`dispatch-select-tick:814-819`)
-
-
-    The new at-cap branch is the *only* log-only path in the file, not an
-    instance of an existing pattern. The skeptics' "just consistency" argument
-    was based on a `--manual` precedent that doesn't exist.
-
-
-    **But there is a real reason it can't simply exit 2**, documented in the
-    code at `dispatch-select-tick:696-699`: exiting from inside the at-cap block
-    would also suppress the main-broken diagnose probe (`:735-746`) and the
-    reseed below it, both of which must stay reachable when the pace lane is
-    closed. So "match the sibling's severity" is not a one-line change.
-
-
-    ### Options
-
-
-    1. **Accept log-only, document it.** Add a comment at `:707` stating the
-    divergence from `:643-649` and `:814-819` is deliberate — this branch must
-    not exit because the main-broken probe and reseed live below it. Zero risk,
-    closes the PR today, leaves the silent-forever failure unaddressed.
-
-    2. **Durable graph latch.** Write a find-or-create
-    `tactic-config-unreadable-*` node the way `repo-health --main-broken-sha`
-    writes `tactic-main-red-*` (`:735-746`), with the same stand-down-once-open
-    semantics. Gives an operator-visible, self-clearing signal without exiting
-    the block. This is new behavior the plan never described — if you want it,
-    it belongs in a follow-up node, not this PR.
-
-    3. **Project-wide upgrade.** Treat "non-numeric config read" as one class
-    and route all of them (`:643`, `:707`, `:814`) through a single alarm path
-    rather than three ad-hoc treatments. Strategy-level proposal; explicitly out
-    of scope here.
-
-
-    **Recommendation:** option 1 on this PR (a comment, not new behavior), and
-    file option 2 or 3 as a follow-up node against
-    `strategy-graph-native-dispatch`. The plan text for this tactic specifies
-    fail-closed-with-log and nothing more; that is fully implemented. Adding an
-    escalation mechanism now is scope creep on an otherwise-ready PR.
-
-
-    ## Also decide: the `TARGET_N` / `MAX_WORKERS` asymmetry
-
-
-    Same config source, same read failure, different severity — `TARGET_N`
-    wedges the tick (exit 2), `MAX_WORKERS` closes one lane quietly. Whichever
-    way you go on item-13, say explicitly which it is:
-
-
-    - **Intentional** — `TARGET_N` is load-bearing for every routing decision so
-    an unreadable value must halt; `MAX_WORKERS` bounds one bypass lane, so
-    failing closed on that lane is proportionate. Record this in the comment
-    from option 1.
-
-    - **Oversight** — then it's option 3, and it's a follow-up, because
-    reconciling it means touching the `--manual` branch and the `TARGET_N`
-    guard, both explicitly out of scope per this tactic's plan text.
-
-
-    ## Landing
-
-
-    Item-9's test plus whichever comment you choose is a single small commit on
-    the existing branch. Once it's in, the node moves `qa` → `review` with no
-    further residue.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
