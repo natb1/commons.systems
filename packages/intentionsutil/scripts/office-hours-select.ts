@@ -177,24 +177,23 @@ export type SelectorArgs =
   | { kind: "ok"; wantList: boolean; sessionType?: SessionType; target?: string; ref: string }
   | { kind: "error"; message: string };
 
-/**
- * Parse CLI argv (already stripped of `node`/script path, i.e.
- * `process.argv.slice(2)`) into a structured result. Pure and side-effect-free
- * — no I/O, no `process.exit` — so `main()` remains the only place that
- * writes to stderr or exits.
- */
 /** Every `--`-prefixed token this CLI recognizes. */
 const BOOLEAN_FLAGS: readonly string[] = ["--list"];
 const VALUE_FLAGS: readonly string[] = ["--type", "--ref"];
 const KNOWN_FLAGS: readonly string[] = [...BOOLEAN_FLAGS, ...VALUE_FLAGS];
 
-export function parseSelectorArgs(args: string[]): SelectorArgs {
-  // Normalize `--flag=value` to the `--flag value` spelling so one lookup path
-  // serves both, and reject any `--`-prefixed token that is not a known flag.
-  // Without this, `--type=curriculum-review` (and any misspelling) is filtered
-  // out as a non-positional, `sessionType` stays undefined, and the selector
-  // silently emits the UNFILTERED queue head with exit 0 — the
-  // fallback-over-clear-error anti-pattern `.claude/rules/code-style.md` forbids.
+/** A parse step that either produced a value of type `T` or failed with a message. */
+type ParseStep<T> = { kind: "ok"; value: T } | { kind: "error"; message: string };
+
+/**
+ * Normalize `--flag=value` to the `--flag value` spelling so one lookup path
+ * serves both, and reject any `--`-prefixed token that is not a known flag.
+ * Without this, `--type=curriculum-review` (and any misspelling) is filtered
+ * out as a non-positional, `sessionType` stays undefined, and the selector
+ * silently emits the UNFILTERED queue head with exit 0 — the
+ * fallback-over-clear-error anti-pattern `.claude/rules/code-style.md` forbids.
+ */
+function normalizeArgv(args: string[]): ParseStep<string[]> {
   const norm: string[] = [];
   for (const a of args) {
     if (!a.startsWith("--")) {
@@ -217,69 +216,109 @@ export function parseSelectorArgs(args: string[]): SelectorArgs {
     // missing-value check below reports as such.
     if (eq !== -1) norm.push(a.slice(eq + 1));
   }
+  return { kind: "ok", value: norm };
+}
 
-  const wantList = norm.includes("--list");
+/**
+ * A value flag's position in the normalized argv and the token occupying the
+ * slot it consumes. `idx === -1` means the flag was not passed at all, which is
+ * distinct from a flag passed with a missing value (see `hasFlagValue`).
+ */
+function findValueFlag(norm: string[], name: string): { idx: number; value: string | undefined } {
+  const idx = norm.indexOf(name);
+  return { idx, value: idx === -1 ? undefined : norm[idx + 1] };
+}
 
-  const typeIdx = norm.indexOf("--type");
-  const typeValue = typeIdx !== -1 ? norm[typeIdx + 1] : undefined;
+/**
+ * Whether a value flag's consumed slot holds a usable value. A flag with
+ * nothing after it, an empty `--flag=`, or the next flag after it is a MISSING
+ * value — not a value literally named "undefined" or "--list". Callers report
+ * that as its own error rather than interpolating the junk into an
+ * unknown-value message as if the user had typed it.
+ */
+function hasFlagValue(value: string | undefined): value is string {
+  return value !== undefined && value !== "" && !value.startsWith("--");
+}
 
-  const refIdx = norm.indexOf("--ref");
-  const refValue = refIdx !== -1 ? norm[refIdx + 1] : undefined;
-
-  // Only exclude the token right after a value flag when that flag was
-  // actually found; otherwise the index is -1 and -1 + 1 === 0 would wrongly
-  // drop argv[0]. A value flag consumes the argv slot after it, so a bare
-  // `filter(a => !a.startsWith("--"))` would mistake that value
-  // (`origin/main`, `curriculum-review`) for a positional node id.
-  const valueIdxs = new Set<number>();
-  if (typeIdx !== -1) valueIdxs.add(typeIdx + 1);
-  if (refIdx !== -1) valueIdxs.add(refIdx + 1);
-
+/**
+ * The node-id positionals left once each value flag's consumed slot is
+ * excluded, or the mutual-exclusion error they raise. A value flag consumes the
+ * argv slot after it, so a bare `filter(a => !a.startsWith("--"))` would mistake
+ * that value (`origin/main`, `curriculum-review`) for a positional node id. Only
+ * exclude the slot when the flag was actually found; otherwise the index is -1
+ * and -1 + 1 === 0 would wrongly drop argv[0].
+ */
+function collectPositionals(
+  norm: string[],
+  wantList: boolean,
+  flagIdxs: number[],
+): ParseStep<string[]> {
+  const valueIdxs = new Set(flagIdxs.filter((i) => i !== -1).map((i) => i + 1));
   const positionals = norm.filter((a, i) => !a.startsWith("--") && !valueIdxs.has(i));
 
   if (wantList && positionals.length > 0) {
     return { kind: "error", message: "office-hours-select: --list is mutually exclusive with a node-id" };
   }
-
   if (positionals.length > 1) {
     return { kind: "error", message: "office-hours-select: at most one node-id may be given" };
   }
+  return { kind: "ok", value: positionals };
+}
 
-  if (typeIdx !== -1 && positionals.length > 0) {
+/** Validate the value passed to `--type` against `SESSION_TYPES`. */
+function resolveSessionType(value: string | undefined): ParseStep<SessionType> {
+  if (!hasFlagValue(value)) {
+    return {
+      kind: "error",
+      message: `office-hours-select: missing value for --type (expected: ${SESSION_TYPES.join(", ")})`,
+    };
+  }
+  const found = SESSION_TYPES.find((t) => t === value);
+  if (found === undefined) {
+    return {
+      kind: "error",
+      message: `office-hours-select: unknown --type "${value}" (expected: ${SESSION_TYPES.join(", ")})`,
+    };
+  }
+  return { kind: "ok", value: found };
+}
+
+/**
+ * Parse CLI argv (already stripped of `node`/script path, i.e.
+ * `process.argv.slice(2)`) into a structured result. Pure and side-effect-free
+ * — no I/O, no `process.exit` — so `main()` remains the only place that
+ * writes to stderr or exits.
+ */
+export function parseSelectorArgs(args: string[]): SelectorArgs {
+  const normalized = normalizeArgv(args);
+  if (normalized.kind === "error") return normalized;
+  const norm = normalized.value;
+
+  const wantList = norm.includes("--list");
+  const typeFlag = findValueFlag(norm, "--type");
+  const refFlag = findValueFlag(norm, "--ref");
+
+  const collected = collectPositionals(norm, wantList, [typeFlag.idx, refFlag.idx]);
+  if (collected.kind === "error") return collected;
+  const positionals = collected.value;
+
+  if (typeFlag.idx !== -1 && positionals.length > 0) {
     return { kind: "error", message: "office-hours-select: --type is mutually exclusive with a node-id" };
   }
 
   let sessionType: SessionType | undefined;
-  if (typeIdx !== -1) {
-    // `--type` with nothing after it, or with the next flag after it, is a
-    // missing value — distinct from a value that was supplied but unrecognized.
-    // Without this the unknown-value message below interpolates the literal
-    // string "undefined" (or the following flag) as if the user had typed it.
-    if (typeValue === undefined || typeValue === "" || typeValue.startsWith("--")) {
-      return {
-        kind: "error",
-        message: `office-hours-select: missing value for --type (expected: ${SESSION_TYPES.join(", ")})`,
-      };
-    }
-    const found = SESSION_TYPES.find((t) => t === typeValue);
-    if (found === undefined) {
-      return {
-        kind: "error",
-        message: `office-hours-select: unknown --type "${typeValue}" (expected: ${SESSION_TYPES.join(", ")})`,
-      };
-    }
-    sessionType = found;
+  if (typeFlag.idx !== -1) {
+    const resolved = resolveSessionType(typeFlag.value);
+    if (resolved.kind === "error") return resolved;
+    sessionType = resolved.value;
   }
 
   let ref = DEFAULT_REF;
-  if (refIdx !== -1) {
-    // Same missing-value posture as `--type`: `--ref` with nothing after it,
-    // an empty `--ref=`, or the next flag after it is a missing value, not a
-    // ref literally named "undefined" or "--list".
-    if (refValue === undefined || refValue === "" || refValue.startsWith("--")) {
+  if (refFlag.idx !== -1) {
+    if (!hasFlagValue(refFlag.value)) {
       return { kind: "error", message: "office-hours-select: --ref requires a git-ref argument" };
     }
-    ref = refValue;
+    ref = refFlag.value;
   }
 
   return { kind: "ok", wantList, sessionType, target: positionals[0], ref };
