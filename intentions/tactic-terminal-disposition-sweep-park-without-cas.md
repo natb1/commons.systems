@@ -62,7 +62,7 @@ attention:
     bug-ledger nodes in this cluster; re-simulated over the live store after
     writing to confirm 0 tier changes and 0 value drift onto non-target nodes.
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-terminal-disposition-sweep-park-without-cas
   pr: 3042
@@ -73,7 +73,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T16:48:30Z
+    mergeCommitSha: 4725a16b61ab48921c0a74aa5d3bc9ae4ac26e82
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
