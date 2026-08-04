@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Classify a unified diff for the presence of an API/network/Firestore call
+# site among its ADDED lines.
+# Usage: dispatch-api-call-site < diff.patch
+#
+# Reads a unified diff on stdin. Prints exactly one line to stdout:
+#   api_call_site=true|false
+#
+# No network access, no git, no gh — pure stdin -> stdout classification.
+#
+# Detection rule: only lines matching ^\+ (added lines), excluding the
+# ^\+\+\+ file-header line, are considered. Context lines and removed lines
+# (`-` prefix) are ignored. If any considered line matches the call-site
+# pattern set below, api_call_site=true; otherwise (including empty stdin),
+# api_call_site=false. Exit 0 in both cases — this is a classifier, not a
+# check.
+#
+# Pattern set (design property, not a measurement): fetch(, axios,
+# getDocs(, getDoc(, addDoc(, setDoc(, updateDoc(, deleteDoc(, onSnapshot(,
+# query(, collection(, collectionGroup(, XMLHttpRequest. This list is a
+# tunable design property — no one has counted how many dispatch runs
+# actually contain such a call site. The realized fire rate is to be
+# recorded after this gate lands, and the pattern set revisited against
+# that data.
+#
+# Deliberate omission: bare amplifier patterns (setInterval, setTimeout,
+# polling loops) do NOT fire this gate on their own. This was considered
+# and left out because setTimeout appears in nearly every code diff
+# (debouncing, retries, UI timing) and would collapse the gate into
+# "always true" — defeating its purpose as a targeted widen. Revisit only
+# with measured fire-rate data showing the omission misses real cost
+# call-site diffs.
+set -euo pipefail
+
+CALL_SITE_RE='fetch\(|axios|getDocs\(|getDoc\(|addDoc\(|setDoc\(|updateDoc\(|deleteDoc\(|onSnapshot\(|query\(|collection\(|collectionGroup\(|XMLHttpRequest'
+
+if grep -E '^\+' | grep -vE '^\+\+\+' | grep -qE "$CALL_SITE_RE"; then
+  echo "api_call_site=true"
+else
+  echo "api_call_site=false"
+fi
