@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -102,6 +102,19 @@ describe("censusTick", () => {
       detected: "2026-08-04",
     });
     expect(defect.statement).toContain("execution.pr:7");
+
+    // Minted body starts with a single H1 derived from the same statement text
+    // (not the zero-heading regression the census QA finding flagged).
+    const raw = readFileSync(join(dir, "tactic-census-defect-unverified.md"), "utf8");
+    const fenceEnd = raw.indexOf("\n---\n", 3);
+    const body = raw.slice(fenceEnd + "\n---\n".length);
+    const bodyLines = body.split("\n");
+    const headingLines = bodyLines.filter((line) => /^# /.test(line));
+    expect(headingLines).toHaveLength(1);
+    const firstNonEmptyLine = bodyLines.find((line) => line.trim() !== "");
+    expect(firstNonEmptyLine).toMatch(/^# /);
+    expect(firstNonEmptyLine).toContain(defect.statement);
+    expect(body).toContain("Investigate why `tactic-unverified`'s completion is not mechanically verifiable");
   });
 
   it("does not re-mint an already-surfaced defect on a second run", () => {

@@ -97,6 +97,19 @@ function spliceBody(dir: string, id: string, body: string): void {
   writeFileSync(path, `${raw.slice(0, end + fence.length)}${body}`);
 }
 
+/**
+ * The statement text for a minted defect node. Shared by `defectNode` (the
+ * `statement` field) and `censusTick` (the spliced body's `# ` heading) so the
+ * two cannot drift apart.
+ */
+function defectStatement(targetId: string, reason: DefectReason, target: IntentionNode | undefined): string {
+  const pr = target?.execution?.pr ?? "none";
+  return (
+    `census integrity defect: ${targetId} is phase:done with execution.pr:${String(pr)} ` +
+    `but completion is not mechanically verifiable (${reason})`
+  );
+}
+
 function defectNode(
   defectId: string,
   targetId: string,
@@ -104,13 +117,10 @@ function defectNode(
   target: IntentionNode | undefined,
   date: string,
 ): IntentionNodeInput {
-  const pr = target?.execution?.pr ?? "none";
   return {
     id: defectId,
     kind: "tactic",
-    statement:
-      `census integrity defect: ${targetId} is phase:done with execution.pr:${String(pr)} ` +
-      `but completion is not mechanically verifiable (${reason})`,
+    statement: defectStatement(targetId, reason, target),
     owner: "ai",
     status: "codified",
     parent: null,
@@ -192,11 +202,14 @@ export function censusTick(args: Args): Plan {
       plan.defectsExisting.push(defectId);
       continue;
     }
-    writeNode(args.dir, defectNode(defectId, targetId, reason, byId.get(targetId), args.date));
+    const target = byId.get(targetId);
+    writeNode(args.dir, defectNode(defectId, targetId, reason, target, args.date));
+    const statement = defectStatement(targetId, reason, target);
     spliceBody(
       args.dir,
       defectId,
-      `Investigate why \`${targetId}\`'s completion is not mechanically verifiable and ` +
+      `# ${statement}\n\n` +
+        `Investigate why \`${targetId}\`'s completion is not mechanically verifiable and ` +
         `record the missing completion evidence (re-derive from git history / \`gh\`, or if ` +
         `the node is legitimately complete, backfill the merge-verification field on its ` +
         `\`execution\`). If \`${targetId}\` already verifies and was pruned, close this node ` +
