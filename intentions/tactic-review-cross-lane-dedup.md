@@ -63,7 +63,27 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main item 10 (WAIT): awaits the first live /review-fix run whose
+    code includes this tactic's cross-lane absorption logic (Units 1-3, merged
+    as 0710dc0e via PR #3028). Checked: the one post-merge review-fix run so far
+    (PR #3027, fix commit a4dda1b5, merged 2026-08-04T00:47:17Z) ran on a
+    pre-merge branch -- 0710dc0e is not an ancestor of a4dda1b5, and grepping
+    that commit's review-fix.js for
+    xlane-dedup/LANE_A_SOURCES/laneAAbsorbCandidates finds none. origin/main
+    HEAD (ef2a96e5) does include 0710dc0e. Earliest useful re-check: the next
+    /review-fix run on any PR branched from current origin/main -- several are
+    in flight (PR #3029, #3025, #3023, and others) and will cycle through
+    review-fix soon."
+  since: 2026-08-04
+  recommendation: "No author decision needed -- re-selection only, once a
+    /review-fix run against post-0710dc0e code completes (xlane-dedup:-labelled
+    agents present, or a logged zero-contested-locations line, either satisfies
+    the item). Re-check by: git log origin/main and confirm a PR merged after
+    0710dc0e whose review-fix pass ran on a branch with 0710dc0e as an ancestor
+    of its fix commit, then read that PR's review-fix disposition comment for
+    the absorption summary line."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
