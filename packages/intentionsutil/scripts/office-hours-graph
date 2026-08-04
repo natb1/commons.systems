@@ -38,7 +38,8 @@
 # not selector output:
 #   cleared <node-id>          → the node's park is already cleared on origin/main
 #   all-held <count>           → the queue is NOT empty; every remaining parked
-#                                node is claimed by a live session
+#                                node is claimed — by a live session named after
+#                                it, or by a reservation-ledger marker
 #   reserved <node-id> <session-id> → the node is claimed in the reservation
 #                                ledger by a live drain session — a collision to
 #                                surface, never a silent fall-through or
@@ -310,11 +311,17 @@ resolve_directive() {
     fi
     # Advisory reservation-ledger pre-check (see reserved_owner_for): a node
     # claimed by another drain but not (yet, or ever) named as a live job is
-    # still skipped here to avoid a wasted spawn — but this is not the
-    # `held`/`all-held` case, so it does not add to held_count.
+    # still skipped here to avoid a wasted spawn. It counts toward held_count
+    # for the same reason the live-session skip does: the node IS parked work
+    # waiting on a human, just claimed elsewhere. Leaving it uncounted would let
+    # a queue whose every remaining candidate is reserved report `empty`, whose
+    # message asserts "nothing was skipped as held" — a false statement about
+    # work that needs attention, which is exactly what held_count exists to
+    # prevent.
     reserved_session=$(reserved_owner_for "$nid")
     if [[ -n "$reserved_session" ]]; then
       echo "office-hours: skipping $nid — reserved by session $reserved_session (a drain is already reviewing it)." >&2
+      held_count=$((held_count + 1))
       continue
     fi
     npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$nid"
@@ -362,7 +369,7 @@ case "$verb" in
     exit 1
     ;;
   all-held)
-    echo "office-hours: the queue is NOT empty — $a parked node(s) are ranked but each is already claimed by a live session, so there is nothing new to launch. Run 'claude agents --all' and attach the holding job to continue that review, or re-run once it finishes."
+    echo "office-hours: the queue is NOT empty — $a parked node(s) are ranked but each is already claimed (a live session named after the node, or another drain's reservation-ledger marker), so there is nothing new to launch. Run 'claude agents --all' and attach the holding job to continue that review, or re-run once it finishes."
     exit 0
     ;;
   empty)
