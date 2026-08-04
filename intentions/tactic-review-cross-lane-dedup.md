@@ -46,7 +46,7 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-review-cross-lane-dedup
   pr: 3028
@@ -57,7 +57,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T00:30:23Z
+    mergeCommitSha: 0710dc0e204bf7c9284ebcf4f7f30ef16c17ae84
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
