@@ -635,6 +635,54 @@ assert_eq "stdin-drain: summary counts both" "yes" \
   "$(fs_contains 'sweep complete (blocked=2 parked=2 observing=0 unmeasurable=0 deferred=0)')"
 fs_teardown
 
+# --- Test: --base pins the exact pre-park origin/main blob -------------------
+#
+# Regression test for the diagnosis-time CAS (ref-diagnosis-time-cas): the pin
+# threaded through park-node's --base must be the SAME blob the guard read at
+# step (7b), not merely present. If a stale or wrong sha were pinned, a
+# concurrent writer's park could still be silently clobbered even though a
+# `--base` flag is on the command line.
+
+echo "Test: --base pins the exact origin/main blob read at diagnosis time"
+fs_setup
+fs_write_node "tactic-base-pin" unparked
+fs_commit_nodes
+EXPECTED=$(git -C "$FS_REPO" rev-parse "origin/main:intentions/tactic-base-pin.md")
+fs_write_transcript "0aaa-2020" $(( FS_NOW - 4000 ))
+fs_add_session "0aaa-2020" "tactic-base-pin" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "base-pin: sweep returns 0" "0" "$FS_RC"
+assert_eq "base-pin: first arg is --base" "--base" "$(fs_park_arg 1)"
+assert_eq "base-pin: second arg pins the exact blob" "tactic-base-pin=$EXPECTED" "$(fs_park_arg 2)"
+fs_teardown
+
+# --- Test: park-node exit 3 is its own outcome, not a park failure -----------
+#
+# `rc==3` is the stale-diagnosis compare-and-swap refusal — a park that landed
+# on origin/main between this sweep's guard read and its write. It must get its
+# own disposition, distinct from an ordinary park failure, and must never
+# increment parked_count.
+
+echo "Test: park-node exit 3 is logged as stale-diagnosis, not a park failure (frozen sweep)"
+fs_setup
+fs_write_park_node 3
+fs_write_node "tactic-stale-frozen" unparked
+fs_commit_nodes
+fs_write_transcript "0bbb-2121" $(( FS_NOW - 4000 ))
+fs_add_session "0bbb-2121" "tactic-stale-frozen" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "stale-frozen: sweep returns 0" "0" "$FS_RC"
+assert_eq "stale-frozen: stderr reports stale-diagnosis" "yes" \
+  "$(fs_contains 'stale-diagnosis skip for tactic-stale-frozen')"
+assert_eq "stale-frozen: stderr does NOT report a park failure" "no" \
+  "$(fs_contains 'park failed for tactic-stale-frozen')"
+assert_eq "stale-frozen: the decision record says stale-diagnosis" "stale-diagnosis" "$(fs_log_dispositions)"
+assert_eq "stale-frozen: summary counts zero parks" "yes" \
+  "$(fs_contains 'sweep complete (blocked=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
+fs_teardown
+
 echo ""
 echo "=== terminal_without_disposition_sweep ==="
 
@@ -733,11 +781,71 @@ td_teardown() {
 #           origin/main after an rc-0 park.
 #   body    append a column-0 `office_hours:` block to the markdown BODY while
 #           the frontmatter stays `null` — the frontmatter-scoping trap.
-# Landing is skipped entirely for a non-zero <exit-code>: a park-node that fails
-# does not land, and a hang killed by `timeout` never reaches this code at all
-# (the sleep comes first).
+#   race    faithfully emulates a concurrent writer plus real park-node's own
+#           compare-and-swap (park-node:218-221): FIRST land a SPECIFIC park
+#           (distinctive sentinel reason/recommendation strings) onto
+#           origin/main — the concurrent writer landing inside this sweep's
+#           guard-to-write window — then compare the received `--base` pin
+#           against the NOW-current origin/main blob. On mismatch, log
+#           `RACED=1` and exit 3 WITHOUT writing anything else; on (the
+#           unexercised) match, write generic text and exit 0. <exit-code> and
+#           <landing-mode> interact differently here than for the other modes:
+#           `race` decides its OWN exit code from the compare-and-swap, not
+#           from <exit-code>.
+# Landing is skipped entirely for a non-zero <exit-code> (all modes but
+# `race`): a park-node that fails does not land, and a hang killed by `timeout`
+# never reaches this code at all (the sleep comes first).
 td_write_park_node() {
   local rc="$1" sleep_s="${2:-0}" mode="${3:-land}"
+
+  if [[ "$mode" == "race" ]]; then
+    cat > "$TD_PARK" <<PARK
+#!/usr/bin/env bash
+{
+  printf 'ARGC=%s\n' "\$#"
+  for a in "\$@"; do printf 'ARG=%s\n' "\$a"; done
+  printf 'LOCK=%s\n' "\${GRAPH_COMMIT_LOCK_WAIT_SECONDS:-unset}"
+} >> "$TD_PARKLOG"
+
+# Leading-flags-only parse, mirroring park-node and the sweep itself: walk
+# flags until the first positional (the node id), capturing --base's value
+# along the way. Works regardless of whether --pr precedes --base.
+base_pair=""
+node=""
+while [ "\$#" -gt 0 ]; do
+  case "\$1" in
+    --base) base_pair="\$2"; shift 2 ;;
+    --*) shift 2 ;;
+    *) node="\$1"; break ;;
+  esac
+done
+pinned="\${base_pair#*=}"
+f="$TD_REPO/intentions/\${node}.md"
+
+# 1. Land a concurrent writer's SPECIFIC park FIRST — the guard-to-write
+# window this fix closes. Distinctive sentinels let the test assert the exact
+# text survived, not just that some office_hours block exists.
+sed -i 's/^office_hours: null\$/office_hours:\n  reason: RACE_SENTINEL_REASON_7f3a\n  recommendation: RACE_SENTINEL_RECOMMENDATION_9c2e/' "\$f"
+git -C "$TD_REPO" add -A
+git -C "$TD_REPO" commit -q -m 'fake park-node: race concurrent writer'
+git -C "$TD_REPO" update-ref refs/remotes/origin/main HEAD
+
+# 2. park-node's own compare-and-swap against the NOW-current blob.
+current=\$(git -C "$TD_REPO" rev-parse "origin/main:intentions/\${node}.md" 2>/dev/null)
+if [ "\$current" != "\$pinned" ]; then
+  printf 'RACED=1\n' >> "$TD_PARKLOG"
+  exit 3
+fi
+printf '\nGeneric park text (unreachable in the race regression test).\n' >> "\$f"
+git -C "$TD_REPO" add -A
+git -C "$TD_REPO" commit -q -m 'fake park-node: race match'
+git -C "$TD_REPO" update-ref refs/remotes/origin/main HEAD
+exit 0
+PARK
+    chmod +x "$TD_PARK"
+    return 0
+  fi
+
   cat > "$TD_PARK" <<PARK
 #!/usr/bin/env bash
 {
@@ -1611,6 +1719,106 @@ assert_eq "body-only: origin/main really carries the body line (the fixture is n
   "$(git -C "$TD_REPO" show 'origin/main:intentions/tactic-td-bodyonly.md' | grep -c '^office_hours:$')"
 assert_eq "body-only: the sweep counts no park" "yes" \
   "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
+td_teardown
+
+# --- Test 46: --pr/--base ordering is the leading-flags-only regression guard -
+#
+# park-node's parse is leading-flags-only: the first non-flag argument ends
+# flag parsing and everything after it is verbatim free text. If a flag ever
+# ended up after the first positional, park-node would silently swallow it as
+# part of the reason/recommendation text rather than erroring — so the exact
+# threaded shape ($1=--pr $2=<n> $3=--base $4=<id>=<sha> $5=<node-id> ...) is
+# asserted here, not just "the flags are present somewhere".
+
+echo "Test: --pr/--base thread in the correct leading-flags-only order"
+td_setup
+td_write_node "tactic-order-pr" working
+td_commit_nodes
+EXPECTED=$(git -C "$TD_REPO" rev-parse "origin/main:intentions/tactic-order-pr.md")
+td_write_transcript "0aab-4040" $(( TD_NOW - 4000 ))
+td_add_session "0aab-4040" "tactic-order-pr" "done" "aab04040"
+td_write_job_file "aab04040" "tactic-order-pr" office-hours-reason "reason with a pr for ordering"
+td_write_job_file "aab04040" "tactic-order-pr" office-hours-pr "3300"
+td_install_claude 0
+td_run
+assert_eq "order: sweep returns 0" "0" "$TD_RC"
+assert_eq "order: seven positional args" "ARGC=7" "$(grep '^ARGC=' "$TD_PARKLOG")"
+assert_eq "order: \$1 is --pr" "--pr" "$(td_park_arg 1)"
+assert_eq "order: \$2 is the pr number" "3300" "$(td_park_arg 2)"
+assert_eq "order: \$3 is --base" "--base" "$(td_park_arg 3)"
+assert_eq "order: \$4 pins tactic-order-pr=<sha>" "tactic-order-pr=$EXPECTED" "$(td_park_arg 4)"
+assert_eq "order: \$5 is the node id" "tactic-order-pr" "$(td_park_arg 5)"
+td_teardown
+
+# --- Test 47: park-node exit 3 is its own outcome, not a park failure --------
+#
+# Sibling of the frozen-sweep exit-3 test: `rc==3` is the stale-diagnosis
+# compare-and-swap refusal and must get its own disposition, must never be
+# reported as an ordinary park failure, must not increment parked_count, and —
+# unlike a real ordinary failure — the escalation markers are retained exactly
+# as every other non-landed path already keeps them.
+
+echo "Test: park-node exit 3 is logged as stale-diagnosis, not a park failure (terminal sweep)"
+td_setup
+td_write_park_node 3
+td_write_node "tactic-stale-terminal" working
+td_commit_nodes
+td_write_transcript "0bbc-4141" $(( TD_NOW - 4000 ))
+td_add_session "0bbc-4141" "tactic-stale-terminal" "done" "bbc04141"
+td_write_job_file "bbc04141" "tactic-stale-terminal" office-hours-reason "reason that must survive a stale-diagnosis refusal"
+td_install_claude 0
+td_run
+assert_eq "stale-terminal: sweep returns 0" "0" "$TD_RC"
+assert_eq "stale-terminal: stderr reports stale-diagnosis" "yes" \
+  "$(td_contains 'stale-diagnosis skip for tactic-stale-terminal')"
+assert_eq "stale-terminal: stderr does NOT report a park failure" "no" \
+  "$(td_contains 'park failed for tactic-stale-terminal')"
+assert_eq "stale-terminal: the decision record says stale-diagnosis" "stale-diagnosis" "$(td_log_dispositions)"
+assert_eq "stale-terminal: summary counts zero parks" "yes" \
+  "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
+assert_eq "stale-terminal: the escalation marker is retained" "present" \
+  "$([[ -e "$TD_JOBS/bbc04141/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+td_teardown
+
+# --- Test 48: a concurrent writer inside the guard-to-write window is REFUSED,
+#              not clobbered — THE regression test for this defect -----------
+#
+# The end-to-end race: a different park lands on origin/main between this
+# sweep's diagnosis-time read and its own park-node write. Before the Unit 1
+# fix, the sweep's write would silently overwrite that park with its own
+# generic boilerplate. With the fix, park-node's compare-and-swap sees the
+# pinned --base no longer matches origin/main and REFUSES (exit 3) instead —
+# so the concurrent writer's specific park must survive byte-for-byte and the
+# sweep's generic text must never appear.
+
+echo "Test: a concurrent writer landing inside the guard-to-write window is REFUSED, not clobbered"
+td_setup
+td_write_park_node 0 0 race
+td_write_node "tactic-race" working
+td_commit_nodes
+td_write_transcript "0ccd-4242" $(( TD_NOW - 4000 ))
+td_add_session "0ccd-4242" "tactic-race" "done" "ccd04242"
+td_write_job_file "ccd04242" "tactic-race" office-hours-reason "reason that must survive the race"
+td_install_claude 0
+td_run
+assert_eq "race: sweep returns 0" "0" "$TD_RC"
+RACE_BODY=$(git -C "$TD_REPO" show 'origin/main:intentions/tactic-race.md')
+assert_eq "race: the concurrent writer's reason sentinel survives byte-for-byte" "yes" \
+  "$(case "$RACE_BODY" in *"RACE_SENTINEL_REASON_7f3a"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "race: the concurrent writer's recommendation sentinel survives byte-for-byte" "yes" \
+  "$(case "$RACE_BODY" in *"RACE_SENTINEL_RECOMMENDATION_9c2e"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "race: the sweep's generic disposition text is ABSENT" "no" \
+  "$(case "$RACE_BODY" in *"ended without declaring a disposition"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "race: the decision record says stale-diagnosis" "stale-diagnosis" "$(td_log_dispositions)"
+assert_eq "race: the sweep counts no park" "yes" \
+  "$(td_contains 'terminal-disposition sweep complete (terminal=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
+assert_eq "race: the escalation marker is retained" "present" \
+  "$([[ -e "$TD_JOBS/ccd04242/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+# Non-vacuity control: without this, the test would pass trivially if the fake
+# never actually advanced origin/main, or if the sweep stopped calling
+# park-node at all. Assert the race actually fired.
+assert_eq "race: non-vacuity — the fake park-node's CAS actually raced" "yes" \
+  "$(grep -q '^RACED=1$' "$TD_PARKLOG" && printf 'yes' || printf 'no')"
 td_teardown
 
 report_results
