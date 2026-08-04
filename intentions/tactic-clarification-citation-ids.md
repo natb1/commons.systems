@@ -122,3 +122,23 @@ Prose: author a dangling citation locally and confirm validate-graph rejects
 it naming the source field; revert. Confirm the upgraded references on
 strategy-graph-native-dispatch resolve, and that uncited clarification
 entries carry no id.
+
+## needs-main residue
+
+- id: 11; title: Remaining ordinal references graph-wide are left unmigrated;
+  url_path: current; expected_outcome: Remaining "(entry N)"-style ordinal
+  references graph-wide are accepted as staying vulnerable to the off-by-N
+  bug class this tactic addresses, until each node is next amended
+  (opportunistic upgrade), per the PR's own explicit no-big-bang-rewrite
+  scope constraint (Unit 3).
+  finding: This is an explicit planned deferral stated by both Unit 3 and
+  the PR body itself — not a defect found by QA. Recorded here per the
+  disposition workflow's needs-main routing for planned-deferral items.
+  Verifiability: MACHINE
+  Check: On main post-merge, `npx tsx
+  packages/intentionsutil/scripts/validate-graph.ts` should remain clean
+  (confirms no dangling-citation regression was introduced), and a spot
+  check of `intentions/*.md` should show no big-bang rewrite of ordinal
+  references was silently added beyond this PR's declared Unit 3 scope
+  (the 4 sites on strategy-graph-native-dispatch's `reaping` entry, fixed
+  in the qa-fix auto-fix pass).
