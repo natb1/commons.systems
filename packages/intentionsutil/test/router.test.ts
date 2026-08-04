@@ -1081,7 +1081,7 @@ describe("strategyFingerprint", () => {
     expect(
       strategyFingerprint({
         ...base,
-        clarifications: [{ question: "q", answer: "a" }],
+        clarifications: [{ question: "q", answer: "a", id: null }],
       }),
     ).not.toBe(fp);
     expect(

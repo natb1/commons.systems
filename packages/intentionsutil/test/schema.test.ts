@@ -1577,9 +1577,9 @@ describe("validateGraph", () => {
         id: "tactic-1",
         kind: "tactic",
         clarifications: [
-          { question: "front-loaded?", answer: "(Recorded 2026-07-05 by author) settled." },
-          { question: "trailing?", answer: "Settled the scope. Recorded 2026-07-05." },
-          { question: "mid-sentence?", answer: "On 2026-07-05 the author ratified this." },
+          { question: "front-loaded?", answer: "(Recorded 2026-07-05 by author) settled.", id: null },
+          { question: "trailing?", answer: "Settled the scope. Recorded 2026-07-05.", id: null },
+          { question: "mid-sentence?", answer: "On 2026-07-05 the author ratified this.", id: null },
         ],
       }),
     ];
@@ -1594,8 +1594,8 @@ describe("validateGraph", () => {
         id: "tactic-1",
         kind: "tactic",
         clarifications: [
-          { question: "dated?", answer: "Recorded 2026-07-05." },
-          { question: "dateless?", answer: "No date anywhere in this answer." },
+          { question: "dated?", answer: "Recorded 2026-07-05.", id: null },
+          { question: "dateless?", answer: "No date anywhere in this answer.", id: null },
         ],
       }),
     ];
@@ -1621,12 +1621,12 @@ describe("validateGraph", () => {
       gnode({
         id: "tactic-1",
         kind: "tactic",
-        clarifications: [{ question: "q", answer: "No date here." }],
+        clarifications: [{ question: "q", answer: "No date here.", id: null }],
       }),
       gnode({
         id: "virtue-1",
         kind: "virtue",
-        clarifications: [{ question: "q", answer: "Also no date." }],
+        clarifications: [{ question: "q", answer: "Also no date.", id: null }],
       }),
     ];
     let caught: unknown;
@@ -1823,6 +1823,105 @@ describe("validateGraph", () => {
     const nodes = tierNodes({ attributes: { bug_fix: true, security: true }, attention: null });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
+
+  // --- Rule 21: <node-id>#<slug> clarification citations ---------------------
+
+  /**
+   * A citing node (`strategy-citer`) plus a cited node (`strategy-cited`) that
+   * carries one clarification with id "why-lazy". Both kind nodes are present so
+   * only rule 21 is under test.
+   */
+  function citationNodes(citer: Partial<IntentionNode>): IntentionNode[] {
+    return [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
+      }),
+      gnode({
+        id: "strategy-cited",
+        kind: "strategy",
+        clarifications: [
+          {
+            question: "Why are ids lazy?",
+            answer: "Because only cited entries need one. 2026-08-04",
+            id: "why-lazy",
+          },
+        ],
+      }),
+      gnode({ id: "strategy-citer", kind: "strategy", ...citer }),
+    ];
+  }
+
+  it("Rule 21: accepts a citation that resolves to a clarification id on the cited node", () => {
+    const nodes = citationNodes({
+      statement: "Follows from `strategy-cited#why-lazy`, which settled the question.",
+    });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 21: rejects a citation whose slug names no clarification on the cited node", () => {
+    const nodes = citationNodes({
+      statement: "Follows from `strategy-cited#no-such-slug`.",
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-citer: statement cites "strategy-cited#no-such-slug" but strategy-cited has no clarification with id "no-such-slug"/,
+    );
+  });
+
+  it("Rule 21: reports the field a dangling citation was found in (rationale, clarifications)", () => {
+    const nodes = citationNodes({
+      rationale: "See strategy-cited#gone.",
+      clarifications: [
+        {
+          question: "Does strategy-cited#absent still hold?",
+          answer: "Yes, per strategy-cited#why-lazy. 2026-08-04",
+          id: null,
+        },
+      ],
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-citer: rationale cites "strategy-cited#gone"/,
+    );
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-citer: clarifications\[0\]\.question cites "strategy-cited#absent"/,
+    );
+    // The resolving citation in the answer is NOT reported.
+    expect(() => validateGraph(nodes)).not.toThrow(/clarifications\[0\]\.answer/);
+  });
+
+  it("Rule 21: ignores a `#` whose preceding token is not a real node id", () => {
+    const nodes = citationNodes({
+      statement: "Recurred as #1170 and again in #123; see docs/page#some-anchor and #foo.",
+      rationale: "Also https://example.com/guide#install and a markdown heading marker.",
+    });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 21: resolves and dangles citations inside attributes.conditions entries", () => {
+    const ok = citationNodes({
+      attributes: {
+        status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        conditions: ["Holds while `strategy-cited#why-lazy` stands.", 42],
+      },
+    });
+    expect(() => validateGraph(ok)).not.toThrow();
+
+    const bad = citationNodes({
+      attributes: {
+        status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        conditions: ["First condition.", "Breaks if `strategy-cited#dropped` is retired."],
+      },
+    });
+    expect(() => validateGraph(bad)).toThrow(
+      /strategy-citer: attributes\.conditions\[1\] cites "strategy-cited#dropped" but strategy-cited has no clarification with id "dropped"/,
+    );
+  });
 });
 
 describe("validateGraphProseRefs", () => {
@@ -1875,7 +1974,7 @@ describe("validateGraphProseRefs", () => {
       pnode({
         id: "tactic-a",
         kind: "tactic",
-        clarifications: [{ question: "q", answer: "Depends on `tactic-missing`." }],
+        clarifications: [{ question: "q", answer: "Depends on `tactic-missing`.", id: null }],
       }),
     ];
     expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
@@ -1972,7 +2071,7 @@ describe("validateGraphProseRefs", () => {
       pnode({
         id: "tactic-b",
         kind: "tactic",
-        clarifications: [{ question: "q", answer: "Also `tactic-y`." }],
+        clarifications: [{ question: "q", answer: "Also `tactic-y`.", id: null }],
       }),
     ];
     let caught: unknown;

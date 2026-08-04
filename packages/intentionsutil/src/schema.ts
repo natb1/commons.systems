@@ -1101,6 +1101,79 @@ function checkAttentionTierNamespace(node: IntentionNode, problems: string[]): v
 }
 
 /**
+ * A `<node-id>#<slug>` clarification citation. The prefix group is deliberately
+ * a LOOSE id-shaped token (not a kind-prefix alternation like `id-refs.ts`'s
+ * `idShape`): membership in the real id set is what decides whether a match is
+ * a citation at all, so the regex only has to be permissive enough to capture
+ * every possible id and precise enough not to swallow surrounding punctuation.
+ *
+ * The `(?<![\w-])` / `(?![\w-])` boundaries are borrowed from `id-refs.ts` so a
+ * citation embedded in a longer identifier never matches. A bare `#123` GitHub
+ * issue ref has no id-shaped token immediately before the `#`, so it cannot
+ * match at all; a `#fragment` in a URL matches only if the token before it
+ * happens to be a real node id.
+ */
+const CLARIFICATION_CITATION_RE =
+  /(?<![\w-])([a-z0-9]+(?:-[a-z0-9]+)*)#([a-z0-9]+(?:-[a-z0-9]+)*)(?![\w-])/g;
+
+/** Every string a node's clarification citations may appear in, labeled for reporting. */
+function citationScanFields(node: IntentionNode): Array<{ field: string; text: string }> {
+  const fields: Array<{ field: string; text: string }> = [
+    { field: "statement", text: node.statement },
+  ];
+  if (node.rationale !== null) fields.push({ field: "rationale", text: node.rationale });
+  node.clarifications.forEach((c, i) => {
+    fields.push({ field: `clarifications[${i}].question`, text: c.question });
+    fields.push({ field: `clarifications[${i}].answer`, text: c.answer });
+  });
+  // `attributes` is Record<string, unknown>, so `conditions` (a kind-specific
+  // strategy attribute) is untyped here — scan it only when it really is an
+  // array, and skip non-string entries rather than coercing them.
+  const conditions = node.attributes.conditions;
+  if (Array.isArray(conditions)) {
+    conditions.forEach((entry, i) => {
+      if (typeof entry === "string") {
+        fields.push({ field: `attributes.conditions[${i}]`, text: entry });
+      }
+    });
+  }
+  return fields;
+}
+
+/**
+ * Rule 21: every `<node-id>#<slug>` clarification citation resolves — the cited
+ * node exists AND carries a clarification whose `id` is `<slug>`. This is the
+ * durable replacement for free-text ordinal references ("clarification 26"),
+ * which silently shifted whenever an entry was inserted above them.
+ *
+ * The grammar is deliberately conservative: a match is only a CITATION when the
+ * token before the `#` is an id that actually exists in the node set being
+ * validated. Anything else — a markdown heading, a `#123` issue reference, a URL
+ * fragment — is skipped silently, so this rule can never false-positive on
+ * ordinary prose. The consequence is that a typo'd node id degrades to "not a
+ * citation" rather than to an error; `validateGraphProseRefs` owns dangling
+ * plain-id references, and this rule owns dangling SLUGS on resolvable ids.
+ */
+function checkClarificationCitations(
+  node: IntentionNode,
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  for (const { field, text } of citationScanFields(node)) {
+    for (const m of text.matchAll(CLARIFICATION_CITATION_RE)) {
+      const [citation, targetId, slug] = m;
+      const target = byId.get(targetId);
+      if (target === undefined) continue; // not a citation — some other use of `#`
+      if (!target.clarifications.some((c) => c.id === slug)) {
+        problems.push(
+          `${node.id}: ${field} cites "${citation}" but ${targetId} has no clarification with id "${slug}"`,
+        );
+      }
+    }
+  }
+}
+
+/**
  * Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
  * flags every node that participates in a cycle (a tactic transitively blocked
  * by itself). Dangling edges are reported by rule 13, not traversed.
@@ -1214,6 +1287,15 @@ function checkBlockedByCycles(
  *      check deliberately uses the own tier, not the effective one: an
  *      effective-tier check would cascade, invalidating every boosted
  *      descendant the moment any ancestor gained a mark.
+ *  21. Every `<node-id>#<slug>` clarification citation resolves: the cited node
+ *      exists and carries a clarification whose `id` is `<slug>`. Citations are
+ *      scanned in `statement`, `rationale`, every `clarifications[].question`
+ *      and `.answer`, and every string entry of `attributes.conditions`. A `#`
+ *      whose preceding token is NOT a real node id is not a citation at all and
+ *      is skipped silently, so markdown headings, `#123` issue references, and
+ *      URL fragments never false-positive. This replaces free-text ordinal
+ *      references ("clarification 26"), which shifted on insertion above them
+ *      with nothing validating them.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -1264,6 +1346,8 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkTierMarkShape(node, problems);
     // Rule 20: attention.tier tags the node's own tier namespace.
     checkAttentionTierNamespace(node, problems);
+    // Rule 21: <node-id>#<slug> clarification citations resolve.
+    checkClarificationCitations(node, byId, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkBlockedByCycles(nodes, byId, problems);
