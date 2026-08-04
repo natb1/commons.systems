@@ -79,7 +79,34 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "All 3 needs-main residue items are Verifiability: WAIT, awaiting a day
+    of post-merge dispatch-tick traffic. Source PR #3042 merged
+    2026-08-04T16:48:30Z (~17 min before this check). journalctl -u
+    dispatch-tick --since <merge-time> returned zero entries -- no ticks have
+    run yet, so none of (1) the state-aware UNHEALED-clobber detect re-windowed
+    to since-merge, (2) a stale-diagnosis grep, or (3) a parked-count
+    cross-check can be evaluated yet. Ran the full-window UNHEALED detect
+    anyway: it found 2 UNHEALED rows on tactic-office-hours-select-fresh-main
+    (restore-from=69cf82b3 gap=809s, restore-from=22aab4cf gap=357s), but both
+    predate this PR's merge -- pre-existing interim-mitigation debt from before
+    the fix landed, not evidence against the fix, and out of this node's own
+    residue scope. Re-check after ~2026-08-05T16:48Z (a day of tick traffic)."
+  since: 2026-08-04
+  recommendation: "No author decision needed -- re-selection only, once enough
+    post-merge dispatch-tick traffic has accumulated (target ~2026-08-05T16:48Z
+    or later). Re-run: (1) the state-aware UNHEALED detect script from this
+    node's 'Interim mitigation' section, re-windowed to
+    --since=2026-08-04T16:48:30Z, require zero UNHEALED rows; (2) journalctl -u
+    dispatch-tick --since 2026-08-04T16:48:30Z | grep stale-diagnosis, confirm
+    any hits self-heal on a later tick; (3) journalctl -u dispatch-tick --since
+    2026-08-04T16:48:30Z | grep 'lib-frozen-session-park: parked ', confirm
+    nonzero and parked_count matches. Separately, the 2 pre-existing UNHEALED
+    rows on tactic-office-hours-select-fresh-main (gaps 809s/357s, both
+    pre-dating this PR) remain from before the fix landed and can be healed via
+    this node's own 'Interim mitigation' step 2 whenever convenient -- unrelated
+    to closing this residue."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
