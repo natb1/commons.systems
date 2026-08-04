@@ -231,6 +231,12 @@ fs_park_calls() {
   printf '%s' "$c"
 }
 
+fs_park_arg() {
+  # fs_park_arg <n> — the nth positional argument of the FIRST park-node call.
+  # Sibling of td_park_arg below.
+  grep '^ARG=' "$FS_PARKLOG" | sed -n "${1}p" | sed 's/^ARG=//'
+}
+
 fs_err_count() {
   local c
   c=$(grep -c -- "$1" <<<"$FS_ERR") || c=0
@@ -255,8 +261,8 @@ fs_install_claude 0
 fs_run
 assert_eq "park: sweep returns 0" "0" "$FS_RC"
 assert_eq "park: park-node invoked exactly once" "1" "$(fs_park_calls)"
-assert_eq "park: park-node received 3 positional args" "ARGC=3" "$(grep '^ARGC=' "$FS_PARKLOG")"
-assert_eq "park: node id is \$1" "tactic-frozen-one" "$(grep '^ARG=' "$FS_PARKLOG" | head -n1 | sed 's/^ARG=//')"
+assert_eq "park: park-node received 5 positional args" "ARGC=5" "$(grep '^ARGC=' "$FS_PARKLOG")"
+assert_eq "park: node id is \$3 (after --base <id>=<sha>)" "tactic-frozen-one" "$(fs_park_arg 3)"
 assert_eq "park: stderr reports the park" "yes" "$(fs_contains 'parked tactic-frozen-one (denied-command-frozen')"
 assert_eq "park: one decision record, disposition=parked" "parked" "$(fs_log_dispositions)"
 assert_eq "park: the call carries the short landing-lock wait" "LOCK=60" "$(grep '^LOCK=' "$FS_PARKLOG")"
@@ -312,7 +318,7 @@ assert_eq "already-parked: sweep returns 0" "0" "$FS_RC"
 assert_eq "already-parked: stderr reports the skip" "yes" "$(fs_contains 'skipping tactic-already (already parked to office_hours)')"
 assert_eq "already-parked: exactly one park-node invocation" "1" "$(fs_park_calls)"
 assert_eq "already-parked: the body-mention node is the one parked" "tactic-body-mention" \
-  "$(grep '^ARG=' "$FS_PARKLOG" | head -n1 | sed 's/^ARG=//')"
+  "$(fs_park_arg 3)"
 fs_teardown
 
 # --- Test 5: no blocked sessions at all --------------------------------------
@@ -576,7 +582,7 @@ assert_eq "dup-pair: stderr reports the duplicate hold" "yes" \
   "$(fs_contains 'keeping tactic-dup-pair (2 live sessions registered under this node name')"
 assert_eq "dup-pair: exactly one park-node invocation" "1" "$(fs_park_calls)"
 assert_eq "dup-pair: the lone frozen worker is the one parked" "tactic-lone" \
-  "$(grep '^ARG=' "$FS_PARKLOG" | head -n1 | sed 's/^ARG=//')"
+  "$(fs_park_arg 3)"
 fs_teardown
 
 # --- Test 18: the grace boundary is inclusive (idle == grace parks) -----------
@@ -741,9 +747,16 @@ td_write_park_node() {
 } >> "$TD_PARKLOG"
 sleep $sleep_s
 if [ "$rc" = 0 ] && [ "$mode" != none ]; then
-  # The sweep may prefix the positionals with '--pr <n>'.
+  # The sweep prefixes the positionals with leading flags ('--pr <n>',
+  # '--base <id>=<sha>'). Skip any number of them, exactly as park-node's own
+  # leading-flags-only parse does, so this fake survives a changed flag set.
+  while [ "\$#" -gt 0 ]; do
+    case "\$1" in
+      --*) shift 2 ;;
+      *) break ;;
+    esac
+  done
   node="\$1"
-  [ "\$node" = "--pr" ] && node="\$3"
   f="$TD_REPO/intentions/\$node.md"
   case "$mode" in
     land)   sed -i 's/^office_hours: null\$/office_hours:\n  reason: landed by the fake park-node\n  recommendation: null/' "\$f" ;;
@@ -906,7 +919,7 @@ td_install_claude 0
 td_run
 assert_eq "terminal: sweep returns 0" "0" "$TD_RC"
 assert_eq "terminal: park-node invoked exactly once" "1" "$(td_park_calls)"
-assert_eq "terminal: node id is \$1" "tactic-terminal-one" "$(td_park_arg 1)"
+assert_eq "terminal: node id is \$3 (after --base <id>=<sha>)" "tactic-terminal-one" "$(td_park_arg 3)"
 assert_eq "terminal: stderr reports the park" "yes" \
   "$(td_contains 'parked tactic-terminal-one (terminal-without-disposition after 2000s')"
 assert_eq "terminal: one decision record, disposition=parked" "parked" "$(td_log_dispositions)"
@@ -947,7 +960,7 @@ assert_eq "already-parked: sweep returns 0" "0" "$TD_RC"
 assert_eq "already-parked: stderr reports the skip" "yes" \
   "$(td_contains 'skipping tactic-td-already (already parked to office_hours)')"
 assert_eq "already-parked: exactly one park-node invocation" "1" "$(td_park_calls)"
-assert_eq "already-parked: the body-mention node is the one parked" "tactic-td-body-mention" "$(td_park_arg 1)"
+assert_eq "already-parked: the body-mention node is the one parked" "tactic-td-body-mention" "$(td_park_arg 3)"
 td_teardown
 
 # --- Test 23: idle below the grace is observed, not parked -------------------
@@ -1051,9 +1064,9 @@ td_install_claude 0
 td_run
 assert_eq "escalation: sweep returns 0" "0" "$TD_RC"
 assert_eq "escalation: park-node invoked once" "1" "$(td_park_calls)"
-assert_eq "escalation: three positional args" "ARGC=3" "$(grep '^ARGC=' "$TD_PARKLOG")"
-assert_eq "escalation: reason is the worker's own text" "the worker's own reason" "$(td_park_arg 2)"
-assert_eq "escalation: recommendation is the worker's own text" "the worker's own recommendation" "$(td_park_arg 3)"
+assert_eq "escalation: five positional args" "ARGC=5" "$(grep '^ARGC=' "$TD_PARKLOG")"
+assert_eq "escalation: reason is the worker's own text" "the worker's own reason" "$(td_park_arg 4)"
+assert_eq "escalation: recommendation is the worker's own text" "the worker's own recommendation" "$(td_park_arg 5)"
 assert_eq "escalation: the reason marker was removed" "gone" \
   "$([[ -e "$TD_JOBS/efb0aaaa/office-hours-reason" ]] && printf 'present' || printf 'gone')"
 assert_eq "escalation: the recommendation marker was removed" "gone" \
@@ -1077,7 +1090,7 @@ td_install_claude 0
 td_run
 assert_eq "resumed: sweep returns 0" "0" "$TD_RC"
 assert_eq "resumed: park-node invoked once" "1" "$(td_park_calls)"
-assert_eq "resumed: the worker's own reason was recovered" "the resumed worker's own reason" "$(td_park_arg 2)"
+assert_eq "resumed: the worker's own reason was recovered" "the resumed worker's own reason" "$(td_park_arg 4)"
 td_teardown
 
 # --- Test 28c: a job dir owned by another node is neither read nor deleted ----
@@ -1100,7 +1113,7 @@ td_run
 assert_eq "foreign-job: sweep returns 0" "0" "$TD_RC"
 assert_eq "foreign-job: park-node invoked once" "1" "$(td_park_calls)"
 assert_eq "foreign-job: the other session's reason was NOT used" "yes" \
-  "$(case "$(td_park_arg 2)" in *"ended without declaring a disposition"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+  "$(case "$(td_park_arg 4)" in *"ended without declaring a disposition"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 assert_eq "foreign-job: stderr reports the ownership mismatch" "yes" \
   "$(td_contains 'does not belong to tactic-td-victim (state.json name=tactic-someone-else)')"
 assert_eq "foreign-job: the other session's marker survives" "present" \
@@ -1122,7 +1135,7 @@ assert_eq "bad-jobid: park-node invoked once" "1" "$(td_park_calls)"
 assert_eq "bad-jobid: stderr reports the unusable job id" "yes" \
   "$(td_contains 'terminal worker tactic-td-badjob has no usable job id (id=../escape)')"
 assert_eq "bad-jobid: the synthesized reason is used" "yes" \
-  "$(case "$(td_park_arg 2)" in *"ended without declaring a disposition"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+  "$(case "$(td_park_arg 4)" in *"ended without declaring a disposition"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 td_teardown
 
 # --- Test 29: office-hours-pr is threaded as --pr; a non-numeric one is not --
@@ -1139,10 +1152,10 @@ td_write_job_file "fac0aaaa" "tactic-td-pr" office-hours-pr "2994"
 td_install_claude 0
 td_run
 assert_eq "pr: sweep returns 0" "0" "$TD_RC"
-assert_eq "pr: five positional args" "ARGC=5" "$(grep '^ARGC=' "$TD_PARKLOG")"
+assert_eq "pr: seven positional args" "ARGC=7" "$(grep '^ARGC=' "$TD_PARKLOG")"
 assert_eq "pr: --pr is first" "--pr" "$(td_park_arg 1)"
 assert_eq "pr: the number is second" "2994" "$(td_park_arg 2)"
-assert_eq "pr: the node id is third" "tactic-td-pr" "$(td_park_arg 3)"
+assert_eq "pr: the node id is fifth (after --pr <n> --base <id>=<sha>)" "tactic-td-pr" "$(td_park_arg 5)"
 assert_eq "pr: the pr marker was removed on success" "gone" \
   "$([[ -e "$TD_JOBS/fac0aaaa/office-hours-pr" ]] && printf 'present' || printf 'gone')"
 td_teardown
@@ -1158,8 +1171,8 @@ td_write_job_file "abd0aaaa" "tactic-td-badpr" office-hours-pr "not-a-number"
 td_install_claude 0
 td_run
 assert_eq "bad-pr: sweep returns 0" "0" "$TD_RC"
-assert_eq "bad-pr: three positional args (no --pr)" "ARGC=3" "$(grep '^ARGC=' "$TD_PARKLOG")"
-assert_eq "bad-pr: the node id is first" "tactic-td-badpr" "$(td_park_arg 1)"
+assert_eq "bad-pr: five positional args (no --pr)" "ARGC=5" "$(grep '^ARGC=' "$TD_PARKLOG")"
+assert_eq "bad-pr: the node id is third" "tactic-td-badpr" "$(td_park_arg 3)"
 td_teardown
 
 # --- Test 30: with no job dir the reason is synthesized ----------------------
@@ -1175,9 +1188,9 @@ td_run
 assert_eq "synth: sweep returns 0" "0" "$TD_RC"
 assert_eq "synth: park-node invoked once" "1" "$(td_park_calls)"
 assert_eq "synth: the synthesized reason names the missing disposition" "yes" \
-  "$(case "$(td_park_arg 2)" in *"ended without declaring a disposition"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+  "$(case "$(td_park_arg 4)" in *"ended without declaring a disposition"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 assert_eq "synth: the synthesized recommendation warns against a bare reap" "yes" \
-  "$(case "$(td_park_arg 3)" in *"restarts the churn loop"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+  "$(case "$(td_park_arg 5)" in *"restarts the churn loop"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 td_teardown
 
 # --- Test 31: a park-node failure retains the markers for the next tick ------
@@ -1414,7 +1427,7 @@ assert_eq "td-live-dup: stderr reports the live hold" "yes" \
   "$(td_contains 'keeping tactic-td-held (live sessions still registered under this node name')"
 assert_eq "td-live-dup: exactly one park-node invocation" "1" "$(td_park_calls)"
 assert_eq "td-live-dup: the lone terminal worker is the one parked" "tactic-td-alone" \
-  "$(td_park_arg 1)"
+  "$(td_park_arg 3)"
 td_teardown
 
 # --- Test 40: an unqueryable ACTIVE view aborts the sweep --------------------
@@ -1469,7 +1482,7 @@ td_install_claude 0
 td_run
 assert_eq "td-nullid: sweep returns 0" "0" "$TD_RC"
 assert_eq "td-nullid: park-node invoked once" "1" "$(td_park_calls)"
-assert_eq "td-nullid: the node id survived the parse" "tactic-td-nullid" "$(td_park_arg 1)"
+assert_eq "td-nullid: the node id survived the parse" "tactic-td-nullid" "$(td_park_arg 3)"
 assert_eq "td-nullid: stderr reports the unusable job id" "yes" \
   "$(td_contains 'terminal worker tactic-td-nullid has no usable job id')"
 td_teardown
