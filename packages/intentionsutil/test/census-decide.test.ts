@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateNode, type IntentionNode } from "../src/schema.js";
-import { verifyCompletion, partitionDonePresent } from "../scripts/census-decide.js";
+import { verifyCompletion, isCensusDefectNode, partitionDonePresent } from "../scripts/census-decide.js";
 
 // tactic-census-scripted-tick Unit 1 — the pure decision layer for the
 // scripted census dispatch-tick step. verifyCompletion and
@@ -101,6 +101,31 @@ describe("verifyCompletion", () => {
   });
 });
 
+describe("isCensusDefectNode", () => {
+  it("is true for a node carrying the attributes.census_defect object", () => {
+    const n = doneTactic("tactic-census-defect-x", {
+      attributes: { census_defect: { target: "tactic-x", reason: "no-execution", detected: "2026-08-04" } },
+    });
+    expect(isCensusDefectNode(n)).toBe(true);
+  });
+
+  it("is false for a node with no census_defect attribute", () => {
+    expect(isCensusDefectNode(doneTactic("tactic-plain"))).toBe(false);
+  });
+
+  it("keys off the attribute, NOT the id prefix", () => {
+    // Borrowing the naming convention does not make a node census bookkeeping.
+    const impostor = doneTactic("tactic-census-defect-hand-authored");
+    expect(isCensusDefectNode(impostor)).toBe(false);
+
+    // ...and a census-minted defect stays recognized under any id.
+    const renamed = doneTactic("tactic-renamed-away-from-the-convention", {
+      attributes: { census_defect: { target: "tactic-x", reason: "no-pr", detected: "2026-08-04" } },
+    });
+    expect(isCensusDefectNode(renamed)).toBe(true);
+  });
+});
+
 describe("partitionDonePresent", () => {
   it("puts a verified real-merge done node in prunable", () => {
     const nodes = [
@@ -163,6 +188,30 @@ describe("partitionDonePresent", () => {
     const p = partitionDonePresent(nodes);
     expect(p.prunable).toEqual([]);
     expect(p.defects).toEqual([{ id: "tactic-f", reason: "unverified-merge" }]);
+  });
+
+  it("puts a CLOSED census-defect node in prunable even though it does not verify", () => {
+    // The regress the census QA finding reproduced: a defect node closed the
+    // way its own body instructs has execution: null, so verifyCompletion is
+    // false — without the isCensusDefectNode arm it becomes a defect target and
+    // census mints tactic-census-defect-census-defect-… forever.
+    const closed = doneTactic("tactic-census-defect-broken", {
+      attributes: { census_defect: { target: "tactic-broken", reason: "no-execution", detected: "2026-08-04" } },
+    });
+    expect(verifyCompletion(closed)).toBe(false);
+
+    const p = partitionDonePresent([strategy(), closed]);
+    expect(p.prunable).toEqual(["tactic-census-defect-broken"]);
+    expect(p.defects).toEqual([]);
+  });
+
+  it("leaves an OPEN census-defect node in neither bucket", () => {
+    const open = openTactic("tactic-census-defect-broken", {
+      attributes: { census_defect: { target: "tactic-broken", reason: "no-execution", detected: "2026-08-04" } },
+    });
+    const p = partitionDonePresent([strategy(), open]);
+    expect(p.prunable).toEqual([]);
+    expect(p.defects).toEqual([]);
   });
 
   it("excludes a non-done node from both prunable and defects", () => {

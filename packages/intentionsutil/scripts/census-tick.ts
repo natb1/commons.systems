@@ -2,12 +2,23 @@
 // step (tactic-census-scripted-tick Unit 2). Consumes the pure decision layer
 // (`census-decide`'s `partitionDonePresent`) and applies the mutations:
 //
-//   - prune every done-present node whose completion verifies mechanically,
-//     repairing the inbound `blocked_by` edges that would otherwise dangle
-//     (validateGraph rule 13),
+//   - prune every done-present node whose completion verifies mechanically —
+//     PLUS every done-present census-defect node, which census retires without
+//     merge evidence because it minted the node itself (see
+//     `census-decide.ts`'s `partitionDonePresent`) — repairing the inbound
+//     `blocked_by` edges that would otherwise dangle (validateGraph rule 13),
 //   - mint one `tactic-census-defect-*` node per done-present node whose
 //     completion does NOT verify, deduped by the deterministic defect id so a
 //     repeated tick surfaces each defect exactly once.
+//
+// Acceptable known residue: pruning a defect node discards its own completion
+// record — census keeps no evidence that the defect was resolved, or by whom.
+// That is by design and costs nothing recoverable. The defect node is
+// bookkeeping census minted; the real evidence of the FIX lives on the target's
+// `execution`, which census re-checks every tick. And because mint-dedup is by
+// file existence, a defect closed while its target is still unverifiable is
+// simply re-minted on the next tick — so the residue is a lost audit trail on a
+// throwaway record, never a lost defect.
 //
 // Structural analog of `reconcile-graph.ts`: a decision-and-mutation TS module
 // that does its own file writes/deletes and prints the graph-commit plan as
@@ -27,7 +38,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes, readNode, writeNode } from "../src/store.js";
 import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
 import { inboundBlockers } from "../src/transitions.js";
-import { partitionDonePresent, type DefectReason } from "./census-decide.js";
+import { isCensusDefectNode, partitionDonePresent, type DefectReason } from "./census-decide.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
@@ -198,11 +209,31 @@ export function censusTick(args: Args): Plan {
   // an earlier tick is reported, not re-minted.
   for (const { id: targetId, reason } of defects) {
     const defectId = defectIdFor(targetId);
+    const target = byId.get(targetId);
+
+    // Defense in depth against the closed-defect self-regress: a census-minted
+    // defect node must NEVER itself become a defect target. `partitionDonePresent`
+    // already routes a done defect node to `prunable`, so this only fires if
+    // that classification is ever weakened — and if it did fire without this
+    // guard, the mint would produce `tactic-census-defect-census-defect-<x>`
+    // (`defectIdFor` strips only ONE leading `tactic-`/`strategy-`), which the
+    // next tick would compound again, unbounded.
+    if (target !== undefined && isCensusDefectNode(target)) continue;
+
+    // Same-batch id collision: the deletion loop above already removed the
+    // pruned files, so `existsSync` cannot see a defect node pruned THIS tick.
+    // `prunableSet` is exactly the set of ids that loop deleted. When a pruned
+    // defect's target is still unverifiable, the mint loop would otherwise
+    // re-create the very id sitting in `plan.prune`, and the batch would hand
+    // graph-commit the same id as both `--prune <id>` and a bare create arg.
+    // Skip it this tick; the next tick re-mints it cleanly — which is the right
+    // outcome, because the target is still broken and the defect is still owed.
+    if (prunableSet.has(defectId)) continue;
+
     if (existsSync(join(args.dir, `${defectId}.md`))) {
       plan.defectsExisting.push(defectId);
       continue;
     }
-    const target = byId.get(targetId);
     writeNode(args.dir, defectNode(defectId, targetId, reason, target, args.date));
     const statement = defectStatement(targetId, reason, target);
     spliceBody(

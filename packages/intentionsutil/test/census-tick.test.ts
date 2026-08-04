@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -134,6 +134,99 @@ describe("censusTick", () => {
     expect(second.defectsMinted).toEqual([]);
     expect(second.defectsExisting).toEqual(["tactic-census-defect-unverified"]);
     expect(second.defectCount).toBe(1);
+  });
+
+  // The closed-defect self-regress the census QA finding reproduced: a defect
+  // node closed the way its OWN generated body instructs ("If <target> already
+  // verifies and was pruned, close this node (phase → done)") is itself a
+  // done-present node with execution: null, so it used to be classified as a
+  // fresh defect and minted tactic-census-defect-census-defect-<target> —
+  // unbounded, one generation per tick.
+  describe("closed census-defect nodes", () => {
+    /** A census-minted defect node, closed (phase done, execution still null). */
+    function closedDefect(dir: string, targetId: string, reason = "no-execution"): string {
+      const id = `tactic-census-defect-${targetId.replace(/^(tactic|strategy)-/, "")}`;
+      node(dir, {
+        id,
+        kind: "tactic",
+        phase: "done",
+        execution: null,
+        attributes: { census_defect: { target: targetId, reason, detected: "2026-08-01" } },
+      });
+      return id;
+    }
+
+    it("prunes a closed defect node and mints nothing for it", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      // The target was fixed and pruned by an earlier tick; only the closed
+      // defect node remains.
+      const defectId = closedDefect(dir, "tactic-broken");
+
+      const plan = censusTick({ dir, date: "2026-08-04" });
+
+      expect(plan.prune).toEqual([defectId]);
+      expect(plan.defectsMinted).toEqual([]);
+      expect(plan.defectsExisting).toEqual([]);
+      expect(plan.defectCount).toBe(0);
+      expect(existsSync(join(dir, `${defectId}.md`))).toBe(false);
+      expect(existsSync(join(dir, "tactic-census-defect-census-defect-broken.md"))).toBe(false);
+    });
+
+    it("is a clean no-op on a second run — no second-order defect id anywhere", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      closedDefect(dir, "tactic-broken");
+
+      censusTick({ dir, date: "2026-08-04" });
+      const second = censusTick({ dir, date: "2026-08-05" });
+
+      expect(second).toEqual({
+        prune: [],
+        edit: [],
+        defectsMinted: [],
+        defectsExisting: [],
+        defectCount: 0,
+      });
+      // Nothing named census-defect-census-defect survived either generation.
+      expect(readdirSync(dir).filter((f) => f.includes("defect-census-defect"))).toEqual([]);
+      expect(readdirSync(dir).sort()).toEqual(["kind-tactic.md"]);
+    });
+
+    it("prunes without re-minting in the same batch when the target is still unverified", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      // Closed prematurely: the target is STILL done-but-unverifiable, so this
+      // tick both prunes the defect node and would otherwise re-mint its id.
+      node(dir, {
+        id: "tactic-broken",
+        kind: "tactic",
+        phase: "done",
+        execution: { branch: "b", pr: 7, attempts: {}, markers: [], strategy_fingerprint: null },
+      });
+      const defectId = closedDefect(dir, "tactic-broken", "unverified-merge");
+
+      const plan = censusTick({ dir, date: "2026-08-04" });
+
+      // The id appears as a prune and NOWHERE else — handing graph-commit the
+      // same id as both `--prune <id>` and a create arg is the bug being fixed.
+      expect(plan.prune).toEqual([defectId]);
+      expect(plan.defectsMinted).toEqual([]);
+      expect(plan.defectsExisting).toEqual([]);
+      expect(plan.defectCount).toBe(1);
+      expect(existsSync(join(dir, `${defectId}.md`))).toBe(false);
+
+      // The defect is not lost: the next tick re-mints it cleanly, because the
+      // target is still broken and dedup is by file existence.
+      const next = censusTick({ dir, date: "2026-08-05" });
+      expect(next.prune).toEqual([]);
+      expect(next.defectsMinted).toEqual([defectId]);
+      expect(readNode(dir, defectId).attributes.census_defect).toEqual({
+        target: "tactic-broken",
+        reason: "unverified-merge",
+        detected: "2026-08-05",
+      });
+    });
   });
 
   it("prunes both co-pruned nodes without editing the blocker that is itself deleted", () => {
