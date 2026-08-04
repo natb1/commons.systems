@@ -100,8 +100,17 @@ attention:
     5.33 undecomposed baseline. Simulated over the live store before writing: 0
     tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-graph-router-conflict-routing
+  pr: 3038
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by:
   - tactic-dispatch-conflict-branch-merge-lane
