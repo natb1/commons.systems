@@ -454,3 +454,23 @@ that the fleet parked itself; check `graph-auto-merge:96` against `:119` first.
 `office_hours` filter crept into `reconcile-graph.ts` or `reconcile-graph-merged`
 — Unit 2's whole purpose is that the reconcilers stay ungated, and the
 regression test plus the two comments are the record of that ruling.
+
+## needs-main residue
+
+- id: 11 — Preventative-only hardening: no live incident to reproduce
+  - URL path: current
+  - Expected outcome: QA does not manufacture a false reproduction of a
+    nonexistent incident; the backward-audit scoping question is surfaced to a
+    human rather than silently answered.
+  - Finding: this PR frames itself as closing a gap that has not been observed
+    firing in production (the PR #3006 timeline was investigated and confirmed
+    benign — a park set post-merge, at the downstream `main-qa` phase, not
+    before). There is no historical incident to reproduce, so the acceptance
+    evidence is the two test suites (`test-graph-auto-merge.sh` 25/25,
+    `packages/intentionsutil` vitest 784/784), not a before/after production
+    comparison. Open question: is a one-time backward audit of already-merged
+    node-lane PRs against their nodes' park history worth running as separate
+    follow-up work?
+  - Verifiability: AUTHOR — whether to invest in a backward audit is a
+    scoping/prioritization call (the user's product intent), not an objective
+    check any tool can settle.
