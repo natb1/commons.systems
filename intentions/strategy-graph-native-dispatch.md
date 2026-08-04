@@ -3975,6 +3975,198 @@ clarifications:
       tactic-qa-main-verifiability-sort-criterion; and note that the lane is not
       quiescent -- at least one in-flight main-qa node is being evaluated under
       the old wording while the predicate sites are edited."
+  - question: How large is the pace_exempt marked set relative to the worker
+      ceiling, as measured during the 2026-08-04
+      tactic-pace-exempt-ceiling-fanout finalize round?
+    answer: "(Recorded 2026-08-04 /align-tactics round on
+      tactic-pace-exempt-ceiling-fanout.) Measured input for the not-yet-armed
+      pace-exempt marked-set containment condition, taken at HEAD of intentions/
+      this round: 16 of 491 nodes carry `pace_exempt: true` in frontmatter — an
+      earlier count of 18 was inflated by body-prose matches;
+      strategy-graph-native-dispatch and strategy-main-health both carry
+      `pace_exempt: false`. Of the 16, four are phase:done and one is an
+      unplanned draft (phase:null), leaving 11 in working phases (10 main-qa, 1
+      implement) and therefore router-selectable. Against the
+      max_concurrent_workers default of 8 (dispatch.config/target-workers.json
+      is machine-local and absent in a clean checkout; default documented at
+      dispatch-target-workers:106), the live marked set already exceeds the
+      ceiling in headcount — so once the fill-to-ceiling amendment of 2026-07-31
+      is implemented, a closed weekly pace curve can keep the whole autonomous
+      ceiling occupied by pace-exempt work indefinitely rather than admitting
+      one worker. Recorded as an observation toward the author's eventual band
+      declaration, not as a gate on the fan-out fix: the fix computes headroom,
+      it does not change how many nodes are marked."
+  - question: What does the autonomous at-cap pace-exempt lane do when
+      dispatch-target-workers --max returns a non-numeric or unreadable ceiling?
+    answer: (Observed 2026-08-04 /align-tactics round on
+      tactic-pace-exempt-ceiling-fanout.) The autonomous at-cap pace-exempt lane
+      fails CLOSED on an unreadable or non-numeric max_concurrent_workers —
+      treat it as an internal error and select nothing, mirroring
+      dispatch-select-tick's two existing sibling guards (the autonomous block's
+      non-numeric TARGET_N exit 2 at :635-643, and the --manual branch's
+      combined TARGET_N/MAX_WORKERS exit 2 at :767-774) — never fall open to a
+      one-worker grant. Derived from the recorded rule that
+      max_concurrent_workers is ABSOLUTE for all autonomous scheduling plus the
+      pause condition's fail-closed posture on config read failure. Recorded
+      because graph-select-target's separate --standalone path (:347-364) takes
+      the opposite posture, failing open to --top 1 on a non-numeric ceiling;
+      that divergence is scoped to that caller and is not license for the
+      autonomous lane to do the same.
+  - question: "Is the PR-title `<node id>: <description>` condition's CI guard
+      already enforced at HEAD?"
+    answer: "(Observed 2026-08-04 /align-tactics round.) The PR-title condition's
+      enforcement half is recorded doctrine, not yet a holding invariant: no
+      check under .github/workflows/ validates PR-title format or node-id
+      resolution, and dispatch-open-pr still takes a free-form --title, so only
+      the branch name carries the node id today. The open node
+      tactic-pr-title-node-id-convention (status: raw, phase: null) is the
+      change that would build the guard. Recorded so a future round reads the
+      condition as declared-but-unenforced rather than as an existing CI gate."
+  - question: Does the 2026-07-27 clarification's stated eligibility consequence --
+      that the strategy is non-decomposable until the two done signal-path
+      terminals (tactic-legacy-router-removal, tactic-phase-skill-node-targets)
+      are pruned -- still hold against current router code?
+    answer: "(Recorded 2026-08-04 /align-tactics round.) No -- superseded by code.
+      router.ts:590-596 tests `children.some((t) => isOpenTactic(t) &&
+      onPath.has(t.id))`, and its in-code comment declares the done-exclusion
+      load-bearing precisely because reconcile-graph writes phase done and no
+      longer prunes, and computeSignalPath does not filter by phase, so a
+      completed child would otherwise sit on the signal path forever and
+      permanently disqualify its serving strategy. Verified 2026-08-04 at
+      origin/main: both on-path non-draft children are phase done, no OPEN
+      non-draft child occupies the signal path, and this strategy passes that
+      gate. Pruning the two done terminals remains graph hygiene but is not an
+      eligibility precondition. The rest of the 2026-07-27 entry's owed
+      reconciliation still stands -- reading is still null and rounds.count is
+      still 0."
+  - question: Is the round-cap guard (rounds.count < 2) and the fresh-reading gate
+      (rounds.last_aligned) actually being enforced across this strategy's many
+      re-evaluation rounds, given rounds.count still reads 0?
+    answer: "(Observed 2026-08-04 /align-tactics round.) rounds.count is still 0 and
+      rounds.last_aligned still null despite a dozen-plus documented
+      re-evaluation rounds since 2026-07-03, so both halves of the round-cap
+      guard recorded in this strategy's first clarification are inert on this
+      node: every round reads 0 < 2 and passes the cap check no matter how many
+      have actually run, and the fresh-reading gate is vacuously satisfied by a
+      null last_aligned rather than by a fresh reading. This is an
+      accounting-write gap in the align round path -- the rounds block is never
+      stamped on completion -- not a doctrine change, and it gates no plan. It
+      does mean 'burning rounds forever' is currently unguarded here in the only
+      place the guard was supposed to bite."
+  - question: What is the current baseline count of this strategy's serving tactics
+      by classification, and can the align-tactics Workflow's own drift-gate
+      on-path count be trusted?
+    answer: "(Measured 2026-08-04 /align-tactics round.) Direct re-run of
+      align-tactics-census.ts against origin/main: 178 tactics serve this
+      strategy, classified 51 open / 11 born-parked / 44 done / 72 draft, i.e.
+      106 non-draft children, of which exactly 2 sit on the computed
+      success-signal path and both are phase done. An earlier round's trimmed
+      sample stated 95 non-draft; treat these 2026-08-04 figures as the
+      baseline. Separately, the align-tactics Workflow's own strategy-mode drift
+      gate (buildDriftPrompt/driftProceed in .claude/workflows/align-tactics.js)
+      has reported an inflated on-path blocking count for this strategy -- '92
+      non-draft children already on its signal path' -- which produced born-park
+      escalations on tactic-bounded-work-in-progress and
+      tactic-office-hours-graph-type-passthrough; the fix sits at
+      tactic-align-tactics-tactic-mode-drift-gate (PR #2982, unmerged), with a
+      likely-duplicate rediscovery at
+      tactic-align-tactics-workflow-tactic-mode-drift-gate (draft) that a future
+      pass should dedup. Until #2982 lands, an on-path count reported by that
+      gate must be re-derived directly rather than trusted."
+  - question: Does trimming this strategy's 180-entry clarifications array for
+      Workflow tool-call size limits violate the recording condition that /align
+      records all context a fresh /align-tactics session needs?
+    answer: "(Observed 2026-08-04 /align-tactics round.) This strategy's
+      clarifications array has grown to 180 entries, and the align-tactics
+      Workflow now inlines only about 3 of them into a round's args to stay
+      inside tool-call size limits. This does not fail the recording condition
+      ('/align records in the graph, at record time, all context a fresh
+      /align-tactics session needs') -- the context is recorded on the node; the
+      loss is delivery-side, at the round's arg-construction boundary. The
+      practical consequence is that a round reasoning only over the inlined
+      sample reasons over roughly 2% of the recorded substance, so drift review
+      and decomposition must read intentions/strategy-graph-native-dispatch.md
+      directly rather than treat the inlined subset as the record. Related
+      in-flight work: tactic-align-tactics-target-node-context-dropped
+      (main-qa)."
+  - question: How does the router handle a node in a state its phase ladder
+      cannot progress from — a terminal session holding its worktree claim, a
+      silently-declined reap, a failed park — and what unifies these with the
+      existing conflict and CI lanes?
+    answer: "(Recorded 2026-08-04 /align interview, author-ratified.) Invalid
+      states get ONE common lane: detect, then an optional mechanical-resolution
+      tier, then an intervention skill session, then an office-hours park as the
+      fallback — generalizing the ad-hoc precedents (the conflict lane's
+      provision-exit-11 detect routing to dispatch-conflict is the worked
+      example; the fix-checks lane and the defensive sweeps are the others).
+      Detection happens at BOTH points: (a) the selection-time occupancy check
+      discriminates occupied-by-terminal (an invalid state — route to the lane)
+      from occupied-by-live (a valid skip), and (b) the existing defensive
+      sweeps become the second detection point, routing to the same lane
+      instead of minting ad-hoc parks. Guards ratified with the pattern: a
+      per-node intervention-attempt cap that parks to office-hours at the cap
+      (the fix-attempt-cap precedent); find-or-create dedup on any follow-ups
+      the lane files; and every mechanical-tier gate fails toward
+      keep/escalate. Fleet-level invalid states with no node to route (an
+      unreadable config value, a red main) instead mint a find-or-create latch
+      node — the tactic-main-red-* shape — that is simultaneously the alarm,
+      the work item, and the dedup key. Implementation retained as drafts
+      tactic-invalid-state-lane and
+      tactic-invalid-state-transcript-intervention."
+  - question: Condition 14 keeps every undeclared terminal exit frozen until an
+      operator manually reaps it because the live session is the only artifact
+      of the failure — does the invalid-state lane change that, and who owns
+      dispatch-self-close's reap line?
+    answer: "(Amended 2026-08-04 /align interview, author-ratified.) Condition
+      14's keep-for-debug is amended: an undeclared terminal exit routes to the
+      invalid-state lane, whose intervention session consumes the debugging
+      artifact autonomously — it reviews the transcript, files the
+      find-or-create root-cause follow-up, then reaps or parks — replacing the
+      wait for a human debugger. The artifact is read, not erased, which is the
+      purpose the freeze existed to serve; freeze-until-operator remains only
+      as the fallback when the intervention itself parks. The
+      declared-but-declined case (claude rm exits 0 while declining, the
+      tactic-self-close-reap-silent-noop defect) needs no doctrine change —
+      condition 14 already licenses that reap; the lane is the escalation when
+      the mechanical reap cannot proceed. Ownership: dispatch-self-close KEEPS
+      its reap as a best-effort fast path;
+      tactic-worker-self-close-configurable's default-off keep-all gate lands
+      on that call site as planned; the lane is the guaranteed net behind both.
+      tactic-self-close-reap-silent-noop's recorded brownfield Step 2 (delete
+      the reap line) is retired."
+  - question: When a parked node's PR merges outside graph-auto-merge and the
+      reconciler advances it to phase done while office_hours stays live — is
+      done-but-parked a valid state?
+    answer: "(Recorded 2026-08-04 /align interview, author ruling.) Yes — phase
+      and office_hours are conceptually orthogonal dimensions: a park means a
+      human owes a decision, and author escalation may be required even after
+      the code lands by whatever means; the merge and the phase advance are
+      orthogonal to that debt. The reconciler stays ungated (per
+      tactic-graph-auto-merge-office-hours-gate Unit 2's design, ratified on PR
+      #3033 item 10 as accepted-behavior). Greenfield consequence: the
+      office-hours queue presents BOTH dimensions — parked entries annotate the
+      node's phase (e.g. phase done, underlying work already merged) so
+      decision-state and work-state read jointly. Presentation follow-up
+      retained as draft tactic-office-hours-queue-phase-annotation."
+  - question: Does the fleet's throughput dial (max_concurrent_workers) need
+      self-expiring deviation machinery so a deliberately temporary throttle
+      cannot silently become permanent?
+    answer: "(Recorded 2026-08-04 /align interview, author ruling.) No — that
+      machinery is unintentional bloat. A deliberate temporary throttle is an
+      INTERVENTION by a session (e.g. a monitor healing the automation), and
+      the graph — not config schema — is where interventions live: the
+      intervening session mints a find-or-create restore node carrying the
+      reason and an event-shaped restore signal (the 2026-08-01 occurrence's
+      condition was an event — the blocking PR merges — not a clock), resolved
+      by monitor/office-hours restoring the cap and closing the node. Config
+      stays a bare standing value; the loader shape does not change; the fleet
+      NEVER writes the operator's config file (read-time resolution only,
+      upholding the 2026-07-11 human/machine config split). Provenance and
+      deviation-detection come from the tactic-dispatch-config-instance-repo
+      migration: the committed value is the standing value, so any local edit
+      reads as a git diff. What remains code-scoped on
+      tactic-worker-cap-config-durability: emit the cap into every select-tick
+      routing decision, so a deviation shows as a deviation in the log."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -4016,11 +4208,50 @@ attention:
     migration is the current focus — lift this strategy and its tactic subtree
     above derived-only ranks (derived terms cap at 2) so router selection works
     the migration first."
+  tier: 1
 phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Two material premises this round's decomposition would depend on are
+    unrecorded and need author ratification before any plan is written. (1)
+    Sensor-name drift: the 2026-07-28 success_signal.sensor amendment left the
+    recorded sensor name (strategy-graph-native-dispatch.md:4052-4054) no longer
+    equal to the registered lifecycle sensor's LIFECYCLE_SENSOR_NAME
+    (read-sensors.ts:437/:640); SensorRegistry.resolve is exact-match with no
+    fallback (sensors.ts:49-59), so read-sensors buckets this node as
+    unregistered (read-sensors.ts:871, 988-990) and reading stays null
+    permanently -- the signal cannot be validated by any number of rounds. The
+    proposed clarification asks the author to ratify ONE sensor (extend
+    readLifecycleReading with a defect-backlog segment and re-point the constant
+    at the amended string) versus TWO sensors (register a separate backlog
+    sensor and amend success_signal.sensor to name it), because either fix edits
+    persistent-layer substance that condition 4 reserves to the /align
+    interview. (2) Unreadable threshold: the amended threshold's 'bounded' term
+    has no declared band -- condition 18 says so in its own text
+    ('not-yet-armed') -- and its 'non-increasing across consecutive census
+    samples' term needs a sample history nothing in the store keeps
+    (align-tactics-census.ts:23-71 is point-in-time;
+    readTacticVelocity/readTokenEconomy window off git log). The proposed
+    clarification asks the author to declare the band (2026-08-04 baseline: 62
+    open+born-parked of 178 serving tactics) and to say where consecutive
+    samples live. Eligibility itself is clean -- office_hours null, reading
+    null, last_aligned null, no OPEN non-draft child on the signal path,
+    rounds.count 0 -- so this is a ratification hold on the strategy's own
+    measurement instrument, not a structural block. Recommend: at one sitting
+    ratify (a) which sensor shape closes the sensor-name drift (extend the
+    existing lifecycle sensor with a defect-backlog segment and re-point
+    LIFECYCLE_SENSOR_NAME at the amended recorded string, versus registering a
+    separate defect-backlog sensor and amending success_signal.sensor to name
+    it), and (b) the maintenance-burden band value plus where consecutive census
+    samples persist (derived from intentions/ git history at read time, on this
+    node, or in a committed samples file) -- then clear this park and re-run
+    /align-tactics strategy-graph-native-dispatch to plan the now-readable
+    instrument work."
+  since: 2026-08-04
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds:
   count: 0

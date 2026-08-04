@@ -60,7 +60,29 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Design ruling — bound WIP in the selector or swap the comparator
+      keys, and does Ruling 17's hold (decide only once the fleet runs at cap)
+      still stand?
+    answer: "(Ruled 2026-08-04 /align interview, superseding Ruling 17's hold.)
+      The WIP bound is ADOPTED: when the count of in-flight tactics is at or
+      above a configured limit, the selector restricts the candidate set to
+      in-flight nodes; below the limit, behavior is unchanged. Edge-case
+      resolutions ratified with it: FAIL OPEN when the restricted set is empty
+      (every in-flight node parked or blocked) — fall through to normal
+      selection, never deadlock at the limit; tier-2 candidates BYPASS the
+      bound (tier remains the preemption escape hatch); parked in-flight nodes
+      count toward the WIP number but stay unselectable (each is a live claim
+      on decaying mergeability); the pace-exempt lane draws from the restricted
+      set. The comparator swap (tier, progression, rank, id) is REJECTED: it
+      permanently changes every ranking decision and silently defeats authored
+      boosts on draft work until the backlog drains. Ruling 17's re-measure
+      (CONFLICTING trend once the fleet demonstrably runs at cap) becomes this
+      node's post-landing VERIFICATION, not a decision precondition. blocked_by
+      records the mechanical WAIT: the /align-tactics tactic-mode finalize is
+      blocked by the workflow drift-gate defect, whose fix is
+      tactic-align-tactics-tactic-mode-drift-gate (PR #2982, phase review).
+      Park cleared on this ruling."
 tooling_goals: []
 success_signal: null
 attention:
@@ -69,13 +91,14 @@ attention:
   rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
     BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
     inbound distributor adds 5.33 — under that cluster's 20.00 and above the
-    5.33 undecomposed baseline. Simulated over the live store before writing:
-    0 tier changes, 0 value drift onto non-target nodes."
+    5.33 undecomposed baseline. Simulated over the live store before writing: 0
+    tier changes, 0 value drift onto non-target nodes."
   tier: 1
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-align-tactics-tactic-mode-drift-gate
 office_hours: null
 pace_exempt: false
 rounds: null

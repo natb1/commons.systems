@@ -13,39 +13,60 @@ rationale: "Confirmed live 2026-08-03 by direct reproduction. THE DEFECT:
   dispatch-self-close ends with `exec \"$CLAUDE_CMD\" rm \"$JOB_ID\"`, and
   treats that exec as the reap. But when the session's worktree cannot be
   verified against a repository, `claude rm` does not remove it — it prints
-  `kept <id> — worktree has files but no repository to verify them against`
-  and exits **0**. Reproduced verbatim against session e2636150. Because the
-  exit status is 0, the Stop hook sees a successful reap, no error is logged,
-  no retry is scheduled, and no detect fires. The session stays registered in
+  `kept <id> — worktree has files but no repository to verify them against` and
+  exits **0**. Reproduced verbatim against session e2636150. Because the exit
+  status is 0, the Stop hook sees a successful reap, no error is logged, no
+  retry is scheduled, and no detect fires. The session stays registered in
   `claude agents --json --all` forever. THE CONSEQUENCE: graph-select-target's
-  occupancy check (`worktree_has_live_session`) is NAME-keyed on the node id,
-  so a permanently-registered terminal session makes its node permanently
-  unselectable while also consuming a live-session slot — the exact
-  double-bind the auto-heal contract exists to prevent, arrived at through a
-  path that reports success at every step. THE TRIGGER, and why this is
-  systemic rather than incidental: the unverifiable-worktree condition holds
-  whenever the node's branch was never pushed to origin. An `/align-tactics`
-  round lands its work by `graph-commit` direct-push to `main` and never
-  pushes a branch named for the node, so EVERY align-round node worker ends in
-  this state. Measured 2026-08-03: of 5 stranded terminal sessions, 4 carried
-  a correct `node-terminal` marker with `disposition=align-round` and all 4
-  had `remote=NO` for their node branch — the reap gate passed and the reap
-  itself silently did nothing. Since the router autonomously decomposes draft
-  tactics through `/align-tactics` (the fleet's most frequent unattended
-  phase), this leaks a session per align-round indefinitely. THE FIX
-  DIRECTION: `claude rm`'s decline is detectable — it is reported on stdout
-  and the session remains present in a subsequent listing — so self-close must
-  verify the removal rather than trust the exit code, and on a detected
-  decline either remove the worktree first (the documented remedy) and retry,
-  or emit a loud, detectable failure. This is the project's recurring
-  silent-PASS class: an instrument or action whose failure mode is
-  indistinguishable from success."
+  occupancy check (`worktree_has_live_session`) is NAME-keyed on the node id, so
+  a permanently-registered terminal session makes its node permanently
+  unselectable while also consuming a live-session slot — the exact double-bind
+  the auto-heal contract exists to prevent, arrived at through a path that
+  reports success at every step. THE TRIGGER, and why this is systemic rather
+  than incidental: the unverifiable-worktree condition holds whenever the node's
+  branch was never pushed to origin. An `/align-tactics` round lands its work by
+  `graph-commit` direct-push to `main` and never pushes a branch named for the
+  node, so EVERY align-round node worker ends in this state. Measured
+  2026-08-03: of 5 stranded terminal sessions, 4 carried a correct
+  `node-terminal` marker with `disposition=align-round` and all 4 had
+  `remote=NO` for their node branch — the reap gate passed and the reap itself
+  silently did nothing. Since the router autonomously decomposes draft tactics
+  through `/align-tactics` (the fleet's most frequent unattended phase), this
+  leaks a session per align-round indefinitely. THE FIX DIRECTION: `claude rm`'s
+  decline is detectable — it is reported on stdout and the session remains
+  present in a subsequent listing — so self-close must verify the removal rather
+  than trust the exit code, and on a detected decline either remove the worktree
+  first (the documented remedy) and retry, or emit a loud, detectable failure.
+  This is the project's recurring silent-PASS class: an instrument or action
+  whose failure mode is indistinguishable from success."
 reading: null
 gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Park questions — (1) what reaps a marker-declared terminal session
+      whose branch has unlanded content or an open PR, and (2) which tactic owns
+      dispatch-self-close's terminal reap line?
+    answer: "(Ruled 2026-08-04 /align interview, author-ratified.) Superseded
+      by the invalid-state lane recorded on strategy-graph-native-dispatch
+      (2026-08-04 clarifications). (1) The recorded brownfield Step 2 (delete
+      exec claude rm) is RETIRED — dispatch-self-close KEEPS its reap as a
+      best-effort fast path, session_reap_sweep stays the backstop for the
+      undeclared/align-round class, and the invalid-state lane is the
+      guaranteed net: the selection-time occupancy check discriminates
+      occupied-by-terminal (invalid state — route to an intervention session
+      that reviews the transcript, files a find-or-create root-cause follow-up,
+      and resolves or parks) from occupied-by-live (valid skip), with the
+      defensive sweeps as the second detection point. A marker-declared session
+      with unlanded content or an open PR routes to that lane rather than being
+      force-reaped or stranded, so gates 7b/7c stay as they are. (2)
+      tactic-worker-self-close-configurable retains ownership of the call site;
+      its default-off keep-all gate lands as planned with no ordering conflict.
+      This node's remaining scope: make the fast path's decline DETECTABLE and
+      loud (verify the post-state instead of trusting exit 0), with the lane
+      owning escalation. Re-run /align-tactics on this node to re-plan against
+      the lane. Park cleared on this ruling."
 tooling_goals: []
 success_signal: null
 attention:
@@ -54,8 +75,8 @@ attention:
   rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
     BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
     inbound distributor adds 5.33 — under that cluster's 20.00 and above the
-    5.33 undecomposed baseline. Simulated over the live store before writing:
-    0 tier changes, 0 value drift onto non-target nodes."
+    5.33 undecomposed baseline. Simulated over the live store before writing: 0
+    tier changes, 0 value drift onto non-target nodes."
   tier: 1
 phase: null
 execution: null
@@ -248,3 +269,16 @@ on that proof would close the remaining class without weakening Invariant 2,
 since the evidence the invariant protects has by then been produced and verified.
 Whether the terminal-disposition contract should admit a supervisor-supplied
 disposition is exactly the kind of premise that belongs in an author ruling.
+
+## Step 2 retired (2026-08-04 author ruling)
+
+The brownfield Step 2 above — deleting `exec claude rm` from
+`dispatch-self-close` — is retired; see the 2026-08-04 clarification in this
+node's frontmatter. Self-close keeps its reap as a best-effort fast path (so
+`tactic-worker-self-close-configurable`'s gate on that call site lands as
+planned); the invalid-state lane recorded on `strategy-graph-native-dispatch`
+(2026-08-04) is the guaranteed net for declines, with the occupancy-check
+discriminator (occupied-by-terminal vs occupied-by-live) as the detection
+point and the sweeps as the second. This node's remaining scope narrows to
+making the fast path's decline detectable and loud — verify the post-state
+instead of trusting exit 0.

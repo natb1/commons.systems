@@ -190,12 +190,21 @@ order relative to `dispatch-mark-deviation` does not matter. The deviation path
 only runs when the Workflow ran this session, so `result` is in scope. Pass
 `--disposition escalated` and `--terminated-reason` set to the **same string**
 passed to `dispatch-mark-deviation` above. Derive `repo` from the local remote
-(read-only git, sandbox-safe — no network):
+(read-only git, sandbox-safe — no network). On the node lane
+(`TARGET_KIND=node`) pass `--node-id "$N"` and omit `--issue` — the idempotency
+preamble's "never pass `--issue`" node-lane rule extends here to naming this
+substitution; on the legacy issue lane (`TARGET_KIND=issue`) keep `--issue "$N"`
+and omit `--node-id`:
 
 ```bash
 REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+if [[ "$TARGET_KIND" == node ]]; then
+  id_arg=(--node-id "$N")
+else
+  id_arg=(--issue "$N")
+fi
 .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
-  --phase review --repo "$REPO" --issue <N> --pr "$PR_NUM" --base-sha "$MERGE_BASE" \
+  --phase review --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" --base-sha "$MERGE_BASE" \
   --findings-surfaced <result.findings_surfaced> \
   --findings-actionable <result.findings_actionable> \
   --fixes-applied <result.fixes_applied> \
@@ -228,12 +237,19 @@ inject a phantom run into the aggregate. This call runs **sandboxed** —
 Use `result.disposition` directly (the Workflow already computes `completed` vs
 `completed_with_fixes` from `fixed.length`); **omit** `--terminated-reason` (it
 must be absent on a non-escalated disposition). Derive `repo` from the local
-remote (read-only git, sandbox-safe):
+remote (read-only git, sandbox-safe). On the node lane (`TARGET_KIND=node`)
+pass `--node-id "$N"` and omit `--issue`; on the legacy issue lane
+(`TARGET_KIND=issue`) keep `--issue "$N"` and omit `--node-id`:
 
 ```bash
 REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+if [[ "$TARGET_KIND" == node ]]; then
+  id_arg=(--node-id "$N")
+else
+  id_arg=(--issue "$N")
+fi
 .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
-  --phase review --repo "$REPO" --issue <N> --pr "$PR_NUM" --base-sha "$MERGE_BASE" \
+  --phase review --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" --base-sha "$MERGE_BASE" \
   --findings-surfaced <result.findings_surfaced> \
   --findings-actionable <result.findings_actionable> \
   --fixes-applied <result.fixes_applied> \

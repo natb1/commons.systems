@@ -18,6 +18,14 @@
 #                                       exercised live — it is small and its
 #                                       tri-state is load-bearing here)
 #   DISPATCH_FLEET_WATCH_STATE_FILE     cross-pass span state
+#   DISPATCH_FLEET_WATCH_HOLDALERT_CMD  stub for predicate 5's enumerator
+#                                       (list-unclaimed-hold-alerts.ts) — the
+#                                       whole invocation, no args appended
+#   DISPATCH_GRAPH_MAIN_WORKTREE        lib-graph-worktree.sh's root override,
+#                                       so resolve_main_worktree never reaches
+#                                       the real repo (and predicate 5's
+#                                       worktree probes stay inside $WORK)
+#   DISPATCH_RESERVATION_DIR            lib-reservation-ledger.sh's ledger dir
 #
 # No systemd, no real `claude` daemon, no git remote, no graph write — only bash
 # + jq. Run under bash, never zsh.
@@ -98,13 +106,34 @@ exit "${STUB_ALARM_RC:-0}"
 STUB
 chmod +x "$BIN/alarm"
 
+# predicate 5's enumerator stub (list-unclaimed-hold-alerts.ts). The watcher
+# runs it with NO arguments appended, so the stub takes none. STUB_HOLDALERT_OUT
+# is the raw 6-column TSV; STUB_HOLDALERT_RC fakes an enumeration failure.
+cat > "$BIN/holdalert" <<'STUB'
+#!/usr/bin/env bash
+[[ -n "${STUB_HOLDALERT_OUT:-}" ]] && printf '%s\n' "$STUB_HOLDALERT_OUT"
+exit "${STUB_HOLDALERT_RC:-0}"
+STUB
+chmod +x "$BIN/holdalert"
+
 # `claude` stub — lib-claude-agents.sh's own CLAUDE_AGENTS_CMD seam. Handles
-# both `agents --json` (the snapshot capture) and the busy count that reads it.
+# both `agents --json` (the ACTIVE view: the snapshot capture and the busy count
+# that reads it) and `agents --json --all` (the REGISTERED view, which is what
+# worktree_has_live_session — predicate 5's claim ladder — actually reads).
 # STUB_AGENTS_FAIL=1 makes the daemon query fail, which is exactly how the real
 # library produces its UNKNOWN busy count.
+# THE TWO VIEWS MUST BE INDEPENDENTLY FAILABLE. They are separate daemon queries
+# over separate snapshot variables, and a stub that answers both from one fixture
+# cannot see a predicate gating on the wrong one: STUB_AGENTS_ALL_FAIL=1 fails
+# ONLY the `--all` query, leaving the active view healthy.
 cat > "$BIN/claude" <<'STUB'
 #!/usr/bin/env bash
 [[ "${STUB_AGENTS_FAIL:-0}" == "1" ]] && exit 1
+for a in "$@"; do
+  if [[ "$a" == "--all" ]]; then
+    [[ "${STUB_AGENTS_ALL_FAIL:-0}" == "1" ]] && exit 1
+  fi
+done
 printf '%s\n' "${STUB_AGENTS_JSON:-[]}"
 STUB
 chmod +x "$BIN/claude"
@@ -141,6 +170,11 @@ run_case() {
     DISPATCH_DECISION_LOG_FILE="$LOGFILE" \
     DISPATCH_PAUSE_FLAG="$PAUSEFLAG" \
     DISPATCH_FLEET_WATCH_STATE_FILE="$STATEFILE" \
+    DISPATCH_FLEET_WATCH_HOLDALERT_CMD="$BIN/holdalert" \
+    DISPATCH_GRAPH_MAIN_WORKTREE="$CASEDIR" \
+    DISPATCH_RESERVATION_DIR="$RESVDIR" \
+    STUB_HOLDALERT_OUT="${STUB_HOLDALERT_OUT:-}" \
+    STUB_HOLDALERT_RC="${STUB_HOLDALERT_RC:-0}" \
     STUB_LIVENESS_RC="${STUB_LIVENESS_RC:-0}" \
     STUB_LIVENESS_VERDICT="${STUB_LIVENESS_VERDICT:-}" \
     STUB_LIVENESS_REASON="${STUB_LIVENESS_REASON:-}" \
@@ -148,6 +182,7 @@ run_case() {
     STUB_REDSYNC_OUT="${STUB_REDSYNC_OUT:-}" \
     STUB_AGENTS_JSON="${STUB_AGENTS_JSON:-[]}" \
     STUB_AGENTS_FAIL="${STUB_AGENTS_FAIL:-0}" \
+    STUB_AGENTS_ALL_FAIL="${STUB_AGENTS_ALL_FAIL:-0}" \
     STUB_ALARM_RC="${STUB_ALARM_RC:-0}" \
     bash "$SCRIPT" "$@" 2>/dev/null
   )"
@@ -159,7 +194,8 @@ run_case() {
 
 reset_stubs() {
   unset STUB_LIVENESS_RC STUB_LIVENESS_VERDICT STUB_LIVENESS_REASON STUB_LIVENESS_NOJSON
-  unset STUB_REDSYNC_OUT STUB_AGENTS_JSON STUB_AGENTS_FAIL STUB_ALARM_RC
+  unset STUB_REDSYNC_OUT STUB_AGENTS_JSON STUB_AGENTS_FAIL STUB_AGENTS_ALL_FAIL STUB_ALARM_RC
+  unset STUB_HOLDALERT_OUT STUB_HOLDALERT_RC
 }
 
 # new_env <case-name> — fresh log/pause/state paths for an isolated case.
@@ -170,18 +206,22 @@ new_env() {
   PAUSEDIR="$CASEDIR/state"; mkdir -p "$PAUSEDIR"
   PAUSEFLAG="$PAUSEDIR/paused"
   STATEFILE="$CASEDIR/fleet-watch-state.json"
+  # Predicate 5's two other inputs: the reservation ledger (empty = nothing
+  # claimed) and the worktrees root under the faked main worktree ($CASEDIR).
+  RESVDIR="$CASEDIR/reservations"; mkdir -p "$RESVDIR"
+  mkdir -p "$CASEDIR/.claude/worktrees"
 }
 
 fresh_log() { printf '{"ts":"%s","site":"select-tick"}\n' "$(iso $((NOW - 60)))" > "$LOGFILE"; }
 stale_log() { printf '{"ts":"%s","site":"select-tick"}\n' "$(iso $((NOW - 99999)))" > "$LOGFILE"; }
 
 # ===========================================================================
-# Case 1: all four clear -> exit 0, four --resolve calls, zero finding calls.
+# Case 1: all five clear -> exit 0, five --resolve calls, zero finding calls.
 reset_stubs; new_env case1
 fresh_log
 STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 2)" STUB_REDSYNC_OUT="" run_case
 assert_eq "case1 exit code" 0 "$RUN_RC"
-assert_eq "case1 resolve count" 4 "$(grep -c -- '--resolve' <<<"$ALARMS")"
+assert_eq "case1 resolve count" 5 "$(grep -c -- '--resolve' <<<"$ALARMS")"
 assert_eq "case1 finding-alarm count" 0 "$(grep -c -- '--statement' <<<"$ALARMS")"
 assert_contains "case1 reports ok" "result: ok" "$RUN_OUT"
 # The latch is READ, never completed: completing it re-arms the auto-merge gate
@@ -214,7 +254,13 @@ assert_not_contains "case2 daemon-degraded not resolved" "--resolve --kind daemo
 reset_stubs; new_env case3
 stale_log
 touch "$PAUSEFLAG"
-STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="[]" STUB_REDSYNC_OUT="" run_case
+# `agents_json 0` (an array with no BUSY WORKERS, but non-empty) rather than a
+# literal `[]`: an exactly-`[]` payload is only a definite empty read when
+# lib-claude-agents.sh's daemon-process probe corroborates it, so a bare `[]`
+# would make the snapshot capture UNKNOWN on some hosts and not others. The
+# predicate under test here (busy-stall, quiet under pause) reads the same
+# either way.
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 0)" STUB_REDSYNC_OUT="" run_case
 assert_eq "case3 exit code (paused, quiet)" 0 "$RUN_RC"
 assert_not_contains "case3 no tick-stale finding alarm" "--kind tick-stale --statement" "$ALARMS"
 assert_not_contains "case3 no tick-stale resolve either" "--resolve --kind tick-stale" "$ALARMS"
@@ -236,8 +282,8 @@ assert_contains "case4 pause reported unknown" "pause=unknown" "$RUN_OUT"
 assert_eq "case4 watch-unknown alarm fired" 1 "$(grep -c -- '--kind watch-unknown --statement' <<<"$ALARMS")"
 assert_not_contains "case4 does NOT report bare ok" "result: ok" "$RUN_OUT"
 if [[ "$RUN_RC" -ne 0 ]]; then ok "case4 exit is not 0"; else no "case4 exited 0 despite pause-unknown"; fi
-# All four still evaluated (each read cleanly, so each resolved).
-assert_eq "case4 all four predicates still evaluated" 4 "$(grep -c -- '--resolve' <<<"$ALARMS")"
+# All five still evaluated (each read cleanly, so each resolved).
+assert_eq "case4 all five predicates still evaluated" 5 "$(grep -c -- '--resolve' <<<"$ALARMS")"
 
 # ===========================================================================
 # Case 5: busy-worker count UNKNOWN (the daemon query fails) with a pre-set
@@ -457,6 +503,150 @@ assert_not_contains "case16 busy body has no first-seen epoch stamp" "$((NOW - 8
 # ...but the offending node id IS identity and must survive.
 assert_contains "case16 automerge body still names the offending node" "tactic-main-red-abcd1234" \
   "$(cat "$CASEDIR/bodies-2/automerge-suppressed.body")"
+
+# ===========================================================================
+# Predicate 5 (unclaimed-hold). The enumerator is stubbed through
+# DISPATCH_FLEET_WATCH_HOLDALERT_CMD, the claim ladder through the `claude`
+# stub (live sessions) and an empty $RESVDIR (reservations).
+#
+# hold_row <hold-id> <source-id> <kind> <age> <tier> <value> — one enumerator
+# TSV line, built with real TABs so the watcher's `IFS=$'\t' read` sees the
+# same six columns list-unclaimed-hold-alerts.ts emits.
+hold_row() { printf '%s\t%s\t%s\t%s\t%s\t%s' "$1" "$2" "$3" "$4" "$5" "$6"; }
+
+# Case 18: one unclaimed candidate, no live session, empty reservation ledger
+# -> exactly one unclaimed-hold finding alarm, exit 1.
+reset_stubs; new_env case18
+fresh_log
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 1)" STUB_REDSYNC_OUT="" \
+  STUB_HOLDALERT_OUT="$(hold_row tactic-hold-review-alpha tactic-alpha review 90000 A 12.5)" run_case
+assert_eq "case18 exactly one unclaimed-hold finding" 1 \
+  "$(grep -c -- '--kind unclaimed-hold --statement' <<<"$ALARMS")"
+assert_not_contains "case18 no unclaimed-hold resolve" "--resolve --kind unclaimed-hold" "$ALARMS"
+assert_contains "case18 verdict is finding" "unclaimed-hold:       finding" "$RUN_OUT"
+assert_eq "case18 exit code (finding)" 1 "$RUN_RC"
+
+# ===========================================================================
+# Case 19: the enumerator emits nothing -> clear, exactly one resolve, exit 0.
+reset_stubs; new_env case19
+fresh_log
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 1)" STUB_REDSYNC_OUT="" run_case
+assert_eq "case19 exactly one unclaimed-hold resolve" 1 \
+  "$(grep -c -- '--resolve --kind unclaimed-hold' <<<"$ALARMS")"
+assert_not_contains "case19 no unclaimed-hold finding" "--kind unclaimed-hold --statement" "$ALARMS"
+assert_contains "case19 verdict is clear" "unclaimed-hold:       clear" "$RUN_OUT"
+assert_eq "case19 exit code (clear)" 0 "$RUN_RC"
+
+# ===========================================================================
+# Case 20 (THE "UNCLAIMED" HALF): the same candidate, but a live session is
+# registered under the SOURCE's worktree basename. Somebody is on it, so this is
+# not an unclaimed hold — verdict clear, resolve issued, no finding.
+reset_stubs; new_env case20
+fresh_log
+CLAIMED_AGENTS="$(jq -c '. + [{sessionId:"sid-1", name:"tactic-alpha", status:"busy", state:"running"}]' <<<"$(agents_json 1)")"
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$CLAIMED_AGENTS" STUB_REDSYNC_OUT="" \
+  STUB_HOLDALERT_OUT="$(hold_row tactic-hold-review-alpha tactic-alpha review 90000 A 12.5)" run_case
+assert_contains "case20 verdict clear (source is claimed)" "unclaimed-hold:       clear" "$RUN_OUT"
+assert_eq "case20 unclaimed-hold resolved" 1 "$(grep -c -- '--resolve --kind unclaimed-hold' <<<"$ALARMS")"
+assert_not_contains "case20 no unclaimed-hold finding" "--kind unclaimed-hold --statement" "$ALARMS"
+
+# ===========================================================================
+# Case 21: the enumerator FAILS (exit 2). An enumeration that could not run is
+# unknown, never clear: no unclaimed-hold alarm, no resolve, watch-unknown
+# raised, exit 2. A failed read must never launder into "no unclaimed holds".
+reset_stubs; new_env case21
+fresh_log
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 1)" STUB_REDSYNC_OUT="" \
+  STUB_HOLDALERT_RC=2 run_case
+assert_contains "case21 verdict unknown" "unclaimed-hold:       unknown" "$RUN_OUT"
+assert_not_contains "case21 no unclaimed-hold finding" "--kind unclaimed-hold --statement" "$ALARMS"
+assert_not_contains "case21 no unclaimed-hold resolve" "--resolve --kind unclaimed-hold" "$ALARMS"
+assert_eq "case21 watch-unknown alarm fired" 1 "$(grep -c -- '--kind watch-unknown --statement' <<<"$ALARMS")"
+assert_not_contains "case21 does NOT report bare ok" "result: ok" "$RUN_OUT"
+assert_eq "case21 exit code (unknown)" 2 "$RUN_RC"
+
+# ===========================================================================
+# Case 22 (BODY-STABILITY RATCHET for predicate 5): two passes over the SAME
+# hold/source pair whose readings differ — a different unclaimed age and a
+# different resolved source tier/value — must emit a byte-identical body. The
+# resolved attention values move on essentially every graph commit, so a body
+# carrying them would fetch/rebase/push to origin/main once per 5-minute pass.
+reset_stubs; new_env case22
+fresh_log
+ALARM_BODY_DIR="$CASEDIR/bodies-1"
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 1)" STUB_REDSYNC_OUT="" \
+  STUB_HOLDALERT_OUT="$(hold_row tactic-hold-review-alpha tactic-alpha review 90000 A 12.5)" run_case
+assert_eq "case22 pass 1 raised the unclaimed-hold finding" 1 \
+  "$(grep -c -- '--kind unclaimed-hold --statement' <<<"$ALARMS")"
+CASE22_OUT_1="$RUN_OUT"
+ALARM_BODY_DIR="$CASEDIR/bodies-2"
+reset_stubs
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 1)" STUB_REDSYNC_OUT="" \
+  STUB_HOLDALERT_OUT="$(hold_row tactic-hold-review-alpha tactic-alpha review 178000 B 41.25)" run_case
+ALARM_BODY_DIR=""
+if [[ ! -s "$CASEDIR/bodies-1/unclaimed-hold.body" || ! -s "$CASEDIR/bodies-2/unclaimed-hold.body" ]]; then
+  no "case22 unclaimed-hold body missing from one of the passes (the ratchet would be vacuous)"
+elif cmp -s "$CASEDIR/bodies-1/unclaimed-hold.body" "$CASEDIR/bodies-2/unclaimed-hold.body"; then
+  ok "case22 unclaimed-hold body is identical across passes"
+else
+  no "case22 unclaimed-hold body CHURNS across passes: $(diff "$CASEDIR/bodies-1/unclaimed-hold.body" "$CASEDIR/bodies-2/unclaimed-hold.body" | tr '\n' ' ')"
+fi
+# The readings really did differ, or the byte-comparison above proves nothing.
+if [[ "$(grep -F 'unclaimed-hold:' <<<"$CASE22_OUT_1")" != "$(grep -F 'unclaimed-hold:' <<<"$RUN_OUT")" ]]; then
+  ok "case22 unclaimed-hold reading DID change between passes (stdout keeps the live numbers)"
+else
+  no "case22 unclaimed-hold reading did not change between passes — the body comparison above is vacuous"
+fi
+CASE22_BODY="$(cat "$CASEDIR/bodies-2/unclaimed-hold.body")"
+assert_not_contains "case22 body carries no unclaimed age" "178000" "$CASE22_BODY"
+assert_not_contains "case22 body carries no resolved attention value" "41.25" "$CASE22_BODY"
+# ...but the offending pair IS the condition's identity and must survive.
+assert_contains "case22 body names the offending hold" "tactic-hold-review-alpha" "$CASE22_BODY"
+assert_contains "case22 body names the blocked source" "tactic-alpha" "$CASE22_BODY"
+
+# ===========================================================================
+# Case 23: PAUSED. Predicate 5 still evaluates (paused scheduling with
+# manual-only dispatch is a standing operating mode, and a top-ranked node
+# blocked by an unclaimed hold is exactly what the human driving it needs), and
+# its verdict carries the pause state rather than going quiet.
+reset_stubs; new_env case23
+fresh_log
+touch "$PAUSEFLAG"
+ALARM_BODY_DIR="$CASEDIR/bodies"
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 1)" STUB_REDSYNC_OUT="" \
+  STUB_HOLDALERT_OUT="$(hold_row tactic-hold-review-alpha tactic-alpha review 90000 A 12.5)" run_case
+ALARM_BODY_DIR=""
+assert_contains "case23 predicate 5 evaluated under pause" "unclaimed-hold:       finding" "$RUN_OUT"
+assert_not_contains "case23 predicate 5 is NOT quiet under pause" "unclaimed-hold:       quiet" "$RUN_OUT"
+assert_eq "case23 unclaimed-hold finding raised under pause" 1 \
+  "$(grep -c -- '--kind unclaimed-hold --statement' <<<"$ALARMS")"
+assert_contains "case23 verdict tagged with the pause state" "Pause state: paused" \
+  "$(cat "$CASEDIR/bodies/unclaimed-hold.body")"
+# Predicate 1 is still quiet under pause — pause did not stop meaning anything.
+assert_contains "case23 tick-stale still quiet under pause" "tick-stale:           quiet" "$RUN_OUT"
+
+# ===========================================================================
+# Case 24 (WRONG-INPUT GUARD, the false-all-clear this predicate exists to
+# prevent): the ACTIVE view reads fine but the REGISTERED view (`--all`) — the
+# only view predicate 5's claim ladder reads — is unreadable, with a genuine
+# unclaimed candidate present. Gating on the active view's readability would let
+# every `--all` probe return UNKNOWN, fold every candidate to "claimed", and
+# report `clear` — which does not merely suppress the alarm, it RESOLVES an
+# already-open unclaimed-hold node. The verdict must be unknown: no finding, no
+# resolve, watch-unknown raised.
+reset_stubs; new_env case24
+fresh_log
+STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 1)" STUB_AGENTS_ALL_FAIL=1 STUB_REDSYNC_OUT="" \
+  STUB_HOLDALERT_OUT="$(hold_row tactic-hold-review-alpha tactic-alpha review 90000 A 12.5)" run_case
+assert_contains "case24 verdict unknown (registered view unreadable)" "unclaimed-hold:       unknown" "$RUN_OUT"
+assert_not_contains "case24 verdict is NOT a false clear" "unclaimed-hold:       clear" "$RUN_OUT"
+assert_not_contains "case24 no unclaimed-hold resolve" "--resolve --kind unclaimed-hold" "$ALARMS"
+assert_not_contains "case24 no unclaimed-hold finding" "--kind unclaimed-hold --statement" "$ALARMS"
+assert_eq "case24 watch-unknown alarm fired" 1 "$(grep -c -- '--kind watch-unknown --statement' <<<"$ALARMS")"
+assert_eq "case24 exit code (unknown)" 2 "$RUN_RC"
+# The ACTIVE view really was healthy, or the case proves nothing about WHICH
+# view the gate consults: predicate 3 read it and produced a definite verdict.
+assert_not_contains "case24 busy-stall still read the active view" "busy-stall:           unknown" "$RUN_OUT"
 
 # ===========================================================================
 # Case 17 (DOCTRINE RATCHET): the watcher must never fleet-halt. Grep the

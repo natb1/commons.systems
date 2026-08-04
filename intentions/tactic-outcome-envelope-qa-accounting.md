@@ -25,10 +25,10 @@ attention:
     token-efficiency work ahead of bug-fix work and ahead of the undecomposed
     baseline. Matches the boost 20 already carried by the review-phase
     token-cost cluster (tactic-review-skill-body-decomposition and its
-    siblings). Simulated over the live store before writing: 0 tier changes,
-    0 value drift onto non-target nodes, resolves to 20.00."
+    siblings). Simulated over the live store before writing: 0 tier changes, 0
+    value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: null
+phase: main-qa
 execution:
   branch: tactic-outcome-envelope-qa-accounting
   pr: 2774
@@ -38,13 +38,14 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: main-qa
+attributes: {}
 ---
 # per-phase routing metric — qa routes on actionability, not hit_rate, so a triage-shaped phase is not promoted to Opus by a rate it cannot move
 

@@ -60,7 +60,7 @@ lands.
 
 When a decomposition or re-evaluation cannot proceed because needed context
 simply is not in the graph, name the gap in the park reason as a
-**record-completeness defect** of the `/align-strategy` round that produced
+**record-completeness defect** of the `/align` round that produced
 the strategy — not something this session should guess at. The fix is an
-author `/align-strategy` pass to complete the record, and the park reason
+author `/align` pass to complete the record, and the park reason
 should say so explicitly.

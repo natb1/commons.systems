@@ -42,11 +42,11 @@ It inherits along two axes, each with a part it deliberately does **not** take:
   plan-comment, no worktree-branch target parsing, no owning-PR probe. The
   target is the `<strategy-node-id>` argument; sequencing is `blocked_by`
   frontmatter edges, not a PR-precondition scan.
-- **From `/align-strategy` (`.claude/skills/align-strategy/SKILL.md`)** — take
+- **From `/align` (`.claude/skills/align/SKILL.md`)** — take
   the write path (`write-node.ts` → `assert-node-fresh` → body `Edit` →
   `graph-commit`), the
   citation of `validateGraph` rules by number, and the register. Invert the
-  interaction model: `/align-strategy` is interview-driven; **`/align-tactics`
+  interaction model: `/align` is interview-driven; **`/align-tactics`
   is autonomous and never calls `AskUserQuestion`**. This inversion is the
   single biggest trap — "match the sibling" pulls the wrong way.
 
@@ -76,32 +76,7 @@ checkout: a concurrent session's dirty tracked file blocks this run's
 
 1. **Resolve the target node id** — the `strategy-<slug>` or `tactic-<slug>`
    argument (this skill never selects its own target).
-2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
-   already exists with a live session — `worktree_has_live_session <path>
-   "$CLAUDE_CODE_SESSION_ID"`
-   (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
-   run with `dangerouslyDisableSandbox: true`) — the claim is held by
-   another session: stop and report the held claim, then end the run. Pass
-   this session's own id as the second (exclusion) argument so a
-   graph-launched orchestrator — the strategy-lane spawn in
-   `dispatch-graph-execute` uses `dispatch-spawn-job --name "$id"`, whose
-   name equals this worktree's basename — does not match its own
-   just-spawned session as a pre-existing claim; a genuinely different live
-   session in the same worktree still counts as a held claim and stops the
-   run. A held claim is **not** an `office_hours` park (it is not one of the
-   three autonomy-contract conditions below) and **not** a defect.
-
-   Before ending the run on a held claim, record the terminal disposition —
-   this session did nothing and lost nothing, so reaping its job is correct:
-
-   ```bash
-   packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
-   ```
-
-   Without it the Stop hook holds the job alive (see the note at the end of
-   Step 2). The call is safe unconditionally: `mark-node-terminal` writes
-   nothing unless this job's own name is `<target-node-id>`.
-3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+2. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
    or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
    liveness rule the router uses, so no separate lock is needed. **Prefer
@@ -153,14 +128,16 @@ checkout: a concurrent session's dirty tracked file blocks this run's
      and is not soft-frozen, was parked to `office_hours`, was resolved or
      pruned, or has incomplete blockers. **STOP.** Make **no** graph write,
      open no PR, and record the terminal disposition so the Stop hook can
-     reap the job, reusing the same call this Step 0 already uses for the
-     held-claim case above:
+     reap the job — this session did nothing and lost nothing, so reaping it
+     is correct:
      ```bash
      packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
      ```
      `no-claim` is already a validated disposition value in
-     `mark-node-terminal`'s vocabulary (it is the same value the held-claim
-     case above uses) — this is not a new value.
+     `mark-node-terminal`'s vocabulary
+     (`packages/intentionsutil/scripts/mark-node-terminal:74`) — this is not
+     a new value. The call is safe unconditionally: `mark-node-terminal`
+     writes nothing unless this job's own name is `<target-node-id>`.
    - `13` — not reachable at this phase: the gate's scope-chained-phase
      check only applies to the `fix`/`qa`/`review` phases, not
      `align-tactics`. Treat it as a mechanical error: report and stop.
@@ -234,7 +211,7 @@ run resumes by planning only what's missing. The census reports each child's
 its `office_hours.reason`; read the classification off its output
 rather than re-deriving it from a raw `phase`/`office_hours` read. See
 `references/idempotency.md` for the census output contract and how to tell an
-`/align-strategy`-retained draft from a born-parked child (both are
+`/align`-retained draft from a born-parked child (both are
 `phase`-absent, but only the latter carries `office_hours`).
 
 ## Step 1 — Build `args` and invoke the Workflow
@@ -253,7 +230,7 @@ this session no longer re-types a `model:` at each subagent callsite.
 small `tsx` one-liner, or just read the file — only the frontmatter is
 authoritative): `statement`, `rationale`, `success_signal`, `reading`, `gap`,
 `clarifications`, `attributes.conditions`, and `rounds`. Read its draft child
-tactics (their bodies carry retained tactical context from `/align-strategy`)
+tactics (their bodies carry retained tactical context from `/align`)
 and its existing non-draft children — the Idempotency section's census script
 finds both, and its `classification` field tells a draft (`phase` absent **and**
 `office_hours` unset) from a born-parked child (`phase` absent **with** `office_hours` set,
@@ -413,11 +390,10 @@ forms relate.
 - The router's consumption of `phase` (selection, transitions, the soft-freeze
   gate) — `tactic-graph-router-selector` / `tactic-graph-router-transitions`,
   not this skill.
-- `/align-strategy` (recording the strategy under interview) and `/align-init`
-  (fork onboarding) — sibling skills.
+- `/align` (recording the strategy under interview) — sibling skill.
 - Retiring `/plan-issue` / `/file-issue` — done by
   `tactic-legacy-router-removal` Unit 2. Both SKILL.md bodies are now
-  retirement stubs pointing here and at `/align-strategy`; neither works for
+  retirement stubs pointing here and at `/align`; neither works for
   gh-issue work any more (GitHub Issues are disabled repo-wide). Deleting the
   stub directories outright is not this skill's work either.
 - `phase: main-qa` — it is in the spec enum (strategy clarification 22) but

@@ -8,7 +8,8 @@ statement: dispatch.config/target-workers.json — the fleet's throughput dial �
 owner: ai
 status: raw
 parent: null
-rationale: "Confirmed live 2026-08-03. THE DEFECT: git ls-files reports
+rationale: >-
+  Confirmed live 2026-08-03. THE DEFECT: git ls-files reports
   dispatch.config/target-workers.json is untracked, so the file has no history,
   no blame, no diff and no review. Its whole content is a max_concurrent_workers
   integer (the loader's own default is 8). Nothing records WHO set the current
@@ -42,13 +43,45 @@ rationale: "Confirmed live 2026-08-03. THE DEFECT: git ls-files reports
   deviation, so the loader change can land before any config is rewritten.
   Related to but distinct from tactic-pace-exempt-ceiling-fanout, which concerns
   a lane that reads no ceiling at all; this node concerns the durability and
-  provenance of the ceiling's own value."
+  provenance of the ceiling's own value.
+
+
+  2026-08-04 /align-tactics PARK NOTE: an autonomous finalize pass ran the
+  two-sided drift review (gather: 3 reuse hunts + corpus + clause-coverage, 6
+  subagents, 573734 tokens) and found this node's greenfield depends on three
+  design premises the graph already answers differently or leaves undecided —
+  see office_hours.reason for the full DECIDE list. Once those are ratified,
+  greenfield elements 2-4 (the loader's standing/deviation schema,
+  effective-value resolution, and select-tick logging) are fully plannable with
+  no further author input; the gather phase already located every reuse site.
 reading: null
 gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Three DECIDE items — provenance home, where the self-expiring
+      throttle lives, and may the fleet write the operator's config file?
+    answer: "(Ruled 2026-08-04 /align interview.) (1) Git-tracking DESCOPED
+      from this node — provenance depends on the recorded
+      tactic-dispatch-config-instance-repo migration (the 2026-07-11 decision
+      stands): once migrated, the committed value IS the standing value and
+      deviation detection is a plain git diff. (2) NO self-expiring deviation
+      machinery — author ruling: it is unintentional bloat. A deliberate
+      temporary throttle is an INTERVENTION by a session (e.g. a monitor
+      healing the automation); the intervening session mints a find-or-create
+      restore node carrying the reason and an event-shaped restore signal (the
+      2026-08-01 occurrence's condition was an event — the blocking PR merges —
+      not a clock), resolved by monitor/office-hours restoring the cap and
+      closing the node. Config stays a bare standing value; the loader shape
+      does not change. (3) The fleet NEVER writes the operator's config file —
+      read-time resolution only, upholding the 2026-07-11 human/machine split.
+      Remaining code scope of this node: emit the cap into every select-tick
+      routing decision (the 2026-08-01 occurrence logged target_n 1 with
+      max_workers null, so the log carried no evidence the value was a
+      deviation). Doctrine recorded on strategy-graph-native-dispatch
+      (2026-08-04 throttle-as-intervention clarification). Park cleared; re-run
+      /align-tactics to plan the narrowed scope."
 tooling_goals: []
 success_signal: null
 attention:
@@ -57,8 +90,8 @@ attention:
   rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
     BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
     inbound distributor adds 5.33 — under that cluster's 20.00 and above the
-    5.33 undecomposed baseline. Simulated over the live store before writing:
-    0 tier changes, 0 value drift onto non-target nodes."
+    5.33 undecomposed baseline. Simulated over the live store before writing: 0
+    tier changes, 0 value drift onto non-target nodes."
   tier: 1
 phase: null
 execution: null
