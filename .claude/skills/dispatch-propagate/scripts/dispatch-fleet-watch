@@ -2,7 +2,7 @@
 #
 # dispatch-fleet-watch — ONE-SHOT fleet-health watcher pass.
 #
-# Reads four independent fleet-health predicates, reports each one, and turns
+# Reads five independent fleet-health predicates, reports each one, and turns
 # every finding (and every unreadable input) into a graph node through
 # dispatch-fleet-alarm. Then it exits. It does NOT loop and it takes no deadline
 # argument: cadence belongs to the systemd timer that invokes it, not to the
@@ -14,7 +14,7 @@
 # (fleet-health-watch.sh) evaluated predicates in sequence and returned at the
 # first finding — so one spurious finding silently stopped every LATER predicate
 # from being read at all, and the fleet went unwatched while a watcher appeared
-# to be running. Four verdicts are collected first; reporting happens once, at
+# to be running. Every verdict is collected first; reporting happens once, at
 # the end, over the complete set.
 #
 # THE SECOND MOST IMPORTANT PROPERTY: an unreadable input is `unknown`, never
@@ -28,20 +28,38 @@
 #   2. daemon-degraded       delegated to dispatch-daemon-liveness
 #   3. busy-stall            sustained BUSY=0 across passes (state-file spanned)
 #   4. automerge-suppressed  open tactic-main-red-* latch held too long
+#   5. unclaimed-hold        a tracked hold blocking top-ranked work that no
+#                            session and no reservation claims
 #
-# WHY ONE SNAPSHOT, CAPTURED AT THE INPUT BOUNDARY:
-#   Only predicate 3 currently reads the live session array, and it reads it
-#   through claude_agents_count_busy_workers, which already applies the worker
-#   keyspace filter (`^[0-9]+-|^tactic-|^strategy-`, lib-claude-agents.sh:1043).
-#   Nonetheless this script captures ONE machine-wide snapshot per pass via
-#   claude_agents_snapshot_capture and exports it as DISPATCH_AGENTS_SNAPSHOT.
+# WHY TWO SNAPSHOTS, BOTH CAPTURED AT THE INPUT BOUNDARY:
+#   Predicate 3 reads the live session array through
+#   claude_agents_count_busy_workers, which already applies the worker keyspace
+#   filter (`^[0-9]+-|^tactic-|^strategy-`, lib-claude-agents.sh:1043), and
+#   predicate 5 reads it through worktree_has_live_session, one probe per
+#   candidate hold/source worktree.
+#   THE TWO PREDICATES DO NOT READ THE SAME VIEW. Predicate 3 reads the ACTIVE
+#   view (`claude agents --json`, DISPATCH_AGENTS_SNAPSHOT, backing
+#   `_claude_agents_raw`); worktree_has_live_session reads the REGISTERED view
+#   (`claude agents --json --all`, DISPATCH_AGENTS_SNAPSHOT_ALL, backing
+#   `_claude_agents_raw_registered`) — the two are documented as INDEPENDENT at
+#   lib-claude-agents.sh:451-461. So this script captures BOTH machine-wide
+#   snapshots per pass, via claude_agents_snapshot_capture and
+#   claude_agents_snapshot_capture_registered, and exports both variables.
+#   Without the registered capture, predicate 5 would still issue up to two live
+#   `--all` round-trips PER CANDIDATE ROW.
 #   History: the session-keyspace exclusion used to be bolted onto individual
 #   predicates one at a time, and the bug recurred every single time a new
 #   predicate was added — the new test read the raw array, forgot the filter,
 #   and counted routers/human sessions as workers. The filter must be a PROPERTY
 #   OF THE INPUT, captured once at the boundary, not a rule each test restates.
-#   A fifth predicate added later inherits both the single daemon query and the
-#   filter for free, without knowing either exists.
+#   Predicate 5 inherited the filter for free, without knowing it exists —
+#   exactly as this note predicted a fifth predicate would.
+#   It does NOT inherit the fail direction, though, and that is the one thing a
+#   later predicate must reason about for itself: see "FAIL DIRECTION" on
+#   predicate 5 below. Each snapshot's READABILITY is therefore recorded at its
+#   capture site (SNAPSHOT_OK for the active view, SNAPSHOT_ALL_OK for the
+#   registered one), and predicate 5 gates on SNAPSHOT_ALL_OK — the bit for the
+#   view its claim ladder actually reads.
 #
 # TWO DETAIL STRINGS PER PREDICATE, ON PURPOSE:
 #   D_<P>  the READING — carries the live numbers (elapsed spans, ages, counts,
@@ -90,10 +108,14 @@
 #   paused   — predicates 1 and 3 are `quiet` (not evaluated, not reported as
 #              clear/finding/unknown, and 3 additionally CLEARS its
 #              busy_zero_since stamp so the pause window does not accumulate
-#              toward the stall span). Predicates 2 and 4 evaluate normally: a
-#              paused fleet still has a live daemon, and a suppressed auto-merge
-#              latch is still suppressed.
-#   unknown  — ALL FOUR predicates evaluate and emit as normal, each tagged
+#              toward the stall span). Predicates 2, 4 and 5 evaluate normally:
+#              a paused fleet still has a live daemon, a suppressed auto-merge
+#              latch is still suppressed, and an unclaimed hold blocking
+#              top-ranked work is still blocking it. Paused scheduling with
+#              manual-only dispatch is a supported STANDING operating mode, and
+#              a top-ranked node blocked by a hold nobody is holding is exactly
+#              what the human driving that paused fleet needs told.
+#   unknown  — ALL FIVE predicates evaluate and emit as normal, each tagged
 #              `pause=unknown`, AND the pass emits a watch-unknown finding
 #              naming the unreadable pause state. Silencing on an unreadable
 #              input is exactly the failure class this rewrite exists to close.
@@ -115,6 +137,11 @@
 #   DISPATCH_FLEET_WATCH_TICK_MAX_AGE      default 1500   (25m)
 #   DISPATCH_FLEET_WATCH_IDLE_LIMIT        default 2700   (45m)
 #   DISPATCH_FLEET_WATCH_SUPPRESSION_LIMIT default 21600  (6h)
+#   DISPATCH_FLEET_WATCH_HOLD_MIN_AGE      default 86400  (24h) — how long a
+#       hold must have sat unclaimed in the human review queue before it alerts.
+#   DISPATCH_FLEET_WATCH_HOLD_TOP_K        default 10 (a COUNT, not seconds) —
+#       how many top-ranked live nodes count as "important" for predicate 5's
+#       blocked-source gate. Both are passed straight through to the enumerator.
 #
 # Paths:
 #   DISPATCH_DECISION_LOG_FILE / DISPATCH_DECISION_LOG_DIR
@@ -144,7 +171,18 @@
 #                                      "NEVER FLEET-RESUME EITHER" above); a
 #                                      substitute must honour that flag.
 #   DISPATCH_FLEET_WATCH_ALARM_CMD     default: $SCRIPT_DIR/dispatch-fleet-alarm
+#   DISPATCH_FLEET_WATCH_HOLDALERT_CMD Executable run INSTEAD of the whole
+#                                      predicate-5 enumerator invocation, with
+#                                      NO arguments appended (mirrors
+#                                      DISPATCH_HOLD_RECHECK_ENUM in
+#                                      lib-stale-hold-recheck.sh). Its stdout
+#                                      must carry the same 6-column TSV.
 #   CLAUDE_AGENTS_CMD                  lib-claude-agents.sh's own `claude` seam
+#   DISPATCH_GRAPH_MAIN_WORKTREE       lib-graph-worktree.sh's root override,
+#                                      honoured by resolve_main_worktree (the
+#                                      anchor for predicate 5's enumerator and
+#                                      worktree probes)
+#   DISPATCH_RESERVATION_DIR           lib-reservation-ledger.sh's ledger dir
 #
 # NOT set -e: every risky step is guarded explicitly so the pass always reaches
 # its reporting block (same convention as sibling dispatch-graph-main-red-sync).
@@ -159,9 +197,10 @@ usage() {
 usage: dispatch-fleet-watch [--json]
        dispatch-fleet-watch -h|--help
 
-One-shot fleet-health watcher pass. Evaluates four predicates (tick-stale,
-daemon-degraded, busy-stall, automerge-suppressed), ALWAYS all four, and
-records findings / unreadable inputs as graph nodes via dispatch-fleet-alarm.
+One-shot fleet-health watcher pass. Evaluates five predicates (tick-stale,
+daemon-degraded, busy-stall, automerge-suppressed, unclaimed-hold), ALWAYS all
+five, and records findings / unreadable inputs as graph nodes via
+dispatch-fleet-alarm.
 
 exit: 0 all clear, 1 finding, 2 unknown, 64 usage, 69 environment.
 USAGE
@@ -189,7 +228,9 @@ ALARM_CMD="${DISPATCH_FLEET_WATCH_ALARM_CMD:-$SCRIPT_DIR/dispatch-fleet-alarm}"
 TICK_MAX_AGE="${DISPATCH_FLEET_WATCH_TICK_MAX_AGE:-1500}"
 IDLE_LIMIT="${DISPATCH_FLEET_WATCH_IDLE_LIMIT:-2700}"
 SUPPRESSION_LIMIT="${DISPATCH_FLEET_WATCH_SUPPRESSION_LIMIT:-21600}"
-for t in "$TICK_MAX_AGE" "$IDLE_LIMIT" "$SUPPRESSION_LIMIT"; do
+HOLD_MIN_AGE="${DISPATCH_FLEET_WATCH_HOLD_MIN_AGE:-86400}"
+HOLD_TOP_K="${DISPATCH_FLEET_WATCH_HOLD_TOP_K:-10}"
+for t in "$TICK_MAX_AGE" "$IDLE_LIMIT" "$SUPPRESSION_LIMIT" "$HOLD_MIN_AGE" "$HOLD_TOP_K"; do
   [[ "$t" =~ ^[0-9]+$ ]] || { log "threshold must be a non-negative integer, got '$t'"; exit 64; }
 done
 
@@ -244,17 +285,41 @@ state_set() { # <key> <epoch|null>
   return 0
 }
 
-# --- one snapshot at the input boundary --------------------------------------
-# See the header ("WHY ONE SNAPSHOT"). Capture failure is NOT fatal: the library
+# --- both snapshots at the input boundary ------------------------------------
+# See the header ("WHY TWO SNAPSHOTS"). Capture failure is NOT fatal: the library
 # falls back to a live per-call query, which carries its own UNKNOWN contract.
 # shellcheck source=/dev/null
 if ! source "$SCRIPT_DIR/lib-claude-agents.sh" 2>/dev/null; then
   log "cannot source lib-claude-agents.sh"
   exit 69
 fi
+# Predicate 5 additionally needs to know whether the REGISTERED-view read
+# succeeded — see "FAIL DIRECTION" on that predicate. SNAPSHOT_ALL_OK is that
+# bit; SNAPSHOT_OK is the ACTIVE-view sibling, which predicate 5 never reads.
+# shellcheck source=/dev/null
+if ! source "$SCRIPT_DIR/lib-graph-worktree.sh" 2>/dev/null; then
+  log "cannot source lib-graph-worktree.sh"
+  exit 69
+fi
+# shellcheck source=/dev/null
+if ! source "$SCRIPT_DIR/lib-reservation-ledger.sh" 2>/dev/null; then
+  log "cannot source lib-reservation-ledger.sh"
+  exit 69
+fi
 SNAPSHOT_PATH="$WORK_DIR/agents-snapshot.json"
+SNAPSHOT_OK=0
 if claude_agents_snapshot_capture "$SNAPSHOT_PATH" 2>/dev/null; then
   export DISPATCH_AGENTS_SNAPSHOT="$SNAPSHOT_PATH"
+  SNAPSHOT_OK=1
+fi
+# The REGISTERED view is a SEPARATE daemon query (`--all`) over a SEPARATE
+# variable. Predicate 5's claim ladder reads only this one, so its readability
+# is a separate bit — SNAPSHOT_OK says nothing about it.
+SNAPSHOT_ALL_PATH="$WORK_DIR/agents-snapshot-all.json"
+SNAPSHOT_ALL_OK=0
+if claude_agents_snapshot_capture_registered "$SNAPSHOT_ALL_PATH" 2>/dev/null; then
+  export DISPATCH_AGENTS_SNAPSHOT_ALL="$SNAPSHOT_ALL_PATH"
+  SNAPSHOT_ALL_OK=1
 fi
 
 # --- pause state, read ONCE --------------------------------------------------
@@ -519,6 +584,110 @@ else
   fi
 fi
 
+# --- 5. an unclaimed hold blocking top-ranked work ---------------------------
+# The condition: a tracked hold whose review nobody has picked up has sat in the
+# human queue past HOLD_MIN_AGE while blocking a node among the graph's top
+# HOLD_TOP_K live, unparked, eligible sources. Nothing else notices — the source
+# is simply unselectable, forever, and the fleet looks busy on other work.
+#
+# Shape copied from lib-stale-hold-recheck.sh steps 1-3c: resolve the main
+# checkout, enumerate through a tsx CLI anchored there, then run the SAME
+# claimed ladder per candidate. The difference is what the ladder is FOR — there
+# it gates a resolve, here it decides whether to alert.
+#
+# FAIL DIRECTION, and why it needs a guard the resolve sweep does not:
+#   For the resolve sweep, fail-safe means KEEP, so an unknown session state
+#   folding to "occupied" is exactly right. For an ALERT the same fold is
+#   backwards: an unreadable daemon would read as "someone is on it" and
+#   SUPPRESS the alarm — a false all-clear, the one failure this whole script
+#   exists to prevent. worktree_has_live_session cannot report unknown
+#   separately (occupied IS its unknown), so the readability of the daemon view
+#   it reads is captured at the input boundary instead and consumed here:
+#   no snapshot, no verdict. `unknown` raises watch-unknown and resolves nothing.
+#   WHICH VIEW: the ladder below calls worktree_has_live_session, which reads the
+#   REGISTERED view (`claude agents --json --all`), NOT the active view predicate
+#   3 uses. The gate is therefore SNAPSHOT_ALL_OK. Gating on SNAPSHOT_OK (the
+#   active view) would certify an input this predicate never reads: a registered
+#   query that fails at probe time folds every candidate to "claimed", HOLD_COUNT
+#   stays 0, and the pass reports `clear` — which does not merely suppress the
+#   alarm, it sends `--resolve --kind unclaimed-hold` and closes an already-open
+#   alarm node. Exporting DISPATCH_AGENTS_SNAPSHOT_ALL also pins the ladder to
+#   the same bytes the gate certified, instead of re-querying per candidate row.
+#
+# Not quiet under pause — see the PAUSE block in the header.
+V_HOLD="unknown"; D_HOLD=""; B_HOLD=""
+HOLD_COUNT=0
+HOLD_PAIRS=""      # identity: one `<hold-id> -> <source-id>` per line
+HOLD_READINGS=""   # reading: the same pairs with ages and resolved attention
+HOLD_ROOT="$(resolve_main_worktree 2>/dev/null)" || HOLD_ROOT=""
+if [[ -z "$HOLD_ROOT" ]]; then
+  D_HOLD="repo root unresolvable (no worktree has main checked out and DISPATCH_GRAPH_MAIN_WORKTREE is unset) — unclaimed holds could not be enumerated"
+elif [[ "$SNAPSHOT_ALL_OK" -ne 1 || ! -r "$SNAPSHOT_ALL_PATH" ]]; then
+  # See FAIL DIRECTION above: without a readable REGISTERED snapshot every
+  # candidate would read as claimed and this predicate would report a silent
+  # all-clear that ALSO resolves the alarm node. SNAPSHOT_OK is deliberately not
+  # consulted — it certifies the active view, which this ladder never reads.
+  D_HOLD="the machine-wide claude agents daemon snapshot (registered view, 'claude agents --json --all') could not be captured or is no longer readable — whether a session claims a hold is unreadable, and an unreadable claim must NOT be folded into 'claimed' here (that would suppress this alarm)"
+else
+  HOLD_OUT=""; HOLD_RC=0
+  if [[ -n "${DISPATCH_FLEET_WATCH_HOLDALERT_CMD:-}" ]]; then
+    HOLD_OUT=$( (cd "$HOLD_ROOT" && "$DISPATCH_FLEET_WATCH_HOLDALERT_CMD") 2>/dev/null ) || HOLD_RC=$?
+  else
+    HOLD_OUT=$( (cd "$HOLD_ROOT" && node --import tsx/esm \
+      "$HOLD_ROOT/packages/intentionsutil/scripts/list-unclaimed-hold-alerts.ts" \
+      --dir "$HOLD_ROOT/intentions" \
+      --now "$(date -u -d "@$NOW" +%FT%TZ)" \
+      --min-age-seconds "$HOLD_MIN_AGE" \
+      --top-k "$HOLD_TOP_K") 2>/dev/null ) || HOLD_RC=$?
+  fi
+  if (( HOLD_RC != 0 )); then
+    # An enumeration that could not run is NEVER "no unclaimed holds".
+    D_HOLD="the unclaimed-hold enumerator exited $HOLD_RC — no hold was inspected this pass, which is NOT the same as no hold alerting"
+    B_HOLD="the unclaimed-hold enumerator (list-unclaimed-hold-alerts.ts) could not be run"
+  else
+    HOLD_PARSE_OK=1
+    while IFS=$'\t' read -r H_ID H_SRC H_KIND H_AGE H_TIER H_VALUE; do
+      [[ -n "${H_ID}${H_SRC}" ]] || continue
+      # Unparseable is unknown, not clear: a row we cannot read may be the very
+      # alert that matters. Both ids also become path components below.
+      if [[ -z "$H_ID" || -z "$H_SRC" || ! "$H_AGE" =~ ^[0-9]+$ ]]; then
+        HOLD_PARSE_OK=0; break
+      fi
+      case "$H_ID$H_SRC" in
+        *..*|*/*|*[[:cntrl:]]*) HOLD_PARSE_OK=0; break ;;
+      esac
+      # CLAIMED — the "unclaimed" half, checked for the SOURCE and the HOLD
+      # alike, exactly as lib-stale-hold-recheck.sh step 3c does. The full
+      # worktree PATH goes to worktree_has_live_session, never a bare id.
+      if reservation_exists "$H_SRC" 2>/dev/null \
+        || worktree_has_live_session "$HOLD_ROOT/.claude/worktrees/$H_SRC" 2>/dev/null \
+        || reservation_exists "$H_ID" 2>/dev/null \
+        || worktree_has_live_session "$HOLD_ROOT/.claude/worktrees/$H_ID" 2>/dev/null; then
+        continue
+      fi
+      HOLD_COUNT=$(( HOLD_COUNT + 1 ))
+      HOLD_PAIRS+="$H_ID -> $H_SRC"$'\n'
+      HOLD_READINGS+="$H_ID -> $H_SRC (${H_KIND:-<kind?>}, unclaimed ${H_AGE}s, source ${H_TIER:-<tier?>}/${H_VALUE:-<value?>}); "
+    done <<<"$HOLD_OUT"
+    if [[ "$HOLD_PARSE_OK" -ne 1 ]]; then
+      V_HOLD="unknown"
+      D_HOLD="the unclaimed-hold enumerator emitted a row this pass could not parse (expected <hold-id>TAB<source-id>TAB<kind>TAB<age>TAB<tier>TAB<value>) — no verdict is possible"
+      B_HOLD="the unclaimed-hold enumerator emitted an unparseable row"
+    elif (( HOLD_COUNT > 0 )); then
+      V_HOLD="finding"
+      D_HOLD="$HOLD_COUNT unclaimed hold(s) blocking top-${HOLD_TOP_K} work: ${HOLD_READINGS%; }"
+      # IDENTITY ONLY. The ages and the resolved tier/value are readings — they
+      # move on essentially every graph commit, and a body carrying them would
+      # push to origin/main once per 5-minute pass. Sorted so the same set of
+      # pairs always renders the same bytes regardless of enumerator ordering.
+      B_HOLD="tracked hold(s) have blocked top-ranked work while unclaimed by any session or reservation: $(printf '%s' "$HOLD_PAIRS" | sort | tr '\n' ';' | sed 's/;$//' | sed 's/;/; /g')"
+    else
+      V_HOLD="clear"
+      D_HOLD="no unclaimed hold is blocking top-${HOLD_TOP_K} work (minimum unclaimed age ${HOLD_MIN_AGE}s)"
+    fi
+  fi
+fi
+
 # =============================================================================
 # Reporting — runs ONCE, over the complete verdict set.
 # =============================================================================
@@ -533,6 +702,7 @@ B_TICK="${B_TICK:-$D_TICK}"
 B_DAEMON="${B_DAEMON:-$D_DAEMON}"
 B_BUSY="${B_BUSY:-$D_BUSY}"
 B_AUTOMERGE="${B_AUTOMERGE:-$D_AUTOMERGE}"
+B_HOLD="${B_HOLD:-$D_HOLD}"
 
 FINDING_COUNT=0
 UNKNOWN_COUNT=0
@@ -550,9 +720,10 @@ note_verdict "$V_TICK"      "tick-stale: $B_TICK"
 note_verdict "$V_DAEMON"    "daemon-degraded: $B_DAEMON"
 note_verdict "$V_BUSY"      "busy-stall: $B_BUSY"
 note_verdict "$V_AUTOMERGE" "automerge-suppressed: $B_AUTOMERGE"
+note_verdict "$V_HOLD"      "unclaimed-hold: $B_HOLD"
 
 # An unreadable PAUSE state is itself an unreadable input — it must raise
-# watch-unknown even when all four predicates happened to read cleanly.
+# watch-unknown even when all five predicates happened to read cleanly.
 if [[ "$PAUSE_UNKNOWN" -eq 1 ]]; then
   UNKNOWN_COUNT=$((UNKNOWN_COUNT + 1))
   UNKNOWN_REASONS+="- pause-state: dispatch_pause_state returned unknown — the sentinel's parent directory exists but is not searchable, so pause state could not be determined. Every predicate was evaluated anyway (pause silences nothing when pause itself is unreadable)."$'\n'
@@ -649,6 +820,19 @@ State file: $STATE_FILE (suppression_since — the live value is in this pass's
 journald output and in --json)
 Pause state: $PAUSE_STATE (auto-merge suppression is evaluated regardless of pause)"
 
+# Identity only: the offending `<hold-id> -> <source-id>` pairs and the two
+# threshold names. NOT the unclaimed ages and NOT the resolved source
+# tier/value — those move on essentially every graph commit, so a body carrying
+# them would push to origin/main once per 5-minute pass. They are on stdout and
+# in --json for this pass instead.
+dispatch_predicate "$V_HOLD" unclaimed-hold \
+  "A tracked hold has blocked top-ranked work with no session claiming it" \
+  "$B_HOLD
+
+Thresholds: DISPATCH_FLEET_WATCH_HOLD_MIN_AGE=${HOLD_MIN_AGE}s,
+DISPATCH_FLEET_WATCH_HOLD_TOP_K=${HOLD_TOP_K}
+Pause state: $PAUSE_STATE (unclaimed holds are evaluated regardless of pause)"
+
 # THE most important single behavior in this script: any unknown, for any
 # reason, is announced. A watcher that cannot read its inputs must say so
 # loudly rather than emit a false all-clear.
@@ -678,6 +862,8 @@ if [[ "$JSON" -eq 1 ]]; then
     --arg v_daemon "$V_DAEMON" --arg d_daemon "$D_DAEMON" \
     --arg v_busy "$V_BUSY" --arg d_busy "$D_BUSY" \
     --arg v_automerge "$V_AUTOMERGE" --arg d_automerge "$D_AUTOMERGE" \
+    --arg v_hold "$V_HOLD" --arg d_hold "$D_HOLD" \
+    --argjson hold_count "$HOLD_COUNT" \
     --arg busy_count "${BUSY_COUNT:-}" \
     --arg busy_zero_since "${BUSY_SINCE_AFTER:-}" \
     --arg suppression_since "${SUPPRESSION_SINCE_AFTER:-}" \
@@ -700,7 +886,9 @@ if [[ "$JSON" -eq 1 ]]; then
                                    busy_zero_since: ($busy_zero_since | blank_null | if . == null then null else tonumber end) },
         "automerge-suppressed":  { verdict: $v_automerge, detail: $d_automerge,
                                    suppression_since: ($suppression_since | blank_null | if . == null then null else tonumber end),
-                                   open_main_red_nodes: ($red_nodes | blank_null | if . == null then [] else split("\n") end) }
+                                   open_main_red_nodes: ($red_nodes | blank_null | if . == null then [] else split("\n") end) },
+        "unclaimed-hold":        { verdict: $v_hold,      detail: $d_hold,
+                                   candidate_count: $hold_count }
       },
       unknown_reasons: ($unknown_reasons | blank_null)
     }'
@@ -712,6 +900,7 @@ printf '  tick-stale:           %-8s %s%s\n' "$V_TICK"      "$D_TICK"      "$PAU
 printf '  daemon-degraded:      %-8s %s%s\n' "$V_DAEMON"    "$D_DAEMON"    "$PAUSE_TAG"
 printf '  busy-stall:           %-8s %s%s\n' "$V_BUSY"      "$D_BUSY"      "$PAUSE_TAG"
 printf '  automerge-suppressed: %-8s %s%s\n' "$V_AUTOMERGE" "$D_AUTOMERGE" "$PAUSE_TAG"
+printf '  unclaimed-hold:       %-8s %s%s\n' "$V_HOLD"      "$D_HOLD"      "$PAUSE_TAG"
 
 # Never print a bare `ok` when anything is unknown — that is the false
 # all-clear this watcher exists to prevent.

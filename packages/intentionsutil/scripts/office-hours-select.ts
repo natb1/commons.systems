@@ -43,7 +43,10 @@
 // `office-hours-graph` read loop cites this block): `<rank>\t<sessionType>\t
 // <nodeId>\t<since>` per line, rendered by the exported `formatQueueRow` below
 // and pinned by its unit test. `rank` is the soft-penalty-adjusted rank, not
-// raw attention.
+// raw attention. These four columns are UNCHANGED by lift advisories: when a
+// member's key was lifted from a blocked source (`liftedFrom !== null`), the
+// "why" goes to stderr as a `NOTE —` line (`formatLiftNote`), never as a fifth
+// stdout column — see the stderr contract above.
 
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -129,6 +132,19 @@ export function formatDisposition(
  */
 export function formatQueueRow(m: QueueMember): string {
   return `${m.rank}\t${m.sessionType}\t${m.nodeId}\t${m.since}`;
+}
+
+/**
+ * The stderr advisory for a queue member whose ordering key was lifted from a
+ * blocked source (`liftedFrom !== null`) — surfaces WHY the hold jumped the
+ * queue. Follows the `formatBlockerNote` `NOTE —` convention. Never called for
+ * a member with `liftedFrom === null`.
+ */
+export function formatLiftNote(m: QueueMember): string {
+  return (
+    `NOTE — ${m.nodeId} ranks at tier ${m.tier}/${m.rank} inherited from blocked source ` +
+    `${m.liftedFrom} (own: tier ${m.ownTier}/${m.ownRank})`
+  );
 }
 
 // --- Argv parsing (pure, exported for tests) --------------------------------
@@ -246,6 +262,9 @@ function main(): void {
   if (wantList) {
     for (const m of officeHoursQueue(nodes, sessionType)) {
       process.stdout.write(`${formatQueueRow(m)}\n`);
+      if (m.liftedFrom !== null) {
+        process.stderr.write(`${formatLiftNote(m)}\n`);
+      }
     }
     return;
   }
