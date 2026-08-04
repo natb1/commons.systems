@@ -45,7 +45,92 @@ validates: []
 blocked_by:
   - tactic-office-hours-pr-custody
   - tactic-execution-pr-merge-verification
-office_hours: null
+office_hours:
+  reason: "/qa-fix: 4 confirmed opus-fixable bugs (CRITICAL: minted census-defect
+    bodies fail the CI lint graph-commit's land depends on, blocking every
+    census batch from landing once any node is done-but-unverifiable, which is
+    already true for 19 live nodes; HIGH: retention refusal not transitive,
+    reintroduces a dangling-edge class already fixed once; MEDIUM: defectIdFor
+    id collision, 2 live pairs; LOW/MEDIUM: stale PR body test counts, 4th
+    recurrence) but the qa-fix auto-fix attempt cap (3) was already reached
+    coming into this pass, so none could be auto-fixed; escalating to
+    office-hours for human fix or attempt-counter reset"
+  since: 2026-08-04
+  recommendation: >-
+    # Recommendation: `tactic-census-scripted-tick` (#3037)
+
+
+    ## Finding #1 is the only thing that matters first
+
+
+    Minted `tactic-census-defect-*` bodies fail `lintTacticBodies`
+    (`packages/intentionsutil/src/planlint.ts`) — no `## Context`, no
+    `Recommended model`, no `## Verification`. That lint is exactly what
+    `graph-fast-path.yml`'s `guard` job runs via `validate-graph.ts`, and
+    `graph-commit`'s `try_land()` treats a CONCLUDED failed check as a
+    non-retryable `die()`.
+
+
+    Because `dispatch-census-tick` batches every prune, edge-repair, and mint
+    into ONE `graph-commit`, the first production tick that encounters a
+    done-but-unverifiable node poisons the whole batch — including the 43
+    legitimate prunes — inside a silent `|| true` retry loop. The live store has
+    19 such nodes today. This is first-tick behavior, not a corner case, and it
+    defeats the PR's entire purpose. Reproduced this session: 19 minted defects
+    → `IntentionSchemaError`, 3 violations each, exit 1.
+
+
+    Two fix shapes, pick one:
+
+    - **(a) Give minted bodies the three markers** — `## Context` (what to
+    investigate), `Recommended model: sonnet`, `## Verification` (how to confirm
+    the target's completion evidence). Local to `census-tick.ts`; preferred.
+
+    - **(b) Exempt `tactic-census-defect-*` in `lintTacticBodies`** — mirrors
+    `isMainqaModelExempt`, but that carve-out only waives the model line, so
+    this needs its own. Touches shared cross-cutting validation. Higher blast
+    radius.
+
+
+    ## Ordering
+
+
+    1. **#1** — nothing lands without it.
+
+    2. **#2** (retention not transitive) — same landing-blocking class, rarer
+    trigger. The refusal pass computes `retained` in one linear scan against the
+    *original* `candidateSet`. Iterate to a fixpoint, or do a real reachability
+    closure. Note this re-opens the exact dangling-inbound-edge class attempt 2
+    was supposed to eliminate, via a 2-level chain.
+
+    3. **#3** (`defectIdFor` collides `tactic-X`/`strategy-X`) — latent; two
+    colliding pairs already exist in the store, neither done yet. Keep the kind
+    in the derived id, or dedup off `attributes.census_defect.target`.
+
+    4. **#4** — PR body numbers: 44 files / 854 tests, 18 tests in
+    `census-decide.test.ts`, 16 in `census-tick.test.ts`.
+
+
+    ## Tests
+
+
+    The 854 vitest tests and both bash harnesses should stay green. But add NEW
+    coverage — neither gap is currently tested despite ~500-line files:
+
+    - **#1**: run `lintTacticBodies` against a minted defect body.
+
+    - **#2**: the 2-level scratch scenario (A referenced only by B's `parent`; B
+    referenced by surviving C; assert B's retention forces A's retention).
+
+
+    ## Before another autonomous pass
+
+
+    The attempt cap is exhausted at 3/3. Drop the `dispatch:qa-fix-attempt-3`
+    label (or whatever this repo's counter reset is) once you've either applied
+    these fixes or judged this parked context stale — otherwise the qa-fix lane
+    won't re-enter.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
