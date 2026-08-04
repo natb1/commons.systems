@@ -93,19 +93,32 @@ marker-writing gap in the qa-main and qa-fix park paths, and the reap path.
 The defect destroys content but is fully recoverable, because the pre-clobber
 commit still holds the specific text.
 
-**1. Detect.** Any hit is a clobber:
+**1. Detect.** The detect must be STATE-AWARE. The clobber's commit pattern
+stays in history forever, so a history-only scan re-reports every clobber that
+has already been healed and cannot distinguish healed from live. This form
+re-reads each node's CURRENT frontmatter and prints `UNHEALED` only when the
+generic text is still the live park, together with the commit to restore from.
+Only `UNHEALED` rows are actionable:
 
 ```bash
 cd /home/n8/natb1/commons.systems && git fetch origin main -q
 git log --since='-4 days' --format='%H%x09%ct%x09%s' origin/main -- intentions/ \
-  | grep '^[0-9a-f]*	[0-9]*	graph: park ' \
+  | grep '^[0-9a-f]*\t[0-9]*\tgraph: park ' \
   | awk -F'\t' '{n=$3; sub(/^graph: park /,"",n); split(n,a," ");
       g=($3 ~ /session ended without declaring a disposition/)?1:0;
       print $1"\t"$2"\t"a[1]"\t"g}' \
   | sort -k3,3 -k2,2n \
   | awk -F'\t' '{ if ($3==p3 && $4==1 && p4==0)
-      print "CLOBBERED "$3" specific="ps" generic="$1" gap="($2-pt)"s";
-      p3=$3; p4=$4; ps=$1; pt=$2 }'
+      printf "%s\t%s\t%s\t%s\n", $3, ps, $1, ($2-pt); p3=$3; p4=$4; ps=$1; pt=$2 }' \
+  | while IFS=$'\t' read -r node spec gen gap; do
+      if git show "origin/main:intentions/$node.md" 2>/dev/null \
+         | awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' \
+         | grep -q 'session ended without declaring a disposition'; then
+        printf '  UNHEALED %s  restore-from=%s  gap=%ss\n' "$node" "${spec:0:8}" "$gap"
+      else
+        printf '  healed   %s  (gap=%ss)\n' "$node" "$gap"
+      fi
+    done
 ```
 
 A gap under the sweep grace (900s frozen, 300s terminal) is this defect. A much
