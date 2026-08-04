@@ -82,4 +82,22 @@ concrete pattern but is not obviously actionable still classifies `Deferred`
 (not merge-blocking), and **never** verify-eligible (the adversarial-verify
 step is skipped for cost). When the classify agent returns no verdict for a cost
 finding, the Workflow falls back to `Deferred` so it is filed as a follow-up
-rather than silently dropped.
+rather than silently dropped. The `cost` Source is now emitted by the merged
+`api-cost` finder alongside security-classified `firebase` findings from the
+same agent, split by sub-pattern: rules-permissiveness, emulator-reachability,
+and key-exposure findings are `firebase` (security-classified), while
+query-cost, amplifier, and N+1 findings are `cost` (advisory). Because the
+merge raises the odds of a misclassified `bucket` sending an advisory `cost`
+finding down the merge-blocking path, the non-escalation invariant above is now
+clamped harness-side — not merely briefed — by the COST CLAMP in
+`review-fix.js` (search for `COST CLAMP`), which coerces a `cost` finding
+classified `Required` or `Fixed` back to `Deferred`.
+
+The clamp is **merge-aware**: it keys on the finding's full `sources`
+provenance, not on the representative `Source` that `dedupMerge` copies onto a
+merged entry. A merged finding whose `sources` include any non-`cost` member
+(a security source that dedup judged same-root at the same `path:line`) is
+left at its classified bucket and the skip is logged — otherwise a loud,
+high-confidence cost finding winning the representative slot would silently
+declassify a genuine merge-blocking vulnerability. For the same reason the
+clamp never rewrites `security_class`.

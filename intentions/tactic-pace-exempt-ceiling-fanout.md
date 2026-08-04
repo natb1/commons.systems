@@ -19,7 +19,26 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Item-13 — does a persistently unreadable max_concurrent_workers
+      need a durable operator-visible signal, and is the TARGET_N/MAX_WORKERS
+      severity asymmetry intentional?
+    answer: "(Ruled 2026-08-04 /align interview, author-ratified.) Follow-up
+      recommended: the durable graph latch — a find-or-create
+      tactic-config-unreadable-<key> node with stand-down-once-open semantics
+      (the tactic-main-red-* shape) — retained as draft
+      tactic-config-unreadable-latch, which owns routing all three config-read
+      sites (dispatch-select-tick:643, :707, :814) through one signal path. On
+      THIS PR (#3034): option 1 — a comment at :707 documenting that log-only
+      is deliberate because the main-broken probe and reseed below the at-cap
+      block must stay reachable, pointing at the follow-up node; land item-9's
+      crashed-stub test; then qa proceeds with no further residue. Asymmetry
+      ruling: the divergence in degradation scope is intentional functionality
+      (TARGET_N is load-bearing for the whole tick, so an unreadable value
+      halts; MAX_WORKERS bounds one bypass lane, so failing closed on that lane
+      alone is proportionate), but the divergence in signal durability is not —
+      the latch unifies signaling while each site keeps its own blast radius.
+      Park cleared on this ruling."
 tooling_goals: []
 success_signal: null
 attention:
@@ -31,8 +50,16 @@ attention:
     5.33 undecomposed baseline. Simulated over the live store before writing: 0
     tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-pace-exempt-ceiling-fanout
+  pr: 3034
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null

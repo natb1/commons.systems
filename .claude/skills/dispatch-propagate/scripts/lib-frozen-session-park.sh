@@ -43,7 +43,14 @@
 #   evidence of staleness. An UNKNOWN daemon, an unreadable transcript, an
 #   unmeasurable mtime, or a missing node file all mean "keep", never "park".
 #   The only path that parks is: blocked + measured idle >= grace + NO other
-#   live session holding the node + a real, unparked node file on origin/main.
+#   live session holding the node + a real node file on origin/main that is
+#   unparked AT WRITE TIME. That last term is stronger than the read alone can
+#   make it: `origin/main` is fetched once per sweep and each candidate then
+#   burns minutes of wall clock before its write, so the "not parked" read is
+#   stale by the time the park runs. Every `park-node` call therefore carries
+#   `--base <id>=<blob>` pinned to the blob the decision was read from, and a
+#   park that landed inside that window makes park-node REFUSE (exit 3) instead
+#   of overwriting it — a stale-diagnosis skip, not a park failure.
 #
 #   The "no other live session" term is the stand-down interlock. A stood-down
 #   LOSER (the duplicate-worker protocol in lib-standdown-recheck.sh) has
@@ -476,12 +483,28 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (8) Already parked. Idiom copied VERBATIM from `park_live_on_main` in
-      # `packages/intentionsutil/scripts/office-hours-graph` — deliberately
-      # inlined rather than shared. The frontmatter scoping is load-bearing:
-      # restricting the test to the YAML block (between the first two `---`
-      # fences) means a column-0 `office_hours:` line in the markdown BODY
-      # (documentation of the serialization) can never be misread as park state.
+      # (7b) Diagnosis-time base (ref-diagnosis-time-cas). The decision this
+      # sweep is about to make — "not parked, so park it" — is made against the
+      # blob read HERE, from a ref last fetched once at step (6). Pin that exact
+      # blob through park-node's --base so a park landing in the window between
+      # this read and the write below is REFUSED (exit 3) rather than
+      # overwritten. `rev-parse` is the identical expression park-node resolves
+      # FRESH_BLOB with (park-node:205), so the two are bit-for-bit comparable;
+      # hashing $body instead would not match, because command substitution
+      # strips its trailing newlines.
+      local diagnosis_blob
+      if ! diagnosis_blob=$(git -C "$repo_root" rev-parse "origin/main:intentions/${name}.md" 2>/dev/null); then
+        printf 'lib-frozen-session-park: keeping %s (could not resolve the origin/main blob sha for intentions/%s.md; refusing to park without a compare-and-swap base)\n' "$name" "$name" >&2
+        continue
+      fi
+
+      # (8) Already parked. Idiom deliberately inlined rather than shared (same
+      # frontmatter-scoped, column-0-anchored idiom `node_kind_on_main` in
+      # `packages/intentionsutil/scripts/office-hours-graph` uses). The
+      # frontmatter scoping is load-bearing: restricting the test to the YAML
+      # block (between the first two `---` fences) means a column-0
+      # `office_hours:` line in the markdown BODY (documentation of the
+      # serialization) can never be misread as park state.
       local frontmatter parked_already=0
       frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$body")
       if grep -q '^office_hours:' <<<"$frontmatter"; then
@@ -502,10 +525,18 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (10) Park. Three positional args: <node-id> <reason> [recommendation].
-      # No `--pr` (this caller is gh-free and has no PR number) and no `--base`
-      # (there is no diagnosis/execution gap to pin — park-node's own fresh
-      # origin/main re-read is the correct guard here).
+      # (10) Park. Three positional args: <node-id> <reason> [recommendation],
+      # preceded by `--base`. No `--pr` (this caller is gh-free and has no PR
+      # number), but `--base` IS threaded: there is a real diagnosis/execution
+      # gap to pin. `origin/main` is fetched ONCE per sweep at step (6), and each
+      # candidate then burns wall clock on transcript stats, job-dir reads, and
+      # (for earlier candidates) a full park-node landing — so the window between
+      # the step-(8) "not parked" read and the write below is minutes wide in
+      # practice. park-node's own fresh origin/main re-read is NOT a guard against
+      # that: it re-reads to build the write, not to verify the decision still
+      # holds, so a specific human-facing park that landed in the window is
+      # silently overwritten with this sweep's generic boilerplate. Pinning the
+      # step-(7b) blob turns that race into an exit-3 refusal instead.
       local reason recommendation
       printf -v reason \
         'worker session froze at a permission/classifier denial — claude agents reports state=blocked and the transcript has had no activity for %ss; the session cannot make progress and cannot park itself (a blocked session never reaches the Stop hook), so the dispatch-tick frozen-session sweep parked this node' \
@@ -518,13 +549,30 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       # default. The tick must keep scheduling even when the lock is busy.
       # `</dev/null`: park-node runs a long chain of git/node subprocesses, none
       # of which has any business reading the sweep's inherited stdin.
+      #
+      # park-node's parse is leading-flags-only: the first non-flag argument ends
+      # flag parsing and everything after it is verbatim free text, so `--base`
+      # must come first. The `<id>=<sha>` pair form (rather than a bare sha) is a
+      # free guard — park-node rejects a pair whose id is not the node id, so a
+      # mis-threaded `$name` fails loudly instead of pinning the wrong file.
+      local -a park_args=(--base "$name=$diagnosis_blob" "$name" "$reason" "$recommendation")
       local rc=0
       GRAPH_COMMIT_LOCK_WAIT_SECONDS="$lock_wait" \
-        "$timeout_bin" "$park_timeout" "$park_node" "$name" "$reason" "$recommendation" >/dev/null </dev/null || rc=$?
+        "$timeout_bin" "$park_timeout" "$park_node" "${park_args[@]}" >/dev/null </dev/null || rc=$?
       if (( rc == 0 )); then
         parked_count=$(( parked_count + 1 ))
         printf 'lib-frozen-session-park: parked %s (denied-command-frozen after %ss; session=%s)\n' "$name" "$idle" "$sid" >&2
         _frozen_session_log_decision "$name" "$sid" "$idle" "parked"
+      elif (( rc == 3 )); then
+        # NOT a park failure. park-node refused the compare-and-swap because the
+        # node changed on origin/main after this sweep read it — it is already
+        # parked, or already under human review. Nothing was written, nothing is
+        # broken, and the correct response is to re-diagnose next tick, never to
+        # retry without the base and never to park again
+        # (.claude/skills/ref-diagnosis-time-cas/SKILL.md:73-83).
+        printf 'lib-frozen-session-park: stale-diagnosis skip for %s — intentions/%s.md on origin/main changed after this sweep read it (pinned base %s); park-node REFUSED rather than overwriting a park that landed in the meantime. Nothing was written; the next tick re-reads and re-decides\n' \
+          "$name" "$name" "$diagnosis_blob" >&2
+        _frozen_session_log_decision "$name" "$sid" "$idle" "stale-diagnosis"
       elif (( rc == 124 )); then
         # A timeout is just another park failure — same non-fatal handling, but
         # named distinctly so a contended landing lock is greppable as itself.
@@ -983,13 +1031,30 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (8) Already parked. Idiom copied VERBATIM from `park_live_on_main` in
-      # `packages/intentionsutil/scripts/office-hours-graph` — deliberately
-      # inlined rather than shared (the same deliberate duplication
-      # frozen_session_sweep step (8) carries). The frontmatter scoping is
-      # load-bearing: restricting the test to the YAML block (between the first
-      # two `---` fences) means a column-0 `office_hours:` line in the markdown
-      # BODY can never be misread as park state.
+      # (7b) Diagnosis-time base (ref-diagnosis-time-cas), exactly as
+      # frozen_session_sweep step (7b) does it. The decision this sweep is about
+      # to make — "not parked, still at a working phase, so park it" — is made
+      # against the blob read HERE, from a ref last fetched once at step (6).
+      # Pin that exact blob through park-node's --base so a park landing in the
+      # window between this read and the write at step (12) is REFUSED (exit 3)
+      # rather than overwritten. `rev-parse` is the identical expression
+      # park-node resolves FRESH_BLOB with (park-node:205), so the two are
+      # bit-for-bit comparable; hashing $body instead would not match, because
+      # command substitution strips its trailing newlines.
+      local diagnosis_blob
+      if ! diagnosis_blob=$(git -C "$repo_root" rev-parse "origin/main:intentions/${name}.md" 2>/dev/null); then
+        printf 'lib-frozen-session-park: keeping %s (could not resolve the origin/main blob sha for intentions/%s.md; refusing to park without a compare-and-swap base)\n' "$name" "$name" >&2
+        continue
+      fi
+
+      # (8) Already parked. Idiom deliberately inlined rather than shared (same
+      # frontmatter-scoped, column-0-anchored idiom `node_kind_on_main` in
+      # `packages/intentionsutil/scripts/office-hours-graph` uses; also the same
+      # deliberate duplication frozen_session_sweep step (8) carries). The
+      # frontmatter scoping is load-bearing: restricting the test to the YAML
+      # block (between the first two `---` fences) means a column-0
+      # `office_hours:` line in the markdown BODY can never be misread as park
+      # state.
       local frontmatter parked_already=0
       frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$body")
       if grep -q '^office_hours:' <<<"$frontmatter"; then
@@ -1097,10 +1162,17 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       # The tick must keep scheduling even when the landing lock is busy — the
       # header's "retries on the next tick if a landing-lock wait is in progress"
       # is only true because of these two bounds.
+      #
+      # park-node's parse is leading-flags-only, so every flag precedes the
+      # positionals. The `<id>=<sha>` pair form of `--base` (rather than a bare
+      # sha) is a free guard — park-node rejects a pair whose id is not the node
+      # id, so a mis-threaded `$name` fails loudly instead of pinning the wrong
+      # file.
       local -a park_args=()
       if [[ -n "$pr" ]]; then
         park_args+=(--pr "$pr")
       fi
+      park_args+=(--base "$name=$diagnosis_blob")
       park_args+=("$name" "$reason" "$recommendation")
       local rc=0
       GRAPH_COMMIT_LOCK_WAIT_SECONDS="$lock_wait" \
@@ -1162,6 +1234,18 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
             "$name" "$name" >&2
           _terminal_disposition_log_decision "$name" "$sid" "$idle" "park-not-landed"
         fi
+      elif (( rc == 3 )); then
+        # NOT a park failure. park-node refused the compare-and-swap because the
+        # node changed on origin/main after this sweep read it — it is already
+        # parked, or already under human review. Nothing was written, nothing is
+        # broken, and the correct response is to re-diagnose next tick, never to
+        # retry without the base and never to park again
+        # (.claude/skills/ref-diagnosis-time-cas/SKILL.md:73-83). The escalation
+        # markers stay where the failure paths leave them: they are only ever
+        # deleted from the confirmed-landed branch above.
+        printf 'lib-frozen-session-park: stale-diagnosis skip for %s — intentions/%s.md on origin/main changed after this sweep read it (pinned base %s); park-node REFUSED rather than overwriting a park that landed in the meantime. Nothing was written, keeping the escalation markers; the next tick re-reads and re-decides\n' \
+          "$name" "$name" "$diagnosis_blob" >&2
+        _terminal_disposition_log_decision "$name" "$sid" "$idle" "stale-diagnosis"
       elif (( rc == 124 )); then
         # A timeout is just another park failure — same non-fatal handling, the
         # markers are retained, but it is named distinctly so a contended landing

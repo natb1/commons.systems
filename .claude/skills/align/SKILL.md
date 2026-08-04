@@ -1,14 +1,14 @@
 ---
-name: align-strategy
-description: Interview-driven recording of a `strategy-*` intention node — the graph-native successor to `/file-issue`'s requirements-definition role. Frames the input as a new strategy or an edit to an existing one, runs a Socratic dialectic to fix intent/placement/benefit/signal/conditions, advises on delegation capture, retains tactical byproducts as draft tactic nodes, and lands the record via `graph-commit`. On-demand only; never files a GitHub issue.
+name: align
+description: Single interactive entry point to the persistent layer — an interview-driven session that records or revises a `strategy-*` intention node. Frames the input as a new strategy or an edit to an existing one, runs a Socratic dialectic to fix intent/placement/benefit/signal/conditions, advises on delegation capture, retains tactical byproducts as draft tactic nodes, and lands the record via `graph-commit`. With no prompt, runs an onboarding funnel — orient, validate the deployment, walk to a crafted prompt — that falls through into the same interview. On-demand only; never files a GitHub issue.
 user-invocable: true
 model: opus
 ---
 
-# Align Strategy
+# Align
 
 **On the `model` field's enforcement (strategy-token-economy clarification 10,
-2026-07-16):** `/align-strategy` is `user-invocable: true` — it runs on the
+2026-07-16):** `/align` is `user-invocable: true` — it runs on the
 interactive main loop, not via a `context: fork` subagent launch. A `model:`
 field in frontmatter is confirmed honored for `context: fork` skills; for
 `user-invocable` main-loop skills like this one, honoring is unconfirmed. This
@@ -20,7 +20,7 @@ here is intended-not-guaranteed — backed by the token audit's by-node/by-phase
 attribution (`strategy-token-economy`'s sensor) reading after the fact whether
 the session actually ran on Opus.
 
-`/align-strategy [optional requirement text]` records or revises a
+`/align [optional requirement text]` records or revises a
 `strategy-*` intention node under interview. It supersedes `/file-issue`'s
 requirements-definition role for the graph-native dispatch model
 (`intentions/strategy-graph-native-dispatch.md`): a strategy enters
@@ -51,16 +51,22 @@ permanent gap in the record, not a draft someone else will catch.
 
 ## Trigger and input
 
-On-demand only, human-invoked. Treat any text following `/align-strategy`
-as the **requirement text** for step 1. With no text, run the
-**improvement pass** branch of step 1 instead.
+On-demand only, human-invoked. The two branches are fixed by
+prompt-presence:
+
+- **With a prompt** — treat the text following `/align` as the
+  **requirement text** and run step 1's "With requirement text" branch
+  (the interview).
+- **With no prompt** — run step 1's **onboarding funnel** branch, which
+  ends by falling through into the interview with a crafted prompt.
 
 Never `AskUserQuestion`-free for the interview itself (step 2) — this
 skill's whole value is the dialectic. Reserve `AskUserQuestion` for
 bounded choices with a recommended option listed first, per the
 2026-07-03 prototype run's convention; open-ended elicitation is a normal
-conversational turn, prose reply captured as-is (same split as
-`.claude/skills/align-init/SKILL.md`'s rung-0 intent interview).
+conversational turn, prose reply captured as-is — never `AskUserQuestion`.
+That split is this skill's standing elicitation convention, and it binds
+the onboarding funnel's Socratic walk as much as the interview proper.
 
 ## Step 0 — Claim and isolate
 
@@ -72,18 +78,12 @@ shared `main` checkout: a second concurrent session's dirty tracked file
 blocks your `graph-commit` rebase, and a stale read races live phase state
 (both happened live the day that clarification landed).
 
-1. **Resolve the target node id.** For an edit, an improvement pass, or a
-   doctrine round, it is the primary `strategy-*` being edited — claimed
+1. **Resolve the target node id.** For an edit or a doctrine round, it is
+   the primary `strategy-*` being edited — claimed
    before the first write. A brand-new strategy has no id until step 5
    constructs it; author it in the worktree and claim its id as soon as the
    id is fixed.
-2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
-   already exists with a live session — `worktree_has_live_session <path>`
-   (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
-   run with `dangerouslyDisableSandbox: true`) — the claim is held by
-   another session: stop and report the held claim to the author. Do
-   **not** park the node — a held claim is not a defect.
-3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+2. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
    or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
    liveness rule the router uses, so no separate lock is needed. **Prefer
@@ -134,50 +134,88 @@ clarification records.
    with the author (`AskUserQuestion`, recommended: "edit
    `strategy-<id>`") before proceeding.
 
-**With no requirement text — improvement pass:**
+**With no requirement text — onboarding funnel:**
 
-1. Run
-   `npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions`
-   and check its per-strategy census dump (conditions, reading, gap,
-   clarification provenance) for each strategy:
-   - Any `attributes.conditions` entry that no longer plausibly holds
-     against current repo/author state.
-   - `reading`/`gap` staleness — a `reading` that predates a clarification
-     it should have been invalidated by, or a `gap` describing a target
-     already met.
-   - A `clarifications` entry contradicted by a later clarification on the
-     same or a related node.
-   - **Greenfield-relevance gate** (strategy clarification 26): sweep the
-     strategy's open (non-draft, non-`done`) tactics for subjects deleted or
-     superseded by a non-draft node elsewhere in the graph (a raw draft
-     never obsoletes live work). Per-unit: a doomed unit is a candidate to
-     drop, naming the superseding node; a tactic demotes to draft only when
-     it is *fully* superseded; a tactic on doomed surface may be kept only
-     with an explicit interim-live-risk exception naming its expiry event
-     (e.g. "until the gh-queue drains"). This is the same gate
-     `/align-tactics` runs at finalization — running it here too catches
-     staleness on strategies with no pending decomposition round.
-2. Separately, read the census's "Unserved virtues" section — virtue ids
-   that appear in **no** strategy's `serves` — a virtue with no strategy
-   expressing it is a candidate for a brand-new strategy.
-3. Present the candidates (failing-condition strategies, stale-signal
-   strategies, contradicted-clarification strategies, doomed-tactic
-   strategies, unserved virtues) via `AskUserQuestion` and let the author
-   pick one or more to take into step 2. If the author picks none, stop
-   here — there is nothing to record.
+This is the fork/consuming-repo entry path, folded in from the retired
+`/align-init` skill: orient the practitioner, verify the deployment
+actually works, then walk them to a prompt and run the interview on it.
 
-**Mechanics.** The corpus staleness checks above (condition-vs-repo-state,
-reading/gap dating, contradicted clarifications, greenfield-relevance) may
-fan out to `Explore` subagents returning compact `path:line`-anchored
-findings — the interview dialectic itself (step 2 onward) is never
-delegated. Keyword grep (this step's corpus sweep, and step 3's delegation
-sweep) only **shortlists** candidates; it never disposes of one — disposition
-requires reading each shortlisted node in full. The
-`align-strategy-census.ts` script (`tactic-align-tactics-mechanical-floor`
-Unit 4) is the enumeration hook for this sweep — run it as shown in item 1
-above instead of hand-reading the corpus; the greenfield-relevance gate's
-per-strategy tactic sweep still requires reading each flagged strategy's
-node in full, since the census does not carry tactic state.
+1. **Orient.** Give the practitioner a one-screen description of what they
+   have deployed: a harness for long-horizon autonomous workflows built
+   around the **intention graph** — the versioned store under `intentions/`
+   whose node kinds are defined by the `intentions/kind-*.md` nodes:
+   - **Virtues** (`virtue-*`) — permanent dispositions; the roots of the
+     graph. They never complete; everything else justifies itself against
+     them.
+   - **Strategies** (`strategy-*`) — persistent, condition-bearing,
+     signal-carrying goals. A strategy records the author's intent, the
+     circumstances it is contingent on (`attributes.conditions`), and the
+     `success_signal` that would validate it.
+   - **Tactics** (`tactic-*`) — transient, completable, delegable work.
+     Each claude-eligible tactic carries a full clean-session plan in its
+     node body and is walked through execution phases by the dispatch
+     router.
+   - **Delegations** — attachment records: which work is handed to whom
+     (human → AI → procedure), with the divergence/irreversibility axes
+     that bound capture risk.
+
+   The router reads the graph at `origin/main` and schedules eligible
+   tactics autonomously; the two align skills (`/align` and
+   `/align-tactics`) are the human interface that populates it. Keep the
+   orientation to one screen — the schema reference is
+   `intentions/kind-kind.md` for anyone who wants depth.
+
+2. **Validate deployment.** Confirm the tooling actually works in this
+   checkout before interviewing anyone. Run
+   `.claude/skills/align/scripts/validate-deployment.sh`, which performs the
+   three local checks (no `gh`, no network) and reports each result with its
+   own remediation diagnostic:
+   - **Workspace installed** — `npm test --prefix packages/intentionsutil`.
+     On failure (tests fail, or `npx tsx` cannot resolve) the workspace is
+     not installed: the script says to run `npm ci` at the repo root and
+     rerun.
+   - **Graph clean** — `npx tsx packages/intentionsutil/scripts/validate-graph.ts`
+     (dangling refs, cycles, schema). On failure — a missing or unreadable
+     `intentions/` directory, or a schema violation — the script reports the
+     exact error. Do **not** proceed to the funnel's remaining steps over a
+     broken store.
+   - **Router heartbeat** — `systemctl --user is-active
+     dispatch-claude-daemon.service` (Linux deployments; the daemon hosts
+     the dispatch tick). An inactive daemon is non-fatal: the script points
+     at the home-manager module (`nix/home/claude-code.nix`, instance
+     template `examples/office-hours-nate/flake.nix`) and the funnel
+     continues — the interview itself does not need the daemon — but say
+     clearly that nothing dispatches until the heartbeat is wired.
+
+   Keeping these rote checks in a script rather than inline prose is the
+   mechanical-floor doctrine: scripts carry what is mechanical, skill prose
+   carries only what needs judgment.
+
+3. **Walk to a prompt.** Elicit, Socratically, what the practitioner wants
+   recorded or changed — one open question at a time, as a normal
+   conversational turn with the prose reply captured as-is. This is
+   open-ended capture, never `AskUserQuestion` (the "Trigger and input"
+   convention above; `AskUserQuestion` stays reserved for bounded gates).
+   Converge on a single crafted prompt stating the requirement in the
+   practitioner's own terms, and confirm it reads right to them.
+
+   Then **fall through directly into this same step's "With requirement
+   text" branch** using that crafted prompt as the requirement text,
+   continuing in-session. Do **not** re-invoke `/align` through the Skill
+   tool on itself — this is a continuation, not a new invocation.
+
+**Note — no virtue-review step.** This funnel deliberately omits
+`/align-init`'s old "Review virtues" step (its rung-0 virtue-review flow);
+that flow retires with `/align-init` rather than folding in. Virtue
+recording now happens as a natural consequence of running `/align <prompt>`
+normally — the "New vs. edit" logic above already identifies which
+`virtue-*` node a new strategy serves, and surfaces the gap when none fits.
+
+**Mechanics.** Keyword grep (step 3's delegation sweep) only **shortlists**
+candidates; it never disposes of one — disposition requires reading each
+shortlisted node in full. Such sweeps may fan out to `Explore` subagents
+returning compact `path:line`-anchored findings — the interview dialectic
+itself (step 2 onward) is never delegated.
 
 ## Step 2 — Interview dialectic
 
@@ -404,10 +442,10 @@ recommendation on trust, never a quiet drop. When the author accepts one:
 | Compliance | Step 2.2 — does intent trace to a real virtue |
 | Clarity | Step 2.1 — a muddled composite statement is a step-1.1 multi-topic split, not a vague one-liner accepted as-is |
 | Correctness | Step 2.6 — does the signal actually measure the stated intent |
-| Relevance | Step 1 improvement-pass branch (edit mode only) |
+| Relevance | Retired with the improvement pass — no longer covered by this skill |
 | Decomposition | Deliberately **not** this skill's job — a strategy is never broken into PR leaves here; that is `/align-tactics` |
 | Recommendations | The interview's own resolutions, recorded live as clarifications — there is no separate recommendations pass |
-| Open-issue alignment | Step 1 improvement-pass condition/signal staleness sweep, generalized from "issues" to "the graph" |
+| Open-issue alignment | Retired with the improvement pass — the corpus-wide condition/signal staleness sweep is no longer covered by this skill |
 
 ## Step 3 — Delegation advice
 
@@ -444,7 +482,7 @@ nearest-fit strategy just because it is the one under interview. A
 genuinely cross-cutting byproduct uses an honest multi-entry `serves`
 naming every owning strategy. When no strategy owns the artifact, do not
 force-fit one: surface the gap to the author (a candidate for a brand-new
-strategy, per the improvement-pass branch above) rather than parking the
+strategy, per Step 1's "New vs. edit" logic) rather than parking the
 draft under a strategy that does not actually own it.
 
 For each such byproduct, write a draft tactic node:
@@ -728,11 +766,12 @@ responsible for closing.
 ## Out of scope
 
 - `/align-tactics` (breaking a recorded strategy into PR-sized tactics —
-  `tactic-align-tactics-skill`) and `/align-init` (fork onboarding —
-  `tactic-align-init-skill`): sibling skills, not this one's job.
+  `tactic-align-tactics-skill`): a sibling skill, not this one's job.
 - Deleting `/file-issue` itself: that is `tactic-legacy-router-removal`,
-  gated on the legacy gh queue draining. `/file-issue` keeps working for
-  gh-issue work throughout this skill's rollout.
+  gated on the legacy gh queue draining. `/file-issue` carried gh-issue work
+  through this skill's rollout; it is now retired ("RETIRED — do not invoke",
+  `.claude/skills/file-issue/SKILL.md`) and GitHub Issues are disabled
+  repo-wide.
 
 ## Verification
 
@@ -746,3 +785,15 @@ test surface, so no ```verify block:
   - any draft tactics from step 4 landed in the same commit and read back
     with `phase` absent;
   - no `gh issue`/`gh pr` command ran anywhere in the flow.
+
+- Invoke `/align` with **no prompt** in an interactive session to exercise
+  the onboarding branch. Confirm:
+  - step 1 orients — the practitioner gets the one-screen description of the
+    graph's node kinds before anything else runs;
+  - `.claude/skills/align/scripts/validate-deployment.sh` actually runs, and
+    reports all three checks (workspace installed, graph clean, router
+    heartbeat) each with its own remediation diagnostic — including on the
+    failure paths, and with an inactive daemon reported as non-fatal;
+  - the walk-to-a-prompt step converges on a crafted prompt and then
+    **falls through in-session** into step 1's "With requirement text"
+    branch — it must not re-invoke `/align` through the Skill tool.

@@ -7,21 +7,50 @@ description: Diagnosis-time compare-and-swap reference — how a batched drain c
 
 ## When this applies
 
-Any caller with a gap between DECIDING a disposition for a node and EXECUTING
-it. Canonical case: a batched office-hours drain diagnoses several parked
-nodes, then interviews the human author about each proposed disposition before
+The rule is stated by shape, not by caller class: any caller that makes a
+decision from a read of a node and later writes that node must capture the
+blob at the deciding read and pin it through `--base`. It does not matter
+whether the gap is a human interview or a loop over subprocess calls — what
+matters is whether a decision was made from a read that a later write could
+silently invalidate.
+
+Canonical case: a batched office-hours drain diagnoses several parked nodes,
+then interviews the human author about each proposed disposition before
 executing any of them — minutes can pass. Without a pin, a fleet write landing
 during that interview window would be silently absorbed by park-node's /
 clear-park's own execution-time self-refresh of origin/main, including one
-that changes what the human should have decided.
+that changes what the human should have decided. This is the widest instance
+of the shape, not the only one.
 
-NOT needed for immediate mechanical parks that diagnose and execute in the
-same breath — e.g. `dispatch-tick`'s `frozen_session_sweep` and
-`terminal_without_disposition_sweep`
-(`.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`), which
-read the node and call `park-node` with no interview gap in between. Their
-diagnosis→execution window is a handful of subprocesses, and `park-node`'s own
-fresh `origin/main` re-read is the correct guard at that scale.
+Worked example of a narrower instance: `dispatch-tick`'s `frozen_session_sweep`
+and `terminal_without_disposition_sweep`
+(`.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`) fetch
+`origin/main` once per sweep, then loop over N candidates, each candidate's
+already-parked guard read served from that single fetch, each candidate's
+`park-node` call bounded by a 120s timeout over a 60s landing-lock wait.
+Observed windows were not "a handful of subprocesses": 351s, 441s, and 809s.
+`park-node`'s own fresh `origin/main` re-read is not the guard for this
+hazard — it protects against a stale local copy diverging from origin/main,
+but it does nothing for a park that lands inside the caller's own
+guard-to-write window, because absent `--base` `park-node` has no
+already-parked check of its own and overwrites `office_hours`
+unconditionally. Before these two sweeps threaded a diagnosis-time `--base`
+(this pin landed in this PR), that gap produced four confirmed clobbers on
+origin/main in four days — a specific
+human-authored `office_hours` park silently overwritten with generic
+"session ended without declaring a disposition" boilerplate on the same node:
+
+- `tactic-attention-surface-graph-read` — specific park `1c09ccf1`, clobbered 351s later
+- `tactic-explicit-node-reservation-sweep-policy` — `ac4c24f7`, 441s later
+- `tactic-office-hours-select-fresh-main` — `69cf82b3`, 809s later
+
+Both sweeps now thread `--base` through their diagnosis-time reads exactly as
+described in this reference.
+
+The only genuine exemption is a caller with no guard decision at all: an
+unconditional park that would write the same thing regardless of what it
+read. That is not a compare-and-swap situation because there is no decision
+for a later write to invalidate.
 
 ## The three-step protocol
 
@@ -51,10 +80,8 @@ clear-park selects only its own id's line out of the shared manifest, so a
 single `dump-node.ts` capture at the start of a drain serves every disposition
 executed later in that drain.
 
-`clear-park` is described here even though it may not exist yet on
-`origin/main` — it lands via the sibling tactic `tactic-clear-park-primitive`,
-mirroring park-node's `--base <blobsha>|<id>=<blobsha>|<manifest-file>` shape
-exactly.
+`clear-park` mirrors park-node's `--base <blobsha>|<id>=<blobsha>|<manifest-file>`
+shape exactly.
 
 ## Exit-code contract
 
