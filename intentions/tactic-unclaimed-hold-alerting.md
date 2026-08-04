@@ -147,7 +147,7 @@ attention:
     5.33 undecomposed baseline. Simulated over the live store before writing: 0
     tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-unclaimed-hold-alerting
   pr: 3036
@@ -158,7 +158,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T08:15:45Z
+    mergeCommitSha: 21758a37a6989f7d4066d2bd8ceae837637b056e
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
