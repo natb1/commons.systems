@@ -40,7 +40,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: main-qa
+phase: done
 execution:
   branch: tactic-graph-node-session-reap
   pr: 2922
@@ -424,3 +424,20 @@ daemon):
 - **url_path:** current
 - **expected outcome:** Terminal node-worker exits (clean and parked) leave no registry entry via the Stop-hook self-close, phase/office_hours state is durable, and interactive sessions are preserved. (Mid-phase-dead-worker reap is no longer this tactic's concern — see the scope note above; main's own NODE-arm subsystem owns that verification on its own PR.)
 - **finding:** Requires live `claude agents --json` / `claude rm` calls against the local daemon (which the shell fixtures fake entirely) and observation of real session lifecycle; only verifiable downstream in production, not at PR-merge time in this sandboxed session. Planned deferral: the acceptance criteria for real-daemon self-close and interactive-session safety are documented as non-assertable at merge time — verify by observing `claude agents --json` before/after a real node-worker Stop-hook fire.
+
+**Disposition (2026-07-29).** `/qa-main` parked this residue item as
+cannot-verify: its `url_path` is the literal string `current`, not a real page,
+and the check it asks for — observing `claude agents --json --all` / `claude rm`
+against the live local Claude daemon across a real node-worker session lifecycle
+— is not browser-observable, so Claude-in-Chrome cannot assert it against
+deployed main. The author reviewed the park in-session and elected to **skip**
+the rehearsal rather than hold the node open pending a manufactured or
+naturally-occurring daemon-level observation; the node is closed to `done` on
+that basis. The source PR #2922 merged 2026-07-26T05:51:57Z, so the fix is
+deployed and the full shell suite (3076/3076) covers both units at the fixture
+level; what is waived is only the four live-daemon observations enumerated in
+the park recommendation (parked-exit reap, durable-before-teardown ordering,
+clean-advance reap, interactive-session no-op). Those remain unrehearsed — the
+next real node-worker Stop-hook fire is the first production validation. If any
+of them turns out to be broken, file a fresh bug against `dispatch-stop.sh` /
+`dispatch-self-close` rather than reopening this already-merged PR.

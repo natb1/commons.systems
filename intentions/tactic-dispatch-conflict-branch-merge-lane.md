@@ -61,7 +61,7 @@ attention:
     rank, and matching it would need a raw boost of ~383, which schema rule 18
     rejects without the literal ACK string. That ACK was not sought, so the
     boost is capped at the authored band. Recorded 2026-07-27."
-phase: review
+phase: done
 execution:
   branch: tactic-dispatch-conflict-branch-merge-lane
   pr: 2977
@@ -69,9 +69,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-28T20:05:18Z
+    mergeCommitSha: e5d674003acc7a3ee2f74b9e3ab8c41ae7570ebc
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -733,3 +737,14 @@ after `review → main-qa` fires post-merge.
   ladder still engages when the lane itself cannot be launched. Finding: only
   observable against the running dispatch fleet's own ticks; not reproducible
   in the QA session.
+
+**Disposition (2026-07-28).** `/qa-main` found all five items above carry
+`url_path: n/a` and require live dispatch-fleet/graph state (a real
+held/conflicted node, a genuine exit-11 tick, an opus-resolver judgment call, a
+contended two-write `resolve-hold` race) unreachable via Claude-in-Chrome
+against deployed prod — none of it is browser-observable. The author reviewed
+this in-session and elected to skip rehearsal rather than park pending a
+naturally-occurring or manufactured conflict scenario; the node is closed to
+`done` on that basis. Items 8-12 remain unrehearsed — a future conflict/hold
+that exercises Lane 3 is the first real-world validation of this tactic's
+behavior.

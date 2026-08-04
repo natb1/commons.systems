@@ -207,6 +207,31 @@ describe("evaluateSelection", () => {
     expect(r.stderr[0]).toMatch(/fingerprint:.*strategy-x substance changed/);
   });
 
+  it("throws (fails closed) when a serving strategy's file is corrupt rather than passing the gate", () => {
+    // Regression: the gate enumerates the store STRICTLY. Under the tolerant
+    // `listNodes` a corrupt strategy file is skipped with a warning, the
+    // `byId.get(sid) === undefined → continue` shortcut fires, and this
+    // soft-frozen tactic gets a silent exit-0 pass — a required staleness gate
+    // turned into a no-op for every tactic serving that strategy.
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-x", kind: "strategy", statement: "Own the substrate." }));
+    seed(
+      dir,
+      anode({
+        id: "tactic-x",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-x"],
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: "0".repeat(64) },
+      }),
+    );
+    // Simulate the partially-written / truncated node file.
+    writeFileSync(join(dir, "strategy-x.md"), "");
+    expect(() => evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null })).toThrow(
+      /strategy-x\.md/,
+    );
+  });
+
   it("passes when the stamped strategy fingerprint matches the current substance", () => {
     const dir = tempDir();
     seed(dir, anode({ id: "strategy-x", kind: "strategy", statement: "Own the substrate." }));

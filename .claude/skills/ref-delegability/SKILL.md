@@ -43,12 +43,14 @@ Apply the steps in order:
 
 ## Perspectives
 
-Three reused agents feed the evaluation. The doc defines exactly how each feeds the
+Three perspectives feed the evaluation, each formerly a deleted `.claude/agents/`
+agent definition; the verbatim pre-deletion source is at `origin/main` commit
+`44493733` under `.claude/agents/`. The doc defines exactly how each feeds the
 ROI inequality and the consistency check; this skill only names them:
 
-- **FINANCIAL** — `.claude/agents/align-financial.md`; estimates the left-side costs
-  (`build`, `run`, `manual_cost`, `frequency`).
-- **TECHNICAL** — `.claude/agents/align-technical.md`; estimates `maintenance`
-  and holds a veto if the codified artifact would not be safe to abandon.
-- **Consistency-tester** — `.claude/agents/align-consistency.md`; the consistency veto layer that
-  checks charter compliance and ratchet risk.
+- **FINANCIAL** — formerly the deleted `align-financial` agent definition; estimates
+  the left-side costs (`build`, `run`, `manual_cost`, `frequency`).
+- **TECHNICAL** — formerly the deleted `align-technical` agent definition; estimates
+  `maintenance` and holds a veto if the codified artifact would not be safe to abandon.
+- **Consistency-tester** — formerly the deleted `align-consistency` agent definition;
+  the consistency veto layer that checks charter compliance and ratchet risk.
