@@ -89,3 +89,47 @@ attributes:
     codified: the author has personally settled this strategy against present conditions
 ---
 # Strategy — the highest goals a virtue generates against present conditions
+
+A strategy node's body carries settled design and mechanism notes. This section
+is the normative detail for the two fields only strategy nodes may carry. The
+all-nodes field list, the shared shapes, and the full graph rule set live on
+kind-kind, which is the schema authority; nothing here restates it.
+
+Every node file carries both fields and `validateNode` defaults them uniformly
+(`recovers: []`, `rounds: null`). What makes them strategy-scoped is
+`validateGraph`: rule 9 rejects a non-empty `recovers` on any node whose `kind`
+is not `strategy`, and rule 12 rejects a non-null `rounds` the same way.
+
+## `recovers`
+
+Ids of the delegation records this strategy's work unwinds — the
+strategy→delegation edge described in this node's rationale. Rule 4 requires
+every entry to resolve to an existing node, and rule 9 additionally requires
+each resolved target to be a `kind: delegation` node. The two split cleanly: an
+id naming nothing is rule 4's report, an id naming a node of the wrong kind is
+rule 9's, so one broken entry is never reported twice.
+
+The edge is what keeps recovery real rather than aspirational: a delegation
+record is the surface where an attachment is detected, and a strategy that
+claims to recover it says so structurally instead of in prose.
+
+## `rounds`
+
+`/align-tactics` re-evaluation accounting for this strategy — how many
+decomposition rounds have run against it and when.
+
+| Name             | Type             | Meaning |
+| ---------------- | ---------------- | ------- |
+| `count`          | `number`         | Rounds run; a non-negative integer. |
+| `last_completed` | `string \| null` | Verified-in-prod completion time. Advances only when a non-draft child prunes — so it tracks work actually landing, not rounds being run. |
+| `last_aligned`   | `string \| null` | The `YYYY-MM-DD` date the last round *landed* (align-decompose time), stamped independently of completion. |
+
+The two dates are deliberately independent. A round that decomposes a strategy
+into fresh tactics advances `last_aligned` immediately; `last_completed` stays
+put until one of those tactics actually completes and prunes. A strategy with a
+recent `last_aligned` and a stale `last_completed` is one that keeps being
+planned but not delivered — a signal only the split makes visible.
+
+`last_aligned` is shape-validated as a `YYYY-MM-DD` date string when non-null;
+`last_completed` is validated as a plain nullable string, so it can hold a
+fuller timestamp.

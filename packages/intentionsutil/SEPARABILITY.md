@@ -123,8 +123,13 @@ branch-protection ruleset requiring exactly the four checks
   a push is accepted, and that the `graph/**` fast path is what stamps them.
 - `scripts/graph-commit:343-346` — polls
   `gh api "repos/{owner}/{repo}/commits/$sha/check-runs"` and selects check runs
-  named literally `acceptance` / `preview-and-smoke` / `lint` / `unit-tests`.
-  These names, and the `gh` CLI + GitHub REST API, are hardcoded.
+  named literally `acceptance` / `preview-and-smoke` / `lint` / `unit-tests`,
+  and only those rows written by the GitHub Actions App
+  (`.app.slug == "github-actions"`) — a row from any other `checks: write`
+  principal can neither satisfy nor supersede a required context. These names,
+  that producer slug, and the `gh` CLI + GitHub REST API, are hardcoded. A
+  consumer repo whose fast path is stamped by some other App must change the
+  slug too, not just the names.
 - `.github/workflows/graph-fast-path.yml:3-4,54-80` — the `on: push: branches:
   ['graph/**']` workflow that stamps those four contexts for an
   intentions/-only SHA. A consumer repo has neither this workflow nor the
@@ -150,7 +155,7 @@ structure.
 
 ## Gap 4 — the align skill family assumes worktrees, dispatch state fields, and router semantics
 
-**What breaks:** the align skills (`/align-strategy`, `/align-tactics`, and
+**What breaks:** the align skills (`/align`, `/align-tactics`, and
 peers) assume git worktrees, live-session detection, the dispatch `phase` /
 `execution` lifecycle, and router selection. None of that is available to a
 standalone adopter who only wants to author and validate a graph.
@@ -214,6 +219,14 @@ round-trip, derived attention) but has two concrete holes:
   standalone-adoption path and the extension fields are not. The fix is a
   `SCHEMA.md` addition (or a companion `USAGE.md`) covering the field gap and a
   standalone authoring walkthrough.
+
+**Superseded 2026-07-28:** the remediation above (extend `SCHEMA.md` / add a
+companion `USAGE.md`) no longer applies. `SCHEMA.md` has been deprecated and
+deleted; the still-accurate schema documentation it held was moved into the
+kind-node bodies, and `intentions/kind-kind.md` is now the sole doc home for
+this content (including, going forward, any standalone-adoption and
+dispatch-state-field documentation this gap called for). The dated audit
+narrative above is left as-is as a historical record.
 
 ## Summary
 

@@ -38,7 +38,10 @@ and land the single-node graph write it returns (via the write path in
 
 **Read the node and decide draft/raw vs soft-frozen.** A frozen tactic
 target is either draft/raw or soft-frozen; read its frontmatter to tell
-which. This session picks the `phase` value it will land, but the
+which. Capture the single-node base manifest here, at this read, before any
+write — see `references/write-path.md`'s "Capture a base manifest" section
+for the recipe; do not restate it here. This session picks the `phase` value
+it will land, but the
 finalize-vs-re-plan *judgment* (what the reconciled body should say) is the
 Workflow's tactic-mode job, not this thread's:
 
@@ -113,7 +116,8 @@ mode.
 single-node result lands through the **same** apply-result writer as the
 strategy-target flow, with one node (not a subtree) to write: `dump-node.ts`
 (base manifest) → `write-node.ts` (frontmatter, with the `phase` decided
-above) → body `Edit` (the Workflow's `body_markdown`) → `graph-commit
+above) → `assert-node-fresh` (freshness assertion against `origin/main`) →
+body `Edit` (the Workflow's `body_markdown`) → `graph-commit
 --base`. Do **not** duplicate that writer here; the only tactic-mode
 specializations are the `phase` choice above (`implement` for a finalize,
 the preserved in-flight phase for a re-plan) and the single-strategy

@@ -19,16 +19,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-schema-md-deprecation
   pr: 2980
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: 15b5ef1dc7ce30e0a267440a124bd558c5506c86bd79f91fa2dc39b909df79b9
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T10:46:06Z
+    mergeCommitSha: edc11dc4f3292a1d06b43eb09078e9def80c19cf
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-align-skill-schema-pointers

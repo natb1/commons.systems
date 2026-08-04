@@ -17,16 +17,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-flake-fingerprint-stability
   pr: 2979
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-29T14:07:26Z
+    mergeCommitSha: 3766801af7226462d5220b70e5efff33c9694bfa
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

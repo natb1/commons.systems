@@ -28,18 +28,13 @@ execution:
   strategy_fingerprint: null
   fix:
     since: 2026-07-28
-    attempt: 1
-    pushed_sha: null
+    attempt: 2
+    pushed_sha: 9b151ee71fff48d94780a18757c10fa795960ed8
   completion: null
 validates:
   - strategy-owned-web-platform
 blocked_by: []
-office_hours:
-  reason: provision-node-worktree failed for this tactic (exit 2)
-  since: 2026-07-28
-  recommendation: Inspect the provisioning failure (git fetch/worktree add,
-    direnv) in the tick journal, fix the environment, and re-run the phase.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

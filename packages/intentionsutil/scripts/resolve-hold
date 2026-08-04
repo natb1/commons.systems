@@ -75,10 +75,27 @@
 # `blocked_by` still names the hold is rejected by validate-graph, so prune
 # ordering is a separate concern (the owed-prune census), not this script's.
 #
-# Usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap>]
+# Usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap|worktree-residue>]
+#                     [--hold-id <hold-node-id>]
 #
 # --kind defaults to `provision-conflict` (the Lane-3 case). It selects which
 #   hold id is resolved, since a source can in principle carry one hold per kind.
+#   The list must stay in sync with hold-node-decide.ts's HOLD_KINDS — a kind
+#   missing from it here is silently undrainable in practice: a human reading
+#   the usage omits --kind and resolves a hold that does not exist (an
+#   idempotent no-op), leaving the real hold in place.
+#
+# --hold-id is an OPTIONAL caller assertion, not an override: when given, the id
+#   this script derives from (<source-node-id>, --kind) must equal it, and a
+#   mismatch is a usage error (exit 2) that lands NOTHING. It exists because a
+#   caller that ENUMERATED a hold by node id (lib-stale-hold-recheck.sh's sweep)
+#   otherwise hands over only (source, kind) and lets this script re-derive —
+#   so a node carrying `hold_kind`/`hold_for` under a NON-canonical id would
+#   have its own classification applied to whatever hold the derivation lands
+#   on, i.e. a different node's genuine, still-open hold. Passing the enumerated
+#   id binds "the hold that was classified" to "the hold that gets resolved".
+#   Callers that have no enumerated id (a human on the Lane-3 lane) omit it and
+#   get the derivation unchanged.
 #
 # Stdout on success: exactly one line — `resolved <hold-id> (unblocked <source-id>)`.
 #
@@ -102,13 +119,22 @@ DUMP_NODE_TS="$SCRIPT_DIR/dump-node.ts"
 WRITE_NODE_TS="$SCRIPT_DIR/write-node.ts"
 GRAPH_COMMIT="$SCRIPT_DIR/graph-commit"
 
-USAGE="usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap>]"
+USAGE="usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap|worktree-residue>] [--hold-id <hold-node-id>]"
 
 SOURCE_ID=""
 KIND="provision-conflict"
+EXPECTED_HOLD_ID=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --kind) KIND="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
+    --hold-id)
+      EXPECTED_HOLD_ID="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; }
+      if [[ -z "$EXPECTED_HOLD_ID" ]]; then
+        echo "resolve-hold: --hold-id requires a non-empty node id" >&2
+        echo "$USAGE" >&2
+        exit 2
+      fi
+      ;;
     -*) echo "resolve-hold: unknown option \"$1\"" >&2; echo "$USAGE" >&2; exit 2 ;;
     *)
       if [[ -n "$SOURCE_ID" ]]; then
@@ -136,6 +162,15 @@ fi
 # front (provision-node-worktree:61, dispatch-graph-execute:144).
 if [[ ! "$SOURCE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
   echo "resolve-hold: invalid node id \"$SOURCE_ID\" (expected a lowercase slug like tactic-foo-bar)" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+# Same guard for the asserted hold id. It never reaches a path on its own (the
+# derived id is what everything below interpolates), but a malformed assertion
+# is a caller bug worth refusing up front rather than reporting as a mismatch.
+if [[ -n "$EXPECTED_HOLD_ID" && ! "$EXPECTED_HOLD_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  echo "resolve-hold: invalid --hold-id \"$EXPECTED_HOLD_ID\" (expected a lowercase slug like tactic-hold-residue-foo)" >&2
   echo "$USAGE" >&2
   exit 2
 fi
@@ -319,6 +354,16 @@ fi
 HOLD_ID="$(jq -r '.hold_id' <<<"$DECIDE_OUT")"
 [[ -n "$HOLD_ID" && "$HOLD_ID" != "null" ]] || {
   echo "resolve-hold: could not derive the hold id for $SOURCE_ID" >&2; exit 1; }
+
+# The --hold-id assertion (see the header). A caller that enumerated a hold by
+# node id must be resolving THAT node; a mismatch means the enumerated node is
+# not the canonical hold for (source, kind), so acting on the derivation would
+# resolve a DIFFERENT hold than the one the caller inspected. Refuse, land
+# nothing (exit 2 is non-zero, so the EXIT trap restores the source refresh).
+if [[ -n "$EXPECTED_HOLD_ID" && "$EXPECTED_HOLD_ID" != "$HOLD_ID" ]]; then
+  echo "resolve-hold: --hold-id \"$EXPECTED_HOLD_ID\" does not match the hold id derived from ($SOURCE_ID, $KIND) = \"$HOLD_ID\" — refusing to resolve a hold other than the one the caller named" >&2
+  exit 2
+fi
 
 # --- Fresh-origin/main refresh (hold) ----------------------------------------
 capture_orig "$HOLD_ID"

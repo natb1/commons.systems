@@ -19,9 +19,31 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
-phase: implement
-execution: null
+attention:
+  boost: 20
+  override: null
+  rationale: "Author-directed 2026-08-03: prioritize progression of
+    token-efficiency work ahead of bug-fix work and ahead of the undecomposed
+    baseline. Matches the boost 20 already carried by the review-phase
+    token-cost cluster (tactic-review-skill-body-decomposition and its
+    siblings). Simulated over the live store before writing: 0 tier changes, 0
+    value drift onto non-target nodes, resolves to 20.00."
+  tier: 1
+phase: done
+execution:
+  branch: tactic-audit-routing-advisory-gate
+  pr: 3029
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-04T01:32:07Z
+    mergeCommitSha: df9bb84c51a05be6a97309130098d880833a575a
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

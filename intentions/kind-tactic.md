@@ -92,3 +92,69 @@ attributes:
       has settled its execution plan
 ---
 # Tactic — a completable unit of execution
+
+A tactic node's body is its execution plan — clean-session-executable and
+authoritative. This section is the exception that makes the rule usable: it is
+the normative detail for the four fields only tactic nodes may carry. The
+all-nodes field list, the shared shapes, and the full graph rule set live on
+kind-kind, which is the schema authority; nothing here restates it.
+
+Every node file carries these four fields and `validateNode` defaults them
+uniformly (`phase: null`, `execution: null`, `validates: []`, `blocked_by: []`).
+What makes them tactic-scoped is graph rule 10: `validateGraph` rejects a
+non-null `phase` or `execution`, or a non-empty `validates` or `blocked_by`, on
+any node whose `kind` is not `tactic`.
+
+## `phase`
+
+The persisted dispatch phase this tactic sits in, one of `draft`,
+`align-tactics`, `implement`, `qa`, `review`, `main-qa`, `done`. The router
+transitions it; the schema only checks the value is a member of the enum. `null`
+means no dispatch state — a tactic authored but not yet entered into the
+workflow.
+
+`fix` is deliberately NOT a phase. The CI-fix interrupt lives entirely in the
+orthogonal `execution.fix` record, set and cleared off the live CI verdict
+independent of whatever phase the tactic is in — so a tactic under CI repair
+does not lose its place in the lifecycle.
+
+## `execution`
+
+The live in-flight record a router stamps on a tactic: `branch`, `pr`,
+per-phase `attempts`, `markers`, the `strategy_fingerprint` soft-freeze stamp,
+the `fix` interrupt record, and the `completion` merge evidence. Field-by-field
+shapes and validation rules are on kind-kind under the `Execution` shape.
+
+Two parts of it carry tactic-specific meaning worth naming here. The
+`strategy_fingerprint` map keys each strategy this tactic `serves` to that
+strategy's substance hash at the moment the tactic was planned: when a serving
+strategy is later edited, the mismatch is what tells a mid-flight tactic its
+plan was written against a strategy that has since moved. A serving strategy
+absent from the map is never stale. And `completion` is what lets a
+merge-verification gate confirm the tactic's work actually reached `main`
+without trusting `execution.pr` alone — the tactic layer is transient, so the
+evidence must be captured before the node is pruned.
+
+## `validates`
+
+Ids of the strategies whose `success_signal` this tactic validates — a factual
+edge, distinct from `serves`. `serves` says which strategies the tactic
+advances; `validates` says the tactic's completion is itself evidence about a
+strategy's signal. `validateGraph` rule 14 requires every entry to resolve to an
+existing `kind: strategy` node; unlike `serves` and `parent`, this edge owns its
+own dangling case, so a `validates` entry naming a non-existent id is reported
+directly rather than by a separate existence rule.
+
+## `blocked_by`
+
+Ids of the tactics that must complete before this one begins. The gate is
+subtree-wide: no tactic in a blocked subtree starts until the blocking tactics
+complete. `validateGraph` rule 13 requires every entry to resolve to an existing
+`kind: tactic` node (again owning its dangling case), and rule 15 rejects cycles
+— a depth-first walk over the resolved edges flags every node that participates
+in a cycle, since a tactic transitively blocked by itself can never start.
+Dangling edges are reported by rule 13 rather than traversed.
+
+Because tactics are transient, a blocking tactic disappears when it completes;
+the blocked tactic's entry must be removed at the same time, or rule 13 will
+report it as unresolved.

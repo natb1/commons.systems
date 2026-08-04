@@ -45,12 +45,72 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Is a merge conflict handled exactly like a failing CI check —
+      interrupt phase progression, launch the conflict-resolution skill
+      directly, and park the source node itself only when the skill cannot
+      resolve it mechanically?
+    answer: "(Recorded 2026-08-03, author-confirmed.) Yes, and that is this tactic's
+      design as already written — this clarification ratifies it as the target
+      and resolves one live contradiction against
+      [[tactic-mechanical-park-producers]]. Four points. (1) PARITY IS EXACT.
+      The conflict interrupt is the structural twin of the CI-fix interrupt, not
+      a separate lane: `execution.conflict` mirrors `execution.fix`'s shape, the
+      selector is the routing authority for both, and neither adds a `PHASES`
+      value (clarification 66's precedent). Detecting a conflict interrupts
+      phase progression and dispatches the resolver directly — the phase worker
+      is never relied on to notice or fix it, exactly as a red check dispatches
+      `/fix-checks` rather than waiting for the phase worker. (2) THE WORKER IS
+      RANKED NORMALLY. A conflict worker is selected by the ordinary attention
+      ranking against the SOURCE node, with no special lane, exemption, or
+      priority carve-out. The source keeps its own rank throughout, because the
+      interrupt is orthogonal execution state on the source rather than a
+      separate node standing in for it. (3) THE WORKER ASSESSES, THEN PARKS ONLY
+      IF AUTHOR ATTENTION IS REQUIRED. The conflict worker judges whether the
+      resolution is mechanical (doable without author input) or whether the
+      author's intention is not sufficiently recorded in the graph to resolve
+      it. Mechanical → resolve, clear `execution.conflict`, proceed
+      (materiality-scoped re-review per clarification 78). Author intention
+      required → park. (4) THE PARK LANDS ON THE SOURCE NODE'S OWN
+      `office_hours`, carrying the reason and the recommended next step — the
+      same shape `/fix-checks` and `/qa-fix` already use for their own
+      escalations. This is what this node's Plan already specifies (`park-node
+      <id> conflict-attempt-cap \"<recommendation>\"` in
+      `_gate_conflict_active`), and it now explicitly SUPERSEDES
+      [[tactic-mechanical-park-producers]]' direction that this cap call
+      `hold-node` instead of parking. No hold node, no `blocked_by` edge, and no
+      attention-value indirection stands between a conflicted node and the human
+      queue. Landing this tactic therefore also retires the two interim
+      provision-conflict hold producers it converges on: `/dispatch-conflict`
+      Lane 3's `hold-node --kind provision-conflict` escalation, and
+      `dispatch-graph-execute` case 11's strike/hold ladder (whose own
+      CONVERGENCE NOTE already anticipates being replaced wholesale). Both
+      become a direct `park-node` on the source. The `hold-node` primitive
+      itself is NOT deleted — it survives for the `fix-attempt-cap` producer and
+      any future kind; see [[tactic-mechanical-park-producers]]' companion
+      clarification for why that producer keeps the hold shape."
 tooling_goals: []
 success_signal: null
-attention: null
-phase: implement
-execution: null
+attention:
+  boost: 12
+  override: null
+  rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
+    BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
+    inbound distributor adds 5.33 — under that cluster's 20.00 and above the
+    5.33 undecomposed baseline. Simulated over the live store before writing: 0
+    tier changes, 0 value drift onto non-target nodes."
+  tier: 1
+phase: qa
+execution:
+  branch: tactic-graph-router-conflict-routing
+  pr: 3038
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by:
   - tactic-dispatch-conflict-branch-merge-lane

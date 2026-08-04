@@ -25,7 +25,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-tick-node-lane-auto-merge
   pr: 2904
@@ -35,9 +35,118 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-07-30T16:11:25Z
+    mergeCommitSha: c2a7970c0b7b773f1e0b973422961aec52cdcc66
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-main: all 3 needs-main residue items on
+    tactic-graph-tick-node-lane-auto-merge (id 7, 8, 9) are
+    non-browser-verifiable — none carries a url_path, and each asks whether a
+    live dispatch-select-tick cycle merges/holds a *different, future* node-lane
+    PR in production (graph-auto-merge auto-merge, transition-node's
+    deferred-merge line, and the scope-stale hold-and-demote path). There is no
+    prod URL or UI surface to observe for any of the three; the qa-fix triage
+    that filed them already classified them as \"not verifiable at merge time\"
+    for the same reason. Source PR #2904 is confirmed MERGED (mergedAt
+    2026-07-30T16:11:25Z, mergeCommit c2a7970c), so the deploy-readiness signal
+    is favorable — this is a routing barrier (item 1 of the qa-main decision
+    tree: not browser-verifiable), not a deploy-lag or ambiguity case."
+  since: 2026-07-30
+  recommendation: >-
+    ## What to verify
+
+
+    All three residue items need direct observation of a live tick cycle, not a
+
+    browser check, so `/qa-main` cannot resolve them itself. Here is a concrete
+    lead
+
+    plus what to look for on each.
+
+
+    **Promising lead already found:** PR #2986 ("bootstrap: node-terminal
+
+    declaration + dump-node manifest CAS guard") merged at 2026-07-30T16:17:38Z
+    —
+
+    6 minutes after PR #2904 (this tactic) merged at 16:11:25Z. Its head branch
+
+    (`bootstrap-integrity-guards`) is non-numeric — a node-lane branch — and it
+
+    carries **zero labels**, i.e. it merged label-free. Right after, origin/main
+
+    commit `b552dfa2` ("narrow the qa-fix terminal-declaration node to Unit 2;
+
+    prune the shipped dump-node manifest tactic") shows the corresponding node
+    was
+
+    pruned, consistent with a clean review → auto-merge → `main-qa`/`done` →
+
+    prune pass. This is strong circumstantial evidence the new
+    `graph-auto-merge`
+
+    path already fired once in production, but it has not been confirmed against
+
+    the actual dispatch-tick session transcript.
+
+
+    ### id 7 — first node-lane tactic auto-merges via the tick in production
+
+
+    - Find the dispatch-tick session that ran around 2026-07-30T16:11–16:18Z
+      (`claude agents --json` history, or the dispatch session logs) and confirm it
+      printed `merge: merged #2986 (bootstrap-integrity-guards)` from the new
+      `graph-auto-merge` reconciler (wired in
+      `.claude/skills/dispatch-propagate/scripts/dispatch-select-tick`, the block
+      right after the legacy issue-lane auto-merge and before
+      `reconcile-graph-merged`).
+    - If that line is present, id 7 is confirmed working end-to-end and can be
+      closed out; if PR #2986 merged some other way (e.g. a human `gh pr merge`),
+      keep watching the next node-lane PR that reaches clean review.
+
+    ### id 8 — `transition-node` defers the merge and prints the new line
+
+
+    - In the same tick/session window, look for `transition-node`'s output on
+      `bootstrap-integrity-guards` (or whichever node reached clean review) —
+      expect `review-complete <id> (merge deferred to tick)` and **no**
+      `dispatch-auto-merge` invocation from that script itself
+      (`.claude/skills/dispatch-propagate/scripts/transition-node`, arm block
+      removed at what was `:166-174`).
+
+    ### id 9 — a scope-edited node is held and demoted
+
+
+    - No evidence yet either way. Needs a node that reaches `phase:review` +
+      `reviewed` marker, then has its scope edited before the tick's freshness
+      re-check runs. Watch the next occurrence, or deliberately construct one: put
+      a node through review, then touch a file the tactic's scope fingerprint
+      covers before the next tick, and confirm the tick emits `held <id>
+      (scope-stale)` (no merge) and the next selection tick demotes it to
+      `implement`.
+
+    ## Suggested resolution
+
+
+    Since id 7/8 already have a strong real-world candidate (PR #2986), the
+    fastest
+
+    path is: pull the dispatch session transcript covering 16:11–16:18Z on
+
+    2026-07-30, grep for `graph-auto-merge`, `merge:`, and `review-complete`,
+    and
+
+    confirm the exact lines above. If confirmed, mark ids 7 and 8 done via a
+    normal
+
+    graph-commit needs-main-residue update; only id 9 needs a fresh live
+
+    observation.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -345,6 +454,21 @@ defect):
     label-free without author intervention.
   - Finding: Requires a live tick cycle acting on a different downstream node in
     production after this PR merges; not verifiable at merge time.
+  - **DISCHARGED 2026-07-30 — observed, not asserted.** A single
+    `dispatch-tick` cycle (pid 1840083) merged two reviewed node-lane PRs
+    label-free, with no author intervention:
+
+    ```
+    Jul 30 16:13:05 nixos dispatch-tick[1840083]: merge: merged #2987 (tactic-fix-checks-pushed-nothing-base)
+    Jul 30 16:13:05 nixos dispatch-tick[1840083]: merge: merged #2973 (tactic-transition-node-stamp-landed-body)
+    ```
+
+    Both nodes read `phase: done` on `origin/main` afterwards. This was only
+    possible once `tactic-main-red-sync-completion-test` landed (PR #2941,
+    `eeefa235`): until then `dispatch-graph-main-red-sync` misread that
+    ordinary tactic as an open red episode and silently suppressed **all**
+    auto-merge fleet-wide, so this criterion could not have been observed
+    regardless of how many node-lane PRs reached clean review.
 
 - **id 8** — `transition-node` emits the exact `review-complete` line and does
   not merge in a live run.
@@ -353,9 +477,159 @@ defect):
     `transition-node`.
   - Finding: Requires a live review-completion run on a downstream node in
     production; not verifiable at merge time.
+  - **DISCHARGED 2026-07-31 — observed, not asserted.** `transition-node`
+    emitted the exact line on **15 distinct real downstream nodes**. Worked
+    example, `tactic-fix-checks-pushed-nothing-base`, from that node's own
+    worker transcript
+    (`.../-...--claude-worktrees-tactic-fix-checks-pushed-nothing-base/ede79b9c-63d0-4ba5-a4f4-712243b08b84.jsonl`,
+    tool-result record at `2026-07-30T18:28:59.435Z`):
+
+    ```
+    review-complete tactic-fix-checks-pushed-nothing-base (merge deferred to tick)
+    ```
+
+    The "no merge performed by `transition-node`" half is confirmed by the
+    ordering: the merge of that node's PR was performed **later, by the tick**,
+    already recorded under id 7 above —
+    `Jul 30 16:13:05 nixos dispatch-tick[1840083]: merge: merged #2987
+    (tactic-fix-checks-pushed-nothing-base)` (16:13:05 EDT = 20:13:05Z, i.e.
+    1h44m *after* the 18:28:59Z deferral). The full set of 15 emitting nodes:
+    `tactic-clear-park-repo-targeting-guard`, `tactic-denied-command-parks-node`,
+    `tactic-fix-checks-pushed-nothing-base`, `tactic-frozen-session-debug-count`,
+    `tactic-graph-commit-noop-landing-false-failure`,
+    `tactic-graph-tick-node-lane-auto-merge`, `tactic-node-worker-fresh-skill-body`,
+    `tactic-provision-exit11-worktree-residue`,
+    `tactic-prune-conflict-recovery-silent-loss`,
+    `tactic-reclaim-audit-journal-unit-filter`,
+    `tactic-router-spawn-window-duplicate-worker`,
+    `tactic-standdown-winner-liveness`, `tactic-stopped-session-blocks-node`,
+    `tactic-sweep-timer-unit-dir-leak`, `tactic-transition-node-stamp-landed-body`.
 
 - **id 9** — A scope-edited node is held and demoted in a live run.
   - Expected outcome: The stale-scope node is fail-closed held (`held <id>
     (scope-stale)`) and subsequently demoted to `implement` by selection.
   - Finding: Requires a live tick observing a scope-edited downstream node in
     production; not verifiable at merge time.
+  - **SPLIT into 9a and 9b (ratified 2026-07-31).** The criterion as written
+    conflated two different mechanisms owned by two different scripts, so it
+    could never be discharged as a unit. 9a is discharged below on observed
+    evidence; 9b stays open awaiting a real occurrence.
+
+  - **9a — a scope-stale node is demoted in a live run. DISCHARGED 2026-07-31
+    — observed, not asserted.** The *demotion* half is observed repeatedly on
+    real nodes, three independent ways.
+    - **Demotion — observed, three independent ways.** `transition-node` has no
+      hold path for a pre-merge scope-stale node: at
+      `transition-node:197-201` a `scopeStale` node (phase ≠ `main-qa`) is
+      delegated straight to `demote-node-to-implement` and the script prints
+      `demoted <id> -> implement (scope drift)`. That line is present in real
+      worker transcripts for at least ten distinct nodes, among them
+      `tactic-mechanical-park-producers`, `tactic-standdown-winner-liveness`,
+      `tactic-router-spawn-window-duplicate-worker`,
+      `tactic-frozen-session-debug-count` and
+      `tactic-graph-commit-noop-landing-false-failure`. Independently,
+      `dispatch-graph-scope-sweep:120` logs `scope-stale <id>` to journald —
+      whose documented meaning at that script's line 54 is "the tactic **was
+      demoted to implement and landed on main**" — and it has fired on four
+      real nodes:
+
+      ```
+      Jul 31 02:03:18 nixos dispatch-tick[1706783]: scope-sweep: scope-stale tactic-prune-conflict-recovery-silent-loss
+      Jul 31 08:48:16 nixos dispatch-tick[3976038]: scope-sweep: scope-stale tactic-stopped-session-blocks-node
+      Jul 31 11:18:58 nixos dispatch-tick[741133]: scope-sweep: scope-stale tactic-attention-tier-ranking
+      Jul 31 11:18:58 nixos dispatch-tick[741133]: scope-sweep: scope-stale tactic-denied-command-parks-node
+      ```
+
+    - **Re-verified 2026-07-31T19:45Z.** The transcript grep (in its corrected
+      form below) returns **11 distinct real nodes**, and the tick-side
+      `scope-sweep: scope-stale` journal grep returns the same four nodes
+      listed above. 9a is therefore discharged on standing, reproducible
+      evidence rather than a one-shot observation.
+
+  - **9b — `graph-auto-merge`'s fail-closed hold at the review→merge arming
+    point. STILL OPEN — awaiting a real occurrence.** The `held <id>
+    (scope-stale)` half belongs to `graph-auto-merge`, not to
+    `transition-node`. It is the fail-closed stamp re-check at the review→merge
+    *arming* point, which `transition-node`'s own header documents as owned by
+    the tick reconciler. It therefore only fires when a node's scope goes stale
+    in the window between review completion and the tick's arming pass — a
+    narrow race that has not yet occurred in production. The only occurrences
+    of the string anywhere are against a synthetic single-letter fixture id
+    inside `test-dispatch-graph-execute.sh` and `test-graph-auto-merge.sh` —
+    i.e. test output, never a real node. Re-confirmed 2026-07-31T19:45Z:
+    journald carries **zero** such lines under the `dispatch-tick` identifier,
+    and every transcript hit belongs to a session that had just run one of
+    those two suites.
+
+**Items 7, 8 and 9a are discharged; 9b is not. Do not hand-write evidence for an
+event that has not happened.** This node stays at `main-qa` until 9b fires.
+
+**The re-check command previously recorded here was structurally blind — it
+could never have discharged item 8.** It read:
+
+```
+journalctl --user --since '2026-07-27' --no-pager | grep -cE 'review-complete|scope-stale'
+0
+```
+
+`review-complete` is emitted by exactly one site, `transition-node:249`, on
+**stdout**; `dispatch-tick` never invokes `transition-node` (the phase workers
+do), so the line lands in a worker **session transcript** and never in journald.
+The `0` above was not evidence the event had not happened — by 2026-07-30 it had
+already happened 15 times. This is another member of the "check whose failure
+mode is a silent PASS" class this plan tracks: a detect reporting "not observed"
+when it structurally cannot observe. Use the transcript grep instead, and
+exclude the *reading* session's own transcript or it matches its own output —
+the same self-contamination shape as the routing-log fixture leak
+(`tactic-test-decision-log-prod-leak`):
+
+```
+grep -rhoE 'review-complete [a-z0-9-]+ \(merge deferred to tick\)' \
+  --exclude-dir='*strategy-graph-native-dispatch*' /home/n8/.claude/projects/
+```
+
+**Pass the projects DIRECTORY, not a `*/*.jsonl` glob.** The obvious-looking
+form `--exclude-dir='...' /home/n8/.claude/projects/*/*.jsonl` **does not
+exclude anything**: the shell expands the glob to an explicit file list before
+`grep` runs, and `--exclude-dir` is only consulted while `grep` recurses a
+directory itself. Verified 2026-07-31 on a two-directory fixture — the glob form
+matched both the kept and the skipped directory (2 hits), the directory form
+matched only the kept one (1 hit).
+
+That failure is silent and self-confirming: the excluded directory is the
+*reading* session's own transcript, so the broken form reports back whatever the
+reading session just printed. It is the same shape as the two defects this
+node's own residue already documents — a detect that reports a healthy-looking
+answer when it structurally cannot see — so the guard against self-contamination
+must itself be checked, not assumed.
+
+The journal grep remains correct for the tick-side lines only —
+`merge: merged #<pr>` and `scope-sweep: scope-stale <id>` — because those are
+emitted by `dispatch-tick` itself.
+
+When id 9 is resolved, record the evidence here the same way id 7 and id 8 are
+recorded, then transition `main-qa -> done`.
+
+**The `office_hours` park on this node is a misroute, and it is deliberately
+left in place until 8 and 9 are observed.** Its stated reason is "not
+browser-verifiable — none carries a `url_path`", but the greenfield qa-main
+design makes the criterion machine-verifiable / author-required, never
+browser-verifiable: `strategy-graph-native-dispatch` at lines 2224-2227 (only a
+VERIFIABILITY cannot-verify becomes an `office_hours` park), 2221 (parking wakes
+the author for something no author is needed for), 3182-3188 (the sort is an
+explicitly recorded state, never inferred), and 2195-2200 (a cannot-verify park
+on a machine-sorted node is a mis-sort by construction). All three items are
+git/journal queries. "Browser-verifiable" is the *interim* implementation
+predicate, single-sourced in `dispatch-main-qa-triage` and
+`qa-main/SKILL.md:297`; at least four sibling nodes carry the same misroute
+(`tactic-drain-disposition-diagnosis-cas`, `tactic-mechanical-park-producers`,
+`tactic-main-post-merge-validation`,
+`tactic-execution-pr-merge-verification`). Clearing the park now would only
+return the node to a `main-qa` lane that re-applies the same interim predicate
+and re-parks it, with 8 and 9 still undischargeable — a loop. Clear it as part
+of the discharge, once 8 and 9 are observed.
+
+**Open seam, not yet tracked by its own node:** the greenfield clarification
+says the sorting predicate is "unchanged" (`:2192-2194`), yet that predicate is
+still written in browser terms in
+`qa-fix/references/needs-main-followups.md:65-72`.

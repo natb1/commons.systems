@@ -17,19 +17,11 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: origin/main has not merged clean into this tactic's branch for 5
-    consecutive ticks (provision exit 11).
-  since: 2026-07-28
-  recommendation: "Resolve the conflict by hand in
-    `.claude/worktrees/tactic-dispatch-test-monolith-split`, push the branch,
-    then resolve THIS HOLD TACTIC to `phase: done` and prune it. Clearing
-    `office_hours` alone does not unblock the source."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:

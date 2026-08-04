@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool on two lanes: code-review and security-review (Lane A) run their own built-in review-and-fix — code-review via `/code-review max --fix`, applying its own edits — trusting the built-ins, with un-auto-fixed residue dispositioned (resolve/defer/ignore) by a dedicated Opus residue phase; every other finder — domain security reviewers, cost, codeql, npm, erosion (Lane B) — still goes through code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
+description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool on two lanes: code-review and security-review (Lane A) run their own built-in review-and-fix — code-review via a serialized `claude -p '/code-review low --fix'` exclusive pre-stage (Step 1b, run before the Workflow's finder fan-out), applying its own edits — trusting the built-ins, with un-auto-fixed residue dispositioned (resolve/defer/ignore) by a dedicated Opus residue phase; every other finder — domain security reviewers, api-cost, codeql, npm, erosion (Lane B) — still goes through code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -66,18 +66,35 @@ case "$BRANCH" in
     DERIVE_ERR="tmp/derive-$NODE_ID.err"
     DERIVE_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-derive-node-target \
       "$NODE_ID" --expect-phase review --pr-mode required 2>"$DERIVE_ERR")
-    case $? in
+    DERIVE_RC=$?
+    case "$DERIVE_RC" in
       0) ;;
       1|2)
         echo "/review-fix: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
         exit 1 ;;
       3)
-        # Phase mismatch — the front door's stderr already names the persisted phase.
-        echo "/review-fix: node '$NODE_ID' is not at phase 'review' at origin/main: $(cat "$DERIVE_ERR")" >&2
-        exit 1 ;;
+        # The mechanical selection gate rejected the selection (phase/interrupt
+        # mismatch, office_hours park, stale serving-strategy fingerprint, no
+        # longer align-eligible, or an already-reviewed node re-selected — the
+        # front door's stderr names the specifics). This is a stale selection,
+        # not a defect. End the session; make no graph write and open no PR.
+        echo "/review-fix: node '$NODE_ID' selection no longer valid at origin/main (front door exit 3): $(cat "$DERIVE_ERR") — stale selection, not a defect; ending with no graph write and no PR" >&2
+        exit 0 ;;
       4)
         # --pr-mode required found no open PR — preserve review-fix's plain hard stop.
         echo "/review-fix: node '$NODE_ID' has no open PR — review-fix requires one" >&2
+        exit 1 ;;
+      5)
+        # Scope changed since the previous phase ran — the node wants demoting
+        # to implement, not a defect. End the session; make no graph write and
+        # open no PR.
+        echo "/review-fix: node '$NODE_ID' is scope-stale at origin/main (front door exit 5) — wants demoting to implement, not a defect; ending with no graph write and no PR" >&2
+        exit 0 ;;
+      *)
+        # Any exit code not otherwise handled above — a real error. Hard-stop
+        # rather than silently falling through with an empty DERIVE_OUT and
+        # unbound PR_NUM/NODE_JSON.
+        echo "/review-fix: dispatch-derive-node-target failed for '$NODE_ID' (exit $DERIVE_RC): $(cat "$DERIVE_ERR")" >&2
         exit 1 ;;
     esac
     PR_NUM=$(printf '%s\n' "$DERIVE_OUT" | sed -n 's/^PR: *//p' | head -1)
@@ -90,7 +107,10 @@ esac
 ```
 
 On the node lane, `$N` is the node id (keys `tmp/` filenames); never pass
-`--issue`. **On the node lane no gh issue is ever read or written.**
+`--issue`. **On the node lane no gh issue is ever read or written.** This
+extends to every `dispatch-emit-outcome` call site (Step 7 /
+`references/terminal-actions.md`): on the node lane pass `--node-id "$N"` in
+place of `--issue "$N"`.
 
 ```bash
 case "$TARGET_KIND" in
@@ -145,14 +165,15 @@ output — do not re-resolve any of them later:
 On the node lane every step runs unchanged except three re-keyed seams:
 
 - **Completion** — invoke `transition-node "$N" --set-pr "$PR_NUM"` (records the
-  `reviewed` marker in `execution.markers` and arms gh auto-merge as one
-  state-only graph-commit), **not** `dispatch-complete-phase` /
-  `dispatch-mark-complete` / `dispatch-finalize-phase`.
+  `reviewed` marker in `execution.markers` as one state-only graph-commit; it does
+  **not** arm or perform any merge), **not** `dispatch-complete-phase` /
+  `dispatch-mark-complete` / `dispatch-finalize-phase`. Merging is deferred to the
+  tick's `graph-auto-merge` reconciler, keyed off the `reviewed` marker.
 - **Deferred findings (Step 5)** — deferred/security follow-ups become **draft
   tactic nodes**, not gh issues.
 - **Escalation** — write the reason to `$CLAUDE_JOB_DIR/office-hours-reason`
-  (and best-next-steps to `.../office-hours-recommendation`); the Stop hook parks
-  via `park-node`. Also write the already-bound `PR_NUM` to
+  (and best-next-steps to `.../office-hours-recommendation`); `dispatch-tick`'s
+  `terminal_without_disposition_sweep` parks via `park-node`. Also write the already-bound `PR_NUM` to
   `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic tempfile+`mv` write) so the
   park records `execution.pr` (tactic-office-hours-pr-custody).
 
@@ -227,6 +248,17 @@ SURFACE_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-changed-files <
 surface=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^surface=//p')
 deps=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^deps=//p')
 app_or_rules=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^app_or_rules=//p')
+
+# api_call_site: computed from diff CONTENT via a dedicated pure stdin->stdout
+# classifier — the one deliberate exception to this step's "do not run a fresh
+# `git diff` here" instruction above. That instruction exists to stop the diff
+# TEXT being re-read into this skill's context; this pipeline never brings the
+# diff into context — it pipes straight through the classifier and yields a
+# single boolean. Reuses MERGE_BASE (computed just above). Both `git diff` and
+# the classifier are read-only / pure stdin, so no dangerouslyDisableSandbox.
+api_call_site=$(git diff "$MERGE_BASE"...HEAD \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-api-call-site \
+  | sed -n 's/^api_call_site=//p')
 ```
 
 - `surface` is `empty` (no changed files), `docs` (every changed path is
@@ -237,6 +269,20 @@ app_or_rules=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^app_or_rules=//p')
 - `app_or_rules` is `true` when the diff touches application source
   (`.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`/`.go` outside `.claude/`) or a
   Firestore / Storage rules file.
+- `api_call_site` is `true` when the diff **adds** a line containing an API or
+  query call site (`fetch`/`axios`/`getDocs`/`getDoc`/`query`/`collection`/…).
+  It is computed from diff CONTENT, as its own flag rather than by relaxing
+  `app_or_rules` — relaxing `app_or_rules` would also widen the `auth` and
+  `data-exposure` domain-sweep sections, silently expanding security review
+  scope to every code diff. It gates the **advisory** `cost` section of the
+  merged `api-cost` lens, and additionally fires its **security** `firebase`
+  section. `firebase` itself still rides `app_or_rules` as well
+  (`app_or_rules || api_call_site`): the call-site pattern set matches none of
+  what that lens reviews — a rules diff (`allow read, write: if …`),
+  emulator-only code (`connectFirestoreEmulator`), or key/config exposure
+  (`apiKey`, `initializeApp`) all classify `api_call_site=false` — so gating it
+  on this flag alone would switch the reviewer off for exactly the diffs it
+  exists for.
 
 Set `security_note` for the Workflow `args`:
 - `surface=docs`: `Security review: no attack surface — docs-only diff (no executable, config, dependency, or Firestore-rules changes).`
@@ -249,18 +295,190 @@ Set `security_note` for the Workflow `args`:
 - **Dependency audit** — inline in this parent thread when `deps=true`.
 - **CodeQL alerts** — inline when `surface=code`.
 - **Erosion metrics** — inline when `surface=code`.
-- **Finder agents** — the Workflow fans out surface/`app_or_rules`-gated finders
-  when `surface=code` (the always-on `code-review` quality finder runs on every
-  surface).
+- **Finder agents** — the Workflow fans out surface / `app_or_rules` /
+  `api_call_site`-gated finders when `surface=code` (the always-on
+  `code-review` quality finder runs on every surface).
 
 Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
 to pass to the Workflow. **See `references/inline-scans.md`** for the exact
 command block, normalization rules, and the per-finder roster and descriptions.
 
+### 1b. Run the built-in `/code-review` as an exclusive pre-stage
+
+`dispatch-code-review` shells `claude -p '/code-review <effort> --fix
+[--comment]'` — the `-p` user-turn entry point is the only way to invoke a
+skill marked `disable-model-invocation`, which the built-in `/code-review`
+carries (see `references/code-review-invocation.md` for the full measured
+contract). Because `--fix` **writes the working tree**, this stage must run
+to completion before any owned lens fans out — **never inside** the Step 2
+Workflow's parallel finder fan-out, which would race concurrent writers
+against the same tree. This is why it is its own serialized step between
+Step 1 and Step 2, not a finder inside the Workflow.
+
+`MERGE_BASE` is already bound by Step 1 above — reuse it; do not recompute or
+hand-roll a second target formatter. Pass it as the **rev-range**
+`"$MERGE_BASE..HEAD"`, never as the bare `"$MERGE_BASE"` SHA. The built-in
+resolves a bare SHA to *that single commit's* diff, not to the diff from that
+commit to `HEAD`: measured live, `claude -p '/code-review low <bare-sha>'`
+reviewed only the one commit at that SHA (a 1-file graph phase-bump), while
+`claude -p '/code-review low <sha>..HEAD'` reviewed the PR's full accumulated
+diff (9 non-test files, 3 findings). A bare SHA therefore reviews the
+phase-transition commit that *started* the review phase and returns
+`status=ok` with vacuous findings — the exact silently-reviews-nothing defect
+this stage exists to eliminate. `dispatch-code-review` now rejects a
+non-range `--target` with exit 2, so this is enforced, not just documented.
+
+Do **not** pass `--effort` to `dispatch-code-review` here — leave it at the
+script's own default (`low`). This is deliberate, not an oversight: Unit 1's
+measured investigation (`references/code-review-invocation.md` §1.2, §5.4, §7)
+found that `max` effort against a real, non-trivial diff ran over 39 minutes
+without completing — `claude -p` buffers all output until the run completes,
+so the timeout was a total loss of ~$372 of price-proxy spend for zero bytes
+of output — and that `medium` effort did not complete within 300s either.
+Only `low` effort is measured to reliably complete (14-30s observed). Raising
+the effort level for this lane is an open follow-up for
+`strategy-token-economy`, not settled by this node.
+
+Run this call with `dangerouslyDisableSandbox: true` and `timeout: 600000`
+(it is a nested `claude` session — `--comment` shells `gh` and it touches the
+local Claude daemon; see `.claude/rules/sandbox.md`):
+
+```bash
+CR_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-code-review \
+  --target "$MERGE_BASE..HEAD" --out-dir "tmp/code-review-$N" 2>"tmp/code-review-$N.err")
+CR_RC=$?
+```
+
+**Hard stop on any non-zero `CR_RC`**, following the same stdout/stderr-split,
+case-on-exit-code idiom this file already uses for the front door
+(`DERIVE_OUT`/`DERIVE_ERR`, preamble above) and for `commit-merge-push`
+(Step 3):
+
+```bash
+CR_ERR="tmp/code-review-$N.err"
+CR_LOG="tmp/code-review-$N/output.txt"
+case $CR_RC in
+  0) ;;
+  1) echo "/review-fix: 'claude -p /code-review' exited non-zero (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  2) echo "/review-fix: dispatch-code-review argument/empty-output error (see $CR_ERR)" >&2; exit 1 ;;
+  3) echo "/review-fix: /code-review is unavailable — rejection signature in output (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  4) echo "/review-fix: 'claude -p /code-review' timed out (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  *) echo "/review-fix: dispatch-code-review exited unexpectedly ($CR_RC) — script missing, non-executable, sandbox-denied, signalled, or aborted under 'set -euo pipefail' (see $CR_ERR)" >&2; exit 1 ;;
+esac
+```
+
+The `*)` catch-all is **load-bearing, not defensive padding**. The script's
+documented exit codes are 0/1/2/3/4, but a stale worktree checked out before
+this node landed yields 127 (missing script), a lost `+x` bit or a sandbox
+denial yields 126, a signal yields 128+n (130 on SIGINT), and a `set -euo
+pipefail` abort inside the script (e.g. `mkdir -p` on an unwritable
+`--out-dir`) yields whatever the failing builtin returned. Every one of those
+leaves `CR_OUT` **empty**. Without the catch-all they fall through the `case`
+untouched, Step 2 builds `code_review` from empty parses, and the Workflow's
+hard contract check passes on a review that never ran — reinstating the exact
+silent substitution this node exists to eliminate. Never delete this branch,
+and never replace it with a warning that continues.
+
+The failure messages deliberately name the artifact **paths** rather than
+`cat`-ing them. The captured text is a code review of the pending diff and
+routinely quotes the reviewed lines verbatim — including anything the roster's
+`secrets` finder exists to catch. Keep it on disk; see the redaction rule
+below before any of it reaches a durable record.
+
+**A failure here fails the phase.** This pass never degrades to an
+agent-performed review, never retries with a substitute, and never reports
+substituted output under the built-in's name — that is the exact four-day
+silent-substitution defect this node's Context section documents and exists
+to fix. Exit 3 in particular means the instrument itself is unavailable.
+
+**Redaction rule for the office-hours park reason.** Never copy the nested
+session's captured output verbatim into the park reason. On the node lane the
+reason is written to `$CLAUDE_JOB_DIR/office-hours-reason`, persisted by
+`park-node` into the graph node file, and pushed to `origin/main` in this
+**public** repository — permanently, in git history. The captured text is a
+review *of the pending diff* and routinely quotes the reviewed lines; a diff
+that carries a credential (the reason the finder roster has a dedicated
+`secrets` lens) would publish that credential on any exit-1/3/4 path.
+
+The reason must instead carry, in this order:
+
+1. The exit code and what it means (`3` = instrument unavailable, `4` =
+   timeout, `1` = nested session exited non-zero, `2` = argument/empty output,
+   anything else = unexpected exit — see the catch-all above).
+2. The `--target` passed above and the effort level (`low`).
+3. The on-disk paths of the full, unredacted evidence — `tmp/code-review-$N.err`
+   and `tmp/code-review-$N/output.txt` — so the human reviewer can read it in
+   the worktree, where it never leaves the machine.
+4. A **bounded, redacted excerpt** — at most a few lines, enough to identify
+   the failure mode. Apply the same redaction discipline
+   `dispatch-diagnose-main` applies to its "redacted likely-cause summary"
+   (`.claude/skills/dispatch-diagnose-main/SKILL.md`, "Redaction rule"): quote
+   only the error category and the matched rejection signature, never raw diff
+   lines, environment-variable values, or any string that looks like a token,
+   credential, or key — even one that appears already masked. Also neutralize
+   any `close`/`fix`/`resolve` keyword adjacent to a `#N`, per
+   `.claude/rules/issue-references.md`, before the text reaches the node file.
+
+Fidelity is preserved by the paths in (3), not by pasting the payload into a
+pushed record.
+
+Parse the summary with the same `sed -n 's/^key=//p'` idiom Step 1 uses for
+`SURFACE_OUT`:
+
+```bash
+CR_STATUS=$(printf '%s\n' "$CR_OUT" | sed -n 's/^status=//p')
+CR_FINDINGS=$(printf '%s\n' "$CR_OUT" | sed -n 's/^findings_path=//p')
+CR_PATCH=$(printf '%s\n' "$CR_OUT" | sed -n 's/^patch_path=//p')
+CR_TOUCHED=$(printf '%s\n' "$CR_OUT" | sed -n 's/^touched_file=//p')
+```
+
+`CR_FINDINGS` and `CR_PATCH` are each a single absolute path (one
+`findings_path=` line, one `patch_path=` line). `CR_TOUCHED` collects
+potentially multiple `touched_file=` lines — one per file the built-in's
+`--fix` actually touched, derived by `dispatch-code-review` from a
+before/after `git diff`, never from the review's own self-report of what it
+fixed.
+
+**Then gate on what the script actually emitted, not on `CR_RC` alone.** The
+exit-code `case` above cannot see a truncated or empty `CR_OUT` — a killed
+pipeline, a redirect that lost stdout, or any of the undocumented exits the
+`*)` branch now catches leaves the parses empty while `CR_RC` may still be
+absent or zero. `dispatch-code-review` emits `status=ok` as the **first** line
+of its summary and only ever on the success path (Step 7 of the script), so
+that line, plus a non-empty `findings_path=` and `patch_path=`, is the
+evidence that the built-in ran:
+
+```bash
+if [ "$CR_STATUS" != ok ] || [ -z "$CR_FINDINGS" ] || [ -z "$CR_PATCH" ]; then
+  echo "/review-fix: dispatch-code-review summary is incomplete (status='$CR_STATUS' findings='$CR_FINDINGS' patch='$CR_PATCH') — the built-in /code-review did not verifiably run (see $CR_ERR)" >&2
+  exit 1
+fi
+```
+
+`$CR_STATUS` — never the literal string `ok` — is what Step 2 puts in
+`args.code_review.status`. Hardcoding the literal would make the Workflow's
+hard contract check (`review-fix.js`: `_a.code_review.status !== 'ok'`) a
+tautology that passes on a review that never ran.
+
+Do **not** recompute `surface` or `changed_files` after this pre-stage. The
+built-in's `--fix` edits are uncommitted working-tree changes to files
+already in the diff, and the Lane-B finder prompt tells each finder to diff
+against `merge_base` — a `git diff <merge_base>` run by a Workflow subagent
+already includes these working-tree edits. This is deliberate; a later reader
+should not "fix" it by adding a recompute step.
+
 ### 2. Build `args` and invoke the Workflow
 
 Collect the fields for the Workflow invocation. Parse `Closes #N` from the pack's
-`=== PR ===` body to resolve `implementing_issues`:
+`=== PR ===` body to resolve `implementing_issues`. Workflow scripts cannot call
+`new Date()` / `Date.now()` themselves (the runtime throws — it would break
+resume), so capture the instrument-verification lower-bound timestamp here in
+bash, immediately before invoking the Workflow, and pass it through as
+`run_started_at`:
+
+```bash
+RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+```
 
 ```
 args = {
@@ -270,16 +488,32 @@ args = {
   surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
   app_or_rules:        <true|false>,
+  api_call_site:       <true|false>,    // from `api_call_site` above; gates `cost`, and widens (never narrows) `firebase`
   prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
+  run_started_at:      <RUN_STARTED_AT>, // ISO8601 lower bound for the instrument-invocation transcript verifier
   security_note:       <string or omit>, // set for empty/docs/tests; omit for code
-  prior_phase_log:     <string or omit> // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
+  prior_phase_log:     <string or omit>, // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
+  code_review: {
+    status:         <CR_STATUS>,          // the parsed `status=` line — NEVER a hardcoded "ok"
+    findings_path:  <CR_FINDINGS>,        // absolute path; the Workflow's reader subagent reads it
+    patch_path:     <CR_PATCH>,           // absolute path to the before/after patch
+    touched_files:  [ <CR_TOUCHED lines> ] // git-derived; the AUTHORITATIVE fixed[] constraint
+  }
 }
 ```
 
 When `PRIOR_PHASE_LOG` is non-empty, pass it as `prior_phase_log` so the review
 finders see what an earlier phase (e.g. qa-fix) already tried; omit the field
 when the preamble read the `phase-log: none` sentinel.
+
+`code_review` carries **paths, not findings** — Step 1b's raw review text at
+`CR_FINDINGS` is never read into this skill's own context; only the path
+crosses into `args`, preserving the property this file already asserts below
+("The skill's context never holds raw findings — only this compact summary,"
+Step 2's Workflow-invocation prose). The current Workflow (`review-fix.js`)
+does not read this field yet — it is additive here, consumed once the
+Workflow is rewired.
 
 **Invoke the Workflow tool on `.claude/workflows/review-fix.js`**, passing `args`.
 The Workflow is a sanctioned call from this skill — no `ultracode` keyword needed.
@@ -294,17 +528,27 @@ result = {
   security_followup_input: [ ...codeql/npm out-of-scope subset... ],
   verify_report:        [ {id, location, verdict, skeptic_votes, rationale} ],
   deviation:            <bool>,
+  instrument_failures:  [ {instrument, reason} ],
   coverage_incomplete:  <bool>,
   coverage_note?:       <string>,
   security_note?:       <string>
 }
 ```
 
+`coverage_incomplete` / `coverage_note` are the generic degraded-coverage
+signal, covering three causes: (1) the security probe wave skipped because
+both quality finders died, (2) an unverified instrument, and (3) Lane-A
+residue left undispositioned because the residue-disposition agent died;
+when more than one co-occurs in the same run, `coverage_note` is a
+space-joined composition of the causes.
+
 The Workflow's fix-authoring agents (non-isolated, Opus) have already edited the
 working tree by the time `result` is returned — this includes THREE sources
 of edits merged into the one envelope above: the shared Lane-B Opus fix fan-out,
-Lane-A code-review's own `/code-review max --fix` edits, and the residue phase's
-applied resolve-dispositioned fixes. The skill's context never holds raw
+Lane-A code-review's own Step 1b `claude -p '/code-review low --fix'`
+pre-stage edits (already applied and committed-to-diff before this Workflow
+call even starts — see Step 1b), and the residue phase's applied
+resolve-dispositioned fixes. The skill's context never holds raw
 findings — only this compact summary. **See
 `references/schema-edge-cases-notes.md`** for the full model split across
 finder/fix/classify stages (#1172, #2872, tactic-review-phase-trust-builtin-review).
@@ -372,7 +616,9 @@ Workflow's classifier preserves **both** vocabularies: the security pass's
 `security-review` (Lane A) sources, the buckets are populated by their own outcome
 and the residue phase's disposition — this pipeline's classify/verify/fix stages
 run only over Lane-B sources. `Source "cost"` findings are ADVISORY and always
-route to `Deferred` (never `Fixed`, `Required`, or verify-eligible). A finding is
+route to `Deferred` (never `Fixed`, `Required`, or verify-eligible); `cost` is now
+emitted by the merged `api-cost` finder alongside security-classified `firebase`
+findings from the same agent, split by sub-pattern. A finding is
 **never** Dismissed purely because the change is small.
 
 **See `references/disposition-table.md`** for the full bucket table, the Lane-A

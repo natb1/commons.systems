@@ -1,11 +1,15 @@
 ---
 id: tactic-demote-node-stale-local-read
 kind: tactic
-statement: demote-node-to-implement derives its repo root from the script's own
-  on-disk location and reads the node from the local worktree with no
-  origin/main refresh and no --base CAS, so a scope-stale demotion invoked from
-  a node worktree silently reverts body sections and markers that landed on
-  origin/main after the worktree was provisioned
+statement: Make graph-script repo-root resolution uniform and explicit — today
+  demote-node-to-implement and dump-node.ts root from the script's own on-disk
+  location, validate-graph.ts from a cwd-relative default, and graph-commit from
+  -C/cwd, so a read or verify invoked from the wrong directory silently targets
+  the wrong tree and can report a vacuous pass; additionally give
+  demote-node-to-implement an origin/main refresh and a --base CAS, without
+  which a scope-stale demotion invoked from a node worktree silently reverts
+  body sections and markers that landed on origin/main after the worktree was
+  provisioned
 owner: ai
 status: raw
 parent: null
@@ -46,25 +50,52 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Should this node stay scoped to demote-node-to-implement, or widen
+      to own root-resolution consistency across all the graph scripts?
+    answer: "(Recorded 2026-08-04, author-directed.) Widen. The hazard is not any
+      single script but that scripts used together in one graph-write recipe
+      resolve their target tree three different ways: dump-node.ts and
+      demote-node-to-implement from the script's own on-disk location,
+      validate-graph.ts from a cwd-relative default argument (`process.argv[2] ??
+      \"intentions\"`), and graph-commit from -C/cwd via `git rev-parse
+      --show-toplevel` (explicitly never from script location, per
+      tactic-graph-commit-cwd-repo-resolution). Passing the same absolute script
+      path to all three therefore silently targets different trees. Concrete new
+      instance found 2026-08-04 during bootstrap step 1a: validate-graph.ts
+      invoked by absolute worktree path while cwd was the main checkout
+      validated the MAIN checkout's intentions/, not the edited worktree, and
+      printed 'ok — 500 nodes' at exit 0 — a vacuous pass indistinguishable from
+      a real one, and exactly the sensor failure mode the standing
+      instruments rule warns about (ask what a check prints when it cannot
+      see). This node now owns making root resolution uniform and explicit
+      across the graph scripts. Fixing them one site at a time is what let the
+      class recur after tactic-graph-commit-cwd-repo-resolution and
+      tactic-clear-park-repo-targeting-guard already closed the write-path
+      half; the read/verify path was never swept."
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 96
+  boost: 50
   override: null
-  rationale: "Author-directed 2026-07-26: boost to top ranking. This is a
-    data-loss defect in a backward-transition primitive on the sole write path
-    to main -- a demotion silently discards landed body content and
-    completed-phase markers, and the loss is invisible (no conflict, no park,
-    exit 0), so it is only ever caught by a human noticing missing sections
-    after the fact. Sized at 96 (own claim) so that composed with the +5
-    inherited from strategy-graph-native-dispatch it reaches an authored 101,
-    above the current live selectable composed max of 100.33
-    (tactic-transition-node-stamp-landed-body and
-    tactic-phase-evidence-fingerprint-bound, both at own boost 95), while
-    staying strictly below strategy-main-health's standing 100 boost value so no
-    schema rule 18 dominance ACK is required and the main-health signal keeps
-    its recorded dominance."
+  rationale: "Bootstrap re-scale 2026-07-30: the SOLE attention anchor for the
+    fingerprint-custody chain. The 2026-07-30 re-serialization (d2b161a3) turned
+    the cluster from a tree into a linear chain -
+    tactic-demote-node-stale-local-read ->
+    tactic-phase-evidence-fingerprint-bound ->
+    tactic-scope-fingerprint-plan-substance ->
+    tactic-transition-node-stamp-landed-body - so a single anchor on this, the
+    most-downstream node, lifts every blocker upstream of it and the whole chain
+    resolves to a flat 55.33. Attention flows backward along blocked_by and SUMS
+    over distinct sources, so a second anchor anywhere in the chain
+    double-counts: the interim 50 briefly also sat on
+    tactic-scope-fingerprint-plan-substance and that node resolved to 105.33 -
+    back above strategy-main-health 101, the exact failure this re-scale exists
+    to remove. That second anchor was removed; do not reintroduce one while the
+    chain is linear. Note validate-graph rule 18 does NOT catch this - it checks
+    the authored boost (50), not the resolved rank. Interim scaffolding only;
+    tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
+    numeric scheme."
 phase: null
 execution: null
 validates: []

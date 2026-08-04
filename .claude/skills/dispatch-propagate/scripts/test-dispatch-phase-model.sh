@@ -88,4 +88,53 @@ assert_eq "no arg -> exit 2" "2" "$NOARG_RC"
 assert_eq "empty arg -> exit 2" "2" "$EMPTYARG_RC"
 assert_eq "extra arg -> exit 2" "2" "$EXTRAARG_RC"
 
+
+# >>> MOVED FROM test-dispatch-scripts.sh >>>
+# ============================================================================
+# dispatch-phase-model tests
+# ============================================================================
+echo "=== dispatch-phase-model ==="
+
+echo "Test: dispatch-phase-model maps qa → sonnet"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" qa 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: qa exits 0" "0" "$pm_rc"
+assert_eq "phase-model: qa → sonnet" "sonnet" "$pm_out"
+
+echo "Test: dispatch-phase-model maps review → sonnet (#1172)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" review 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: review exits 0" "0" "$pm_rc"
+assert_eq "phase-model: review → sonnet" "sonnet" "$pm_out"
+
+echo "Test: dispatch-phase-model maps fix-checks → sonnet (#2042)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-checks 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: fix-checks exits 0" "0" "$pm_rc"
+assert_eq "phase-model: fix-checks → sonnet" "sonnet" "$pm_out"
+
+echo "Test: dispatch-phase-model maps fix-conflicts → sonnet (#2042)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-conflicts 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: fix-conflicts exits 0" "0" "$pm_rc"
+assert_eq "phase-model: fix-conflicts → sonnet" "sonnet" "$pm_out"
+
+echo "Test: dispatch-phase-model maps main-qa → sonnet (#2274)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" main-qa 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: main-qa exits 0" "0" "$pm_rc"
+assert_eq "phase-model: main-qa → sonnet" "sonnet" "$pm_out"
+
+echo "Test: dispatch-phase-model maps unmapped phases → empty (default → Opus, no override)"
+for ph in implement done; do
+  if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" "$ph" 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+  assert_eq "phase-model: $ph exits 0" "0" "$pm_rc"
+  assert_eq "phase-model: $ph → empty (no --model, inherit Opus)" "" "$pm_out"
+done
+
+echo "Test: dispatch-phase-model with no phase arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-model" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: no-arg → exit 2" "2" "$pm_rc"
+
+echo "Test: dispatch-phase-model with an empty-string arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-model" "" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: empty-string-arg → exit 2" "2" "$pm_rc"
+
+# <<< END MOVED <<<
+
 report_results

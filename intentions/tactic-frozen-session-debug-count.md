@@ -28,9 +28,29 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
-phase: implement
-execution: null
+attention:
+  boost: 20
+  override: null
+  rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
+    scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
+    follows the Wave-A write-path fixes. Interim scaffolding only;
+    tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
+    numeric scheme."
+phase: done
+execution:
+  branch: tactic-frozen-session-debug-count
+  pr: 3000
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-07-31T12:45:34Z
+    mergeCommitSha: 0f55a784bf7efc60ad11fb6489750daa87ea3a9a
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-graph-node-session-reap
@@ -292,3 +312,59 @@ Not machine-checkable in CI (confirm at review):
   which layers on top of the narrowed default; its draft framing must be
   re-scoped to the narrowed default (unrelated to this tactic's own units,
   noted here only for context continuity).
+
+## needs-main residue
+
+- **id 10** — Interim value: the count reads a stable 0 on the real fleet
+  until the narrowed auto-close mechanism exists.
+  - URL path: current
+  - Expected outcome: The operator sees `n=0` consistently in `dispatch-sweep`'s
+    log, which is the documented correct interim reading; the metric becomes
+    informative only once the blocker tactic lands.
+  - Finding: the PR description and this node body both document that
+    `HELD_FOR_DEBUG_COUNT` reads a real, stable `n=0` in production until
+    `tactic-graph-node-session-reap`'s narrowed auto-close mechanism exists at
+    all (that tactic is a `blocked_by` dependency here). The informative
+    (nonzero) reading is verifiable only downstream of that tactic landing,
+    not at this PR's merge — a planned deferral, not a defect. Verify against
+    deployed main/prod once that blocker clears.
+
+## Verification evidence 2026-07-31 — residue item 10 PASSES, park cleared
+
+Machine-verified after PR #3000 merged (2026-07-31T12:45:34Z, sha 0f55a784).
+The park's stated reason — "not browser-verifiable" — is not the graph's sorting
+criterion; the criterion is machine-verifiable vs. author-required
+(`strategy-graph-native-dispatch.md:2224-2227`), and a cannot-verify park on a
+machine-sortable item is a mis-sort by construction (`:2195-2200`). This item is
+one grep plus one daemon query.
+
+**Method note for anyone re-verifying:** `journalctl | grep HELD_FOR_DEBUG_COUNT`
+returns nothing and is a **false negative**. `dispatch-sweep` does not log to the
+journal — its `log()` helper writes to
+`${DISPATCH_SWEEP_LOG_FILE:-$PROJECT_ROOT/tmp/dispatch-sweep.log}`
+(`dispatch-sweep:65-70`). Grep the file.
+
+Emitted at `dispatch-sweep:544` via `claude_agents_count_held_for_debug`
+(`lib-claude-agents.sh:1080`); harness cases N8a/N8b at
+`test-dispatch-sweep.sh:1898-1968`. Eight consecutive sweeps, first at 91 seconds
+after merge, never `UNKNOWN`:
+
+```
+12:47:05Z n=9    13:32:27Z n=12   14:17:32Z n=11
+13:02:06Z n=10   13:47:28Z n=12   14:32:27Z n=0
+13:17:29Z n=11   14:02:31Z n=11
+```
+
+Corroborated independently against the live daemon at the n=0 reading: zero
+non-busy, non-idle rows. Item 10's expected outcome ("the operator sees n=0") is
+observed.
+
+**Correction to this node's own body, which the evidence falsifies.** The
+`## Verification` section predicts the count "can only ever report 0, by design"
+because "`.claude/hooks/dispatch-stop.sh`'s node-lane branch never calls
+`dispatch-self-close`". That is no longer true — `dispatch-stop.sh:100-116` now
+invokes it with `--node "$JOB_NAME"`. The metric read 9 -> 12 over roughly two
+hours before dropping to 0. That is the metric working as intended, making
+frozen-session accumulation visible; the "stable 0" claim and the park
+recommendation's "any other nonzero count would be unexpected" are both stale and
+are superseded by this section.

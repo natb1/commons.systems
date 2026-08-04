@@ -18,7 +18,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: main-qa
 execution:
   branch: tactic-attention-surface-graph-read
   pr: 2780
@@ -28,56 +28,41 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-10T13:52:25Z
+    mergeCommitSha: 2e63b186a7e12e4f9922d51cea28f5973ac5e6fe
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "align-tactics router misroute, not a genuine target: this node's
-    phase:null is a stale main-qa squatter (attributes.phase: main-qa), not a
-    draft. It was already finalized, implemented, reviewed, and merged (PR
-    #2780, execution.markers: [qa-done]); its own '## needs-main residue (review
-    2026-07-10)' body section records the PR as clean with auto-merge armed,
-    still awaiting the browser-manual main-qa verification. The squatter
-    encoding was correct when written (2026-07-10, commit 451e9ed8) because
-    schema.ts's PHASES enum did not yet include \"main-qa\" — PR #2859
-    (4486b25d, 2026-07-11) added it the next day, but this node was never
-    backfilled to the real phase:\"main-qa\" (attributes: {}) the way
-    tactic-schema-migration-backfill (234e52e7) migrated its siblings on
-    2026-07-07. Because router.ts's isDraft() (line 117) treats bare phase:null
-    as draft/raw regardless of an attributes.phase squatter, and
-    frozenTacticSelectable/the frozen-tactic candidate loop (lines 323-337)
-    build directly on isDraft(), this node keeps re-surfacing as an
-    align-tactics draft/raw candidate every tick — align-tactics' own
-    tactic-target doc (references/tactic-target.md) has no carve-out for this
-    case and would otherwise finalize it as a fresh draft, silently discarding
-    the completed PR/qa-done/needs-main-residue state. At least 6 sibling nodes
-    carry the identical stale pattern (grep intentions/tactic-*.md frontmatter
-    for phase: null plus attributes.phase: main-qa):
-    tactic-attention-surface-analytics-collector, tactic-budget-txn-identity,
-    tactic-indieweb-audience, tactic-noncodegen-session-model-defaults,
-    tactic-outcome-envelope-qa-accounting, tactic-token-audit-node-attribution.
-    Recommend: (1) restamp this node's own phase to the real main-qa value
-    (phase: \"main-qa\", attributes: {}) via a direct state-only graph-commit,
-    precedented by tactic-schema-migration-backfill, which unblocks it onto
-    /qa-main's normal main-qa queue; and (2) harden router.ts's
-    isDraft()/tactic-candidate filters to also treat any
-    attributes.phase-carrying node as non-draft, closing this whole misroute
-    class so future phase-enum-gap squatters cannot recur; consider folding both
-    into tactic-mainqa-record-time-routing's migration (which currently only
-    covers draining nodes already at first-class phase:main-qa, not backfilling
-    pre-#2859 squatters) or a small standalone backfill tactic. This session
-    made no other change and is not competent to apply either fix itself:
-    align-tactics' own SKILL.md scopes it to landing only phase: implement, and
-    explicitly excludes stamping phase: main-qa (\"never something this skill
-    stamps\"); the router.ts change is a source-code fix outside this skill's
-    remit (intention-node graph writes only)."
-  since: 2026-07-28
-  recommendation: null
+  reason: "Both needs-main items require a human to grant a File System Access
+    directory handle to their own real local repo clone via the native OS picker
+    (office-hours owner tier) and visually confirm the render/rank order and the
+    loud stale-clone banner -- no automated session can grant that native picker
+    consent or possesses a real local clone to point it at, so this is an
+    author-only manual check, not a tool-checkable one. Separately, the
+    goals-page UI route that would host this check has not shipped:
+    tactic-attention-surface-goals-page is still phase:implement with no PR or
+    branch (gh pr list --search and git ls-remote both empty), and no code
+    outside its own test file (office-hours/test/graph-source.test.ts) imports
+    office-hours/src/graph-source.ts."
+  since: 2026-08-04
+  recommendation: "Author to verify once tactic-attention-surface-goals-page ships
+    and deploys: (1) grant a real local clone via the owner-tier FSA picker,
+    confirm the tree renders and the attention rank order matches
+    packages/intentionsutil/scripts/frontier-view.ts output; (2) point the
+    handle at a clone whose git sync is older than STALE_CLONE_THRESHOLD_MS (6h)
+    and confirm the blocking loud banner replaces the view rather than rendering
+    stale rank silently. Machine checks already run this session: this node's
+    source PR #2780 confirmed MERGED 2026-07-10 (gh pr view);
+    tactic-attention-surface-goals-page has no open PR or branch (gh pr list
+    --search, git ls-remote origin both empty); grep across the repo for
+    graph-source.ts imports found only its own test file, confirming no live UI
+    consumer exists yet."
   session_type: other
 pace_exempt: false
 rounds: null
-attributes:
-  phase: main-qa
+attributes: {}
 ---
 # browser graph read layer — File System Access API over the local clone, client-side tree build and resolveAttention, staleness surfaced loudly
 
