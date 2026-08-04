@@ -175,7 +175,7 @@ reserved_owner_for() {
 # has a worktree: `execution.branch` is non-null on tactic nodes and on no other
 # kind, and `.claude/skills/office-hours/SKILL.md` step 5 states outright that a
 # strategy node has "no worktree, no PR" — engagement there is a graph edit
-# (`/align-strategy`, `/align-tactics`), not a checkout. The launch arm gates
+# (`/align`, `/align-tactics`), not a checkout. The launch arm gates
 # provisioning on this so a non-tactic park never mints a branch and worktree the
 # documentation says does not exist (and which dispatch-sweep's NODE arm could
 # never reap: those kinds carry `phase: null`, never `phase: done`).

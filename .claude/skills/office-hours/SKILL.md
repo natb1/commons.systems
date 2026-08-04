@@ -503,7 +503,7 @@ an explicit `/office-hours <node-id>` naming an already-live node errors (the
 6. **Report where to engage (kind-aware).**
 
    - **Strategy node** — no worktree, no PR. Engage by refining the node itself:
-     `/align-strategy` or `/align-tactics` on `<node-id>`. `office-hours-graph`
+     `/align` or `/align-tactics` on `<node-id>`. `office-hours-graph`
      provisions no worktree for a strategy node (nor for any other non-tactic
      kind) and launches it at the repo root — only the bare node-id session name
      is shared with the tactic lane.
