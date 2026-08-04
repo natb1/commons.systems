@@ -82,7 +82,7 @@ function readManifest(path: string): Record<string, unknown> {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error(`dependency-audit: manifest ${path} is not a JSON object`);
   }
-  return parsed as Record<string, unknown>;
+  return parsed as Record<string, unknown>; // type-safety-ok: narrowed to a non-null non-array object by the checks above; TS cannot infer string keys from typeof alone
 }
 
 /**
