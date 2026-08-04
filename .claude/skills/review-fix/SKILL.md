@@ -271,10 +271,18 @@ api_call_site=$(git diff "$MERGE_BASE"...HEAD \
   Firestore / Storage rules file.
 - `api_call_site` is `true` when the diff **adds** a line containing an API or
   query call site (`fetch`/`axios`/`getDocs`/`getDoc`/`query`/`collection`/…).
-  It is computed from diff CONTENT, deliberately decoupled from
+  It is computed from diff CONTENT, as its own flag rather than by relaxing
   `app_or_rules` — relaxing `app_or_rules` would also widen the `auth` and
   `data-exposure` domain-sweep sections, silently expanding security review
-  scope to every code diff.
+  scope to every code diff. It gates the **advisory** `cost` section of the
+  merged `api-cost` lens, and additionally fires its **security** `firebase`
+  section. `firebase` itself still rides `app_or_rules` as well
+  (`app_or_rules || api_call_site`): the call-site pattern set matches none of
+  what that lens reviews — a rules diff (`allow read, write: if …`),
+  emulator-only code (`connectFirestoreEmulator`), or key/config exposure
+  (`apiKey`, `initializeApp`) all classify `api_call_site=false` — so gating it
+  on this flag alone would switch the reviewer off for exactly the diffs it
+  exists for.
 
 Set `security_note` for the Workflow `args`:
 - `surface=docs`: `Security review: no attack surface — docs-only diff (no executable, config, dependency, or Firestore-rules changes).`
@@ -480,7 +488,7 @@ args = {
   surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
   app_or_rules:        <true|false>,
-  api_call_site:       <true|false>,    // from `api_call_site` above; decoupled from app_or_rules
+  api_call_site:       <true|false>,    // from `api_call_site` above; gates `cost`, and widens (never narrows) `firebase`
   prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
   run_started_at:      <RUN_STARTED_AT>, // ISO8601 lower bound for the instrument-invocation transcript verifier

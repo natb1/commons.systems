@@ -28,15 +28,21 @@ out=$(node "$SCRIPT_DIR/review-fix-domain-sweep-probe.mjs")
 assert_eq "domain sweep: roster_code_noapp" '["input-validation","domain-sweep","red-team","security-review"]' \
   "$(printf '%s' "$out" | jq -c '.roster_code_noapp')"
 
-assert_eq "domain sweep: roster_code_app" '["input-validation","domain-sweep","red-team","security-review"]' \
+# app_or_rules alone still launches the merged api-cost agent: its `firebase`
+# section is the SECURITY half and keeps its pre-fold trigger (see agentFinderSet's
+# comment — the api_call_site pattern set matches no rules/emulator/config diff, so
+# gating firebase on it alone would silently drop the lens on exactly the diffs it
+# exists to review).
+assert_eq "domain sweep: roster_code_app ends in api-cost (firebase half rides app_or_rules)" \
+  '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
   "$(printf '%s' "$out" | jq -c '.roster_code_app')"
 
 assert_eq "domain sweep: roster_empty is []" '[]' "$(printf '%s' "$out" | jq -c '.roster_empty')"
 assert_eq "domain sweep: roster_docs is []" '[]' "$(printf '%s' "$out" | jq -c '.roster_docs')"
 assert_eq "domain sweep: roster_tests is []" '[]' "$(printf '%s' "$out" | jq -c '.roster_tests')"
 
-# api_call_site (third arg) is what now gates the merged api-cost lens —
-# app_or_rules alone (roster_code_app above) no longer adds anything.
+# api_call_site (third arg) launches the lens on its own too — that is the widen
+# the merge added, for API call sites outside the app/rules path set.
 assert_eq "domain sweep: roster_code_app_call ends in api-cost" \
   '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
   "$(printf '%s' "$out" | jq -c '.roster_code_app_call')"
@@ -104,9 +110,32 @@ assert_eq "domain sweep: sections_app carries set Source auth" "true" \
 assert_eq "domain sweep: sections_app carries set Source data-exposure" "true" \
   "$(jq -n --arg hay "$sections_app" --arg needle 'set Source "data-exposure"' '$hay | contains($needle)')"
 
+# --- apiCostDomains per-flag gating -------------------------------------------
+# The two folded sources are gated SEPARATELY — `firebase` (security) on
+# `app_or_rules || api_call_site`, `cost` (advisory) on `api_call_site` alone. A
+# regression that re-collapses both onto api_call_site drops the firebase lens on
+# rules/emulator/config diffs (which classify api_call_site=false), so the
+# app-without-call-site vector below is the one with teeth.
+assert_eq "domain sweep: api_cost_domains (app, no call site) is [firebase] only" '["firebase"]' \
+  "$(printf '%s' "$out" | jq -c '.api_cost_domains_app_nocall')"
+assert_eq "domain sweep: api_cost_domains (no app, call site) is [firebase, cost]" '["firebase","cost"]' \
+  "$(printf '%s' "$out" | jq -c '.api_cost_domains_noapp_call')"
+assert_eq "domain sweep: api_cost_domains (app + call site) is [firebase, cost]" '["firebase","cost"]' \
+  "$(printf '%s' "$out" | jq -c '.api_cost_domains_app_call')"
+assert_eq "domain sweep: api_cost_domains (neither flag) is []" '[]' \
+  "$(printf '%s' "$out" | jq -c '.api_cost_domains_noapp_nocall')"
+
+# The order within a briefed set is load-bearing (see review-fix.js comment above
+# apiCostDomains: firebase is allowedList[0] for the gather loop's SOURCE CLAMP,
+# so an off-brief Source escalates to the security-classified lens rather than
+# being silently demoted to advisory) — pinned by the exact-array assertions above.
+
 # --- apiCostSections brief content --------------------------------------------
 
-api_cost_sections=$(printf '%s' "$out" | jq -r '.api_cost_sections')
+api_cost_sections=$(printf '%s' "$out" | jq -r '.api_cost_sections_app_call')
+api_cost_sections_app_nocall=$(printf '%s' "$out" | jq -r '.api_cost_sections_app_nocall')
+api_cost_sections_noapp_call=$(printf '%s' "$out" | jq -r '.api_cost_sections_noapp_call')
+api_cost_sections_noapp_nocall=$(printf '%s' "$out" | jq -r '.api_cost_sections_noapp_nocall')
 brief_firebase=$(printf '%s' "$out" | jq -r '.brief_firebase')
 cost_brief=$(printf '%s' "$out" | jq -r '.cost_brief')
 
@@ -123,12 +152,17 @@ assert_eq "domain sweep: api_cost_sections carries set Source cost" "true" \
 assert_eq "domain sweep: api_cost_sections carries cost OWASP/STRIDE advisory phrasing" "true" \
   "$(jq -n --arg hay "$api_cost_sections" --arg needle 'and OWASP "" and STRIDE "" on findings from this section — cost findings are ADVISORY' '$hay | contains($needle)')"
 
-# apiCostDomains() order is load-bearing (see review-fix.js comment above
-# apiCostDomains: firebase is allowedList[0] for the gather loop's SOURCE
-# CLAMP, so an off-brief Source escalates to the security-classified lens
-# rather than being silently demoted to advisory).
-assert_eq "domain sweep: api_cost_domains is [firebase, cost] in that exact order" '["firebase","cost"]' \
-  "$(printf '%s' "$out" | jq -c '.api_cost_domains')"
+# The brief follows the gate: firebase-only on an app/rules diff with no added
+# call site, both sections once a call site appears, empty when neither fires.
+assert_eq "domain sweep: sections (app, no call site) contain brief_firebase" "true" \
+  "$(jq -n --arg hay "$api_cost_sections_app_nocall" --arg needle "$brief_firebase" '$hay | contains($needle)')"
+assert_eq "domain sweep: sections (app, no call site) do NOT contain cost_brief" "false" \
+  "$(jq -n --arg hay "$api_cost_sections_app_nocall" --arg needle "$cost_brief" '$hay | contains($needle)')"
+assert_eq "domain sweep: sections (no app, call site) contain brief_firebase" "true" \
+  "$(jq -n --arg hay "$api_cost_sections_noapp_call" --arg needle "$brief_firebase" '$hay | contains($needle)')"
+assert_eq "domain sweep: sections (no app, call site) contain cost_brief" "true" \
+  "$(jq -n --arg hay "$api_cost_sections_noapp_call" --arg needle "$cost_brief" '$hay | contains($needle)')"
+assert_eq "domain sweep: sections (neither flag) are empty" "" "$api_cost_sections_noapp_nocall"
 
 # --- call-site / doctrine coverage (anti-regression teeth) -------------------
 # A future edit that keeps these functions but stops calling them, or drops
@@ -154,8 +188,19 @@ assert_eq "sweepSections is called with args.app_or_rules" "1" \
 # and laneBAllowedSources' own `name === 'api-cost'` ternary arm.
 assert_eq "laneBAllowedSources routes api-cost through apiCostDomains()" "2" \
   "$(grep -c "name === 'api-cost'" "$REVIEW_FIX_JS" || true)"
-assert_eq "laneBAllowedSources api-cost arm calls apiCostDomains()" "1" \
-  "$(grep -c '? apiCostDomains()' "$REVIEW_FIX_JS" || true)"
+# The clamp must be computed with the SAME flags the brief was: a bare
+# apiCostDomains() call would allow an unbriefed `cost` Source through on an
+# app/rules diff that briefed firebase only.
+assert_eq "laneBAllowedSources api-cost arm calls apiCostDomains with both flags" "1" \
+  "$(grep -c '? apiCostDomains(_a.app_or_rules, _a.api_call_site)' "$REVIEW_FIX_JS" || true)"
+assert_eq "apiCostSections is called with args.app_or_rules and args.api_call_site" "1" \
+  "$(grep -c 'apiCostSections(args.app_or_rules, args.api_call_site)' "$REVIEW_FIX_JS" || true)"
+
+# The api-cost gate itself: the agent launches on EITHER flag. A regression that
+# narrows this to `if (api_call_site)` silently drops the firebase security lens
+# on rules/emulator/config diffs.
+assert_eq "agentFinderSet gates api-cost on app_or_rules || api_call_site" "1" \
+  "$(grep -c 'if (app_or_rules || api_call_site) {' "$REVIEW_FIX_JS" || true)"
 
 # The gate function itself is only coverage if the run actually calls it with
 # the run's own surface/app_or_rules/api_call_site. Without this pin, replacing

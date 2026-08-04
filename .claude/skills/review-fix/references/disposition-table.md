@@ -90,5 +90,14 @@ query-cost, amplifier, and N+1 findings are `cost` (advisory). Because the
 merge raises the odds of a misclassified `bucket` sending an advisory `cost`
 finding down the merge-blocking path, the non-escalation invariant above is now
 clamped harness-side — not merely briefed — by the COST CLAMP in
-`review-fix.js` (search for `COST CLAMP`), which coerces any `cost` finding
+`review-fix.js` (search for `COST CLAMP`), which coerces a `cost` finding
 classified `Required` or `Fixed` back to `Deferred`.
+
+The clamp is **merge-aware**: it keys on the finding's full `sources`
+provenance, not on the representative `Source` that `dedupMerge` copies onto a
+merged entry. A merged finding whose `sources` include any non-`cost` member
+(a security source that dedup judged same-root at the same `path:line`) is
+left at its classified bucket and the skip is logged — otherwise a loud,
+high-confidence cost finding winning the representative slot would silently
+declassify a genuine merge-blocking vulnerability. For the same reason the
+clamp never rewrites `security_class`.

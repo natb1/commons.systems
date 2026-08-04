@@ -22,7 +22,7 @@
 #   security-review      (surface==code)
 #   auth                 (surface==code AND app_or_rules==true)
 #   data-exposure        (surface==code AND app_or_rules==true)
-#   firebase             (surface==code AND api_call_site==true)
+#   firebase             (surface==code AND (app_or_rules==true OR api_call_site==true))
 #   cost                 (surface==code AND api_call_site==true)
 #   codeql               (surface==code)
 #   erosion              (surface==code)
@@ -30,8 +30,9 @@
 #
 # surface empty/docs/tests => exactly code-review (zero security finders).
 # surface==code       => 4 always-on security finders + codeql + erosion.
-# app_or_rules==true  => additionally auth, data-exposure (6 total).
-# api_call_site==true => additionally firebase, cost (independent of app_or_rules).
+# app_or_rules==true  => additionally auth, data-exposure, firebase (7 total).
+# api_call_site==true => additionally cost, and firebase if not already added by
+#                        app_or_rules (i.e. firebase rides EITHER flag).
 # deps==true          => additionally npm (independent of surface).
 #
 # No network access, no git, no gh — pure stdin → stdout classification.
@@ -63,15 +64,35 @@
 # NOTE — api-cost merge (tactic-review-api-cost-lens-merge): the JS agent fan-out
 # (`agentFinderSet` in review-fix.js) now maps the `firebase` + `cost` SOURCES
 # onto ONE agent called `api-cost`. Unlike the domain-sweep fold above, this also
-# changes what GATES those two sources: they no longer ride `app_or_rules`, they
-# now gate on a new `api_call_site` flag computed from diff content (does the
-# diff touch a call site for a metered/paid API, e.g. Firebase or another billed
-# service) at the /review-fix SKILL.md args-build step, NOT by
+# introduces a new GATE for the ADVISORY half: `cost` no longer rides
+# `app_or_rules`, it gates on the `api_call_site` flag computed from diff content
+# (does the diff ADD a call site for a metered/paid API, e.g. Firebase or another
+# billed service) at the /review-fix SKILL.md args-build step, NOT by
 # `dispatch-security-surface` (which only ever emitted `surface`/`deps`/
-# `app_or_rules`). `auth` and `data-exposure` are unaffected and remain gated on
-# `app_or_rules`. As with domain-sweep, this script remains the normative
-# SOURCE-name spec, not an agent-name spec — two sources, one agent, and nothing
-# about this script's own stdout format changes as a result.
+# `app_or_rules`).
+#
+# The SECURITY half does NOT move. `firebase` reviews Firestore rules
+# permissiveness, emulator-only code on production paths, and Firebase key/config
+# exposure — none of which the `api_call_site` pattern set matches (a rules diff
+# adding `allow read, write: if request.auth != null;`, or an `initializeApp`/
+# `connectFirestoreEmulator`/`apiKey` diff, yields `api_call_site=false`). Gating
+# it on `api_call_site` ALONE would silently switch the firebase reviewer off for
+# exactly the diffs it exists to review — a fail-open security-coverage
+# regression. So `firebase` rides `app_or_rules || api_call_site`: it keeps its
+# pre-merge trigger and additionally fires on API-call-site diffs outside the
+# app/rules path set. `auth` and `data-exposure` are unaffected and remain gated
+# on `app_or_rules` alone.
+#
+# Consequence for the merged agent: `api-cost` launches when EITHER flag is true,
+# and its brief carries only the sections whose own gate is true — firebase-only
+# on an app/rules diff that adds no call site, and both sections whenever
+# api_call_site is true (a cost-only brief is unreachable, since api_call_site
+# also satisfies firebase's gate). review-fix.js's apiCostDomains()/
+# apiCostSections() take both flags and emit exactly the subset this roster does.
+#
+# As with domain-sweep, this script remains the normative SOURCE-name spec, not
+# an agent-name spec — two sources, one agent, and nothing about this script's
+# own stdout format changes as a result.
 set -euo pipefail
 
 # --- parse stdin ----------------------------------------------------------------
@@ -110,10 +131,15 @@ if [[ "$surface" == "code" ]]; then
     echo "data-exposure"
   fi
 
-  # Metered/paid API call-site finders (api-cost agent in review-fix.js),
-  # gated independently of app_or_rules on diff-content detection.
-  if [[ "$api_call_site" == "true" ]]; then
+  # The two sources the merged api-cost agent carries (review-fix.js), gated
+  # SEPARATELY. firebase is the security half: it keeps its app/rules trigger AND
+  # additionally fires on a diff-content call site, so widening the merged lens
+  # never narrows security coverage. cost is the advisory half and rides
+  # api_call_site alone.
+  if [[ "$app_or_rules" == "true" || "$api_call_site" == "true" ]]; then
     echo "firebase"
+  fi
+  if [[ "$api_call_site" == "true" ]]; then
     echo "cost"
   fi
 

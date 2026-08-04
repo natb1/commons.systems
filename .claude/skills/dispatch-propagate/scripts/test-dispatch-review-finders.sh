@@ -34,19 +34,29 @@ assert_eq "finders: code !app → codeql present" "1" "$n"
 n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^npm$' || true)
 assert_eq "finders: code !app !deps → npm absent" "0" "$n"
 
-# code + app_or_rules=false → app-domain trio absent (firebase now gated on
-# api_call_site, not app_or_rules; default api_call_site=false)
+# code + app_or_rules=false → app-domain trio absent (firebase rides
+# app_or_rules OR api_call_site; both false here)
 n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(auth|data-exposure|firebase)$' || true)
 assert_eq "finders: code !app → app-domain trio absent" "0" "$n"
 
-# code + app_or_rules=true + deps=false → 6 security reviewers present (firebase
-# excluded: it no longer gates on app_or_rules)
-n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(input-validation|secrets|red-team|security-review|auth|data-exposure)$')
-assert_eq "finders: code+app → 6 security reviewers" "6" "$n"
+# code + app_or_rules=true + deps=false → 7 security reviewers present, firebase
+# among them: firebase is the SECURITY half of the merged api-cost lens and keeps
+# its app_or_rules trigger. Gating it on api_call_site alone would drop it on
+# exactly the diffs it reviews (Firestore rules permissiveness, emulator-only code
+# on production paths, Firebase key/config exposure) — none of which the
+# api_call_site pattern set matches.
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(input-validation|secrets|red-team|security-review|auth|data-exposure|firebase)$')
+assert_eq "finders: code+app → 7 security reviewers" "7" "$n"
 
-# code + app_or_rules=true + deps=false → firebase absent (api_call_site defaults false)
-n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^firebase$' || true)
-assert_eq "finders: code+app !api_call_site → firebase absent" "0" "$n"
+# code + app_or_rules=true + deps=false → firebase present even with
+# api_call_site unset (defaults false)
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^firebase$')
+assert_eq "finders: code+app !api_call_site → firebase present" "1" "$n"
+
+# ...and cost absent in that same case: only the ADVISORY half moved to the
+# api_call_site gate.
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\napi_call_site=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: code+app !api_call_site → cost absent" "0" "$n"
 
 # code + app_or_rules=true + deps=false → npm absent
 n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^npm$' || true)
@@ -85,8 +95,9 @@ n=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\napi_call_site=true\n'
 assert_eq "finders: tests surface → cost absent" "0" "$n"
 
 # code + app_or_rules=false + api_call_site=true → firebase and cost present,
-# auth and data-exposure absent (the decoupling: api_call_site gates firebase/
-# cost independently of app_or_rules)
+# auth and data-exposure absent (the widen: api_call_site adds cost, and adds
+# firebase on diffs outside the app/rules path set, without touching auth or
+# data-exposure)
 n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\napi_call_site=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(firebase|cost)$')
 assert_eq "finders: code !app+api_call_site → firebase+cost present" "2" "$n"
 n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\napi_call_site=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(auth|data-exposure)$' || true)

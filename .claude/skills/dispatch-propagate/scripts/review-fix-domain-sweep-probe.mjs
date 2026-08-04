@@ -29,13 +29,19 @@
 //     sweepSections.
 //
 // A later unit (tactic-review-api-cost-lens-merge) folded the `firebase` and
-// `cost` finder agents into one `api-cost` agent, gated on the diff-content
-// flag `api_call_site` rather than `app_or_rules`, INSIDE those same two
+// `cost` finder agents into one `api-cost` agent, INSIDE those same two
 // sentinel regions (no new sentinel pair was added):
 //   - "domain sweep gate" — agentFinderSet is now 3-parameter
 //     (surface, app_or_rules, api_call_site).
-//   - "domain sweep brief" — also now holds COST_BRIEF, apiCostDomains, and
-//     apiCostSections.
+//   - "domain sweep brief" — also now holds COST_BRIEF, apiCostDomains,
+//     API_COST_SECTION_PROMPTS, and apiCostSections.
+//
+// The two folded sources keep SEPARATE gates, so apiCostDomains/apiCostSections
+// are flag-conditional exactly like sweepDomains/sweepSections:
+//   - `firebase` (security) — app_or_rules || api_call_site.
+//   - `cost` (advisory)     — api_call_site alone.
+// The vectors below cover every (app_or_rules, api_call_site) combination so a
+// regression that re-collapses them to a single gate fails here.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -113,12 +119,13 @@ const {
   DOMAIN_PROMPTS,
   apiCostDomains,
   apiCostSections,
+  API_COST_SECTION_PROMPTS,
   COST_BRIEF,
 } = (function () {
   const combinedSource = `${gateSlice}\n${briefSlice}`;
   // eslint-disable-next-line no-eval -- see comment above // type-safety-ok: eval is required (not new Function) because the combined slice has several top-level statements, not a single expression
   return eval(
-    `(function () { ${combinedSource}\nreturn { agentFinderSet, sweepDomains, sweepSections, DOMAIN_PROMPTS, apiCostDomains, apiCostSections, COST_BRIEF }; })()`
+    `(function () { ${combinedSource}\nreturn { agentFinderSet, sweepDomains, sweepSections, DOMAIN_PROMPTS, apiCostDomains, apiCostSections, API_COST_SECTION_PROMPTS, COST_BRIEF }; })()`
   );
 })();
 
@@ -144,8 +151,20 @@ results.brief_auth = DOMAIN_PROMPTS.auth;
 results.brief_data_exposure = DOMAIN_PROMPTS['data-exposure'];
 results.brief_firebase = DOMAIN_PROMPTS.firebase;
 
-results.api_cost_domains = apiCostDomains();
-results.api_cost_sections = apiCostSections();
+// Every (app_or_rules, api_call_site) combination — the two sources are gated
+// separately, so a single-flag regression must show up as a changed vector here.
+results.api_cost_domains_noapp_nocall = apiCostDomains(false, false);
+results.api_cost_domains_app_nocall = apiCostDomains(true, false);
+results.api_cost_domains_noapp_call = apiCostDomains(false, true);
+results.api_cost_domains_app_call = apiCostDomains(true, true);
+
+results.api_cost_sections_app_nocall = apiCostSections(true, false);
+results.api_cost_sections_noapp_call = apiCostSections(false, true);
+results.api_cost_sections_app_call = apiCostSections(true, true);
+results.api_cost_sections_noapp_nocall = apiCostSections(false, false);
+
+results.api_cost_section_firebase = API_COST_SECTION_PROMPTS.firebase;
+results.api_cost_section_cost = API_COST_SECTION_PROMPTS.cost;
 results.cost_brief = COST_BRIEF;
 
 process.stdout.write(JSON.stringify(results) + '\n');

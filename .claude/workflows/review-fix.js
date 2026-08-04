@@ -526,12 +526,25 @@ function transcriptVerdictDetail(tv) {
 // (apiCostSections below), exactly as `domain-sweep` does. `api-cost` is an AGENT
 // name only — it is never a Source value on a finding.
 //
-// Its trigger is also DECOUPLED from `app_or_rules`: the merged lens fires on the
-// diff-content flag `api_call_site` (emitted by
-// .claude/skills/dispatch-propagate/scripts/dispatch-api-call-site) rather than the
-// coarse app-or-rules-path boolean, so it follows where API call sites actually
-// appear in the diff. `app_or_rules` remains a parameter because sweepSections still
-// consumes it for the domain-sweep fold; it no longer gates this lens.
+// Its trigger is PER-SECTION, not per-agent — the two halves keep separate gates,
+// and the agent launches when EITHER is satisfied:
+//   - `cost` (advisory) is the half that moved. It rides the diff-content flag
+//     `api_call_site` (emitted by
+//     .claude/skills/dispatch-propagate/scripts/dispatch-api-call-site) instead of
+//     the coarse app-or-rules-path boolean, so it follows where API call sites
+//     actually appear in the diff.
+//   - `firebase` (security-classified) does NOT move. It rides
+//     `app_or_rules || api_call_site`. Gating it on `api_call_site` alone would be
+//     a fail-open coverage regression: the CALL_SITE_RE pattern set (fetch/axios/
+//     getDocs/…) matches none of the three things this lens reviews — a Firestore
+//     rules diff (`allow read, write: if …`), emulator-only code
+//     (`connectFirestoreEmulator`), and Firebase key/config exposure (`apiKey`,
+//     `initializeApp`) all classify as `api_call_site=false`, so exactly the diffs
+//     the lens exists for would stop being reviewed, silently.
+// `app_or_rules` therefore stays a real parameter of this gate (as well as feeding
+// sweepSections for the domain-sweep fold), and apiCostDomains/apiCostSections take
+// BOTH flags so the launched agent is briefed only on the sections whose own gate
+// is true.
 // >>> domain sweep gate: sliced + eval'd by review-fix-domain-sweep-probe.mjs >>>
 function agentFinderSet(surface, app_or_rules, api_call_site) {
   // Any non-`code` surface (`empty`/`docs`/`tests`) yields NO agent finders at all —
@@ -540,7 +553,7 @@ function agentFinderSet(surface, app_or_rules, api_call_site) {
   const set = [];
   if (surface === 'code') {
     set.push('input-validation', 'domain-sweep', 'red-team', 'security-review');
-    if (api_call_site) {
+    if (app_or_rules || api_call_site) {
       set.push('api-cost');
     }
   }
@@ -794,21 +807,41 @@ const COST_BRIEF = [
   'That query×amplifier interaction is the primary target of this lens.',
 ].join(' ');
 
-// The two sources the single `api-cost` agent carries, and the labelled brief it is
-// given. Unlike sweepDomains, this takes no argument: whenever the lens fires (i.e.
-// `api_call_site` is true) BOTH sections are always briefed. The ORDER is
-// load-bearing — `firebase` is first because it is allowedList[0] for the gather
-// loop's SOURCE CLAMP, so an off-brief Source escalates to the security-classified
-// lens rather than being demoted to advisory (see laneBAllowedSources).
-function apiCostDomains() {
-  return ['firebase', 'cost'];
+// The sources the single `api-cost` agent carries, and the labelled brief it is
+// given. Like sweepDomains, this is FLAG-CONDITIONAL — the two sections keep the
+// separate gates described above agentFinderSet, and only the sections whose own
+// gate is true are briefed:
+//   - `firebase` (security): app_or_rules || api_call_site — its pre-fold trigger,
+//     widened, never narrowed.
+//   - `cost` (advisory): api_call_site alone.
+// So an app/rules diff that adds no API call site briefs firebase only, and any
+// diff that does add one briefs both (api_call_site also satisfies firebase's
+// gate, so a cost-only brief is unreachable).
+//
+// The ORDER is load-bearing — `firebase` is first because it is allowedList[0] for
+// the gather loop's SOURCE CLAMP, so an off-brief Source escalates to the
+// security-classified lens rather than being demoted to advisory (see
+// laneBAllowedSources). Keeping firebase first is also why the clamp target stays
+// a security lens on every reachable flag combination.
+function apiCostDomains(app_or_rules, api_call_site) {
+  const domains = [];
+  if (app_or_rules || api_call_site) domains.push('firebase');
+  if (api_call_site) domains.push('cost');
+  return domains;
 }
 
-function apiCostSections() {
-  return [
-    `Section "firebase" (set Source "firebase" on findings from this section, and FILL OWASP and STRIDE — these are security findings): ${DOMAIN_PROMPTS.firebase}`,
-    `Section "cost" (set Source "cost" and OWASP "" and STRIDE "" on findings from this section — cost findings are ADVISORY, never security-classified): ${COST_BRIEF}`,
-  ].join('\n');
+// Per-section brief text, keyed by Source. Kept as a map (rather than inlined in
+// apiCostSections) so the conditional emit below stays a plain lookup over
+// apiCostDomains' output, exactly like sweepSections.
+const API_COST_SECTION_PROMPTS = {
+  firebase: `Section "firebase" (set Source "firebase" on findings from this section, and FILL OWASP and STRIDE — these are security findings): ${DOMAIN_PROMPTS.firebase}`,
+  cost: `Section "cost" (set Source "cost" and OWASP "" and STRIDE "" on findings from this section — cost findings are ADVISORY, never security-classified): ${COST_BRIEF}`,
+};
+
+function apiCostSections(app_or_rules, api_call_site) {
+  return apiCostDomains(app_or_rules, api_call_site)
+    .map((d) => API_COST_SECTION_PROMPTS[d])
+    .join('\n');
 }
 // <<< domain sweep brief <<<
 
@@ -938,13 +971,23 @@ function finderPrompt(name, args) {
   // planning draft and is closed by the reasoning above.
   if (name === 'api-cost') {
     return [
-      'You are a findings-only reviewer for Firebase/Firestore API call sites, running the two',
-      'sections listed below in ONE pass over the same diff. Work the sections in order and report',
-      'on each independently — a clean result in one section is never a reason to shorten another.',
-      apiCostSections(),
+      'You are a findings-only reviewer for Firebase/Firestore rules, config, and API call sites,',
+      'running the sections listed below in ONE pass over the same diff. Work the sections in order',
+      'and report on each independently — a clean result in one section is never a reason to shorten',
+      'another.',
+      apiCostSections(args.app_or_rules, args.api_call_site),
       ctx,
-      'Set Source on EACH finding to the section it came from — exactly one of "firebase", "cost".',
-      'Never invent a combined source name and never use a source that is not one of those two.',
+      // Enumerate the BRIEFED sections only — same reason as domain-sweep below:
+      // naming a section this run never briefed would invite findings from a lens
+      // that did not run, corrupting per-lens yield. The harness clamps Source to
+      // this same set on the way back in (gather loop).
+      `Set Source on EACH finding to the section it came from — exactly one of ${apiCostDomains(
+        args.app_or_rules,
+        args.api_call_site
+      )
+        .map((d) => `"${d}"`)
+        .join(', ')}. Never invent a combined source name and never use a source that is not one of`,
+      'those sections.',
       'Fill OWASP and STRIDE on every "firebase" finding (they are security findings); leave BOTH',
       'as "" on every "cost" finding (cost findings are advisory and are never security-classified).',
       SCHEMA_BLURB,
@@ -1399,11 +1442,16 @@ log(
 // `domain-sweep` carries THREE sources chosen by the agent itself, and on the
 // non-app path only `secrets` is briefed at all.
 //
-// `api-cost` carries TWO sources the same way, and the ORDER apiCostDomains()
-// returns them in is load-bearing here: the clamp below relabels an off-brief Source
-// to `allowedList[0]`, which is `firebase` — the security-classified lens. An
-// unrecognized Source therefore ESCALATES to security rather than being demoted to
-// the advisory `cost` lane, which is the fail-safe direction.
+// `api-cost` carries up to TWO sources the same way — and, like domain-sweep, the
+// briefed subset depends on this run's flags, so the clamp must be computed with the
+// SAME flags the brief was (`apiCostDomains(_a.app_or_rules, _a.api_call_site)`). On
+// an app/rules diff that adds no API call site the agent is briefed on `firebase`
+// only, and an unbriefed `cost` label must not be honoured. The ORDER apiCostDomains
+// returns is load-bearing here: the clamp below relabels an off-brief Source to
+// `allowedList[0]`, which is `firebase` — the security-classified lens — on every
+// reachable flag combination. An unrecognized Source therefore ESCALATES to security
+// rather than being demoted to the advisory `cost` lane, which is the fail-safe
+// direction.
 // Residual risk the split design knowingly accepts: WITHIN its briefed set the
 // `api-cost` agent chooses freely which of the two Sources to tag a finding with, so
 // it could in principle self-tag a rules-permissiveness finding as `cost` and the
@@ -1415,7 +1463,7 @@ const laneBAllowedSources = (name) =>
   name === 'domain-sweep'
     ? sweepDomains(_a.app_or_rules)
     : name === 'api-cost'
-      ? apiCostDomains()
+      ? apiCostDomains(_a.app_or_rules, _a.api_call_site)
       : [name];
 let allFindings = [];
 for (const { name, res } of finderResults) {
@@ -1636,12 +1684,36 @@ if (deduped.length) {
 // finding is ADVISORY — never Required, never verify-eligible. Prompt text
 // alone enforced this before the api-cost merge; with one agent now emitting
 // both Sources, clamp it harness-side.
+//
+// The clamp is MERGE-AWARE, and must stay that way. dedupMerge elects ONE
+// representative per merged group by (laneA-last, Confidence desc, _idx asc)
+// and copies only THAT member's `Source` onto the merged finding — the full
+// provenance survives solely in `sources`. So a loud, high-confidence cost
+// finding can win the representative slot over a genuine security finding the
+// dedup partitioner judged same-root at the same `path:line` (e.g. one
+// statement that is both an unbounded collection read and a missing ownership
+// check). Keying the clamp on `Source` alone would then coerce a real
+// vulnerability to Deferred and drop it out of requiredFindings — never
+// adversarially verified, never fixed — and confidence is diff-steerable, so
+// that representative election is deterministic in an attacker's favour.
+// Key on the WHOLE provenance instead: clamp only when EVERY source in the
+// merge is 'cost', log the skip otherwise, and never rewrite `security_class`
+// (a purely advisory finding already carries 'none'; a security-carrying one
+// keeps its own class rather than being silently declassified).
 deduped = deduped.map((f) => {
-  if (f.Source === 'cost' && (f.bucket === 'Required' || f.bucket === 'Fixed')) {
-    log(`classify: COST CLAMP — cost finding classified "${f.bucket}"; coerced to Deferred (non-escalation invariant).`);
-    return Object.assign({}, f, { bucket: 'Deferred', security_class: 'none' });
+  if (f.bucket !== 'Required' && f.bucket !== 'Fixed') return f;
+  const srcs = f.sources && f.sources.length ? f.sources : [f.Source];
+  if (!srcs.includes('cost')) return f;
+  if (!srcs.every((s) => s === 'cost')) {
+    log(
+      `classify: COST CLAMP SKIPPED — finding ${f.id} classified "${f.bucket}" merges non-cost source(s) [${srcs.join(', ')}]; left as classified (clamp applies only to purely advisory findings).`
+    );
+    return f;
   }
-  return f;
+  log(
+    `classify: COST CLAMP — cost finding ${f.id} (sources: [${srcs.join(', ')}]) classified "${f.bucket}"; coerced to Deferred (non-escalation invariant).`
+  );
+  return Object.assign({}, f, { bucket: 'Deferred' });
 });
 
 // >>> skeptic batching: sliced + eval'd by review-fix-skeptic-batch-probe.mjs >>>
