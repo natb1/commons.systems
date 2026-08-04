@@ -476,12 +476,13 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (8) Already parked. Idiom copied VERBATIM from `park_live_on_main` in
-      # `packages/intentionsutil/scripts/office-hours-graph` — deliberately
-      # inlined rather than shared. The frontmatter scoping is load-bearing:
-      # restricting the test to the YAML block (between the first two `---`
-      # fences) means a column-0 `office_hours:` line in the markdown BODY
-      # (documentation of the serialization) can never be misread as park state.
+      # (8) Already parked. Idiom deliberately inlined rather than shared (same
+      # frontmatter-scoped, column-0-anchored idiom `node_kind_on_main` in
+      # `packages/intentionsutil/scripts/office-hours-graph` uses). The
+      # frontmatter scoping is load-bearing: restricting the test to the YAML
+      # block (between the first two `---` fences) means a column-0
+      # `office_hours:` line in the markdown BODY (documentation of the
+      # serialization) can never be misread as park state.
       local frontmatter parked_already=0
       frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$body")
       if grep -q '^office_hours:' <<<"$frontmatter"; then
@@ -983,13 +984,14 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (8) Already parked. Idiom copied VERBATIM from `park_live_on_main` in
-      # `packages/intentionsutil/scripts/office-hours-graph` — deliberately
-      # inlined rather than shared (the same deliberate duplication
-      # frozen_session_sweep step (8) carries). The frontmatter scoping is
-      # load-bearing: restricting the test to the YAML block (between the first
-      # two `---` fences) means a column-0 `office_hours:` line in the markdown
-      # BODY can never be misread as park state.
+      # (8) Already parked. Idiom deliberately inlined rather than shared (same
+      # frontmatter-scoped, column-0-anchored idiom `node_kind_on_main` in
+      # `packages/intentionsutil/scripts/office-hours-graph` uses; also the same
+      # deliberate duplication frozen_session_sweep step (8) carries). The
+      # frontmatter scoping is load-bearing: restricting the test to the YAML
+      # block (between the first two `---` fences) means a column-0
+      # `office_hours:` line in the markdown BODY can never be misread as park
+      # state.
       local frontmatter parked_already=0
       frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$body")
       if grep -q '^office_hours:' <<<"$frontmatter"; then
