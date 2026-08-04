@@ -128,14 +128,16 @@ checkout: a concurrent session's dirty tracked file blocks this run's
      and is not soft-frozen, was parked to `office_hours`, was resolved or
      pruned, or has incomplete blockers. **STOP.** Make **no** graph write,
      open no PR, and record the terminal disposition so the Stop hook can
-     reap the job, reusing the same call this Step 0 already uses for the
-     held-claim case above:
+     reap the job — this session did nothing and lost nothing, so reaping it
+     is correct:
      ```bash
      packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
      ```
      `no-claim` is already a validated disposition value in
-     `mark-node-terminal`'s vocabulary (it is the same value the held-claim
-     case above uses) — this is not a new value.
+     `mark-node-terminal`'s vocabulary
+     (`packages/intentionsutil/scripts/mark-node-terminal:74`) — this is not
+     a new value. The call is safe unconditionally: `mark-node-terminal`
+     writes nothing unless this job's own name is `<target-node-id>`.
    - `13` — not reachable at this phase: the gate's scope-chained-phase
      check only applies to the `fix`/`qa`/`review` phases, not
      `align-tactics`. Treat it as a mechanical error: report and stop.
