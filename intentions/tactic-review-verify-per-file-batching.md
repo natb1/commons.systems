@@ -27,7 +27,7 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-review-verify-per-file-batching
   pr: 3027
@@ -38,7 +38,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T00:47:17Z
+    mergeCommitSha: 06ed374f375bcf56354a2e97d23ab7ec9204c65a
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
