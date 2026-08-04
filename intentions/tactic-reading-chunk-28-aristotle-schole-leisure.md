@@ -39,6 +39,7 @@ office_hours:
     education ground 'leisure as the space of the best activities'?"
   since: 2026-07-11
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

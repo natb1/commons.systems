@@ -2123,6 +2123,233 @@ clarifications:
       2026-07-28 by the /align-strategy round that resolved the per-node
       carve-out above; recovered verbatim from the journal of workflow run
       wf_9f49072c-454, whose session dropped it.)"
+  - question: A main-qa verification test recorded by the qa phase always entered
+      the dispatch queue first and parked to office-hours only after a worker
+      had already analysed it. Where is a post-merge verification test's
+      destination decided, and what is the routing unit?
+    answer: "(Recorded 2026-07-28 /align-strategy interview.) Standing requirement:
+      a post-merge (main-qa) verification test is sorted to its terminal queue
+      AT RECORD TIME, by the qa phase that discovers it; a dispatch worker never
+      boots to discover that a test needs the author. The record already
+      asserted this invariant —
+      .claude/skills/qa-fix/references/needs-main-followups.md, node lane:
+      'verifiability is triaged here at record time ... This makes the legacy
+      boot-then-reject waste structurally impossible on the node lane' — but the
+      machinery could not deliver it, because the ROUTING UNIT was the source
+      tactic and a source tactic has exactly one destination. /qa-fix appended a
+      '## needs-main residue' section to the source's own body and advanced it
+      review -> main-qa, so mixed residue could not be split, and an
+      author-required item could not be parked at qa time without blocking the
+      very merge its observation depends on. Live cost:
+      tactic-execution-pr-merge-verification residue item 12 booted /qa-main,
+      which analysed it and concluded 'not browser-verifiable — its url_path
+      names a repo script, not a web page', parked 2026-07-28, and was then
+      drained by human override. Greenfield design adopted: the sorting unit
+      becomes the routing unit. At qa record time /qa-fix writes STANDALONE
+      tactic-mainqa-* nodes — grouped by destination, at most two per source
+      (one carrying all machine-verifiable items, one carrying all
+      author-required items, either omitted when empty) — instead of a residue
+      body section. Birth state IS the routing decision, reusing the shape
+      already live on the migrated tactic-mainqa-* nodes: machine-verifiable ->
+      phase main-qa, office_hours null, owner ai (dispatch queue);
+      author-required -> phase main-qa, office_hours {reason, since,
+      recommendation}, owner human (office-hours queue only — the selector's
+      tactic eligibility requires office_hours null,
+      packages/intentionsutil/src/router.ts:197, so it is never selectable).
+      Both carry execution.pr (the deploy to check) and blocked_by [<source
+      tactic>]: on the machine lane that is a merge gate, on the author lane it
+      is the readiness advisory office-hours already surfaces as a
+      signal-not-gate, and it self-clears correctly because pruning the done
+      source strips inbound blocked_by in the same commit and absence reads as
+      completion (inboundBlockers,
+      packages/intentionsutil/src/transitions.ts:265-272). The source tactic
+      then goes review -> done directly: no main-qa phase on the source, no
+      residue body append. The sorting predicate is unchanged — the
+      autonomous|human criteria already recorded in needs-main-followups.md
+      section 1, uncertain -> author. main-qa remains a valid standing phase;
+      only the SOURCE's use of it is retired. Measurement: the mis-sort rate —
+      /qa-main cannot-verify parks on nodes born office_hours null, over all
+      machine-sorted main-qa nodes; sensor is a graph census over parked main-qa
+      nodes (a cannot-verify park on a machine-sorted node IS a mis-sort by
+      construction, so this is a direct count, not a proxy); threshold at most 1
+      in 20. Recorded honestly: the opposite direction — an author-sorted item
+      Claude could have verified — is NOT mechanically observable and stays
+      unmeasured. This measurement is recorded here rather than in
+      success_signal because that slot carries this strategy's broader lifecycle
+      signal, which still holds and is not displaced by a narrower one.
+      Supersedes entry 22 (2026-07-04), whose answer located post-merge residue
+      in a body section of the source node; amends the parenthetical in entry
+      111 (2026-07-27) that 'main-qa is reachable only via review -> main-qa on
+      needs-main residue' — under this design main-qa is reached by a
+      verification node being BORN at it, while forwardPhase remains the single
+      home of phase routing exactly as entry 111 requires."
+  - question: A deploy lag makes /qa-main park a correctly-sorted machine-verifiable
+      item as cannot-verify. Is that an office_hours park?
+    answer: "(Recorded 2026-07-28 /align-strategy interview, alongside the same-day
+      record-time main-qa routing clarification.) No — it is a mechanical retry
+      hold, not an office_hours park. The selector gates main-qa on the source
+      PR's mergedAt only
+      (.claude/skills/dispatch-propagate/scripts/graph-select-target:631-642)
+      and not on the prod deploy having landed, so /qa-main can boot on a
+      correctly-sorted machine-verifiable item, find prod still serving the
+      pre-merge build, and route to cannot-verify. Parking that to office_hours
+      wakes the author for something no author is needed for, and — because a
+      cannot-verify park on a machine-sorted node is exactly the mis-sort
+      measurement recorded the same day — it also injects false positives into
+      that measurement. Resolution: a deploy-lag cannot-verify emits a
+      blocked_by hold against a tracked deploy-wait and re-selects once the
+      deploy lands; only a VERIFIABILITY cannot-verify (the item cannot be
+      machine-checked at all) becomes an office_hours park. This applies this
+      strategy's existing park taxonomy — 'Mechanical retry holds stop being
+      office_hours parks: ... emit blocked_by edges against a tracked fix tactic
+      instead' (tactic-mechanical-park-producers, live) — to a third producer,
+      and it keeps the mis-sort measurement clean by construction rather than by
+      filtering free-text park reasons."
+  - question: "Steelman: is routing author-required post-merge tests efficiently the
+      wrong end — since every such test is a QA design failure that entrenches
+      the author in a loop this strategy exists to remove?"
+    answer: "(Recorded 2026-07-28 /align-strategy interview.) The tension is ADOPTED
+      as real; its conclusion is DIVERGED from, with the reason recorded. The
+      rival framing is sourced from this strategy's own served virtue,
+      virtue-progressive-detachment: if the end is the author's detachment from
+      tactical execution, then an author-required post-merge verification is
+      itself the defect, and making its routing efficient optimizes a queue that
+      should be empty — entrenching the author rather than removing them.
+      Diverged from because the two goods are orthogonal and the sort is prior:
+      until post-merge tests are sorted at record time, the author-required
+      population is not countable at all, because author-required and
+      machine-verifiable work is indistinguishably fused into one source node's
+      residue section. The sort is what first makes that population a measurable
+      quantity — which is precisely what the same-day mis-sort measurement reads
+      — so it is a precondition for shrinking the population, not a substitute
+      for shrinking it. Recorded limit of this divergence: it does NOT license
+      treating the author-required queue as permanently acceptable. Some items
+      (owner-credentialled GCP billing alerts, human visual smoke of a
+      Storybook) may never be machine-verifiable, and this round adopts no
+      target for the population's size; a future round that sets one would be
+      consistent with this resolution, not a reversal of it."
+  - question: Is the graph-commit MAX_PUSH_ATTEMPTS exhaustion signature always
+      landing contention, as clarification 80 records?
+    answer: "(Amended 2026-07-28, extending clarification 80.) No. Clarification 80
+      diagnoses busy-main exhaustion as landing contention — unrelated nodes
+      racing for the single linear main ref, each retry re-buying the CI stamp —
+      and that diagnosis is correct for the 2026-07-19 observations it was drawn
+      from. It is not exhaustive. A second, non-contention cause produces a
+      byte-identical signature: the same 5/5 attempt exhaustion and the same
+      terminal text, main busy (landing-lock contention or required checks never
+      stamped green). Observed 2026-07-28: graph-commit attempted to land a SHA
+      that was already origin/main HEAD and already CI-stamped (reached via the
+      no new changes to stage — landing current HEAD fallback at
+      graph-commit:1476 for a write that staged nothing). await_checks counts
+      check-run ROWS matching the four required context names and gates on exact
+      equality with 4 (graph-commit:610), but an already-stamped SHA accumulates
+      one row per context per workflow run — the observed SHA carried 3
+      successful rows of each of the four contexts, 12 green and 0 failed — so
+      the gate could never pass, and no amount of retrying could change it.
+      There was no competing writer and no red check. Consequence for diagnosis:
+      the exhaustion signature alone is AMBIGUOUS as to cause and must not be
+      read as contention; distinguish by checking whether the target SHA already
+      exists on origin/main and how many check-run rows per context it carries.
+      Consequence for the ratified resolution: none — this strengthens rather
+      than weakens it. The greenfield (tactic-graph-ref-split) deletes the CI
+      stamp and with it both causes; the interim lock
+      (tactic-graph-commit-landing-lock, since landed) addresses only the
+      contention cause, which is why the arithmetic cause needed its own tracked
+      node (tactic-graph-commit-noop-landing-false-failure, filed this round).
+      Standing invariant recorded with it: a required-check gate counts DISTINCT
+      required contexts green, never check-run rows — a row count admits both
+      false negatives (duplicate runs) and, under a >= relaxation, false
+      positives (four green rows of one context standing in for four contexts)."
+  - question: Are conditions 14 (the write-path boost guard), 16 (the
+      dispatch.config pause-field amendment) and 17 (the CI PR-title guard)
+      implemented in code today, or are they recorded requirements still pending
+      implementation?
+    answer: "(Recorded 2026-07-28 /align-tactics round.) Implementation-status sweep
+      of three conditions, verified directly against origin/main so a future
+      session does not mistake them for observations of current state. Condition
+      14 (a write-path guard refusing any commit that authors a boost/override
+      at or above strategy-main-health's 100, or reduces it) is NOT implemented:
+      'boost', 'override' and 'main-health' do not appear in
+      packages/intentionsutil/scripts/validate-graph.ts or
+      packages/intentionsutil/scripts/graph-commit,
+      packages/intentionsutil/src/attention.ts composes boosts with no cap or
+      refusal, and strategy-main-health.md's own rationale nonetheless asserts
+      the guard exists -- and no tactic in this strategy's child set tracks it,
+      which is the one actionable gap in this sweep. Condition 16's
+      parenthetical amendment (the pause sentinel replaced by a
+      dispatch.config/*.json boolean as the sole mechanism, failing closed) is
+      NOT implemented: dispatch-tick:266 still gates on the DISPATCH_PAUSE_FLAG
+      sentinel file and dispatch-config-load's key list has no 'pause' member;
+      the condition's substantive half DOES hold (the gate covers worker
+      spawning only, never reservation_sweep), and the mechanism half is tracked
+      by tactic-dispatch-pause-config-field (raw). Condition 17's CI title guard
+      does not exist (.github/workflows/pr-checks.yml carries no title
+      validation; dispatch-open-pr takes a caller-supplied --title unvalidated),
+      tracked by tactic-pr-title-node-id-convention (raw). All three read as
+      recorded requirements with pending implementation, not as failed
+      conditions."
+  - question: Condition 1 is framed around a legacy gh router that 'only drains
+      existing issues' — does that draining lane still exist, and does the
+      condition still hold?
+    answer: (Recorded 2026-07-28 /align-tactics round.) Condition 1's framing --
+      'the legacy gh router only drains existing issues' -- is superseded by
+      completion, not failed. dispatch-select-tick's own comments (lines 18-21
+      and 806-816 on origin/main) state the legacy gh selection lane was REMOVED
+      and the graph selector is now the only queue selector;
+      intentions/tactic-dispatch-legacy-rewire.md no longer exists (done and
+      pruned); GitHub Issues are disabled repo-wide. The condition's substantive
+      assertion -- the graph is the sole issue tracker, bug tracker included,
+      with no side-channel work records -- holds in a stronger form than the
+      drain framing describes. Read the condition as that assertion, not as a
+      claim that a draining legacy lane still exists.
+  - question: "The office-hours drain lane's terminal SESSION disposition on the
+      green-CI path is unrecorded: clear-park writes no
+      $CLAUDE_JOB_DIR/node-terminal marker while park-node does, so an
+      office-hours-graph-launched drain's SUCCESS path would leave its job held
+      and worktree_has_live_session TRUE, freezing the node it just unblocked.
+      Who writes the marker -- clear-park itself (a), the drain skill (b), or is
+      the drain declared a non-managed interactive session (c)?"
+    answer: "(Ratified 2026-07-28 office-hours session on
+      tactic-office-hours-self-modification-skill.) Option (b): the DRAIN SKILL
+      calls mark-node-terminal itself, with a new `park-clear` member added to
+      that script's disposition enum
+      (packages/intentionsutil/scripts/mark-node-terminal:67). Condition 15's
+      auto-close enumeration is amended in this same round to a third clean
+      terminal state. The governing principle, recorded here because it decides
+      future cases too: the node-terminal marker asserts THE SESSION'S PASS IS
+      OVER, not that a node was disposed. So a scripted primitive may write it
+      only in lanes where one job disposes exactly one node (transition-node's
+      advance/demote, park-node's Stop-hook backstop park); in any lane where
+      one session disposes SEVERAL nodes, only the session can know it is done,
+      which is why /align-tactics and /fix-checks already declare via SKILL.md
+      prose. The drain is definitively in the second class:
+      .claude/skills/ref-diagnosis-time-cas/SKILL.md:11-13 defines it as a
+      BATCHED drain that diagnoses several parked nodes, then interviews the
+      author about each proposed disposition before executing any of them. Under
+      option (a), clear-park would arm the reap on the drain's own primary node
+      mid-batch, and because dispatch-self-close fires on every turn yield --
+      and an interview yields on every turn -- the session would be reaped out
+      from under the remaining nodes: precisely the incident class the marker
+      was introduced to prevent (dispatch-self-close:43-46; node
+      tactic-graph-ref-split, session 36e64744). Two corrections to the
+      reasoning recorded at park time. FIRST, the stated objection to (a) --
+      that resolve-park would inherit the reap -- is factually wrong:
+      resolve-park does NOT call clear-park, it inlines its own office_hours
+      clear and graph-commit (resolve-park:162,188), and clear-park has ZERO
+      code callers on origin/main today. (a)'s blast radius is therefore not the
+      problem; its unsafety under batching is. SECOND, park-node:277's
+      unconditional internal call carries the SAME early-arming hazard for a
+      batched drain that re-parks its own primary node before finishing the
+      batch -- a live latent defect, pre-existing and out of scope for this
+      ratification, recorded in tactic-office-hours-self-modification-skill's
+      body so the planning round carries it as a unit or sibling. Option (c) is
+      rejected as previously recorded: it conflicts with the fallback lane's
+      need for the office-hours-graph-provisioned node-id worktree holding the
+      worker's staged branch. The accepted cost of (b) is the residual
+      dispatch-self-close:75-78 already names: a lane declaring via prose can
+      drop the line, which fails toward HOLD (job kept alive, node stays
+      claimed) rather than toward a lost session -- cheap, recoverable, and
+      operator-visible via the canary log line."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -2256,21 +2483,23 @@ attributes:
       explicit author override"
     - a node-worker session is auto-closed (reaped from the agents list via the
       foreground-safe self-close primitive — `claude rm`; interactive sessions
-      exempt) ONLY on a clean phase-transition or an escalation-park; every
-      other terminal exit — a hard crash, an error, or a
-      clean-but-no-transition/no-progress exit — is KEPT (its job entry and
+      exempt) ONLY on a clean phase-transition, an escalation-park, or a
+      park-clear (the office-hours drain lane's green-CI terminal disposition,
+      ratified 2026-07-28); every other terminal exit — a hard crash, an error,
+      or a clean-but-no-transition/no-progress exit — is KEPT (its job entry and
       node-id worktree both held) for local debugging until an operator manually
       reaps it, because such an exit was not parked to office-hours and the live
       session is its only debugging artifact (2026-07-19 reap-scope-narrowing
-      clarification). Reaping a transitioned/parked session loses nothing
-      durable (the transition advanced the node's phase; the park wrote
-      office_hours into the node), and a transitioned/parked worker job left in
-      `claude agents --json` is a defect UNLESS the default-off keep-all
-      operator escape hatch (2026-07-19 configurable-auto-close clarification)
-      is enabled. A kept failed session holds worktree_has_live_session TRUE, so
-      its node freezes (router will not re-select; no-progress fuse will not
-      count re-selections) until manual reap — accepted freeze-for-debug over
-      silent auto-retry on the failure path. A minimal operator-visible count of
+      clarification). Reaping a transitioned/parked/park-cleared session loses
+      nothing durable (the transition advanced the node's phase; the park wrote
+      office_hours into the node; the park-clear landed the office_hours removal
+      on origin/main), and a transitioned/parked worker job left in `claude
+      agents --json` is a defect UNLESS the default-off keep-all operator escape
+      hatch (2026-07-19 configurable-auto-close clarification) is enabled. A
+      kept failed session holds worktree_has_live_session TRUE, so its node
+      freezes (router will not re-select; no-progress fuse will not count
+      re-selections) until manual reap — accepted freeze-for-debug over silent
+      auto-retry on the failure path. A minimal operator-visible count of
       held-for-debug sessions surfaces accumulation without re-coupling
       observability to session persistence (it reports only the count, never
       session content; it is not a recovery substrate or escalation channel —
@@ -2309,6 +2538,20 @@ attributes:
       half of the alignment-of-attachments steelman; no band value is declared
       yet, so until the author declares one this condition reads as
       not-yet-armed rather than as holding.
+    - an author-lane post-merge verification node carries, AT BIRTH, everything
+      a fresh office-hours sitting needs — office_hours.reason,
+      office_hours.recommendation, and the verification item's url_path /
+      expected_outcome / finding — because a born-parked node otherwise shifts
+      this strategy's park-context failure earlier rather than removing it; this
+      is the standing park-recommendation condition applied at creation time
+      instead of at park time
+    - the machine-verifiable / author-required sort is an explicitly recorded
+      state on the verification node, never inferred from whether office_hours
+      happens to be set — office_hours is cleared when the author drains the
+      item, which would erase the very mark the mis-sort measurement reads; this
+      extends strategy-verified-requirements' recorded condition that
+      not-machine-verifiable is an explicit recorded state, never a silent
+      omission
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
@@ -2324,6 +2567,16 @@ below states the current rule and folds the clarification entries that produced
 it; the compressed `clarifications:` entries point here.
 
 ### Phase Transitions & Fix State
+
+> **Target state (recorded 2026-07-28 /align-strategy, record-time main-qa
+> routing).** The `→ main-qa` step below describes the ladder as `forwardPhase`
+> implements it TODAY, and stays accurate until
+> `tactic-mainqa-record-time-routing` lands. Target: the SOURCE tactic's ladder
+> ends `review → done`, and `main-qa` is reached only by a standalone
+> `tactic-mainqa-*` verification node BORN at that phase by the qa phase, with
+> its queue fixed at birth (`office_hours` null → dispatch, set → office-hours).
+> The `## needs-main residue` body section on the source is retired with it.
+> `forwardPhase` remains the single home of phase routing (entry 111).
 
 **Fix is orthogonal execution state, not a phase.** Current rule (from the
 2026-07-18 encoding decision, entry 66): fix is a nullable orthogonal

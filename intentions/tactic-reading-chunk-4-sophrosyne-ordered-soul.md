@@ -36,6 +36,7 @@ office_hours:
     add NE III.2-3 and III.5 — see the body's deferral bullets."
   since: 2026-07-06
   recommendation: null
+  session_type: curriculum-review
 pace_exempt: false
 rounds: null
 attributes:

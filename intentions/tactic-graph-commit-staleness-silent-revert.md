@@ -1,130 +1,99 @@
 ---
 id: tactic-graph-commit-staleness-silent-revert
 kind: tactic
-statement: "graph-commit's staleness/freshness check
-  (id_files_dirty()/check_base_freshness()-equivalent logic) can silently
-  discard a genuine dirty edit under heavy concurrent origin/main activity —
-  reverting an already-applied office_hours:null clear-park write back to its
-  stale parked value during a rebase retry, or reporting 'landed'/exit 0
-  success while leaving the edit uncommitted and unpushed on disk"
+statement: clear-park and resolve-park invoked graph-commit WITHOUT -C
+  "$REPO_ROOT" while deriving REPO_ROOT from their own script location; since
+  graph-commit resolves its repo from cwd when -C is absent, invoking either
+  script by absolute path from a different checkout wrote the office_hours edit
+  into one repo while graph-commit inspected another, took its benign equal-blob
+  branch, printed "landed" and exited 0 having committed nothing — leaving the
+  park silently in place and the edit dirty and unpushed
 owner: ai
 status: raw
 parent: null
-rationale: "Surfaced 2026-07-26 by a subagent draining office_hours parks
-  across multiple graph nodes under heavy concurrent fleet activity (many
-  office-hours drain sessions landing to main at once). While working
-  tactic-graph-commit-landing-lock's own park, three separate clear-park
-  invocations (one background, two foreground, each from a fresh worktree off
-  origin/main) either had their office_hours:null write silently reverted
-  back to the stale parked value during a rebase retry — evidenced by an
-  intermediate commit that correctly nulled office_hours immediately followed
-  by another commit reverting it back to the old parked value, with no
-  unresolved-conflict/park output ever printed by graph-commit — or reported
-  \"graph-commit: landed ... on main\" / exit 0 while leaving the
-  office_hours:null edit uncommitted and un-pushed (git status showed a real
-  uncommitted diff, git log showed no new commit). Neither shape is the
-  layer-2/3 same-field-conflict path (that path prints an explicit park/
-  conflict message); both look like the staleness check itself
-  misclassifying a real dirty edit as clean. This is filed as a SEPARATE
-  tracked node from tactic-graph-commit-landing-lock (whose own office_hours
-  block records the same live symptom as a blocker on clearing THAT node's
-  specific park) because the defect is systemic — it threatens the
-  reliability of the whole office-hours park/clear-park/graph-commit pipeline
-  for every node, not just that one. Author-directed 2026-07-26: filed as a
-  new tracked bug tactic and boosted to top ranking, explicitly authorizing
-  the >=100 raw boost this requires per schema rule 18 (own boost 173 composes
-  with the +5 inherited from strategy-graph-native-dispatch to an authored
-  178 — above the current live discretionary composed max of 175.33
-  (tactic-graph-commit-landing-lock, itself elevated by backward blocked_by
-  inheritance from tactic-graph-ref-split's own boost) — and deliberately
-  below strategy-main-health's standing 100 boost value itself, though the
-  COMPOSED value exceeds 100, hence the required ACK: main-health-dominance
-  below)."
+rationale: "Surfaced 2026-07-26 by a subagent draining office_hours parks across
+  multiple graph nodes under heavy concurrent fleet activity, and ORIGINALLY
+  MISDIAGNOSED as a concurrency race in graph-commit's staleness/freshness
+  detection (id_files_dirty() / check_base_freshness()) discarding a genuine
+  dirty edit against a moving base. That diagnosis was wrong. Corrected
+  2026-07-28 by an office-hours drain session that root-caused the defect
+  deterministically with a SINGLE writer and no concurrency at all: the defect
+  is caller-side repo targeting, not a race. clear-park and resolve-park derive
+  REPO_ROOT from their own on-disk location (SCRIPT_DIR) and write the
+  office_hours clear into the intentions directory under THAT repo, but both
+  invoked graph-commit without -C, and graph-commit resolves its repo from -C
+  when given and otherwise from cwd
+  (packages/intentionsutil/scripts/graph-commit:1337). A session invoking the
+  main checkout's copy of either script by absolute path from inside a worktree
+  therefore addressed two different checkouts at once: the edit landed in the
+  script's repo while graph-commit inspected the caller's cwd repo, where
+  nothing was staged for the id and the HEAD blob already equalled origin/main.
+  That is the benign equal-blob branch (graph-commit:1477) — it printed \"landed
+  ... on main\", exited 0, and committed nothing, leaving the real edit dirty
+  and unpushed in the other checkout and the park silently in place. The fix
+  adds -C \"$REPO_ROOT\" at both call sites, mirroring park-node:263 and
+  demote-node-to-implement:115 which already pass it for exactly this reason;
+  landed via PR #2978. The separately-observed \"silent revert\" shape (a commit
+  nulling office_hours immediately followed by one restoring the stale value) is
+  the same family — a writer operating from a stale checkout landing an outdated
+  blob — and not a race inside graph-commit's staleness detection; no such race
+  was found, and test-graph-commit.sh's existing -C-targeting and
+  fail-loud-guard cases pass 43/43 against the fix. This node stays filed
+  separately from tactic-graph-commit-landing-lock (contention serialization, a
+  different defect) and from tactic-graph-commit-cwd-repo-resolution (the
+  earlier wrong-repo fix inside graph-commit itself); this one is the
+  caller-side half of the same wrong-repo hazard."
 reading: null
 gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: This node records a defect whose fix has already shipped — what is its
+      disposition, and why is the authorized boost 173 being retired?
+    answer: "(Recorded 2026-07-28 /align-strategy round.) Closed as shipped. The
+      2026-07-28 office-hours drain session root-caused this deterministically
+      as caller-side repo targeting (clear-park and resolve-park invoking
+      graph-commit without -C) and its fix landed in PR #2978, merged as
+      29952532; the separately-observed silent-revert shape was dispositioned in
+      the same pass as the same family (a writer operating from a stale checkout
+      landing an outdated blob), with no race found in graph-commit staleness
+      detection and test-graph-commit.sh passing 43/43 against the fix. phase is
+      therefore set to done and the record retained rather than pruned: the
+      misdiagnosis-and-correction history is itself worth keeping, and
+      tactic-graph-commit-noop-landing-false-failure cross-references this node
+      by id, so pruning would dangle that prose reference. The attention boost
+      of 173 — authored 2026-07-26 under explicit human authorization with the
+      ACK: main-health-dominance substring, when the defect was believed live
+      and systemic — is cleared to null because the WORK IS COMPLETE, not
+      because the defect was reassessed as unimportant; leaving a top-rank claim
+      on shipped work would have distorted the next /align-tactics round on
+      strategy-graph-native-dispatch into planning a fix that already exists.
+      The live remainder of this defect family is tracked separately as
+      tactic-graph-commit-noop-landing-false-failure: the inverse failure
+      through the same nothing-staged / land-current-HEAD fallback, where an
+      absent edit is reported as a hard failure rather than a lost edit reported
+      as success."
 tooling_goals: []
 success_signal: null
-attention:
-  boost: 173
-  override: null
-  rationale: "Author-directed 2026-07-26: boost to top ranking, per explicit
-    human authorization for a >=100 boost (ACK: main-health-dominance). This
-    is the durable fix for a live reliability defect in the sole write path
-    to main (graph-commit) — a silent revert or false-success report on a
-    clear-park write undermines every office-hours drain across the whole
-    fleet, not just one node. Sized at 173 (own claim) so that composed with
-    the +5 inherited from strategy-graph-native-dispatch (authored 178) it
-    lands just above the current live discretionary composed max of 175.33
-    (tactic-graph-commit-landing-lock, elevated via backward blocked_by
-    inheritance from tactic-graph-ref-split), making this tactic the top
-    discretionary dispatch/office-hours target — and still below
-    strategy-main-health's own standing attention.boost of 100 (this node's
-    OWN boost value of 173 numerically exceeds that 100, which is why the
-    literal ACK substring is required and is deliberately included here per
-    the human's explicit authorization in this filing session; the intent is
-    not to claim main-health-dominance's role, only to rank above other
-    discretionary graph-tooling work while main-health itself is not
-    currently parked)."
-phase: null
-execution: null
+attention: null
+phase: done
+execution:
+  branch: tactic-graph-commit-staleness-silent-revert
+  pr: 2978
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Reproducible graph-commit tooling bug discovered 2026-07-26 while
-    draining office_hours parks under heavy concurrent fleet activity:
-    clear-park/graph-commit can silently REVERT an already-applied
-    office_hours:null write back to the old parked value during a
-    rebase-retry under concurrent-write contention (an intermediate commit
-    correctly nulls office_hours, immediately followed by another commit
-    reverting it), or can report \"graph-commit: landed ... on main\" / exit
-    0 success while leaving the office_hours:null edit uncommitted and
-    un-pushed on disk (a real uncommitted git diff, no new commit in git
-    log). No unresolved-conflict/park output was printed in the no-op cases,
-    ruling out the layer-2/3 same-field-conflict path. This is a systemic
-    reliability defect in the sole write primitive to main
-    (packages/intentionsutil/scripts/graph-commit), affecting every node's
-    park/clear-park cycle, not specific to one node. First observed and
-    recorded in detail on tactic-graph-commit-landing-lock's own
-    office_hours block (since 2026-07-26), which is blocked on clearing its
-    own park by this exact defect; this node tracks the systemic fix
-    separately from that node-specific block."
-  since: "2026-07-26"
-  recommendation: "Audit graph-commit's staleness/freshness detection —
-    id_files_dirty(), check_base_freshness(), and
-    ensure_intentions_only_base() (packages/intentionsutil/scripts/graph-commit)
-    — for a race where a legitimate uncommitted working-tree edit is
-    discarded (treated as already-clean / already-landed) rather than
-    retried or reapplied, specifically under concurrent origin/main
-    activity (many writers landing near-simultaneously). Suspected
-    mechanism: a rebase retry re-reads or re-derives \"is this id's file
-    dirty relative to base\" against a moving base without correctly
-    re-anchoring to the edit this specific invocation is trying to land, so
-    a real diff gets classified as no-op. Also examine whether the CAS
-    --base token mechanism itself has a gap that lets a stale base get
-    treated as fresh under rapid concurrent commits (i.e. the token check
-    passing when it should have failed and forced a rebase-and-reapply of
-    the local edit instead of silently dropping it). Reproduce against a
-    real concurrent-writer scenario if possible (the existing
-    test-graph-commit.sh harness's bare-origin + multi-clone shape, per
-    tactic-graph-commit-landing-lock's Unit 3, is the right harness to
-    extend for a deterministic repro — a case where writer A's edit is
-    genuinely dirty relative to a base that origin/main raced past during
-    A's own rebase retry). Once root-caused, fix the detection so a real
-    dirty edit is always either landed or reported as an explicit
-    conflict/park — never silently discarded with a false 'landed' message
-    or a silent revert. Cross-reference tactic-graph-commit-landing-lock's
-    office_hours block (same symptom, recorded independently) when
-    diagnosing — clearing that node's park is itself blocked on this
-    defect."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# graph-commit's staleness check can silently discard a genuine dirty edit under concurrent origin/main activity
+# clear-park and resolve-park invoked graph-commit without -C, targeting the wrong repo and reporting a false "landed"
 
 ## Context
 
@@ -132,18 +101,16 @@ attributes: {}
 that lands intention-node edits on `main` (see also
 `tactic-graph-commit-landing-lock`, which serializes the rebase→stamp→push
 critical section, and `tactic-graph-commit-cwd-repo-resolution`, which fixed
-a different silent-wrong-repo defect in the same script). This tactic tracks
-a third, distinct defect class in the same script: its staleness/freshness
-detection.
+the wrong-repo defect *inside* `graph-commit` itself). This tactic tracks the
+**caller-side half** of that same wrong-repo hazard: two callers that never
+told `graph-commit` which repo to act on.
 
 While draining `office_hours` parks across multiple graph nodes on
-2026-07-26, under heavy concurrent fleet activity (many office-hours drain
-sessions landing to `main` at once), a subagent working
+2026-07-26, under heavy concurrent fleet activity, a subagent working
 `tactic-graph-commit-landing-lock`'s own park ran `clear-park` (which invokes
 `graph-commit`) three separate times — once backgrounded, twice in the
-foreground, each from a fresh worktree checked out at `origin/main` — trying
-to write `office_hours: null` on that node. Each attempt failed silently, in
-one of two ways:
+foreground — trying to write `office_hours: null` on that node. Each attempt
+failed silently, in one of two ways:
 
 1. **Silent revert.** The commit history showed an intermediate commit that
    correctly set `office_hours: null`, immediately followed by ANOTHER
@@ -152,82 +119,72 @@ one of two ways:
 2. **False success.** `graph-commit` printed its normal `landed ... on main`
    success message and exited 0, but `git status` on the invoking worktree
    showed a real, uncommitted diff (the `office_hours: null` edit) and
-   `git log` showed no new commit — the edit was never actually staged,
-   committed, or pushed.
+   `git log` showed no new commit — the edit was never staged, committed,
+   or pushed.
 
-Neither shape matches the script's existing, already-landed layer-2/3
-same-field-conflict path (`tactic-graph-commit-auto-serialization`'s merge
-ladder), which prints an explicit park/conflict message when it detects a
-genuine content conflict on the same field. Both look instead like the
-script's own dirty/staleness check misjudging a real, pending local edit as
-already clean or already applied.
+## Confirmed root cause
 
-## Why this is systemic, not node-specific
+The original filing (2026-07-26) blamed a **concurrency race** in
+`graph-commit`'s staleness/freshness detection —
+`id_files_dirty()` / `check_base_freshness()` / `ensure_intentions_only_base()`
+misclassifying a real dirty edit as clean against a moving base. **That
+diagnosis was wrong.** It was corrected on 2026-07-28 by an office-hours drain
+session that reproduced the failure deterministically with a **single writer
+and no concurrency at all**.
 
-`tactic-graph-commit-landing-lock`'s own `office_hours` block records this
-exact symptom as the reason clearing THAT node's park is currently blocked.
-This tactic is filed separately, deliberately, because the defect is not
-scoped to that one node: it lives in `graph-commit`'s general staleness
-detection, which every `park-node` / `clear-park` / `graph-commit` write on
-every node in the graph depends on. Under the kind of heavy concurrent
-fleet activity that triggered it here — many office-hours drain sessions
-landing near-simultaneously — any node's clear-park write is exposed to the
-same silent-revert or false-success failure mode. That makes this a
-reliability defect in the sole write path to `main`, not an incident local
-to one tactic.
+The actual defect is caller-side repo targeting:
 
-## Suspected root cause
+- `clear-park` and `resolve-park` derive `REPO_ROOT` from their own on-disk
+  location (`SCRIPT_DIR`), and write the `office_hours` clear into the
+  intentions directory under **that** repo.
+- Both then invoked `graph-commit` **without** `-C`. `graph-commit` resolves
+  its repo from `-C` when given, and otherwise from **cwd**
+  (`packages/intentionsutil/scripts/graph-commit:1337`).
 
-The reporting subagent's diagnosis, not yet independently confirmed: some
-staleness/freshness check in `graph-commit` — the `id_files_dirty()` /
-`check_base_freshness()` / `ensure_intentions_only_base()` family of
-functions — decides whether a given node id has a real pending edit to land.
-Under concurrent `origin/main` motion (the base moving mid-rebase-retry),
-this check appears to sometimes conclude "nothing to do" even though the
-invoking process is holding a genuine, uncommitted diff for that id. Two
-candidate failure shapes worth distinguishing during the audit:
+So a session that invokes the main checkout's copy of either script by
+absolute path from inside a worktree addresses two different checkouts at
+once. The edit lands in the script's repo while `graph-commit` inspects the
+caller's cwd repo, where nothing is staged for the node id and the HEAD blob
+already equals `origin/main`. That is the **benign equal-blob branch**
+(`graph-commit:1477`): it prints `landed ... on main`, exits 0, and commits
+nothing — leaving the real edit dirty and unpushed in the other checkout and
+the park silently in place.
 
-- The dirty check re-derives its answer against a freshly-rebased base on
-  each retry without correctly re-anchoring to the specific local edit this
-  invocation is trying to land, so a real diff momentarily reads as already
-  matching the (new) base.
-- The CAS `--base` compare-and-swap token itself has a gap that lets a
-  stale token be treated as still-fresh under rapid concurrent commits,
-  causing the write to be accepted as a no-op (or silently dropped) instead
-  of triggering a rebase-and-reapply of the local edit.
+The separately-observed *silent revert* shape belongs to the same family — a
+writer operating from a stale checkout landing an outdated blob — and not to
+a race inside `graph-commit`'s staleness detection. No such race was found.
 
-## Recommendation
+## Fix
 
-See the `office_hours.recommendation` field above for the full audit
-prescription (same content, kept in sync): audit
-`id_files_dirty()`/`check_base_freshness()`/`ensure_intentions_only_base()`
-in `packages/intentionsutil/scripts/graph-commit` for the race described
-above, ideally reproduced deterministically by extending the existing
-`test-graph-commit.sh` bare-origin + multi-clone harness (the same harness
-`tactic-graph-commit-landing-lock`'s Unit 3 already extends for its own lock
-cases) with a case that forces a writer's rebase retry to race a genuinely
-concurrent `origin/main` advance. Once root-caused, the fix must ensure a
-real dirty edit is always either landed or surfaced as an explicit
-conflict/park — never silently discarded with a false "landed" message or a
-silent revert to the pre-edit value.
+Both call sites now pass `-C "$REPO_ROOT"`, mirroring `park-node:263` and
+`demote-node-to-implement:115`, which already do so for exactly this reason.
+Each site carries a comment recording why the flag is mandatory rather than
+cosmetic, so a later edit does not drop it as noise.
 
-## Out of scope
+- `packages/intentionsutil/scripts/clear-park:181`
+- `packages/intentionsutil/scripts/resolve-park:188`
 
-This tactic does not itself contain an implementation plan — it is filed
-`status: raw`, `phase: null` for a future `/align-tactics` or `/align-init`
-round (or a direct office-hours session) to root-cause and plan. It does not
-duplicate `tactic-graph-commit-landing-lock` (contention serialization, a
-different defect already fully planned) or
-`tactic-graph-commit-cwd-repo-resolution` (wrong-repo targeting, already
-landed) — this is a third, distinct defect in the same script's staleness
-detection.
+Landed via PR #2978.
+
+## Verification
+
+- `bash -n` clean on both scripts.
+- `packages/intentionsutil/scripts/test-graph-commit.sh` — 43 passed, 0
+  failed. The suite already covers the targeting contract directly (`-C
+  targeting: script physically inside w16, targeting w17 via -C from an
+  unrelated cwd, lands in w17's repo`) and both fail-loud guards around the
+  equal-blob branch.
+- `packages/intentionsutil/scripts/test-park-node.sh` — 14 passed, 1 failed.
+  The single failure, `demote-node-to-implement byte-identical restore`
+  (an `ERR_MODULE_NOT_FOUND` in a helper import), is **pre-existing on clean
+  `origin/main`** and unrelated to this change. It is left failing
+  deliberately — it is signal, not an obstacle.
 
 ## Reuse
 
 - `packages/intentionsutil/scripts/test-graph-commit.sh` — the bare-origin +
-  multi-clone functional-test harness already used by
-  `tactic-graph-commit-landing-lock`'s planned Unit 3; the natural home for a
-  new deterministic-contention repro case.
-- `tactic-graph-commit-landing-lock`'s `office_hours` block — the
-  independently-recorded live incident on that node; cross-reference when
-  diagnosing, since it is blocked on this same defect.
+  multi-clone functional-test harness; its existing `-C targeting` case is the
+  regression guard for this defect class.
+- `packages/intentionsutil/scripts/park-node` and
+  `demote-node-to-implement` — the two callers that already passed `-C`, and
+  the pattern the fix mirrors.
