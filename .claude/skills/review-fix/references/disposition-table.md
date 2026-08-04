@@ -18,9 +18,13 @@ code-review `Fixed` / `Informational` / `Dismissed` / `Deferred` axis.
 
 For `code-review` and `security-review` sources specifically, these buckets are
 populated differently from the rest of this table — this pipeline's own
-classify/verify/fix stages never run over Lane-A findings, and now only classify
-Lane-B sources (domain security finders, cost, codeql, npm, erosion). Lane A's
-buckets are filled directly from two inputs:
+classify/verify/fix stages never run over Lane-A findings, and only classify
+Lane-B sources (domain security finders, cost, codeql, npm, erosion). That
+holds even after cross-lane absorption below: absorption is a later,
+mechanical merge over already-fixed Lane-B `deduped` records, not classify/
+verify/fix processing of a Lane-A item — no Lane-A finding is ever classified,
+verified, or fixed by this pipeline's own stages. Lane A's buckets are filled
+directly from two inputs:
 
 - **code-review's `fixed[]` is derived from the git diff, not from any report.**
   `dispatch-code-review` (SKILL.md Step 1b) takes a before/after `git diff`
@@ -42,6 +46,23 @@ buckets are filled directly from two inputs:
   skeptic** per surviving item, dropping refuted (or unvoted) ones as `Refuted`.
   `security-review` residue skips both gates — it arrives with a verified
   instrument receipt and the built-in's own confidence>=8 false-positive filter.
+
+After the pre-gate and before disposition, surviving Lane-A residue (both
+`code-review` and `security-review`, except as noted below) is checked for
+**cross-lane absorption** against the Lane-B findings this run actually fixed.
+A residue item sharing a same-root `path:line` location with a
+fixed Lane-B finding is absorbed: the Lane-B `deduped` record survives with
+both lanes recorded in its `sources`, and the Lane-A twin is dropped from the
+residue ledger rather than disposed of separately — the defect is dispositioned
+and fixed exactly once instead of drawing a second, redundant residue pass.
+Absorption requires the Lane-B finding to have survived adversarial-verify and
+been actually fixed; Refuted, Unverified, and Deferred Lane-B findings never
+absorb, so their Lane-A twins stay in the residue ledger and go through
+disposition normally. High-severity `security-review` residue is never
+absorbed, so the deviation/escalation gate is unaffected. Absorption only
+merges records for deduplication and fix-assignment bookkeeping — it never
+changes verify eligibility, and it never routes a Lane-A item into the verify
+phase's adversarial skeptics.
 
 A finding is **never Dismissed/Disregarded purely because the change is small.**
 If a code-review finding is a real improvement within the PR's scope,
