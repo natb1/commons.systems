@@ -19,6 +19,26 @@ rationale: >-
   Calendar/scheduling folded into this record 2026-07-02: same delegatee family,
   and the substitute path is the same shape — owned domain plus open protocols
   (CalDAV/ICS alongside email's portable protocols).
+
+  Axis resolution (tactic-delegation-classification-derivation, 2026-08-04): no
+  axis value changed here, but the classification the record used to store —
+  platform — now derives as `captured`, and the divergence axis alone is what
+  decides it. divergence was already recorded `high`, with
+  virtue-alignment-of-attachments named in contradictions; a stored `platform`
+  sitting next to a named contradiction of a virtue held here is exactly the
+  label-versus-axes disagreement the derivation removes, so the flip corrects a
+  standing inconsistency rather than raising a new alarm. The gated band is the
+  faithful reading of the recorded `partially — message history and contacts
+  export unevenly; account-root recovery (recovery codes, second-custodian
+  access) unassessed`: email itself moves over portable protocols to an owned
+  domain, which is what strategy-realign-attachments stages, while history,
+  contacts, and the account root are the parts that do not — a middle band, not
+  `large`. That band carries no weight either way, since `high` divergence has
+  already decided the derivation; the same holds for recovery_cost, left
+  `unassessed` because the substitute path is not yet designed. What would move
+  this record off `captured` is the divergence axis — the realignment to a
+  fee-aligned provider on an owned domain named as the interim path above — not
+  the export mechanics.
 reading: null
 gap: null
 serves: []
