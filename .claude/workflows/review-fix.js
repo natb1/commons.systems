@@ -1632,6 +1632,18 @@ if (deduped.length) {
   });
 }
 
+// Cost non-escalation invariant (disposition-table.md): a Source "cost"
+// finding is ADVISORY — never Required, never verify-eligible. Prompt text
+// alone enforced this before the api-cost merge; with one agent now emitting
+// both Sources, clamp it harness-side.
+deduped = deduped.map((f) => {
+  if (f.Source === 'cost' && (f.bucket === 'Required' || f.bucket === 'Fixed')) {
+    log(`classify: COST CLAMP — cost finding classified "${f.bucket}"; coerced to Deferred (non-escalation invariant).`);
+    return Object.assign({}, f, { bucket: 'Deferred', security_class: 'none' });
+  }
+  return f;
+});
+
 // >>> skeptic batching: sliced + eval'd by review-fix-skeptic-batch-probe.mjs >>>
 // Group by file path (Location before the last ':'). Module-scope so both the
 // verify phase (skeptic batching) and the fix phase (file-group fan-out)

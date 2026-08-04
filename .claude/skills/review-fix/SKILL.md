@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool on two lanes: code-review and security-review (Lane A) run their own built-in review-and-fix — code-review via a serialized `claude -p '/code-review low --fix'` exclusive pre-stage (Step 1b, run before the Workflow's finder fan-out), applying its own edits — trusting the built-ins, with un-auto-fixed residue dispositioned (resolve/defer/ignore) by a dedicated Opus residue phase; every other finder — domain security reviewers, cost, codeql, npm, erosion (Lane B) — still goes through code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
+description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool on two lanes: code-review and security-review (Lane A) run their own built-in review-and-fix — code-review via a serialized `claude -p '/code-review low --fix'` exclusive pre-stage (Step 1b, run before the Workflow's finder fan-out), applying its own edits — trusting the built-ins, with un-auto-fixed residue dispositioned (resolve/defer/ignore) by a dedicated Opus residue phase; every other finder — domain security reviewers, api-cost, codeql, npm, erosion (Lane B) — still goes through code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -605,7 +605,9 @@ Workflow's classifier preserves **both** vocabularies: the security pass's
 `security-review` (Lane A) sources, the buckets are populated by their own outcome
 and the residue phase's disposition — this pipeline's classify/verify/fix stages
 run only over Lane-B sources. `Source "cost"` findings are ADVISORY and always
-route to `Deferred` (never `Fixed`, `Required`, or verify-eligible). A finding is
+route to `Deferred` (never `Fixed`, `Required`, or verify-eligible); `cost` is now
+emitted by the merged `api-cost` finder alongside security-classified `firebase`
+findings from the same agent, split by sub-pattern. A finding is
 **never** Dismissed purely because the change is small.
 
 **See `references/disposition-table.md`** for the full bucket table, the Lane-A
