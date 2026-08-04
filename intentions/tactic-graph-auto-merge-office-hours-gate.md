@@ -60,7 +60,55 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA needs a human (doctrine/product-intent judgment on the
+    ungated-reconciler asymmetry, item 10 — the gated fix-planner refused with a
+    scope-deviation, no code fix authored); escalating to office-hours"
+  since: 2026-08-04
+  recommendation: >-
+    ## Decision: ratify or annotate the ungated-reconciler asymmetry
+
+
+    **The call:** when a parked node's PR is merged outside graph-auto-merge,
+    the reconciler advances the node to `phase:done` while its `office_hours`
+    park is still live — do you accept "a done node sitting in the office-hours
+    queue" as-is, or does the queue need to say the work already shipped?
+
+
+    ### Option A — Ratify as-is (no code change)
+
+    Confirm in a review comment on PR #3033 that a done-but-parked node is
+    intended and readable: the park still means "a human owes a decision here,"
+    and the merge is orthogonal. Nothing else to do; the PR lands unchanged and
+    item 10 closes as accepted-behavior. Pick this if you read the park as being
+    about the *decision*, not the *code state*.
+
+
+    ### Option B — Ratify + file a follow-up tactic
+
+    Land PR #3033 unchanged, and file a new tactic scoped strictly to
+    office-hours **queue presentation** (annotate parked entries whose node is
+    `phase:done` — e.g. "underlying work already merged"). No reconciler filter,
+    no gate change. That scope is explicitly outside this node's diff and its
+    "Out of scope" section, which is exactly why the fix-planner refused to
+    author it here. Pick this if a reviewer opening the queue would be misled
+    about whether action is still needed.
+
+
+    ### Option C — Reject the asymmetry
+
+    Only if you believe the reconciler itself must respect `office_hours`. This
+    contradicts Unit 2's stated purpose ("the whole point is that they stay
+    ungated") and would require re-planning the node, not a follow-up.
+
+
+    **This PR is not blocked on the answer.** The `office_hours` merge-gate is
+    fully implemented, 9/9 script-verifiable QA items pass, both suites green,
+    and the ungated-reconciler behavior has a deliberate regression test with
+    doctrine comments. The decision only determines whether a separate follow-up
+    gets filed. A second item (no live incident to reproduce) is already
+    deferred to post-merge main-qa and needs nothing from you now.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
