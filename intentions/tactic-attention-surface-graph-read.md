@@ -34,32 +34,7 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Both needs-main items require a human to grant a File System Access
-    directory handle to their own real local repo clone via the native OS picker
-    (office-hours owner tier) and visually confirm the render/rank order and the
-    loud stale-clone banner -- no automated session can grant that native picker
-    consent or possesses a real local clone to point it at, so this is an
-    author-only manual check, not a tool-checkable one. Separately, the
-    goals-page UI route that would host this check has not shipped:
-    tactic-attention-surface-goals-page is still phase:implement with no PR or
-    branch (gh pr list --search and git ls-remote both empty), and no code
-    outside its own test file (office-hours/test/graph-source.test.ts) imports
-    office-hours/src/graph-source.ts."
-  since: 2026-08-04
-  recommendation: "Author to verify once tactic-attention-surface-goals-page ships
-    and deploys: (1) grant a real local clone via the owner-tier FSA picker,
-    confirm the tree renders and the attention rank order matches
-    packages/intentionsutil/scripts/frontier-view.ts output; (2) point the
-    handle at a clone whose git sync is older than STALE_CLONE_THRESHOLD_MS (6h)
-    and confirm the blocking loud banner replaces the view rather than rendering
-    stale rank silently. Machine checks already run this session: this node's
-    source PR #2780 confirmed MERGED 2026-07-10 (gh pr view);
-    tactic-attention-surface-goals-page has no open PR or branch (gh pr list
-    --search, git ls-remote origin both empty); grep across the repo for
-    graph-source.ts imports found only its own test file, confirming no live UI
-    consumer exists yet."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
