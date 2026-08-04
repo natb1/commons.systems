@@ -83,6 +83,33 @@
 #      free-text arguments start with `-` and contain embedded spaces still
 #      parks successfully (exit 0) — proving the "first non-flag argument ends
 #      flag parsing" rule isn't fooled by dash-prefixed positionals.
+#  16. clear-park happy path: a parked node is cleared on origin/main
+#      (office_hours: null) with no working-tree residue left in the clone.
+#  17. clear-park idempotent no-op: re-running on an already-cleared node exits
+#      0 with a "nothing to do" note, leaves origin/main byte-unchanged, and
+#      restores the node file the origin/main refresh had overwritten (no
+#      working-tree diff) — the explicit restore-before-exit-0 path.
+#  18. clear-park byte-identical restore-on-failure: with graph-commit swapped
+#      for a wrapper that fails AFTER the office_hours clear landed on disk,
+#      the trap restores intentions/<id>.md exactly (git diff empty).
+#  19. clear-park `--base` diagnosis-time pin, mirroring cases 12-13: a
+#      matching pin is transparent (exit 0, cleared on origin); a stale pin
+#      refuses BEFORE any mutation (exit 3, `stale-diagnosis` on stderr,
+#      origin/main unchanged, no local diff).
+#  20. clear-park repo targeting — THE regression guard for
+#      tactic-clear-park-repo-targeting-guard. clear-park derives REPO_ROOT
+#      from its own script location and writes there, but graph-commit resolves
+#      its repo from `-C` if given else from CWD. Invoking clone X's clear-park
+#      by absolute path from clone Y's cwd (and again from a non-repo dir) must
+#      still land the clear on origin/main and must leave clone Y's intentions/
+#      untouched. Without the `-C "$REPO_ROOT"` on clear-park's graph-commit
+#      call this fails: graph-commit inspects Y, finds nothing staged for the id
+#      and its HEAD blob equal to origin/main, and takes the benign
+#      "no new changes" branch — exiting 0 having committed nothing (or, with
+#      Unit 1's --expect guard, failing loudly).
+#  21. resolve-park repo targeting: the same construction for resolve-park
+#      --ratify — invoked from a foreign cwd, `gh pr ready` still fires, the
+#      clear lands on origin/main, and the foreign clone stays clean.
 #
 # No network needed. Cases 1-3 and 6-15 need only bash + git + jq (the gh and
 # npx PATH shims stand in for the GitHub API and the tsx writers). Cases 4-5
@@ -97,11 +124,13 @@ REAL_REPO_ROOT="$(cd "$HARNESS_DIR/../../.." && pwd)"
 PN_SCRIPT="$HARNESS_DIR/park-node"
 GC_SCRIPT="$HARNESS_DIR/graph-commit"
 RP_SCRIPT="$HARNESS_DIR/resolve-park"
+CP_SCRIPT="$HARNESS_DIR/clear-park"
 DEMOTE_SCRIPT="$HARNESS_DIR/demote-node-to-implement"
 APPLY_TS="$HARNESS_DIR/apply-node-transition.ts"
 [[ -f "$PN_SCRIPT" ]] || { echo "error: park-node not found at $PN_SCRIPT" >&2; exit 1; }
 [[ -f "$GC_SCRIPT" ]] || { echo "error: graph-commit not found at $GC_SCRIPT" >&2; exit 1; }
 [[ -f "$RP_SCRIPT" ]] || { echo "error: resolve-park not found at $RP_SCRIPT" >&2; exit 1; }
+[[ -f "$CP_SCRIPT" ]] || { echo "error: clear-park not found at $CP_SCRIPT" >&2; exit 1; }
 [[ -f "$DEMOTE_SCRIPT" ]] || { echo "error: demote-node-to-implement not found at $DEMOTE_SCRIPT" >&2; exit 1; }
 command -v jq >/dev/null || { echo "error: jq not found (required by the gh shim)" >&2; exit 1; }
 
@@ -130,11 +159,13 @@ mkdir -p "$SEED/intentions" \
 cp "$PN_SCRIPT" "$SEED/packages/intentionsutil/scripts/park-node"
 cp "$GC_SCRIPT" "$SEED/packages/intentionsutil/scripts/graph-commit"
 cp "$RP_SCRIPT" "$SEED/packages/intentionsutil/scripts/resolve-park"
+cp "$CP_SCRIPT" "$SEED/packages/intentionsutil/scripts/clear-park"
 cp "$DEMOTE_SCRIPT" "$SEED/packages/intentionsutil/scripts/demote-node-to-implement"
 cp "$APPLY_TS" "$SEED/packages/intentionsutil/scripts/apply-node-transition.ts"
 chmod +x "$SEED/packages/intentionsutil/scripts/park-node" \
          "$SEED/packages/intentionsutil/scripts/graph-commit" \
          "$SEED/packages/intentionsutil/scripts/resolve-park" \
+         "$SEED/packages/intentionsutil/scripts/clear-park" \
          "$SEED/packages/intentionsutil/scripts/demote-node-to-implement"
 # Cases 1-3 (npx-shimmed) never load a real store module, so a stub `store.js`
 # would suffice for them — but case 5 runs the REAL apply-node-transition.ts,
@@ -157,7 +188,8 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
     for i in $(seq 1 12); do echo "line$i: base"; done
   } >"$SEED/intentions/$1.md"
 }
-for id in t-stale t-concurrent t-pr t-pr-bad-arg t-resolve-ratify t-resolve-reject t-resolve-unparked t-pinned; do
+for id in t-stale t-concurrent t-pr t-pr-bad-arg t-resolve-ratify t-resolve-reject t-resolve-unparked t-pinned \
+          t-clear-happy t-clear-noop t-clear-rollback t-clear-pinned t-clear-cwd t-resolve-cwd; do
   seed_node "$id"
 done
 # t-demote: a schema-VALID node (only id/kind/statement/owner/status are
@@ -208,12 +240,15 @@ make_clone() { # <dst> <identity>
 # <id>) by appending an office_hours line to the file park-node has ALREADY
 # refreshed from origin/main — so a correct refresh is what survives.
 mkdir -p "$WORK/bin" "$WORK/fixtures"
+# `app.slug` is required, not decorative: graph-commit's required-check gate
+# only considers rows authored by the github-actions App, so a fixture row
+# without it is dropped as a foreign producer and the context reads `absent`.
 cat >"$WORK/fixtures/green.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
-  {"name": "lint", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests", "status": "completed", "conclusion": "success"}
+  {"name": "acceptance", "status": "completed", "conclusion": "success", "id": 1, "app": {"slug": "github-actions"}},
+  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success", "id": 2, "app": {"slug": "github-actions"}},
+  {"name": "lint", "status": "completed", "conclusion": "success", "id": 3, "app": {"slug": "github-actions"}},
+  {"name": "unit-tests", "status": "completed", "conclusion": "success", "id": 4, "app": {"slug": "github-actions"}}
 ]}
 JSON
 
@@ -262,13 +297,31 @@ if [[ "$2" == *merge-node.ts ]]; then
 fi
 helper="$2"
 # (d) resolve-park's two helpers — state-read (dir, id) and clear-write
-# (dir, id) — both leave exactly 2 args after stripping tsx/helper/store,
-# distinct from (a)'s 6 and (b)'s 6+. The two are disambiguated from each
-# other by the helper file's own content (readable — it is a plain tempfile).
+# (dir, id) — plus clear-park's single clear-write helper (dir, id): all
+# leave exactly 2 args after stripping tsx/helper/store, distinct from (a)'s 6
+# and (b)'s 6+. They are disambiguated from each other by the helper file's own
+# content (readable — it is a plain tempfile). The clear-write branch covers
+# both resolve-park's and clear-park's writers, whose bodies each emit
+# "cleared office_hours on ${id}"; only clear-park's ALSO refuses an
+# already-clear node with exit 3, which the branch emulates below (harmless for
+# resolve-park, which only reaches its clear-write after its own state-read has
+# already confirmed the node is parked).
 if [[ $# -eq 5 ]]; then
   rp_dir="$4"; rp_id="$5"
   [[ -f "$rp_dir/$rp_id.md" ]] || { echo "npx shim: unreadable node $rp_id" >&2; exit 1; }
   if grep -q 'cleared office_hours' "$helper"; then
+    # Parked-ness is the LAST office_hours line in the file, since this
+    # harness's clears/parks append rather than rewrite (same `grep | tail -1`
+    # idiom the state-read branch below uses for execution_pr).
+    last_oh=""
+    if grep -q '^office_hours' "$rp_dir/$rp_id.md"; then
+      last_oh="$(grep '^office_hours' "$rp_dir/$rp_id.md" | tail -1)"
+    fi
+    if [[ -z "$last_oh" || "$last_oh" == "office_hours: null" ]]; then
+      # clear-park's helper: `if (node.office_hours == null) process.exit(3)`.
+      echo "clear-park: $rp_id is not parked (office_hours already null)" >&2
+      exit 3
+    fi
     # Naive simulation of the real writer's office_hours=null: since this
     # harness's seed content isn't real YAML, "clearing" is simulated by
     # appending a sentinel line a test can grep for.
@@ -342,6 +395,19 @@ run_rp() { # <clone> <gh-log-file> [resolve-park args...]
     export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5
     export GRAPH_COMMIT_MAX_ATTEMPTS=5
     bash packages/intentionsutil/scripts/resolve-park "$@"
+  )
+}
+
+run_cp() { # <clone> [clear-park args...]
+  local clone="$1"; shift
+  (
+    cd "$clone" || exit 99
+    export PATH="$WORK/bin:$PATH"
+    export GC_FIXTURE_DIR="$FIXTURE_DIR"
+    export GRAPH_COMMIT_CHECK_POLL_SECONDS=0
+    export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5
+    export GRAPH_COMMIT_MAX_ATTEMPTS=5
+    bash packages/intentionsutil/scripts/clear-park "$@"
   )
 }
 
@@ -762,6 +828,198 @@ else
   printf 'unknown: %s\n' "$out_unknown"
   printf 'badsha: %s\n' "$out_badsha"
   printf 'dash: %s\n' "$out_dash"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 16: clear-park happy path.
+# ---------------------------------------------------------------------------
+M_CLEAR="$WORK/m-clear"
+make_clone "$M_CLEAR" writer-m-clear
+run_pn "$M_CLEAR" t-clear-happy 'unit-test clear-park setup' >/dev/null 2>&1
+sync_clone "$M_CLEAR"
+out="$(run_cp "$M_CLEAR" t-clear-happy 'drain disposition' 2>&1)"; rc=$?
+content="$(origin_show t-clear-happy)"
+porcelain="$(git -C "$M_CLEAR" status --porcelain -- intentions/)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'office_hours: null' <<<"$content" \
+   && [[ -z "$porcelain" ]]; then
+  ok "clear-park happy path: office_hours cleared on origin/main, no working-tree residue"
+else
+  no "clear-park happy path (rc=$rc)"
+  printf '%s\n' "$out"; printf '%s\n' "$content"; printf 'porcelain: %s\n' "$porcelain"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 17: clear-park idempotent no-op restores the tree.
+# ---------------------------------------------------------------------------
+# Re-running on the node case 16 just cleared: the helper's not-parked exit 3
+# is translated into a deliberate exit-0 no-op. Because clear-park's
+# origin/main refresh ALREADY overwrote the local file before that discovery,
+# the no-op path must restore it explicitly — assert `git diff` is empty, not
+# merely that the command exited 0.
+before_sha="$(origin_sha)"
+out="$(run_cp "$M_CLEAR" t-clear-happy 'second call' 2>&1)"; rc=$?
+diff_after="$(git -C "$M_CLEAR" diff -- intentions/t-clear-happy.md)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'nothing to do' <<<"$out" \
+   && [[ "$(origin_sha)" == "$before_sha" ]] \
+   && [[ -z "$diff_after" ]]; then
+  ok "clear-park idempotent no-op: exit 0 with 'nothing to do', main unchanged, refresh overwrite restored (git diff empty)"
+else
+  no "clear-park idempotent no-op (rc=$rc)"
+  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 18: clear-park byte-identical rollback when graph-commit fails.
+# ---------------------------------------------------------------------------
+# Same shape as case 4: park the node first through a clone with the REAL
+# graph-commit, then run clear-park in a SECOND clone whose graph-commit is a
+# wrapper that unconditionally fails after the office_hours clear already
+# landed on disk. The trap must restore intentions/t-clear-rollback.md exactly.
+N_SETUP="$WORK/n-setup"
+make_clone "$N_SETUP" writer-n-setup
+run_pn "$N_SETUP" t-clear-rollback 'unit-test clear-park rollback setup' >/dev/null 2>&1
+
+N_CLEAR="$WORK/n-clear"
+make_clone "$N_CLEAR" writer-n-clear
+mv "$N_CLEAR/packages/intentionsutil/scripts/graph-commit" \
+   "$N_CLEAR/packages/intentionsutil/scripts/graph-commit.real"
+cat >"$N_CLEAR/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+echo "graph-commit wrapper: simulated post-mutation failure" >&2
+exit 1
+SH
+chmod +x "$N_CLEAR/packages/intentionsutil/scripts/graph-commit"
+
+out="$(run_cp "$N_CLEAR" t-clear-rollback 'simulated failure' 2>&1)"; rc=$?
+diff_after="$(git -C "$N_CLEAR" diff -- intentions/t-clear-rollback.md)"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'office_hours write was rolled back' <<<"$out" \
+   && [[ -z "$diff_after" ]]; then
+  ok "clear-park byte-identical restore: graph-commit failure rolls back the office_hours clear (git diff empty)"
+else
+  no "clear-park byte-identical restore (rc=$rc)"
+  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 19: clear-park --base diagnosis-time pin (mirrors cases 12-13).
+# ---------------------------------------------------------------------------
+# (a) A pin matching origin/main's current blob is transparent — the clear
+# lands exactly as an unpinned call would. (b) Reusing that now-stale pin on a
+# second call refuses BEFORE any mutation: exit 3, `stale-diagnosis` on stderr,
+# origin/main byte-unchanged, and no local diff for the trap to roll back.
+P_PIN="$WORK/p-pin"
+make_clone "$P_PIN" writer-p-pin
+run_pn "$P_PIN" t-clear-pinned 'unit-test clear-park pin setup' >/dev/null 2>&1
+sync_clone "$P_PIN"
+clear_pin="$(git -C "$ORIGIN" rev-parse main:intentions/t-clear-pinned.md)"
+
+out_match="$(run_cp "$P_PIN" --base "$clear_pin" t-clear-pinned 2>&1)"; rc_match=$?
+content="$(origin_show t-clear-pinned)"
+
+before_sha="$(origin_sha)"
+out_stale="$(run_cp "$P_PIN" --base "$clear_pin" t-clear-pinned 2>&1)"; rc_stale=$?
+diff_after="$(git -C "$P_PIN" diff -- intentions/t-clear-pinned.md)"
+
+if [[ $rc_match -eq 0 ]] && grep -q 'office_hours: null' <<<"$content" \
+   && [[ $rc_stale -eq 3 ]] && grep -q 'stale-diagnosis' <<<"$out_stale" \
+   && [[ "$(origin_sha)" == "$before_sha" ]] \
+   && [[ -z "$diff_after" ]]; then
+  ok "clear-park --base: matching pin clears normally (exit 0); stale pin refuses before any mutation (exit 3, stale-diagnosis, main unchanged, no local diff)"
+else
+  no "clear-park --base pin (rc_match=$rc_match rc_stale=$rc_stale)"
+  printf 'match: %s\n' "$out_match"; printf 'stale: %s\n' "$out_stale"
+  printf 'diff: %s\n' "$diff_after"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 20: clear-park repo targeting — cwd is a DIFFERENT checkout.
+# ---------------------------------------------------------------------------
+# The regression guard this node exists for (mirrors test-graph-commit.sh's
+# case 25 construction). clear-park derives REPO_ROOT from its own script
+# location and performs every write there; graph-commit resolves its repo from
+# `-C` if given, else from CWD. So invoking clone X's clear-park by absolute
+# path from clone Y's cwd (and from a plain non-repo directory) must still land
+# the clear in X and push it to origin/main, leaving Y's intentions/ untouched.
+# Strip the `-C "$REPO_ROOT"` from clear-park's graph-commit call and this goes
+# red: graph-commit inspects Y instead, where nothing is staged for the id, and
+# either silently commits nothing or trips Unit 1's --expect guard.
+X_CWD="$WORK/x-cwd"; make_clone "$X_CWD" writer-x-cwd
+Y_CWD="$WORK/y-cwd"; make_clone "$Y_CWD" writer-y-cwd
+NOREPO_CWD="$WORK/norepo-cwd"; mkdir -p "$NOREPO_CWD"
+
+run_cp_from() { # <cwd> <script-owning-clone> [clear-park args...]
+  local at="$1" owner="$2"; shift 2
+  (
+    cd "$at" || exit 99
+    export PATH="$WORK/bin:$PATH"
+    export GC_FIXTURE_DIR="$FIXTURE_DIR"
+    export GRAPH_COMMIT_CHECK_POLL_SECONDS=0
+    export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5
+    export GRAPH_COMMIT_MAX_ATTEMPTS=5
+    bash "$owner/packages/intentionsutil/scripts/clear-park" "$@"
+  )
+}
+
+# (a) cwd = a different clone.
+run_pn "$X_CWD" t-clear-cwd 'unit-test foreign-cwd setup' >/dev/null 2>&1
+out_a="$(run_cp_from "$Y_CWD" "$X_CWD" t-clear-cwd 'from foreign clone' 2>&1)"; rc_a=$?
+content_a="$(origin_show t-clear-cwd)"
+porcelain_a="$(git -C "$Y_CWD" status --porcelain -- intentions/)"
+
+# (b) cwd = a directory that is not a git repository at all.
+# `office_hours: null` alone is NOT discriminating here: part (a) already
+# cleared this same id, and the harness's clear shim APPENDS the sentinel
+# rather than rewriting the file, so (a)'s leftover line satisfies the grep
+# even if (b) landed nothing at all. Pin origin/main's sha immediately before
+# the run and require it to MOVE, so this arm proves a commit actually landed.
+run_pn "$X_CWD" t-clear-cwd 'unit-test non-repo-cwd setup' >/dev/null 2>&1
+before_sha_b="$(origin_sha)"
+out_b="$(run_cp_from "$NOREPO_CWD" "$X_CWD" t-clear-cwd 'from non-repo dir' 2>&1)"; rc_b=$?
+content_b="$(origin_show t-clear-cwd)"
+porcelain_b="$(git -C "$Y_CWD" status --porcelain -- intentions/)"
+after_sha_b="$(origin_sha)"
+
+if [[ $rc_a -eq 0 ]] && grep -q 'office_hours: null' <<<"$content_a" && [[ -z "$porcelain_a" ]] \
+   && [[ $rc_b -eq 0 ]] && grep -q 'office_hours: null' <<<"$content_b" && [[ -z "$porcelain_b" ]] \
+   && [[ "$after_sha_b" != "$before_sha_b" ]]; then
+  ok "clear-park repo targeting: script in clone X invoked from clone Y's cwd and from a non-repo cwd still lands the clear on origin/main; Y's intentions/ never written"
+else
+  no "clear-park repo targeting (rc_a=$rc_a rc_b=$rc_b porcelain_a='$porcelain_a' porcelain_b='$porcelain_b' before_sha_b=$before_sha_b after_sha_b=$after_sha_b)"
+  printf 'a: %s\n' "$out_a"; printf '%s\n' "$content_a"
+  printf 'b: %s\n' "$out_b"; printf '%s\n' "$content_b"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 21: resolve-park repo targeting — same construction.
+# ---------------------------------------------------------------------------
+X_RP="$WORK/x-rp"; make_clone "$X_RP" writer-x-rp
+Y_RP="$WORK/y-rp"; make_clone "$Y_RP" writer-y-rp
+run_pn "$X_RP" --pr 3003 t-resolve-cwd 'unit-test resolve foreign-cwd setup' >/dev/null 2>&1
+sync_clone "$X_RP"
+GHLOG_CWD="$WORK/ghlog-resolve-cwd"
+out="$(
+  cd "$Y_RP" || exit 99
+  export PATH="$WORK/bin:$PATH"
+  export GC_FIXTURE_DIR="$FIXTURE_DIR"
+  export GH_LOG="$GHLOG_CWD"
+  export GRAPH_COMMIT_CHECK_POLL_SECONDS=0
+  export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5
+  export GRAPH_COMMIT_MAX_ATTEMPTS=5
+  bash "$X_RP/packages/intentionsutil/scripts/resolve-park" t-resolve-cwd --ratify 2>&1
+)"; rc=$?
+content="$(origin_show t-resolve-cwd)"
+porcelain="$(git -C "$Y_RP" status --porcelain -- intentions/)"
+if [[ $rc -eq 0 ]] \
+   && grep -q '^ready 3003$' "$GHLOG_CWD" \
+   && grep -q 'office_hours: null' <<<"$content" \
+   && [[ -z "$porcelain" ]]; then
+  ok "resolve-park repo targeting: script in clone X invoked from clone Y's cwd still readies the PR and lands the clear on origin/main; Y's intentions/ never written"
+else
+  no "resolve-park repo targeting (rc=$rc porcelain='$porcelain')"
+  printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 echo

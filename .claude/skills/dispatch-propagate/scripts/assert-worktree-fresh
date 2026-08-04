@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # assert-worktree-fresh [<worktree-path>] — non-skippable pre-analysis freshness
-# guard for the interactive align skills (/align-strategy, /align-tactics,
-# /align-init, grounding-research, office-hours). It refuses to let a session's
+# guard for the interactive align skills (/align, /align-tactics,
+# grounding-research, office-hours). It refuses to let a session's
 # graph reads proceed on a STALE local checkout: it fetches origin/main and, if
 # the target worktree's HEAD is behind origin/main, fails so the caller freshens
 # (merges origin/main) before reading the intention graph.

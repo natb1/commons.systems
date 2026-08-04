@@ -16,12 +16,17 @@
 //   npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir <dir> <id> [<id> ...]
 //
 // For each <id> it writes `<dir>/<id>.json` (the shape `readNode` returns, ready
-// to pipe back into write-node.ts after reconciliation) and appends a
-// `<id>=<blobsha>` line to `<dir>/base-manifest.txt`. It prints the manifest
+// to pipe back into write-node.ts after reconciliation) and merges a
+// `<id>=<blobsha>` line into `<dir>/base-manifest.txt`. It prints the manifest
 // path on stdout so the caller can pass it straight to `graph-commit --base`.
+//
+// The manifest merge (see dumpNodes below) exists because a second dump into an
+// out-dir used to truncate the manifest, silently dropping the earlier ids' base
+// tokens — so `graph-commit --base` guarded one node while the rest landed with
+// no compare-and-swap at all.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readNode } from "../src/store.js";
@@ -37,9 +42,60 @@ const intentionsDir = join(repoRoot, "intentions");
 const USAGE =
   "usage: dump-node.ts --out-dir <dir> <id> [<id> ...]\n" +
   "  Writes <dir>/<id>.json for each node and a <dir>/base-manifest.txt of\n" +
-  "  <id>=<blobsha> lines; prints the manifest path for `graph-commit --base`.\n";
+  "  <id>=<blobsha> lines; prints the manifest path for `graph-commit --base`.\n" +
+  "  The manifest is merged by id, so a repeat dump into the same --out-dir\n" +
+  "  keeps the earlier ids it can still verify. One --out-dir per graph-commit.\n";
 
 // --- Core helper (exported for tests) --------------------------------------
+
+/**
+ * Blob sha of the on-disk node file. `git hash-object` is content-only (no side
+ * effects, no index touch), so it is safe from any worktree.
+ */
+function hashNodeFile(repoRoot: string, id: string): string {
+  return execFileSync("git", ["-C", repoRoot, "hash-object", `intentions/${id}.md`], {
+    encoding: "utf8",
+  }).trim();
+}
+
+/**
+ * Same hash, but for re-checking a manifest line this call did not produce.
+ * A node that has since been pruned cannot be hashed, and that is an expected
+ * outcome here rather than a broken environment — report it as "absent" so the
+ * caller can drop the entry and say why.
+ */
+function hashNodeFileIfPresent(repoRoot: string, id: string): string | null {
+  try {
+    return execFileSync("git", ["-C", repoRoot, "hash-object", `intentions/${id}.md`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read an existing `base-manifest.txt` into id -> blobsha pairs, preserving
+ * line order. A line that is not `<id>=<blobsha>` is a corrupt manifest, not
+ * something to skip past: throw rather than quietly produce a thinner guard.
+ */
+function readManifest(manifestPath: string): Map<string, string> {
+  const entries = new Map<string, string>();
+  for (const raw of readFileSync(manifestPath, "utf8").split("\n")) {
+    const line = raw.trim();
+    if (line === "") continue;
+    const eq = line.indexOf("=");
+    if (eq <= 0 || eq === line.length - 1) {
+      throw new Error(
+        `dump-node: malformed line in existing manifest ${manifestPath}: ${JSON.stringify(line)} ` +
+          "(expected <id>=<blobsha>)",
+      );
+    }
+    entries.set(line.slice(0, eq), line.slice(eq + 1));
+  }
+  return entries;
+}
 
 /**
  * Dump each node in `ids` to JSON in `outDir` and write a base manifest of
@@ -47,23 +103,67 @@ const USAGE =
  * file — i.e. the exact content that was read — so `graph-commit --base` can
  * refuse the write if origin/main's blob has since moved.
  *
+ * The manifest is merged by id, not truncated:
+ *
+ * - An id named in THIS call always gets this call's freshly-read blob; an
+ *   existing line for that id is overwritten in place.
+ * - An id left over from an EARLIER call into the same out-dir is preserved
+ *   only if this call can still verify it — the node file on disk must still
+ *   hash to the blob the earlier line recorded. That is the whole claim a
+ *   manifest line makes ("this is the content that was read"), and it is the
+ *   only claim a later call is in a position to re-assert.
+ * - An unverifiable leftover is dropped with a loud stderr warning naming the
+ *   id. It is NOT carried forward: `graph-commit`'s `add_blob_pair` accepts a
+ *   `--base` entry for any id with no membership check against the ids being
+ *   committed, and `check_base_freshness` iterates every entry independently —
+ *   so a stale blob for an unrelated, already-landed node makes graph-commit
+ *   attempt a three-way merge on that node and, on divergence, `park_and_exit`,
+ *   parking the write that was actually in flight. Silently unioning leftovers
+ *   would trade one silent failure for a worse one.
+ *
+ * The out-dir is therefore the dump scope: one out-dir holds the base tokens
+ * for one `graph-commit`. Unrelated writes must use separate out-dirs, and the
+ * ids for a single commit are best captured in a single call.
+ *
  * Returns the absolute manifest path.
  */
 export function dumpNodes(intentionsDir: string, repoRoot: string, outDir: string, ids: string[]): string {
   mkdirSync(outDir, { recursive: true });
-  const manifestLines: string[] = [];
+  const manifestPath = join(outDir, "base-manifest.txt");
+  const merged = new Map<string, string>();
+
+  if (existsSync(manifestPath)) {
+    const callIds = new Set(ids);
+    for (const [id, blob] of readManifest(manifestPath)) {
+      if (callIds.has(id)) {
+        // This call re-reads the node; reserve its line position and let the
+        // fresh read below supply the value.
+        merged.set(id, "");
+        continue;
+      }
+      const current = hashNodeFileIfPresent(repoRoot, id);
+      if (current === blob) {
+        merged.set(id, blob);
+        continue;
+      }
+      process.stderr.write(
+        `dump-node: dropping stale manifest entry '${id}' from ${manifestPath} — ` +
+          `intentions/${id}.md no longer matches the recorded base blob ${blob} ` +
+          `(now ${current ?? "absent"}). Its compare-and-swap guard is NOT in this manifest. ` +
+          "Capture every id a single graph-commit lands in one dump-node.ts call, " +
+          "and give unrelated writes their own --out-dir.\n",
+      );
+    }
+  }
+
   for (const id of ids) {
     const node = readNode(intentionsDir, id);
     writeFileSync(join(outDir, `${id}.json`), `${JSON.stringify(node, null, 2)}\n`);
-    // Blob sha of the file actually read. `git hash-object` is content-only
-    // (no side effects, no index touch), so it is safe from any worktree.
-    const blob = execFileSync("git", ["-C", repoRoot, "hash-object", `intentions/${id}.md`], {
-      encoding: "utf8",
-    }).trim();
-    manifestLines.push(`${id}=${blob}`);
+    merged.set(id, hashNodeFile(repoRoot, id));
   }
-  const manifestPath = join(outDir, "base-manifest.txt");
-  writeFileSync(manifestPath, `${manifestLines.join("\n")}\n`);
+
+  const lines = [...merged].map(([id, blob]) => `${id}=${blob}`);
+  writeFileSync(manifestPath, `${lines.join("\n")}\n`);
   return manifestPath;
 }
 

@@ -27,7 +27,31 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "This draft's mechanism choice cannot be finalized independently of an
+    unresolved author pacing decision recorded on the serving strategy.
+    strategy-promote-progressive-detachment is itself currently parked
+    (office_hours since 2026-07-13) on whether/when to enter an outward
+    validation tier (strategy-progressive-validation records tiers 2-4 as NOT
+    entered as of 2026-07-06), and that park's own reason explicitly names this
+    tactic: 'Retained draft tactic-analytics-preinit-vitals is left untouched as
+    input for the next round (its mechanism choice, beacon vs accept-and-bound,
+    is itself entangled with the deferred signal-scope decision).' Candidate
+    mechanism 3 (accept-and-bound) in this tactic's body explicitly proposes
+    validating 'the strategy's adoption signal against the post-init segment
+    only' — a choice that presupposes the very tier/signal-scope decision the
+    strategy has deferred. This is an unrecorded-context park (needed context —
+    the tier-entry declaration and the fork/derivative-sensor-sharing and
+    user-migration-check definitions — is not yet in the graph); the fix is an
+    author /align-strategy or progressive-validation pass, not a guess by this
+    session. Recommend: resolve strategy-promote-progressive-detachment's
+    office_hours park first (decide whether to enter an outward tier and, if so,
+    define the user-migration/no-lock-in check and the fork-reading-sharing
+    question), then re-run /align-tactics tactic-analytics-preinit-vitals to
+    finalize the mechanism choice among the three recorded candidates."
+  since: 2026-08-03
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes:

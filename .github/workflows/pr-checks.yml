@@ -16,6 +16,17 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
+      - name: Disable unattended-upgrades / free dpkg lock
+        # Same mitigation the preview-and-smoke job runs, from the same script —
+        # see that job's copy below for the budget derivation. This job shells
+        # out to apt-get through playwright's `install --with-deps` too, and it
+        # shares the lib.sh `wait_for_dpkg_lock` backstop whose default this PR
+        # left at 30s, so leaving it undefended would just move the flake.
+        # Budget: 5 min here on top of this job's existing work, against the
+        # 30-min job cap; the helper adds up to 12 waits x 30s = 6 min.
+        timeout-minutes: 5
+        continue-on-error: true
+        run: .github/scripts/free-dpkg-lock.sh
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
@@ -37,11 +48,57 @@ jobs:
 
   preview-and-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Raised 20 -> 30 to match the sibling `acceptance` job above. See the
+    # additivity note on the dpkg-lock step below: 20 min could not hold the
+    # worst case once the mitigation step's own cap is counted, and an
+    # ambiguous budget is what let the original flake hide.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
+      - name: Disable unattended-upgrades / free dpkg lock
+        # Budget derivation. The two budgets in play are ADDITIVE in the worst
+        # case, and this comment used to imply they were alternatives:
+        #   5 min   this step's own cap (below)
+        # + ~11 min the original flake's real job work
+        # + up to 12 min of lib.sh `wait_for_dpkg_lock` (DPKG_LOCK_WAIT_TIMEOUT
+        #   is 30s and this job's call site fans out to 2 attempts x 2 smoke
+        #   runs x 6 hosting apps = up to 24 waits = 12 min)
+        #   ------
+        #   = ~28 min, which does NOT fit the old 20-min job cap.
+        # In practice the two are near-mutually-exclusive: `wait_for_dpkg_lock`
+        # only waits AFTER a failed apt-get attempt, and preventing that failed
+        # attempt is the entire point of this pre-step — when this step does its
+        # job the helper waits ~0s, and when the helper is burning 12 min this
+        # step has already lost. But "near-mutually-exclusive" is not a bound,
+        # and the ambiguity is resolved rather than argued: the job cap above is
+        # raised to 30 min, matching the sibling `acceptance` job, so even the
+        # fully-additive worst case fits.
+        # The step's own internal worst case (290s, under this 300s cap) is
+        # derived in .github/scripts/free-dpkg-lock.sh, where every external
+        # call is wrapped in `timeout`.
+        # `continue-on-error: true` because this step is best-effort: every path
+        # inside the script exits 0 by design, so the step cap below is the ONE
+        # way this mitigation could itself block a PR. A mitigation that fails
+        # the job it exists to protect is worse than no mitigation.
+        #
+        # Note: .github/workflows/unit-tests.yml also calls `sudo apt-get
+        # update && sudo apt-get install -y zsh` (no pre-step like this one, no
+        # raised timeout) — a third apt-get call site in this repo's CI left
+        # deliberately unmitigated. It has no observed dpkg-lock flake history,
+        # and it's a plain `apt-get install`, not the `playwright install
+        # --with-deps` path whose timed-out apt-get tree is what strands the
+        # lock for this job's kind of failure (see `playwright_install_with_deps`
+        # / `wait_for_dpkg_lock` in
+        # .claude/skills/dispatch-propagate/scripts/lib.sh). Adding this 5-min
+        # best-effort step to a fast, frequently-run unit-test job costs more
+        # than the unobserved risk is currently worth. If the flake is ever
+        # observed there too, harden it the same way with
+        # .github/scripts/free-dpkg-lock.sh.
+        timeout-minutes: 5
+        continue-on-error: true
+        run: .github/scripts/free-dpkg-lock.sh
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
