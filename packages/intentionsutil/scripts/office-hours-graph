@@ -34,9 +34,13 @@
 #                                session (job <job-id>) — a collision to surface,
 #                                never a silent fall-through or duplicate launch
 #
-# Two further dispositions are this script's own extensions (resolve_directive),
+# Park state is resolved by `office-hours-select.ts` itself, which reads the
+# `intentions/` store at `origin/main` (not this checkout's working tree), so its
+# verdicts are always main-authoritative. This script keeps no freshness guard of
+# its own — a stale worktree can no longer produce a false `launch`.
+#
+# One further disposition is this script's own extension (resolve_directive),
 # not selector output:
-#   cleared <node-id>          → the node's park is already cleared on origin/main
 #   all-held <count>           → the queue is NOT empty; every remaining parked
 #                                node is claimed — by a live session named after
 #                                it, or by a reservation-ledger marker
@@ -135,33 +139,6 @@ job_id_for_name() {
           | .id) // empty' <<<"$raw"
 }
 
-# park_live_on_main <node-id> — success iff origin/main authoritatively shows a
-# LIVE park for the node (an `office_hours:` field that is not `null`). The
-# offline selector reads only the LOCAL `intentions/` store, which can lag
-# origin/main: a node already drained-and-cleared by a prior session still ranks
-# if this checkout's copy of its file predates the clear (a stale PR-branch
-# worktree is the common case — its committed node file still shows the old
-# park). origin/main is the authoritative park state, so we confirm each
-# candidate there before launching and skip stale-worktree false positives.
-# Reads the already-fetched `origin/main` ref via `git show` (no working-tree
-# mutation); a missing file or `office_hours: null` on main —> not a live park.
-park_live_on_main() {
-  local nid="$1" body frontmatter
-  # Scope git to the script's own tree — $SCRIPT_DIR always lies inside the
-  # repo, so the guard is cwd-independent (matching the selector's self-locating
-  # contract) regardless of the invocation directory.
-  body=$(git -C "$SCRIPT_DIR" show "origin/main:intentions/${nid}.md" 2>/dev/null) || return 1
-  # Restrict the park-state test to the YAML frontmatter block (between the
-  # first two `---` fences), so a column-0 `office_hours:` line in the markdown
-  # body (documentation of the serialization) can never be misread as park state.
-  frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$body")
-  grep -q '^office_hours:' <<<"$frontmatter" || return 1
-  if grep -qE '^office_hours:[[:space:]]*null[[:space:]]*$' <<<"$frontmatter"; then
-    return 1
-  fi
-  return 0
-}
-
 # reserved_owner_for <node-id> — echo the session id that holds a reservation-
 # ledger claim on <node-id>, or empty if no claim is on file. Advisory,
 # best-effort, read-only pre-flight: the AUTHORITATIVE gate against a race with
@@ -179,7 +156,7 @@ park_live_on_main() {
 # ledger-dir expression below is the literal mirror of that lib's own
 # `reservation_dir`/`resolve_project_root` logic, scoped via `git -C
 # "$SCRIPT_DIR"` for the same cwd-independence this script's other helpers use
-# (see park_live_on_main).
+# (see node_kind_on_main).
 #
 # Never fails the script: a ledger-dir resolution failure or a missing/
 # unreadable marker is just "not reserved" from this function's point of view,
@@ -203,8 +180,8 @@ reserved_owner_for() {
 # documentation says does not exist (and which dispatch-sweep's NODE arm could
 # never reap: those kinds carry `phase: null`, never `phase: done`).
 #
-# Frontmatter-scoped and column-0-anchored, exactly as park_live_on_main is, so a
-# `kind:` line in the markdown body cannot be misread as schema state. A node
+# Frontmatter-scoped and column-0-anchored, so a `kind:` line in the markdown
+# body cannot be misread as schema state. A node
 # whose file or `kind` cannot be read is a hard error, not a default: guessing
 # would silently launch a tactic session at the repo root with no worktree.
 node_kind_on_main() {
@@ -223,52 +200,37 @@ node_kind_on_main() {
 }
 
 # resolve_directive — emit exactly one directive line for the first LIVE head (or
-# the explicit target), authoritatively confirmed on origin/main. Extends the
-# selector's disposition vocabulary with `cleared <node-id>` for a selected node
-# whose park is already cleared on main (a stale-worktree false positive). In
+# the explicit target). Park state is the selector's answer alone: it reads the
+# `intentions/` store at `origin/main`, so a single call is already
+# main-authoritative and this script adds no freshness check of its own. In
 # queue-head mode it walks the ranked `--list` top-down and launches the first
-# node still parked on main, logging each skipped false positive to stderr. The
-# selector's own `NOTE —` stderr advisory still passes straight to the terminal.
+# node no live session already holds. The selector's own `NOTE —` stderr advisory
+# still passes straight to the terminal.
 resolve_directive() {
   if [[ -n "$TARGET" ]]; then
-    if park_live_on_main "$TARGET"; then
+    local sel sel_verb sel_node
+    sel=$(npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$TARGET")
+    read -r sel_verb sel_node _ <<<"$sel"
+    if [[ "$sel_verb" == launch ]]; then
       # An explicit human target on an already-live node is a collision to
-      # surface, never a silent fall-through or duplicate launch. This preempts
-      # the normal launch directive: check liveness BEFORE consulting the
-      # selector so an occupied target errors (`held`) rather than launching.
+      # surface, never a silent fall-through or duplicate launch — so a launch
+      # verdict is converted to `held` when a live job already claims the node.
       local target_job target_reserved
-      target_job=$(job_id_for_name "$TARGET")
+      target_job=$(job_id_for_name "$sel_node")
       if [[ -n "$target_job" ]]; then
-        echo "held $TARGET $target_job"
+        echo "held $sel_node $target_job"
         return 0
       fi
       # Advisory reservation-ledger pre-check (see reserved_owner_for), checked
       # AFTER job_id_for_name so a live-session-by-name collision (the stronger
       # signal) wins if somehow both are true.
-      target_reserved=$(reserved_owner_for "$TARGET")
+      target_reserved=$(reserved_owner_for "$sel_node")
       if [[ -n "$target_reserved" ]]; then
-        echo "reserved $TARGET $target_reserved"
+        echo "reserved $sel_node $target_reserved"
         return 0
       fi
-      npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$TARGET"
-    else
-      # park_live_on_main fails for three distinct states: a genuine
-      # local-parked-but-main-cleared false positive, an absent node file, and
-      # office_hours null/absent on main. Only the first warrants the `cleared`
-      # narrative. Consult the selector (which reads the LOCAL store) to tell
-      # them apart: if it would `launch` the node, the node IS parked locally but
-      # main shows it cleared — the true stale-worktree false positive, so emit
-      # `cleared`. Otherwise pass the selector's accurate disposition through
-      # (e.g. `empty not-parked <id>` for a genuinely-unparked/nonexistent id).
-      local sel sel_verb
-      sel=$(npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$TARGET")
-      read -r sel_verb _ <<<"$sel"
-      if [[ "$sel_verb" == launch ]]; then
-        echo "cleared $TARGET"
-      else
-        printf '%s\n' "$sel"
-      fi
     fi
+    printf '%s\n' "$sel"
     return 0
   fi
   # Capture --list and check its exit status: a process substitution's failure
@@ -296,10 +258,6 @@ resolve_directive() {
   local held_count=0
   while IFS=$'\t' read -r score sessiontype nid date; do
     [[ -z "$nid" ]] && continue
-    if ! park_live_on_main "$nid"; then
-      echo "office-hours: skipping $nid — park already cleared on origin/main (stale-worktree false positive)." >&2
-      continue
-    fi
     # A node parked on main but already claimed by a live session (office-hours
     # or worker, both now named after the bare node id) is skipped to the next
     # rank — the same liveness-keyed dedup worker sessions use.
@@ -334,21 +292,20 @@ resolve_directive() {
   fi
 }
 
-# Sync the authoritative park state before selecting. A fetch failure is
-# non-fatal: fall back to whatever `origin/main` ref this checkout already has
-# (usually current) rather than blocking office hours on a network blip.
+# Sync the authoritative park state before selecting. `office-hours-select.ts`
+# reads the `intentions/` store at `origin/main` directly, so this fetch is what
+# keeps the SELECTOR's own answer current — not just this script's (it no longer
+# has a guard of its own). A fetch failure is non-fatal: fall back to whatever
+# `origin/main` ref this checkout already has (usually current) rather than
+# blocking office hours on a network blip.
 git -C "$SCRIPT_DIR" fetch origin main --quiet 2>/dev/null || true
 
-# Dispatch on the freshness-guarded directive. Capture only stdout so the
-# selector's `NOTE —` stderr advisory reaches the terminal.
+# Dispatch on the selector's directive. Capture only stdout so the selector's
+# `NOTE —` stderr advisory reaches the terminal.
 directive=$(resolve_directive)
 read -r verb a b _ <<<"$directive"
 
 case "$verb" in
-  cleared)
-    echo "office-hours: node $a park already cleared on origin/main (stale-worktree false positive) — nothing to launch."
-    exit 0
-    ;;
   held)
     # An explicitly-targeted node claimed by a live session is a collision, not
     # a dead end: offer the holding job, an opt-in attach, and a read-only
@@ -374,7 +331,7 @@ case "$verb" in
     ;;
   empty)
     if [[ "$a" == "not-parked" ]]; then
-      echo "office-hours: node $b is not parked — nothing to launch for it."
+      echo "office-hours: node $b is not parked on origin/main — nothing to launch for it."
     else
       echo "office-hours: queue is empty — no parked node is waiting (nothing was skipped as held)."
     fi
@@ -410,7 +367,7 @@ case "$verb" in
       # CI-ready/PR gating, merge-conflict and scope-staleness handling — all
       # worker/phase machinery wrong for a read-only, no-commit, no-PR session).
       # Git is scoped via `git -C "$SCRIPT_DIR"`, matching this script's
-      # cwd-independence convention (see park_live_on_main).
+      # cwd-independence convention (see node_kind_on_main).
       #
       # Project root = the worktree with `main` checked out, resolved from the
       # worktree registry exactly as graph-select-target does.

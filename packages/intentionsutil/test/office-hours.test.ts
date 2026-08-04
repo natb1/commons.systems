@@ -1,6 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 import type { Attention, IntentionNode, OfficeHours } from "../src/schema.js";
 import {
@@ -18,6 +21,36 @@ import {
   parseSelectorArgs,
   resolveSessionCwd,
 } from "../scripts/office-hours-select.js";
+import { extractFrontmatter } from "../src/frontmatter.js";
+
+// This test file lives at packages/intentionsutil/test/, so repo root is
+// three dirname() calls up from this file's own location — same pattern as
+// committed-store.test.ts and office-hours-select.ts.
+const testDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = dirname(dirname(dirname(testDir)));
+const selectScript = join(repoRoot, "packages/intentionsutil/scripts/office-hours-select.ts");
+
+/** True when `origin/main` resolves in this checkout — the CLI tests below can
+ * only run meaningfully against the real repo (office-hours-select.ts resolves
+ * its own repoRoot from import.meta.url), so they skip cleanly rather than
+ * false-failing in an isolated checkout with no `origin` remote. */
+function hasOriginMain(): boolean {
+  try {
+    execFileSync("git", ["-C", repoRoot, "rev-parse", "--verify", "origin/main"], {
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function runSelect(args: string[]): string {
+  return execFileSync("npx", ["tsx", selectScript, ...args], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+}
 
 /** Build a full IntentionNode fixture, filling required/default fields. */
 function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
@@ -542,6 +575,7 @@ describe("parseSelectorArgs", () => {
       wantList: false,
       sessionType: undefined,
       target: "tactic-some-id",
+      ref: "origin/main",
     });
   });
 
@@ -551,6 +585,7 @@ describe("parseSelectorArgs", () => {
       wantList: false,
       sessionType: undefined,
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -560,6 +595,7 @@ describe("parseSelectorArgs", () => {
       wantList: true,
       sessionType: undefined,
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -569,6 +605,7 @@ describe("parseSelectorArgs", () => {
       wantList: false,
       sessionType: "curriculum-review",
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -578,6 +615,7 @@ describe("parseSelectorArgs", () => {
       wantList: true,
       sessionType: "curriculum-review",
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -619,6 +657,7 @@ describe("parseSelectorArgs", () => {
       wantList: false,
       sessionType: "curriculum-review",
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -628,6 +667,7 @@ describe("parseSelectorArgs", () => {
       wantList: true,
       sessionType: "requirement-discovery",
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -655,6 +695,44 @@ describe("parseSelectorArgs", () => {
     const result = parseSelectorArgs(["--list=true"]);
     expect(result.kind).toBe("error");
     expect(result.kind === "error" && result.message).toMatch(/--list takes no value/);
+  });
+
+  it("sets ref for --ref <git-ref>, excluding the ref value from positionals", () => {
+    expect(parseSelectorArgs(["--ref", "HEAD"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: undefined,
+      target: undefined,
+      ref: "HEAD",
+    });
+  });
+
+  it("accepts the --ref=<value> spelling alongside a node-id target", () => {
+    expect(parseSelectorArgs(["--ref=HEAD", "tactic-some-id"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: undefined,
+      target: "tactic-some-id",
+      ref: "HEAD",
+    });
+  });
+
+  it("errors when --ref is the last token", () => {
+    const result = parseSelectorArgs(["--ref"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--ref requires a git-ref argument/);
+  });
+
+  it("errors when --ref is followed by another flag", () => {
+    const result = parseSelectorArgs(["--ref", "--list"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--ref requires a git-ref argument/);
+  });
+
+  it("errors on more than one node-id positional", () => {
+    const result = parseSelectorArgs(["tactic-a", "tactic-b"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/at most one node-id/);
   });
 });
 
@@ -748,4 +826,48 @@ describe("formatDisposition", () => {
       stderr: "",
     });
   });
+});
+
+// These tests exercise the real CLI against THIS repo's actual `origin/main`
+// state, not in-memory fixtures — the direct regression test for the
+// main-authority invariant office-hours-select.ts now guarantees (every queued
+// node is genuinely parked on `origin/main`, not just in the local worktree).
+// They skip cleanly when no `origin/main` ref is resolvable (e.g. a stripped
+// checkout with no `origin` remote), matching the defensive posture of
+// committed-store.test.ts's `describe.skipIf(!existsSync(...))`.
+describe.skipIf(!hasOriginMain())("office-hours-select CLI (real repo)", () => {
+  it("--list: every line matches rank\\tsessionType\\tnodeId\\tsince", () => {
+    const out = runSelect(["--list"]);
+    const lines = out.split("\n").filter((l) => l.length > 0);
+    for (const line of lines) {
+      expect(line).toMatch(/^-?\d+(\.\d+)?\t\S+\t\S+\t\S+$/);
+    }
+  }, 15000);
+
+  it("main-authority invariant: every listed node is parked on origin/main", () => {
+    const out = runSelect(["--list"]);
+    const lines = out.split("\n").filter((l) => l.length > 0);
+    // Column 2 (0-indexed) is the node id — see formatQueueRow's column contract.
+    const nodeIds = lines.map((line) => line.split("\t")[2]);
+    for (const id of nodeIds) {
+      const raw = execFileSync("git", ["-C", repoRoot, "show", `origin/main:intentions/${id}.md`], {
+        encoding: "utf8",
+      });
+      const frontmatter = extractFrontmatter(raw, id);
+      const parsed: unknown = parse(frontmatter);
+      expect(parsed).toBeTruthy();
+      expect((parsed as { office_hours?: unknown }).office_hours).not.toBeNull();
+    }
+  }, 15000);
+
+  it("targeted not-parked: a fabricated node id reports not-parked", () => {
+    const out = runSelect(["absent-node-id-xyz"]);
+    expect(out).toBe("empty not-parked absent-node-id-xyz\n");
+  }, 15000);
+
+  it("--ref plumbing: --ref origin/main matches the no-flag default", () => {
+    const withRef = runSelect(["--ref", "origin/main", "--list"]);
+    const withoutRef = runSelect(["--list"]);
+    expect(withRef).toBe(withoutRef);
+  }, 15000);
 });
