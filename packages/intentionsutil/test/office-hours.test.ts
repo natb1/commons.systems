@@ -230,6 +230,198 @@ describe("officeHoursQueue", () => {
     expect(filtered.map((m) => m.nodeId)).toEqual(["tactic-reqdisc"]);
     expect(filtered.every((m) => m.sessionType === "requirement-discovery")).toBe(true);
   });
+
+  it("lifts a parked hold to the rank of the live work it blocks", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
+      anode({
+        id: "tactic-source",
+        kind: "tactic",
+        attention: boost(60),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+      anode({
+        id: "tactic-unrelated",
+        kind: "tactic",
+        attention: boost(40),
+        office_hours: parked(),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+
+    expect(queue.map((m) => m.nodeId)).toEqual(["tactic-hold", "tactic-unrelated"]);
+    const hold = queue.find((m) => m.nodeId === "tactic-hold");
+    expect(hold?.rank).toBe(60);
+    expect(hold?.ownRank).toBe(0);
+    expect(hold?.liftedFrom).toBe("tactic-source");
+  });
+
+  it("lifts the tier when a blocking source is at a higher tier (tier dominates value)", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", attention: boost(100), office_hours: parked() }),
+      anode({
+        id: "tactic-source",
+        kind: "tactic",
+        attention: boost(1),
+        attributes: { tier: 2 },
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+    ];
+
+    const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.tier).toBe(2);
+    expect(hold?.rank).toBe(1);
+    expect(hold?.ownTier).toBe(1);
+    expect(hold?.ownRank).toBe(100);
+    expect(hold?.liftedFrom).toBe("tactic-source");
+  });
+
+  it("takes the max over several blocking sources", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
+      anode({
+        id: "tactic-src-low",
+        kind: "tactic",
+        attention: boost(5),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+      anode({
+        id: "tactic-src-high",
+        kind: "tactic",
+        attention: boost(30),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+    ];
+
+    const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.rank).toBe(30);
+    expect(hold?.liftedFrom).toBe("tactic-src-high");
+  });
+
+  it("breaks a tie between equal blocking sources by id ascending", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
+      anode({
+        id: "tactic-src-z",
+        kind: "tactic",
+        attention: boost(9),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+      anode({
+        id: "tactic-src-a",
+        kind: "tactic",
+        attention: boost(9),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+    ];
+
+    const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.rank).toBe(9);
+    expect(hold?.liftedFrom).toBe("tactic-src-a");
+  });
+
+  it("does not lift from a blocking source already at phase done (cleared blocker)", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", attention: boost(2), office_hours: parked() }),
+      anode({
+        id: "tactic-src-done",
+        kind: "tactic",
+        attention: boost(50),
+        phase: "done",
+        blocked_by: ["tactic-hold"],
+      }),
+    ];
+
+    const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.rank).toBe(2);
+    expect(hold?.tier).toBe(1);
+    expect(hold?.liftedFrom).toBeNull();
+  });
+
+  it("keeps its own key when it outranks every blocking source", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", attention: boost(20), office_hours: parked() }),
+      anode({
+        id: "tactic-source",
+        kind: "tactic",
+        attention: boost(3),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+    ];
+
+    const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.rank).toBe(20);
+    expect(hold?.ownRank).toBe(20);
+    expect(hold?.liftedFrom).toBeNull();
+  });
+
+  it("applies the session-type penalty to a lifted value without crossing a tier", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-hold",
+        kind: "tactic",
+        office_hours: parkedTyped("requirement-discovery"),
+      }),
+      anode({
+        id: "tactic-source",
+        kind: "tactic",
+        attention: boost(40),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+      anode({
+        id: "tactic-tier2",
+        kind: "tactic",
+        attention: boost(1),
+        attributes: { tier: 2 },
+        office_hours: parked(),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+    const hold = queue.find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.rank).toBe(40 * SESSION_TYPE_PENALTY);
+    expect(hold?.ownRank).toBe(0);
+    expect(hold?.tier).toBe(1);
+    // The penalized lift is huge, but tier is still the hard outer axis.
+    expect(queue.map((m) => m.nodeId)).toEqual(["tactic-tier2", "tactic-hold"]);
+  });
+
+  it("leaves a parked node with no inbound blocked_by edges unchanged", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-alone", kind: "tactic", attention: boost(7), office_hours: parked() }),
+      anode({ id: "tactic-elsewhere", kind: "tactic", attention: boost(90), phase: "implement" }),
+    ];
+
+    const alone = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-alone");
+
+    expect(alone?.liftedFrom).toBeNull();
+    expect(alone?.rank).toBe(alone?.ownRank);
+    expect(alone?.tier).toBe(alone?.ownTier);
+    expect(alone?.rank).toBe(7);
+  });
 });
 
 describe("openBlockers", () => {
@@ -474,6 +666,9 @@ describe("formatQueueRow", () => {
       nodeId: "tactic-a",
       rank: 12.5,
       tier: 1,
+      ownTier: 1,
+      ownRank: 12.5,
+      liftedFrom: null,
       sessionType: "curriculum-review",
       since: "2026-07-01",
     });

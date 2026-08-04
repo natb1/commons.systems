@@ -14,14 +14,29 @@ export const SESSION_TYPE_PENALTY = 0.5;
 /** One parked node as it appears in the ordered queue. */
 export interface QueueMember {
   nodeId: string;
-  /** Resolved attention rank; a node absent from the attention map ranks 0. */
+  /**
+   * The queue's ordering rank: the session-type-penalized value of the
+   * surfacing key — the lexicographic max of the node's own resolved
+   * `(tier, value)` and that of every non-`done` node it blocks. A node absent
+   * from the attention map ranks 0.
+   */
   rank: number;
   /**
-   * Resolved attention tier; a node absent from the attention map defaults to
-   * tier 1, matching `resolveAttention`'s default tier. The hard outer sort
-   * key — see `officeHoursQueue`.
+   * The queue's ordering tier: the tier of the surfacing key (see `rank`). A
+   * node absent from the attention map defaults to tier 1, matching
+   * `resolveAttention`'s default tier. The hard outer sort key — see
+   * `officeHoursQueue`.
    */
   tier: number;
+  /** The node's OWN resolved tier, before any blocked-source lift. */
+  ownTier: number;
+  /** The node's OWN penalized rank, before any blocked-source lift. */
+  ownRank: number;
+  /**
+   * The id of the blocking source whose `(tier, value)` lifted this member's
+   * key, or `null` when nothing it blocks outranks it.
+   */
+  liftedFrom: string | null;
   sessionType: SessionType;
   since: string;
 }
@@ -42,11 +57,33 @@ export interface QueueMember {
  * sufficiently boosted penalized node can still overtake an `other` node
  * within the same tier, but it can never cross a tier boundary.
  *
+ * A parked node's key is not its own attention alone: it is the lexicographic
+ * max of its own resolved `(tier, value)` and the resolved `(tier, value)` of
+ * every node it BLOCKS (every node whose `blocked_by` lists it), restricted to
+ * sources not yet at `phase: "done"` — the same "a done blocker is cleared"
+ * convention `openBlockers` uses. A park that is holding up high-attention live
+ * work surfaces with that work's urgency rather than its own, and
+ * `liftedFrom` names the source that supplied the key. The lift is monotone-up:
+ * a member's key can only rise, never fall, so a park that blocks nothing keeps
+ * exactly the key it had before. `ownTier`/`ownRank` always report the
+ * un-lifted values.
+ *
  * When `sessionType` is provided, only parked nodes whose
  * `office_hours.session_type` matches are included.
  */
 export function officeHoursQueue(nodes: IntentionNode[], sessionType?: SessionType): QueueMember[] {
   const attention = resolveAttention(nodes);
+  // reverse.get(id) = the nodes that list `id` in their own blocked_by — i.e.
+  // the nodes `id` blocks. Same shape as `reverseBlockers` in
+  // `computeSignalPath` (attention.ts), which is private to that module.
+  const reverse = new Map<string, IntentionNode[]>();
+  for (const n of nodes) {
+    for (const b of n.blocked_by) {
+      const list = reverse.get(b);
+      if (list) list.push(n);
+      else reverse.set(b, [n]);
+    }
+  }
   const members: QueueMember[] = [];
   for (const n of nodes) {
     // A `continue` guard narrows office_hours to non-null for the body below —
@@ -57,11 +94,38 @@ export function officeHoursQueue(nodes: IntentionNode[], sessionType?: SessionTy
     const penalty =
       st === "requirement-discovery" || st === "curriculum-review" ? SESSION_TYPE_PENALTY : 1;
     const rawRank = attention.get(n.id)?.value ?? 0;
-    const tier = attention.get(n.id)?.tier ?? 1;
+    const ownTier = attention.get(n.id)?.tier ?? 1;
+    // Lexicographic (tier, value) max over {own} ∪ blocked sources. The penalty
+    // is applied AFTER the key is chosen: it is a property of this park's
+    // session type, not of where the value came from, and it must never affect
+    // the tier comparison.
+    let keyTier = ownTier;
+    let keyValue = rawRank;
+    let liftedFrom: string | null = null;
+    for (const src of reverse.get(n.id) ?? []) {
+      if (src.phase === "done") continue;
+      const srcValue = attention.get(src.id)?.value ?? 0;
+      const srcTier = attention.get(src.id)?.tier ?? 1;
+      const better =
+        srcTier > keyTier ||
+        (srcTier === keyTier &&
+          (srcValue > keyValue ||
+            // Ties among sources break by id ascending; a source can never tie
+            // its way past the member's own key (liftedFrom stays null).
+            (srcValue === keyValue && liftedFrom !== null && src.id < liftedFrom)));
+      if (better) {
+        keyTier = srcTier;
+        keyValue = srcValue;
+        liftedFrom = src.id;
+      }
+    }
     members.push({
       nodeId: n.id,
-      rank: rawRank * penalty,
-      tier,
+      rank: keyValue * penalty,
+      tier: keyTier,
+      ownTier,
+      ownRank: rawRank * penalty,
+      liftedFrom,
       sessionType: st,
       since: n.office_hours.since,
     });
