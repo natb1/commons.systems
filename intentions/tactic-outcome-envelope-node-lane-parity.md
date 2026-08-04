@@ -86,13 +86,14 @@ attention:
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: qa
+phase: review
 execution:
   branch: tactic-outcome-envelope-node-lane-parity
   pr: 3030
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -303,3 +304,26 @@ Manual smoke checks (prose — quick shell one-liners against the built script):
   `--node-id 42` exits 2 (slug reject).
 - Read-review the two SKILLs: every `dispatch-emit-outcome` template honors its
   own node-lane "never pass `--issue`" preamble.
+
+## needs-main residue
+
+- **id:** 12 — Live node-lane envelope reaches token-audit aggregate
+  - URL path: current
+  - Expected outcome: a real node-lane `/qa-fix` or `/review-fix` session,
+    running after this PR merges, emits an outcome envelope with `"issue":
+    null, "node_id": "<slug>"`, and `aggregate-usage.sh` surfaces it on
+    `.sessions[].outcome.node_id`.
+  - Finding: not verifiable from this PR's own working tree by construction —
+    the unit mechanics are already covered by passing QA (`dispatch-emit-outcome`
+    correctly emits `node_id`; `test-aggregate-usage.sh`'s fixture-based
+    regression test already exercises a synthetic node-lane envelope end-to-end
+    through the aggregator and asserts the `.sessions[].outcome.node_id`
+    passthrough), but the live end-to-end effect — a real node-lane session's
+    transcript actually carrying the new envelope shape — can only be observed
+    after merge.
+  - Verifiability: WAIT — awaiting the next live node-lane `/qa-fix` or
+    `/review-fix` session that reaches its terminal disposition post-merge.
+  - Check: grep that session's transcript for a `<!-- dispatch:outcome:v1 -->`
+    block and confirm `"issue": null` / `"node_id": "<the node's id>"`; then run
+    `aggregate-usage.sh` over the projects root and confirm
+    `.sessions[].outcome.node_id` for that session id matches.
