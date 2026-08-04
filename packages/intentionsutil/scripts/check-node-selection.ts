@@ -51,7 +51,7 @@ import {
 } from "../src/router.js";
 import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
 import { isPlainObject } from "../src/schema.js";
-import type { FixState, IntentionNode, StrategyStampValue } from "../src/schema.js";
+import type { ConflictState, FixState, IntentionNode, StrategyStampValue } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
 // --- Exit codes ------------------------------------------------------------
@@ -173,6 +173,31 @@ function readFixState(node: IntentionNode): FixState | null {
 }
 
 /**
+ * The node's active merge-conflict interrupt (`execution.conflict`), first-class
+ * or squatter, else null (tactic-graph-router-conflict-routing). Structural
+ * sibling of `readFixState` minus the `pushed_sha` field (a conflict carries no
+ * pending-CI-sha guard). Like the fix interrupt this is graph-native-only, so in
+ * practice only the first-class read fires; the squatter fallback is kept for
+ * uniformity with `readFixState` / `readMarkers` / `readStrategyFingerprint`.
+ */
+function readConflictState(node: IntentionNode): ConflictState | null {
+  const firstClass = node.execution?.conflict ?? null;
+  if (firstClass !== null) return firstClass;
+  const squatExec = node.attributes.execution;
+  if (squatExec !== null && typeof squatExec === "object" && "conflict" in squatExec) {
+    const conflict = (squatExec as { conflict?: unknown }).conflict;
+    if (
+      isPlainObject(conflict) &&
+      typeof conflict.since === "string" &&
+      typeof conflict.attempt === "number"
+    ) {
+      return { since: conflict.since, attempt: conflict.attempt };
+    }
+  }
+  return null;
+}
+
+/**
  * Run the five re-validation checks against a store the caller guarantees is at
  * fresh origin/main. Pure: reads files, returns a result — no process exit, no
  * direct stdio. Throws only on a genuinely malformed store (a node file that
@@ -232,6 +257,22 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
         EXIT_STALE_SELECTION,
         "phase",
         `selected fix but ${nodeId} carries no execution.fix interrupt (resolved since selection)`,
+      );
+    }
+  } else if (selectedPhase === "conflict") {
+    // `conflict` is likewise a directive the selector emits but never stores:
+    // the merge-conflict interrupt lives on `execution.conflict` while `phase`
+    // stays at its real ladder position (typically `review` with the reviewed
+    // marker, awaiting merge). Same interrupt-presence gate as `fix` — a null
+    // `execution.conflict` means the conflict resolved between selection and
+    // execute-time, a stale selection. (`pending-merge`, the other new signal
+    // string, is never a dispatched selectedPhase: the shell sensor gate turns
+    // it into `conflict` or a skip before any worker starts.)
+    if (readConflictState(node) === null) {
+      return fail(
+        EXIT_STALE_SELECTION,
+        "phase",
+        `selected conflict but ${nodeId} carries no execution.conflict interrupt (resolved since selection)`,
       );
     }
   } else if (selectedPhase === "align-tactics") {

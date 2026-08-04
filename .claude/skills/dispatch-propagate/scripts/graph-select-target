@@ -44,9 +44,24 @@
 # `hold-node --kind fix-attempt-cap --reset-fix-attempt` writes a born-parked
 # hold tactic plus a `blocked_by` edge on the source, in one graph-commit) —
 # dropping the node out of the eligible set via that edge rather than
-# re-arming another retry forever. These graph-commit writes (this script's
-# own via `_graph_commit_fix`, and hold-node's own internal commit) are the
-# only writes selection makes.
+# re-arming another retry forever.
+#
+# The SECOND exception is the merge-conflict interrupt
+# (tactic-graph-router-conflict-routing). A reviewed awaiting-merge node is no
+# longer excluded from candidates: the router emits it as `pending-merge`, and
+# `_gate_pending_merge` reads the PR's mergeability each tick. On CONFLICTING it
+# ENTERS the orthogonal `execution.conflict` interrupt (`apply-conflict-state
+# --set-conflict` + `graph-commit`) and emits `conflict`, which
+# dispatch-graph-execute routes to `/dispatch-conflict`. On a subsequent tick the
+# node arrives as a `conflict` candidate and `_gate_conflict_active` spends one
+# attempt per re-dispatch, parks the node once `CONFLICT_ATTEMPT_CAP` is spent,
+# or self-heals the interrupt (`--clear-conflict-mechanical`) once GitHub reports
+# the PR MERGEABLE again. UNKNOWN mergeability is never acted on — GitHub
+# computes it asynchronously.
+#
+# These graph-commit writes (this script's own via `_graph_commit_fix` /
+# `_graph_commit_conflict`, and hold-node's and park-node's own internal
+# commits) are the only writes selection makes.
 #
 # Usage: graph-select-target [--top <n>] [--pace-exempt-only] [--standalone] [--node <id>]
 #
@@ -478,6 +493,31 @@ _graph_commit_fix() {
     && packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1
 }
 
+# --- Merge-conflict interrupt helpers (tactic-graph-router-conflict-routing) --
+# Structural siblings of _apply_fix/_graph_commit_fix above, for the orthogonal
+# `execution.conflict` interrupt entered on a reviewed awaiting-merge node whose
+# PR reports mergeable == CONFLICTING.
+
+# _apply_conflict <id> <mode-flag...> — run apply-conflict-state against the
+# main store. Its JSON result is on stdout for the caller to capture.
+_apply_conflict() {
+  ( cd "$NATIVE_ROOT" \
+    && npx tsx packages/intentionsutil/scripts/apply-conflict-state.ts "$@" --dir "$NATIVE_ROOT/intentions" )
+}
+
+# _graph_commit_conflict <message> <id> — land the on-disk conflict-state write.
+_graph_commit_conflict() {
+  ( cd "$NATIVE_ROOT" \
+    && packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1
+}
+
+# CONFLICT_ATTEMPT_CAP mirrors packages/intentionsutil/src/transitions.ts's
+# constant of the same name (currently 3) — used only for the park reason's
+# diagnostic prose, never for the capped decision itself (that stays
+# apply-conflict-state.ts's `--park-if-capped`, the single source of truth for
+# the comparison). Keep this literal in sync if the source constant changes.
+CONFLICT_ATTEMPT_CAP=3
+
 # FIX_ATTEMPT_CAP mirrors packages/intentionsutil/src/transitions.ts's constant
 # of the same name (currently 3) — used only for the hold reason's diagnostic
 # prose below, never for the capped decision itself (that stays
@@ -705,6 +745,114 @@ _gate_fix_active() {
   esac
 }
 
+# _park_conflict_cap <id> <pr> <attempt> — park the source node once the
+# automated conflict-resolution budget is exhausted. Unlike the fix lane's
+# _hold_node_fix_cap (a tracked hold tactic + blocked_by edge, because a fix
+# retry budget is RESETTABLE by resolving the hold), a capped conflict has no
+# reset flag to offer — park-node takes <reason> and <recommendation> as plain
+# positional arguments (packages/intentionsutil/scripts/park-node's usage line),
+# so no reason/recommendation FILES are involved here. rc mirrors park-node's.
+_park_conflict_cap() {
+  local id="$1" pr="$2" attempt="$3" reason rec
+  reason=$(printf 'Automated conflict resolution exhausted: PR #%s still reports mergeable == CONFLICTING after %s attempt(s) — the %s-attempt cap (CONFLICT_ATTEMPT_CAP) is spent.' \
+    "$pr" "$attempt" "$CONFLICT_ATTEMPT_CAP")
+  rec=$(printf 'Run `/dispatch-conflict %s` by hand, or resolve the merge conflict directly in that node'"'"'s worktree and push the branch. Then clear `office_hours` on %s to return it to the queue; the reviewed marker and its armed auto-merge are untouched, so dispatch-auto-merge lands it once GitHub reports MERGEABLE.' \
+    "$id" "$id")
+  ( cd "$NATIVE_ROOT" && packages/intentionsutil/scripts/park-node "$id" "$reason" "$rec" ) \
+    >/dev/null 2>&1
+}
+
+# _gate_pending_merge <id> <pr> — the candidate is reviewed and awaiting its
+# armed auto-merge (router emitted phase `pending-merge`), carrying NO conflict
+# interrupt yet. Read the PR's mergeability and, on CONFLICTING, ENTER the
+# interrupt this tick.
+#   rc 0 — conflict interrupt entered (caller emits `conflict`).
+#   rc 1 — not satisfied; a short skip-reason token is on stdout.
+#   rc 3 — an interrupt was due but could not be acted on (write/commit failed,
+#          or an unreadable `.mergeable`); a reason token is on stdout and the
+#          caller skips the node.
+_gate_pending_merge() {
+  local id="$1" pr="$2"
+  if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
+  if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
+  # A merge landed out of band — the merged-tactic reconciler's job, not this
+  # gate's; it absorbs the node to `done` on the next tick.
+  if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+  case "$_CI_MERGEABLE" in
+    CONFLICTING)
+      if _apply_conflict "$id" --set-conflict >/dev/null 2>&1 \
+         && _graph_commit_conflict "graph: enter conflict-interrupt on $id" "$id"; then
+        return 0
+      fi
+      echo "conflict-write-failed"; return 3 ;;
+    MERGEABLE)
+      # Clean: dispatch-auto-merge (a separate tick-wide reconciler) lands it.
+      echo "mergeable-clean"; return 1 ;;
+    UNKNOWN|"")
+      # GitHub computes mergeability asynchronously and self-heals; wait and
+      # retry next tick. NEVER route a conflict lane off an UNKNOWN.
+      echo "mergeable-unknown"; return 1 ;;
+    *)
+      echo "graph-select-target: unexpected .mergeable '$_CI_MERGEABLE' from gh_pr_view_rest #$pr for $id (projection changed?)" >&2
+      echo "mergeable-unreadable"; return 3 ;;
+  esac
+}
+
+# _gate_conflict_active <id> <pr> — the candidate ALREADY carries an active
+# conflict interrupt (router emitted phase `conflict`). Spend an attempt and
+# re-dispatch while the PR is still conflicted, park at the cap, or self-heal a
+# stale interrupt once GitHub reports the PR mergeable again.
+#   rc 0 — still conflicted, an attempt was spent (caller emits `conflict`).
+#   rc 1 — not satisfied; a short skip-reason token is on stdout (including the
+#          capped-and-parked and the self-healed paths — neither emits a phase).
+#   rc 3 — a due write could not be made; reason token on stdout.
+_gate_conflict_active() {
+  local id="$1" pr="$2" out capped attempt
+  if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
+  if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
+  if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+  case "$_CI_MERGEABLE" in
+    CONFLICTING)
+      # Retry cap first: --park-if-capped is a PURE READ (no write, no park of
+      # its own), so the park below is this script's to make.
+      out=$(_apply_conflict "$id" --park-if-capped 2>/dev/null) \
+        || { echo "conflict-cap-check-failed"; return 1; }
+      capped=$(jq -r '.capped' <<<"$out" 2>/dev/null) || capped=""
+      if [[ "$capped" == "true" ]]; then
+        attempt=$(jq -r '.attempt' <<<"$out" 2>/dev/null)
+        if ! _park_conflict_cap "$id" "$pr" "$attempt"; then
+          echo "conflict-cap-park-failed"; return 1
+        fi
+        echo "conflict-capped-parked"; return 1
+      fi
+      if _apply_conflict "$id" --spend-attempt >/dev/null 2>&1 \
+         && _graph_commit_conflict "graph: spend conflict-interrupt attempt on $id" "$id"; then
+        return 0
+      fi
+      echo "conflict-spend-failed"; return 3 ;;
+    MERGEABLE)
+      # Defensive self-heal of a stale interrupt. MECHANICAL is always the safe
+      # clear here: this arm is only reached because the node still carries BOTH
+      # execution.conflict AND the reviewed marker, and an intention-verdict
+      # clear (--clear-conflict-intention) would already have stripped that
+      # marker — making the node a fresh `review` candidate, not a `conflict`
+      # one. (Explanatory-comment sibling of _gate_fix_active's DELIBERATELY
+      # CONFLICT-BLIND note above.)
+      if _apply_conflict "$id" --clear-conflict-mechanical >/dev/null 2>&1 \
+         && _graph_commit_conflict "graph: self-heal stale conflict-interrupt on $id" "$id"; then
+        # NOT an emitted phase: the node returns to pending-merge and
+        # dispatch-auto-merge takes it from here.
+        echo "conflict-cleared-mergeable"; return 1
+      fi
+      echo "conflict-clear-failed"; return 3 ;;
+    UNKNOWN|"")
+      echo "mergeable-unknown"; return 1 ;;
+    *)
+      echo "graph-select-target: unexpected .mergeable '$_CI_MERGEABLE' from gh_pr_view_rest #$pr for $id (projection changed?)" >&2
+      echo "mergeable-unreadable"; return 3 ;;
+  esac
+}
+
 # sensor_gate <id> <phase> <pr> <pushed_sha> — the phase's environmental sensor
 # and CI-routing authority (§3.1; tactic-fix-interrupt-orthogonal-state).
 #   0 = satisfied, the PHASE TO EMIT is on stdout (may differ from <phase>: a
@@ -716,6 +864,23 @@ sensor_gate() {
     fix)
       # An active interrupt (router override). Resolve/guard/retry.
       _gate_fix_active "$id" "$pr" "$pushed_sha" "$fix_since"; return $? ;;
+    pending-merge)
+      # Reviewed, awaiting the armed auto-merge (tactic-graph-router-conflict-
+      # routing). CONFLICTING enters the interrupt and emits `conflict`; every
+      # other outcome is a skip whose reason token _gate_pending_merge already
+      # printed on stdout (rc 1 and rc 3 alike).
+      _gate_pending_merge "$id" "$pr"
+      case $? in
+        0) echo "conflict"; return 0 ;;
+      esac
+      return 1 ;;
+    conflict)
+      # An active conflict interrupt (router override). Spend/park/self-heal.
+      _gate_conflict_active "$id" "$pr"
+      case $? in
+        0) echo "conflict"; return 0 ;;
+      esac
+      return 1 ;;
     align-tactics)
       echo "align-tactics"; return 0 ;;
     implement)

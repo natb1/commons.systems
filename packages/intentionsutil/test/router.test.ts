@@ -63,6 +63,7 @@ function exec(partial: Partial<Execution> = {}): Execution {
     markers: partial.markers ?? [],
     strategy_fingerprint: partial.strategy_fingerprint ?? null,
     fix: partial.fix ?? null,
+    conflict: partial.conflict ?? null,
   };
 }
 
@@ -173,7 +174,11 @@ describe("tactic eligibility", () => {
     expect(c?.fix).toBeNull();
   });
 
-  it("skips a phase:review tactic once execution.markers includes 'reviewed' (tick-owned)", () => {
+  it("surfaces a phase:review reviewed tactic as a pending-merge candidate", () => {
+    // tactic-graph-router-conflict-routing: the reviewed-marker EXCLUSION is
+    // retired. A reviewed node awaiting its armed auto-merge is emitted as
+    // `pending-merge` so the shell sensor gate can read its mergeability every
+    // tick — but never as `review`, which would re-run the finished review pass.
     const nodes = [
       tactic({
         id: "tactic-reviewed",
@@ -181,7 +186,57 @@ describe("tactic eligibility", () => {
         execution: exec({ markers: ["reviewed"] }),
       }),
     ];
-    expect(candidateIds(nodes)).toEqual([]);
+    const sel = selectGraphTargets(nodes);
+    expect(candidateIds(nodes)).toEqual(["tactic-reviewed"]);
+    expect(sel.candidates[0]).toMatchObject({ id: "tactic-reviewed", phase: "pending-merge" });
+  });
+
+  it("emits a reviewed tactic as 'conflict' — never pending-merge — while execution.conflict is set", () => {
+    const conflict = { since: "2026-08-03", attempt: 1 };
+    const nodes = [
+      tactic({
+        id: "tactic-conflicted",
+        phase: "review",
+        execution: exec({ markers: ["reviewed"], conflict }),
+      }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    expect(candidateIds(nodes)).toEqual(["tactic-conflicted"]);
+    expect(sel.candidates[0]?.phase).toBe("conflict");
+  });
+
+  it("gives execution.fix precedence over execution.conflict", () => {
+    // Both interrupts set: `fix` wins, exactly as it already outranks the
+    // ladder phase.
+    const nodes = [
+      tactic({
+        id: "tactic-both",
+        phase: "review",
+        execution: exec({
+          markers: ["reviewed"],
+          fix: { since: "2026-08-01", attempt: 1, pushed_sha: null },
+          conflict: { since: "2026-08-03", attempt: 1 },
+        }),
+      }),
+    ];
+    expect(selectGraphTargets(nodes).candidates[0]?.phase).toBe("fix");
+  });
+
+  it("never emits a reviewed tactic at phase 'review', under any interrupt combination", () => {
+    const fix = { since: "2026-08-01", attempt: 1, pushed_sha: null };
+    const conflict = { since: "2026-08-03", attempt: 1 };
+    const combos: Array<Partial<Execution>> = [
+      { markers: ["reviewed"] },
+      { markers: ["reviewed"], fix },
+      { markers: ["reviewed"], conflict },
+      { markers: ["reviewed"], fix, conflict },
+    ];
+    for (const [i, partial] of combos.entries()) {
+      const nodes = [tactic({ id: `tactic-r${i}`, phase: "review", execution: exec(partial) })];
+      const sel = selectGraphTargets(nodes);
+      expect(sel.candidates).toHaveLength(1);
+      expect(sel.candidates[0]?.phase).not.toBe("review");
+    }
   });
 
   it("re-surfaces a phase:review reviewed tactic as a fix candidate once execution.fix is set", () => {

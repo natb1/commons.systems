@@ -19,17 +19,14 @@
 #              would have made), which the router.ts fix-aware carve-out
 #              (tactic-graph-review-exclusion-stall-recovery) then re-surfaces
 #              as a `fix` candidate on the next selection tick.
-#   conflict — the PR no longer merges into origin/main. This must NOT go
-#              through execution.fix: _gate_fix_active reads CI, not
-#              mergeability, so a conflicted-but-green PR would be treated as
-#              resolved on the very next selection — apply-fix-state
-#              --clear-fix strips the `reviewed` marker and `gh pr ready
-#              --undo` drafts the PR, discarding a finished review verdict and
-#              re-running the whole review pass while the conflict itself
-#              stays untouched. Instead land a tracked `provision-conflict`
-#              hold (hold-node): a born-parked hold tactic plus a blocked_by
-#              edge on the source, whose id is a valid /dispatch-conflict
-#              Lane 3 entry point. The `reviewed` marker is preserved.
+#
+# CONFLICTING detection is NO LONGER this sweep's job
+# (tactic-graph-router-conflict-routing): the selector now surfaces every
+# reviewed awaiting-merge node as a `pending-merge` candidate and enters the
+# orthogonal `execution.conflict` interrupt from its own sensor gate, every tick,
+# through the normal selection path. The `conflict` route below is therefore a
+# deliberate no-op — acting on it too would double-handle the same PR (a
+# `hold-node` here racing an `execution.conflict` interrupt there).
 #
 # A still-OPEN PR with no regression, or one whose mergeability is still
 # UNKNOWN (GitHub computes it asynchronously and self-heals), is a no-op —
@@ -45,7 +42,6 @@
 #
 # Stdout protocol, one line per tactic acted on; NOTHING for a skip:
 #   recovered <id> -> fix (ci=<verdict> merge=<state>)
-#   held <id> -> conflict via <hold-id> (ci=<verdict> merge=<state>)
 #
 # Exit codes: 0 always (including a no-op sweep and any per-node error —
 # best-effort, matching reconcile-graph-merged's doctrine); 1 only for a hard
@@ -63,17 +59,16 @@
 # this sweep, and dispatch-acquire-lock reclaims a holder whose heartbeat is
 # older than MAX_HOLD_SECONDS (default 300s). A graph-commit can block far
 # longer than that (it waits on the global landing lock for up to
-# LOCK_WAIT_SECONDS, default 1050s), so this sweep runs AT MOST TWO
-# graph-commits per tick: every `fix`-routed node's `--set-fix` write is
-# batched into ONE commit (exactly as reconcile-graph-merged batches its plan),
-# and at most ONE `conflict`-routed node is held per sweep (hold-node lands its
-# own commit and cannot be batched into that one). Per-tick actions are
+# LOCK_WAIT_SECONDS, default 1050s), so this sweep runs AT MOST ONE
+# graph-commit per tick: every `fix`-routed node's `--set-fix` write is
+# batched into ONE commit (exactly as reconcile-graph-merged batches its plan).
+# Per-tick actions are
 # additionally capped (GRAPH_REVIEW_STALL_CAP), and the lock heartbeat is
 # refreshed between candidates so the per-PR polling loop cannot age the lock
 # out on its own.
 #
 # Env:
-#   GRAPH_REVIEW_STALL_CAP  Max nodes acted on per sweep (fix + conflict).
+#   GRAPH_REVIEW_STALL_CAP  Max nodes acted on per sweep.
 #                           Positive integer. Default: 3. Excess candidates are
 #                           left for the next tick (the sweep is idempotent —
 #                           they still match).
@@ -114,7 +109,6 @@ refresh_lock() {
 # (RESTORE_ON_FAILURE / restore_snapshot).
 declare -A SNAPSHOT=()
 RESTORE_ON_FAILURE=0
-TMPDIR_HOLD=""
 restore_snapshot() {
   local sid blob
   for sid in "${!SNAPSHOT[@]}"; do
@@ -122,10 +116,9 @@ restore_snapshot() {
     git -C "$REPO_ROOT" show "$blob" > "$REPO_ROOT/intentions/$sid.md"
   done
 }
-# Single EXIT trap (bash REPLACES a trap on a signal, it does not stack): drop
-# the hold scratch dir, and roll the staged writes back when a failure armed
-# the flag, so this sweep never exits leaving intentions/ dirty.
-trap 'rc=$?; [[ -n "$TMPDIR_HOLD" ]] && rm -rf "$TMPDIR_HOLD"; [[ "$RESTORE_ON_FAILURE" -ne 0 ]] && restore_snapshot; exit $rc' EXIT
+# EXIT trap: roll the staged writes back when a failure armed the flag, so this
+# sweep never exits leaving intentions/ dirty.
+trap 'rc=$?; [[ "$RESTORE_ON_FAILURE" -ne 0 ]] && restore_snapshot; exit $rc' EXIT
 
 # --- Enumerate stranded review+reviewed tactics ------------------------------
 # One node pass: print `<id>\t<pr>` for every tactic at phase:review carrying
@@ -171,14 +164,8 @@ CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
 
 # --- Per candidate: poll the PR, decide, and stage its fix-state write -------
 # Writes only; nothing is landed inside the loop (see the lock budget above).
-# A `conflict` route is only RECORDED here — its hold-node land runs after the
-# batched graph-commit below, because hold-node refreshes from origin/main and
-# lands its own graph-commit, whose assert_clean_outside_ids guard would trip on
-# the still-uncommitted `--set-fix` writes staged by this loop.
 RECOVERED_IDS=()
 RECOVERED_MSGS=()
-CONFLICT_IDS=()
-CONFLICT_NOTES=()
 ACTED=0
 while IFS=$'\t' read -r id pr; do
   [[ -n "$id" && -n "$pr" ]] || continue
@@ -255,15 +242,12 @@ while IFS=$'\t' read -r id pr; do
       ACTED=$(( ACTED + 1 ))
       ;;
     conflict)
-      # Recorded, not landed — see the loop header. Each hold-node call lands
-      # its OWN graph-commit, so at most one conflict is held per sweep (the
-      # lock budget above allows one batched commit; this adds at most one
-      # more). A second conflicting node is picked up on the next tick, whose
-      # enumeration still matches it.
-      [[ "${#CONFLICT_IDS[@]}" -ge 1 ]] && continue
-      CONFLICT_IDS+=("$id")
-      CONFLICT_NOTES+=("ci=$VERDICT merge=$MERGEABLE")
-      ACTED=$(( ACTED + 1 ))
+      # Retired no-op (tactic-graph-router-conflict-routing): the selector's
+      # `pending-merge`/`conflict` candidate path handles CONFLICTING on every
+      # tick through `execution.conflict`, so this sweep must NOT also land a
+      # competing `provision-conflict` hold on the same PR. Nothing staged,
+      # ACTED not incremented.
+      continue
       ;;
     *)
       continue   # null — no regression; nothing to route
@@ -271,7 +255,7 @@ while IFS=$'\t' read -r id pr; do
   esac
 done <<<"$CANDIDATES"
 
-[[ "${#RECOVERED_IDS[@]}" -eq 0 && "${#CONFLICT_IDS[@]}" -eq 0 ]] && exit 0
+[[ "${#RECOVERED_IDS[@]}" -eq 0 ]] && exit 0
 
 # --- Land every staged fix-state write as ONE graph-commit -------------------
 # `-C "$REPO_ROOT"` is mandatory: graph-commit resolves the repo to commit from
@@ -289,9 +273,8 @@ if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]; then
   if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
     echo "reconcile-graph-review-stall: graph-commit failed for ${RECOVERED_IDS[*]} (write rolled back, nothing landed)" >&2
     # The EXIT trap restores every staged write, so intentions/ is left clean
-    # for the next graph writer. The conflict route is skipped this tick (a
-    # failing land means the landing path itself is unhealthy); the next tick
-    # re-detects it — the enumeration still matches.
+    # for the next graph writer. The next tick re-detects these nodes — the
+    # enumeration still matches.
     exit 0
   fi
   # Landed — disarm the rollback so the clean exit keeps the committed state.
@@ -299,38 +282,6 @@ if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]; then
   refresh_lock
 
   for msg in "${RECOVERED_MSGS[@]}"; do echo "$msg"; done
-fi
-
-# --- Land the conflict route as a tracked provision-conflict hold ------------
-# NOT execution.fix: _gate_fix_active reads CI, not mergeability, so a
-# conflicted-but-green PR would be cleared as "resolved" on the next selection —
-# stripping the `reviewed` marker, drafting the PR, and re-running the whole
-# review pass with the conflict untouched (see the header). hold-node births a
-# born-parked hold tactic and adds a blocked_by edge on the source; the source's
-# own office_hours is never written, its `reviewed` marker is preserved, and the
-# hold id is a valid /dispatch-conflict Lane 3 entry point.
-if [[ "${#CONFLICT_IDS[@]}" -gt 0 ]]; then
-  refresh_lock
-  # The single EXIT trap installed above removes TMPDIR_HOLD (and would roll
-  # back staged writes, though by here every one of them has landed).
-  TMPDIR_HOLD=$(mktemp -d) || { echo "reconcile-graph-review-stall: mktemp -d failed" >&2; exit 0; }
-  REASON_FILE="$TMPDIR_HOLD/reason"
-  RECOMMENDATION_FILE="$TMPDIR_HOLD/recommendation"
-
-  for i in "${!CONFLICT_IDS[@]}"; do
-    id="${CONFLICT_IDS[$i]}"
-    printf '%s\n' "This tactic completed review and its merge was armed, but its PR no longer merges cleanly into origin/main (${CONFLICT_NOTES[$i]}). The selector's reviewed-marker exclusion means no worker lane sees it, so the conflict cannot be resolved autonomously from selection." > "$REASON_FILE"
-    printf '%s\n' "Run \`/dispatch-conflict $id\` (Lane 3 reproduces and resolves the origin/main merge on the node's own branch), or resolve the conflict directly in that node's worktree and push the branch. Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source. Do NOT route this through the CI-fix interrupt: it clears on green CI without touching the conflict, and discards the completed review verdict." > "$RECOMMENDATION_FILE"
-
-    HELD_LINE=$( (cd "$REPO_ROOT" && "$UTIL_SCRIPTS/hold-node" "$id" --kind provision-conflict \
-                  --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE") ) || {
-      echo "reconcile-graph-review-stall: hold-node --kind provision-conflict failed for $id" >&2
-      continue
-    }
-    HOLD_ID=$(awk '{print $2}' <<<"$HELD_LINE")
-    echo "held $id -> conflict via ${HOLD_ID:-unknown} (${CONFLICT_NOTES[$i]})"
-    refresh_lock
-  done
 fi
 
 exit 0

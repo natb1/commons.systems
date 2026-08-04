@@ -788,6 +788,16 @@ GSCIPGREP
 exit 0
 GSCIGC
   chmod +x "$GSCI_ROOT/packages/intentionsutil/scripts/graph-commit"
+  # park-node stub: _park_conflict_cap runs it from NATIVE_ROOT on the
+  # conflict-attempt-cap path. Logs its argv so the cap case can assert the park
+  # actually happened (and carried a reason + recommendation).
+  cat > "$GSCI_ROOT/packages/intentionsutil/scripts/park-node" <<'GSCIPARK'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+printf '%s\n' "$*" >> "$_root/park-node-calls.log"
+exit 0
+GSCIPARK
+  chmod +x "$GSCI_ROOT/packages/intentionsutil/scripts/park-node"
   # Fake npx: serves BOTH tsx entry points the selector shells out to —
   # select-targets.ts (the candidate list, from a per-case file) and
   # apply-fix-state.ts (the interrupt write, whose invocation is logged; the
@@ -800,6 +810,10 @@ for _a in "$@"; do
     *apply-fix-state*)
       printf '%s\n' "$*" >> "$_root/apply-fix-calls.log"
       echo '{}'
+      exit 0 ;;
+    *apply-conflict-state*)
+      printf '%s\n' "$*" >> "$_root/apply-conflict-calls.log"
+      cat "$_root/conflict-result.json"
       exit 0 ;;
   esac
 done
@@ -856,6 +870,10 @@ GSCICLAUDE
   gsci_pr false
   gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
   printf 'conflict' > "$GSCI_ROOT/route.txt"
+  # apply-conflict-state's default reply: an UNCAPPED --park-if-capped read (the
+  # other modes' JSON is never parsed by the selector).
+  printf '%s\n' '{"mode":"park-if-capped","id":"tactic-fixture","wrote":false,"capped":false,"attempt":1}' \
+    > "$GSCI_ROOT/conflict-result.json"
   # A git repo whose origin/main carries an intentions/ tree, main checked out
   # at the fixture root so NATIVE_ROOT resolves there.
   git init -q -b main "$GSCI_ROOT"
@@ -1007,5 +1025,100 @@ assert_eq "graph-select-target interrupt: a failed cascade eval is reported on s
 gsc_interrupt_teardown
 
 # <<< END MOVED <<<
+
+# ============================================================================
+# Test: graph-select-target — the merge-conflict interrupt
+# (tactic-graph-router-conflict-routing Unit 3)
+# ============================================================================
+# The router now SURFACES a reviewed awaiting-merge node (as `pending-merge`)
+# instead of excluding it, and this selector's two new gates own the orthogonal
+# `execution.conflict` interrupt: _gate_pending_merge ENTERS it on CONFLICTING,
+# _gate_conflict_active spends an attempt / parks at the cap / self-heals once
+# the PR is MERGEABLE again. The cases below reuse the interrupt fixture above
+# verbatim (its npx stub also serves apply-conflict-state.ts, and its
+# packages/intentionsutil/scripts/ carries graph-commit + park-node stubs) and
+# pin the SHELL seam only: which apply-conflict-state mode is called, and which
+# phase (if any) is emitted. Neither gate consults interruptRoute, so the fake
+# `node` is never exercised on these paths.
+
+# --- Case 7: pending-merge + CONFLICTING enters the interrupt ----------------
+echo "Test: graph-select-target — a CONFLICTING pending-merge node enters the conflict interrupt and emits conflict"
+gsc_interrupt_setup
+gsci_candidate pending-merge
+gsci7_out=$(gsci_run)
+assert_eq "graph-select-target conflict: CONFLICTING pending-merge emits conflict" \
+  "node tactic-fixture tactic conflict" "$gsci7_out"
+assert_eq "graph-select-target conflict: the entry call carries --set-conflict" \
+  "1" "$(grep -q -- "--set-conflict" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 8: pending-merge + MERGEABLE is left to dispatch-auto-merge --------
+echo "Test: graph-select-target — a MERGEABLE pending-merge node is skipped for dispatch-auto-merge"
+gsc_interrupt_setup
+gsci_candidate pending-merge
+gsci_pr true
+gsci8_out=$(gsci_run)
+assert_eq "graph-select-target conflict: MERGEABLE pending-merge emits nothing" "empty" "$gsci8_out"
+assert_eq "graph-select-target conflict: MERGEABLE pending-merge makes no apply-conflict-state call" \
+  "0" "$([ -f "$GSCI_ROOT/apply-conflict-calls.log" ] && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 9: pending-merge + UNKNOWN never dispatches ------------------------
+# GitHub computes mergeability asynchronously; an UNKNOWN must wait, never route.
+echo "Test: graph-select-target — an UNKNOWN-mergeability pending-merge node waits for the next tick"
+gsc_interrupt_setup
+gsci_candidate pending-merge
+gsci_pr null
+gsci9_out=$(gsci_run)
+assert_eq "graph-select-target conflict: UNKNOWN pending-merge emits nothing" "empty" "$gsci9_out"
+assert_eq "graph-select-target conflict: UNKNOWN pending-merge makes no apply-conflict-state call" \
+  "0" "$([ -f "$GSCI_ROOT/apply-conflict-calls.log" ] && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 10: an active interrupt, still conflicted, spends one attempt ------
+echo "Test: graph-select-target — an active conflict interrupt still CONFLICTING spends an attempt and re-emits conflict"
+gsc_interrupt_setup
+gsci_candidate conflict
+gsci10_out=$(gsci_run)
+assert_eq "graph-select-target conflict: an uncapped active interrupt re-emits conflict" \
+  "node tactic-fixture tactic conflict" "$gsci10_out"
+assert_eq "graph-select-target conflict: the cap is read first via --park-if-capped" \
+  "1" "$(grep -q -- "--park-if-capped" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: an uncapped retry spends an attempt" \
+  "1" "$(grep -q -- "--spend-attempt" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: an uncapped retry never parks the node" \
+  "0" "$([ -f "$GSCI_ROOT/park-node-calls.log" ] && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 11: at the cap the node is parked, not re-dispatched ---------------
+echo "Test: graph-select-target — an active conflict interrupt at the attempt cap parks the node instead of retrying"
+gsc_interrupt_setup
+gsci_candidate conflict
+printf '%s\n' '{"mode":"park-if-capped","id":"tactic-fixture","wrote":false,"capped":true,"attempt":3}' \
+  > "$GSCI_ROOT/conflict-result.json"
+gsci11_out=$(gsci_run)
+assert_eq "graph-select-target conflict: a capped interrupt emits nothing" "empty" "$gsci11_out"
+assert_eq "graph-select-target conflict: a capped interrupt parks the source node" \
+  "1" "$([ -f "$GSCI_ROOT/park-node-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: the park names the node and its recommendation" \
+  "1" "$(grep -q "dispatch-conflict tactic-fixture" "$GSCI_ROOT/park-node-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: a capped interrupt never spends another attempt" \
+  "0" "$(grep -q -- "--spend-attempt" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 12: MERGEABLE again self-heals the stale interrupt -----------------
+# Mechanical clear only: the node keeps its ladder phase and `reviewed` marker,
+# and dispatch-auto-merge lands it — no `conflict` emission.
+echo "Test: graph-select-target — an active conflict interrupt on a now-MERGEABLE PR self-heals mechanically"
+gsc_interrupt_setup
+gsci_candidate conflict
+gsci_pr true
+gsci12_out=$(gsci_run)
+assert_eq "graph-select-target conflict: a self-healed interrupt emits nothing" "empty" "$gsci12_out"
+assert_eq "graph-select-target conflict: the self-heal clears MECHANICALLY (review verdict preserved)" \
+  "1" "$(grep -q -- "--clear-conflict-mechanical" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: the self-heal never clears by intention" \
+  "0" "$(grep -q -- "--clear-conflict-intention" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
 
 report_results
