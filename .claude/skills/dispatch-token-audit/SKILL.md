@@ -126,6 +126,7 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
      - The evidence rows from the script (error signatures with counts, phase-model rows, etc.).
      - A concrete, specific suggestion (not a vague "consider X" — name the phase, the model, the script, the error signature).
    - **All ten lenses represented**: lenses with negligible measured impact appear at the bottom with their measured magnitude and a note that the data shows near-zero impact.
+   - **Routing recommendations**: a separate labeled section, rendered on EVERY run, AFTER the ranked opportunities list. It is **not** an eleventh lens and is **not** ranked by `price_proxy_usd` (it is a yield lens, not a cost-magnitude one) — do not merge it into the numbered ranked list and do not reorder it by the Step 5 ranking rule. Build it at report-generation time from the `by_phase_outcome` rates slice plus the static phase→model map, exactly as specified in "Rendering routing recommendations in the report" below. Entries tagged `untrusted` are rendered but explicitly excluded from the actionable set. This section does not depend on `DISPATCH_AUDIT_AGGREGATES_ENABLED` — it is produced whether or not the optional Firestore persist path is on.
 
 7. **Report-only.** The skill writes no control artifacts, creates NO GitHub issues, and modifies NO dispatch workflow files. The user reads the report and decides what to file. This keeps the skill from racing or duplicating the optimization issues it surfaces (e.g. #1171, #1172).
 
@@ -164,13 +165,20 @@ jq '.by_phase_outcome.qa.disposition_distribution' tmp/usage-audit.json
 
 # Top 10 worker sessions by per-run hit_rate
 jq '[.sessions[] | select(.outcome_rates.hit_rate != null)] | sort_by(-.outcome_rates.hit_rate) | .[0:10] | map({id, hit_rate: .outcome_rates.hit_rate})' tmp/usage-audit.json
+
+# Routing-recommendation input: the three pooled rates per phase, one row per phase key.
+# This is the ONLY data-side input the report's "Routing recommendations" section needs;
+# the phase->model side is the static map stated inline below (not in the JSON).
+jq '.by_phase_outcome | to_entries | map({phase:.key, hit_rate:.value.hit_rate, actionability:.value.actionability, fix_rate:.value.fix_rate, sessions:.value.sessions, findings_surfaced:.value.findings_surfaced, findings_actionable:.value.findings_actionable, fixes_applied:.value.fixes_applied})' tmp/usage-audit.json
 ```
 
-These slices are yield metrics, not cost metrics — they do not sort into the ranked token-reduction report. Read them alongside the report to correlate phase spend with phase effectiveness.
+These slices are yield metrics, not cost metrics — they do not sort into the ranked token-reduction report. Read them alongside the report to correlate phase spend with phase effectiveness. The last slice above is also the input to the report's **Routing recommendations** section (Step 6) — see "Rendering routing recommendations in the report" below.
 
-### `routing_recommendations` (advisory, persisted-doc only)
+### `routing_recommendations` (advisory, persisted aggregate doc)
 
-When the optional Firestore persist path is enabled (`DISPATCH_AUDIT_AGGREGATES_ENABLED=1` — see Step 2), `audit-aggregate-writer.mjs` derives a `routing_recommendations` array from `by_phase_outcome` and adds it to the persisted doc. It is NOT part of `tmp/usage-audit.json` and NOT part of the markdown report; it exists only on the persisted aggregate.
+When the optional Firestore persist path is enabled (`DISPATCH_AUDIT_AGGREGATES_ENABLED=1` — see Step 2), `audit-aggregate-writer.mjs` derives a `routing_recommendations` array from `by_phase_outcome` and adds it to the persisted doc. It is NOT part of `tmp/usage-audit.json`; it exists on the persisted aggregate only.
+
+**Two mechanisms, one computation.** The same recommendations are ALSO rendered as the report's "Routing recommendations" section on every run (Step 6). The two are deliberate duplicates of one computation, differing only in where and when they run: this one is JS-computed by `audit-aggregate-writer.mjs` on the persisted doc, and only when the optional persist gate is on; the report section is LLM-computed at report time from the same `by_phase_outcome` slice and the same static map, on every run including the (usual) runs with the persist path off. Both apply the identical grounding rule below, so they must agree for any window where both are produced. Neither applies anything — both are advisory.
 
 One entry per phase key present in `by_phase_outcome`:
 
@@ -189,12 +197,71 @@ One entry per phase key present in `by_phase_outcome`:
 
 The field is a recommendation surface only. The writer never writes `dispatch-phase-model`, `dispatch-phase-effort`, or any other routing-policy file — no routing change is ever applied automatically (strategy-token-economy clarification 10 / condition 3).
 
+### Rendering routing recommendations in the report
+
+Step 6 emits a **Routing recommendations** section on every run. There is no rendering
+script — compute it in-session, the same way the ten lenses are interpreted. Inputs:
+
+1. The `by_phase_outcome` rates slice (last jq slice in the block above): one row per
+   phase key with `hit_rate`, `actionability`, `fix_rate`.
+2. The **static phase→model map**, stated inline here because `dispatch-phase-model` is
+   a bash `case` statement and cannot be queried with `jq`:
+
+   | phase | current model |
+   | --- | --- |
+   | `qa` | `sonnet` |
+   | `review` | `sonnet` |
+   | `fix-checks` | `sonnet` |
+   | `fix-conflicts` | `sonnet` |
+   | `main-qa` | `sonnet` |
+   | anything else | unmapped — inherits the session default (render as `default`) |
+
+   **Keep this table in sync by hand with
+   `.claude/skills/dispatch-propagate/scripts/dispatch-phase-model`, which is the single
+   source of truth.** (`audit-aggregate-writer.mjs`'s `PHASE_MODEL_MAP` is a third mirror
+   of the same map; all three must agree.) If a run's data shows a phase key absent from
+   this table, treat it as unmapped rather than guessing.
+
+Per phase key present in `by_phase_outcome`, emit one entry:
+
+- **Yield metric selection.** Use the phase's primary metric — `review` → `hit_rate`,
+  `qa` → `actionability`. If that metric is `null` for the window (denominator 0), or the
+  phase is not one of those two, fall back to the first non-null of `hit_rate`,
+  `actionability`, `fix_rate`. If all three are `null`, the metric value is `null`.
+- **Untrusted rule (verbatim, same as the writer's).** An entry is `untrusted` when its
+  selected metric value is `null`, OR when the phase+metric pair has known-unverified
+  accounting. The current unverified list is exactly: **`qa` + `hit_rate`** and
+  **`qa` + `fix_rate`** — both put `fixes_applied` in the numerator and qa's
+  `fixes_applied` accounting gap is presently open (qa-fix delegates its fixes to
+  `/implement-unit`; see `.claude/docs/outcome-envelope.md`). `qa` + `actionability` and
+  `review` + `hit_rate` are NOT subject to that gap. No other pair is unverified today.
+- **Recommendation.** Recommend a model change only when the entry is trusted AND its
+  metric value is `>= 0.5` AND the phase is unmapped in the table above — in that case
+  recommend `sonnet`, with quality-preservation evidence of the form
+  "verified `<metric>` `<value>` >= 0.5; phase orchestrator delegates generative work to
+  `agent()`/subagents". Otherwise render "no change recommended".
+
+Render as a table or list, each entry carrying: **phase**, **current model → recommended
+model** (or "no change recommended"), **yield metric name + value** with whether it is
+verified, and **quality-preservation evidence** (or, when untrusted, the reason the
+accounting is unverified in place of evidence).
+
+Then, immediately under the section, state which entries are excluded: list every
+`untrusted` entry by phase and say explicitly that they are **excluded from the actionable
+set** and must not be acted on. Never rank or present an untrusted entry alongside the
+verified ones as if it were actionable.
+
+The section is advisory output only. Applying a recommendation is a hand edit by the
+author (next subsection); this skill's report step writes no file other than the report.
+
 ### Acting on routing recommendations
 
 `routing_recommendations` is advisory input to a human decision, never an auto-apply
 queue. The loop:
 
-1. The audit surfaces `routing_recommendations` on the persisted aggregate doc (above).
+1. The audit surfaces the recommendations — in the report's "Routing recommendations"
+   section on every run, and additionally as `routing_recommendations` on the persisted
+   aggregate doc when the optional persist path is enabled (both above).
 2. The author reviews them at office-hours, excluding any entry tagged `untrusted: true`
    per the grounding rule above.
 3. An approved change is applied **by hand**: the author edits the static map directly —
