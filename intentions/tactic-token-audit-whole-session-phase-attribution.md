@@ -30,7 +30,7 @@ attention:
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: review
+phase: done
 execution:
   branch: tactic-token-audit-whole-session-phase-attribution
   pr: 3032
@@ -41,7 +41,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T04:03:29Z
+    mergeCommitSha: 371c3b1e0b6d4e09f016512e7468f8a2c87f94e3
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
