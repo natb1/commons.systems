@@ -145,32 +145,30 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 97
+  boost: 50
   override: null
-  rationale: "Author-directed 2026-07-28 /align-strategy round: lift to the top of
-    the authored discretionary band. Composes with the +5.33 inherited from
-    strategy-graph-native-dispatch to a resolved 102.33, just above the current
-    top authored rank of 101.33 (tactic-dispatch-conflict-branch-merge-lane,
-    boost 96) — measured from select-targets.ts this session, not estimated.
-    Deliberately held at 97, below strategy-main-health's standing 100, so no
-    >=100 authorization or ACK substring is required (schema rule 18). It does
-    NOT out-rank the live composed max of 387.33
-    (tactic-scope-fingerprint-plan-substance, whose rank is compounded by
-    inbound blocked_by rather than authored); that node is at qa on PR #2974 and
-    expected to complete, after which this becomes the effective top selectable
-    target. Justification: this defect fails whole dispatch ticks
-    deterministically and misreports its own cause, so every occurrence costs
-    both the tick and the diagnosis time."
-phase: qa
+  rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
+    (50 / 20 / 10) that puts write-path integrity work above ordinary feature
+    work. This band holds the silent graph-write-corruption defects plus the two
+    paths the bootstrap arms or depends on. Interim scaffolding only -
+    tactic-attention-tier-ranking replaces the whole numeric scheme with
+    lexicographic (tier, rank) and max-lifting, and
+    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
+phase: done
 execution:
   branch: tactic-graph-commit-noop-landing-false-failure
   pr: 2981
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-31T14:31:12Z
+    mergeCommitSha: 10f9e91aee7560b9feaca9f0d2509b962720a989
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -414,3 +412,138 @@ Manual / observe-in-production checks (not auto-runnable):
 - Confirm a normal (non-no-op) land still waits correctly. On the first real graph write after the change, the scratch push fires a fresh fast-path run whose rows are the newest per name and start as `pending`; `await_checks` must wait for them to conclude and then land. If instead it lands instantly off older rows, the ordering key is wrong (that is the `max_by` behaviour to check).
 - Sanity-check the new diagnostic once against a genuinely non-green SHA if one occurs: the terminal message should name per-context state (`acceptance=…`, `lint=…`) rather than asserting contention.
 
+
+## Observed 2026-07-30: the blast radius is fleet starvation, not a false failure
+
+The record above scopes this defect as a *false failure* — one tick exits 1 and
+one node's write is rolled back. Observed live during the dispatch-pipeline
+bootstrap's Stage 4 drain, that understates it by a wide margin. **The severity
+this node should be planned against is fleet-wide starvation.**
+
+What was seen:
+
+- An orphaned `graph-commit` held `refs/graph/landing-lock` for **17 minutes**,
+  renewing the claim past its TTL. `LOCK_TTL_SECONDS` is
+  `CHECK_TIMEOUT_SECONDS + 60` = 240s (`graph-commit:119`, `:128`), so the
+  expiry-and-steal path that is supposed to bound a dead holder never fired —
+  the process was alive and renewing, just looping on a gate it could never
+  pass.
+- `origin/main` was frozen for **~35 minutes across the entire fleet**. Every
+  graph write serializes on that lock, so this is not one node's problem: no
+  phase transition, no park, no reconcile could land for any node while it was
+  held.
+- The scratch branch was at **exactly `origin/main`** — the write was a genuine
+  **no-op**, because the reconcile it was landing had already landed 19 minutes
+  earlier. So the whole fleet was frozen for over half an hour by a landing
+  cycle for a change that did not exist.
+
+That last point is what connects it to the diagnosis already recorded here: the
+no-op path enters a real landing cycle (`graph-commit:1476`), and the row-counting
+`await_checks` gate makes that cycle unpassable on an already-stamped SHA. The
+new information is that the loop does not merely fail — it **holds the global
+write lock while failing**, so the cost is paid by every other writer.
+
+Resolved by `SIGTERM` to the orphan, with author approval.
+
+**Termination is safe by construction** — worth recording, because the instinct
+is to delete the lock ref instead, which is unsafe:
+
+- `graph-commit:1402-1405` converts `INT`/`TERM` into `exit 130` precisely
+  because an `EXIT` trap does not reliably fire on signals in all shells.
+- `cleanup()` (`:335`) then restores the original HEAD, deletes the pushed
+  scratch branch (`:349-351`), and releases the lock via its `LOCK_HELD`
+  backstop (`:356-358` → `lock_release()`, `:885`), which pushes with
+  `--force-with-lease`.
+
+So `SIGTERM` to the holder is the correct remedy for an orphan, and deleting
+`refs/graph/landing-lock` by hand never is. Note also that several live
+`graph-commit` processes are legitimate fleet contention, not orphans — check
+`pgrep -af 'packages/intentionsutil/scripts/graph-commit'` before concluding
+anything, and discount the self-match from your own shell command.
+
+### What this means for the planned fix
+
+The plan in this node is scoped to making the no-op case exit early and to
+correcting the row-counting gate. Both remain right. What the plan should add is
+that **the fix's value is bounded by lock-hold time, not by message accuracy** —
+a change that produced a correct terminal diagnostic but still burned five
+180-second attempts under the lock would leave the starvation intact. Prefer the
+early-exit-before-lock-acquisition ordering wherever the two are separable, and
+treat "how long can a no-op hold `refs/graph/landing-lock`" as the acceptance
+question.
+
+## needs-main residue
+
+- id: 11
+  title: Interim-by-construction scope holds until tactic-graph-ref-split lands
+  url_path: current
+  expected_outcome: The interim fix stops the deterministic dispatch-tick failure without accruing debt the greenfield ref-split fix must pay down; live ticks confirm genuine no-ops land instantly.
+  finding: Judgment item flagged planned-deferral by the qa-fix disposition Workflow — the golden-path claim (a genuine no-op lands instantly on the live dispatch tick) and the non-recurrence of the 12-row false failure are only observable against real GitHub check-run data across subsequent ticks on main, not at PR merge time.
+
+## Verification evidence 2026-07-31 — residue item 11 PASSES, park was a misroute
+
+Machine-verified after PR #2981 merged (2026-07-31T14:31:12Z, merge commit
+`10f9e91a`). The single `needs-main` residue item (id 11) resolves entirely from
+live post-merge machine data — `journalctl` for the tick behavior, `gh api
+.../check-runs` for the row data, `gh pr view --json files` for the scope claim.
+No author-required question remains, so the node advances `main-qa` → `done`
+rather than waiting on office-hours.
+
+**Clause A — "live ticks confirm genuine no-ops land instantly" — PASS.** The
+Unit 2 short-circuit fired on a real headless tick (heartbeat #2022,
+2026-07-31T15:00–15:01Z), 29 minutes after the merge:
+`graph-commit: no new changes to stage for … and HEAD is already origin/main
+(663d38c9) — nothing to push; skipping the landing cycle`, with the next
+`graph-select-target` step 3 seconds later. No `refs/graph/landing-lock` push,
+no `graph/**` scratch branch, and no check-run poll appears anywhere in the
+window. Contrast the pre-fix no-op over the same node set 29 minutes earlier:
+`— landing current HEAD` at 14:31:38Z → lock push → scratch push → `landed` at
+14:32:54Z = **76 s of stamp cycle for a zero-diff write**.
+
+**Clause B — "non-recurrence of the 12-row false failure" — PASS.** The
+signature (`required checks not green within …` / `could not land on main …
+main busy`) has **243 occurrences** in the five days before the fix, including
+two full 5-attempt burn cycles in the 45 minutes before merge (`12/4 green` at
+13:49–14:01Z — the literal 12-row symptom — then `16/4 green` at 14:05–14:17Z as
+a fourth duplicate set landed). The last occurrence is **14:17:54Z, 14 minutes
+before the merge**; there are **zero** occurrences after the new binary reached
+the tick's checkout at 14:31:42Z. The stuck SHA `06c19a40` carries 16 rows
+across 4 required contexts (4 each of acceptance, preview-and-smoke, lint,
+unit-tests) — the exact unlandable shape — and is already an ancestor of
+`origin/main`. Post-fix, the genuine land `d4f0b0d3` (14:47:52Z, first attempt,
+no retry lines) and the no-op SHA `663d38c9` each carry one row per context.
+
+  One honest limit, recorded rather than papered over: post-merge no
+  *duplicate-row* SHA has yet reached `await_checks` on live main, because
+  Unit 2 now short-circuits the path that produced them. Unit 1's
+  distinct-context gate is therefore proven by the harness cases (33–36, green
+  in the required `unit-tests` run on merge commit `10f9e91a`) rather than by a
+  live duplicate-row land. That does not weaken item 11, whose claim is
+  non-recurrence of the failure, not exercise of the gate.
+
+**Clause C — "without accruing debt the greenfield ref-split fix must pay
+down" — PASS.** PR #2981 touches only `packages/intentionsutil/SEPARABILITY.md`,
+`scripts/graph-commit`, and the three harness scripts — confined to
+`await_checks` plus the nothing-staged branch, i.e. precisely the two code paths
+`tactic-graph-ref-split` deletes wholesale. That successor is alive and
+progressing (`phase: implement`, unparked). Residual scope was split out as its
+own node, `tactic-graph-commit-noop-shortcircuit-head-behind`, rather than left
+as debt.
+
+**Why this sat in `main-qa` at all — an instance of the verifiability-sort
+defect.** The `/qa-main` pass sorted item 11 to office-hours on the ground that
+it "is not browser-verifiable — its `url_path` is the literal string `current`".
+That is true and irrelevant: the graph's criterion is machine-verifiable vs.
+author-required, not browser vs. non-browser. Recorded here as a live instance
+for `tactic-qa-main-verifiability-sort-criterion`, which owns the fix.
+
+**The park never landed — a live instance of the Stop-hook backstop defect.**
+The `/qa-main` pass built the park as local commit `db99d1ec` in
+`.claude/worktrees/tactic-graph-commit-noop-landing-false-failure`, which was
+never pushed to any remote; `park-node`'s exit trap then reverted the working
+tree, leaving the node on `origin/main` untouched at `phase: main-qa` /
+`office_hours: null` and the park text stranded in the session's job directory.
+Both the misroute and the stranding are recorded on
+`tactic-phase-terminal-requires-disposition`, which owns deleting that backstop
+in favor of the tick sweep. The stranded commit is discarded rather than landed,
+because the correct disposition is this evidence, not the park.

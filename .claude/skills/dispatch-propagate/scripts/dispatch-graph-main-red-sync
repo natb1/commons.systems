@@ -18,7 +18,31 @@
 # phase: "done" so the next red episode re-fires the gate on first detection. A
 # graph write is a side effect of this script, not of the pure selector.
 #
-# Usage: dispatch-graph-main-red-sync
+# Usage: dispatch-graph-main-red-sync [--read-only]
+#
+#   --read-only (alias --no-complete)
+#       Read the open tactic-main-red-* set and print it, then stop. The
+#       recovery-completion loop is skipped ENTIRELY — no repo-health probe, no
+#       dump-node/write-node/graph-commit, no graph write of any kind. The
+#       stdout protocol and the always-exit-0 contract are unchanged.
+#
+#       This mode exists because completing the open latch nodes is an
+#       AUTHORITATIVE act, not a reading: dispatch-select-tick gates auto-merge
+#       SOLELY on the open set being empty, so completing those nodes re-arms
+#       the gate and PRs merge onto main as a downstream consequence. That
+#       authority belongs to the scheduler's tick, which runs this script with
+#       no flag. Any other caller that merely wants to KNOW whether the latch is
+#       held — notably the dispatch-fleet-watch watchdog, which runs unattended
+#       on its own systemd timer with no relationship to a tick — must pass
+#       --read-only. Two reasons, both load-bearing:
+#         1. A transient green repo-health reading (rate-limited gh answer,
+#            partially-aggregated CI) during a still-red main would otherwise
+#            let a watchdog clear the latch and unblock auto-merge onto a broken
+#            main.
+#         2. The timer's cadence is unrelated to the tick's, so an
+#            unflagged watchdog invocation races the tick through the SAME
+#            dump-node/write-node/graph-commit cycle on the SAME node in the
+#            SAME worktree — the documented graph-commit corruption class.
 #
 # Stdout protocol: each open tactic-main-red-* node's id, one per line — the
 # SAME set read at the top of this run, regardless of whether the
@@ -44,12 +68,37 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # as sibling script dispatch-graph-census).
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
+# --- argument parsing ---------------------------------------------------------
+# An unknown argument is a caller bug, but this script's contract is ALWAYS exit
+# 0 (see the header): exiting non-zero here could be swallowed by a caller's
+# `|| true` and read as "no open node / main healthy". So an unknown argument is
+# reported on stderr and treated as UNKNOWN on stdout — fail closed.
+READ_ONLY=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --read-only|--no-complete) READ_ONLY=1; shift ;;
+    *)
+      echo "dispatch-graph-main-red-sync: unknown argument: $1 (usage: dispatch-graph-main-red-sync [--read-only]); treating main health as UNKNOWN" >&2
+      printf 'UNKNOWN\n'
+      exit 0
+      ;;
+  esac
+done
+
 # --- Read the open tactic-main-red-* nodes (verbatim from the former inline
 # Step 1c block, relocated) ---------------------------------------------------
 OPEN_MAIN_RED=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const { listNodes } = await import("./packages/intentionsutil/src/store.js");
+  // Anchored to the exact tactic-main-red-<shortsha> shape (8 lowercase hex
+  // chars, dispatch-diagnose-main SKILL.md: `git rev-parse --short=8`), NOT a
+  // bare startsWith prefix test — a bare prefix test previously matched ANY
+  // tactic id merely beginning with "tactic-main-red-" (e.g. an unrelated
+  // hand-authored tactic like tactic-main-red-sync-completion-test), causing
+  // this script to mechanically auto-complete it to phase:"done" as though it
+  // were a real main-red episode latch.
+  const MAIN_RED_ID = /^tactic-main-red-[0-9a-f]{8}$/;
   for (const n of listNodes("./intentions")) {
-    if (!n.id.startsWith("tactic-main-red-")) continue;
+    if (!MAIN_RED_ID.test(n.id)) continue;
     if (n.phase === "done") continue;
     // NOTE: office_hours-parked nodes are DELIBERATELY kept open. A park means
     // the fix hit a blocker and awaits a human — the red episode is unresolved
@@ -65,7 +114,10 @@ OPEN_MAIN_RED=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   OPEN_MAIN_RED=UNKNOWN
 }
 
-if [[ -n "$OPEN_MAIN_RED" && "$OPEN_MAIN_RED" != "UNKNOWN" ]]; then
+# --read-only stops here: the read above is the whole job, and NOTHING below
+# this point may run — the recovery-completion loop is a graph write that
+# re-arms the auto-merge gate.
+if [[ "$READ_ONLY" -eq 0 && -n "$OPEN_MAIN_RED" && "$OPEN_MAIN_RED" != "UNKNOWN" ]]; then
   # Use explicit exit-code capture: a failed probe would produce empty output,
   # which -z would treat as "green" and incorrectly complete the latch. The
   # probe lives in the standalone repo-health sensor: repo-health

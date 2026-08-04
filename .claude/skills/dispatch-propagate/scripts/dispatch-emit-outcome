@@ -4,7 +4,7 @@
 # Usage: dispatch-emit-outcome \
 #          --phase <phase> \
 #          --repo <owner/repo> \
-#          --issue <issue-num> \
+#          (--issue <issue-num> | --node-id <node-id>) \
 #          [--pr <pr-num>] \
 #          [--base-sha <sha>] \
 #          --findings-surfaced <n> \
@@ -21,6 +21,13 @@
 #
 # The envelope contract is defined in .claude/docs/outcome-envelope.md.
 # That doc is the single source of truth for fields, enums, and formulas.
+#
+# --issue / --node-id: exactly one of these two must be given. --issue is the
+#   legacy gh-issue lane (a positive integer). --node-id is the graph-native
+#   lane's target: a non-numeric intention-node id (e.g. tactic-foo), mirroring
+#   the session sidecar's dual issue/node_id nullable shape
+#   (dispatch-stamp-session:15-19). Both or neither given is a validation
+#   error (exit 2).
 #
 # --phase: one of the ALLOWED_PHASES set (review, qa). Extensible: update
 #   ALLOWED_PHASES below to add future phases.
@@ -57,6 +64,7 @@ ALLOWED_DISPOSITIONS=("completed" "completed_with_fixes" "escalated")
 PHASE=""
 REPO=""
 ISSUE=""
+NODE_ID=""
 PR=""
 BASE_SHA=""
 FINDINGS_SURFACED=""
@@ -73,7 +81,7 @@ usage() {
 usage: dispatch-emit-outcome \
          --phase <phase> \
          --repo <owner/repo> \
-         --issue <issue-num> \
+         (--issue <issue-num> | --node-id <node-id>) \
          [--pr <pr-num>] \
          [--base-sha <sha>] \
          --findings-surfaced <n> \
@@ -85,6 +93,9 @@ usage: dispatch-emit-outcome \
          [--terminated-reason <reason>]
 
   --phase        one of: review qa
+  --issue        legacy gh-issue lane target (positive integer)
+  --node-id      graph-native lane target (lowercase node-id slug);
+                 exactly one of --issue / --node-id is required
   --disposition  one of: completed completed_with_fixes escalated
   --terminated-reason  required when disposition=escalated, forbidden otherwise
 EOF
@@ -105,6 +116,9 @@ while [[ $# -gt 0 ]]; do
     --issue)
       [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --issue requires a value" >&2; exit 2; }
       ISSUE="$2"; shift 2 ;;
+    --node-id)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --node-id requires a value" >&2; exit 2; }
+      NODE_ID="$2"; shift 2 ;;
     --pr)
       [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --pr requires a value" >&2; exit 2; }
       PR="$2"; shift 2 ;;
@@ -153,7 +167,18 @@ _require() {
 
 _require phase          "$PHASE"
 _require repo           "$REPO"
-_require issue          "$ISSUE"
+
+# --issue / --node-id: exactly one of these two must be given. Neither given,
+# or both given, is a clear validation error rather than a silent fallback.
+if [[ -z "$ISSUE" && -z "$NODE_ID" ]]; then
+  echo "dispatch-emit-outcome: exactly one of --issue / --node-id is required (neither given)" >&2
+  exit 2
+fi
+if [[ -n "$ISSUE" && -n "$NODE_ID" ]]; then
+  echo "dispatch-emit-outcome: exactly one of --issue / --node-id is required (both given)" >&2
+  exit 2
+fi
+
 _require findings-surfaced   "$FINDINGS_SURFACED"
 _require findings-actionable "$FINDINGS_ACTIONABLE"
 _require fixes-applied       "$FIXES_APPLIED"
@@ -202,7 +227,20 @@ _require_pos_int() {
   fi
 }
 
-_require_pos_int issue               "$ISSUE"
+_require_node_id() {
+  local flag="$1" val="$2"
+  if [[ ! "$val" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || [[ "$val" =~ ^[0-9] ]]; then
+    echo "dispatch-emit-outcome: invalid --${flag} '${val}' (expected a lowercase node-id slug; numeric-prefixed names are the legacy gh lane)" >&2
+    exit 2
+  fi
+}
+
+if [[ -n "$ISSUE" ]]; then
+  _require_pos_int issue "$ISSUE"
+fi
+if [[ -n "$NODE_ID" ]]; then
+  _require_node_id node-id "$NODE_ID"
+fi
 _require_nonneg_int findings-surfaced   "$FINDINGS_SURFACED"
 _require_nonneg_int findings-actionable "$FINDINGS_ACTIONABLE"
 _require_nonneg_int fixes-applied       "$FIXES_APPLIED"
@@ -235,6 +273,18 @@ fi
 # Absent nullable fields bind to JSON null via --argjson.
 # ---------------------------------------------------------------------------
 
+if [[ -n "$ISSUE" ]]; then
+  issue_arg=(--argjson issue "$ISSUE")
+else
+  issue_arg=(--argjson issue "null")
+fi
+
+if [[ -n "$NODE_ID" ]]; then
+  node_id_arg=(--arg node_id "$NODE_ID")
+else
+  node_id_arg=(--argjson node_id "null")
+fi
+
 if [[ -n "$PR" ]]; then
   pr_arg=(--argjson pr "$PR")
 else
@@ -264,7 +314,8 @@ jq -n \
   --arg     schema              "dispatch.outcome.v1" \
   --arg     phase               "$PHASE" \
   --arg     repo                "$REPO" \
-  --argjson issue               "$ISSUE" \
+  "${issue_arg[@]}" \
+  "${node_id_arg[@]}" \
   "${pr_arg[@]}" \
   "${base_sha_arg[@]}" \
   --argjson findings_surfaced   "$FINDINGS_SURFACED" \
@@ -279,6 +330,7 @@ jq -n \
     phase:                $phase,
     repo:                 $repo,
     issue:                $issue,
+    node_id:              $node_id,
     pr:                   $pr,
     base_sha:             $base_sha,
     findings_surfaced:    $findings_surfaced,

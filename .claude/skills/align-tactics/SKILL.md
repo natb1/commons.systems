@@ -43,7 +43,8 @@ It inherits along two axes, each with a part it deliberately does **not** take:
   target is the `<strategy-node-id>` argument; sequencing is `blocked_by`
   frontmatter edges, not a PR-precondition scan.
 - **From `/align` (`.claude/skills/align/SKILL.md`)** — take
-  the write path (`write-node.ts` → body `Edit` → `graph-commit`), the
+  the write path (`write-node.ts` → `assert-node-fresh` → body `Edit` →
+  `graph-commit`), the
   citation of `validateGraph` rules by number, and the register. Invert the
   interaction model: `/align` is interview-driven; **`/align-tactics`
   is autonomous and never calls `AskUserQuestion`**. This inversion is the
@@ -117,6 +118,70 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    way, **STOP** and freshen (`git fetch origin main && git merge
    origin/main`) before proceeding. Never treat a failed fetch as license to
    proceed on unverified state.
+
+   **Then, unconditionally, on both entry paths — run the shared mechanical
+   selection-validity gate**, in the worktree, after `assert-worktree-fresh`
+   and **before any graph read** (before any `readNode` call or drift grep
+   below). This includes the `provision-node-worktree` path too, even though
+   `provision-node-worktree` already ran `check-node-selection.ts` itself
+   moments earlier: the re-run here is a redundant, idempotent ~0.7s check,
+   and paying it uniformly is the point — a session that provisioned once via
+   `provision-node-worktree` but re-enters later (e.g. a resumed session)
+   would otherwise slip through on re-entry with no fresh gate check at all.
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/assert-node-selection "<target-node-id>" align-tactics
+   ```
+
+   `align-tactics` is the correct `<selected-phase>` literal for **both**
+   target kinds this skill handles. For a `strategy-<slug>` target,
+   `check-node-selection.ts` requires the node still be `kind: strategy` at
+   its native null phase and defers wholesale to a helper predicate,
+   `strategyAlignSelectable`. For a `tactic-<slug>` target — draft/raw
+   finalize or soft-frozen re-plan alike — the gate skips the phase-literal
+   comparison and defers wholesale to `frozenTacticSelectable`, which is
+   membership in the selector's own candidate list
+   (`packages/intentionsutil/src/router.ts`). The selector emits an
+   uncapped, fully-sorted candidate list, so a low-ranked draft is still
+   admitted — ranking never causes a false exit 12.
+
+   Route on the exit code:
+
+   - `0` — proceed; stdout is the node's scope fingerprint (discard it here,
+     Step 0 does not consume it).
+   - `12` — the selection is no longer valid: the node advanced past draft
+     and is not soft-frozen, was parked to `office_hours`, was resolved or
+     pruned, or has incomplete blockers. **STOP.** Make **no** graph write,
+     open no PR, and record the terminal disposition so the Stop hook can
+     reap the job, reusing the same call this Step 0 already uses for the
+     held-claim case above:
+     ```bash
+     packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
+     ```
+     `no-claim` is already a validated disposition value in
+     `mark-node-terminal`'s vocabulary (it is the same value the held-claim
+     case above uses) — this is not a new value.
+   - `13` — not reachable at this phase: the gate's scope-chained-phase
+     check only applies to the `fix`/`qa`/`review` phases, not
+     `align-tactics`. Treat it as a mechanical error: report and stop.
+   - any other non-zero — mechanical error (unresolvable project root,
+     failed fetch, malformed store): report and stop. A stale selection
+     (`12`) is NOT an `office_hours` park and NOT a defect; a mechanical
+     error is neither of those either — it is a broken environment to report
+     plainly, per this repo's code-style convention of clear errors over
+     defensive fallbacks.
+
+   **Deliberately not gated by `assert-node-selection`** — each of these has
+   a shape this gate cannot express, so a future session should not "finish
+   the rollout" by wiring it in:
+
+   - `/office-hours` — operates on an **office_hours-parked** node by
+     definition; the gate's park check would reject every legitimate run.
+   - `/align-strategy` — may target a strategy that doesn't exist yet (a
+     new-strategy interview), and strategies carry no phase to gate on.
+   - `/align-init` — has no node target at all.
+   - `/grounding-research` — walks many nodes; there is no single selected
+     target to gate.
 
 ## Tactic target — per-node finalize or re-plan
 
@@ -193,6 +258,9 @@ and its existing non-draft children — the Idempotency section's census script
 finds both, and its `classification` field tells a draft (`phase` absent **and**
 `office_hours` unset) from a born-parked child (`phase` absent **with** `office_hours` set,
 which is decided human-owned work, **not** a draft — leave it out of the input).
+Dump the base manifest for every pre-existing node this round will edit
+**here**, at this read, before any write — see `references/write-path.md`'s
+"Capture a base manifest" section for the recipe.
 
 **Build `args`.**
 
@@ -290,8 +358,10 @@ The Workflow authored no files; this session lands every graph write. The
 shape of the work, in order: **mint** real node ids for the Workflow's
 `temp_ref`s and rewrite edges, **dump** a base manifest for every
 pre-existing node this round touches (`dump-node.ts`), write each node's
-**frontmatter** (`write-node.ts`), `Edit` in each planned tactic's **body**
-(the Workflow's `body_markdown`), **land** the whole round in one or a few
+**frontmatter** (`write-node.ts`), **assert** freshness against
+`origin/main` for every id about to receive a body write
+(`assert-node-fresh`), `Edit` in each planned tactic's **body** (the
+Workflow's `body_markdown`), **land** the whole round in one or a few
 `graph-commit --base` calls, then **validate**
 (`validate-graph.ts`). Parks (`result.parks`) are written the same way, as
 `office_hours: {reason, since}` on the target node. `graph-commit` has two
@@ -299,10 +369,11 @@ distinct exit-1 cases — a parking message (a concurrent writer landed first;
 this session's content is unlanded but preserved on disk) versus a
 busy-main-exhaustion error (nothing landed, no park) — either way, report and
 stop rather than retry automatically. See `references/write-path.md` for the
-full write-node.ts/dump-node.ts/graph-commit mechanics, exit-1 discrimination,
-park-writing, and the fingerprint/round-accounting details (per-strategy
-`execution.strategy_fingerprint` map via `strategy-fingerprint.ts`, and the
-strategy's `rounds.count`/`last_completed`/`last_aligned` bookkeeping).
+full write-node.ts/dump-node.ts/assert-node-fresh/graph-commit mechanics,
+exit-1 discrimination, park-writing, and the fingerprint/round-accounting
+details (per-strategy `execution.strategy_fingerprint` map via
+`strategy-fingerprint.ts`, and the strategy's
+`rounds.count`/`last_completed`/`last_aligned` bookkeeping).
 
 Once the round has landed and `validate-graph.ts` is clean, record the
 terminal disposition:

@@ -33,21 +33,7 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention:
-  boost: 96
-  override: null
-  rationale: "Author-directed 2026-07-26: boost to top ranking. Re-boosted from
-    the 85 band after the machinery-write custody hazard this tactic removes by
-    construction fired live during /qa-fix on tactic-mechanical-park-producers
-    (PR #2970): the Step 3.6 `## needs-main residue` append this node names as
-    the sole current machinery writer tripped the scope-custody gate against its
-    own expected output, demoting a qa-complete node to implement. The hazard is
-    no longer prospective, so the sequenced-target framing that justified the 85
-    placement no longer holds. Sized at 96 (own claim) so that composed with the
-    +5 inherited from strategy-graph-native-dispatch it reaches an authored 101,
-    above the current live selectable composed max of 100.33, while staying
-    strictly below strategy-main-health's standing 100 boost value so no schema
-    rule 18 dominance ACK is required."
+attention: null
 phase: qa
 execution:
   branch: tactic-scope-fingerprint-plan-substance
@@ -59,96 +45,143 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-transition-node-stamp-landed-body
 office_hours:
-  reason: "/qa-fix: scope-deviation escalation on residue item 10 (\"Transitional
-    legacy-fingerprint acceptance has no tracked deletion follow-up\") — the
-    disposition Workflow's fix-plan judged the only fix is filing a new
-    follow-up tactic graph node via write-node.ts + graph-commit, which is
-    outside qa-fix's auto-fix lane (code-only, working-tree-only). PR #2974
-    itself is otherwise fully QA'd: 8/8 script-verifiable checks pass, 1
-    needs-human-judgment item already-satisfied and dropped as PASS. Needs a
-    human call: file the follow-up tactic node, or accept comment-only tracking
-    of the legacy-fingerprint deletion condition."
-  since: 2026-07-28
+  reason: "/dispatch-conflict: stale-skill-body deadlock
+    (tactic-node-worker-fresh-skill-body), not a QA or judgment item — this node
+    cannot progress autonomously and cannot self-heal. PR #2974 is genuinely
+    CONFLICTING/DIRTY against origin/main, which is a real origin/main merge
+    conflict on a graph node's own branch — exactly the case /dispatch-conflict
+    Lane 3 exists to service. But the node's worktree is 143 commits behind
+    origin/main, and the SKILL.md it serves predates Lane 3: the worktree copy
+    of .claude/skills/dispatch-conflict/SKILL.md contains 0 occurrences of
+    \"Lane 3\" (blob bca805af8dc7d52a4a0d2e595088c321ec61a107) while
+    origin/main's copy contains 28 (blob
+    6544ffc934167a6e26b951c75c0f6605bdcaff3a). Two successive sessions
+    (9e84a55e, 9eed1a95) each read that pre-Lane-3 body, correctly found that
+    Lane 1 is gated on a numeric <N>- issue-branch shape this branch does not
+    have and Lane 2 only services nodes graph-commit already parked with a
+    mechanical-unresolved marker (office_hours was null), correctly concluded
+    neither lane applied, and correctly stopped without taking any graph-write
+    action. Both behaved exactly as instructed; the instructions they were given
+    were stale. This is why releasing the node does not help:
+    provision-node-worktree recreates a worktree from the existing branch
+    (remote first, then local) and only falls through to `worktree add -b <id>
+    origin/main` when neither exists, so a respawned worker re-checks-out the
+    same stale branch and re-reads the same pre-Lane-3 skill. Every reap
+    therefore reproduces the identical dead end while consuming a concurrency
+    slot, and each respawn is itself a spawn event that provokes
+    tactic-router-spawn-window-duplicate-worker. Parked rather than reaped so
+    the node leaves the router's lane instead of churning. Nothing is at risk in
+    the worktree: all code work is already pushed to
+    origin/tactic-scope-fingerprint-plan-substance, and the only commits absent
+    from both origin/main and the remote branch are two merge commits whose
+    trees are byte-identical to a recomputed `git merge-tree --write-tree` of
+    their parents (verified 2026-07-31) — no conflict resolutions, no original
+    content."
+  since: 2026-07-31
   recommendation: >-
-    # Recommendation — `tactic-scope-fingerprint-plan-substance` (PR #2974)
+    ## Recommendation — unblock tactic-scope-fingerprint-plan-substance (PR
+    #2974)
 
 
-    ## The decision
+    Two independent things are wrong. Do them in this order; the second is not
+
+    possible before the first.
 
 
-    One question, nothing else: **does the transitional legacy-fingerprint
-    acceptance need a tracked graph node, or is the in-code comment enough?**
+    **Step 1 — refresh the worktree so it serves a current skill body.** The
+    worktree
+
+    at .claude/worktrees/tactic-scope-fingerprint-plan-substance is 143 commits
+
+    behind origin/main and its .claude/skills/dispatch-conflict/SKILL.md has no
+
+    Lane 3. Merge origin/main into the branch there (`git -C <wt> merge
+    origin/main`,
+
+    sandbox-disabled — a tree-updating op that touches the read-only
+    .claude/skills
+
+    carve-out will otherwise abort half-written and leave the tree dirty with
+    HEAD
+
+    unmoved). Expect conflicts: that merge IS the work PR #2974 needs, so
+    resolving
+
+    it here is not a detour. Confirm afterwards that
+
+    `grep -c 'Lane 3' <wt>/.claude/skills/dispatch-conflict/SKILL.md` is
+    non-zero
+
+    before doing anything else — if it is still 0, the merge did not complete
+    and
+
+    every subsequent step will repeat the same dead end.
 
 
-    PR #2974 is otherwise done. 8/8 script-verifiable QA checks pass,
-    re-verified independently; the one `needs-human-judgment` item was assessed
-    already-satisfied and dropped. This park is not about the PR's correctness.
-    The escalation exists only because filing a new node in `intentions/` and
-    landing it via `graph-commit` is outside `/qa-fix`'s auto-fix lane, which
-    only edits code in the PR's working tree.
+    **Step 2 — then let the node re-enter the lane.** With a current skill body
+    in
+
+    place, /dispatch-conflict routes this node to Lane 3 (an origin/main merge
+
+    conflict on a graph node's own branch, entered by source id), which is the
+    lane
+
+    that actually covers it. Clear this park and let the router re-select, or
+    run the
+
+    phase by hand from the refreshed worktree.
 
 
-    The substance: `acceptableScopeFingerprints()` in
-    `packages/intentionsutil/src/router.ts` accepts both the new plan-substance
-    fingerprint and the legacy whole-body one, so stamps taken before this merge
-    keep matching. The deletion condition is already written out precisely at
-    `router.ts:139-147`, and the tactic's own Verification block repeats it and
-    names the check. Nothing about the follow-up needs designing — the only open
-    question is whether it gets a node or stays a comment.
+    **Do not reap the worktree or the branch as a shortcut.** PR #2974 is OPEN,
+    so
+
+    the branch-reap precondition (PR merged, tree clean, no open PR) is not met,
+    and
+
+    deleting the worktree alone changes nothing — provision-node-worktree
+    recreates
+
+    it from the same stale branch, which is precisely the deadlock.
 
 
-    Bias toward filing it. Stamps rotate on every worker provision and every
-    transition, so the condition will be met within days, and a comment is the
-    kind of thing that survives long after the condition it guards has passed.
+    **Verify nothing was lost if the worktree is ever rebuilt:** all code work
+    is
+
+    already on origin/tactic-scope-fingerprint-plan-substance. The only local
+
+    commits absent from both that branch and origin/main are two merge commits,
+    and
+
+    both were confirmed reproducible on 2026-07-31 (`git merge-tree
+    --write-tree` of
+
+    each merge's parents yields a tree byte-identical to the recorded one), so
+    they
+
+    carry no conflict resolutions and no original content.
 
 
-    ## Branch A — file the follow-up (recommended)
+    **Worth filing separately if it recurs:** the general defect is
 
+    tactic-node-worker-fresh-skill-body — a spawned worker executes the skill
+    body
 
-    - Node id: `tactic-remove-legacy-scope-fingerprint`.
+    from its target worktree rather than main. This node is the second observed
 
-    - `kind: tactic`, `status: raw`, no `phase` (draft), `owner: ai`, `parent:
-    null`, `serves: [strategy-graph-native-dispatch]` — same as the parent node.
+    instance and the first where the stale body caused a silent no-op exit
+    rather
 
-    - **No `attention.boost`.** Leave it at the default. It is blocked on a
-    filesystem condition, not on design work or urgency; boosting it puts it in
-    front of the selector before the condition can possibly be met.
+    than an outright failure to declare. The sharper variant this instance
 
-    - Body restates, from `router.ts:139-147`:
-      - **Deletion condition** — every `<main-root>/.claude/worktrees/*.scope-fingerprint` file postdates PR #2974's merge commit. Check with `ls -l` on that directory against the merge commit date.
-      - **Deletion steps** — drop the legacy entry from `acceptableScopeFingerprints`, inline `tacticScopeFingerprint` into `scopeStampMatches`, delete the private `legacyWholeBodyFingerprint` helper, re-run the parent tactic's verify block.
-    - Write it with the worktree-local
-    `packages/intentionsutil/scripts/write-node.ts` (JSON on stdin or `--file`),
-    then land it with the worktree-local
-    `packages/intentionsutil/scripts/graph-commit
-    tactic-remove-legacy-scope-fingerprint`. Both resolve the repo root from
-    their own script path, so run the copy inside the worktree you are in — not
-    one reached by a relative path out of another checkout.
+    demonstrates: a node whose own branch predates the skill that would fix it
 
-    - Confirm it landed: `git show
-    origin/main:intentions/tactic-remove-legacy-scope-fingerprint.md`.
-    `graph-commit` can exit 0 having pushed nothing under a fetch race, so check
-    origin/main directly rather than the local tree.
+    cannot be repaired by any amount of respawning, because the repair
+    instructions
 
-    - Then clear the park: `packages/intentionsutil/scripts/clear-park
-    tactic-scope-fingerprint-plan-substance "follow-up filed as
-    tactic-remove-legacy-scope-fingerprint"`.
-
-
-    ## Branch B — comment-only tracking is enough
-
-
-    - Take no graph action beyond the clear.
-
-    - `packages/intentionsutil/scripts/clear-park
-    tactic-scope-fingerprint-plan-substance "legacy-fingerprint deletion tracked
-    by the router.ts comment; no follow-up node"`.
-
-
-    Either way, once the park is clear the node resumes at `qa` with nothing
-    outstanding, and PR #2974 proceeds normally.
+    are the thing that is missing.
   session_type: other
 pace_exempt: false
 rounds: null

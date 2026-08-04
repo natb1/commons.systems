@@ -30,8 +30,17 @@ attention:
   rationale: "Author-directed 2026-07-23 /align-strategy round: the top-3 systemic
     gaps (PR custody, scripted census, playwright retry) rank ahead of the
     low-urgency tracked gaps once finalized."
-phase: implement
-execution: null
+  tier: 1
+phase: qa
+execution:
+  branch: tactic-census-scripted-tick
+  pr: 3037
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by:
   - tactic-office-hours-pr-custody

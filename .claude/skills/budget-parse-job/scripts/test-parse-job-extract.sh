@@ -2,7 +2,7 @@
 # Unit-test suite for parse-job-extract.sh. Self-contained: builds issue-body
 # fixtures and statement-file fixtures in a tmp dir, exercises every subcommand
 # and every error path. No network. Matches the assert_eq / report_results
-# convention of test-dispatch-scripts.sh.
+# convention of the per-SUT test-*.sh files sharing dispatch-test-fixture.sh.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
