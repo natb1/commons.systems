@@ -18,6 +18,10 @@
 # reviewed conflict-free PR auto-merges regardless of whether it closes a bug,
 # security, or enhancement issue.
 #
+# Eligibility ALSO excludes any PR belonging to a graph node with an in-flight
+# `execution.conflict` interrupt (tactic-graph-router-conflict-routing). That
+# guard is load-bearing, not defense-in-depth — see Step 1b and the per-PR gate.
+#
 # Config gate (ON by default): read from dispatch-config-load auto-merge. The
 # config file is an opt-OUT kill-switch (incident response), inverting the usual
 # absent→inert convention.
@@ -50,6 +54,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"  # pr_list_open, dispatch_ci_verdict_rest, gh_retry
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 # ---- Step 1: config gate (no-op when off) -----------------------------------
 CFG=$("$SCRIPT_DIR/dispatch-config-load" auto-merge) || {
@@ -63,6 +68,25 @@ if [[ "$CFG" != "no-config" ]]; then
   ENABLED=$(jq -r '.enabled' <<<"$CFG")
   [[ "$ENABLED" == "false" ]] && exit 0
 fi
+
+# ---- Step 1b: the conflict-interrupt PR set (one graph read per sweep) -------
+# Every tactic carrying an in-flight `execution.conflict` interrupt, by PR
+# number. Captured ONCE here rather than per-PR: the set is small and the read
+# is a process spawn.
+#
+# A fetch failure is NOT fatal. An empty set is exactly the pre-guard behavior
+# (the merge race this guard closes), so degrading to it keeps the sweep
+# running rather than stranding every ready PR on one bad read — the same
+# fail-safe posture as the per-PR merge failures below. It is logged to stderr
+# so the degradation is visible rather than silently swallowed.
+CONFLICT_PRS=$( (cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/list-conflict-nodes.ts --dir "$REPO_ROOT/intentions") ) || {
+  echo "dispatch-auto-merge: warning: list-conflict-nodes failed; proceeding with an empty conflict set (merge-race guard degraded this pass)" >&2
+  CONFLICT_PRS=""
+}
+
+# Exact whole-line match against the captured set (-x -F: no regex, no substring
+# — #12 must not match #123).
+is_conflict_pr() { grep -qxF "$1" <<<"$CONFLICT_PRS"; }
 
 # ---- Step 2: one fresh fetch of every open PR -------------------------------
 # Never proceed on a partial fetch — a truncated snapshot could merge a PR whose
@@ -90,6 +114,21 @@ while IFS= read -r pr; do
   # short-circuit before it.
   [[ "$IS_DRAFT" == "false" ]] || continue
   [[ "$MERGEABLE" == "MERGEABLE" ]] || continue
+
+  # ---- Conflict-interrupt guard (LOAD-BEARING, not defense-in-depth) --------
+  # A node can flip CONFLICTING → MERGEABLE while `execution.conflict` is STILL
+  # set: the per-node selector pass that self-heals the interrupt has not run
+  # yet this tick, or it observed a stale mergeable read. Merging in that window
+  # lands conflict-resolution code the completed review never actually saw.
+  # The `intention` resolution path (stripped dispatch:reviewed label, PR
+  # re-drafted via `gh pr ready --undo`) is already covered by the isDraft and
+  # dispatch:reviewed gates around this one; this guard closes the remaining
+  # window where the interrupt is set but the PR has not yet been dispositioned
+  # back to draft/re-review.
+  if is_conflict_pr "$N"; then
+    continue
+  fi
+
   HAS_REVIEWED=$(jq -r '[.labels[].name] | index("dispatch:reviewed") != null' <<<"$pr")
   [[ "$HAS_REVIEWED" == "true" ]] || continue
 
