@@ -95,7 +95,8 @@ to pass to the Workflow.
 
 ## Finder agents (when `surface=code`)
 
-The Workflow fans out agent finders based on `surface` and `app_or_rules`. The
+The Workflow fans out agent finders based on `surface`, `app_or_rules`, and
+`api_call_site`. The
 Workflow's own agent fan-out contains only the surface-gated security/domain
 lenses plus `security-review` — **`code-review` is not among them.** It runs as
 the exclusive `claude -p '/code-review low --fix'` pre-stage in SKILL.md Step 1b,
@@ -109,13 +110,25 @@ agent finders at all. When `surface === 'code'`, the following domain finders
 run. Four agents are gated on `surface=code` alone (`input-validation`,
 `domain-sweep`, `red-team`, `security-review`) — `domain-sweep` folds what were
 three separate always-vs-conditional lenses into one agent, so this is still
-four AGENTS at this tier, not four lenses; two agents additionally require
-`app_or_rules=true` (application/functions/rules source): `firebase` and
-`cost`, down from four before the fold. The fold itself does not change the
-lens content or the `Source` taxonomy — it only removes the redundant cost of
-three agents each independently re-reading the same diff, by having one agent
-read the diff once and carry the `secrets`/`auth`/`data-exposure` lenses as
-labelled sections instead.
+four AGENTS at this tier, not four lenses; one further agent, `api-cost`, runs
+when `app_or_rules=true` **or** `api_call_site=true` — it folds the `firebase`
+and `cost` lenses the same way, so this is one AGENT where there were two. The
+folds do not change the lens content or the `Source` taxonomy — they only remove
+the redundant cost of several agents each independently re-reading the same
+diff, by having one agent read the diff once and carry the lenses as labelled
+sections instead.
+
+The two `api-cost` sections keep SEPARATE gates, and the agent is briefed only
+on the sections whose gate is true:
+
+- `firebase` (security) — `app_or_rules || api_call_site`. Its `app_or_rules`
+  trigger is unchanged from before the fold; `api_call_site` only widens it.
+  This matters: the `api_call_site` classifier matches added API/query call
+  sites, and matches none of what this lens reviews (a Firestore rules diff,
+  `connectFirestoreEmulator`, `apiKey`/`initializeApp`), so gating it on that
+  flag alone would silently drop the reviewer on exactly the diffs it exists
+  for.
+- `cost` (advisory) — `api_call_site` alone.
 
 `code-review` and `security-review` are still Lane A: they trust the built-in
 `/code-review` and `/security-review` skills to do their own review-and-fix
@@ -161,10 +174,15 @@ throttle probe, launched as wave 1); `code-review` is the Step-1b pre-stage.
 **`surface === 'code' && app_or_rules=true`** (app/functions/rules source):
 - See **domain-sweep** above — the `auth` and `data-exposure` sections it carries
   when `app_or_rules=true`.
-- **firebase** — Firebase-specific: Firestore rules permissiveness (overly broad `allow`
+- The **api-cost** agent's `firebase` section (below).
+
+**`surface === 'code'` and the `api-cost` agent fires** (`app_or_rules=true` or
+`api_call_site=true`) — one agent, the sections below, each briefed only when its
+own gate is true:
+- **firebase** (`app_or_rules || api_call_site`) — Firebase-specific: Firestore rules permissiveness (overly broad `allow`
   conditions, missing field constraints), emulator-only code reachable on production
   paths, Firebase API key or config exposure.
-- **cost** — Cost/scaling lens: flags three Firestore cost/scaling patterns introduced in
+- **cost** (`api_call_site` only) — Cost/scaling lens: flags three Firestore cost/scaling patterns introduced in
   the diff: (1) unbounded queries — `getDocs`/collection scans with no `limit()` over a
   collection that grows without bound; (2) new high-frequency amplifiers layered over
   collection scans — a new interval, scheduler, polling loop, or refresh (e.g. a 5-minute
