@@ -58,7 +58,28 @@ execution:
 validates: []
 blocked_by:
   - tactic-office-hours-concurrency-dedup
-office_hours: null
+office_hours:
+  reason: "needs-main item 6 (two-concurrent-/office-hours-drain race) requires
+    two live sessions racing the reservation ledger against a real parked node
+    at the same instant; a single bounded Lane-M pass provides no mechanism to
+    orchestrate that live scenario, and the source PR #3035's own Test plan
+    already marks this specific check observational and non-auto-runnable"
+  since: 2026-08-04
+  recommendation: "Lane-M results already obtained, all passing: bash -n on
+    lib-reservation-ledger.sh and office-hours-graph (syntax OK); grep of
+    .claude/skills/office-hours/SKILL.md confirms the claim step references
+    reservation_owner, reservation_write, and worktree_has_live_session, with
+    reservation_clear appearing only in the deliberate never-issue warning prose
+    (matches Unit 2's design); test-lib-reservation-ledger.sh 92/92 passed
+    including the new reservation_owner assertions (Unit 1);
+    test-office-hours.sh 42/42 passed. No author decision is needed —
+    re-selection or a manual two-session drill would close this out: run
+    /office-hours <node-id> in one session, then the same command against the
+    same parked node in a second live session while the first is still running,
+    and confirm the second halts at the claim step (reporting the collision,
+    before surfacing park context) while tmp/dispatch-reservations/<node-id>'s
+    session= line records only the first session's id throughout."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
