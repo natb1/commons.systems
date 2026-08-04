@@ -1772,10 +1772,20 @@ assert_eq "ws: sess-ws-worker phases keys == [review-fix] (no <none> leak)" '["r
 assert_eq "ws: attribution_coverage.whole_session_attributed_sessions == 2 (worker + helper)" "2" \
   "$(jq '.attribution_coverage.whole_session_attributed_sessions' <<<"$OUT_WS")"
 
-# attribution_coverage raw-vs-effective (Unit 2). `by_attribution_skill` and
-# `attributed_turns_raw` are stage-1-only fields, never projected onto
-# `.sessions[]` in the final document — this root's global raw/effective
-# counters are the only place they surface, so hand-derive both from every
+# The RAW per-turn harness slice is projected onto each `.sessions[]` entry as
+# `by_attribution_skill` / `attributed_turns_raw` (SKILL.md step 3 documents it
+# as the per-session escape hatch for auditing the whole-session override):
+# sess-ws-worker's turn1 is tagged review-fix and turns 2-3 are untagged, so the
+# raw slice still shows the harness gap the re-keyed `phases` map hides.
+assert_eq "ws: sess-ws-worker by_attribution_skill[<none>].turns == 2 (raw gap preserved)" "2" \
+  "$(jq '[.sessions[]|select(.id=="sess-ws-worker")][0].by_attribution_skill["<none>"].turns' <<<"$OUT_WS")"
+assert_eq "ws: sess-ws-worker by_attribution_skill[review-fix].turns == 1 (raw, un-re-keyed)" "1" \
+  "$(jq '[.sessions[]|select(.id=="sess-ws-worker")][0].by_attribution_skill["review-fix"].turns' <<<"$OUT_WS")"
+assert_eq "ws: sess-ws-worker attributed_turns_raw == 1" "1" \
+  "$(jq '[.sessions[]|select(.id=="sess-ws-worker")][0].attributed_turns_raw' <<<"$OUT_WS")"
+
+# attribution_coverage raw-vs-effective (Unit 2). The window-wide raw/effective
+# counters roll the same per-session raw slice up, so hand-derive both from every
 # session's RAW per-turn attributionSkill (raw skill != "<none>": worker
 # turn1=review-fix, multi turns1-2=implement/qa-fix, helper both turns=
 # review-fix/commit-merge-push — helper's commit-merge-push counts as raw-

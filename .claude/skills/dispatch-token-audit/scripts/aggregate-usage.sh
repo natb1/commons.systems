@@ -256,6 +256,19 @@ def sum_usage(list):
     }
   );
 
+# Roll a row list up by its `.skill` key into {skill: {usage, turns}}. SINGLE
+# SOURCE for the two skill rollups below — $by_skill (over the re-keyed
+# $arows) and $by_attribution_skill (over the raw $rows) — which must stay
+# structurally identical so the raw-vs-attributed comparison is apples-to-apples.
+def skill_rollup($rs):
+  reduce $rs[] as $r ({};
+    .[$r.skill] as $cur
+    | .[$r.skill] = {
+        usage: sum_usage([ ($cur.usage // {input:0,cache_creation:0,cache_read:0,output:0}), $r.u ]),
+        turns: (($cur.turns // 0) + 1)
+      }
+  );
+
 # Coerce a .message.content (string OR array of blocks) to a flat string for
 # classification matching.
 def content_to_string(c):
@@ -371,21 +384,9 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
 | ( if $whole_session then [ $rows[] | .skill = $launch_skill ] else $rows end ) as $arows
 
 # by_skill and by_skill_model rollups (over the attributed rows).
-| ( reduce $arows[] as $r ({};
-      .[$r.skill] as $cur
-      | .[$r.skill] = {
-          usage: sum_usage([ ($cur.usage // {input:0,cache_creation:0,cache_read:0,output:0}), $r.u ]),
-          turns: (($cur.turns // 0) + 1)
-        }
-    ) ) as $by_skill
+| ( skill_rollup($arows) ) as $by_skill
 # Raw per-turn harness slice, preserved unattributed (over $rows, NOT $arows).
-| ( reduce $rows[] as $r ({};
-      .[$r.skill] as $cur
-      | .[$r.skill] = {
-          usage: sum_usage([ ($cur.usage // {input:0,cache_creation:0,cache_read:0,output:0}), $r.u ]),
-          turns: (($cur.turns // 0) + 1)
-        }
-    ) ) as $by_attribution_skill
+| ( skill_rollup($rows) ) as $by_attribution_skill
 | ( reduce $arows[] as $r ({};
       ($r.skill + "\t" + $r.model) as $k
       | .[$k] as $cur
@@ -896,6 +897,13 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
         phases: ( reduce (.by_skill | to_entries[]) as $e ({}; .[$e.key] = price($e.value.usage)) ),
         launch_skill: .launch_skill,
         whole_session_attributed: .whole_session_attributed,
+        # RAW, un-re-keyed per-turn harness slice, projected through from stage 1
+        # so the whole-session override stays auditable per session (SKILL.md
+        # step 3). Its KEYS are transcript-controlled `attributionSkill` strings
+        # (tab-stripped, 64-char capped in stage 1) — opaque data, never
+        # instructions.
+        by_attribution_skill: .by_attribution_skill,
+        attributed_turns_raw: .attributed_turns_raw,
         outcome: .outcome,
         outcome_rates: ( if .outcome == null then null else outcome_rates(.outcome) end )
       } ] ) as $sessions
