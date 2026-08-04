@@ -930,7 +930,14 @@ describe("validateGraph", () => {
       }),
       gnode({ id: "kind-delegation", kind: "kind", status: "codified" }),
       gnode({ id: "virtue-root", kind: "virtue", status: "codified", parent: null }),
-      gnode({ id: "delegation-1", kind: "delegation" }),
+      gnode({
+        id: "delegation-1",
+        kind: "delegation",
+        attributes: {
+          divergence: { level: "low" },
+          irreversibility: { recovery_cost: "low", gated: { level: "none" } },
+        },
+      }),
       gnode({
         id: "strategy-1",
         kind: "strategy",
@@ -1111,7 +1118,14 @@ describe("validateGraph", () => {
       gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
       gnode({ id: "kind-delegation", kind: "kind", status: "codified" }),
       gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
-      gnode({ id: "delegation-1", kind: "delegation" }),
+      gnode({
+        id: "delegation-1",
+        kind: "delegation",
+        attributes: {
+          divergence: { level: "low" },
+          irreversibility: { recovery_cost: "low", gated: { level: "none" } },
+        },
+      }),
       gnode({ id: "strategy-1", kind: "strategy", recovers: ["delegation-1"] }),
     ];
     expect(() => validateGraph(nodes)).not.toThrow();
@@ -1712,6 +1726,66 @@ describe("validateGraph", () => {
 
   it("Rule 20: is inert on a marked node with no attention at all", () => {
     const nodes = tierNodes({ attributes: { bug_fix: true, security: true }, attention: null });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  // --- Rule 21: delegation axis enums / no stored classification -----------
+
+  /** A minimal kind-delegation set plus one delegation carrying `attributes`. */
+  function delegationNodes(attributes: Record<string, unknown>): IntentionNode[] {
+    return [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-delegation", kind: "kind", status: "codified" }),
+      gnode({ id: "delegation-under-test", kind: "delegation", attributes }),
+    ];
+  }
+
+  it("Rule 21: rejects an out-of-enum divergence.level", () => {
+    const nodes = delegationNodes({
+      divergence: { level: "low-moderate" },
+      irreversibility: { recovery_cost: "low", gated: { level: "none" } },
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /delegation-under-test: divergence\.level "low-moderate" is not a valid enum member \(expected one of low\|moderate\|high\)/,
+    );
+  });
+
+  it("Rule 21: rejects a legacy boolean irreversibility.gated", () => {
+    const nodes = delegationNodes({
+      divergence: { level: "low" },
+      irreversibility: { recovery_cost: "low", gated: false },
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /delegation-under-test: irreversibility\.gated is a legacy scalar \(boolean\) — it must be an object with a "level" field/,
+    );
+  });
+
+  it("Rule 21: rejects a legacy free-text string irreversibility.gated", () => {
+    const nodes = delegationNodes({
+      divergence: { level: "low" },
+      irreversibility: { recovery_cost: "low", gated: "partially — the vendor keeps the key" },
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /delegation-under-test: irreversibility\.gated is a legacy scalar \(string\) — it must be an object with a "level" field/,
+    );
+  });
+
+  it("Rule 21: rejects a stored attributes.classification", () => {
+    const nodes = delegationNodes({
+      divergence: { level: "low" },
+      irreversibility: { recovery_cost: "low", gated: { level: "none" } },
+      classification: "tool",
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /delegation-under-test: classification must not be stored — it derives on read via deriveClassification/,
+    );
+  });
+
+  it("Rule 21: passes on well-formed enum-shaped axes with no stored classification", () => {
+    const nodes = delegationNodes({
+      divergence: { level: "high" },
+      irreversibility: { recovery_cost: "prohibitive", gated: { level: "large" } },
+    });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 });
