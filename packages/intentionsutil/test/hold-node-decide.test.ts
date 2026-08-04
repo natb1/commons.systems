@@ -69,6 +69,12 @@ describe("holdIdFor", () => {
     );
   });
 
+  it("derives the residue slug id for worktree-residue", () => {
+    expect(holdIdFor("worktree-residue", "tactic-some-work")).toBe(
+      "tactic-hold-residue-some-work",
+    );
+  });
+
   it("strips only a leading tactic- prefix", () => {
     expect(holdIdFor("provision-conflict", "strategy-thing")).toBe(
       "tactic-hold-conflict-strategy-thing",
@@ -145,6 +151,15 @@ describe("decideHold dispositions", () => {
     expect(d.node?.attributes).toEqual({
       hold_for: SOURCE,
       hold_kind: "fix-attempt-cap",
+    });
+  });
+
+  it("uses the residue hold id when the kind is worktree-residue", () => {
+    const d = decideHold([source()], input({ kind: "worktree-residue" }));
+    expect(d.hold_id).toBe("tactic-hold-residue-some-work");
+    expect(d.node?.attributes).toEqual({
+      hold_for: SOURCE,
+      hold_kind: "worktree-residue",
     });
   });
 

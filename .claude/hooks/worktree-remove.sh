@@ -3,8 +3,16 @@
 # Symmetric with WorktreeCreate (which performs creation); this performs removal.
 #
 # Removes the worktree ONLY if "in sync" (clean working tree AND all commits
-# pushed) AND no live Claude session is running in it. Otherwise the worktree
+# pushed) AND no Claude session is REGISTERED against it. Otherwise the worktree
 # is kept. No PR-state check.
+#
+# "Registered", not "running": `worktree_has_live_session` reads the REGISTERED
+# view (`claude agents --json --all`), so a session that has STOPPED but has not
+# been `claude rm`'d still holds its worktree and this hook keeps the checkout.
+# That is deliberate — the held checkout is the debugging artifact
+# (tactic-stopped-session-blocks-node); the release act is `claude rm <sid>`.
+# The library names the holding session on stderr, which is captured into the
+# log below so the operator sees WHICH session to release.
 #
 # CONTRACT: WorktreeRemove has no decision control — exit code and stdout are
 # ignored, failures surface only in debug mode. A broken hook fails SILENTLY,
@@ -79,9 +87,11 @@ done <<<"$WT_LIST"
 # In-sync check — any error or ambiguity => keep.
 if ! worktree_in_sync "$CANON" "$LOG_FILE"; then exit 0; fi
 
-# Live-session guard — occupied or unknown => keep.
-if worktree_has_live_session "$CANON"; then
-  log "KEEP: '$CANON' has a live Claude session"
+# Session guard — occupied or unknown => keep. Stderr is appended to the log so
+# the library's done-but-not-removed diagnostic (session id + `claude rm <sid>`)
+# reaches the operator instead of being discarded with the hook's stderr.
+if worktree_has_live_session "$CANON" 2>>"$LOG_FILE"; then
+  log "KEEP: '$CANON' has a live Claude session, or one registered but not yet 'claude rm'd (see any diagnostic above for the holder)"
   exit 0
 fi
 

@@ -15,12 +15,12 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listNodes } from "../src/store.js";
+import { listNodesStrict } from "../src/store.js";
 import type { IntentionNode } from "../src/schema.js";
 
 /**
  * Every node in the `intentions/` store as of `ref`, validated and sorted by id
- * — the git-ref-aware counterpart of `listNodes(<worktree>/intentions)`.
+ * — the git-ref-aware counterpart of `listNodesStrict(<worktree>/intentions)`.
  *
  * `repoRoot` is a parameter (not resolved from `import.meta.url`) because
  * callers already know which checkout they mean, and the answer must not depend
@@ -29,9 +29,14 @@ import type { IntentionNode } from "../src/schema.js";
  * Failure posture (see .claude/rules/code-style.md): a missing store at `ref`
  * throws a descriptive error rather than returning an empty list — an empty
  * graph is indistinguishable from "nothing is parked" and would be read as a
- * real answer. A schema-invalid node likewise propagates its
- * `IntentionSchemaError` uncaught: a malformed node at `origin/main` is a
- * repo-integrity failure, not something to swallow.
+ * real answer. Enumeration is STRICT for the same reason: this helper serves
+ * gate and selection callers, where absence from the enumerated set carries
+ * load-bearing "pass" semantics (`blockersComplete` reads an absent
+ * `blocked_by` id as COMPLETE). It therefore calls `listNodesStrict`, not the
+ * tolerant `listNodes` — a file that cannot be read or validated at `ref`
+ * propagates its `IntentionSchemaError` uncaught instead of being silently
+ * skipped. A malformed node at `origin/main` is a repo-integrity failure, not
+ * something to swallow.
  *
  * Implementation note: `git archive <ref> intentions` and the `tar -x` that
  * unpacks it are run as two separately status-checked `execFileSync` calls, not
@@ -66,7 +71,7 @@ export function listNodesAtRef(repoRoot: string, ref: string): IntentionNode[] {
   const dir = mkdtempSync(join(tmpdir(), "intentions-at-ref-"));
   try {
     execFileSync("tar", ["-x", "-C", dir], { input: tar });
-    return listNodes(join(dir, "intentions"));
+    return listNodesStrict(join(dir, "intentions"));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

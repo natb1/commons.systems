@@ -21,30 +21,22 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention:
-  boost: 85
-  override: null
-  rationale: "Author-directed 2026-07-25: the queue-serialization work
-    (dispatch-queue claim integrity, office-hours drain claiming, and the
-    cross-queue landing path) is the current focus. Own boost 85 composes with
-    the +5 inherited from strategy-graph-native-dispatch to an authored 90 —
-    exact parity with tactic-graph-router-live-worker-read-robust, the existing
-    author-set boost on this same defect class — and deliberately below
-    strategy-main-health's standing 100 so the main-health signal keeps its
-    recorded dominance."
-phase: qa
+attention: null
+phase: done
 execution:
   branch: tactic-dispatch-test-monolith-split
   pr: 2971
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-25
-    attempt: 1
-    pushed_sha: null
-  completion: null
+  fix: null
+  completion:
+    mergedAt: 2026-07-31T00:45:40Z
+    mergeCommitSha: 58e5bc3476ef11e0b628a4bb788198eb4e89bf29
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

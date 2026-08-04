@@ -32,18 +32,24 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 85
+  boost: 10
   override: null
-  rationale: "Author-directed 2026-07-25: the queue-serialization work
-    (dispatch-queue claim integrity, office-hours drain claiming, and the
-    cross-queue landing path) is the current focus. Own boost 85 composes with
-    the +5 inherited from strategy-graph-native-dispatch to an authored 90 —
-    exact parity with tactic-graph-router-live-worker-read-robust, the existing
-    author-set boost on this same defect class — and deliberately below
-    strategy-main-health's standing 100 so the main-health signal keeps its
-    recorded dominance."
-phase: implement
-execution: null
+  rationale: "Bootstrap re-scale 2026-07-30: demoted from the pre-bootstrap 85-90
+    band to 10. These are ordinary improvements, not integrity defects; at 85-90
+    they outranked strategy-main-health (101 resolved) and flooded the selector
+    hot band. Interim scaffolding only; tactic-attention-tier-ranking and
+    tactic-attention-boost-scripts retire this numeric scheme."
+  tier: 1
+phase: qa
+execution:
+  branch: tactic-office-hours-drain-claim
+  pr: 3035
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by:
   - tactic-office-hours-concurrency-dedup

@@ -96,24 +96,59 @@ to pass to the Workflow.
 ## Finder agents (when `surface=code`)
 
 The Workflow fans out agent finders based on `surface` and `app_or_rules`. The
-`code-review` quality finder always runs — via `/code-review max --fix`,
-applying its own working-tree edits directly; only its un-auto-fixed residue is
-dispositioned (resolve/defer/ignore) by the new residue phase. When `surface === 'code'`, the following
-domain finders also run. Four are gated on `surface=code` alone; four additionally
-require `app_or_rules=true` (application/functions/rules source):
+Workflow's own agent fan-out contains only the surface-gated security/domain
+lenses plus `security-review` — **`code-review` is not among them.** It runs as
+the exclusive `claude -p '/code-review low --fix'` pre-stage in SKILL.md Step 1b,
+BEFORE the Workflow is invoked at all: the `-p` user turn is the only entry point
+that can invoke a `disable-model-invocation` skill, and its `--fix` writes the
+working tree, so it must run to completion rather than concurrently with the
+fan-out. The Workflow receives its output as `args.code_review` (paths plus the
+git-derived `touched_files` list) and structures it with one Sonnet
+`parse:code-review` subagent. On a non-`code` surface the Workflow launches no
+agent finders at all. When `surface === 'code'`, the following domain finders
+run. Four agents are gated on `surface=code` alone (`input-validation`,
+`domain-sweep`, `red-team`, `security-review`) — `domain-sweep` folds what were
+three separate always-vs-conditional lenses into one agent, so this is still
+four AGENTS at this tier, not four lenses; two agents additionally require
+`app_or_rules=true` (application/functions/rules source): `firebase` and
+`cost`, down from four before the fold. The fold itself does not change the
+lens content or the `Source` taxonomy — it only removes the redundant cost of
+three agents each independently re-reading the same diff, by having one agent
+read the diff once and carry the `secrets`/`auth`/`data-exposure` lenses as
+labelled sections instead.
 
-`code-review` and `security-review` are Lane A: they trust the built-in
+`code-review` and `security-review` are still Lane A: they trust the built-in
 `/code-review` and `/security-review` skills to do their own review-and-fix
 rather than feeding the shared dedup/classify/verify/fix pipeline below — see
 the "Disposition table" (Step 4) and the Model split note for how their output
-reaches this skill's disposition set.
+reaches this skill's disposition set. They differ only in how they are invoked:
+`security-review` is an agent finder inside the Workflow (and doubles as its
+throttle probe, launched as wave 1); `code-review` is the Step-1b pre-stage.
 
 **`surface === 'code'`** (any code-surface diff):
 - **input-validation** — Hunt injection in the changed code: SQL/NoSQL injection, XSS,
   command injection, path traversal. Check that external input is validated and escaped
   at every boundary it crosses.
-- **secrets** — Hardcoded keys/tokens/credentials in the changed code, `.env` files
-  committed to git, secrets leaking into build output.
+- **domain-sweep** — one Opus agent that reads the diff once and carries the domain
+  lenses below as labelled sections. The `secrets` section always runs on a code
+  surface; `auth` and `data-exposure` additionally run when `app_or_rules=true`
+  (folded from three separate agents that each independently re-read the diff —
+  see below).
+  - **secrets** — Hardcoded keys/tokens/credentials in the changed code, `.env` files
+    committed to git, secrets leaking into build output. Findings from this section
+    carry `Source` set to exactly `secrets`, so per-lens yield stays separately
+    measurable.
+  - **auth** (runs only when `app_or_rules=true`) — Auth and access control:
+    Firestore rules coverage for paths the diff touches, missing auth checks,
+    privilege escalation. Confirm each new or changed Firestore path has a
+    matching rule block and that client code does not assume access the rules do
+    not grant. Findings from this section carry `Source` set to exactly `auth`,
+    so per-lens yield stays separately measurable.
+  - **data-exposure** (runs only when `app_or_rules=true`) — API responses
+    returning more fields than the caller needs, PII in logs (console.log and
+    similar), internal details (stack traces, config, paths) leaked in error
+    messages. Findings from this section carry `Source` set to exactly
+    `data-exposure`, so per-lens yield stays separately measurable.
 - **red-team** — Construct concrete attack scenarios against the changed code. Pick an
   attacker goal, trace a path through the diff to reach it, and report each viable
   scenario as a finding. Build scenarios from the code under review, not a checklist of
@@ -124,13 +159,8 @@ reaches this skill's disposition set.
   residue phase rather than feeding the shared dedup/classify/verify/fix pipeline.
 
 **`surface === 'code' && app_or_rules=true`** (app/functions/rules source):
-- **auth** — Auth and access control: Firestore rules coverage for paths the diff touches,
-  missing auth checks, privilege escalation. Confirm each new or changed Firestore path
-  has a matching rule block and that client code does not assume access the rules do not
-  grant.
-- **data-exposure** — API responses returning more fields than the caller needs, PII in
-  logs (console.log and similar), internal details (stack traces, config, paths) leaked
-  in error messages.
+- See **domain-sweep** above — the `auth` and `data-exposure` sections it carries
+  when `app_or_rules=true`.
 - **firebase** — Firebase-specific: Firestore rules permissiveness (overly broad `allow`
   conditions, missing field constraints), emulator-only code reachable on production
   paths, Firebase API key or config exposure.

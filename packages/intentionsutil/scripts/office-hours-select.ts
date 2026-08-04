@@ -285,9 +285,16 @@ function main(): void {
     process.exit(2);
   }
 
+  // Read at the REF, with STRICT enumeration: `listNodesAtRef` enumerates the
+  // extracted store with `listNodesStrict`, never the tolerant `listNodes`.
+  // Selection gates on open blockers, and a blocker ABSENT from the enumerated
+  // set reads as "not blocking" — a tolerant reader would turn a corrupt
+  // blocker file into a dispatchable park. A corrupt file must refuse loudly.
+  //
   // Only the ref read is caught: a failed ref read is an environment problem
-  // this script reports as its own exit-2 failure. A schema-invalid node
-  // (`IntentionSchemaError`) is a repo-integrity failure and propagates uncaught.
+  // this script reports as its own exit-2 failure. An unreadable or
+  // schema-invalid node (`IntentionSchemaError`) is a repo-integrity failure
+  // and propagates uncaught.
   let nodes: IntentionNode[];
   try {
     nodes = listNodesAtRef(repoRoot, ref);
