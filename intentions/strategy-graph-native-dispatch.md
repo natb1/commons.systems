@@ -3975,6 +3975,53 @@ clarifications:
       tactic-qa-main-verifiability-sort-criterion; and note that the lane is not
       quiescent -- at least one in-flight main-qa node is being evaluated under
       the old wording while the predicate sites are edited."
+  - question: How large is the pace_exempt marked set relative to the worker
+      ceiling, as measured during the 2026-08-04
+      tactic-pace-exempt-ceiling-fanout finalize round?
+    answer: "(Recorded 2026-08-04 /align-tactics round on
+      tactic-pace-exempt-ceiling-fanout.) Measured input for the not-yet-armed
+      pace-exempt marked-set containment condition, taken at HEAD of intentions/
+      this round: 16 of 491 nodes carry `pace_exempt: true` in frontmatter — an
+      earlier count of 18 was inflated by body-prose matches;
+      strategy-graph-native-dispatch and strategy-main-health both carry
+      `pace_exempt: false`. Of the 16, four are phase:done and one is an
+      unplanned draft (phase:null), leaving 11 in working phases (10 main-qa, 1
+      implement) and therefore router-selectable. Against the
+      max_concurrent_workers default of 8 (dispatch.config/target-workers.json
+      is machine-local and absent in a clean checkout; default documented at
+      dispatch-target-workers:106), the live marked set already exceeds the
+      ceiling in headcount — so once the fill-to-ceiling amendment of 2026-07-31
+      is implemented, a closed weekly pace curve can keep the whole autonomous
+      ceiling occupied by pace-exempt work indefinitely rather than admitting
+      one worker. Recorded as an observation toward the author's eventual band
+      declaration, not as a gate on the fan-out fix: the fix computes headroom,
+      it does not change how many nodes are marked."
+  - question: What does the autonomous at-cap pace-exempt lane do when
+      dispatch-target-workers --max returns a non-numeric or unreadable ceiling?
+    answer: (Observed 2026-08-04 /align-tactics round on
+      tactic-pace-exempt-ceiling-fanout.) The autonomous at-cap pace-exempt lane
+      fails CLOSED on an unreadable or non-numeric max_concurrent_workers —
+      treat it as an internal error and select nothing, mirroring
+      dispatch-select-tick's two existing sibling guards (the autonomous block's
+      non-numeric TARGET_N exit 2 at :635-643, and the --manual branch's
+      combined TARGET_N/MAX_WORKERS exit 2 at :767-774) — never fall open to a
+      one-worker grant. Derived from the recorded rule that
+      max_concurrent_workers is ABSOLUTE for all autonomous scheduling plus the
+      pause condition's fail-closed posture on config read failure. Recorded
+      because graph-select-target's separate --standalone path (:347-364) takes
+      the opposite posture, failing open to --top 1 on a non-numeric ceiling;
+      that divergence is scoped to that caller and is not license for the
+      autonomous lane to do the same.
+  - question: "Is the PR-title `<node id>: <description>` condition's CI guard
+      already enforced at HEAD?"
+    answer: "(Observed 2026-08-04 /align-tactics round.) The PR-title condition's
+      enforcement half is recorded doctrine, not yet a holding invariant: no
+      check under .github/workflows/ validates PR-title format or node-id
+      resolution, and dispatch-open-pr still takes a free-form --title, so only
+      the branch name carries the node id today. The open node
+      tactic-pr-title-node-id-convention (status: raw, phase: null) is the
+      change that would build the guard. Recorded so a future round reads the
+      condition as declared-but-unenforced rather than as an existing CI gate."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -4016,6 +4063,7 @@ attention:
     migration is the current focus — lift this strategy and its tactic subtree
     above derived-only ranks (derived terms cap at 2) so router selection works
     the migration first."
+  tier: 1
 phase: null
 execution: null
 validates: []
