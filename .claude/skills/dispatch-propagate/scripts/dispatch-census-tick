@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# dispatch-census-tick — the scripted census dispatch-tick step
+# (tactic-census-scripted-tick Unit 3). Runs the pure decision layer
+# (census-decide.ts's partitionDonePresent, applied via census-tick.ts) each
+# tick, unconditionally: it prunes every done-but-present node whose
+# completion verifies mechanically (with scripted inbound blocked_by edge
+# repair in the same graph-commit) and mints one `tactic-census-defect-*`
+# tactic per unverified node, deduped by deterministic id so a repeated tick
+# never re-mints. This wrapper is the LANDING half (graph-commit) around the
+# network-free, testable census-tick.ts, mirroring the decision/land split
+# between reconcile-graph.ts and reconcile-graph-merged.
+#
+# Replaces the retired dispatch-graph-census born-parked-latch mechanism:
+# there is no threshold, no dispatch.config tunable, and no born-parked
+# recurrence-latch node — every tick drains whatever debt is present, however
+# small, directly into ordinary graph state (a prune or a selectable defect
+# tactic), rather than accumulating debt behind a config-gated birth.
+#
+# Doctrine: run from a main-based checkout (graph-commit lands state on
+# main). GRAPH-ONLY — no gh, no network. The CALLER wraps invocation with
+# dangerouslyDisableSandbox regardless, since node --import tsx/esm needs the
+# npm cache (see .claude/rules/sandbox.md). Best-effort — a failure here must
+# not abort the tick.
+#
+# Stdout protocol (one line, caller prefixes it with `census: `):
+#   pruned <n>, integrity-defects <m> (minted <j>, existing <k>)
+# printed on both the no-op path and the graph-commit-succeeded path — NOT on
+# a hard-error exit-1 path, where only the stderr diagnostic is printed.
+#
+# Exit codes: 0 (including a no-op tick); 1 if census-tick.ts or graph-commit
+# hard-errored.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
+
+OUT=$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/census-tick.ts") ) || {
+  echo "dispatch-census-tick: census-tick.ts failed" >&2; exit 1; }
+
+N=$(jq -r '.prune | length' <<<"$OUT")
+M=$(jq -r '.defectCount' <<<"$OUT")
+J=$(jq -r '.defectsMinted | length' <<<"$OUT")
+K=$(jq -r '.defectsExisting | length' <<<"$OUT")
+
+mapfile -t PRUNE < <(jq -r '.prune[]?' <<<"$OUT")
+mapfile -t EDIT_AND_MINT < <(jq -r '.edit[]?, .defectsMinted[]?' <<<"$OUT")
+
+if [[ "${#PRUNE[@]}" -eq 0 && "${#EDIT_AND_MINT[@]}" -eq 0 ]]; then
+  echo "pruned $N, integrity-defects $M (minted $J, existing $K)"
+  exit 0
+fi
+
+GC_ARGS=(-C "$REPO_ROOT" -m "graph: census — pruned $N, defects $M")
+for id in "${PRUNE[@]}"; do GC_ARGS+=(--prune "$id"); done
+for id in "${EDIT_AND_MINT[@]}"; do GC_ARGS+=("$id"); done
+
+if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
+  echo "dispatch-census-tick: graph-commit failed" >&2
+  exit 1
+fi
+
+echo "pruned $N, integrity-defects $M (minted $J, existing $K)"
+exit 0

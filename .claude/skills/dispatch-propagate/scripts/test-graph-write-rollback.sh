@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
 # test-graph-write-rollback.sh — functional harness for the write-failure
-# rollback added to transition-node, dispatch-graph-census, and
-# dispatch-graph-main-red-sync (tactic-graph-write-failure-rollback Units
-# 2/4/5). Each case forces a downstream `graph-commit` to fail AFTER the
-# script's own mutation already landed on disk, then asserts the mutation was
-# rolled back — a clean intentions/ tree, never a leaked dirty/deleted file
-# that would trip graph-commit's assert_clean_outside_ids guard for every
-# other unrelated node.
+# rollback added to transition-node and dispatch-graph-main-red-sync
+# (tactic-graph-write-failure-rollback Units 2/4/5). Each case forces a
+# downstream `graph-commit` to fail AFTER the script's own mutation already
+# landed on disk, then asserts the mutation was rolled back — a clean
+# intentions/ tree, never a leaked dirty/deleted file that would trip
+# graph-commit's assert_clean_outside_ids guard for every other unrelated
+# node.
 #
 # Mirrors packages/intentionsutil/scripts/test-park-node.sh's harness shape: a
 # throwaway bare origin + a real git clone, with the REAL
@@ -22,9 +22,6 @@
 #   1. transition-node: a graph-commit failure after apply-node-transition.ts's
 #      real write rolls intentions/<id>.md back to origin/main (byte-identical
 #      `git diff` against the clone's HEAD).
-#   2. dispatch-graph-census, born-fresh case: a graph-commit failure after a
-#      brand-new census node's write-node.ts write DELETES the file (no prior
-#      blob to restore to) rather than leaving it dirty.
 #   3. dispatch-graph-main-red-sync: a completion failure (a) emits a non-empty
 #      stderr diagnostic naming the node (regression guard for the old
 #      `... ) 1>&2 || true` total swallow) and (b) leaves the working tree
@@ -51,7 +48,7 @@ REAL_REPO_ROOT="$(cd "$HARNESS_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS_SRC="$REAL_REPO_ROOT/packages/intentionsutil/scripts"
 INTENTIONSUTIL_SRC="$REAL_REPO_ROOT/packages/intentionsutil/src"
 
-for f in transition-node dispatch-graph-census dispatch-graph-main-red-sync lib.sh dispatch-config-load; do
+for f in transition-node dispatch-graph-main-red-sync lib.sh dispatch-config-load; do
   [[ -f "$HARNESS_DIR/$f" ]] || { echo "error: $f not found at $HARNESS_DIR/$f" >&2; exit 1; }
 done
 command -v jq >/dev/null || { echo "error: jq not found" >&2; exit 1; }
@@ -227,56 +224,6 @@ if [[ $rc -ne 0 ]] && [[ -z "$diff_after" ]]; then
 else
   no "transition-node byte-identical restore (rc=$rc)"
   printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
-fi
-
-# ===========================================================================
-# Case 2: dispatch-graph-census born-fresh delete-on-failure
-# (tactic-graph-write-failure-rollback Unit 4).
-# ===========================================================================
-T2="$WORK/t2-seed"
-build_seed_repo "$T2"
-cp "$HARNESS_DIR/dispatch-graph-census" "$T2/.claude/skills/dispatch-propagate/scripts/dispatch-graph-census"
-chmod +x "$T2/.claude/skills/dispatch-propagate/scripts/dispatch-graph-census"
-# A single done-but-present node is enough owed-prune debt to cross a
-# threshold of 1 (graph-census-debt.ts: total = |donePresent ∪ orphans ∪
-# mergedUnabsorbed|).
-cat >"$T2/intentions/t-done.md" <<'NODE'
----
-id: t-done
-kind: tactic
-statement: a done-but-present node contributing owed-prune debt
-owner: ai
-status: codified
-phase: done
-serves: []
----
-# a done-but-present node contributing owed-prune debt
-NODE
-new_origin t2
-init_and_push "$T2"
-
-C2="$WORK/t2-clone"
-clone_with_node_modules "$C2"
-fail_graph_commit "$C2"
-CENSUS_CFG_DIR="$WORK/t2-config"
-mkdir -p "$CENSUS_CFG_DIR"
-echo '{"threshold": 1}' >"$CENSUS_CFG_DIR/census.json"
-
-out="$(
-  cd "$C2" || exit 99
-  export DISPATCH_CONFIG_DIR="$CENSUS_CFG_DIR"
-  bash .claude/skills/dispatch-propagate/scripts/dispatch-graph-census 2>&1
-)"; rc=$?
-CENSUS_ID="tactic-graph-census-$(date -u +%Y-%m-%d)"
-status_after="$(git -C "$C2" status --porcelain intentions/)"
-if [[ $rc -ne 0 ]] \
-   && grep -q "born-node write was rolled back (file deleted)" <<<"$out" \
-   && [[ ! -e "$C2/intentions/$CENSUS_ID.md" ]] \
-   && [[ -z "$status_after" ]]; then
-  ok "dispatch-graph-census born-fresh delete-on-failure: the newly-written census file is deleted, tree clean"
-else
-  no "dispatch-graph-census born-fresh delete-on-failure (rc=$rc, id=$CENSUS_ID)"
-  printf '%s\n' "$out"; printf 'status: %s\n' "$status_after"
 fi
 
 # ===========================================================================

@@ -141,7 +141,7 @@ FAKE
   for _hs in dispatch-reconcile-merged:SEL_RECONCILE_MERGED_OUT \
              reconcile-graph-merged:SEL_RECONCILE_GRAPH_OUT \
              reconcile-graph-review-stall:SEL_REVIEW_STALL_OUT \
-             dispatch-graph-census:SEL_CENSUS_OUT \
+             dispatch-census-tick:SEL_CENSUS_OUT \
              dispatch-jit-calendar-import:SEL_CALENDAR_OUT \
              dispatch-statements-scan:SEL_STATEMENTS_OUT; do
     _hname="${_hs%%:*}"; _hvar="${_hs#*:}"

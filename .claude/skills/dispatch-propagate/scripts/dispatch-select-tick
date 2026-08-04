@@ -537,15 +537,16 @@ if [[ -n "$REVIEW_STALL_OUT" ]]; then
   done <<< "$REVIEW_STALL_OUT"
 fi
 
-# Standing per-tick reconciliation-debt duty (tactic-graph-census-recurrence
-# Unit 2). Runs right after the same-tick reconciler above absorbs what it can,
-# so what remains is the persistent owed-prune / orphan debt a census must
-# drain. Graph-only (no network — the per-tick duty is near-free), best-effort
-# (a failure must not abort the tick). When accumulated debt crosses the
-# configured threshold and no census node is already open, it births exactly one
-# born-parked census tactic naming the batch and lands it via graph-commit; the
-# born-parked node is the recurrence latch, so it births at most one at a time.
-CENSUS_OUT=$("$SCRIPT_DIR/dispatch-graph-census") || true
+# Scripted census tick step (tactic-census-scripted-tick Unit 3). Runs right
+# after the same-tick reconciler above absorbs what it can, pruning every
+# done-but-present node whose completion verifies mechanically (edge repair
+# scripted in the same graph-commit) and surfacing every unverified one as an
+# ordinary selectable `tactic-census-defect-*` tactic (deduped by
+# deterministic id, so a repeated tick never re-mints). Graph-only (no
+# network), best-effort (a failure must not abort the tick), unconditional —
+# no threshold, no config, no born-parked latch; replaces the old
+# per-tick reconciliation-debt-latch mechanism it superseded.
+CENSUS_OUT=$("$SCRIPT_DIR/dispatch-census-tick") || true
 if [[ -n "$CENSUS_OUT" ]]; then
   while IFS= read -r census_line; do
     [[ -n "$census_line" ]] && echo "census: $census_line"
