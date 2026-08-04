@@ -34,17 +34,17 @@ reading: null
 gap: "Still open (decision made 2026-08-04, see clarifications): how many OTHER
   already-parked nodes in the current graph are silently in this same state
   (Workflow landed, session dead, park is the only symptom) -- the one-time
-  sweep cross-checking parked nodes against their originating session's
-  Workflow completion record has not been run."
+  sweep cross-checking parked nodes against their originating session's Workflow
+  completion record has not been run."
 serves:
   - strategy-graph-native-dispatch
 recovers: []
 clarifications:
-  - question: Gap decision — session-level hardening of Step 2's
-      mark-node-terminal call, or sweep-level reap of the dead job, given
-      condition 14 reserved the freeze-for-debug trade for the author?
-    answer: "(Ruled 2026-08-04 /align interview, author-ratified.) Both, with
-      the doctrine trade made: condition 14's keep-for-debug is amended
+  - question: Gap decision — session-level hardening of Step 2's mark-node-terminal
+      call, or sweep-level reap of the dead job, given condition 14 reserved the
+      freeze-for-debug trade for the author?
+    answer: "(Ruled 2026-08-04 /align interview, author-ratified.) Both, with the
+      doctrine trade made: condition 14's keep-for-debug is amended
       (strategy-graph-native-dispatch 2026-08-04 clarification) — an undeclared
       terminal exit now routes to the invalid-state lane, whose intervention
       session consumes the debugging artifact autonomously (transcript review,
@@ -53,16 +53,16 @@ clarifications:
       completed, graph write landed, mark-node-terminal skipped) is the worked
       example the intervention resolves mechanically: the transcript shows the
       completed Workflow, so the intervention performs the missed
-      mark-node-terminal disposition, reaps, and files the hardening follow-up
-      — the runtime discriminator the park said was missing is supplied by
-      reading the transcript, not by a sweep-time flag. Session-level hardening
-      of /align-tactics Step 2 (move mark-node-terminal into the same block as
-      the graph-commit it follows, mirroring park-node:310-317 and
-      transition-node's mark_terminal helper) remains in scope as prevention,
-      as does correcting the shipped park-recommendation text at
-      lib-frozen-session-park.sh:1034 and the one-time cross-check audit still
-      recorded in gap. Re-run /align-tactics on this node to finalize against
-      this ruling. Park cleared."
+      mark-node-terminal disposition, reaps, and files the hardening follow-up —
+      the runtime discriminator the park said was missing is supplied by reading
+      the transcript, not by a sweep-time flag. Session-level hardening of
+      /align-tactics Step 2 (move mark-node-terminal into the same block as the
+      graph-commit it follows, mirroring park-node:310-317 and transition-node's
+      mark_terminal helper) remains in scope as prevention, as does correcting
+      the shipped park-recommendation text at lib-frozen-session-park.sh:1034
+      and the one-time cross-check audit still recorded in gap. Re-run
+      /align-tactics on this node to finalize against this ruling. Park
+      cleared."
 tooling_goals: []
 success_signal:
   observable: an /align-tactics tactic-mode session that completes its Workflow to
@@ -80,7 +80,59 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "This tactic's /align-tactics finalize round (2026-08-04) could not
+    author a plan: its serving strategy (strategy-graph-native-dispatch) is
+    itself office_hours-parked at origin/main since 2026-08-04 for an unresolved
+    measurement-instrument ratification hold (success_signal.sensor no longer
+    resolves to any registered sensor under SensorRegistry.resolve's exact-match
+    design, sensors.ts:49-59; success_signal.threshold's two quantitative terms
+    -- the maintenance-burden band and the sample-history home -- are
+    undeclared). The /align-tactics Workflow's drift-review gate requires the
+    serving strategy's office_hours be null before it authors any plan,
+    tactic-mode included, so this round's drift phase returned
+    decomposable=false and disposition=escalated before writing a body for this
+    node (Workflow run wf_d7572c90-18f, 2026-08-04). This tactic's own scope was
+    not found deficient -- the drift review confirmed the tactic's three-item
+    scope (Step 2 hardening, correcting lib-frozen-session-park.sh's
+    park-recommendation text, the one-time cross-check audit) is unchanged; the
+    block is entirely upstream, in the serving strategy's own measurement
+    instrument. Separately, this round's drift review surfaced three
+    record-completeness gaps on the strategy itself, none of which are written
+    here -- a tactic-target /align-tactics session never edits the serving
+    strategy's frontmatter: (a) the strategy record supplied to the drift
+    agent's input dump omitted the strategy's own office_hours field entirely,
+    so a reviewer trusting its input would have proceeded to plan against a live
+    park -- worth checking whether the dump path strips office_hours or was
+    simply taken before this park landed; (b) rounds.count reads 0 and
+    rounds.last_aligned reads null at origin/main despite a dozen-plus
+    documented re-evaluation rounds on this strategy since 2026-07-03, so the
+    round-cap and fresh-reading gates that read those fields have never actually
+    contained anything; (c) three attributes.conditions entries (the 2026-07-26
+    pause-config-field migration, the PR-title CI guard, the
+    bounded-ancestry-projection script) narrate landed mechanisms that are in
+    fact still open, unplanned tactics. Recommend: do not re-plan this tactic
+    directly against this park. First clear the strategy's own standing park via
+    an /align interview ratifying its sensor-name and threshold premises (see
+    strategy-graph-native-dispatch's own office_hours.reason for the two
+    ratification options), landing the three drift-surfaced record-completeness
+    gaps above as dated clarifications in that same sitting if the author judges
+    them worth recording; then re-run /align-tactics
+    tactic-align-tactics-mark-terminal-skipped to finalize this tactic. Until
+    the strategy's park clears, leaving this tactic unparked would let the
+    router's frozenTacticSelectable gate keep re-selecting it every tick (the
+    draft-tactic candidate emission in router.ts checks only this tactic's own
+    office_hours, never its serving strategy's), re-spawning a session that
+    would hit this identical block every time -- this park exists to stop that
+    churn, not to flag a defect in this tactic's own content."
+  since: 2026-08-04
+  recommendation: Run an /align interview against strategy-graph-native-dispatch
+    to ratify its own pending office_hours hold (sensor-name drift + unreadable
+    threshold), clear that park, then re-run /align-tactics
+    tactic-align-tactics-mark-terminal-skipped to finalize this tactic. Do not
+    attempt to plan this tactic while the strategy park is live -- the
+    Workflow's drift gate will re-park identically.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
