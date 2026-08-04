@@ -26,8 +26,8 @@ attention:
     token-efficiency work ahead of bug-fix work and ahead of the undecomposed
     baseline. Matches the boost 20 already carried by the review-phase
     token-cost cluster (tactic-review-skill-body-decomposition and its
-    siblings). Simulated over the live store before writing: 0 tier changes,
-    0 value drift onto non-target nodes, resolves to 20.00."
+    siblings). Simulated over the live store before writing: 0 tier changes, 0
+    value drift onto non-target nodes, resolves to 20.00."
   tier: 1
 phase: null
 execution:
@@ -39,9 +39,54 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/align-tactics misrouted onto this node: it is not a draft. router.ts's
+    isDraft (packages/intentionsutil/src/router.ts:147-149) treats any
+    phase:null as a draft with no allowance for the pre-schema-migration
+    attributes.phase squatter form. This node was lifted to first-class
+    phase:review by tactic-schema-migration-backfill (234e52e7, 2026-07-07),
+    then re-squatted into phase:null / attributes:{phase: main-qa} to represent
+    it awaiting main-qa verification -- at that time schema.ts had no
+    first-class main-qa phase to write. schema.ts's Phase enum gained a
+    first-class 'main-qa' value on 2026-07-11 (tactic-main-qa-phase, PR #2859)
+    and the qa-main node-lane handler (its Unit 2) now expects real phase:
+    main-qa nodes -- this node was never re-backfilled after that migration. PR
+    #2777 (this tactic's own work) merged; execution.markers already carry
+    qa-done+reviewed, and the body already carries a full finalized plan plus a
+    '## main-qa residue' checklist (added at qa time). The selector's
+    frozenTacticSelectable gate does not distinguish this stale squatter shape
+    from a genuine draft, so it queued this node for align-tactics
+    finalize/decompose -- which would be actively harmful here (re-planning or
+    resetting phase:implement on already-shipped, reviewed, merged work).
+    Declining to run the Workflow on this target. This is the same defect class
+    already parked on sibling tactic-outcome-envelope-qa-accounting (commit
+    8f7b1069, 2026-08-03) and tactic-noncodegen-session-model-defaults (commit
+    9af38372, 2026-08-03) -- both parks' recommendations predicted more
+    lingering attributes.phase squatters exist; this node is one of the
+    predicted six, already named in the filed draft
+    tactic-attributes-phase-squatter-retire's statement ('backfill the 6
+    remaining phase:null + attributes.phase:main-qa nodes')."
+  since: 2026-08-03
+  recommendation: "Migrate this node's frontmatter directly to current schema
+    (phase: main-qa, attributes: {}) via a standalone state-only graph-commit,
+    mirroring precedent commit 234e52e7 -- no qa/review needed, it is a pure
+    frontmatter fix restoring the shape this node already held once (phase:
+    review) before the main-qa squatter round-trip. That unblocks the qa-main
+    node-lane handler (tactic-main-qa-phase Unit 2,
+    .claude/skills/qa-main/SKILL.md) to run the '## main-qa residue (qa
+    2026-07-06)' checklist already recorded in this node's body and land it to
+    done. Do not file a fresh grep-sweep recommendation:
+    tactic-attributes-phase-squatter-retire (filed 2026-07-30, status: raw)
+    already tracks backfilling all 6 remaining attributes.phase squatters plus
+    deleting the squatter fallback readers and hardening validate-graph to
+    reject the key outright -- that draft is the correct owner of the systemic
+    fix; this park just needs its own frontmatter migrated in the meantime so
+    qa-main can drain it."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes:
