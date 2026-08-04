@@ -1,34 +1,44 @@
 ---
 id: tactic-emit-outcome-node-lane-issue-arg
 kind: tactic
-statement: dispatch-emit-outcome's --issue flag hard-requires a positive
-  integer, but review-fix and qa-fix's node-lane terminal steps are documented
-  to call it with the graph-native node id (a string) as --issue, so the
-  node-lane outcome-envelope emit will always exit 2 and never has been able to
-  run
+statement: dispatch-emit-outcome hard-validates --issue as a positive integer,
+  but review-fix and qa-fix's node lane both pass the node id (non-numeric) as
+  --issue per their own terminal-disposition docs, so every node-lane
+  outcome-envelope emit call exits 2 and no envelope ever lands for graph-native
+  runs, silently excluding the entire node lane from the token-audit dataset
 owner: ai
 status: raw
 parent: null
-rationale: "Surfaced 2026-08-04 running /review-fix on
-  tactic-review-verify-per-file-batching (PR #3027), a graph-native node-lane
-  run. Step 7 of review-fix/SKILL.md and qa-fix's terminal-disposition.md both
-  document calling `dispatch-emit-outcome --issue \"$N\"` unchanged on the node
-  lane, where $N is the node id string (e.g.
-  tactic-review-verify-per-file-batching), not a gh issue number.
-  dispatch-emit-outcome's own argument parser calls `_require_pos_int issue
-  \"$ISSUE\"` (scripts/dispatch-emit-outcome:205), which regex-matches
-  `^[1-9][0-9]*$` and exits 2 on any non-integer value. The outcome-envelope
-  schema doc (.claude/docs/outcome-envelope.md) also types `issue` as `integer,
-  no, the dispatch issue number` with no node-id variant. So every node-lane
-  review/qa terminal pass that reaches this call fails it; this session skipped
-  the emit rather than fabricate a fake issue number (which would corrupt
-  aggregate-usage.sh's per-issue cost attribution) or hard-crash the terminal
-  sequence before the load-bearing completion action (transition-node --set-pr)
-  ran."
+rationale: "Discovered independently twice. First by /review-fix on PR #3004
+  (tactic-phase-terminal-requires-disposition), 2026-07-31, while executing its
+  own Step 7 terminal actions: dispatch-emit-outcome
+  (.claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome) requires
+  --issue to match ^[1-9][0-9]*$ and exits 2 otherwise (\"--issue must be a
+  positive integer\"). review-fix's node-lane docs
+  (references/terminal-actions.md's general Step 7 recipe, not re-keyed by
+  references/node-lane.md's seam list) call `dispatch-emit-outcome --issue <N>`
+  where $N is bound to the node id string on the node lane (e.g.
+  tactic-phase-terminal-requires-disposition) -- not a number. qa-fix's
+  references/terminal-disposition.md has the identical pattern (`--issue \"$N\"`
+  with no lane distinction). So on every node-lane run of either skill the emit
+  call fails validation and no envelope is ever printed to the transcript,
+  meaning aggregate-usage.sh / dispatch-token-audit silently sees zero node-lane
+  runs -- not an accurate zero, an unmeasured gap that looks identical to a
+  clean or unused pipeline. That PR's own review-fix pass hit this and skipped
+  the emit for its run rather than fabricate a numeric placeholder (which would
+  misattribute review-fix outcomes to a fake issue number and corrupt rather
+  than merely omit data). Rediscovered independently 2026-08-04 by /review-fix
+  on PR #3027 (tactic-review-verify-per-file-batching), confirming the gap is
+  still unfixed and recurring on every node-lane terminal pass, not a one-off:
+  same call site (dispatch-emit-outcome:205, _require_pos_int issue), same
+  failure mode. That second session skipped its own emit the same way, then
+  filed this node without first checking whether it already existed and briefly
+  overwrote this original PR #3004 provenance with its own before the collision
+  was caught and the two write-ups were merged back together here."
 reading: null
 gap: null
 serves:
-  - strategy-token-economy
+  - strategy-graph-native-dispatch
 recovers: []
 clarifications: []
 tooling_goals: []
@@ -53,11 +63,11 @@ attributes: {}
   and `.claude/skills/qa-fix/references/terminal-disposition.md:97/213`
   (`--issue "$N"` where `$N` is the node id on the node lane).
 - **Failure scenario**: run `/review-fix` or `/qa-fix` to completion on a
-  graph-native tactic node (e.g. this session's `tactic-review-verify-per-file-batching`,
-  PR #3027) and reach the terminal outcome-envelope emit as documented →
-  `dispatch-emit-outcome --issue "$N" ...` exits 2
-  (`--issue must be a positive integer (>= 1), got: tactic-...`), because
-  `$N` is a node-id string, not a gh issue number.
+  graph-native tactic node and reach the terminal outcome-envelope emit as
+  documented → `dispatch-emit-outcome --issue "$N" ...` exits 2
+  (`--issue must be a positive integer (>= 1), got: tactic-...`), because `$N`
+  is a node-id string, not a gh issue number. Confirmed on two independent
+  occurrences: PR #3004 (2026-07-31) and PR #3027 (2026-08-04).
 - **Adversarial check performed**: read the script's parser directly
   (no `--node-id` variant or string-issue branch exists), read
   `.claude/docs/outcome-envelope.md`'s field table (`issue: integer, no, the
@@ -65,11 +75,10 @@ attributes: {}
   both `review-fix` and `qa-fix` node-lane docs pass `$N` unchanged with no
   re-keyed seam noted for this call — this is not a one-off doc typo, it is
   the same gap in both phases' node lane.
-- **Source PR**: this finding was surfaced, not fixed, while running
-  `/review-fix` on PR #3027
-  (`tactic-review-verify-per-file-batching`); this session skipped the
-  node-lane outcome-envelope emit for that run rather than fabricate a
-  numeric `--issue` value.
+- Both sessions skipped the node-lane outcome-envelope emit for their run
+  rather than fabricate a numeric `--issue` value (which would misattribute
+  the run to a fake issue number and corrupt aggregate-usage.sh's per-issue
+  cost attribution, rather than merely omit data).
 
 ## Suggested direction (not binding)
 
