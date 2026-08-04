@@ -40,7 +40,7 @@ attention:
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-office-hours-drain-claim
   pr: 3035
@@ -51,7 +51,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T06:47:20Z
+    mergeCommitSha: edddaad820a127429fdc520515d71bfeeb9d3717
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-office-hours-concurrency-dedup
