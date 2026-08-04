@@ -18,6 +18,8 @@
 // This module never WRITES marks (strategy clarification 4 — marks are
 // author-side); it only reads the graph and reports.
 
+import { readDivergenceLevel, readGatedLevel } from "./attention.js";
+import type { DivergenceLevel, GatedLevel } from "./attention.js";
 import type { IntentionNode } from "./schema.js";
 
 // --- Durable-layer membership ------------------------------------------------
@@ -62,53 +64,39 @@ export function isMarked(node: IntentionNode): boolean {
 
 // --- Capture-axis scoring (delegation nodes) ---------------------------------
 // Reads the two capture axes off a delegation's freeform attributes, in the
-// same spirit as src/attention.ts's capture term: a missing/malformed axis
+// same spirit as src/attention.ts's capture term: an absent/out-of-enum axis
 // scores 0 (boundary validation, not a fallback — attributes shape is data,
-// not a code contract). Token/prefix matching, not exact-match, so the store's
-// real compound values ("low-moderate", "partially — ...") parse to real
-// intent instead of silently zeroing.
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+// not a code contract). Both axes are enums read EXACTLY, via the single set of
+// readers in src/attention.ts — no prefix matching over free text.
 
 /**
- * Divergence severity of a delegation, ranked high > moderate > low-moderate >
- * low (strategy plan: parse the leading token of the free-text level). A
- * compound value is dispatched on its leading severity band, with
- * `low-moderate` checked before the bare `low` prefix it shares. Unrecognized
- * or absent → 0.
+ * Divergence severity of a delegation, ranked high (4) > moderate (3) > low
+ * (1). Absent or out-of-enum → 0. The gap at 2 is vestigial: it once held a
+ * `low-moderate` compound band, which the enum makes unrepresentable. Only the
+ * ORDER matters to `delegationScore`, so the gap is harmless and the surviving
+ * values are left as they were rather than renumbered.
  */
 export function divergenceRank(delegation: IntentionNode): number {
-  const divergence = delegation.attributes.divergence;
-  if (!isPlainObject(divergence)) return 0;
-  const level = divergence.level;
-  if (typeof level !== "string") return 0;
-  const t = level.trim().toLowerCase();
-  if (t.startsWith("high")) return 4;
-  if (t.startsWith("moderate")) return 3;
-  if (t.startsWith("low-moderate") || t.startsWith("low moderate")) return 2;
-  if (t.startsWith("low")) return 1;
-  return 0;
+  const level = readDivergenceLevel(delegation);
+  if (level === null) return 0;
+  return DIVERGENCE_RANKS[level];
 }
 
+const DIVERGENCE_RANKS: Record<DivergenceLevel, number> = { high: 4, moderate: 3, low: 1 };
+
 /**
- * Irreversibility of a delegation from `attributes.irreversibility.gated`: a
- * string beginning `true` outranks one beginning `false`; a present, non-empty
- * middle-ground string ("partially — ...") sits between; absent/malformed → 0
- * (mirrors src/attention.ts's `irreversibilityScore`).
+ * Irreversibility of a delegation from `attributes.irreversibility.gated.level`:
+ * `large` (3) > `partial` (2) > `none` (1); absent/out-of-enum → 0 (mirrors
+ * src/attention.ts's `irreversibilityScore`, including its 0-vs-1 distinction —
+ * an unfilled axis must not outrank one authored as fully open).
  */
 export function gatedRank(delegation: IntentionNode): number {
-  const irreversibility = delegation.attributes.irreversibility;
-  if (!isPlainObject(irreversibility)) return 0;
-  const gated = irreversibility.gated;
-  if (typeof gated !== "string") return 0;
-  const g = gated.trim().toLowerCase();
-  if (g === "") return 0;
-  if (g.startsWith("true")) return 3;
-  if (g.startsWith("false")) return 1;
-  return 2;
+  const level = readGatedLevel(delegation);
+  if (level === null) return 0;
+  return GATED_RANKS[level];
 }
+
+const GATED_RANKS: Record<GatedLevel, number> = { none: 1, partial: 2, large: 3 };
 
 /**
  * A delegation's own capture exposure. Divergence dominates gating: a one-step
@@ -224,7 +212,7 @@ export interface RankedUnmarked {
   id: string;
   kind: string;
   exposure: number;
-  /** Human-readable exposure factors, e.g. "divergence=high gated=true" or "nearest=delegation-x hops=2". */
+  /** Human-readable exposure factors, e.g. "divergence=4 gated=3" or "nearest=delegation-x hops=2". */
   factors: string;
 }
 

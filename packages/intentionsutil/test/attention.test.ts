@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Attention, IntentionNode } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
-import { resolveAttention } from "../src/attention.js";
+import { deriveClassification, resolveAttention } from "../src/attention.js";
 
 /** Build a full IntentionNode fixture, filling required/default fields. */
 function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
@@ -253,7 +253,7 @@ describe("resolveAttention override (branch cap)", () => {
         status: "codified",
         attributes: {
           divergence: { level: "high" },
-          irreversibility: { gated: "true — no export path" },
+          irreversibility: { gated: { level: "large", note: "no export path" } },
         },
       }),
       anode({ id: "strategy-target", kind: "strategy" }), // reading: null omitted → unvalidated
@@ -379,7 +379,7 @@ describe("resolveAttention capture-resolution term", () => {
         status: "codified",
         attributes: {
           divergence: { level: "low" },
-          irreversibility: { gated: "false — fully portable" },
+          irreversibility: { gated: { level: "none", note: "fully portable" } },
         },
       }),
       anode({
@@ -388,7 +388,7 @@ describe("resolveAttention capture-resolution term", () => {
         status: "codified",
         attributes: {
           divergence: { level: "high" },
-          irreversibility: { gated: "true — no export path" },
+          irreversibility: { gated: { level: "large", note: "no export path" } },
         },
       }),
       svnode({ id: "strategy-low-capture", recovers: ["delegation-low"] }),
@@ -411,7 +411,7 @@ describe("resolveAttention capture-resolution term", () => {
         status: "codified",
         attributes: {
           divergence: { level: "moderate" },
-          irreversibility: { gated: "false" },
+          irreversibility: { gated: { level: "none" } },
         },
       }),
       svnode({ id: "strategy-x", recovers: ["delegation-x"] }),
@@ -425,14 +425,10 @@ describe("resolveAttention capture-resolution term", () => {
     expect(tacticValue).toBe(strategyValue);
   });
 
-  // Both capture axes are free text, not a schema-gated enum — the live store
-  // already authors values beyond the plain low/moderate/high + true/false the
-  // kind-delegation field spec documents: delegation-anthropic-claude and
-  // delegation-banking use `low-moderate`; delegation-hosted-publishing uses
-  // `moderate — would-be`; every gated delegation with a description reads
-  // `partially — ...` or `largely — ...`, never a bare `true`. An exact-match
-  // parse silently zeroes (divergence) or under-scores (irreversibility) these
-  // real, already-recovered delegations; these cases pin the real vocabulary.
+  // Both capture axes are enums read EXACTLY — no prefix or token matching over
+  // free text. The prose that used to sit inside the value ("partially — the
+  // authoritative record is the vendor's") now lives in `gated.note`, so a
+  // reader never parses an authored sentence. Anything out of enum scores 0.
 
   function withCaptureAxes(attributes: Record<string, unknown>): IntentionNode[] {
     return [
@@ -442,30 +438,129 @@ describe("resolveAttention capture-resolution term", () => {
     ];
   }
 
-  it("scores a compound divergence level ('low-moderate') as its more severe component, not 0", () => {
-    const result = resolveAttention(withCaptureAxes({ divergence: { level: "low-moderate" } }));
-    // moderate (2) / 6 — not 0, and strictly above a plain "low" (1/6).
-    expect(result.get("strategy-under-test")?.value).toBeCloseTo(2 / 6);
+  const captureValue = (attributes: Record<string, unknown>): number | undefined =>
+    resolveAttention(withCaptureAxes(attributes)).get("strategy-under-test")?.value;
+
+  it("scores each divergence enum member exactly (low/moderate/high)", () => {
+    expect(captureValue({ divergence: { level: "low" } })).toBeCloseTo(1 / 6);
+    expect(captureValue({ divergence: { level: "moderate" } })).toBeCloseTo(2 / 6);
+    expect(captureValue({ divergence: { level: "high" } })).toBeCloseTo(3 / 6);
   });
 
-  it("scores a qualified divergence level ('moderate — would-be') by its recognized token, not 0", () => {
-    const result = resolveAttention(withCaptureAxes({ divergence: { level: "moderate — would-be" } }));
-    expect(result.get("strategy-under-test")?.value).toBeCloseTo(2 / 6);
+  it("scores an out-of-enum or malformed divergence level as 0", () => {
+    // Transitional: the pre-enum corpus still authors compound/qualified free
+    // text like these until Unit 2 normalizes it. Out of enum reads 0 — the
+    // contract this unit establishes, not a regression.
+    expect(captureValue({ divergence: { level: "low-moderate" } })).toBe(0);
+    expect(captureValue({ divergence: { level: "moderate — would-be" } })).toBe(0);
+    expect(captureValue({ divergence: { level: "HIGH" } })).toBe(0); // case-sensitive
+    expect(captureValue({ divergence: { level: 3 } })).toBe(0);
+    expect(captureValue({ divergence: "high" })).toBe(0);
+    expect(captureValue({})).toBe(0);
   });
 
-  it("scores 'partially gated' strictly between 'false' and 'true' — never collapsed onto 'false'", () => {
-    const falseValue = resolveAttention(
-      withCaptureAxes({ irreversibility: { gated: "false" } }),
-    ).get("strategy-under-test")?.value;
-    const partialValue = resolveAttention(
-      withCaptureAxes({ irreversibility: { gated: "partially — the authoritative record is the vendor's" } }),
-    ).get("strategy-under-test")?.value;
-    const trueValue = resolveAttention(
-      withCaptureAxes({ irreversibility: { gated: "true — no export path" } }),
-    ).get("strategy-under-test")?.value;
+  it("scores each gated enum member exactly (none/partial/large), strictly ordered", () => {
+    const none = captureValue({ irreversibility: { gated: { level: "none" } } });
+    const partial = captureValue({ irreversibility: { gated: { level: "partial" } } });
+    const large = captureValue({
+      irreversibility: { gated: { level: "large", note: "the authoritative record is the vendor's" } },
+    });
 
-    expect(partialValue).toBeGreaterThan(falseValue ?? 0);
-    expect(trueValue).toBeGreaterThan(partialValue ?? 0);
+    expect(none).toBeCloseTo(1 / 6);
+    expect(partial).toBeCloseTo(2 / 6);
+    expect(large).toBeCloseTo(3 / 6);
+    expect(partial).toBeGreaterThan(none ?? 0);
+    expect(large).toBeGreaterThan(partial ?? 0);
+  });
+
+  it("scores an absent or malformed gated axis 0 — strictly BELOW an authored 'none'", () => {
+    // The 0-vs-1 distinction is load-bearing: an unfilled `irreversibility`
+    // object must not score HIGHER than one explicitly authored as fully open.
+    const none = captureValue({ irreversibility: { gated: { level: "none" } } }) ?? 0;
+    expect(captureValue({ irreversibility: {} })).toBe(0);
+    expect(captureValue({ irreversibility: { gated: {} } })).toBe(0);
+    expect(captureValue({ irreversibility: { gated: { level: "partially — vendor-held" } } })).toBe(0);
+    expect(captureValue({ irreversibility: { gated: true } })).toBe(0); // legacy boolean is gone
+    expect(captureValue({ irreversibility: { gated: "false" } })).toBe(0); // legacy free text is gone
+    expect(none).toBeGreaterThan(0);
+  });
+});
+
+// kind-delegation's derivation rule (2026-07-09): captured = high divergence OR
+// gated/prohibitive recovery; platform = moderate divergence OR high recovery
+// cost; tool = otherwise. `gated` resolves to gated.level === "large".
+describe("deriveClassification", () => {
+  const derive = (attributes: Record<string, unknown>): string => deriveClassification(attributes);
+
+  const axes = (
+    divergence: string | null,
+    gated: string | null,
+    recoveryCost: string | null,
+  ): Record<string, unknown> => ({
+    ...(divergence === null ? {} : { divergence: { level: divergence } }),
+    irreversibility: {
+      ...(gated === null ? {} : { gated: { level: gated, note: "why" } }),
+      ...(recoveryCost === null ? {} : { recovery_cost: recoveryCost }),
+    },
+  });
+
+  it("derives captured from high divergence alone", () => {
+    expect(derive(axes("high", "none", "low"))).toBe("captured");
+  });
+
+  it("derives captured from large gating alone (boundary: moderate + gated large)", () => {
+    expect(derive(axes("moderate", "large", "low"))).toBe("captured");
+  });
+
+  it("derives captured from prohibitive recovery cost alone", () => {
+    expect(derive(axes("low", "none", "prohibitive"))).toBe("captured");
+  });
+
+  it("derives captured for high divergence even when nothing is gated (boundary: high + none)", () => {
+    expect(derive(axes("high", "none", "none"))).toBe("captured");
+  });
+
+  it("derives platform from moderate divergence", () => {
+    expect(derive(axes("moderate", "none", "low"))).toBe("platform");
+  });
+
+  it("derives platform from high recovery cost with low divergence", () => {
+    expect(derive(axes("low", "none", "high"))).toBe("platform");
+  });
+
+  it("derives platform from partial gating only when another arm fires — partial alone is a tool", () => {
+    expect(derive(axes("low", "partial", "low"))).toBe("tool");
+    expect(derive(axes("moderate", "partial", "low"))).toBe("platform");
+  });
+
+  it("derives tool when both axes sit low", () => {
+    expect(derive(axes("low", "none", "none"))).toBe("tool");
+  });
+
+  it("treats 'unassessed' recovery cost as triggering neither arm", () => {
+    expect(derive(axes("low", "none", "unassessed"))).toBe("tool");
+  });
+
+  it("derives tool from absent/out-of-enum axes rather than throwing", () => {
+    expect(derive({})).toBe("tool");
+    expect(derive(axes("low-moderate", "partially — vendor-held", "bounded: a weekend"))).toBe("tool");
+  });
+
+  it("accepts a delegation node as well as a bare attributes map", () => {
+    const node = anode({
+      id: "delegation-node-form",
+      kind: "delegation",
+      status: "codified",
+      attributes: axes("high", "none", "low"),
+    });
+    expect(deriveClassification(node)).toBe("captured");
+  });
+
+  it("derives a declined record over its would-be axes, with no special-casing", () => {
+    const entered = { origin: "chosen", ...axes("high", "large", "prohibitive") };
+    const declined = { origin: "declined", ...axes("high", "large", "prohibitive") };
+    expect(derive(declined)).toBe("captured");
+    expect(derive(declined)).toBe(derive(entered));
   });
 });
 
@@ -728,7 +823,7 @@ describe("resolveAttention term composition is modular", () => {
         status: "codified",
         attributes: {
           divergence: { level: "high" },
-          irreversibility: { gated: "true" },
+          irreversibility: { gated: { level: "large" } },
         },
       }),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
