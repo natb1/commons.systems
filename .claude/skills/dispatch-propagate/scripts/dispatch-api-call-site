@@ -34,7 +34,19 @@ set -euo pipefail
 
 CALL_SITE_RE='fetch\(|axios|getDocs\(|getDoc\(|addDoc\(|setDoc\(|updateDoc\(|deleteDoc\(|onSnapshot\(|query\(|collection\(|collectionGroup\(|XMLHttpRequest'
 
-if grep -E '^\+' | grep -vE '^\+\+\+' | grep -qE "$CALL_SITE_RE"; then
+# The terminal stage must be `grep -cE`, NOT `grep -qE`. `grep -q` exits on its
+# first match, closing the pipe while the producer upstream (a real `git diff`)
+# is still writing; the upstream stages then die of SIGPIPE with status 141, and
+# under `pipefail` bash reports the pipeline's status as the rightmost non-zero
+# stage — 141 — so a genuine match was read as "no match" (PIPESTATUS on a real
+# invocation: 141 141 141 0). `grep -c` reads stdin to EOF, so no stage is ever
+# SIGPIPE'd. The `|| true` guard is required because grep exits 1 on zero
+# matches even though `-c` still prints `0` (and the upstream `grep -E '^\+'`
+# likewise exits 1 on a diff with no added lines) — under `set -e` either would
+# abort the script before it could print a verdict.
+match_count=$(grep -E '^\+' | grep -vE '^\+\+\+' | grep -cE "$CALL_SITE_RE" || true)
+
+if [[ "${match_count:-0}" -gt 0 ]]; then
   echo "api_call_site=true"
 else
   echo "api_call_site=false"

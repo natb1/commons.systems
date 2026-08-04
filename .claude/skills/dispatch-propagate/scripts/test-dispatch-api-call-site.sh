@@ -56,4 +56,25 @@ diff_markdown=$'--- a/README.md\n+++ b/README.md\n@@ -1,1 +1,1 @@\n+Call `fetch(
 out=$(printf '%s' "$diff_markdown" | "$SCRIPT_DIR/dispatch-api-call-site")
 assert_eq "markdown prose mentioning fetch( → true (accepted false positive)" "api_call_site=true" "$out"
 
+# Large STREAMING diff whose only call-site match is on an EARLY added line,
+# followed by a long non-matching tail → true. Regression pin for the SIGPIPE
+# bug: the classifier's terminal stage used to be `grep -qE`, which exits on
+# its first match and closes the pipe while the producer is still writing. The
+# upstream stages then died of SIGPIPE (141) and `pipefail` reported the whole
+# pipeline as failed, so a genuine match printed api_call_site=false. Every
+# other case above uses a small pre-built literal that the producer finishes
+# writing before the terminal stage can close early, so none of them can see
+# the race. This case must genuinely stream a large volume of added lines —
+# mirroring the production invocation `git diff ... | dispatch-api-call-site`.
+out=$(
+  {
+    printf -- '--- a/src/big.ts\n+++ b/src/big.ts\n@@ -1,1 +1,15001 @@\n'
+    printf -- '+  const snap = await getDocs(collection(db, %s));\n' "'jobs'"
+    for i in $(seq 1 15000); do
+      printf -- '+  const pad%d = %d;\n' "$i" "$i"
+    done
+  } | "$SCRIPT_DIR/dispatch-api-call-site"
+)
+assert_eq "large streaming diff, match on early added line → true" "api_call_site=true" "$out"
+
 report_results
