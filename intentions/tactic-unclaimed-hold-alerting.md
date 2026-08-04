@@ -147,11 +147,43 @@ attention:
     5.33 undecomposed baseline. Simulated over the live store before writing: 0
     tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: implement
-execution: null
+phase: main-qa
+execution:
+  branch: tactic-unclaimed-hold-alerting
+  pr: 3036
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-04T08:15:45Z
+    mergeCommitSha: 21758a37a6989f7d4066d2bd8ceae837637b056e
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main residue item 7 needs roughly a week of dispatch-fleet-watch
+    production readings to judge whether
+    DISPATCH_FLEET_WATCH_HOLD_MIN_AGE=86400s / HOLD_TOP_K=10 are operationally
+    sane; source PR #3036 merged 2026-08-04T08:15:45Z, only ~15 minutes before
+    this check (now 2026-08-04T08:31Z) — the predicate has fired 3 times in the
+    journal so far. Re-check no earlier than ~2026-08-11 once a week of readings
+    has accumulated."
+  since: 2026-08-04
+  recommendation: "No author decision needed — re-selection only. Lane-M checks
+    already run and both are healthy: 'journalctl --user -t dispatch-fleet-watch
+    --since -7d | grep -c unclaimed-hold:' returned 3 (predicate reporting every
+    ~5-min pass since deploy, first line timestamped at merge time); 'git log
+    --oneline origin/main -- intentions/tactic-fleet-alarm-unclaimed-hold*.md'
+    shows exactly one commit (f4b731ab), with subsequent identical-reading
+    passes correctly logging a no-op skip instead of re-committing — no push
+    storm observed. The signal looks correct; the window is just too short (~15
+    minutes, not ~1 week) to judge the threshold defaults per the node's own
+    Verification section."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -738,3 +770,31 @@ Manual / judgment (run from the PR worktree, against the real store):
    the counts in the journald lines are the evidence for retuning
    `DISPATCH_FLEET_WATCH_HOLD_MIN_AGE` / `DISPATCH_FLEET_WATCH_HOLD_TOP_K` — both
    env-overridable, so retuning needs no code change.
+
+## needs-main residue
+
+- **id:** 7 — Threshold defaults (24h age, top-K=10) are operationally sane
+  against the live graph
+  - URL path: current (repo/journal check, not a route)
+  - Expected outcome: the shipped defaults (`DISPATCH_FLEET_WATCH_HOLD_MIN_AGE`
+    default 86400s, `DISPATCH_FLEET_WATCH_HOLD_TOP_K` default 10) produce a
+    useful signal on the deployed fleet-watch timer — neither dead silence nor
+    an alarm-node push storm — over roughly a week of production readings, per
+    this node's own Verification §5 (author-facing tuning, not a merge gate)
+    and §4 (explicit observe-in-production check on the 5-minute systemd
+    cadence).
+  - Finding: this item is a documented planned deferral — the node body's own
+    Verification section states the thresholds are declared defaults evaluated
+    from a week of production journald readings, not assertable at merge time.
+    A qa-fix pre-merge sanity run against the live `intentions/` store at the
+    shipped defaults returned 2 rows (`tactic-hold-fix-cap-strategy-fingerprint-stamp-coverage`,
+    `tactic-hold-conflict-manual-path-reservation-sweep`) — neither zero
+    (dead signal) nor a flood (storm) — supporting shipping the defaults as-is
+    and deferring the tuning judgment to post-merge observation.
+  - Verifiability: MACHINE
+  - Check: `journalctl --user -t dispatch-fleet-watch --since -7d | grep -c
+    'unclaimed-hold:'` to confirm the predicate reports every pass over the
+    week; `git log --oneline origin/main -- 'intentions/tactic-fleet-alarm-unclaimed-hold*.md'`
+    to confirm at most one commit per condition episode (no push storm) and
+    that the alarm node, if any exists, is a plain unparked draft tactic
+    (`office_hours: null`, no `blocked_by` write on another node).

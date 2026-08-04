@@ -253,6 +253,39 @@ else
 fi
 rl_teardown
 
+# --- Test 5e: the TTL also covers `origin=office-hours` (the drain claim) -----
+# tactic-office-hours-drain-claim: the `/office-hours <node-id>` graph lane
+# stamps its dedup claim `origin=office-hours`. Its reserving session is a
+# long-lived HUMAN review session that is usually NOT named the node id, so
+# rules (a) and (c) never fire and the marker would be immortal — and every
+# outstanding marker is subtracted from the dispatch fan-out budget
+# (`effective_live = busy_workers + RESV`), so a handful of open reviews would
+# pin LIVE_COUNT at the ceiling and stall the fleet. Rule (c-ttl) must treat
+# `office-hours` exactly like `standalone`/`explicit`. Same fixture shape as 5d.
+echo "Test: reservation_sweep TTL-reclaims an aged origin=office-hours marker even though its reserving session is still live"
+rl_setup
+reservation_write "tactic-oh-aged" "tactic-oh-aged" "live-sess" "office-hours"
+reservation_write "tactic-oh-young" "tactic-oh-young" "live-sess" "office-hours"
+rl_write_fake_claude '[{"sessionId":"live-sess","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_STANDALONE_TTL_S=600
+# Inside the TTL first: a just-issued drain claim is in-flight and must be KEPT.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 599))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-office-hours-ttl-young: young office-hours marker kept" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-oh-young" ] && echo 1 || echo 0)"
+# Past the TTL: reclaimed despite the reserving session still being live.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 601))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+assert_eq "rl-sweep-office-hours-ttl: aged office-hours marker reclaimed (count 0)" "0" "$(reservation_count)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'office-hours-ttl-expired'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-office-hours-ttl: note mentions office-hours-ttl-expired"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-office-hours-ttl: note mentions office-hours-ttl-expired"
+  echo "    stderr: $err"
+fi
+rl_teardown
+
 # --- Test 6: sweep reclaims NOTHING when the daemon is UNKNOWN ----------------
 
 echo "Test: reservation_sweep reclaims nothing (fail safe) when the daemon is UNKNOWN"
@@ -674,6 +707,32 @@ if printf '%s' "$err" | grep -q 'fail open'; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: rl-union-failopen: stderr diagnostic mentions fail open"
 fi
+rl_teardown
+
+# --- Test 19: reservation_owner reads the session= owner and guards its arg ---
+# reservation_owner distinguishes "no claim" (reservation_exists false) from
+# "claim held by another/my session" (reservation_exists true, owner known)
+# from "claim with unknown owner" (reservation_exists true, owner fails) — the
+# fail-safe case mirroring reservation_sweep's own malformed-marker handling.
+echo "Test: reservation_owner returns the marker's session owner and guards its argument"
+rl_setup
+reservation_write "995-slug" "995" "sess-owner"
+if out=$(reservation_owner "995-slug"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: exits 0 for a freshly written marker" "0" "$rc"
+assert_eq "rl-owner: stdout is the marker's session id" "sess-owner" "$out"
+# Absent marker → return 1, no stdout.
+if out=$(reservation_owner "996-absent"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: absent marker → return 1" "1" "$rc"
+assert_eq "rl-owner: absent marker → empty stdout" "" "$out"
+# Malformed marker (session= line stripped) → return 1, empty stdout.
+sed -i '/^session=/d' "$DISPATCH_RESERVATION_DIR/995-slug"
+if out=$(reservation_owner "995-slug"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: malformed marker (no session= line) → return 1" "1" "$rc"
+assert_eq "rl-owner: malformed marker → empty stdout" "" "$out"
+# Unsafe basename → return 1 (path-safety guard).
+if out=$(reservation_owner "../escape"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: unsafe basename → return 1" "1" "$rc"
+assert_eq "rl-owner: unsafe basename → empty stdout" "" "$out"
 rl_teardown
 
 # <<< END MOVED <<<

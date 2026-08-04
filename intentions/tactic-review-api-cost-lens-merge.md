@@ -31,7 +31,7 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-review-api-cost-lens-merge
   pr: 3031
@@ -39,26 +39,32 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T16:57:43Z
+    mergeCommitSha: 7aecba983181ab9f432497aae0d9e62ecba5c94c
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "phase session ended without declaring a disposition — `claude agents
-    --all` reports the session for this node in a terminal state and it has had
-    no transcript activity for `422`s, while `origin/main` still shows the node
-    at a working phase with `office_hours: null`; the node is therefore both
-    re-selectable and held, so the dispatch-tick terminal-without-disposition
-    sweep parked it"
+  reason: "id 20 (needs-main residue): awaits post-merge review-fix run history to
+    measure the api-cost lens's realized fire rate and draw against the
+    pre-merge 5-of-18 baseline. PR #3031 merged 2026-08-04T16:57:43Z; journalctl
+    since merge shows 0 review-fix runs and 0 find:api-cost entries — no sample
+    has accumulated yet. Re-check once several post-merge review-fix runs have
+    occurred (aim for a sample comparable to the pre-merge 18-run window, e.g.
+    after a few days of dispatch activity)."
   since: 2026-08-04
-  recommendation: Read the session's transcript or attach the held job (`claude
-    agents --all`, `claude attach <job-id>`) to see what it concluded. Decide
-    the judgment item it stopped on, then either answer it here and `clear-park
-    <node-id>`, or stop the session (`claude stop <job-id>`), let
-    `dispatch-sweep` reap the worktree, and `clear-park <node-id>` to return the
-    node to the lane. Do NOT simply reap the terminal session and release the
-    node — that is what restarts the churn loop.
+  recommendation: "No author decision needed — re-selection only. On re-check:
+    grep accumulated run logs for 'find:api-cost', compare the fire rate against
+    the pre-merge 5-of-18 baseline, and record the realized draw (expected range
+    ~$25-30 proxy per 4-day window per the 2026-08-03 ruling, not a threshold).
+    Confirm no recurring 'classify: COST CLAMP' log line (a recurring clamp
+    would mean the section-wrapper Source-assignment wording needs tightening).
+    Also confirm tactic-mainqa-review-cost-finder's downstream observation
+    checklist still passes against the merged lens."
   session_type: other
 pace_exempt: false
 rounds: null

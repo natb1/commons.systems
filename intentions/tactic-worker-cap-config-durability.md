@@ -59,7 +59,29 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Three DECIDE items — provenance home, where the self-expiring
+      throttle lives, and may the fleet write the operator's config file?
+    answer: "(Ruled 2026-08-04 /align interview.) (1) Git-tracking DESCOPED
+      from this node — provenance depends on the recorded
+      tactic-dispatch-config-instance-repo migration (the 2026-07-11 decision
+      stands): once migrated, the committed value IS the standing value and
+      deviation detection is a plain git diff. (2) NO self-expiring deviation
+      machinery — author ruling: it is unintentional bloat. A deliberate
+      temporary throttle is an INTERVENTION by a session (e.g. a monitor
+      healing the automation); the intervening session mints a find-or-create
+      restore node carrying the reason and an event-shaped restore signal (the
+      2026-08-01 occurrence's condition was an event — the blocking PR merges —
+      not a clock), resolved by monitor/office-hours restoring the cap and
+      closing the node. Config stays a bare standing value; the loader shape
+      does not change. (3) The fleet NEVER writes the operator's config file —
+      read-time resolution only, upholding the 2026-07-11 human/machine split.
+      Remaining code scope of this node: emit the cap into every select-tick
+      routing decision (the 2026-08-01 occurrence logged target_n 1 with
+      max_workers null, so the log carried no evidence the value was a
+      deviation). Doctrine recorded on strategy-graph-native-dispatch
+      (2026-08-04 throttle-as-intervention clarification). Park cleared; re-run
+      /align-tactics to plan the narrowed scope."
 tooling_goals: []
 success_signal: null
 attention:
@@ -75,70 +97,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Requirement ambiguity — three design premises this finalize depends on
-    are answered differently, or not at all, by recorded graph substance, and
-    none is autonomously resolvable. (1) PROVENANCE HOME. The node's greenfield
-    says \"Track the file in git so every change has provenance\", but
-    strategy-owned-orchestration's 2026-07-11 clarification
-    (intentions/strategy-owned-orchestration.md:70-82) already decided that
-    human-edited fleet-behavior config — target-workers.json named explicitly —
-    migrates into natb1/office-hours-nate's dispatch.config/ under version
-    control, located by a host symlink, and strategy-graph-native-dispatch's
-    2026-07-26 XDG clarification rests its whole divergence on that symlink
-    being the source of reviewable history. The remaining half is
-    tactic-dispatch-config-instance-repo (owner human, status delegated,
-    office_hours since 2026-07-11, blocked_by tactic-dispatch-config-template at
-    phase implement), whose recommendation is literally to copy the live
-    target-workers.json into the private instance repo and place the symlink.
-    Planning git-tracking here would duplicate decided human-owned work, cross
-    into another strategy's owned artifact shape, and put private operator
-    config in the public monorepo. DECIDE: descope git-tracking from this node
-    and depend on that migration, or amend the 2026-07-11 decision. (2) WHERE
-    THE SELF-EXPIRING THROTTLE LIVES. The 2026-07-26 steelman clarification
-    distinguishes a self-clearing throttle (the pace-curve pin) from a standing
-    operating mode (the config field) and put pause in config because pause must
-    NOT self-clear; this node proposes a self-clearing deviation inside that
-    standing-mode surface. The strategy also already declined a bare
-    blocked_until timestamp for the WAIT-node shape precisely because a
-    timestamp \"carries NO attempt counter, NO cap and NO escalation path\" — a
-    deviation record disciplined only by expires_at is that declined shape — and
-    records a binding boundary that where a cheap readable signal already
-    exists, reaching for the clock is the retreat (the 2026-08-01 occurrence's
-    restore condition was \"the blocking PR merged\", an event, not a clock).
-    DECIDE: config deviation record, pace-curve pin, or a graph WAIT node — and
-    whether the deviation must name a restore signal plus a finite cap that
-    escalates to a park. (3) MAY THE FLEET WRITE THE OPERATOR'S CONFIG FILE?
-    \"past expires_at, restores the standing value\" reads as dispatch-tick
-    rewriting target-workers.json, which converts a human-edited tracked file
-    into a machine-written one (against the same 2026-07-11 split) and races
-    across worktrees on the single shared config path (lib.sh:1867). The clean
-    alternative is read-time resolution — return the standing value once the
-    deviation has expired and log the restoration, never writing. DECIDE:
-    read-time effective value, or a fleet-written restore. OBSERVATION, no
-    decision needed: load-time rejection of an expiry-less deviation halts
-    autonomous scheduling rather than falling back to 8 workers, because every
-    consumer fails closed (pause's any-read-failure-is-paused; the 2026-08-04
-    at-cap pace-exempt lane's select-nothing posture) — the intended direction,
-    recorded here because a tactic-target round may not write clarifications
-    onto the strategy (references/tactic-target.md:135-141). SCOPE THAT IS NOT
-    BLOCKED: greenfield elements 2-4 minus the above ambiguities — the loader's
-    standing/deviation schema, effective-value resolution, and emitting
-    effective + standing values into each select-tick decision — are fully
-    plannable, and the gather phase already located every reuse site
-    (dispatch-config-load's target-workers case arm and schema block,
-    _dlog_select_emit as the single decision-record builder,
-    dispatch-target-workers --max's config-only short-circuit, and
-    reservation_sweep's ISO-timestamp expiry idiom). Recommend: at one sitting
-    answer the three DECIDE items above (descope-vs-amend; config-deviation vs
-    pace-pin vs graph WAIT node, with or without a named restore signal and cap;
-    read-time vs fleet-written restore), record them as clarifications on the
-    owning strategies, then clear this park — a re-run of /align-tactics
-    tactic-worker-cap-config-durability can plan the remaining units with no
-    further author input."
-  since: 2026-08-04
-  recommendation: null
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

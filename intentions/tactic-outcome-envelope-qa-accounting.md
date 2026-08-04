@@ -28,7 +28,7 @@ attention:
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: null
+phase: main-qa
 execution:
   branch: tactic-outcome-envelope-qa-accounting
   pr: 2774
@@ -42,52 +42,10 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/align-tactics misrouted onto this node: it is not a draft. router.ts's
-    isDraft (packages/intentionsutil/src/router.ts:147-149) treats any
-    phase:null as a draft with no allowance for the pre-schema-migration
-    attributes.phase squatter form. This node was lifted to first-class
-    phase:review by tactic-schema-migration-backfill (234e52e7, 2026-07-07),
-    then re-squatted three days later by commit 32078569 (2026-07-10, \"review
-    -> main-qa squatter\") back into phase:null / attributes:{phase: main-qa} to
-    represent it awaiting main-qa verification -- at that time schema.ts had no
-    first-class main-qa phase to write. schema.ts's Phase enum gained a
-    first-class 'main-qa' value the very next day (tactic-main-qa-phase, PR
-    #2859, landed 2026-07-11) and the qa-main node-lane handler (its Unit 2) now
-    expects real phase: main-qa nodes -- this node was never re-backfilled after
-    that migration. PR #2774 (this tactic's own work) merged
-    2026-07-10T16:52:57Z; execution.markers already carry qa-done+reviewed, and
-    the body already carries a full finalized plan plus a '## main-qa residue'
-    checklist (added at qa time). The selector's frozenTacticSelectable gate
-    does not distinguish this stale squatter shape from a genuine draft, so it
-    queued this node for align-tactics finalize/decompose -- which would be
-    actively harmful here (re-planning or resetting phase:implement on
-    already-shipped, reviewed, merged work). Declining to run the Workflow on
-    this target. This is the same defect class already parked on sibling
-    tactic-noncodegen-session-model-defaults (commit 9af38372, 2026-08-03) --
-    that park's recommendation predicted more lingering attributes.phase
-    squatters exist; this node is one of them."
-  since: 2026-08-04
-  recommendation: "Migrate this node's frontmatter directly to current schema
-    (phase: main-qa, attributes: {}) via a standalone state-only graph-commit,
-    mirroring precedent commit 234e52e7 -- no qa/review needed, it is a pure
-    frontmatter fix restoring the shape this node already held once (phase:
-    review) before the main-qa squatter round-trip. That unblocks the qa-main
-    node-lane handler (tactic-main-qa-phase Unit 2,
-    .claude/skills/qa-main/SKILL.md) to run the '## main-qa residue (qa
-    2026-07-06)' checklist already recorded in this node's body and land it to
-    done. Separately: this is the second sibling of this exact defect class
-    found (after tactic-noncodegen-session-model-defaults, 9af38372) -- the grep
-    sweep that park's recommendation called for (intentions/tactic-*.md for
-    lingering 'attributes:\\n  phase:' squatters, plus hardening router.ts's
-    isDraft to exclude legacy attributes.phase carriers) has not yet run; a
-    future session should run it rather than let the selector keep misrouting
-    these one at a time."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: main-qa
+attributes: {}
 ---
 # per-phase routing metric — qa routes on actionability, not hit_rate, so a triage-shaped phase is not promoted to Opus by a rate it cannot move
 
