@@ -25,8 +25,12 @@
 // artifact), per the local-first / no-mining principle in
 // `.claude/docs/signal-identification.md`. External sensors (site analytics,
 // PageSpeed Insights, anything that observes activity beyond one's own
-// execution) are FLAGGED, opt-in, and deliberately NOT registered here; they
-// live in `.claude/skills/align-init/scripts/fetch-*.sh` behind explicit flags.
+// execution) are FLAGGED, opt-in, and deliberately NOT registered here. They
+// used to live in `.claude/skills/align-init/scripts/fetch-*.sh` behind
+// explicit flags; those fetch scripts (fetch-analytics, fetch-psi,
+// fetch-forks) were retired outright by `tactic-align-entrypoint-consolidation`
+// and are not carried forward anywhere — see `origin/main` commit `44493733`
+// for the pre-deletion `.claude/skills/align-init/SKILL.md` and scripts.
 // Own-pipeline CI/check-run status is a different case: even where its probe
 // (below, main-health) shells to `gh`, it observes the repo's OWN execution
 // (own check-run conclusions), not external or analytics activity, so it is
@@ -115,8 +119,10 @@ const gitSensor: Sensor = {
 // check-run conclusions is the same "own pipeline" class as the vitest/git
 // sensors above — it is distinct from the deliberately-excluded
 // external/analytics sensors (site analytics, PageSpeed Insights, anything
-// observing activity beyond one's own execution) that stay opt-in behind
-// `.claude/skills/align-init/scripts/`.
+// observing activity beyond one's own execution) that used to stay opt-in
+// behind `.claude/skills/align-init/scripts/` — those fetch scripts were
+// retired by `tactic-align-entrypoint-consolidation` (see `origin/main`
+// commit `44493733` for the pre-deletion scripts).
 
 /** The short canonical `success_signal.sensor` key this sensor registers under. */
 const MAIN_HEALTH_SENSOR_NAME = "main-health";

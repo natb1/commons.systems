@@ -61,10 +61,13 @@ NOW=${GRAPH_RECONCILE_NOW:-$(date -u +%s)}
 # --- Enumerate open graph-native tactics carrying a PR -----------------------
 # One node pass: print `<id>\t<pr>` for every open tactic (phase set, not
 # draft/done) whose execution.pr is non-null.
+# Enumeration is STRICT (`listNodesStrict`): a corrupt node file dropped by the
+# tolerant reader would silently never be reconciled, stranding its merged PR at
+# a stale phase. Abort the pass loudly instead.
 OPEN_TACTICS="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
-  const { listNodes } = await import("./packages/intentionsutil/src/store.js");
+  const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
   const open = new Set(["implement","fix","qa","review","main-qa"]);
-  for (const n of listNodes("./intentions")) {
+  for (const n of listNodesStrict("./intentions")) {
     if (n.kind !== "tactic") continue;
     if (n.phase === null || !open.has(n.phase)) continue;
     const pr = n.execution && n.execution.pr;

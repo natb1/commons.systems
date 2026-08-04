@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# assert-node-selection — the shared selection-validity gate primitive
+# (tactic-phase-entry-selection-gate, unit 1). Wraps
+# packages/intentionsutil/scripts/check-node-selection.ts (its pure core is
+# evaluateSelection, :182-352) so every phase-skill entry point can run the
+# SAME worker-start re-validation `provision-node-worktree` already runs
+# before it provisions a worktree — a stale/parked/terminal-state selection
+# exits cheaply here instead of doing real work first.
+#
+# Usage: assert-node-selection <node-id> <selected-phase> [--dir <intentions-dir>]
+#
+# Stdout: the node's scope fingerprint (exit 0 only). All diagnostics to stderr.
+#
+# Exit codes (check-node-selection.ts's vocabulary, passed through unchanged):
+#   0   the selection is still valid.
+#   12  stale-selection — pruned, phase advanced, parked, no longer
+#       align-eligible, already carries the `reviewed` marker, or a serving
+#       strategy's substance changed since the stamp. NOT a defect.
+#   13  scope-stale — the tactic's scope changed after the previous phase ran.
+#       NOT a defect; the node wants demoting to `implement`.
+#   1   could not obtain a fresh origin/main intentions store (fetch or
+#       `git archive` failed).
+#   2   usage error, unresolvable project root, or the gate itself failed
+#       mechanically (any check-node-selection exit other than 0/12/13).
+#
+# Requires `dangerouslyDisableSandbox: true` from a Claude session for the
+# `git fetch`/`git archive` it runs when `--dir` is not supplied.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
+
+usage() {
+  echo "usage: assert-node-selection <node-id> <selected-phase> [--dir <intentions-dir>]" >&2
+}
+
+NODE_ID="${1:-}"
+SELECTED_PHASE="${2:-}"
+if [[ -z "$NODE_ID" || -z "$SELECTED_PHASE" ]]; then
+  usage
+  exit 2
+fi
+shift 2 || true
+
+if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  echo "assert-node-selection: invalid node id '$NODE_ID' (must match ^[a-z][a-z0-9]*(-[a-z0-9]+)*\$)" >&2
+  exit 2
+fi
+
+DIR_OVERRIDE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dir)
+      DIR_OVERRIDE="${2:-}"
+      if [[ -z "$DIR_OVERRIDE" ]]; then
+        echo "assert-node-selection: --dir requires a directory argument" >&2
+        exit 2
+      fi
+      shift 2 ;;
+    *)
+      echo "assert-node-selection: unexpected argument '$1'" >&2
+      usage
+      exit 2 ;;
+  esac
+done
+
+# Project root: the worktree with `main` checked out (substrate clarification
+# 23). resolve_main_worktree honors DISPATCH_GRAPH_MAIN_WORKTREE, the test
+# override, when set; resolve_project_root is the plain git-common-dir
+# fallback when no worktree has `main` checked out (e.g. this script running
+# from inside a plain single-checkout repo). Used for the stamp sidecar path
+# and, absent --dir, as the origin for the fresh-store fetch/archive.
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  PROJECT_ROOT=$(resolve_project_root 2>/dev/null) || PROJECT_ROOT=""
+fi
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "assert-node-selection: cannot resolve the project root (no worktree with 'main' checked out, and resolve_project_root also failed)" >&2
+  exit 2
+fi
+
+# Stamp path: same sidecar convention provision-node-worktree writes —
+# deliberately outside every checkout so it never dirties a tree. Do not
+# create it here; a missing stamp is handled inside the gate (fails open with
+# a warning on stderr).
+STAMP_PATH="$PROJECT_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
+
+if [[ -n "$DIR_OVERRIDE" ]]; then
+  # The caller asserts this is already a fresh-origin/main snapshot — use it
+  # verbatim, no fetch.
+  DIR="$DIR_OVERRIDE"
+else
+  if ! git -C "$PROJECT_ROOT" fetch origin main --quiet; then
+    echo "assert-node-selection: git fetch origin main failed" >&2
+    exit 1
+  fi
+  SNAP_DIR="$(mktemp -d)" || { echo "assert-node-selection: mktemp failed" >&2; exit 1; }
+  trap 'rm -rf "$SNAP_DIR"' EXIT
+  # The WHOLE intentions/ tree is required, not just the target node file:
+  # evaluateSelection calls listNodes(dir) for the align-eligibility and
+  # fingerprint checks. A single-file snapshot would silently no-op the
+  # serving-strategy lookup (check 4), turning it into a silent hole rather
+  # than an error.
+  if ! git -C "$PROJECT_ROOT" archive origin/main intentions/ | tar -x -C "$SNAP_DIR"; then
+    echo "assert-node-selection: git archive origin/main intentions/ failed" >&2
+    exit 1
+  fi
+  DIR="$SNAP_DIR/intentions"
+fi
+
+# Invoke the gate. set -e is deliberately NOT used (see header): a non-zero
+# exit here (12/13/other) must be captured, not kill the script. Mirrors
+# provision-node-worktree's GATE_FP/GATE_RC capture shape.
+GATE_FP=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/check-node-selection.ts \
+  "$NODE_ID" "$SELECTED_PHASE" --dir "$DIR" --stamp "$STAMP_PATH")
+GATE_RC=$?
+
+case "$GATE_RC" in
+  0)
+    printf '%s\n' "$GATE_FP"
+    exit 0 ;;
+  12|13)
+    # stderr already carries the one-line stale-selection / scope-stale
+    # reason from check-node-selection — emit nothing extra here, re-wrapping
+    # it would bury the detail.
+    exit "$GATE_RC" ;;
+  *)
+    echo "assert-node-selection: check-node-selection failed (exit $GATE_RC)" >&2
+    exit 2 ;;
+esac

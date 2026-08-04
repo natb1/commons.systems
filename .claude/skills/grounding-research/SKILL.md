@@ -22,7 +22,7 @@ tick-invoked** (a condition on `strategy-complete-grounding`: `/deep-research`
 sourcing stays author-invoked). A tick worker never runs this skill and never
 writes a grounding mark.
 
-Interaction split — same as `.claude/skills/align-strategy/SKILL.md`: reserve
+Interaction split — same as `.claude/skills/align/SKILL.md`: reserve
 `AskUserQuestion` for bounded choices (recommended option first); run open
 dialectic (why a node is circumstantial, which found work is load-bearing) as
 ordinary conversational turns.
@@ -148,7 +148,7 @@ tell the author and stop, do not retry automatically.
   `packages/intentionsutil/scripts/graph-commit` — the write path.
 - `intentions/tactic-reading-chunk-10-hirschman-exit-voice.md` — the
   candidate-chunk template this skill instantiates.
-- `.claude/skills/align-strategy/SKILL.md` — register and interaction
+- `.claude/skills/align/SKILL.md` — register and interaction
   conventions.
 
 ## Verification

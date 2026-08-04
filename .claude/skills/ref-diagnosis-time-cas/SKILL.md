@@ -16,8 +16,12 @@ clear-park's own execution-time self-refresh of origin/main, including one
 that changes what the human should have decided.
 
 NOT needed for immediate mechanical parks that diagnose and execute in the
-same breath — e.g. the Stop-hook backstop (`.claude/hooks/dispatch-stop.sh`),
-which parks right after detecting a failure, with no interview gap.
+same breath — e.g. `dispatch-tick`'s `frozen_session_sweep` and
+`terminal_without_disposition_sweep`
+(`.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`), which
+read the node and call `park-node` with no interview gap in between. Their
+diagnosis→execution window is a handful of subprocesses, and `park-node`'s own
+fresh `origin/main` re-read is the correct guard at that scale.
 
 ## The three-step protocol
 

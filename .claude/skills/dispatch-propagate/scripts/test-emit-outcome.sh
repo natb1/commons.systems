@@ -168,4 +168,60 @@ _in_set_local "completed" "${_test_arr[@]}" \
   && assert_eq "partial word does not match multi-word element" "1" "0" \
   || assert_eq "partial word does not match multi-word element" "1" "1"
 
+# ============================================================================
+# Suite 4: --node-id node-lane parity (tactic-outcome-envelope-node-lane-parity)
+#
+# Verifies the --issue / --node-id exactly-one-of contract: --node-id is the
+# graph-native lane's alternative to --issue, mirroring the session sidecar's
+# dual issue/node_id nullable shape (dispatch-stamp-session:15-19).
+# ============================================================================
+
+echo ""
+echo "Testing dispatch-emit-outcome --node-id node-lane parity..."
+echo ""
+
+# COMMON_NO_ISSUE mirrors COMMON but omits --issue, so the node-id tests
+# below can supply --issue / --node-id themselves.
+COMMON_NO_ISSUE=(--phase review --repo natb1/commons.systems
+  --findings-surfaced 0 --findings-actionable 0 --fixes-applied 0
+  --followups-filed 0 --subagents-launched 0 --disposition completed)
+
+run_sut_no_issue() {
+  set +e
+  OUT=$("$SUT" "${COMMON_NO_ISSUE[@]}" "$@" 2>&1)
+  RC=$?
+  set -e
+}
+
+echo "--- (a) --node-id tactic-foo, no --issue ---"
+run_sut_no_issue --node-id tactic-foo
+assert_eq "node-id only: exit 0" "0" "$RC"
+ISSUE_VAL=$(printf '%s\n' "$OUT" | sed -n '/^```json$/,/^```$/p' | sed '1d;$d' | jq -r '.issue')
+NODE_ID_VAL=$(printf '%s\n' "$OUT" | sed -n '/^```json$/,/^```$/p' | sed '1d;$d' | jq -r '.node_id')
+assert_eq "node-id only: issue is null" "null" "$ISSUE_VAL"
+assert_eq "node-id only: node_id serialized" "tactic-foo" "$NODE_ID_VAL"
+
+echo "--- (b) --issue 42, no --node-id ---"
+run_sut_no_issue --issue 42
+assert_eq "issue only: exit 0" "0" "$RC"
+ISSUE_VAL=$(printf '%s\n' "$OUT" | sed -n '/^```json$/,/^```$/p' | sed '1d;$d' | jq -r '.issue')
+NODE_ID_VAL=$(printf '%s\n' "$OUT" | sed -n '/^```json$/,/^```$/p' | sed '1d;$d' | jq -r '.node_id')
+assert_eq "issue only: issue serialized" "42" "$ISSUE_VAL"
+assert_eq "issue only: node_id is null" "null" "$NODE_ID_VAL"
+
+echo "--- (c) neither --issue nor --node-id ---"
+run_sut_no_issue
+assert_eq "neither given: exit 2" "2" "$RC"
+assert_contains "neither given: message mentions exactly one" "exactly one of" "$OUT"
+
+echo "--- (d) both --issue and --node-id ---"
+run_sut_no_issue --issue 42 --node-id tactic-foo
+assert_eq "both given: exit 2" "2" "$RC"
+assert_contains "both given: message mentions exactly one" "exactly one of" "$OUT"
+
+echo "--- (e) numeric --node-id rejected (slug reject) ---"
+run_sut_no_issue --node-id 42
+assert_eq "numeric node-id: exit 2" "2" "$RC"
+assert_contains "numeric node-id: message mentions node-id slug" "node-id slug" "$OUT"
+
 report_results

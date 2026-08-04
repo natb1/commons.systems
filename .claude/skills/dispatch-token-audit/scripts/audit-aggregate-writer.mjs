@@ -310,6 +310,10 @@ function loadPayload(raw) {
     byPhase: projectBucketMap(obj.by_phase, "by_phase"),
     byModel: projectBucketMap(obj.by_model, "by_model"),
     priceModel,
+    // OPTIONAL — absent on windows predating the outcome envelope. Carried raw
+    // for the advisory routing-recommendation projection; never validated as
+    // required (its absence is a normal case, not an error).
+    byPhaseOutcome: obj.by_phase_outcome,
   };
 }
 
@@ -319,6 +323,138 @@ function requireString(obj, path, field) {
     fail(`payload field ${path}.${field} must be a non-empty string`);
   }
   return v;
+}
+
+// ---------------------------------------------------------------------------
+// ROUTING RECOMMENDATIONS (advisory only)
+//
+// The persisted doc carries a `routing_recommendations` array: a structured,
+// per-phase "current model → recommended model, justified by metric X" record
+// derived from the payload's by_phase_outcome yield rates.
+//
+// REPORT-ONLY, NEVER AUTO-APPLIED. This writer computes a RECOMMENDATION and
+// persists it for a human to read; it never writes dispatch-phase-model,
+// dispatch-phase-effort, or any other routing-policy file. Acting on a
+// recommendation is a hand-edit of the static map by the author
+// (strategy-token-economy clarification 10 / condition 3).
+// ---------------------------------------------------------------------------
+
+// Static mirror of the phase→model map in
+// .claude/skills/dispatch-propagate/scripts/dispatch-phase-model. MUST BE KEPT
+// IN SYNC with that file by hand: it is a bash script, and this pure-projection
+// writer cannot cheaply shell out to it. `null` (unmapped) means the phase
+// inherits the session default model.
+const PHASE_MODEL_MAP = {
+  qa: "sonnet",
+  review: "sonnet",
+  "fix-checks": "sonnet",
+  "fix-conflicts": "sonnet",
+  "main-qa": "sonnet",
+};
+
+// The metric each phase is READ ON, per .claude/docs/outcome-envelope.md
+// ("Which rate reflects which phase"). Phases not listed fall through to the
+// generic preference order below.
+const PHASE_PRIMARY_METRIC = {
+  review: "hit_rate",
+  qa: "actionability",
+};
+
+// Fallback preference order when a phase's primary metric is null (its
+// denominator was 0 for the window) or the phase is unlisted.
+const METRIC_PREFERENCE = ["hit_rate", "actionability", "fix_rate"];
+
+// Phase+metric pairs whose ACCOUNTING is known to be unverified. A
+// recommendation grounded on one of these is tagged `untrusted: true` and MUST
+// be excluded from any actionable/acted-upon set.
+//
+// qa + hit_rate/fix_rate: both put `fixes_applied` in the numerator, and qa's
+// `fixes_applied` accounting gap is presently OPEN — qa-fix delegates its fixes
+// to /implement-unit, so pooled fixes_applied is structurally near 0 regardless
+// of how well the phase performed (.claude/docs/outcome-envelope.md, "Which
+// rate reflects which phase"). Named pairs, not a blanket rule, so the list is
+// auditable and extendable as accounting gaps open and close.
+const UNVERIFIED_ACCOUNTING = [
+  {
+    phase: "qa",
+    metrics: ["hit_rate", "fix_rate"],
+    reason:
+      "qa fixes_applied accounting gap is open (fixes delegated to /implement-unit); see .claude/docs/outcome-envelope.md",
+  },
+];
+
+// A yield metric at or above this value is read as "the phase is producing its
+// designed output" — the evidence a cheaper orchestrator would not compromise
+// quality. Below it, no model change is recommended.
+const QUALITY_PRESERVING_YIELD = 0.5;
+
+function isAccountingUnverified(phase, metricName) {
+  return UNVERIFIED_ACCOUNTING.some(
+    (e) => e.phase === phase && e.metrics.includes(metricName),
+  );
+}
+
+// Pick the metric name + value a phase's recommendation rests on. Returns
+// `{name, value}`; value is null when no rate is available.
+function selectYieldMetric(phase, rates) {
+  const primary = PHASE_PRIMARY_METRIC[phase];
+  const order = primary
+    ? [primary, ...METRIC_PREFERENCE.filter((m) => m !== primary)]
+    : METRIC_PREFERENCE;
+  for (const name of order) {
+    if (isFiniteNumber(rates?.[name])) {
+      return { name, value: rates[name] };
+    }
+  }
+  return { name: primary ?? METRIC_PREFERENCE[0], value: null };
+}
+
+// Build the advisory routing_recommendations array. TOLERANT by design:
+// `by_phase_outcome` is OPTIONAL (windows predating the outcome envelope lack
+// it), so a missing or malformed value yields an empty list rather than a new
+// failure path — this must never widen the fail-closed validation contract.
+export function computeRoutingRecommendations(byPhaseOutcome) {
+  if (
+    byPhaseOutcome === null ||
+    typeof byPhaseOutcome !== "object" ||
+    Array.isArray(byPhaseOutcome)
+  ) {
+    return [];
+  }
+
+  const out = [];
+  for (const [phase, entry] of Object.entries(byPhaseOutcome)) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const currentModel = Object.prototype.hasOwnProperty.call(PHASE_MODEL_MAP, phase)
+      ? PHASE_MODEL_MAP[phase]
+      : null;
+    const metric = selectYieldMetric(phase, entry);
+    const verified = metric.value !== null && !isAccountingUnverified(phase, metric.name);
+
+    let recommendedModel = null;
+    let evidence = null;
+    if (verified && metric.value >= QUALITY_PRESERVING_YIELD && currentModel === null) {
+      // Unmapped phase inherits the session default (possibly Opus) while its
+      // verified yield shows the phase delivering its designed output — so a
+      // cheaper orchestrator is proposed for the author to weigh.
+      recommendedModel = "sonnet";
+      evidence = `verified ${metric.name} ${metric.value} >= ${QUALITY_PRESERVING_YIELD}; phase orchestrator delegates generative work to agent()/subagents`;
+    }
+
+    out.push({
+      phase,
+      current_model: currentModel,
+      recommended_model: recommendedModel,
+      yield_metric: { name: metric.name, value: metric.value, verified },
+      quality_preservation_evidence: evidence,
+      // Excluded from any actionable set: the justifying accounting is not
+      // verified (or no rate was available for the window).
+      untrusted: !verified,
+    });
+  }
+  return out;
 }
 
 // Compute the deterministic, idempotent doc id. A pure function of the payload
@@ -338,6 +474,8 @@ export function assembleDoc(payload, config, mkTimestamp) {
     byPhase: payload.byPhase,
     byModel: payload.byModel,
     priceModel: payload.priceModel,
+    // Advisory only — surfaced for author review, never auto-applied.
+    routing_recommendations: computeRoutingRecommendations(payload.byPhaseOutcome),
     windowDays: payload.windowDays,
     computedAt: mkTimestamp(config.nowEpochSeconds),
     groupId: config.groupId,

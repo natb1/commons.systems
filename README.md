@@ -61,18 +61,25 @@ back as a sensor, never the origin.
 
 ## The align skill family
 
-Three skills are the human interface to the graph (superseding the
+Two skills are the human interface to the graph (superseding the
 issue-based `/file-issue` and `/plan-issue` — coverage matrix on the draft
 tactic [`tactic-graph-native-dispatch`](intentions/tactic-graph-native-dispatch.md)):
 
-- **`/align-init`** — the entrypoint for forks and consuming repos. Orients the
-  user in the concepts above, validates the tooling deployment, reviews the
-  inherited virtue roots (forks start from this repo's; the harness assumes
-  inherited virtues and strategies are preserved), interviews for new or
-  clarified virtues, then hands off to `/align-strategy`. Its periodic form —
-  the scheduled dialectic review — reassesses priorities against the graph.
-- **`/align-strategy <optional requirements>`** — records new strategies or
-  edits under a dialectic interview: intent, justification by virtues or
+- **`/align <optional requirements>`** — the single entrypoint for forks,
+  consuming repos, and ongoing strategy work, in one session. With no prompt
+  it funnels into onboarding: orients the user in the node kinds above,
+  validates the deployment
+  ([`validate-deployment.sh`](.claude/skills/align/scripts/validate-deployment.sh):
+  workspace installed, graph clean, router heartbeat, each with its own
+  remediation diagnostic), then walks the user Socratically to a crafted
+  prompt and falls through into the interview in the same session — no
+  hand-off to a separate skill. A fork starts from this repo's virtue roots,
+  and the harness assumes inherited virtues and strategies are preserved;
+  there is no separate virtue-review step, because recording a virtue falls
+  out of a normal `/align <requirements>` run — the interview's placement
+  step identifies which `virtue-*` node a new strategy serves and surfaces
+  the gap when none fits. Given requirements, it records new strategies
+  or edits under a dialectic interview: intent, justification by virtues or
   parent strategies, benefit, signals, and the conditions the strategy is
   contingent on. Disambiguation happens here — edge cases are put to the
   author and resolutions are recorded as dated `clarifications` on the node.
@@ -229,9 +236,9 @@ run-all-cleanup-preview.sh <pr-number>
 - **Agentic Coding Tools** (Claude Code): stand up your own `office-hours-nate` instance flake (template: [examples/office-hours-nate/flake.nix](examples/office-hours-nate/flake.nix)) that imports this framework's `homeManagerModules.default` and sets your identity, then `home-manager switch -b backup --flake <your-instance>#<system>` (evaluates purely on every platform — the `wezterm-windows` Windows binary is fetched at activation runtime via `curl`, not at eval time, so no `--impure` is needed).
 - **Infrastructure** (Firebase): hosting and storage for the apps this
   instance of the workflow builds.
-- **Intent**: run `/align-init` — it validates the deployment, walks the
-  inherited virtue roots, and hands off to `/align-strategy` to record your
-  first strategy.
+- **Intent**: run `/align` with no prompt — it orients you, validates the
+  deployment, and helps you craft your first strategy prompt in the same
+  session.
 
 ## Where to go next
 

@@ -11,24 +11,30 @@ Every step runs unchanged except these re-keyed seams:
 - **Completion.** Do **not** apply `dispatch:reviewed` via
   `dispatch-complete-phase`, and do **not** call `dispatch-mark-complete` /
   `dispatch-finalize-phase`. Invoke the graph-native transition writer, which
-  records the `reviewed` marker in `execution.markers` and — on a clean review —
-  arms gh auto-merge (same config gate as today), all as one state-only
-  graph-commit on `origin/main`; the reconciler sweep absorbs the out-of-band
-  merge to `done`:
+  records the `reviewed` marker in `execution.markers` as one state-only
+  graph-commit on `origin/main` and then stops — it does **not** arm or perform any
+  merge itself:
 
   ```bash
   .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
   ```
 
   The graph-tick worker runs it with the reset-dance a PR-branch worktree needs;
-  the skill hands it the node id and never writes the graph directly.
+  the skill hands it the node id and never writes the graph directly. Merging is
+  deferred entirely to the tick's `graph-auto-merge` reconciler, which runs every
+  tick keyed off the `reviewed` marker: for each reviewed-marked node it senses the
+  PR and — only when it is `mergeable == MERGEABLE`, green on CI, and the node's
+  tactic-scope fingerprint is fresh against `origin/main` — squash-merges it
+  label-free. `reconcile-graph-merged` then absorbs that out-of-band merge to
+  `done`/`main-qa` on a later tick.
 - **Deferred findings (Step 5).** On the node lane, deferred/security follow-up
   findings become **draft tactic nodes**, not gh follow-up issues — see the
   node-lane branch in Step 5.
 - **Escalation.** Instead of `dispatch:office-hours`, write the reason to
   `$CLAUDE_JOB_DIR/office-hours-reason` (and best-next-steps to
-  `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook parks the node via
-  `park-node`. See `.claude/hooks/dispatch-stop.sh`. Also write the
+  `$CLAUDE_JOB_DIR/office-hours-recommendation`); `dispatch-tick`'s
+  `terminal_without_disposition_sweep` parks the node via `park-node`. See
+  `.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh`. Also write the
   already-bound `PR_NUM` to `$CLAUDE_JOB_DIR/office-hours-pr` (same atomic
   tempfile+`mv` write) so the park records `execution.pr`
   (tactic-office-hours-pr-custody).

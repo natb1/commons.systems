@@ -216,6 +216,124 @@ export function incrementAttempt(execution: Execution, phase: string): Execution
 
 // --- Reconciler (Unit 2) -----------------------------------------------------
 
+/** GitHub's PR mergeability enum, as gh_pr_view_rest projects it. */
+export type Mergeable = "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+
+/**
+ * The recovery lane `interruptRoute`'s ordered cascade resolves to, or `null`
+ * when no interrupt is due. See `interruptRoute` for the cascade itself.
+ */
+export type InterruptRoute = "fix" | "conflict" | null;
+
+/**
+ * The recovery lane a stalled `phase: review` + `reviewed` tactic must be
+ * routed to, or `null` when nothing has regressed.
+ *
+ *  - `"fix"` — the CI-fix interrupt (`execution.fix`), acted on by
+ *    `/fix-checks` and resolved by `apply-fix-state --clear-fix`.
+ *  - `"conflict"` — the conflict lane (`/dispatch-conflict`, or a tracked
+ *    `provision-conflict` hold via `hold-node`), which resolves an
+ *    origin/main merge conflict on the node's own branch.
+ */
+export type ReviewStallRoute = InterruptRoute;
+
+/**
+ * Which recovery lane an armed `phase: review` tactic carrying the `reviewed`
+ * marker needs, for the review-stall reconciler
+ * (`tactic-graph-review-exclusion-stall-recovery`). Once a node reaches
+ * `review` and picks up the `reviewed` marker, the selector's reviewed-marker
+ * exclusion (`selectGraphTargets` in `router.ts`,
+ * `tactic-graph-selector-reviewed-exclusion`) removes it from selection
+ * entirely — so the normal CI-red fix-interrupt entry (`graph-select-target`'s
+ * `_gate_maybe_interrupt`, which only runs on candidates the selector already
+ * emits) never gets a chance to run on this node again, and a later CI
+ * regression or merge conflict would otherwise strand it forever.
+ *
+ * The two regressions route to DIFFERENT lanes — they are not interchangeable:
+ *
+ *  - `ci === "failing"` → `"fix"`. Red CI is exactly what the `execution.fix`
+ *    interrupt carries.
+ *  - `mergeable === "CONFLICTING"` → `"conflict"`. A merge conflict must NOT
+ *    enter `execution.fix`: `graph-select-target`'s `_gate_fix_active` reads
+ *    CI, not mergeability, so a conflicted-but-green PR would be seen as
+ *    resolved on the very next selection and `apply-fix-state --clear-fix`
+ *    would strip the `reviewed` marker, reset `phase` to `review`, and
+ *    `gh pr ready --undo` the PR back to draft — discarding a completed review
+ *    verdict and re-running the whole review pass while the conflict itself
+ *    stayed untouched. That is an unbounded review-cost amplifier anyone able
+ *    to land a commit on main touching the PR's files could fire repeatedly.
+ *    Only the conflict lane actually resolves the conflict, and it preserves
+ *    the `reviewed` marker.
+ *
+ * `CONFLICTING` takes precedence over `failing` when both hold: the fix lane
+ * would have to merge origin/main to even run, so the conflict must clear
+ * first. Once it does, a later sweep sees `ci === "failing"` on the
+ * (no-longer-conflicting) PR and routes to `"fix"` then.
+ *
+ * `UNKNOWN` mergeability and any non-`failing` CI verdict are NOT a regression:
+ * GitHub computes mergeability asynchronously and self-heals `UNKNOWN` to a
+ * real value on a later sweep — the same no-op posture
+ * `dispatch-reconcile-ready` takes on an `UNKNOWN` read.
+ *
+ * The CONFLICTING-outranks-failing ordering documented above now lives in
+ * `interruptRoute`, which this function delegates to at the fixed phase
+ * `"review"` — see `interruptRoute` for the single documented home of the
+ * precedence rule.
+ */
+export function reviewStallRoute(ci: CiVerdict, mergeable: Mergeable): ReviewStallRoute {
+  return interruptRoute("review", ci, mergeable);
+}
+
+/**
+ * The single ordered cascade over `(mergeable, ci)` for whether an interrupt is
+ * due at `phase`, and which lane it enters. This is the ONE documented home of
+ * the CONFLICTING-outranks-failing-CI precedence rule described above on
+ * `reviewStallRoute` (see that comment for the full rationale — not restated
+ * here) — consumed by BOTH:
+ *
+ *  - the review-stall sweep (`reviewStallRoute`, which delegates here at the
+ *    fixed phase `"review"`); and
+ *  - the normal selection gate (`graph-select-target`'s
+ *    `_gate_maybe_interrupt`), which calls this function through a
+ *    `node --import tsx/esm -e` bridge before writing any fix-attempt state.
+ *
+ * That normal path WAS merge-blind before that gate was wired: it only
+ * checked `ci === "failing"` before writing a fix-attempt state, so a PR that
+ * was BOTH `CONFLICTING` and red would get a fix-attempt state written and
+ * burn one of a limited attempt budget (`FIX_ATTEMPT_CAP`) against a CI
+ * verdict that actually describes stale pre-merge code — and the fix lane
+ * cannot even run until the conflict clears, since fixing requires merging
+ * origin/main first. Routing that case to `"conflict"` instead is what
+ * `_gate_maybe_interrupt` now does: it declines the interrupt (no
+ * `execution.fix` write, no graph-commit, no attempt consumed) and lets the
+ * candidate fall through to provisioning's conflict lane, avoiding spending
+ * both a graph write and an attempt on a verdict the conflict will
+ * invalidate anyway.
+ *
+ * The sibling arm for a candidate that ALREADY carries an active interrupt
+ * (`graph-select-target`'s `_gate_fix_active`) does NOT consume
+ * `interruptRoute` and stays conflict-blind by design — see the comment
+ * above `_gate_fix_active` in that file for the scope rationale; the two
+ * sites are meant to agree.
+ *
+ * `UNKNOWN` mergeability is deliberately NOT treated as a conflict: GitHub
+ * computes mergeability asynchronously and self-heals `UNKNOWN` to a real
+ * value on a later check. Treating `UNKNOWN` as `CONFLICTING` would suppress
+ * every fix interrupt during GitHub's compute window.
+ *
+ * A `null` return means no interrupt is due. The only two conditions that can
+ * produce a non-null route are `ci === "failing"` and `mergeable ===
+ * "CONFLICTING"` — a superset invariant a shell caller may exploit as a cheap
+ * pre-filter (`ci === "failing" || mergeable === "CONFLICTING"`) before paying
+ * for a full call, and which a later test pins so that optimization stays
+ * correct.
+ */
+export function interruptRoute(phase: string, ci: CiVerdict, mergeable: Mergeable): InterruptRoute {
+  if (mergeable === "CONFLICTING") return "conflict";
+  if (fixInterrupt(phase, ci)) return "fix";
+  return null;
+}
+
 /**
  * The phase a merged-out-of-band tactic reconciles to: `main-qa` when the node
  * carries a needs-main residue section (verified post-merge, strategy

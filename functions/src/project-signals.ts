@@ -20,10 +20,13 @@
 // document via conditional spread (firebase-admin rejects an explicit
 // `undefined`). The collector ALWAYS writes the snapshot with whatever succeeded.
 //
-// Fetch logic is ported faithfully from the /align skill scripts
-// (.claude/skills/align-init/scripts/{gather-context,fetch-analytics,fetch-psi}.sh).
-// CrUX field-data and GA4 web-vitals percentile aggregation are intentionally
-// DROPPED — they are not in those scripts' stable output.
+// Fetch logic is ported faithfully from the former align-init skill scripts
+// (.claude/skills/align-init/scripts/{gather-context,fetch-analytics,fetch-psi}.sh),
+// which were retired outright by `tactic-align-entrypoint-consolidation` and are
+// not carried forward anywhere; see `origin/main` commit `44493733` for the
+// pre-deletion scripts. CrUX field-data and GA4 web-vitals percentile
+// aggregation are intentionally DROPPED — they are not in those scripts'
+// stable output.
 //
 // Authentication:
 //   - GitHub: reuses the shared GitHub App auth (`mintInstallationToken` from

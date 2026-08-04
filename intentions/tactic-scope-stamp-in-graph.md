@@ -12,7 +12,7 @@ rationale: "The scope-custody chain gates every pre-merge phase transition, but
   its stamp lives at <main-root>/.claude/worktrees/<id>.scope-fingerprint, which
   .gitignore:1 (`worktrees/`) excludes from the repo — 0 of 60 live stamps are
   tracked. isScopeStale treats a null stamp as NOT stale
-  (packages/intentionsutil/src/transitions.ts:331), the documented bootstrap
+  (packages/intentionsutil/src/transitions.ts:449), the documented bootstrap
   fail-open, so on a fresh clone or a second machine every node reads as fresh
   and the chain-of-custody guarantee silently evaporates. This contradicts the
   standing preference that the graph always reflects target state (strategy
@@ -20,11 +20,16 @@ rationale: "The scope-custody chain gates every pre-merge phase transition, but
   is not in the graph. It also forces every legitimate author documentation edit
   through an out-of-band side-channel write (restamp-scope-fingerprint.ts) that
   leaves no trace in git and no reviewable record that a scope-inert
-  classification was made. Distinct from
-  tactic-scope-fingerprint-plan-substance, which narrows WHAT the fingerprint
-  hashes but leaves the stamp out-of-graph, and from
-  tactic-transition-node-stamp-landed-body, which repairs WHEN the machinery
-  refresh runs. Filed 2026-07-27 /align-strategy."
+  classification was made. Distinct from tactic-scope-fingerprint-plan-substance
+  (phase: qa, PR #2974), which narrows WHAT the fingerprint hashes but leaves
+  the stamp out-of-graph, and from tactic-transition-node-stamp-landed-body
+  (phase: done, PR #2973, merged 2026-07-30), which repairs the stamp's CONTENT
+  SOURCE — restamp-scope-fingerprint.ts now reads the landed text via `git show
+  <sha>:<path>` (--from-rev / restampScopeFromRev) instead of the post-`git
+  reset --hard` worktree copy, not its timing (refresh_stamp still runs after
+  graph-commit, unchanged). Filed 2026-07-27 /align-strategy; corrected
+  2026-08-03 /align-tactics park round (line citation and sibling-fix
+  characterization — see body Park Note)."
 reading: null
 gap: null
 serves:
@@ -33,12 +38,67 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 20
+  override: null
+  rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
+    scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
+    follows the Wave-A write-path fixes. Interim scaffolding only;
+    tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
+    numeric scheme."
+  tier: 1
 phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Finalizing this node's plan this round would reverse an explicit,
+    four-day-old, by-name author decision without author input. Entry 141 ruling
+    (6) of strategy-graph-native-dispatch, recorded 2026-07-30 with the author
+    present, states: 'tactic-scope-stamp-in-graph stays RAW AND UNBOOSTED for
+    now' — the author accepted the carrier's diagnosis (entry 115 confirms entry
+    102's shape leaves exactly the residual hole this tactic names) but declined
+    to boost or chain it, because 'four nodes are already serialized on this
+    seam with nothing landed in five days, and adding a fifth to the queue would
+    buy no throughput.' A finalize promotes status: raw -> codified and phase:
+    null -> implement, which is the literal state the ruling directed the node
+    to stay out of. Fresh measurement taken this round (2026-08-03, read
+    directly from intentions/*.md frontmatter): the cited premise has changed —
+    tactic-transition-node-stamp-landed-body is now phase: done,
+    tactic-scope-fingerprint-plan-substance and
+    tactic-phase-evidence-fingerprint-bound are both phase: qa, and only
+    tactic-demote-node-stale-local-read is still raw/null. That the premise
+    moved is a reason for the AUTHOR to re-rule, not license for this round to
+    re-resolve a human-decided priority call; attention.boost and blocked_by are
+    author-owned (see body Park Note for the full measurement and two supporting
+    corrections landed on this node's own rationale/body this round). A second,
+    subordinate ambiguity rides the same ratification: any future plan must
+    repoint four stamp-consumption sites
+    (packages/intentionsutil/src/scope-sweep.ts:33-58/:103,
+    packages/intentionsutil/scripts/check-node-selection.ts:341,
+    .claude/skills/dispatch-propagate/scripts/transition-node:185-193 via
+    compute-freshness,
+    packages/intentionsutil/scripts/demote-node-to-implement:41-52), and
+    tactic-scope-fingerprint-plan-substance (PR #2974, phase: qa, unmerged) is
+    scheduled to widen isScopeStale's signature to `string | readonly string[]`
+    across that same surface — so the plan either takes a blocked_by edge onto
+    that sibling or is authored signature-agnostic against the existing
+    ScopeStamp|null shape, and either choice is exactly the kind of chaining
+    decision ruling (6) declined to make."
+  since: 2026-08-03
+  recommendation: "Re-rule on entry 141 ruling (6) given the changed
+    queue-congestion premise: either confirm tactic-scope-stamp-in-graph stays
+    raw/unboosted, or explicitly boost/chain it and decide whether it takes a
+    blocked_by edge onto tactic-scope-fingerprint-plan-substance (PR #2974,
+    phase: qa) given its pending isScopeStale signature widening. If re-ruled in
+    favor, re-run /align-tactics tactic-scope-stamp-in-graph to author the plan
+    — the reuse surface is already inventoried in this node's body Park Note:
+    execution.strategy_fingerprint (schema.ts:494 field, :571-604 validator) as
+    the field/validator precedent to copy, ScopeStamp {fingerprint, sha}
+    (transitions.ts:424-441) as the shape to keep verbatim, and
+    apply-node-transition.ts (:88-125/:159-172) as the writer path that folds
+    the stamp write into the transition's existing writeNode call."
+  session_type: requirement-discovery
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -61,7 +121,7 @@ writes it into the repo. Measured 2026-07-27: 60 live stamps on this machine,
 
 The consequence is a silent, total loss of the guarantee off this machine:
 
-- `isScopeStale(null, fp)` returns `false` (`transitions.ts:331`) — the
+- `isScopeStale(null, fp)` returns `false` (`transitions.ts:449`) — the
   documented bootstrap fail-open.
 - `listScopeStaleTactics` skips any node whose stamp file is missing
   (`packages/intentionsutil/src/scope-sweep.ts`, `readStampedFingerprint`
@@ -97,17 +157,74 @@ settled at `/align-tactics`:
 
 ## Relationship to siblings
 
-- `tactic-scope-fingerprint-plan-substance` (`phase: qa`) narrows **what** the
-  fingerprint hashes — plan substance only, excluding machinery-appended
-  sections. It does not move the stamp, and it does not stop author
-  documentation edits from tripping the gate. Orthogonal; both are wanted.
-- `tactic-transition-node-stamp-landed-body` (`phase: review`, PR #2973)
-  repairs **when** the machinery refresh runs (`refresh_stamp` after
-  `graph-commit`'s `git reset --hard` hashes the reverted body). Also
-  orthogonal: it fixes the writer, not the stamp's location.
+- `tactic-scope-fingerprint-plan-substance` (`phase: qa`, PR #2974) narrows
+  **what** the fingerprint hashes — plan substance only, excluding
+  machinery-appended sections. It does not move the stamp, and it does not
+  stop author documentation edits from tripping the gate. Orthogonal; both
+  are wanted. It also widens `isScopeStale`'s signature to
+  `string | readonly string[]` (see Park Note below) — a future plan on this
+  tactic must sequence against that.
+- `tactic-transition-node-stamp-landed-body` (`phase: done`, PR #2973, merged
+  2026-07-30) repairs the stamp's **content source**: `restamp-scope-fingerprint.ts`
+  now reads the landed text via `git show <sha>:<path>` (`--from-rev` /
+  `restampScopeFromRev`) instead of the post-`git reset --hard` worktree copy.
+  `refresh_stamp` still runs after `graph-commit`, unchanged — the fix is WHAT
+  content gets hashed, not WHEN the hashing runs (corrected 2026-08-03; see
+  Park Note). Orthogonal to this tactic: it fixes the writer, not the stamp's
+  location.
 - Entry 73's `restamp-scope-fingerprint.ts` is the author-present escape hatch
   this tactic would make unnecessary as a side-channel, folding it into a
   normal graph write.
+
+## Park Note (2026-08-03 /align-tactics round)
+
+This round found the node ready to finalize on every mechanical gate
+(draft/raw, no blockers, no failed `attributes.conditions` entry) but parked
+it instead on a Side-B drift finding: strategy clarification entry 141 ruling
+(6), recorded 2026-07-30 with the author present, explicitly left this tactic
+"RAW AND UNBOOSTED for now," citing four sibling nodes on the same
+scope-custody seam serialized with nothing landed in five days. Finalizing
+this round (`status: raw` → `codified`, `phase: null` → `implement`) would be
+the literal state that ruling directed the node to stay out of, without new
+author input.
+
+Fresh measurement this round (2026-08-03, read directly from
+`intentions/*.md` frontmatter in a worktree cut from `origin/main`): of the
+four nodes ruling (6) cited, three have since moved —
+`tactic-transition-node-stamp-landed-body` is `status: codified` / `phase:
+done` (PR #2973, merged 2026-07-30, chain head landed);
+`tactic-scope-fingerprint-plan-substance` is `status: codified` / `phase: qa`
+(PR #2974, `blocked_by: [tactic-transition-node-stamp-landed-body]`);
+`tactic-phase-evidence-fingerprint-bound` is `status: codified` / `phase: qa`
+(PR #2975, `blocked_by: [tactic-scope-fingerprint-plan-substance,
+tactic-transition-node-stamp-landed-body]`, `office_hours: null`); only
+`tactic-demote-node-stale-local-read` remains `status: raw` / `phase: null`
+(`blocked_by: [tactic-phase-evidence-fingerprint-bound]`). So the specific
+congestion premise ruling (6) cited ("nothing landed in five days") no longer
+describes current state — offered here as evidence for the author to re-rule
+with, not as license for this session to re-decide a human-owned priority
+call (see `office_hours.recommendation`).
+
+A second, subordinate finding: `tactic-scope-fingerprint-plan-substance` (PR
+#2974, still unmerged at `phase: qa`) is scheduled to widen `isScopeStale`'s
+signature from `(stamp: ScopeStamp | null, fingerprint: string)` to accept
+`string | readonly string[]`, touching the same four consumption sites
+(`scope-sweep.ts:33-58`/`:103`, `check-node-selection.ts:341`,
+`transition-node:185-193`, `demote-node-to-implement:41-52`) any plan for
+this tactic must repoint. A future plan should either add an explicit
+`blocked_by` edge onto that sibling, or be authored signature-agnostic
+against the current `ScopeStamp | null` shape — an open call for whoever
+re-runs `/align-tactics tactic-scope-stamp-in-graph` once the author
+re-rules.
+
+Two corrections landed on this node this round, both verified directly
+against current code before being applied (not taken on an agent's claim):
+the `## Context` section's `isScopeStale` line citation (`transitions.ts:331`
+→ `:449`, drifted by the two sibling tactics editing that file), and the
+`## Relationship to siblings` bullet above, which previously said
+`tactic-transition-node-stamp-landed-body` "repairs WHEN the machinery
+refresh runs" — wrong; it repairs the stamp's content source, not the
+refresh's timing.
 
 ## Known risk
 
