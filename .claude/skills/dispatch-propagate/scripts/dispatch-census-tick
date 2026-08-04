@@ -22,13 +22,36 @@
 # npm cache (see .claude/rules/sandbox.md). Best-effort — a failure here must
 # not abort the tick.
 #
+# Rollback contract (mirrors transition-node / dispatch-graph-main-red-sync):
+# census-tick.ts performs REAL filesystem mutations against intentions/ before
+# this wrapper's single batched graph-commit runs — an rmSync per prune, a
+# writeNode per inbound blocked_by edge repair, a writeNode + body splice per
+# minted defect. If that batch does not land, every one of those mutations is
+# leaked into the working tree, and graph-commit's assert_clean_outside_ids
+# guard then refuses EVERY subsequent graph-commit — this tick's and every
+# later tick's — until a human cleans the tree. So:
+#
+#   PRECONDITION: intentions/ must be CLEAN before any mutation runs. A dirty
+#   intentions/ is refused up front (exit 1, nothing run): pre-existing dirt
+#   would make the blanket restore below destructive, and graph-commit would
+#   refuse the land anyway.
+#
+#   ROLLBACK: on EITHER failure path — census-tick.ts erroring partway through
+#   its writes, or graph-commit failing after all of them — the whole batch is
+#   reverted (`git checkout -- intentions/` restores deleted and edited tracked
+#   node files; `git clean -f -- intentions/` removes minted untracked ones).
+#   The clean-tree precondition is what makes that blanket revert safe:
+#   everything dirty at that point was written by this run. NEVER on the
+#   success path — a landed batch is graph state, not garbage.
+#
 # Stdout protocol (one line, caller prefixes it with `census: `):
 #   pruned <n>, integrity-defects <m> (minted <j>, existing <k>)
 # printed on both the no-op path and the graph-commit-succeeded path — NOT on
 # a hard-error exit-1 path, where only the stderr diagnostic is printed.
 #
-# Exit codes: 0 (including a no-op tick); 1 if census-tick.ts or graph-commit
-# hard-errored.
+# Exit codes: 0 (including a no-op tick); 1 if intentions/ was already dirty on
+# entry (nothing run), or if census-tick.ts or graph-commit hard-errored (the
+# batch rolled back).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,10 +60,45 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
 GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
 
-OUT=$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/census-tick.ts") ) || {
-  echo "dispatch-census-tick: census-tick.ts failed" >&2; exit 1; }
+# Revert every intentions/ mutation this run made. `checkout` restores the
+# tracked files census-tick.ts deleted (prunes) and rewrote (edge repairs);
+# `clean` removes the untracked files it minted (defect nodes). Safe as a
+# BLANKET revert only because of the clean-tree precondition asserted below.
+rollback_intentions() {
+  local failed=0
+  git -C "$REPO_ROOT" checkout -- intentions/ || failed=1
+  git -C "$REPO_ROOT" clean -fq -- intentions/ || failed=1
+  if [[ "$failed" -ne 0 ]]; then
+    echo "dispatch-census-tick: ROLLBACK FAILED — intentions/ may be left dirty;" \
+         "a human must clean the tree before any graph-commit can land again" >&2
+  fi
+}
+
+# Armed for the whole window between the first mutation and the land: any exit
+# through that window (including one this script does not anticipate) reverts
+# the batch. Disarmed on the two success exits — a no-op tick (nothing was
+# written) and a landed batch (the writes are graph state now).
+ROLLBACK_ARMED=0
+trap '[[ "$ROLLBACK_ARMED" -eq 1 ]] && rollback_intentions' EXIT
+
+# PRECONDITION: nothing dirty in intentions/ before we mutate it. The blanket
+# rollback above would otherwise discard someone else's in-flight work, and
+# graph-commit's assert_clean_outside_ids would refuse the land regardless.
+DIRT="$(git -C "$REPO_ROOT" status --porcelain -- intentions/)"
+if [[ -n "$DIRT" ]]; then
+  echo "dispatch-census-tick: refusing to run — intentions/ is already dirty:" >&2
+  printf '%s\n' "$DIRT" >&2
+  exit 1
+fi
+
+ROLLBACK_ARMED=1
+if ! OUT=$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/census-tick.ts") ); then
+  echo "dispatch-census-tick: census-tick.ts failed; its partial intentions/ mutations were rolled back" >&2
+  exit 1
+fi
 
 N=$(jq -r '.prune | length' <<<"$OUT")
+E=$(jq -r '.edit | length' <<<"$OUT")
 M=$(jq -r '.defectCount' <<<"$OUT")
 J=$(jq -r '.defectsMinted | length' <<<"$OUT")
 K=$(jq -r '.defectsExisting | length' <<<"$OUT")
@@ -49,6 +107,7 @@ mapfile -t PRUNE < <(jq -r '.prune[]?' <<<"$OUT")
 mapfile -t EDIT_AND_MINT < <(jq -r '.edit[]?, .defectsMinted[]?' <<<"$OUT")
 
 if [[ "${#PRUNE[@]}" -eq 0 && "${#EDIT_AND_MINT[@]}" -eq 0 ]]; then
+  ROLLBACK_ARMED=0  # no-op tick: census-tick.ts wrote nothing to revert.
   echo "pruned $N, integrity-defects $M (minted $J, existing $K)"
   exit 0
 fi
@@ -58,9 +117,11 @@ for id in "${PRUNE[@]}"; do GC_ARGS+=(--prune "$id"); done
 for id in "${EDIT_AND_MINT[@]}"; do GC_ARGS+=("$id"); done
 
 if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
-  echo "dispatch-census-tick: graph-commit failed" >&2
+  echo "dispatch-census-tick: graph-commit failed; the batch (prune $N, edge-repair $E, mint $J)" \
+       "was rolled back — intentions/ restored to HEAD" >&2
   exit 1
 fi
 
+ROLLBACK_ARMED=0  # landed: the mutations are graph state, never reverted.
 echo "pruned $N, integrity-defects $M (minted $J, existing $K)"
 exit 0

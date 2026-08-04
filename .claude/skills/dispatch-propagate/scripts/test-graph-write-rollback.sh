@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # test-graph-write-rollback.sh — functional harness for the write-failure
-# rollback added to transition-node and dispatch-graph-main-red-sync
-# (tactic-graph-write-failure-rollback Units 2/4/5). Each case forces a
+# rollback added to transition-node, dispatch-census-tick, and
+# dispatch-graph-main-red-sync (tactic-graph-write-failure-rollback Units
+# 2/4/5; tactic-census-scripted-tick). Each case forces a
 # downstream `graph-commit` to fail AFTER the script's own mutation already
 # landed on disk, then asserts the mutation was rolled back — a clean
 # intentions/ tree, never a leaked dirty/deleted file that would trip
@@ -14,14 +15,23 @@
 # packages/intentionsutil/src copied in (plus its package.json for ESM
 # resolution) and a node_modules SYMLINK to this repo's own — so the real
 # TypeScript mutation primitives (apply-node-transition.ts, compute-freshness.ts,
-# dump-node.ts, write-node.ts, graph-census-debt.ts) execute for real, not via a
-# shim. Only graph-commit itself and (for the main-red-sync case) repo-health
+# dump-node.ts, write-node.ts, graph-census-debt.ts, census-tick.ts +
+# census-decide.ts) execute for real, not via a shim. Only graph-commit itself and (for the main-red-sync case) repo-health
 # are stubbed, standing in for a real land failure / a green main.
 #
 # Covers:
 #   1. transition-node: a graph-commit failure after apply-node-transition.ts's
 #      real write rolls intentions/<id>.md back to origin/main (byte-identical
 #      `git diff` against the clone's HEAD).
+#   2. dispatch-census-tick BATCH rollback: census-tick.ts mutates intentions/
+#      for real before the wrapper's single batched graph-commit runs — an
+#      rmSync per prune, a writeNode per inbound blocked_by edge repair, a
+#      writeNode + body splice per minted defect node. A graph-commit failure
+#      after all three kinds of write must revert the WHOLE batch (deleted node
+#      restored, edited node byte-identical to HEAD, minted defect file gone) and
+#      still surface a non-empty stderr diagnostic — dispatch-select-tick's
+#      call site swallows the exit code (`|| true`), so the tick log is the only
+#      operator-facing signal.
 #   3. dispatch-graph-main-red-sync: a completion failure (a) emits a non-empty
 #      stderr diagnostic naming the node (regression guard for the old
 #      `... ) 1>&2 || true` total swallow) and (b) leaves the working tree
@@ -48,7 +58,7 @@ REAL_REPO_ROOT="$(cd "$HARNESS_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS_SRC="$REAL_REPO_ROOT/packages/intentionsutil/scripts"
 INTENTIONSUTIL_SRC="$REAL_REPO_ROOT/packages/intentionsutil/src"
 
-for f in transition-node dispatch-graph-main-red-sync lib.sh dispatch-config-load; do
+for f in transition-node dispatch-census-tick dispatch-graph-main-red-sync lib.sh dispatch-config-load; do
   [[ -f "$HARNESS_DIR/$f" ]] || { echo "error: $f not found at $HARNESS_DIR/$f" >&2; exit 1; }
 done
 command -v jq >/dev/null || { echo "error: jq not found" >&2; exit 1; }
@@ -89,6 +99,8 @@ build_seed_repo() {
   cp "$UTIL_SCRIPTS_SRC/dump-node.ts" "$dst/packages/intentionsutil/scripts/dump-node.ts"
   cp "$UTIL_SCRIPTS_SRC/write-node.ts" "$dst/packages/intentionsutil/scripts/write-node.ts"
   cp "$UTIL_SCRIPTS_SRC/graph-census-debt.ts" "$dst/packages/intentionsutil/scripts/graph-census-debt.ts"
+  cp "$UTIL_SCRIPTS_SRC/census-tick.ts" "$dst/packages/intentionsutil/scripts/census-tick.ts"
+  cp "$UTIL_SCRIPTS_SRC/census-decide.ts" "$dst/packages/intentionsutil/scripts/census-decide.ts"
   cp "$UTIL_SCRIPTS_SRC/restamp-scope-fingerprint.ts" "$dst/packages/intentionsutil/scripts/restamp-scope-fingerprint.ts"
   chmod +x "$dst/packages/intentionsutil/scripts/graph-commit"
   cp "$HARNESS_DIR/lib.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib.sh"
@@ -224,6 +236,116 @@ if [[ $rc -ne 0 ]] && [[ -z "$diff_after" ]]; then
 else
   no "transition-node byte-identical restore (rc=$rc)"
   printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+fi
+
+# ===========================================================================
+# Case 2: dispatch-census-tick batch rollback on graph-commit failure
+# (tactic-census-scripted-tick).
+#
+# The retired dispatch-graph-census had ONE born node to delete on failure; the
+# scripted census tick's blast radius is a whole BATCH — census-tick.ts rmSyncs
+# every prunable node, rewrites every node whose inbound blocked_by named one,
+# and writes+splices a fresh defect node per unverifiable done node, all before
+# the wrapper's single graph-commit runs. The seed below makes the plan contain
+# one of each:
+#
+#   t-census-pruned   phase:done, completion mergedAt+mergeCommitSha  -> PRUNE
+#   t-census-blocked  open, blocked_by: [t-census-pruned]             -> EDIT
+#   t-census-broken   phase:done, execution:null (unverifiable)       -> MINT
+#
+# graph-commit is stubbed to fail, so the wrapper must revert all three writes.
+# ===========================================================================
+T2="$WORK/t2-seed"
+build_seed_repo "$T2"
+cp "$HARNESS_DIR/dispatch-census-tick" "$T2/.claude/skills/dispatch-propagate/scripts/dispatch-census-tick"
+chmod +x "$T2/.claude/skills/dispatch-propagate/scripts/dispatch-census-tick"
+# (a) verifiably-complete done node -> pruned (file deleted).
+cat >"$T2/intentions/t-census-pruned.md" <<'NODE'
+---
+id: t-census-pruned
+kind: tactic
+statement: a done node whose completion verifies mechanically
+owner: ai
+status: codified
+phase: done
+serves: []
+execution:
+  branch: t-census-pruned
+  pr: 4242
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: "2026-07-25T18:21:49Z"
+    mergeCommitSha: dee357ae4d77018525a3a6a07a0adf0c71fa3cca
+    graphCommitSha: null
+---
+# a done node whose completion verifies mechanically
+NODE
+# (b) open node whose inbound blocked_by names (a) -> edge-repair rewrite.
+cat >"$T2/intentions/t-census-blocked.md" <<'NODE'
+---
+id: t-census-blocked
+kind: tactic
+statement: an open node blocked by the node census is about to prune
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+blocked_by:
+  - t-census-pruned
+---
+# an open node blocked by the node census is about to prune
+NODE
+# (c) done node with no execution -> integrity defect, freshly minted.
+cat >"$T2/intentions/t-census-broken.md" <<'NODE'
+---
+id: t-census-broken
+kind: tactic
+statement: a done node with no execution record at all
+owner: ai
+status: codified
+phase: done
+serves: []
+execution: null
+---
+# a done node with no execution record at all
+NODE
+new_origin t2
+init_and_push "$T2"
+
+C2="$WORK/t2-clone"
+clone_with_node_modules "$C2"
+fail_graph_commit "$C2"
+# census-tick.ts's defectIdFor(): strip a leading `tactic-`/`strategy-`, prefix
+# `tactic-census-defect-`. `t-census-broken` carries neither prefix, so the id
+# is the whole target id appended.
+DEFECT_ID="tactic-census-defect-t-census-broken"
+
+stdout_out="$(
+  cd "$C2" || exit 99
+  bash .claude/skills/dispatch-propagate/scripts/dispatch-census-tick 2>"$WORK/t2-stderr.log"
+)"; rc=$?
+stderr_out="$(cat "$WORK/t2-stderr.log")"
+status_after="$(git -C "$C2" status --porcelain intentions/)"
+# The `prune 1, edge-repair 1, mint 1` match below is the teeth guard: it proves
+# the plan really was a three-way batch rather than a degenerate one-op tick
+# whose rollback would prove nothing.
+if [[ $rc -ne 0 ]] \
+   && [[ -n "$stderr_out" ]] \
+   && grep -q 'graph-commit failed' <<<"$stderr_out" \
+   && grep -q 'rolled back' <<<"$stderr_out" \
+   && grep -q 'prune 1, edge-repair 1, mint 1' <<<"$stderr_out" \
+   && [[ -z "$status_after" ]] \
+   && [[ -f "$C2/intentions/t-census-pruned.md" ]] \
+   && [[ ! -e "$C2/intentions/$DEFECT_ID.md" ]]; then
+  ok "dispatch-census-tick batch rollback: a graph-commit failure reverts the whole batch (pruned node restored, edge-repair edit reverted, minted defect removed) and names the failure on stderr"
+else
+  no "dispatch-census-tick batch rollback (rc=$rc)"
+  printf 'stdout: %s\n' "$stdout_out"; printf 'stderr: %s\n' "$stderr_out"
+  printf 'status: %s\n' "$status_after"
 fi
 
 # ===========================================================================
