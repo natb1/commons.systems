@@ -1,10 +1,18 @@
 # Delegability Evaluation
 
-The delegability evaluation is the core of `/align-init`'s per-intention loop. For each
+The delegability evaluation is a per-intention-node evaluation. For each
 intention node, it decides where execution can and should be owned along the
 human → AI → procedure continuum: first whether ownership *can* move (feasibility),
 then whether it *should* move (economics). It does not decompose intentions and it
 does not own the node — it reads one node and emits a recommendation.
+
+No entry point runs this evaluation today. It was the core of the retired
+`/align-init` skill's per-intention loop; the rung-5 design it belonged to is
+retained by the intention node `tactic-align-audit-legacy-review`
+(`intentions/tactic-align-audit-legacy-review.md`), which decides whether a future
+`/align-audit` re-consumes this contract. The verbatim pre-deletion source is
+`.claude/skills/align-init/SKILL.md` at `origin/main` commit `44493733` — read it
+there rather than duplicating it here.
 
 This doc is the single source of truth for the delegability contract. The
 `ref-delegability` skill, the #2370 delegability-assessor role, and the dialectic
@@ -14,7 +22,8 @@ changing this doc.
 
 ## The two axes
 
-Two axes run through `/align-init`, and nothing downstream should conflate them.
+Two axes run through the delegability evaluation, and nothing downstream should
+conflate them.
 
 - **Decomposition** — intention → sub-intention → goal. Breaking a broad intention
   into narrower pieces until each is concrete enough to act on. This is *not* this
@@ -133,12 +142,14 @@ proceduralized.
 ### Perspectives intrinsic to delegation
 
 Two perspectives are always consulted on a SHOULD decision. They estimate the terms;
-they do not by themselves decide. They reuse the existing align agents:
+they do not by themselves decide. Both were derived from now-deleted agent
+definitions; the verbatim pre-deletion source is at `origin/main` commit
+`44493733` under `.claude/agents/`.
 
 | Perspective | Derived from | Estimates |
 |---|---|---|
-| FINANCIAL | `.claude/agents/align-financial.md` — cost analysis, break-even, sustainability | the left-side costs (`build`, `run`), `manual_cost`, and `frequency` |
-| TECHNICAL | `.claude/agents/align-technical.md` — impact × risk × effort, forkability, "safe to abandon" | `maintenance`, and a veto if the codified artifact would not be safe to abandon |
+| FINANCIAL | formerly the deleted `align-financial` agent definition — cost analysis, break-even, sustainability | the left-side costs (`build`, `run`), `manual_cost`, and `frequency` |
+| TECHNICAL | formerly the deleted `align-technical` agent definition — impact × risk × effort, forkability, "safe to abandon" | `maintenance`, and a veto if the codified artifact would not be safe to abandon |
 
 ### Greedy codification
 
@@ -151,8 +162,8 @@ teeth. When all three pass, push down, because the freed attention compounds.
 
 ## Consistency / veto layer
 
-A consistency-tester derived from `.claude/agents/align-consistency.md` — charter
-compliance and ratchet risk — runs over the recommendation. It does not produce the
+A consistency-tester — formerly the deleted `align-consistency` agent definition;
+charter compliance and ratchet risk — runs over the recommendation. It does not produce the
 recommendation; it can veto one. A push-down that is CAN-feasible and ROI-positive is
 still declined if it conflicts with a standing intention or a charter principle — for
 example, if codifying it creates a ratchet tooth that resists later removal. Its

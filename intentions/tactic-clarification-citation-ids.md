@@ -19,13 +19,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-clarification-citation-ids
-  pr: null
+  pr: 3041
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: 15b5ef1dc7ce30e0a267440a124bd558c5506c86bd79f91fa2dc39b909df79b9
+  fix:
+    since: 2026-08-04
+    attempt: 2
+    pushed_sha: c5a7b81f323b0af285aaf48691d5866b809bc14d
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
