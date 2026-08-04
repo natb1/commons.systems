@@ -86,14 +86,12 @@ attention:
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: review
+phase: implement
 execution:
   branch: tactic-outcome-envelope-node-lane-parity
   pr: 3030
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
