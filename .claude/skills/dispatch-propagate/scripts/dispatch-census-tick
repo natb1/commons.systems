@@ -45,9 +45,12 @@
 #   success path — a landed batch is graph state, not garbage.
 #
 # Stdout protocol (one line, caller prefixes it with `census: `):
-#   pruned <n>, integrity-defects <m> (minted <j>, existing <k>)
+#   pruned <n>, integrity-defects <m> (minted <j>, existing <k>), retained <r>
 # printed on both the no-op path and the graph-commit-succeeded path — NOT on
-# a hard-error exit-1 path, where only the stderr diagnostic is printed.
+# a hard-error exit-1 path, where only the stderr diagnostic is printed. `<r>`
+# is the count of prune candidates census-tick.ts REFUSED to prune because a
+# surviving node still names them via parent/serves/validates/recovers — left
+# on disk untouched, no defect minted (see census-tick.ts's header comment).
 #
 # Exit codes: 0 (including a no-op tick); 1 if intentions/ was already dirty on
 # entry (nothing run), or if census-tick.ts or graph-commit hard-errored (the
@@ -102,13 +105,14 @@ E=$(jq -r '.edit | length' <<<"$OUT")
 M=$(jq -r '.defectCount' <<<"$OUT")
 J=$(jq -r '.defectsMinted | length' <<<"$OUT")
 K=$(jq -r '.defectsExisting | length' <<<"$OUT")
+R=$(jq -r '.retained | length' <<<"$OUT")
 
 mapfile -t PRUNE < <(jq -r '.prune[]?' <<<"$OUT")
 mapfile -t EDIT_AND_MINT < <(jq -r '.edit[]?, .defectsMinted[]?' <<<"$OUT")
 
 if [[ "${#PRUNE[@]}" -eq 0 && "${#EDIT_AND_MINT[@]}" -eq 0 ]]; then
   ROLLBACK_ARMED=0  # no-op tick: census-tick.ts wrote nothing to revert.
-  echo "pruned $N, integrity-defects $M (minted $J, existing $K)"
+  echo "pruned $N, integrity-defects $M (minted $J, existing $K), retained $R"
   exit 0
 fi
 
@@ -123,5 +127,5 @@ if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
 fi
 
 ROLLBACK_ARMED=0  # landed: the mutations are graph state, never reverted.
-echo "pruned $N, integrity-defects $M (minted $J, existing $K)"
+echo "pruned $N, integrity-defects $M (minted $J, existing $K), retained $R"
 exit 0

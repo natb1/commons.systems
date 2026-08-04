@@ -11,6 +11,20 @@
 //     completion does NOT verify, deduped by the deterministic defect id so a
 //     repeated tick surfaces each defect exactly once.
 //
+// Refusal, not repair, for every OTHER inbound edge class validateGraph
+// checks: a prune candidate still named by a surviving node's `parent`,
+// `serves`, `validates`, or `recovers` (schema.ts's `validateGraph` — e.g.
+// 'parent "x" does not resolve to a node') is dropped from the batch —
+// left on disk, untouched, no defect minted for it — and reported in
+// `Plan.retained`. `blocked_by` is the one edge class census repairs, because
+// removing a `blocked_by` entry is semantics-preserving (absence already
+// reads as completion to the selector — see `inboundBlockers`'s doc comment).
+// Stripping a `serves`/`validates` entry or re-pointing a `parent` is not:
+// it would silently change what the surviving node MEANS (which strategy it
+// validates, which node it is a child of), a call census has no authority to
+// make unattended. Refusing leaves the decision for a human/office-hours pass
+// instead of guessing.
+//
 // Acceptable known residue: pruning a defect node discards its own completion
 // record — census keeps no evidence that the defect was resolved, or by whom.
 // That is by design and costs nothing recoverable. The defect node is
@@ -30,7 +44,7 @@
 //
 // Stdout: one JSON object
 //   { "prune": [...ids], "edit": [...ids], "defectsMinted": [...ids],
-//     "defectsExisting": [...ids], "defectCount": <n> }
+//     "defectsExisting": [...ids], "defectCount": <n>, "retained": [...ids] }
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -57,6 +71,12 @@ export interface Plan {
   defectsMinted: string[];
   defectsExisting: string[];
   defectCount: number;
+  /**
+   * Prune candidates REFUSED because a surviving (not co-pruned) node still
+   * names them via `parent`, `serves`, `validates`, or `recovers`. Left on
+   * disk untouched; no defect minted. Sorted.
+   */
+  retained: string[];
 }
 
 function parseArgs(argv: string[]): Args {
@@ -86,6 +106,29 @@ function parseArgs(argv: string[]): Args {
 /** The deterministic, stable id of the defect node tracking `targetId`. */
 export function defectIdFor(targetId: string): string {
   return `tactic-census-defect-${targetId.replace(/^(tactic|strategy)-/, "")}`;
+}
+
+/**
+ * The ids of nodes referencing `id` through any inbound edge class OTHER than
+ * `blocked_by` that `validateGraph` (schema.ts) checks resolve to an existing
+ * node: `parent`, `serves`, `validates`, `recovers` (its rules 1-4 and 13-14,
+ * e.g. 'parent "x" does not resolve to a node'). `blocked_by` is excluded —
+ * that edge class has its own dedicated repair loop (`inboundBlockers`).
+ *
+ * Mirrors `inboundBlockers`'s shape: returns RAW referrers, unfiltered for
+ * co-pruning. The caller applies the co-prune exemption, same as the
+ * `blocked_by` repair loop does.
+ */
+export function inboundNonBlockedByReferences(id: string, nodes: readonly IntentionNode[]): string[] {
+  return nodes
+    .filter(
+      (n) =>
+        n.parent === id ||
+        n.serves.includes(id) ||
+        n.validates.includes(id) ||
+        n.recovers.includes(id),
+    )
+    .map((n) => n.id);
 }
 
 /**
@@ -167,7 +210,23 @@ export function censusTick(args: Args): Plan {
   const nodes = listNodes(args.dir);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const { prunable, defects } = partitionDonePresent(nodes);
-  const prunableSet = new Set(prunable);
+  const candidateSet = new Set(prunable);
+
+  // Refusal pass, BEFORE the edge-repair loop below: a candidate still named
+  // by a surviving (not co-pruned) node's parent/serves/validates/recovers is
+  // dropped from the prune batch entirely — census repairs blocked_by, but
+  // refuses rather than repairs every other edge class (see header comment).
+  // Same co-prune exemption as the blocked_by loop: a referrer that is itself
+  // a prune candidate this batch does not block the prune, since it too is
+  // about to vanish.
+  const retained: string[] = [];
+  for (const id of prunable) {
+    const referrers = inboundNonBlockedByReferences(id, nodes).filter((r) => !candidateSet.has(r));
+    if (referrers.length > 0) retained.push(id);
+  }
+  const retainedSet = new Set(retained);
+  const prunableFiltered = prunable.filter((id) => !retainedSet.has(id));
+  const prunableSet = new Set(prunableFiltered);
 
   const plan: Plan = {
     prune: [],
@@ -175,6 +234,7 @@ export function censusTick(args: Args): Plan {
     defectsMinted: [],
     defectsExisting: [],
     defectCount: defects.length,
+    retained: retained.sort(),
   };
   const editSet = new Set<string>();
 
@@ -182,7 +242,7 @@ export function censusTick(args: Args): Plan {
   // every file still exists, so no read races an about-to-be-deleted file.
   // validateGraph rule 13 rejects a surviving blocked_by that no longer
   // resolves, so these edges must be repaired in the same commit as the prune.
-  for (const id of prunable) {
+  for (const id of prunableFiltered) {
     for (const inbound of inboundBlockers(id, nodes)) {
       // A co-pruned blocker is itself being deleted this run — editing it would
       // write a file that is about to vanish.
@@ -200,7 +260,7 @@ export function censusTick(args: Args): Plan {
   // Stamping again at prune time would double-count the same completion.
 
   // Deletion LAST, after every edge-repair read/write above.
-  for (const id of prunable) {
+  for (const id of prunableFiltered) {
     rmSync(join(args.dir, `${id}.md`));
     plan.prune.push(id);
   }

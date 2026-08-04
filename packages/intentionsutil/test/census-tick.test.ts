@@ -187,6 +187,7 @@ describe("censusTick", () => {
         defectsMinted: [],
         defectsExisting: [],
         defectCount: 0,
+        retained: [],
       });
       // Nothing named census-defect-census-defect survived either generation.
       expect(readdirSync(dir).filter((f) => f.includes("defect-census-defect"))).toEqual([]);
@@ -252,5 +253,109 @@ describe("censusTick", () => {
     expect(plan.edit).toEqual([]);
     expect(existsSync(join(dir, "tactic-a.md"))).toBe(false);
     expect(existsSync(join(dir, "tactic-b.md"))).toBe(false);
+  });
+
+  describe("refusal on non-blocked_by inbound edges", () => {
+    it("refuses to prune a candidate still named by a surviving node's parent, and reports it in retained", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      node(dir, {
+        id: "tactic-parent-target",
+        kind: "tactic",
+        phase: "done",
+        execution: verifiedExecution(10),
+      });
+      node(dir, {
+        id: "tactic-child",
+        kind: "tactic",
+        phase: "implement",
+        parent: "tactic-parent-target",
+      });
+
+      const plan = censusTick({ dir, date: "2026-08-04" });
+
+      expect(plan.prune).toEqual([]);
+      expect(plan.retained).toEqual(["tactic-parent-target"]);
+      expect(plan.edit).toEqual([]);
+      expect(plan.defectsMinted).toEqual([]);
+      expect(plan.defectsExisting).toEqual([]);
+      expect(plan.defectCount).toBe(0);
+      expect(existsSync(join(dir, "tactic-parent-target.md"))).toBe(true);
+      // Untouched: refusal leaves the file exactly as it was, no repair attempt.
+      expect(readNode(dir, "tactic-parent-target").phase).toBe("done");
+    });
+
+    it("refuses to prune a candidate still named by a surviving node's validates edge", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      node(dir, {
+        id: "strategy-validated-target",
+        kind: "strategy",
+        phase: "done",
+        execution: verifiedExecution(11),
+      });
+      node(dir, {
+        id: "tactic-validator",
+        kind: "tactic",
+        phase: "implement",
+        validates: ["strategy-validated-target"],
+      });
+
+      const plan = censusTick({ dir, date: "2026-08-04" });
+
+      expect(plan.prune).toEqual([]);
+      expect(plan.retained).toEqual(["strategy-validated-target"]);
+      expect(plan.defectsMinted).toEqual([]);
+      expect(existsSync(join(dir, "strategy-validated-target.md"))).toBe(true);
+    });
+
+    it("refuses to prune a candidate still named by a surviving node's serves edge", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      node(dir, {
+        id: "strategy-served-target",
+        kind: "strategy",
+        phase: "done",
+        execution: verifiedExecution(12),
+      });
+      node(dir, {
+        id: "tactic-server",
+        kind: "tactic",
+        phase: "implement",
+        serves: ["strategy-served-target"],
+      });
+
+      const plan = censusTick({ dir, date: "2026-08-04" });
+
+      expect(plan.prune).toEqual([]);
+      expect(plan.retained).toEqual(["strategy-served-target"]);
+      expect(plan.defectsMinted).toEqual([]);
+      expect(existsSync(join(dir, "strategy-served-target.md"))).toBe(true);
+    });
+
+    it("still prunes a candidate whose only non-blocked_by referrer is co-pruned in the same batch", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      node(dir, {
+        id: "tactic-copruned-target",
+        kind: "tactic",
+        phase: "done",
+        execution: verifiedExecution(20),
+      });
+      node(dir, {
+        id: "tactic-copruned-referrer",
+        kind: "tactic",
+        phase: "done",
+        parent: "tactic-copruned-target",
+        execution: verifiedExecution(21),
+      });
+
+      const plan = censusTick({ dir, date: "2026-08-04" });
+
+      expect(plan.prune).toEqual(["tactic-copruned-referrer", "tactic-copruned-target"]);
+      expect(plan.retained).toEqual([]);
+      expect(existsSync(join(dir, "tactic-copruned-target.md"))).toBe(false);
+      expect(existsSync(join(dir, "tactic-copruned-referrer.md"))).toBe(false);
+    });
   });
 });
