@@ -58,7 +58,7 @@ execution:
   strategy_fingerprint: null
   fix:
     since: 2026-08-03
-    attempt: 2
+    attempt: 4
     pushed_sha: null
   completion: null
 validates: []

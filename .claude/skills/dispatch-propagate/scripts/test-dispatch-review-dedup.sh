@@ -79,4 +79,37 @@ assert_eq "dedup: all-absent partition group → []" "[]" "$(printf '%s' "$out" 
 
 # <<< END MOVED <<<
 
+# --- cross-lane dedup priority (tactic-review-cross-lane-dedup) -------------
+# A same-root group spanning Lane A (code-review/security-review) and Lane B
+# (everything else) must always let the Lane-B member win representative/id/
+# Source selection, regardless of Confidence — a Lane-A win would let a
+# Lane-A-derived entry acquire bucket `Required`, narrowing verify eligibility.
+
+# (a) high-confidence code-review member + low-confidence secrets member,
+# same location, partitioned together → representative is the secrets one
+# (id/Source), Confidence is still the group MAX (high), sources is the union.
+INX1='{"findings":[{"id":"a","Location":"f.ts:1","Source":"code-review","OWASP":"","STRIDE":"","Confidence":"high"},{"id":"b","Location":"f.ts:1","Source":"secrets","OWASP":"A02:2021 Cryptographic Failures","STRIDE":"Information Disclosure","Confidence":"low"}],"partition":[["a","b"]]}'
+out=$(printf '%s' "$INX1" | "$SCRIPT_DIR/dispatch-review-dedup")
+assert_eq "dedup: cross-lane group → representative id is Lane-B member" "b" "$(printf '%s' "$out" | jq -r '.[0].id')"
+assert_eq "dedup: cross-lane group → representative Source is Lane-B member" "secrets" "$(printf '%s' "$out" | jq -r '.[0].Source')"
+assert_eq "dedup: cross-lane group → Confidence is group max (high)" "high" "$(printf '%s' "$out" | jq -r '.[0].Confidence')"
+assert_eq "dedup: cross-lane group → sources union" '["code-review","secrets"]' "$(printf '%s' "$out" | jq -c '.[0].sources')"
+
+# (b) two-Lane-B group is unaffected by the lane-priority term — regression
+# guard on today's Confidence-desc/idx-asc behavior (both members are Lane B,
+# so the lane-a flag is 0/0 for both and the tie-break falls through to
+# Confidence exactly as before).
+INX2='{"findings":[{"id":"a","Location":"f.ts:1","Source":"secrets","OWASP":"","STRIDE":"","Confidence":"low"},{"id":"b","Location":"f.ts:1","Source":"domain-sweep","OWASP":"A03:2021 Injection","STRIDE":"Tampering","Confidence":"high"}],"partition":[["a","b"]]}'
+out=$(printf '%s' "$INX2" | "$SCRIPT_DIR/dispatch-review-dedup")
+assert_eq "dedup: two-Lane-B group → representative id is high-Confidence member" "b" "$(printf '%s' "$out" | jq -r '.[0].id')"
+assert_eq "dedup: two-Lane-B group → Confidence max (high)" "high" "$(printf '%s' "$out" | jq -r '.[0].Confidence')"
+
+# (c) Lane-A-only group still picks the Confidence-desc/idx-asc winner — the
+# lane-a flag is 1/1 for both members, so it never discriminates and the
+# existing tie-break governs.
+INX3='{"findings":[{"id":"a","Location":"f.ts:1","Source":"code-review","OWASP":"","STRIDE":"","Confidence":"low"},{"id":"b","Location":"f.ts:1","Source":"security-review","OWASP":"A01:2021 Broken Access Control","STRIDE":"Elevation of Privilege","Confidence":"high"}],"partition":[["a","b"]]}'
+out=$(printf '%s' "$INX3" | "$SCRIPT_DIR/dispatch-review-dedup")
+assert_eq "dedup: Lane-A-only group → representative id is high-Confidence member" "b" "$(printf '%s' "$out" | jq -r '.[0].id')"
+assert_eq "dedup: Lane-A-only group → Confidence max (high)" "high" "$(printf '%s' "$out" | jq -r '.[0].Confidence')"
+
 report_results
