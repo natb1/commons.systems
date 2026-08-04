@@ -175,11 +175,18 @@
 #          mandatory before any retry, not merely a suggestion.
 #          The stderr lines above distinguish the parked set from the landed
 #          bystander-prune set, and so does the park commit subject; those are
-#          the authoritative record of what happened. No in-repo caller
-#          currently passes --prune programmatically — pruning is agent-driven
-#          via the owed-prune census, not script-driven — so this contract is
-#          documented for the agent reading it before a retry, not enforced by
-#          a caller check.
+#          the authoritative record of what happened. This retry contract is
+#          written for an agent doing a manual retry. The one in-repo caller
+#          that passes --prune programmatically is
+#          .claude/skills/dispatch-propagate/scripts/dispatch-census-tick, and
+#          it does not exercise this hazard: it has no retry logic at all — on
+#          any graph-commit failure it rolls back the whole batch
+#          (`git checkout -- intentions/ && git clean -fq -- intentions/`) and
+#          exits 1, and the next dispatch tick recomputes its prune/edit/mint
+#          plan fresh from a new `listNodes()` call rather than replaying the
+#          same argv. So there is no stale-argv double-prune retry for that
+#          caller to hit; this contract still applies verbatim to a human or
+#          agent retrying a failed invocation by hand.
 #   2  usage error — reserved for the paths that call `exit 2` directly: an
 #      unknown `-*` option, no node ids given at all, an id rejected by
 #      validate_id_chars (empty, containing a path separator, or exactly `.`
