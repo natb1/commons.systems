@@ -62,12 +62,15 @@ attention:
     bug-ledger nodes in this cluster; re-simulated over the live store after
     writing to confirm 0 tier changes and 0 value drift onto non-target nodes.
   tier: 1
-phase: implement
+phase: review
 execution:
   branch: tactic-terminal-disposition-sweep-park-without-cas
   pr: 3042
   attempts: {}
-  markers: []
+  markers:
+    - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
   completion: null
