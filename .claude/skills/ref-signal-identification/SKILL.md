@@ -1,12 +1,13 @@
 ---
 name: ref-signal-identification
-description: Signal identification reference — the parse-time classifier with categories existing_sensor/instrument/proxy, the sensor economics gate, and the signal.eval.v1 output object the align-signal-assessor and #2372 consume.
+description: Signal identification reference — the parse-time classifier with categories existing_sensor/instrument/proxy, the sensor economics gate, and the signal.eval.v1 output object the align-signal-assessor (no live agent definition today) and #2372 consume.
 ---
 # Signal Identification Reference
 
 `.claude/docs/signal-identification.md` is the single source of truth for the
 signal-identification contract. This skill is the entry point an align-signal-assessor
-(#2371 structural role, Unit 4) loads before classifying an intention node. Everything
+(#2371 structural role, Unit 4; no live agent definition today) loads before
+classifying an intention node. Everything
 that defines categories, the economics inequality, field shapes, and invariants lives in
 that doc — this skill points at it; it does not restate it.
 
@@ -14,8 +15,9 @@ that doc — this skill points at it; it does not restate it.
 
 Invoke when deciding what observable says an intention is met and how to read it, and
 whether building or wiring a sensor is worth the cost. The align-signal-assessor role
-loads this skill before each classification; the resulting `signal.eval.v1` output is
-consumed downstream by #2372, which wires the signal arm into the align loop.
+(no live agent definition today) loads this skill before each classification; the
+resulting `signal.eval.v1` output is consumed downstream by #2372, which wires the
+signal arm into the align loop.
 
 ## The contract
 
@@ -39,10 +41,13 @@ Apply the steps in order:
 
 ## Perspectives
 
-Two reused align agents feed the economics estimate. The doc defines exactly how each
-contributes to the ROI inequality; this skill only names them:
+Two perspectives feed the economics estimate, each formerly a deleted `.claude/agents/`
+agent definition; the verbatim pre-deletion source is at `origin/main` commit
+`44493733` under `.claude/agents/`. The doc defines exactly how each contributes to
+the ROI inequality; this skill only names them:
 
-- **FINANCIAL** — `.claude/agents/align-financial.md`; estimates `build`, `run`,
-  `decision_value`, and `decision_frequency`.
-- **TECHNICAL** — `.claude/agents/align-technical.md`; estimates `maintenance` and
-  holds a "safe to abandon" concern on a sensor that would rot if left untouched.
+- **FINANCIAL** — formerly the deleted `align-financial` agent definition; estimates
+  `build`, `run`, `decision_value`, and `decision_frequency`.
+- **TECHNICAL** — formerly the deleted `align-technical` agent definition; estimates
+  `maintenance` and holds a "safe to abandon" concern on a sensor that would rot if
+  left untouched.

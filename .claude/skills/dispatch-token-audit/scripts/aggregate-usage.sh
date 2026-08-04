@@ -311,7 +311,7 @@ def cmd_prefix(c):
 # list must be updated when a new dispatch worker phase skill is added.
 def worker_skills: ["plan-issue","implement","qa-fix","review-fix","fix-checks",
   "fix-conflicts","dispatch-conflict","qa-main","budget-parse-job","resolve-epic",
-  "office-hours","align-strategy","align-tactics","align-init"];
+  "office-hours","align-strategy","align-tactics","align-init","align"];
 def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + ")</command-name>";
 
 . as $msgs

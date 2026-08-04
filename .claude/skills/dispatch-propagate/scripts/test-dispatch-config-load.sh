@@ -183,36 +183,36 @@ else
 fi
 config_teardown
 
-# --- Test 2d: align jit (7d/14d, skill: align-init) validates ------------
+# --- Test 2d: weekly-review jit (7d/14d, skill: weekly-review-engine) validates ------------
 
-echo "Test: align jit (7d/14d, skill: align-init) validates"
+echo "Test: weekly-review jit (7d/14d, skill: weekly-review-engine) validates"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "align",
+      "key": "weekly-review",
       "repo": "test-owner/test-repo",
-      "label": "jit:align",
-      "title": "Alignment review",
-      "body": "Recurring align review.",
+      "label": "jit:weekly-review",
+      "title": "Weekly review",
+      "body": "Recurring weekly review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
       "debounce": "1h",
-      "skill": "align-init"
+      "skill": "weekly-review-engine"
     }
   ]
 }
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
-assert_eq "align jit exits 0" "0" "$rc"
-align_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
-assert_eq "align jit skill value" "align-init" "$align_skill"
-align_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
-assert_eq "align jit remindAfterClose value" "7d" "$align_remind"
-align_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
-assert_eq "align jit dueAfterClose value" "14d" "$align_due"
+assert_eq "weekly-review jit exits 0" "0" "$rc"
+weekly_review_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
+assert_eq "weekly-review jit skill value" "weekly-review-engine" "$weekly_review_skill"
+weekly_review_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
+assert_eq "weekly-review jit remindAfterClose value" "7d" "$weekly_review_remind"
+weekly_review_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
+assert_eq "weekly-review jit dueAfterClose value" "14d" "$weekly_review_due"
 config_teardown
 
 # --- Test 3: absent file prints no-config and exits 0 ------------------------
