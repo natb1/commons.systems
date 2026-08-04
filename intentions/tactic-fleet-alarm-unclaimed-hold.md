@@ -20,24 +20,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: worker session froze at a permission/classifier denial — claude agents
-    reports state=blocked and the transcript has had no activity for 1403s; the
-    session cannot make progress and cannot park itself (a blocked session never
-    reaches the Stop hook), so the dispatch-tick frozen-session sweep parked
-    this node
-  since: 2026-08-04
-  recommendation: Find the holding job with 'claude agents --all' and attach it
-    ('claude attach <job-id>'), then answer the pending prompt. If the denied
-    command was gratuitous, cancel it and let the worker continue; if it is
-    genuinely needed, run it yourself or add a standing permission rule — do NOT
-    rewrite the command to route around the classifier. If the session is
-    unrecoverable, stop it ('claude rm <job-id>'), let dispatch-sweep reap the
-    worktree, then run clear-park <node-id> to return the node to the lane.
-    Until that session is gone, office-hours reports this node as 'all-held'
-    rather than launching a review session for it, because the frozen session
-    still holds the node-id session name.
-  session_type: other
+office_hours: null
 pace_exempt: true
 rounds: null
 attributes: {}
