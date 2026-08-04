@@ -13,6 +13,7 @@ import {
 import type { SessionType } from "../src/schema.js";
 import {
   formatDisposition,
+  formatLiftNote,
   formatQueueRow,
   parseSelectorArgs,
   resolveSessionCwd,
@@ -674,6 +675,39 @@ describe("formatQueueRow", () => {
     });
     expect(row).toBe("12.5\tcurriculum-review\ttactic-a\t2026-07-01");
     expect(row.split("\t")).toEqual(["12.5", "curriculum-review", "tactic-a", "2026-07-01"]);
+  });
+
+  it("emits exactly four tab-separated fields, even for a lifted member", () => {
+    const row = formatQueueRow({
+      nodeId: "tactic-b",
+      rank: 30,
+      tier: 3,
+      ownTier: 1,
+      ownRank: 5,
+      liftedFrom: "tactic-blocked",
+      sessionType: "other",
+      since: "2026-08-01",
+    });
+    expect(row.split("\t")).toHaveLength(4);
+    expect(row).toBe("30\tother\ttactic-b\t2026-08-01");
+  });
+});
+
+describe("formatLiftNote", () => {
+  it("renders the advisory naming the lifted-from source and own values", () => {
+    const note = formatLiftNote({
+      nodeId: "tactic-b",
+      rank: 30,
+      tier: 3,
+      ownTier: 1,
+      ownRank: 5,
+      liftedFrom: "tactic-blocked",
+      sessionType: "other",
+      since: "2026-08-01",
+    });
+    expect(note).toBe(
+      "NOTE — tactic-b ranks at tier 3/30 inherited from blocked source tactic-blocked (own: tier 1/5)",
+    );
   });
 });
 
