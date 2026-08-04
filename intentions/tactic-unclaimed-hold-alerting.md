@@ -164,7 +164,26 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main residue item 7 needs roughly a week of dispatch-fleet-watch
+    production readings to judge whether
+    DISPATCH_FLEET_WATCH_HOLD_MIN_AGE=86400s / HOLD_TOP_K=10 are operationally
+    sane; source PR #3036 merged 2026-08-04T08:15:45Z, only ~15 minutes before
+    this check (now 2026-08-04T08:31Z) — the predicate has fired 3 times in the
+    journal so far. Re-check no earlier than ~2026-08-11 once a week of readings
+    has accumulated."
+  since: 2026-08-04
+  recommendation: "No author decision needed — re-selection only. Lane-M checks
+    already run and both are healthy: 'journalctl --user -t dispatch-fleet-watch
+    --since -7d | grep -c unclaimed-hold:' returned 3 (predicate reporting every
+    ~5-min pass since deploy, first line timestamped at merge time); 'git log
+    --oneline origin/main -- intentions/tactic-fleet-alarm-unclaimed-hold*.md'
+    shows exactly one commit (f4b731ab), with subsequent identical-reading
+    passes correctly logging a no-op skip instead of re-committing — no push
+    storm observed. The signal looks correct; the window is just too short (~15
+    minutes, not ~1 week) to judge the threshold defaults per the node's own
+    Verification section."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
