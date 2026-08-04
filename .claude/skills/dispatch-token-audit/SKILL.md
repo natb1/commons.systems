@@ -168,6 +168,27 @@ jq '[.sessions[] | select(.outcome_rates.hit_rate != null)] | sort_by(-.outcome_
 
 These slices are yield metrics, not cost metrics — they do not sort into the ranked token-reduction report. Read them alongside the report to correlate phase spend with phase effectiveness.
 
+### `routing_recommendations` (advisory, persisted-doc only)
+
+When the optional Firestore persist path is enabled (`DISPATCH_AUDIT_AGGREGATES_ENABLED=1` — see Step 2), `audit-aggregate-writer.mjs` derives a `routing_recommendations` array from `by_phase_outcome` and adds it to the persisted doc. It is NOT part of `tmp/usage-audit.json` and NOT part of the markdown report; it exists only on the persisted aggregate.
+
+One entry per phase key present in `by_phase_outcome`:
+
+```
+{
+  phase: "qa" | "review" | ...,
+  current_model: <the phase's model per the static dispatch-phase-model map, or null if unmapped>,
+  recommended_model: <proposed model change, or null when no change is recommended>,
+  yield_metric: { name: "hit_rate" | "actionability" | "fix_rate", value: <number|null>, verified: <boolean> },
+  quality_preservation_evidence: <short string, or null>,
+  untrusted: <boolean>
+}
+```
+
+**Grounding rule.** A recommendation is `untrusted: true` whenever the metric it rests on has unverified accounting (or no rate was available for the window). The writer encodes this as a named list of phase+metric pairs with known accounting gaps: `qa` + `hit_rate` and `qa` + `fix_rate` both put `fixes_applied` in the numerator, and qa's `fixes_applied` accounting gap is presently open (qa-fix delegates its fixes to `/implement-unit` — see `.claude/docs/outcome-envelope.md`). `review` + `hit_rate` is not subject to that gap. **Entries tagged `untrusted: true` must be excluded from any actionable or acted-upon set.**
+
+The field is a recommendation surface only. The writer never writes `dispatch-phase-model`, `dispatch-phase-effort`, or any other routing-policy file — no routing change is ever applied automatically (strategy-token-economy clarification 10 / condition 3).
+
 ## Per-session artifact join
 
 The `artifact` field on each `.sessions[]` entry carries the per-session GitHub join record. Its `{repo, issue, pr, base_sha, branch}` shape, the session-id join key, and the sidecar's role as the authoritative source for the overlapping join keys are described in Step 3 above. `base_sha` is the worktree HEAD at session start — preserved across resume — so it anchors each session to the repository state it began from. The field is `null` for sessions with no sidecar — subagent transcripts, router ticks, pre-#1861 worker sessions, and any non-worker session that did not write one.
