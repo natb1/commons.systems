@@ -46,6 +46,10 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
    # Window and totals
    jq '.window, .totals' tmp/usage-audit.json
 
+   # Phase-attribution coverage — how much of the window's turns/spend landed
+   # on a named phase vs the "<none>" bucket, raw vs whole-session-effective
+   jq '.attribution_coverage' tmp/usage-audit.json
+
    # Phase spend, sorted by price_proxy_usd descending
    jq '.by_phase | to_entries | sort_by(-.value.price_proxy_usd) | map({phase:.key, usd:.value.price_proxy_usd, turns:.value.turns})' tmp/usage-audit.json
 
@@ -91,6 +95,10 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
    ```
 
    The join key is the session id: the sidecar `<id>.dispatch-stamp.json` sits next to `<id>.jsonl` in the transcripts directory, so `.sessions[].id` is the join key between audit findings and GitHub artifacts. Each `artifact` record carries `{repo, issue, pr, base_sha, branch}`. The sidecar is the authoritative source of the overlapping join keys (`repo/issue/pr/base_sha`); the sibling outcome envelope (the #1860 internal-yield record) carries only its own non-overlapping outcome fields (findings, disposition) — so there is exactly one join-key source.
+
+   **Phase attribution is whole-session** for a classifier-typed single-phase `worker` session: every assistant turn in `by_phase`/`by_phase_model`/each session's `phases` field is folded onto the session's launch skill (the phase-skill slash command that started it), not just the turns the harness happened to tag with `attributionSkill`. Each session in `.sessions[]` also carries `launch_skill` and `whole_session_attributed` so a report can see which sessions were re-keyed. `by_attribution_skill` on each session preserves the RAW, un-re-keyed per-turn harness slice (keyed strictly on `attributionSkill`, `<none>` included) for anyone measuring the harness-side attribution gap directly. The top-level `attribution_coverage` rollup summarizes this window-wide: `raw_coverage_rate` (turns the harness itself tagged) vs `effective_coverage_rate` (turns attributed after whole-session re-keying), plus `unattributed_price_proxy_usd` (spend still sitting in `by_phase["<none>"]`).
+
+   **Re-baseline caveat:** this whole-session attribution logic landed 2026-08-03 (strategy-token-economy). A report window spanning that landing date is **not comparable** to `by_phase` figures persisted from before it — a step increase in named-phase spend with a matching drop in `by_phase["<none>"]` across that boundary is the **expected, correct signature of this change**, not a regression or a real spend shift. When comparing windows that straddle the boundary, say so explicitly in the report rather than reporting the delta as a finding.
 
 4. **Interpret and rank against all ten lenses.** Evaluate every lens. Map each to the script output it draws from:
 

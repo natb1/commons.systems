@@ -703,6 +703,30 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
       )
     ) ) as $by_phase_model
 
+# ---- attribution_coverage (Unit 2, whole-session phase attribution) ----
+# Surfaces coverage of Unit 1's whole-session re-keying: how many turns ended
+# up attributed vs left in the "<none>" bucket, plus a raw vs effective
+# coverage rate. "raw" counts attributed_turns_raw (the per-turn
+# `attributionSkill` slice BEFORE whole-session re-keying); "effective" counts
+# each row's own turns minus whatever landed in its (already re-keyed)
+# by_skill["<none>"] bucket AFTER whole-session re-keying. Both rates are
+# null-guarded on a zero denominator via the same `rate()` helper used by
+# outcome_rates above (never a fabricated 0). unattributed_price_proxy_usd
+# reuses the SAME $by_phase computed just above (not a second computation).
+| ( [ $rows[].turns ] | add // 0 ) as $ac_turns_total
+| ( [ $rows[].attributed_turns_raw ] | add // 0 ) as $ac_turns_attributed_raw
+| ( [ $rows[] | (.turns - ((.by_skill["<none>"].turns) // 0)) ] | add // 0 ) as $ac_turns_attributed_effective
+| ( {
+      turns_total: $ac_turns_total,
+      turns_attributed_raw: $ac_turns_attributed_raw,
+      turns_attributed_effective: $ac_turns_attributed_effective,
+      raw_coverage_rate: rate($ac_turns_attributed_raw; $ac_turns_total),
+      effective_coverage_rate: rate($ac_turns_attributed_effective; $ac_turns_total),
+      whole_session_attributed_sessions: ( [ $rows[] | select(.whole_session_attributed) ] | length ),
+      multi_phase_worker_sessions: ( [ $rows[] | select(.multi_phase_worker) ] | length ),
+      unattributed_price_proxy_usd: (($by_phase["<none>"].price_proxy_usd) // 0)
+    } ) as $attribution_coverage
+
 # ---- by_node (graph-native attribution) ----
 # Keyed by the sidecar-carried artifact.node_id. Only sessions whose sidecar
 # stamps a non-null node_id are folded — legacy issue-branch sessions carry
@@ -870,6 +894,8 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
         price_proxy_usd: price(.usage),
         cost_usd: session_cost(.),
         phases: ( reduce (.by_skill | to_entries[]) as $e ({}; .[$e.key] = price($e.value.usage)) ),
+        launch_skill: .launch_skill,
+        whole_session_attributed: .whole_session_attributed,
         outcome: .outcome,
         outcome_rates: ( if .outcome == null then null else outcome_rates(.outcome) end )
       } ] ) as $sessions
@@ -960,6 +986,10 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
       # spawned mid-phase whose opening bigram is NOT the phase stand-up
       # preamble, so folding them into the boot-preamble medians corrupts this
       # lens's own outputs; recovery/other are not phase-boot emitters either.
+      # NOTE (Unit 2): this guard is now satisfied by whole-session attribution
+      # for free — Unit 1 re-keyed .by_skill so a single-phase worker session's
+      # `has($skill)` check holds without per-turn attributionSkill coverage.
+      # No logic change here.
       | ( [ $rows[] | select(.type == "worker" and ((.by_skill // {}) | has($skill))) ] ) as $qual
       # Opening n=2 preamble (first bigram) of each qualifying session's tool_calls.
       | ( [ $qual[] | (ngrams((.tool_calls // []); 2) | .[0]) | select(. != null) ] ) as $openings
@@ -1022,6 +1052,7 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
       actual_rates_per_mtok: ACTUAL_RATES
     },
     totals: $totals,
+    attribution_coverage: $attribution_coverage,
     by_session_type: $by_session_type,
     by_phase: $by_phase,
     by_phase_outcome: $by_phase_outcome,
