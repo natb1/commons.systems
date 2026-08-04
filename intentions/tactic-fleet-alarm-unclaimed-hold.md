@@ -22,7 +22,7 @@ validates: []
 blocked_by: []
 office_hours:
   reason: worker session froze at a permission/classifier denial — claude agents
-    reports state=blocked and the transcript has had no activity for 3193s; the
+    reports state=blocked and the transcript has had no activity for 3349s; the
     session cannot make progress and cannot park itself (a blocked session never
     reaches the Stop hook), so the dispatch-tick frozen-session sweep parked
     this node
