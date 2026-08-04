@@ -37,14 +37,89 @@ attention:
     token-efficiency work ahead of bug-fix work and ahead of the undecomposed
     baseline. Matches the boost 20 already carried by the review-phase
     token-cost cluster (tactic-review-skill-body-decomposition and its
-    siblings). Simulated over the live store before writing: 0 tier changes,
-    0 value drift onto non-target nodes, resolves to 20.00."
+    siblings). Simulated over the live store before writing: 0 tier changes, 0
+    value drift onto non-target nodes, resolves to 20.00."
   tier: 1
 phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/implement: tactic-baseline-proxy-float-tolerance's fix already landed
+    on origin/main via PR #2880 - no diff to make, nothing to build; parking for
+    a human decision on how to resolve the node without a PR"
+  since: 2026-08-04
+  recommendation: >-
+    ## What happened
+
+
+    This tactic's plan calls for replacing the exact-string `assert_eq` on
+
+    `lenses.baseline_context.total_proxy_usd` in
+
+    `.claude/skills/dispatch-token-audit/scripts/test-aggregate-usage.sh` with a
+
+    tolerance-based comparison.
+
+
+    That change is already on `origin/main`, landed by PR #2880 (commit
+
+    `c9bb1d4d`, "dispatch-token-audit: add per-phase standup-cost lens
+
+    (tactic-phase-standup-audit-lens)"). That commit added the `assert_close`
+
+    helper (`test-aggregate-usage.sh:41-56`) and switched the
+
+    `total_proxy_usd` assertion to use it (line 531-532) — apparently landed
+
+    alongside or shortly after the park note that first surfaced this flake, and
+
+    the tactic node was never marked resolved.
+
+
+    This worktree (branch `tactic-baseline-proxy-float-tolerance`) is
+    bit-identical
+
+    to `origin/main` for this file (`git diff origin/main --
+    test-aggregate-usage.sh`
+
+    is empty). The full suite passes 182/182 locally.
+
+
+    ## Recommendation
+
+
+    No code change and no PR are needed — there is nothing left to implement.
+
+    A human (or a future automated pass) should transition this node directly
+
+    from `implement` to `done` (or `qa`, if that's the process norm for a
+
+    no-PR-needed resolution) without going through the PR-gated
+
+    `transition-node --set-pr` path, since that path assumes a PR exists.
+
+
+    If there's appetite for the plan's optional follow-up — "check whether other
+
+    float-valued lenses in the same file already have this problem latently" —
+
+    note the plan explicitly scoped that as opportunistic, not required: "do not
+
+    go looking for unrelated assertions to convert; fix only what is provably
+
+    non-deterministic." A scan of the file's other `EXPECTED_*`-summed
+    assertions
+
+    (e.g. `EXPECTED_PRICE`, `EXPECTED_WORKER_COST`, `EXPECTED_NODE_PROXY`,
+    several
+
+    per-model cost checks) shows the same left-to-right-sum-vs-map-then-add
+
+    pattern, but none have observed CI failures the way `total_proxy_usd` did —
+
+    so per the plan's own scoping, they're out of scope here.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
