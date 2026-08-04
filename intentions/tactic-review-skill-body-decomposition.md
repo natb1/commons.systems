@@ -62,8 +62,7 @@ execution:
     pushed_sha: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-fix-cap-review-skill-body-decomposition
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
