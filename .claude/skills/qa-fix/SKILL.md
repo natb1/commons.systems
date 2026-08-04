@@ -184,6 +184,9 @@ each fork site.
 
    - **Context / PR.** Skip the `--issue` slices; reuse the `PR_NUM` the
      Idempotency preamble resolved (via `gh pr list --head`), do not re-derive.
+   - **Outcome envelope.** Every `dispatch-emit-outcome` call site
+     (`references/terminal-disposition.md`, `references/auto-fix-lane.md`) passes
+     `--node-id "$N"` in place of `--issue "$N"` on this lane.
    - **Completion.** On a clean pass do **not** apply `dispatch:qa-done` or call
      `dispatch-mark-complete` / `dispatch-finalize-phase`. Instead invoke the
      graph-native transition writer, which records the `qa-done` marker and

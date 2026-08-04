@@ -405,6 +405,16 @@ def cmd_prefix(c):
       and ($parsed.fixes_applied       | type) == "number"
     then $parsed else null end ) as $outcome
 
+# NODE_ID PASSTHROUGH (tactic-outcome-envelope-node-lane-parity): $outcome is
+# bound to the WHOLE parsed envelope object above, not a hand-picked field
+# subset, so a node-lane envelope's `node_id` key rides through unstripped on
+# `.sessions[].outcome.node_id` in the per-session summary — and only there.
+# It does NOT reach `by_phase_outcome` below: that reduce builds a fresh object
+# from an explicit key list and keys only on `.phase`. A future pooled
+# by-node-outcome join analogous to `by_node` (see below) would therefore need
+# a new reduce, and should key on the sidecar-derived `artifact.node_id` rather
+# than on this envelope field.
+
 # Ordered per-session token list of tool calls, in document order. Bash calls
 # become "Bash:<cmd_prefix>"; other tools become their name.
 | ( [ $msgs[] | select(.type=="assistant")

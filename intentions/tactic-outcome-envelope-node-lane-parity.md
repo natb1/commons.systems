@@ -86,7 +86,7 @@ attention:
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-outcome-envelope-node-lane-parity
   pr: 3030
@@ -94,12 +94,33 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T02:45:28Z
+    mergeCommitSha: e05c1e78d1dc81a95cb2a6128f0a5740ac5ec65c
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main item 12 awaits the next live node-lane /qa-fix or
+    /review-fix session reaching terminal disposition post-merge (PR #3030
+    merged 2026-08-04T02:45:28Z, ~20min ago); journalctl -u dispatch-tick since
+    the merge shows no qa-fix/review-fix/node-id/dispatch:outcome activity yet
+    -- re-check after a node-lane qa-fix or review-fix session has completed
+    post-merge (likely several hours out, once one is next selected)"
+  since: 2026-08-04
+  recommendation: "No author decision needed, only re-selection once a node-lane
+    /qa-fix or /review-fix session has completed post-merge. Then: grep that
+    session's transcript for a <!-- dispatch:outcome:v1 --> block and confirm
+    issue is null and node_id is the node's slug; run aggregate-usage.sh over
+    the projects root and confirm .sessions[].outcome.node_id matches for that
+    session id. Unit-level mechanics (dispatch-emit-outcome --node-id emission,
+    aggregate-usage.sh passthrough) already pass their own test suites
+    (test-emit-outcome.sh, test-aggregate-usage.sh) -- only the live end-to-end
+    effect remains unconfirmed."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

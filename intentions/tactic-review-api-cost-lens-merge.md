@@ -31,13 +31,12 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: qa
+phase: implement
 execution:
   branch: tactic-review-api-cost-lens-merge
   pr: 3031
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -717,3 +716,32 @@ Manual / judgment checks:
   must still pass against the merged lens. That node is parked at `main-qa` for
   passive observation and is a pending downstream check, not a blocker on this
   tactic.
+
+## needs-main residue
+
+QA pass (PR #3031, `/qa-fix`) triaged 15 plan items: 13 script-verifiable items
+all PASSED (node --check, the domain-sweep probe + its 44-assertion test
+including the two unchanged Source-enum/SEC_SOURCES exact-membership pins, the
+new 10-assertion `dispatch-api-call-site` test, the 23-assertion
+`dispatch-review-finders` test, the 34-assertion `dispatch-security-surface`
+control suite, and `run-lint.sh`); one `needs-human-judgment` item (verbatim
+fidelity of `COST_BRIEF`/`DOMAIN_PROMPTS.firebase` and doctrine-prose
+consistency) was assessed **already-satisfied** by the Step 3.5 disposition
+Workflow via direct code read and dropped as PASS. The remaining item is
+recorded here as post-merge residue:
+
+- **id 15 — Realized api-cost fire rate, realized draw, and the downstream
+  cost-finder checklist.**
+  - Expected outcome: post-merge monitoring shows the `api-cost` lens firing
+    materially more often than the pre-merge baseline of 5 of 18 comparable
+    runs, at an acceptable draw; `tactic-mainqa-review-cost-finder`'s
+    downstream observation checklist passes against the merged lens.
+  - Finding: not assertable at merge time — no post-merge run history exists
+    yet. The plan's own Verification section explicitly designates this a
+    post-merge observation, not a merge gate (planned deferral).
+  - Verifiability: WAIT — awaits several post-merge `review-fix` runs to
+    accumulate a comparable sample. Check: `grep 'find:api-cost'` over the
+    accumulated run logs once available; compare fire rate against the 5-of-18
+    pre-merge baseline and report the realized draw. Also confirm no recurring
+    `classify: COST CLAMP` log line (a recurring clamp would mean the section
+    wrapper's Source-assignment wording needs tightening).

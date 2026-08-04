@@ -823,6 +823,54 @@ assert_eq "partial-envelope by_phase_outcome is empty {} (no fabricated entry)" 
 rm -rf "$PARTIAL_ROOT"
 
 # ---------------------------------------------------------------------------
+# node_id passthrough (tactic-outcome-envelope-node-lane-parity). A node-lane
+# envelope carries "issue": null, "node_id": "<slug>" instead of an issue
+# number. $outcome binds the WHOLE parsed envelope object (no hand-picked
+# field subset), so node_id should ride through unstripped onto the
+# per-session outcome — this is a regression guard that the passthrough is
+# never lost, not a new reduce.
+#
+# Built in its own mktemp root (mirrors the partial-envelope fixture above).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- node_id passthrough (tactic-outcome-envelope-node-lane-parity) ---"
+
+NODE_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/commons.systems","issue":null,"node_id":"tactic-example-node","pr":2100,"base_sha":"nnn222","findings_surfaced":4,"findings_actionable":3,"fixes_applied":2,"followups_filed":1,"subagents_launched":6,"disposition":"completed_with_fixes","terminated_reason":null}'
+NODE_BLOCK="$(envelope_block "$NODE_ENV_JSON")"
+
+NODE_ROOT=$(mktemp -d)
+trap 'rm -rf "$NODE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+node_worktree="$NODE_ROOT/-home-x-worktrees-tactic-example-node"
+mkdir -p "$node_worktree"
+node_jsonl="$node_worktree/sess-node.jsonl"
+
+# line 1: first user line — classifies as worker (mirror line 68)
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/implement</command-name>"}}' \
+  >> "$node_jsonl"
+# line 2: assistant — opus, minimal usage (mirror the worker assistant shape)
+printf '%s\n' '{"type":"assistant","attributionSkill":"implement","isSidechain":false,"gitBranch":"tactic-example-node","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_n01","name":"Bash","input":{"command":"echo hi"}}],"usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":4,"output_tokens":1}}}' \
+  >> "$node_jsonl"
+# line 3: node-lane outcome-envelope tool_result (mirror lines 799-801)
+jq -nc --arg c "$NODE_BLOCK" \
+  '{type:"user",message:{content:[{type:"tool_result",tool_use_id:"toolu_n01",content:$c}]}}' \
+  >> "$node_jsonl"
+jq . "$node_jsonl" >/dev/null
+touch "$node_jsonl"
+
+OUT_NODE=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$NODE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "node-envelope sessions[sess-node].outcome.node_id" '"tactic-example-node"' \
+  "$(jq '[.sessions[]|select(.id=="sess-node")][0].outcome.node_id' <<<"$OUT_NODE")"
+assert_eq "node-envelope sessions[sess-node].outcome.issue is null" "null" \
+  "$(jq '[.sessions[]|select(.id=="sess-node")][0].outcome.issue' <<<"$OUT_NODE")"
+
+rm -rf "$NODE_ROOT"
+
+# ---------------------------------------------------------------------------
 # Unpriceable-model cost guard (#2027). ISOLATED fixture: a fresh projects root
 # with ONE worker session whose assistant message carries a model in NO known
 # family (not opus/sonnet/haiku) and NONZERO usage. cost()'s family==null branch
