@@ -72,3 +72,76 @@ rounds: null
 attributes: {}
 ---
 # lib-frozen-session-park's sweeps invoke park-node with no --base CAS token, so their already-parked guard is a bare read-then-write: a specific office_hours park that lands between the guard and the write is silently overwritten with generic boilerplate, destroying the author-facing reason and recommendation an office-hours reviewer needs
+
+## Scope
+
+`.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh` only.
+
+- `frozen_session_sweep` — guard at `:487-495`, write at `:524`.
+- `terminal_without_disposition_sweep` — guard at `:995-1001`, write at step (12).
+
+Both must capture the node's base blob at the moment the guard reads it and
+pass it through as `park-node --base <blobsha>`. A CAS refusal is then the
+CORRECT outcome: log it, retain the markers, and let the next tick re-diagnose
+against fresh state. It must never be downgraded to a retry without the base.
+
+Out of scope: the grace windows, the park caps, the fetch budget, the
+marker-writing gap in the qa-main and qa-fix park paths, and the reap path.
+
+## Interim mitigation, until the fix lands
+
+The defect destroys content but is fully recoverable, because the pre-clobber
+commit still holds the specific text.
+
+**1. Detect.** Any hit is a clobber:
+
+```bash
+cd /home/n8/natb1/commons.systems && git fetch origin main -q
+git log --since='-4 days' --format='%H%x09%ct%x09%s' origin/main -- intentions/ \
+  | grep '^[0-9a-f]*	[0-9]*	graph: park ' \
+  | awk -F'\t' '{n=$3; sub(/^graph: park /,"",n); split(n,a," ");
+      g=($3 ~ /session ended without declaring a disposition/)?1:0;
+      print $1"\t"$2"\t"a[1]"\t"g}' \
+  | sort -k3,3 -k2,2n \
+  | awk -F'\t' '{ if ($3==p3 && $4==1 && p4==0)
+      print "CLOBBERED "$3" specific="ps" generic="$1" gap="($2-pt)"s";
+      p3=$3; p4=$4; ps=$1; pt=$2 }'
+```
+
+A gap under the sweep grace (900s frozen, 300s terminal) is this defect. A much
+larger gap is more likely a legitimate later re-park — check before restoring.
+
+**2. Heal.** Recover the specific text from the pre-clobber commit. Parse it,
+never grep, since YAML folds long values:
+
+```bash
+git show <specific-sha>:intentions/<id>.md > /tmp/claude-heal/<id>.md
+# parse office_hours.reason and .recommendation via listNodes, write to files,
+# then re-land, pinning the CAS token this defect fails to pin:
+BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$SCRATCH" <id>)
+packages/intentionsutil/scripts/park-node --base "$BASE" <id> "$REASON" "$REC"
+```
+
+Verify by reading `office_hours` back from `origin/main` and comparing the
+restored strings for byte equality — `graph-commit` exit 0 is not evidence
+anything landed.
+
+**3. Reduce exposure.** Every candidate these sweeps adopt arrives because the
+session never declared a terminal disposition, so closing that gap starves this
+defect of inputs without touching it. Lowering
+`DISPATCH_TERMINAL_DISPOSITION_PARK_MAX` to 1 narrows but does not close the
+window — a concurrent writer can still land inside a single park's own
+read-to-write span, which is what three of the four observed clobbers look like.
+
+## Verification
+
+```verify
+cd /home/n8/natb1/commons.systems && bash -n .claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh
+```
+
+The real gate is behavioural and needs a fixture, not a shell parse: park a
+scratch node specifically, drive a sweep whose guard read predates that park,
+and assert the sweep REFUSES (stale-diagnosis skip logged, markers retained,
+park count unincremented) rather than overwriting. Assert the specific `reason`
+and `recommendation` survive byte-for-byte. Then run the detect above over a
+full day and require zero hits.
