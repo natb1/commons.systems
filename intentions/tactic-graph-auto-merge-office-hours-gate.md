@@ -48,8 +48,16 @@ attention:
     5.33 undecomposed baseline. Simulated over the live store before writing: 0
     tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-graph-auto-merge-office-hours-gate
+  pr: 3033
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
