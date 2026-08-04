@@ -189,6 +189,28 @@ One entry per phase key present in `by_phase_outcome`:
 
 The field is a recommendation surface only. The writer never writes `dispatch-phase-model`, `dispatch-phase-effort`, or any other routing-policy file — no routing change is ever applied automatically (strategy-token-economy clarification 10 / condition 3).
 
+### Acting on routing recommendations
+
+`routing_recommendations` is advisory input to a human decision, never an auto-apply
+queue. The loop:
+
+1. The audit surfaces `routing_recommendations` on the persisted aggregate doc (above).
+2. The author reviews them at office-hours, excluding any entry tagged `untrusted: true`
+   per the grounding rule above.
+3. An approved change is applied **by hand**: the author edits the static map directly —
+   `.claude/skills/dispatch-propagate/scripts/dispatch-phase-model` for a model change,
+   or `.claude/skills/dispatch-propagate/scripts/dispatch-phase-effort` for an effort
+   change — and commits it.
+4. That commit is the auditable record of the approved change. There is no separate
+   approval log; the diff and its commit message are the record.
+
+No automated path ever writes either map. This is the same invariant #2872 established
+when it retired the learned/adaptive phase-model-policy (see the design-invariant
+comment at the top of `dispatch-phase-model`), and it is required by
+strategy-token-economy clarification 10 / condition 3: no audit-driven routing change
+may ever be applied automatically. A future change must not reintroduce an auto-write
+path for either map — any such mechanism would violate that condition.
+
 ## Per-session artifact join
 
 The `artifact` field on each `.sessions[]` entry carries the per-session GitHub join record. Its `{repo, issue, pr, base_sha, branch}` shape, the session-id join key, and the sidecar's role as the authoritative source for the overlapping join keys are described in Step 3 above. `base_sha` is the worktree HEAD at session start — preserved across resume — so it anchors each session to the repository state it began from. The field is `null` for sessions with no sidecar — subagent transcripts, router ticks, pre-#1861 worker sessions, and any non-worker session that did not write one.
