@@ -29,15 +29,45 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
-phase: implement
+attention:
+  boost: 50
+  override: null
+  rationale: "Bootstrap promotion 2026-07-30: Wave A of the three-band interim
+    scale (50 / 20 / 10). Promoted from attention: null (rank 5.33, dead last
+    behind twelve Wave A nodes, so never selectable in practice) after
+    diagnosing that this node is the sole cause of the node-lane auto-merge path
+    being dead. dispatch-graph-main-red-sync line 52 selects open main-red
+    episode latches with a bare startsWith(tactic-main-red-) prefix rather than
+    the anchored tactic-main-red-<8-hex-shortsha> shape, so it matches THIS node
+    — an ordinary test-writing tactic whose id merely begins with that string.
+    The node is phase qa, not done, so it stays in the OPEN_MAIN_RED list
+    permanently; dispatch-select-tick gates BOTH the issue-lane auto-merge (line
+    464) and the node-lane auto-merge (line 482) solely on OPEN_MAIN_RED being
+    empty, so both are skipped silently on every tick while main is in fact
+    fully green. The recovery-completion loop cannot clear it either: line 92
+    requires execution === null and this node carries pr 2941. The fix is PR
+    2941 (this node own PR), which anchors the match — so the defect blocks its
+    own fix from auto-merging, and 2941 has sat OPEN, CONFLICTING, with
+    unit-tests failing. This is why tactic-graph-tick-node-lane-auto-merge
+    needs-main item 7 has never been observable and why earlier node-lane PRs
+    needed hand-merges. blocked_by is empty, so this promotion lifts no blocker
+    and cannot compound. Interim attention scaffolding only —
+    tactic-attention-tier-ranking replaces the numeric scheme with lexicographic
+    (tier, rank) and max-lifting, and tactic-attention-boost-scripts converts
+    these boosts to tier/bug_fix marks."
+phase: done
 execution:
   branch: tactic-main-red-sync-completion-test
   pr: 2941
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
   fix: null
+  completion:
+    mergedAt: 2026-07-30T20:07:01Z
+    mergeCommitSha: eeefa235f45439a11e5d19a39277787a084f3fcf
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

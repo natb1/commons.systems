@@ -155,7 +155,7 @@ proceed on recollection.
    understanding of the tradition and its application to the deferral; probe
    with the body's questions. Use `AskUserQuestion` only for bounded choices,
    recommended option listed first; use plain conversation for open dialectic
-   — the same split as `.claude/skills/align-strategy/SKILL.md`. The author
+   — the same split as `.claude/skills/align/SKILL.md`. The author
    articulates first on each question; Claude's account enters afterward as
    counterpoint.
 4. **Record each resolution** per the recording rules below.
@@ -599,7 +599,7 @@ automatic retry.
   write gate; `readNode`/`listNodes` at
   `packages/intentionsutil/src/store.ts:110,124`.
 - `packages/intentionsutil/scripts/graph-commit` — the only landing path.
-- `.claude/skills/align-strategy/SKILL.md` — register, `AskUserQuestion`
+- `.claude/skills/align/SKILL.md` — register, `AskUserQuestion`
   conventions, provenance-sentence format.
 - Chunk node bodies (`intentions/tactic-reading-chunk-*.md`) — the per-chunk
   session script this skill consumes.

@@ -34,6 +34,27 @@
 #
 # Consumer: .claude/workflows/review-fix.js mirrors this mapping in JS;
 # this script is the normative spec for that inline JS logic.
+#
+# NOTE — code-review is still always-on regardless of surface (this roster is
+# unchanged and remains normative for that), but it is no longer invoked as an
+# AGENT in the Workflow's parallel finder fan-out. It runs as the serialized
+# `claude -p '/code-review low --fix'` pre-stage in /review-fix SKILL.md Step 1b,
+# before the Workflow is invoked at all — the `-p` user turn is the only entry
+# point that can invoke a `disable-model-invocation` skill, and its `--fix` writes
+# the working tree, so it must not run concurrently with the fan-out. That is why
+# `agentFinderSet` in review-fix.js excludes code-review, alongside codeql/npm/
+# erosion (which were never agents either — they arrive as prescanned findings).
+# Nothing about this script's emitted stdout changes.
+#
+# NOTE — domain-sweep fold (tactic-review-domain-lens-consolidation): the JS agent
+# fan-out (`agentFinderSet` in review-fix.js) now maps the `secrets` + `auth` +
+# `data-exposure` SOURCES onto ONE agent called `domain-sweep`, whose brief carries
+# each source's section under the same `app_or_rules` gating this script's SOURCE
+# roster already encodes above (`secrets` unconditional on `surface=code`; `auth`/
+# `data-exposure` only when `app_or_rules=true`). So the SOURCE roster this script
+# emits and the AGENT roster in review-fix.js are now deliberately NOT 1:1 — three
+# sources, one agent. Nothing about this script's own stdout output changes as a
+# result; it remains the normative SOURCE-name spec, not an agent-name spec.
 set -euo pipefail
 
 # --- parse stdin ----------------------------------------------------------------

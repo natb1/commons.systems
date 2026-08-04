@@ -3,9 +3,30 @@
 # the graph-native tactic phase skills (tactic-dispatch-skill-input-contract
 # Unit 1). Replaces each phase skill's hand-rolled branch-name parsing +
 # sed/git-archive dance with one scripted call: validate the node id, confirm
-# the current worktree branch matches it, snapshot the node from origin/main,
-# read it via the intentionsutil store primitives, gate on the expected phase,
-# and (optionally) resolve the open PR.
+# the current worktree branch matches it, snapshot intentions/ from origin/main,
+# read the node via the intentionsutil store primitives, run the FULL mechanical
+# selection-validity gate, and (optionally) resolve the open PR.
+#
+# The gate is no longer a local phase-string comparison
+# (tactic-phase-entry-selection-gate Unit 2): it delegates to
+# `assert-node-selection`, the shared wrapper over
+# packages/intentionsutil/scripts/check-node-selection.ts — the SAME
+# re-validation provision-node-worktree runs. That covers phase/interrupt match,
+# office_hours park (first-class AND squatter), align-eligibility, serving-
+# strategy fingerprint freshness, and scope-chain custody.
+#
+# Two intentional behavior changes came with that switch:
+#
+#   * `review` gains the `reviewed`-marker guard. A node at phase `review` that
+#     already carries the `reviewed` marker now exits 3 instead of proceeding —
+#     the marker means the review pass already ran and the node is awaiting tick
+#     merge/fix. This is the execute-side mirror of the selector's own
+#     reviewed-exclusion, and it catches the hand-run / re-entry case that
+#     bypasses the selector entirely.
+#   * Every phase now gets the park and fingerprint checks. A node parked to
+#     office_hours between selection and skill entry exits 3 at this front door
+#     for all five consuming phase skills — previously only qa-fix had its own
+#     hand-rolled parked check, and it ran elsewhere (later, after real work).
 #
 # Usage: dispatch-derive-node-target <node-id> (--expect-phase <phase> | --expect-fix-active) [--pr-mode none|optional|required]
 #
@@ -13,17 +34,21 @@
 #                     node-id slug regex AND the current checked-out branch
 #                     name (tactic phase worktrees are branch==node-id, mirrors
 #                     dispatch-graph-execute's provisioning contract).
-#   --expect-phase    The phase the caller expects the node to be persisted at.
-#                     Mismatch is a stale-selection signal (exit 3), not a usage
-#                     error — the caller decides how to react. Exactly one of
-#                     --expect-phase / --expect-fix-active must be given.
+#   --expect-phase    The phase the caller expects the node to be selected at.
+#                     Passed through to the gate as its <selected-phase>. A
+#                     rejected selection is exit 3 (or exit 5 for scope-stale),
+#                     not a usage error — the caller decides how to react.
+#                     Exactly one of --expect-phase / --expect-fix-active must
+#                     be given.
 #   --expect-fix-active
 #                     Gate on an active CI-fix interrupt instead of a ladder
-#                     phase: require the node's `execution.fix` to be non-null
-#                     (the /fix-checks lane's real gate — `phase` stays at its
-#                     ladder position and is never the literal "fix"). Null
-#                     `execution.fix` is exit 3 (no active interrupt). Exactly
-#                     one of --expect-phase / --expect-fix-active must be given.
+#                     phase (the /fix-checks lane's real gate — `phase` stays at
+#                     its ladder position and is never the literal "fix").
+#                     Passed to the gate as the literal selected-phase "fix",
+#                     for which check-node-selection.ts replaces phase equality
+#                     with an `execution.fix != null` interrupt-presence check.
+#                     A null `execution.fix` is exit 3. Exactly one of
+#                     --expect-phase / --expect-fix-active must be given.
 #   --pr-mode         none (default): skip PR resolution, never calls gh.
 #                     optional: resolve the open PR if one exists; empty is
 #                     NOT an error.
@@ -44,9 +69,14 @@
 #   1  node-not-found / read-failure (absent from origin/main, or the store
 #      primitives failed to read it)
 #   2  usage error (bad node-id, missing/duplicated gate flag) or branch mismatch
-#   3  gate mismatch: --expect-phase does not match the node's persisted phase,
-#      or --expect-fix-active and the node's execution.fix is null
+#   3  selection no longer valid. The full mechanical gate rejected it:
+#      phase/interrupt mismatch, an office_hours park, a stale serving-strategy
+#      fingerprint, no longer align-eligible, or an already-`reviewed` node
+#      re-selected for review. NOT a defect — the caller stops cleanly and the
+#      next tick re-selects from current state.
 #   4  --pr-mode required and no open PR was found
+#   5  scope-stale. The tactic's scope changed after the previous phase ran.
+#      NOT a defect — the node wants demoting to `implement`.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -117,7 +147,11 @@ if [[ "$CUR_BRANCH" != "$NODE_ID" ]]; then
   exit 2
 fi
 
-# --- Step 3: snapshot intentions/<node-id>.md from origin/main --------------
+# --- Step 3: snapshot the whole intentions/ tree from origin/main ------------
+# The WHOLE tree, not just intentions/<node-id>.md: Step 5's gate
+# (check-node-selection.ts via assert-node-selection) enumerates the store for
+# its align-eligibility and serving-strategy fingerprint checks. A single-file
+# snapshot would silently no-op those checks instead of erroring.
 # Fail loudly on a failed fetch: the whole point of the script is to gate on the
 # LATEST origin/main node state. A silent failure would proceed against a
 # possibly-stale local origin/main ref and make a wrong gate/PR decision.
@@ -129,7 +163,14 @@ git fetch origin main --quiet || {
 SNAP_DIR="$(mktemp -d)" || { echo "dispatch-derive-node-target: mktemp failed" >&2; exit 1; }
 trap 'rm -rf "$SNAP_DIR"' EXIT
 
-if ! git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -x -C "$SNAP_DIR"; then
+if ! git archive origin/main intentions/ 2>/dev/null | tar -x -C "$SNAP_DIR"; then
+  echo "dispatch-derive-node-target: git archive origin/main intentions/ failed (no intentions tree at origin/main?)" >&2
+  exit 1
+fi
+
+# The widened archive succeeds whether or not the target node is in it, so the
+# exit-1 "node absent from origin/main" contract is preserved explicitly here.
+if [[ ! -f "$SNAP_DIR/intentions/$NODE_ID.md" ]]; then
   echo "dispatch-derive-node-target: node '$NODE_ID' not found at origin/main (intentions/$NODE_ID.md)" >&2
   exit 1
 fi
@@ -145,22 +186,34 @@ if [[ $? -ne 0 || -z "$COMBINED_JSON" ]]; then
   exit 1
 fi
 
-# --- Step 5: gate --------------------------------------------------------
+# --- Step 5: selection-validity gate ----------------------------------------
+# The full mechanical gate, not a phase-string comparison: assert-node-selection
+# wraps check-node-selection.ts, which re-runs every worker-start check
+# (phase/interrupt match, not-parked, align-eligibility, serving-strategy
+# fingerprint freshness, scope-chain custody) against the fresh origin/main
+# snapshot taken above.
+#
+# It runs BEFORE Step 6's PR resolution deliberately: a stale selection must
+# exit before any network call to GitHub.
+#
 # ACTUAL_PHASE is read regardless of gate mode — it is emitted informationally
-# on the PHASE: line (step 7). It is the gate criterion only under --expect-phase.
+# on the PHASE: line (step 7); the gate itself reads the node independently.
 ACTUAL_PHASE="$(jq -r '.node.phase' <<<"$COMBINED_JSON")"
-if [[ "$EXPECT_FIX_ACTIVE" -eq 1 ]]; then
-  ACTUAL_FIX="$(jq -r '.node.execution.fix // "null"' <<<"$COMBINED_JSON")"
-  if [[ "$ACTUAL_FIX" == "null" ]]; then
-    echo "dispatch-derive-node-target: node '$NODE_ID' has no active CI-fix interrupt (execution.fix is null)" >&2
-    exit 3
-  fi
-else
-  if [[ "$ACTUAL_PHASE" != "$EXPECT_PHASE" ]]; then
-    echo "dispatch-derive-node-target: node '$NODE_ID' is at phase '$ACTUAL_PHASE', expected '$EXPECT_PHASE'" >&2
-    exit 3
-  fi
-fi
+
+# --expect-fix-active maps to the literal selected-phase "fix", for which
+# check-node-selection.ts swaps phase equality for an `execution.fix != null`
+# interrupt-presence gate — exactly the old hand-rolled behavior.
+if [[ "$EXPECT_FIX_ACTIVE" -eq 1 ]]; then GATE_PHASE="fix"; else GATE_PHASE="$EXPECT_PHASE"; fi
+# stdout discarded: the gate prints a scope fingerprint, and this script's own
+# stdout is a structured payload that must not gain a stray line.
+"$SCRIPT_DIR/assert-node-selection" "$NODE_ID" "$GATE_PHASE" --dir "$SNAP_DIR/intentions" >/dev/null
+GATE_RC=$?
+case "$GATE_RC" in
+  0)  ;;
+  12) exit 3 ;;
+  13) exit 5 ;;
+  *)  exit 1 ;;
+esac
 
 # --- Step 6: PR resolution ------------------------------------------------
 PR_NUM=""

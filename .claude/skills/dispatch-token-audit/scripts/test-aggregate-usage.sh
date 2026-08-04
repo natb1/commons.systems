@@ -110,8 +110,11 @@ setup() {
 
   local worker_jsonl="$worktree_dir/sess-worker.jsonl"
 
-  # line 1: first user line — classifies as worker
-  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
+  # line 1: first user line — classifies as worker. Command matches the
+  # session's own attributionSkill ("implement", set on every assistant turn
+  # below) — a real worker session's launch command always matches its turns'
+  # attribution (whole-session phase attribution realism sweep).
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/implement</command-name>"}}' \
     >> "$worker_jsonl"
 
   # line 2: assistant — implement, opus, usage input=1000, cc=2000, cr=4000, out=500
@@ -661,7 +664,7 @@ assert_eq 'sessions[sess-router].outcome_rates.fix_rate is null' 'null' \
 # ---------------------------------------------------------------------------
 # Persist-wiring tests (Unit 2).  These use a fake writer stub controlled via
 # DISPATCH_AUDIT_AGGREGATES_WRITER, mirroring the DISPATCH_USAGE_SAMPLES_WRITER
-# pattern from test-dispatch-scripts.sh.
+# pattern from the per-SUT test-*.sh files sharing dispatch-test-fixture.sh.
 # ---------------------------------------------------------------------------
 
 echo ""
@@ -789,8 +792,9 @@ partial_worktree="$PARTIAL_ROOT/-home-x-worktrees-1909-partial"
 mkdir -p "$partial_worktree"
 partial_jsonl="$partial_worktree/sess-partial.jsonl"
 
-# line 1: first user line — classifies as worker (mirror line 68)
-printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
+# line 1: first user line — classifies as worker (mirror line 68). Command
+# matches the session's own attributionSkill ("review-fix", set below).
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/review-fix</command-name>"}}' \
   >> "$partial_jsonl"
 # line 2: assistant — opus, minimal usage (mirror the worker assistant shape)
 printf '%s\n' '{"type":"assistant","attributionSkill":"review-fix","isSidechain":false,"gitBranch":"1909-partial","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_p01","name":"Bash","input":{"command":"echo hi"}}],"usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":4,"output_tokens":1}}}' \
@@ -823,6 +827,54 @@ assert_eq "partial-envelope by_phase_outcome is empty {} (no fabricated entry)" 
 rm -rf "$PARTIAL_ROOT"
 
 # ---------------------------------------------------------------------------
+# node_id passthrough (tactic-outcome-envelope-node-lane-parity). A node-lane
+# envelope carries "issue": null, "node_id": "<slug>" instead of an issue
+# number. $outcome binds the WHOLE parsed envelope object (no hand-picked
+# field subset), so node_id should ride through unstripped onto the
+# per-session outcome — this is a regression guard that the passthrough is
+# never lost, not a new reduce.
+#
+# Built in its own mktemp root (mirrors the partial-envelope fixture above).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- node_id passthrough (tactic-outcome-envelope-node-lane-parity) ---"
+
+NODE_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/commons.systems","issue":null,"node_id":"tactic-example-node","pr":2100,"base_sha":"nnn222","findings_surfaced":4,"findings_actionable":3,"fixes_applied":2,"followups_filed":1,"subagents_launched":6,"disposition":"completed_with_fixes","terminated_reason":null}'
+NODE_BLOCK="$(envelope_block "$NODE_ENV_JSON")"
+
+NODE_ROOT=$(mktemp -d)
+trap 'rm -rf "$NODE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+node_worktree="$NODE_ROOT/-home-x-worktrees-tactic-example-node"
+mkdir -p "$node_worktree"
+node_jsonl="$node_worktree/sess-node.jsonl"
+
+# line 1: first user line — classifies as worker (mirror line 68)
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/implement</command-name>"}}' \
+  >> "$node_jsonl"
+# line 2: assistant — opus, minimal usage (mirror the worker assistant shape)
+printf '%s\n' '{"type":"assistant","attributionSkill":"implement","isSidechain":false,"gitBranch":"tactic-example-node","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_n01","name":"Bash","input":{"command":"echo hi"}}],"usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":4,"output_tokens":1}}}' \
+  >> "$node_jsonl"
+# line 3: node-lane outcome-envelope tool_result (mirror lines 799-801)
+jq -nc --arg c "$NODE_BLOCK" \
+  '{type:"user",message:{content:[{type:"tool_result",tool_use_id:"toolu_n01",content:$c}]}}' \
+  >> "$node_jsonl"
+jq . "$node_jsonl" >/dev/null
+touch "$node_jsonl"
+
+OUT_NODE=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$NODE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "node-envelope sessions[sess-node].outcome.node_id" '"tactic-example-node"' \
+  "$(jq '[.sessions[]|select(.id=="sess-node")][0].outcome.node_id' <<<"$OUT_NODE")"
+assert_eq "node-envelope sessions[sess-node].outcome.issue is null" "null" \
+  "$(jq '[.sessions[]|select(.id=="sess-node")][0].outcome.issue' <<<"$OUT_NODE")"
+
+rm -rf "$NODE_ROOT"
+
+# ---------------------------------------------------------------------------
 # Unpriceable-model cost guard (#2027). ISOLATED fixture: a fresh projects root
 # with ONE worker session whose assistant message carries a model in NO known
 # family (not opus/sonnet/haiku) and NONZERO usage. cost()'s family==null branch
@@ -847,8 +899,11 @@ guard_worktree="$GUARD_ROOT/-home-x-worktrees-2027-guard"
 mkdir -p "$guard_worktree"
 guard_jsonl="$guard_worktree/sess-guard.jsonl"
 
-# line 1: first user line — classifies as worker
-printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
+# line 1: first user line — classifies as worker. Launch command uses /implement
+# (this fixture is not under a by_skill/by_phase-shaped assertion, so the exact
+# skill match only matters for launch-line realism, not for the rc!=0 assertion
+# below, which fires regardless of re-keying).
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/implement</command-name>"}}' \
   >> "$guard_jsonl"
 # line 2: assistant — UNPRICEABLE model "gpt-fake-9" with NONZERO usage
 printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2027-guard","message":{"model":"gpt-fake-9","usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
@@ -1237,15 +1292,15 @@ rm -rf "$COV_ROOT"
 # ISOLATED fixture: one minimal worker session per skill, each in its own root
 # so the shared totals stay untouched. Keep this list in lockstep with the
 # alternation regex in aggregate-usage.sh's classifier (10 legacy phase skills
-# + the 3 graph-native align-family skills).
+# + the 4 graph-native align-family skills).
 # ---------------------------------------------------------------------------
 
 echo ""
-echo "--- alternation coverage: all 13 phase skills classify as worker (#2351) ---"
+echo "--- alternation coverage: all 14 phase skills classify as worker (#2351) ---"
 
 for skill in plan-issue implement qa-fix review-fix fix-checks fix-conflicts \
              qa-main budget-parse-job resolve-epic office-hours \
-             align-strategy align-tactics align-init; do
+             align-strategy align-tactics align-init align; do
   ALT_ROOT=$(mktemp -d)
   trap 'rm -rf "$ALT_ROOT"; teardown' EXIT INT TERM
   alt_worktree="$ALT_ROOT/-home-x-worktrees-2351-alternation"
@@ -1594,6 +1649,193 @@ assert_eq "bad-format: --day badformat exits 2" "2" "$rc_bad"
 if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --day 2025-13-40 >/dev/null 2>&1 ); then
   rc_cal=0; else rc_cal=$?; fi
 assert_eq "bad-format: --day with invalid calendar date exits 2" "2" "$rc_cal"
+
+# ---------------------------------------------------------------------------
+# Whole-session phase attribution (tactic-token-audit-whole-session-phase-
+# attribution, Units 1-2). ISOLATED fixture (own mktemp root) so the shared
+# setup() fixture's hand-computed totals stay completely untouched. Five
+# sessions exercise every branch of the whole-session re-keying + the
+# multi-phase guard:
+#   sess-ws-worker  — single-phase worker; only its FIRST turn carries
+#                     attributionSkill (review-fix); the other two turns are
+#                     untagged and must be folded onto the launch skill.
+#   sess-ws-multi   — worker whose turns carry TWO distinct phase-skill
+#                     attributions (implement, qa-fix) plus one untagged turn;
+#                     the multi-phase guard must keep per-turn attribution.
+#   sess-ws-helper  — worker whose second turn carries a NON-phase helper
+#                     skill (commit-merge-push, not in worker_skills); the
+#                     guard must NOT trip on a helper skill, so the whole
+#                     session still folds onto its one phase skill.
+#   agent-ws        — subagent transcript nested under sess-ws-worker; whole-
+#                     session re-keying is worker-only, so its untagged turn
+#                     must stay in "<none>".
+#   sess-ws-other   — freeform session with no <command-name> tag; classifies
+#                     "other", proving the override never leaks past workers.
+#
+# NOTE: sess-ws-worker and sess-ws-helper BOTH launch /review-fix (per their
+# own turns' attributionSkill), so the global by_phase["review-fix"] bucket
+# legitimately pools BOTH sessions' turns — assertions below hand-sum across
+# both rather than assuming sess-ws-worker alone, and per-session isolation is
+# instead verified via each session's own `.phases` key set (built from that
+# session's own by_skill, never cross-session) — this is the "adjust and note
+# why" case the plan anticipated for a shared-root <none>/phase check.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- whole-session phase attribution (worker/multi-phase/helper/subagent/other) ---"
+
+WS_ROOT=$(mktemp -d)
+trap 'rm -rf "$WS_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+ws_worktree="$WS_ROOT/-home-x-worktrees-ws-fixture"
+mkdir -p "$ws_worktree/sess-ws-worker/subagents"
+
+# 1. sess-ws-worker: launch /review-fix; turn1 tagged review-fix, turns 2-3
+#    untagged with distinct nonzero usage.
+ws_worker_jsonl="$ws_worktree/sess-ws-worker.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/review-fix</command-name>"}}' \
+  >> "$ws_worker_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"review-fix","isSidechain":false,"gitBranch":"ws-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":400,"output_tokens":50}}}' \
+  >> "$ws_worker_jsonl"
+printf '%s\n' '{"type":"assistant","isSidechain":false,"gitBranch":"ws-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":10,"cache_creation_input_tokens":20,"cache_read_input_tokens":40,"output_tokens":5}}}' \
+  >> "$ws_worker_jsonl"
+printf '%s\n' '{"type":"assistant","isSidechain":false,"gitBranch":"ws-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":4,"output_tokens":1}}}' \
+  >> "$ws_worker_jsonl"
+jq . "$ws_worker_jsonl" >/dev/null
+
+# 1b. subagent nested under sess-ws-worker: untagged turn, must stay <none>.
+ws_agent_jsonl="$ws_worktree/sess-ws-worker/subagents/agent-ws.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"subagent task"}}' \
+  >> "$ws_agent_jsonl"
+printf '%s\n' '{"type":"assistant","isSidechain":true,"gitBranch":"ws-fixture","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":7,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$ws_agent_jsonl"
+jq . "$ws_agent_jsonl" >/dev/null
+
+# 2. sess-ws-multi: launch /implement; turns tagged implement + qa-fix (two
+#    DISTINCT phase skills) plus one untagged turn.
+ws_multi_jsonl="$ws_worktree/sess-ws-multi.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/implement</command-name>"}}' \
+  >> "$ws_multi_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"implement","isSidechain":false,"gitBranch":"ws-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$ws_multi_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"qa-fix","isSidechain":false,"gitBranch":"ws-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":2000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$ws_multi_jsonl"
+printf '%s\n' '{"type":"assistant","isSidechain":false,"gitBranch":"ws-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":3000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$ws_multi_jsonl"
+jq . "$ws_multi_jsonl" >/dev/null
+
+# 3. sess-ws-helper: launch /review-fix; turn1 tagged review-fix, turn2
+#    tagged commit-merge-push (a NON-phase helper skill — not in
+#    worker_skills). The multi-phase guard must NOT trip on this.
+ws_helper_jsonl="$ws_worktree/sess-ws-helper.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/review-fix</command-name>"}}' \
+  >> "$ws_helper_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"review-fix","isSidechain":false,"gitBranch":"ws-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":500,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$ws_helper_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"commit-merge-push","isSidechain":false,"gitBranch":"ws-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":300,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$ws_helper_jsonl"
+jq . "$ws_helper_jsonl" >/dev/null
+
+# 4. sess-ws-other: freeform text, no <command-name> tag -> classifies "other".
+ws_other_jsonl="$ws_worktree/sess-ws-other.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"Just chatting here, no slash command"}}' \
+  >> "$ws_other_jsonl"
+printf '%s\n' '{"type":"assistant","isSidechain":false,"gitBranch":"ws-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":9,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$ws_other_jsonl"
+jq . "$ws_other_jsonl" >/dev/null
+
+touch "$ws_worker_jsonl" "$ws_agent_jsonl" "$ws_multi_jsonl" "$ws_helper_jsonl" "$ws_other_jsonl"
+
+OUT_WS=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$WS_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# --- sess-ws-worker: single-phase whole-session re-keying ---
+# by_phase["review-fix"] pools sess-ws-worker (3 turns/111 input) AND
+# sess-ws-helper (2 turns/800 input) — both launch /review-fix in this root.
+assert_eq "ws: by_phase[review-fix].turns == 5 (worker 3 + helper 2)" "5" \
+  "$(jq '.by_phase["review-fix"].turns' <<<"$OUT_WS")"
+assert_eq "ws: by_phase[review-fix].input == 911 (worker 111 + helper 800)" "911" \
+  "$(jq '.by_phase["review-fix"].input' <<<"$OUT_WS")"
+
+# Invariance check: whole-session re-keying is a pure re-key, so the ROOT's
+# total price_proxy_usd equals the hand-summed usage across all 5 sessions'
+# turns, independent of any re-keying (input=6927, cc=222, cr=444, out=56 —
+# worker 111/222/444/56 + multi 6000/0/0/0 + helper 800/0/0/0 + subagent
+# 7/0/0/0 + other 9/0/0/0).
+EXPECTED_WS_TOTAL_PROXY=$(jq -n '(6927*15 + 222*18.75 + 444*1.5 + 56*75)/1e6')
+assert_close "ws: totals.price_proxy_usd (hand-summed, re-keying invariant)" \
+  "$EXPECTED_WS_TOTAL_PROXY" "$(jq '.totals.price_proxy_usd' <<<"$OUT_WS")"
+
+assert_eq "ws: sess-ws-worker phases keys == [review-fix] (no <none> leak)" '["review-fix"]' \
+  "$(jq -c '[.sessions[]|select(.id=="sess-ws-worker")][0].phases | keys' <<<"$OUT_WS")"
+assert_eq "ws: attribution_coverage.whole_session_attributed_sessions == 2 (worker + helper)" "2" \
+  "$(jq '.attribution_coverage.whole_session_attributed_sessions' <<<"$OUT_WS")"
+
+# The RAW per-turn harness slice is projected onto each `.sessions[]` entry as
+# `by_attribution_skill` / `attributed_turns_raw` (SKILL.md step 3 documents it
+# as the per-session escape hatch for auditing the whole-session override):
+# sess-ws-worker's turn1 is tagged review-fix and turns 2-3 are untagged, so the
+# raw slice still shows the harness gap the re-keyed `phases` map hides.
+assert_eq "ws: sess-ws-worker by_attribution_skill[<none>].turns == 2 (raw gap preserved)" "2" \
+  "$(jq '[.sessions[]|select(.id=="sess-ws-worker")][0].by_attribution_skill["<none>"].turns' <<<"$OUT_WS")"
+assert_eq "ws: sess-ws-worker by_attribution_skill[review-fix].turns == 1 (raw, un-re-keyed)" "1" \
+  "$(jq '[.sessions[]|select(.id=="sess-ws-worker")][0].by_attribution_skill["review-fix"].turns' <<<"$OUT_WS")"
+assert_eq "ws: sess-ws-worker attributed_turns_raw == 1" "1" \
+  "$(jq '[.sessions[]|select(.id=="sess-ws-worker")][0].attributed_turns_raw' <<<"$OUT_WS")"
+
+# attribution_coverage raw-vs-effective (Unit 2). The window-wide raw/effective
+# counters roll the same per-session raw slice up, so hand-derive both from every
+# session's RAW per-turn attributionSkill (raw skill != "<none>": worker
+# turn1=review-fix, multi turns1-2=implement/qa-fix, helper both turns=
+# review-fix/commit-merge-push — helper's commit-merge-push counts as raw-
+# attributed even though it is not a worker_skills member) vs the
+# AFTER-rekey by_skill["<none>"] turns (worker 0, multi 1, helper 0, subagent
+# 1, other 1). turns_total=10 (3+3+2+1+1); turns_attributed_raw=5
+# (1+2+2+0+0); turns_attributed_effective=7 (3+2+2+0+0).
+assert_eq "ws: attribution_coverage.turns_total == 10" "10" \
+  "$(jq '.attribution_coverage.turns_total' <<<"$OUT_WS")"
+assert_eq "ws: attribution_coverage.turns_attributed_raw == 5" "5" \
+  "$(jq '.attribution_coverage.turns_attributed_raw' <<<"$OUT_WS")"
+assert_eq "ws: attribution_coverage.turns_attributed_effective == 7" "7" \
+  "$(jq '.attribution_coverage.turns_attributed_effective' <<<"$OUT_WS")"
+assert_eq "ws: attribution_coverage.raw_coverage_rate == 0.5" "0.5" \
+  "$(jq '.attribution_coverage.raw_coverage_rate' <<<"$OUT_WS")"
+assert_eq "ws: attribution_coverage.effective_coverage_rate == 0.7" "0.7" \
+  "$(jq '.attribution_coverage.effective_coverage_rate' <<<"$OUT_WS")"
+
+# --- sess-ws-multi: multi-phase guard keeps per-turn attribution ---
+assert_eq "ws: attribution_coverage.multi_phase_worker_sessions == 1 (sess-ws-multi only)" "1" \
+  "$(jq '.attribution_coverage.multi_phase_worker_sessions' <<<"$OUT_WS")"
+assert_eq "ws: sess-ws-multi.whole_session_attributed == false" "false" \
+  "$(jq '[.sessions[]|select(.id=="sess-ws-multi")][0].whole_session_attributed' <<<"$OUT_WS")"
+# Its untagged 3rd turn stays in <none> (per-turn preserved, NOT re-keyed) —
+# by_skill["<none>"] for this session prices exactly its untagged turn's own
+# usage (3000 input at the uniform Opus proxy rate), proving no re-keying leak.
+EXPECTED_MULTI_NONE_PROXY=$(jq -n '(3000*15)/1e6')
+assert_close "ws: sess-ws-multi phases[<none>] == untagged turn's own proxy price" \
+  "$EXPECTED_MULTI_NONE_PROXY" \
+  "$(jq '[.sessions[]|select(.id=="sess-ws-multi")][0].phases["<none>"]' <<<"$OUT_WS")"
+
+# --- sess-ws-helper: non-phase helper skill does not trip the guard ---
+assert_eq "ws: sess-ws-helper.whole_session_attributed == true" "true" \
+  "$(jq '[.sessions[]|select(.id=="sess-ws-helper")][0].whole_session_attributed' <<<"$OUT_WS")"
+assert_eq "ws: sess-ws-helper phases keys == [review-fix] (both turns folded there)" '["review-fix"]' \
+  "$(jq -c '[.sessions[]|select(.id=="sess-ws-helper")][0].phases | keys' <<<"$OUT_WS")"
+
+# --- agent-ws: subagent transcript, unchanged behavior ---
+assert_eq "ws: agent-ws classifies as subagent" "subagent" \
+  "$(jq -r '[.sessions[]|select(.id=="agent-ws")][0].type' <<<"$OUT_WS")"
+assert_eq "ws: agent-ws phases keys == [<none>] (subagent turn never re-keyed)" '["<none>"]' \
+  "$(jq -c '[.sessions[]|select(.id=="agent-ws")][0].phases | keys' <<<"$OUT_WS")"
+
+# --- sess-ws-other: non-worker session, override never leaks ---
+assert_eq "ws: sess-ws-other classifies as other" "other" \
+  "$(jq -r '[.sessions[]|select(.id=="sess-ws-other")][0].type' <<<"$OUT_WS")"
+assert_eq "ws: sess-ws-other phases keys == [<none>] (no whole-session override outside worker)" '["<none>"]' \
+  "$(jq -c '[.sessions[]|select(.id=="sess-ws-other")][0].phases | keys' <<<"$OUT_WS")"
+
+rm -rf "$WS_ROOT"
 
 report_results
 exit $FAIL

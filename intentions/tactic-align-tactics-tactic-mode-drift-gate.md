@@ -59,10 +59,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-align-tactics-tactic-mode-drift-gate
+  pr: 2982
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-conflict-align-tactics-tactic-mode-drift-gate
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -627,3 +637,32 @@ Manual / judgment checks:
   escalates with the synthesized "recorded no park" reason from Unit 1e, that is
   the deliberate tightening firing on an inconsistent drift verdict — report it
   rather than loosening the gate.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #2982) — planned deferrals only assertable against
+merged `main`, not pre-merge. All other QA items passed or were confirmed
+already-satisfied by direct code/doc reading; see the PR's `<!-- dispatch:qa-summary -->`
+comment for the full triage.
+
+- **id 8 — End-to-end: the next real per-node run against a signal-path-claimed
+  strategy completes instead of escalating.**
+  - URL path: current
+  - Expected outcome: the next natural `/align-tactics <tactic-id>` invocation
+    against a frozen draft tactic serving a strategy whose signal path is
+    claimed by a non-draft sibling (`strategy-graph-native-dispatch` is in
+    exactly that state) returns `disposition: completed_with_fixes` with a
+    planned `body_markdown`, where before the fix it returned `disposition:
+    escalated`.
+  - Finding: cannot be settled pre-merge — the node's own verification section
+    directs observing the next natural production run rather than forcing one.
+
+- **id 9 — No new escalations in strategy mode after landing.**
+  - URL path: current
+  - Expected outcome: the first strategy-mode `/align-tactics <strategy-id>`
+    round after this lands behaves exactly as before, unless it hits the
+    deliberate park-synthesis-belt tightening (in which case that is reported,
+    not patched away).
+  - Finding: cannot be settled pre-merge — requires observing the first
+    post-merge strategy-mode round in production; no such round exists to
+    inspect now.

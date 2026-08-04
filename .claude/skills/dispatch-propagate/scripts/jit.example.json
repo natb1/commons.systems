@@ -22,18 +22,6 @@
       "dueAfterClose": "48h",
       "debounce": "1h",
       "skill": "digest"
-    },
-    {
-      "key": "align",
-      "repo": "example-owner/example-repo",
-      "label": "jit:align",
-      "title": "Align review",
-      "body": "Recurring align review. Reassesses the active-frontier view and work completed since the previous review against the project's principles (the intention graph), triages the backlog, then closes to anchor the next cycle.",
-      "project": "example-project",
-      "remindAfterClose": "7d",
-      "dueAfterClose": "14d",
-      "debounce": "1h",
-      "skill": "align-init"
     }
   ]
 }
