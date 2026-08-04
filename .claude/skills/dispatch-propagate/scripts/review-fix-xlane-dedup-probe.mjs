@@ -247,6 +247,71 @@ const results = {};
   };
 }
 
+// --- absorb-partition-reuse: the Sonnet-returned `subgroups` is not a real
+// partition — 'b1' appears in two subgroups. First merge wins; the second is
+// skipped whole, so the second Lane-A twin is NOT marked absorbed (it must stay
+// in laneAResidue and reach the disposition agent).
+{
+  const laneA1 = finding({ id: 'a1', Source: 'code-review', Confidence: 'high', _idx: 0, _laneAIdx: 3 });
+  const laneA2 = finding({ id: 'a2', Source: 'code-review', Confidence: 'high', _idx: 2, _laneAIdx: 7 });
+  const laneB = finding({ id: 'b1', Source: 'secrets', Confidence: 'low', _idx: 1 });
+  const deduped = [laneB];
+  const byId = new Map([
+    ['a1', laneA1],
+    ['a2', laneA2],
+    ['b1', laneB],
+  ]);
+  const result = applyXlaneAbsorption({
+    deduped,
+    subgroups: [
+      ['a1', 'b1'],
+      ['a2', 'b1'],
+    ],
+    byId,
+    merge: dedupMerge,
+  });
+  const replaced = result.deduped.find((f) => f.id === 'b1');
+  results['absorb-partition-reuse'] = {
+    skipped: result.skipped,
+    absorbedIdx: [...result.absorbedIdx],
+    replacedSources: replaced ? replaced.sources : null,
+    dedupedLength: result.deduped.length,
+  };
+}
+
+// --- absorb-double-replace: two DISJOINT subgroups whose merges both resolve to
+// the same deduped id (a merge regression). The second must be refused so the
+// first merge's `sources` union is never discarded.
+{
+  const laneA1 = finding({ id: 'a1', Source: 'code-review', _laneAIdx: 3 });
+  const laneA2 = finding({ id: 'a2', Source: 'code-review', _laneAIdx: 7 });
+  const laneB1 = finding({ id: 'b1', Source: 'secrets' });
+  const laneB2 = finding({ id: 'b2', Source: 'secrets' });
+  const deduped = [laneB1, laneB2];
+  const collidingMerge = () =>
+    finding({ id: 'b1', Source: 'secrets', sources: ['code-review', 'secrets'] });
+  const byId = new Map([
+    ['a1', laneA1],
+    ['a2', laneA2],
+    ['b1', laneB1],
+    ['b2', laneB2],
+  ]);
+  const result = applyXlaneAbsorption({
+    deduped,
+    subgroups: [
+      ['a1', 'b1'],
+      ['a2', 'b2'],
+    ],
+    byId,
+    merge: collidingMerge,
+  });
+  results['absorb-double-replace'] = {
+    skipped: result.skipped,
+    absorbedIdx: [...result.absorbedIdx],
+    secondEntryUntouched: result.deduped[1].id === 'b2',
+  };
+}
+
 // --- empty-inputs.
 {
   const candidates = laneAAbsorbCandidates([]);

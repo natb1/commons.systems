@@ -84,6 +84,26 @@ assert_eq "xlane dedup: absorb-success absorbedIdx" "[3]" \
 assert_eq "xlane dedup: absorb-success other entry untouched" "true" \
   "$(printf '%s' "$out" | jq -r '."absorb-success".otherEntryUntouched')"
 
+# --- absorb-partition-reuse: the model-returned subgroups re-use a Lane-B id
+# across two subgroups (not a real partition). First merge wins, the second
+# subgroup is skipped whole, and only the FIRST Lane-A twin is absorbed -- the
+# second must survive in laneAResidue so it still reaches the disposition agent.
+assert_eq "xlane dedup: partition-reuse skipped one subgroup" "1" \
+  "$(printf '%s' "$out" | jq -r '."absorb-partition-reuse".skipped')"
+assert_eq "xlane dedup: partition-reuse absorbs only the first Lane-A twin" "[3]" \
+  "$(printf '%s' "$out" | jq -c '."absorb-partition-reuse".absorbedIdx')"
+assert_eq "xlane dedup: partition-reuse keeps the first merge's sources union" '["code-review","secrets"]' \
+  "$(printf '%s' "$out" | jq -c '."absorb-partition-reuse".replacedSources')"
+
+# --- absorb-double-replace: two disjoint subgroups whose merges collide on the
+# same deduped id -> the second replacement is refused (fail closed).
+assert_eq "xlane dedup: double-replace skipped one subgroup" "1" \
+  "$(printf '%s' "$out" | jq -r '."absorb-double-replace".skipped')"
+assert_eq "xlane dedup: double-replace absorbs only the first Lane-A twin" "[3]" \
+  "$(printf '%s' "$out" | jq -c '."absorb-double-replace".absorbedIdx')"
+assert_eq "xlane dedup: double-replace leaves the second deduped entry untouched" "true" \
+  "$(printf '%s' "$out" | jq -r '."absorb-double-replace".secondEntryUntouched')"
+
 # --- empty-inputs: no throw, empty results throughout.
 assert_eq "xlane dedup: empty-inputs candidates length" "0" \
   "$(printf '%s' "$out" | jq -r '."empty-inputs".candidatesLength')"

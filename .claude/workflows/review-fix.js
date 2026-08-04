@@ -1945,9 +1945,13 @@ const residueResolvedByIdx = new Map();
 // local Set — like the `dedup merge` sentinel region's own LANE_A_SOURCES copy
 // above (review-fix.js:538) — rather than referencing LANE_A directly, since
 // this sentinel-bounded region is sliced out and eval'd standalone by the
-// probe without pulling in the rest of the module. Keep in sync with LANE_A
-// (and the `dedup merge` region's copy) by hand.
-const LANE_A_SOURCES = new Set(['code-review', 'security-review']);
+// probe without pulling in the rest of the module. Named distinctly
+// (LANE_A_SOURCES_XLANE, not LANE_A_SOURCES) because both copies live at true
+// module top-level scope in this file — an identical name here would be a
+// duplicate `const` declaration and a SyntaxError at load time, not just a
+// probe-eval collision. Keep in sync with LANE_A (and the `dedup merge`
+// region's copy) by hand.
+const LANE_A_SOURCES_XLANE = new Set(['code-review', 'security-review']);
 
 // Every surviving Lane-A residue item is an absorption candidate EXCEPT
 // high-severity security-review items. Those are the only Lane-A items wired to
@@ -2001,8 +2005,8 @@ function contestedLocationGroups(laneBEligible, laneAProjections) {
     xlaneGroups.get(loc).push(f);
   }
   for (const [loc, group] of [...xlaneGroups.entries()]) {
-    const hasLaneA = group.some((f) => LANE_A_SOURCES.has(f.Source));
-    const hasNonLaneA = group.some((f) => !LANE_A_SOURCES.has(f.Source));
+    const hasLaneA = group.some((f) => LANE_A_SOURCES_XLANE.has(f.Source));
+    const hasNonLaneA = group.some((f) => !LANE_A_SOURCES_XLANE.has(f.Source));
     if (!hasLaneA || !hasNonLaneA) xlaneGroups.delete(loc);
   }
   return xlaneGroups;
@@ -2017,21 +2021,51 @@ function contestedLocationGroups(laneBEligible, laneAProjections) {
 // `absorbedIdx` Set of `_laneAIdx` values absorbed in this call, plus a
 // `skipped` count incremented on either fail-closed branch. Does not log —
 // callers use the returned `skipped`/`absorbedIdx` to log themselves.
+//
+// `subgroups` is UNTRUSTED: it is Sonnet output over finding text the diff under
+// review can influence, and nothing guarantees it is a real partition (each id in
+// exactly one subgroup). Two guards enforce that here, mirroring the same-lane
+// dedup site's `covered` Set:
+//   - an id already claimed by an earlier subgroup makes the later subgroup a
+//     no-op (first merge wins). Without this, the later merge reads the UNMUTATED
+//     `byId`, overwrites the same `nextDeduped` slot, and discards the first
+//     merge's `sources` union — while BOTH Lane-A twins land in `absorbedIdx` and
+//     get filtered out of laneAResidue. The absorbed item's whole audit record is
+//     the surviving entry's `sources` union, so the discarded one vanishes with no
+//     disposition, no follow-up, and no residue pass.
+//   - a `merged.id` slot already replaced during this call is refused, so one
+//     deduped entry can never absorb twice (belt and braces against a `merge`
+//     regression that returns a colliding representative id).
 function applyXlaneAbsorption({ deduped, subgroups, byId, merge }) {
   const nextDeduped = deduped.slice();
   const absorbedIdx = new Set();
+  const covered = new Set();
+  const replacedIds = new Set();
   let skipped = 0;
   for (const sub of subgroups) {
+    const reused = sub.find((id) => covered.has(id));
+    if (reused !== undefined) {
+      skipped += 1;
+      continue;
+    }
     const members = sub.map((id) => byId.get(id)).filter(Boolean);
-    const laneAMembers = members.filter((f) => LANE_A_SOURCES.has(f.Source));
-    const laneBMembers = members.filter((f) => !LANE_A_SOURCES.has(f.Source));
+    if (!members.length) continue;
+    for (const id of sub) covered.add(id);
+    const laneAMembers = members.filter((f) => LANE_A_SOURCES_XLANE.has(f.Source));
+    const laneBMembers = members.filter((f) => !LANE_A_SOURCES_XLANE.has(f.Source));
     // Subgroups the partition split into a single lane are no-ops.
     if (!laneAMembers.length || !laneBMembers.length) continue;
     const merged = merge(members);
     // Cheap structural check that the Lane-B representative pinning in
     // dedupMerge actually held — it is the only thing standing between a
     // dedupMerge regression and a narrowed verify ledger. Fail closed.
-    if (LANE_A_SOURCES.has(merged.Source)) {
+    if (LANE_A_SOURCES_XLANE.has(merged.Source)) {
+      skipped += 1;
+      continue;
+    }
+    // One deduped entry absorbs at most once per call — a second merge into an
+    // already-replaced slot would discard the first merge's `sources` union.
+    if (replacedIds.has(merged.id)) {
       skipped += 1;
       continue;
     }
@@ -2043,29 +2077,106 @@ function applyXlaneAbsorption({ deduped, subgroups, byId, merge }) {
       continue;
     }
     nextDeduped[at] = merged;
+    replacedIds.add(merged.id);
     for (const a of laneAMembers) absorbedIdx.add(a._laneAIdx);
   }
   return { deduped: nextDeduped, absorbedIdx, skipped };
 }
 // <<< cross-lane dedup <<<
 
+// Read-only working-tree probe, shared by the cross-lane absorption gate below and
+// the residue phase's phantom-fix check. A SEPARATE agent is fed ONLY a git
+// instruction — no finding text reaches it, so a prompt-injection payload embedded
+// in an attacker-controlled finding description cannot steer it — and reports the
+// files that actually carry uncommitted modifications.
+async function workingTreeModifiedFiles(label) {
+  subagentsLaunched += 1;
+  const treeRes = await agent(
+    [
+      'Run `git diff --name-only HEAD` in the current working tree and return the',
+      'EXACT list of repo-relative file paths it prints — the files with uncommitted',
+      'modifications. Make NO edits, NO commits, NO pushes; this is a read-only check.',
+      'Return { "modified_files": [ ...paths... ] }. Return [] if it prints nothing.',
+    ].join('\n'),
+    {
+      model: 'sonnet',
+      agentType: 'general-purpose',
+      schema: RESIDUE_TREE_SCHEMA,
+      label,
+      phase: 'residue',
+    }
+  );
+  const set = new Set();
+  for (const p of (treeRes && treeRes.modified_files) || []) {
+    const s = String(p).trim();
+    if (s) set.add(s);
+  }
+  return set;
+}
+
+// A claimed touched file is "really modified" only if it matches a path in the
+// git-diff set. Tolerate absolute-vs-repo-relative reporting by suffix match.
+function makePathReallyModified(modifiedSet) {
+  return (t) => {
+    const tf = String(t).trim();
+    if (!tf) return false;
+    if (modifiedSet.has(tf)) return true;
+    for (const m of modifiedSet) {
+      if (m === tf || m.endsWith('/' + tf) || tf.endsWith('/' + m)) return true;
+    }
+    return false;
+  };
+}
+
 {
   const laneAResidueBefore = laneAResidue.length;
 
-  // Only a Lane-B finding that survived verify AND was actually fixed may absorb
-  // a Lane-A twin. `fixedIds` is exactly that predicate already: it is built from
-  // `fixed`, which holds only findings the fix agent resolved out of `fixSet`,
-  // itself drawn from applyVerifyDrop's survivors (Upheld-verified Required
-  // findings, or Fixed-bucket erosion findings). A Refuted or Unverified finding
-  // never reaches `fixed`; a Deferred-bucket finding never enters `fixSet`. So
-  // membership in fixedIds excludes Refuted/Unverified/Deferred with no extra
-  // predicate — do not add one.
-  const laneBEligible = deduped.filter((f) => fixedIds.has(f.id));
-
   const laneACandidates = laneAAbsorbCandidates(laneAResidue);
-  const laneAProjected = laneACandidates.map((entry) =>
-    projectLaneAResidue(entry, allFindings.length + 1)
-  );
+
+  // Only a Lane-B finding whose fix is VISIBLE IN THE WORKING TREE may absorb a
+  // Lane-A twin. `fixedIds` alone is NOT that predicate: `fixed` is populated
+  // purely from the fix agent's self-reported `resolved_ids`, with no working-tree
+  // check (unlike the residue path, which verifies its own applied resolves and
+  // demotes a phantom resolve to `Required`). The Lane-B fix prompt interpolates
+  // attacker-influenceable Description / Recommended-fix text verbatim, so a
+  // planted description that steers the fix agent into reporting an id resolved
+  // without editing anything would — absent this gate — ALSO permanently delete
+  // the co-located Lane-A twin from the residue ledger, closing out both lanes'
+  // records for one real defect with zero bytes changed on disk.
+  //
+  // Membership in `fixedIds` still carries the verify-survival half of the
+  // predicate for free (`fixed` is drawn from `fixSet`, itself applyVerifyDrop's
+  // survivors — a Refuted/Unverified finding never reaches it, a Deferred-bucket
+  // one never enters `fixSet`), so the added check is only the tree half: the
+  // entry's claimed `touched_files` must be non-empty and every path must appear
+  // in the git-diff set.
+  let laneBEligible = [];
+  if (fixed.length && laneACandidates.length) {
+    const touchedById = new Map();
+    for (const e of fixed) {
+      const prev = touchedById.get(e.id) || [];
+      touchedById.set(e.id, prev.concat(e.touched_files || []));
+    }
+    const pathReallyModified = makePathReallyModified(
+      await workingTreeModifiedFiles('xlane-fix-verify')
+    );
+    const fixVerifiedIds = new Set();
+    for (const [id, files] of touchedById) {
+      if (files.length && files.every(pathReallyModified)) fixVerifiedIds.add(id);
+    }
+    laneBEligible = deduped.filter((f) => fixVerifiedIds.has(f.id));
+    const unverified = fixedIds.size - fixVerifiedIds.size;
+    if (unverified > 0) {
+      log(
+        `xlane-dedup: ${unverified} of ${fixedIds.size} Lane-B fix claim(s) not confirmed by the ` +
+          'working tree — those findings may not absorb a Lane-A twin'
+      );
+    }
+  }
+
+  const laneAProjected = laneBEligible.length
+    ? laneACandidates.map((entry) => projectLaneAResidue(entry, allFindings.length + 1))
+    : [];
 
   const contested = contestedLocationGroups(laneBEligible, laneAProjected);
 
@@ -2209,38 +2320,9 @@ if (laneAResidue.length === 0) {
     (it) => it.disposition === 'resolve' && it.applied === true
   );
   if (anyResolveApplied) {
-    subagentsLaunched += 1;
-    const treeRes = await agent(
-      [
-        'Run `git diff --name-only HEAD` in the current working tree and return the',
-        'EXACT list of repo-relative file paths it prints — the files with uncommitted',
-        'modifications. Make NO edits, NO commits, NO pushes; this is a read-only check.',
-        'Return { "modified_files": [ ...paths... ] }. Return [] if it prints nothing.',
-      ].join('\n'),
-      {
-        model: 'sonnet',
-        agentType: 'general-purpose',
-        schema: RESIDUE_TREE_SCHEMA,
-        label: 'residue-tree-verify',
-        phase: 'residue',
-      }
-    );
-    for (const p of (treeRes && treeRes.modified_files) || []) {
-      const s = String(p).trim();
-      if (s) modifiedSet.add(s);
-    }
+    modifiedSet = await workingTreeModifiedFiles('residue-tree-verify');
   }
-  // A claimed touched file is "really modified" only if it matches a path in the
-  // git-diff set. Tolerate absolute-vs-repo-relative reporting by suffix match.
-  const pathReallyModified = (t) => {
-    const tf = String(t).trim();
-    if (!tf) return false;
-    if (modifiedSet.has(tf)) return true;
-    for (const m of modifiedSet) {
-      if (m === tf || m.endsWith('/' + tf) || tf.endsWith('/' + m)) return true;
-    }
-    return false;
-  };
+  const pathReallyModified = makePathReallyModified(modifiedSet);
 
   // Zip each disposition back to its original residue item by ref index to recover
   // location/description/category/exploit_scenario/recommended_fix (the schema does
