@@ -4022,6 +4022,73 @@ clarifications:
       tactic-pr-title-node-id-convention (status: raw, phase: null) is the
       change that would build the guard. Recorded so a future round reads the
       condition as declared-but-unenforced rather than as an existing CI gate."
+  - question: Does the 2026-07-27 clarification's stated eligibility consequence --
+      that the strategy is non-decomposable until the two done signal-path
+      terminals (tactic-legacy-router-removal, tactic-phase-skill-node-targets)
+      are pruned -- still hold against current router code?
+    answer: "(Recorded 2026-08-04 /align-tactics round.) No -- superseded by code.
+      router.ts:590-596 tests `children.some((t) => isOpenTactic(t) &&
+      onPath.has(t.id))`, and its in-code comment declares the done-exclusion
+      load-bearing precisely because reconcile-graph writes phase done and no
+      longer prunes, and computeSignalPath does not filter by phase, so a
+      completed child would otherwise sit on the signal path forever and
+      permanently disqualify its serving strategy. Verified 2026-08-04 at
+      origin/main: both on-path non-draft children are phase done, no OPEN
+      non-draft child occupies the signal path, and this strategy passes that
+      gate. Pruning the two done terminals remains graph hygiene but is not an
+      eligibility precondition. The rest of the 2026-07-27 entry's owed
+      reconciliation still stands -- reading is still null and rounds.count is
+      still 0."
+  - question: Is the round-cap guard (rounds.count < 2) and the fresh-reading gate
+      (rounds.last_aligned) actually being enforced across this strategy's many
+      re-evaluation rounds, given rounds.count still reads 0?
+    answer: "(Observed 2026-08-04 /align-tactics round.) rounds.count is still 0 and
+      rounds.last_aligned still null despite a dozen-plus documented
+      re-evaluation rounds since 2026-07-03, so both halves of the round-cap
+      guard recorded in this strategy's first clarification are inert on this
+      node: every round reads 0 < 2 and passes the cap check no matter how many
+      have actually run, and the fresh-reading gate is vacuously satisfied by a
+      null last_aligned rather than by a fresh reading. This is an
+      accounting-write gap in the align round path -- the rounds block is never
+      stamped on completion -- not a doctrine change, and it gates no plan. It
+      does mean 'burning rounds forever' is currently unguarded here in the only
+      place the guard was supposed to bite."
+  - question: What is the current baseline count of this strategy's serving tactics
+      by classification, and can the align-tactics Workflow's own drift-gate
+      on-path count be trusted?
+    answer: "(Measured 2026-08-04 /align-tactics round.) Direct re-run of
+      align-tactics-census.ts against origin/main: 178 tactics serve this
+      strategy, classified 51 open / 11 born-parked / 44 done / 72 draft, i.e.
+      106 non-draft children, of which exactly 2 sit on the computed
+      success-signal path and both are phase done. An earlier round's trimmed
+      sample stated 95 non-draft; treat these 2026-08-04 figures as the
+      baseline. Separately, the align-tactics Workflow's own strategy-mode drift
+      gate (buildDriftPrompt/driftProceed in .claude/workflows/align-tactics.js)
+      has reported an inflated on-path blocking count for this strategy -- '92
+      non-draft children already on its signal path' -- which produced born-park
+      escalations on tactic-bounded-work-in-progress and
+      tactic-office-hours-graph-type-passthrough; the fix sits at
+      tactic-align-tactics-tactic-mode-drift-gate (PR #2982, unmerged), with a
+      likely-duplicate rediscovery at
+      tactic-align-tactics-workflow-tactic-mode-drift-gate (draft) that a future
+      pass should dedup. Until #2982 lands, an on-path count reported by that
+      gate must be re-derived directly rather than trusted."
+  - question: Does trimming this strategy's 180-entry clarifications array for
+      Workflow tool-call size limits violate the recording condition that /align
+      records all context a fresh /align-tactics session needs?
+    answer: "(Observed 2026-08-04 /align-tactics round.) This strategy's
+      clarifications array has grown to 180 entries, and the align-tactics
+      Workflow now inlines only about 3 of them into a round's args to stay
+      inside tool-call size limits. This does not fail the recording condition
+      ('/align records in the graph, at record time, all context a fresh
+      /align-tactics session needs') -- the context is recorded on the node; the
+      loss is delivery-side, at the round's arg-construction boundary. The
+      practical consequence is that a round reasoning only over the inlined
+      sample reasons over roughly 2% of the recorded substance, so drift review
+      and decomposition must read intentions/strategy-graph-native-dispatch.md
+      directly rather than treat the inlined subset as the record. Related
+      in-flight work: tactic-align-tactics-target-node-context-dropped
+      (main-qa)."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -4068,7 +4135,45 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Two material premises this round's decomposition would depend on are
+    unrecorded and need author ratification before any plan is written. (1)
+    Sensor-name drift: the 2026-07-28 success_signal.sensor amendment left the
+    recorded sensor name (strategy-graph-native-dispatch.md:4052-4054) no longer
+    equal to the registered lifecycle sensor's LIFECYCLE_SENSOR_NAME
+    (read-sensors.ts:437/:640); SensorRegistry.resolve is exact-match with no
+    fallback (sensors.ts:49-59), so read-sensors buckets this node as
+    unregistered (read-sensors.ts:871, 988-990) and reading stays null
+    permanently -- the signal cannot be validated by any number of rounds. The
+    proposed clarification asks the author to ratify ONE sensor (extend
+    readLifecycleReading with a defect-backlog segment and re-point the constant
+    at the amended string) versus TWO sensors (register a separate backlog
+    sensor and amend success_signal.sensor to name it), because either fix edits
+    persistent-layer substance that condition 4 reserves to the /align
+    interview. (2) Unreadable threshold: the amended threshold's 'bounded' term
+    has no declared band -- condition 18 says so in its own text
+    ('not-yet-armed') -- and its 'non-increasing across consecutive census
+    samples' term needs a sample history nothing in the store keeps
+    (align-tactics-census.ts:23-71 is point-in-time;
+    readTacticVelocity/readTokenEconomy window off git log). The proposed
+    clarification asks the author to declare the band (2026-08-04 baseline: 62
+    open+born-parked of 178 serving tactics) and to say where consecutive
+    samples live. Eligibility itself is clean -- office_hours null, reading
+    null, last_aligned null, no OPEN non-draft child on the signal path,
+    rounds.count 0 -- so this is a ratification hold on the strategy's own
+    measurement instrument, not a structural block. Recommend: at one sitting
+    ratify (a) which sensor shape closes the sensor-name drift (extend the
+    existing lifecycle sensor with a defect-backlog segment and re-point
+    LIFECYCLE_SENSOR_NAME at the amended recorded string, versus registering a
+    separate defect-backlog sensor and amending success_signal.sensor to name
+    it), and (b) the maintenance-burden band value plus where consecutive census
+    samples persist (derived from intentions/ git history at read time, on this
+    node, or in a committed samples file) -- then clear this park and re-run
+    /align-tactics strategy-graph-native-dispatch to plan the now-readable
+    instrument work."
+  since: 2026-08-04
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds:
   count: 0
