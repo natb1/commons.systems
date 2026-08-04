@@ -25,7 +25,42 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "This /align-tactics tactic-office-hours-graph-type-passthrough round
+    could not autonomously finalize this draft: the align-tactics Workflow's
+    tactic-mode drift phase declined to author a plan (disposition 'escalated',
+    tactics[0].body_markdown null) because its ELIGIBILITY SANITY CHECK judged
+    serving strategy strategy-attention-surface 'not decomposable this round'
+    (twelve non-draft children already on its signal path) -- a
+    strategy-round-decomposability question that is orthogonal to finalizing
+    this one already-scoped, already-frozen draft. The drift review's own Side A
+    / Side B substance passed cleanly (side_a_failed_conditions: [], both
+    unrecorded_premises immaterial: PR #2961 merged 2026-07-28 unblocking
+    tactic-office-hours-session-type-strategy-review, and this strategy's
+    subtree is idempotent-complete pending
+    tactic-attention-surface-analytics-collector), so nothing about THIS
+    tactic's own content or scope blocks it. This is a known, already-tracked
+    tooling defect, not a fresh finding: buildDriftPrompt
+    (.claude/workflows/align-tactics.js) is not mode-aware and driftProceed
+    gates tactic-mode plan authoring on the strategy's round-decomposability
+    verdict -- see tactic-align-tactics-tactic-mode-drift-gate (phase review, PR
+    #2982 'align-tactics: split tactic-mode plan gate from strategy
+    round-decomposability', OPEN/unmerged as of 2026-08-04), whose planned fix
+    (a computePhaseGates helper splitting decomposeProceed from planProceed,
+    with mode threaded into the drift prompt) directly addresses this failure
+    mode. A second live rediscovery of the same defect also sits at
+    tactic-align-tactics-workflow-tactic-mode-drift-gate (status raw, filed
+    2026-08-04) -- likely a duplicate of
+    tactic-align-tactics-tactic-mode-drift-gate, but deduping it is outside this
+    session's single-node write scope. Recommend: after PR #2982 merges, re-run
+    /align-tactics tactic-office-hours-graph-type-passthrough -- the finalize
+    should then proceed autonomously with no author input needed, since the
+    underlying scope (accept --type/--type=<t> before the positional node id in
+    office-hours-graph, forward it at both office-hours-select.ts call sites,
+    update the usage block) is already fully specified in this node's own body."
+  since: 2026-08-04
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
