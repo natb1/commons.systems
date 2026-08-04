@@ -45,7 +45,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-claim-dedup-only
   pr: 2972
@@ -53,9 +53,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T11:28:21Z
+    mergeCommitSha: 4efe6faf6e5a3f9c2e2870954f9b5441977a0853
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
