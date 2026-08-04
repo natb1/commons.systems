@@ -53,6 +53,16 @@
 #     defensive fallbacks).
 #   - Output schema is a documented contract later units depend on; keys are
 #     stable. See the stage-2 jq program below for the full shape.
+#   - Phase attribution is WHOLE-SESSION for a classifier-typed single-phase
+#     `worker` session: every assistant turn is re-keyed onto the session's
+#     launch skill (the phase skill in its first-user <command-name> block), so
+#     by_skill / by_skill_model no longer dump most of a worker's turns into the
+#     `<none>` bucket. This is a pure re-keying — turns, models, and all totals
+#     are numerically unchanged. `by_attribution_skill` preserves the RAW
+#     per-turn harness slice (keyed strictly on `attributionSkill`, `<none>`
+#     included) for measuring harness attribution coverage. Subagent, recovery,
+#     router-tick, other, and multi-phase worker sessions (two or more distinct
+#     phase-skill attributions) keep per-turn attribution unchanged.
 #   - Outcome envelope (#1860): each session's last `<!-- dispatch:outcome:v1 -->`
 #     envelope (last-wins; malformed -> null, never aborts the file) is surfaced
 #     on the per-session summary as `outcome` (the parsed object or null) plus
@@ -281,6 +291,16 @@ def cmd_prefix(c):
   | gsub("[0-9]+"; "N")
   | .[0:120];
 
+# Dispatch worker phase-skill set (plus the graph-native align family). SINGLE
+# SOURCE for stage 1: consumed TWICE — once by the session-type classifier below
+# (a first-user <command-name> match types the session "worker") and once by the
+# whole-session phase attribution ($launch_skill / $tagged_phase_skills). This
+# list must be updated when a new dispatch worker phase skill is added.
+def worker_skills: ["plan-issue","implement","qa-fix","review-fix","fix-checks",
+  "fix-conflicts","dispatch-conflict","qa-main","budget-parse-job","resolve-epic",
+  "office-hours","align-strategy","align-tactics","align-init"];
+def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + ")</command-name>";
+
 . as $msgs
 | (asst) as $a
 | (input_filename) as $path
@@ -314,10 +334,31 @@ def cmd_prefix(c):
     # Real --bg dispatch workers are spawned with a phase-skill slash command.
     # Their first user message is a <command-name>/<skill></command-name> block
     # whose skill is one of the dispatch worker phase set (plus the graph-native
-    # align family). This alternation must be updated when a new dispatch worker
-    # phase skill is added.
-    elif ($firstuser_str | test("<command-name>/(plan-issue|implement|qa-fix|review-fix|fix-checks|fix-conflicts|dispatch-conflict|qa-main|budget-parse-job|resolve-epic|office-hours|align-strategy|align-tactics|align-init)</command-name>")) then "worker"
+    # align family) — see `worker_skills` above, which must be updated when a new
+    # dispatch worker phase skill is added. That list is now consumed twice: here
+    # for classification, and below for whole-session phase attribution.
+    elif ($firstuser_str | test(worker_cmd_re)) then "worker"
     else "other" end ) as $type
+
+# The launching phase skill, captured from the same first-user <command-name>
+# block that typed the session. `capture` yields nothing on no-match and
+# `empty // null` evaluates to null, so no error branch is needed.
+| ( ($firstuser_str | capture(worker_cmd_re) | .wskill) // null ) as $launch_skill
+
+# WHOLE-SESSION PHASE ATTRIBUTION. Per-turn `attributionSkill` only covers a
+# session's opening turns, so most of a worker session's turns land in the
+# "<none>" bucket. A classifier-typed worker session runs exactly one phase, so
+# fold ALL its turns onto its launch skill.
+#
+# Multi-phase guard: a worker session that inlines a NON-phase helper skill
+# (e.g. commit-merge-push) is still one phase and must fold whole — only the
+# phase-skill attributions count toward the guard. A session carrying two or
+# more DISTINCT phase-skill attributions is genuinely multi-phase and keeps
+# today's per-turn behavior.
+| ( [ $rows[] | .skill | select(. != "<none>") ] | unique ) as $tagged_skills
+| ( [ $tagged_skills[] | select(. as $s | worker_skills | index($s)) ] ) as $tagged_phase_skills
+| ( ($type == "worker") and ($launch_skill != null)
+    and (($tagged_phase_skills | length) <= 1) ) as $whole_session
 
 # Peak context across assistant msgs.
 | ( [ $rows[] | (.u.input + .u.cache_read + .u.cache_creation) ] | (max // 0) ) as $peak_context
@@ -325,15 +366,27 @@ def cmd_prefix(c):
 # Init overhead = first assistant message's input / cache_creation.
 | ( ($a[0] // null) | if . == null then {input:0, cache_creation:0} else usage_of(.) end ) as $init_u
 
-# by_skill and by_skill_model rollups.
-| ( reduce $rows[] as $r ({};
+# Attributed rows: a pure RE-KEYING of $rows — same turns, same per-turn models,
+# same usage objects — so every totals figure stays numerically invariant.
+| ( if $whole_session then [ $rows[] | .skill = $launch_skill ] else $rows end ) as $arows
+
+# by_skill and by_skill_model rollups (over the attributed rows).
+| ( reduce $arows[] as $r ({};
       .[$r.skill] as $cur
       | .[$r.skill] = {
           usage: sum_usage([ ($cur.usage // {input:0,cache_creation:0,cache_read:0,output:0}), $r.u ]),
           turns: (($cur.turns // 0) + 1)
         }
     ) ) as $by_skill
+# Raw per-turn harness slice, preserved unattributed (over $rows, NOT $arows).
 | ( reduce $rows[] as $r ({};
+      .[$r.skill] as $cur
+      | .[$r.skill] = {
+          usage: sum_usage([ ($cur.usage // {input:0,cache_creation:0,cache_read:0,output:0}), $r.u ]),
+          turns: (($cur.turns // 0) + 1)
+        }
+    ) ) as $by_attribution_skill
+| ( reduce $arows[] as $r ({};
       ($r.skill + "\t" + $r.model) as $k
       | .[$k] as $cur
       | .[$k] = {
@@ -459,6 +512,11 @@ def cmd_prefix(c):
     usage: sum_usage([ $rows[].u ]),
     by_skill: $by_skill,
     by_skill_model: $by_skill_model,
+    launch_skill: $launch_skill,
+    whole_session_attributed: $whole_session,
+    multi_phase_worker: (($type == "worker") and (($tagged_phase_skills | length) > 1)),
+    by_attribution_skill: $by_attribution_skill,
+    attributed_turns_raw: ([ $rows[] | select(.skill != "<none>") ] | length),
     errors: $errors,
     tool_calls: $tool_calls,
     payload: $payload,
