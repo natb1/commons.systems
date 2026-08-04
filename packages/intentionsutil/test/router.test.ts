@@ -1110,7 +1110,7 @@ describe("strategyFingerprint", () => {
       clarifications: [
         { question: "q1", answer: "a1 (2026-07-01)" },
         { question: "q2", answer: "a2 (2026-07-01)" },
-      ] as unknown as IntentionNode["clarifications"],
+      ] as unknown as IntentionNode["clarifications"], // type-safety-ok: simulates pre-widening on-disk shape with no `id` key at all
     });
     const withNullId = strategy({
       id: "strategy-s",
