@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// review-fix-domain-sweep-probe.mjs (tactic-review-domain-lens-consolidation)
+// review-fix-domain-sweep-probe.mjs (tactic-review-domain-lens-consolidation,
+// extended by tactic-review-api-cost-lens-merge)
 //
-// CI-vector probe for agentFinderSet, DOMAIN_PROMPTS, sweepDomains, and
-// sweepSections in .claude/workflows/review-fix.js. run-unit-tests.sh has no
-// mapping for .claude/workflows/*, so a PR touching only review-fix.js
-// triggers no vitest suite. Its test-*.sh glob over this directory is NOT a
-// fallback either: that glob only runs when RUN_PR_SCRIPTS is set, which
-// auto-detect sets solely for changed paths under
+// CI-vector probe for agentFinderSet, DOMAIN_PROMPTS, sweepDomains,
+// sweepSections, apiCostDomains, apiCostSections, and COST_BRIEF in
+// .claude/workflows/review-fix.js. run-unit-tests.sh has no mapping for
+// .claude/workflows/*, so a PR touching only review-fix.js triggers no
+// vitest suite. Its test-*.sh glob over this directory is NOT a fallback
+// either: that glob only runs when RUN_PR_SCRIPTS is set, which auto-detect
+// sets solely for changed paths under
 // .claude/skills/dispatch-propagate/scripts/ (run-unit-tests.sh:88). The
 // actual CI vector is the hook-tests job in .github/workflows/unit-tests.yml,
 // which runs test-review-fix-domain-sweep.sh (this probe's driver)
@@ -25,6 +27,15 @@
 //   - "domain sweep gate" — wraps agentFinderSet.
 //   - "domain sweep brief" — wraps DOMAIN_PROMPTS, sweepDomains, and
 //     sweepSections.
+//
+// A later unit (tactic-review-api-cost-lens-merge) folded the `firebase` and
+// `cost` finder agents into one `api-cost` agent, gated on the diff-content
+// flag `api_call_site` rather than `app_or_rules`, INSIDE those same two
+// sentinel regions (no new sentinel pair was added):
+//   - "domain sweep gate" — agentFinderSet is now 3-parameter
+//     (surface, app_or_rules, api_call_site).
+//   - "domain sweep brief" — also now holds COST_BRIEF, apiCostDomains, and
+//     apiCostSections.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -95,21 +106,32 @@ const briefSlice = sliceBetween(source, BRIEF_START, BRIEF_END);
 // src)()` the way a single function expression can. Instead the concatenated
 // slices are eval'd directly (in an IIFE, to avoid leaking into this
 // module's top level) and the IIFE returns the four names under test.
-const { agentFinderSet, sweepDomains, sweepSections, DOMAIN_PROMPTS } = (function () {
+const {
+  agentFinderSet,
+  sweepDomains,
+  sweepSections,
+  DOMAIN_PROMPTS,
+  apiCostDomains,
+  apiCostSections,
+  COST_BRIEF,
+} = (function () {
   const combinedSource = `${gateSlice}\n${briefSlice}`;
   // eslint-disable-next-line no-eval -- see comment above // type-safety-ok: eval is required (not new Function) because the combined slice has several top-level statements, not a single expression
   return eval(
-    `(function () { ${combinedSource}\nreturn { agentFinderSet, sweepDomains, sweepSections, DOMAIN_PROMPTS }; })()`
+    `(function () { ${combinedSource}\nreturn { agentFinderSet, sweepDomains, sweepSections, DOMAIN_PROMPTS, apiCostDomains, apiCostSections, COST_BRIEF }; })()`
   );
 })();
 
 const results = {};
 
-results.roster_empty = agentFinderSet('empty', false);
-results.roster_docs = agentFinderSet('docs', true);
-results.roster_tests = agentFinderSet('tests', true);
-results.roster_code_noapp = agentFinderSet('code', false);
-results.roster_code_app = agentFinderSet('code', true);
+results.roster_empty = agentFinderSet('empty', false, false);
+results.roster_docs = agentFinderSet('docs', true, false);
+results.roster_tests = agentFinderSet('tests', true, false);
+results.roster_code_noapp = agentFinderSet('code', false, false);
+results.roster_code_app = agentFinderSet('code', true, false);
+results.roster_code_app_call = agentFinderSet('code', true, true);
+results.roster_code_noapp_call = agentFinderSet('code', false, true);
+results.roster_tests_call = agentFinderSet('tests', true, true);
 
 results.domains_noapp = sweepDomains(false);
 results.domains_app = sweepDomains(true);
@@ -120,5 +142,10 @@ results.sections_app = sweepSections(true);
 results.brief_secrets = DOMAIN_PROMPTS.secrets;
 results.brief_auth = DOMAIN_PROMPTS.auth;
 results.brief_data_exposure = DOMAIN_PROMPTS['data-exposure'];
+results.brief_firebase = DOMAIN_PROMPTS.firebase;
+
+results.api_cost_domains = apiCostDomains();
+results.api_cost_sections = apiCostSections();
+results.cost_brief = COST_BRIEF;
 
 process.stdout.write(JSON.stringify(results) + '\n');

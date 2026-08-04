@@ -28,22 +28,38 @@ out=$(node "$SCRIPT_DIR/review-fix-domain-sweep-probe.mjs")
 assert_eq "domain sweep: roster_code_noapp" '["input-validation","domain-sweep","red-team","security-review"]' \
   "$(printf '%s' "$out" | jq -c '.roster_code_noapp')"
 
-assert_eq "domain sweep: roster_code_app" '["input-validation","domain-sweep","red-team","security-review","firebase","cost"]' \
+assert_eq "domain sweep: roster_code_app" '["input-validation","domain-sweep","red-team","security-review"]' \
   "$(printf '%s' "$out" | jq -c '.roster_code_app')"
 
 assert_eq "domain sweep: roster_empty is []" '[]' "$(printf '%s' "$out" | jq -c '.roster_empty')"
 assert_eq "domain sweep: roster_docs is []" '[]' "$(printf '%s' "$out" | jq -c '.roster_docs')"
 assert_eq "domain sweep: roster_tests is []" '[]' "$(printf '%s' "$out" | jq -c '.roster_tests')"
 
-# None of the three folded-in domain names ('secrets'/'auth'/'data-exposure')
+# api_call_site (third arg) is what now gates the merged api-cost lens —
+# app_or_rules alone (roster_code_app above) no longer adds anything.
+assert_eq "domain sweep: roster_code_app_call ends in api-cost" \
+  '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
+  "$(printf '%s' "$out" | jq -c '.roster_code_app_call')"
+assert_eq "domain sweep: roster_code_noapp_call ends in api-cost" \
+  '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
+  "$(printf '%s' "$out" | jq -c '.roster_code_noapp_call')"
+assert_eq "domain sweep: roster_tests_call is [] (non-code surface, regardless of api_call_site)" '[]' \
+  "$(printf '%s' "$out" | jq -c '.roster_tests_call')"
+
+# None of the three folded-in domain-sweep names ('secrets'/'auth'/
+# 'data-exposure') nor the two folded-in api-cost names ('firebase'/'cost')
 # is itself a member of ANY roster array — they are brief sections of the
-# single 'domain-sweep' agent, not separate agent names.
+# 'domain-sweep'/'api-cost' agents, not separate agent names.
 assert_eq "domain sweep: 'secrets' is not an agent name in any roster" "false" \
-  "$(printf '%s' "$out" | jq '[.roster_empty,.roster_docs,.roster_tests,.roster_code_noapp,.roster_code_app] | flatten | any(. == "secrets")')"
+  "$(printf '%s' "$out" | jq '[.roster_empty,.roster_docs,.roster_tests,.roster_code_noapp,.roster_code_app,.roster_code_app_call,.roster_code_noapp_call,.roster_tests_call] | flatten | any(. == "secrets")')"
 assert_eq "domain sweep: 'auth' is not an agent name in any roster" "false" \
-  "$(printf '%s' "$out" | jq '[.roster_empty,.roster_docs,.roster_tests,.roster_code_noapp,.roster_code_app] | flatten | any(. == "auth")')"
+  "$(printf '%s' "$out" | jq '[.roster_empty,.roster_docs,.roster_tests,.roster_code_noapp,.roster_code_app,.roster_code_app_call,.roster_code_noapp_call,.roster_tests_call] | flatten | any(. == "auth")')"
 assert_eq "domain sweep: 'data-exposure' is not an agent name in any roster" "false" \
-  "$(printf '%s' "$out" | jq '[.roster_empty,.roster_docs,.roster_tests,.roster_code_noapp,.roster_code_app] | flatten | any(. == "data-exposure")')"
+  "$(printf '%s' "$out" | jq '[.roster_empty,.roster_docs,.roster_tests,.roster_code_noapp,.roster_code_app,.roster_code_app_call,.roster_code_noapp_call,.roster_tests_call] | flatten | any(. == "data-exposure")')"
+assert_eq "domain sweep: 'firebase' is not an agent name in any roster" "false" \
+  "$(printf '%s' "$out" | jq '[.roster_empty,.roster_docs,.roster_tests,.roster_code_noapp,.roster_code_app,.roster_code_app_call,.roster_code_noapp_call,.roster_tests_call] | flatten | any(. == "firebase")')"
+assert_eq "domain sweep: 'cost' is not an agent name in any roster" "false" \
+  "$(printf '%s' "$out" | jq '[.roster_empty,.roster_docs,.roster_tests,.roster_code_noapp,.roster_code_app,.roster_code_app_call,.roster_code_noapp_call,.roster_tests_call] | flatten | any(. == "cost")')"
 
 # --- sweepDomains trigger asymmetry ------------------------------------------
 
@@ -88,6 +104,32 @@ assert_eq "domain sweep: sections_app carries set Source auth" "true" \
 assert_eq "domain sweep: sections_app carries set Source data-exposure" "true" \
   "$(jq -n --arg hay "$sections_app" --arg needle 'set Source "data-exposure"' '$hay | contains($needle)')"
 
+# --- apiCostSections brief content --------------------------------------------
+
+api_cost_sections=$(printf '%s' "$out" | jq -r '.api_cost_sections')
+brief_firebase=$(printf '%s' "$out" | jq -r '.brief_firebase')
+cost_brief=$(printf '%s' "$out" | jq -r '.cost_brief')
+
+assert_eq "domain sweep: api_cost_sections contains brief_firebase" "true" \
+  "$(jq -n --arg hay "$api_cost_sections" --arg needle "$brief_firebase" '$hay | contains($needle)')"
+assert_eq "domain sweep: api_cost_sections contains cost_brief" "true" \
+  "$(jq -n --arg hay "$api_cost_sections" --arg needle "$cost_brief" '$hay | contains($needle)')"
+assert_eq "domain sweep: api_cost_sections carries set Source firebase" "true" \
+  "$(jq -n --arg hay "$api_cost_sections" --arg needle 'set Source "firebase"' '$hay | contains($needle)')"
+assert_eq "domain sweep: api_cost_sections carries set Source cost" "true" \
+  "$(jq -n --arg hay "$api_cost_sections" --arg needle 'set Source "cost"' '$hay | contains($needle)')"
+# Pin the cost section's advisory (never-security-classified) OWASP/STRIDE
+# treatment specifically — distinct from the firebase section, which fills them.
+assert_eq "domain sweep: api_cost_sections carries cost OWASP/STRIDE advisory phrasing" "true" \
+  "$(jq -n --arg hay "$api_cost_sections" --arg needle 'and OWASP "" and STRIDE "" on findings from this section — cost findings are ADVISORY' '$hay | contains($needle)')"
+
+# apiCostDomains() order is load-bearing (see review-fix.js comment above
+# apiCostDomains: firebase is allowedList[0] for the gather loop's SOURCE
+# CLAMP, so an off-brief Source escalates to the security-classified lens
+# rather than being silently demoted to advisory).
+assert_eq "domain sweep: api_cost_domains is [firebase, cost] in that exact order" '["firebase","cost"]' \
+  "$(printf '%s' "$out" | jq -c '.api_cost_domains')"
+
 # --- call-site / doctrine coverage (anti-regression teeth) -------------------
 # A future edit that keeps these functions but stops calling them, or drops
 # 'domain-sweep' back out of LANE_B into LANE_A, would otherwise pass every
@@ -99,16 +141,29 @@ REVIEW_FIX_JS="$REPO_ROOT/.claude/workflows/review-fix.js"
 assert_eq "domain-sweep branch present in finderPrompt" "1" \
   "$(grep -c "if (name === 'domain-sweep')" "$REVIEW_FIX_JS" || true)"
 
+assert_eq "api-cost branch present in finderPrompt" "1" \
+  "$(grep -c "if (name === 'api-cost')" "$REVIEW_FIX_JS" || true)"
+
 assert_eq "sweepSections is called with args.app_or_rules" "1" \
   "$(grep -c 'sweepSections(args.app_or_rules)' "$REVIEW_FIX_JS" || true)"
 
+# laneBAllowedSources routes the api-cost agent's findings through
+# apiCostDomains() for the source clamp — pins that the merge did not leave
+# api-cost falling through to the bare `[name]` default arm. Two matches are
+# expected: finderPrompt's `if (name === 'api-cost')` branch (pinned above)
+# and laneBAllowedSources' own `name === 'api-cost'` ternary arm.
+assert_eq "laneBAllowedSources routes api-cost through apiCostDomains()" "2" \
+  "$(grep -c "name === 'api-cost'" "$REVIEW_FIX_JS" || true)"
+assert_eq "laneBAllowedSources api-cost arm calls apiCostDomains()" "1" \
+  "$(grep -c '? apiCostDomains()' "$REVIEW_FIX_JS" || true)"
+
 # The gate function itself is only coverage if the run actually calls it with
-# the run's own surface/app_or_rules. Without this pin, replacing the call with
-# a narrowed literal or a hardcoded surface (turning the security fan-out off)
-# leaves every probe/roster assertion above passing — the probe evals the
-# untouched function, not the call site.
-assert_eq "agentFinderSet is called with the run's surface/app_or_rules" "1" \
-  "$(grep -c 'agentFinderSet(_a.surface, _a.app_or_rules)' "$REVIEW_FIX_JS" || true)"
+# the run's own surface/app_or_rules/api_call_site. Without this pin, replacing
+# the call with a narrowed literal or a hardcoded surface (turning the security
+# fan-out off) leaves every probe/roster assertion above passing — the probe
+# evals the untouched function, not the call site.
+assert_eq "agentFinderSet is called with the run's surface/app_or_rules/api_call_site" "1" \
+  "$(grep -c 'agentFinderSet(_a.surface, _a.app_or_rules, _a.api_call_site)' "$REVIEW_FIX_JS" || true)"
 
 # The roster the gate pushes on a code surface — pinned as a literal so a
 # silent narrowing (dropping a finder from the push) fails here as well as in
