@@ -614,6 +614,37 @@ assert_eq "unreadable ceiling: decision log .skip_reason" "at-cap-ceiling-unread
   "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
 sel_tick_teardown
 
+# --- at-cap: crashed dispatch-target-workers --max closes the lane (item 9) ----
+# A crashed dispatch-target-workers prints nothing for --max; empty stdout also
+# fails the `^[0-9]+$` regex, so this is the "tool crashed" sibling of the
+# non-numeric-string case above (mirrors the TARGET_N crashed-stub test further
+# below, "select-tick empty TARGET_N -> release + exit 2", but for MAX_WORKERS,
+# where the correct behavior is NOT exit 2: the lane fails closed to
+# concurrency-cap at exit 0, keeping the main-broken probe and reseed
+# reachable).
+echo "Test: select-tick crashed dispatch-target-workers --max -> closes lane, exit 0, concurrency-cap"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-target-workers" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--exhausted" ]]; then echo "${SEL_EXHAUSTED:-ok}"; exit 0; fi
+# --max: emit nothing (simulate a crashed dispatch-target-workers)
+if [[ "$1" == "--max" ]]; then exit 0; fi
+echo "${SEL_TARGET_N:-1}"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-target-workers"
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
+export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
+rc=0; out=$(run_sel_tick) || rc=$?
+assert_eq "crashed max: exit 0" "0" "$rc"
+assert_eq "crashed max: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "crashed max: probe not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "crashed max: decision log .skip_reason" "at-cap-ceiling-unreadable" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+sel_tick_teardown
+
 # --- exhausted at cap: neither probe runs (hard floor) -------------------------
 echo "Test: select-tick at-cap exhausted → no graph pace-exempt probe (hard floor)"
 sel_tick_setup

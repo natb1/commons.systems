@@ -704,6 +704,16 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
         (( PACE_GAP < 0 )) && PACE_GAP=0
         (( PACE_GAP == 0 )) && PACE_LANE_CLOSED="at-cap-ceiling-full"
       else
+        # Log-only (stderr), not a durable graph latch: this deliberately does
+        # not write any operator-visible record beyond the routing-decision
+        # log's `at-cap-ceiling-unreadable` skip_reason. Keeping this a bare
+        # `echo` matters because the main-broken probe and reseed below this
+        # at-cap block must stay reachable when the ceiling is unreadable —
+        # anything heavier (a latch write, a retry) risks wedging that path.
+        # Follow-up: tactic-config-unreadable-latch owns unifying this
+        # config-read site with the other two in this script (:643 TARGET_N,
+        # :814 the --manual branch's combined TARGET_N/MAX_WORKERS read) behind
+        # one durable, operator-visible latch (the tactic-main-red-* shape).
         echo "dispatch-select-tick: dispatch-target-workers --max returned a non-numeric ceiling ('$MAX_WORKERS'); pace-exempt lane closed rather than admitting an unbounded bypass" >&2
         PACE_GAP=0
         PACE_LANE_CLOSED="at-cap-ceiling-unreadable"
