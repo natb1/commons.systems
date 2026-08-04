@@ -44,7 +44,29 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Park questions — (1) what reaps a marker-declared terminal session
+      whose branch has unlanded content or an open PR, and (2) which tactic owns
+      dispatch-self-close's terminal reap line?
+    answer: "(Ruled 2026-08-04 /align interview, author-ratified.) Superseded
+      by the invalid-state lane recorded on strategy-graph-native-dispatch
+      (2026-08-04 clarifications). (1) The recorded brownfield Step 2 (delete
+      exec claude rm) is RETIRED — dispatch-self-close KEEPS its reap as a
+      best-effort fast path, session_reap_sweep stays the backstop for the
+      undeclared/align-round class, and the invalid-state lane is the
+      guaranteed net: the selection-time occupancy check discriminates
+      occupied-by-terminal (invalid state — route to an intervention session
+      that reviews the transcript, files a find-or-create root-cause follow-up,
+      and resolves or parks) from occupied-by-live (valid skip), with the
+      defensive sweeps as the second detection point. A marker-declared session
+      with unlanded content or an open PR routes to that lane rather than being
+      force-reaped or stranded, so gates 7b/7c stay as they are. (2)
+      tactic-worker-self-close-configurable retains ownership of the call site;
+      its default-off keep-all gate lands as planned with no ordering conflict.
+      This node's remaining scope: make the fast path's decline DETECTABLE and
+      loud (verify the post-state instead of trusting exit 0), with the lane
+      owning escalation. Re-run /align-tactics on this node to re-plan against
+      the lane. Park cleared on this ruling."
 tooling_goals: []
 success_signal: null
 attention:
@@ -60,56 +82,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "REQUIREMENT AMBIGUITY — Step 2 as recorded cannot be planned as
-    written; it would strand every common-case node worker. VERIFIED 2026-08-04
-    against HEAD: session_reap_sweep skips at gate 7b when the worktree tree
-    differs from origin/main outside intentions/ (lib-session-reap.sh:429-445)
-    and at gate 7c when any OPEN PR has the branch as head (:447-469) — i.e.
-    every implement/qa/review/fix worker. Every other dispatch-sweep worktree
-    arm SKIPs on worktree_has_live_session (dispatch-sweep:415,467,495), which
-    reads the REGISTERED view, so a stopped-but-unremoved session still counts
-    as live. dispatch-self-close:222 is therefore the ONLY reaper for the
-    declared-terminal common case; step 1's unlock criterion (sweep observed
-    reaping within one interval — SESSION_REAPED 22:02:39 and 22:32:16 UTC
-    2026-08-03) was met only for the align-round class, whose branches are never
-    pushed and have no PR. With tactic-stopped-session-blocks-node
-    (codified/done: a registered session blocks its node permanently, NO
-    TIMEOUT), deleting line 222 makes each such node permanently unselectable —
-    and the deadlock is circular, not merely delayed, because the PR can only
-    merge after qa/review, which cannot start while the implement session holds
-    the node. This contradicts the strategy's condition 'AUTO-CLOSE REMAINS THE
-    DOCTRINAL DEFAULT FOR EVERY DECLARED TERMINAL DISPOSITION'. AUTHOR DECISION
-    NEEDED — two questions: (1) What reaps a marker-declared terminal session
-    whose branch has unlanded content or an open PR once self-close no longer
-    reaps? Candidates: (a) retire Step 2 — self-close stays the reaper for the
-    DECLARED case and session_reap_sweep stays a backstop for the
-    undeclared/align-round class only (one reaper per class, not one reaper
-    overall); (b) narrow gates 7b/7c so a marker-declared session is reapable
-    despite unlanded content/open PR (the worktree-remove-first step then needs
-    a safety story for unlanded work); (c) a third design. (2) Which tactic owns
-    dispatch-self-close's terminal reap line?
-    tactic-worker-self-close-configurable (status codified, phase implement, IN
-    FLIGHT) plans a default-off keep-all config gate layered on exactly that
-    call site (its body cites dispatch-self-close:216, today's line 222). Step 2
-    deletes the site its sibling gates; the two cannot both land as written and
-    the ordering is unrecorded. Recommend: settle (1) then (2) in an
-    /align-strategy sitting or an office-hours disposition; amend this node's
-    'Brownfield migration' section (body ~173-190) and its 'Amendment to scope
-    note' to the ratified answer; then re-run /align-tactics
-    tactic-self-close-reap-silent-noop to finalize. STATE A FRESH SESSION NEEDS:
-    step 1 (session_reap_sweep, PR #3026 / commit 2b3ff597) is LANDED, wired at
-    dispatch-sweep:70,566, and verified reaping in production — a re-plan must
-    scope to the remaining question ONLY and must not re-propose the sweep arm;
-    the two invariants above line 222 (router continuation, node-terminal marker
-    check) stay out of scope; re-run journalctl --user -t dispatch-sweep --since
-    <ts> | grep -E
-    'SESSION_REAPED|REAP_DECLINED|SESSION_REAP_UNVERIFIED|SESSION_REAP_SKIP_OPE\
-    N_PR' (dangerouslyDisableSandbox) to reconfirm the gate behavior before
-    executing."
-  since: 2026-08-04
-  recommendation: null
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -296,3 +269,16 @@ on that proof would close the remaining class without weakening Invariant 2,
 since the evidence the invariant protects has by then been produced and verified.
 Whether the terminal-disposition contract should admit a supervisor-supplied
 disposition is exactly the kind of premise that belongs in an author ruling.
+
+## Step 2 retired (2026-08-04 author ruling)
+
+The brownfield Step 2 above — deleting `exec claude rm` from
+`dispatch-self-close` — is retired; see the 2026-08-04 clarification in this
+node's frontmatter. Self-close keeps its reap as a best-effort fast path (so
+`tactic-worker-self-close-configurable`'s gate on that call site lands as
+planned); the invalid-state lane recorded on `strategy-graph-native-dispatch`
+(2026-08-04) is the guaranteed net for declines, with the occupancy-check
+discriminator (occupied-by-terminal vs occupied-by-live) as the detection
+point and the sweeps as the second. This node's remaining scope narrows to
+making the fast path's decline detectable and loud — verify the post-state
+instead of trusting exit 0.

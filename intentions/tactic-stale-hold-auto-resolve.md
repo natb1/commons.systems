@@ -75,17 +75,44 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: null
-  fix:
-    since: 2026-08-03
-    attempt: 2
-    pushed_sha: e99304c0b345c6582eee98fe7f505aad61188435
+  fix: null
   completion:
     mergedAt: 2026-08-03T19:00:41Z
     mergeCommitSha: 190777100263403e404da68ce458cfd813f8f7d3
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main residue item 8 (dirty-main resolve-hold retry) has not
+    naturally occurred: journalctl --user -u 'dispatch-converge-*' --since
+    2026-08-03T19:00:41Z (source PR #3011 merge time) through 2026-08-04T17:20
+    UTC shows 118 dispatch-tick invocations with a 'lib-stale-hold-recheck:
+    sweep complete' line each, 7 'resolved' occurrences, and 0 'resolve-failed'
+    occurrences — the assert_clean_outside_ids refusal-then-retry path item 8
+    checks has never fired in this window. The check is sound (item 7's
+    identical journalctl method against the same window fully confirmed) and the
+    machinery works; only the triggering event (a transiently dirty main
+    coinciding with a resolve-hold attempt) has not happened yet. Deliberately
+    forcing that event is a write action outside qa-main's read-only Lane M, so
+    no tool in this session can decide item 8 further without it occurring
+    naturally."
+  since: 2026-08-04
+  recommendation: "id 7: CONFIRMED PASS. journalctl --user -u
+    'dispatch-converge-*' --since 2026-08-03T19:00:41Z | grep
+    'lib-stale-hold-recheck: sweep complete' returns 118 lines, one per distinct
+    dispatch-tick PID (no duplicates, so exactly one summary line per tick
+    invocation), all 'status=ok', all 'unknown=0 failed=0'; 7 'resolved' lines,
+    0 'resolve-failed' lines in the same window. id 8: UNDECIDED, not
+    contradicted — same window has 0 'resolve-failed' lines, so the
+    dirty-main-refusal-then-retry behavior has not yet had an occasion to run.
+    No author decision needed here; re-check after more tick traffic accumulates
+    a natural transient-dirty-main occurrence during a resolve-hold attempt.
+    Re-run to re-check: journalctl --user -u 'dispatch-converge-*' --since
+    <this-park-since> | grep -c 'resolve-failed' — a nonzero count means the
+    event finally occurred and item 8 can be scored on its actual output (does
+    the sweep summary show failed>=1 status=ok, no partial intentions/ write,
+    and does the following tick's log show a retry of the same hold id)."
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}

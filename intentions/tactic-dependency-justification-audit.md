@@ -28,8 +28,8 @@ execution:
   strategy_fingerprint: null
   fix:
     since: 2026-07-28
-    attempt: 1
-    pushed_sha: null
+    attempt: 2
+    pushed_sha: 9b151ee71fff48d94780a18757c10fa795960ed8
   completion: null
 validates:
   - strategy-owned-web-platform

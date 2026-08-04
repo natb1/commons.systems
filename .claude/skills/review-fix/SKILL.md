@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool on two lanes: code-review and security-review (Lane A) run their own built-in review-and-fix — code-review via a serialized `claude -p '/code-review low --fix'` exclusive pre-stage (Step 1b, run before the Workflow's finder fan-out), applying its own edits — trusting the built-ins, with un-auto-fixed residue dispositioned (resolve/defer/ignore) by a dedicated Opus residue phase; every other finder — domain security reviewers, cost, codeql, npm, erosion (Lane B) — still goes through code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
+description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool on two lanes: code-review and security-review (Lane A) run their own built-in review-and-fix — code-review via a serialized `claude -p '/code-review low --fix'` exclusive pre-stage (Step 1b, run before the Workflow's finder fan-out), applying its own edits — trusting the built-ins, with un-auto-fixed residue dispositioned (resolve/defer/ignore) by a dedicated Opus residue phase; every other finder — domain security reviewers, api-cost, codeql, npm, erosion (Lane B) — still goes through code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -248,6 +248,17 @@ SURFACE_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-changed-files <
 surface=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^surface=//p')
 deps=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^deps=//p')
 app_or_rules=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^app_or_rules=//p')
+
+# api_call_site: computed from diff CONTENT via a dedicated pure stdin->stdout
+# classifier — the one deliberate exception to this step's "do not run a fresh
+# `git diff` here" instruction above. That instruction exists to stop the diff
+# TEXT being re-read into this skill's context; this pipeline never brings the
+# diff into context — it pipes straight through the classifier and yields a
+# single boolean. Reuses MERGE_BASE (computed just above). Both `git diff` and
+# the classifier are read-only / pure stdin, so no dangerouslyDisableSandbox.
+api_call_site=$(git diff "$MERGE_BASE"...HEAD \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-api-call-site \
+  | sed -n 's/^api_call_site=//p')
 ```
 
 - `surface` is `empty` (no changed files), `docs` (every changed path is
@@ -258,6 +269,20 @@ app_or_rules=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^app_or_rules=//p')
 - `app_or_rules` is `true` when the diff touches application source
   (`.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`/`.go` outside `.claude/`) or a
   Firestore / Storage rules file.
+- `api_call_site` is `true` when the diff **adds** a line containing an API or
+  query call site (`fetch`/`axios`/`getDocs`/`getDoc`/`query`/`collection`/…).
+  It is computed from diff CONTENT, as its own flag rather than by relaxing
+  `app_or_rules` — relaxing `app_or_rules` would also widen the `auth` and
+  `data-exposure` domain-sweep sections, silently expanding security review
+  scope to every code diff. It gates the **advisory** `cost` section of the
+  merged `api-cost` lens, and additionally fires its **security** `firebase`
+  section. `firebase` itself still rides `app_or_rules` as well
+  (`app_or_rules || api_call_site`): the call-site pattern set matches none of
+  what that lens reviews — a rules diff (`allow read, write: if …`),
+  emulator-only code (`connectFirestoreEmulator`), or key/config exposure
+  (`apiKey`, `initializeApp`) all classify `api_call_site=false` — so gating it
+  on this flag alone would switch the reviewer off for exactly the diffs it
+  exists for.
 
 Set `security_note` for the Workflow `args`:
 - `surface=docs`: `Security review: no attack surface — docs-only diff (no executable, config, dependency, or Firestore-rules changes).`
@@ -270,9 +295,9 @@ Set `security_note` for the Workflow `args`:
 - **Dependency audit** — inline in this parent thread when `deps=true`.
 - **CodeQL alerts** — inline when `surface=code`.
 - **Erosion metrics** — inline when `surface=code`.
-- **Finder agents** — the Workflow fans out surface/`app_or_rules`-gated finders
-  when `surface=code` (the always-on `code-review` quality finder runs on every
-  surface).
+- **Finder agents** — the Workflow fans out surface / `app_or_rules` /
+  `api_call_site`-gated finders when `surface=code` (the always-on
+  `code-review` quality finder runs on every surface).
 
 Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
 to pass to the Workflow. **See `references/inline-scans.md`** for the exact
@@ -463,6 +488,7 @@ args = {
   surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
   app_or_rules:        <true|false>,
+  api_call_site:       <true|false>,    // from `api_call_site` above; gates `cost`, and widens (never narrows) `firebase`
   prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
   run_started_at:      <RUN_STARTED_AT>, // ISO8601 lower bound for the instrument-invocation transcript verifier
@@ -590,7 +616,9 @@ Workflow's classifier preserves **both** vocabularies: the security pass's
 `security-review` (Lane A) sources, the buckets are populated by their own outcome
 and the residue phase's disposition — this pipeline's classify/verify/fix stages
 run only over Lane-B sources. `Source "cost"` findings are ADVISORY and always
-route to `Deferred` (never `Fixed`, `Required`, or verify-eligible). A finding is
+route to `Deferred` (never `Fixed`, `Required`, or verify-eligible); `cost` is now
+emitted by the merged `api-cost` finder alongside security-classified `firebase`
+findings from the same agent, split by sub-pattern. A finding is
 **never** Dismissed purely because the change is small.
 
 **See `references/disposition-table.md`** for the full bucket table, the Lane-A

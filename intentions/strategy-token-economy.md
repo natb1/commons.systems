@@ -851,6 +851,78 @@ clarifications:
       list; reconciling the other two enumerations remains explicitly out of
       scope for that tactic and is a separate concern if it becomes
       load-bearing.
+  - question: What is the weekly utilization target, and does 5-hour rolling-window
+      pacing qualify it?
+    answer: "(Recorded 2026-08-04 interview, author-dictated.) The target is 100% of
+      the weekly allowance, every week, regardless of current 5-hour
+      rolling-window pacing. Token economy is paramount in the sense of
+      maximizing functional throughput within that allowance — verbosity and
+      efficiency levers serve closure velocity, never spend reduction. This
+      fixes how success_signal.threshold's 'utilization near 100% of the weekly
+      allowance' is to be read: the window is weekly, the cadence is every week
+      rather than an average across weeks, and short-window 5-hour pacing is not
+      a qualifier — a week that under-uses the allowance because 5-hour windows
+      throttled it still fails the signal, and the response is to raise
+      throughput, not to restate the target. Restates clarification 2's
+      throughput-not-savings ruling as a standing target rather than only a
+      definition; the round-2 reading of ~7% utilization (clarification 11) is a
+      measurement against this target, not a revision of it."
+  - question: Does disabling verbose output for unsupervised dispatch workers reduce
+      token draw, and what is terser conversation prose actually worth?
+    answer: "(Recorded 2026-08-04 interview; measured this round.) The config lever
+      is void and the underlying hypothesis is real but small; no tactic is
+      created. (a) VOID MECHANISM: the `verbose` settings key and the
+      `--verbose` flag are a display/logging mode — the CLI documents the flag
+      as 'Override verbose mode setting from config', and it changes what the
+      terminal renders, not what the model generates or what is re-sent as
+      context. Disabling it saves approximately zero tokens. No dispatch launch
+      path sets it today: a grep of `.claude/` finds no `verbose` key, and
+      workers spawn via `dispatch-spawn-job` as `claude --bg --name --model
+      --effort --permission-mode auto`, which carries no output-verbosity
+      argument. (b) SIZING OF THE REAL HYPOTHESIS — terser conversation prose
+      from the model, counting BOTH generation and the re-send-as-context tail
+      the author named: measured over 46 transcripts / 24 sessions / 2,646
+      assistant turns in the 3 days to 2026-08-04, price-proxy weighted, total
+      draw was ~$197 proxy, split 86% input side (input + cache_creation +
+      cache_read) and 14% output side. Assistant conversation prose totalled
+      ~37.5k tokens (~150k chars); costed all-in — generated at the output rate,
+      written to cache once, then read back on every remaining assistant turn of
+      its session — it is ~$1.53, about 0.8% of draw. Tool-use arguments (the
+      work itself: bash commands, file writes, subagent prompts, unreachable by
+      any prose-style change) are ~$10.07 all-in, about 5%. (c) WHERE THE OUTPUT
+      SIDE ACTUALLY GOES: thinking blocks are present (859 in the window) but
+      their text is not persisted in transcripts — the `.thinking` field is
+      empty and only a signature is stored — so thinking volume is not directly
+      measurable; reconciling 1,815,033 output tokens against ~1.17M chars of
+      visible content implies roughly 83% of output tokens are thinking, about
+      12% of total draw. Thinking is not re-sent as context, so the lever that
+      reaches it is the phase-to-effort routing already recorded in
+      tooling_goals, never prose style. (d) WHERE THE DRAW ACTUALLY IS: the
+      dominant 86% is the input side, dominated by cache_read — the context
+      re-read on every turn. The levers already recorded against it are
+      clarification 4 (context discipline), clarification 12 (SKILL-body prose
+      and boot boilerplate as per-session standup cost) and clarification 15
+      (prefer one script over a multi-step Claude turn loop, since every round
+      trip re-reads the whole context). Terse prose does not reach any of them;
+      reducing TURN COUNT and resident context does. (e) AUTHOR RULING: record
+      the evaluation, create NO draft tactic. Under the author's standing rule a
+      low-but-meaningful lever would still be recorded and merely left
+      unprioritized; at a ~0.8% ceiling the mechanism is declined outright
+      rather than parked. If it is ever revived, the mechanism is a
+      system-prompt or output-style-level terseness scoped to unsupervised
+      worker sessions, leaving edit and tool output untouched, and it must
+      preserve the background-job state-classifier lines (`result:` / `needs
+      input:` / `failed:` and restated outcomes, which that classifier reads
+      from message text only, never from tool output) plus enough narration to
+      debug a failed session — the same shape as the quality-preservation
+      condition, which forbids buying efficiency with lost signal. (f)
+      MEASUREMENT CAVEATS, flagged rather than buried: the re-send cost model is
+      a linear approximation (each prose block re-read once per remaining
+      assistant turn of its session, 4 chars per token), and the display-only
+      reading of `verbose` rests on the CLI's own help text rather than a
+      controlled A/B. Both would need tightening before any figure here is
+      treated as a threshold. No `recovers` edge — this round reduces no
+      reliance on delegation-anthropic-claude."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance

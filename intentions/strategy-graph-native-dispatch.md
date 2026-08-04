@@ -4089,6 +4089,84 @@ clarifications:
       directly rather than treat the inlined subset as the record. Related
       in-flight work: tactic-align-tactics-target-node-context-dropped
       (main-qa)."
+  - question: How does the router handle a node in a state its phase ladder
+      cannot progress from — a terminal session holding its worktree claim, a
+      silently-declined reap, a failed park — and what unifies these with the
+      existing conflict and CI lanes?
+    answer: "(Recorded 2026-08-04 /align interview, author-ratified.) Invalid
+      states get ONE common lane: detect, then an optional mechanical-resolution
+      tier, then an intervention skill session, then an office-hours park as the
+      fallback — generalizing the ad-hoc precedents (the conflict lane's
+      provision-exit-11 detect routing to dispatch-conflict is the worked
+      example; the fix-checks lane and the defensive sweeps are the others).
+      Detection happens at BOTH points: (a) the selection-time occupancy check
+      discriminates occupied-by-terminal (an invalid state — route to the lane)
+      from occupied-by-live (a valid skip), and (b) the existing defensive
+      sweeps become the second detection point, routing to the same lane
+      instead of minting ad-hoc parks. Guards ratified with the pattern: a
+      per-node intervention-attempt cap that parks to office-hours at the cap
+      (the fix-attempt-cap precedent); find-or-create dedup on any follow-ups
+      the lane files; and every mechanical-tier gate fails toward
+      keep/escalate. Fleet-level invalid states with no node to route (an
+      unreadable config value, a red main) instead mint a find-or-create latch
+      node — the tactic-main-red-* shape — that is simultaneously the alarm,
+      the work item, and the dedup key. Implementation retained as drafts
+      tactic-invalid-state-lane and
+      tactic-invalid-state-transcript-intervention."
+  - question: Condition 14 keeps every undeclared terminal exit frozen until an
+      operator manually reaps it because the live session is the only artifact
+      of the failure — does the invalid-state lane change that, and who owns
+      dispatch-self-close's reap line?
+    answer: "(Amended 2026-08-04 /align interview, author-ratified.) Condition
+      14's keep-for-debug is amended: an undeclared terminal exit routes to the
+      invalid-state lane, whose intervention session consumes the debugging
+      artifact autonomously — it reviews the transcript, files the
+      find-or-create root-cause follow-up, then reaps or parks — replacing the
+      wait for a human debugger. The artifact is read, not erased, which is the
+      purpose the freeze existed to serve; freeze-until-operator remains only
+      as the fallback when the intervention itself parks. The
+      declared-but-declined case (claude rm exits 0 while declining, the
+      tactic-self-close-reap-silent-noop defect) needs no doctrine change —
+      condition 14 already licenses that reap; the lane is the escalation when
+      the mechanical reap cannot proceed. Ownership: dispatch-self-close KEEPS
+      its reap as a best-effort fast path;
+      tactic-worker-self-close-configurable's default-off keep-all gate lands
+      on that call site as planned; the lane is the guaranteed net behind both.
+      tactic-self-close-reap-silent-noop's recorded brownfield Step 2 (delete
+      the reap line) is retired."
+  - question: When a parked node's PR merges outside graph-auto-merge and the
+      reconciler advances it to phase done while office_hours stays live — is
+      done-but-parked a valid state?
+    answer: "(Recorded 2026-08-04 /align interview, author ruling.) Yes — phase
+      and office_hours are conceptually orthogonal dimensions: a park means a
+      human owes a decision, and author escalation may be required even after
+      the code lands by whatever means; the merge and the phase advance are
+      orthogonal to that debt. The reconciler stays ungated (per
+      tactic-graph-auto-merge-office-hours-gate Unit 2's design, ratified on PR
+      #3033 item 10 as accepted-behavior). Greenfield consequence: the
+      office-hours queue presents BOTH dimensions — parked entries annotate the
+      node's phase (e.g. phase done, underlying work already merged) so
+      decision-state and work-state read jointly. Presentation follow-up
+      retained as draft tactic-office-hours-queue-phase-annotation."
+  - question: Does the fleet's throughput dial (max_concurrent_workers) need
+      self-expiring deviation machinery so a deliberately temporary throttle
+      cannot silently become permanent?
+    answer: "(Recorded 2026-08-04 /align interview, author ruling.) No — that
+      machinery is unintentional bloat. A deliberate temporary throttle is an
+      INTERVENTION by a session (e.g. a monitor healing the automation), and
+      the graph — not config schema — is where interventions live: the
+      intervening session mints a find-or-create restore node carrying the
+      reason and an event-shaped restore signal (the 2026-08-01 occurrence's
+      condition was an event — the blocking PR merges — not a clock), resolved
+      by monitor/office-hours restoring the cap and closing the node. Config
+      stays a bare standing value; the loader shape does not change; the fleet
+      NEVER writes the operator's config file (read-time resolution only,
+      upholding the 2026-07-11 human/machine config split). Provenance and
+      deviation-detection come from the tactic-dispatch-config-instance-repo
+      migration: the committed value is the standing value, so any local edit
+      reads as a git diff. What remains code-scoped on
+      tactic-worker-cap-config-durability: emit the cap into every select-tick
+      routing decision, so a deviation shows as a deviation in the log."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
