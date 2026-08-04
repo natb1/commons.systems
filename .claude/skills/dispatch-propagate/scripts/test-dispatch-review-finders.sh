@@ -34,13 +34,19 @@ assert_eq "finders: code !app → codeql present" "1" "$n"
 n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^npm$' || true)
 assert_eq "finders: code !app !deps → npm absent" "0" "$n"
 
-# code + app_or_rules=false → app-domain trio absent
+# code + app_or_rules=false → app-domain trio absent (firebase now gated on
+# api_call_site, not app_or_rules; default api_call_site=false)
 n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(auth|data-exposure|firebase)$' || true)
 assert_eq "finders: code !app → app-domain trio absent" "0" "$n"
 
-# code + app_or_rules=true + deps=false → 7 security reviewers present
-n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(input-validation|secrets|red-team|security-review|auth|data-exposure|firebase)$')
-assert_eq "finders: code+app → 7 security reviewers" "7" "$n"
+# code + app_or_rules=true + deps=false → 6 security reviewers present (firebase
+# excluded: it no longer gates on app_or_rules)
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(input-validation|secrets|red-team|security-review|auth|data-exposure)$')
+assert_eq "finders: code+app → 6 security reviewers" "6" "$n"
+
+# code + app_or_rules=true + deps=false → firebase absent (api_call_site defaults false)
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^firebase$' || true)
+assert_eq "finders: code+app !api_call_site → firebase absent" "0" "$n"
 
 # code + app_or_rules=true + deps=false → npm absent
 n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^npm$' || true)
@@ -62,21 +68,39 @@ assert_eq "finders: docs surface → codeql absent" "0" "$n"
 out=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
 assert_eq "finders: tests → code-review only" "code-review" "$out"
 
-# cost finder: present when surface=code + app_or_rules=true
-n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$')
-assert_eq "finders: code+app → cost present" "1" "$n"
+# cost finder: present when surface=code + api_call_site=true
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\napi_call_site=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$')
+assert_eq "finders: code+api_call_site → cost present" "1" "$n"
 
-# cost finder: absent when surface=code + app_or_rules=false
-n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
-assert_eq "finders: code !app → cost absent" "0" "$n"
+# cost finder: absent when surface=code + api_call_site=false
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\napi_call_site=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: code !api_call_site → cost absent" "0" "$n"
 
-# cost finder: absent on docs surface
-n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+# cost finder: absent on docs surface even with api_call_site=true
+n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\napi_call_site=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
 assert_eq "finders: docs surface → cost absent" "0" "$n"
 
-# cost finder: absent on tests surface
-n=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+# cost finder: absent on tests surface even with api_call_site=true
+n=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\napi_call_site=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
 assert_eq "finders: tests surface → cost absent" "0" "$n"
+
+# code + app_or_rules=false + api_call_site=true → firebase and cost present,
+# auth and data-exposure absent (the decoupling: api_call_site gates firebase/
+# cost independently of app_or_rules)
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\napi_call_site=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(firebase|cost)$')
+assert_eq "finders: code !app+api_call_site → firebase+cost present" "2" "$n"
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\napi_call_site=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(auth|data-exposure)$' || true)
+assert_eq "finders: code !app+api_call_site → auth/data-exposure absent" "0" "$n"
+
+# docs surface + api_call_site=true → firebase and cost both absent (surface==code
+# gate still dominates)
+n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\napi_call_site=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(firebase|cost)$' || true)
+assert_eq "finders: docs+api_call_site → firebase/cost absent" "0" "$n"
+
+# tests surface + api_call_site=true → firebase and cost both absent (surface==code
+# gate still dominates)
+n=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\napi_call_site=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(firebase|cost)$' || true)
+assert_eq "finders: tests+api_call_site → firebase/cost absent" "0" "$n"
 
 # <<< END MOVED <<<
 

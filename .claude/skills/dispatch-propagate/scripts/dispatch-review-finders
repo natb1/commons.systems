@@ -3,12 +3,15 @@
 # /review-fix Workflow fan-out (issue #890).
 # Usage: printf 'surface=code\ndeps=true\napp_or_rules=true\n' | dispatch-review-finders
 #
-# Reads three key=value lines on stdin (as emitted by dispatch-security-surface),
-# in any order, blank lines ignored:
+# Reads four key=value lines on stdin (as emitted by dispatch-security-surface,
+# plus api_call_site which is computed separately at the review-fix args-build
+# site), in any order, blank lines ignored:
 #   surface=<empty|docs|tests|code>
 #   deps=<true|false>
 #   app_or_rules=<true|false>
-# Missing keys default to: surface=empty, deps=false, app_or_rules=false.
+#   api_call_site=<true|false>
+# Missing keys default to: surface=empty, deps=false, app_or_rules=false,
+# api_call_site=false.
 #
 # Prints finder source names to stdout, one per line, in this fixed order,
 # omitting any not warranted by the surface flags:
@@ -19,15 +22,16 @@
 #   security-review      (surface==code)
 #   auth                 (surface==code AND app_or_rules==true)
 #   data-exposure        (surface==code AND app_or_rules==true)
-#   firebase             (surface==code AND app_or_rules==true)
-#   cost                 (surface==code AND app_or_rules==true)
+#   firebase             (surface==code AND api_call_site==true)
+#   cost                 (surface==code AND api_call_site==true)
 #   codeql               (surface==code)
 #   erosion              (surface==code)
 #   npm                  (deps==true)
 #
 # surface empty/docs/tests => exactly code-review (zero security finders).
 # surface==code       => 4 always-on security finders + codeql + erosion.
-# app_or_rules==true  => additionally auth, data-exposure, firebase, cost (8 total).
+# app_or_rules==true  => additionally auth, data-exposure (6 total).
+# api_call_site==true => additionally firebase, cost (independent of app_or_rules).
 # deps==true          => additionally npm (independent of surface).
 #
 # No network access, no git, no gh — pure stdin → stdout classification.
@@ -55,6 +59,19 @@
 # emits and the AGENT roster in review-fix.js are now deliberately NOT 1:1 — three
 # sources, one agent. Nothing about this script's own stdout output changes as a
 # result; it remains the normative SOURCE-name spec, not an agent-name spec.
+#
+# NOTE — api-cost merge (tactic-review-api-cost-lens-merge): the JS agent fan-out
+# (`agentFinderSet` in review-fix.js) now maps the `firebase` + `cost` SOURCES
+# onto ONE agent called `api-cost`. Unlike the domain-sweep fold above, this also
+# changes what GATES those two sources: they no longer ride `app_or_rules`, they
+# now gate on a new `api_call_site` flag computed from diff content (does the
+# diff touch a call site for a metered/paid API, e.g. Firebase or another billed
+# service) at the /review-fix SKILL.md args-build step, NOT by
+# `dispatch-security-surface` (which only ever emitted `surface`/`deps`/
+# `app_or_rules`). `auth` and `data-exposure` are unaffected and remain gated on
+# `app_or_rules`. As with domain-sweep, this script remains the normative
+# SOURCE-name spec, not an agent-name spec — two sources, one agent, and nothing
+# about this script's own stdout format changes as a result.
 set -euo pipefail
 
 # --- parse stdin ----------------------------------------------------------------
@@ -62,6 +79,7 @@ set -euo pipefail
 surface="empty"
 deps="false"
 app_or_rules="false"
+api_call_site="false"
 
 while IFS= read -r line; do
   # Skip blank / whitespace-only lines.
@@ -70,6 +88,7 @@ while IFS= read -r line; do
     surface=*)   surface="${line#surface=}" ;;
     deps=*)      deps="${line#deps=}" ;;
     app_or_rules=*) app_or_rules="${line#app_or_rules=}" ;;
+    api_call_site=*) api_call_site="${line#api_call_site=}" ;;
   esac
 done
 
@@ -89,6 +108,11 @@ if [[ "$surface" == "code" ]]; then
   if [[ "$app_or_rules" == "true" ]]; then
     echo "auth"
     echo "data-exposure"
+  fi
+
+  # Metered/paid API call-site finders (api-cost agent in review-fix.js),
+  # gated independently of app_or_rules on diff-content detection.
+  if [[ "$api_call_site" == "true" ]]; then
     echo "firebase"
     echo "cost"
   fi
