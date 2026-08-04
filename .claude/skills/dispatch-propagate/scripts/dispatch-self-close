@@ -81,6 +81,12 @@
 #   stays claimed until someone clears it. The distinctive log line is the
 #   canary; broad or repeated firing means a lane is failing to declare.
 #
+#   Asking "why is my job being held?" and finding no matching terminal-
+#   disposition lane above: check whether it is a duplicate-worker stand-down
+#   instead — see `dispatch-standdown` and `standdown_recheck_sweep`
+#   (lib-standdown-recheck.sh), which deliberately hold a job this way while a
+#   winner session is re-checked on the tick cadence.
+#
 # Neither invariant applies to: an empty/missing name with no `--node` (legacy /
 # plain managed-job callers, e.g. dispatch-finalize-phase), which keeps its
 # existing unconditional behavior.

@@ -122,6 +122,35 @@ OUT3=$(printf '%s' "$PAYLOAD" | DISPATCH_AUDIT_AGGREGATES_NOW=1790000000 node "$
 ID3=$(jq -r '.id' <<<"$OUT3")
 assert_eq "doc id unchanged when NOW changes" "$ID" "$ID3"
 
+# --- Case 8b: routing_recommendations (advisory projection) -----------------
+# The fixture PAYLOAD has NO by_phase_outcome (windows predating the outcome
+# envelope lack it), so the field must be present and EMPTY — never a failure.
+assert_eq "doc has routing_recommendations" "true" \
+  "$(jq -c '.doc | has("routing_recommendations")' <<<"$OUT")"
+assert_eq "routing_recommendations empty without by_phase_outcome" "[]" \
+  "$(jq -c '.doc.routing_recommendations' <<<"$OUT")"
+
+# With a qa entry grounded on hit_rate (fixes_applied in the numerator — the
+# open qa accounting gap), the recommendation MUST be tagged untrusted.
+WITH_QA_OUTCOME=$(jq -c '.by_phase_outcome = {"qa": {"sessions": 4, "findings_surfaced": 10, "fixes_applied": 1, "hit_rate": 0.1}}' <<<"$PAYLOAD")
+QA_OUT=$(printf '%s' "$WITH_QA_OUTCOME" | node "$WRITER_MJS" --dry-run 2>/dev/null)
+assert_eq "qa recommendation entry present" "qa" \
+  "$(jq -r '.doc.routing_recommendations[0].phase' <<<"$QA_OUT")"
+assert_eq "qa hit_rate recommendation is untrusted" "true" \
+  "$(jq -c '.doc.routing_recommendations[0].untrusted' <<<"$QA_OUT")"
+assert_eq "qa yield_metric unverified" '{"name":"hit_rate","value":0.1,"verified":false}' \
+  "$(jq -c '.doc.routing_recommendations[0].yield_metric' <<<"$QA_OUT")"
+assert_eq "qa current_model from static map" "sonnet" \
+  "$(jq -r '.doc.routing_recommendations[0].current_model' <<<"$QA_OUT")"
+assert_eq "untrusted entry recommends no model change" "null" \
+  "$(jq -c '.doc.routing_recommendations[0].recommended_model' <<<"$QA_OUT")"
+
+# A review entry on hit_rate has no known accounting gap → verified/trusted.
+WITH_REVIEW_OUTCOME=$(jq -c '.by_phase_outcome = {"review": {"sessions": 3, "findings_surfaced": 10, "fixes_applied": 8, "hit_rate": 0.8}}' <<<"$PAYLOAD")
+REVIEW_OUT=$(printf '%s' "$WITH_REVIEW_OUTCOME" | node "$WRITER_MJS" --dry-run 2>/dev/null)
+assert_eq "review hit_rate recommendation is trusted" "false" \
+  "$(jq -c '.doc.routing_recommendations[0].untrusted' <<<"$REVIEW_OUT")"
+
 # --- Case 9: fail-closed validation branches --------------------------------
 # Each branch must exit non-zero and print exactly the matching one-line stderr
 # diagnostic prefixed "audit-aggregate-writer:". assert_fail captures both the

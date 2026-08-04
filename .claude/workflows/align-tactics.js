@@ -33,7 +33,14 @@
  *       rounds:{count,last_completed,last_aligned} },
  *     target_node: {              // tactic mode ONLY: the single tactic being (re)planned
  *       id, statement, rationale, body, phase },
- *     draft_tactics:[ { id, statement, body } ],  // strategy mode: retained /align-strategy drafts
+ *       // ALL FIVE fields ride into the plan prompt (synthesizeTargetPlanTactic
+ *       // + tacticModeFraming below). `body` must be the node's FULL current
+ *       // body text below the frontmatter fence: the plan agent reconciles
+ *       // against it and its returned body_markdown REPLACES it wholesale
+ *       // (references/write-path.md), so a truncated body silently loses
+ *       // content. `phase` is the finalize-vs-re-plan discriminator
+ *       // (null/absent/"draft" => finalize; any in-flight phase => re-plan).
+ *     draft_tactics:[ { id, statement, body } ],  // strategy mode: retained /align drafts
  *     existing_children:[ { id, phase, on_signal_path } ], // non-draft children already on the signal path
  *     reuse_hunts:[ { focus, scope } ],           // up to 3 reuse-hunt foci (default 1)
  *     existing_ids:[ ... ] }      // pre-existing real node ids (for the caller's resolveTempRefs pass)
@@ -449,6 +456,114 @@ const untrusted = (text) => ['<untrusted>', String(text == null ? '' : text), '<
 // Compact JSON for embedding a data structure inside a prompt.
 const asJson = (obj) => JSON.stringify(obj, null, 2);
 
+// --- tactic-mode target-node context -----------------------------------------
+
+// synthesizeTargetPlanTactic — build the one-entry `planTactics` record for
+// mode: "tactic" from args.target_node.
+//
+// The defect this fixes: this record used to carry only id/statement, and it is
+// the object buildPlanPrompt serializes verbatim (`untrusted(asJson(tactic))`),
+// so the plan agent never saw the node's own rationale, its accumulated body
+// evidence, or its phase. All three now ride through. PURE (no fs/git) so the
+// probe can eval it in isolation.
+//
+// >>> synthesizeTargetPlanTactic: sliced + eval'd by test-align-tactics-target-context.sh >>>
+function synthesizeTargetPlanTactic(targetNode) {
+  const t = targetNode || {};
+  return {
+    temp_ref: t.id || 'target',
+    slug_hint: t.id || 'target',
+    statement: t.statement || '',
+    // The node's own accumulated evidence — the primary input to a finalize or
+    // a re-plan, not decoration.
+    rationale: t.rationale || '',
+    body: t.body || '',
+    // null (not undefined) so the discriminator is explicit in the serialized
+    // JSON the agent reads.
+    phase: t.phase == null ? null : t.phase,
+    claude_eligible: true,
+    draft_source_id: t.id || null,
+    existing_id: t.id || null,
+  };
+}
+// <<< synthesizeTargetPlanTactic <<<
+
+// tacticModeFraming — the finalize-vs-re-plan prose block for buildPlanPrompt.
+//
+// Returns [] in strategy mode (a decomposed tactic is new work with no prior
+// body to reconcile). In tactic mode it branches on the target node's phase.
+// The doctrine text is spliced from
+// .claude/skills/align-tactics/references/tactic-target.md:40-56 (draft/raw ->
+// finalize) and :58-73 + :160-172 (soft-frozen -> re-plan, clarification 32's
+// whole-node reconciliation bar) — author-approved wording, not re-derived.
+//
+// Phase values are the schema enum (packages/intentionsutil/src/schema.ts:36-43):
+// draft | align-tactics | implement | qa | review | main-qa | done. A null,
+// empty, or "draft" phase means never-decomposed; anything else is in-flight.
+// ("fix" is NOT a phase — the CI-fix interrupt lives in execution.fix.)
+//
+// >>> tacticModeFraming: sliced + eval'd by test-align-tactics-target-context.sh >>>
+function tacticModeFraming(mode, tactic) {
+  if (mode !== 'tactic') return [];
+  const t = tactic || {};
+  const phase = t.phase == null ? '' : String(t.phase);
+  const isFinalize = phase === '' || phase === 'draft';
+  const head = isFinalize
+    ? [
+        'TACTIC-MODE DISPOSITION — FINALIZE. This node has never been decomposed',
+        '(its phase is absent/draft), so this run authors its FIRST full',
+        'clean-session plan body.',
+      ]
+    : [
+        `TACTIC-MODE DISPOSITION — RE-PLAN. This node is soft-frozen at phase`,
+        `"${phase}": work is already in flight against the body below. This run`,
+        'RECONCILES that node, it does not author a plan from zero.',
+      ];
+  const shared = [
+    '',
+    'The `rationale` and `body` fields on the tactic below are the node\'s OWN',
+    'accumulated evidence — the recorded diagnosis, root cause, path:line',
+    'anchors, caveats, and instructions its author put there. Read them as the',
+    'PRIMARY input. The gather-phase reuse evidence and the strategy substance',
+    'are context around them, never a replacement for them.',
+    '',
+    'YOUR RETURNED body_markdown REPLACES THE NODE BODY WHOLESALE. Anything in',
+    '`body` that is still true and still needed — root-cause analysis, path:line',
+    'anchors, explicit caveats, instructions addressed to sibling or child nodes',
+    '— must be carried forward into what you author, or it is permanently lost.',
+    'Anything in it that your plan contradicts must be rewritten, not left',
+    'standing beside it.',
+  ];
+  const tail = isFinalize
+    ? [
+        '',
+        'WHOLE-NODE RECONCILE (clarification 32): rewrite any stale draft',
+        'narrative so nothing in the body contradicts the finalized plan. Do NOT',
+        'sweep the serving strategy\'s other draft tactics and do NOT propose a',
+        'rounds bump — neither is this run\'s job.',
+      ]
+    : [
+        '',
+        'WHOLE-NODE RECONCILIATION BAR (clarification 32): reconcile the node\'s',
+        'WHOLE body — the ## Context prose, EVERY unit, ## Reuse, and',
+        '## Verification — against the full current strategy substance shown',
+        'above, in this one pass. A one-bullet delta that leaves a sibling unit',
+        'or a verification step contradicting the amendment is an INCOMPLETE',
+        'amendment. Preserve verbatim every unit the current strategy substance',
+        'does not invalidate (units already implemented against this body are',
+        'cited by landed work); revise only what it actually invalidates, and',
+        'say explicitly in ## Context what changed and why. Do NOT relabel or',
+        'renumber the phase — the caller preserves the in-flight phase on',
+        'landing.',
+      ];
+  return head.concat(shared, tail, [
+    '',
+    'Whichever disposition applies, the body_markdown you return must satisfy',
+    'the PLAN BODY SCHEMA above in full.',
+  ]);
+}
+// <<< tacticModeFraming <<<
+
 // --- prompt builders ---------------------------------------------------------
 
 // gather: reuse-hunt Explore-style agent (mechanical search, reuse-first).
@@ -702,7 +817,7 @@ function buildDecomposePrompt(strategy, drafts, gather, drift) {
 }
 
 // plan: the per-tactic plan-body schema + quality bar (SKILL.md Step 3), inline.
-function buildPlanPrompt(strategy, tactic, gather) {
+function buildPlanPrompt(strategy, tactic, gather, mode) {
   return [
     'You are the plan-authoring agent for a single claude-eligible tactic. Produce',
     'a FULL clean-session plan and return it as body_markdown. The quality bar:',
@@ -749,12 +864,28 @@ function buildPlanPrompt(strategy, tactic, gather) {
     '',
     `Serving strategy id: ${strategy.id || '?'}`,
     'Strategy intent:',
-    untrusted(
-      [
-        `statement: ${strategy.statement || ''}`,
-        `success_signal: ${strategy.success_signal || ''}`,
-      ].join('\n')
-    ),
+    mode === 'tactic'
+      ? untrusted(
+          asJson({
+            id: strategy.id,
+            statement: strategy.statement,
+            rationale: strategy.rationale,
+            success_signal: strategy.success_signal,
+            reading: strategy.reading,
+            gap: strategy.gap,
+            conditions: strategy.conditions || [],
+            clarifications: strategy.clarifications || [],
+            rounds: strategy.rounds || null,
+          })
+        )
+      : untrusted(
+          [
+            `statement: ${strategy.statement || ''}`,
+            `success_signal: ${strategy.success_signal || ''}`,
+          ].join('\n')
+        ),
+    '',
+    ...tacticModeFraming(mode, tactic),
     '',
     'Tactic to plan:',
     untrusted(asJson(tactic)),
@@ -792,7 +923,7 @@ let subagentsLaunched = 0;
 // A short summary of the decomposition target, reused by the reuse-hunt prompts.
 const targetSummary =
   mode === 'tactic'
-    ? `Finalize/re-plan the single tactic "${(_a.target_node && _a.target_node.id) || '?'}": ${(_a.target_node && _a.target_node.statement) || ''}`
+    ? `Finalize/re-plan the single tactic "${(_a.target_node && _a.target_node.id) || '?'}" (phase: ${(_a.target_node && _a.target_node.phase) || 'draft/raw — finalize'}): ${(_a.target_node && _a.target_node.statement) || ''}`
     : `Decompose strategy "${strategy.id || '?'}" into its minimum signal-validating tactic subtree this round.`;
 
 // --- 1. GATHER (parallel: reuse hunts + corpus scan + clause coverage) --------
@@ -954,17 +1085,7 @@ let planTactics = [];
 if (!driftProceed) {
   planTactics = []; // parked — nothing to plan this run
 } else if (mode === 'tactic') {
-  const t = _a.target_node || {};
-  planTactics = [
-    {
-      temp_ref: t.id || 'target',
-      slug_hint: t.id || 'target',
-      statement: t.statement || '',
-      claude_eligible: true,
-      draft_source_id: t.id || null,
-      existing_id: t.id || null,
-    },
-  ];
+  planTactics = [synthesizeTargetPlanTactic(_a.target_node)];
 } else {
   planTactics = (decompose.tactics || []).filter((t) => t.claude_eligible === true);
 }
@@ -975,7 +1096,7 @@ if (planTactics.length) {
   subagentsLaunched += planTactics.length;
   const planResults = await parallel(
     planTactics.map((t) => () =>
-      agent(buildPlanPrompt(strategy, t, gather), {
+      agent(buildPlanPrompt(strategy, t, gather, mode), {
         model: 'opus',
         agentType: 'general-purpose',
         schema: PLAN_SCHEMA,

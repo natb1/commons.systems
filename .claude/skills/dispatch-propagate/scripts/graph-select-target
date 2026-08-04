@@ -23,7 +23,15 @@
 # The ONE exception is the CI-fix interrupt (tactic-fix-interrupt-orthogonal-state):
 # selection is the sole CI-routing authority. On a fix-interruptible ladder phase
 # (implement/qa/review) whose PR CI has CONCLUDED-RED and which carries no active
-# interrupt, the gate ENTERS the interrupt — `apply-fix-state --set-fix` +
+# interrupt, the gate ENTERS the interrupt — UNLESS the PR is also CONFLICTING,
+# which is EXCLUDED from the exception (tactic-conflict-outranks-ci-precedence):
+# `interruptRoute` (packages/intentionsutil/src/transitions.ts) ranks a merge
+# conflict above red CI, so such a node makes NO write here at all — it is emitted
+# at its ladder phase and reaches the conflict lane via provision-node-worktree's
+# exit 11. The red verdict describes stale pre-merge code, and the fix lane cannot
+# run until the conflict clears, so spending a graph write plus one of a limited
+# fix-attempt budget on it is pure waste. For the non-conflicting red case the gate
+# still enters the interrupt — `apply-fix-state --set-fix` +
 # `graph-commit` (a state-only commit on main, mirroring what transition-node
 # used to do at the transition seam) — and emits the candidate as `fix` the same
 # tick. On CONCLUDED-GREEN of an active interrupt it RESOLVES it — `apply-fix-state
@@ -58,8 +66,12 @@
 #                        otherwise wraps around this selector. CLAIM OBLIGATION:
 #                        each claim is a budget-consuming marker. A caller that
 #                        launches its selections hands the marker to
-#                        dispatch-graph-execute (which clears it on spawn); a
-#                        caller that does NOT launch MUST `reservation_clear <id>`
+#                        dispatch-graph-execute, which re-stamps it
+#                        `origin=spawned` on a successful spawn kick and lets
+#                        reservation_sweep release it once the worker
+#                        registers as live (or via the bounded handoff TTL if
+#                        it never does); a caller that does NOT launch MUST
+#                        `reservation_clear <id>`
 #                        for every emitted node. Markers written by this flag carry
 #                        `origin=standalone` so reservation_sweep reclaims them
 #                        once they age past DISPATCH_RESERVATION_STANDALONE_TTL_S
@@ -306,15 +318,29 @@ if [[ -n "$STANDALONE" ]]; then
   # prevent. It likewise does NOT inherit that branch's pace-curve OVERRIDE: the
   # pace-curve gap (TARGET_N - LIVE_COUNT) is applied as a second ceiling below,
   # for the same non-sovereignty reason. LIVE_COUNT = busy workers + reservations.
-  # All four
-  # environmental reads fail OPEN, each to its own safe default: EXHAUSTED → `ok`
-  # on missing telemetry; MAX_WORKERS → headroom UNKNOWN on an unreadable or
-  # non-numeric ceiling; TARGET_N → pace budget UNKNOWN on the same; daemon UNKNOWN
-  # (busy-worker read failed) → skip the
-  # headroom computation outright. UNKNOWN on any of those reads converges on
-  # the same fail-open floor, TOP=1 (the standalone analogue of
-  # dispatch-select-tick's "GAP stays 1"), never leaving TOP unclamped when the
-  # live-worker count or the ceiling is unknown.
+  # Three of the four environmental reads fail OPEN, each to its own safe
+  # default: EXHAUSTED → `ok` on missing telemetry; MAX_WORKERS → headroom
+  # UNKNOWN on an unreadable or non-numeric ceiling; TARGET_N → pace budget
+  # UNKNOWN on the same — converging on the fail-open floor, TOP=1 (the
+  # standalone analogue of dispatch-select-tick's "GAP stays 1"), never leaving
+  # TOP unclamped when the ceiling is unknown. The FOURTH read — daemon
+  # UNKNOWN, busy-worker count failed/uncorroborated — is different: it means
+  # true live occupancy can't be determined, not that a config ceiling is
+  # unreadable, so it does NOT fail open to TOP=1. It fails CLOSED to the
+  # concurrency-cap-style `live-read-unverified` disposition instead (see the
+  # busy-read branch below) — assuming headroom while blind to occupancy risks
+  # selecting a target an already-running worker owns.
+  #
+  # The ledger is SWEPT before it is counted, mirroring dispatch-select-tick's
+  # autonomous gate. Since the spawn handoff landed, a launched claim is no
+  # longer cleared at the kick but re-stamped `origin=spawned` and held until its
+  # worker registers — so an unswept count charges a registered worker twice
+  # (once busy, once reserved). That matters more here than on the manual lane:
+  # this path deliberately omits the floor-of-1 above, so an inflated LIVE_COUNT
+  # drives HEADROOM to 0 and the run selects NOTHING while real headroom exists.
+  # Sweep rule (a) drops exactly those redundant markers. The dispatch lock is
+  # already held (step (a) above), so the sweep cannot race a concurrent tick.
+  reservation_sweep 1>&2 || true
   if BUSY=$(claude_agents_count_busy_workers); then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
@@ -379,7 +405,17 @@ if [[ -n "$STANDALONE" ]]; then
       (( TOP > 1 )) && TOP=1
     fi
   else
-    (( TOP > 1 )) && TOP=1
+    # daemon UNKNOWN (busy-worker read failed/uncorroborated, #lib-claude-agents
+    # EMPTY-READ CORROBORATION). Unlike the MAX_WORKERS/TARGET_N config reads
+    # above, this is NOT a "ceiling unreadable" case that can safely fail open to
+    # TOP=1 — it means true live occupancy is unknown, so assuming any headroom
+    # risks selecting a target an already-running worker owns (a duplicate
+    # worker). Fail CLOSED: mirror the concurrency-cap disposition above rather
+    # than fall through to the TOP=1 floor.
+    DISPOSITION="live-read-unverified"
+    echo "graph-select-target: busy-worker read unverified (daemon unreachable/uncorroborated); deferring rather than assuming headroom" >&2
+    echo "empty"
+    exit 0
   fi
 fi
 
@@ -494,30 +530,104 @@ _hold_node_fix_cap() {
 }
 
 # _read_pr_ci <pr> — one gh_pr_view_rest + one CI verdict, into globals
-# _CI_MERGED / _CI_HEAD / _CI_VERDICT. rc 1 when the PR is unreadable.
+# _CI_MERGED / _CI_HEAD / _CI_VERDICT / _CI_MERGEABLE. rc 1 when the PR is
+# unreadable. _CI_MERGEABLE is read off the SAME already-fetched PR view (no
+# extra gh round-trip): gh_pr_view_rest projects REST's boolean `.mergeable`
+# into the porcelain enum MERGEABLE/CONFLICTING/UNKNOWN (lib.sh, the
+# `mergeable:` branch of its jq projection).
 _read_pr_ci() {
   local pr="$1" pv
-  _CI_MERGED=""; _CI_HEAD=""; _CI_VERDICT=""
+  _CI_MERGED=""; _CI_HEAD=""; _CI_VERDICT=""; _CI_MERGEABLE=""
   pv=$(gh_pr_view_rest "$pr" 2>/dev/null) || return 1
   _CI_MERGED=$(jq -r '.mergedAt // empty' <<<"$pv" 2>/dev/null)
+  _CI_MERGEABLE=$(jq -r '.mergeable // empty' <<<"$pv" 2>/dev/null)
   _CI_HEAD=$(jq -r '.headRefOid // empty' <<<"$pv" 2>/dev/null)
   [[ -n "$_CI_HEAD" ]] || return 1
   _CI_VERDICT=$(dispatch_ci_verdict_rest "$_CI_HEAD" 2>/dev/null || echo pending)
   return 0
 }
 
-# _gate_maybe_interrupt <id> <pr> — for a fix-interruptible ladder phase carrying
-# NO active interrupt: enter `fix` iff the PR's CI has CONCLUDED-RED. On entry it
-# writes execution.fix and lands it on main.
-#   rc 0 — interrupt entered (caller emits `fix` this tick).
-#   rc 1 — no interrupt (caller falls through to the phase's normal gate).
-#   rc 3 — interrupt was due but the write/commit failed (reason printed; skip).
+# _gate_maybe_interrupt <id> <pr> <phase> — for a fix-interruptible ladder phase
+# carrying NO active interrupt: decide whether an interrupt is due, and which lane
+# it belongs to, by delegating to `interruptRoute`
+# (packages/intentionsutil/src/transitions.ts — the single home of the
+# CONFLICTING-outranks-failing-CI precedence rule). Only the `fix` route writes:
+# it writes execution.fix and lands it on main.
+#   rc 0 — fix interrupt entered (caller emits `fix` this tick).
+#   rc 1 — no interrupt is due for this caller (caller falls through to the
+#          phase's normal gate and the node is emitted at its ladder phase).
+#          This covers BOTH the `null` route and the `conflict` route: a
+#          CONFLICTING PR is DECLINED here — no execution.fix write, no
+#          graph-commit, no fix attempt consumed — and reaches the conflict lane
+#          through provision-node-worktree's exit 11 instead.
+#   rc 3 — an interrupt was due but could not be acted on (write/commit failed,
+#          an unreadable `.mergeable`, or a failed interruptRoute eval); a short
+#          reason token is printed on stdout and the caller skips the node.
+#
+# STDOUT DISCIPLINE: on rc 1 this function must print NOTHING to stdout. The
+# caller's arm falls through to its own `echo "$phase"`, and sensor_gate's whole
+# stdout is captured as the emitted phase — so the conflict-decline diagnostic
+# (and any future rc-1 note) goes to STDERR only. rc 1/rc 3 stdout tokens are
+# recorded as skip reasons; rc 3 is the only rc-1-adjacent path that may print.
 _gate_maybe_interrupt() {
-  local id="$1" pr="$2"
+  local id="$1" pr="$2" phase="$3"
   [[ "$pr" == "null" || -z "$pr" ]] && return 1
   _read_pr_ci "$pr" || return 1               # unreadable PR → do not interrupt
   [[ -n "$_CI_MERGED" ]] && return 1          # merged-awaiting-reconcile → not an interrupt
-  [[ "$_CI_VERDICT" == "failing" ]] || return 1
+
+  # Cost guard, NOT the routing rule: interruptRoute returns null unless CI is
+  # failing or the PR is CONFLICTING, so skip the node subprocess when neither
+  # holds (the overwhelmingly common case). This condition MUST stay a
+  # superset of interruptRoute's non-null conditions; the transitions.test.ts
+  # case named for "the shell pre-filter's superset invariant" pins that.
+  if [[ "$_CI_VERDICT" != "failing" && "$_CI_MERGEABLE" != "CONFLICTING" ]]; then
+    return 1
+  fi
+
+  # Validate at the shell/TypeScript edge before crossing it — interruptRoute
+  # takes closed unions, so an unexpected value would silently route to `null`
+  # (mirrors reconcile-graph-review-stall's posture on the same fields).
+  case "$_CI_MERGEABLE" in
+    MERGEABLE|CONFLICTING|UNKNOWN) ;;
+    *)
+      echo "graph-select-target: unexpected .mergeable '$_CI_MERGEABLE' from gh_pr_view_rest #$pr for $id (projection changed?)" >&2
+      echo "mergeable-unreadable"; return 3 ;;
+  esac
+  # dispatch_ci_verdict_rest emits passing|failing|pending; CiVerdict's third
+  # member is "unknown". Normalize, exactly as reconcile-graph-review-stall does.
+  local verdict
+  case "$_CI_VERDICT" in
+    passing|failing) verdict="$_CI_VERDICT" ;;
+    *) verdict="unknown" ;;
+  esac
+
+  local route
+  route=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+    const { interruptRoute } = await import("./packages/intentionsutil/src/transitions.js");
+    process.stdout.write(String(interruptRoute(process.argv[1], process.argv[2], process.argv[3])));
+  ' "$phase" "$verdict" "$_CI_MERGEABLE") ) || {
+    echo "graph-select-target: interruptRoute eval failed for $id (pr #$pr)" >&2
+    echo "route-eval-failed"; return 3
+  }
+
+  case "$route" in
+    conflict)
+      # Conflict outranks failing CI (transitions.ts, interruptRoute). DECLINE the
+      # interrupt: no execution.fix write, no graph-commit, no attempt burned. The
+      # candidate falls through to its phase's normal gate and is emitted at its
+      # ladder phase; provision-node-worktree exit 11 -> dispatch-graph-execute
+      # case 11 routes it to /dispatch-conflict Lane 3, which is the only lane
+      # that actually resolves the conflict.
+      #
+      # STDERR ONLY. An rc-1 return falls through to the caller's own
+      # `echo "$phase"`, and sensor_gate's stdout is captured whole as the emitted
+      # phase — anything printed to stdout here corrupts the selection line.
+      echo "graph-select-target: $id PR #$pr is CONFLICTING; conflict outranks failing CI — declining the fix interrupt (provisioning routes it to the conflict lane)" >&2
+      return 1 ;;
+    fix) ;;                 # fall through to the interrupt write below
+    *) return 1 ;;          # "null" or anything else: no interrupt is due
+  esac
+
   # CONCLUDED-RED at an interruptible phase, fix null (guaranteed: the router
   # would have emitted phase `fix` otherwise). Enter the interrupt this tick.
   if _apply_fix "$id" --set-fix >/dev/null 2>&1 \
@@ -532,6 +642,21 @@ _gate_maybe_interrupt() {
 # carries an active interrupt (router emitted phase `fix`). Resolve on green,
 # guard/retry otherwise. Prints the phase to emit (rc 0), a skip reason
 # (rc 1), or an env error (rc 2).
+#
+# DELIBERATELY CONFLICT-BLIND: this function reads CI only (`_read_pr_ci`'s
+# `_CI_VERDICT`) and never consults `_CI_MERGEABLE`. A node that entered `fix`
+# BEFORE the conflict appeared keeps retrying and guarding here, and can burn
+# fix attempts against a CI verdict that describes stale pre-merge code. That
+# is authorized scope residue of the tactic that made `_gate_maybe_interrupt`
+# (above, around lines 537-559) conflict-aware at ENTRY — not an oversight:
+# the node is not stranded, because `provision-node-worktree` exit 11 (routed
+# by `dispatch-graph-execute` case 11 to `/dispatch-conflict` Lane 3) still
+# catches it, and that lane is the only one that actually resolves the
+# conflict. Closing this asymmetry belongs to a later, separate unification of
+# this arm into the ordered `interruptRoute` cascade
+# (packages/intentionsutil/src/transitions.ts), and, separately, to
+# `tactic-graph-router-conflict-routing`'s `execution.conflict` state — neither
+# of which this PR introduces.
 _gate_fix_active() {
   local id="$1" pr="$2" pushed_sha="$3" fix_since="$4" out phase
   if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
@@ -596,7 +721,7 @@ sensor_gate() {
     implement)
       # Interruptible: a red PR at implement enters fix this tick; else ready
       # (implement has no CI gate of its own).
-      _gate_maybe_interrupt "$id" "$pr"
+      _gate_maybe_interrupt "$id" "$pr" "$phase"
       case $? in
         0) echo "fix"; return 0 ;;
         3) return 1 ;;
@@ -605,7 +730,7 @@ sensor_gate() {
     qa|review)
       # Interruptible: a red PR enters fix this tick; otherwise the existing
       # CI-verdict-present gate.
-      _gate_maybe_interrupt "$id" "$pr"
+      _gate_maybe_interrupt "$id" "$pr" "$phase"
       case $? in
         0) echo "fix"; return 0 ;;
         3) return 1 ;;
@@ -696,8 +821,10 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha fix_since; do
   # the failure posture of dispatch-select-tick's own emit_graph_selection call.
   #
   # The `standalone` ORIGIN stamp (4th arg) bounds the claim's lifetime. Unlike a
-  # tick claim — handed straight to dispatch-graph-execute, which clears it on
-  # spawn — a standalone claim has no guaranteed consumer: a caller that discards
+  # tick claim — handed straight to dispatch-graph-execute, which re-stamps it
+  # `origin=spawned` on a successful spawn kick and lets reservation_sweep
+  # release it once the worker registers as live (or via the bounded handoff
+  # TTL if it never does) — a standalone claim has no guaranteed consumer: a caller that discards
   # the output, crashes, or is interrupted between selection and launch leaves the
   # marker behind, and reservation_sweep's dead-session rule never reclaims it while
   # the (long-lived) calling session stays alive. Markers stamped `origin=standalone`

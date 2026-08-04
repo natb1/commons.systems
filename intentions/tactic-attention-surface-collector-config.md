@@ -90,7 +90,8 @@ Scope:
   `EnvironmentFile` (`nix/nixos/office-hours.nix:27-64` contract).
 - Set the instance values at the current instance-config site
   (`nix/nixos/configuration.nix:41-45`, the interim home whose relocation to the
-  instance flake is tracked by `tactic-nix-fullsystem-instance-split`) and
+  instance flake is tracked by `tactic-nix-instance-flake-extraction` and
+  `tactic-nix-operator-machine-cutover`) and
   mirror the option shape in the
   `examples/office-hours-nate/flake.nix` template with placeholder values.
 - The module stays forkable: no personal values in module defaults; new

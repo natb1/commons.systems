@@ -43,6 +43,8 @@ result
 /.claude/launch.json
 /.claude/routines
 /.claude/scheduled_tasks.lock
+/.claude/loop.md
+/.claude/output-styles
 /.idea
 /.vscode
 

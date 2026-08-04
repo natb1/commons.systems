@@ -23,10 +23,15 @@ BODY_MARKER="FIXTURE BODY MARKER TEXT"
 
 # Write a valid intentions/<id>.md node file into $1 (a repo working dir).
 # $2 = node id, $3 = phase, $4 = execution YAML block (optional; defaults to
-# `execution: null`). $4 lets a case seed an active CI-fix interrupt
-# (execution.fix non-null) to exercise the --expect-fix-active gate.
+# `execution: null`), $5 = office_hours YAML block (optional; defaults to
+# `office_hours: null`).
+# $4 lets a case seed an active CI-fix interrupt (execution.fix non-null) to
+# exercise the --expect-fix-active gate, or an execution.markers list (e.g.
+# `reviewed`) to exercise the gate's reviewed-marker guard. $5 lets a case park
+# the node so the gate's not-parked check fires.
 write_node_fixture() {
   local repo="$1" id="$2" phase="$3" execution="${4:-execution: null}"
+  local office_hours="${5:-office_hours: null}"
   mkdir -p "$repo/intentions"
   cat > "$repo/intentions/$id.md" <<EOF
 ---
@@ -44,7 +49,7 @@ clarifications: []
 tooling_goals: []
 validates: []
 blocked_by: []
-office_hours: null
+$office_hours
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -67,6 +72,8 @@ EOF
 # $2 = "with_node:<phase>" to seed intentions/<node-id>.md on origin/main
 #      before push (execution: null); "with_fix:<phase>" to seed it with a
 #      non-null execution.fix (an active CI-fix interrupt) at the given phase;
+#      "with_parked:<phase>" to seed it with a populated office_hours park;
+#      "with_reviewed:<phase>" to seed it with execution.markers: [reviewed];
 #      or empty to omit the node entirely.
 REPO=""
 BARE=""
@@ -81,6 +88,10 @@ make_repo() {
   git -C "$REPO" config user.email "test@example.com"
   git -C "$REPO" config user.name "Test User"
   git -C "$REPO" remote add origin "$BARE"
+  # The selection gate resolves its scope-fingerprint stamp sidecar under
+  # <project-root>/.claude/worktrees/ (run_sut points DISPATCH_GRAPH_MAIN_WORKTREE
+  # here). Untracked — a stamp is a sidecar, never committed.
+  mkdir -p "$REPO/.claude/worktrees"
 
   if [[ "$seed" == with_node:* ]]; then
     local phase="${seed#with_node:}"
@@ -103,6 +114,33 @@ execution:
 FIXEOF
 )
     write_node_fixture "$REPO" "$branch_id" "$phase" "$exec_block"
+  elif [[ "$seed" == with_parked:* ]]; then
+    local phase="${seed#with_parked:}"
+    local park_block
+    park_block=$(cat <<'PARKEOF'
+office_hours:
+  reason: fixture park
+  since: 2026-08-01
+  recommendation: null
+  session_type: other
+PARKEOF
+)
+    write_node_fixture "$REPO" "$branch_id" "$phase" "execution: null" "$park_block"
+  elif [[ "$seed" == with_reviewed:* ]]; then
+    local phase="${seed#with_reviewed:}"
+    local reviewed_block
+    reviewed_block=$(cat <<'REVEOF'
+execution:
+  branch: fixture-branch
+  pr: null
+  attempts: {}
+  markers:
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+REVEOF
+)
+    write_node_fixture "$REPO" "$branch_id" "$phase" "$reviewed_block"
   else
     printf '%s\n' "# placeholder" > "$REPO/README.md"
   fi
@@ -158,7 +196,12 @@ run_sut() {
   : > "$GH_LOG"
   cd "$REPO"
   set +e
-  OUT=$(PATH="$STUB_DIR:$PATH" GH_LOG="$GH_LOG" GH_PR_NUM="${GH_PR_NUM:-}" "$SUT" "$@" 2>&1)
+  # DISPATCH_GRAPH_MAIN_WORKTREE pins the selection gate's project-root
+  # resolution (lib-graph-worktree.sh's resolve_main_worktree) at the fixture
+  # repo, so its scope-fingerprint stamp sidecar is looked up under
+  # $REPO/.claude/worktrees/ and never touches the real repo.
+  OUT=$(PATH="$STUB_DIR:$PATH" GH_LOG="$GH_LOG" GH_PR_NUM="${GH_PR_NUM:-}" \
+    DISPATCH_GRAPH_MAIN_WORKTREE="$REPO" "$SUT" "$@" 2>&1)
   RC=$?
   # The suite runs `set -uo pipefail` and never enables errexit; `set +e` above
   # only guards this one command substitution. Do NOT force errexit on here —
@@ -287,5 +330,48 @@ echo "Test 13: no gate flag given -> exit 2 (usage error)"
 make_repo "tactic-no-gate" "with_node:implement"
 run_sut "tactic-no-gate" --pr-mode none
 assert_eq "no-gate-flag: exit 2" "2" "$RC"
+
+# ---------------------------------------------------------------------------
+# The cases below cover the routing the shared selection gate
+# (assert-node-selection -> check-node-selection.ts) added to this front door
+# in tactic-phase-entry-selection-gate Unit 2. Test 2 (phase mismatch) and
+# Test 9 (--expect-fix-active with a null execution.fix) above are the same
+# contract, now regression-guarded through the shared gate rather than a local
+# phase-string comparison.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Test 14: node parked to office_hours between selection and entry -> exit 3.
+# Previously only qa-fix caught this, and only later; now every phase does, at
+# the front door, before any gh call.
+# ---------------------------------------------------------------------------
+echo "Test 14: office_hours-parked node -> exit 3"
+make_repo "tactic-parked-node" "with_parked:implement"
+run_sut "tactic-parked-node" --expect-phase implement --pr-mode required
+assert_eq "parked-node: exit 3" "3" "$RC"
+GH_LOG_SIZE=$(wc -c < "$GH_LOG" 2>/dev/null || echo 0)
+assert_eq "parked-node: gate ran before gh (gh log empty)" "0" "$GH_LOG_SIZE"
+
+# ---------------------------------------------------------------------------
+# Test 15: phase:review node already carrying the `reviewed` marker -> exit 3.
+# The execute-side mirror of the selector's reviewed-exclusion — the case a
+# hand-run or re-entry bypasses.
+# ---------------------------------------------------------------------------
+echo "Test 15: review node with the reviewed marker -> exit 3"
+make_repo "tactic-already-reviewed" "with_reviewed:review"
+run_sut "tactic-already-reviewed" --expect-phase review --pr-mode none
+assert_eq "already-reviewed: exit 3" "3" "$RC"
+
+# ---------------------------------------------------------------------------
+# Test 16: scope-stale — a stamp recording a different scope fingerprint than
+# the node's current statement+body -> exit 5. `qa` is one of the
+# scope-chained phases (fix/qa/review) the custody check applies to.
+# ---------------------------------------------------------------------------
+echo "Test 16: scope-stale stamp -> exit 5"
+make_repo "tactic-scope-stale" "with_node:qa"
+printf '%s %s\n' "0000000000000000000000000000000000000000000000000000000000000000" "deadbee" \
+  > "$REPO/.claude/worktrees/tactic-scope-stale.scope-fingerprint"
+run_sut "tactic-scope-stale" --expect-phase qa --pr-mode none
+assert_eq "scope-stale: exit 5" "5" "$RC"
 
 report_results

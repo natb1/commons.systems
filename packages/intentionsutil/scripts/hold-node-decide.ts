@@ -18,7 +18,7 @@
 //
 // Usage:
 //   node --import tsx/esm hold-node-decide.ts --source <id>
-//     --kind <provision-conflict|fix-attempt-cap>
+//     --kind <provision-conflict|fix-attempt-cap|worktree-residue>
 //     --reason-file <f> --recommendation-file <f>
 //     [--body-file <f>] [--now <YYYY-MM-DD>] [--intentions <dir>]
 //
@@ -29,51 +29,27 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listNodes } from "../src/store.js";
+import { listNodesStrict } from "../src/store.js";
 import type { IntentionNode } from "../src/schema.js";
+import {
+  HOLD_KINDS,
+  holdIdFor,
+  isHoldKind,
+  RESERVED_KIND_SLUGS,
+  RESOLUTION_SENTENCE,
+  type HoldKind,
+} from "../src/holds.js";
 
-/**
- * Hold-kind vocabulary: HOLD_KINDS is the source of truth for the producer
- * kinds this tool implements; KIND_SLUGS and HoldKind both derive from it.
- *
- * Reserved slugs (the id scheme is deliberately extensible; a slug reserved here
- * is documentation of the namespace, not an implemented producer):
- *
- *  - `conflict`    — provision-conflict: a merge-conflict retry against a
- *                    moving main. IMPLEMENTED.
- *  - `fix-cap`     — fix-attempt-cap: the CI-fix interrupt exhausted
- *                    FIX_ATTEMPT_CAP attempts (see src/transitions.ts).
- *                    IMPLEMENTED.
- *  - `no-progress` — RESERVED for a different tactic's future per-node
- *                    no-progress fuse. Deliberately NOT wired to a producer
- *                    kind or a CLI case here; the name is reserved so the id
- *                    scheme (`tactic-hold-no-progress-<source>`) is documented
- *                    and cannot be claimed for something else.
- */
-export const HOLD_KINDS = ["provision-conflict", "fix-attempt-cap"] as const;
-
-export type HoldKind = (typeof HOLD_KINDS)[number];
-
-const KIND_SLUGS: Record<HoldKind, string> = {
-  "provision-conflict": "conflict",
-  "fix-attempt-cap": "fix-cap",
+// The hold-kind vocabulary now lives in ../src/holds.ts so re-check consumers
+// can import it without pulling in this producer CLI. Re-exported here under
+// its original names, so this module's public surface is unchanged.
+export {
+  HOLD_KINDS,
+  holdIdFor,
+  RESERVED_KIND_SLUGS,
+  RESOLUTION_SENTENCE,
+  type HoldKind,
 };
-
-/** Type guard narrowing a raw CLI string to `HoldKind`. */
-function isHoldKind(k: string): k is HoldKind {
-  return k === "provision-conflict" || k === "fix-attempt-cap";
-}
-
-/** Reserved-but-unimplemented kind slugs (see KIND_SLUGS' doc comment). */
-export const RESERVED_KIND_SLUGS: readonly string[] = ["no-progress"];
-
-/** The node-id slug shape provision-node-worktree:56 enforces. */
-const NODE_ID_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
-
-/** The load-bearing closing sentence of every hold body's "How to resolve". */
-export const RESOLUTION_SENTENCE =
-  "resolve the hold tactic to `phase: done` (then prune) — clearing " +
-  "`office_hours` alone does not unblock the source.";
 
 export type Disposition = "NONE" | "EXISTING" | "REOPENED";
 
@@ -94,28 +70,6 @@ export interface HoldInput {
   recommendation: string;
   diagnosis: string | null;
   now: string;
-}
-
-/**
- * Derive the deterministic hold id and assert it matches the node-id slug shape
- * enforced at .claude/skills/dispatch-propagate/scripts/provision-node-worktree:56.
- * Throws (the CLI turns this into a non-zero exit + stderr) rather than emitting
- * an id the provisioner would later reject.
- */
-export function holdIdFor(kind: HoldKind, sourceId: string): string {
-  const slug = KIND_SLUGS[kind];
-  if (slug === undefined) {
-    throw new Error(`hold-node-decide: unknown kind "${kind}"`);
-  }
-  const id = `tactic-hold-${slug}-${sourceId.replace(/^tactic-/, "")}`;
-  if (!NODE_ID_RE.test(id)) {
-    throw new Error(
-      `hold-node-decide: derived hold id "${id}" does not match the node-id slug ` +
-        `shape ${NODE_ID_RE.source} (from source "${sourceId}") — ` +
-        `provision-node-worktree would reject it`,
-    );
-  }
-  return id;
 }
 
 /** The dated occurrence stanza appended on a re-entry (EXISTING/REOPENED). */
@@ -288,7 +242,9 @@ function parseArgs(argv: string[]): Args {
   }
 
   if (sourceId === null || sourceId === "") fail("--source <node-id> is required");
-  if (kind === null) fail("--kind <provision-conflict|fix-attempt-cap> is required");
+  if (kind === null) {
+    fail("--kind <provision-conflict|fix-attempt-cap|worktree-residue> is required");
+  }
   if (!isHoldKind(kind)) {
     fail(`--kind must be one of ${HOLD_KINDS.join("|")}, got "${kind}"`);
   }
@@ -315,7 +271,11 @@ function parseArgs(argv: string[]): Args {
 
 function main(): void {
   const { intentionsDir, ...input } = parseArgs(process.argv.slice(2));
-  const nodes = listNodes(intentionsDir);
+  // STRICT enumeration: the hold decision is a gate (find-or-create an existing
+  // hold, then wire the source's blocked_by edge). A hold node dropped by the
+  // tolerant reader would look absent, minting a duplicate hold and losing the
+  // existing edge — so a corrupt file must refuse loudly instead of vanishing.
+  const nodes = listNodesStrict(intentionsDir);
   let decision: HoldDecision;
   try {
     decision = decideHold(nodes, input);

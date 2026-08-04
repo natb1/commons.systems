@@ -46,12 +46,102 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 20
+  override: null
+  rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
+    scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
+    follows the Wave-A write-path fixes. Interim scaffolding only;
+    tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
+    numeric scheme."
+  tier: 1
 phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    Parked at an /align-tactics tactic-target round, 2026-08-03. Two independent
+
+    findings block finalizing this tactic's plan today.
+
+
+    (1) Recorded ordering unmet, one leg unverifiable. This tactic's own
+    rationale
+
+    directs it be planned AFTER both tactic-claim-containment-durable-anchor and
+
+    tactic-terminal-declaration-verified-against-node close the two leaks that
+
+    make the underlying claim-freeze mechanism sound ("Two leaks must be closed
+
+    for this fuse to be sound... This tactic should be planned after both.").
+
+    Neither has landed. tactic-claim-containment-durable-anchor is itself
+
+    born-parked (since 2026-07-31) awaiting an author ratification of WHERE the
+
+    durable claim anchor lives (graph field vs. reservation-ledger extension vs.
+
+    no new record) — and that park's own text says the answer determines whether
+
+    condition 10 ("Breaker state never lives outside the graph") binds THIS
+
+    tactic's per-claim evidence anchor or only the tripped-breaker incident
+
+    record. tactic-terminal-declaration-verified-against-node is an unplanned
+
+    draft (phase: null). This session cannot ratify the claim-anchor location
+
+    itself, so the ordering blocker is unverifiable from the graph alone.
+
+
+    (2) Major scope collision, newly discovered this round. This tactic's
+
+    re-scoped (2026-07-29) design says "what remains for this tactic is the
+
+    residual backstop only" — a per-node one-strike fuse parking a node to
+
+    office_hours on reap-without-declaration. That exact mechanism has since
+    been
+
+    designed, built, and merged under a DIFFERENT, independently-filed tactic:
+
+    tactic-phase-terminal-requires-disposition (PR #3004, merged
+
+    2026-07-31T20:15:44Z — terminal_without_disposition_sweep in
+
+    lib-frozen-session-park.sh, wired into dispatch-tick on both cadences,
+
+    now at phase: main-qa). It was filed the same week from a different angle
+
+    (grouped with tactic-denied-command-parks-node and
+
+    tactic-standdown-winner-liveness) with no cross-reference to this tactic. So
+
+    the per-node-fuse half of this tactic's statement is very likely moot, and
+
+    only the systemic-breaker half (correlated-dead-claim quorum tripping a
+
+    born-parked incident tactic gating all selection) remains live scope — but
+
+    rewriting this tactic's own statement/scope on that judgment is an author
+
+    call, since it changes what the tactic is for, not something this session
+
+    should decide unilaterally.
+  since: 2026-08-03
+  recommendation: |-
+    In one /align-strategy or office-hours sitting citing this park: (a) ratify
+    tactic-claim-containment-durable-anchor's durable-claim-anchor location —
+    this decision also settles the systemic breaker's evidence-anchor design,
+    per that park's own cross-reference; (b) confirm the per-node fuse half of
+    this tactic is superseded by tactic-phase-terminal-requires-disposition and
+    re-scope this tactic's statement/body to the systemic-breaker half only (or
+    close it outright if the breaker gets refiled as its own tactic). Then clear
+    this park and re-run /align-tactics tactic-router-failure-fuses to finalize
+    the (now narrower) plan.
+  session_type: requirement-discovery
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -162,3 +252,34 @@ Integration points:
   fanning out.
 - No recovers edge (clarification 26 precedent): the fuse bounds
   executor-failure blast radius; it does not reduce executor reliance.
+
+## Landing-order constraint (recorded 2026-07-30 by the dispatch bootstrap)
+
+**This tactic may not land until node-lane terminal-disposition declaration
+coverage is complete.** It is a one-strike fuse that parks a node on
+reap-without-declaration, so landing it while any phase-skill lane still drops
+its `mark-node-terminal` call converts what is today a session freeze into a
+mass park — and one transient fault already produces several at once (the
+2026-07-28 16-wide fan-out turned a single `git worktree add` failure at
+`provision-node-worktree:118` into three invalid mechanical parks in one tick).
+
+Coverage as of 2026-07-30, after the bootstrap's audit:
+
+- `/qa-fix`'s fix-finalize path — **fixed** (PR #2986 added
+  `mark-node-terminal "$N" fix-attempt` as the last durable action; both
+  `.claude/skills/qa-fix/references/auto-fix-lane.md` and the condensed
+  `SKILL.md` mirror).
+- `/dispatch-conflict` **Lane 2** (`SKILL.md:530-606` `resolved`, and its
+  sibling `ambiguous` path at `:608-664`) — **still undeclaring.** It calls only
+  `dispatch-mark-complete --phase fix-conflicts`, whose legacy `phase-completed`
+  marker `dispatch-self-close --node` never reads. It strands nothing today
+  because no dispatch tick enters Lane 2 (`SKILL.md:80-81`, `:454-455`; only
+  Lane 3 is auto-spawned, by `dispatch-graph-execute:226-276`) — but
+  `dispatch-stop.sh:56-63` gates purely on the job name matching an
+  `intentions/<id>.md` id regardless of which skill ran inside it, so a human or
+  a future router running Lane 2 as a managed `--node` job deadlocks.
+
+So the ordering gate is: **Lane 2 declares (or is proven unreachable by
+construction, not by convention) before this fuse arms.** Rank alone does not
+enforce this — the interim 20-band puts several Wave-C nodes at the same rank —
+so the constraint lives here, in prose, deliberately.

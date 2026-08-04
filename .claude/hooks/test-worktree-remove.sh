@@ -36,6 +36,38 @@ chmod +x "$STUB_BIN/claude"
 # Tell lib-claude-agents.sh to use our stub instead of the real `claude`.
 export CLAUDE_AGENTS_CMD="$STUB_BIN/claude"
 
+# Fake `pgrep` for lib-claude-agents.sh's EMPTY-READ CORROBORATION probe.
+#
+# Without this stub the probe shells out to the REAL pgrep and asks the REAL
+# host whether a `claude daemon` process is running — so every assertion below
+# that drives STUB_CLAUDE_JSON='[]' (the "no sessions, therefore reap" cases)
+# would silently depend on the developer's machine. On a host running the
+# daemon the empty read is corroborated and the suite passes; in CI, where no
+# daemon exists, the same read folds to UNKNOWN, `worktree_has_live_session`
+# fails safe, and 15 assertions fail with "expected 'git worktree remove' to be
+# invoked". Same commit, opposite results — the suite was measuring the host,
+# not the hook.
+#
+# There is no in-process probe that can tell "sandboxed, host daemon
+# invisible" from "unsandboxed, no daemon running" — both report an empty
+# process listing that still functions (measured 2026-08-03: under sandbox
+# `pgrep -f 'claude daemon'` returns 1 while a positive control returns 0,
+# exactly as in a daemon-less CI runner). The ambiguity is irreducible, so the
+# corroboration signal must be INJECTED by the fixture, exactly as the agents
+# list already is — not inferred.
+#
+# Behaviour is driven by STUB_PGREP_RC. Default 0 = "a claude daemon is
+# visible", which corroborates an empty read and lets these cases exercise the
+# reap path they are actually asserting. A case that wants to exercise the
+# uncorroborated-empty path sets STUB_PGREP_RC=1.
+cat >"$STUB_BIN/pgrep" <<'STUB'
+#!/usr/bin/env bash
+set -uo pipefail
+exit "${STUB_PGREP_RC:-0}"
+STUB
+chmod +x "$STUB_BIN/pgrep"
+export CLAUDE_AGENTS_PGREP_CMD="$STUB_BIN/pgrep"
+
 cat >"$STUB_BIN/git" <<'STUB'
 #!/usr/bin/env bash
 set -uo pipefail
@@ -316,6 +348,29 @@ run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
 assert_exit0          "live session: session name mismatch -> exit 0"
 assert_remove_called  "live session: session name mismatch -> removed (name-keyed, not cwd)"
 assert_log            "live session: session name mismatch -> log shows IN SYNC" "IN SYNC: removing"
+
+# (e) EMPTY-READ CORROBORATION: an empty agents list that NO visible `claude
+# daemon` process corroborates must fold to UNKNOWN and keep the worktree.
+#
+# This is the direct coverage for the corroboration probe itself. The fixture
+# stubs the probe to "daemon visible" by default so every other case exercises
+# the behaviour it is actually asserting; this case is where the probe's own
+# negative branch is pinned. Without it, stubbing the probe would have removed
+# the only exercise of the feature in this suite — the empty read would be
+# corroborated everywhere and the fail-safe would be untested.
+#
+# Note the contrast with case (c): there the daemon read itself FAILS
+# (STUB_CLAUDE_RC=1). Here the read SUCCEEDS and returns a well-formed `[]` —
+# the ambiguity is entirely in whether that emptiness is real, which is exactly
+# what the corroboration probe exists to decide.
+setup_root
+# STUB_CLAUDE_JSON defaults to "[]" via setup_root; the read succeeds (rc 0).
+export STUB_PGREP_RC=1   # no `claude daemon` process visible
+run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
+assert_exit0              "corroboration: uncorroborated empty read -> exit 0"
+assert_remove_not_called  "corroboration: uncorroborated empty read -> not removed"
+assert_log                "corroboration: uncorroborated empty read -> log shows KEEP" "KEEP:"
+unset STUB_PGREP_RC
 
 # --- Summary ----------------------------------------------------------------
 

@@ -164,11 +164,19 @@ Otherwise (opus-fixable items present), choose exactly one path:
 
    qa-fix keeps **no** merge base (Step 1 runs only a name-only
    `git diff origin/main...HEAD`), so **omit** `--base-sha` (it serializes as
-   null). Derive `repo` from the local remote (read-only git, sandbox-safe):
+   null). Derive `repo` from the local remote (read-only git, sandbox-safe). On
+   the node lane (`TARGET_KIND=node`) pass `--node-id "$N"` and omit `--issue`;
+   on the legacy issue lane (`TARGET_KIND=issue`) keep `--issue "$N"` and omit
+   `--node-id`:
    ```bash
    REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+   if [[ "$TARGET_KIND" == node ]]; then
+     id_arg=(--node-id "$N")
+   else
+     id_arg=(--issue "$N")
+   fi
    .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
-     --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+     --phase qa --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" \
      --findings-surfaced <result.findings_surfaced> \
      --findings-actionable <result.findings_actionable> \
      --fixes-applied <fixes_applied_count> \
@@ -176,7 +184,19 @@ Otherwise (opus-fixable items present), choose exactly one path:
      --subagents-launched <SKILL_SUBAGENTS + result.subagents_launched> \
      --disposition completed_with_fixes
    ```
-6. **STOP.**
+6. **Write the node lane's terminal-disposition marker** (`TARGET_KIND=node`
+   only; the legacy issue lane has no such marker). This must come **after**
+   the PR comment (Step 4), the phase-completed marker (item 4 above), and the
+   outcome envelope (item 5 above) — `Stop` fires on every turn yield, not
+   only on terminal exit, so writing this marker early would let the hook reap
+   the job before those writes land:
+   ```bash
+   packages/intentionsutil/scripts/mark-node-terminal "$N" fix-attempt
+   ```
+   `fix-attempt` is correct here too: this pass spent an attempt via the fix
+   lane, same as `/fix-checks`' own node lane (retry by design — the selector
+   re-routes on a later tick).
+7. **STOP.**
 
 ## Escalate finalize path
 
