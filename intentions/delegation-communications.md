@@ -54,10 +54,11 @@ attributes:
     recovery_path: substitute — owned domain for email, portable protocols where
       they exist; not yet designed
     recovery_cost: unassessed
-    gated: partially — message history and contacts export unevenly; account-root
-      recovery (recovery codes, second-custodian access) unassessed
+    gated:
+      level: partial
+      note: message history and contacts export unevenly; account-root recovery
+        (recovery codes, second-custodian access) unassessed
     last_exercised: null
-  classification: platform
   non_delegable_floor: unassessed
   review_trigger: re-alignment per strategy-realign-attachments, or selection as a
     recovery domain (strategy-domain-selection)

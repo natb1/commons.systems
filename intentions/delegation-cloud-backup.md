@@ -19,7 +19,10 @@ rationale: "The off-machine half of the ad-hoc backup practice — budget
   (2026-07-09): this record covers backup transport and storage of owned data —
   copies of local-first files; knowledge-notes covers the knowledge corpus and
   its organizing structure, wherever silo'd. A Google Doc is knowledge-notes'
-  scope; a .benc snapshot on Drive is this record's."
+  scope; a .benc snapshot on Drive is this record's. Axis resolution
+  (tactic-delegation-classification-derivation, 2026-08-04): recovery_cost
+  resolved to `low` — the recorded assessment was copy elsewhere and update the
+  sync habit, bounded by strategy-durable-owned-data's restore rehearsals."
 reading: null
 gap: null
 serves: []
@@ -50,11 +53,12 @@ attributes:
   irreversibility:
     recovery_path: substitute — any storage target (another provider, owned NAS,
       offline media); the data is files and already local-first
-    recovery_cost: low — copy elsewhere and update the sync habit; bounded by
-      strategy-durable-owned-data's restore rehearsals
-    gated: false
+    recovery_cost: low
+    gated:
+      level: none
+      note: no gating stated — the data is files already held local-first, and the
+        .benc snapshots are encrypted and unreadable to the host
     last_exercised: null
-  classification: tool — replaceable storage, account-gated; unaudited until this record
   non_delegable_floor: the restore itself — knowing the copies exist, where, and
     how to read them (strategy-durable-owned-data owns the rehearsal)
   review_trigger: strategy-durable-owned-data's redundancy design keeping or

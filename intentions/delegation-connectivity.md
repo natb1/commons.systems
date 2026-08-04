@@ -6,14 +6,19 @@ statement: Home connectivity delegated to a single wired ISP, cellular as the
 owner: human
 status: raw
 parent: null
-rationale: One wired ISP carries the household's connectivity; no second wired
+rationale: "One wired ISP carries the household's connectivity; no second wired
   provider serves the address, so the substitute path is cellular tethering or
   fixed wireless at degraded capacity (owner interview, 2026-07-02). Recorded
   2026-07-02 by the completeness sweep (strategy-complete-ledger). Connectivity
   sits under the delegations more than under the recovery paths — the
   local-first artifacts keep working offline by design — but every hosted
   surface, sync, and vendor relationship assumes it. Raw per kind-delegation;
-  axes below are a first pass, not an assessment.
+  axes below are a first pass, not an assessment. Axis resolution
+  (tactic-delegation-classification-derivation, 2026-08-04): recovery_cost
+  resolved to `high` — the recorded assessment was immediate but degraded:
+  cellular tethering or fixed wireless restores connectivity at once, but
+  recovering it at parity would require moving, since no second wired provider
+  serves the address."
 reading: null
 gap: null
 serves: []
@@ -42,10 +47,12 @@ attributes:
   irreversibility:
     recovery_path: substitute — cellular tethering or fixed wireless at degraded
       capacity; no second wired provider at the address
-    recovery_cost: immediate but degraded; a genuine second wired option would require moving
-    gated: false
+    recovery_cost: high
+    gated:
+      level: none
+      note: no gating stated — the substitute paths (cellular tethering, fixed
+        wireless) run through unrelated carriers
     last_exercised: null
-  classification: platform
   non_delegable_floor: unassessed
   review_trigger: a second wired provider reaching the address, or the ISP's terms
     shifting against the household

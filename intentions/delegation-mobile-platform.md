@@ -15,7 +15,10 @@ rationale: "The phone runs iOS: the mobile OS, the App Store's gating of what
   is set by apps and their push machinery, not by the owned queue
   strategy-recover-discovery is building. A future-candidate capture, raw per
   kind-delegation, standing as a candidate input to strategy-domain-selection.
-  Axes below are a first pass, not an assessment."
+  Axes below are a first pass, not an assessment. Axis resolution
+  (tactic-delegation-classification-derivation, 2026-08-04): recovery_cost stays
+  `unassessed` — assessment is deferred; the factors named at recording were app
+  repurchase, migration friction, and household messaging ties."
 reading: null
 gap: null
 serves: []
@@ -47,11 +50,11 @@ attributes:
     recovery_path: substitute — platform switch to Android (degoogled builds exist);
       data leaves via vendor-mediated exports (iCloud export, photo library
       download)
-    recovery_cost: unassessed — app repurchase, migration friction, household messaging ties
-    gated: partially — the export paths are the vendor's own, and iOS has no
-      sideloading path
+    recovery_cost: unassessed
+    gated:
+      level: partial
+      note: the export paths are the vendor's own, and iOS has no sideloading path
     last_exercised: null
-  classification: platform
   non_delegable_floor: unassessed
   review_trigger: App Store or iCloud policy shifts that narrow export, or
     selection as a recovery domain (strategy-domain-selection)

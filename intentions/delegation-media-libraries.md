@@ -42,9 +42,10 @@ attributes:
   irreversibility:
     recovery_path: substitute — owned files and local libraries; not yet designed
     recovery_cost: unassessed
-    gated: partially — DRM and proprietary formats
+    gated:
+      level: partial
+      note: DRM and proprietary formats
     last_exercised: null
-  classification: platform
   non_delegable_floor: unassessed
   review_trigger: selection as a recovery domain (strategy-domain-selection)
   last_assessed: 2026-07-02

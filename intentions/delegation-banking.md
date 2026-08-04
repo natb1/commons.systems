@@ -13,7 +13,14 @@ rationale: "The accounts, the payment rails, and the authoritative transaction
   account feeding budget-etl has a working machine-readable export (owner
   interview, 2026-07-02), which is what keeps the owned financial picture
   assemblable. A future-candidate capture, raw per kind-delegation; axes below
-  are a first pass, not an assessment."
+  are a first pass, not an assessment. Axis resolution
+  (tactic-delegation-classification-derivation, 2026-08-04): divergence was
+  recorded as `low-moderate` before the axes were enum-ized; resolved to
+  `moderate` — the bank holds the authoritative transaction record and the
+  imported fee structures and product upsells are standing pressure, which is
+  buy-in rather than a separable tool. recovery_cost resolved to `moderate` —
+  the recorded assessment was days per account move, with rewiring direct
+  deposit and autopay the friction."
 reading: null
 gap: null
 serves: []
@@ -34,7 +41,7 @@ attributes:
   delegated: custody of money, payment execution, and the authoritative transaction record
   origin: inherited
   divergence:
-    level: low-moderate
+    level: moderate
     imported:
       - fee structures and product upsells
       - the bank's data practices around transaction history
@@ -42,11 +49,12 @@ attributes:
   irreversibility:
     recovery_path: substitute — accounts replicate at competing banks; the owned
       statement archive (strategy-recover-finance) keeps the record portable
-    recovery_cost: days per account move; rewiring direct deposit and autopay is the friction
-    gated: partially — the authoritative record is the bank's; the exercised export
-      bounds the loss
+    recovery_cost: moderate
+    gated:
+      level: partial
+      note: the authoritative record is the bank's; the exercised export bounds the
+        loss
     last_exercised: null
-  classification: platform
   non_delegable_floor: reading the statements — assembling and auditing the
     household picture from raw exports
   review_trigger: any account losing its machine-readable export path

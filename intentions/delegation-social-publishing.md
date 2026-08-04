@@ -12,7 +12,10 @@ rationale: "The producer-side kin of delegation-attention-services: where that
   algorithmic distribution) decide what the work is worth and who sees it, and
   the audience relationship accrues to the platform, not the author. Recovery is
   owned by strategy-recover-publishing: IndieWeb principles, work on owned
-  domains first, platforms as at most syndication copies."
+  domains first, platforms as at most syndication copies. Axis resolution
+  (tactic-delegation-classification-derivation, 2026-08-04): recovery_cost
+  resolved to `low` — the recorded assessment was low and largely paid: two
+  owned sites run today, with the platform audience graph the sticky remainder."
 reading: null
 gap: null
 serves: []
@@ -45,11 +48,11 @@ attributes:
   irreversibility:
     recovery_path: substitute — publish on owned domains (fellspiral, the landing
       blog on the shared blog package) and syndicate outward if at all
-    recovery_cost: low and largely paid — two owned sites run today; the platform
-      audience graph is the sticky remainder
-    gated: partially — platform audiences and distribution are not portable
+    recovery_cost: low
+    gated:
+      level: partial
+      note: platform audiences and distribution are not portable
     last_exercised: null
-  classification: captured
   non_delegable_floor: the writing itself — work exists in portable form before any platform sees it
   review_trigger: publishing anything platform-first
   last_assessed: 2026-07-02

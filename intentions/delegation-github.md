@@ -5,10 +5,18 @@ statement: Code hosting, issue tracking, and CI delegated to GitHub
 owner: human
 status: codified
 parent: null
-rationale: GitHub holds the repository, the issue graph the dispatch chain runs
+rationale: "GitHub holds the repository, the issue graph the dispatch chain runs
   on, and CI. It is the hardest of the current infrastructure migrations —
   feasible if not convenient. Git itself is fully portable; the sticky parts are
   the issue/PR relationship data the workflow depends on and the Actions wiring.
+  Axis resolution (tactic-delegation-classification-derivation, 2026-08-04):
+  recovery_cost resolved to `low` — measured 2026-07-16 drill:
+  hours-to-about-a-day, dominated by CI porting (8 workflow files to a new
+  runner) and a rate-limited PR/comment re-import (1312 PRs + 6343 comments span
+  multiple GitHub REST 5000/hr windows via Gitea's migrator); the issue graph
+  (local intentions/, 0 GitHub issues remain) and git history (mirrored clones
+  exist) carry near-zero recovery cost. See
+  ops/recovery-drills/github-drill-report.md."
 reading: null
 gap: null
 serves:
@@ -39,15 +47,11 @@ attributes:
   irreversibility:
     recovery_path: re-host — git is portable by design; issues/PR relationships
       export via API; Actions workflows would need porting to another runner
-    recovery_cost: "measured 2026-07-16 drill: hours-to-about-a-day, dominated by CI
-      porting (8 workflow files to a new runner) and a rate-limited PR/comment
-      re-import (1312 PRs + 6343 comments span multiple GitHub REST 5000/hr
-      windows via Gitea's migrator); the issue graph (local intentions/, 0
-      GitHub issues remain) and git history (mirrored clones exist) carry
-      near-zero recovery cost. See ops/recovery-drills/github-drill-report.md."
-    gated: false — all data exportable via API
+    recovery_cost: low
+    gated:
+      level: none
+      note: all data exportable via API
     last_exercised: 2026-07-16
-  classification: platform
   non_delegable_floor: the repo itself — full clones exist on local machines at all times
   review_trigger: terms, pricing, or API changes hostile to individual-scale automation
   last_assessed: 2026-07-02

@@ -44,9 +44,10 @@ attributes:
     recovery_path: substitute — periodic export to owned files under the right of
       access; not yet designed
     recovery_cost: unassessed
-    gated: largely — export is by request through the party recovered from
+    gated:
+      level: large
+      note: export is by request through the party recovered from
     last_exercised: null
-  classification: platform
   non_delegable_floor: unassessed
   review_trigger: selection as a recovery domain (strategy-domain-selection)
   last_assessed: 2026-07-02

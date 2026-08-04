@@ -12,7 +12,14 @@ rationale: "Firebase hosts the deployed apps and supplies the thin backend
   convenience, not user capability. The easiest of the current infrastructure
   migrations. As with any paid vendor, the spend imports a minor capture —
   promoting the vendor's growth, not a virtue held here — kept visible by the
-  owned budgeting pipeline (strategy-recover-finance)."
+  owned budgeting pipeline (strategy-recover-finance). Axis resolution
+  (tactic-delegation-classification-derivation, 2026-08-04): recovery_cost
+  resolved to `low` — measured 2026-07-16 via tactic-recovery-drill-firebase
+  (ops/recovery-drills/firebase-drill-report.md): ~35s build->serve->verify for
+  the mechanical steps once substitute-host tooling exists, with that tooling
+  (nginx config translating firebase.json, parity checklist, verify script) a
+  low-single-digit-hour one-time build; the one real gap is /api/webmention,
+  compute-backed and not re-hostable statically."
 reading: null
 gap: null
 serves:
@@ -86,16 +93,12 @@ attributes:
   irreversibility:
     recovery_path: re-host — static apps deploy anywhere; the Firestore surfaces are
       small and behind an abstraction; functions are portable Node
-    recovery_cost: low for the mechanical steps (~35s build->serve->verify once
-      substitute-host tooling exists), but the tooling itself (nginx config
-      translating firebase.json, parity checklist, verify script) was a
-      low-single-digit-hour one-time build; the one real gap is /api/webmention,
-      compute-backed and not re-hostable statically -- measured 2026-07-16 via
-      tactic-recovery-drill-firebase
-      (ops/recovery-drills/firebase-drill-report.md)
-    gated: false
+    recovery_cost: low
+    gated:
+      level: none
+      note: no gating stated — static apps deploy anywhere, the Firestore surfaces sit
+        behind an abstraction, and the functions are portable Node
     last_exercised: 2026-07-16
-  classification: platform
   non_delegable_floor: user data never lives only in the backend — local-first
     files are the source of truth
   review_trigger: pricing or quota changes that break the runway rule; service deprecations

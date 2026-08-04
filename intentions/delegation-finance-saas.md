@@ -21,6 +21,13 @@ rationale: >-
   use, so last_exercised below is a real date, not a hope. The classification
   records the edge as the standing offer presents it; the exercised substitute
   is what keeps the record from being a live capture.
+
+
+  Axis resolution (tactic-delegation-classification-derivation, 2026-08-04):
+  recovery_cost resolved to `low` — the recorded assessment was already paid:
+  the owned pipeline is the daily tool, and the residual cost is writing a
+  parser when a bank changes its export format. Not `none`, which is reserved
+  for a delegation never entered.
 reading: null
 gap: null
 serves:
@@ -52,12 +59,11 @@ attributes:
     recovery_path: substitute — the budget app plus the budget-etl CLI over the
       banks' own statement exports; encrypted local .benc snapshots; nothing
       uploaded
-    recovery_cost: already paid — the owned pipeline is the daily tool; residual
-      cost is writing a parser when a bank changes its export format
-    gated: false — the source data is the banks' exports, not the budgeting
-      service's records
+    recovery_cost: low
+    gated:
+      level: none
+      note: the source data is the banks' exports, not the budgeting service's records
     last_exercised: 2026-06-30
-  classification: captured
   non_delegable_floor: reading a bank statement and knowing where the money went —
     the categorization judgment itself
   review_trigger: a bank withdrawing machine-readable exports; the owned pipeline
