@@ -296,21 +296,27 @@
 #
 # ---- Schema: census.json ----------------------------------------------------
 #
-# Top-level object with one optional tunable for the standing per-tick
-# reconciliation-debt duty (`dispatch-graph-census`). This config type follows
-# the GENERIC absent→inert convention (see "Stdout protocol" above): when the
-# file is absent, no-config is emitted and dispatch-graph-census uses its
-# baked-in default threshold. Only the birth THRESHOLD is config — the debt and
-# the census node itself are graph state (parity with the fuse-breaker
-# doctrine).
+# INERT as of the retirement of `dispatch-graph-census` (tactic-census-scripted-
+# tick) — the standing per-tick reconciliation-debt duty that used to read this
+# file's "threshold" value. Nothing reads census.json anymore. Its replacement,
+# `dispatch-census-tick` (.claude/skills/dispatch-propagate/scripts/
+# dispatch-census-tick, wrapping census-tick.ts), is unconditional: it runs
+# every tick, reads no config, and has no threshold.
+#
+# The "census" config type, its usage-string entry, and the jq validation below
+# are retained ONLY for backwards compatibility, so an existing census.json
+# left over from before the retirement does not start erroring on load.
+# Setting "threshold" changes NO behavior — there is no consumer left to gate.
 #
 #   threshold               number (optional, must be a non-negative integer) —
-#                           the accumulated reconciliation debt at or above which
-#                           the duty births a born-parked census tactic. The
-#                           default (10) is baked into dispatch-graph-census, not
-#                           here. Absent → dispatch-graph-census uses its default.
+#                           historically, the accumulated reconciliation debt at
+#                           or above which the retired dispatch-graph-census duty
+#                           birthed a born-parked census tactic. No longer read
+#                           by any production caller; validated only so a
+#                           pre-existing file continues to load without error.
 #
-# Example (see census.example.json):
+# Example (see census.example.json) — retained for backwards-compatible
+# validation only; describes a value that no longer affects any behavior:
 #   {
 #     "threshold": 10
 #   }
@@ -739,9 +745,13 @@ case "$CONFIG_TYPE" in
     ;;
   census)
     # top-level value must be an object; the single tunable is optional.
-    # `dispatch-graph-census` substitutes a baked-in default (10) when the field
-    # is absent, so absence is silent — only the type of a present field is
-    # checked. threshold is a debt count, so a non-negative integer.
+    # INERT (see the census.json schema comment above): the retired
+    # `dispatch-graph-census` was the only reader of "threshold"; its
+    # replacement, dispatch-census-tick, is unconditional and reads no config.
+    # This validation is retained only for backwards compatibility, so an
+    # existing census.json still loads without error — threshold, if present,
+    # must still be a non-negative integer (a debt count), but the value now
+    # gates nothing.
     ERRORS=$(jq -r '
       if type != "object" then
         "top-level value must be a JSON object, got \(type)"
