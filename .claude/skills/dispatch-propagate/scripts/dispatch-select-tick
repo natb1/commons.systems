@@ -546,7 +546,24 @@ fi
 # network), best-effort (a failure must not abort the tick), unconditional —
 # no threshold, no config, no born-parked latch; replaces the old
 # per-tick reconciliation-debt-latch mechanism it superseded.
-CENSUS_OUT=$("$SCRIPT_DIR/dispatch-census-tick") || true
+#
+# Race bounded here: reconcile-graph-merged (above) writes `phase: done` for a
+# genuinely-merged PR, and census would otherwise mechanically verify and DELETE
+# that node from intentions/ seconds later, in this same tick — a far shorter
+# window than any consumer still reading the node file after its done
+# transition can be assumed to tolerate. So every id the SAME tick's reconciler
+# just transitioned to done is passed as `--skip <id>`: census leaves it
+# entirely alone this tick (neither pruned nor defect-minted) and prunes it on
+# the next tick, once it is no longer newly-transitioned. Only `-> done`
+# targets are skipped — a `-> main-qa` transition is not done and is already
+# outside census's done-phase filter. Parsed from the already-captured
+# RECONCILE_GRAPH_OUT (its stdout protocol is `reconciled <id> -> <target>` per
+# tactic acted on; nothing is emitted for a skipped one).
+CENSUS_SKIP_ARGS=()
+while IFS= read -r skip_id; do
+  [[ -n "$skip_id" ]] && CENSUS_SKIP_ARGS+=(--skip "$skip_id")
+done < <(awk '$1 == "reconciled" && $3 == "->" && $4 == "done" { print $2 }' <<< "$RECONCILE_GRAPH_OUT")
+CENSUS_OUT=$("$SCRIPT_DIR/dispatch-census-tick" ${CENSUS_SKIP_ARGS[@]+"${CENSUS_SKIP_ARGS[@]}"}) || true
 if [[ -n "$CENSUS_OUT" ]]; then
   while IFS= read -r census_line; do
     [[ -n "$census_line" ]] && echo "census: $census_line"

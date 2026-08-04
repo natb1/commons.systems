@@ -41,6 +41,17 @@
 //
 // Usage:
 //   node --import tsx/esm census-tick.ts [--intentions <dir>] [--now <YYYY-MM-DD>]
+//                                        [--skip <id>]...
+//
+// `--skip <id>` (repeatable) excludes `<id>` from the done-present partition
+// entirely — it is neither pruned nor counted/minted as a defect this run. It
+// stays a FULL member of the node set for every inbound-edge scan, so a
+// skipped node still protects its own references: another candidate the
+// skipped node names via parent/serves/validates/recovers is still refused
+// (`Plan.retained`). The dispatch caller passes the ids the SAME tick's
+// reconciler just transitioned to done, so a node is never absorbed and
+// deleted seconds apart; deferring its prune by one tick costs nothing (it is
+// still done-present, and no longer newly-transitioned, on the next tick).
 //
 // Stdout: one JSON object
 //   { "prune": [...ids], "edit": [...ids], "defectsMinted": [...ids],
@@ -63,6 +74,12 @@ const DEFECT_SERVES = "strategy-graph-native-dispatch";
 export interface Args {
   dir: string;
   date: string;
+  /**
+   * Ids excluded from the done-present partition: neither pruned nor minted as
+   * defects this run, but still present in the node set every inbound-edge scan
+   * reads (see the header comment). Empty for an unrestricted census.
+   */
+  skip: string[];
 }
 
 export interface Plan {
@@ -83,6 +100,7 @@ function parseArgs(argv: string[]): Args {
   const out: Args = {
     dir: join(repoRoot, "intentions"),
     date: new Date().toISOString().slice(0, 10),
+    skip: [],
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -92,6 +110,9 @@ function parseArgs(argv: string[]): Args {
         break;
       case "--now":
         out.date = argv[++i];
+        break;
+      case "--skip":
+        out.skip.push(argv[++i]);
         break;
       default:
         throw new Error(`census-tick: unknown flag '${a}'`);
@@ -209,7 +230,15 @@ export function censusTick(args: Args): Plan {
   // mints new defect files; a corrupt file simply is not censused this tick.
   const nodes = listNodes(args.dir);
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const { prunable, defects } = partitionDonePresent(nodes);
+
+  // Skipped ids are withheld from the PARTITION only — they are neither pruned
+  // nor counted/minted as defects this run. Every inbound-edge scan below still
+  // reads the FULL `nodes` array, so a skipped node keeps protecting whatever it
+  // references: it survives this batch, so a candidate it names via
+  // parent/serves/validates/recovers is still refused (retained), and a
+  // `blocked_by` entry it holds is still repaired.
+  const skipSet = new Set(args.skip);
+  const { prunable, defects } = partitionDonePresent(nodes.filter((n) => !skipSet.has(n.id)));
   const candidateSet = new Set(prunable);
 
   // Refusal pass, BEFORE the edge-repair loop below: a candidate still named

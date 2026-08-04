@@ -68,7 +68,7 @@ describe("censusTick", () => {
       blocked_by: ["tactic-verified"],
     });
 
-    const plan = censusTick({ dir, date: "2026-08-04" });
+    const plan = censusTick({ dir, date: "2026-08-04", skip: [] });
 
     expect(plan.prune).toEqual(["tactic-verified"]);
     expect(existsSync(join(dir, "tactic-verified.md"))).toBe(false);
@@ -86,7 +86,7 @@ describe("censusTick", () => {
       execution: { branch: "b", pr: 7, attempts: {}, markers: [], strategy_fingerprint: null },
     });
 
-    const plan = censusTick({ dir, date: "2026-08-04" });
+    const plan = censusTick({ dir, date: "2026-08-04", skip: [] });
 
     expect(plan.prune).toEqual([]);
     expect(existsSync(join(dir, "tactic-unverified.md"))).toBe(true);
@@ -127,10 +127,10 @@ describe("censusTick", () => {
       execution: { branch: "b", pr: 7, attempts: {}, markers: [], strategy_fingerprint: null },
     });
 
-    const first = censusTick({ dir, date: "2026-08-04" });
+    const first = censusTick({ dir, date: "2026-08-04", skip: [] });
     expect(first.defectsMinted).toEqual(["tactic-census-defect-unverified"]);
 
-    const second = censusTick({ dir, date: "2026-08-05" });
+    const second = censusTick({ dir, date: "2026-08-05", skip: [] });
     expect(second.defectsMinted).toEqual([]);
     expect(second.defectsExisting).toEqual(["tactic-census-defect-unverified"]);
     expect(second.defectCount).toBe(1);
@@ -163,7 +163,7 @@ describe("censusTick", () => {
       // defect node remains.
       const defectId = closedDefect(dir, "tactic-broken");
 
-      const plan = censusTick({ dir, date: "2026-08-04" });
+      const plan = censusTick({ dir, date: "2026-08-04", skip: [] });
 
       expect(plan.prune).toEqual([defectId]);
       expect(plan.defectsMinted).toEqual([]);
@@ -178,8 +178,8 @@ describe("censusTick", () => {
       node(dir, { id: "kind-tactic", kind: "kind" });
       closedDefect(dir, "tactic-broken");
 
-      censusTick({ dir, date: "2026-08-04" });
-      const second = censusTick({ dir, date: "2026-08-05" });
+      censusTick({ dir, date: "2026-08-04", skip: [] });
+      const second = censusTick({ dir, date: "2026-08-05", skip: [] });
 
       expect(second).toEqual({
         prune: [],
@@ -207,7 +207,7 @@ describe("censusTick", () => {
       });
       const defectId = closedDefect(dir, "tactic-broken", "unverified-merge");
 
-      const plan = censusTick({ dir, date: "2026-08-04" });
+      const plan = censusTick({ dir, date: "2026-08-04", skip: [] });
 
       // The id appears as a prune and NOWHERE else — handing graph-commit the
       // same id as both `--prune <id>` and a create arg is the bug being fixed.
@@ -219,7 +219,7 @@ describe("censusTick", () => {
 
       // The defect is not lost: the next tick re-mints it cleanly, because the
       // target is still broken and dedup is by file existence.
-      const next = censusTick({ dir, date: "2026-08-05" });
+      const next = censusTick({ dir, date: "2026-08-05", skip: [] });
       expect(next.prune).toEqual([]);
       expect(next.defectsMinted).toEqual([defectId]);
       expect(readNode(dir, defectId).attributes.census_defect).toEqual({
@@ -247,7 +247,7 @@ describe("censusTick", () => {
       execution: verifiedExecution(3),
     });
 
-    const plan = censusTick({ dir, date: "2026-08-04" });
+    const plan = censusTick({ dir, date: "2026-08-04", skip: [] });
 
     expect(plan.prune).toEqual(["tactic-a", "tactic-b"]);
     expect(plan.edit).toEqual([]);
@@ -272,7 +272,7 @@ describe("censusTick", () => {
         parent: "tactic-parent-target",
       });
 
-      const plan = censusTick({ dir, date: "2026-08-04" });
+      const plan = censusTick({ dir, date: "2026-08-04", skip: [] });
 
       expect(plan.prune).toEqual([]);
       expect(plan.retained).toEqual(["tactic-parent-target"]);
@@ -301,7 +301,7 @@ describe("censusTick", () => {
         validates: ["strategy-validated-target"],
       });
 
-      const plan = censusTick({ dir, date: "2026-08-04" });
+      const plan = censusTick({ dir, date: "2026-08-04", skip: [] });
 
       expect(plan.prune).toEqual([]);
       expect(plan.retained).toEqual(["strategy-validated-target"]);
@@ -325,12 +325,39 @@ describe("censusTick", () => {
         serves: ["strategy-served-target"],
       });
 
-      const plan = censusTick({ dir, date: "2026-08-04" });
+      const plan = censusTick({ dir, date: "2026-08-04", skip: [] });
 
       expect(plan.prune).toEqual([]);
       expect(plan.retained).toEqual(["strategy-served-target"]);
       expect(plan.defectsMinted).toEqual([]);
       expect(existsSync(join(dir, "strategy-served-target.md"))).toBe(true);
+    });
+
+    it("refuses to prune a candidate named by a SKIPPED node — a skipped node still survives", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      node(dir, {
+        id: "tactic-refused-target",
+        kind: "tactic",
+        phase: "done",
+        execution: verifiedExecution(30),
+      });
+      // Done and verified, so it WOULD be co-pruned and thus exempt the target —
+      // but it is skipped this run, so it survives and still names the target.
+      node(dir, {
+        id: "tactic-skipped-referrer",
+        kind: "tactic",
+        phase: "done",
+        parent: "tactic-refused-target",
+        execution: verifiedExecution(31),
+      });
+
+      const plan = censusTick({ dir, date: "2026-08-04", skip: ["tactic-skipped-referrer"] });
+
+      expect(plan.prune).toEqual([]);
+      expect(plan.retained).toEqual(["tactic-refused-target"]);
+      expect(existsSync(join(dir, "tactic-refused-target.md"))).toBe(true);
+      expect(existsSync(join(dir, "tactic-skipped-referrer.md"))).toBe(true);
     });
 
     it("still prunes a candidate whose only non-blocked_by referrer is co-pruned in the same batch", () => {
@@ -350,12 +377,111 @@ describe("censusTick", () => {
         execution: verifiedExecution(21),
       });
 
-      const plan = censusTick({ dir, date: "2026-08-04" });
+      const plan = censusTick({ dir, date: "2026-08-04", skip: [] });
 
       expect(plan.prune).toEqual(["tactic-copruned-referrer", "tactic-copruned-target"]);
       expect(plan.retained).toEqual([]);
       expect(existsSync(join(dir, "tactic-copruned-target.md"))).toBe(false);
       expect(existsSync(join(dir, "tactic-copruned-referrer.md"))).toBe(false);
+    });
+  });
+
+  // The same-tick absorb-then-delete race the dispatch tick bounds: the tick's
+  // reconciler moves a merged node to done, and census — running seconds later
+  // in the SAME tick — would otherwise verify and delete it immediately. Every
+  // id the reconciler just transitioned is passed as `--skip`, so census leaves
+  // it entirely alone this tick and prunes it on the next one.
+  describe("--skip", () => {
+    it("neither prunes nor edits for a skipped verified done node", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      node(dir, {
+        id: "tactic-just-merged",
+        kind: "tactic",
+        phase: "done",
+        execution: verifiedExecution(40),
+      });
+
+      const plan = censusTick({ dir, date: "2026-08-04", skip: ["tactic-just-merged"] });
+
+      expect(plan.prune).toEqual([]);
+      expect(plan.edit).toEqual([]);
+      expect(plan.retained).toEqual([]);
+      expect(plan.defectsMinted).toEqual([]);
+      expect(plan.defectCount).toBe(0);
+      expect(existsSync(join(dir, "tactic-just-merged.md"))).toBe(true);
+
+      // Deferred by exactly one tick: the next run (no longer newly-transitioned)
+      // prunes it normally.
+      const next = censusTick({ dir, date: "2026-08-05", skip: [] });
+      expect(next.prune).toEqual(["tactic-just-merged"]);
+      expect(existsSync(join(dir, "tactic-just-merged.md"))).toBe(false);
+    });
+
+    it("mints no defect and does not raise defectCount for a skipped unverified done node", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      node(dir, {
+        id: "tactic-unverified",
+        kind: "tactic",
+        phase: "done",
+        execution: { branch: "b", pr: 7, attempts: {}, markers: [], strategy_fingerprint: null },
+      });
+
+      const plan = censusTick({ dir, date: "2026-08-04", skip: ["tactic-unverified"] });
+
+      expect(plan.defectsMinted).toEqual([]);
+      expect(plan.defectsExisting).toEqual([]);
+      expect(plan.defectCount).toBe(0);
+      expect(existsSync(join(dir, "tactic-census-defect-unverified.md"))).toBe(false);
+      expect(existsSync(join(dir, "tactic-unverified.md"))).toBe(true);
+    });
+
+    it("leaves a skipped node's inbound blocked_by edges untouched", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      node(dir, {
+        id: "tactic-just-merged",
+        kind: "tactic",
+        phase: "done",
+        execution: verifiedExecution(41),
+      });
+      node(dir, {
+        id: "tactic-blocked",
+        kind: "tactic",
+        phase: "implement",
+        blocked_by: ["tactic-just-merged"],
+      });
+
+      const plan = censusTick({ dir, date: "2026-08-04", skip: ["tactic-just-merged"] });
+
+      // Nothing was pruned, so nothing is repaired: the edge still resolves.
+      expect(plan.prune).toEqual([]);
+      expect(plan.edit).toEqual([]);
+      expect(readNode(dir, "tactic-blocked").blocked_by).toEqual(["tactic-just-merged"]);
+    });
+
+    it("censuses the rest of the graph normally around a skipped node", () => {
+      const dir = tempDir();
+      node(dir, { id: "kind-tactic", kind: "kind" });
+      node(dir, {
+        id: "tactic-just-merged",
+        kind: "tactic",
+        phase: "done",
+        execution: verifiedExecution(42),
+      });
+      node(dir, {
+        id: "tactic-older",
+        kind: "tactic",
+        phase: "done",
+        execution: verifiedExecution(43),
+      });
+
+      const plan = censusTick({ dir, date: "2026-08-04", skip: ["tactic-just-merged"] });
+
+      expect(plan.prune).toEqual(["tactic-older"]);
+      expect(existsSync(join(dir, "tactic-older.md"))).toBe(false);
+      expect(existsSync(join(dir, "tactic-just-merged.md"))).toBe(true);
     });
   });
 });

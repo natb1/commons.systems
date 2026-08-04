@@ -16,6 +16,18 @@
 # small, directly into ordinary graph state (a prune or a selectable defect
 # tactic), rather than accumulating debt behind a config-gated birth.
 #
+# Usage:
+#   dispatch-census-tick [--skip <id>]...
+#
+# `--skip <id>` (repeatable) is forwarded verbatim as `--skip <id>` to
+# census-tick.ts: the id is excluded from this run's done-present partition —
+# neither pruned nor minted as a defect — while still counting as a surviving
+# node for every inbound-edge scan (see census-tick.ts's header). The tick
+# caller (dispatch-select-tick) passes the ids the SAME tick's
+# reconcile-graph-merged just transitioned to done, so census never deletes a
+# node seconds after the reconciler absorbed it; the prune simply happens on
+# the next tick.
+#
 # Doctrine: run from a main-based checkout (graph-commit lands state on
 # main). GRAPH-ONLY — no gh, no network. The CALLER wraps invocation with
 # dangerouslyDisableSandbox regardless, since node --import tsx/esm needs the
@@ -52,9 +64,9 @@
 # surviving node still names them via parent/serves/validates/recovers — left
 # on disk untouched, no defect minted (see census-tick.ts's header comment).
 #
-# Exit codes: 0 (including a no-op tick); 1 if intentions/ was already dirty on
-# entry (nothing run), or if census-tick.ts or graph-commit hard-errored (the
-# batch rolled back).
+# Exit codes: 0 (including a no-op tick); 1 on a bad argv (nothing run), if
+# intentions/ was already dirty on entry (nothing run), or if census-tick.ts or
+# graph-commit hard-errored (the batch rolled back).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,6 +74,26 @@ source "$SCRIPT_DIR/lib.sh"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
 GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
+
+# Argv parse (before any mutation): each `--skip <id>` is forwarded verbatim to
+# census-tick.ts, which excludes the id from this run's done-present partition.
+CENSUS_ARGS=()
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --skip)
+      if [[ "$#" -lt 2 || -z "$2" ]]; then
+        echo "dispatch-census-tick: --skip requires a node id" >&2
+        exit 1
+      fi
+      CENSUS_ARGS+=(--skip "$2")
+      shift 2
+      ;;
+    *)
+      echo "dispatch-census-tick: unknown argument '$1'" >&2
+      exit 1
+      ;;
+  esac
+done
 
 # Revert every intentions/ mutation this run made. `checkout` restores the
 # tracked files census-tick.ts deleted (prunes) and rewrote (edge repairs);
@@ -95,7 +127,8 @@ if [[ -n "$DIRT" ]]; then
 fi
 
 ROLLBACK_ARMED=1
-if ! OUT=$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/census-tick.ts") ); then
+if ! OUT=$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/census-tick.ts" \
+  ${CENSUS_ARGS[@]+"${CENSUS_ARGS[@]}"}) ); then
   echo "dispatch-census-tick: census-tick.ts failed; its partial intentions/ mutations were rolled back" >&2
   exit 1
 fi
