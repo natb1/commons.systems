@@ -49,7 +49,7 @@ blocked_by:
   - tactic-office-hours-concurrency-dedup
 office_hours:
   reason: worker session froze at a permission/classifier denial — claude agents
-    reports state=blocked and the transcript has had no activity for 1203s; the
+    reports state=blocked and the transcript has had no activity for 1209s; the
     session cannot make progress and cannot park itself (a blocked session never
     reaches the Stop hook), so the dispatch-tick frozen-session sweep parked
     this node
