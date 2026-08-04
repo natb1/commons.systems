@@ -408,10 +408,12 @@ def cmd_prefix(c):
 # NODE_ID PASSTHROUGH (tactic-outcome-envelope-node-lane-parity): $outcome is
 # bound to the WHOLE parsed envelope object above, not a hand-picked field
 # subset, so a node-lane envelope's `node_id` key rides through unstripped on
-# `.outcome.node_id` in the per-session summary and into `by_phase_outcome`
-# below. No reduce change is needed for this — the pooled phase metric keys
-# only on `.phase` — but the field is there for a future by-node-outcome join
-# analogous to `by_node` (see below).
+# `.sessions[].outcome.node_id` in the per-session summary — and only there.
+# It does NOT reach `by_phase_outcome` below: that reduce builds a fresh object
+# from an explicit key list and keys only on `.phase`. A future pooled
+# by-node-outcome join analogous to `by_node` (see below) would therefore need
+# a new reduce, and should key on the sidecar-derived `artifact.node_id` rather
+# than on this envelope field.
 
 # Ordered per-session token list of tool calls, in document order. Bash calls
 # become "Bash:<cmd_prefix>"; other tools become their name.
