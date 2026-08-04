@@ -30,8 +30,16 @@ attention:
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-token-audit-whole-session-phase-attribution
+  pr: 3032
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null

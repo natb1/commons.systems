@@ -69,14 +69,38 @@ attention:
   rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
     BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
     inbound distributor adds 5.33 — under that cluster's 20.00 and above the
-    5.33 undecomposed baseline. Simulated over the live store before writing:
-    0 tier changes, 0 value drift onto non-target nodes."
+    5.33 undecomposed baseline. Simulated over the live store before writing: 0
+    tier changes, 0 value drift onto non-target nodes."
   tier: 1
 phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Cannot autonomously finalize this tactic: /align-tactics tactic-mode
+    invocations are blocked by a mode-blind defect in the shared Workflow,
+    .claude/workflows/align-tactics.js. Its drift phase (buildDriftPrompt, line
+    ~656) is the STRATEGY-decomposability eligibility check verbatim -- \"the
+    strategy is decomposable this round only when ... it has no non-draft child
+    tactic already on its signal path\" -- but it runs UNCONDITIONALLY
+    regardless of args.mode (line 1009, no mode branch), and the plan phase
+    gates on its proceed verdict even in tactic mode (line 1085: if
+    (!driftProceed) planTactics = [];). Per this SKILL's own
+    references/tactic-target.md, tactic-mode selectability is already decided by
+    the router's frozenTacticSelectable gate before the session runs and must
+    not be re-decided here -- but the drift agent, correctly applying the
+    STRATEGY eligibility criteria it was given, found
+    strategy-graph-native-dispatch not decomposable (92 non-draft children
+    already on its signal path) and returned proceed=false, so the plan phase
+    never ran and no plan body was authored for this node (Workflow run
+    wf_7a2584e1-808, disposition escalated). Recorded as
+    tactic-align-tactics-workflow-tactic-mode-drift-gate. Recommend: land that
+    tactic's fix (scope the eligibility.decomposable gate and the driftProceed
+    plan-phase gate to mode !== \"tactic\"), then re-run /align-tactics
+    tactic-bounded-work-in-progress."
+  since: 2026-08-04
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
