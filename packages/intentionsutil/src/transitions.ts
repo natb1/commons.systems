@@ -113,6 +113,24 @@ export function fixInterrupt(phase: string, ci: CiVerdict): boolean {
   return ci === "failing" && FIX_INTERRUPTIBLE.has(phase);
 }
 
+// --- Conflict interrupt -------------------------------------------------------
+
+/** Spin guard on conflict-resolution attempts; matches legacy `/fix-conflicts`' cap of 3. */
+export const CONFLICT_ATTEMPT_CAP = 3;
+
+/**
+ * Whether a reviewed-awaiting-merge PR's `mergeable` value should set the
+ * orthogonal `execution.conflict` interrupt (clarification 66). This is the
+ * SELECTOR's mergeable-routing input, orthogonal to `phase` — exactly
+ * parallel to `fixInterrupt`. Only `"CONFLICTING"` fires; `"MERGEABLE"` never
+ * does, and `"UNKNOWN"` never does either — GitHub computes mergeability
+ * asynchronously, so `UNKNOWN` means "not yet known" and the caller should
+ * wait and re-check rather than treat it as a conflict.
+ */
+export function conflictInterrupt(mergeable: string): boolean {
+  return mergeable === "CONFLICTING";
+}
+
 // --- Whole forward-transition decision ---------------------------------------
 
 /** What the transition writer should do at the end of a phase worker's run. */

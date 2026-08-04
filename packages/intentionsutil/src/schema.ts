@@ -462,6 +462,19 @@ export interface FixState {
 }
 
 /**
+ * A pending-merge conflict interrupt in flight on a tactic, orthogonal to
+ * `phase` — exactly parallel to `FixState`, but for a reviewed-awaiting-merge
+ * node whose PR reports `mergeable == CONFLICTING` rather than failing CI.
+ * `since` is the interrupt date (`date -u +%Y-%m-%d`); `attempt` is the
+ * conflict-resolution attempt counter. No `pushed_sha` guard: conflicts have
+ * no pending-CI-sha to wait on.
+ */
+export interface ConflictState {
+  since: string;
+  attempt: number;
+}
+
+/**
  * Merge-verification evidence recorded on `Execution` at the done-transition,
  * so a merge-verification gate need not trust `execution.pr` alone. There are
  * two independent sufficient proofs:
@@ -499,6 +512,13 @@ export interface Execution {
    * it (to a validated object or `null`) on any value it returns.
    */
   fix?: FixState | null;
+  /**
+   * Optional (not just nullable) at the type level: existing `Execution`
+   * object literals across the codebase predate this field and are out of
+   * scope for this additive-only unit. `validateExecution` always populates
+   * it (to a validated object or `null`) on any value it returns.
+   */
+  conflict?: ConflictState | null;
   completion?: Completion | null;
 }
 
@@ -623,6 +643,22 @@ function validateFixState(value: unknown, field: string): FixState | null {
 }
 
 /**
+ * Nullable `ConflictState` object: string `since`, number `attempt`. Mirrors
+ * `validateFixState` minus `pushed_sha` (conflicts have no pending-CI-sha
+ * guard).
+ */
+function validateConflictState(value: unknown, field: string): ConflictState | null {
+  if (value == null) return null;
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object or null for ${field}, got ${typeof value}`);
+  }
+  return {
+    since: requireDateString(value.since, `${field}.since`),
+    attempt: requireNonNegativeInt(value.attempt, `${field}.attempt`),
+  };
+}
+
+/**
  * Nullable `Completion` object: nullable strings `mergedAt`, `mergeCommitSha`,
  * `graphCommitSha`. Deliberately uses `optionalString` (not
  * `optionalDateString`) for `mergedAt` — GitHub's `merged_at` is a full
@@ -652,6 +688,7 @@ function validateExecution(value: unknown, field: string): Execution {
     markers: validateIdArray(value.markers, `${field}.markers`),
     strategy_fingerprint: validateStrategyFingerprint(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
     fix: validateFixState(value.fix, `${field}.fix`),
+    conflict: validateConflictState(value.conflict, `${field}.conflict`),
     completion: validateCompletion(value.completion, `${field}.completion`),
   };
 }

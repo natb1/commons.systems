@@ -81,6 +81,7 @@ describe("validateNode", () => {
       markers: ["dispatch:qa"],
       strategy_fingerprint: "abc123",
       fix: null,
+      conflict: null,
       completion: null,
     });
     expect(result.validates).toEqual(["strategy-1"]);
@@ -115,6 +116,7 @@ describe("validateNode", () => {
       markers: [],
       strategy_fingerprint: null,
       fix: null,
+      conflict: null,
       completion: null,
     });
   });
@@ -171,6 +173,96 @@ describe("validateNode", () => {
       mergeCommitSha: null,
       graphCommitSha: "abc123",
     });
+  });
+
+  it("round-trips a valid execution.conflict object", () => {
+    const result = validateNode({
+      id: "n1-conflict",
+      kind: "tactic",
+      statement: "Execution with a conflict interrupt in flight.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: 42,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        conflict: { since: "2026-08-03", attempt: 1 },
+      },
+    });
+    expect(result.execution?.conflict).toEqual({ since: "2026-08-03", attempt: 1 });
+  });
+
+  it("accepts a null execution.conflict", () => {
+    const result = validateNode({
+      id: "n1-conflict-null",
+      kind: "tactic",
+      statement: "Execution with an explicit null conflict.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        conflict: null,
+      },
+    });
+    expect(result.execution?.conflict).toBeNull();
+  });
+
+  it("defaults execution.conflict to null when absent", () => {
+    const result = validateNode({
+      id: "n1-conflict-absent",
+      kind: "tactic",
+      statement: "Execution with no conflict field at all.",
+      owner: "ai",
+      status: "raw",
+      execution: { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
+    expect(result.execution?.conflict).toBeNull();
+  });
+
+  it("rejects an execution.conflict with a malformed attempt", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-conflict-bad-attempt",
+        kind: "tactic",
+        statement: "Conflict with a non-numeric attempt.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: null,
+          conflict: { since: "2026-08-03", attempt: "one" },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects an execution.conflict with a malformed since date", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-conflict-bad-since",
+        kind: "tactic",
+        statement: "Conflict with a malformed since date.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: null,
+          conflict: { since: "08/03/2026", attempt: 0 },
+        },
+      }),
+    ).toThrow(IntentionSchemaError);
   });
 
   it("accepts a per-strategy strategy_fingerprint map", () => {
