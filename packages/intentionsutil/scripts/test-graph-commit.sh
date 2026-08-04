@@ -187,8 +187,10 @@
 #      (genuine rm+commit+push, not --prune), then a stale --base edit races
 #      it: exit 1, no false "layer 2/3 auto-resolved" claim, the node is
 #      re-materialized onto main carrying office_hours and the
-#      "delete/modify divergence" recommendation, and the writer's original
-#      field content survives in the re-materialized body
+#      "delete/modify divergence" recommendation, the writer's field edit
+#      survives in the re-materialized frontmatter, and the node's authored
+#      markdown body is preserved rather than replaced by the generated
+#      "# <statement>" placeholder
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -1863,8 +1865,10 @@ if [[ $rc -eq 1 ]] \
    && ! grep -q 'layer 2/3 auto-resolved' <<<"$out" \
    && grep -q 'office_hours' <<<"$content" \
    && grep -q 'delete/modify divergence' <<<"$content" \
-   && grep -q 'fieldA: writer23-edit' <<<"$content"; then
-  ok "delete/modify divergence: deletion lands first, stale-base edit races it, park re-materializes the node with office_hours"
+   && grep -q 'fieldA: writer23-edit' <<<"$content" \
+   && grep -q 'Placeholder body for t-field-delete-edit\.' <<<"$content" \
+   && ! grep -q '^# base statement for t-field-delete-edit' <<<"$content"; then
+  ok "delete/modify divergence: deletion lands first, stale-base edit races it, park re-materializes the node with office_hours, authored body preserved"
 else
   no "delete/modify divergence (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
