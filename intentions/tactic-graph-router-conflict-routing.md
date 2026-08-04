@@ -46,12 +46,13 @@ serves:
   - strategy-graph-native-dispatch
 recovers: []
 clarifications:
-  - question: Is a merge conflict handled exactly like a failing CI check — interrupt
-      phase progression, launch the conflict-resolution skill directly, and park
-      the source node itself only when the skill cannot resolve it mechanically?
-    answer: "(Recorded 2026-08-03, author-confirmed.) Yes, and that is this
-      tactic's design as already written — this clarification ratifies it as the
-      target and resolves one live contradiction against
+  - question: Is a merge conflict handled exactly like a failing CI check —
+      interrupt phase progression, launch the conflict-resolution skill
+      directly, and park the source node itself only when the skill cannot
+      resolve it mechanically?
+    answer: "(Recorded 2026-08-03, author-confirmed.) Yes, and that is this tactic's
+      design as already written — this clarification ratifies it as the target
+      and resolves one live contradiction against
       [[tactic-mechanical-park-producers]]. Four points. (1) PARITY IS EXACT.
       The conflict interrupt is the structural twin of the CI-fix interrupt, not
       a separate lane: `execution.conflict` mirrors `execution.fix`'s shape, the
@@ -73,8 +74,8 @@ clarifications:
       required → park. (4) THE PARK LANDS ON THE SOURCE NODE'S OWN
       `office_hours`, carrying the reason and the recommended next step — the
       same shape `/fix-checks` and `/qa-fix` already use for their own
-      escalations. This is what this node's Plan already specifies
-      (`park-node <id> conflict-attempt-cap \"<recommendation>\"` in
+      escalations. This is what this node's Plan already specifies (`park-node
+      <id> conflict-attempt-cap \"<recommendation>\"` in
       `_gate_conflict_active`), and it now explicitly SUPERSEDES
       [[tactic-mechanical-park-producers]]' direction that this cap call
       `hold-node` instead of parking. No hold node, no `blocked_by` edge, and no
@@ -96,15 +97,32 @@ attention:
   rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
     BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
     inbound distributor adds 5.33 — under that cluster's 20.00 and above the
-    5.33 undecomposed baseline. Simulated over the live store before writing:
-    0 tier changes, 0 value drift onto non-target nodes."
+    5.33 undecomposed baseline. Simulated over the live store before writing: 0
+    tier changes, 0 value drift onto non-target nodes."
   tier: 1
 phase: implement
 execution: null
 validates: []
 blocked_by:
   - tactic-dispatch-conflict-branch-merge-lane
-office_hours: null
+office_hours:
+  reason: worker session froze at a permission/classifier denial — claude agents
+    reports state=blocked and the transcript has had no activity for 1062s; the
+    session cannot make progress and cannot park itself (a blocked session never
+    reaches the Stop hook), so the dispatch-tick frozen-session sweep parked
+    this node
+  since: 2026-08-04
+  recommendation: Find the holding job with 'claude agents --all' and attach it
+    ('claude attach <job-id>'), then answer the pending prompt. If the denied
+    command was gratuitous, cancel it and let the worker continue; if it is
+    genuinely needed, run it yourself or add a standing permission rule — do NOT
+    rewrite the command to route around the classifier. If the session is
+    unrecoverable, stop it ('claude rm <job-id>'), let dispatch-sweep reap the
+    worktree, then run clear-park <node-id> to return the node to the lane.
+    Until that session is gone, office-hours reports this node as 'all-held'
+    rather than launching a review session for it, because the frozen session
+    still holds the node-id session name.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
