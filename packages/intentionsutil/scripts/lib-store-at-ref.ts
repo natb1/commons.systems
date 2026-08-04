@@ -32,7 +32,7 @@ import type { IntentionNode } from "../src/schema.js";
  * real answer. Enumeration is STRICT for the same reason: this helper serves
  * gate and selection callers, where absence from the enumerated set carries
  * load-bearing "pass" semantics (`blockersComplete` reads an absent
- * `blocked_by` id as COMPLETE). It therefore calls `listNodesStrict`, not the
+ * `blocked_by` id as complete). It therefore calls `listNodesStrict`, not the
  * tolerant `listNodes` — a file that cannot be read or validated at `ref`
  * propagates its `IntentionSchemaError` uncaught instead of being silently
  * skipped. A malformed node at `origin/main` is a repo-integrity failure, not

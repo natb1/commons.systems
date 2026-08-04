@@ -54,6 +54,8 @@ function cloneFull(origin: string): string {
   scratch.push(dir);
   const dest = join(dir, "repo");
   execFileSync("git", ["clone", "--quiet", `file://${origin}`, dest], { encoding: "utf8" });
+  git(dest, "config", "user.email", "test@example.com");
+  git(dest, "config", "user.name", "Test");
   return dest;
 }
 
