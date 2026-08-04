@@ -117,7 +117,10 @@ function isPlainObjectLike(value: unknown): value is Record<string, unknown> {
 /** Exact membership read: a non-member (or non-string) is `null`, never coerced. */
 function readEnum<T extends string>(value: unknown, members: readonly T[]): T | null {
   if (typeof value !== "string") return null;
-  return (members as readonly string[]).includes(value) ? (value as T) : null;
+  for (const member of members) {
+    if (member === value) return member;
+  }
+  return null;
 }
 
 /**
@@ -129,8 +132,9 @@ function readEnum<T extends string>(value: unknown, members: readonly T[]): T | 
 function delegationAttributes(
   delegation: IntentionNode | Record<string, unknown>,
 ): Record<string, unknown> {
-  const own = (delegation as Partial<IntentionNode>).attributes;
-  return isPlainObjectLike(own) ? own : (delegation as Record<string, unknown>);
+  if (!isPlainObjectLike(delegation)) return {};
+  const own = delegation.attributes;
+  return isPlainObjectLike(own) ? own : delegation;
 }
 
 /** `attributes.divergence.level`, or null if absent/out-of-enum. */
