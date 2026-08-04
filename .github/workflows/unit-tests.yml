@@ -216,6 +216,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-xlane-dedup.sh
       - name: Run review-fix domain-sweep tests
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-domain-sweep.sh
+      - name: Run review-fix skeptic-batching tests
+        run: .claude/skills/dispatch-propagate/scripts/test-review-fix-skeptic-batch.sh
       - name: Run dispatch-verify-instrument-invocation tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-verify-instrument-invocation.sh
       - name: Run dispatch-stop hook tests
