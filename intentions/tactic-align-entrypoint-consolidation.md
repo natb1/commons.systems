@@ -26,7 +26,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-align-entrypoint-consolidation
   pr: 2983
@@ -37,7 +37,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T10:24:00Z
+    mergeCommitSha: c845d50f88458ea14d6f481f8ae9da43e8ce94fb
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-align-tactics-mechanical-floor
