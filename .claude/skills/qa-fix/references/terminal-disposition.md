@@ -90,12 +90,21 @@ Source the counts by whether Step 3.5 ran this pass:
   fan-out is added).
 
 qa-fix keeps **no** merge base, so **omit** `--base-sha`. Derive `repo` from the
-local remote (read-only git, sandbox-safe):
+local remote (read-only git, sandbox-safe). On the node lane (`TARGET_KIND=node`)
+pass `--node-id "$N"` and omit `--issue`; on the legacy issue lane
+(`TARGET_KIND=issue`) keep `--issue "$N"` and omit `--node-id` — see the
+idempotency preamble's "never pass `--issue`" node-lane rule, which extends here
+to naming the `--node-id "$N"` substitution:
 
 ```bash
 REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+if [[ "$TARGET_KIND" == node ]]; then
+  id_arg=(--node-id "$N")
+else
+  id_arg=(--issue "$N")
+fi
 .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
-  --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+  --phase qa --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" \
   --findings-surfaced <result.findings_surfaced, or 0 if Step 3.5 was skipped> \
   --findings-actionable <result.findings_actionable, or 0 if Step 3.5 was skipped> \
   --fixes-applied 0 \
@@ -206,12 +215,19 @@ differ in whether the Step-3.5 Workflow ran — source the counts accordingly:
   reported `0`.
 
 qa-fix keeps **no** merge base, so **omit** `--base-sha`. Derive `repo` from the
-local remote (read-only git, sandbox-safe):
+local remote (read-only git, sandbox-safe). On the node lane (`TARGET_KIND=node`)
+pass `--node-id "$N"` and omit `--issue`; on the legacy issue lane
+(`TARGET_KIND=issue`) keep `--issue "$N"` and omit `--node-id`:
 
 ```bash
 REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+if [[ "$TARGET_KIND" == node ]]; then
+  id_arg=(--node-id "$N")
+else
+  id_arg=(--issue "$N")
+fi
 .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
-  --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+  --phase qa --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" \
   --findings-surfaced <result.findings_surfaced, or 0 if Step 3.5 did not run> \
   --findings-actionable <result.findings_actionable, or 0 if Step 3.5 did not run> \
   --fixes-applied 0 \

@@ -51,7 +51,7 @@ attention:
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-router-live-worker-read-robust
   pr: 3010
@@ -62,11 +62,42 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-03T22:01:11Z
+    mergeCommitSha: dd56eb369aa6cfad23cc2219686ea1e747383c5f
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-graph-router-live-worker-visibility
-office_hours: null
+office_hours:
+  reason: "Awaited event not yet occurred: a dispatch-select-tick cold start
+    against a genuinely idle fleet (empty claude agents --json array), which
+    would exercise Unit 1's corroboration probe against the real daemon/process
+    table for the first time in production. Checked journalctl --user -t
+    dispatch-tick since the 2026-08-03T22:01:11Z merge through 2026-08-04T03:46Z
+    (~5h45m): 8 tick runs 22:01-23:46 UTC (~15min cadence), each emitting a
+    normal 'graph <count> node:kind:phase ...' decision line, zero occurrences
+    of concurrency-cap or live-read-unverified in that window. But every sampled
+    tick found the fleet already busy (implement/qa/review/align-tactics/main-qa
+    work continuously in flight across many nodes) -- no tick observed a truly
+    empty live-worker set, so the probe path this item watches for was never
+    confirmed exercised. No tick activity 23:46-03:46 (this /qa-main session was
+    the outstanding spawn from the last tick). Re-check after the fleet next
+    drains to zero live workers between ticks (e.g. an overnight/low-activity
+    window) and grep the same window for live-read-unverified."
+  since: 2026-08-04
+  recommendation: "No author decision needed -- re-selection only, once a
+    genuinely idle-fleet cold start has occurred post-merge. Lane-M commands
+    run: journalctl --user -u 'dispatch-tick*' --since '2026-08-03 22:01:00' (0
+    entries -- dispatch-tick is not a systemd timer unit, it's spawned
+    per-cycle); journalctl --user -t dispatch-tick --since '2026-08-03 22:01:00'
+    | grep -E 'graph [0-9]+ |concurrency-cap' (8 normal graph-decision lines, no
+    concurrency-cap); journalctl --user --since '2026-08-03 22:01:00' | grep -iE
+    'concurrency-cap|live-read-unverified' (0 matches). Result category: healthy
+    tick activity throughout the observed window, no regression signal, but the
+    specific idle-fleet cold-start scenario this item names has not yet
+    occurred."
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}

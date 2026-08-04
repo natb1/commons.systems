@@ -107,7 +107,10 @@ esac
 ```
 
 On the node lane, `$N` is the node id (keys `tmp/` filenames); never pass
-`--issue`. **On the node lane no gh issue is ever read or written.**
+`--issue`. **On the node lane no gh issue is ever read or written.** This
+extends to every `dispatch-emit-outcome` call site (Step 7 /
+`references/terminal-actions.md`): on the node lane pass `--node-id "$N"` in
+place of `--issue "$N"`.
 
 ```bash
 case "$TARGET_KIND" in

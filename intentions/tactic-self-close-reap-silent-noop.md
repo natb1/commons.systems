@@ -13,33 +13,32 @@ rationale: "Confirmed live 2026-08-03 by direct reproduction. THE DEFECT:
   dispatch-self-close ends with `exec \"$CLAUDE_CMD\" rm \"$JOB_ID\"`, and
   treats that exec as the reap. But when the session's worktree cannot be
   verified against a repository, `claude rm` does not remove it — it prints
-  `kept <id> — worktree has files but no repository to verify them against`
-  and exits **0**. Reproduced verbatim against session e2636150. Because the
-  exit status is 0, the Stop hook sees a successful reap, no error is logged,
-  no retry is scheduled, and no detect fires. The session stays registered in
+  `kept <id> — worktree has files but no repository to verify them against` and
+  exits **0**. Reproduced verbatim against session e2636150. Because the exit
+  status is 0, the Stop hook sees a successful reap, no error is logged, no
+  retry is scheduled, and no detect fires. The session stays registered in
   `claude agents --json --all` forever. THE CONSEQUENCE: graph-select-target's
-  occupancy check (`worktree_has_live_session`) is NAME-keyed on the node id,
-  so a permanently-registered terminal session makes its node permanently
-  unselectable while also consuming a live-session slot — the exact
-  double-bind the auto-heal contract exists to prevent, arrived at through a
-  path that reports success at every step. THE TRIGGER, and why this is
-  systemic rather than incidental: the unverifiable-worktree condition holds
-  whenever the node's branch was never pushed to origin. An `/align-tactics`
-  round lands its work by `graph-commit` direct-push to `main` and never
-  pushes a branch named for the node, so EVERY align-round node worker ends in
-  this state. Measured 2026-08-03: of 5 stranded terminal sessions, 4 carried
-  a correct `node-terminal` marker with `disposition=align-round` and all 4
-  had `remote=NO` for their node branch — the reap gate passed and the reap
-  itself silently did nothing. Since the router autonomously decomposes draft
-  tactics through `/align-tactics` (the fleet's most frequent unattended
-  phase), this leaks a session per align-round indefinitely. THE FIX
-  DIRECTION: `claude rm`'s decline is detectable — it is reported on stdout
-  and the session remains present in a subsequent listing — so self-close must
-  verify the removal rather than trust the exit code, and on a detected
-  decline either remove the worktree first (the documented remedy) and retry,
-  or emit a loud, detectable failure. This is the project's recurring
-  silent-PASS class: an instrument or action whose failure mode is
-  indistinguishable from success."
+  occupancy check (`worktree_has_live_session`) is NAME-keyed on the node id, so
+  a permanently-registered terminal session makes its node permanently
+  unselectable while also consuming a live-session slot — the exact double-bind
+  the auto-heal contract exists to prevent, arrived at through a path that
+  reports success at every step. THE TRIGGER, and why this is systemic rather
+  than incidental: the unverifiable-worktree condition holds whenever the node's
+  branch was never pushed to origin. An `/align-tactics` round lands its work by
+  `graph-commit` direct-push to `main` and never pushes a branch named for the
+  node, so EVERY align-round node worker ends in this state. Measured
+  2026-08-03: of 5 stranded terminal sessions, 4 carried a correct
+  `node-terminal` marker with `disposition=align-round` and all 4 had
+  `remote=NO` for their node branch — the reap gate passed and the reap itself
+  silently did nothing. Since the router autonomously decomposes draft tactics
+  through `/align-tactics` (the fleet's most frequent unattended phase), this
+  leaks a session per align-round indefinitely. THE FIX DIRECTION: `claude rm`'s
+  decline is detectable — it is reported on stdout and the session remains
+  present in a subsequent listing — so self-close must verify the removal rather
+  than trust the exit code, and on a detected decline either remove the worktree
+  first (the documented remedy) and retry, or emit a loud, detectable failure.
+  This is the project's recurring silent-PASS class: an instrument or action
+  whose failure mode is indistinguishable from success."
 reading: null
 gap: null
 serves:
@@ -48,12 +47,69 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 12
+  override: null
+  rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
+    BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
+    inbound distributor adds 5.33 — under that cluster's 20.00 and above the
+    5.33 undecomposed baseline. Simulated over the live store before writing: 0
+    tier changes, 0 value drift onto non-target nodes."
+  tier: 1
 phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "REQUIREMENT AMBIGUITY — Step 2 as recorded cannot be planned as
+    written; it would strand every common-case node worker. VERIFIED 2026-08-04
+    against HEAD: session_reap_sweep skips at gate 7b when the worktree tree
+    differs from origin/main outside intentions/ (lib-session-reap.sh:429-445)
+    and at gate 7c when any OPEN PR has the branch as head (:447-469) — i.e.
+    every implement/qa/review/fix worker. Every other dispatch-sweep worktree
+    arm SKIPs on worktree_has_live_session (dispatch-sweep:415,467,495), which
+    reads the REGISTERED view, so a stopped-but-unremoved session still counts
+    as live. dispatch-self-close:222 is therefore the ONLY reaper for the
+    declared-terminal common case; step 1's unlock criterion (sweep observed
+    reaping within one interval — SESSION_REAPED 22:02:39 and 22:32:16 UTC
+    2026-08-03) was met only for the align-round class, whose branches are never
+    pushed and have no PR. With tactic-stopped-session-blocks-node
+    (codified/done: a registered session blocks its node permanently, NO
+    TIMEOUT), deleting line 222 makes each such node permanently unselectable —
+    and the deadlock is circular, not merely delayed, because the PR can only
+    merge after qa/review, which cannot start while the implement session holds
+    the node. This contradicts the strategy's condition 'AUTO-CLOSE REMAINS THE
+    DOCTRINAL DEFAULT FOR EVERY DECLARED TERMINAL DISPOSITION'. AUTHOR DECISION
+    NEEDED — two questions: (1) What reaps a marker-declared terminal session
+    whose branch has unlanded content or an open PR once self-close no longer
+    reaps? Candidates: (a) retire Step 2 — self-close stays the reaper for the
+    DECLARED case and session_reap_sweep stays a backstop for the
+    undeclared/align-round class only (one reaper per class, not one reaper
+    overall); (b) narrow gates 7b/7c so a marker-declared session is reapable
+    despite unlanded content/open PR (the worktree-remove-first step then needs
+    a safety story for unlanded work); (c) a third design. (2) Which tactic owns
+    dispatch-self-close's terminal reap line?
+    tactic-worker-self-close-configurable (status codified, phase implement, IN
+    FLIGHT) plans a default-off keep-all config gate layered on exactly that
+    call site (its body cites dispatch-self-close:216, today's line 222). Step 2
+    deletes the site its sibling gates; the two cannot both land as written and
+    the ordering is unrecorded. Recommend: settle (1) then (2) in an
+    /align-strategy sitting or an office-hours disposition; amend this node's
+    'Brownfield migration' section (body ~173-190) and its 'Amendment to scope
+    note' to the ratified answer; then re-run /align-tactics
+    tactic-self-close-reap-silent-noop to finalize. STATE A FRESH SESSION NEEDS:
+    step 1 (session_reap_sweep, PR #3026 / commit 2b3ff597) is LANDED, wired at
+    dispatch-sweep:70,566, and verified reaping in production — a re-plan must
+    scope to the remaining question ONLY and must not re-propose the sweep arm;
+    the two invariants above line 222 (router continuation, node-terminal marker
+    check) stay out of scope; re-run journalctl --user -t dispatch-sweep --since
+    <ts> | grep -E
+    'SESSION_REAPED|REAP_DECLINED|SESSION_REAP_UNVERIFIED|SESSION_REAP_SKIP_OPE\
+    N_PR' (dangerouslyDisableSandbox) to reconfirm the gate behavior before
+    executing."
+  since: 2026-08-04
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

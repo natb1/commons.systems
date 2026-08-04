@@ -46,15 +46,43 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: implement
-execution: null
+phase: main-qa
+execution:
+  branch: tactic-review-cross-lane-dedup
+  pr: 3028
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-04T00:30:23Z
+    mergeCommitSha: 0710dc0e204bf7c9284ebcf4f7f30ef16c17ae84
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: provision-node-worktree failed for this tactic (exit 2)
-  since: 2026-08-03
-  recommendation: Inspect the provisioning failure (git fetch/worktree add,
-    direnv) in the tick journal, fix the environment, and re-run the phase.
+  reason: "needs-main item 10 (WAIT): awaits the first live /review-fix run whose
+    code includes this tactic's cross-lane absorption logic (Units 1-3, merged
+    as 0710dc0e via PR #3028). Checked: the one post-merge review-fix run so far
+    (PR #3027, fix commit a4dda1b5, merged 2026-08-04T00:47:17Z) ran on a
+    pre-merge branch -- 0710dc0e is not an ancestor of a4dda1b5, and grepping
+    that commit's review-fix.js for
+    xlane-dedup/LANE_A_SOURCES/laneAAbsorbCandidates finds none. origin/main
+    HEAD (ef2a96e5) does include 0710dc0e. Earliest useful re-check: the next
+    /review-fix run on any PR branched from current origin/main -- several are
+    in flight (PR #3029, #3025, #3023, and others) and will cycle through
+    review-fix soon."
+  since: 2026-08-04
+  recommendation: "No author decision needed -- re-selection only, once a
+    /review-fix run against post-0710dc0e code completes (xlane-dedup:-labelled
+    agents present, or a logged zero-contested-locations line, either satisfies
+    the item). Re-check by: git log origin/main and confirm a PR merged after
+    0710dc0e whose review-fix pass ran on a branch with 0710dc0e as an ancestor
+    of its fix commit, then read that PR's review-fix disposition comment for
+    the absorption summary line."
   session_type: other
 pace_exempt: false
 rounds: null
@@ -671,3 +699,31 @@ Manual / judgment checks — the ones a suite cannot make:
   deviating from the normative "distinct locations never merge" rule and
   running many more partition agents. Left out deliberately; revisit only with
   real-instrument data.
+
+## needs-main residue
+
+- **id:** 10 — Observe the first live `/review-fix` run after merge
+  - URL path: current
+  - Expected outcome: End-to-end absorption observed once on real data:
+    `xlane-dedup:`-labelled agents appear (or zero contested locations, also
+    valid), the absorption summary log line is present, residue count drops
+    by exactly the absorbed count, and the posted PR comment shows the
+    absorbed root once under the Lane-B source with both lanes in `sources`.
+  - Finding: this is the PR's own unchecked test-plan box ("Observe in
+    production on the first real review run after merge"). The absorption
+    code path only executes inside the `/review-fix` Workflow tool's real
+    two-lane gather/dedup/verify/fix/residue pipeline against genuine
+    findings from both lanes at the same `path:line` — no standalone `node`
+    invocation, fixture, or pre-merge check can exercise it end-to-end. The
+    probe fixtures (`test-review-fix-xlane-dedup.sh`) already cover the pure
+    functions in isolation; this is the remaining live-integration
+    observation, structurally unreachable before merge.
+  - Verifiability: WAIT — awaiting the next live `/review-fix` run (on any
+    PR, post-merge of this tactic) that produces a genuine cross-lane
+    duplicate finding.
+  - Check: read the `/review-fix` Workflow transcript / PR comment of that
+    next run for an `xlane-dedup:<loc>`-labelled partition agent and the
+    `xlane-dedup: <n> contested location(s), <n> Lane-A item(s) absorbed, ...`
+    summary log line; confirm the PR's `<!-- dispatch:qa-summary -->` (or
+    review-fix's own disposition comment) shows the absorbed root once under
+    the Lane-B source with both lanes listed in `sources`.
