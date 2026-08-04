@@ -338,3 +338,27 @@ Manual/observational:
 `tactic-office-hours-concurrency-dedup` (the launch-path half),
 `tactic-drain-disposition-diagnosis-cas` (the write-time half of the same race),
 `tactic-claim-dedup-only` (claiming is scheduling dedup, never an edit block).
+
+## needs-main residue
+
+- **id 6** — Two concurrent `/office-hours <node-id>` drains — second stops at
+  the claim step.
+  - URL path: current
+  - Expected outcome: the second drain halts at the claim step, before
+    surfacing any park context, and reports the node as already held by the
+    live first session; the first session completes normally.
+  - Finding: multi-session concurrency scenario the PR (#3035) documents as
+    observational and non-auto-runnable in its own Test plan (unchecked item:
+    "Manual: two concurrent `/office-hours <node-id>` drains — second stops
+    at the claim step before surfacing park context (observational, not
+    auto-runnable)"). Cannot be reproduced or asserted from within a single
+    QA session; needs a real concurrent-drain scenario to observe.
+  - Verifiability: MACHINE
+  - Check: launch two `/office-hours <node-id>` sessions concurrently against
+    the same parked node (post-#3035, on `origin/main`); confirm via
+    `tmp/dispatch-reservations/<node-id>` (the reservation marker's
+    `session=` line) and each session's own transcript/output that only the
+    first session's `session=` id is recorded, and that the second session's
+    output reports the collision and stops before any park-reason surfacing
+    — no `gh pr diff` call, no recommendation subagent output in its
+    transcript.
