@@ -47,28 +47,7 @@ execution:
 validates: []
 blocked_by:
   - tactic-office-hours-concurrency-dedup
-office_hours:
-  reason: "needs-main residue items wrapper-live-dispatch and
-    stale-worktree-live-repro (PR #2976, merged 2026-08-04T09:01:13Z) are
-    WAIT-verifiability: they await a live post-merge
-    office-hours-graph/office-hours-select.ts dispatch run (targeted launch,
-    --list queue-head selection, held/liveness dedup, the reworded not-parked
-    message) and a genuine stale-worktree repro under concurrent dispatch.
-    journalctl --since 2026-08-04T09:00 shows no such invocation yet — only
-    unrelated graph-commit/reconcile-graph bookkeeping and this node's own
-    historic self-inflicted park-clear. Re-check after the next live
-    /office-hours dispatch cycle exercises this code path (earliest useful
-    re-check: next tick that runs office-hours-graph with a real target, or
-    after roughly a day of ticks)."
-  since: 2026-08-04
-  recommendation: "No author decision needed — re-selection only, once a live
-    office-hours-graph/office-hours-select.ts invocation appears in journalctl
-    post-merge. Lane-M check already run this pass: gh pr view 2976 confirmed
-    MERGED at 2026-08-04T09:01:13Z; journalctl --since 2026-08-04T09:00 grepped
-    for office-hours-select.ts/office-hours-graph runtime markers (targeted
-    launch, not-parked message, held/liveness lines) — no matching live-dispatch
-    invocation found yet."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
