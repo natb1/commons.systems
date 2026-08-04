@@ -51,26 +51,7 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: needs-main residue item 5 asks a human to ratify a design/policy
-    judgment already made by /align-tactics -- whether reclaiming a stranded
-    reservation-ledger marker via reservation_sweep in the explicit-node
-    dispatch branch (option 1, implemented in Unit 1) is the correct disposition
-    versus merely documenting the gap (option 2), and whether best-effort ||
-    true non-fatal sweep semantics are acceptable. QA's own triage subagent
-    flagged this as a subjective policy call, not a machine-assertable fact --
-    no git, journal, log, shell, or filesystem check can decide it.
-  since: 2026-08-04
-  recommendation: "Confirm the policy: running reservation_sweep before
-    graph-select-target --node in the explicit-node branch (mirroring the
-    autonomous block's existing sweep call, so a stale dead-session marker never
-    refuses an explicit human dispatch), with a sweep failure never blocking the
-    explicit dispatch (best-effort || true). This node has no MACHINE-verifiable
-    needs-main items -- Unit 1 (the sweep wiring) and Unit 2 (its test coverage)
-    already landed via the merged source PR (execution.pr 2952); this is the
-    sole remaining residue item and it is a pure author ratification, not a
-    regression check."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
