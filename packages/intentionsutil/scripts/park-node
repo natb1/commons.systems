@@ -42,6 +42,15 @@
 # leaked dirty node file trips graph-commit's assert_clean_outside_ids guard
 # for every other unrelated node in that worktree, AND blocks dispatch-tick's
 # own `git merge --ff-only` sync fleet-wide for as long as it persists.
+# The restore is itself conditional on the checkout still being the one this
+# script wrote: graph-commit has failure paths that commit the park locally, or
+# `git reset --hard` onto a fresher origin/main, before exiting non-zero — and
+# it only rewinds HEAD when its own RESTORE_HEAD=1, which it deliberately does
+# NOT set for the main-checkout/clean-worktree callers here. So restore_node
+# declines (with a diagnostic) when HEAD has moved or when the node file no
+# longer hashes to the blob this script wrote; in those cases the pre-refresh
+# bytes would be an uncommitted REVERT of a park that is already committed,
+# which is the very dirty tree this rollback exists to prevent.
 #
 # The park-recommendation contract: a mechanical park must carry recoverable
 # context — a reason AND a best-next-steps recommendation. `office_hours.
@@ -219,18 +228,64 @@ if [[ -f "$INTENTIONS_DIR/$NODE_ID.md" ]]; then
   fi
   ORIG_EXISTED=1
 fi
+# HEAD_BEFORE pins the commit the checkout was on when the pre-refresh copy was
+# taken. The rollback below is only valid while HEAD has not moved: graph-commit
+# has exit-1 paths that FIRST commit the park locally (or `git reset --hard
+# FETCH_HEAD` onto a fresher origin/main) and only rewind when its own
+# RESTORE_HEAD=1 — which ensure_intentions_only_base deliberately leaves at 0
+# for the main-checkout/clean-worktree callers this script routinely runs from.
+# Restoring the pre-refresh bytes over a HEAD that already contains the park
+# would write an uncommitted REVERT of the park into the tree: it blocks
+# dispatch-tick's `git merge --ff-only` sync fleet-wide, trips
+# assert_clean_outside_ids for every other node write from that checkout, and —
+# if a later writer commits intentions/ from there — silently clears the park a
+# human gate had frozen. An empty HEAD_BEFORE (unborn HEAD, or git unavailable)
+# disables the comparison rather than failing the rollback.
+HEAD_BEFORE="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
 
 # restore_node — put intentions/$NODE_ID.md back to its pre-refresh state.
 # Copies to a temp sibling and mv's into place only on success, so a failed copy
 # never truncates the node file to zero bytes. When the file did not exist
-# before (a worktree branch predating the node), the restore is a delete.
+# before (a worktree branch predating the node), the restore returns the tree to
+# clean — a delete only when the path is genuinely untracked.
+#
+# Both guards below detect "graph-commit has already committed or reset this
+# file, so park-node's pre-refresh bytes are no longer the correct restore
+# target" and decline to write, printing a diagnostic instead.
 restore_node() {
+  local head_now blob_now
+  head_now="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -n "$HEAD_BEFORE" && -n "$head_now" && "$head_now" != "$HEAD_BEFORE" ]]; then
+    echo "park-node: HEAD moved from $HEAD_BEFORE to $head_now during the park — graph-commit already committed or reset intentions/$NODE_ID.md, so the pre-refresh copy is no longer the correct restore target; leaving the file as graph-commit left it (check 'git -C $REPO_ROOT log -1' and whether the park needs a retry)" >&2
+    return
+  fi
+  # EXPECT_BLOB is only set once this script's own office_hours write has
+  # landed on disk; before that there is nothing to compare against.
+  if [[ -n "${EXPECT_BLOB:-}" ]]; then
+    blob_now="$(git -C "$REPO_ROOT" hash-object -- "intentions/$NODE_ID.md" 2>/dev/null || true)"
+    if [[ -n "$blob_now" && "$blob_now" != "$EXPECT_BLOB" ]]; then
+      echo "park-node: intentions/$NODE_ID.md is no longer the content park-node wrote ($blob_now != $EXPECT_BLOB) — graph-commit already committed or reset it; leaving it in place rather than restoring the pre-refresh copy" >&2
+      return
+    fi
+  fi
+
   if [[ "$ORIG_EXISTED" == 1 ]]; then
     if cp "$TMPORIG" "$INTENTIONS_DIR/$NODE_ID.md.rollback"; then
       mv "$INTENTIONS_DIR/$NODE_ID.md.rollback" "$INTENTIONS_DIR/$NODE_ID.md"
     else
       rm -f "$INTENTIONS_DIR/$NODE_ID.md.rollback"
       echo "park-node: CRITICAL — could not restore intentions/$NODE_ID.md from its pre-refresh copy; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
+    fi
+  elif git -C "$REPO_ROOT" ls-files --error-unmatch -- "intentions/$NODE_ID.md" >/dev/null 2>&1; then
+    # Absent at capture time but TRACKED now: graph-commit reset the checkout
+    # onto an origin/main where this node file exists. `rm -f` here would
+    # manufacture a deletion of a live node file — one that blocks
+    # `git merge --ff-only`, and that the next graph-commit naming this node
+    # from this checkout would stage and land (assert_staged_safe permits
+    # intentions/$NODE_ID.md), pruning the node and its park off main. Restore
+    # from the index instead, which returns the tree to clean.
+    if ! git -C "$REPO_ROOT" checkout -- "intentions/$NODE_ID.md"; then
+      echo "park-node: CRITICAL — intentions/$NODE_ID.md is tracked but could not be restored with git checkout; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
     fi
   else
     rm -f "$INTENTIONS_DIR/$NODE_ID.md"
