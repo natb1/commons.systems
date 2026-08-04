@@ -747,3 +747,31 @@ Manual / judgment (run from the PR worktree, against the real store):
    the counts in the journald lines are the evidence for retuning
    `DISPATCH_FLEET_WATCH_HOLD_MIN_AGE` / `DISPATCH_FLEET_WATCH_HOLD_TOP_K` — both
    env-overridable, so retuning needs no code change.
+
+## needs-main residue
+
+- **id:** 7 — Threshold defaults (24h age, top-K=10) are operationally sane
+  against the live graph
+  - URL path: current (repo/journal check, not a route)
+  - Expected outcome: the shipped defaults (`DISPATCH_FLEET_WATCH_HOLD_MIN_AGE`
+    default 86400s, `DISPATCH_FLEET_WATCH_HOLD_TOP_K` default 10) produce a
+    useful signal on the deployed fleet-watch timer — neither dead silence nor
+    an alarm-node push storm — over roughly a week of production readings, per
+    this node's own Verification §5 (author-facing tuning, not a merge gate)
+    and §4 (explicit observe-in-production check on the 5-minute systemd
+    cadence).
+  - Finding: this item is a documented planned deferral — the node body's own
+    Verification section states the thresholds are declared defaults evaluated
+    from a week of production journald readings, not assertable at merge time.
+    A qa-fix pre-merge sanity run against the live `intentions/` store at the
+    shipped defaults returned 2 rows (`tactic-hold-fix-cap-strategy-fingerprint-stamp-coverage`,
+    `tactic-hold-conflict-manual-path-reservation-sweep`) — neither zero
+    (dead signal) nor a flood (storm) — supporting shipping the defaults as-is
+    and deferring the tuning judgment to post-merge observation.
+  - Verifiability: MACHINE
+  - Check: `journalctl --user -t dispatch-fleet-watch --since -7d | grep -c
+    'unclaimed-hold:'` to confirm the predicate reports every pass over the
+    week; `git log --oneline origin/main -- 'intentions/tactic-fleet-alarm-unclaimed-hold*.md'`
+    to confirm at most one commit per condition episode (no push storm) and
+    that the alarm node, if any exists, is a plain unparked draft tactic
+    (`office_hours: null`, no `blocked_by` write on another node).
