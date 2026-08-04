@@ -17,7 +17,7 @@ describe("validateNode", () => {
       rationale: "r",
       reading: "rd",
       gap: "g",
-      clarifications: [{ question: "q", answer: "a" }],
+      clarifications: [{ question: "q", answer: "a", id: "q-a" }],
       tooling_goals: [{ kind: "actuator", statement: "t" }],
       success_signal: {
         observable: "o",
@@ -873,6 +873,115 @@ describe("validateNode", () => {
         attention: { boost: 1, rationale: "" },
       }),
     ).toThrow(/rationale must be a non-empty string/);
+  });
+
+  it("accepts a valid kebab-case clarification id", () => {
+    const result = validateNode({
+      id: "n10a",
+      kind: "tactic",
+      statement: "Has a slugged clarification.",
+      owner: "human",
+      status: "raw",
+      clarifications: [{ question: "q", answer: "a", id: "why-this-approach" }],
+    });
+    expect(result.clarifications).toEqual([{ question: "q", answer: "a", id: "why-this-approach" }]);
+  });
+
+  it("defaults clarification id to null when absent", () => {
+    const result = validateNode({
+      id: "n10b",
+      kind: "tactic",
+      statement: "No id on the clarification.",
+      owner: "human",
+      status: "raw",
+      clarifications: [{ question: "q", answer: "a" }],
+    });
+    expect(result.clarifications).toEqual([{ question: "q", answer: "a", id: null }]);
+  });
+
+  it("defaults clarification id to null when explicitly null", () => {
+    const result = validateNode({
+      id: "n10c",
+      kind: "tactic",
+      statement: "Explicit null id.",
+      owner: "human",
+      status: "raw",
+      clarifications: [{ question: "q", answer: "a", id: null }],
+    });
+    expect(result.clarifications).toEqual([{ question: "q", answer: "a", id: null }]);
+  });
+
+  it("rejects an uppercase clarification id", () => {
+    expect(() =>
+      validateNode({
+        id: "n10d",
+        kind: "tactic",
+        statement: "Bad slug.",
+        owner: "human",
+        status: "raw",
+        clarifications: [{ question: "q", answer: "a", id: "Why-This" }],
+      }),
+    ).toThrow(/clarifications\[0\]\.id/);
+  });
+
+  it("rejects a clarification id with underscores", () => {
+    expect(() =>
+      validateNode({
+        id: "n10e",
+        kind: "tactic",
+        statement: "Bad slug.",
+        owner: "human",
+        status: "raw",
+        clarifications: [{ question: "q", answer: "a", id: "why_this" }],
+      }),
+    ).toThrow(/clarifications\[0\]\.id/);
+  });
+
+  it("rejects an empty-string clarification id", () => {
+    expect(() =>
+      validateNode({
+        id: "n10f",
+        kind: "tactic",
+        statement: "Empty slug.",
+        owner: "human",
+        status: "raw",
+        clarifications: [{ question: "q", answer: "a", id: "" }],
+      }),
+    ).toThrow(/clarifications\[0\]\.id/);
+  });
+
+  it("rejects duplicate non-null clarification ids within one node", () => {
+    expect(() =>
+      validateNode({
+        id: "n10g",
+        kind: "tactic",
+        statement: "Duplicate slugs.",
+        owner: "human",
+        status: "raw",
+        clarifications: [
+          { question: "q1", answer: "a1", id: "dup" },
+          { question: "q2", answer: "a2", id: "dup" },
+        ],
+      }),
+    ).toThrow(/[Dd]uplicate clarification id "dup".*clarifications\[1\]\.id/);
+  });
+
+  it("allows multiple clarifications with null ids (no uniqueness constraint on absent ids)", () => {
+    const result = validateNode({
+      id: "n10h",
+      kind: "tactic",
+      statement: "Multiple unslugged clarifications.",
+      owner: "human",
+      status: "raw",
+      clarifications: [
+        { question: "q1", answer: "a1" },
+        { question: "q2", answer: "a2" },
+      ],
+    });
+    expect(result.clarifications).toEqual([
+      { question: "q1", answer: "a1", id: null },
+      { question: "q2", answer: "a2", id: null },
+    ]);
   });
 });
 

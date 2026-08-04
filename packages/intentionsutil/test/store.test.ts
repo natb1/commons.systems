@@ -51,8 +51,8 @@ describe("store round-trip", () => {
       reading: "See the alignment principles.",
       gap: "No automated alignment check exists yet.",
       clarifications: [
-        { question: "Who arbitrates conflicts?", answer: "The charter owner." },
-        { question: "How often is it reviewed?", answer: "Each digest cycle." },
+        { question: "Who arbitrates conflicts?", answer: "The charter owner.", id: "who-arbitrates" },
+        { question: "How often is it reviewed?", answer: "Each digest cycle.", id: null },
       ],
       tooling_goals: [{ kind: "actuator", statement: "align-cli" }, { kind: "sensor", statement: "intention-tree" }],
       success_signal: {
@@ -141,10 +141,12 @@ describe("store round-trip", () => {
         {
           question: "Does the yaml library clip trailing newlines?",
           answer: "Not when fields are read back via parse — this test confirms it.",
+          id: null,
         },
         {
           question: "Are internal blank lines preserved?",
           answer: "Yes — the rationale field above contains one.",
+          id: null,
         },
       ],
       tooling_goals: [{ kind: "actuator", statement: "yaml-round-trip" }, { kind: "sensor", statement: "intention-store" }],

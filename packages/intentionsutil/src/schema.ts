@@ -108,6 +108,11 @@ export interface SuccessSignal {
 export interface Clarification {
   question: string;
   answer: string;
+  // Optional kebab-case slug naming this clarification for citation as
+  // `<node-id>#<slug>`. Unique within a single node's own clarifications
+  // array (NOT enforced across nodes — see validateGraph for cross-node
+  // citation resolution). Defaults to null when absent.
+  id: string | null;
 }
 
 /** A tooling goal a node aims to produce or change. */
@@ -298,17 +303,43 @@ function validateAttributes(value: unknown, field: string): Record<string, unkno
   return { ...value };
 }
 
+// Kebab-case slug: lowercase alphanumeric segments joined by single hyphens,
+// no leading/trailing/doubled hyphens, non-empty.
+const CLARIFICATION_ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+function validateClarificationId(value: unknown, field: string): string | null {
+  if (value == null) return null;
+  if (typeof value !== "string" || !CLARIFICATION_ID_RE.test(value)) {
+    throw new IntentionSchemaError(
+      `Expected a kebab-case slug (or absent/null) for ${field}, got ${JSON.stringify(value)}`,
+    );
+  }
+  return value;
+}
+
 function validateClarifications(value: unknown, field: string): Clarification[] {
   if (!Array.isArray(value)) {
     throw new IntentionSchemaError(`Expected array for ${field}, got ${typeof value}`);
   }
+  const seenIds = new Map<string, number>();
   return value.map((item, i) => {
     if (!isPlainObject(item)) {
       throw new IntentionSchemaError(`Expected object at ${field}[${i}], got ${typeof item}`);
     }
+    const id = validateClarificationId(item.id, `${field}[${i}].id`);
+    if (id !== null) {
+      const priorIndex = seenIds.get(id);
+      if (priorIndex !== undefined) {
+        throw new IntentionSchemaError(
+          `Duplicate clarification id "${id}" at ${field}[${i}].id (already used at ${field}[${priorIndex}].id)`,
+        );
+      }
+      seenIds.set(id, i);
+    }
     return {
       question: requireString(item.question, `${field}[${i}].question`),
       answer: requireString(item.answer, `${field}[${i}].answer`),
+      id,
     };
   });
 }
