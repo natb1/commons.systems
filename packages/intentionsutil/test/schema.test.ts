@@ -1750,6 +1750,16 @@ describe("validateGraph", () => {
     );
   });
 
+  it("Rule 21: rejects an out-of-enum recovery_cost", () => {
+    const nodes = delegationNodes({
+      divergence: { level: "low" },
+      irreversibility: { recovery_cost: "extreme", gated: { level: "none" } },
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /delegation-under-test: irreversibility\.recovery_cost "extreme" is not a valid enum member \(expected one of none\|low\|moderate\|high\|prohibitive\|unassessed\)/,
+    );
+  });
+
   it("Rule 21: rejects a legacy boolean irreversibility.gated", () => {
     const nodes = delegationNodes({
       divergence: { level: "low" },
@@ -1767,6 +1777,16 @@ describe("validateGraph", () => {
     });
     expect(() => validateGraph(nodes)).toThrow(
       /delegation-under-test: irreversibility\.gated is a legacy scalar \(string\) — it must be an object with a "level" field/,
+    );
+  });
+
+  it("Rule 21: rejects an out-of-enum gated.level inside a well-formed object", () => {
+    const nodes = delegationNodes({
+      divergence: { level: "low" },
+      irreversibility: { recovery_cost: "low", gated: { level: "severe" } },
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /delegation-under-test: irreversibility\.gated\.level "severe" is not a valid enum member \(expected one of none\|partial\|large\)/,
     );
   });
 
