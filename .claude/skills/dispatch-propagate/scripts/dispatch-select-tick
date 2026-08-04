@@ -609,11 +609,19 @@ refresh_lock
 #      is pure noise. This is distinct from "paced to 0 / at cap", which the
 #      pace/ramp math can produce while tokens remain; --exhausted is computed
 #      from telemetry independently of that math.
-#   2. Otherwise probe `graph-select-target --pace-exempt-only` (the authored
-#      `pace_exempt` flag is the graph home of the legacy `priority` label): a
-#      hit HOLDS the lock and appends GAP=1 for ONE gate-exempt worker. It is
-#      still counted by claude_agents_count_busy_workers on later ticks, so it
-#      suppresses non-pace-exempt fan-out: it bypasses the GATE, not the COUNT.
+#   2. Otherwise resolve the absolute ceiling (`dispatch-target-workers --max`)
+#      and compute PACE_GAP = max(0, MAX_WORKERS − LIVE_COUNT) — the genuine
+#      headroom under max_concurrent_workers, which is absolute for autonomous
+#      scheduling. PACE_GAP == 0 CLOSES the lane (never probed:
+#      `at-cap-ceiling-full`); a non-numeric/unreadable ceiling also closes it
+#      (`at-cap-ceiling-unreadable`) — fail CLOSED rather than admit an
+#      unbounded bypass. Otherwise probe `graph-select-target
+#      --pace-exempt-only --top PACE_GAP` (the authored `pace_exempt` flag is
+#      the graph home of the legacy `priority` label): a hit HOLDS the lock and
+#      fills the lane to the ceiling, up to PACE_GAP gate-exempt workers. They
+#      are still counted by claude_agents_count_busy_workers on later ticks, so
+#      they suppress non-pace-exempt fan-out: the flag bypasses the pace GATE,
+#      not the COUNT.
 #   3. Otherwise check `repo-health --main-broken-sha` (its own live CI probe;
 #      a main that broke WHILE at cap is surfaced here even though no other
 #      item is pace-exempt) → release the lock, echo `main-broken <sha>` (the
@@ -655,8 +663,10 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
     if (( LIVE_COUNT >= TARGET_N )); then
       echo "router: $LIVE_COUNT effective live ($BUSY busy + $RESV reserved) >= target $TARGET_N"
       # At the worker budget. The budget paces NON-pace-exempt autonomous
-      # fan-out; pace-exempt/main-broken work bypasses it (one gate-exempt
-      # worker, GAP=1). The only hard stop is
+      # fan-out; pace-exempt/main-broken work bypasses it — but only up to the
+      # absolute max_concurrent_workers ceiling, filling to PACE_GAP =
+      # max(0, MAX_WORKERS − LIVE_COUNT) gate-exempt workers rather than the
+      # single worker this lane used to admit. The only hard stop is
       # genuine token exhaustion: when the 5-hour or weekly window is actually
       # out of tokens (~100% used, reset still ahead), spawn nothing — including
       # the main-broken diagnose job. Distinguish "paced to 0 / at cap" (a
@@ -672,21 +682,52 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
         echo "concurrency-cap"
         exit 0
       fi
-      # Not exhausted: probe the graph pace-exempt lane FIRST
-      # (tactic-graph-router-selector; strategy clarification 14 — the authored
-      # `pace_exempt` flag is the graph home of the legacy priority label).
-      # Whichever lane finds an item first admits the ONE gate-exempt worker —
-      # at most one total across both keyspaces; the flag bypasses the pace
-      # GATE, not the count or the rank order. The probe's own `--exhausted`
+      # Not exhausted: resolve the ABSOLUTE ceiling before probing. Exhaustion
+      # stays the hard floor and is evaluated first (above); the ceiling is the
+      # second, independent bound. The pace-exempt lane fills to
+      #   PACE_GAP = max(0, MAX_WORKERS − LIVE_COUNT)
+      # — genuine headroom under max_concurrent_workers, which is absolute for
+      # autonomous scheduling (unlike the --manual branch, where a deliberate
+      # human dispatch may take a bounded ceiling + 1 overage). PACE_GAP == 0
+      # closes the lane: already at the ceiling, nothing to admit. A
+      # non-numeric/unreadable ceiling ALSO closes the lane — fail CLOSED, since
+      # the alternative is an unbounded bypass that compounds across ticks (the
+      # gate re-evaluates every tick and keeps no memory of a prior bypass).
+      # This deliberately diverges from graph-select-target's --standalone path,
+      # which fails open to TOP=1; that is a different caller. Do NOT exit 2
+      # here — that would also suppress the main-broken probe and the reseed
+      # below, both of which must stay reachable when this lane is closed.
+      MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max 2>/dev/null) || MAX_WORKERS=""
+      PACE_LANE_CLOSED=""
+      if [[ "$MAX_WORKERS" =~ ^[0-9]+$ ]]; then
+        PACE_GAP=$(( MAX_WORKERS - LIVE_COUNT ))
+        (( PACE_GAP < 0 )) && PACE_GAP=0
+        (( PACE_GAP == 0 )) && PACE_LANE_CLOSED="at-cap-ceiling-full"
+      else
+        echo "dispatch-select-tick: dispatch-target-workers --max returned a non-numeric ceiling ('$MAX_WORKERS'); pace-exempt lane closed rather than admitting an unbounded bypass" >&2
+        PACE_GAP=0
+        PACE_LANE_CLOSED="at-cap-ceiling-unreadable"
+      fi
+      # Record the width this lane actually granted in the routing decision log
+      # (the `gap` field), replacing the stale GAP=1 default set above.
+      GAP=$PACE_GAP
+      # Probe the graph pace-exempt lane (tactic-graph-router-selector; strategy
+      # clarification 14 — the authored `pace_exempt` flag is the graph home of
+      # the legacy priority label). The flag bypasses the pace GATE, not the
+      # COUNT or the rank order: a bypassed worker is still counted by
+      # claude_agents_count_busy_workers on later ticks, so it suppresses
+      # non-pace-exempt fan-out from then on. The probe's own `--exhausted`
       # re-check inside graph-select-target is redundant here (checked above)
       # but keeps the lane self-contained for other callers.
-      GPRIO=$("$SCRIPT_DIR/graph-select-target" --pace-exempt-only --top 1) \
-        || { echo "dispatch-select-tick: graph-select-target --pace-exempt-only failed; falling through to the legacy priority probe" >&2; GPRIO="empty"; }
-      if emit_graph_selection <<<"$GPRIO"; then
-        DLOG_SKIP_REASON="pace-exempt-bypass-at-cap"
-        exit 0
+      if (( PACE_GAP > 0 )); then
+        GPRIO=$("$SCRIPT_DIR/graph-select-target" --pace-exempt-only --top "$PACE_GAP") \
+          || { echo "dispatch-select-tick: graph-select-target --pace-exempt-only failed; falling through to the legacy priority probe" >&2; GPRIO="empty"; }
+        if emit_graph_selection <<<"$GPRIO"; then
+          DLOG_SKIP_REASON="pace-exempt-bypass-at-cap"
+          exit 0
+        fi
       fi
-      # Graph pace-exempt lane empty → the only surviving at-cap bypass is a
+      # Graph pace-exempt lane empty or closed → the only surviving at-cap bypass is a
       # newly-red main: a red main outranks the pace budget and must still
       # spawn its diagnose job even at cap (the legacy priority-LABELED PR/issue
       # bypass and the CI-pending `waiting` reseed died with the legacy selector).
@@ -704,11 +745,16 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
         echo "main-broken $MB_CAP"
         exit 0
       fi
-      # Nothing to bypass the cap → hard cap as before.
+      # Nothing to bypass the cap → hard cap as before. The skip reason tells
+      # the three closed-lane cases apart: `at-cap-no-priority` (lane probed,
+      # nothing pace-exempt selectable), `at-cap-ceiling-full` (lane never
+      # probed — already at max_concurrent_workers), and
+      # `at-cap-ceiling-unreadable` (lane never probed — ceiling unreadable, so
+      # the lane failed closed).
       release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
       DLOG_DISPOSITION="concurrency-cap"
-      DLOG_SKIP_REASON="at-cap-no-priority"
+      DLOG_SKIP_REASON="${PACE_LANE_CLOSED:-at-cap-no-priority}"
       echo "concurrency-cap"
       exit 0
     fi
