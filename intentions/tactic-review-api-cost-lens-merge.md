@@ -31,7 +31,7 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-review-api-cost-lens-merge
   pr: 3031
@@ -42,7 +42,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-04T16:57:43Z
+    mergeCommitSha: 7aecba983181ab9f432497aae0d9e62ecba5c94c
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
