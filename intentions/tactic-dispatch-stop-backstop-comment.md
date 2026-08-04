@@ -24,7 +24,45 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/implement: tactic-dispatch-stop-backstop-comment's target no longer
+    exists — the stale comment at .claude/hooks/dispatch-stop.sh:62-63 was
+    already deleted by commit c06c7295 prior to this session; nothing remains to
+    reword"
+  since: 2026-08-04
+  recommendation: >-
+    ## Recommendation: resolve as done (no-op)
+
+
+    This tactic is moot — the defect it targets no longer exists.
+
+
+    The stale comment (and the whole Stop-hook backstop-park block it lived in)
+    was deleted by commit `c06c7295`, "Replace Stop-hook escalation-park
+    backstop with a tick-owned terminal-disposition sweep" — not by this
+    session. The current `.claude/hooks/dispatch-stop.sh` header comment (lines
+    16-35) already accurately describes the removal: the backstop measured 0/4
+    successes and was replaced by `dispatch-tick`'s
+    `terminal_without_disposition_sweep`.
+
+
+    Evidence:
+
+
+    - `c06c7295` removed the code block containing the "backstop does not apply
+    the reset-dance" assertion.
+
+    - A repo-wide grep for `reset-dance` returns no occurrence in
+    `.claude/hooks/dispatch-stop.sh` or anywhere else under `.claude/`.
+
+    - Lines 62-63 of the current file are unrelated to the backstop; there is no
+    comment left to reword.
+
+
+    Recommended disposition: resolve the node as done with no code change.
+    Attempting a fix would mean inventing a target — there is no remaining text
+    that makes the stale claim.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
