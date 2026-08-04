@@ -514,10 +514,11 @@ assert_eq "graph empty: decision line" "empty" \
 assert_eq "graph empty: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
-# --- at-cap: graph pace-exempt probe admits ONE gate-exempt worker -------------
+# --- at-cap: graph pace-exempt probe admits this single candidate --------------
 # strategy clarification 14: at the worker cap (not exhausted) the graph
 # pace-exempt probe runs BEFORE the legacy --priority-only probe; a hit admits
-# exactly one gate-exempt worker and the legacy probe must not run.
+# this single candidate here, and the legacy probe must not run. The lane's
+# general width is the ceiling headroom PACE_GAP = max(0, MAX_WORKERS - LIVE_COUNT).
 echo "Test: select-tick at-cap graph pace-exempt probe → graph decision, legacy priority probe skipped"
 sel_tick_setup
 export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
