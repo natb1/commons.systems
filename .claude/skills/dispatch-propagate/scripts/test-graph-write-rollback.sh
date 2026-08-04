@@ -15,7 +15,7 @@
 # packages/intentionsutil/src copied in (plus its package.json for ESM
 # resolution) and a node_modules SYMLINK to this repo's own — so the real
 # TypeScript mutation primitives (apply-node-transition.ts, compute-freshness.ts,
-# dump-node.ts, write-node.ts, graph-census-debt.ts, census-tick.ts +
+# dump-node.ts, write-node.ts, census-tick.ts +
 # census-decide.ts) execute for real, not via a shim. Only graph-commit itself and (for the main-red-sync case) repo-health
 # are stubbed, standing in for a real land failure / a green main.
 #
@@ -98,7 +98,6 @@ build_seed_repo() {
   cp "$UTIL_SCRIPTS_SRC/compute-freshness.ts" "$dst/packages/intentionsutil/scripts/compute-freshness.ts"
   cp "$UTIL_SCRIPTS_SRC/dump-node.ts" "$dst/packages/intentionsutil/scripts/dump-node.ts"
   cp "$UTIL_SCRIPTS_SRC/write-node.ts" "$dst/packages/intentionsutil/scripts/write-node.ts"
-  cp "$UTIL_SCRIPTS_SRC/graph-census-debt.ts" "$dst/packages/intentionsutil/scripts/graph-census-debt.ts"
   cp "$UTIL_SCRIPTS_SRC/census-tick.ts" "$dst/packages/intentionsutil/scripts/census-tick.ts"
   cp "$UTIL_SCRIPTS_SRC/census-decide.ts" "$dst/packages/intentionsutil/scripts/census-decide.ts"
   cp "$UTIL_SCRIPTS_SRC/restamp-scope-fingerprint.ts" "$dst/packages/intentionsutil/scripts/restamp-scope-fingerprint.ts"
