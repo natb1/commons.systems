@@ -81,9 +81,9 @@ export function defectIdFor(targetId: string): string {
  * Replace a just-written node file's generated `# ${statement}` placeholder body
  * with `body`. `writeNode` only generates the placeholder for a brand-new file
  * (it preserves an existing body verbatim), so this runs immediately after the
- * mint. Mirrors the fence-preserving splice `dispatch-graph-census` does in bash:
- * keep everything through the frontmatter's closing `---` fence, overwrite the
- * rest.
+ * mint. Mirrors the fence-preserving splice the retired `dispatch-graph-census`
+ * (replaced by `dispatch-census-tick`) used to do in bash: keep everything
+ * through the frontmatter's closing `---` fence, overwrite the rest.
  */
 function spliceBody(dir: string, id: string, body: string): void {
   const path = join(dir, `${id}.md`);

@@ -3,7 +3,8 @@
 # completer (tactic-graph-main-self-heal). Extracted out of
 # dispatch-select-tick's former inline Step 1c block into its own script,
 # matching the script-per-concern convention already used by sibling scripts
-# repo-health and graph-select-target in this directory — each is a small
+# repo-health, graph-select-target, and dispatch-census-tick (the retired
+# dispatch-graph-census's replacement) in this directory — each is a small
 # script dispatch-select-tick invokes via "$SCRIPT_DIR/<name>", independently
 # fakeable by the test harness.
 #
@@ -59,13 +60,15 @@
 # non-zero in a way that could get swallowed as empty by a caller's `|| true`.
 #
 # NOT set -e: every risky step below is guarded explicitly (matching the
-# sibling dispatch-select-tick / dispatch-graph-census convention), so the
-# script always reaches its final exit 0.
+# sibling dispatch-select-tick / dispatch-census-tick convention — the latter
+# replaced the retired dispatch-graph-census, which followed the same
+# convention), so the script always reaches its final exit 0.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # scripts → dispatch-propagate → skills → .claude → repo root (same convention
-# as sibling script dispatch-graph-census).
+# as sibling script dispatch-census-tick, the retired dispatch-graph-census's
+# replacement).
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 # --- argument parsing ---------------------------------------------------------

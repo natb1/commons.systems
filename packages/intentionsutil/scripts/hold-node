@@ -26,9 +26,9 @@
 # file. If origin/main advances again before the land, graph-commit refuses the
 # write (hold-node exits 1) rather than silently reverting newer landed content.
 # The hold node's own file gets the same treatment when it already exists; when
-# it does not, absence is the EXPECTED born-fresh case (the inverted probe
-# dispatch-graph-census uses), not an error — and no `--base` token is emitted
-# for it.
+# it does not, absence is the EXPECTED born-fresh case (the inverted probe the
+# retired dispatch-graph-census used, now dispatch-census-tick's analog), not
+# an error — and no `--base` token is emitted for it.
 #
 # Usage:
 #   hold-node <source-node-id>
@@ -149,8 +149,9 @@ HOLD_ID="$(jq -r '.hold_id' <<<"$DECIDE_OUT")"
 [[ -n "$HOLD_ID" && "$HOLD_ID" != "null" ]] || {
   echo "hold-node: could not derive the hold id for $SOURCE_ID" >&2; exit 1; }
 
-# Inverted absent-node probe (dispatch-graph-census:96-101): here absence is the
-# EXPECTED born-fresh case and presence is the re-entry case. HOLD_BLOB set ⇒
+# Inverted absent-node probe (the pattern the now-retired dispatch-graph-census
+# used at its old :96-101): here absence is the EXPECTED born-fresh case and
+# presence is the re-entry case. HOLD_BLOB set ⇒
 # emit a --base token for it and restore it on rollback; HOLD_BLOB unset ⇒ no
 # --base token, and rollback deletes the freshly born file.
 HOLD_BLOB=""
