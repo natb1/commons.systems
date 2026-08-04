@@ -48,22 +48,25 @@ validates: []
 blocked_by:
   - tactic-office-hours-concurrency-dedup
 office_hours:
-  reason: worker session froze at a permission/classifier denial — claude agents
-    reports state=blocked and the transcript has had no activity for 1528s; the
-    session cannot make progress and cannot park itself (a blocked session never
-    reaches the Stop hook), so the dispatch-tick frozen-session sweep parked
-    this node
+  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
+    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
   since: 2026-08-04
-  recommendation: Find the holding job with 'claude agents --all' and attach it
-    ('claude attach <job-id>'), then answer the pending prompt. If the denied
-    command was gratuitous, cancel it and let the worker continue; if it is
-    genuinely needed, run it yourself or add a standing permission rule — do NOT
-    rewrite the command to route around the classifier. If the session is
-    unrecoverable, stop it ('claude rm <job-id>'), let dispatch-sweep reap the
-    worktree, then run clear-park <node-id> to return the node to the lane.
-    Until that session is gone, office-hours reports this node as 'all-held'
-    rather than launching a review session for it, because the frozen session
-    still holds the node-id session name.
+  recommendation: >-
+    A concurrent writer landed an overlapping edit to this node while this
+    session's edit was in flight; this writer's content was NOT landed. This
+    session's unlanded content is preserved at
+    /tmp/tmp.0wfraYJ8Ya/tactic-office-hours-select-fresh-main.md (this machine
+    only — may not survive past this session). Recommended: the losing writer
+    re-reads the current origin/main content, manually merges in its intended
+    edit, and re-runs graph-commit on the merged result — that same commit
+    clears this office_hours park. A third session encountering this park while
+    the loser is still working should wait rather than attempt its own merge
+    (the mailbox discipline).
+
+
+    Diverged field 'phase' on tactic-office-hours-select-fresh-main:
+      this session's value: done
+      origin/main's value: main-qa
   session_type: other
 pace_exempt: false
 rounds: null
