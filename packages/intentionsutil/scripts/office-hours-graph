@@ -42,7 +42,12 @@
 # One further disposition is this script's own extension (resolve_directive),
 # not selector output:
 #   all-held <count>           → the queue is NOT empty; every remaining parked
-#                                node is claimed by a live session
+#                                node is claimed — by a live session named after
+#                                it, or by a reservation-ledger marker
+#   reserved <node-id> <session-id> → the node is claimed in the reservation
+#                                ledger by a live drain session — a collision to
+#                                surface, never a silent fall-through or
+#                                duplicate launch
 #
 # Sandbox: `claude agents --json` reaches the local daemon over a Unix socket;
 # a sandboxed call returns `[]` indistinguishable from "no sessions" (see
@@ -134,6 +139,37 @@ job_id_for_name() {
           | .id) // empty' <<<"$raw"
 }
 
+# reserved_owner_for <node-id> — echo the session id that holds a reservation-
+# ledger claim on <node-id>, or empty if no claim is on file. Advisory,
+# best-effort, read-only pre-flight: the AUTHORITATIVE gate against a race with
+# a second drain or the fleet is the claim step inside the launched
+# `/office-hours <node-id>` session itself (SKILL.md's graph-native mode,
+# sourcing lib-reservation-ledger.sh directly). This function exists only to
+# avoid spawning a wasted `--bg` session into a node another drain is already
+# reviewing in the common case; there is an inherent TOCTOU window between this
+# check and the launched session's own claim, and that window is fine — the
+# launched session's claim step is what actually closes the race.
+#
+# This file's header states it sources NOTHING from
+# `.claude/skills/dispatch-propagate/` (scheduled for deletion), so the ledger
+# read is inlined here rather than sourcing lib-reservation-ledger.sh. The
+# ledger-dir expression below is the literal mirror of that lib's own
+# `reservation_dir`/`resolve_project_root` logic, scoped via `git -C
+# "$SCRIPT_DIR"` for the same cwd-independence this script's other helpers use
+# (see node_kind_on_main).
+#
+# Never fails the script: a ledger-dir resolution failure or a missing/
+# unreadable marker is just "not reserved" from this function's point of view,
+# not an error to propagate — it is advisory-only pre-flight, not a gate.
+reserved_owner_for() {
+  local nid="$1" ledger_dir marker
+  ledger_dir="${DISPATCH_RESERVATION_DIR:-$(dirname "$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir)")/tmp/dispatch-reservations}" || return 0
+  marker="$ledger_dir/$nid"
+  [[ -f "$marker" ]] || return 0
+  sed -n 's/^session=//p' "$marker" 2>/dev/null | head -n1 || true
+  return 0
+}
+
 # node_kind_on_main <node-id> — echo the node's `kind` as recorded on origin/main
 # (`tactic`, `strategy`, `delegation`, `virtue`, `tradition`). Only a TACTIC node
 # has a worktree: `execution.branch` is non-null on tactic nodes and on no other
@@ -179,10 +215,18 @@ resolve_directive() {
       # An explicit human target on an already-live node is a collision to
       # surface, never a silent fall-through or duplicate launch — so a launch
       # verdict is converted to `held` when a live job already claims the node.
-      local target_job
+      local target_job target_reserved
       target_job=$(job_id_for_name "$sel_node")
       if [[ -n "$target_job" ]]; then
         echo "held $sel_node $target_job"
+        return 0
+      fi
+      # Advisory reservation-ledger pre-check (see reserved_owner_for), checked
+      # AFTER job_id_for_name so a live-session-by-name collision (the stronger
+      # signal) wins if somehow both are true.
+      target_reserved=$(reserved_owner_for "$sel_node")
+      if [[ -n "$target_reserved" ]]; then
+        echo "reserved $sel_node $target_reserved"
         return 0
       fi
     fi
@@ -206,7 +250,7 @@ resolve_directive() {
   # with it silently shifts $nid onto the wrong column and every node lookup
   # fails, which surfaces as a false "empty" queue — keep this read in sync.
   local score sessiontype nid date
-  local nid_job
+  local nid_job reserved_session
   # Count nodes skipped because a live session holds them, so the caller can
   # distinguish a genuinely empty queue from "parked work exists but every
   # candidate is claimed" — reporting the latter as `empty` would be a false
@@ -220,6 +264,21 @@ resolve_directive() {
     nid_job=$(job_id_for_name "$nid")
     if [[ -n "$nid_job" ]]; then
       echo "office-hours: skipping $nid — a live session (job $nid_job) is already in progress." >&2
+      held_count=$((held_count + 1))
+      continue
+    fi
+    # Advisory reservation-ledger pre-check (see reserved_owner_for): a node
+    # claimed by another drain but not (yet, or ever) named as a live job is
+    # still skipped here to avoid a wasted spawn. It counts toward held_count
+    # for the same reason the live-session skip does: the node IS parked work
+    # waiting on a human, just claimed elsewhere. Leaving it uncounted would let
+    # a queue whose every remaining candidate is reserved report `empty`, whose
+    # message asserts "nothing was skipped as held" — a false statement about
+    # work that needs attention, which is exactly what held_count exists to
+    # prevent.
+    reserved_session=$(reserved_owner_for "$nid")
+    if [[ -n "$reserved_session" ]]; then
+      echo "office-hours: skipping $nid — reserved by session $reserved_session (a drain is already reviewing it)." >&2
       held_count=$((held_count + 1))
       continue
     fi
@@ -262,8 +321,12 @@ case "$verb" in
     echo "  inspect the holder     : claude agents --all" >&2
     exit 1
     ;;
+  reserved)
+    echo "office-hours: node $a is reserved by a live drain session ($b) — not launching a duplicate review. Run 'claude agents --all' to inspect, or wait for that session to finish." >&2
+    exit 1
+    ;;
   all-held)
-    echo "office-hours: the queue is NOT empty — $a parked node(s) are ranked but each is already claimed by a live session, so there is nothing new to launch. Run 'claude agents --all' and attach the holding job to continue that review, or re-run once it finishes."
+    echo "office-hours: the queue is NOT empty — $a parked node(s) are ranked but each is already claimed (a live session named after the node, or another drain's reservation-ledger marker), so there is nothing new to launch. Run 'claude agents --all' and attach the holding job to continue that review, or re-run once it finishes."
     exit 0
     ;;
   empty)
