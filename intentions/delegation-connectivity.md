@@ -18,7 +18,28 @@ rationale: "One wired ISP carries the household's connectivity; no second wired
   resolved to `high` — the recorded assessment was immediate but degraded:
   cellular tethering or fixed wireless restores connectivity at once, but
   recovering it at parity would require moving, since no second wired provider
-  serves the address."
+  serves the address. The record supports two readings, and the resolution
+  turns on which one is load-bearing. Reading A, immediate degraded fallback,
+  rests on this rationale's 'the substitute path is cellular tethering or fixed
+  wireless at degraded capacity' and on the matching `recovery_path`,
+  'substitute — cellular tethering or fixed wireless at degraded capacity',
+  reinforced by `gated.level: none` and its note that those paths 'run through
+  unrelated carriers' — nothing blocks the switch and it can be exercised the
+  same day, which on its own would argue for `moderate`. Reading B, no
+  alternative wired provider, rests on this rationale's 'no second wired
+  provider serves the address' and on `recovery_path`'s 'no second wired
+  provider at the address'. Reading B was taken as load-bearing. The axis
+  scores the cost of recovering what was delegated — household internet
+  connectivity at wired capacity, which this record says every hosted surface,
+  sync, and vendor relationship assumes — not the cost of reaching a standby.
+  Reading A's substitutes restore reachability but not that capacity, so
+  exercising them leaves the delegation un-recovered; the only parity path is a
+  change of address, which the household cannot elect at will, and that is what
+  `high` names. Reading A was therefore judged insufficient to lower the cost:
+  how fast the failover happens says nothing about the parity gap the axis is
+  scoring. Nothing in the record contradicts `high`. Revisit if the recorded
+  `review_trigger` fires and a second wired provider reaches the address, which
+  would collapse Reading B and put `moderate` back in play."
 reading: null
 gap: null
 serves: []
