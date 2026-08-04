@@ -31,19 +31,35 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: qa
+phase: review
 execution:
   branch: tactic-review-api-cost-lens-merge
   pr: 3031
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "phase session ended without declaring a disposition — `claude agents
+    --all` reports the session for this node in a terminal state and it has had
+    no transcript activity for `422`s, while `origin/main` still shows the node
+    at a working phase with `office_hours: null`; the node is therefore both
+    re-selectable and held, so the dispatch-tick terminal-without-disposition
+    sweep parked it"
+  since: 2026-08-04
+  recommendation: Read the session's transcript or attach the held job (`claude
+    agents --all`, `claude attach <job-id>`) to see what it concluded. Decide
+    the judgment item it stopped on, then either answer it here and `clear-park
+    <node-id>`, or stop the session (`claude stop <job-id>`), let
+    `dispatch-sweep` reap the worktree, and `clear-park <node-id>` to return the
+    node to the lane. Do NOT simply reap the terminal session and release the
+    node — that is what restarts the churn loop.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -717,3 +733,42 @@ Manual / judgment checks:
   must still pass against the merged lens. That node is parked at `main-qa` for
   passive observation and is a pending downstream check, not a blocker on this
   tactic.
+
+## needs-main residue
+
+QA pass 2 (PR #3031, `/qa-fix`, attempt 0) triaged 20 plan items against the
+re-implemented diff (an earlier cut of this PR was demoted to `implement` for
+scope drift and fully re-implemented before this pass; this entry supersedes
+the prior pass's id-15 entry below, which QA'd that superseded cut). 17
+script-verifiable items all PASSED: `node --check`, the `dispatch-api-call-site`
+classifier + its 10-assertion test, the 23-assertion `dispatch-review-finders`
+test (including the `api_call_site`/`app_or_rules` decoupling and
+surface-dominance cases), the domain-sweep probe + its 44-assertion test
+(including the two unchanged Source-enum/SEC_SOURCES exact-membership pins),
+the 34-assertion `dispatch-security-surface` control suite (confirmed
+byte-for-byte untouched), `run-lint.sh`, and direct verification that
+`agentFinderSet`/`laneBAllowedSources`/the COST CLAMP are correctly wired and
+that the COST CLAMP runs before `requiredFindings` is computed. Two
+`needs-human-judgment` items (verbatim fidelity of
+`COST_BRIEF`/`DOMAIN_PROMPTS.firebase`; section-wrapper and doctrine-prose
+consistency) were assessed **already-satisfied** by the Step 3.5 disposition
+Workflow via direct code read and dropped as PASS. The remaining item is
+recorded here as post-merge residue:
+
+- **id 20 — Realized api-cost fire rate, realized draw, and the downstream
+  cost-finder checklist.**
+  - Expected outcome: post-merge monitoring shows the `api-cost` lens firing
+    materially more often than the pre-merge baseline of 5 of 18 comparable
+    runs, at an acceptable draw; `tactic-mainqa-review-cost-finder`'s
+    downstream observation checklist passes against the merged lens.
+  - Finding: not assertable at merge time — no post-merge run history exists
+    yet for this (re-implemented) lens. The plan's own Verification section
+    explicitly designates this a post-merge observation, not a merge gate
+    (planned deferral).
+  - Verifiability: WAIT — awaits several post-merge `review-fix` runs to
+    accumulate a comparable sample.
+  - Check: `grep 'find:api-cost'` over the accumulated run logs once
+    available; compare fire rate against the 5-of-18 pre-merge baseline and
+    report the realized draw. Also confirm no recurring `classify: COST CLAMP`
+    log line (a recurring clamp would mean the section wrapper's
+    Source-assignment wording needs tightening).

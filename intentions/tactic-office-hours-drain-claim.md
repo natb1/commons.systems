@@ -39,12 +39,47 @@ attention:
     they outranked strategy-main-health (101 resolved) and flooded the selector
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
-phase: implement
-execution: null
+  tier: 1
+phase: main-qa
+execution:
+  branch: tactic-office-hours-drain-claim
+  pr: 3035
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-04T06:47:20Z
+    mergeCommitSha: edddaad820a127429fdc520515d71bfeeb9d3717
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-office-hours-concurrency-dedup
-office_hours: null
+office_hours:
+  reason: "needs-main item 6 (two-concurrent-/office-hours-drain race) requires
+    two live sessions racing the reservation ledger against a real parked node
+    at the same instant; a single bounded Lane-M pass provides no mechanism to
+    orchestrate that live scenario, and the source PR #3035's own Test plan
+    already marks this specific check observational and non-auto-runnable"
+  since: 2026-08-04
+  recommendation: "Lane-M results already obtained, all passing: bash -n on
+    lib-reservation-ledger.sh and office-hours-graph (syntax OK); grep of
+    .claude/skills/office-hours/SKILL.md confirms the claim step references
+    reservation_owner, reservation_write, and worktree_has_live_session, with
+    reservation_clear appearing only in the deliberate never-issue warning prose
+    (matches Unit 2's design); test-lib-reservation-ledger.sh 92/92 passed
+    including the new reservation_owner assertions (Unit 1);
+    test-office-hours.sh 42/42 passed. No author decision is needed —
+    re-selection or a manual two-session drill would close this out: run
+    /office-hours <node-id> in one session, then the same command against the
+    same parked node in a second live session while the first is still running,
+    and confirm the second halts at the claim step (reporting the collision,
+    before surfacing park context) while tmp/dispatch-reservations/<node-id>'s
+    session= line records only the first session's id throughout."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -329,3 +364,27 @@ Manual/observational:
 `tactic-office-hours-concurrency-dedup` (the launch-path half),
 `tactic-drain-disposition-diagnosis-cas` (the write-time half of the same race),
 `tactic-claim-dedup-only` (claiming is scheduling dedup, never an edit block).
+
+## needs-main residue
+
+- **id 6** — Two concurrent `/office-hours <node-id>` drains — second stops at
+  the claim step.
+  - URL path: current
+  - Expected outcome: the second drain halts at the claim step, before
+    surfacing any park context, and reports the node as already held by the
+    live first session; the first session completes normally.
+  - Finding: multi-session concurrency scenario the PR (#3035) documents as
+    observational and non-auto-runnable in its own Test plan (unchecked item:
+    "Manual: two concurrent `/office-hours <node-id>` drains — second stops
+    at the claim step before surfacing park context (observational, not
+    auto-runnable)"). Cannot be reproduced or asserted from within a single
+    QA session; needs a real concurrent-drain scenario to observe.
+  - Verifiability: MACHINE
+  - Check: launch two `/office-hours <node-id>` sessions concurrently against
+    the same parked node (post-#3035, on `origin/main`); confirm via
+    `tmp/dispatch-reservations/<node-id>` (the reservation marker's
+    `session=` line) and each session's own transcript/output that only the
+    first session's `session=` id is recorded, and that the second session's
+    output reports the collision and stops before any park-reason surfacing
+    — no `gh pr diff` call, no recommendation subagent output in its
+    transcript.

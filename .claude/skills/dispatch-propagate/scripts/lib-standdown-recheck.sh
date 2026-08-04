@@ -632,12 +632,13 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
         continue
       fi
 
-      # Already parked. Idiom copied VERBATIM from `park_live_on_main` in
-      # `packages/intentionsutil/scripts/office-hours-graph`. The frontmatter
-      # scoping is load-bearing: restricting the test to the YAML block (between
-      # the first two `---` fences) means a column-0 `office_hours:` line in the
-      # markdown BODY (documentation of the serialization) can never be misread
-      # as park state.
+      # Already parked. The frontmatter scoping below is load-bearing:
+      # restricting the test to the YAML block (between the first two `---`
+      # fences) means a column-0 `office_hours:` line in the markdown BODY
+      # (documentation of the serialization) can never be misread as park
+      # state. Same frontmatter-scoped, column-0-anchored idiom
+      # `node_kind_on_main` in `packages/intentionsutil/scripts/office-hours-graph`
+      # uses, deliberately inlined here rather than shared.
       local frontmatter parked_already=0
       frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$body")
       if grep -q '^office_hours:' <<<"$frontmatter"; then

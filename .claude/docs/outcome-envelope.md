@@ -43,7 +43,8 @@ envelope.
 | `schema` | string | no | const `"dispatch.outcome.v1"` |
 | `phase` | string | no | enum `{review, qa}`, extensible to future phases |
 | `repo` | string | no | e.g. `natb1/commons.systems` |
-| `issue` | integer | no | the dispatch issue number |
+| `issue` | integer | yes | the dispatch issue number on the issue lane, or `null` on the node lane |
+| `node_id` | string | yes | the intention-graph node id on the node lane, or `null` on the issue lane |
 | `pr` | integer | yes | the PR number, or `null` when no PR exists yet |
 | `base_sha` | string | yes | the merge base the phase ran against, or `null` |
 | `findings_surfaced` | integer ≥ 0 | no | total deduped findings the phase surfaced |
@@ -53,6 +54,10 @@ envelope.
 | `subagents_launched` | integer ≥ 0 | no | total subagents spawned (see semantics below) |
 | `disposition` | string | no | enum `{completed, completed_with_fixes, escalated}` |
 | `terminated_reason` | string | yes | escalation reason on `escalated`, else `null` |
+
+Exactly one of `issue` / `node_id` is non-null: the issue lane sets `issue`
+(`node_id` null), the node lane sets `node_id` (`issue` null) — mirroring the
+session sidecar's dual `issue`/`node_id` shape (`dispatch-stamp-session`).
 
 ## `disposition` enum
 
@@ -205,6 +210,7 @@ follow-ups, and spawned 11 subagents — a `completed_with_fixes` outcome:
   "phase": "review",
   "repo": "natb1/commons.systems",
   "issue": 1860,
+  "node_id": null,
   "pr": 1871,
   "base_sha": "0a454453c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6",
   "findings_surfaced": 8,
@@ -221,3 +227,6 @@ follow-ups, and spawned 11 subagents — a `completed_with_fixes` outcome:
 For these counts the reader computes `hit_rate = 3/8 = 0.375`,
 `actionability = 5/8 = 0.625`, and `fix_rate = 3/5 = 0.6` (and
 `0.625 × 0.6 = 0.375`, matching `hit_rate`).
+
+On the graph-native node lane the same envelope instead carries `"issue":
+null, "node_id": "tactic-example-node"` — every other field is unchanged.

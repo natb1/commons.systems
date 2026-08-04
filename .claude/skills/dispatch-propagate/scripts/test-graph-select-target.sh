@@ -13,7 +13,7 @@ source "$FIXTURE_DIR/dispatch-test-fixture.sh"
 # (tactic-align-session-claiming Unit 3)
 # ============================================================================
 # Uniform node-id claiming (strategy clarification 13) must cover worktrees a
-# HUMAN-invoked /align-strategy or /align-tactics session created — sessions
+# HUMAN-invoked /align or /align-tactics session created — sessions
 # that claim by authoring in <root>/.claude/worktrees/<node-id> and never write
 # a router reservation-ledger marker. graph-select-target's claimed-set gate is
 # worktree_has_live_session, name-keyed on the worktree basename, so a live

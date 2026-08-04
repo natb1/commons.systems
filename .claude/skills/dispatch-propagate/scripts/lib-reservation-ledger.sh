@@ -28,6 +28,7 @@
 #   reservation_clear   <worktree-basename>
 #   reservation_mark_spawned <worktree-basename>
 #   reservation_exists  <worktree-basename>
+#   reservation_owner   <worktree-basename>
 #   reservation_count
 #   reserved_claimed_nums
 #   claimed_issue_nums
@@ -46,15 +47,25 @@
 #   <worktree-basename> in the ledger dir, with the three documented lines (plus
 #   an `origin=` line when the optional 4th argument is given — a bare
 #   [A-Za-z0-9_-] token; anything else prints a diagnostic and returns 1). The
-#   origin names the claim's writer so the sweep can bound its lifetime. Three
-#   origins are recognized. Two are TTL-reclaimable (see reservation_sweep rule
-#   (c-ttl)) because neither has a guaranteed consumer:
+#   origin names the claim's writer so the sweep can bound its lifetime. Four
+#   origins are recognized. Three are TTL-reclaimable (see reservation_sweep rule
+#   (c-ttl)) because none of them has a guaranteed consumer:
 #     `standalone` — a claim written by `graph-select-target --standalone`.
 #     `explicit`   — a claim written by `dispatch-select-tick`'s explicit
 #                    single-node lane (`dispatch <node-id>`), typically run from
 #                    inside a long-lived interactive session whose id stays live
 #                    for hours.
-#   The third is the spawn handoff:
+#     `office-hours` — a claim written by the `/office-hours <node-id>` graph
+#                    lane (.claude/skills/office-hours/SKILL.md step 2) so two
+#                    drains cannot work one parked node. Its reserving session is
+#                    a long-lived HUMAN review session that is usually NOT named
+#                    the node id, so rules (a) and (c) never fire for it. Without
+#                    a TTL an open review would hold a fan-out slot
+#                    (`effective_live = busy_workers + RESV`) for as long as the
+#                    human keeps the session open, and a handful of concurrent
+#                    reviews would pin LIVE_COUNT at the ceiling and stall the
+#                    fleet — the same failure (c-ttl) was introduced to stop.
+#   The fourth is the spawn handoff:
 #     `spawned`    — a claim RE-STAMPED by reservation_mark_spawned at a
 #                    successful spawn kick. It is governed by sweep rule
 #                    (a-handoff) and DISPATCH_RESERVATION_HANDOFF_TTL_S — NOT by
@@ -129,6 +140,26 @@
 #     return 1 — a missing/unsafe argument, an unresolvable ledger dir, or no
 #               such marker.
 #
+# reservation_owner <worktree-basename>
+#   Print the reserving session id for the marker named exactly
+#   <worktree-basename> to stdout. The basename arg is required and must pass
+#   the same path-safety guard as reservation_write/_clear/_exists
+#   (missing/unsafe → 1, nothing printed). Reads the `session=` line the same
+#   way reservation_sweep does (first match wins via `sed -n
+#   's/^session=//p' | head -n1`) — this is the ONE parser of that line;
+#   reservation_sweep calls this function rather than re-parsing it inline. A
+#   marker that exists but has no readable `session=` line (malformed) prints
+#   nothing and returns 1, the same fail-safe treatment reservation_sweep
+#   gives a malformed marker (kept, not treated as "dead"). This lets a caller
+#   distinguish "no claim" (reservation_exists false) from "claim held by
+#   another session" / "claim held by me" (reservation_exists true,
+#   reservation_owner succeeds) from "claim with unknown owner"
+#   (reservation_exists true, reservation_owner fails) — the fail-safe case.
+#     return 0 — stdout carries the single `session=` value.
+#     return 1 — a missing/unsafe argument, an unresolvable ledger dir, an
+#               absent marker file, or a marker with no readable `session=`
+#               line; nothing printed (or empty stdout).
+#
 # reservation_count
 #   Print the integer count of outstanding marker files to stdout. NEVER fails —
 #   there is no daemon dependency, so an unresolvable/absent ledger dir prints
@@ -171,14 +202,17 @@
 #        strands the handoff at the 30s boot grace, reopening the
 #        duplicate-worker window. An unparseable/absent timestamp falls through
 #        to the rules below (same fail-safe posture as the boot grace).
-#     (c-ttl) else the marker carries a TTL-reclaimable origin (`standalone` or
-#        `explicit`) AND has aged past DISPATCH_RESERVATION_STANDALONE_TTL_S
+#     (c-ttl) else the marker carries a TTL-reclaimable origin (`standalone`,
+#        `explicit`, or `office-hours`) AND has aged past
+#        DISPATCH_RESERVATION_STANDALONE_TTL_S
 #        (default 600s) → reclaim (ttl-expired), REGARDLESS of whether the
-#        reserving session is still live. Both origins name a claim written by a
-#        caller with no guaranteed consumer: `graph-select-target --standalone`
-#        may discard the selection, and `dispatch-select-tick`'s explicit
-#        single-node lane may have its downstream dispatch-graph-execute spawn
-#        fail (which deliberately leaves the reservation "for the sweep"). In
+#        reserving session is still live. All three origins name a claim written
+#        by a caller with no guaranteed consumer: `graph-select-target
+#        --standalone` may discard the selection, `dispatch-select-tick`'s
+#        explicit single-node lane may have its downstream dispatch-graph-execute
+#        spawn fail (which deliberately leaves the reservation "for the sweep"),
+#        and an `/office-hours <node-id>` drain claim is held by a long-lived
+#        human review session that is usually not named the node id. In
 #        either case, if the claim never converts, rule (a) never fires (no worker
 #        of that name ever goes live) and rule (c) never fires either while the
 #        (typically long-lived, often interactive) calling session stays alive —
@@ -200,7 +234,8 @@
 #     `spawn-handoff-expired`  rule (a-handoff) — an origin=spawned claim aged
 #                              past DISPATCH_RESERVATION_HANDOFF_TTL_S with no
 #                              live worker.
-#     `<origin>-ttl-expired`   rule (c-ttl) — a `standalone`/`explicit` claim
+#     `<origin>-ttl-expired`   rule (c-ttl) — a
+#                              `standalone`/`explicit`/`office-hours` claim
 #                              aged past DISPATCH_RESERVATION_STANDALONE_TTL_S.
 #     `dead-session-stranded`  rule (c) — the reserving session is dead.
 #   `.tmp`/dot tempfiles are skipped.
@@ -223,7 +258,8 @@
 #   DISPATCH_RESERVATION_STANDALONE_TTL_S
 #                             The TTL (seconds, default 600) after which the sweep
 #                             reclaims a TTL-reclaimable-origin marker
-#                             (`origin=standalone` or `origin=explicit`) with no
+#                             (`origin=standalone`, `origin=explicit`, or
+#                             `origin=office-hours`) with no
 #                             live worker of that name, regardless of the
 #                             reserving session's liveness. A non-numeric value
 #                             falls back to 600. (Named for the origin that first
@@ -426,6 +462,35 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     [[ -f "$dir/$wt_name" ]]
   }
 
+  # reservation_owner <worktree-basename> — print the reserving session id.
+  # See the header comment for the return-code contract.
+  reservation_owner() {
+    local wt_name="${1:-}"
+    if [[ -z "$wt_name" ]]; then
+      printf 'lib-reservation-ledger: reservation_owner requires a <worktree-basename> argument\n' >&2
+      return 1
+    fi
+    # Same path guard as reservation_write/_clear/_exists — never let an unsafe
+    # name read outside the ledger dir.
+    case "$wt_name" in
+      *..*|*/*|*[[:cntrl:]]*)
+        printf 'lib-reservation-ledger: reservation_owner: unsafe worktree-basename %q\n' "$wt_name" >&2
+        return 1
+        ;;
+    esac
+    local dir
+    # Unresolvable ledger dir → nothing to read.
+    dir=$(reservation_dir) || return 1
+    [[ -f "$dir/$wt_name" ]] || return 1
+    # Read the `session=` line robustly (first match wins); independent of
+    # line ordering within the marker. Mirrors reservation_sweep's own parse.
+    local sid
+    sid=$(sed -n 's/^session=//p' "$dir/$wt_name" 2>/dev/null | head -n1)
+    [[ -n "$sid" ]] || return 1
+    printf '%s\n' "$sid"
+    return 0
+  }
+
   # reservation_count — print the count of outstanding marker files. Never fails.
   # See the header comment for the return-code contract.
   reservation_count() {
@@ -558,9 +623,9 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     fi
     local grace="${DISPATCH_RESERVATION_BOOT_GRACE_S:-30}"
     [[ "$grace" =~ ^[0-9]+$ ]] || grace=30
-    # TTL for consumer-less claims — `origin=standalone` and `origin=explicit`
-    # (rule (c-ttl) in the header). The env var keeps its original name for
-    # backward compatibility; it governs both origins.
+    # TTL for consumer-less claims — `origin=standalone`, `origin=explicit`, and
+    # `origin=office-hours` (rule (c-ttl) in the header). The env var keeps its
+    # original name for backward compatibility; it governs all three origins.
     local ttl_s="${DISPATCH_RESERVATION_STANDALONE_TTL_S:-600}"
     [[ "$ttl_s" =~ ^[0-9]+$ ]] || ttl_s=600
     # TTL for the spawn handoff — `origin=spawned` (rule (a-handoff)). Must
@@ -575,9 +640,10 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
     for f in "$dir"/*; do
       [[ -f "$f" ]] || continue
       bn=$(basename "$f")
-      # Read the `session=` line robustly (first match wins); independent of
-      # line ordering within the marker.
-      marker_sid=$(sed -n 's/^session=//p' "$f" 2>/dev/null | head -n1)
+      # Read the `session=` line via reservation_owner — the ONE parser of
+      # that line in this file (independent of line ordering within the
+      # marker; empty on a malformed/absent-session marker).
+      marker_sid=$(reservation_owner "$bn") || marker_sid=""
       # Read the `timestamp=` line and parse it to epoch. The markers store UTC
       # ISO-8601 (e.g. 2026-01-01T00:00:00Z), which GNU `date -d` parses. This
       # may fail (empty/non-numeric marker_epoch) on an absent/unparseable
@@ -625,18 +691,21 @@ if [[ -z "${_LIB_RESERVATION_LEDGER_LOADED:-}" ]]; then
           reservation_clear "$bn"
           printf 'lib-reservation-ledger: reclaimed reservation %s (spawn-handoff-expired after %ss with no live worker)\n' "$bn" "$handoff_ttl_s" >&2
         fi
-      elif [[ "$marker_origin" == "standalone" || "$marker_origin" == "explicit" ]] \
+      elif [[ "$marker_origin" == "standalone" || "$marker_origin" == "explicit" \
+              || "$marker_origin" == "office-hours" ]] \
            && [[ "$marker_epoch" =~ ^[0-9]+$ ]] \
            && (( now - marker_epoch >= ttl_s )); then
-        # (c-ttl) A consumer-less claim — `graph-select-target --standalone` or
-        # dispatch-select-tick's explicit single-node lane — that aged past the TTL
+        # (c-ttl) A consumer-less claim — `graph-select-target --standalone`,
+        # dispatch-select-tick's explicit single-node lane, or an
+        # `/office-hours <node-id>` drain — that aged past the TTL
         # without a live worker of its name ever appearing. Reclaimed regardless of
-        # the reserving session's liveness: neither caller has a guaranteed consumer
-        # for the claim, so an unlaunched/discarded/crashed selection (or a failed
-        # dispatch-graph-execute spawn, which deliberately leaves the reservation
-        # for this sweep) would otherwise hold a budget slot forever while its
-        # (long-lived, often interactive) session stays alive — enough repeats pin
-        # LIVE_COUNT at the ceiling and stall the fleet.
+        # the reserving session's liveness: none of these callers has a guaranteed
+        # consumer for the claim, so an unlaunched/discarded/crashed selection (a
+        # failed dispatch-graph-execute spawn, which deliberately leaves the
+        # reservation for this sweep, or a human review session that stays open for
+        # hours under a name that is not the node id) would otherwise hold a budget
+        # slot forever while its (long-lived, often interactive) session stays alive
+        # — enough repeats pin LIVE_COUNT at the ceiling and stall the fleet.
         reservation_clear "$bn"
         printf 'lib-reservation-ledger: reclaimed reservation %s (%s-ttl-expired after %ss with no live worker)\n' "$bn" "$marker_origin" "$ttl_s" >&2
       elif [[ -z "${live_ids[$marker_sid]:-}" ]]; then
