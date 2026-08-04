@@ -546,6 +546,9 @@ assert_eq "at-cap fallback: graph pace-exempt probe consulted" "1" \
 assert_eq "at-cap fallback: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "at-cap fallback: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "at-cap fallback: decision log .skip_reason" "at-cap-no-priority" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
 sel_tick_teardown
 
 # --- at-cap: PACE_GAP > 1 admits multiple pace-exempt nodes (tactic-pace-exempt-ceiling-fanout Unit 1) ---
