@@ -55,7 +55,7 @@ office_hours:
     A concurrent writer landed an overlapping edit to this node while this
     session's edit was in flight; this writer's content was NOT landed. This
     session's unlanded content is preserved at
-    /tmp/tmp.0wfraYJ8Ya/tactic-office-hours-select-fresh-main.md (this machine
+    /tmp/tmp.ijyi4sIcUG/tactic-office-hours-select-fresh-main.md (this machine
     only — may not survive past this session). Recommended: the losing writer
     re-reads the current origin/main content, manually merges in its intended
     edit, and re-runs graph-commit on the merged result — that same commit
@@ -64,9 +64,9 @@ office_hours:
     (the mailbox discipline).
 
 
-    Diverged field 'phase' on tactic-office-hours-select-fresh-main:
-      this session's value: done
-      origin/main's value: main-qa
+    Diverged field 'office_hours' on tactic-office-hours-select-fresh-main:
+      this session's value: null
+      origin/main's value: {"reason":"graph-commit: mechanical-unresolved — 1 field(s) diverged across concurrent writes and could not be auto-merged (layers 1-3 exhausted)","since":"2026-08-04","recommendation":"A concurrent writer landed an overlapping edit to this node while this session's edit was in flight; this writer's content was NOT landed. This session's unlanded content is preserved at /tmp/tmp.0wfraYJ8Ya/tactic-office-hours-select-fresh-main.md (this machine only — may not survive past this session). Recommended: the losing writer re-reads the current origin/main content, manually merges in its intended edit, and re-runs graph-commit on the merged result — that same commit clears this office_hours park. A third session encountering this park while the loser is still working should wait rather than attempt its own merge (the mailbox discipline).\n\nDiverged field 'phase' on tactic-office-hours-select-fresh-main:\n  this session's value: done\n  origin/main's value: main-qa","session_type":"other"}
   session_type: other
 pace_exempt: false
 rounds: null
