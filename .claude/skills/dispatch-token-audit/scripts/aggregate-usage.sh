@@ -405,6 +405,14 @@ def cmd_prefix(c):
       and ($parsed.fixes_applied       | type) == "number"
     then $parsed else null end ) as $outcome
 
+# NODE_ID PASSTHROUGH (tactic-outcome-envelope-node-lane-parity): $outcome is
+# bound to the WHOLE parsed envelope object above, not a hand-picked field
+# subset, so a node-lane envelope's `node_id` key rides through unstripped on
+# `.outcome.node_id` in the per-session summary and into `by_phase_outcome`
+# below. No reduce change is needed for this — the pooled phase metric keys
+# only on `.phase` — but the field is there for a future by-node-outcome join
+# analogous to `by_node` (see below).
+
 # Ordered per-session token list of tool calls, in document order. Bash calls
 # become "Bash:<cmd_prefix>"; other tools become their name.
 | ( [ $msgs[] | select(.type=="assistant")
