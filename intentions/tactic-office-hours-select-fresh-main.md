@@ -50,7 +50,7 @@ blocked_by:
 office_hours:
   reason: "phase session ended without declaring a disposition — `claude agents
     --all` reports the session for this node in a terminal state and it has had
-    no transcript activity for `936`s, while `origin/main` still shows the node
+    no transcript activity for `888`s, while `origin/main` still shows the node
     at a working phase with `office_hours: null`; the node is therefore both
     re-selectable and held, so the dispatch-tick terminal-without-disposition
     sweep parked it"
