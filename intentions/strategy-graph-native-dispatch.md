@@ -4124,7 +4124,12 @@ clarifications:
       tactic-main-red-* shape — that is simultaneously the alarm, the work item,
       and the dedup key. Implementation retained as drafts
       tactic-invalid-state-lane and
-      tactic-invalid-state-transcript-intervention."
+      tactic-invalid-state-transcript-intervention. (Amended 2026-08-05 /align
+      interview: the 'intervention skill session' tier is ONE SKILL PER KIND,
+      not one skill serving every kind — the router resolves its skill directory
+      from --kind while the common ladder itself stays shared. A sixth kind,
+      duplicate-session, is added by the same round. See the per-kind-skill and
+      duplicate-session clarifications of that date.)"
   - question: Condition 14 keeps every undeclared terminal exit frozen until an
       operator manually reaps it because the live session is the only artifact
       of the failure — does the invalid-state lane change that, and who owns
@@ -4411,6 +4416,138 @@ clarifications:
       is set while reading is null — which is this node's exact state while the
       sensor drift keeps reading null. Both guards would have latched shut
       permanently."
+  - question: Where does the guard against concurrent sessions on one node live — in
+      each dispatch skill, in the launch path, or in the fleet monitor?
+    answer: "(Recorded 2026-08-05 /align interview, author-ratified.) Detection is
+      centralized in the fleet-health watcher (dispatch-fleet-watch) as an
+      additional predicate, never as prose guidance or a guard inside any
+      dispatch phase skill: the watcher is already the fleet's single home for
+      health predicates and already turns every finding into a graph node
+      through dispatch-fleet-alarm, so a duplicate-session predicate reuses an
+      existing detect-and-mint path rather than adding one. The launch path
+      ADDITIONALLY refuses — dispatch-graph-execute gains its own claimed-set
+      check — because the watcher can only detect a duplicate that already
+      exists, up to a full watch interval of two concurrent workers on one node,
+      whereas a launch-time refusal prevents most duplicates outright. Both live
+      in owned script code and cost no model tokens; the token constraint that
+      motivated this requirement binds the ESCALATION tier (an intervention
+      session), not detection. Two ground corrections are recorded with this
+      entry because the requirement was framed on both: dispatch-fleet-watch is
+      COMPLETE and live — a one-shot on a five-minute systemd timer with five
+      predicates, every one evaluated on every pass — not partially implemented;
+      the gap was only that no predicate counted sessions per node. And no
+      dispatch skill has ever carried a concurrency guard, so no token-wasting
+      per-skill guard was removed by this decision. The pre-existing guard is
+      graph-select-target's claimed-set check (reservation_exists, folding
+      worktree_has_live_session in as fail-safe), which is script code and
+      equally token-free."
+  - question: Are two concurrent sessions on one node a cost problem or a
+      correctness fault?
+    answer: "(Diverged 2026-08-05 /align interview from the cost framing.) The
+      strongest rival conception — that a duplicate is a benign, self-correcting
+      race which merely burns tokens, and so belongs to strategy-token-economy
+      rather than to this strategy's invalid-state machinery — is DIVERGED FROM.
+      Ground for the divergence: the two sessions share ONE worktree (both are
+      spawned with cwd .claude/worktrees/<node-id>, since liveness and isolation
+      are both name-keyed on the node id) and both can write the graph. The
+      failure mode is therefore lost updates and clobbered edits by two writers
+      in one working tree, not doubled spend; the spend is a symptom of the
+      fault, not the fault. Corroborating instance from the same session that
+      produced this round: a graph-commit issued from a worktree while a second
+      graph-commit was still running from that same worktree silently landed
+      nothing — it pushed its staging branch, printed no failure worth stopping
+      on, and left origin/main unchanged. Honest limit on that evidence, stated
+      when the steelman was put to the author: this is ONE observed instance,
+      not a measured rate, so the divergence rests on the structural argument (a
+      shared writer with no mutual exclusion) with the instance as corroboration
+      rather than proof."
+  - question: What does the response to a detected duplicate actually do, and at
+      what scope?
+    answer: "(Recorded 2026-08-05 /align interview, author-ratified.) NODE-SCOPED,
+      with no fleet latch: a node carrying a live session is already frozen —
+      worktree_has_live_session is name-keyed on the node id, so the router will
+      not re-select it — so no new pause mechanism is introduced and a single
+      duplicate never halts the fleet. The mechanical tier resolves it: STOP THE
+      NEWER SESSION AND LET THE OLDER ONE COMPLETE, reap the stopped session,
+      then debug the root cause and track a structural fix. Age is the default
+      discriminator but not the sole one, because age is not liveness: where the
+      OLDER session is itself already detectable as frozen or terminal — both
+      are existing invalid-state kinds with their own probes — the newer,
+      healthy worker is kept instead, so the rule cannot kill a working session
+      in order to preserve a wedged one. Consistent with the 2026-08-04 lane
+      ratification's guard that every mechanical-tier gate fails toward keep: on
+      any uncertainty about which session to stop, nothing is stopped and the
+      case escalates."
+  - question: How does mechanically stopping a live session avoid creating a second
+      invalid state?
+    answer: "(Recorded 2026-08-05 /align interview, author-ratified.) By DECLARING
+      it. Under condition 14 a session that exits without declaring a
+      disposition is KEPT — the Stop hook holds the job alive and
+      worktree_has_live_session freezes the node — so a bare stop would convert
+      a duplicate-session state into a terminal-session state and route straight
+      back into the lane, a loop rather than a resolution. The stop therefore
+      writes a node-terminal marker naming the node under a NEW disposition
+      member (duplicate-stopped), so the stopped session is declared and reaps
+      cleanly. Adding a member is explicitly sanctioned by condition 14's own
+      text — the disposition member is 'the primitive's diagnostic detail, never
+      doctrine: dispatch-self-close reads only ^node=, so adding a member never
+      re-stales this condition' — so this is an additive change that does not
+      amend that condition. Reusing the existing no-claim member was considered
+      and rejected as semantically false here: no-claim means the session held
+      no claim and did nothing, whereas the stopped session DID hold a claim and
+      may have done work."
+  - question: What happens to the stopped session's uncommitted work, given both
+      sessions share one worktree?
+    answer: "(Recorded 2026-08-05 /align interview, author-ratified.) It is
+      CAPTURED, never discarded, and the tree is never auto-cleaned. The stopped
+      session's uncommitted diff is recorded as evidence on the tracked
+      follow-up node; no restore, checkout or clean runs, because the SURVIVING
+      session is live in that same tree and any such write would race its
+      in-flight edits. For the same reason the existing worktree-residue
+      invalid-state kind must NOT fire on a tree occupied by a live session: a
+      dirty tracked tree under a live worker is that worker's work in progress,
+      not dead-session residue. This is the same hazard already recorded raw as
+      tactic-provision-residue-live-session-check ('provision-node-worktree's
+      exit-14 precondition guard must consult worktree_has_live_session before
+      escalating a dirty tracked tree to a human-drained worktree-residue
+      hold'), which this round gives a second caller and therefore a second
+      reason to land."
+  - question: Does each invalid-state kind get its own intervention skill, or does
+      one skill serve every kind?
+    answer: "(Recorded 2026-08-05 /align interview, author-ratified; amends the
+      intervention-skill limb of the 2026-08-04 invalid-state-lane
+      clarification.) ONE SKILL PER KIND. The router keeps --kind — it needs it
+      for the mechanical tier and the escalation class — and the ONE common
+      ladder (mechanical tier, then intervention session, then escalation) stays
+      shared and written down exactly once, as that clarification requires. What
+      splits is the intervention SKILL: dispatch-invalid-state-route resolves
+      its skill directory from the kind rather than hardcoding a single path,
+      and each kind carries its own skill body. Measured state at the time of
+      the ruling: the router never passed --kind to the skill at all (the prompt
+      is '/dispatch-invalid-state <node-id>') and the skill directory was a
+      single hardcoded path, while that one skill's body is written wholly for
+      terminal-session — its method is reading a DEAD session's transcript, and
+      its own frontmatter states it is 'never invoked on a live claim'. A
+      duplicate is two LIVE sessions, so serving it from that skill would have
+      required one body to branch across contradictory preconditions. Today's
+      skill becomes the terminal-session skill; duplicate-session gets its own."
+  - question: Does the bootstrap exemption entitle a pace-ceiling bypass on
+      graph-select-target --standalone?
+    answer: "(Recorded 2026-08-05 /align interview, author-ratified.) NO — the
+      ceiling governs for every unattended caller, monitor-run drains included,
+      as graph-select-target already states: an interactive keystroke is
+      sovereign, but a --standalone caller is unattended, so it is ceiling-gated
+      like every other --standalone selection. Ruling 34 item 4's bootstrap
+      exemption does not purchase a standing route past the weekly curve. The
+      problem the question was raised against — that the only claim-safe manual
+      launch path (--standalone) returns nothing whenever
+      dispatch-target-workers reads 0, leaving a bare dispatch-graph-execute as
+      the only usable route and that route holding no claim and checking none —
+      is closed from the OTHER side, by the launch-path refusal recorded above:
+      once dispatch-graph-execute performs its own claimed-set check, a direct
+      launch is claim-safe without selecting at all, and no bypass is needed.
+      Honest limit stated when the question was put to the author: what else
+      depends on --standalone was not enumerated in this round."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -4696,6 +4833,20 @@ attributes:
       flight. No set-size value is declared yet, so until the author declares
       one this condition reads as not-yet-armed rather than as holding — the
       same posture as the maintenance-burden band condition."
+    - "concurrent sessions on a single node are an invalid state, never a
+      tolerated race — they are detected by the fleet-health watcher rather than
+      by guards embedded in phase skills, every dispatch launch path refuses a
+      node already covered by the claimed set, and a detected duplicate is
+      resolved node-scoped without halting the fleet: stop the newer session
+      unless it is the only healthy one, declare and reap it rather than leaving
+      it undeclared, capture rather than discard its uncommitted work in the
+      shared worktree, and track the root cause as a structural fix (Recorded
+      2026-08-05)"
+    - invalid-state detection and mechanical resolution stay in owned script
+      code with no per-node model spend — only the escalation tier may cost a
+      model session — and each invalid-state kind carries its own intervention
+      skill rather than one skill body branching across kinds (Recorded
+      2026-08-05)
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
@@ -5097,6 +5248,36 @@ fails loudly when a subagent's writes land outside the worktree (tracked as
 tactic-subagent-cwd-worktree-guard). This is distinct from the
 primary-checkout-on-main invariant (tactic-primary-checkout-main-guard): that
 keeps the primary checkout ON main; this keeps subagent WRITES OUT of it.
+
+**The claimed set is enforced at SELECTION only, so a caller that skips
+selection is unguarded — and a duplicate is an invalid state, not a race to
+tolerate.** (Amended 2026-08-05 interview; extends entries 13 and 72, which
+point here for the mechanism.) The claimed-set check described above lives
+entirely in the SELECTOR: `graph-select-target` skips a node when
+`reservation_exists` holds or `worktree_has_live_session` reports a live
+node-id-named session. The launcher it feeds, `dispatch-graph-execute`, performs
+no occupancy check of its own — it only HANDS OFF a claim it assumes its caller
+already took (re-stamping the marker `origin=spawned` so the claim survives the
+boot window, the 2026-07 spawn-window fix) and clears one outright on the
+stale-selection and scope-stale dispositions. A caller that never went through
+the selector therefore holds no claim and checks none, and the guard is
+structurally absent in both race directions. Observed live 2026-08-05: a
+park-clearing drain cleared a node's `office_hours` — which is precisely what
+makes the node tick-selectable — the headless tick selected and launched it
+three seconds later, and the drain's own direct `dispatch-graph-execute`
+launched a second `/qa-main` into the SAME worktree nine seconds after that.
+Both sessions were live, in one working tree, both able to write the graph.
+Three consequences are recorded as doctrine by this round's clarifications:
+detection of duplicates belongs to the fleet-health watcher rather than to any
+phase skill; every launch path — not only the selector — refuses a node already
+covered by the claimed set; and a detected duplicate is an invalid state
+resolved node-scoped through the invalid-state lane (stop the newer session
+unless it is the only healthy one, declare it so it reaps rather than freezing
+the node afresh, capture rather than discard its uncommitted work in the shared
+tree, and track the root cause). Note the asymmetry this closes: liveness
+detection is name-keyed on the node id, which is exactly why the two sessions
+shared one worktree — the isolation rule that gives each node its own tree also
+guarantees that a duplicate lands two writers inside it.
 
 ### Pace, Backlog & Attention
 
