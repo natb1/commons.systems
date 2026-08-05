@@ -39,7 +39,78 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA plan clean (16/16 script-verifiable PASS, 2 judgment items
+    independently confirmed already-satisfied, 3 planned-deferral items filed as
+    needs-main residue on the node body). One residual item (arming sequence —
+    sibling #3048 must land before this PR merges, since merging arms autonomous
+    intervention fleet-wide) was reclassified opus-fixable by disposition triage
+    but the gated fix-planner refused with a scope-deviation: merge-order
+    authorization is not a code fix. Escalating to office-hours for that
+    authorization call only."
+  since: 2026-08-05
+  recommendation: >-
+    ## Recommendation: one merge-order authorization call
+
+
+    **Run the check first:**
+
+
+    ```
+
+    gh pr view 3048 --json state,mergedAt
+
+    ```
+
+
+    That is the entire open question. PR #3048 (node
+    `tactic-invalid-state-lane`) builds the invalid-state router whose
+    intervention tier is gated purely on the existence of
+    `.claude/skills/dispatch-invalid-state/SKILL.md` — the exact file this PR
+    (#3049) adds.
+
+
+    **If #3048 shows `state: MERGED` with a non-null `mergedAt`:** the ordering
+    constraint is satisfied and #3049 is merge-eligible. Before merging, be
+    deliberate about one thing: the merge itself arms autonomous intervention
+    across the whole dispatch fleet the instant it lands on `main` — there is no
+    staged rollout and no feature flag between merge and armed. Do a final skim
+    of `.claude/skills/dispatch-invalid-state/SKILL.md` against the router's
+    tier gate in the landed #3048 (confirm the path the router probes is
+    byte-identical to the path this PR creates), then merge and watch the next
+    few dispatch ticks.
+
+
+    **If #3048 is still open or draft:** hold #3049. No code action, no edits,
+    no new commits — merging now would land a skill file whose companion router
+    does not exist on `main`, which is the failure mode the PR body calls out
+    ("#3048 must land first, or this arms a router that is not there"). Park it
+    back on office-hours or leave it queued, and re-run the same `gh pr view
+    3048` check once #3048 lands.
+
+
+    **Disarm path, if arming turns out premature or buggy post-merge:** revert
+    exactly one file — `.claude/skills/dispatch-invalid-state/SKILL.md`. Its
+    absence returns the router to its pre-intervention tier. Nothing else in
+    #3049 needs to be touched, and no revert of #3048 is required.
+
+
+    **Everything else in this PR is QA-clean.** 16 script-verifiable items
+    passed (full PR-scripts unit suite, lint, `packages/intentionsutil` vitest
+    820/820, and the doctrine greps: no direct `claude rm` / `git worktree
+    remove` outside the extracted library function, no `hold-node` outside its
+    prohibition list, no write to the source node from the followup script,
+    anchored root-cause id regex, closing-keyword refusal, timestamp-free dedup
+    key). The two judgment items — declaration coverage on every terminal path
+    of the new SKILL.md, and the five-state classification with its
+    fail-toward-keep posture — were independently confirmed by Opus code review.
+    Three deferrals (synthetic-registry rehearsal, post-merge production
+    observation, self-reap non-regression) are already appended as `##
+    needs-main residue` on the node body (commit `0215311`, on `origin/main`)
+    and drain automatically once this merges and the phase advances `review →
+    main-qa`. No code defects were found in the diff. The merge-order
+    authorization is the only thing waiting on a human.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -707,3 +778,53 @@ Manual and judgment checks:
 - The PR title must be `tactic-invalid-state-transcript-intervention: <short
   description>` — the literal node id verbatim, per the standing PR-title
   condition.
+
+## needs-main residue
+
+### 20. Rehearsal before arming against a synthetic registry and scratch dirs
+
+- URL path: `.claude/skills/dispatch-propagate/scripts/`
+- Expected outcome: With a synthetic terminal registry row, a fixture
+  transcript, and scratch projects/intentions/job dirs, the three scripts
+  compose correctly end to end: one follow-up node minted and schema-valid,
+  correct reap verdict, no write to the source node, `--dry-run` producing no
+  commits, and the real `intentions/` untouched.
+- Finding: Requires a synthetic registry/daemon fixture harness and scratch
+  roots this reasons-only QA pass could not stand up interactively. The PR
+  body claims this rehearsal was already run pre-merge; independent
+  re-verification against the landed scripts is deferred here.
+- Verifiability: WAIT — awaiting PR merge (sibling `tactic-invalid-state-lane`
+  / #3048 already on `main`) before a fixture-based rehearsal can be driven
+  against the landed scripts.
+
+### 21. Observe in production, one tick after merge
+
+- URL path: current
+- Expected outcome: On the next dispatch tick with a terminal-held node: the
+  journal shows the `invalid-state:` sweep line, the router logs `intervened
+  <id> 1/3`, the intervention session appears and self-closes, a
+  `tactic-invalid-state-rc-*` node exists on `origin/main` with exactly one
+  occurrence, and the previously-frozen node is selectable again.
+- Finding: Requires real post-merge fleet state with a genuinely
+  terminal-held node; not reproducible before merge.
+- Verifiability: WAIT — awaiting merge plus one dispatch tick that observes a
+  genuinely terminal-held node.
+- Check: grep dispatch-tick journal/log output for the `invalid-state:` sweep
+  line and `intervened <id> 1/3`; confirm a `tactic-invalid-state-rc-*` node
+  lands on `origin/main` with one occurrence; confirm the previously-frozen
+  node becomes selectable again.
+
+### 22. Self-reap non-regression on the intervention's own session
+
+- URL path: `.claude/skills/dispatch-propagate/scripts/lib-session-reap.sh`
+- Expected outcome: After a real post-merge intervention run declares its
+  disposition, its own session (registered under the same node name as the
+  corpse it targeted) is reaped normally by the ordinary
+  `session_reap_sweep` rather than becoming permanently unreapable — the
+  self-target refusal must not trade the old freeze for a new one.
+- Finding: Observable only after a real post-merge intervention run
+  completes; the refusal path and the ordinary sweep path cannot both be
+  exercised against the same live session before merge.
+- Verifiability: WAIT — awaiting a real post-merge intervention run to
+  complete and declare its disposition, followed by the next
+  `session_reap_sweep` tick.
