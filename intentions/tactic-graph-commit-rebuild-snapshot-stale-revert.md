@@ -96,7 +96,7 @@ attention:
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-commit-rebuild-snapshot-stale-revert
   pr: 2990
@@ -107,7 +107,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-05T21:47:35Z
+    mergeCommitSha: 156ce3a18929dd0c85f80db6be4f35c32ad45a7d
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-graph-commit-intentions-base-stale-restore

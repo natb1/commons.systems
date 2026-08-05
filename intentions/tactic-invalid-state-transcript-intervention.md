@@ -27,7 +27,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-invalid-state-transcript-intervention
   pr: 3049
@@ -38,7 +38,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-05T21:47:40Z
+    mergeCommitSha: 0e953cadc578a5be0d07d43e8e12cf20ceebf8b8
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
