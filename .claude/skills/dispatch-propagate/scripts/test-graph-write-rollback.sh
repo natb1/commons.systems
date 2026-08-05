@@ -52,6 +52,12 @@
 #      script for the first time — rolls back to HEAD, leaving a clean tree and
 #      preserving the park rather than restoring stale park-erased bytes
 #      (Unit 2).
+#   9. The graph-commit BUSY-MAIN path (rc 11): commit_files() ran, land() did
+#      not, so HEAD carries an un-landed content commit. `git checkout --`
+#      against that HEAD would restore the MUTATED bytes and report a rollback
+#      that never happened, stranding a commit the next graph-commit from this
+#      shared checkout would push. The un-landed commit must be discarded (HEAD
+#      back where the sweep found it) and the false claim must not be emitted.
 #
 # Cases 6 and 7 are both verified to go RED when Unit 1's `--base` threading is
 # reverted. Case 7 needed care to avoid being vacuous: if the checkout is left
@@ -933,7 +939,10 @@ for id in "${ids[@]}"; do
   mv "intentions/$id.md.new" "intentions/$id.md"
   git add "intentions/$id.md"
 done
-git commit -qm 'graph-commit stub: park_and_exit stand-in'
+# park_and_exit()'s real commit subject shape — `graph: park <ids> (...)` — is
+# load-bearing, not cosmetic: it is how the reconciler's rollback tells a park
+# commit apart from an un-landed content commit (case 9).
+git commit -qm "graph: park ${ids[*]} (concurrent-edit conflict)"
 echo "graph-commit: parked on unresolvable divergence" >&2
 exit 1
 SH
@@ -956,6 +965,82 @@ else
   printf '%s\n' "$out"
   printf 'status: %s\n' "$status8"
   printf 'node:\n%s\n' "$node8"
+fi
+
+# ===========================================================================
+# Case 9: graph-commit's BUSY-MAIN path (rc 11) — it runs commit_files() before
+# land(), so on `exit 1` HEAD has moved and carries the sweep's un-landed,
+# un-CAS-checked mutation with no reset. A bare `git checkout --` "rollback"
+# would restore each node file to that MUTATED HEAD: a no-op reported as a
+# rollback, leaving a stranded commit that the NEXT graph-commit from this
+# shared checkout would rebase and push to main (graph-commit pushes HEAD, not
+# just the node it names) — a write that never passed check_base_freshness.
+#
+# The stub differs from case 8's in exactly one way that matters: its commit is
+# an ordinary content commit, NOT a `graph: park ...` commit, and it is never
+# pushed. Assert the commit is discarded (HEAD back where the sweep found it,
+# the node file un-mutated, tree clean) and that the false "rolled back" claim
+# is replaced by an explicit report.
+# ===========================================================================
+T9="$WORK/t9-seed"
+build_seed_repo "$T9"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T9/intentions/t-strand.md" t-strand 909
+new_origin t9
+init_and_push "$T9"
+
+C9="$WORK/t9-clone"
+clone_with_node_modules "$C9"
+BIN9="$WORK/t9-bin"; FIX9="$WORK/t9-fixtures"
+reconcile_gh_stub "$BIN9" "$FIX9"
+# graph-commit stub standing in for the rc-11 busy-main exit: commit the caller's
+# already-mutated node files (commit_files runs BEFORE land), then fail without
+# pushing and without resetting.
+cat >"$C9/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""; ids=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+cd "$dir" || exit 2
+for id in "${ids[@]}"; do
+  git add -- "intentions/$id.md"
+done
+git commit -qm "graph: reconcile terminal tactics (record completion)"
+echo "error: graph-commit: could not land ${ids[*]} — main advanced through every push attempt" >&2
+exit 1
+SH
+chmod +x "$C9/packages/intentionsutil/scripts/graph-commit"
+
+head9_before="$(git -C "$C9" rev-parse HEAD)"
+node9_before="$(cat "$C9/intentions/t-strand.md")"
+out="$(
+  cd "$C9" || exit 99
+  export PATH="$BIN9:$PATH" GC_FIXTURE_DIR="$FIX9"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+head9_after="$(git -C "$C9" rev-parse HEAD)"
+status9="$(git -C "$C9" status --porcelain intentions/)"
+node9_after="$(cat "$C9/intentions/t-strand.md")"
+if [[ $rc -ne 0 ]] \
+   && [[ "$head9_after" == "$head9_before" ]] \
+   && [[ -z "$status9" ]] \
+   && [[ "$node9_after" == "$node9_before" ]] \
+   && grep -q 'discarded by resetting to' <<<"$out" \
+   && ! grep -q 'rolled the apply run.s node writes back' <<<"$out"; then
+  ok "reconcile-graph-merged busy-main rollback: an un-landed commit graph-commit left on HEAD is discarded (HEAD restored, node un-mutated) instead of being reported as a rollback"
+else
+  no "reconcile-graph-merged busy-main rollback (rc=$rc, head moved: $([[ "$head9_after" == "$head9_before" ]] && echo no || echo yes))"
+  printf '%s\n' "$out"
+  printf 'status: %s\n' "$status9"
+  printf 'node:\n%s\n' "$node9_after"
 fi
 
 echo
