@@ -71,8 +71,7 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-conflict-align-tactics-tactic-mode-drift-gate
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

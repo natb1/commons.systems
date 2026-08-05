@@ -49,8 +49,18 @@ success_signal:
     intentions/ file in the main checkout
   is_proxy: false
 attention: null
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-park-node-rollback-dirty-tree-blocks-tick-sync
+  pr: 3043
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null

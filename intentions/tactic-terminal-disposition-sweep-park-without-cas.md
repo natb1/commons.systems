@@ -79,7 +79,58 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    All 3 needs-main residue items remain Verifiability: WAIT. Re-verified
+    2026-08-04 by a read-only main-qa pass against origin/main and the live
+    host: (1) the state-aware UNHEALED-clobber detect over the since-merge
+    window (source PR #3042 merged 2026-08-04T16:48:30Z) returns 0 UNHEALED
+    rows, but only ~33.5 minutes of real dispatch-tick sweep activity has
+    occurred post-merge (16:48:31Z-17:21:57Z) before the fleet fell idle and
+    dispatch was paused at 17:43:22Z -- far short of the day of traffic the
+    residue asks for, so a zero count here is not yet evidence of absence; (2) 0
+    'stale-diagnosis' occurrences across the same window because no concurrent
+    office_hours park has landed inside a sweep's guard-to-write gap at all, so
+    the exit-3 path has never been exercised; (3) the ordinary park success path
+    did fire once post-merge (17:14:51Z, 'lib-frozen-session-park: parked
+    tactic-terminal-disposition-sweep-park-without-cas ... terminal=3 parked=1',
+    parked_count accurate), which is supporting but not sufficient. The awaited
+    event is elapsed post-merge dispatch-tick traffic, currently blocked further
+    by dispatch being paused.
+
+
+    RECURRENCE NOTE (bug X, ledger-unfiled): an essentially identical WAIT park
+    landed on this node at 2026-08-04T17:14:51Z (commit 09027d03) and was
+    destroyed 22 seconds later by commit d2c53f79 'graph: reconcile terminal
+    tactics (record completion)' -- the reconciler replaced the whole
+    office_hours block with `office_hours: null` while leaving phase: main-qa
+    unchanged. That is the reconcile-reverts-a-concurrent-park defect (bug X),
+    not a human disposition, and it is what caused this node to be re-selected
+    and re-verified at token cost. Ruling 31 ratified that the reconcilers stay
+    UNGATED on office_hours (they must not skip a merge or a phase advance
+    because a park is live); it did not sanction ERASING a live park. If this
+    park disappears again without a recorded human decision, that is a fresh
+    bug-X reproduction and should be captured as such rather than treated as a
+    resolution.
+  since: 2026-08-04
+  recommendation: "No author decision needed -- re-selection only, once enough
+    post-merge dispatch-tick traffic has accumulated (target ~2026-08-05T16:48Z
+    or later, and only counting time with dispatch un-paused). Re-run, in order:
+    (1) the state-aware UNHEALED detect script from this node's 'Interim
+    mitigation' section, re-windowed to --since=2026-08-04T16:48:30Z, requiring
+    zero UNHEALED rows over a window containing substantial real sweep activity
+    -- state the observed sweep-invocation count alongside the row count, since
+    a zero over an empty window proves nothing; (2) journalctl --user -u
+    'dispatch-converge-*' --since 2026-08-04T16:48:30Z | grep stale-diagnosis,
+    confirming any hits self-heal on a later tick; (3) the same journal grepped
+    for 'lib-frozen-session-park: parked ', confirming nonzero invocations and
+    that parked_count matches the observed parks. Separately, 2 pre-existing
+    UNHEALED rows on tactic-office-hours-select-fresh-main (gaps 809s/357s)
+    pre-date the fix and can be healed via this node's own 'Interim mitigation'
+    step 2 whenever convenient -- unrelated to closing this residue. Do not
+    force the concurrent-park race to satisfy item 2; it is out of the read-only
+    main-qa lane's authority."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
