@@ -143,8 +143,7 @@ execution:
     pushed_sha: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-fix-cap-align-tactics-mark-terminal-skipped
+blocked_by: []
 office_hours: null
 pace_exempt: true
 rounds: null
