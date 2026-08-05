@@ -188,9 +188,25 @@ is making a claim, not reporting a fact — the standing posture
    Redact the body before you write it, per
    `.claude/skills/dispatch-diagnose-main/SKILL.md:52-71` — no raw log lines, no
    environment values, nothing token- or credential-shaped, no file paths beyond
-   the immediate failing module. The script re-scans for a GitHub closing keyword
-   next to a `#N` and **refuses (exit 3) rather than laundering it**; on a
-   refusal, fix the body, do not work around the check.
+   the immediate failing module. The script re-scans the body **and**
+   `--statement` for a GitHub closing keyword next to an issue reference
+   (exit 3) and for a credential-shaped string (exit 4), and **refuses rather
+   than laundering** either: the record lands on a public branch and a pushed
+   leak cannot be walked back. On a refusal, fix the body, do not work around
+   the check.
+
+   The script emits your body inside a fenced `## Untrusted transcript excerpt`
+   block — the excerpt stays marked as transcript-derived in the durable record,
+   so a later planner reads it as data. That framing is the script's, not yours;
+   do not pre-fence the body.
+
+   The one line it prints is `<node-id> minted|updated|recurred|unchanged`.
+   **`recurred` is a routing signal**: the follow-up node already existed and was
+   already dispositioned (`phase: done`, or parked), so the same cause has
+   recurred after being intervened on — classify the source node as
+   `author-required` and park it (Step 4). The script records the occurrence and
+   leaves that node's `phase`/`office_hours` untouched; it never re-opens or
+   re-parks anything.
 
 2. **Then either reap or park.**
 
