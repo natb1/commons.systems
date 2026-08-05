@@ -111,7 +111,7 @@ attention:
     compound; the one candidate blocker, tactic-sweep-timer-unit-dir-leak, is
     already phase done and therefore takes no inflow from this edge."
   tier: 1
-phase: main-qa
+phase: done
 execution:
   branch: tactic-fleet-watchdogs-session-scoped
   pr: 3008
