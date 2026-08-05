@@ -96,42 +96,21 @@ attention:
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
   tier: 1
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-commit-rebuild-snapshot-stale-revert
   pr: 2990
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
 validates: []
 blocked_by:
   - tactic-graph-commit-intentions-base-stale-restore
-office_hours:
-  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
-    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
-  since: 2026-08-05
-  recommendation: >-
-    A concurrent writer landed an overlapping edit to this node while this
-    session's edit was in flight; this writer's content was NOT landed. This
-    session's unlanded content is preserved at
-    /tmp/tmp.VFV4cKB1ck/tactic-graph-commit-rebuild-snapshot-stale-revert.md
-    (this machine only — may not survive past this session). Recommended: the
-    losing writer re-reads the current origin/main content, manually merges in
-    its intended edit, and re-runs graph-commit on the merged result — that same
-    commit clears this office_hours park. A third session encountering this park
-    while the loser is still working should wait rather than attempt its own
-    merge (the mailbox discipline).
-
-
-    Unresolved conflict on tactic-graph-commit-rebuild-snapshot-stale-revert:
-    list-entry removal vs. concurrent edit — this write removes frontmatter list
-    entries that origin/main still carries (execution[planned]), and the
-    field-level merge unions list fields base-free, so auto-merging would
-    silently restore them
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
