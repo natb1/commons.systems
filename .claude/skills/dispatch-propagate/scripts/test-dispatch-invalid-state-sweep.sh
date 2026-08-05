@@ -106,6 +106,84 @@ case "$out" in *"kept=1"*) a=yes ;; *) a="no: $out" ;; esac
 assert_eq "sweep: a reserved node is counted as kept" "yes" "$a"
 iss_teardown
 
+# --- Case: the doctrine gates this arm holds on its own ---------------------
+# This arm carries NO router-supplied discrimination: the router's own gates run
+# after it has already been called, and a call is what spawns an Opus session.
+# So `phase: done` (a completed node in the normal post-completion reap window —
+# session terminal, worktree not yet reaped) and an already-parked node must both
+# be filtered HERE, exactly as terminal_without_disposition_sweep steps (8) and
+# (9) do. `office_hours` is serialized as a BLOCK MAPPING, so the gate has to be
+# a frontmatter-scoped PRESENCE test, not a read of the key's own line.
+echo "Test: dispatch-invalid-state-sweep — phase: done and already-parked are never routed"
+iss_setup
+for n in tactic-done tactic-parked tactic-body-prose tactic-live-work; do iss_node "$n"; done
+cat > "$ISS_ROOT/intentions/tactic-done.md" <<'DONE'
+---
+id: tactic-done
+phase: done
+office_hours: null
+---
+# done
+DONE
+cat > "$ISS_ROOT/intentions/tactic-parked.md" <<'PARKED'
+---
+id: tactic-parked
+phase: implement
+office_hours:
+  reason: waiting on the author
+  since: 2026-08-01T00:00:00Z
+---
+# parked
+PARKED
+# The negative control for the frontmatter scoping: a column-0 `office_hours:`
+# line in the BODY is prose, not park state, and must NOT suppress routing.
+cat > "$ISS_ROOT/intentions/tactic-body-prose.md" <<'PROSE'
+---
+id: tactic-body-prose
+phase: implement
+office_hours: null
+---
+# body prose
+
+office_hours: this line is documentation about the field, not park state
+PROSE
+cat > "$ISS_ROOT/intentions/tactic-live-work.md" <<'LIVE'
+---
+id: tactic-live-work
+phase: implement
+office_hours: null
+---
+# live work
+LIVE
+printf '%s' '[{"sessionId":"s1","id":"j1","name":"tactic-done","cwd":"/w","state":"done"},
+              {"sessionId":"s2","id":"j2","name":"tactic-parked","cwd":"/w","state":"done"},
+              {"sessionId":"s3","id":"j3","name":"tactic-body-prose","cwd":"/w","state":"done"},
+              {"sessionId":"s4","id":"j4","name":"tactic-live-work","cwd":"/w","state":"done"}]' \
+  > "$ISS_ROOT/claude-payload.json"
+out=$(DISPATCH_INVALID_STATE_SWEEP_MAX=9 \
+  PATH="$ISS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$ISS_ROOT/bin/claude" \
+  CLAUDE_AGENTS_PGREP_CMD="$ISS_ROOT/bin/pgrep-visible" \
+  DISPATCH_INVALID_STATE_SWEEP_ROOT="$ISS_ROOT" \
+  DISPATCH_INVALID_STATE_ROUTE_CMD="$ISS_SCRIPTS/route-stub" \
+  DISPATCH_RESERVATION_DIR="$ISS_ROOT/reservations" \
+  ISS_ROUTE_LOG="$ISS_ROUTE_LOG" \
+  "$ISS_SWEEP" 2>/dev/null)
+routed=$(cat "$ISS_ROUTE_LOG")
+case "$routed" in *tactic-done*) a="no: $routed" ;; *) a=filtered ;; esac
+assert_eq "sweep: a phase: done node is never routed" "filtered" "$a"
+case "$routed" in *tactic-parked*) a="no: $routed" ;; *) a=filtered ;; esac
+assert_eq "sweep: an already-parked node (block mapping) is never routed" "filtered" "$a"
+# Both controls must still route, or the gates would be suppressing everything.
+case "$routed" in *tactic-body-prose*) a=routed ;; *) a="no: $routed" ;; esac
+assert_eq "sweep: a column-0 office_hours line in the BODY does not suppress routing" "routed" "$a"
+case "$routed" in *tactic-live-work*) a=routed ;; *) a="no: $routed" ;; esac
+assert_eq "sweep: a working, unparked node still routes" "routed" "$a"
+assert_eq "sweep: exactly the two eligible nodes were routed" "2" "$(route_calls)"
+case "$out" in *"kept=2"*) a=yes ;; *) a="no: $out" ;; esac
+assert_eq "sweep: the two filtered nodes are counted as kept" "yes" "$a"
+iss_teardown
+
 # --- Case: UNKNOWN is not an empty set --------------------------------------
 # The sensors rule: what does this check print when it cannot see? If the answer
 # is "healthy", it is broken.
@@ -194,6 +272,87 @@ assert_eq "sweep: a router exit 10 is counted as escalate-deferred" "yes" "$a"
 case "$out" in *"terminal_without_disposition_sweep owns the escalation"*) a=yes ;; *) a="no: $out" ;; esac
 assert_eq "sweep: the deferral names the escalation owner" "yes" "$a"
 ISS_ROUTE_RC=0
+iss_teardown
+
+# --- Case: the evidence file has exactly one owner --------------------------
+# The sweep creates the evidence file, so it owns it until ownership transfers.
+# Ownership transfers only when the router reports a LAUNCHED intervention
+# (rc 0) — that session reads the path out of its own prompt after this loop has
+# moved on. On any other outcome nothing will ever read the file, and the
+# steady state today is exactly that outcome (the intervention skill has not
+# landed, so the router escalates every time), which without cleanup drops files
+# into the temp dir every tick, forever.
+echo "Test: dispatch-invalid-state-sweep — the evidence file has exactly one owner"
+iss_setup
+iss_node tactic-fixture
+printf '%s' '[{"sessionId":"s-dead","id":"job-1","name":"tactic-fixture","cwd":"/w","state":"done"}]' \
+  > "$ISS_ROOT/claude-payload.json"
+SAVED_TMPDIR="${TMPDIR:-}"
+mkdir -p "$ISS_ROOT/tmp"
+export TMPDIR="$ISS_ROOT/tmp"
+
+iss_evidence_path() {
+  awk '{for (i = 1; i < NF; i++) if ($i == "--evidence-file") print $(i + 1)}' \
+    "$ISS_ROUTE_LOG" | head -1
+}
+
+# rc 0: a session was launched and now owns the file — it must survive.
+ISS_ROUTE_RC=0
+iss_run >/dev/null
+evid=$(iss_evidence_path)
+case "$evid" in */invalid-state-evidence-*) a=yes ;; *) a="no: $evid" ;; esac
+assert_eq "sweep: an evidence file path is handed to the router" "yes" "$a"
+[[ -f "$evid" ]] && a=yes || a=no
+assert_eq "sweep: a launched intervention keeps its evidence file" "yes" "$a"
+
+# rc 10: no session was launched, so the sweep still owns the file.
+: > "$ISS_ROUTE_LOG"
+ISS_ROUTE_RC=10
+iss_run >/dev/null
+evid=$(iss_evidence_path)
+[[ -e "$evid" ]] && a="still present: $evid" || a=removed
+assert_eq "sweep: an escalated candidate leaves no evidence file behind" "removed" "$a"
+
+ISS_ROUTE_RC=0
+if [[ -n "$SAVED_TMPDIR" ]]; then export TMPDIR="$SAVED_TMPDIR"; else unset TMPDIR; fi
+iss_teardown
+
+# --- Case: the router call is bounded on the tick path ----------------------
+# This sweep runs inline between two of the tick's lock heartbeats, so a router
+# call that hangs (a contended graph landing lock is the easy way to induce one)
+# would stall the tick past its heartbeat and the fleet with it. Two bounds are
+# asserted: the wall-clock `timeout` around the call, and the short landing-lock
+# wait handed down so the router's own graph landing defers rather than waits.
+echo "Test: dispatch-invalid-state-sweep — the router call is time-bounded and gets a short lock wait"
+iss_setup
+iss_node tactic-fixture
+cat > "$ISS_SCRIPTS/route-slow" <<'ISSSLOW'
+#!/usr/bin/env bash
+printf 'LOCK=%s\n' "${GRAPH_COMMIT_LOCK_WAIT_SECONDS:-unset}" >> "${ISS_ROUTE_LOG:?}"
+sleep 30
+exit 0
+ISSSLOW
+chmod +x "$ISS_SCRIPTS/route-slow"
+printf '%s' '[{"sessionId":"s-dead","id":"job-1","name":"tactic-fixture","cwd":"/w","state":"done"}]' \
+  > "$ISS_ROOT/claude-payload.json"
+t0=$(date +%s)
+out=$(DISPATCH_INVALID_STATE_ROUTE_TIMEOUT_S=1 \
+  DISPATCH_INVALID_STATE_LOCK_WAIT_S=7 \
+  PATH="$ISS_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$ISS_ROOT/bin/claude" \
+  CLAUDE_AGENTS_PGREP_CMD="$ISS_ROOT/bin/pgrep-visible" \
+  DISPATCH_INVALID_STATE_SWEEP_ROOT="$ISS_ROOT" \
+  DISPATCH_INVALID_STATE_ROUTE_CMD="$ISS_SCRIPTS/route-slow" \
+  DISPATCH_RESERVATION_DIR="$ISS_ROOT/reservations" \
+  ISS_ROUTE_LOG="$ISS_ROUTE_LOG" \
+  "$ISS_SWEEP" 2>/dev/null)
+elapsed=$(( $(date +%s) - t0 ))
+if (( elapsed < 15 )); then a=bounded; else a="no: ${elapsed}s"; fi
+assert_eq "sweep: a hanging router is cut off well inside its sleep" "bounded" "$a"
+case "$out" in *"escalate-deferred=1"*) a=yes ;; *) a="no: $out" ;; esac
+assert_eq "sweep: a timed-out router call defers to the sweep tier" "yes" "$a"
+case "$(cat "$ISS_ROUTE_LOG")" in *"LOCK=7"*) a=yes ;; *) a="no: $(cat "$ISS_ROUTE_LOG")" ;; esac
+assert_eq "sweep: the router inherits the short landing-lock wait" "yes" "$a"
 iss_teardown
 
 # --- Case: this arm never parks, holds or reaps -----------------------------

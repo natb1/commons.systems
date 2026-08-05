@@ -579,11 +579,38 @@ fi
 # selection considers claimed. Best-effort (a failure must not abort the tick);
 # this whole script runs with the sandbox disabled (see the header note), which
 # covers the sweep's daemon socket read and the router's session spawn.
-INVALID_STATE_SWEEP_OUT=$("$SCRIPT_DIR/dispatch-invalid-state-sweep") || true
-if [[ -n "$INVALID_STATE_SWEEP_OUT" ]]; then
-  while IFS= read -r sweep_line; do
-    [[ -n "$sweep_line" ]] && echo "invalid-state: $sweep_line"
-  done <<< "$INVALID_STATE_SWEEP_OUT"
+#
+# BOUNDED. This runs INLINE on the scheduling path, between the heartbeat above
+# and the `refresh_lock` below, and it calls the invalid-state router (up to its
+# own per-invocation cap) — whose git reads, latch mint and graph landing push
+# are not self-bounding. Left unbounded, one contended graph landing lock (any
+# concurrent graph writer induces one) would hold this tick past its heartbeat
+# window, let another tick steal the lock, and stall the fleet. The sweep bounds
+# each router call itself; this is the outer bound on the whole sweep, and it
+# takes the same posture `invalid_state_route_gate` takes for its router call
+# (lib-frozen-session-park.sh): a missing `timeout` is a loud SKIP of the sweep,
+# never a silent unbounded call (.claude/rules/code-style.md). The default budget
+# covers the sweep's whole per-invocation router budget (cap 2 x the 60s per-call
+# timeout) plus slack.
+INVALID_STATE_TIMEOUT_BIN=$(command -v timeout 2>/dev/null) || INVALID_STATE_TIMEOUT_BIN=""
+INVALID_STATE_SWEEP_BUDGET="${DISPATCH_INVALID_STATE_SWEEP_TIMEOUT_S:-180}"
+[[ "$INVALID_STATE_SWEEP_BUDGET" =~ ^[0-9]+$ ]] || INVALID_STATE_SWEEP_BUDGET=180
+if [[ -z "$INVALID_STATE_TIMEOUT_BIN" ]]; then
+  echo "invalid-state: timeout not found; refusing to run an unbounded invalid-state sweep on the tick path; sweeping nothing"
+else
+  INVALID_STATE_SWEEP_RC=0
+  INVALID_STATE_SWEEP_OUT=$("$INVALID_STATE_TIMEOUT_BIN" "$INVALID_STATE_SWEEP_BUDGET" \
+    "$SCRIPT_DIR/dispatch-invalid-state-sweep" </dev/null) || INVALID_STATE_SWEEP_RC=$?
+  if [[ -n "$INVALID_STATE_SWEEP_OUT" ]]; then
+    while IFS= read -r sweep_line; do
+      [[ -n "$sweep_line" ]] && echo "invalid-state: $sweep_line"
+    done <<< "$INVALID_STATE_SWEEP_OUT"
+  fi
+  # 124 is `timeout`'s own code. Never silent: a truncated sweep that reads as a
+  # clean pass is the sensors-rule failure this lane exists to fix.
+  if (( INVALID_STATE_SWEEP_RC == 124 )); then
+    echo "invalid-state: sweep exceeded its ${INVALID_STATE_SWEEP_BUDGET}s budget and was cut short — remaining candidates deferred to the next tick (the lock heartbeat must not be starved)"
+  fi
 fi
 
 # Heartbeat: refresh after the auto-merge and reconcile-merged sub-steps complete (#2104, #2512).

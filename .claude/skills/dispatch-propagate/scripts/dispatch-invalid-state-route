@@ -49,6 +49,13 @@
 # to declare a disposition (`mark-node-terminal:22-35`). A session spawned
 # without it would freeze the very node it was sent to unfreeze.
 #
+# THE PRIMARY-CHECKOUT GATE RUNS FIRST, before any fleet-latch code exists. The
+# latch's mint runs write-node.ts and graph-commit out of `$PROJECT_ROOT`, and
+# graph-commit force-pushes `refs/graph/**` and pushes `main`. Minting out of a
+# checkout that just FAILED the on-main assert would execute an unreviewed
+# branch's copy of exactly those scripts. That precondition therefore neither
+# observes nor mints — it logs and exits 10.
+#
 # Sandbox: reads the Claude daemon over a Unix socket (occupancy re-probe) and
 # spawns a session. Callers MUST run this with `dangerouslyDisableSandbox: true`
 # — a sandboxed daemon read yields `[]` indistinguishably from "nothing there"
@@ -164,6 +171,36 @@ fi
 
 PROJECT_ROOT=""
 
+# --- The primary-checkout gate, HOISTED ABOVE the fleet-latch machinery ------
+# Deliberately resolved and asserted here, before a single fleet-latch
+# definition or call site exists: `fleet_latch_mint` runs two PRIVILEGED
+# executables out of `$PROJECT_ROOT` — `write-node.ts`, and `graph-commit`,
+# which force-pushes `refs/graph/**` and pushes `main` — unattended, from the
+# headless tick, with the sandbox off. Minting out of a checkout that just
+# FAILED the on-main assert would execute an unreviewed branch's version of
+# exactly those scripts, which is the hazard the assert exists to prevent
+# (lib-frozen-session-park.sh:930-940 documents it verbatim). So this one
+# precondition never observes and never mints: it logs and exits 10 outright.
+# Every LATER precondition runs only after the checkout has been vouched for,
+# which is what makes routing them through `fail_precondition` safe.
+REPO_ROOT="${DISPATCH_INVALID_STATE_REPO_ROOT:-}"
+if [[ -z "$REPO_ROOT" ]]; then
+  REPO_ROOT=$(resolve_project_root) || REPO_ROOT=""
+fi
+if [[ -z "$REPO_ROOT" || ! -d "$REPO_ROOT" ]]; then
+  # No project root: nothing can be resolved, so the fleet latch cannot be
+  # written either (its sidecar lives under the project root). Loud exit.
+  printf 'dispatch-invalid-state-route: could not resolve the project root; escalating\n' >&2
+  exit 10
+fi
+PROJECT_ROOT="$REPO_ROOT"
+
+if ! assert_primary_checkout_on_main "$PROJECT_ROOT"; then
+  printf 'dispatch-invalid-state-route: primary checkout %s is not on main; escalating without acting, and WITHOUT observing or minting a fleet latch — the mint would have to run the graph-writing scripts of this same rejected checkout (they force-push refs/graph/** and push main)\n' \
+    "$PROJECT_ROOT" >&2
+  exit 10
+fi
+
 # --- Unit 6: the fleet-level latch -----------------------------------------
 # Some invalid states have no node to route: the router's own preconditions fail
 # FLEET-WIDE, so no node can be dispositioned and the failure would otherwise be
@@ -244,6 +281,46 @@ fleet_latch_mint() {
   local store="$PROJECT_ROOT/packages/intentionsutil"
   [[ -d "$store" ]] || return 1
 
+  # Provenance, the same posture the spawner gets below (and
+  # lib-frozen-session-park.sh:945-967 applies to park-node): the two privileged
+  # executables this mint runs must be regular files whose REAL directory is
+  # THIS project root's intentionsutil scripts dir. Canonicalize both sides with
+  # `pwd -P` so `..` segments and symlinked roots cannot slip an arbitrary
+  # executable past a string prefix test. It matters most for `graph-commit`,
+  # which force-pushes `refs/graph/**` and pushes `main` — unattended, from the
+  # headless tick, sandbox off, with push credentials available.
+  local scripts_dir scripts_dir_real
+  scripts_dir="$store/scripts"
+  scripts_dir_real=$(cd "$scripts_dir" 2>/dev/null && pwd -P) || scripts_dir_real=""
+  if [[ -z "$scripts_dir_real" ]]; then
+    printf 'dispatch-invalid-state-route: %s does not resolve; not minting\n' "$scripts_dir" >&2
+    return 1
+  fi
+  # Held in variables so the invocations below name no path of their own — the
+  # resolved-and-checked value is the ONLY thing that ever gets executed.
+  local write_node_exe commit_exe
+  write_node_exe="$scripts_dir/write-node.ts"
+  commit_exe="$scripts_dir/graph-commit"
+  local exe exe_dir_real
+  for exe in "$write_node_exe" "$commit_exe"; do
+    exe_dir_real=$(cd "$(dirname -- "$exe")" 2>/dev/null && pwd -P) || exe_dir_real=""
+    if [[ "$exe_dir_real" != "$scripts_dir_real" ]]; then
+      printf 'dispatch-invalid-state-route: %s does not resolve inside %s; not minting\n' "$exe" "$scripts_dir" >&2
+      return 1
+    fi
+    if [[ ! -f "$exe" ]]; then
+      printf 'dispatch-invalid-state-route: %s is not a regular file; not minting\n' "$exe" >&2
+      return 1
+    fi
+  done
+  # Only the committer is exec'd directly; the writer is a TypeScript source fed
+  # to `npx tsx`, and is checked in-repo non-executable (0644) on purpose, so an
+  # `-x` test on it would refuse every legitimate mint.
+  if [[ ! -x "$commit_exe" ]]; then
+    printf 'dispatch-invalid-state-route: %s is not executable; not minting\n' "$commit_exe" >&2
+    return 1
+  fi
+
   # Classify against origin/main: open | closed | absent.
   local state
   if git -C "$PROJECT_ROOT" cat-file -e "origin/main:intentions/$id.md" 2>/dev/null; then
@@ -285,10 +362,11 @@ fleet_latch_mint() {
       pace_exempt: false, rounds: null, attributes: {}}' > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
 
   # write-node.ts resolves intentions/ from the SCRIPT's own location, not cwd —
-  # invoke the copy under this project root.
-  ( cd "$PROJECT_ROOT" && npx tsx "$store/scripts/write-node.ts" --file "$tmp" ) >/dev/null 2>&1 || { rm -f "$tmp"; return 1; }
+  # invoke the copy under this project root. Both paths are the provenance-checked
+  # variables from above, never a freshly-composed string.
+  ( cd "$PROJECT_ROOT" && npx tsx "$write_node_exe" --file "$tmp" ) >/dev/null 2>&1 || { rm -f "$tmp"; return 1; }
   rm -f "$tmp"
-  ( cd "$PROJECT_ROOT" && "$store/scripts/graph-commit" -m "graph: latch fleet invalid state $slug" "$id" ) >/dev/null 2>&1 || return 1
+  ( cd "$PROJECT_ROOT" && "$commit_exe" -m "graph: latch fleet invalid state $slug" "$id" ) >/dev/null 2>&1 || return 1
   printf 'dispatch-invalid-state-route: minted fleet latch %s\n' "$id" >&2
   return 0
 }
@@ -308,23 +386,6 @@ fail_precondition() { # <slug> <message>
   exit 10
 }
 
-REPO_ROOT="${DISPATCH_INVALID_STATE_REPO_ROOT:-}"
-if [[ -z "$REPO_ROOT" ]]; then
-  REPO_ROOT=$(resolve_project_root) || REPO_ROOT=""
-fi
-if [[ -z "$REPO_ROOT" || ! -d "$REPO_ROOT" ]]; then
-  # No project root: nothing can be resolved, so the fleet latch cannot be
-  # written either (its sidecar lives under the project root). Loud exit.
-  printf 'dispatch-invalid-state-route: could not resolve the project root; escalating\n' >&2
-  exit 10
-fi
-PROJECT_ROOT="$REPO_ROOT"
-
-if ! assert_primary_checkout_on_main "$PROJECT_ROOT"; then
-  fail_precondition "primary-checkout-not-on-main" \
-    "primary checkout $PROJECT_ROOT is not on main; escalating without acting"
-fi
-
 # The node must exist on origin/main — the authoritative tree. A node that is
 # not there is not this lane's to route.
 if ! git -C "$PROJECT_ROOT" cat-file -e "origin/main:intentions/$NODE_ID.md" 2>/dev/null; then
@@ -334,8 +395,9 @@ fi
 
 # Every precondition passed: reset the observation counters, so the fleet latch
 # only ever counts CONSECUTIVE failures. A single transient drift followed by a
-# healthy pass must not accumulate toward a mint.
-fleet_latch_clear "primary-checkout-not-on-main"
+# healthy pass must not accumulate toward a mint. Only the latch-eligible
+# preconditions have a counter — `primary-checkout-not-on-main` deliberately has
+# none (see the hoisted gate above), so there is nothing to clear for it.
 fleet_latch_clear "node-absent-on-origin-main"
 
 # --- Tier 1: mechanical resolution -----------------------------------------
@@ -356,14 +418,25 @@ fi
 # done-but-parked is a VALID state (2026-08-04 author ruling): phase and
 # office_hours are ORTHOGONAL dimensions. Never classify it as invalid and never
 # try to resolve it mechanically.
-node_field() { # <jq-path>
-  git -C "$PROJECT_ROOT" show "origin/main:intentions/$NODE_ID.md" 2>/dev/null \
-    | awk '/^---$/{n++; next} n==1' \
-    | grep -E "^$1:" | head -1 | sed -E "s/^$1:[[:space:]]*//"
-}
-_phase="$(node_field phase)"
-_oh="$(node_field office_hours)"
-if [[ "$_phase" == "done" && -n "$_oh" && "$_oh" != "null" ]]; then
+#
+# The park test is a PRESENCE test over the frontmatter, NOT a value read. A
+# parked node serializes `office_hours` as a YAML BLOCK MAPPING — the key alone
+# on its line with `reason:`/`since:`/`recommendation:` indented beneath — so
+# reading the rest of the `office_hours:` line yields the empty string for every
+# parked node and the literal `null` for every unparked one, which makes a
+# value-based guard dead in both branches. Same frontmatter-scoped, column-0
+# anchored idiom the sweeps use (lib-frozen-session-park.sh:1167-1190); the
+# scoping is load-bearing, so a column-0 `office_hours:` line in the markdown
+# BODY can never be misread as park state.
+NODE_FRONTMATTER="$(git -C "$PROJECT_ROOT" show "origin/main:intentions/$NODE_ID.md" 2>/dev/null \
+  | awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f')"
+_parked=0
+if grep -q '^office_hours:' <<<"$NODE_FRONTMATTER"; then
+  grep -qE '^office_hours:[[:space:]]*null[[:space:]]*$' <<<"$NODE_FRONTMATTER" || _parked=1
+fi
+_done=0
+grep -qE '^phase:[[:space:]]*done[[:space:]]*$' <<<"$NODE_FRONTMATTER" && _done=1
+if (( _done && _parked )); then
   printf 'dispatch-invalid-state-route: %s is done-but-parked — phase and office_hours are orthogonal (2026-08-04 ruling), not an invalid state; keeping\n' "$NODE_ID" >&2
   exit 4
 fi
@@ -502,6 +575,15 @@ fi
 # The prompt carries the evidence-file PATH, not its content: the intervention
 # reads it itself, and passing a path keeps an unbounded, untrusted transcript
 # excerpt out of the spawn argv.
+#
+# EVIDENCE-FILE LIFECYCLE. This router never creates the file and never deletes
+# it: the DETECTOR creates it and owns it until this router reports a launched
+# intervention (exit 0), at which point ownership passes to the spawned session,
+# which deletes it once it has read it. On every non-zero exit no session was
+# launched, so the detector still owns the file — see
+# dispatch-invalid-state-sweep's rc handling, the one detector that passes one
+# today. Stating the contract here is what keeps a future detector from creating
+# a file nobody reaps.
 PROMPT="/dispatch-invalid-state $NODE_ID"
 if [[ -n "$EVIDENCE_FILE" ]]; then
   PROMPT="$PROMPT --evidence-file $EVIDENCE_FILE"

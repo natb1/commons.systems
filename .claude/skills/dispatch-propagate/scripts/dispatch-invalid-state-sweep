@@ -37,6 +37,8 @@
 #   DISPATCH_INVALID_STATE_ROUTE_CMD   — replaces dispatch-invalid-state-route
 #   DISPATCH_INVALID_STATE_SWEEP_ROOT  — replaces resolve_project_root
 #   DISPATCH_INVALID_STATE_SWEEP_MAX   — per-invocation router-call cap
+#   DISPATCH_INVALID_STATE_ROUTE_TIMEOUT_S — per-router-call wall-clock budget
+#   DISPATCH_INVALID_STATE_LOCK_WAIT_S — landing-lock wait handed to the router
 #   CLAUDE_AGENTS_CMD                  — the registry fake
 
 set -uo pipefail
@@ -70,6 +72,34 @@ if [[ ! -x "$ROUTE" ]]; then
   exit 0
 fi
 
+# BOUND EVERY ROUTER CALL. The cap above bounds HOW MANY router calls a tick
+# makes; it says nothing about how long one may take, and the router's own work
+# is neither cheap nor self-bounding: git reads, and — when a fleet-level
+# precondition fails — a latch mint (`npx tsx write-node.ts` plus a graph landing
+# push whose lock wait defaults to roughly 1050 seconds). This sweep runs INLINE
+# on the tick's scheduling path, between two lock heartbeats, so an unbounded
+# call stalls the tick past its heartbeat window, lets another tick steal the
+# lock, and stalls the fleet. Same posture (and same 60s default) as
+# `invalid_state_route_gate`, the other call site of this router
+# (lib-frozen-session-park.sh) — including its refusal to run at all when
+# `timeout` cannot be resolved: an unbounded call on the tick path is a loud
+# abort, never a silent downgrade (.claude/rules/code-style.md).
+TIMEOUT_BIN=$(command -v timeout 2>/dev/null) || TIMEOUT_BIN=""
+if [[ -z "$TIMEOUT_BIN" ]]; then
+  echo "invalid-state-sweep: timeout not found; refusing an unbounded router call on the tick path; sweeping nothing"
+  exit 0
+fi
+ROUTE_TIMEOUT="${DISPATCH_INVALID_STATE_ROUTE_TIMEOUT_S:-60}"
+[[ "$ROUTE_TIMEOUT" =~ ^[0-9]+$ ]] || ROUTE_TIMEOUT=60
+
+# The same hazard bounded from the inside as well: a short landing-lock wait for
+# whatever graph landing the router performs, so a lock contended by any
+# concurrent graph writer DEFERS this candidate to the next tick instead of being
+# waited out inline. Mirrors the short lock wait this fleet already hands
+# park-node on the sweep path (lib-frozen-session-park.sh).
+ROUTE_LOCK_WAIT="${DISPATCH_INVALID_STATE_LOCK_WAIT_S:-60}"
+[[ "$ROUTE_LOCK_WAIT" =~ ^[0-9]+$ ]] || ROUTE_LOCK_WAIT=60
+
 # Step 1 — enumerate candidates. Columns are sessionId<TAB>id<TAB>name<TAB>cwd,
 # where `.id` is the JOB id and is NOT a prefix of the sessionId; any job-dir
 # lookup MUST key on that column.
@@ -101,6 +131,32 @@ while IFS=$'\t' read -r sid jid name cwd; do
     continue
   fi
 
+  # Doctrine gates, held INDEPENDENTLY of the router rather than delegated to
+  # it. terminal_without_disposition_sweep carries both as its own steps (8) and
+  # (9) (lib-frozen-session-park.sh:1167-1190) and this arm must not be the one
+  # detection path that lacks them: a completed node sitting in the normal
+  # post-completion reap window (session terminal, worktree not yet reaped) and
+  # an already-parked node are both states the ratified doctrine calls VALID, and
+  # routing either one spawns an Opus session against a node nobody asked about.
+  # Frontmatter-scoped and column-0 anchored, the same idiom the sweeps use: the
+  # scoping means a column-0 `phase:`/`office_hours:` line in the markdown BODY
+  # cannot be misread as node state. `office_hours` is a PRESENCE test, never a
+  # value read — a parked node serializes it as a block mapping, so the key's own
+  # line is empty after the colon.
+  frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' \
+    "$PROJECT_ROOT/intentions/$name.md" 2>/dev/null)
+  if grep -qE '^phase:[[:space:]]*done[[:space:]]*$' <<<"$frontmatter"; then
+    KEPT=$(( KEPT + 1 ))
+    echo "invalid-state-sweep: $name is phase: done — finished, not an invalid state; keeping"
+    continue
+  fi
+  if grep -q '^office_hours:' <<<"$frontmatter" \
+     && ! grep -qE '^office_hours:[[:space:]]*null[[:space:]]*$' <<<"$frontmatter"; then
+    KEPT=$(( KEPT + 1 ))
+    echo "invalid-state-sweep: $name is already parked to office_hours — a human owns it; keeping"
+    continue
+  fi
+
   if (( CALLS >= SWEEP_MAX )); then
     # Deliberately NOT silent: a silent cap reads as "covered everything".
     echo "invalid-state-sweep: per-invocation cap ($SWEEP_MAX) reached — $name and any further candidates deferred to a later tick"
@@ -119,6 +175,15 @@ while IFS=$'\t' read -r sid jid name cwd; do
 
   # Evidence file: what the router hands the intervention session. A PATH is
   # passed onward, never the content.
+  #
+  # LIFECYCLE. This sweep CREATES the file, so it owns the file until ownership
+  # transfers. Ownership transfers to the spawned intervention session exactly
+  # when the router reports it launched one (rc 0) — that session reads the path
+  # out of its own prompt, so the file must outlive this loop iteration. On every
+  # other router outcome no session was launched and nothing will ever read the
+  # file, so this sweep deletes it below. Without that, the inert-tier steady
+  # state (the intervention skill has not landed, so the router always escalates)
+  # would drop up to SWEEP_MAX files into the temp dir per tick, forever.
   EVIDENCE=$(mktemp "${TMPDIR:-/tmp}/invalid-state-evidence-XXXXXX") || EVIDENCE=""
   if [[ -n "$EVIDENCE" ]]; then
     {
@@ -141,16 +206,29 @@ while IFS=$'\t' read -r sid jid name cwd; do
   fi
 
   CALLS=$(( CALLS + 1 ))
-  "$ROUTE" --node "$name" --kind terminal-session \
-    --session "$sid" --job-id "$jid" --evidence-file "$EVIDENCE" >/dev/null 2>&1
+  # `</dev/null` so a router subprocess can never consume the remaining rows of
+  # the here-string this loop is reading from (the same hazard
+  # lib-frozen-session-park.sh drains its candidate list to avoid).
+  GRAPH_COMMIT_LOCK_WAIT_SECONDS="$ROUTE_LOCK_WAIT" \
+  "$TIMEOUT_BIN" "$ROUTE_TIMEOUT" "$ROUTE" --node "$name" --kind terminal-session \
+    --session "$sid" --job-id "$jid" --evidence-file "$EVIDENCE" >/dev/null 2>&1 </dev/null
   rc=$?
+  # Hand the evidence file back to its creator unless ownership transferred. rc 0
+  # transferred it to the launched session. rc 124 means `timeout` killed the
+  # router mid-call, which may have been AFTER its spawn returned — no positive
+  # evidence that nothing owns the file, so leave it rather than pull the
+  # evidence out from under a session that may be starting on it.
+  if [[ -n "$EVIDENCE" && "$rc" != 0 && "$rc" != 124 ]]; then
+    rm -f "$EVIDENCE" 2>/dev/null || true
+  fi
   case "$rc" in
     0)  INTERVENED=$(( INTERVENED + 1 )) ;;
     4)  KEPT=$(( KEPT + 1 )) ;;
     *)
-      # 10 (escalate), 1 (router failure) and anything else all defer to the
-      # sweep tier. terminal_without_disposition_sweep owns the escalation this
-      # round; this arm must not duplicate its park.
+      # 10 (escalate), 1 (router failure), 124 (the wall-clock budget above ran
+      # out) and anything else all defer to the sweep tier.
+      # terminal_without_disposition_sweep owns the escalation this round; this
+      # arm must not duplicate its park.
       ESCALATE_DEFERRED=$(( ESCALATE_DEFERRED + 1 ))
       echo "invalid-state-sweep: $name deferred (router rc=$rc) — terminal_without_disposition_sweep owns the escalation"
       ;;

@@ -184,7 +184,54 @@ git -C "$ISR_ROOT" push -q origin main
 git -C "$ISR_ROOT" fetch -q origin
 isr_run --node tactic-fixture --kind terminal-session; rc=$?
 assert_eq "route: done-but-parked keeps — a VALID state, never invalid" "4" "$rc"
-assert_eq "route: neither valid state spawned an intervention" "0" "$(spawn_count)"
+
+# The BLOCK-MAPPING serialization is what park-node actually writes: the key
+# alone on its line, `reason:`/`since:`/`recommendation:` indented beneath. A
+# guard that reads the VALUE off the `office_hours:` line sees the empty string
+# for every node in this shape and the literal `null` for every unparked one, so
+# it is dead in both branches. The gate has to be a frontmatter-scoped PRESENCE
+# test — and the trailing body line proves the frontmatter scoping is real.
+cat > "$ISR_ROOT/intentions/tactic-fixture.md" <<'BLOCKPARKED'
+---
+id: tactic-fixture
+kind: tactic
+phase: done
+office_hours:
+  reason: waiting on the author
+  since: 2026-08-01T00:00:00Z
+  recommendation: review and unpark
+---
+# fixture
+
+office_hours: this column-0 line is BODY prose and must never read as park state
+BLOCKPARKED
+git -C "$ISR_ROOT" add -A >/dev/null 2>&1
+git -C "$ISR_ROOT" commit -q -m block-parked
+git -C "$ISR_ROOT" push -q origin main
+git -C "$ISR_ROOT" fetch -q origin
+isr_run --node tactic-fixture --kind terminal-session; rc=$?
+assert_eq "route: done + a BLOCK-MAPPING office_hours keeps (the real parked shape)" "4" "$rc"
+
+# Control: the same node UNPARKED is not a keep. Without this the gate could be
+# keeping vacuously and the assertion above would still pass. `--no-intervene`
+# so the discrimination is visible (10, not 4) without spawning anything.
+cat > "$ISR_ROOT/intentions/tactic-fixture.md" <<'DONEUNPARKED'
+---
+id: tactic-fixture
+kind: tactic
+phase: done
+office_hours: null
+---
+# fixture
+DONEUNPARKED
+git -C "$ISR_ROOT" add -A >/dev/null 2>&1
+git -C "$ISR_ROOT" commit -q -m done-unparked
+git -C "$ISR_ROOT" push -q origin main
+git -C "$ISR_ROOT" fetch -q origin
+isr_run --node tactic-fixture --kind terminal-session --no-intervene; rc=$?
+assert_eq "route: done with office_hours: null is NOT a keep — the gate discriminates" "10" "$rc"
+
+assert_eq "route: no valid-state case spawned an intervention" "0" "$(spawn_count)"
 isr_teardown
 
 # --- Case: the intervention tier, its cap, and the inert path ----------------
@@ -329,13 +376,16 @@ assert_eq "latch-id: the same precondition is stable across calls" \
 isr_teardown
 
 # --- Case: the fleet latch mints only on CONSECUTIVE observations -----------
+# Exercised through `node-absent-on-origin-main`, the latch-ELIGIBLE
+# precondition: it runs only after the primary-checkout-on-main assert has
+# vouched for the checkout, which is what makes minting out of that checkout
+# safe. (`primary-checkout-not-on-main` has no counter at all by design — see the
+# next case.)
 echo "Test: dispatch-invalid-state-route — the fleet latch needs two consecutive observations"
 isr_setup
 payload '[{"sessionId":"s-dead","name":"tactic-fixture","state":"done"}]'
-git -C "$ISR_ROOT" checkout -q -b not-main
-# Latch enabled, but the mint itself is stubbed out by pointing the store
-# elsewhere: this case asserts the OBSERVATION COUNTER, which is what decides
-# whether a mint is attempted at all.
+# The latch is disabled so the mint itself never runs: this case asserts the
+# OBSERVATION COUNTER, which is what decides whether a mint is attempted at all.
 run_latched() {
   PATH="$ISR_ROOT/bin:$SAVED_PATH" \
   CLAUDE_AGENTS_CMD="$ISR_ROOT/bin/claude" \
@@ -343,7 +393,7 @@ run_latched() {
   DISPATCH_INVALID_STATE_REPO_ROOT="$ISR_ROOT" \
   DISPATCH_INVALID_STATE_SPAWN_JOB="$ISR_SCRIPTS/spawn-stub" \
   DISPATCH_INVALID_STATE_FLEET_LATCH=0 \
-  "$ISR_ROUTE" --node tactic-fixture --kind terminal-session 2>&1 >/dev/null
+  "$ISR_ROUTE" --node tactic-absent-from-main --kind terminal-session 2>&1 >/dev/null
 }
 out1=$(run_latched)
 case "$out1" in *"1/2 observations"*) o1=counted ;; *) o1="no: $out1" ;; esac
@@ -354,14 +404,64 @@ assert_eq "fleet-latch: the second consecutive failure reaches the mint threshol
 
 # A successful precondition pass resets the counter, so only CONSECUTIVE
 # failures accumulate toward a mint.
-git -C "$ISR_ROOT" checkout -q main
 isr_run --node tactic-fixture --kind terminal-session --no-intervene
 assert_eq "fleet-latch: a healthy pass clears the observation sidecar" \
-  "absent" "$([[ -f "$ISR_ROOT/.claude/worktrees/.invalid-state-fleet-primary-checkout-not-on-main" ]] && echo present || echo absent)"
-git -C "$ISR_ROOT" checkout -q not-main
+  "absent" "$([[ -f "$ISR_ROOT/.claude/worktrees/.invalid-state-fleet-node-absent-on-origin-main" ]] && echo present || echo absent)"
 out3=$(run_latched)
 case "$out3" in *"1/2 observations"*) o3=restarted ;; *) o3="no: $out3" ;; esac
 assert_eq "fleet-latch: the counter restarts from 1 after a healthy pass" "restarted" "$o3"
 isr_teardown
+
+# --- Case: an off-main checkout never reaches the fleet-latch mint -----------
+# `fleet_latch_mint` runs write-node.ts and graph-commit OUT OF $PROJECT_ROOT,
+# and graph-commit force-pushes refs/graph/** and pushes main — unattended, from
+# the headless tick, sandbox off. Minting out of the very checkout the on-main
+# assert just REJECTED would execute an unreviewed branch's copy of exactly those
+# scripts, which is the hazard the assert exists to prevent. So this precondition
+# must neither observe nor mint, no matter how many times it fires.
+echo "Test: dispatch-invalid-state-route — an off-main checkout never observes or mints"
+isr_setup
+payload '[{"sessionId":"s-dead","name":"tactic-fixture","state":"done"}]'
+git -C "$ISR_ROOT" checkout -q -b not-main
+# The latch is ARMED here, deliberately: the refusal must come from the ordering,
+# not from the latch being switched off.
+run_offmain() {
+  PATH="$ISR_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$ISR_ROOT/bin/claude" \
+  CLAUDE_AGENTS_PGREP_CMD="$ISR_ROOT/bin/pgrep-visible" \
+  DISPATCH_INVALID_STATE_REPO_ROOT="$ISR_ROOT" \
+  DISPATCH_INVALID_STATE_SPAWN_JOB="$ISR_SCRIPTS/spawn-stub" \
+  DISPATCH_INVALID_STATE_FLEET_LATCH=1 \
+  ISR_SPAWN_LOG="$ISR_SPAWN_LOG" \
+  "$ISR_ROUTE" --node tactic-fixture --kind terminal-session 2>&1 >/dev/null
+}
+off1=$(run_offmain); rc1=$?
+off2=$(run_offmain); rc2=$?
+off3=$(run_offmain); rc3=$?
+assert_eq "off-main: every call escalates" "10 10 10" "$rc1 $rc2 $rc3"
+case "$off1$off2$off3" in *observations*) m="no: $off3" ;; *) m=never-counted ;; esac
+assert_eq "off-main: the failure is never counted toward a mint" "never-counted" "$m"
+case "$off1$off2$off3" in *minted*) m="no: $off3" ;; *) m=never-minted ;; esac
+assert_eq "off-main: nothing is minted even past the observation threshold" "never-minted" "$m"
+assert_eq "off-main: no observation sidecar is written for the checkout precondition" \
+  "absent" "$([[ -f "$ISR_ROOT/.claude/worktrees/.invalid-state-fleet-primary-checkout-not-on-main" ]] && echo present || echo absent)"
+assert_eq "off-main: no node file was written out of the rejected checkout" \
+  "1" "$(ls "$ISR_ROOT/intentions" | wc -l | tr -d ' ')"
+assert_eq "off-main: nothing was spawned either" "0" "$(spawn_count)"
+git -C "$ISR_ROOT" checkout -q main
+isr_teardown
+
+# --- Case: the mint's own provenance check ----------------------------------
+# Structural: the two privileged executables the mint runs must be resolved
+# through the same `pwd -P` canonicalization the spawner gets, so `..` segments
+# and symlinked roots cannot slip an arbitrary executable past a prefix test.
+echo "Test: dispatch-invalid-state-route — the fleet-latch mint provenance-checks what it runs"
+pv=$(grep -cE 'pwd -P' "$ROUTE" | tr -d ' ')
+if (( pv >= 3 )); then m=canonicalized; else m="no: only $pv pwd -P sites"; fi
+assert_eq "mint: the mint's executables are canonicalized like the spawner is" "canonicalized" "$m"
+# The mint must invoke through the checked variables, never a freshly-composed
+# path: a literal `$store/scripts/graph-commit` invocation would bypass the check.
+bad=$(grep -cE '^[^#]*\$store/scripts/(graph-commit|write-node)' "$ROUTE" | tr -d ' ')
+assert_eq "mint: no invocation composes its own path under \$store/scripts" "0" "$bad"
 
 report_results
