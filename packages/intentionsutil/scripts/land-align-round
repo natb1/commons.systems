@@ -32,15 +32,37 @@
 #
 # Behavior keyed on graph-commit's exit:
 #   0                             -> mark-node-terminal <node> align-round; exit 0
-#   1 with the parking message    -> mark-node-terminal <node> park; exit 1
+#   1 with the park-LANDED
+#   confirmation                  -> mark-node-terminal <node> park; exit 1
 #   any other non-zero (busy-main
-#   exhaustion, usage error, ...) -> no marker; propagate graph-commit's exit
+#   exhaustion, a park whose own
+#   push failed, usage error, ...) -> no marker; propagate graph-commit's exit
 #
 # The exit-1 discrimination mirrors references/write-path.md's "Discriminating
-# the two exit-1 cases": graph-commit's concurrent-edit path lands an
-# office_hours park on the node (a real terminal disposition — `park`), while
-# its busy-main exhaustion path lands nothing at all, so there is no
-# disposition to declare and the session must stay held.
+# the exit-1 cases": graph-commit's concurrent-edit path can land an
+# office_hours park on the node and push it to main (a real terminal
+# disposition — `park`), while its busy-main exhaustion path — and a
+# concurrent-edit park whose own push failed — land nothing at all, so there
+# is no disposition to declare and the session must stay held.
+#
+# MATCH THE CONFIRMATION, NOT THE ANNOUNCEMENT. graph-commit prints
+# "... parking node(s) — this writer's content is NOT landed" BEFORE it tries
+# to push the parking write (graph-commit ~1800/1816), and that push can fail
+# — the graph landing lock is held, main stays busy, the push is rejected —
+# in which case graph-commit prints "could not land the parking write ... —
+# office_hours set locally but not pushed to main" and still exits 1. Nothing
+# reached origin/main in that case: the node is still unparked, at a working
+# phase, with `office_hours: null`. Keying the `park` marker on the
+# announcement would declare a terminal disposition for a park that does not
+# exist on main — dispatch-self-close would then reap the job and its
+# worktree (destroying the only copy of this writer's content, which lives
+# only in the local worktree), while the tick's terminal-without-disposition
+# sweep skips the node because a disposition WAS declared. So the marker is
+# keyed on graph-commit's post-push SUCCESS confirmation (graph-commit
+# ~1828/1830), whose shared literal is the needle grepped for below; the
+# unlanded-park case falls through to the no-marker branch and is treated
+# exactly like busy-main exhaustion — the session stays held and the sweep
+# catches it.
 #
 # No ownership guard here: mark-node-terminal already refuses to write unless
 # $CLAUDE_JOB_DIR/state.json's `.name` equals the node id, and no-ops entirely
@@ -137,16 +159,24 @@ if [[ $rc -eq 0 ]]; then
   exit 0
 fi
 
-if [[ $rc -eq 1 ]] && grep -qF -- "parking node(s) — this writer's content is NOT landed" "$ERR_FILE"; then
+if [[ $rc -eq 1 ]] && grep -qF -- "(office_hours set on the origin/main content)" "$ERR_FILE"; then
   # graph-commit's concurrent-edit fallback landed an office_hours park on the
-  # node: a genuine terminal disposition, even though this writer's content did
-  # not land. Same best-effort contract as above.
+  # node AND pushed it to main — the needle above is the substring shared by
+  # both of graph-commit's post-push success confirmations ("parked <ids>
+  # (office_hours set on the origin/main content) and pushed the parking write
+  # to main" / "... ; landed bystander prune deletion(s) ...; pushed to main")
+  # and appears in NEITHER the pre-push announcement nor the failed-push error
+  # ("office_hours set locally but not pushed to main"). So this branch is
+  # reached only when the park is durably on main: a genuine terminal
+  # disposition, even though this writer's content did not land. Same
+  # best-effort contract as above.
   mark_terminal_best_effort park
   exit 1
 fi
 
 # Every other non-zero exit (busy-main exhaustion ending `... retry later`, a
+# concurrent-edit park whose own push failed so nothing reached main, a
 # graph-commit usage error, a pre-flight refusal) landed nothing and parked
-# nothing. There is no disposition to declare, so no marker is written and the
-# session stays held — report and stop.
+# nothing on main. There is no disposition to declare, so no marker is written
+# and the session stays held — report and stop.
 exit "$rc"

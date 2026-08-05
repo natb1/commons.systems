@@ -348,10 +348,12 @@ Workflow's `body_markdown`), **land** the whole round in one or a few
 `land-align-round --terminal <target-node-id>`, which bundles the
 terminal-disposition marker into the same process as the land — then
 **validate** (`validate-graph.ts`). Parks (`result.parks`) are written the same way, as
-`office_hours: {reason, since}` on the target node. `graph-commit` has two
-distinct exit-1 cases — a parking message (a concurrent writer landed first;
-this session's content is unlanded but preserved on disk) versus a
-busy-main-exhaustion error (nothing landed, no park) — either way, report and
+`office_hours: {reason, since}` on the target node. `graph-commit` has three
+distinct exit-1 cases — a park that landed on `main` (a concurrent writer
+landed first; this session's content is unlanded but preserved on disk), a
+park whose own push failed (nothing on `main` at all — the parking
+*announcement* prints before the push, so it does not distinguish these two),
+and busy-main exhaustion (nothing landed, no park) — in every case, report and
 stop rather than retry automatically. See `references/write-path.md` for the
 full write-node.ts/dump-node.ts/assert-node-fresh/graph-commit mechanics,
 exit-1 discrimination, park-writing, and the fingerprint/round-accounting
@@ -363,7 +365,9 @@ The round's **final** landing call goes through
 `packages/intentionsutil/scripts/land-align-round --terminal <target-node-id>
 ...` rather than a bare `graph-commit`. That wrapper writes this session's
 terminal disposition marker (`align-round`, or `park` when `graph-commit`'s
-concurrent-edit fallback parked the node) in the **same process** as the land.
+concurrent-edit fallback parked the node **and pushed that park to main**) in
+the **same process** as the land. When the park itself failed to push, no
+marker is written and the session stays held — same as busy-main exhaustion.
 There is no separate marker step to run.
 
 The Stop hook (`.claude/hooks/dispatch-stop.sh`) reaps this node worker's job

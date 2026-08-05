@@ -248,17 +248,24 @@ author) instead of assigning ownership by proximity.
    the `graph/**` fast path, and fast-forwards onto `main` with a bounded
    rebase-retry loop.
 
-### Discriminating the two exit-1 cases
+### Discriminating the exit-1 cases
 
-`graph-commit` has **two** distinct exit-1 cases, discriminated by the
-presence of a parking message:
+`graph-commit` has **three** distinct exit-1 cases. The parking
+*announcement* (`... parking node(s) — this writer's content is NOT landed`)
+does not separate them: it prints **before** the parking write is pushed, so
+it appears on two of the three. Only the post-push confirmation does:
 
-- **Parking message present** (`... parking node(s) — this writer's content
-  is NOT landed`) — a concurrent writer landed an overlapping edit to the
-  same node: the node landed with `office_hours` set instead of the
-  intended content, and this session's unlanded content is preserved on
-  disk.
-- **No parking message** — instead the busy-main exhaustion error ending
+- **Park landed** — the announcement, then `parked <ids> (office_hours set
+  on the origin/main content) ... pushed to main`. A concurrent writer landed
+  an overlapping edit to the same node: the node is on `main` with
+  `office_hours` set instead of the intended content, and this session's
+  unlanded content is preserved on disk.
+- **Park attempted, not landed** — the announcement, then `could not land
+  the parking write ... office_hours set locally but not pushed to main`.
+  Nothing reached `main`: the node is still unparked, at a working phase,
+  with `office_hours: null`. The local worktree holds the only copy of both
+  this writer's content and the park.
+- **No announcement at all** — instead the busy-main exhaustion error ending
   `... retry later` — nothing landed and no `office_hours` was set: `main`
   stayed busy (or the required checks never stamped green) across all
   `MAX_PUSH_ATTEMPTS`, with no semantic conflict.
@@ -267,14 +274,17 @@ Either way, report it and stop — do not retry automatically within this
 session.
 
 On the round's final call, **`land-align-round` performs this discrimination
-itself** and writes the matching marker: `park` on the parking-message case
-(the node really did reach a terminal disposition — an `office_hours` park —
-even though this writer's content did not land), and **no marker at all** on
-the busy-main case (nothing landed and nothing parked, so there is no
-disposition to declare and the session stays held). Either exit code is
-propagated unchanged. So this session no longer decides *which* marker to
-write — it still reads the stderr, reports which of the two cases occurred,
-and stops.
+itself** and writes the matching marker: `park` **only** on the park-landed
+case (the node really did reach a terminal disposition — an `office_hours`
+park on `main` — even though this writer's content did not land), and **no
+marker at all** on the other two (nothing landed and nothing parked on
+`main`, so there is no disposition to declare and the session stays held for
+the tick's terminal-without-disposition sweep). It keys that decision on the
+post-push confirmation, never on the announcement — a marker written for an
+unlanded park would let the job and its worktree be reaped while the only
+copy of the round's content lives there. Either exit code is propagated
+unchanged. So this session no longer decides *which* marker to write — it
+still reads the stderr, reports which case occurred, and stops.
 
 ## Parks — writing `office_hours`
 
