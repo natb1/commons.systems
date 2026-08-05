@@ -63,6 +63,41 @@ clarifications:
       and the one-time cross-check audit still recorded in gap. Re-run
       /align-tactics on this node to finalize against this ruling. Park
       cleared."
+  - question: The 2026-08-04 park (commit 13f4efa7) blocked this node's finalize
+      round on its serving strategy's own office_hours park. Does that block
+      still stand?
+    answer: "No — it was already void when it was written, and is now disproven
+      by direct observation. (Ruled 2026-08-05, author-directed, during the
+      bootstrap monitor pass.) 13f4efa7 landed at 23:25:02Z and gave as its sole
+      reason that the /align-tactics drift-review gate 'requires the serving
+      strategy's office_hours be null before it authors any plan, tactic-mode
+      included', so the round returned decomposable=false and escalated. PR
+      #2982 removed exactly that coupling and merged at 00:15:46Z — fifty
+      minutes later. On the code now at origin/main, tactic mode sets
+      eligibility.decomposable=true by construction (align-tactics.js:728) and
+      the plan gate reads planProceed = isTactic ? proceed : proceed &&
+      decomposable (align-tactics.js:474), so a parked serving strategy no
+      longer blocks a tactic-mode finalize. Behavioural proof, not inference:
+      at 00:50Z tactic-reconcile-park-clobber — which also carries serves:
+      [strategy-graph-native-dispatch], still parked — cleared its drift review
+      with proceed=true and no parks, authored a full three-unit plan, and
+      landed as status codified / phase implement (commit 4d737d0e). That is the
+      identical shape this park declared impossible. Disposition: unpark and
+      re-run /align-tactics to finalize. The alternative reading — that the bug
+      ledger's note calling this node 'subsumed by the invalid-state lane (1d)'
+      should close it instead — was considered and rejected, because 13f4efa7's
+      own drift review recorded this tactic's three-item scope as intact and not
+      deficient (Step 2 hardening, correcting lib-frozen-session-park.sh's
+      park-recommendation text, and the one-time cross-check audit), and none of
+      those three is covered by the invalid-state lane, which addresses
+      detection and intervention rather than that script's wording. Note that
+      the three record-completeness gaps 13f4efa7 raised against
+      strategy-graph-native-dispatch itself (its office_hours missing from the
+      drift agent's input dump; rounds.count 0 and rounds.last_aligned null
+      despite a dozen-plus documented rounds; three attributes.conditions
+      entries narrating mechanisms that are still open tactics) are independent
+      of this ruling and remain owed to an /align sitting on the strategy — a
+      tactic-target session never edits the serving strategy's frontmatter."
 tooling_goals: []
 success_signal:
   observable: an /align-tactics tactic-mode session that completes its Workflow to
