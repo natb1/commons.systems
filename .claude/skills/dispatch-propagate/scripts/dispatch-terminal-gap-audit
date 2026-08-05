@@ -1,0 +1,391 @@
+#!/usr/bin/env bash
+# Terminal-gap audit — size the "landed then skipped" population: nodes whose
+# `/align-tactics` Workflow ran to completion (the round LANDED) but whose
+# session then died before declaring a disposition, so the dispatch-tick
+# terminal-without-disposition sweep parked them with synthesized boilerplate.
+# Re-runnable, report-only diagnostic. Writes nothing, touches no `gh`, takes no
+# action — the mechanical remediation belongs to the invalid-state lane, not
+# here.
+#
+# THE PROBLEM
+#   `/align-tactics` finishes its Workflow, graph-commit lands the round, and
+#   the session dies in the gap before `mark-node-terminal` records a
+#   disposition. `origin/main` then shows a node at a working phase with
+#   `office_hours: null` and a terminal, un-reaped session — so the sweep in
+#   lib-frozen-session-park.sh (`terminal_without_disposition_sweep`) parks it
+#   with a synthesized reason. The work is DONE and the park says nothing about
+#   it. Nobody notices, because the park looks exactly like every other park.
+#
+#   This audit answers two questions an operator cannot otherwise answer:
+#     1. how many parked nodes are sitting in that state RIGHT NOW, and
+#     2. does the count keep growing after the `land-align-round` wrapper (Unit
+#        1 of this tactic) shipped — i.e. is the fix actually holding.
+#   Re-run it periodically; the `landed-then-skipped` count is the metric.
+#
+# THE TWO-SOURCE DESIGN
+#   PARKED NODES (left side, the population): `office-hours-select.ts --list`,
+#     which reads the `intentions/` store AT A GIT REF (default `origin/main`,
+#     `--ref` overridable). Park enumeration is NEVER re-implemented by grepping
+#     `intentions/*.md` in the local checkout: a checkout answers from whatever
+#     it last synced, so a stale worktree would silently report stale park
+#     state. Same rationale as office-hours-select.ts's own header. The park
+#     REASON of each listed node is read from the same ref
+#     (`git show <ref>:intentions/<id>.md`), so both halves of the left side are
+#     one consistent snapshot.
+#   WORKFLOW RECORDS (right side, the evidence a round completed): the local
+#     host's Claude Code transcript store. For a node id, its worktree path is
+#     `<main-root>/.claude/worktrees/<node-id>`, and Claude Code's project-slug
+#     encoding of that path replaces every `/` and `.` with `-`, giving
+#     `-home-n8-natb1-commons-systems--claude-worktrees-<node-id>`. Under
+#     `<projects-root>/<slug>/<session-id>/workflows/wf_*.json` a record with
+#     `.workflowName` beginning `align-tactics` and `.status == "completed"` is
+#     proof the round finished. `.timestamp` and `.result` are read for the
+#     report.
+#
+# CLASSIFICATION (each parked node lands in EXACTLY one bucket)
+#   landed-then-skipped  — the park reason IS the sweep's synthesized
+#                          terminal-without-disposition text AND a completed
+#                          align-tactics Workflow record exists for the node.
+#                          The population this audit exists to size: the round
+#                          landed, the disposition never got written.
+#   parked-by-design     — the park reason is NOT the synthesized text. A
+#                          deliberate escalation, a concurrent-edit park, a
+#                          config park. Decided by the reason alone; no
+#                          transcript lookup is needed or done, because nothing
+#                          a transcript could say would move it.
+#   no-workflow-record   — the reason IS the synthesized text but no completed
+#                          align-tactics record is found in the node's project
+#                          dir. Transcripts pruned, or a non-align lane produced
+#                          the park. Reported SEPARATELY — never folded into
+#                          landed-then-skipped (which would overstate the
+#                          problem) nor into parked-by-design (which would hide
+#                          it).
+#   unmeasurable         — the measurement could not be made: the projects root
+#                          is missing/unreadable, the slug derivation finds no
+#                          directory at all, a `wf_*.json` in the node's dir
+#                          does not parse, or the node's own file cannot be read
+#                          at the ref / carries no park there. Never silently
+#                          reclassified as `no-workflow-record`
+#                          (.claude/rules/code-style.md: clear errors over
+#                          defensive fallbacks — "could not measure" must never
+#                          read as "measured zero").
+#
+#   A single unparseable `wf_*.json` in a node's dir makes that node
+#   unmeasurable even if a good record was also found: the unreadable file could
+#   itself have been the align-tactics record, so no honest verdict is
+#   available.
+#
+# WHAT IT DOES ABOUT A HIT
+#   Nothing — it PRINTS. For every `landed-then-skipped` row it prints the
+#   remediation the sweep's own park recommendation now carries (corrected in
+#   Unit 2 of this tactic, lib-frozen-session-park.sh): reap the terminal
+#   session FIRST, then clear the park. That order is mandatory; clearing the
+#   park while the session is still present is a no-op the same sweep undoes on
+#   its next pass.
+#
+# USAGE
+#   dispatch-terminal-gap-audit [--ref <git-ref>]
+#     --ref <git-ref>  read the intentions store at this ref (default
+#                      `origin/main`). Passed through to office-hours-select.ts.
+#                      Reading at a ref is what makes the result reproducible;
+#                      the caller runs `git fetch origin main` first if absolute
+#                      freshness matters (this script never fetches).
+#   Env overrides (naming mirrors lib-frozen-session-park.sh's
+#   DISPATCH_TERMINAL_DISPOSITION_* convention):
+#     DISPATCH_TERMINAL_GAP_PROJECTS_ROOT  projects root (default
+#                                          $HOME/.claude/projects).
+#     DISPATCH_TERMINAL_GAP_REPO_ROOT      repo root (default: resolved from this
+#                                          script's own location, four levels up,
+#                                          exactly as transition-node does — never
+#                                          from cwd). The PRIMARY checkout, which
+#                                          owns `.claude/worktrees/`, is derived
+#                                          from it via the git common dir, so the
+#                                          audit gives the same answer run from a
+#                                          node worktree as from main.
+#
+# EXIT CODES
+#   0  report emitted, every parked node measured
+#   2  usage error (bad/unknown argument)
+#   3  report emitted IN FULL, but at least one node is `unmeasurable` — the
+#      counts are incomplete and must not be read as a clean measurement
+#   4  the parked-node enumeration itself failed (office-hours-select.ts errored)
+#      — no report is possible, and a zero count would be a lie
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# REPO_ROOT resolution copies transition-node's convention: four levels up from
+# .claude/skills/dispatch-propagate/scripts, resolved from the script's OWN
+# location, never from cwd.
+REPO_ROOT="${DISPATCH_TERMINAL_GAP_REPO_ROOT:-$(cd "$SCRIPT_DIR/../../../.." && pwd)}"
+PROJECTS_ROOT="${DISPATCH_TERMINAL_GAP_PROJECTS_ROOT:-$HOME/.claude/projects}"
+REF="origin/main"
+
+# MAIN_ROOT — the primary checkout, which is where `.claude/worktrees/` actually
+# lives. REPO_ROOT is the checkout this script runs FROM; run from a node
+# worktree it is `<main-root>/.claude/worktrees/<this-node>`, and deriving other
+# nodes' worktree paths from it would produce a doubled
+# `…worktrees-<this-node>--claude-worktrees-<that-node>` slug that matches
+# nothing — every node would come back `unmeasurable`. Same distinction, and the
+# same resolution, transition-node draws between REPO_ROOT and MAIN_ROOT via
+# lib.sh's `resolve_project_root` (`dirname` of the absolute git COMMON dir);
+# computed inline here rather than by sourcing lib.sh, whose load has side
+# effects a report-only diagnostic must not take on.
+if ! GIT_COMMON_DIR=$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+  echo "error: '$REPO_ROOT' is not a git repository — cannot resolve the primary checkout" >&2
+  exit 2
+fi
+MAIN_ROOT=$(dirname "$GIT_COMMON_DIR")
+WORKTREES_ROOT="$MAIN_ROOT/.claude/worktrees"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ref)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == -* ]]; then
+        echo "error: --ref requires a value" >&2; exit 2
+      fi
+      REF="$2"
+      shift 2
+      ;;
+    --ref=*)
+      REF="${1#--ref=}"
+      if [[ -z "$REF" ]]; then
+        echo "error: --ref requires a value" >&2; exit 2
+      fi
+      shift
+      ;;
+    *)
+      echo "error: unknown argument '$1'" >&2
+      echo "usage: dispatch-terminal-gap-audit [--ref <git-ref>]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+# The STABLE PREFIX of the sweep's synthesized park reason. Kept to the leading
+# clause on purpose: the rest of that string interpolates the idle seconds and
+# will keep being reworded, but this clause is the sweep's identity. Source:
+# lib-frozen-session-park.sh, terminal_without_disposition_sweep()'s `reason=`.
+SYNTHESIZED_REASON_PREFIX='phase session ended without declaring a disposition'
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+# ---------------------------------------------------------------------------
+# LEFT SIDE — parked nodes at the ref.
+# ---------------------------------------------------------------------------
+SELECT_SCRIPT="packages/intentionsutil/scripts/office-hours-select.ts"
+LIST_RAW="$TMP/parked.tsv"
+if ! (cd "$REPO_ROOT" && npx tsx "$SELECT_SCRIPT" --list --ref "$REF") >"$LIST_RAW" 2>"$TMP/select.err"; then
+  echo "dispatch-terminal-gap-audit: could not enumerate parked nodes at '$REF' via $SELECT_SCRIPT" >&2
+  cat -- "$TMP/select.err" >&2 || true
+  exit 4
+fi
+
+# `--list` column contract (office-hours-select.ts formatQueueRow):
+#   <rank>\t<sessionType>\t<nodeId>\t<since>
+PARKED_IDS="$TMP/ids.txt"
+: >"$PARKED_IDS"
+while IFS=$'\t' read -r _rank _stype nid _since; do
+  [[ -n "${nid:-}" ]] || continue
+  printf '%s\n' "$nid" >>"$PARKED_IDS"
+done <"$LIST_RAW"
+
+# ---------------------------------------------------------------------------
+# Helpers.
+# ---------------------------------------------------------------------------
+
+# park_reason <node-id> — the node's office_hours.reason at $REF, whitespace-
+# collapsed onto one line. YAML folds a long reason across several indented
+# lines, so the prefix match must be made against the UNFOLDED text or a fold
+# landing mid-phrase would silently miss. Exit 1 (no output) when the node file
+# cannot be read at the ref or carries no park there.
+park_reason() {
+  local id="$1" block
+  # Materialize via a file rather than a command substitution: a node body may
+  # carry a byte bash's `$( )` would drop with a `ignored null byte` warning.
+  git -C "$REPO_ROOT" show "$REF:intentions/$id.md" >"$TMP/node.md" 2>/dev/null || return 1
+  # One pass: enter the `office_hours:` block (a bare key — `office_hours: null`
+  # deliberately does NOT match, so an unparked node reads as no park), then
+  # inside it keep only the `reason:` entry and its folded continuation lines,
+  # stopping at the next sibling key or the next top-level key.
+  local reason
+  reason=$(awk '
+    /^office_hours:[[:space:]]*$/ { inb = 1; next }
+    inb && /^[^[:space:]]/        { inb = 0; inr = 0 }
+    inb && /^  reason:/           { inr = 1; print; next }
+    inb && inr && /^  [a-z_]+:/   { inr = 0 }
+    inb && inr                    { print }
+  ' "$TMP/node.md" | tr '\n' ' ' | tr -s ' ')
+  [[ -n "$reason" ]] || return 1
+  printf '%s\n' "$reason"
+}
+
+# project_slug <node-id> — Claude Code's project-dir slug for the node's
+# worktree path: every `/` and `.` of `<main-root>/.claude/worktrees/<id>`
+# replaced by `-`.
+project_slug() {
+  printf '%s' "$WORKTREES_ROOT/$1" | tr './' '--'
+}
+
+# print_remediation <node-id> — the corrected two-step the sweep's own park
+# recommendation now carries (lib-frozen-session-park.sh, Unit 2 of
+# tactic-align-tactics-mark-terminal-skipped). Reap FIRST, clear SECOND; the
+# order is mandatory, not a choice between two options.
+print_remediation() {
+  local id="$1"
+  echo "      remediation (reap THEN clear — this order is mandatory):"
+  echo "        1. read the session's transcript or attach the held job"
+  echo "           (\`claude agents --all\`, \`claude attach <job-id>\`) to see what it concluded"
+  echo "        2. reap the terminal session: \`claude stop <job-id>\`, then let"
+  echo "           \`dispatch-sweep\` reap the worktree. If that does not clear it (e.g. an"
+  echo "           unpushed branch whose content is already landed elsewhere), fall back to"
+  echo "           \`git worktree remove\` plus \`claude rm <job-id>\`"
+  echo "        3. ONLY THEN \`clear-park $id\` to return the node to the lane"
+  echo "      Clearing the park while the session is still present is a no-op: the same"
+  echo "      sweep re-parks the node on its next pass. Deciding the judgment item the"
+  echo "      session stopped on is done IN ADDITION to the reap, never instead of it."
+}
+
+# ---------------------------------------------------------------------------
+# CLASSIFY.
+# ---------------------------------------------------------------------------
+declare -A BUCKET=(
+  [landed-then-skipped]=0
+  [parked-by-design]=0
+  [no-workflow-record]=0
+  [unmeasurable]=0
+)
+
+PROJECTS_ROOT_OK=1
+if [[ ! -d "$PROJECTS_ROOT" || ! -r "$PROJECTS_ROOT" || ! -x "$PROJECTS_ROOT" ]]; then
+  PROJECTS_ROOT_OK=0
+  echo "dispatch-terminal-gap-audit: projects root '$PROJECTS_ROOT' is missing or unreadable; every synthesized-reason park is unmeasurable" >&2
+fi
+
+# <id>\t<bucket>\t<wf-ts>\t<session-id>\t<note>\t<result-digest>. Every field is
+# written as `-` when absent, NEVER as an empty string: TAB is an IFS-whitespace
+# character, so bash's `read` collapses a run of tabs into one delimiter and an
+# empty middle field would shift every field after it onto the wrong variable.
+ROWS="$TMP/rows.txt"
+: >"$ROWS"
+
+# One jq program, applied per FILE (never `echo "$VAR" | jq` — .claude/rules/shell-json.md):
+# emit "<timestamp>\t<result-digest>" for a completed align-tactics record, else
+# nothing. A file that does not parse makes jq exit non-zero, which is what
+# drives the `unmeasurable` verdict.
+WF_JQ="$TMP/wf.jq"
+cat >"$WF_JQ" <<'WFJQ'
+if ((.workflowName? // "") | startswith("align-tactics")) and (.status? == "completed")
+then ((.timestamp? // "") + "\t" + ((.result? | tojson)[0:160]))
+else empty
+end
+WFJQ
+
+while IFS= read -r id; do
+  [[ -n "$id" ]] || continue
+
+  bucket=""
+  wf_ts="-"
+  wf_sid="-"
+  wf_result="-"
+  note="-"
+
+  if ! reason=$(park_reason "$id"); then
+    bucket=unmeasurable
+    note="node file unreadable at $REF, or it carries no office_hours park there"
+  elif [[ "$reason" != *"$SYNTHESIZED_REASON_PREFIX"* ]]; then
+    # Decided by the reason alone — no transcript lookup can move this verdict.
+    bucket=parked-by-design
+  elif (( ! PROJECTS_ROOT_OK )); then
+    bucket=unmeasurable
+    note="projects root '$PROJECTS_ROOT' missing or unreadable"
+  else
+    slug=$(project_slug "$id")
+    proj_dir="$PROJECTS_ROOT/$slug"
+    if [[ ! -d "$proj_dir" ]]; then
+      bucket=unmeasurable
+      note="no project dir for slug '$slug' — the transcript store cannot answer for this node"
+    else
+      parse_failed=0
+      best_ts=""
+      best_sid=""
+      best_result=""
+      while IFS= read -r -d '' wf; do
+        if ! rec=$(jq -r -f "$WF_JQ" "$wf" 2>/dev/null); then
+          parse_failed=1
+          echo "dispatch-terminal-gap-audit: unparseable workflow record: $wf" >&2
+          continue
+        fi
+        [[ -n "$rec" ]] || continue
+        ts=$(printf '%s' "$rec" | cut -f1)
+        res=$(printf '%s' "$rec" | cut -f2)
+        # Lexical max over same-format ISO strings is chronological max.
+        if [[ -z "$best_ts" || "$ts" > "$best_ts" ]]; then
+          best_ts="$ts"
+          best_result="$res"
+          # <slug>/<session-id>/workflows/wf_*.json
+          best_sid=$(basename "$(dirname "$(dirname "$wf")")")
+        fi
+      done < <(find "$proj_dir" -mindepth 3 -maxdepth 3 -path '*/workflows/wf_*.json' -print0 2>/dev/null)
+
+      if (( parse_failed )); then
+        bucket=unmeasurable
+        note="a wf_*.json under '$slug' does not parse — the align-tactics record may be the unreadable one"
+      elif [[ -n "$best_ts" ]]; then
+        bucket=landed-then-skipped
+        wf_ts="$best_ts"
+        wf_sid="$best_sid"
+        wf_result="${best_result:--}"
+      else
+        bucket=no-workflow-record
+        note="synthesized park reason, but no completed align-tactics record under '$slug'"
+      fi
+    fi
+  fi
+
+  BUCKET[$bucket]=$(( ${BUCKET[$bucket]} + 1 ))
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$bucket" "$wf_ts" "$wf_sid" "$note" "$wf_result" >>"$ROWS"
+done <"$PARKED_IDS"
+
+TOTAL=$(( ${BUCKET[landed-then-skipped]} + ${BUCKET[parked-by-design]} \
+        + ${BUCKET[no-workflow-record]} + ${BUCKET[unmeasurable]} ))
+
+# ---------------------------------------------------------------------------
+# REPORT.
+# ---------------------------------------------------------------------------
+echo "=========================================================="
+echo " dispatch-terminal-gap-audit"
+echo "=========================================================="
+printf 'ref: %s   repo-root: %s\n' "$REF" "$REPO_ROOT"
+printf 'projects-root: %s\n' "$PROJECTS_ROOT"
+echo "report-only: this script writes nothing, reaps nothing, clears nothing."
+echo
+
+echo "--- PARKED NODES (node-id / bucket / workflow-ts / session-id) ---"
+if (( TOTAL == 0 )); then
+  echo "  (no parked nodes at $REF)"
+else
+  while IFS=$'\t' read -r id bucket wf_ts wf_sid note wf_result; do
+    printf '  %s\t%s\t%s\t%s\n' "$id" "$bucket" "$wf_ts" "$wf_sid"
+    if [[ "$note" != "-" ]]; then
+      printf '      note: %s\n' "$note"
+    fi
+    if [[ "$bucket" == "landed-then-skipped" ]]; then
+      if [[ "$wf_result" != "-" ]]; then
+        printf '      workflow result (truncated): %s\n' "$wf_result"
+      fi
+      print_remediation "$id"
+    fi
+  done <"$ROWS"
+fi
+echo
+
+printf 'summary: landed-then-skipped=%d parked-by-design=%d no-workflow-record=%d unmeasurable=%d total=%d\n' \
+  "${BUCKET[landed-then-skipped]}" "${BUCKET[parked-by-design]}" \
+  "${BUCKET[no-workflow-record]}" "${BUCKET[unmeasurable]}" "$TOTAL"
+
+if (( ${BUCKET[unmeasurable]} > 0 )); then
+  echo "NOTE: ${BUCKET[unmeasurable]} node(s) could not be measured — the counts above are incomplete, not a clean zero." >&2
+  exit 3
+fi
+exit 0
