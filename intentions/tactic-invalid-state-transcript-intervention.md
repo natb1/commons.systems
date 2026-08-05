@@ -38,8 +38,7 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-invalid-state-lane
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
