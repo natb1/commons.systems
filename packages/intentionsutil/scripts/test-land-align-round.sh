@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+#
+# test-land-align-round.sh — functional harness for land-align-round, the
+# /align-tactics landing wrapper that bundles the terminal-disposition marker
+# write into the SAME process as the land
+# (tactic-align-tactics-mark-terminal-skipped, Unit 1).
+#
+# Sibling-fake shape, mirroring test-park-node.sh's structure but far smaller:
+# land-align-round resolves both of its collaborators through its own
+# SCRIPT_DIR, so a scratch dir holding a copy of land-align-round next to
+# argv-logging `graph-commit` and `mark-node-terminal` stubs exercises the real
+# script with fully test-controlled exit codes and stderr. No git, no network,
+# no node — the wrapper itself touches none of them.
+#
+# Covers:
+#   1. graph-commit exit 0 -> exactly one mark-node-terminal call, args
+#      `<terminal-node> align-round`, wrapper exits 0.
+#   2. graph-commit exit 1 WITH the concurrent-edit parking message -> exactly
+#      one mark-node-terminal call with `park`, wrapper exits 1, and
+#      graph-commit's stderr is re-emitted to the caller.
+#   3. graph-commit exit 1 with the busy-main `... retry later` exhaustion
+#      message -> ZERO marker calls (nothing landed, nothing parked, so there
+#      is no disposition to declare), exit 1 propagated.
+#   4. graph-commit exit 2 (any other non-zero) -> zero marker calls, exit code
+#      propagated verbatim.
+#   5. mark-node-terminal itself exits non-zero after a successful land ->
+#      wrapper STILL exits 0. This is the `|| true` guarantee: a marker write
+#      must never demote a landed round to a script failure.
+#   6. Missing --terminal -> exit 2 with a usage error and NO graph-commit call
+#      (the target node is never inferred from the positional ids).
+#   7. --base, -m, and the positional ids reach graph-commit unchanged,
+#      including the multi-id batch form.
+
+set -uo pipefail
+
+HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAR_SCRIPT="$HARNESS_DIR/land-align-round"
+[[ -f "$LAR_SCRIPT" ]] || { echo "error: land-align-round not found at $LAR_SCRIPT" >&2; exit 1; }
+
+WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
+harness_cleanup() { rm -rf "$WORK"; }
+trap harness_cleanup EXIT
+
+PASS=0; FAIL=0
+ok() { echo "PASS: $1"; PASS=$((PASS + 1)); }
+no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
+
+# The exact string land-align-round greps for. Kept verbatim (including the
+# em-dash) so a drift in graph-commit's message surfaces here as a failure
+# rather than as a silently unwritten park marker in production.
+PARK_MSG="graph-commit: concurrent-edit conflict on t-node; parking node(s) — this writer's content is NOT landed"
+BUSY_MSG="error: graph-commit: could not land on main after 5/5 attempts — cause: main busy; retry later"
+
+# --- Scratch script dir with argv-logging stubs ------------------------------
+SD="$WORK/scripts"
+mkdir -p "$SD"
+cp "$LAR_SCRIPT" "$SD/land-align-round"
+chmod +x "$SD/land-align-round"
+
+cat >"$SD/graph-commit" <<'SH'
+#!/usr/bin/env bash
+# argv-logging graph-commit stub. GC_LOG records the full argv (one arg per
+# line, delimited by a per-call marker); GC_STDERR is emitted verbatim on
+# stderr; GC_RC is the exit code.
+{
+  echo "--- call"
+  for a in "$@"; do echo "$a"; done
+} >>"$GC_LOG"
+[[ -n "${GC_STDERR:-}" ]] && printf '%s\n' "$GC_STDERR" >&2
+exit "${GC_RC:-0}"
+SH
+
+cat >"$SD/mark-node-terminal" <<'SH'
+#!/usr/bin/env bash
+# argv-logging mark-node-terminal stub: one line per call, `<node> <disposition>`.
+echo "$*" >>"$MNT_LOG"
+exit "${MNT_RC:-0}"
+SH
+chmod +x "$SD/graph-commit" "$SD/mark-node-terminal"
+
+GC_LOG="$WORK/gc.log"
+MNT_LOG="$WORK/mnt.log"
+
+run_lar() { # <gc-rc> <gc-stderr> <mnt-rc> [land-align-round args...]
+  local gc_rc="$1" gc_stderr="$2" mnt_rc="$3"; shift 3
+  : >"$GC_LOG"; : >"$MNT_LOG"
+  (
+    export GC_LOG MNT_LOG
+    export GC_RC="$gc_rc" GC_STDERR="$gc_stderr" MNT_RC="$mnt_rc"
+    bash "$SD/land-align-round" "$@"
+  )
+}
+
+# `grep -c` exits 1 on zero matches, so the count is captured first and the
+# fallback assigned separately — `grep -c ... || echo 0` would print BOTH the
+# grep's own "0" and the fallback's, yielding a two-line non-numeric result.
+mnt_calls() { local n; n=$(grep -c . "$MNT_LOG" 2>/dev/null) || n=0; echo "$n"; }
+gc_calls() { local n; n=$(grep -c '^--- call$' "$GC_LOG" 2>/dev/null) || n=0; echo "$n"; }
+
+# ---------------------------------------------------------------------------
+# Case 1: clean land -> exactly one `align-round` marker, exit 0.
+# ---------------------------------------------------------------------------
+out="$(run_lar 0 "" 0 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && [[ "$(mnt_calls)" -eq 1 ]] \
+   && [[ "$(cat "$MNT_LOG")" == "t-node align-round" ]]; then
+  ok "clean land: exactly one mark-node-terminal call with '<node> align-round', wrapper exits 0"
+else
+  no "clean land (rc=$rc calls=$(mnt_calls) log='$(cat "$MNT_LOG")')"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 2: exit 1 with the parking message -> one `park` marker, exit 1, stderr
+# re-emitted.
+# ---------------------------------------------------------------------------
+out="$(run_lar 1 "$PARK_MSG" 0 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
+if [[ $rc -eq 1 ]] && [[ "$(mnt_calls)" -eq 1 ]] \
+   && [[ "$(cat "$MNT_LOG")" == "t-node park" ]] \
+   && grep -qF -- "parking node(s)" <<<"$out"; then
+  ok "parking-message exit 1: exactly one marker call with 'park', exit 1, graph-commit stderr re-emitted"
+else
+  no "parking-message exit 1 (rc=$rc calls=$(mnt_calls) log='$(cat "$MNT_LOG")')"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 3: busy-main exhaustion exit 1 -> zero markers, exit 1.
+# ---------------------------------------------------------------------------
+# Nothing landed and nothing was parked, so there is no terminal disposition to
+# declare: writing one here would make an un-landed round reapable.
+out="$(run_lar 1 "$BUSY_MSG" 0 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
+if [[ $rc -eq 1 ]] && [[ "$(mnt_calls)" -eq 0 ]] \
+   && grep -qF -- "retry later" <<<"$out"; then
+  ok "busy-main exit 1: zero marker calls, exit 1 propagated, stderr re-emitted"
+else
+  no "busy-main exit 1 (rc=$rc calls=$(mnt_calls) log='$(cat "$MNT_LOG")')"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 4: any other non-zero exit -> zero markers, exit code propagated.
+# ---------------------------------------------------------------------------
+out="$(run_lar 2 "graph-commit: usage error" 0 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
+if [[ $rc -eq 2 ]] && [[ "$(mnt_calls)" -eq 0 ]]; then
+  ok "graph-commit exit 2: zero marker calls, exit code propagated verbatim"
+else
+  no "graph-commit exit 2 (rc=$rc calls=$(mnt_calls))"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 5: a failing marker write does NOT demote a landed round.
+# ---------------------------------------------------------------------------
+out="$(run_lar 0 "" 7 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && [[ "$(mnt_calls)" -eq 1 ]]; then
+  ok "marker write fails after a successful land: wrapper still exits 0 (the || true guarantee)"
+else
+  no "marker-failure tolerance (rc=$rc calls=$(mnt_calls))"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 6: missing --terminal -> exit 2, usage error, no graph-commit call.
+# ---------------------------------------------------------------------------
+out="$(run_lar 0 "" 0 -m 'graph: round' t-node 2>&1)"; rc=$?
+if [[ $rc -eq 2 ]] && [[ "$(gc_calls)" -eq 0 ]] && [[ "$(mnt_calls)" -eq 0 ]] \
+   && grep -qF -- "--terminal" <<<"$out"; then
+  ok "missing --terminal: exit 2 with a usage error, no graph-commit call, no marker call"
+else
+  no "missing --terminal (rc=$rc gc_calls=$(gc_calls))"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 7: --base, -m and the positional ids pass through unchanged (batch form).
+# ---------------------------------------------------------------------------
+out="$(run_lar 0 "" 0 --terminal t-parent --base /tmp/base-manifest.txt \
+        -m 'graph: land round with children' t-parent t-child-a t-child-b 2>&1)"; rc=$?
+expected=$'--- call\n--base\n/tmp/base-manifest.txt\n-m\ngraph: land round with children\nt-parent\nt-child-a\nt-child-b'
+actual="$(cat "$GC_LOG")"
+if [[ $rc -eq 0 ]] && [[ "$actual" == "$expected" ]] \
+   && [[ "$(cat "$MNT_LOG")" == "t-parent align-round" ]]; then
+  ok "pass-through: --base/-m/multi-id batch reach graph-commit unchanged; marker names --terminal's node, not a positional id"
+else
+  no "pass-through (rc=$rc)"; printf 'argv:\n%s\n' "$actual"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "land-align-round: $PASS passed, $FAIL failed"
+[[ $FAIL -eq 0 ]]

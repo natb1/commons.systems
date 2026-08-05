@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# land-align-round — land an /align-tactics decomposition round AND record the
+# session's terminal disposition in the SAME process.
+#
+# Usage:
+#   land-align-round --terminal <node-id> [--base <manifest>] -m <message> <id> [<id> ...]
+#
+# Why this wrapper exists (tactic-align-tactics-mark-terminal-skipped):
+# /align-tactics used to land its round with a bare `graph-commit` call and
+# then, several tool calls and at least one turn later, was instructed by
+# SKILL.md prose to separately call `mark-node-terminal <node-id> align-round`.
+# Nothing guaranteed the session survived to make that second call. When it did
+# not, the round's content landed durably on main but the node carried no
+# declared disposition, so dispatch-tick's terminal-without-disposition sweep
+# parked it — and clearing that park alone restarted the churn, since the dead
+# session was still un-reaped. Confirmed three times in production.
+#
+# This is the same rationale park-node states at its own bundled
+# mark-node-terminal call, and the same one transition-node's `mark_terminal()`
+# helper embodies: a terminal writer must bundle the marker write into the SAME
+# shell process as the landing write, so no turn boundary, context exhaustion,
+# or API error can separate the two. This script centralizes that pattern for
+# /align-tactics in one reusable place rather than duplicating it inline.
+#
+# `--terminal <node-id>` names exactly ONE node — the session's own target (the
+# tactic-target id in tactic mode, the strategy id in strategy mode). It is
+# required and never inferred from the positional ids: a round routinely lands
+# CHILD tactics whose ids are not the session's target, and a marker written
+# for one of those would be a lie.
+#
+# `--base`, `-m`, and the positional ids pass through to graph-commit verbatim.
+#
+# Behavior keyed on graph-commit's exit:
+#   0                             -> mark-node-terminal <node> align-round; exit 0
+#   1 with the parking message    -> mark-node-terminal <node> park; exit 1
+#   any other non-zero (busy-main
+#   exhaustion, usage error, ...) -> no marker; propagate graph-commit's exit
+#
+# The exit-1 discrimination mirrors references/write-path.md's "Discriminating
+# the two exit-1 cases": graph-commit's concurrent-edit path lands an
+# office_hours park on the node (a real terminal disposition — `park`), while
+# its busy-main exhaustion path lands nothing at all, so there is no
+# disposition to declare and the session must stay held.
+#
+# No ownership guard here: mark-node-terminal already refuses to write unless
+# $CLAUDE_JOB_DIR/state.json's `.name` equals the node id, and no-ops entirely
+# when CLAUDE_JOB_DIR is unset (an interactive run). Both are reused as-is.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+USAGE="usage: land-align-round --terminal <node-id> [--base <manifest>] -m <message> <id> [<id> ...]"
+
+TERMINAL_NODE=""
+BASE=""
+MSG=""
+HAVE_MSG=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --terminal)
+      [[ $# -ge 2 ]] || { echo "land-align-round: --terminal requires a value" >&2; echo "$USAGE" >&2; exit 2; }
+      TERMINAL_NODE="$2"; shift 2 ;;
+    --base)
+      [[ $# -ge 2 ]] || { echo "land-align-round: --base requires a value" >&2; echo "$USAGE" >&2; exit 2; }
+      BASE="$2"; shift 2 ;;
+    -m|--message)
+      [[ $# -ge 2 ]] || { echo "land-align-round: $1 requires a value" >&2; echo "$USAGE" >&2; exit 2; }
+      MSG="$2"; HAVE_MSG=1; shift 2 ;;
+    --)
+      shift; break ;;
+    -*)
+      echo "land-align-round: unrecognized flag: $1" >&2; echo "$USAGE" >&2; exit 2 ;;
+    *)
+      break ;;
+  esac
+done
+
+if [[ -z "$TERMINAL_NODE" ]]; then
+  echo "land-align-round: --terminal <node-id> is required (the session's own target node)" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+if [[ $# -eq 0 ]]; then
+  echo "land-align-round: expected at least one node id to land" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+GC_ARGS=()
+[[ -n "$BASE" ]] && GC_ARGS+=(--base "$BASE")
+[[ $HAVE_MSG -eq 1 ]] && GC_ARGS+=(-m "$MSG")
+GC_ARGS+=("$@")
+
+# graph-commit's stderr is both discriminated here and re-emitted to the caller
+# verbatim. It is captured to a tempfile and flushed after the call rather than
+# tee'd through a process substitution, so the read below can never race the
+# writer.
+ERR_FILE="$(mktemp)"
+cleanup() { rm -f "$ERR_FILE"; }
+trap cleanup EXIT
+
+rc=0
+"$SCRIPT_DIR/graph-commit" "${GC_ARGS[@]}" 2>"$ERR_FILE" || rc=$?
+cat "$ERR_FILE" >&2
+
+if [[ $rc -eq 0 ]]; then
+  # Best-effort by design: a marker write must NEVER demote a landed round to a
+  # script failure. This `|| true` is a deliberate, documented exception to
+  # .claude/rules/code-style.md's prefer-clear-errors rule, not a pattern to
+  # imitate elsewhere in this script.
+  "$SCRIPT_DIR/mark-node-terminal" "$TERMINAL_NODE" align-round >/dev/null 2>&1 || true
+  exit 0
+fi
+
+if [[ $rc -eq 1 ]] && grep -qF -- "parking node(s) — this writer's content is NOT landed" "$ERR_FILE"; then
+  # graph-commit's concurrent-edit fallback landed an office_hours park on the
+  # node: a genuine terminal disposition, even though this writer's content did
+  # not land. Same best-effort contract as above.
+  "$SCRIPT_DIR/mark-node-terminal" "$TERMINAL_NODE" park >/dev/null 2>&1 || true
+  exit 1
+fi
+
+# Every other non-zero exit (busy-main exhaustion ending `... retry later`, a
+# graph-commit usage error, a pre-flight refusal) landed nothing and parked
+# nothing. There is no disposition to declare, so no marker is written and the
+# session stays held — report and stop.
+exit "$rc"

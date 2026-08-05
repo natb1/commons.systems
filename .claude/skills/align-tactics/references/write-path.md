@@ -62,8 +62,18 @@ For a single-node tactic-target session (finalize/re-plan of one
 ```bash
 BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
   --out-dir "$TMPDIR/dump" <tactic-id>)
-packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
+packages/intentionsutil/scripts/land-align-round --terminal <tactic-id> \
+  --base "$BASE" -m 'graph: finalize <tactic-id>' <tactic-id>
 ```
+
+`land-align-round` is the wrapper around `graph-commit` used for the round's
+**final** landing call — it passes `--base`, `-m`, and the positional ids
+through verbatim and, in the **same process**, records this session's terminal
+disposition via `mark-node-terminal` (`align-round` on a clean land, `park`
+when `graph-commit`'s concurrent-edit fallback parked the node). `--terminal`
+names exactly one node — this session's own target, here the `tactic-<slug>`
+being finalized — and is never inferred from the positional ids, which
+routinely include child tactics this session does not own. See Step 4 below.
 
 **Capture the manifest at the read, before any write, and never re-dump over
 an edited worktree.** The manifest's claim is "this is the content that was
@@ -195,6 +205,34 @@ author) instead of assigning ownership by proximity.
      <tactic-id> [<tactic-id> ...] [<strategy-id>]
    ```
 
+   **The round's FINAL landing call — and only that one — goes through
+   `land-align-round` instead:**
+
+   ```bash
+   packages/intentionsutil/scripts/land-align-round \
+     --terminal <target-node-id> --base "$BASE" -m '<message>' \
+     <tactic-id> [<tactic-id> ...] [<strategy-id>]
+   ```
+
+   `land-align-round` invokes `graph-commit` with `--base`, `-m`, and the
+   positional ids passed through verbatim, then writes this session's terminal
+   disposition marker in the **same process** as the land — the guarantee
+   `park-node` and `transition-node` already carry, and the one this session
+   used to lack when the marker was a separate call a turn or more later (a
+   session that died in between left the round landed on `main` with no
+   declared disposition, and the tick's terminal-without-disposition sweep
+   parked the node; confirmed 3x in production). `--terminal` names exactly
+   one node — this session's own target (the tactic-target id in tactic mode,
+   the strategy id in strategy mode) — and is never inferred from the
+   positional ids, which routinely include child tactics this session does not
+   own. `mark-node-terminal`'s own ownership gate makes the call safe
+   unconditionally; it is a no-op in an interactive run.
+
+   A **multi-call** round keeps bare `graph-commit` for every earlier call. A
+   marker written after call 1 of 3 would declare a partially landed round
+   terminal, making it reapable mid-round — converting a failure the sweep
+   currently catches into a silent one.
+
    A split's parent edit and its new sibling must never land as two
    separate `graph-commit` calls — the 2026-07-18 near-miss (`c037cec7`
    landed the parent alone; the follow-up sibling-add call lost the push
@@ -227,6 +265,16 @@ presence of a parking message:
 
 Either way, report it and stop — do not retry automatically within this
 session.
+
+On the round's final call, **`land-align-round` performs this discrimination
+itself** and writes the matching marker: `park` on the parking-message case
+(the node really did reach a terminal disposition — an `office_hours` park —
+even though this writer's content did not land), and **no marker at all** on
+the busy-main case (nothing landed and nothing parked, so there is no
+disposition to declare and the session stays held). Either exit code is
+propagated unchanged. So this session no longer decides *which* marker to
+write — it still reads the stderr, reports which of the two cases occurred,
+and stops.
 
 ## Parks — writing `office_hours`
 

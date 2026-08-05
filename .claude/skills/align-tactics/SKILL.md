@@ -344,8 +344,10 @@ pre-existing node this round touches (`dump-node.ts`), write each node's
 `origin/main` for every id about to receive a body write
 (`assert-node-fresh`), `Edit` in each planned tactic's **body** (the
 Workflow's `body_markdown`), **land** the whole round in one or a few
-`graph-commit --base` calls, then **validate**
-(`validate-graph.ts`). Parks (`result.parks`) are written the same way, as
+`graph-commit --base` calls — the round's **final** call through
+`land-align-round --terminal <target-node-id>`, which bundles the
+terminal-disposition marker into the same process as the land — then
+**validate** (`validate-graph.ts`). Parks (`result.parks`) are written the same way, as
 `office_hours: {reason, since}` on the target node. `graph-commit` has two
 distinct exit-1 cases — a parking message (a concurrent writer landed first;
 this session's content is unlanded but preserved on disk) versus a
@@ -357,19 +359,29 @@ details (per-strategy `execution.strategy_fingerprint` map via
 `strategy-fingerprint.ts`, and the strategy's
 `rounds.count`/`last_completed`/`last_aligned` bookkeeping).
 
-Once the round has landed and `validate-graph.ts` is clean, record the
-terminal disposition:
-
-```bash
-packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" align-round
-```
+The round's **final** landing call goes through
+`packages/intentionsutil/scripts/land-align-round --terminal <target-node-id>
+...` rather than a bare `graph-commit`. That wrapper writes this session's
+terminal disposition marker (`align-round`, or `park` when `graph-commit`'s
+concurrent-edit fallback parked the node) in the **same process** as the land.
+There is no separate marker step to run.
 
 The Stop hook (`.claude/hooks/dispatch-stop.sh`) reaps this node worker's job
 only on positive evidence that the pass ended — `Stop` fires on every turn
 yield, not only on terminal exit, so an unmarked session is held alive instead
-of reaped. Call it unconditionally: `mark-node-terminal` writes nothing unless
-this job's own name is `<target-node-id>`, so a round that lands *child*
-tactics cannot authorize a reap on their behalf.
+of reaped. Bundling the marker into the landing process is what makes that
+evidence unmissable: as a separate call a turn or more later, it was skipped
+whenever the session died in between, leaving the round landed on `main` with
+no declared disposition for the tick's terminal-without-disposition sweep to
+read (confirmed 3x in production). The wrapper's marker call is safe
+unconditionally — `mark-node-terminal` writes nothing unless this job's own
+name is `<target-node-id>`, so a round that lands *child* tactics cannot
+authorize a reap on their behalf.
+
+Consequently `validate-graph.ts` runs AFTER the marker, not before it. A
+`validate-graph.ts` failure on an already-landed round is **reported and filed
+as a follow-up**, not held as a live session: the graph is already invalid on
+`main`, and holding this session open does not fix it.
 
 ## Re-evaluation mode
 
