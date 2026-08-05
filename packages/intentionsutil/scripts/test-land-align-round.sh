@@ -215,6 +215,36 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Case 9: real-source ratchet. Extract the needle land-align-round ACTUALLY
+# greps for (from the REAL land-align-round on disk, not the stub) and assert
+# it is a literal substring of the REAL graph-commit's emitted text, AND that
+# the harness's own PARK_MSG fixture (line ~59) also contains it. Without this
+# case, a wording change to graph-commit's concurrent-edit-conflict message
+# passes CI green while land-align-round silently falls through to its
+# no-marker branch on a genuine concurrent-edit park in production — the exact
+# defect this test suite exists to catch, just relocated one hop upstream.
+# ---------------------------------------------------------------------------
+GC_REAL="$HARNESS_DIR/graph-commit"
+[[ -f "$GC_REAL" ]] || { echo "error: graph-commit not found at $GC_REAL" >&2; exit 1; }
+
+# Extract the quoted argument of land-align-round's `grep -qF -- "..."` call
+# rather than hardcoding a 4th copy of the literal — a copy could drift from
+# the real needle without this case ever noticing.
+needle="$(grep -oP 'grep -qF -- "\K[^"]*(?=")' "$LAR_SCRIPT")"
+
+if [[ -z "$needle" ]]; then
+  no "real-source ratchet: extracted an EMPTY needle from land-align-round's 'grep -qF --' argument — the extraction regex is broken or the grep call was removed/reworded; refusing to vacuously pass"
+else
+  found_in_gc=0; grep -qF -- "$needle" "$GC_REAL" && found_in_gc=1
+  found_in_park=0; grep -qF -- "$needle" <<<"$PARK_MSG" && found_in_park=1
+  if [[ $found_in_gc -eq 1 ]] && [[ $found_in_park -eq 1 ]]; then
+    ok "real-source ratchet: the needle land-align-round greps for is a literal substring of both the REAL graph-commit's emission and the harness's PARK_MSG fixture"
+  else
+    no "real-source ratchet: needle '$needle' (extracted from land-align-round) found_in_graph-commit=$found_in_gc found_in_PARK_MSG=$found_in_park — the real-source coupling has drifted"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 echo
 echo "land-align-round: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

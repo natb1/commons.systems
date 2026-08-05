@@ -1575,6 +1575,15 @@ park_and_exit() {
   local park_msg
   if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
     park_msg="graph: park ${park_ids[*]} (concurrent-edit conflict); prune ${bystander_prunes[*]}"
+    # LOAD-BEARING SUBSTRING: land-align-round (the /align-tactics landing
+    # wrapper) greps its captured stderr for the literal substring
+    # "parking node(s) — this writer's content is NOT landed" to decide
+    # whether this rc-1 exit is a genuine terminal disposition (park) versus a
+    # busy-main/usage-error exit with nothing landed and nothing parked. A
+    # wording change here silently breaks that downstream branch. The ratchet
+    # case in test-land-align-round.sh (packages/intentionsutil/scripts/)
+    # extracts land-align-round's needle from its real source and asserts it
+    # is a substring of this emission — keep them coupled.
     echo "graph-commit: concurrent-edit conflict on ${park_ids[*]}; parking node(s) — this writer's content is NOT landed" >&2
     echo "graph-commit: re-applying and landing bystander prune(s) not implicated in the conflict: ${bystander_prunes[*]}" >&2
     for id in "${bystander_prunes[@]}"; do
@@ -1582,6 +1591,15 @@ park_and_exit() {
     done
   else
     park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
+    # LOAD-BEARING SUBSTRING: land-align-round (the /align-tactics landing
+    # wrapper) greps its captured stderr for the literal substring
+    # "parking node(s) — this writer's content is NOT landed" to decide
+    # whether this rc-1 exit is a genuine terminal disposition (park) versus a
+    # busy-main/usage-error exit with nothing landed and nothing parked. A
+    # wording change here silently breaks that downstream branch. The ratchet
+    # case in test-land-align-round.sh (packages/intentionsutil/scripts/)
+    # extracts land-align-round's needle from its real source and asserts it
+    # is a substring of this emission — keep them coupled.
     echo "graph-commit: concurrent-edit conflict on ${park_ids[*]}; parking node(s) — this writer's content is NOT landed" >&2
   fi
 
