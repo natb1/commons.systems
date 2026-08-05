@@ -213,6 +213,224 @@ if [[ -z "${_LIB_SESSION_REAP_LOADED:-}" ]]; then
     return 0
   }
 
+  # session_reap_node <name> <sid> <jid> [log-file] [log-tag] [idle-seconds] [cwd]
+  #
+  # THE REAP ACT ITSELF — gates (7) worktree/(7a) clean/(7b) content/(7c) open
+  # PR/(7d) worktree remove, then (8) `claude rm`, then (9) the verified
+  # post-state read. Extracted from `session_reap_sweep`'s loop so it has exactly
+  # ONE implementation, because a second one would be a second UNPROVEN one: this
+  # is the code path that deletes a worktree, and the failure mode is destroying
+  # unlanded work.
+  #
+  # WHY IT WAS EXTRACTED. `/dispatch-invalid-state` (the invalid-state lane's
+  # intervention session) needs this act, but cannot use the sweep: the sweep's
+  # candidate gate (4) requires a `node-terminal` marker, and the intervention's
+  # PRIMARY class is precisely the session that has none — a worker that went
+  # terminal without declaring anything. The intervention supplies its own
+  # positive evidence (an independent re-read of git/gh/the graph) in place of
+  # gate (4), then calls this.
+  #
+  # THE CONTRACT IS THE PRINTED TOKEN, NOT THE EXIT CODE. Exactly one token on
+  # stdout, and ALWAYS `return 0` — the shape `dispatch_pause_state`
+  # (`lib-pause-state.sh:30-45`) and `worktree_occupancy_state` use. An exit code
+  # would collapse ten distinguishable outcomes into pass/fail, and the whole
+  # point of this file is that "it exited 0" is not evidence of anything.
+  #
+  #   reaped                        the registry no longer lists the job — VERIFIED
+  #   declined                      `claude rm` returned, the job is STILL listed
+  #   unverified                    post-state unreadable; removal NOT confirmed
+  #   skip-dirty                    worktree has uncommitted changes
+  #   skip-unlanded-content         tree differs from origin/main outside intentions/
+  #   skip-open-pr                  an OPEN PR has this branch as its head
+  #   skip-status-error             `git status` failed (UNKNOWN → keep)
+  #   skip-diff-error               `git diff` failed (UNKNOWN → keep)
+  #   skip-pr-fetch-failed          the PR probe failed or was unparseable
+  #   skip-worktree-remove-failed   `git worktree remove` refused
+  #   skip-repo-root-unresolvable   no repo root (see the note below)
+  #
+  # DELIBERATELY NOT A GLOBALS-PUBLISHING FUNCTION. Callers read the token with
+  # `tok=$(session_reap_node …)`, which runs the function in a SUBSHELL — any
+  # variable it assigned would die with that subshell and the caller would
+  # silently read a stale value. So everything the caller needs is in the token.
+  # (`_lsr_log` still reaches stderr and the log file from inside the subshell;
+  # only assignments are lost.)
+  #
+  # `skip-repo-root-unresolvable` is the one token `session_reap_sweep` can never
+  # produce: it resolves the repo root once, before its loop, and aborts the
+  # whole arm when that fails (see below). The token exists for the standalone
+  # `dispatch-node-reap` caller, which has no such preamble.
+  #
+  # [idle-seconds] and [cwd] are DIAGNOSTIC ONLY — they appear in the terminal
+  # SESSION_REAPED line and nowhere else. The sweep passes the values it already
+  # measured in gates (5) and the row parse, so its log output is byte-identical
+  # to before the extraction; a caller with neither renders `idle_seconds=unknown`.
+  # They are trailing and optional precisely so they cannot become load-bearing.
+  #
+  # ALWAYS returns 0.
+  session_reap_node() {
+    local name="$1" sid="$2" jid="$3"
+    local log_file="${4:-}" log_tag="${5:-dispatch-sweep}"
+    local idle="${6:-}" cwd="${7:-}"
+
+    local claude_cmd="${CLAUDE_AGENTS_CMD:-claude}"
+    local repo_root="${DISPATCH_SESSION_REAP_REPO_ROOT:-}"
+    if [[ -z "$repo_root" ]]; then
+      repo_root=$(resolve_project_root) || repo_root=""
+    fi
+    if [[ -z "$repo_root" ]]; then
+      _lsr_log "$log_file" "$log_tag" \
+        "SESSION_REAP_SKIP_ALL: repo root unresolvable; reaping nothing"
+      printf '%s\n' "skip-repo-root-unresolvable"
+      return 0
+    fi
+    local worktrees_root="${DISPATCH_SESSION_REAP_WORKTREES_ROOT:-$repo_root/.claude/worktrees}"
+
+    # (7) The worktree. Its path is derived, never taken from the registry's
+    # `cwd`: provision-node-worktree puts a node's checkout at exactly
+    # <project-root>/.claude/worktrees/<node-id> on a branch of the same name.
+    local wt_path="$worktrees_root/$name"
+    local branch="$name"
+    local wt_present=0
+    [[ -d "$wt_path" ]] && wt_present=1
+
+    if (( wt_present )); then
+      # Prefer the worktree's ACTUAL branch for the PR probe when it can be
+      # read; fall back to the node id. A detached HEAD reads back as the
+      # literal "HEAD", which is not a branch.
+      local head_ref
+      head_ref=$(git -C "$wt_path" rev-parse --abbrev-ref HEAD 2>/dev/null) || head_ref=""
+      if [[ -n "$head_ref" && "$head_ref" != "HEAD" ]]; then
+        branch="$head_ref"
+      fi
+
+      # (7a) Clean tree. `--untracked-files=no`: untracked residue is build
+      # output and scratch, not work — the CONTENT gate below is what protects
+      # actual work. A `git status` failure is UNKNOWN → keep.
+      local status_out
+      if ! status_out=$(git -C "$wt_path" status --porcelain --untracked-files=no 2>/dev/null); then
+        _lsr_log "$log_file" "$log_tag" \
+          "SESSION_REAP_SKIP_STATUS_ERROR: name=$name session=$sid worktree=$wt_path (git status failed)"
+        printf '%s\n' "skip-status-error"
+        return 0
+      fi
+      if [[ -n "$status_out" ]]; then
+        _lsr_log "$log_file" "$log_tag" \
+          "SESSION_REAP_SKIP_DIRTY: name=$name session=$sid worktree=$wt_path (uncommitted changes)"
+        printf '%s\n' "skip-dirty"
+        return 0
+      fi
+
+      # (7b) CONTENT gate — see the header for why this is a content diff and
+      # not a commit count. `--quiet` exits 0 for "no diff", 1 for "diff", >1
+      # for an error (which is UNKNOWN → keep). `-C` puts the cwd at the
+      # worktree root, so `.` and `:!intentions` are both anchored there.
+      local diff_rc=0
+      git -C "$wt_path" diff --quiet origin/main HEAD -- . ':!intentions' 2>/dev/null || diff_rc=$?
+      case "$diff_rc" in
+        0) ;;
+        1)
+          _lsr_log "$log_file" "$log_tag" \
+            "SESSION_REAP_SKIP_UNLANDED_CONTENT: name=$name session=$sid worktree=$wt_path branch=$branch (tree differs from origin/main outside intentions/)"
+          printf '%s\n' "skip-unlanded-content"
+          return 0
+          ;;
+        *)
+          _lsr_log "$log_file" "$log_tag" \
+            "SESSION_REAP_SKIP_DIFF_ERROR: name=$name session=$sid worktree=$wt_path (git diff vs origin/main failed, rc=$diff_rc)"
+          printf '%s\n' "skip-diff-error"
+          return 0
+          ;;
+      esac
+
+      # (7c) No OPEN PR on this branch. A `gh` failure fails toward KEEP —
+      # never toward reap.
+      local pr_json open_count
+      if ! pr_json=$(gh_pr_list_rest --head "$branch" --state all 2>/dev/null); then
+        _lsr_log "$log_file" "$log_tag" \
+          "SESSION_REAP_SKIP_PR_FETCH_FAILED: name=$name session=$sid branch=$branch (gh_pr_list_rest failed)"
+        printf '%s\n' "skip-pr-fetch-failed"
+        return 0
+      fi
+      open_count=$(jq '[.[] | select(.state == "OPEN")] | length' <<<"$pr_json" 2>/dev/null) || open_count=""
+      if [[ ! "$open_count" =~ ^[0-9]+$ ]]; then
+        _lsr_log "$log_file" "$log_tag" \
+          "SESSION_REAP_SKIP_PR_FETCH_FAILED: name=$name session=$sid branch=$branch (PR list unparseable)"
+        printf '%s\n' "skip-pr-fetch-failed"
+        return 0
+      fi
+      if (( open_count > 0 )); then
+        _lsr_log "$log_file" "$log_tag" \
+          "SESSION_REAP_SKIP_OPEN_PR: name=$name session=$sid branch=$branch open_prs=$open_count"
+        printf '%s\n' "skip-open-pr"
+        return 0
+      fi
+
+      # (7d) Remove the worktree — FIRST, before `claude rm`. THIS is what
+      # makes the daemon accept the removal: it declines while the worktree has
+      # files it cannot verify against a repository. NOT `--force`: the gates
+      # above already proved the tree clean, so a plain remove that still fails
+      # is telling us something we did not model, and the safe answer is to
+      # keep. The BRANCH is deliberately left alone (see the header).
+      if ! git -C "$repo_root" worktree remove "$wt_path" 2>/dev/null; then
+        _lsr_log "$log_file" "$log_tag" \
+          "SESSION_REAP_SKIP_WORKTREE_REMOVE_FAILED: name=$name session=$sid worktree=$wt_path"
+        printf '%s\n' "skip-worktree-remove-failed"
+        return 0
+      fi
+      git -C "$repo_root" worktree prune 2>/dev/null || true
+      # Clear any not-in-sync grace marker, exactly as the other reap arms in
+      # dispatch-sweep do, so a future same-named worktree cannot inherit a
+      # stale grace timestamp.
+      reap_marker_clear "$repo_root" "$name" || true
+      _lsr_log "$log_file" "$log_tag" \
+        "SESSION_REAP_WORKTREE_REMOVED: name=$name session=$sid worktree=$wt_path branch=$branch (branch retained)"
+    else
+      # Absent worktree — the reap-safety gates are vacuous. See the header.
+      _lsr_log "$log_file" "$log_tag" \
+        "SESSION_REAP_NO_WORKTREE: name=$name session=$sid worktree=$wt_path (nothing to remove; proceeding to claude rm)"
+    fi
+
+    # (8) `claude rm` — on the JOB id (`.id`), which is what dispatch-self-close
+    # passes and what the daemon keys removals on. Its exit code is recorded
+    # but NOT trusted: exiting 0 while declining is the entire bug.
+    local rm_rc=0
+    "$claude_cmd" rm "$jid" >/dev/null 2>&1 || rm_rc=$?
+
+    # (9) Verify the POST-STATE by re-querying, instead of believing exit 0.
+    # THREE outcomes, never two. The candidates were terminal going in, so a
+    # session the daemon declined to remove is still terminal and still in this
+    # listing; absence from it is a genuine removal.
+    local post
+    if ! post=$(claude_agents_list_terminal_workers); then
+      _lsr_log "$log_file" "$log_tag" \
+        "SESSION_REAP_UNVERIFIED: name=$name session=$sid id=$jid claude_rm_rc=$rm_rc (daemon unqueryable on the post-state read; removal NOT confirmed)"
+      printf '%s\n' "unverified"
+      return 0
+    fi
+    local still=0 prow prest pjid
+    if [[ -n "$post" ]]; then
+      while IFS= read -r prow; do
+        [[ -n "$prow" ]] || continue
+        prest="${prow#*$'\t'}"
+        pjid="${prest%%$'\t'*}"
+        if [[ -n "$pjid" && "$pjid" == "$jid" ]]; then
+          still=1
+          break
+        fi
+      done <<<"$post"
+    fi
+    if (( still )); then
+      _lsr_log "$log_file" "$log_tag" \
+        "REAP_DECLINED: name=$name session=$sid id=$jid claude_rm_rc=$rm_rc — the daemon still reports this session after \`claude rm\`; it is holding a worker slot and its node is unselectable. Left for the operator."
+      printf '%s\n' "declined"
+      return 0
+    fi
+    _lsr_log "$log_file" "$log_tag" \
+      "SESSION_REAPED: name=$name session=$sid id=$jid idle_seconds=${idle:-unknown} worktree_present=$wt_present cwd=$cwd"
+    printf '%s\n' "reaped"
+    return 0
+  }
+
   # session_reap_sweep [log-file-path] [log-tag] — see the header for the full
   # contract. ALWAYS returns 0.
   session_reap_sweep() {
@@ -255,8 +473,13 @@ if [[ -z "${_LIB_SESSION_REAP_LOADED:-}" ]]; then
     [[ "$reap_max" =~ ^[0-9]+$ ]] || reap_max=8
     local projects_root="${DISPATCH_SESSION_REAP_PROJECTS_ROOT:-$HOME/.claude/projects}"
     local jobs_root="${DISPATCH_SESSION_REAP_JOBS_ROOT:-$HOME/.claude/jobs}"
-    local claude_cmd="${CLAUDE_AGENTS_CMD:-claude}"
 
+    # The repo root is resolved HERE only to decide whether the arm can run at
+    # all: an unresolvable root aborts the whole sweep with one line, rather
+    # than emitting the same failure once per candidate. `session_reap_node`
+    # resolves it again, from the same env seam and the same fallback, so the
+    # two never disagree; the worktrees root and the `claude` command now live
+    # entirely inside the act and are not duplicated here.
     local repo_root="${DISPATCH_SESSION_REAP_REPO_ROOT:-}"
     if [[ -z "$repo_root" ]]; then
       repo_root=$(resolve_project_root) || repo_root=""
@@ -268,7 +491,6 @@ if [[ -z "${_LIB_SESSION_REAP_LOADED:-}" ]]; then
         "SESSION_REAP_COMPLETE: terminal=$terminal reaped=$reaped declined=$declined unverified=$unverified skipped=$skipped"
       return 0
     fi
-    local worktrees_root="${DISPATCH_SESSION_REAP_WORKTREES_ROOT:-$repo_root/.claude/worktrees}"
 
     # Drain the candidate list into an array BEFORE looping, for the reason the
     # sibling does: the loop body runs git/gh/claude subprocesses that would
@@ -388,149 +610,32 @@ if [[ -z "${_LIB_SESSION_REAP_LOADED:-}" ]]; then
         continue
       fi
 
-      # (7) The worktree. Its path is derived, never taken from the registry's
-      # `cwd`: provision-node-worktree puts a node's checkout at exactly
-      # <project-root>/.claude/worktrees/<node-id> on a branch of the same name.
-      local wt_path="$worktrees_root/$name"
-      local branch="$name"
-      local wt_present=0
-      [[ -d "$wt_path" ]] && wt_present=1
+      # (7)-(9) THE REAP ACT — now `session_reap_node`, which owns gates (7)
+      # through (7d), the `claude rm`, and the verified post-state read, and
+      # emits every one of the log lines this block used to emit, verbatim and
+      # in the same order. Gates (1)-(6) above are unchanged and stay here: they
+      # are the SWEEP's candidate policy (marker required, grace window, per-
+      # sweep cap), not part of the act.
+      #
+      # `idle` and `cwd` are passed through only so the terminal SESSION_REAPED
+      # line reads exactly as it did before the extraction.
+      #
+      # The token is read from stdout, which means this runs in a SUBSHELL — so
+      # the function deliberately publishes nothing through globals (see its
+      # header). Its `_lsr_log` output still reaches stderr and the log file.
+      local verdict
+      verdict=$(session_reap_node "$name" "$sid" "$jid" "$log_file" "$log_tag" "$idle" "$cwd")
 
-      if (( wt_present )); then
-        # Prefer the worktree's ACTUAL branch for the PR probe when it can be
-        # read; fall back to the node id. A detached HEAD reads back as the
-        # literal "HEAD", which is not a branch.
-        local head_ref
-        head_ref=$(git -C "$wt_path" rev-parse --abbrev-ref HEAD 2>/dev/null) || head_ref=""
-        if [[ -n "$head_ref" && "$head_ref" != "HEAD" ]]; then
-          branch="$head_ref"
-        fi
-
-        # (7a) Clean tree. `--untracked-files=no`: untracked residue is build
-        # output and scratch, not work — the CONTENT gate below is what protects
-        # actual work. A `git status` failure is UNKNOWN → keep.
-        local status_out
-        if ! status_out=$(git -C "$wt_path" status --porcelain --untracked-files=no 2>/dev/null); then
-          skipped=$(( skipped + 1 ))
-          _lsr_log "$log_file" "$log_tag" \
-            "SESSION_REAP_SKIP_STATUS_ERROR: name=$name session=$sid worktree=$wt_path (git status failed)"
-          continue
-        fi
-        if [[ -n "$status_out" ]]; then
-          skipped=$(( skipped + 1 ))
-          _lsr_log "$log_file" "$log_tag" \
-            "SESSION_REAP_SKIP_DIRTY: name=$name session=$sid worktree=$wt_path (uncommitted changes)"
-          continue
-        fi
-
-        # (7b) CONTENT gate — see the header for why this is a content diff and
-        # not a commit count. `--quiet` exits 0 for "no diff", 1 for "diff", >1
-        # for an error (which is UNKNOWN → keep). `-C` puts the cwd at the
-        # worktree root, so `.` and `:!intentions` are both anchored there.
-        local diff_rc=0
-        git -C "$wt_path" diff --quiet origin/main HEAD -- . ':!intentions' 2>/dev/null || diff_rc=$?
-        case "$diff_rc" in
-          0) ;;
-          1)
-            skipped=$(( skipped + 1 ))
-            _lsr_log "$log_file" "$log_tag" \
-              "SESSION_REAP_SKIP_UNLANDED_CONTENT: name=$name session=$sid worktree=$wt_path branch=$branch (tree differs from origin/main outside intentions/)"
-            continue
-            ;;
-          *)
-            skipped=$(( skipped + 1 ))
-            _lsr_log "$log_file" "$log_tag" \
-              "SESSION_REAP_SKIP_DIFF_ERROR: name=$name session=$sid worktree=$wt_path (git diff vs origin/main failed, rc=$diff_rc)"
-            continue
-            ;;
-        esac
-
-        # (7c) No OPEN PR on this branch. A `gh` failure fails toward KEEP —
-        # never toward reap.
-        local pr_json open_count
-        if ! pr_json=$(gh_pr_list_rest --head "$branch" --state all 2>/dev/null); then
-          skipped=$(( skipped + 1 ))
-          _lsr_log "$log_file" "$log_tag" \
-            "SESSION_REAP_SKIP_PR_FETCH_FAILED: name=$name session=$sid branch=$branch (gh_pr_list_rest failed)"
-          continue
-        fi
-        open_count=$(jq '[.[] | select(.state == "OPEN")] | length' <<<"$pr_json" 2>/dev/null) || open_count=""
-        if [[ ! "$open_count" =~ ^[0-9]+$ ]]; then
-          skipped=$(( skipped + 1 ))
-          _lsr_log "$log_file" "$log_tag" \
-            "SESSION_REAP_SKIP_PR_FETCH_FAILED: name=$name session=$sid branch=$branch (PR list unparseable)"
-          continue
-        fi
-        if (( open_count > 0 )); then
-          skipped=$(( skipped + 1 ))
-          _lsr_log "$log_file" "$log_tag" \
-            "SESSION_REAP_SKIP_OPEN_PR: name=$name session=$sid branch=$branch open_prs=$open_count"
-          continue
-        fi
-
-        # (7d) Remove the worktree — FIRST, before `claude rm`. THIS is what
-        # makes the daemon accept the removal: it declines while the worktree has
-        # files it cannot verify against a repository. NOT `--force`: the gates
-        # above already proved the tree clean, so a plain remove that still fails
-        # is telling us something we did not model, and the safe answer is to
-        # keep. The BRANCH is deliberately left alone (see the header).
-        if ! git -C "$repo_root" worktree remove "$wt_path" 2>/dev/null; then
-          skipped=$(( skipped + 1 ))
-          _lsr_log "$log_file" "$log_tag" \
-            "SESSION_REAP_SKIP_WORKTREE_REMOVE_FAILED: name=$name session=$sid worktree=$wt_path"
-          continue
-        fi
-        git -C "$repo_root" worktree prune 2>/dev/null || true
-        # Clear any not-in-sync grace marker, exactly as the other reap arms in
-        # dispatch-sweep do, so a future same-named worktree cannot inherit a
-        # stale grace timestamp.
-        reap_marker_clear "$repo_root" "$name" || true
-        _lsr_log "$log_file" "$log_tag" \
-          "SESSION_REAP_WORKTREE_REMOVED: name=$name session=$sid worktree=$wt_path branch=$branch (branch retained)"
-      else
-        # Absent worktree — the reap-safety gates are vacuous. See the header.
-        _lsr_log "$log_file" "$log_tag" \
-          "SESSION_REAP_NO_WORKTREE: name=$name session=$sid worktree=$wt_path (nothing to remove; proceeding to claude rm)"
-      fi
-
-      # (8) `claude rm` — on the JOB id (`.id`), which is what dispatch-self-close
-      # passes and what the daemon keys removals on. Its exit code is recorded
-      # but NOT trusted: exiting 0 while declining is the entire bug.
-      local rm_rc=0
-      "$claude_cmd" rm "$jid" >/dev/null 2>&1 || rm_rc=$?
-
-      # (9) Verify the POST-STATE by re-querying, instead of believing exit 0.
-      # THREE outcomes, never two. The candidates were terminal going in, so a
-      # session the daemon declined to remove is still terminal and still in this
-      # listing; absence from it is a genuine removal.
-      local post
-      if ! post=$(claude_agents_list_terminal_workers); then
-        unverified=$(( unverified + 1 ))
-        _lsr_log "$log_file" "$log_tag" \
-          "SESSION_REAP_UNVERIFIED: name=$name session=$sid id=$jid claude_rm_rc=$rm_rc (daemon unqueryable on the post-state read; removal NOT confirmed)"
-        continue
-      fi
-      local still=0 prow prest pjid
-      if [[ -n "$post" ]]; then
-        while IFS= read -r prow; do
-          [[ -n "$prow" ]] || continue
-          prest="${prow#*$'\t'}"
-          pjid="${prest%%$'\t'*}"
-          if [[ -n "$pjid" && "$pjid" == "$jid" ]]; then
-            still=1
-            break
-          fi
-        done <<<"$post"
-      fi
-      if (( still )); then
-        declined=$(( declined + 1 ))
-        _lsr_log "$log_file" "$log_tag" \
-          "REAP_DECLINED: name=$name session=$sid id=$jid claude_rm_rc=$rm_rc — the daemon still reports this session after \`claude rm\`; it is holding a worker slot and its node is unselectable. Left for the operator."
-        continue
-      fi
-      reaped=$(( reaped + 1 ))
-      _lsr_log "$log_file" "$log_tag" \
-        "SESSION_REAPED: name=$name session=$sid id=$jid idle_seconds=$idle worktree_present=$wt_present cwd=$cwd"
+      # Map the token onto this sweep's existing counters, so the summary line
+      # and every existing assertion about it are unchanged. Every `skip-*`
+      # token — including ones added later — counts as `skipped`, the same
+      # bucket the inlined `continue`s fed.
+      case "$verdict" in
+        reaped)     reaped=$(( reaped + 1 )) ;;
+        declined)   declined=$(( declined + 1 )) ;;
+        unverified) unverified=$(( unverified + 1 )) ;;
+        *)          skipped=$(( skipped + 1 )) ;;
+      esac
     done
 
     _lsr_log "$log_file" "$log_tag" \
