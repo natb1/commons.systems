@@ -103,6 +103,48 @@ gsc_sel=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
   DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
   DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
 assert_eq "graph-select-target: orphan node-id worktree (no session) is selected" "node tactic-fixture tactic implement" "$gsc_sel"
+
+# Case 3 — a TERMINAL session holds the worktree (tactic-invalid-state-lane
+# Unit 2). The node is still skipped, exactly as in Case 1 — but the skip is now
+# attributable: the decision log must carry `terminal-session`, not
+# `live-session`. Folding the two together is what made this invalid state
+# invisible at the moment the router noticed it.
+echo "Test: graph-select-target — a terminal-session holder is skipped as terminal-session, not live-session"
+printf '%s' '[{"sessionId":"s-dead","name":"tactic-fixture","state":"done","cwd":""}]' \
+  > "$GSC_ROOT/claude-payload.json"
+rm -rf "$GSC_ROOT/seldir"; mkdir -p "$GSC_ROOT/seldir"
+gsc_term=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSC_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
+  DISPATCH_DECISION_LOG_DIR="$GSC_ROOT/seldir" \
+  DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
+assert_eq "graph-select-target: a terminal-held node is still skipped" "empty" "$gsc_term"
+gsc_reason=$(cat "$GSC_ROOT/seldir"/*.jsonl 2>/dev/null \
+  | jq -r 'select(.site=="graph-select-target") | .skipped[]? | select(.id=="tactic-fixture") | .reason' \
+  2>/dev/null | tail -1)
+assert_eq "graph-select-target: the skip reason is attributable as terminal-session" \
+  "terminal-session" "$gsc_reason"
+
+# Case 4 — an UNKNOWN daemon read must keep reporting `live-session`. A blocked
+# read must never manufacture an invalid state out of a healthy node.
+echo "Test: graph-select-target — an UNKNOWN daemon read still reports live-session"
+cat > "$GSC_ROOT/bin/claude" <<'GSCCLAUDEFAIL'
+#!/usr/bin/env bash
+exit 1
+GSCCLAUDEFAIL
+chmod +x "$GSC_ROOT/bin/claude"
+rm -rf "$GSC_ROOT/seldir"; mkdir -p "$GSC_ROOT/seldir"
+gsc_unk=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSC_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
+  DISPATCH_DECISION_LOG_DIR="$GSC_ROOT/seldir" \
+  DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
+assert_eq "graph-select-target: an unknown read still skips the node" "empty" "$gsc_unk"
+gsc_ureason=$(cat "$GSC_ROOT/seldir"/*.jsonl 2>/dev/null \
+  | jq -r 'select(.site=="graph-select-target") | .skipped[]? | select(.id=="tactic-fixture") | .reason' \
+  2>/dev/null | tail -1)
+assert_eq "graph-select-target: an unknown read is NOT reported as terminal-session" \
+  "live-session" "$gsc_ureason"
 rm -rf "$GSC_ROOT" "$GSC_BARE"
 
 # ============================================================================
