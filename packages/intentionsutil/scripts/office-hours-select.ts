@@ -61,13 +61,28 @@
 // never suppresses the stdout line.
 //
 // --list output columns (the single canonical statement of this contract; the
-// `office-hours-graph` read loop cites this block): `<rank>\t<sessionType>\t
-// <nodeId>\t<since>` per line, rendered by the exported `formatQueueRow` below
-// and pinned by its unit test. `rank` is the soft-penalty-adjusted rank, not
-// raw attention. These four columns are UNCHANGED by lift advisories: when a
-// member's key was lifted from a blocked source (`liftedFrom !== null`), the
-// "why" goes to stderr as a `NOTE —` line (`formatLiftNote`), never as a fifth
-// stdout column — see the stderr contract above.
+// `office-hours-graph` read loop and `dispatch-terminal-gap-audit` both cite
+// this block): `<rank>\t<sessionType>\t<nodeId>\t<since>` per line, rendered by
+// the exported `formatQueueRow` below and pinned by its unit test. `rank` is
+// the soft-penalty-adjusted rank, not raw attention. These four columns are
+// UNCHANGED by lift advisories: when a member's key was lifted from a blocked
+// source (`liftedFrom !== null`), the "why" goes to stderr as a `NOTE —` line
+// (`formatLiftNote`), never as a fifth stdout column — see the stderr contract
+// above.
+//
+// LOAD-BEARING for a second consumer, outside this package:
+// `.claude/skills/dispatch-propagate/scripts/dispatch-terminal-gap-audit` runs
+// `npx tsx packages/intentionsutil/scripts/office-hours-select.ts --list --ref
+// <ref>` and parses each row POSITIONALLY with
+// `IFS=$'\t' read -r _rank _stype nid _since`. A column reorder shifts `$nid`
+// onto the wrong field: the audit's parked-node enumeration then misparses
+// SILENTLY — every id lookup misses and the audit reports a false-empty parked
+// population instead of failing. Renaming `--list` or `--ref` is louder but
+// still fatal: the selector exits 2 on an unknown flag and the audit exits 4.
+// `.claude/skills/dispatch-propagate/scripts/test-dispatch-terminal-gap-audit.sh`
+// ratchets both halves — it reads THIS file and asserts `formatQueueRow` still
+// returns the four columns in this order, and that `--list` and `--ref` are
+// still registered flags.
 
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -153,6 +168,15 @@ export function formatDisposition(
  * shifts `$nid` onto the wrong field, every park lookup fails, and the queue
  * reports a false `empty`. Extracted and exported so the column order is
  * pinned by a unit test rather than by comment alone.
+ *
+ * A SECOND positional parser lives outside this package:
+ * `.claude/skills/dispatch-propagate/scripts/dispatch-terminal-gap-audit` reads
+ * these rows with `IFS=$'\t' read -r _rank _stype nid _since` to enumerate the
+ * parked population, and misparses silently on a reorder — see the
+ * LOAD-BEARING note in this file's header block.
+ * `.claude/skills/dispatch-propagate/scripts/test-dispatch-terminal-gap-audit.sh`
+ * ratchets the template literal below: it extracts the returned string from
+ * this source file and fails if the four columns move.
  */
 export function formatQueueRow(m: QueueMember): string {
   return `${m.rank}\t${m.sessionType}\t${m.nodeId}\t${m.since}`;

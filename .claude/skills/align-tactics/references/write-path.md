@@ -62,8 +62,18 @@ For a single-node tactic-target session (finalize/re-plan of one
 ```bash
 BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
   --out-dir "$TMPDIR/dump" <tactic-id>)
-packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
+packages/intentionsutil/scripts/land-align-round --terminal <tactic-id> \
+  --base "$BASE" -m 'graph: finalize <tactic-id>' <tactic-id>
 ```
+
+`land-align-round` is the wrapper around `graph-commit` used for the round's
+**final** landing call — it passes `--base`, `-m`, and the positional ids
+through verbatim and, in the **same process**, records this session's terminal
+disposition via `mark-node-terminal` (`align-round` on a clean land, `park`
+when `graph-commit`'s concurrent-edit fallback parked the node). `--terminal`
+names exactly one node — this session's own target, here the `tactic-<slug>`
+being finalized — and is never inferred from the positional ids, which
+routinely include child tactics this session does not own. See Step 4 below.
 
 **Capture the manifest at the read, before any write, and never re-dump over
 an edited worktree.** The manifest's claim is "this is the content that was
@@ -195,6 +205,34 @@ author) instead of assigning ownership by proximity.
      <tactic-id> [<tactic-id> ...] [<strategy-id>]
    ```
 
+   **The round's FINAL landing call — and only that one — goes through
+   `land-align-round` instead:**
+
+   ```bash
+   packages/intentionsutil/scripts/land-align-round \
+     --terminal <target-node-id> --base "$BASE" -m '<message>' \
+     <tactic-id> [<tactic-id> ...] [<strategy-id>]
+   ```
+
+   `land-align-round` invokes `graph-commit` with `--base`, `-m`, and the
+   positional ids passed through verbatim, then writes this session's terminal
+   disposition marker in the **same process** as the land — the guarantee
+   `park-node` and `transition-node` already carry, and the one this session
+   used to lack when the marker was a separate call a turn or more later (a
+   session that died in between left the round landed on `main` with no
+   declared disposition, and the tick's terminal-without-disposition sweep
+   parked the node; confirmed 3x in production). `--terminal` names exactly
+   one node — this session's own target (the tactic-target id in tactic mode,
+   the strategy id in strategy mode) — and is never inferred from the
+   positional ids, which routinely include child tactics this session does not
+   own. `mark-node-terminal`'s own ownership gate makes the call safe
+   unconditionally; it is a no-op in an interactive run.
+
+   A **multi-call** round keeps bare `graph-commit` for every earlier call. A
+   marker written after call 1 of 3 would declare a partially landed round
+   terminal, making it reapable mid-round — converting a failure the sweep
+   currently catches into a silent one.
+
    A split's parent edit and its new sibling must never land as two
    separate `graph-commit` calls — the 2026-07-18 near-miss (`c037cec7`
    landed the parent alone; the follow-up sibling-add call lost the push
@@ -210,23 +248,43 @@ author) instead of assigning ownership by proximity.
    the `graph/**` fast path, and fast-forwards onto `main` with a bounded
    rebase-retry loop.
 
-### Discriminating the two exit-1 cases
+### Discriminating the exit-1 cases
 
-`graph-commit` has **two** distinct exit-1 cases, discriminated by the
-presence of a parking message:
+`graph-commit` has **three** distinct exit-1 cases. The parking
+*announcement* (`... parking node(s) — this writer's content is NOT landed`)
+does not separate them: it prints **before** the parking write is pushed, so
+it appears on two of the three. Only the post-push confirmation does:
 
-- **Parking message present** (`... parking node(s) — this writer's content
-  is NOT landed`) — a concurrent writer landed an overlapping edit to the
-  same node: the node landed with `office_hours` set instead of the
-  intended content, and this session's unlanded content is preserved on
-  disk.
-- **No parking message** — instead the busy-main exhaustion error ending
+- **Park landed** — the announcement, then `parked <ids> (office_hours set
+  on the origin/main content) ... pushed to main`. A concurrent writer landed
+  an overlapping edit to the same node: the node is on `main` with
+  `office_hours` set instead of the intended content, and this session's
+  unlanded content is preserved on disk.
+- **Park attempted, not landed** — the announcement, then `could not land
+  the parking write ... office_hours set locally but not pushed to main`.
+  Nothing reached `main`: the node is still unparked, at a working phase,
+  with `office_hours: null`. The local worktree holds the only copy of both
+  this writer's content and the park.
+- **No announcement at all** — instead the busy-main exhaustion error ending
   `... retry later` — nothing landed and no `office_hours` was set: `main`
   stayed busy (or the required checks never stamped green) across all
   `MAX_PUSH_ATTEMPTS`, with no semantic conflict.
 
 Either way, report it and stop — do not retry automatically within this
 session.
+
+On the round's final call, **`land-align-round` performs this discrimination
+itself** and writes the matching marker: `park` **only** on the park-landed
+case (the node really did reach a terminal disposition — an `office_hours`
+park on `main` — even though this writer's content did not land), and **no
+marker at all** on the other two (nothing landed and nothing parked on
+`main`, so there is no disposition to declare and the session stays held for
+the tick's terminal-without-disposition sweep). It keys that decision on the
+post-push confirmation, never on the announcement — a marker written for an
+unlanded park would let the job and its worktree be reaped while the only
+copy of the round's content lives there. Either exit code is propagated
+unchanged. So this session no longer decides *which* marker to write — it
+still reads the stderr, reports which case occurred, and stops.
 
 ## Parks — writing `office_hours`
 
