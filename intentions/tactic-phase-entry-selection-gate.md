@@ -26,7 +26,7 @@ attention:
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
   tier: 1
-phase: main-qa
+phase: done
 execution:
   branch: tactic-phase-entry-selection-gate
   pr: 3021
