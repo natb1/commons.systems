@@ -108,7 +108,6 @@ execution:
   completion: null
 validates: []
 blocked_by:
-  - tactic-hold-conflict-graph-commit-rebuild-snapshot-stale-revert
   - tactic-graph-commit-intentions-base-stale-restore
 office_hours: null
 pace_exempt: false
