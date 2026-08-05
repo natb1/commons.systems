@@ -1140,6 +1140,17 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         fi
       fi
       if [[ -z "$reason" ]]; then
+        # LOAD-BEARING: the leading clause "phase session ended without
+        # declaring a disposition" is dispatch-terminal-gap-audit's
+        # SYNTHESIZED_REASON_PREFIX classifier — it buckets any parked node
+        # whose reason does NOT start with this text as parked-by-design
+        # rather than landed-then-skipped. A reword of this clause silently
+        # moves real landed-then-skipped nodes into parked-by-design with no
+        # unmeasurable signal. test-dispatch-terminal-gap-audit.sh ratchets
+        # this: it extracts the audit's prefix and asserts it is still a
+        # literal substring of this file. Reword the tail after the em-dash
+        # freely; keep the leading clause in sync with the audit if you must
+        # change it.
         printf -v reason \
           'phase session ended without declaring a disposition — `claude agents --all` reports the session for this node in a terminal state and it has had no transcript activity for `%s`s, while `origin/main` still shows the node at a working phase with `office_hours: null`; the node is therefore both re-selectable and held, so the dispatch-tick terminal-without-disposition sweep parked it' \
           "$idle"

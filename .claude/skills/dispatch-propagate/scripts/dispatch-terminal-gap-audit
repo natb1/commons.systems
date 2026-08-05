@@ -165,6 +165,9 @@ done
 # clause on purpose: the rest of that string interpolates the idle seconds and
 # will keep being reworded, but this clause is the sweep's identity. Source:
 # lib-frozen-session-park.sh, terminal_without_disposition_sweep()'s `reason=`.
+# Ratcheted by test-dispatch-terminal-gap-audit.sh's doctrine-ratchet case,
+# which extracts this value and asserts it remains a literal substring of
+# lib-frozen-session-park.sh.
 SYNTHESIZED_REASON_PREFIX='phase session ended without declaring a disposition'
 
 TMP=$(mktemp -d)

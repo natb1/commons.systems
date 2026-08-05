@@ -98,9 +98,41 @@ NPX_LOG=""
 WRITE_LOG=""
 
 # The audit's synthesized-reason prefix (lib-frozen-session-park.sh's
-# terminal_without_disposition_sweep). Spelled out here so a change to either
-# side is caught.
-SYNTH='phase session ended without declaring a disposition'
+# terminal_without_disposition_sweep), EXTRACTED from the audit's own
+# `SYNTHESIZED_REASON_PREFIX=` assignment rather than retyped here — a
+# fourth hand-copied literal would drift from the other three exactly like
+# the third one did (QA finding 13, PR #3047). Bash parameter expansion
+# (not sed) strips the surrounding single quotes, since the value itself
+# contains no quote characters to fight with.
+SYNTH_LINE=$(grep -m1 '^SYNTHESIZED_REASON_PREFIX=' "$AUDIT") || SYNTH_LINE=""
+SYNTH="${SYNTH_LINE#*=\'}"
+SYNTH="${SYNTH%\'}"
+if [[ -z "$SYNTH" ]]; then
+  echo "test-dispatch-terminal-gap-audit: could not extract SYNTHESIZED_REASON_PREFIX from $AUDIT — a vacuous empty prefix would make every downstream fixture assertion meaningless" >&2
+  exit 1
+fi
+
+# --- doctrine ratchet: the audit's classifier still matches the sweep's text -
+#
+# The audit classifies by NEGATIVE match: a park reason that does not start
+# with SYNTH is bucketed parked-by-design instead of landed-then-skipped, with
+# no unmeasurable signal. A meaning-preserving reword of
+# lib-frozen-session-park.sh's `reason=` would silently move real
+# landed-then-skipped nodes into parked-by-design. This case is the guard:
+# it fails the instant the two sides disagree, rather than only when a
+# fixture happens to exercise the drifted text.
+LIB_FROZEN_SESSION_PARK="$SCRIPT_DIR/lib-frozen-session-park.sh"
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$LIB_FROZEN_SESSION_PARK" ]]; then
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: dispatch-terminal-gap-audit's SYNTHESIZED_REASON_PREFIX is a literal substring of lib-frozen-session-park.sh's synthesized reason: file missing: lib-frozen-session-park.sh"
+elif grep -qF "$SYNTH" "$LIB_FROZEN_SESSION_PARK"; then
+  PASS=$((PASS + 1))
+  echo "  PASS: dispatch-terminal-gap-audit's SYNTHESIZED_REASON_PREFIX is a literal substring of lib-frozen-session-park.sh's synthesized reason"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: dispatch-terminal-gap-audit's SYNTHESIZED_REASON_PREFIX is a literal substring of lib-frozen-session-park.sh's synthesized reason"
+fi
 
 # write_node <id> <reason-yaml-block> — a minimal but schema-shaped node file.
 write_node() {
