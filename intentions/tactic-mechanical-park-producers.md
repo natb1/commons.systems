@@ -117,7 +117,44 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main residue item 15 (queue-noise reduction) resolves to a
+    genuinely ambiguous, time-varying signal, not a clean pass or contradiction.
+    Lane-M check: git log origin/main --diff-filter=A --since <date> --
+    intentions/tactic-hold-conflict-*.md intentions/tactic-hold-fix-cap-*.md
+    against the 2026-07-26T05:07Z merge of PR #2970. Result category: mixed
+    trend, not stable. Week 1 (2026-07-26 to 2026-08-02, the item own named
+    observation window) shows a real drop for the conflict producer -- 2
+    tactic-hold-conflict-* creations vs the ~5/week exit-11-park baseline, a
+    genuine reduction. But the most recent 3 days (2026-08-03 to 2026-08-05)
+    alone produced 7 new holds (4 conflict + 3 fix-cap), a pace well above the
+    baseline if sustained. 12 tactic-hold-* nodes exist on origin/main total (6
+    conflict-kind, 6 fix-cap-kind), none yet resolved to phase:done. The
+    comparison is further confounded because the free-retry tier
+    (CONFLICT_STRIKE_CAP=5) means self-resolved conflicts produce zero graph
+    record, so the underlying raw exit-11 incidence rate this fix was meant to
+    filter is not independently observable from git history, and general
+    fleet/main-churn growth since the ~5/week baseline was recorded is an
+    uncontrolled variable no Lane-M command can isolate."
+  since: 2026-08-05
+  recommendation: "Author judgment needed, exactly the question this node own
+    Verification section anticipated: does the observed hold-creation rate count
+    as the intended materially fewer queue-noise reduction, or does the
+    days-8-10 spike (4 conflict + 3 fix-cap holds in 3 days) mean
+    CONFLICT_STRIKE_CAP=5 is tuned too tight (real conflicts blow through 5
+    retries too easily) or that main/fleet churn has grown enough since the
+    baseline that a higher raw hold rate is expected regardless of the fix
+    effectiveness? Data already gathered (all on origin/main, PR #2970 merged
+    2026-07-26T05:07Z): week 1 (07-26 to 08-02) = 2 conflict-kind + 3
+    fix-cap-kind holds; days 8-10 (08-03 to 08-05) = 4 conflict-kind + 3
+    fix-cap-kind holds; running total to date = 6 conflict-kind + 6 fix-cap-kind
+    (12 nodes, all intentions/tactic-hold-conflict-*.md and
+    tactic-hold-fix-cap-*.md files present on origin/main, none yet phase:done).
+    No further Lane-M command resolves this -- it needs a human read of whether
+    the trend is a one-off cluster or a real regression, optionally by
+    inspecting a few of the most recent hold nodes bodies to see if the
+    underlying conflicts look genuinely structural or like routine noise."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
