@@ -230,20 +230,25 @@ project_slug() {
   printf '%s' "$WORKTREES_ROOT/$1" | tr './' '--'
 }
 
-# print_remediation <node-id> — the corrected two-step the sweep's own park
-# recommendation now carries (lib-frozen-session-park.sh, Unit 2 of
-# tactic-align-tactics-mark-terminal-skipped). Reap FIRST, clear SECOND; the
-# order is mandatory, not a choice between two options.
+# print_remediation <node-id> — the corrected numbered sequence the sweep's own
+# park recommendation now carries (lib-frozen-session-park.sh, Unit 2 of
+# tactic-align-tactics-mark-terminal-skipped). Reap FIRST, clear LAST; the order
+# is mandatory, not a choice between two options. Keep the steps here and the
+# recommendation text in lib-frozen-session-park.sh saying the same thing in the
+# same order — an operator reads whichever copy reaches them first.
 print_remediation() {
   local id="$1"
   echo "      remediation (reap THEN clear — this order is mandatory):"
   echo "        1. read the session's transcript or attach the held job"
-  echo "           (\`claude agents --all\`, \`claude attach <job-id>\`) to see what it concluded"
+  echo "           (\`claude agents --all\`, \`claude attach <job-id>\`) to see what it"
+  echo "           concluded. Deciding the judgment item the session stopped on is done"
+  echo "           IN ADDITION to the reap, never instead of it."
   echo "        2. reap the terminal session: \`claude stop <job-id>\`, then let"
-  echo "           \`dispatch-sweep\` reap the worktree. If that does not clear it (e.g. an"
-  echo "           unpushed branch whose content is already landed elsewhere), verify the"
-  echo "           worktree is safe to discard BEFORE the destructive fallback, using the"
-  echo "           same reap-safety gate \`lib-session-reap.sh\` applies:"
+  echo "           \`dispatch-sweep\` reap the worktree."
+  echo "        3. only if step 2 does not clear the session (e.g. an unpushed branch"
+  echo "           whose content is already landed elsewhere), verify the worktree is"
+  echo "           safe to discard BEFORE the destructive fallback, using the same"
+  echo "           reap-safety gate \`lib-session-reap.sh\` applies:"
   echo "             a. \`git -C <worktree> status --porcelain --untracked-files=no\` prints"
   echo "                nothing (no uncommitted work), AND"
   echo "             b. \`git -C <worktree> diff --quiet origin/main HEAD -- . ':!intentions'\`"
@@ -252,16 +257,15 @@ print_remediation() {
   echo "             c. no OPEN PR still has that branch as its head."
   echo "           Judge by that content diff, never by a commits-ahead count: GitHub"
   echo "           squash-merges, so a safe branch routinely reads many commits ahead."
-  echo "           If any of those does not pass, do NOT remove the worktree — the work in"
+  echo "           If any of a-c does not pass, do NOT remove the worktree — the work in"
   echo "           it is not yet landed. Only once they all pass, fall back to"
   echo "           \`git worktree remove\` plus \`claude rm <job-id>\`"
-  echo "        3. ONLY THEN \`clear-park $id\` to return the node to the lane"
-  echo "      If \`claude agents --all\` shows no session for this node, the session is"
+  echo "        4. ONLY THEN \`clear-park $id\` to return the node to the lane"
+  echo "      Exception — if \`claude agents --all\` shows no session for this node, the session is"
   echo "      already gone, the reap step is already satisfied, and \`clear-park $id\`"
   echo "      alone is the correct and sufficient action."
   echo "      Clearing the park while the session is still present is a no-op: the same"
-  echo "      sweep re-parks the node on its next pass. Deciding the judgment item the"
-  echo "      session stopped on is done IN ADDITION to the reap, never instead of it."
+  echo "      sweep re-parks the node on its next pass."
 }
 
 # ---------------------------------------------------------------------------
