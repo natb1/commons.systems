@@ -1299,6 +1299,10 @@ assert_eq "synth: the synthesized reason names the missing disposition" "yes" \
   "$(case "$(td_park_arg 4)" in *"ended without declaring a disposition"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 assert_eq "synth: the synthesized recommendation states the mandatory reap-then-clear-park order" "yes" \
   "$(case "$(td_park_arg 5)" in *"reap it before clearing the park"*"mandatory"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation gates the destructive fallback on the reap-safety checks" "yes" \
+  "$(case "$(td_park_arg 5)" in *"status --porcelain --untracked-files=no"*"diff --quiet origin/main HEAD -- . ':!intentions'"*"do NOT remove the worktree"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation warns off a commits-ahead gate" "yes" \
+  "$(case "$(td_park_arg 5)" in *"never by a commits-ahead count"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 assert_eq "synth: the synthesized recommendation drops the retired 'Do NOT simply reap' sentence" "no" \
   "$(case "$(td_park_arg 5)" in *"Do NOT simply reap the terminal session and release the node"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 assert_eq "synth: the synthesized recommendation no longer offers clear-park as a standalone fork" "no" \

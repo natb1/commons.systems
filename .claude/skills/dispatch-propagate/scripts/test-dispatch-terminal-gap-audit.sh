@@ -331,6 +331,27 @@ assert_contains "remediation names dispatch-sweep for the worktree reap" \
 assert_contains "remediation carries the unpushed-branch fallback" \
   "git worktree remove" "$OUT"
 assert_contains "remediation fallback names claude rm" "claude rm <job-id>" "$OUT"
+# The destructive fallback is gated on a NAMED verification, not on a bare
+# parenthetical precondition.
+assert_contains "remediation demands verification before the destructive fallback" \
+  "safe to discard BEFORE the destructive fallback" "$OUT"
+assert_contains "remediation names the clean-tree check" \
+  "git -C <worktree> status --porcelain --untracked-files=no" "$OUT"
+assert_contains "remediation names the landed-content check" \
+  "git -C <worktree> diff --quiet origin/main HEAD -- . ':!intentions'" "$OUT"
+assert_contains "remediation cites the reap-safety gate's canonical home" \
+  "lib-session-reap.sh" "$OUT"
+assert_contains "remediation says not to remove the worktree when a check fails" \
+  "do NOT remove the worktree" "$OUT"
+# The gate is a CONTENT diff; a commits-ahead gate is the known-wrong answer.
+assert_contains "remediation warns off a commits-ahead gate" \
+  "never by a commits-ahead count" "$OUT"
+TOTAL=$((TOTAL + 1))
+if [[ "$OUT" != *"rev-list --count"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: remediation does not recommend a rev-list commit-count gate"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: remediation does not recommend a rev-list commit-count gate"
+fi
 assert_contains "remediation clears the park LAST, naming the node" \
   "ONLY THEN \`clear-park tactic-alpha\`" "$OUT"
 assert_contains "remediation states clearing alone is a no-op" \
