@@ -117,58 +117,7 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-main: needs-main residue item #15 on
-    tactic-mechanical-park-producers (\"Queue-noise reduction: fewer tracked
-    holds than today's exit-11 park rate\") is not browser-verifiable. Its
-    url_path is the literal string \"current\", not a real page — the expected
-    outcome is a week-over-time count of
-    tactic-hold-conflict-*/tactic-hold-fix-cap-* node creations on origin/main
-    compared to the ~5/week exit-11-park baseline named in the plan, a
-    graph/git-history query, not a page Claude-in-Chrome can observe. It also
-    cannot be judged yet on timing alone: source PR #2970 merged
-    2026-07-26T05:07:00Z, only 2 days before this check, short of the week-long
-    observation window the plan's own Verification section specifies."
-  since: 2026-07-28
-  recommendation: >-
-    Wait until at least 2026-08-02 (one week after the PR #2970 merge on
-    2026-07-26) before judging this item.
-
-
-    Then check the rate directly against origin/main:
-
-
-    ```bash
-
-    git -C <repo> log --since=2026-07-26 --diff-filter=A --name-only --oneline
-    -- 'intentions/tactic-hold-conflict-*.md'
-    'intentions/tactic-hold-fix-cap-*.md' origin/main
-
-    ```
-
-
-    Count the created hold nodes in that window. The plan's success signal
-    (Verification section, "Queue-noise outcome") is materially fewer than
-    ~5/week — ideally zero in a week where main is moving normally. Any
-    tactic-hold-conflict-* node that does appear is expected signal for a
-    genuine structural conflict (not noise); if the count is high, check whether
-    `CONFLICT_STRIKE_CAP=5` in
-    `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute` needs to
-    be tuned looser.
-
-
-    Also spot-check hygiene per the plan's other manual checks: confirm the
-    strike-counter sidecar (`.claude/worktrees/<id>.conflict-strikes`) is being
-    deleted on successful provisions rather than accumulating for reaped
-    worktrees, and confirm any hold tactic that landed carries the mandatory
-    "clearing office_hours alone does not unblock the source" sentence in its
-    body.
-
-
-    If the count and hygiene look right, this residue item is satisfied and the
-    node's main-qa phase can be advanced to done via the normal graph-transition
-    path.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
