@@ -129,8 +129,19 @@ success_signal:
     landed-then-skipped count trends to zero across re-runs after the merge
   is_proxy: false
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-align-tactics-mark-terminal-skipped
+  pr: 3047
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-08-05
+    attempt: 1
+    pushed_sha: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
