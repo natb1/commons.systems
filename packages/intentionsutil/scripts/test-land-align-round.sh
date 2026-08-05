@@ -14,7 +14,9 @@
 #
 # Covers:
 #   1. graph-commit exit 0 -> exactly one mark-node-terminal call, args
-#      `<terminal-node> align-round`, wrapper exits 0.
+#      `<terminal-node> align-round`, wrapper exits 0, and marker exit 0
+#      produces NO warning text (the benign interactive/not-my-job skips must
+#      stay silent).
 #   2. graph-commit exit 1 WITH the concurrent-edit parking message -> exactly
 #      one mark-node-terminal call with `park`, wrapper exits 1, and
 #      graph-commit's stderr is re-emitted to the caller.
@@ -24,12 +26,18 @@
 #   4. graph-commit exit 2 (any other non-zero) -> zero marker calls, exit code
 #      propagated verbatim.
 #   5. mark-node-terminal itself exits non-zero after a successful land ->
-#      wrapper STILL exits 0. This is the `|| true` guarantee: a marker write
-#      must never demote a landed round to a script failure.
+#      wrapper STILL exits 0 (the best-effort guarantee: a marker write must
+#      never demote a landed round to a script failure), AND the output
+#      contains the non-fatal warning naming the node/disposition/exit code
+#      plus the marker stub's own re-emitted stderr.
 #   6. Missing --terminal -> exit 2 with a usage error and NO graph-commit call
 #      (the target node is never inferred from the positional ids).
 #   7. --base, -m, and the positional ids reach graph-commit unchanged,
 #      including the multi-id batch form.
+#   8. graph-commit exit 1 WITH the parking message AND a failing `park`
+#      marker -> wrapper still exits 1, one `park` marker call, the warning is
+#      emitted, and BOTH graph-commit's own stderr and the marker's stderr are
+#      re-emitted without clobbering each other.
 
 set -uo pipefail
 
@@ -73,7 +81,13 @@ SH
 cat >"$SD/mark-node-terminal" <<'SH'
 #!/usr/bin/env bash
 # argv-logging mark-node-terminal stub: one line per call, `<node> <disposition>`.
+# On a non-zero MNT_RC, also emit a distinctive stderr line so the
+# 'captured marker stderr is re-emitted by land-align-round' assertion is
+# meaningful rather than trivially true.
 echo "$*" >>"$MNT_LOG"
+if [[ "${MNT_RC:-0}" -ne 0 ]]; then
+  echo "MOCK-MARK-NODE-TERMINAL-STDERR: simulated marker failure" >&2
+fi
 exit "${MNT_RC:-0}"
 SH
 chmod +x "$SD/graph-commit" "$SD/mark-node-terminal"
@@ -102,8 +116,9 @@ gc_calls() { local n; n=$(grep -c '^--- call$' "$GC_LOG" 2>/dev/null) || n=0; ec
 # ---------------------------------------------------------------------------
 out="$(run_lar 0 "" 0 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
 if [[ $rc -eq 0 ]] && [[ "$(mnt_calls)" -eq 1 ]] \
-   && [[ "$(cat "$MNT_LOG")" == "t-node align-round" ]]; then
-  ok "clean land: exactly one mark-node-terminal call with '<node> align-round', wrapper exits 0"
+   && [[ "$(cat "$MNT_LOG")" == "t-node align-round" ]] \
+   && ! grep -qF -- "warning: mark-node-terminal" <<<"$out"; then
+  ok "clean land: exactly one mark-node-terminal call with '<node> align-round', wrapper exits 0, NO warning on a clean marker exit"
 else
   no "clean land (rc=$rc calls=$(mnt_calls) log='$(cat "$MNT_LOG")')"; printf '%s\n' "$out"
 fi
@@ -145,11 +160,14 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Case 5: a failing marker write does NOT demote a landed round.
+# Case 5: a failing marker write does NOT demote a landed round, but IS warned
+# about, with the marker's own stderr re-emitted.
 # ---------------------------------------------------------------------------
 out="$(run_lar 0 "" 7 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
-if [[ $rc -eq 0 ]] && [[ "$(mnt_calls)" -eq 1 ]]; then
-  ok "marker write fails after a successful land: wrapper still exits 0 (the || true guarantee)"
+if [[ $rc -eq 0 ]] && [[ "$(mnt_calls)" -eq 1 ]] \
+   && grep -qF -- "warning: mark-node-terminal t-node align-round failed (exit 7)" <<<"$out" \
+   && grep -qF -- "MOCK-MARK-NODE-TERMINAL-STDERR" <<<"$out"; then
+  ok "marker write fails after a successful land: wrapper still exits 0 (best-effort), warning + marker stderr surfaced"
 else
   no "marker-failure tolerance (rc=$rc calls=$(mnt_calls))"; printf '%s\n' "$out"
 fi
@@ -177,6 +195,23 @@ if [[ $rc -eq 0 ]] && [[ "$actual" == "$expected" ]] \
   ok "pass-through: --base/-m/multi-id batch reach graph-commit unchanged; marker names --terminal's node, not a positional id"
 else
   no "pass-through (rc=$rc)"; printf 'argv:\n%s\n' "$actual"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 8: parking path (graph-commit exit 1 with the parking message) AND a
+# failing `park` marker -> wrapper still exits 1, one `park` marker call, the
+# warning is emitted, and BOTH graph-commit's own stderr and the marker's
+# stderr are re-emitted without clobbering each other.
+# ---------------------------------------------------------------------------
+out="$(run_lar 1 "$PARK_MSG" 3 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
+if [[ $rc -eq 1 ]] && [[ "$(mnt_calls)" -eq 1 ]] \
+   && [[ "$(cat "$MNT_LOG")" == "t-node park" ]] \
+   && grep -qF -- "parking node(s)" <<<"$out" \
+   && grep -qF -- "warning: mark-node-terminal t-node park failed (exit 3)" <<<"$out" \
+   && grep -qF -- "MOCK-MARK-NODE-TERMINAL-STDERR" <<<"$out"; then
+  ok "parking path with a failing park marker: exit 1, one 'park' call, warning + both stderr streams re-emitted intact"
+else
+  no "parking path with failing marker (rc=$rc calls=$(mnt_calls) log='$(cat "$MNT_LOG")')"; printf '%s\n' "$out"
 fi
 
 # ---------------------------------------------------------------------------

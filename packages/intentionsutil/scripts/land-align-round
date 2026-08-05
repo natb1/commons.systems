@@ -45,6 +45,15 @@
 # No ownership guard here: mark-node-terminal already refuses to write unless
 # $CLAUDE_JOB_DIR/state.json's `.name` equals the node id, and no-ops entirely
 # when CLAUDE_JOB_DIR is unset (an interactive run). Both are reused as-is.
+#
+# The marker call is best-effort — its exit code never changes this script's
+# own exit — but it is not silent: mark-node-terminal exits 0 on both of its
+# benign skip paths (CLAUDE_JOB_DIR unset/not-a-dir, or the ownership gate's
+# "not my job"), so any non-zero exit from it is a genuine failure. That case
+# is surfaced as a single non-fatal warning on stderr, with the marker's own
+# stderr appended, so the exact gap this wrapper exists to prevent — a landed
+# or parked round with no declared disposition — is diagnosable at write time
+# instead of only after the fact via dispatch-terminal-gap-audit.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -98,19 +107,33 @@ GC_ARGS+=("$@")
 # tee'd through a process substitution, so the read below can never race the
 # writer.
 ERR_FILE="$(mktemp)"
-cleanup() { rm -f "$ERR_FILE"; }
+MARK_ERR="$(mktemp)"
+cleanup() { rm -f "$ERR_FILE" "$MARK_ERR"; }
 trap cleanup EXIT
+
+# Best-effort by design: a marker write must NEVER demote a landed round to a
+# script failure. This is a deliberate, documented exception to
+# .claude/rules/code-style.md's prefer-clear-errors rule, not a pattern to
+# imitate elsewhere in this script — but "best-effort" only means the exit
+# code is never propagated, not that a failure is invisible. mark-node-terminal
+# exits 0 on both of its benign skip paths (interactive run, not-my-job), so a
+# non-zero exit here is always a genuine failure, and it is warned about on
+# stderr (with the marker's own stderr appended) rather than swallowed.
+mark_terminal_best_effort() {
+  local disposition="$1" mrc=0
+  "$SCRIPT_DIR/mark-node-terminal" "$TERMINAL_NODE" "$disposition" >/dev/null 2>"$MARK_ERR" || mrc=$?
+  if [[ $mrc -ne 0 ]]; then
+    echo "land-align-round: warning: mark-node-terminal $TERMINAL_NODE $disposition failed (exit $mrc) — the outcome already happened (the round landed or was parked) but no terminal disposition was declared; the tick's terminal-without-disposition sweep will park this node. See dispatch-terminal-gap-audit." >&2
+    cat "$MARK_ERR" >&2
+  fi
+}
 
 rc=0
 "$SCRIPT_DIR/graph-commit" "${GC_ARGS[@]}" 2>"$ERR_FILE" || rc=$?
 cat "$ERR_FILE" >&2
 
 if [[ $rc -eq 0 ]]; then
-  # Best-effort by design: a marker write must NEVER demote a landed round to a
-  # script failure. This `|| true` is a deliberate, documented exception to
-  # .claude/rules/code-style.md's prefer-clear-errors rule, not a pattern to
-  # imitate elsewhere in this script.
-  "$SCRIPT_DIR/mark-node-terminal" "$TERMINAL_NODE" align-round >/dev/null 2>&1 || true
+  mark_terminal_best_effort align-round
   exit 0
 fi
 
@@ -118,7 +141,7 @@ if [[ $rc -eq 1 ]] && grep -qF -- "parking node(s) — this writer's content is 
   # graph-commit's concurrent-edit fallback landed an office_hours park on the
   # node: a genuine terminal disposition, even though this writer's content did
   # not land. Same best-effort contract as above.
-  "$SCRIPT_DIR/mark-node-terminal" "$TERMINAL_NODE" park >/dev/null 2>&1 || true
+  mark_terminal_best_effort park
   exit 1
 fi
 
