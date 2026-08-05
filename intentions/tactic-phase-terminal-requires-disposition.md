@@ -88,7 +88,44 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Re-read at the full ~5-day/34k-line observation window (PR #3004 merged
+    2026-07-31T20:15:44Z to now 2026-08-05). 3 of 4 needs-main items now resolve
+    clean via journalctl -t dispatch-tick: (1) design-2-grace-cap-defaults — 86
+    real parks across 1218 sweeps, min idle-at-park 329s (grace=300s, zero
+    premature), park_max=2 cap hit exactly 9 times and never exceeded — defaults
+    hold against real volume (also confirms the stale-description mismatch the
+    prior pass flagged: residue text says cap default \"3\", shipped default is
+    2, doc-only, no code defect); (2) design-3-unmeasurable-keep —
+    unmeasurable=0 across all 1218 sweeps, re-confirmed over the fuller window;
+    (4) design-5-best-effort-retry-forever — 28 \"will retry next tick\" events
+    across 11 distinct nodes (more than the prior 4h sample's single instance,
+    some nodes retried up to 7x during a 2026-08-04 05:25-05:47 burst of
+    concurrent dispatch-tick contention), but every case resolved — none
+    retried-and-failed indefinitely. Item 3, design-4-daemon-unknown, is
+    genuinely WAIT rather than resolvable now: zero \"daemon unqueryable\" lines
+    occurred in the full window (grep -c against dispatch-tick journal) because
+    no real daemon outage has happened yet to exercise the noticed-vs-not
+    question — the mechanism itself is confirmed sound by code inspection (same
+    syslog PRIORITY=6 as routine lines, no elevation), it just has nothing to
+    observe yet."
+  since: 2026-08-05
+  recommendation: "No author decision needed — re-selection only, once a real
+    daemon outage occurs or enough further time has passed to make its continued
+    absence itself informative. On re-check: grep the dispatch-tick journal
+    since this park's `since` date for `lib-frozen-session-park: daemon
+    unqueryable` (also the duplicate-name-set and live-session-registry
+    unqueryable variants in the same file). If a real occurrence is found,
+    confirm from `journalctl -o json` whether it was emitted at an elevated
+    PRIORITY or stayed at routine PRIORITY=6, and whether the outage window
+    shows a gap in \"terminal-disposition sweep complete\" lines that nobody
+    flagged. Items 1 (design-2-grace-cap-defaults), 2
+    (design-3-unmeasurable-keep) and 4 (design-5-best-effort-retry-forever) are
+    resolved with direct 5-day journal evidence above and do not need further
+    review. Separately, worth a future editorial fix (not blocking): the residue
+    text above still describes the park-cap default as \"3\"; the shipped
+    default in lib-frozen-session-park.sh is 2."
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
