@@ -315,6 +315,19 @@ LOCK_WAIT_DEADLINE=0
 # intentions-only worktree), where the in-place path is used unchanged.
 ORIG_HEAD=""
 RESTORE_HEAD=0
+# MAIN_SHA — the SINGLE origin/main tip this invocation reconciles against.
+# main() fetches origin/main exactly once (right after the dirty-tree pre-flight,
+# before snapshot()) and pins the resulting sha here; every pre-land step —
+# check_base_freshness()'s --base CAS, ensure_intentions_only_base()'s far-ahead
+# rebuild and its three-way replay, and main()'s nothing-staged blob comparison —
+# reads THIS value rather than re-fetching and re-reading FETCH_HEAD. Pinning it
+# matters for correctness, not just cost: with independent fetches, the far-ahead
+# rebuild could reset onto a main tip NEWER than the one the freshness check
+# reconciled against, so an edge landed in between would be reconciled against by
+# nobody. The one deliberate exception is park_and_exit(), which re-fetches on
+# purpose — the park must land on the freshest main, not on a tip observed
+# before the conflict was diagnosed.
+MAIN_SHA=""
 # RESOLVED_VIA_MERGE — set to 1 the moment any layer-2 (structural field-level
 # merge, run_merge_node()) or later layer-3 auto-merge actually resolves a
 # concurrent-edit divergence. Read once at the final "landed" log line to append
@@ -442,7 +455,8 @@ assert_expected_content() {
   done
 }
 
-# Reconcile each --base entry against origin/main after a fetch. If an entry's
+# Reconcile each --base entry against origin/main as pinned by main()'s single
+# fetch ($MAIN_SHA — this function no longer fetches itself). If an entry's
 # blob no longer matches origin/main, a concurrent writer landed an edit to the
 # same node since this writer read it. Rather than refusing outright (the old
 # behavior — a hard die), attempt a structural three-way merge of the writer's
@@ -450,7 +464,7 @@ assert_expected_content() {
 # run_merge_node() primitive as the rebase-conflict path. There is no git
 # rebase-stage inversion here — these are plain file reads, so base/ours/theirs
 # map directly: base = the blob the writer read (BASE[$id]), ours = the writer's
-# current on-disk edit, theirs = origin/main's landed content (FETCH_HEAD:path).
+# current on-disk edit, theirs = origin/main's landed content ($MAIN_SHA:path).
 # A fully-merged node is rewritten on disk so the normal commit+land flow
 # proceeds against the fresh origin/main content. A divergence run_merge_node
 # cannot resolve is recorded (CONFLICT_FIELDS_JSON); after every entry is
@@ -464,13 +478,12 @@ assert_expected_content() {
 check_base_freshness() {
   [[ "${#BASE[@]}" -eq 0 ]] && return 0
   echo "graph-commit: checking --base freshness for ${#BASE[@]} node(s) against origin/main" >&2
-  git fetch origin main >&2
   local id sha origin_sha path STALE_BASE_UNRESOLVED=0
   for id in "${!BASE[@]}"; do
     sha="${BASE[$id]}"
     path="intentions/$id.md"
-    if git cat-file -e "FETCH_HEAD:$path" 2>/dev/null; then
-      origin_sha="$(git rev-parse "FETCH_HEAD:$path")"
+    if git cat-file -e "$MAIN_SHA:$path" 2>/dev/null; then
+      origin_sha="$(git rev-parse "$MAIN_SHA:$path")"
     else
       origin_sha="<absent>"
     fi
@@ -496,7 +509,7 @@ check_base_freshness() {
     # map directly to plain file reads (no rebase-stage inversion):
     #   base   = the blob the writer originally read (BASE[$id])
     #   ours   = the writer's current intended content (on disk, pre-snapshot)
-    #   theirs = origin/main's freshly-landed content (FETCH_HEAD:$path), or the
+    #   theirs = origin/main's freshly-landed content ($MAIN_SHA:$path), or the
     #            empty string when the node is now absent on origin/main.
     local base_f theirs_f out_f
     base_f="$SNAP_DIR/.base-merge-$id.base"
@@ -508,7 +521,7 @@ check_base_freshness() {
       theirs_f=""
     else
       theirs_f="$SNAP_DIR/.base-merge-$id.theirs"
-      git show "FETCH_HEAD:$path" >"$theirs_f"
+      git show "$MAIN_SHA:$path" >"$theirs_f"
     fi
     if run_merge_node "$id" "$base_f" "$INTENTIONS_DIR/$id.md" "$theirs_f" "$out_f"; then
       # Fully resolved: overwrite the on-disk node with the merged content so the
@@ -729,12 +742,35 @@ run_merge_node() {
 #
 # This makes graph-commit far-ahead-safe at the source: when HEAD is ahead of
 # origin/main with non-intentions changes, rebuild the intended edit on top of
-# fresh origin/main — reset the tree to origin/main, re-materialize the
-# snapshotted node content (edits) and deletions (prunes) — so the normal
+# fresh origin/main — reset the tree to $MAIN_SHA, then REPLAY the snapshotted
+# node content (edits) and deletions (prunes) onto it — so the normal
 # commit+land flow runs on an intentions/-only base. cleanup() restores the
 # original HEAD on exit. A worktree already at/behind origin/main, or ahead
 # with only intentions/ commits, needs no rebuild and is left untouched (the
 # in-place path is unchanged for the main-checkout and clean-worktree callers).
+#
+# The replay is a THREE-WAY MERGE, not a blind copy. Its base is the merge-base
+# of HEAD and $MAIN_SHA — the fork point the writer's edit was actually derived
+# from — computed BEFORE the reset moves HEAD. Per id:
+#   - the fork blob equals origin/main's blob → origin/main has not touched this
+#     node since the fork, so the snapshot is still a valid replay and is copied
+#     in verbatim (no merge invoked: the common far-ahead case stays merge-free);
+#   - they differ → another writer landed an edit to this node after the fork,
+#     so the snapshot is three-way merged against it (run_merge_node, base = the
+#     fork blob, ours = the snapshot, theirs = origin/main's blob). A resolved
+#     merge is written to BOTH the working tree and SNAP_DIR, keeping SNAP_DIR
+#     authoritative as the content this invocation intends to land. One class of
+#     edit is withheld from that merge and parked instead: a frontmatter LIST
+#     entry this invocation REMOVED that origin/main still carries — the merge's
+#     list rule is a base-free union that cannot express a deletion and would
+#     silently restore it (see the guard above frontmatter_list_entries).
+# A prune is guarded the same way: main carrying a post-fork edit to a node this
+# invocation means to delete is a prune-vs-concurrent-edit conflict, not a
+# deletion to force through. Any divergence the merge cannot resolve parks the
+# node(s) via park_and_exit() rather than silently overwriting the other
+# writer's landed edit — the fail-closed discipline layers 1-3 already follow.
+# The blind `cp` this replaced was a silent-revert hole: any landing between
+# snapshot() and the fetch was overwritten with no conflict, park, or diagnostic.
 #
 # NOTE (deployment): `git reset --hard` is a tree-updating op; when this script
 # is driven through the sandboxed Bash tool it needs dangerouslyDisableSandbox
@@ -742,122 +778,200 @@ run_merge_node() {
 # .claude/rules/sandbox.md. That is a caller concern (every graph-commit caller
 # already sets it), not resolved here. Must run AFTER snapshot() so SNAP_DIR
 # holds the writer's content before the reset overwrites the working tree.
-ensure_intentions_only_base() {
-  git fetch origin main >&2
-  local base_sha nonint
-  base_sha="$(git rev-parse FETCH_HEAD)"
-  # Same diff spec the fast-path guard uses: three-dot (changes on HEAD's side
-  # of the merge-base), name-only, then drop everything under intentions/.
-  nonint="$(git diff --name-only "$base_sha"...HEAD | grep -v '^intentions/' || true)"
-  [[ -z "$nonint" ]] && return 0
-  echo "graph-commit: worktree HEAD is ahead of origin/main with non-intentions changes — rebuilding the edit on an intentions/-only base (HEAD restored on exit)" >&2
-  # Set the HEAD-restore state BEFORE the compare-and-swap below, so a park taken
-  # from inside this function still returns the worktree to its PR tip via
-  # cleanup(). Setting RESTORE_HEAD=1 ahead of a reset that may never happen is
-  # harmless: cleanup()'s `git reset --hard "$ORIG_HEAD"` is a no-op when HEAD
-  # never moved.
-  ORIG_HEAD="$(git rev-parse HEAD)"
-  RESTORE_HEAD=1
+# blob_sha_or_empty <commit-ish> <id> — print the blob sha of intentions/<id>.md
+# at <commit-ish>, or the EMPTY STRING when the file does not exist there. Same
+# existence idiom check_base_freshness() uses (cat-file -e to test, rev-parse to
+# read), with "absent" encoded as "" so callers can compare two sides directly
+# and pass the result straight through to merge-node.ts's empty-arg convention
+# (mirrors stage_file_or_empty()).
+blob_sha_or_empty() {
+  local rev="$1" id="$2"
+  if git cat-file -e "$rev:intentions/$id.md" 2>/dev/null; then
+    git rev-parse "$rev:intentions/$id.md"
+  else
+    printf '%s'
+  fi
+}
 
-  # --- Implicit compare-and-swap on the rebuild path -------------------------
-  # The rebuild below is CONTENT-based, not diff-based: it resets the tree to
-  # fresh origin/main and copies each snapshotted node over the top. That is a
-  # whole-file overwrite with no conflict detection. If this checkout's copy of a
-  # node is STALE — origin/main moved after the worktree was provisioned, which
-  # is the normal shape of any long-running phase worker — the snapshot silently
-  # reverts whatever landed in between, with no conflict and no warning.
-  #
-  # So before touching the tree, compare each node's blob at the merge-base (the
-  # content this checkout's edit is derived FROM) against its blob on fresh
-  # origin/main. Equal → the copy is a safe fast-forward. Different → reconcile
-  # through the same run_merge_node() primitive layers 2 and 3 use, and park when
-  # it cannot resolve.
-  #
-  # Every read below hits the object database, not the working tree, so running
-  # them all BEFORE `git reset --hard` is safe — and it means a park starts from
-  # an untouched tree.
-  local mb
-  mb="$(git merge-base "$base_sha" HEAD)" \
-    || die "could not compute the merge-base of origin/main ($base_sha) and HEAD — cannot verify the rebuild path's snapshot is not stale"
+# --- List-entry removal guard (interim) ------------------------------------
+# The field-level merge primitive (mergeIntentionNodes, via run_merge_node)
+# merges every frontmatter LIST field — serves, recovers, clarifications,
+# tooling_goals, validates, blocked_by, and attributes.conditions — with a
+# BASE-FREE union (packages/intentionsutil/src/node-merge.ts:102-112, 161-166).
+# A union cannot express a deletion: "this entry is in theirs and absent from
+# ours because ours DELETED it" is indistinguishable from "it is in theirs
+# because theirs just added it", and the union keeps it either way. No
+# FieldConflict is ever produced for a list field, so the merge reports a clean
+# resolve and graph-commit exits 0 claiming the write landed — with the removal
+# silently reverted.
+#
+# That defect predates this script's far-ahead replay and is owned by
+# `tactic-node-merge-list-removal-loss`, which makes the primitive base-aware so
+# a removal is HONORED (not parked). But the replay below newly routes any node
+# whose origin/main blob moved since the fork point through that primitive,
+# where the pre-existing code path was a blind `cp` that honored the deletion.
+# Without a guard, a far-ahead writer clearing a satisfied `blocked_by` edge or
+# repointing `serves` loses the removal whenever ANY concurrent writer touches
+# the same node (an `attention` bump is enough) — silently, repeatably, and with
+# no per-field diagnostic naming what was dropped.
+#
+# So the replay refuses instead: when the snapshot drops a frontmatter list
+# entry that origin/main still carries, park (fail closed, the discipline layers
+# 1-3 already follow) rather than hand the removal to a merge that would revert
+# it. This is INTERIM. When `tactic-node-merge-list-removal-loss` lands and the
+# primitive honors removals, delete this guard and its call site — parking a
+# satisfied-blocked_by cleanup is exactly the mechanical park that node's design
+# decision rejects.
+#
+# frontmatter_list_entries <file> — print one "<top-level field><TAB><raw line>"
+# per YAML list-item line inside the file's FRONTMATTER (never the body, whose
+# markdown bullets are not node fields), sorted and deduped for `comm`. Keying
+# each entry by its owning top-level field keeps an entry MOVED between two list
+# fields (e.g. serves → validates) visible as a removal from the field it left.
+# A file with no `---` fence on line 1 yields nothing: it is not a node file, so
+# there is no list field to reason about.
+frontmatter_list_entries() {
+  awk '
+    NR == 1 { if ($0 != "---") exit; in_fm = 1; next }
+    in_fm && $0 == "---" { exit }
+    in_fm && /^[A-Za-z_][A-Za-z0-9_]*:/ { field = $0; sub(/:.*/, "", field); next }
+    in_fm && /^[[:space:]]+-[[:space:]]/ { print field "\t" $0 }
+  ' "$1" | LC_ALL=C sort -u
+}
 
-  local id snap_base origin_blob rebuild_unresolved=0
-  for id in "${IDS[@]}"; do
-    # An id the caller pinned with --base has ALREADY been verified (and, on a
-    # divergence, reconciled) by check_base_freshness(), which also refreshes
-    # SNAP_DIR so the copy below lays down the merged content. Re-deriving a base
-    # from the merge-base here would second-guess the caller's own declared read
-    # point. Load-bearing: test-transition-node.sh Case 1 depends on this skip.
-    [[ -n "${BASE[$id]:-}" ]] && continue
+# list_entries_dropped_by_ours <base-file> <ours-file> <theirs-file> — print the
+# "<field><TAB><line>" entries present at BOTH the fork point and on origin/main
+# but absent from this invocation's snapshot: exactly the set the base-free union
+# would restore. Empty output (and a caller that ignores the exit status) means
+# no removal is at risk. Deliberately conservative in the safe direction — an
+# entry EDITED in place by this writer reads as a removal plus an addition, and
+# the union would resurrect the pre-edit variant alongside the new one, so
+# parking on it is right too.
+#
+# LC_ALL=C on both the sort (above) and the comm: `comm` verifies its inputs are
+# ordered under the SAME collation it compares with, so a locale-collated sort
+# feeding a comm can trip "file N is not in sorted order" — which exits non-zero
+# and, under `set -e`, would kill graph-commit mid-rebuild. Byte order on both
+# sides is deterministic and locale-independent.
+list_entries_dropped_by_ours() {
+  local base_f="$1" ours_f="$2" theirs_f="$3"
+  LC_ALL=C comm -12 \
+    <(LC_ALL=C comm -23 <(frontmatter_list_entries "$base_f") <(frontmatter_list_entries "$ours_f")) \
+    <(frontmatter_list_entries "$theirs_f")
+}
 
-    snap_base="$(git rev-parse "$mb:intentions/$id.md" 2>/dev/null || true)"
-    origin_blob="$(git rev-parse "$base_sha:intentions/$id.md" 2>/dev/null || true)"
-    # Equal (including both empty — an id that exists in neither) means nothing
-    # landed on this node since this checkout diverged: the copy cannot revert
-    # anything.
-    [[ "$snap_base" == "$origin_blob" ]] && continue
+# replay_snapshot_onto_base <id> <fork-sha> — re-materialize one snapshotted node
+# onto the freshly-reset $MAIN_SHA tree, reconciling with anything origin/main
+# landed for that node since <fork-sha> (the merge-base of the writer's HEAD and
+# $MAIN_SHA). Returns 0 when the working-tree copy now holds this invocation's
+# intended content, 1 when the divergence was unresolvable (run_merge_node has
+# already recorded the unresolved fields in CONFLICT_FIELDS_JSON, and
+# RESOLVED_VIA_MERGE is set by it on the resolving path). All tempfiles live
+# under SNAP_DIR so cleanup() removes them.
+replay_snapshot_onto_base() {
+  local id="$1" fork_sha="$2"
+  local fork_blob main_blob
+  fork_blob="$(blob_sha_or_empty "$fork_sha" "$id")"
+  main_blob="$(blob_sha_or_empty "$MAIN_SHA" "$id")"
 
-    echo "graph-commit: rebuild path: '$id' advanced on origin/main since this checkout's merge-base — reconciling the snapshot instead of overwriting" >&2
-    # Plain-file base/ours/theirs mapping, identical to check_base_freshness()'s
-    # (no git-rebase stage inversion applies here):
-    #   base   = the node as of the merge-base (what this checkout edited FROM),
-    #            or "" when the id was created concurrently (absent at the base)
-    #   ours   = the writer's captured content (SNAP_DIR, NOT INTENTIONS_DIR —
-    #            the tree may already have been rewritten by layer 3)
-    #   theirs = origin/main's current content, or "" when the id was pruned there
-    local rb_base rb_theirs rb_out
-    rb_out="$SNAP_DIR/.rebuild-out-$id"
-    if [[ -n "$snap_base" ]]; then
-      rb_base="$SNAP_DIR/.rebuild-base-$id"
-      git cat-file -p "$snap_base" >"$rb_base" \
-        || die "could not read the merge-base blob $snap_base for '$id' — cannot verify the rebuild path's snapshot is not stale"
-    else
-      rb_base=""
-    fi
-    if [[ -n "$origin_blob" ]]; then
-      rb_theirs="$SNAP_DIR/.rebuild-theirs-$id"
-      git show "$base_sha:intentions/$id.md" >"$rb_theirs" \
-        || die "could not read origin/main's content for '$id' — cannot verify the rebuild path's snapshot is not stale"
-    else
-      rb_theirs=""
-    fi
-    if run_merge_node "$id" "$rb_base" "$SNAP_DIR/$id.md" "$rb_theirs" "$rb_out"; then
-      # Resolved: the cp loop below lays down the reconciled content instead of
-      # the stale snapshot.
-      cp -- "$rb_out" "$SNAP_DIR/$id.md"
-      continue
-    fi
-    # run_merge_node() already appended the unresolved fields to
-    # CONFLICT_FIELDS_JSON. Record the divergence but keep checking every
-    # remaining id so the eventual park names them all.
-    rebuild_unresolved=1
-  done
-
-  for id in "${PRUNE_IDS[@]}"; do
-    snap_base="$(git rev-parse "$mb:intentions/$id.md" 2>/dev/null || true)"
-    origin_blob="$(git rev-parse "$base_sha:intentions/$id.md" 2>/dev/null || true)"
-    [[ "$snap_base" == "$origin_blob" ]] && continue
-    # A prune carries no content, so there is nothing to three-way merge: a
-    # concurrent edit to an id this run wants to delete is unresolvable by
-    # construction. This is the same delete-vs-edit collision the in-place path
-    # surfaces as a rebase conflict (try_layer2_resolve()'s prune branch), so it
-    # takes the same outcome — a structured park, not a silent deletion of the
-    # other writer's landed edit.
-    echo "graph-commit: rebuild path: '$id' advanced on origin/main since this checkout's merge-base, but this run prunes it — a deletion has nothing to merge" >&2
-    append_conflicts "$(jq -cn --arg id "$id" '[{id: $id, note: "prune vs. concurrent edit landed on origin/main since this checkout diverged (rebuild path)"}]')"
-    rebuild_unresolved=1
-  done
-
-  if [[ "$rebuild_unresolved" -eq 1 ]]; then
-    park_and_exit   # never returns; always exits 1
+  # Fast path: origin/main has not touched this node since the fork point
+  # (including "absent at both"), so the snapshot is still a valid replay.
+  if [[ "$fork_blob" == "$main_blob" ]]; then
+    cp -- "$SNAP_DIR/$id.md" "$INTENTIONS_DIR/$id.md"
+    return 0
   fi
 
-  git reset --hard "$base_sha" >&2
+  # Divergent: another writer landed an edit (or a deletion) to this node after
+  # the fork point. Three-way merge rather than overwrite. An absent side is
+  # passed as the empty string, merge-node.ts's "this side did not exist".
+  local base_f="" theirs_f="" out_f="$SNAP_DIR/.replay-$id.out"
+  if [[ -n "$fork_blob" ]]; then
+    base_f="$SNAP_DIR/.replay-$id.base"
+    git cat-file -p "$fork_blob" >"$base_f"
+  fi
+  if [[ -n "$main_blob" ]]; then
+    theirs_f="$SNAP_DIR/.replay-$id.theirs"
+    git cat-file -p "$main_blob" >"$theirs_f"
+  fi
+  # Interim list-entry removal guard (see the block above frontmatter_list_entries):
+  # the merge below unions list fields base-free and would silently restore any
+  # entry this invocation removed. Only meaningful with BOTH a fork blob (there is
+  # a base to have removed something FROM) and an origin/main blob (there is a
+  # landed side still carrying it); an absent theirs is the delete/modify case
+  # merge-node.ts already refuses.
+  if [[ -n "$base_f" && -n "$theirs_f" ]]; then
+    local dropped summary
+    dropped="$(list_entries_dropped_by_ours "$base_f" "$SNAP_DIR/$id.md" "$theirs_f")"
+    if [[ -n "$dropped" ]]; then
+      # Render at most 8 dropped entries as `<field>[<entry>]`, joined with "; ",
+      # so a wholesale list rewrite cannot blow up the parked recommendation.
+      summary="$(awk -F'\t' '
+        NR <= 8 { e = $2; sub(/^[[:space:]]*-[[:space:]]*/, "", e); printf "%s%s[%s]", (NR > 1 ? "; " : ""), $1, e }
+        END { if (NR > 8) printf "; +%d more", NR - 8 }
+      ' <<<"$dropped")"
+      append_conflicts "$(jq -cn --arg id "$id" --arg summary "$summary" \
+        '[{id: $id, note: ("list-entry removal vs. concurrent edit — this write removes frontmatter list entries that origin/main still carries (" + $summary + "), and the field-level merge unions list fields base-free, so auto-merging would silently restore them")}]')"
+      return 1
+    fi
+  fi
+  if run_merge_node "$id" "$base_f" "$SNAP_DIR/$id.md" "$theirs_f" "$out_f"; then
+    cp -- "$out_f" "$INTENTIONS_DIR/$id.md"
+    # Keep SNAP_DIR authoritative — it holds exactly what this invocation
+    # intends to land, and is what park_write() would point a human at.
+    cp -- "$out_f" "$SNAP_DIR/$id.md"
+    return 0
+  fi
+  return 1
+}
+
+ensure_intentions_only_base() {
+  local nonint
+  # Same diff spec the fast-path guard uses: three-dot (changes on HEAD's side
+  # of the merge-base), name-only, then drop everything under intentions/.
+  nonint="$(git diff --name-only "$MAIN_SHA"...HEAD | grep -v '^intentions/' || true)"
+  [[ -z "$nonint" ]] && return 0
+  echo "graph-commit: worktree HEAD is ahead of origin/main with non-intentions changes — rebuilding the edit on an intentions/-only base (HEAD restored on exit)" >&2
+  # Set the HEAD-restore state BEFORE the reset below, so a park taken from
+  # inside this function — an unresolvable replay, or a --prune racing a
+  # concurrent edit — still returns the worktree to its PR tip via cleanup().
+  ORIG_HEAD="$(git rev-parse HEAD)"
+  RESTORE_HEAD=1
+  # The fork point MUST be computed before the reset — `git reset --hard` moves
+  # HEAD to $MAIN_SHA, after which merge-base HEAD $MAIN_SHA is just $MAIN_SHA
+  # and every replay would look like a no-op fast path. Clear error, no fallback
+  # (code-style.md): without a real fork point the replay has no base to
+  # three-way against, and guessing one is exactly the silent-revert hole this
+  # replaced.
+  local fork_sha
+  fork_sha="$(git merge-base HEAD "$MAIN_SHA")" \
+    || die "could not compute the merge-base of HEAD and origin/main ($MAIN_SHA) — the far-ahead rebuild has no fork point to replay this invocation's snapshot against"
+  git reset --hard "$MAIN_SHA" >&2
+  local id unresolved=0
   for id in "${IDS[@]}"; do
-    cp -- "$SNAP_DIR/$id.md" "$INTENTIONS_DIR/$id.md"
+    replay_snapshot_onto_base "$id" "$fork_sha" || unresolved=1
   done
+  local prune_fork prune_main
   for id in "${PRUNE_IDS[@]}"; do
+    prune_fork="$(blob_sha_or_empty "$fork_sha" "$id")"
+    prune_main="$(blob_sha_or_empty "$MAIN_SHA" "$id")"
+    # A deletion has nothing to three-way merge, so guard it instead: when
+    # origin/main still holds this node AND its content moved since the fork
+    # point, another writer landed an edit this prune never saw. Forcing the
+    # `rm -f` through would destroy that edit exactly as the old blind copy did.
+    # Same sentinel shape layer 2 records for a prune-vs-edit rebase conflict.
+    if [[ -n "$prune_main" && "$prune_main" != "$prune_fork" ]]; then
+      append_conflicts "$(jq -cn --arg id "$id" '[{id: $id, note: "prune vs. concurrent edit"}]')"
+      unresolved=1
+      continue
+    fi
+    # Unchanged since the fork, or already deleted on main too — safe to delete.
     rm -f -- "$INTENTIONS_DIR/$id.md"
   done
+  # Fail closed. ORIG_HEAD/RESTORE_HEAD are already set above, so cleanup() still
+  # returns the worktree to its PR tip on this park path.
+  if [[ "$unresolved" -eq 1 ]]; then
+    park_and_exit   # never returns
+  fi
 }
 
 # --- Is there anything new to commit? --------------------------------------
@@ -1619,12 +1733,12 @@ TS
 #   1. main()'s rc-12 tail — a rebase conflict layer 2 could not resolve.
 #   2. check_base_freshness() — a stale --base (layer 3) whose divergence
 #      run_merge_node() could not resolve.
-#   3. ensure_intentions_only_base() — the rebuild path's implicit
-#      compare-and-swap found a node (or a --prune id) that advanced on
-#      origin/main since this checkout's merge-base and could not reconcile it.
-#      This one parks BEFORE any tree mutation or local commit exists; the
-#      function's own `git reset --hard "$base_sha"` has not run yet, and
-#      cleanup()'s RESTORE_HEAD still returns the worktree to its PR tip.
+#   3. ensure_intentions_only_base() — the far-ahead rebuild's three-way replay
+#      found a node (or a --prune id) that advanced on origin/main since this
+#      checkout's fork point and could not reconcile it. This one parks with no
+#      local commit yet in existence; ORIG_HEAD/RESTORE_HEAD are set before the
+#      rebuild's own `git reset --hard "$MAIN_SHA"`, so cleanup() still returns
+#      the worktree to its PR tip.
 #
 # Bystander prunes: a --prune id that is NOT itself part of the conflicted set
 # (per conflicted_ids()) is independent of whatever id(s) failed to resolve, so
@@ -1980,7 +2094,19 @@ main() {
   # check_base_freshness (whose layer-3 auto-merge rewrites node files on disk)
   # and before ensure_intentions_only_base (which can `git reset --hard` the
   # tree). Running it any later would hash content graph-commit itself wrote.
+  # It reads only the caller's on-disk content, so it is independent of
+  # $MAIN_SHA and runs ahead of the fetch below.
   assert_expected_content
+
+  # Fetch origin/main ONCE and pin its tip. Every pre-land step below reconciles
+  # against this exact sha (see the MAIN_SHA global): the --base freshness check,
+  # the far-ahead rebuild and its three-way replay, and the nothing-staged blob
+  # comparison. Independent fetches would let those steps disagree about which
+  # main they are reconciling against, leaving a concurrent landing in between
+  # checked by none of them. park_and_exit() deliberately re-fetches — the park
+  # must land on the freshest main, not on this pre-diagnosis observation.
+  git fetch origin main >&2
+  MAIN_SHA="$(git rev-parse FETCH_HEAD)"
 
   # Capture the writer's intended on-disk content BEFORE check_base_freshness.
   # Layer 3's stale-base park (park_and_exit, reached from inside
@@ -2032,13 +2158,13 @@ main() {
     #     checkout was targeted (a bad -C, or cwd pointing at another repo).
     #     Emitting the "landed" success here would repeat the incident bug — a
     #     false success for a tree that was never going to change origin/main.
-    # Compare per id against origin/main using the FETCH_HEAD already populated
-    # by ensure_intentions_only_base()'s fetch above (do NOT fetch again). Both
-    # blobs absent/empty (id absent both places) is benign (equal empty strings).
+    # Compare per id against origin/main as pinned by main()'s single fetch
+    # ($MAIN_SHA, taken above — do NOT fetch again). Both blobs absent/empty (id
+    # absent both places) is benign (equal empty strings).
     local id local_blob main_blob
     for id in "${ALL_IDS[@]}"; do
       local_blob="$(git rev-parse "HEAD:intentions/$id.md" 2>/dev/null || true)"
-      main_blob="$(git rev-parse "FETCH_HEAD:intentions/$id.md" 2>/dev/null || true)"
+      main_blob="$(git rev-parse "$MAIN_SHA:intentions/$id.md" 2>/dev/null || true)"
       if [[ "$local_blob" != "$main_blob" ]]; then
         die "the resolved repo ($REPO_ROOT) holds intentions/$id.md content differing from origin/main but has nothing staged to commit. Under graph-commit's caller-derived repo resolution this can only mean a mis-pointed -C/--repo (or cwd targeting the wrong checkout) — refusing to emit a false 'landed' for a tree that was never going to change origin/main (HEAD blob=${local_blob:-<absent>}, origin/main blob=${main_blob:-<absent>})"
       fi

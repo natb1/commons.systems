@@ -314,14 +314,113 @@ cat >"$WORK/bin/npx" <<'SH'
 #       never is).
 #   (c) graph-commit's merge-node.ts 3-way text merge (flag-based argv:
 #       --base/--ours/--theirs/--out, no store-module positional arg at all —
-#       does not fit (a)/(b)'s shape). No real merge tool exists in this
-#       no-node harness, so this always reports failure, which is what makes
-#       graph-commit's layers 1-3 fall through to the layer-3 conflict-park
-#       path — exactly the refusal behavior this file's case 2 verifies.
+#       does not fit (a)/(b)'s shape). This does NOT reimplement the real
+#       three-way YAML field merge (that primitive, mergeIntentionNodes, is
+#       Unit 1's job and its correctness is covered by
+#       packages/intentionsutil/test/node-merge.test.ts — the source of
+#       truth); it only proves graph-commit invokes merge-node.ts at the right
+#       point and branches correctly on its resolved/unresolved verdict, via a
+#       SIMPLIFIED three-way merge over bare `key: value` lines (ported from
+#       test-graph-commit.sh's identical shim — works against this file's
+#       flat line1..line12 fixtures the same way). For each key appearing in
+#       ours and/or theirs: if both sides agree (or only one side touched
+#       it), that value wins (a disjoint addition on either side never
+#       conflicts — this is exactly why case 1's far-ahead rebuild, which adds
+#       office_hours on one side and a disjoint body edit on the other, now
+#       resolves cleanly instead of parking); if both sides changed it away
+#       from base to DIFFERENT values (or there is no base to compare against
+#       and the two sides disagree), it is an unresolved conflict — the
+#       layer-3 conflict-park path case 2 verifies, which now forces the
+#       concurrent write to collide on the SAME field (office_hours) park-node
+#       itself writes, since a disjoint field addition would resolve cleanly
+#       under this real merge instead of parking.
 [[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
 if [[ "$2" == *merge-node.ts ]]; then
-  echo "npx shim: no real 3-way merge tool available (test harness stub)" >&2
-  exit 1
+  shift 2
+  m_base=""; m_ours=""; m_theirs=""; m_out=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --base) m_base="$2"; shift 2 ;;
+      --ours) m_ours="$2"; shift 2 ;;
+      --theirs) m_theirs="$2"; shift 2 ;;
+      --out) m_out="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  # theirs genuinely absent (the id no longer exists on the landed side):
+  # ours is the only content, so ours wins outright (mirrors merge-node.ts's
+  # real documented behavior for an empty --theirs).
+  if [[ -z "$m_theirs" ]]; then
+    [[ -n "$m_out" && -n "$m_ours" ]] && cp -- "$m_ours" "$m_out"
+    printf '{"resolved":true,"conflicts":[]}\n'
+    exit 0
+  fi
+
+  declare -A M_BASE_V=() M_OURS_V=() M_THEIRS_V=()
+  declare -a M_ALL_KEYS=()
+  if [[ -n "$m_base" && -f "$m_base" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" == *:* ]] || continue
+      k="${line%%:*}"; v="${line#*: }"
+      [[ -n "${M_BASE_V[$k]+x}" ]] || M_BASE_V["$k"]="$v"
+    done <"$m_base"
+  fi
+  if [[ -n "$m_ours" && -f "$m_ours" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" == *:* ]] || continue
+      k="${line%%:*}"; v="${line#*: }"
+      if [[ -z "${M_OURS_V[$k]+x}" ]]; then M_OURS_V["$k"]="$v"; M_ALL_KEYS+=("$k"); fi
+    done <"$m_ours"
+  fi
+  if [[ -n "$m_theirs" && -f "$m_theirs" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" == *:* ]] || continue
+      k="${line%%:*}"; v="${line#*: }"
+      [[ -n "${M_THEIRS_V[$k]+x}" ]] || M_THEIRS_V["$k"]="$v"
+      m_seen=0
+      for m_existing in "${M_ALL_KEYS[@]:-}"; do [[ "$m_existing" == "$k" ]] && { m_seen=1; break; }; done
+      [[ $m_seen -eq 1 ]] || M_ALL_KEYS+=("$k")
+    done <"$m_theirs"
+  fi
+
+  m_conflicts_json="[]"
+  m_resolved=true
+  m_merged_lines=()
+  for k in "${M_ALL_KEYS[@]}"; do
+    have_b=0; [[ -n "${M_BASE_V[$k]+x}" ]] && have_b=1
+    have_o=0; [[ -n "${M_OURS_V[$k]+x}" ]] && have_o=1
+    have_t=0; [[ -n "${M_THEIRS_V[$k]+x}" ]] && have_t=1
+    bv="${M_BASE_V[$k]-}"; ov="${M_OURS_V[$k]-}"; tv="${M_THEIRS_V[$k]-}"
+    final=""
+    if [[ $have_o -eq 1 && $have_t -eq 1 && "$ov" == "$tv" ]]; then
+      final="$ov"
+    elif [[ $have_b -eq 1 && $have_o -eq 1 && "$ov" == "$bv" && $have_t -eq 1 ]]; then
+      final="$tv"
+    elif [[ $have_b -eq 1 && $have_t -eq 1 && "$tv" == "$bv" && $have_o -eq 1 ]]; then
+      final="$ov"
+    elif [[ $have_o -eq 1 && $have_t -eq 0 ]]; then
+      final="$ov"
+    elif [[ $have_t -eq 1 && $have_o -eq 0 ]]; then
+      final="$tv"
+    else
+      m_resolved=false
+      m_conflicts_json="$(jq -c --arg field "$k" --arg ours "$ov" --arg theirs "$tv" \
+        '. + [{field:$field, ours:$ours, theirs:$theirs}]' <<<"$m_conflicts_json")"
+      continue
+    fi
+    m_merged_lines+=("$k: $final")
+  done
+
+  if [[ "$m_resolved" == true ]]; then
+    if [[ -n "$m_out" ]]; then
+      printf '%s\n' "${m_merged_lines[@]}" >"$m_out"
+    fi
+    printf '{"resolved":true,"conflicts":[]}\n'
+  else
+    printf '{"resolved":false,"conflicts":%s}\n' "$m_conflicts_json"
+  fi
+  exit 0
 fi
 helper="$2"
 # (d) resolve-park's two helpers — state-read (dir, id) and clear-write
@@ -494,12 +593,20 @@ fi
 # concurrent change on origin/main for the node, then delegates to the real
 # graph-commit (graph-commit.real). The real graph-commit's check_base_freshness
 # then re-fetches, sees origin's blob no longer matches the FRESH_BLOB token
-# park-node resolved; its layers-1-3 auto-merge fails to mechanically resolve
-# the raw content collision, so it falls through to its documented
-# park_and_exit() fallback — office_hours is set on the node (reason containing
-# "mechanical-unresolved") and that parking write is pushed to origin/main.
-# park-node still exits non-zero, since its OWN writer's edit is what didn't
-# land.
+# park-node resolved, and attempts the layers-1-3 mechanical auto-merge against
+# it. The npx merge-node.ts shim now performs a real (if simplified) key:value
+# three-way merge (see the shim's own comment above), so a concurrent write
+# touching a field DISJOINT from park-node's own edit would resolve cleanly
+# instead of parking — that clean-resolve case is exactly what case 1 proves.
+# To keep this case a genuine unresolvable conflict, the concurrent writer
+# below sets `office_hours` itself — the SAME field park-node's own edit
+# writes — to a different value than park-node's, with neither side's value
+# equal to base (which has no office_hours at all): a real same-field
+# divergence, not a disjoint addition. The auto-merge reports it unresolved,
+# so graph-commit falls through to its documented park_and_exit() fallback —
+# office_hours is set on the node (reason containing "mechanical-unresolved")
+# and that parking write is pushed to origin/main. park-node still exits
+# non-zero, since its OWN writer's edit is what didn't land.
 C="$WORK/c"
 make_clone "$C" writer-c
 # Install the wrapper in park-node's SCRIPT_DIR (the same dir park-node lives in
@@ -513,11 +620,14 @@ SD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ ! -f "$SD/.concurrent-landed" ]]; then
   # Land a concurrent change to the SAME node on origin/main, simulating another
   # writer committing after park-node resolved FRESH_BLOB but before this check.
+  # This must collide with park-node's own edit on the SAME field (office_hours)
+  # — a disjoint new field would now resolve cleanly under the real merge-node.ts
+  # shim (see case 1) instead of parking, which would defeat this case's purpose.
   D="$(mktemp -d)"
   git clone -q "$GC_ORIGIN" "$D"
   git -C "$D" config user.email other@test
   git -C "$D" config user.name other
-  printf 'line14: concurrent edit\n' >>"$D/intentions/$GC_NODE.md"
+  printf 'office_hours: {reason: "competing office_hours from another writer", since: 2026-01-01}\n' >>"$D/intentions/$GC_NODE.md"
   git -C "$D" commit -qam 'concurrent edit (bypassing park-node)'
   git -C "$D" push -q origin main
   rm -rf "$D"
@@ -552,7 +662,7 @@ content="$(origin_show t-concurrent)"
 # expected in the post-state (it is graph-commit's park, not this writer's).
 if [[ $rc -ne 0 ]] \
    && grep -q 'concurrent-edit conflict' <<<"$out" \
-   && grep -q 'line14: concurrent edit' <<<"$content" \
+   && grep -q 'competing office_hours from another writer' <<<"$content" \
    && grep -q 'office_hours' <<<"$content" \
    && grep -q 'mechanical-unresolved' <<<"$content"; then
   ok "concurrent origin/main advance triggers auto-park: park-node/graph-commit exit non-zero, concurrent content survives, node is auto-parked via office_hours"

@@ -26,7 +26,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-invalid-state-lane
   pr: 3048
@@ -34,9 +34,13 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-05T16:52:33Z
+    mergeCommitSha: 62ac5bb140307707b95ac5bfc96f3f74a7a42b1f
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

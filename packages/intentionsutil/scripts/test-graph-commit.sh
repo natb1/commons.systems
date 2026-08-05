@@ -183,25 +183,31 @@
 #      a bystander prune, so the partition would leave park_ids empty — the
 #      conservative fallback parks every id instead and re-applies no prune,
 #      rather than announcing a park while writing office_hours on no node
-#  48. rebuild path CAS, non-overlapping: a far-ahead PR-branch clone holding a
-#      STALE copy of a node (origin/main advanced that node after the clone
-#      diverged) edits a different field — the rebuild reconciles instead of
-#      overwriting, so the concurrently-landed edit is NOT reverted (exit 0,
-#      both edits on main). Pre-fix the snapshot cp silently reverted it.
-#  49. rebuild path CAS, overlapping: the same setup with both sides editing
-#      the SAME field parks (exit 1) — the landed content survives on main,
-#      office_hours is set, and the far-ahead writer's content is preserved in
-#      the kept snapshot dir
-#  50. rebuild path CAS, fresh node: a far-ahead clone whose node copy matches
-#      origin/main at the merge-base takes the unchanged fast path — exit 0,
-#      the edit lands, no reconciliation or park message, HEAD restored
-#  51. rebuild path CAS, --prune vs. a concurrent edit: a far-ahead --prune of
-#      a node that advanced on origin/main is unresolvable by construction
-#      (a deletion has no content to merge) — parks, node still on main
-#  52. rebuild path + --base: a far-ahead caller that DID pass --base keeps the
-#      layer-3 reconciliation check_base_freshness() performed — the snapshot
-#      is refreshed alongside the on-disk node, so the rebuild re-materializes
-#      the merged content rather than the pre-merge copy (exit 0, both edits)
+#  48. far-ahead + stale --base: the layer-3 merge survives the rebuild — a
+#      writer whose worktree is BOTH far-ahead (a non-intentions code commit
+#      on HEAD) AND carrying a stale --base that a concurrent writer has
+#      since landed a disjoint-field edit against; the layer-3 merge's result
+#      must not be reverted by the far-ahead rebuild's snapshot-restore, so
+#      both writers' fields land, the code commit is excluded, and HEAD is
+#      restored to the far-ahead tip
+#  49. far-ahead, NO --base, disjoint field: a concurrent writer lands an edit
+#      to a DIFFERENT field of the same node between this writer's snapshot and
+#      the far-ahead rebuild — the rebuild's three-way replay merges instead of
+#      blindly copying, so both edits land (pre-fix the concurrent edit was
+#      silently reverted with no conflict, park, or diagnostic)
+#  50. far-ahead, NO --base, SAME field: the rebuild's replay cannot resolve the
+#      divergence, so it parks (exit 1, "mechanical-unresolved", both values
+#      named) instead of overwriting — and the far-ahead worktree's HEAD is
+#      still restored to its PR tip on this new park path
+#  51. far-ahead --prune racing a concurrent edit to the same node: the prune is
+#      guarded rather than forced through — exit 1, park, and the node SURVIVES
+#      on main carrying the concurrent edit
+#  52. far-ahead, NO --base, LIST-ENTRY REMOVAL racing a concurrent edit: this
+#      writer clears one `blocked_by` entry while another writer lands an
+#      unrelated field edit to the same node. The replay's merge unions list
+#      fields base-free and would silently restore the removed entry, so the
+#      guard refuses instead — exit 1, park naming the dropped entry, the entry
+#      still present on main, and HEAD restored to the PR tip
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -260,12 +266,12 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
           t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
+          t-farahead-prune-race \
           t-expect-happy t-expect-wrong-repo t-expect-prune \
           t-preexist-conflict t-preexist-rebase t-strand-other t-strand-main \
           t-dup-rows t-partial-dup t-stale-fail t-forged-green \
           t-bystander-prune t-bystander-conflict t-prune-base-stale \
-          t-base-bystander-prune t-manifest-foreign t-manifest-prune \
-          t-rebuild-fresh t-rebuild-prune; do
+          t-base-bystander-prune t-manifest-foreign t-manifest-prune; do
   seed_node "$id"
 done
 
@@ -296,11 +302,11 @@ seed_field_node t-field-merge "fieldA: base" "fieldB: base"
 seed_field_node t-field-conflict "sentinel: base"
 seed_field_node t-field-base-ok "fieldA: base" "fieldB: base"
 seed_field_node t-field-base-bad "sentinel: base"
+seed_field_node t-farahead-base "fieldA: base" "fieldB: base"
+seed_field_node t-farahead-race "fieldA: base" "fieldB: base"
+seed_field_node t-farahead-race-conflict "sentinel: base"
+seed_field_node t-farahead-list-removal "fieldB: base" "blocked_by:" "  - t-satisfied-blocker" "  - t-other-blocker"
 seed_field_node t-base-bystander-conflict "sentinel: base"
-# Rebuild-path compare-and-swap fixtures (cases 48-52).
-seed_field_node t-rebuild-stale-ok "fieldA: base" "fieldB: base"
-seed_field_node t-rebuild-stale-bad "sentinel: base"
-seed_field_node t-rebuild-base "fieldA: base" "fieldB: base"
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -1818,163 +1824,199 @@ else
   no "foreign manifest entry (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"; printf 'subject: %s\n' "$subject"
 fi
 
-# ---------------------------------------------------------------------------
-# Cases 48-52: the rebuild path's implicit compare-and-swap.
-#
-# ensure_intentions_only_base() reacts to a far-ahead PR-branch worktree by
-# resetting the tree to fresh origin/main and copying each snapshotted node over
-# the top — a CONTENT-based overwrite with no conflict detection. When the
-# worktree's copy of a node is STALE (origin/main advanced that node after the
-# worktree was provisioned — the normal shape of a long-running phase worker),
-# that copy silently reverts whatever landed in between. These cases pin the
-# compare-and-swap that turns the silent revert into a reconciliation (48, 52),
-# a park (49, 51), or an untouched fast path (50).
-#
-# far_ahead_clone <dst> <identity> <tag> — a clone carrying a non-intentions
-# code commit on top of whatever origin/main was when it was cloned, i.e. the
-# shape case 16 builds by hand.
-# ---------------------------------------------------------------------------
-far_ahead_clone() { # <dst> <identity> <tag>
-  make_clone "$1" "$2"
-  mkdir -p "$1/src"
-  echo "console.log('pr feature code $3')" >"$1/src/feature-$3.js"
-  git -C "$1" add "src/feature-$3.js"
-  git -C "$1" commit -qm "pr: non-intentions code change ($3)"
-}
-
-# --- Case 48: rebuild path CAS, non-overlapping stale node — reconciles ---------
-# W48 is cloned (and goes far-ahead) BEFORE the concurrent writer lands, so its
-# copy of t-rebuild-stale-ok is stale by the time it commits. It edits fieldB;
-# the concurrent writer landed fieldA. Pre-fix the reset+cp would have laid W48's
-# stale whole file over origin/main, reverting fieldA with exit 0 and no warning.
+# --- Case 48: far-ahead + stale --base: the layer-3 merge survives the rebuild ---
+# Unit 1 regression guard. Wfab is BOTH far-ahead (a non-intentions code
+# commit on HEAD, like case 16) AND carrying a stale --base whose field-level
+# delta is disjoint from a concurrent writer's landed edit (like case 21).
+# Before Unit 1's fix, ensure_intentions_only_base()'s far-ahead rebuild would
+# copy the PRE-merge SNAP_DIR content back over the layer-3 merge result,
+# silently reverting the concurrent writer's landed fieldB edit even though
+# the log line still claimed "layer 2/3 auto-resolved". The fix keeps
+# SNAP_DIR authoritative once the merge resolves, so the rebuild replays the
+# merged content instead.
 set_mode green
-W48="$WORK/w48"
-far_ahead_clone "$W48" writer-48 48
-far_tip48="$(git -C "$W48" rev-parse HEAD)"
+Wfab="$WORK/wfab"
+make_clone "$Wfab" writer-fab
+fab_sha="$(git -C "$Wfab" hash-object intentions/t-farahead-base.md)"
 
-OTHER48="$WORK/other48"; make_clone "$OTHER48" other48
-edit_field "$OTHER48" t-rebuild-stale-ok fieldA concurrent-landed
-git -C "$OTHER48" commit -qam 'concurrent edit lands while w48 is far-ahead and stale'
-git -C "$OTHER48" push -q origin main
+mkdir -p "$Wfab/src"
+echo "console.log('pr feature code, far-ahead + stale base')" >"$Wfab/src/farahead-base-feature.js"
+git -C "$Wfab" add src/farahead-base-feature.js
+git -C "$Wfab" commit -qm 'pr: non-intentions code change (far-ahead + stale base)'
+fab_tip="$(git -C "$Wfab" rev-parse HEAD)"
 
-edit_field "$W48" t-rebuild-stale-ok fieldB farahead-edit
-out="$(run_gc "$W48" -m 'test: rebuild stale reconcile' t-rebuild-stale-ok 2>&1)"; rc=$?
-content="$(origin_show t-rebuild-stale-ok 2>/dev/null)"
-restored48="$(git -C "$W48" rev-parse HEAD)"
-if [[ $rc -eq 0 ]] \
-   && grep -q 'fieldA: concurrent-landed' <<<"$content" \
-   && grep -q 'fieldB: farahead-edit' <<<"$content" \
-   && [[ "$restored48" == "$far_tip48" ]]; then
-  ok "rebuild CAS: a stale far-ahead snapshot is reconciled, the concurrently-landed edit is NOT reverted"
-else
-  no "rebuild CAS non-overlapping (rc=$rc restored=$restored48 far_tip=$far_tip48)"; printf '%s\n' "$out"; printf '%s\n' "$content"
-fi
+edit_field "$Wfab" t-farahead-base fieldA farahead-edit
 
-# --- Case 49: rebuild path CAS, overlapping stale node — parks ------------------
-set_mode green
-W49="$WORK/w49"
-far_ahead_clone "$W49" writer-49 49
+OTHERFAB="$WORK/otherfab"
+make_clone "$OTHERFAB" otherfab
+edit_field "$OTHERFAB" t-farahead-base fieldB concurrent-edit
+git -C "$OTHERFAB" commit -qam 'concurrent field edit (far-ahead + stale base)'
+git -C "$OTHERFAB" push -q origin main
 
-OTHER49="$WORK/other49"; make_clone "$OTHER49" other49
-edit_field "$OTHER49" t-rebuild-stale-bad sentinel concurrent-landed
-git -C "$OTHER49" commit -qam 'concurrent same-field edit lands while w49 is far-ahead'
-git -C "$OTHER49" push -q origin main
-
-edit_field "$W49" t-rebuild-stale-bad sentinel farahead-value
-out="$(run_gc "$W49" -m 'test: rebuild stale conflict' t-rebuild-stale-bad 2>&1)"; rc=$?
-content="$(origin_show t-rebuild-stale-bad 2>/dev/null)"
-snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
-[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
-if [[ $rc -ne 0 ]] \
-   && grep -q 'sentinel: concurrent-landed' <<<"$content" \
-   && ! grep -q '^sentinel: farahead-value' <<<"$content" \
-   && grep -q 'office_hours' <<<"$content" \
-   && grep -q 'mechanical-unresolved' <<<"$content" \
-   && [[ -n "$snap" && -f "$snap/t-rebuild-stale-bad.md" ]] \
-   && grep -q 'sentinel: farahead-value' "$snap/t-rebuild-stale-bad.md"; then
-  ok "rebuild CAS: an unresolvable stale far-ahead divergence parks, landed content survives, writer's content kept in the snapshot"
-else
-  no "rebuild CAS overlapping (rc=$rc snap='$snap')"; printf '%s\n' "$out"; printf '%s\n' "$content"
-fi
-
-# --- Case 50: rebuild path CAS, fresh node — unchanged fast path ----------------
-# The far-ahead clone's copy of the node matches origin/main at the merge-base,
-# so no reconciliation is attempted at all and the pre-existing behavior (case
-# 16) is untouched.
-set_mode green
-W50="$WORK/w50"
-far_ahead_clone "$W50" writer-50 50
-far_tip50="$(git -C "$W50" rev-parse HEAD)"
-edit_line "$W50" t-rebuild-fresh 1 fresh-farahead-edit
-out="$(run_gc "$W50" -m 'test: rebuild fresh' t-rebuild-fresh 2>&1)"; rc=$?
-content="$(origin_show t-rebuild-fresh 2>/dev/null)"
-restored50="$(git -C "$W50" rev-parse HEAD)"
-main_tree50="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
-if [[ $rc -eq 0 ]] \
-   && grep -q 'line1: fresh-farahead-edit' <<<"$content" \
-   && ! grep -q 'reconciling the snapshot' <<<"$out" \
-   && ! grep -q 'graph-commit: concurrent-edit conflict on' <<<"$out" \
-   && ! grep -q 'auto-resolved' <<<"$out" \
-   && ! grep -q 'src/feature-50.js' <<<"$main_tree50" \
-   && [[ "$restored50" == "$far_tip50" ]]; then
-  ok "rebuild CAS: a fresh far-ahead snapshot takes the unchanged path (no merge, no park), edit lands, HEAD restored"
-else
-  no "rebuild CAS fresh node (rc=$rc restored=$restored50 far_tip=$far_tip50)"; printf '%s\n' "$out"; printf '%s\n' "$content"
-fi
-
-# --- Case 51: rebuild path CAS, --prune vs. a concurrent edit — parks -----------
-# A deletion has no content to three-way merge, so a node that advanced on
-# origin/main since the far-ahead checkout diverged cannot be reconciled: the
-# prune must park rather than silently delete the other writer's landed edit.
-set_mode green
-W51="$WORK/w51"
-far_ahead_clone "$W51" writer-51 51
-
-OTHER51="$WORK/other51"; make_clone "$OTHER51" other51
-edit_line "$OTHER51" t-rebuild-prune 1 concurrent-landed
-git -C "$OTHER51" commit -qam 'concurrent edit lands while w51 is far-ahead'
-git -C "$OTHER51" push -q origin main
-
-rm -f "$W51/intentions/t-rebuild-prune.md"
-out="$(run_gc "$W51" -m 'test: rebuild stale prune' --prune t-rebuild-prune 2>&1)"; rc=$?
-still_present=0
-git -C "$ORIGIN" cat-file -e main:intentions/t-rebuild-prune.md 2>/dev/null && still_present=1
-content="$(origin_show t-rebuild-prune 2>/dev/null || true)"
-snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
-[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
-if [[ $rc -ne 0 ]] \
-   && [[ "$still_present" -eq 1 ]] \
-   && grep -q 'line1: concurrent-landed' <<<"$content" \
-   && grep -q 'office_hours' <<<"$content"; then
-  ok "rebuild CAS: a far-ahead --prune of a concurrently-edited node parks, the node survives on main"
-else
-  no "rebuild CAS far-ahead prune (rc=$rc still_present=$still_present)"; printf '%s\n' "$out"; printf '%s\n' "$content"
-fi
-
-# --- Case 52: rebuild path + --base keeps the layer-3 reconciliation ------------
-# check_base_freshness() merges a stale --base into the on-disk node; the rebuild
-# path then re-materializes every node from SNAP_DIR. If the snapshot were not
-# refreshed alongside the on-disk write, the pre-merge copy would land and the
-# concurrently-landed field would be reverted with exit 0.
-set_mode green
-W52="$WORK/w52"
-far_ahead_clone "$W52" writer-52 52
-base52_sha="$(git -C "$W52" hash-object intentions/t-rebuild-base.md)"
-
-OTHER52="$WORK/other52"; make_clone "$OTHER52" other52
-edit_field "$OTHER52" t-rebuild-base fieldB concurrent-landed
-git -C "$OTHER52" commit -qam 'concurrent edit lands while w52 is far-ahead'
-git -C "$OTHER52" push -q origin main
-
-edit_field "$W52" t-rebuild-base fieldA farahead-edit
-out="$(run_gc "$W52" -m 'test: rebuild + base' --base "t-rebuild-base=$base52_sha" t-rebuild-base 2>&1)"; rc=$?
-content="$(origin_show t-rebuild-base 2>/dev/null)"
+out="$(run_gc "$Wfab" -m 'test: far-ahead stale base' --base "t-farahead-base=$fab_sha" t-farahead-base 2>&1)"; rc=$?
+content="$(origin_show t-farahead-base 2>/dev/null)"
+main_tree3="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+restored3="$(git -C "$Wfab" rev-parse HEAD)"
 if [[ $rc -eq 0 ]] \
    && grep -q 'fieldA: farahead-edit' <<<"$content" \
-   && grep -q 'fieldB: concurrent-landed' <<<"$content"; then
-  ok "rebuild + --base: the layer-3 reconciliation survives the rebuild's re-materialization (snapshot kept in sync)"
+   && grep -q 'fieldB: concurrent-edit' <<<"$content" \
+   && ! grep -q 'src/farahead-base-feature.js' <<<"$main_tree3" \
+   && [[ "$restored3" == "$fab_tip" ]]; then
+  ok "far-ahead + stale --base: layer-3 merge survives the far-ahead rebuild, both fields land"
 else
-  no "rebuild + --base reconciliation (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+  no "far-ahead + stale --base (rc=$rc restored3=$restored3 fab_tip=$fab_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# ---------------------------------------------------------------------------
+# Cases 49-51: the far-ahead rebuild's three-way replay (Unit 2).
+#
+# Cases 16/18/48 all exercise the far-ahead rebuild where either nothing landed
+# concurrently or a --base CAS caught the divergence first. These three cover
+# the hole that opened when NEITHER applies: a writer with NO --base whose
+# worktree is far-ahead, racing a concurrent landing to the same node. Pre-Unit-2
+# the rebuild blindly `cp`'d the snapshot back over the freshly-reset tree, so
+# the concurrent edit was reverted with no conflict, no park, and no diagnostic.
+#
+# NOT covered here: a concurrent PRUNE racing this writer's edit (the node exists
+# at the fork point but is absent on origin/main). The real merge-node.ts treats
+# an empty --theirs with a non-null base as a delete/modify conflict (see
+# merge-node.ts's own comment), but this harness's npx shim resolves an empty
+# --theirs in favor of ours — a test here would assert shim behavior, not
+# product behavior. It is covered by the real merge primitive's own unit tests.
+
+# --- Case 49: far-ahead, no --base, disjoint field — both edits land ---------
+set_mode green
+W49="$WORK/w49"
+make_clone "$W49" writer-49
+mkdir -p "$W49/src"
+echo "console.log('pr feature code, far-ahead race')" >"$W49/src/farahead-race-feature.js"
+git -C "$W49" add src/farahead-race-feature.js
+git -C "$W49" commit -qm 'pr: non-intentions code change (far-ahead race)'
+race_tip="$(git -C "$W49" rev-parse HEAD)"
+edit_field "$W49" t-farahead-race fieldA writer-edit
+
+OTHERRACE="$WORK/otherrace"
+make_clone "$OTHERRACE" otherrace
+edit_field "$OTHERRACE" t-farahead-race fieldB concurrent-edit
+git -C "$OTHERRACE" commit -qam 'concurrent field edit (far-ahead race)'
+git -C "$OTHERRACE" push -q origin main
+
+out="$(run_gc "$W49" -m 'test: far-ahead race, disjoint field' t-farahead-race 2>&1)"; rc=$?
+content="$(origin_show t-farahead-race 2>/dev/null)"
+main_tree49="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+restored49="$(git -C "$W49" rev-parse HEAD)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'fieldA: writer-edit' <<<"$content" \
+   && grep -q 'fieldB: concurrent-edit' <<<"$content" \
+   && ! grep -q 'src/farahead-race-feature.js' <<<"$main_tree49" \
+   && [[ "$restored49" == "$race_tip" ]]; then
+  ok "far-ahead race, no --base: the rebuild's three-way replay merges, both writers' fields land"
+else
+  no "far-ahead race disjoint field (rc=$rc restored49=$restored49 race_tip=$race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 50: far-ahead, no --base, SAME field — parks, HEAD restored --------
+set_mode green
+W50="$WORK/w50"
+make_clone "$W50" writer-50
+mkdir -p "$W50/src"
+echo "console.log('pr feature code, far-ahead race conflict')" >"$W50/src/farahead-race-conflict-feature.js"
+git -C "$W50" add src/farahead-race-conflict-feature.js
+git -C "$W50" commit -qm 'pr: non-intentions code change (far-ahead race conflict)'
+race_conflict_tip="$(git -C "$W50" rev-parse HEAD)"
+edit_field "$W50" t-farahead-race-conflict sentinel writer-value
+
+OTHERRACE2="$WORK/otherrace2"
+make_clone "$OTHERRACE2" otherrace2
+edit_field "$OTHERRACE2" t-farahead-race-conflict sentinel concurrent-value
+git -C "$OTHERRACE2" commit -qam 'concurrent same-field edit (far-ahead race conflict)'
+git -C "$OTHERRACE2" push -q origin main
+
+out="$(run_gc "$W50" -m 'test: far-ahead race, same field' t-farahead-race-conflict 2>&1)"; rc=$?
+content="$(origin_show t-farahead-race-conflict 2>/dev/null)"
+restored50="$(git -C "$W50" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'writer-value' <<<"$content" \
+   && grep -q 'concurrent-value' <<<"$content" \
+   && [[ "$restored50" == "$race_conflict_tip" ]]; then
+  ok "far-ahead race, same field: parks mechanical-unresolved instead of overwriting, HEAD restored to the PR tip"
+else
+  no "far-ahead race same-field park (rc=$rc restored50=$restored50 race_conflict_tip=$race_conflict_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 51: far-ahead --prune racing a concurrent edit — park, node survives ---
+set_mode green
+W51="$WORK/w51"
+make_clone "$W51" writer-51
+mkdir -p "$W51/src"
+echo "console.log('pr feature code, far-ahead prune race')" >"$W51/src/farahead-prune-race-feature.js"
+git -C "$W51" add src/farahead-prune-race-feature.js
+git -C "$W51" commit -qm 'pr: non-intentions code change (far-ahead prune race)'
+prune_race_tip="$(git -C "$W51" rev-parse HEAD)"
+rm -f "$W51/intentions/t-farahead-prune-race.md"
+
+OTHERRACE3="$WORK/otherrace3"
+make_clone "$OTHERRACE3" otherrace3
+edit_line "$OTHERRACE3" t-farahead-prune-race 1 concurrent-edit-survives
+git -C "$OTHERRACE3" commit -qam 'concurrent edit racing a far-ahead prune'
+git -C "$OTHERRACE3" push -q origin main
+
+out="$(run_gc "$W51" -m 'test: far-ahead prune race' --prune t-farahead-prune-race 2>&1)"; rc=$?
+content="$(origin_show t-farahead-prune-race 2>/dev/null || true)"
+restored51="$(git -C "$W51" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'line1: concurrent-edit-survives' <<<"$content" \
+   && grep -q 'prune vs. concurrent edit' <<<"$content" \
+   && [[ "$restored51" == "$prune_race_tip" ]]; then
+  ok "far-ahead prune race: the prune is guarded, the node survives on main with the concurrent edit, HEAD restored"
+else
+  no "far-ahead prune race (rc=$rc restored51=$restored51 prune_race_tip=$prune_race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 52: far-ahead list-entry removal racing a concurrent edit ----------
+# The interim list-removal guard in replay_snapshot_onto_base. This writer clears
+# one satisfied `blocked_by` entry (the routine drain operation) from a far-ahead
+# PR worktree; another writer lands an unrelated field edit to the same node
+# first, so the replay takes its MERGE branch. The merge unions list fields
+# base-free — it would restore the cleared entry and report a clean auto-resolve
+# — so the guard parks instead. Asserted on the landed node rather than on the
+# npx shim's behavior: the guard runs before merge-node.ts is ever invoked.
+set_mode green
+W52="$WORK/w52"
+make_clone "$W52" writer-52
+mkdir -p "$W52/src"
+echo "console.log('pr feature code, far-ahead list removal')" >"$W52/src/farahead-list-removal-feature.js"
+git -C "$W52" add src/farahead-list-removal-feature.js
+git -C "$W52" commit -qm 'pr: non-intentions code change (far-ahead list removal)'
+list_removal_tip="$(git -C "$W52" rev-parse HEAD)"
+sed -i '/^  - t-satisfied-blocker$/d' "$W52/intentions/t-farahead-list-removal.md"
+
+OTHERRACE4="$WORK/otherrace4"
+make_clone "$OTHERRACE4" otherrace4
+edit_field "$OTHERRACE4" t-farahead-list-removal fieldB concurrent-edit
+git -C "$OTHERRACE4" commit -qam 'concurrent field edit racing a list-entry removal'
+git -C "$OTHERRACE4" push -q origin main
+
+out="$(run_gc "$W52" -m 'test: far-ahead list-entry removal' t-farahead-list-removal 2>&1)"; rc=$?
+content="$(origin_show t-farahead-list-removal 2>/dev/null)"
+restored52="$(git -C "$W52" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'list-entry removal vs. concurrent edit' <<<"$content" \
+   && grep -q 'blocked_by\[t-satisfied-blocker\]' <<<"$content" \
+   && grep -q '  - t-satisfied-blocker' <<<"$content" \
+   && grep -q 'fieldB: concurrent-edit' <<<"$content" \
+   && [[ "$restored52" == "$list_removal_tip" ]]; then
+  ok "far-ahead list-entry removal: the guard parks instead of letting the base-free union silently restore the removed entry, HEAD restored"
+else
+  no "far-ahead list-entry removal guard (rc=$rc restored52=$restored52 list_removal_tip=$list_removal_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

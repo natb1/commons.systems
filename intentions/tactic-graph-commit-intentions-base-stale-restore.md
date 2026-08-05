@@ -85,16 +85,21 @@ attention:
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
   tier: 1
-phase: qa
+phase: done
 execution:
   branch: tactic-graph-commit-intentions-base-stale-restore
   pr: 2989
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-05T17:17:11Z
+    mergeCommitSha: a6a07cedeef85a8cfeb9a8fd0f6a3d61ba05d7b4
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
