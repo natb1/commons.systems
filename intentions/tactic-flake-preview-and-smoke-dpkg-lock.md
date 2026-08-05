@@ -35,29 +35,7 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "All 4 needs-main residue items (recurrence-watch,
-    holder-allowlist-incomplete, cap-design-tradeoff-acceptance,
-    escalation-ladder-design-soundness) await subsequent
-    preview-and-smoke/acceptance CI runs on main after PR #3020's dpkg-lock
-    mitigations (merged 2026-08-03T21:31:12Z). As of this QA pass, zero
-    preview-and-smoke runs have occurred since the merge (gh run list --repo
-    natb1/commons.systems --workflow \"PR Checks\" shows the most recent run at
-    2026-08-03T21:14:33Z, before the merge). Earliest useful re-check: after the
-    next PR's preview-and-smoke run lands on a merge to main, grep its logs for
-    the fingerprint string 'E: Could not get lock /var/lib/dpkg/lock-frontend'
-    and for the mitigation step's holder-diagnostic lines ('<lock> holders at
-    step start:', '<lock> still held at the shared 120s deadline; holders:')."
-  since: 2026-08-03
-  recommendation: "No author decision needed — this is a pure re-selection wait,
-    not a judgment call. All 4 residue items are observational (do subsequent CI
-    runs show the fingerprint / an unmasked holder / a truncated 300s-cap step /
-    an escalation-ladder failure) and will resolve themselves once enough
-    post-merge preview-and-smoke/acceptance runs accumulate. Re-select this node
-    once at least one preview-and-smoke run has occurred on main since the PR
-    #3020 merge commit cadb2e5b848666f211c292dab06f73a1a8ed3fac, then re-run the
-    Lane-M checks named in each item's Verifiability line."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
