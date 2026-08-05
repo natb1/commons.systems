@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# dispatch-invalid-state-sweep — the invalid-state lane's SELECTION-TIME
+# detection arm (tactic-invalid-state-lane Unit 4). Runs pre-selection on the
+# tick, finds nodes held by a TERMINAL worker session, and hands each to
+# `dispatch-invalid-state-route`.
+#
+# Modelled directly on dispatch-graph-scope-sweep: same shape (pre-selection,
+# enumerate then act, decision/liveness/landing split) and the same invariant —
+#
+#   THE CLAIMED SET THIS HONORS MUST MATCH graph-select-target's EXACTLY.
+#
+# A node the selector will not touch must also be one this sweep will not act on,
+# else the sweep races the selector by intervening on a node selection considers
+# claimed. graph-select-target skips a node when `reservation_exists` OR its
+# occupancy is anything but `free`, so this sweep excludes both halves.
+#
+# THIS ARM NEVER PARKS, NEVER HOLDS, NEVER REAPS. That is deliberate and is the
+# single escalation-owner rule: dispatch-tick runs both defensive sweeps
+# (frozen_session_sweep, terminal_without_disposition_sweep) on every cadence, so
+# the sweep tier is ALWAYS the escalation path. Duplicating a park here would
+# create a second, unproven park implementation beside 1269 lines of
+# carefully-proven park machinery.
+#
+# UNKNOWN IS NOT AN EMPTY SET. `claude_agents_list_terminal_workers` returning
+# UNKNOWN aborts the sweep for this tick with a diagnostic. An empty set would
+# read as "nothing is wrong" — the exact sensors-rule failure this lane exists to
+# fix. (Same rule dispatch-graph-scope-sweep states for claude_agents_list_all.)
+#
+# Always exits 0 and prints one summary line: the tick's scheduling path must
+# never be aborted by this sweep.
+#
+# Sandbox: reads the Claude daemon over a Unix socket and spawns sessions
+# (through the router). dispatch-select-tick runs with the sandbox disabled,
+# which covers this — see .claude/rules/sandbox.md.
+#
+# Test overrides:
+#   DISPATCH_INVALID_STATE_ROUTE_CMD   — replaces dispatch-invalid-state-route
+#   DISPATCH_INVALID_STATE_SWEEP_ROOT  — replaces resolve_project_root
+#   DISPATCH_INVALID_STATE_SWEEP_MAX   — per-invocation router-call cap
+#   CLAUDE_AGENTS_CMD                  — the registry fake
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+# shellcheck source=lib-claude-agents.sh
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+# shellcheck source=lib-reservation-ledger.sh
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+
+# Bound the work: this runs INLINE on the tick's scheduling path, and each router
+# call can spawn a session. Two per invocation is enough to drain a backlog over
+# a few ticks without turning one tick into a fan-out.
+SWEEP_MAX="${DISPATCH_INVALID_STATE_SWEEP_MAX:-2}"
+[[ "$SWEEP_MAX" =~ ^[0-9]+$ ]] || SWEEP_MAX=2
+
+PROJECT_ROOT="${DISPATCH_INVALID_STATE_SWEEP_ROOT:-}"
+if [[ -z "$PROJECT_ROOT" ]]; then
+  PROJECT_ROOT=$(resolve_project_root) || PROJECT_ROOT=""
+fi
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "invalid-state-sweep: could not resolve the project root; sweeping nothing"
+  exit 0
+fi
+
+ROUTE="${DISPATCH_INVALID_STATE_ROUTE_CMD:-$SCRIPT_DIR/dispatch-invalid-state-route}"
+if [[ ! -x "$ROUTE" ]]; then
+  echo "invalid-state-sweep: router not executable at $ROUTE; sweeping nothing"
+  exit 0
+fi
+
+# Step 1 — enumerate candidates. Columns are sessionId<TAB>id<TAB>name<TAB>cwd,
+# where `.id` is the JOB id and is NOT a prefix of the sessionId; any job-dir
+# lookup MUST key on that column.
+if ! ROWS=$(claude_agents_list_terminal_workers 2>/dev/null); then
+  echo "invalid-state-sweep: terminal-worker registry read is UNKNOWN — aborting this tick rather than reading it as an empty set"
+  exit 0
+fi
+
+CANDIDATES=0
+INTERVENED=0
+KEPT=0
+ESCALATE_DEFERRED=0
+CALLS=0
+
+while IFS=$'\t' read -r sid jid name cwd; do
+  [[ -n "${name:-}" ]] || continue
+
+  # Keyspace: only genuine graph node ids with a node file. A legacy `<N>-slug`
+  # issue worktree is not this lane's to route.
+  [[ "$name" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || continue
+  [[ -f "$PROJECT_ROOT/intentions/$name.md" ]] || continue
+
+  CANDIDATES=$(( CANDIDATES + 1 ))
+
+  # Claimed-set parity with the selector: a reserved node is one the selector
+  # will not touch either.
+  if reservation_exists "$name" 2>/dev/null; then
+    KEPT=$(( KEPT + 1 ))
+    continue
+  fi
+
+  if (( CALLS >= SWEEP_MAX )); then
+    # Deliberately NOT silent: a silent cap reads as "covered everything".
+    echo "invalid-state-sweep: per-invocation cap ($SWEEP_MAX) reached — $name and any further candidates deferred to a later tick"
+    break
+  fi
+
+  # Confirm with the granular classifier that the node's OWN-ID worktree really
+  # is terminal. The registry row says a session is terminal; this says the node
+  # is actually held by it. Called directly (not via `$( )`) so the evidence
+  # globals survive — see worktree_occupancy_state's CAVEAT.
+  worktree_occupancy_state "$PROJECT_ROOT/.claude/worktrees/$name" >/dev/null 2>&1
+  if [[ "$WORKTREE_OCCUPANCY_STATE" != "terminal" ]]; then
+    KEPT=$(( KEPT + 1 ))
+    continue
+  fi
+
+  # Evidence file: what the router hands the intervention session. A PATH is
+  # passed onward, never the content.
+  EVIDENCE=$(mktemp "${TMPDIR:-/tmp}/invalid-state-evidence-XXXXXX") || EVIDENCE=""
+  if [[ -n "$EVIDENCE" ]]; then
+    {
+      printf 'detected-by: dispatch-invalid-state-sweep\n'
+      printf 'node: %s\n' "$name"
+      printf 'session_id: %s\n' "$sid"
+      printf 'job_id: %s\n' "$jid"
+      printf 'session_cwd: %s\n' "$cwd"
+      printf 'registry_state: terminal\n'
+      printf 'occupancy: %s\n' "$WORKTREE_OCCUPANCY_STATE"
+      # The absence of this marker is the whole point: a terminal session that
+      # never declared a disposition is what freezes the node.
+      if [[ -n "$jid" && -f "$HOME/.claude/jobs/$jid/node-terminal" ]]; then
+        printf 'node_terminal_marker: present\n'
+      else
+        printf 'node_terminal_marker: absent\n'
+      fi
+      printf 'transcript_hint: %s\n' "$HOME/.claude/projects/*/$sid.jsonl"
+    } > "$EVIDENCE" 2>/dev/null || true
+  fi
+
+  CALLS=$(( CALLS + 1 ))
+  "$ROUTE" --node "$name" --kind terminal-session \
+    --session "$sid" --job-id "$jid" --evidence-file "$EVIDENCE" >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0)  INTERVENED=$(( INTERVENED + 1 )) ;;
+    4)  KEPT=$(( KEPT + 1 )) ;;
+    *)
+      # 10 (escalate), 1 (router failure) and anything else all defer to the
+      # sweep tier. terminal_without_disposition_sweep owns the escalation this
+      # round; this arm must not duplicate its park.
+      ESCALATE_DEFERRED=$(( ESCALATE_DEFERRED + 1 ))
+      echo "invalid-state-sweep: $name deferred (router rc=$rc) — terminal_without_disposition_sweep owns the escalation"
+      ;;
+  esac
+done <<< "$ROWS"
+
+echo "invalid-state-sweep: candidates=$CANDIDATES intervened=$INTERVENED kept=$KEPT escalate-deferred=$ESCALATE_DEFERRED"
+exit 0

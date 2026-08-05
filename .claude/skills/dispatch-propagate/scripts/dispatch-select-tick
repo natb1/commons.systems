@@ -569,6 +569,23 @@ if [[ -n "$SCOPE_SWEEP_OUT" ]]; then
   done <<< "$SCOPE_SWEEP_OUT"
 fi
 
+# Pre-selection invalid-state sweep (tactic-invalid-state-lane Unit 4). The
+# lane's selection-time detection arm: finds nodes held by a TERMINAL worker
+# session — an INVALID state, where nothing is running yet the claim survives —
+# and routes each through dispatch-invalid-state-route. It never parks, holds or
+# reaps; the two defensive sweeps in dispatch-tick own the escalation, so this
+# arm defers to them rather than adding a second park implementation. Its
+# claimed set matches graph-select-target's exactly, so it cannot act on a node
+# selection considers claimed. Best-effort (a failure must not abort the tick);
+# this whole script runs with the sandbox disabled (see the header note), which
+# covers the sweep's daemon socket read and the router's session spawn.
+INVALID_STATE_SWEEP_OUT=$("$SCRIPT_DIR/dispatch-invalid-state-sweep") || true
+if [[ -n "$INVALID_STATE_SWEEP_OUT" ]]; then
+  while IFS= read -r sweep_line; do
+    [[ -n "$sweep_line" ]] && echo "invalid-state: $sweep_line"
+  done <<< "$INVALID_STATE_SWEEP_OUT"
+fi
+
 # Heartbeat: refresh after the auto-merge and reconcile-merged sub-steps complete (#2104, #2512).
 refresh_lock
 
