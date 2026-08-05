@@ -1309,6 +1309,8 @@ assert_eq "synth: the synthesized recommendation no longer offers clear-park as 
   "$(case "$(td_park_arg 5)" in *"either answer it here and"*"or stop the session"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 assert_eq "synth: the synthesized recommendation warns that clearing without a reap is a no-op" "yes" \
   "$(case "$(td_park_arg 5)" in *"is a no-op"*"re-parks the node on its next pass"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation states clear-park alone is correct once the session is already gone" "yes" \
+  "$(case "$(td_park_arg 5)" in *"shows no session for this node"*"clear-park <node-id>\` alone is the correct and sufficient action"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 td_teardown
 
 # --- Test 30b: the worker's own escalation text is unaffected by the wording fix --

@@ -441,6 +441,9 @@ assert_contains "remediation clears the park LAST, naming the node" \
   "ONLY THEN \`clear-park tactic-alpha\`" "$OUT"
 assert_contains "remediation states clearing alone is a no-op" \
   "Clearing the park while the session is still present is a no-op" "$OUT"
+assert_contains "remediation states clear-park alone is correct once the session is already gone" \
+  "already gone, the reap step is already satisfied, and \`clear-park tactic-alpha\`" \
+  "$OUT"
 # The corrected text is a sequence, not a choice: no "either ... or" framing.
 TOTAL=$((TOTAL + 1))
 if [[ "$OUT" != *"either answer it here"* ]]; then
