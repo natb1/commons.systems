@@ -1327,8 +1327,38 @@ assert_eq "synth: sweep returns 0" "0" "$TD_RC"
 assert_eq "synth: park-node invoked once" "1" "$(td_park_calls)"
 assert_eq "synth: the synthesized reason names the missing disposition" "yes" \
   "$(case "$(td_park_arg 4)" in *"ended without declaring a disposition"*) printf 'yes' ;; *) printf 'no' ;; esac)"
-assert_eq "synth: the synthesized recommendation warns against a bare reap" "yes" \
-  "$(case "$(td_park_arg 5)" in *"restarts the churn loop"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation states the mandatory reap-then-clear-park order" "yes" \
+  "$(case "$(td_park_arg 5)" in *"reap it before clearing the park"*"mandatory"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation gates the destructive fallback on the reap-safety checks" "yes" \
+  "$(case "$(td_park_arg 5)" in *"status --porcelain --untracked-files=no"*"diff --quiet origin/main HEAD -- . ':!intentions'"*"do NOT remove the worktree"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation warns off a commits-ahead gate" "yes" \
+  "$(case "$(td_park_arg 5)" in *"never by a commits-ahead count"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation drops the retired 'Do NOT simply reap' sentence" "no" \
+  "$(case "$(td_park_arg 5)" in *"Do NOT simply reap the terminal session and release the node"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation no longer offers clear-park as a standalone fork" "no" \
+  "$(case "$(td_park_arg 5)" in *"either answer it here and"*"or stop the session"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation warns that clearing without a reap is a no-op" "yes" \
+  "$(case "$(td_park_arg 5)" in *"is a no-op"*"re-parks the node on its next pass"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "synth: the synthesized recommendation states clear-park alone is correct once the session is already gone" "yes" \
+  "$(case "$(td_park_arg 5)" in *"shows no session for this node"*"clear-park <node-id>\` alone is the correct and sufficient action"*) printf 'yes' ;; *) printf 'no' ;; esac)"
+td_teardown
+
+# --- Test 30b: the worker's own escalation text is unaffected by the wording fix --
+
+echo "Test: a session's own office-hours-recommendation is threaded through unchanged even in the terminal-without-disposition sweep"
+td_setup
+td_write_node "tactic-td-verbatim-reco" working
+td_commit_nodes
+td_write_transcript "0fed-4040" $(( TD_NOW - 4000 ))
+td_add_session "0fed-4040" "tactic-td-verbatim-reco" "done" "fed0aaaa"
+td_write_job_file "fed0aaaa" "tactic-td-verbatim-reco" office-hours-reason "the worker's own reason, again"
+td_write_job_file "fed0aaaa" "tactic-td-verbatim-reco" office-hours-recommendation "the worker's own recommendation, again"
+td_install_claude 0
+td_run
+assert_eq "verbatim-reco: sweep returns 0" "0" "$TD_RC"
+assert_eq "verbatim-reco: park-node invoked once" "1" "$(td_park_calls)"
+assert_eq "verbatim-reco: recommendation is the worker's own text, untouched by the synthesized-branch wording" \
+  "the worker's own recommendation, again" "$(td_park_arg 5)"
 td_teardown
 
 # --- Test 31: a park-node failure retains the markers for the next tick ------
