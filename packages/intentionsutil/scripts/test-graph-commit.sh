@@ -202,6 +202,12 @@
 #  51. far-ahead --prune racing a concurrent edit to the same node: the prune is
 #      guarded rather than forced through — exit 1, park, and the node SURVIVES
 #      on main carrying the concurrent edit
+#  52. far-ahead, NO --base, LIST-ENTRY REMOVAL racing a concurrent edit: this
+#      writer clears one `blocked_by` entry while another writer lands an
+#      unrelated field edit to the same node. The replay's merge unions list
+#      fields base-free and would silently restore the removed entry, so the
+#      guard refuses instead — exit 1, park naming the dropped entry, the entry
+#      still present on main, and HEAD restored to the PR tip
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -299,6 +305,7 @@ seed_field_node t-field-base-bad "sentinel: base"
 seed_field_node t-farahead-base "fieldA: base" "fieldB: base"
 seed_field_node t-farahead-race "fieldA: base" "fieldB: base"
 seed_field_node t-farahead-race-conflict "sentinel: base"
+seed_field_node t-farahead-list-removal "fieldB: base" "blocked_by:" "  - t-satisfied-blocker" "  - t-other-blocker"
 seed_field_node t-base-bystander-conflict "sentinel: base"
 
 git -C "$SEED" add -A
@@ -1969,6 +1976,47 @@ if [[ $rc -eq 1 ]] \
   ok "far-ahead prune race: the prune is guarded, the node survives on main with the concurrent edit, HEAD restored"
 else
   no "far-ahead prune race (rc=$rc restored51=$restored51 prune_race_tip=$prune_race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 52: far-ahead list-entry removal racing a concurrent edit ----------
+# The interim list-removal guard in replay_snapshot_onto_base. This writer clears
+# one satisfied `blocked_by` entry (the routine drain operation) from a far-ahead
+# PR worktree; another writer lands an unrelated field edit to the same node
+# first, so the replay takes its MERGE branch. The merge unions list fields
+# base-free — it would restore the cleared entry and report a clean auto-resolve
+# — so the guard parks instead. Asserted on the landed node rather than on the
+# npx shim's behavior: the guard runs before merge-node.ts is ever invoked.
+set_mode green
+W52="$WORK/w52"
+make_clone "$W52" writer-52
+mkdir -p "$W52/src"
+echo "console.log('pr feature code, far-ahead list removal')" >"$W52/src/farahead-list-removal-feature.js"
+git -C "$W52" add src/farahead-list-removal-feature.js
+git -C "$W52" commit -qm 'pr: non-intentions code change (far-ahead list removal)'
+list_removal_tip="$(git -C "$W52" rev-parse HEAD)"
+sed -i '/^  - t-satisfied-blocker$/d' "$W52/intentions/t-farahead-list-removal.md"
+
+OTHERRACE4="$WORK/otherrace4"
+make_clone "$OTHERRACE4" otherrace4
+edit_field "$OTHERRACE4" t-farahead-list-removal fieldB concurrent-edit
+git -C "$OTHERRACE4" commit -qam 'concurrent field edit racing a list-entry removal'
+git -C "$OTHERRACE4" push -q origin main
+
+out="$(run_gc "$W52" -m 'test: far-ahead list-entry removal' t-farahead-list-removal 2>&1)"; rc=$?
+content="$(origin_show t-farahead-list-removal 2>/dev/null)"
+restored52="$(git -C "$W52" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'list-entry removal vs. concurrent edit' <<<"$content" \
+   && grep -q 'blocked_by\[t-satisfied-blocker\]' <<<"$content" \
+   && grep -q '  - t-satisfied-blocker' <<<"$content" \
+   && grep -q 'fieldB: concurrent-edit' <<<"$content" \
+   && [[ "$restored52" == "$list_removal_tip" ]]; then
+  ok "far-ahead list-entry removal: the guard parks instead of letting the base-free union silently restore the removed entry, HEAD restored"
+else
+  no "far-ahead list-entry removal guard (rc=$rc restored52=$restored52 list_removal_tip=$list_removal_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
