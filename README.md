@@ -1,11 +1,11 @@
 # commons.systems
 
-**A data structure for managing project goals and alignment. An agentic
-harness that runs on it.**
+**A data structure for managing project goals and alignment. A harness that 
+uses the data structure for agent context management and long horizon orchestration.**
 
 The **intention graph** is a versioned graph of goals. It is human authored
 with AI assistance. The graph is rooted by unconditional *virtues*
-(your virtues, your principles) with condition-bearing, persistent
+(your principles) with condition-bearing, persistent
 *strategies* as child nodes, and completable, transient *tactics* at the leaves.
 The graph is encoded as markdown documents in the repo it governs.
 It is AI-native specification tracking — it is designed with AI in mind both:
