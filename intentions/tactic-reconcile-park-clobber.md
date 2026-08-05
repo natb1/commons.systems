@@ -62,7 +62,7 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-reconcile-park-clobber
   pr: 3046
@@ -73,7 +73,10 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-05T16:46:54Z
+    mergeCommitSha: d9f0a1f0e2addadb3878add6ad8558994c3878e4
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours:
