@@ -527,11 +527,19 @@ check_base_freshness() {
       # Fully resolved: overwrite the on-disk node with the merged content so the
       # write proceeds against exactly origin_sha. RESOLVED_VIA_MERGE is already
       # set to 1 by run_merge_node().
+      #
+      # The SNAP_DIR copy is refreshed in the SAME step, deliberately: SNAP_DIR
+      # holds the content THIS RUN INTENDS TO LAND, not a frozen pre-merge copy
+      # of what the writer happened to have on disk at snapshot() time. A later
+      # ensure_intentions_only_base() re-materializes each node from SNAP_DIR
+      # after resetting the tree to fresh origin/main; if the snapshot still held
+      # the pre-merge content, that re-materialization would silently discard the
+      # reconciliation performed right here. Keeping the two in sync also means
+      # park_and_exit()'s "this writer's unlanded content is preserved at
+      # $SNAP_DIR" message points at the RECONCILED content — the best available
+      # starting point for the manual merge — rather than at a stale pre-merge
+      # copy.
       cp -- "$out_f" "$INTENTIONS_DIR/$id.md"
-      # Keep SNAP_DIR authoritative: it is the content ensure_intentions_only_base()
-      # replays onto the fresh base, and the content park_write() points a human at.
-      # Leaving the pre-merge snapshot here would let the far-ahead rebuild copy the
-      # unmerged bytes back over this merge and silently revert the other writer.
       cp -- "$out_f" "$SNAP_DIR/$id.md"
       continue
     fi
@@ -633,6 +641,16 @@ assert_staged_safe() {
 # origin/main), so this snapshot becomes the only surviving copy of the
 # writer's content — cleanup() keeps SNAP_DIR on that path (KEEP_SNAP=1) and
 # the park message points at it for the manual merge.
+#
+# SNAP_DIR is NOT a frozen pre-merge copy: it holds the content THIS RUN INTENDS
+# TO LAND, and it is refreshed in place whenever a layer-3 merge resolves — by
+# check_base_freshness() (stale --base reconciliation) and by
+# ensure_intentions_only_base() (the rebuild path's implicit compare-and-swap).
+# Two consequences follow. First, ensure_intentions_only_base() re-materializes
+# nodes from SNAP_DIR after resetting the tree to fresh origin/main, so a stale
+# snapshot there would silently revert a reconciliation. Second, park_and_exit()'s
+# "this writer's unlanded content is preserved at $SNAP_DIR" message points at
+# the reconciled content, not at a superseded pre-merge copy.
 snapshot() {
   local id
   for id in "${IDS[@]}"; do
@@ -913,6 +931,9 @@ ensure_intentions_only_base() {
   nonint="$(git diff --name-only "$MAIN_SHA"...HEAD | grep -v '^intentions/' || true)"
   [[ -z "$nonint" ]] && return 0
   echo "graph-commit: worktree HEAD is ahead of origin/main with non-intentions changes — rebuilding the edit on an intentions/-only base (HEAD restored on exit)" >&2
+  # Set the HEAD-restore state BEFORE the reset below, so a park taken from
+  # inside this function — an unresolvable replay, or a --prune racing a
+  # concurrent edit — still returns the worktree to its PR tip via cleanup().
   ORIG_HEAD="$(git rev-parse HEAD)"
   RESTORE_HEAD=1
   # The fork point MUST be computed before the reset — `git reset --hard` moves
@@ -1702,11 +1723,22 @@ TS
 
 # --- Shared fail-closed park path (never returns) ---------------------------
 # The concurrent-edit conflict fail-closed sequence, extracted from main()'s
-# rc-12 tail so a second call site (Unit 3, before any commit exists) can invoke
-# the identical park without duplicating fetch/reset/park_write/re-commit/land
-# logic. Self-contained: relies only on globals (ALL_IDS, SNAP_DIR, KEEP_SNAP)
-# and the committed helpers, never on state that exists only after
-# try_land()/land() ran — it does its own fetch/reset. Always calls exit 1.
+# rc-12 tail so other call sites can invoke the identical park without
+# duplicating fetch/reset/park_write/re-commit/land logic. Self-contained:
+# relies only on globals (ALL_IDS, SNAP_DIR, KEEP_SNAP) and the committed
+# helpers, never on state that exists only after try_land()/land() ran — it does
+# its own fetch/reset. Always calls exit 1.
+#
+# Three call sites:
+#   1. main()'s rc-12 tail — a rebase conflict layer 2 could not resolve.
+#   2. check_base_freshness() — a stale --base (layer 3) whose divergence
+#      run_merge_node() could not resolve.
+#   3. ensure_intentions_only_base() — the far-ahead rebuild's three-way replay
+#      found a node (or a --prune id) that advanced on origin/main since this
+#      checkout's fork point and could not reconcile it. This one parks with no
+#      local commit yet in existence; ORIG_HEAD/RESTORE_HEAD are set before the
+#      rebuild's own `git reset --hard "$MAIN_SHA"`, so cleanup() still returns
+#      the worktree to its PR tip.
 #
 # Bystander prunes: a --prune id that is NOT itself part of the conflicted set
 # (per conflicted_ids()) is independent of whatever id(s) failed to resolve, so
