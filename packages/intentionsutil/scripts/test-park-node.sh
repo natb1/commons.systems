@@ -752,7 +752,7 @@ out="$(
 )"; rc=$?
 porcelain_after="$(git -C "$G" status --porcelain -- intentions/t-demote.md)"
 porcelain_after_dir="$(git -C "$G" status --porcelain -- intentions/)"
-if [[ $rc -ne 0 ]] && grep -q 'demotion write was rolled back' <<<"$out" \
+if [[ $rc -ne 0 ]] && grep -q 'graph-commit failed for' <<<"$out" \
    && [[ -z "$porcelain_after" ]] && [[ -z "$porcelain_after_dir" ]]; then
   ok "demote-node-to-implement byte-identical restore: real apply-node-transition.ts mutation is rolled back on graph-commit failure (git status --porcelain empty)"
 else

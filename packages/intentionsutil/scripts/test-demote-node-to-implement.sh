@@ -39,7 +39,15 @@
 #      writer landed on origin/main survives, and phase becomes `implement`.
 #      The pre-fix code would have reverted blocked_by to its absent seed
 #      state.
-#   2. A node absent from origin/main is refused before any write (exit 1).
+#   2. The failure mode the `--base` token itself introduces: a concurrent
+#      origin/main advance landed AFTER demote-node-to-implement resolved
+#      FRESH_BLOB drives graph-commit's stale-base park (park_and_exit) rather
+#      than a clobber. demote-node-to-implement exits 1, the office_hours park
+#      and the concurrent writer's content are on origin/main, and — the part
+#      no exit code reveals — the demoting checkout is left CLEAN: its
+#      post-failure rollback must not write an uncommitted revert of the park
+#      graph-commit just landed and reset the checkout onto.
+#   3. A node absent from origin/main is refused before any write (exit 1).
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -111,6 +119,7 @@ EOF
 }
 seed_node t-stale "stale demotion target"
 seed_node t-blocker "sibling blocker landed concurrently"
+seed_node t-concurrent "demotion target raced by a concurrent landing"
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
 git -C "$SEED" push -q origin main
@@ -459,7 +468,96 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Case 2: a node absent from origin/main is refused before any write.
+# Case 2: a concurrent origin/main advance between FRESH_BLOB resolution and
+# graph-commit's --base freshness check parks the node — and leaves the
+# demoting checkout clean.
+# ---------------------------------------------------------------------------
+# This is the failure mode the `--base` token introduces, and the one no
+# assertion on origin/main alone can catch: park_and_exit() ends with the
+# demoting checkout reset onto (and holding) the freshly-landed park commit,
+# and demote-node-to-implement's own EXIT-trap rollback then fires on the
+# non-zero graph-commit status. A rollback that blindly restores FRESH_BLOB
+# there writes an uncommitted REVERT of the just-landed park into the tree —
+# which blocks `git merge --ff-only` for every later sync from that checkout,
+# trips graph-commit's assert_clean_outside_ids for every later node write, and
+# can be staged onto main by the next writer, silently clearing a park a human
+# gate is waiting on. So this case asserts the tree state too, not just the
+# exit code.
+#
+# demote-node-to-implement's fetch and graph-commit's check_base_freshness fetch
+# happen back-to-back in one synchronous process, so there is no natural
+# injection point to land a concurrent change between them. Rather than race,
+# swap the graph-commit demote-node-to-implement invokes for a thin wrapper that
+# (once) lands a concurrent change on origin/main for the node, then delegates to
+# the real graph-commit (graph-commit.real) — the mechanism test-transition-node.sh
+# uses for the same purpose. The real graph-commit's check_base_freshness
+# re-fetches, sees origin's blob no longer matches the `--base` FRESH_BLOB, and
+# its layer-3 auto-merge cannot resolve the divergence (the concurrent write
+# moved `phase` — the very field the demotion writes — to a third value: base
+# `qa`, ours `implement`, theirs `main-qa`), so it falls through to
+# park_and_exit().
+C="$WORK/c"
+make_clone "$C" writer-c
+mv "$C/$UTIL_DIR_REL/graph-commit" "$C/$UTIL_DIR_REL/graph-commit.real"
+cat >"$C/$UTIL_DIR_REL/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+SD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ! -f "$SD/.concurrent-landed" ]]; then
+  # Land a concurrent change to the SAME node on origin/main, simulating another
+  # writer committing after demote-node-to-implement resolved FRESH_BLOB but
+  # before this check.
+  D="$(mktemp -d)"
+  git clone -q "$GC_ORIGIN" "$D"
+  git -C "$D" config user.email other@test
+  git -C "$D" config user.name other
+  # Collide on the SAME field the demotion itself writes (phase). A disjoint
+  # addition would merge cleanly under the real 3-way shim and silently defeat
+  # this case; base=qa / ours=implement / theirs=main-qa cannot resolve.
+  sed -i 's/^phase: .*/phase: main-qa/' "$D/intentions/$GC_NODE.md"
+  git -C "$D" commit -qam 'concurrent edit (bypassing demote-node-to-implement)'
+  git -C "$D" push -q origin main
+  rm -rf "$D"
+  : >"$SD/.concurrent-landed"
+fi
+exec "$SD/graph-commit.real" "$@"
+SH
+chmod +x "$C/$UTIL_DIR_REL/graph-commit"
+# Commit the wrapper swap so graph-commit.real's assert_clean_outside_ids
+# pre-flight guard (refuses to start on any unrelated dirty TRACKED file) doesn't
+# trip on the tracked graph-commit path this swap modifies. graph-commit.real is
+# untracked and already exempt (the guard skips '??' entries).
+git -C "$C" add "$UTIL_DIR_REL/graph-commit"
+git -C "$C" commit -qm 'test: install graph-commit wrapper for concurrent-write simulation'
+
+before_sha="$(origin_sha)"
+out="$(
+  cd "$C" || exit 99
+  export PATH="$WORK/bin:$PATH" GC_FIXTURE_DIR="$FIXTURE_DIR"
+  export GRAPH_COMMIT_CHECK_POLL_SECONDS=0 GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5
+  export GRAPH_COMMIT_MAX_ATTEMPTS=5
+  export GC_ORIGIN="$ORIGIN" GC_NODE=t-concurrent
+  bash packages/intentionsutil/scripts/demote-node-to-implement t-concurrent 2>&1
+)"; rc=$?
+content="$(origin_show t-concurrent)"
+# Tracked-path dirt only: the harness's own untracked scaffolding in this clone
+# (graph-commit.real, the wrapper's .concurrent-landed sentinel) is not the
+# subject — a leaked REVERT of the landed park is, and that shows up as a
+# modified tracked file under intentions/.
+dirt="$(git -C "$C" status --porcelain -- intentions/)"
+if [[ $rc -eq 1 ]] \
+   && grep -q '^phase: main-qa' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && [[ -z "$dirt" ]]; then
+  ok "concurrent origin/main advance parks the node: demote exits 1, concurrent content and park survive on main, demoting checkout left clean"
+else
+  no "stale-base park (rc=$rc before_sha=$before_sha dirt='$dirt')"
+  printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 3: a node absent from origin/main is refused before any write.
 # ---------------------------------------------------------------------------
 E="$WORK/e"
 make_clone "$E" writer-e
