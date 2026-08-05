@@ -28,9 +28,11 @@ rationale: >-
   at the bottom — transient, completable units of execution that may form
   subtrees rooted at an epic (kind-tactic). DELEGATIONS are not goals: they are
   attachment records, the surface where capture is detected and recovery kept
-  real (kind-delegation). Lifecycle differs by layer: virtues are permanent,
-  strategies are persistent (they end only by condition-expiry or deliberate
-  retirement), tactics are transient (removed from the graph on completion).
+  real (kind-delegation). Lifecycle differs by layer: virtues are unconditional
+  (exceptionless in application, amendable only by deliberate dialectic —
+  kind-virtue), strategies are persistent (they end only by condition-expiry or
+  deliberate retirement), tactics are transient (removed from the graph on
+  completion).
 
 
   Five edge fields carry the graph. `parent` is the within-layer edge:

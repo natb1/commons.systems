@@ -20,7 +20,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: null
 execution: null
 validates:
   - strategy-data-structure-first
@@ -31,166 +31,245 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Rewrite README.md around the data-structure-first framing — new headline, intention graph leading, harness as one consumer
+# Ratified README copy — re-plan against the 2026-08-04 record
 
-## Context
-
-The current `README.md` headline is harness-first — `# commons.systems: a
-long-horizon agent orchestrator`, with an opening paragraph that leads with
-"A harness for long-horizon autonomous agent workflows, built around one data
-structure: the **intention graph**." This sells the consumer (the harness) and
-buries the product (the intention graph). strategy-data-structure-first
-inverts the project's public identity: the intention graph is a data structure
-for managing intentions and alignment that a reader can adopt with their own
-project management and agentic workflows; the long-horizon coding harness is
-one consumer of it — the reference consumer. This tactic rewrites the top of
-the README so it leads with the data structure and presents the harness as one
-consumer. It is the strategy's signal-validating surface: the success signal
-is owner review at office-hours confirming the README leads with the framing.
-
-This tactic touches **README.md only**. Landing and brand surfaces align in
-later tactics as they are next touched (README/landing audience split holds:
-README is the tier-3 practitioner surface, landing is tier-2).
-
-**Approval gate (hard dependency).** This tactic is `blocked_by`
-tactic-readme-copy-approval — a born-parked office-hours human gate. The router
-cannot select this rewrite until the author ratifies or revises the draft
-headline, subline, and identity sentence recorded below. When the author
-approves, the outcome (approved wording, or the revision and why) is recorded
-as a dated clarification on strategy-data-structure-first. The implementing
-session settles remaining wording **only within the author-approved copy** —
-the draft copy below is the author's requirement text, binding in substance,
-refinable in wording, but the approved version (from the clarification the
-copy-approval gate records) supersedes it wherever they differ. Before
-implementing, read strategy-data-structure-first's clarifications for the
-approval outcome and use that wording.
-
-## Unit 1 — Rewrite the README top-of-file framing
-
-**Recommended model:** opus. This is the project's public identity copy, with
-subtle framing constraints (positioning inversion, "alignment" carrying two
-readings without leaning on jargon, honest-direction claims). It needs voice
-and positioning judgment, not mechanical edits.
-
-**Scope — what changes (README.md only):**
-
-- **Headline** `README.md:1` — replace `# commons.systems: a long-horizon
-  agent orchestrator` with the data-structure-first headline. Author draft:
-  "commons.systems: A data structure for managing intentions and alignment"
-  (use the author-approved wording from the copy-approval clarification).
-- **Opening paragraph** `README.md:3-11` — currently "A harness for
-  long-horizon autonomous agent workflows, built around one data structure:
-  the **intention graph**. …". Rewrite to lead with the intention graph as the
-  adoptable data structure and present the harness as one consumer — the
-  reference consumer. Fold in the two-uses framing (author draft subline): the
-  reader's own project management and agentic workflows first, the provided
-  long-horizon agentic coding harness second, in that order.
-- **Identity sentence** `README.md:13-15` — currently "Owned and self-managed,
-  local-first, built to be forked: not a platform, not a library, but a
-  reference setup an individual runs on their own GitHub, Firebase, and
-  Anthropic accounts." Replace the "not a platform, not a library, but a
-  reference setup" identity with the spec + reference-implementation shape: the
-  schema, node kinds, and attention/signal semantics are the adoptable thing;
-  this repo is their reference implementation, harness included. "Not a
-  platform" survives; "not a library" **softens** (packages/intentionsutil
-  effectively becomes one). Keep the owned/self-managed/local-first/forkable
-  character.
-
-**Scope — constraints:**
-
-- **'alignment' carries both readings deliberately** — agent-alignment (agents
-  act on your recorded intent) and the graph's own sense (alignment of
-  attachments and intentions with virtues) — without leaning on either as
-  jargon. Do not gloss or define the word; let it read as practical vocabulary.
-- **Standalone use is a direction, stated honestly.** No copy claims standalone
-  capability beyond what exists. Tooling assumes this repo's layout and skills
-  assume the harness today; the separability gaps are tracked as work
-  (tactic-graph-separability-audit). Phrase the reader's-own-workflows use as
-  the intended shape/direction, never as a finished capability.
-- **strategy-show-not-tell holds** — the README requires no philosophical
-  buy-in; "intentions and alignment" reads as practical vocabulary, not
-  doctrine.
-- Writing style: simple, direct language; no corporate jargon (see
-  `.claude/rules/writing-style.md`).
-
-**Scope — out of scope:**
-
-- Any file other than `README.md` (landing, brand, `packages/**`, skills).
-- The **Status paragraph** `README.md:17-27` (projection-era router vs
-  graph-native build-out) must **stay accurate** through the rewrite — do not
-  let the reframed headline contradict it. Adjust only if the rewrite makes its
-  wording inconsistent; otherwise leave it.
-- The body sections below the identity/status block ("## The intention graph",
-  "## The align skill family", "## The dispatch router", "## As a harness", the
-  reference tables, "Related work") — leave in place. Light touch only where a
-  sentence would now contradict the reframed headline (e.g. a stray
-  harness-first characterization); do not restructure these sections in this
-  tactic.
-
-**Reuse:** the author's draft copy and interview constraints are captured
-verbatim below (they were retained on this node from the /align-strategy
-interview). The `## The intention graph` section already present in the README
-(`README.md:29` onward) is the existing accurate description of the data
-structure — the new opening should be consistent with it, not duplicate it.
-
-## Verification
-
-Prose (no automated check — this is copy whose acceptance is human judgment):
-
-- The README first screen leads with the intention graph as the adoptable data
-  structure; a first-time reader can state that the graph is adoptable with
-  their own workflows and that the harness is one (optional) consumer.
-- The identity sentence reads as spec + reference implementation; "not a
-  platform" survives, "not a library" is softened.
-- No sentence claims standalone capability beyond what exists (direction stated
-  as direction).
-- The Status paragraph remains accurate.
-- Final acceptance is the strategy's sensor: owner review of the README at
-  office-hours (this is what produces the strategy's reading). The implementing
-  session does not self-certify the signal.
-
-A build/link check may be run if desired but the README has no test surface:
-
-```verify
-git -C . diff --name-only origin/main -- README.md | grep -q README.md
-```
+Demoted to draft 2026-08-04: the prior plan implemented the superseded
+2026-07-25 copy and README structure. The next /align-tactics round
+re-plans this tactic against strategy-data-structure-first's 2026-08-04
+clarifications (five sections, target-state doctrine, guard, references
+governance) and the ratified copy below, reproduced exactly — the only
+permitted pre-publication changes are resolving the reference details
+still flagged unverified at tactic-readme-reference-curriculum.
 
 ---
 
-## Author draft copy (input — superseded by the copy-approval clarification)
+# commons.systems
 
-The author's requirement text, binding in substance, refinable in wording.
-Use the author-approved version from strategy-data-structure-first's
-copy-approval clarification wherever it differs.
+**A data structure for managing project goals and alignment. An agentic
+harness that runs on it.**
 
-> commons.systems: A data structure for managing intentions and alignment.
-> Use it with your own project management and agentic workflows, or use it
-> with the provided long horizon agentic coding harness.
+The **intention graph** is a versioned graph of goals. It is human authored
+with AI assistance. The graph is rooted by unconditional *virtues*
+(your virtues, your principles) with condition-bearing, persistent
+*strategies* as child nodes, and completable, transient *tactics* at the leaves.
+The graph is encoded as markdown documents in the repo it governs.
+It is AI-native specification tracking — it is designed with AI in mind both:
+- as a first-class consumer
+- to enable specification tracking at a level of detail not feasible with
+  legacy technology.
 
-The two sentences fix the framing: (1) the data structure is the product;
-(2) the two uses are the reader's own workflows and the provided harness, in
-that order.
+The intention graph builds on legacy software documentation — such as
+architectural decision records — and contemporary methods such as
+spec-driven development. It maintains the context
+of the *why* for every *what* at a level of specificity not feasible
+except with AI. The result is alignment for longer horizon tasks —
+alignment between team members, collaborators, and AI.
 
-## Copy constraints from the interview (recorded as clarifications on strategy-data-structure-first)
+In addition to the graph, this repo contains a reference harness that
+operates on the graph to manage context and orchestrate long horizon
+agentic workflows. The harness coordinates between:
+- agent activities, the "dispatch" queue: coding, planning,
+  documenting, monitoring, sensor-based alignment
+- human activities, the "office hours" queue: refining requirements,
+  recording knowledge, resolving escalations
 
-- **Inversion**: the current headline `README.md:1` ("a long-horizon agent
-  orchestrator") is harness-first; the rewrite leads with the intention graph
-  as the adoptable data structure and presents the harness as one consumer —
-  the reference consumer.
-- **'alignment' carries both readings deliberately** — agent-alignment and
-  alignment-of-attachments — without leaning on either as jargon.
-- **Standalone use is a direction, stated honestly**: no copy claims
-  standalone capability beyond what exists (see
-  tactic-graph-separability-audit).
-- **Identity sentence**: replace "not a platform, not a library, but a
-  reference setup" with the spec + reference-implementation shape — the
-  schema/node kinds/attention+signal semantics are the adoptable thing; the
-  repo is their reference implementation. "Not a platform" survives; "not a
-  library" softens (packages/intentionsutil effectively becomes one).
-- **Audience split holds**: README stays the tier-3 practitioner surface;
-  landing stays tier-2. This tactic touches README only — landing/brand align
-  in later tactics as they are next touched.
-- **strategy-show-not-tell holds**: the README requires no philosophical
-  buy-in; "intentions and alignment" reads as practical vocabulary.
-- The existing Status paragraph (projection-era router vs graph-native
-  build-out) must stay accurate through the rewrite.
+## Runbook
+
+Get from idea to a recorded strategy in your own repo:
+
+1. **Install the skills as a plugin.** Add this repo as a Claude Code plugin
+   in your own project — the align skill family and the graph tooling come
+   with it.
+2. **Run `/mount`.** The mounting skill bootstraps your graph:
+   it orients you in the data structure (virtues, strategies, tactics,
+   delegations), probes what you already believe about goals and alignment,
+   and teaches the load-bearing concepts using the same methods the
+   graph itself is maintained by. Mechanically, it creates your own
+   `intentions/` graph — your virtue roots, your first nodes — and mounts this
+   repo's graph as a **delegatee**: a recorded delegation with audited
+   divergence and reversibility. Everything you take
+   on trust from this project enrolls in your own review curriculum as
+   born-parked review items, so all dependencies are tracked and managed.
+3. **Run `/align <directive>`.** The mounting skill converges on a
+   directive in your own words; `/align` records it as your first strategy
+   under interview, and the graph is live.
+
+## Technical summary
+
+One markdown file per node under [`intentions/`](intentions/); the schema is
+declared by the graph's own kind nodes —
+[`intentions/kind-kind.md`](intentions/kind-kind.md) is the entry point, and
+drift between code and kind nodes is a guarded defect. Tooling lives in
+[`packages/intentionsutil/`](packages/intentionsutil/).
+
+- **Virtues** are unconditional dispositions — the roots. Virtues serve
+  as principles that are fed forward through all graph operations.
+  **Strategies** carry the conditions they are contingent on and a
+  `success_signal` (observable, sensor, threshold); sensors
+  are a feedback mechanism, and a validated signal
+  quiets the strategy until a condition or reading changes. **Tactics** are
+  PR-sized, completable, and pruned on completion. **Delegations** record
+  external attachments with divergence and irreversibility axes; external
+  graphs **mount** recursively, with auditable capture and deference.
+- **Attention** is authored injection (`boost`/`override`, each with a
+  rationale); rank is derived on read, never stored, and is the router's
+  outermost ordering axis. Escalating work means authoring a boost.
+- **The dispatch router** is a headless, self-perpetuating tick — bash plus
+  systemd transient units, no model in the control loop; model tokens are
+  spent on work, never on deciding to work. Each tick selects the
+  highest-rank eligible node and spawns one bounded agent session per
+  selection into an isolated worktree. Work advances through phases — plan,
+  implement, qa, review, merge, qa-main — with interventions invoked
+  when there is a variance in node progression.
+- **Two queues** route every item: autonomous dispatch, and human office
+  hours. Parking is first-class node state; success requires a positive
+  completion marker, and any failed intervention fails safe to a
+  human park.
+- **The interview is the audit.** Strategies enter the graph through an
+  interview (`/align`); every resolution lands as a dated
+  clarification on the node, so provenance is append-only and legible.
+
+## References
+
+The design descends from and differentiates against several bodies of work.
+
+**Harness engineering** — the vocabulary for everything around the model:
+
+- Birgitta Böckeler, ["Harness engineering for coding agent
+  users"](https://martinfowler.com/articles/harness-engineering.html)
+  (martinfowler.com, 02 Apr 2026) — the Model + Harness split and the
+  guides/sensors taxonomy this repo's rules and CI/reviewer fan-out map onto.
+- Anthropic, ["Effective harnesses for long-running
+  agents"](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
+  (26 Nov 2025) — bounded sessions with no memory, state carried in a durable
+  on-disk artifact; its one-file progress log is a degenerate intention graph.
+- Anthropic, ["Harness design for long-running application
+  development"](https://www.anthropic.com/engineering/harness-design-long-running-apps)
+  (24 Mar 2026) — the generator/evaluator finding (models praise their own
+  mediocre work) that justifies QA and review as separate sessions.
+- OpenAI, ["Harness engineering: leveraging Codex in an agent-first
+  world"](https://openai.com/index/harness-engineering/) (11 Feb 2026) —
+  "manually writing code was treated as a failure mode": the sharpest
+  statement of the posture this repo takes.
+- Addy Osmani, ["Agent Harness
+  Engineering"](https://www.oreilly.com/radar/agent-harness-engineering/)
+  (O'Reilly Radar, 15 May 2026) — most agent failures are harness
+  configuration, not model limits; names *the ratchet* (every mistake becomes
+  a rule), the practice Mitchell Hashimoto demonstrates in ["My AI Adoption
+  Journey"](https://mitchellh.com/writing/my-ai-adoption-journey) (05 Feb
+  2026) and this repo implements as rule and skill edits fed by review.
+
+**Spec-driven development** — the adjacent mainstream; the graph differs on
+hierarchy, state, and scheduling, not on spec persistence:
+
+- GitHub, [Spec Kit](https://github.com/github/spec-kit) (Sep 2025) — the
+  category-defining `/specify → /plan → /tasks → /implement` workflow; one
+  durable layer above the feature (a "constitution"), no goal hierarchy, no
+  signals, nothing a scheduler can rank.
+- Amazon, [Kiro](https://kiro.dev) (Jul 2025) — the largest commercial SDD
+  bet; steering files are shared context, not a governed goal hierarchy.
+- Fission AI, [OpenSpec](https://github.com/Fission-AI/OpenSpec) (Aug 2025) —
+  ephemeral by design (propose → apply → archive), the explicit counterpoint
+  to a persistent graph.
+- BMad Code, [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD)
+  (Apr 2025) — persistent PRD/architecture/story artifacts across the SDLC;
+  role-based agents producing documents, not a typed graph with edges and
+  attention.
+- Tessl, [spec registry and framework](https://tessl.io) (Sep 2025) — specs
+  as versioned dependencies; describes what correct code does, not what
+  should be worked on next and why.
+- Sean Grove (OpenAI), ["The New
+  Code"](https://www.youtube.com/watch?v=BIvILtt164I) (AI Engineer World's
+  Fair, Jun 2025) — code as "a lossy projection from the specification"; the
+  motivation for durable versioned intent, without a structure for it.
+
+**AI-native work tracking** — incumbents attach agents to human-first
+schemas; the graph *is* the work item:
+
+- GitHub, [Agent HQ](https://github.blog/news-insights/company-news/welcome-home-agents/)
+  (Oct 2025) — mission control over many agents, all still anchored to the
+  Issue as the atomic unit: the architecture this project migrated off.
+- Linear, [Linear Agent](https://linear.app/docs/linear-agent) (2026) — the
+  agent as a special assignee type in an otherwise human-first schema.
+- Atlassian, [Rovo agents in
+  Jira](https://www.atlassian.com/blog/rovo/ai-agents-in-jira) (Feb 2026) —
+  its Teamwork Graph *indexes* work that exists elsewhere; the intention
+  graph *is* the work.
+- [Hiveship](https://hiveship.app/) (2026) — "issue tracking, rebuilt for the
+  agent era"; the same agent-first positioning over a conventional flat issue
+  schema in a proprietary store — the differentiation is mechanism, not
+  adjective.
+
+**Goal-oriented requirements engineering** — the academic ancestor; the
+refinement hierarchy is a solved, named structure, and this project says so:
+
+- Dardenne, van Lamsweerde & Fickas, ["Goal-directed requirements
+  acquisition"](https://www.sciencedirect.com/science/article/pii/016764239390021G)
+  (*Sci. Comput. Program.* 20, 1993) — KAOS: goals AND/OR-refined until
+  assignable to an agent; the strategy → tactic pattern, thirty-three years
+  earlier.
+- van Lamsweerde, ["Goal-Oriented Requirements Engineering: A Guided
+  Tour"](https://webperso.info.ucl.ac.be/~avl/files/RE01.pdf) (RE'01) — why
+  goals anchor completeness, traceability, and conflict management; and
+  *Requirements Engineering* (Wiley, 2009), whose obstacle analysis is the
+  precedent for strategy conditions — analyzed at design time there, held
+  open and re-read at runtime here.
+- Yu, ["Towards Modelling and Reasoning Support for Early-Phase Requirements
+  Engineering"](https://ieeexplore.ieee.org/document/566873) (RE'97) — i*:
+  hard goals vs. satisficed softgoals, the precursor of signal/gap semantics;
+  with Chung, Nixon & Mylopoulos, *Non-Functional Requirements in Software
+  Engineering* (Kluwer, 2000) formalizing graded satisfaction. There the
+  labels are analyst-assigned; here a sensor reading drives the gap.
+- Yu & Zhao, ["4D-ARE: Bridging the Attribution Gap in LLM Agent Requirements
+  Engineering"](https://arxiv.org/abs/2601.04556) (2026) — GORE assumed
+  deterministic agents; the probabilistic-agent gap this design occupies.
+- What the graph adds to that lineage: agent-executable rather than
+  analysis-only; versioned in the working repo beside the code it governs;
+  authored attention with derived rank; a live sensor/reading loop; dated
+  interview provenance; and a completable, pruned tactic layer.
+
+**Agent memory and context engineering** — the contrast category: those
+systems machine-extract *descriptive recall* of what happened; the intention
+graph is human-authored and *prescriptive* about what should happen:
+
+- Edge et al., ["From Local to Global: A Graph RAG
+  Approach"](https://arxiv.org/abs/2404.16130) (2024); Packer et al.,
+  ["MemGPT"](https://arxiv.org/abs/2310.08560) (2023); Rasmussen et al.,
+  ["Zep: A Temporal Knowledge Graph Architecture for Agent
+  Memory"](https://arxiv.org/abs/2501.13956) (2025) — extracted graphs and
+  tiered memory over data that already exists.
+- Mei et al., ["A Survey of Context Engineering for Large Language
+  Models"](https://arxiv.org/abs/2507.13334) (2025) and Anthropic,
+  ["Effective context engineering for AI
+  agents"](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+  (Sep 2025) — the per-turn context assembly discipline; the graph is the
+  durable artifact just-in-time retrieval reads *from*.
+
+**Long-horizon reliability** — why a leave-it-alone workflow needs sensors:
+
+- METR, ["Measuring AI Ability to Complete Long Software
+  Tasks"](https://arxiv.org/abs/2503.14499) (2025) and ["Time Horizon
+  1.1"](https://metr.org/blog/2026-1-29-time-horizon-1-1/) (Jan 2026) — task
+  horizons doubling every ~3–4 months, and accelerating.
+- Sinha et al., ["The Illusion of Diminishing
+  Returns"](https://arxiv.org/abs/2509.09677) (2025) — long-task failure is
+  execution slips, not reasoning gaps, and models self-condition on their own
+  errors: the case for bounded fresh-context sessions.
+- Khanal et al., ["Beyond pass@1: A Reliability Science Framework for
+  Long-Horizon LLM Agents"](https://arxiv.org/abs/2603.29231) (2026) —
+  reliability decay is worst in software engineering, and memory scaffolds
+  universally hurt long-horizon performance — a finding this design confronts
+  rather than omits: the graph is not an in-context scaffold; it is read
+  just-in-time, per bounded session.
+- Orlanski et al., ["SlopCodeBench"](https://arxiv.org/abs/2603.24755) (v2,
+  May 2026) — structural erosion and verbosity growth across iterative edits;
+  guidance alone does not prevent degradation, which is why the sensors are
+  separate sessions.
+- Cemri et al., ["Why Do Multi-Agent LLM Systems Fail?"
+  (MAST)](https://arxiv.org/abs/2503.13657) (2025) — the failure taxonomy the
+  review/QA fan-out phases exist to cover.
+
+## License
+
+[CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Forking is
+encouraged.
